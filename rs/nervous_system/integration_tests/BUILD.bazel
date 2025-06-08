@@ -351,6 +351,7 @@ rust_test(
 exports_files(
     [
         "kong_backend.wasm",
+        "kongswap-adaptor-canister.wasm",
     ],
 )
 
@@ -361,14 +362,17 @@ rust_test(
         "tests/sns_extension_test.rs",
     ],
     aliases = ALIASES,
-    data = DEV_DATA + [":kong_backend.wasm"],
+    data = DEV_DATA + [":kong_backend.wasm", "kongswap-adaptor-canister.wasm"],
     env = DEV_ENV | {
         "KONG_BACKEND_CANISTER_WASM_PATH": "$(rootpath :kong_backend.wasm)",
+        "KONGSWAP_ADAPTOR_CANISTER_WASM_PATH": "$(rootpath :kongswap-adaptor-canister.wasm)",
         "RUST_TEST_NOCAPTURE": "1"
     },
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
         "cpu:4",
     ],
-    deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
+    deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES + [
+        "//rs/sns/treasury_manager",
+    ],
 )

@@ -18,6 +18,7 @@ DEPENDENCIES = [
     "//rs/registry/canister",
     "//rs/registry/canister/api",
     "//rs/sns/governance/api",
+    "//rs/sns/treasury_manager",
     "//rs/sns/root",
     "//rs/sns/swap",
     "//rs/types/base_types",

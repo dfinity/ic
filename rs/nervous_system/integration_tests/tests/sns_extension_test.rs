@@ -1,12 +1,11 @@
-use std::collections::BTreeMap;
 use std::str::FromStr;
-
-use candid::{CandidType, Nat};
+use std::time::Duration;
+use candid::Nat;
 use canister_test::Wasm;
 use ic_base_types::CanisterId;
 use ic_base_types::PrincipalId;
 use ic_icrc1_ledger::{InitArgsBuilder, LedgerArgument};
-use ic_nervous_system_agent::{pocketic_impl::PocketIcAgent, CallCanisters, Request};
+use ic_nervous_system_agent::{pocketic_impl::PocketIcAgent, CallCanisters};
 use ic_nervous_system_common::E8;
 use ic_nervous_system_integration_tests::pocket_ic_helpers::install_canister_with_controllers;
 use ic_nervous_system_integration_tests::pocket_ic_helpers::nns;
@@ -20,10 +19,13 @@ use icrc_ledger_types::{
     icrc2::approve::ApproveArgs,
 };
 use itertools::{Either, Itertools};
-use maplit::btreemap;
 use pocket_ic::nonblocking::PocketIc;
 use pocket_ic::PocketIcBuilder;
-use serde::{Deserialize, Serialize};
+use sns_treasury_manager::Allowance;
+use sns_treasury_manager::Asset;
+use sns_treasury_manager::DepositRequest;
+use sns_treasury_manager::TreasuryManagerResult;
+use sns_treasury_manager::{TreasuryManagerArg, TreasuryManagerInit};
 
 // TODO
 // use thiserror::Error
@@ -33,695 +35,6 @@ pub const MAX_SYMBOL_BYTES: usize = 10;
 #[tokio::test]
 async fn test() {
     test_custom_upgrade_path_for_sns().await
-}
-
-pub struct Allowance {
-    pub amount_decimals: Nat,
-    pub ledger_canister_id: CanisterId,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum TransactionError {
-    /// Prevents the call from being attempted.
-    Precondition(String),
-
-    /// An error that occurred while calling a canister.
-    Call(String),
-
-    /// Backend refers to, e.g., the DEX canister that this asset manager talks to.
-    Backend(String),
-
-    /// Prevents the response from being interpreted.
-    Postcondition(String),
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct Symbol {
-    /// An Ascii string of up to MAX_SYMBOL_BYTES, e.g., "CHAT" or "ICP".
-    /// Stored as a fixed-size byte array, so the whole `Asset` type can derive `Copy`.
-    /// Can be created from
-    repr: [u8; MAX_SYMBOL_BYTES],
-}
-
-impl std::fmt::Display for Symbol {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let symbol_str = bytes_to_string(&self.repr);
-        write!(f, "{}", symbol_str)
-    }
-}
-
-impl std::fmt::Debug for Symbol {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let symbol_str = bytes_to_string(&self.repr);
-        write!(f, "{}", symbol_str)
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum Asset {
-    Token {
-        symbol: Symbol,
-        ledger_canister_id: CanisterId,
-    },
-}
-
-impl std::fmt::Display for Asset {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Asset::Token {
-                symbol,
-                ledger_canister_id,
-            } => {
-                write!(f, "{}.{}", symbol, ledger_canister_id)
-            }
-        }
-    }
-}
-
-impl Asset {
-    pub fn new_token(symbol: &str, ledger_canister_id: CanisterId) -> Result<Self, String> {
-        let symbol = Symbol::try_from(symbol)?;
-        Ok(Asset::Token {
-            symbol,
-            ledger_canister_id,
-        })
-    }
-
-    pub fn symbol(&self) -> String {
-        match self {
-            Asset::Token { symbol, .. } => symbol.to_string(),
-        }
-    }
-}
-
-fn bytes_to_string(bytes: &[u8]) -> String {
-    // Find the first null byte (if any)
-    let null_pos = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
-
-    // Convert only ASCII characters
-    bytes[..null_pos].iter().map(|&c| c as char).collect()
-}
-
-fn take_bytes(input: &str) -> [u8; MAX_SYMBOL_BYTES] {
-    let mut result = [0u8; MAX_SYMBOL_BYTES];
-    let bytes = input.as_bytes();
-
-    let copy_len = std::cmp::min(bytes.len(), MAX_SYMBOL_BYTES);
-    result[..copy_len].copy_from_slice(&bytes[..copy_len]);
-
-    result
-}
-
-fn is_valid_symbol_character(b: &u8) -> bool {
-    *b == 0 || b.is_ascii() && b.is_ascii_graphic()
-}
-
-impl TryFrom<[u8; 10]> for Symbol {
-    type Error = String;
-
-    fn try_from(value: [u8; 10]) -> Result<Self, Self::Error> {
-        // Check that the symbol is valid ASCII.
-        if !value.iter().all(is_valid_symbol_character) {
-            return Err(format!("Symbol must be ASCII and graphic; got {:?}", value));
-        }
-
-        Ok(Symbol { repr: value })
-    }
-}
-
-impl TryFrom<&str> for Symbol {
-    type Error = String;
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        if value.len() > MAX_SYMBOL_BYTES {
-            return Err(format!(
-                "Symbol must not exceed {} bytes or characters, got {} bytes.",
-                MAX_SYMBOL_BYTES,
-                value.len()
-            ));
-        }
-
-        let bytes = take_bytes(&value);
-
-        let symbol = Self::try_from(bytes)?;
-
-        Ok(symbol)
-    }
-}
-
-/// (symbol, ledger_canister_id)
-impl TryFrom<(String, String)> for Asset {
-    type Error = String;
-
-    fn try_from(value: (String, String)) -> Result<Self, Self::Error> {
-        let (symbol, ledger_canister_id) = value;
-
-        let symbol = Symbol::try_from(symbol.as_str())?;
-
-        let ledger_canister_id = PrincipalId::from_str(&ledger_canister_id).map_err(|_| {
-            format!(
-                "Cannot interpret second component as a principal: {}",
-                ledger_canister_id
-            )
-        })?;
-
-        let ledger_canister_id =
-            CanisterId::try_from_principal_id(ledger_canister_id).map_err(|_| {
-                format!(
-                    "Cannot interpret second component as a canister ID: {}",
-                    ledger_canister_id
-                )
-            })?;
-
-        Ok(Asset::Token {
-            symbol,
-            ledger_canister_id,
-        })
-    }
-}
-
-pub trait TreasuryManager {
-    fn balances(
-        &self,
-    ) -> impl std::future::Future<Output = Result<BTreeMap<Asset, Nat>, TransactionError>> + Send;
-
-    fn withdraw(
-        &mut self,
-    ) -> impl std::future::Future<Output = Result<BTreeMap<Asset, Nat>, TransactionError>> + Send;
-
-    fn deposit(
-        &mut self,
-        allowances: Vec<Allowance>,
-    ) -> impl std::future::Future<Output = Result<(), TransactionError>> + Send;
-
-    fn audit_trail(&self) -> AuditTrail;
-}
-
-#[derive(Clone, Debug)]
-pub struct Transfer {
-    ledger_canister_id: String,
-    amount_deimals: Nat,
-    block_index: Nat,
-}
-
-#[derive(Clone, Debug)]
-pub enum TransactionWitness {
-    Ledger(Vec<Transfer>),
-
-    /// Represents a transaction that is not related to the ledger, e.g., DEX operations.
-    /// The argument is a (best-effort) JSON encoding of the response (for human inspection).
-    NonLedger(String),
-}
-
-/// Helper trait to extract transaction witness from a response.
-pub trait WithTransactionWitness {
-    fn witness(&self) -> TransactionWitness;
-}
-
-#[derive(Clone, Debug)]
-pub struct Transaction {
-    canister_id: CanisterId,
-    // TODO: add low-level traces stores as JSON.
-    result: Result<TransactionWitness, TransactionError>,
-    human_readable: String,
-    timestamp_seconds: u64,
-    treasury_operation_phase: TreasuryManagerPhase,
-}
-
-#[derive(Clone, Copy, Debug)]
-pub enum TreasuryManagerPhase {
-    Deposit,
-    Balances,
-    IssueReward,
-    Withdraw,
-}
-
-#[derive(Clone, Debug)]
-pub struct AuditTrail {
-    transactions: Vec<Transaction>,
-}
-
-impl AuditTrail {
-    pub fn new() -> Self {
-        AuditTrail {
-            transactions: vec![],
-        }
-    }
-
-    fn record_event(&mut self, event: Transaction) {
-        self.transactions.push(event);
-    }
-
-    pub fn transactions(&self) -> &[Transaction] {
-        &self.transactions
-    }
-}
-
-pub struct KongSwapAdaptor<'a> {
-    agent: &'a PocketIcAgent<'a>,
-    kong_backend_canister_id: CanisterId,
-
-    token_0: Asset,
-    token_1: Asset,
-
-    balance_0_decimals: Nat,
-    balance_1_decimals: Nat,
-
-    audit_trail: AuditTrail,
-}
-
-impl<'a> KongSwapAdaptor<'a> {
-    fn new(
-        agent: &'a PocketIcAgent<'a>,
-        kong_backend_canister_id: CanisterId,
-        token_0: Asset,
-        token_1: Asset,
-    ) -> Result<Self, String> {
-        if token_0 == token_1 {
-            return Err("token_0 and token_1 must be different".to_string());
-        }
-
-        if token_1.symbol() != "ICP" {
-            return Err("token_1 must be ICP".to_string());
-        }
-
-        let audit_trail = AuditTrail::new();
-
-        Ok(KongSwapAdaptor {
-            agent,
-            kong_backend_canister_id,
-            token_0,
-            token_1,
-            audit_trail,
-            balance_0_decimals: Nat::from(0_u64),
-            balance_1_decimals: Nat::from(0_u64),
-        })
-    }
-
-    fn get_cached_balances(&self) -> BTreeMap<Asset, Nat> {
-        btreemap! {
-            self.token_0 => self.balance_0_decimals.clone(),
-            self.token_1 => self.balance_1_decimals.clone(),
-        }
-    }
-
-    /// Performs the request call and records the transaction in the audit trail.
-    async fn emit_transaction<R, Ok>(
-        &mut self,
-        canister_id: CanisterId,
-        request: R,
-        phase: TreasuryManagerPhase,
-        human_readable: String,
-    ) -> Result<Ok, TransactionError>
-    where
-        R: Request,
-        Ok: WithTransactionWitness + Clone,
-        Result<Ok, String>: From<R::Response>,
-    {
-        let result = self
-            .agent
-            .call(canister_id, request)
-            .await
-            .map_err(|err| TransactionError::Call(err.to_string()))
-            .and_then(|response| {
-                Result::<Ok, String>::from(response)
-                    .map_err(|err| TransactionError::Backend(err.to_string()))
-            });
-
-        let transaction = Transaction {
-            canister_id,
-            result: result.clone().map(|ok| ok.witness()),
-            human_readable,
-            // TODO: use ic_cdk::time::now_seconds
-            timestamp_seconds: 1234567,
-            treasury_operation_phase: phase,
-        };
-
-        self.audit_trail.record_event(transaction);
-
-        result
-    }
-
-    async fn maybe_add_token(
-        &mut self,
-        ledger_canister_id: CanisterId,
-        phase: TreasuryManagerPhase,
-    ) -> Result<(), TransactionError> {
-        let token = format!("IC.{}", ledger_canister_id);
-
-        let human_readable = format!(
-            "Calling KongSwapBackend.add_token to attempt to add {}.",
-            token
-        );
-
-        let request = AddTokenArgs {
-            token: token.clone(),
-        };
-
-        let response = self
-            .emit_transaction(
-                self.kong_backend_canister_id,
-                request,
-                phase,
-                human_readable,
-            )
-            .await;
-
-        match response {
-            Ok(_) => Ok(()),
-            Err(TransactionError::Backend(err))
-                if err == format!("Token {} already exists", token) =>
-            {
-                Ok(())
-            }
-            Err(err) => Err(err),
-        }
-    }
-
-    fn lp_token(&self) -> String {
-        format!("{}_{}", self.token_0.symbol(), self.token_1.symbol())
-    }
-
-    async fn lp_balance(&mut self, phase: TreasuryManagerPhase) -> Result<Nat, TransactionError> {
-        let request = UserBalancesArgs {
-            principal_id: self.agent.sender.to_string(),
-        };
-
-        let human_readable =
-            "Calling KongSwapBackend.user_balances to get LP balances.".to_string();
-
-        let user_balance_replies = self
-            .emit_transaction(
-                self.kong_backend_canister_id,
-                request,
-                phase,
-                human_readable,
-            )
-            .await?;
-
-        if user_balance_replies.is_empty() {
-            return Ok(Nat::from(0_u8));
-        }
-
-        let (balances, errors): (BTreeMap<_, _>, Vec<_>) =
-            user_balance_replies.into_iter().partition_map(
-                |UserBalancesReply::LP(UserBalanceLPReply {
-                     symbol, balance, ..
-                 })| {
-                    match kong_lp_balance_to_demilams(balance) {
-                        Ok(balance) => Either::Left((symbol, balance)),
-                        Err(err) => Either::Right(format!(
-                            "Failed to convert balance for {}: {}",
-                            symbol, err
-                        )),
-                    }
-                },
-            );
-
-        if !errors.is_empty() {
-            return Err(TransactionError::Backend(format!(
-                "Failed to convert balances: {:?}",
-                errors.join(", ")
-            )));
-        }
-
-        let lp_token = self.lp_token();
-
-        let Some((_, balance)) = balances.into_iter().find(|(token, _)| *token == lp_token) else {
-            return Err(TransactionError::Backend(format!(
-                "Failed to get LP balance for {}.",
-                lp_token
-            )));
-        };
-
-        Ok(balance)
-    }
-
-    // TODO: Make this method private once it is periodically called from canister timers.
-    pub async fn refresh_balances(&mut self) -> Result<BTreeMap<Asset, Nat>, TransactionError> {
-        let phase = TreasuryManagerPhase::Balances;
-
-        let remove_lp_token_amount = self.lp_balance(phase).await?;
-
-        let human_readable = format!(
-            "Calling KongSwapBackend.remove_liquidity_amounts to estimate how much liquidity can be removed for LP token amount {}.",
-            remove_lp_token_amount
-        );
-
-        let request = RemoveLiquidityAmountsArgs {
-            token_0: self.token_0.symbol(),
-            token_1: self.token_1.symbol(),
-            remove_lp_token_amount,
-        };
-
-        let reply = self
-            .emit_transaction(
-                self.kong_backend_canister_id,
-                request,
-                phase,
-                human_readable,
-            )
-            .await?;
-
-        println!("remove_liquidity_amounts reply = {:#?}", reply);
-
-        let RemoveLiquidityAmountsReply {
-            amount_0, amount_1, ..
-        } = reply;
-
-        self.balance_0_decimals = amount_0.clone();
-        self.balance_1_decimals = amount_1.clone();
-
-        Ok(self.get_cached_balances())
-    }
-}
-
-impl<'a> TreasuryManager for KongSwapAdaptor<'a> {
-    async fn deposit(&mut self, mut allowances: Vec<Allowance>) -> Result<(), TransactionError> {
-        let phase = TreasuryManagerPhase::Deposit;
-
-        // Check preconditions.
-
-        let Some(Allowance {
-            amount_decimals: amount_1,
-            ledger_canister_id: ledger_1,
-        }) = allowances.pop()
-        else {
-            return Err(TransactionError::Precondition(
-                "KongSwapAdaptor requires some allowances.".to_string(),
-            ));
-        };
-
-        if ledger_1 != LEDGER_CANISTER_ID {
-            return Err(TransactionError::Precondition(
-                "KongSwapAdaptor only supports ICP as token_1.".to_string(),
-            ));
-        }
-
-        let Some(Allowance {
-            amount_decimals: amount_0,
-            ledger_canister_id: ledger_0,
-        }) = allowances.pop()
-        else {
-            return Err(TransactionError::Precondition(format!(
-                "KongSwapAdaptor requires two allowances (got {}).",
-                allowances.len()
-            )));
-        };
-
-        if !allowances.is_empty() {
-            return Err(TransactionError::Precondition(format!(
-                "KongSwapAdaptor requires exactly two allowances (got {}).",
-                allowances.len()
-            )));
-        }
-
-        // Notes on why we first add SNS and then ICP:
-        // - KongSwap starts indexing the tokens from 1.
-        // - The ICP token is assumed to have index 2.
-        self.maybe_add_token(ledger_0, phase).await?;
-        self.maybe_add_token(ledger_1, phase).await?;
-
-        let token_0 = format!("IC.{}", ledger_0);
-        let token_1 = format!("IC.{}", ledger_1);
-
-        let original_amount_1 = amount_1.clone();
-
-        let result = self
-            .emit_transaction(
-                self.kong_backend_canister_id,
-                AddPoolArgs {
-                    token_0: token_0.clone(),
-                    amount_0: amount_0.clone(),
-                    token_1: token_1.clone(),
-                    amount_1,
-
-                    // Liquidity provider fee in basis points 30=0.3%.
-                    lp_fee_bps: Some(30),
-
-                    // Not needed for the ICRC2 flow.
-                    tx_id_0: None,
-                    tx_id_1: None,
-                },
-                TreasuryManagerPhase::Deposit,
-                "Calling KongSwapBackend.add_pool to add a new pool.".to_string(),
-            )
-            .await;
-
-        let pool_already_exists = { format!("Pool {} already exists", self.lp_token()) };
-
-        match result {
-            // All used up, since the pool is brand new.
-            Ok(_) => {
-                return Ok(());
-            }
-
-            // An already-existing pool does not preclude a top-up  =>  Keep going.
-            Err(TransactionError::Backend(err)) if *err == pool_already_exists => (),
-
-            Err(err) => {
-                return Err(err);
-            }
-        }
-
-        // This is a top-up operation for a pre-existing pool.
-        // A top-up requires computing amount_1 as a function of amount_0.
-
-        let AddLiquidityAmountsReply { amount_1, .. } = {
-            let human_readable = format!(
-                "Calling KongSwapBackend.add_liquidity_amounts to estimate how much liquidity can \
-                 be added for token_1 ={} when adding token_0 = {}, amount_0 = {}.",
-                token_1, token_0, amount_0,
-            );
-
-            let request = AddLiquidityAmountsArgs {
-                token_0: token_0.clone(),
-                amount: amount_0.clone(),
-                token_1: token_1.clone(),
-            };
-
-            self.emit_transaction(
-                self.kong_backend_canister_id,
-                request,
-                phase,
-                human_readable,
-            )
-            .await?
-        };
-
-        let reply = {
-            let human_readable = format!(
-                "Calling KongSwapBackend.add_liquidity to top up liquidity for \
-                 token_0 = {}, amount_0 = {}, token_1 = {}, amount_1 = {}.",
-                token_0, amount_0, token_1, amount_1
-            );
-
-            let request = AddLiquidityArgs {
-                token_0,
-                amount_0,
-                token_1,
-                amount_1,
-
-                // Not needed for the ICRC2 flow.
-                tx_id_0: None,
-                tx_id_1: None,
-            };
-
-            self.emit_transaction(
-                self.kong_backend_canister_id,
-                request,
-                phase,
-                human_readable,
-            )
-            .await?
-        };
-
-        println!("add_liquidity reply = {:#?}", reply);
-
-        let AddLiquidityReply {
-            amount_0: _,
-            amount_1,
-            ..
-        } = reply;
-
-        if original_amount_1 < amount_1 {
-            return Err(TransactionError::Backend(format!(
-                "Got top-up amount_1 = {} (must be at least {})",
-                original_amount_1, amount_1
-            )));
-        }
-
-        Ok(())
-    }
-
-    async fn balances(&self) -> Result<BTreeMap<Asset, Nat>, TransactionError> {
-        Ok(self.get_cached_balances())
-    }
-
-    async fn withdraw(&mut self) -> Result<BTreeMap<Asset, Nat>, TransactionError> {
-        let phase = TreasuryManagerPhase::Withdraw;
-
-        let remove_lp_token_amount = self.lp_balance(phase).await?;
-
-        println!(
-            "refresh_balances >>> remove_lp_token_amount = {}",
-            remove_lp_token_amount
-        );
-
-        let human_readable =
-            "Calling KongSwapBackend.remove_liquidity to withdraw all allocated tokens."
-                .to_string();
-
-        let request = RemoveLiquidityArgs {
-            token_0: self.token_0.symbol(),
-            token_1: self.token_1.symbol(),
-            remove_lp_token_amount,
-        };
-
-        let reply = self
-            .emit_transaction(
-                self.kong_backend_canister_id,
-                request,
-                phase,
-                human_readable,
-            )
-            .await?;
-
-        println!("remove_liquidity reply = {:#?}", reply);
-
-        let RemoveLiquidityReply {
-            status,
-            symbol_0,
-            address_0,
-            amount_0,
-            symbol_1,
-            amount_1,
-            address_1,
-            ..
-        } = reply;
-
-        if status != "Success" {
-            return Err(TransactionError::Backend(format!(
-                "Failed to withdraw liquidity: status = {}",
-                status
-            )));
-        }
-
-        let asset_0 =
-            Asset::try_from((symbol_0, address_0)).map_err(TransactionError::Postcondition)?;
-
-        let asset_1 =
-            Asset::try_from((symbol_1, address_1)).map_err(TransactionError::Postcondition)?;
-
-        Ok(btreemap! {
-            asset_0 => amount_0,
-            asset_1 => amount_1,
-        })
-    }
-
-    fn audit_trail(&self) -> AuditTrail {
-        self.audit_trail.clone()
-    }
 }
 
 #[track_caller]
@@ -734,7 +47,7 @@ async fn test_custom_upgrade_path_for_sns() {
         .await;
 
     let topology = pocket_ic.topology().await;
-    // let fiduciary_subnet_id = topology.get_fiduciary().unwrap();
+    let fiduciary_subnet_id = topology.get_fiduciary().unwrap();
     let sns_subnet_id = topology.get_sns().unwrap();
 
     // Step 0: Prepare the world.
@@ -816,6 +129,7 @@ async fn test_custom_upgrade_path_for_sns() {
             controllers,
         )
         .await
+        .get()
     };
 
     // Install KongSwap
@@ -867,7 +181,7 @@ async fn test_custom_upgrade_path_for_sns() {
         {
             let observed_sns_tokens = sns::ledger::icrc1_balance_of(
                 pocket_ic,
-                sns_ledger_canister_id.get(),
+                sns_ledger_canister_id,
                 lp_adaptor_sns_account,
             )
             .await;
@@ -893,7 +207,7 @@ async fn test_custom_upgrade_path_for_sns() {
     // Approve some SNS tokens from the LP Adaptor.
     sns::ledger::icrc1_transfer(
         &pocket_ic,
-        sns_ledger_canister_id.get(),
+        sns_ledger_canister_id,
         sns_root_canister_id,
         TransferArg {
             from_subaccount: None,
@@ -970,692 +284,182 @@ async fn test_custom_upgrade_path_for_sns() {
     let sns_token = Asset::new_token("SNS", sns_ledger_canister_id).unwrap();
     let icp_token = Asset::new_token("ICP", LEDGER_CANISTER_ID).unwrap();
 
-    let mut kong_swap_adaptor = KongSwapAdaptor::new(
-        &lp_adaptor_agent,
-        kong_backend_canister_id,
-        sns_token,
-        icp_token,
-    )
-    .unwrap();
+    let kong_swap_adaptor = {
+        let wasm_path = std::env::var("KONGSWAP_ADAPTOR_CANISTER_WASM_PATH")
+            .expect("KONGSWAP_ADAPTOR_CANISTER_WASM_PATH must be set.");
 
-    let err = kong_swap_adaptor.refresh_balances().await.unwrap_err();
-    assert_eq!(err, TransactionError::Backend("User not found".to_string()));
+        let kongswap_adaptor_wasm = Wasm::from_file(wasm_path);
 
-    kong_swap_adaptor
-        .deposit(vec![
-            Allowance {
-                amount_decimals: Nat::from(200 * E8),
-                ledger_canister_id: sns_ledger_canister_id,
-            },
-            Allowance {
-                amount_decimals: Nat::from(50 * E8),
-                ledger_canister_id: LEDGER_CANISTER_ID,
-            },
-        ])
+        let controllers = vec![PrincipalId::new_user_test_id(42)];
+
+        let arg = TreasuryManagerArg::Init(TreasuryManagerInit {
+            allowances: vec![
+                Allowance {
+                    amount_decimals: Nat::from(0_u64),
+                    asset: sns_token,
+                },
+                Allowance {
+                    amount_decimals: Nat::from(0_u64),
+                    asset: icp_token,
+                },
+            ],
+        });
+
+        let arg = candid::encode_one(&arg).unwrap();
+
+        install_canister_on_subnet(
+            &pocket_ic,
+            fiduciary_subnet_id,
+            arg,
+            Some(kongswap_adaptor_wasm),
+            controllers,
+        )
         .await
-        .unwrap();
+    };
+    
+    for _ in 0..100 {
+        pocket_ic.advance_time(Duration::from_secs(1)).await;
+        pocket_ic.tick().await;
+    }
 
-    assert_dao_balances(
-        &pocket_ic,
-        50 * E8 - 2 * DEFAULT_TRANSFER_FEE.get_e8s(),
-        150 * E8 - 2 * DEFAULT_TRANSFER_FEE.get_e8s(),
-    )
-    .await;
+    {
+        let response = pocket_ic
+            .call(
+                kong_swap_adaptor,
+                DepositRequest {
+                    allowances: vec![
+                        Allowance {
+                            amount_decimals: Nat::from(200 * E8),
+                            asset: sns_token,
+                        },
+                        Allowance {
+                            amount_decimals: Nat::from(50 * E8),
+                            asset: icp_token,
+                        },
+                    ]
+                }
+            )
+            .await
+            .unwrap();
 
-    assert_eq!(
-        kong_swap_adaptor.refresh_balances().await,
-        Ok(btreemap! {
-            sns_token => Nat::from(200 * E8),
-            icp_token => Nat::from(50 * E8),
-        }),
-    );
+        println!("response = {:#?}", response);
 
-    // Kong-specific assertion.
-    let response = lp_adaptor_agent
-        .call(kong_backend_canister_id, TokensArgs { symbol: None })
-        .await
-        .unwrap()
-        .unwrap();
-    println!("second tokens response = {:#?}", response);
+        assert_dao_balances(
+            &pocket_ic,
+            50 * E8 - 2 * DEFAULT_TRANSFER_FEE.get_e8s(),
+            150 * E8 - 2 * DEFAULT_TRANSFER_FEE.get_e8s(),
+        )
+        .await;
+    }
 
-    // Kong-specific assertion.
-    let response = lp_adaptor_agent
-        .call(kong_backend_canister_id, PoolsArgs { symbol: None })
-        .await
-        .unwrap()
-        .unwrap();
-    println!("second pools response = {:#?}", response);
+    // let err = kong_swap_adaptor.refresh_balances().await.unwrap_err();
+    // assert_eq!(err, TransactionError::Backend("User not found".to_string()));
 
-    // Step 2: Increase the liquidity allocation.
-    kong_swap_adaptor
-        .deposit(vec![
-            Allowance {
-                amount_decimals: Nat::from(140 * E8),
-                ledger_canister_id: sns_ledger_canister_id,
-            },
-            Allowance {
-                amount_decimals: Nat::from(35 * E8),
-                ledger_canister_id: LEDGER_CANISTER_ID,
-            },
-        ])
-        .await
-        .unwrap();
+    
 
-    assert_dao_balances(
-        &pocket_ic,
-        15 * E8 - 3 * DEFAULT_TRANSFER_FEE.get_e8s(),
-        10 * E8 - 3 * DEFAULT_TRANSFER_FEE.get_e8s(),
-    )
-    .await;
+    // assert_eq!(
+    //     kong_swap_adaptor.refresh_balances().await,
+    //     Ok(btreemap! {
+    //         sns_token => Nat::from(200 * E8),
+    //         icp_token => Nat::from(50 * E8),
+    //     }),
+    // );
 
-    // Debugging: Print the SNS Ledger block details.
+    // // Kong-specific assertion.
+    // let response = lp_adaptor_agent
+    //     .call(kong_backend_canister_id, TokensArgs { symbol: None })
+    //     .await
+    //     .unwrap()
+    //     .unwrap();
+    // println!("second tokens response = {:#?}", response);
 
-    assert_eq!(
-        kong_swap_adaptor.refresh_balances().await,
-        Ok(btreemap! {
-            sns_token => Nat::from(340 * E8),
-            icp_token => Nat::from(85 * E8),
-        }),
-    );
+    // // Kong-specific assertion.
+    // let response = lp_adaptor_agent
+    //     .call(kong_backend_canister_id, PoolsArgs { symbol: None })
+    //     .await
+    //     .unwrap()
+    //     .unwrap();
+    // println!("second pools response = {:#?}", response);
 
-    // Kong-specific assertion.
-    let response = lp_adaptor_agent
-        .call(kong_backend_canister_id, PoolsArgs { symbol: None })
-        .await
-        .unwrap()
-        .unwrap();
-    println!("third pools response = {:#?}", response);
+    // // Step 2: Increase the liquidity allocation.
+    // kong_swap_adaptor
+    //     .deposit(vec![
+    //         Allowance {
+    //             amount_decimals: Nat::from(140 * E8),
+    //             ledger_canister_id: sns_ledger_canister_id,
+    //         },
+    //         Allowance {
+    //             amount_decimals: Nat::from(35 * E8),
+    //             ledger_canister_id: LEDGER_CANISTER_ID,
+    //         },
+    //     ])
+    //     .await
+    //     .unwrap();
 
-    let withdrawn_amounts = kong_swap_adaptor.withdraw().await.unwrap();
+    // assert_dao_balances(
+    //     &pocket_ic,
+    //     15 * E8 - 3 * DEFAULT_TRANSFER_FEE.get_e8s(),
+    //     10 * E8 - 3 * DEFAULT_TRANSFER_FEE.get_e8s(),
+    // )
+    // .await;
 
-    println!("withdrawn_amounts = {:#?}", withdrawn_amounts);
+    // // Debugging: Print the SNS Ledger block details.
 
-    assert_eq!(
-        kong_swap_adaptor.refresh_balances().await,
-        Ok(btreemap! {
-            sns_token => Nat::from(0_u8),
-            icp_token => Nat::from(0_u8),
-        }),
-    );
+    // assert_eq!(
+    //     kong_swap_adaptor.refresh_balances().await,
+    //     Ok(btreemap! {
+    //         sns_token => Nat::from(340 * E8),
+    //         icp_token => Nat::from(85 * E8),
+    //     }),
+    // );
 
-    assert_dao_balances(
-        &pocket_ic,
-        100 * E8 - 4 * DEFAULT_TRANSFER_FEE.get_e8s(),
-        350 * E8 - 4 * DEFAULT_TRANSFER_FEE.get_e8s(),
-    )
-    .await;
+    // // Kong-specific assertion.
+    // let response = lp_adaptor_agent
+    //     .call(kong_backend_canister_id, PoolsArgs { symbol: None })
+    //     .await
+    //     .unwrap()
+    //     .unwrap();
+    // println!("third pools response = {:#?}", response);
 
-    let audit_trail = kong_swap_adaptor.audit_trail();
+    // let withdrawn_amounts = kong_swap_adaptor.withdraw().await.unwrap();
 
-    println!("{:#?}", audit_trail.transactions());
+    // println!("withdrawn_amounts = {:#?}", withdrawn_amounts);
 
-    dbg_print_block(&pocket_ic, sns_ledger_canister_id, 0).await;
-    dbg_print_block(&pocket_ic, sns_ledger_canister_id, 1).await;
-    dbg_print_block(&pocket_ic, sns_ledger_canister_id, 2).await;
-    dbg_print_block(&pocket_ic, sns_ledger_canister_id, 3).await;
-    dbg_print_block(&pocket_ic, sns_ledger_canister_id, 4).await;
+    // assert_eq!(
+    //     kong_swap_adaptor.refresh_balances().await,
+    //     Ok(btreemap! {
+    //         sns_token => Nat::from(0_u8),
+    //         icp_token => Nat::from(0_u8),
+    //     }),
+    // );
+
+    // assert_dao_balances(
+    //     &pocket_ic,
+    //     100 * E8 - 4 * DEFAULT_TRANSFER_FEE.get_e8s(),
+    //     350 * E8 - 4 * DEFAULT_TRANSFER_FEE.get_e8s(),
+    // )
+    // .await;
+
+    // let audit_trail = kong_swap_adaptor.audit_trail();
+
+    // println!("{:#?}", audit_trail.transactions());
+
+    // dbg_print_block(&pocket_ic, sns_ledger_canister_id, 0).await;
+    // dbg_print_block(&pocket_ic, sns_ledger_canister_id, 1).await;
+    // dbg_print_block(&pocket_ic, sns_ledger_canister_id, 2).await;
+    // dbg_print_block(&pocket_ic, sns_ledger_canister_id, 3).await;
+    // dbg_print_block(&pocket_ic, sns_ledger_canister_id, 4).await;
 
     panic!("  Directed by\nROBERT B. WEIDE.");
 }
 
-// ----------------- begin:add_liquidity_amounts -----------------
-impl Request for AddLiquidityAmountsArgs {
-    fn method(&self) -> &'static str {
-        "add_liquidity_amounts"
-    }
-
-    fn update(&self) -> bool {
-        false
-    }
-
-    fn payload(&self) -> Result<Vec<u8>, candid::Error> {
-        let Self {
-            token_0,
-            amount,
-            token_1,
-        } = self.clone();
-
-        candid::encode_args((token_0, amount, token_1))
-    }
-
-    type Response = Result<AddLiquidityAmountsReply, String>;
-}
-
-fn kong_lp_balance_to_demilams(lp_balance: f64) -> Result<Nat, String> {
-    // Check that lp_balance is valid before conversion
-    if !lp_balance.is_finite() || lp_balance < 0.0 {
-        return Err("Invalid LP balance value".to_string());
-    }
-
-    // Calculate with overflow checking
-    let e8_value = E8 as f64;
-    let result_f64 = lp_balance * e8_value;
-
-    // Ensure the result fits in u64 range
-    if result_f64 > u64::MAX as f64 {
-        return Err("LP balance conversion exceeds u64 maximum".to_string());
-    }
-
-    // Convert to Nat (safe because we've checked the bounds)
-    Ok(Nat::from(result_f64.round() as u64))
-}
-
-#[derive(CandidType, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-struct AddLiquidityAmountsArgs {
-    pub token_0: String,
-    pub amount: Nat,
-    pub token_1: String,
-}
-
-#[derive(CandidType, Debug, Clone, Serialize, Deserialize)]
-pub struct AddLiquidityAmountsReply {
-    pub symbol: String,
-    pub chain_0: String,
-    pub address_0: String,
-    pub symbol_0: String,
-    pub amount_0: Nat,
-    pub fee_0: Nat,
-    pub chain_1: String,
-    pub address_1: String,
-    pub symbol_1: String,
-    pub amount_1: Nat,
-    pub fee_1: Nat,
-    pub add_lp_token_amount: Nat,
-}
-
-impl WithTransactionWitness for AddLiquidityAmountsReply {
-    fn witness(&self) -> TransactionWitness {
-        // TODO: Use serde_json::to_string
-        TransactionWitness::NonLedger(format!("{:?}", self))
-    }
-}
-// ----------------- end:add_liquidity_amounts -----------------
-
-// ----------------- begin:add_liquidity -----------------
-impl Request for AddLiquidityArgs {
-    fn method(&self) -> &'static str {
-        "add_liquidity"
-    }
-
-    fn update(&self) -> bool {
-        true
-    }
-
-    fn payload(&self) -> Result<Vec<u8>, candid::Error> {
-        candid::encode_one(self)
-    }
-
-    type Response = Result<AddLiquidityReply, String>;
-}
-
-#[derive(CandidType, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum TxId {
-    BlockIndex(Nat),
-    TransactionHash(String),
-}
-
-#[derive(CandidType, Debug, Clone, Serialize, Deserialize)]
-pub struct AddLiquidityArgs {
-    pub token_0: String,
-    pub amount_0: Nat,
-    pub tx_id_0: Option<TxId>,
-    pub token_1: String,
-    pub amount_1: Nat,
-    pub tx_id_1: Option<TxId>,
-}
-
-#[derive(CandidType, Debug, Clone, Serialize, Deserialize)]
-pub struct AddLiquidityReply {
-    pub tx_id: u64,
-    pub request_id: u64,
-    pub status: String,
-    pub symbol: String,
-    pub chain_0: String,
-    pub address_0: String,
-    pub symbol_0: String,
-    pub amount_0: Nat,
-    pub chain_1: String,
-    pub address_1: String,
-    pub symbol_1: String,
-    pub amount_1: Nat,
-    pub add_lp_token_amount: Nat,
-    pub transfer_ids: Vec<TransferIdReply>,
-    pub claim_ids: Vec<u64>,
-    pub ts: u64,
-}
-
-impl WithTransactionWitness for AddLiquidityReply {
-    fn witness(&self) -> TransactionWitness {
-        let transfers = self.transfer_ids.iter().map(Transfer::from).collect();
-
-        TransactionWitness::Ledger(transfers)
-    }
-}
-
-#[derive(CandidType, Debug, Clone, Serialize, Deserialize)]
-pub struct TransferIdReply {
-    pub transfer_id: u64,
-    pub transfer: TransferReply,
-}
-
-#[derive(CandidType, Debug, Clone, Serialize, Deserialize)]
-pub enum TransferReply {
-    IC(ICTransferReply),
-}
-
-#[derive(CandidType, Debug, Clone, Serialize, Deserialize)]
-pub struct ICTransferReply {
-    pub chain: String,
-    pub symbol: String,
-    pub is_send: bool, // from user's perspective. so if is_send is true, it means the user is sending the token
-    pub amount: Nat,
-    pub canister_id: String,
-    pub block_index: Nat,
-}
-// ----------------- end:add_liquidity -----------------
-
-// ----------------- begin:add_token -----------------
-impl Request for AddTokenArgs {
-    fn method(&self) -> &'static str {
-        "add_token"
-    }
-
-    fn update(&self) -> bool {
-        true
-    }
-
-    fn payload(&self) -> Result<Vec<u8>, candid::Error> {
-        candid::encode_one(self)
-    }
-
-    type Response = Result<AddTokenReply, String>;
-}
-
-// Arguments for adding a token.
-#[derive(CandidType, Debug, Clone, Serialize, Deserialize)]
-pub struct AddTokenArgs {
-    pub token: String,
-}
-
-#[derive(CandidType, Clone, Debug, Serialize, Deserialize)]
-pub enum AddTokenReply {
-    IC(ICReply),
-}
-
-impl WithTransactionWitness for AddTokenReply {
-    fn witness(&self) -> TransactionWitness {
-        // TODO: Use serde_json::to_string
-        TransactionWitness::NonLedger(format!("{:?}", self))
-    }
-}
-
-#[derive(CandidType, Clone, Debug, Serialize, Deserialize)]
-pub struct ICReply {
-    pub token_id: u32,
-    pub chain: String,
-    pub canister_id: String,
-    pub name: String,
-    pub symbol: String,
-    pub decimals: u8,
-    pub fee: Nat,
-    pub icrc1: bool,
-    pub icrc2: bool,
-    pub icrc3: bool,
-    pub is_removed: bool,
-}
-// ----------------- end:add_token -----------------
-
-// ----------------- begin:add_pool -----------------
-impl Request for AddPoolArgs {
-    fn method(&self) -> &'static str {
-        "add_pool"
-    }
-
-    fn update(&self) -> bool {
-        true
-    }
-
-    fn payload(&self) -> Result<Vec<u8>, candid::Error> {
-        candid::encode_one(self)
-    }
-
-    type Response = Result<AddPoolReply, String>;
-}
-
-#[derive(CandidType, Debug, Clone, Serialize, Deserialize)]
-pub struct AddPoolReply {
-    pub tx_id: u64,
-    pub pool_id: u32,
-    pub request_id: u64,
-    pub status: String,
-    pub name: String,
-    pub symbol: String,
-    pub chain_0: String,
-    pub address_0: String,
-    pub symbol_0: String,
-    pub amount_0: Nat,
-    pub balance_0: Nat,
-    pub chain_1: String,
-    pub address_1: String,
-    pub symbol_1: String,
-    pub amount_1: Nat,
-    pub balance_1: Nat,
-    pub lp_fee_bps: u8,
-    pub lp_token_symbol: String,
-    pub add_lp_token_amount: Nat,
-    pub transfer_ids: Vec<TransferIdReply>,
-    pub claim_ids: Vec<u64>,
-    pub is_removed: bool,
-    pub ts: u64,
-}
-
-impl From<&TransferIdReply> for Transfer {
-    fn from(transfer_id_reply: &TransferIdReply) -> Self {
-        let TransferIdReply {
-            transfer_id: _,
-            transfer:
-                TransferReply::IC(ICTransferReply {
-                    amount,
-                    canister_id,
-                    block_index,
-                    ..
-                }),
-        } = transfer_id_reply;
-
-        let ledger_canister_id = canister_id.clone();
-        let amount_deimals = amount.clone();
-        let block_index = block_index.clone();
-
-        Self {
-            ledger_canister_id,
-            amount_deimals,
-            block_index,
-        }
-    }
-}
-
-impl WithTransactionWitness for AddPoolReply {
-    fn witness(&self) -> TransactionWitness {
-        let transfers = self.transfer_ids.iter().map(Transfer::from).collect();
-
-        TransactionWitness::Ledger(transfers)
-    }
-}
-
-#[derive(CandidType, Debug, Clone, Serialize, Deserialize)]
-pub struct AddPoolArgs {
-    pub token_0: String,
-    pub amount_0: Nat,
-    pub tx_id_0: Option<TxId>,
-    pub token_1: String,
-    pub amount_1: Nat,
-    pub tx_id_1: Option<TxId>,
-    pub lp_fee_bps: Option<u8>,
-}
-// ----------------- end:add_pool -----------------
-
-// ----------------- begin:tokens -----------------
-impl Request for TokensArgs {
-    fn method(&self) -> &'static str {
-        "tokens"
-    }
-
-    fn update(&self) -> bool {
-        false
-    }
-
-    fn payload(&self) -> Result<Vec<u8>, candid::Error> {
-        candid::encode_one(self.symbol.clone())
-    }
-
-    type Response = Result<Vec<TokensReply>, String>;
-}
-
-struct TokensArgs {
-    pub symbol: Option<String>,
-}
-
-#[derive(CandidType, Clone, Debug, Serialize, Deserialize)]
-pub enum TokensReply {
-    LP(LPReply),
-    IC(ICReply),
-}
-
-#[derive(CandidType, Clone, Debug, Serialize, Deserialize)]
-pub struct LPReply {
-    pub token_id: u32,
-    pub chain: String,
-    pub address: String,
-    pub name: String,
-    pub symbol: String,
-    pub pool_id_of: u32,
-    pub decimals: u8,
-    pub fee: Nat,
-    pub total_supply: Nat,
-    pub is_removed: bool,
-}
-// ----------------- end:tokens -----------------
-
-// ----------------- begin:tokens -----------------
-impl Request for PoolsArgs {
-    fn method(&self) -> &'static str {
-        "pools"
-    }
-
-    fn update(&self) -> bool {
-        false
-    }
-
-    fn payload(&self) -> Result<Vec<u8>, candid::Error> {
-        candid::encode_one(self.symbol.clone())
-    }
-
-    type Response = Result<Vec<PoolReply>, String>;
-}
-
-struct PoolsArgs {
-    pub symbol: Option<String>,
-}
-
-#[derive(CandidType, Debug, Clone, Serialize, Deserialize)]
-pub struct PoolReply {
-    pub pool_id: u32,
-    pub name: String,
-    pub symbol: String,
-    pub chain_0: String,
-    pub symbol_0: String,
-    pub address_0: String,
-    pub balance_0: Nat,
-    pub lp_fee_0: Nat,
-    pub chain_1: String,
-    pub symbol_1: String,
-    pub address_1: String,
-    pub balance_1: Nat,
-    pub lp_fee_1: Nat,
-    pub price: f64,
-    pub lp_fee_bps: u8,
-    pub lp_token_symbol: String,
-    pub is_removed: bool,
-}
-// ----------------- end:tokens -----------------
-
-// ----------------- begin:remove_liquidity_amounts -----------------
-impl Request for RemoveLiquidityAmountsArgs {
-    fn method(&self) -> &'static str {
-        "remove_liquidity_amounts"
-    }
-
-    fn update(&self) -> bool {
-        false
-    }
-
-    fn payload(&self) -> Result<Vec<u8>, candid::Error> {
-        let Self {
-            token_0,
-            token_1,
-            remove_lp_token_amount,
-        } = self;
-
-        candid::encode_args((token_0, token_1, remove_lp_token_amount))
-    }
-
-    type Response = Result<RemoveLiquidityAmountsReply, String>;
-}
-
-struct RemoveLiquidityAmountsArgs {
-    pub token_0: String,
-    pub token_1: String,
-    pub remove_lp_token_amount: Nat,
-}
-
-#[derive(CandidType, Clone, Debug, Serialize, Deserialize)]
-pub struct RemoveLiquidityAmountsReply {
-    pub symbol: String,
-    pub chain_0: String,
-    pub address_0: String,
-    pub symbol_0: String,
-    pub amount_0: Nat,
-    pub lp_fee_0: Nat,
-    pub chain_1: String,
-    pub address_1: String,
-    pub symbol_1: String,
-    pub amount_1: Nat,
-    pub lp_fee_1: Nat,
-    pub remove_lp_token_amount: Nat,
-}
-
-impl WithTransactionWitness for RemoveLiquidityAmountsReply {
-    fn witness(&self) -> TransactionWitness {
-        // TODO: Use serde_json::to_string
-        TransactionWitness::NonLedger(format!("{:?}", self))
-    }
-}
-// ----------------- end:remove_liquidity_amounts -----------------
-
-// ----------------- begin:liquidity_amounts -----------------
-impl Request for RemoveLiquidityArgs {
-    fn method(&self) -> &'static str {
-        "remove_liquidity"
-    }
-
-    fn update(&self) -> bool {
-        true
-    }
-
-    fn payload(&self) -> Result<Vec<u8>, candid::Error> {
-        candid::encode_one(self)
-    }
-
-    type Response = Result<RemoveLiquidityReply, String>;
-}
-
-#[derive(CandidType, Debug, Clone, Serialize, Deserialize)]
-pub struct RemoveLiquidityReply {
-    pub tx_id: u64,
-    pub request_id: u64,
-    pub status: String,
-    pub symbol: String,
-    pub chain_0: String,
-    pub address_0: String,
-    pub symbol_0: String,
-    pub amount_0: Nat,
-    pub lp_fee_0: Nat,
-    pub chain_1: String,
-    pub address_1: String,
-    pub symbol_1: String,
-    pub amount_1: Nat,
-    pub lp_fee_1: Nat,
-    pub remove_lp_token_amount: Nat,
-    pub transfer_ids: Vec<TransferIdReply>,
-    pub claim_ids: Vec<u64>,
-    pub ts: u64,
-}
-
-impl WithTransactionWitness for RemoveLiquidityReply {
-    fn witness(&self) -> TransactionWitness {
-        let transfers = self.transfer_ids.iter().map(Transfer::from).collect();
-
-        TransactionWitness::Ledger(transfers)
-    }
-}
-
-#[derive(CandidType, Debug, Clone, Serialize, Deserialize)]
-pub struct RemoveLiquidityArgs {
-    pub token_0: String,
-    pub token_1: String,
-    pub remove_lp_token_amount: Nat,
-}
-// ----------------- end:liquidity_amounts -----------------
-
-// ----------------- begin:user_balances -----------------
-impl Request for UserBalancesArgs {
-    fn method(&self) -> &'static str {
-        "user_balances"
-    }
-
-    fn update(&self) -> bool {
-        false
-    }
-
-    fn payload(&self) -> Result<Vec<u8>, candid::Error> {
-        candid::encode_one(self.principal_id.clone())
-    }
-
-    type Response = Result<Vec<UserBalancesReply>, String>;
-}
-
-struct UserBalancesArgs {
-    pub principal_id: String,
-}
-
-#[derive(CandidType, Clone, Debug, Serialize, Deserialize)]
-pub enum UserBalancesReply {
-    LP(UserBalanceLPReply),
-}
-
-impl WithTransactionWitness for Vec<UserBalancesReply> {
-    fn witness(&self) -> TransactionWitness {
-        let witnesses = self
-            .iter()
-            .map(|UserBalancesReply::LP(user_balance_lp_reply)| {
-                // TODO: Use serde_json::to_string
-                format!("{:?}", user_balance_lp_reply)
-            })
-            .collect::<Vec<_>>();
-
-        TransactionWitness::NonLedger(witnesses.join(", "))
-    }
-}
-
-#[derive(CandidType, Clone, Debug, Serialize, Deserialize)]
-pub struct UserBalanceLPReply {
-    pub symbol: String,
-    pub name: String,
-    pub lp_token_id: u64,
-    pub balance: f64,
-    pub usd_balance: f64,
-    pub chain_0: String,
-    pub symbol_0: String,
-    pub address_0: String,
-    pub amount_0: f64,
-    pub usd_amount_0: f64,
-    pub chain_1: String,
-    pub symbol_1: String,
-    pub address_1: String,
-    pub amount_1: f64,
-    pub usd_amount_1: f64,
-    pub ts: u64,
-}
-
-// ----------------- end:user_balances -----------------
-
 async fn dbg_print_block(
     pocket_ic: &PocketIc,
-    sns_ledger_canister_id: CanisterId,
+    sns_ledger_canister_id: PrincipalId,
     block_index: u64,
 ) {
     let block =
-        sns::ledger::get_all_blocks(pocket_ic, sns_ledger_canister_id.get(), block_index, 1).await;
+        sns::ledger::get_all_blocks(pocket_ic, sns_ledger_canister_id, block_index, 1).await;
 
     let Value::Map(block_details) = block.blocks[0].clone() else {
         panic!("Expected a block with details, got: {:?}", block.blocks[0]);
