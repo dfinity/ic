@@ -177,11 +177,10 @@ fn canister_post_upgrade() {
 
     println!(
         "{}canister_post_upgrade: Initializing with: economics: \
-          {:?}, genesis_timestamp_seconds: {}, neuron count: {}, xdr_conversion_rate: {:?}",
+          {:?}, genesis_timestamp_seconds: {}, xdr_conversion_rate: {:?}",
         LOG_PREFIX,
         restored_state.economics,
         restored_state.genesis_timestamp_seconds,
-        restored_state.neurons.len(),
         restored_state.xdr_conversion_rate,
     );
 

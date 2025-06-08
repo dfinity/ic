@@ -2015,6 +2015,12 @@ impl StateMachine {
     }
 
     fn into_components(self) -> (Box<dyn StateMachineStateDir>, u64, Time, u64) {
+        // Finish any asynchronous state manager operations first.
+        self.state_manager.flush_tip_channel();
+        self.state_manager
+            .state_layout()
+            .flush_checkpoint_removal_channel();
+
         let state_manager = Arc::downgrade(&self.state_manager);
         let result = self.into_components_inner();
         // StateManager is owned by an Arc, that is cloned into multiple components and different
