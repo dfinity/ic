@@ -8,8 +8,8 @@ use ic_registry_keys::{
     CANISTER_RANGES_PREFIX,
 };
 use ic_registry_routing_table::{
-    canister_id_into_u64, routing_table_insert_subnet, CanisterIdRange, CanisterIdRanges,
-    CanisterMigrations, RoutingTable,
+    routing_table_insert_subnet, CanisterIdRange, CanisterIdRanges, CanisterMigrations,
+    RoutingTable,
 };
 use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation, RegistryValue};
 use ic_registry_transport::{delete, upsert};
@@ -58,12 +58,6 @@ pub(crate) fn mutations_for_canister_ranges(
             }
         };
 
-    let proto_canister_id_to_u64 = |canister_id: ic_protobuf::types::v1::CanisterId| -> u64 {
-        canister_id_into_u64(CanisterId::unchecked_from_principal(
-            PrincipalId::try_from(canister_id.principal_id.unwrap().raw).unwrap(),
-        ))
-    };
-
     // We have to use the old routing table (in canister_range_* form) in order to create the
     // diff here.
     // We create the structure of the new shards from the current structure without values, as the values
@@ -94,7 +88,6 @@ pub(crate) fn mutations_for_canister_ranges(
         new_shards.insert(zero_id, pb::RoutingTable { entries: vec![] });
     }
 
-    let start_bytes = CanisterId::from_u64(0).get().to_vec();
     for (range, subnet) in new_rt.iter() {
         let range_start = range.start;
 
@@ -789,13 +782,14 @@ mod tests {
         let subnet = SubnetId::new(PrincipalId::new_user_test_id(1));
         let old_shards = shards(vec![
             (0, make_rt_entry_definitions(0..=10, 10)),
-            (150, vec![((150, 190), subnet)]),
+            (150, vec![((150, 199), subnet)]),
             (200, make_rt_entry_definitions(20..=40, 10)),
         ]);
         apply_shards_to_registry(&mut registry, &old_shards);
 
         let new_shards = shards(vec![
             (0, make_rt_entry_definitions(0..=11, 10)),
+            (110, vec![]),
             (200, make_rt_entry_definitions(20..=41, 10)),
         ]);
         let new = rt_from_shards(&new_shards);
@@ -815,7 +809,7 @@ mod tests {
             delete(make_canister_ranges_key(CanisterId::from(150))),
             upsert(
                 make_canister_ranges_key(CanisterId::from(200)),
-                expected_shard_3.encode_to_vec(),
+                expected_shard_2.encode_to_vec(),
             ),
             upsert(
                 make_canister_ranges_key(CanisterId::from(300)),
