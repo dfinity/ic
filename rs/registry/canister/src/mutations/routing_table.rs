@@ -784,7 +784,7 @@ mod tests {
         apply_shards_to_registry(&mut registry, &old_shards);
 
         let new_shards = shards(vec![
-            (0, make_rt_entry_definitions(0..=10, 10)),
+            (0, make_rt_entry_definitions(0..=11, 10)),
             (110, vec![]),
             (200, make_rt_entry_definitions(20..=41, 10)),
         ]);
@@ -793,18 +793,23 @@ mod tests {
         // what changes given the existing shards it ought to make.
         let mutations = mutations_for_canister_ranges(&registry, &new);
 
-        let expected_shard_1 = shard_pb_rt(make_rt_entry_definitions(20..=29, 10));
-        let expected_shard_2 = shard_pb_rt(make_rt_entry_definitions(30..=41, 10));
+        let expected_shard_1 = shard_pb_rt(make_rt_entry_definitions(0..=11, 10));
+        let expected_shard_2 = shard_pb_rt(make_rt_entry_definitions(20..=29, 10));
+        let expected_shard_3 = shard_pb_rt(make_rt_entry_definitions(30..=41, 10));
 
         let expected = vec![
+            upsert(
+                make_canister_ranges_key(CanisterId::from(0)),
+                expected_shard_1.encode_to_vec(),
+            ),
             delete(make_canister_ranges_key(CanisterId::from(110))),
             upsert(
                 make_canister_ranges_key(CanisterId::from(200)),
-                expected_shard_1.encode_to_vec(),
+                expected_shard_3.encode_to_vec(),
             ),
             upsert(
                 make_canister_ranges_key(CanisterId::from(300)),
-                expected_shard_2.encode_to_vec(),
+                expected_shard_3.encode_to_vec(),
             ),
         ];
         compare_rt_mutations(expected, mutations);
