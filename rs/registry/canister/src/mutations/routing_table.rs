@@ -118,8 +118,9 @@ pub(crate) fn mutations_for_canister_ranges(
             let shard_key = proto_canister_id_to_u64(
                 entries
                     .first()
-                    .and_then(|e| e.range)
-                    .and_then(|range| range.start_canister_id)
+                    .and_then(|e| e.range.as_ref())
+                    .and_then(|range| range.start_canister_id.as_ref())
+                    .and_then(|canister_id| Some(canister_id.clone()))
                     // This expect is safe because we push at least one entry right before this.
                     .expect("Invalid Range found in routing table entry."),
             );
