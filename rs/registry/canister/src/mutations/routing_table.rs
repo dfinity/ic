@@ -41,8 +41,6 @@ const MAX_RANGES_PER_CANISTER_RANGES: u16 = 20;
 
 /// Complexity O(n)
 // TODO after migration runs in registry_lifecycle.rs, make this function private to this module again.
-//
-// TODO DO NOT MERGE This is the function that will figure out the correct sharding of canister ranges
 pub(crate) fn mutations_for_canister_ranges(
     registry: &Registry,
     new_rt: &RoutingTable,
@@ -111,23 +109,20 @@ pub(crate) fn mutations_for_canister_ranges(
         if rt_fragment.entries.len() == MAX_RANGES_PER_CANISTER_RANGES as usize {
             // If the current shard has more than MAX_RANGES_PER_CANISTER_RANGES, we need to split it
             // into multiple shards.
-
             let mut entries = rt_fragment
                 .entries
                 .split_off(MAX_RANGES_PER_CANISTER_RANGES as usize / 2);
 
             entries.push(create_rt_entry(range, subnet));
+
             let shard_key = proto_canister_id_to_u64(
                 entries
                     .first()
-                    .cloned()
-                    .unwrap()
-                    .range
-                    .unwrap()
-                    .start_canister_id
-                    .unwrap(),
+                    .and_then(|e| e.range)
+                    .and_then(|range| range.start_canister_id)
+                    // This expect is safe because we push at least one entry right before this.
+                    .expect("Invalid Range found in routing table entry."),
             );
-            // TODO  DO NOT MERGE - this is where we need something a bit more sophisticated
             let new_shard = pb::RoutingTable { entries };
 
             new_shards.insert(shard_key, new_shard);
@@ -152,23 +147,17 @@ pub(crate) fn mutations_for_canister_ranges(
                 .cmp(n_key)
             {
                 Ordering::Less => {
-                    println!("Less {} {}", o_key, n_key);
                     mutations.push(delete(range_key(*o_key)));
                     old_shard_iterator.next();
                 }
                 Ordering::Greater => {
-                    println!("Greater {} {}", o_key, n_key);
                     mutations.push(upsert(range_key(*n_key), new_rt_fragment.encode_to_vec()));
                     new_shard_iterator.next();
                 }
                 Ordering::Equal => {
-                    println!("Equal {} {}", o_key, n_key);
                     // Only produce mutations for differences, since every mutation will take space
                     // in the registry even if the values are equivalent.
                     if old_rt_fragment != new_rt_fragment {
-                        println!("Equal but not equal, pushing upsert");
-                        println!("Old: {:?}", old_rt_fragment);
-                        println!("New: {:?}", new_rt_fragment);
                         mutations.push(upsert(range_key(*n_key), new_rt_fragment.encode_to_vec()));
                     }
                     old_shard_iterator.next();
@@ -176,12 +165,10 @@ pub(crate) fn mutations_for_canister_ranges(
                 }
             },
             (Some(&(o_key, _)), None) => {
-                println!("Old only {}", o_key);
                 mutations.push(delete(range_key(*o_key)));
                 old_shard_iterator.next();
             }
             (None, Some(&(n_key, new_rt_fragment))) => {
-                println!("New only {}", n_key);
                 mutations.push(upsert(range_key(*n_key), new_rt_fragment.encode_to_vec()));
                 new_shard_iterator.next();
             }
