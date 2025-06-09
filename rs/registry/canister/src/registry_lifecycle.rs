@@ -7,7 +7,6 @@ use crate::{
 use ic_base_types::{NodeId, PrincipalId};
 use ic_protobuf::registry::node::v1::{NodeRecord, NodeRewardType};
 use ic_registry_keys::{make_node_record_key, NODE_RECORD_KEY_PREFIX};
-use ic_registry_routing_table::RoutingTable;
 use ic_registry_transport::{pb::v1::RegistryMutation, update};
 use prost::Message;
 use std::str::FromStr;
