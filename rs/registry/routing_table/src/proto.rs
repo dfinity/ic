@@ -96,6 +96,15 @@ impl TryFrom<pb::RoutingTable> for RoutingTable {
     }
 }
 
+impl TryFrom<Vec<pb::RoutingTable>> for RoutingTable {
+    type Error = ProxyDecodeError;
+
+    fn try_from(src: Vec<pb::RoutingTable>) -> Result<Self, Self::Error> {
+        let entries = src.into_iter().flat_map(|table| table.entries).collect();
+        Self::try_from(pb::RoutingTable { entries })
+    }
+}
+
 impl From<CanisterMigrations> for pb::CanisterMigrations {
     fn from(src: CanisterMigrations) -> Self {
         Self::from(&src)
