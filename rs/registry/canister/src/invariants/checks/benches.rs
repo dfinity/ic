@@ -3,7 +3,7 @@ use canbench_rs::{bench, bench_fn, BenchResult};
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_protobuf::registry::routing_table::v1::routing_table::Entry;
 use ic_protobuf::registry::routing_table::v1::RoutingTable;
-use ic_registry_keys::make_canister_range_key;
+use ic_registry_keys::make_canister_ranges_key;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_transport::pb::v1::RegistryValue;
 use ic_registry_transport::upsert;
@@ -41,7 +41,7 @@ fn setup_registry_with_rt_segments_with_x_entries_each(
 
         if i % entries_per_segment == 0 && i > 0 {
             mutations.push(upsert(
-                make_canister_range_key(CanisterId::from(i), subnet_id)
+                make_canister_ranges_key(CanisterId::from(i))
                     .as_bytes()
                     .to_vec(),
                 segment.encode_to_vec(),
@@ -59,14 +59,9 @@ fn setup_registry_with_rt_segments_with_x_entries_each(
 
     if !segment.entries.is_empty() {
         mutations.push(upsert(
-            make_canister_range_key(
-                CanisterId::from(number_segments * entries_per_segment),
-                SubnetId::from(PrincipalId::new_subnet_test_id(
-                    number_segments * entries_per_segment,
-                )),
-            )
-            .as_bytes()
-            .to_vec(),
+            make_canister_ranges_key(CanisterId::from(number_segments * entries_per_segment))
+                .as_bytes()
+                .to_vec(),
             segment.encode_to_vec(),
         ));
     }
