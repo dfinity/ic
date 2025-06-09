@@ -1,9 +1,7 @@
 use crate::deserialize_registry_value;
 use ic_interfaces_registry::{RegistryClient, RegistryClientResult};
 use ic_protobuf::registry::routing_table::v1 as pb;
-use ic_registry_keys::{
-    make_canister_migrations_record_key, make_routing_table_record_key, CANISTER_RANGES_PREFIX,
-};
+use ic_registry_keys::{make_canister_migrations_record_key, CANISTER_RANGES_PREFIX};
 use ic_registry_routing_table::{CanisterIdRange, CanisterMigrations, RoutingTable};
 use ic_types::{registry::RegistryClientError::DecodeError, RegistryVersion, SubnetId};
 use std::convert::TryFrom;
@@ -27,20 +25,16 @@ pub trait RoutingTableRegistry {
 impl<T: RegistryClient + ?Sized> RoutingTableRegistry for T {
     fn get_routing_table(&self, version: RegistryVersion) -> RegistryClientResult<RoutingTable> {
         let keys = self.get_key_family(CANISTER_RANGES_PREFIX, version)?;
-        let entries = keys
+        let routing_table_shards = keys
             .iter()
-            .map(|key| {
-                deserialize_registry_value::<pb::RoutingTable>(self.get_value(key, version))
-                    .map(|pb_rt| pb_rt.map(|rt| rt.entries))
-            })
+            .map(|key| deserialize_registry_value::<pb::RoutingTable>(self.get_value(key, version)))
             .collect::<Result<Vec<_>, _>>()?
             .into_iter()
-            .flatten()
-            .flatten()
+            .filter_map(|opt| opt)
             .collect::<Vec<_>>();
 
         Some(
-            RoutingTable::try_from(pb::RoutingTable { entries }).map_err(|err| DecodeError {
+            RoutingTable::try_from(routing_table_shards).map_err(|err| DecodeError {
                 error: format!("get_routing_table() failed with {}", err),
             }),
         )
