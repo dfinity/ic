@@ -92,12 +92,11 @@ pub(crate) fn mutations_for_canister_ranges(
         let range_start = range.start;
 
         // find the entry in the new_shards that is closest to the start of the range in the lower direction
-        let key = new_shards
+        let key = *(new_shards
             .range(zero_id..=range_start)
             .next_back()
             .unwrap()
-            .0
-            .clone();
+            .0);
 
         let rt_fragment = new_shards.get_mut(&key).unwrap();
 
@@ -115,11 +114,9 @@ pub(crate) fn mutations_for_canister_ranges(
                 .and_then(|e| e.range.as_ref())
                 .and_then(|range| range.start_canister_id.as_ref())
                 .and_then(|canister_id| canister_id.principal_id.as_ref())
-                .and_then(|principal| {
-                    Some(
-                        CanisterId::try_from(principal.raw.clone())
-                            .expect("Invalid canisterId in range key"),
-                    )
+                .map(|principal| {
+                    CanisterId::try_from(principal.raw.clone())
+                        .expect("Invalid canisterId in range key")
                 })
                 // This expect is safe because we push at least one entry right before this.
                 .expect("Invalid Range found in routing table entry.");
