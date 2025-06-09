@@ -57,7 +57,7 @@ The `boot_args.template` file in the GuestOS context directory defines the kerne
 * `BOOT_ARGS_A`: Kernel command line parameters for booting from partition set A
 * `BOOT_ARGS_B`: Kernel command line parameters for booting from partition set B
 
-The `EXTRA_BOOT_ARGS` variable is substituted into the `extra_boot_args` file during build and we also save `extra_boot_args` separately for backwards compatibility.
+We also save `extra_boot_args` separately for backwards compatibility.
 
 === During the boot process
 
