@@ -1,5 +1,6 @@
 use candid::Decode;
 use core::sync::atomic::Ordering;
+use ed25519_dalek::{pkcs8::EncodePrivateKey, SigningKey};
 use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
 use ic_btc_adapter_client::setup_bitcoin_adapter_clients;
 use ic_btc_consensus::BitcoinPayloadBuilder;
@@ -408,10 +409,10 @@ fn add_subnet_local_registry_records(
                 )
                 .unwrap();
         }
-        let root_key_pair = KeyPair::generate().unwrap();
+
         let root_cert = CertificateParams::new(vec![node.node_id.to_string()])
             .unwrap()
-            .self_signed(&root_key_pair)
+            .self_signed(&node.root_key_pair)
             .unwrap();
         let tls_cert = X509PublicKeyCert {
             certificate_der: root_cert.der().to_vec(),
@@ -809,6 +810,7 @@ pub struct StateMachineNode {
     pub idkg_mega_encryption_key: ic_ed25519::PrivateKey,
     pub http_ip_addr: Ipv6Addr,
     pub xnet_ip_addr: Ipv6Addr,
+    pub root_key_pair: KeyPair,
 }
 
 impl StateMachineNode {
@@ -823,6 +825,10 @@ impl StateMachineNode {
         let mut xnet_ip_addr_bytes = rng.gen::<[u8; 16]>();
         xnet_ip_addr_bytes[0] = 0xe0; // make sure the ipv6 address has no special form
         let xnet_ip_addr = Ipv6Addr::from(xnet_ip_addr_bytes);
+        let seed = rng.gen::<[u8; 32]>();
+        let signing_key = SigningKey::from_bytes(&seed);
+        let pkcs8_bytes = signing_key.to_pkcs8_der().unwrap().as_bytes().to_vec();
+        let root_key_pair: KeyPair = pkcs8_bytes.try_into().unwrap();
         Self {
             node_id: PrincipalId::new_self_authenticating(
                 &node_signing_key.public_key().serialize_rfc8410_der(),
@@ -834,6 +840,7 @@ impl StateMachineNode {
             idkg_mega_encryption_key,
             http_ip_addr,
             xnet_ip_addr,
+            root_key_pair,
         }
     }
 }
@@ -2003,6 +2010,12 @@ impl StateMachine {
     }
 
     fn into_components(self) -> (Box<dyn StateMachineStateDir>, u64, Time, u64) {
+        // Finish any asynchronous state manager operations first.
+        self.state_manager.flush_tip_channel();
+        self.state_manager
+            .state_layout()
+            .flush_checkpoint_removal_channel();
+
         let state_manager = Arc::downgrade(&self.state_manager);
         let result = self.into_components_inner();
         // StateManager is owned by an Arc, that is cloned into multiple components and different
