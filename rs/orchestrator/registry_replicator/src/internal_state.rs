@@ -14,8 +14,8 @@ use ic_registry_client_helpers::{
     subnet::{SubnetRegistry, SubnetTransportRegistry},
 };
 use ic_registry_keys::{
-    make_routing_table_record_key, make_subnet_list_record_key, make_subnet_record_key,
-    ROOT_SUBNET_ID_KEY,
+    make_canister_ranges_key, make_routing_table_record_key, make_subnet_list_record_key,
+    make_subnet_record_key, CANISTER_RANGES_PREFIX, ROOT_SUBNET_ID_KEY,
 };
 use ic_registry_local_store::{Changelog, ChangelogEntry, KeyMutation, LocalStore};
 use ic_registry_nns_data_provider::registry::RegistryCanister;
@@ -281,11 +281,11 @@ impl InternalState {
         use prost::Message;
         let registry_version = RegistryVersion::from(changelog.len() as u64);
 
-        let routing_table = self
+        let routing_table_shards = self
             .registry_client
-            .get_routing_table(registry_version)
-            .expect("Could not query registry for routing table.")
-            .expect("No routing table configured in registry");
+            .get_routing_table_shards(registry_version)
+            .expect("Could not query registry for routing table shards")
+            .expect("No routing table shards found in the registry");
 
         let old_nns_subnet_id = self
             .registry_client
@@ -347,32 +347,43 @@ impl InternalState {
             value: Some(subnet_list_record_bytes),
         });
 
-        // adjust routing table
-        let new_routing_table: BTreeMap<CanisterIdRange, SubnetId> = routing_table
+        // Make routing table shard updates
+        let routing_table_updates: Vec<_> = routing_table_shards
             .into_iter()
-            .filter_map(|(r, s_id)| {
-                if s_id == old_nns_subnet_id {
-                    Some((r, new_nns_subnet_id))
+            .flat_map(|(canister_id, pb_rt)| {
+                let mut changed = false;
+                let rt: BTreeMap<CanisterIdRange, SubnetId> = RoutingTable::try_from(pb_rt)
+                    .expect("bug: invalid routing table shard")
+                    .into_iter()
+                    .map(|r, s_id| {
+                        if s_id == old_nns_subnet_id {
+                            changed = true;
+                            (r, new_nns_subnet_id)
+                        } else {
+                            (r, s_id)
+                        }
+                    })
+                    .collect();
+
+                if changed {
+                    Some((
+                        make_canister_ranges_key(canister_id),
+                        PbRoutingTable::from(rt),
+                    ))
                 } else {
                     None
                 }
             })
             .collect();
 
-        // It's safe to unwrap here because we started from a valid table and
-        // removed entries from it.  Removing entries cannot invalidate the
-        // table.
-        let new_routing_table =
-            RoutingTable::try_from(new_routing_table).expect("bug: invalid routing table");
-        let pb_routing_table = PbRoutingTable::from(new_routing_table);
-        let mut pb_routing_table_bytes = vec![];
-        pb_routing_table
-            .encode(&mut pb_routing_table_bytes)
-            .expect("encode can't fail");
-        last.push(KeyMutation {
-            key: make_routing_table_record_key(),
-            value: Some(pb_routing_table_bytes),
-        });
+        for (key, pb_routing_table) in routing_table_updates {
+            // encode the routing table
+            let bytes = pb_routing_table.encode_to_vec();
+            last.push(KeyMutation {
+                key,
+                value: Some(bytes),
+            });
+        }
     }
 
     /// Update the [`RegistryCanister`] API wrapper with the newest API Urls

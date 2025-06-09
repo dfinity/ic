@@ -386,6 +386,21 @@ pub fn make_canister_ranges_key(range_start: CanisterId) -> String {
     format!("{}{}", CANISTER_RANGES_PREFIX, encoded_range_start)
 }
 
+pub fn maybe_parse_canister_id_from_canister_ranges_key(key: &String) -> Option<CanisterId> {
+    if !key.starts_with(CANISTER_RANGES_PREFIX) {
+        return None;
+    }
+    key.strip_prefix(CANISTER_RANGES_PREFIX).map(|stripped| {
+        hex::decode(stripped).ok().and_then(|bytes| {
+            PrincipalId::try_from(bytes)
+                .ok()
+                .map(CanisterId::try_from_principal_id)
+                .flatten()
+                .flatten()
+        })
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
