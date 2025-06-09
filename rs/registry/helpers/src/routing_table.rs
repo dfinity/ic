@@ -30,7 +30,7 @@ impl<T: RegistryClient + ?Sized> RoutingTableRegistry for T {
             .map(|key| deserialize_registry_value::<pb::RoutingTable>(self.get_value(key, version)))
             .collect::<Result<Vec<_>, _>>()?
             .into_iter()
-            .filter_map(|opt| opt)
+            .flatten()
             .collect::<Vec<_>>();
 
         Some(
