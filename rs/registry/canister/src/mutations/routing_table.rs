@@ -409,10 +409,9 @@ impl Registry {
 #[cfg(test)]
 mod tests {
     use crate::common::test_helpers::invariant_compliant_registry;
-    use std::ops::{Range, RangeBounds};
 
     use super::*;
-    use crate::mutations::node_management::common::{get_key_family, get_key_family_iter};
+    use crate::mutations::node_management::common::get_key_family;
     use assert_matches::assert_matches;
     use ic_base_types::CanisterId;
     use ic_registry_keys::CANISTER_RANGES_PREFIX;
@@ -596,6 +595,7 @@ mod tests {
         rt
     }
 
+    #[allow(clippy::type_complexity)]
     fn shards(shards: Vec<(u64, Vec<((u64, u64), SubnetId)>)>) -> Vec<(u64, pb::RoutingTable)> {
         shards
             .into_iter()
@@ -606,7 +606,7 @@ mod tests {
             .collect()
     }
 
-    fn rt_from_shards(shards: &Vec<(u64, pb::RoutingTable)>) -> RoutingTable {
+    fn rt_from_shards(shards: &[(u64, pb::RoutingTable)]) -> RoutingTable {
         let entries = shards
             .iter()
             .flat_map(|(_, rt_proto)| rt_proto.entries.clone())
@@ -617,7 +617,7 @@ mod tests {
 
     // This helper lets us create artificial shards for testing that otherwise
     // would not be created by the routing table saving logic.
-    fn apply_shards_to_registry(registry: &mut Registry, shards: &Vec<(u64, pb::RoutingTable)>) {
+    fn apply_shards_to_registry(registry: &mut Registry, shards: &[(u64, pb::RoutingTable)]) {
         let mutations: Vec<RegistryMutation> = shards
             .iter()
             .map(|(start, rt)| {
@@ -681,13 +681,13 @@ mod tests {
     #[test]
     fn empty_old_and_new_yields_no_mutations() {
         let mut registry = invariant_compliant_registry(0);
-        let old = rt_from_shards(&vec![]);
+        let old = rt_from_shards(&[]);
         registry.apply_mutations_for_test(mutations_for_canister_ranges(&registry, &old));
 
         let entries = get_key_family::<pb::RoutingTable>(&registry, CANISTER_RANGES_PREFIX);
         assert!(entries.is_empty());
 
-        let new = rt_from_shards(&vec![]);
+        let new = rt_from_shards(&[]);
         let mutations = mutations_for_canister_ranges(&registry, &new);
         assert!(mutations.is_empty());
 
@@ -704,7 +704,7 @@ mod tests {
         let old = rt_from_shards(&old_shards);
         registry.apply_mutations_for_test(mutations_for_canister_ranges(&registry, &old));
 
-        let new = rt_from_shards(&vec![]);
+        let new = rt_from_shards(&[]);
         let mutations = mutations_for_canister_ranges(&registry, &new);
 
         let expected = vec![delete(make_canister_ranges_key(CanisterId::from(0)))];
@@ -714,8 +714,7 @@ mod tests {
     #[test]
     fn up_to_limit_all_entries_are_in_same_table() {
         let mut registry = invariant_compliant_registry(0);
-        let subnet = SubnetId::new(PrincipalId::new_user_test_id(2));
-        let old = rt_from_shards(&vec![]);
+        let old = rt_from_shards(&[]);
         registry.apply_mutations_for_test(mutations_for_canister_ranges(&registry, &old));
 
         let new_ranges = make_rt_entry_definitions(1..=20, 10);
@@ -734,7 +733,6 @@ mod tests {
     #[test]
     fn new_has_enough_extra_ranges_generates_upsert_with_new_range() {
         let mut registry = invariant_compliant_registry(0);
-        let subnet = SubnetId::new(PrincipalId::new_user_test_id(2));
         let old = rt_from_ranges(vec![]);
         registry.apply_mutations_for_test(mutations_for_canister_ranges(&registry, &old));
 
