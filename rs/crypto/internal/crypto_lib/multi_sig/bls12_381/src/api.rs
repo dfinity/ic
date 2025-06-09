@@ -63,7 +63,7 @@ pub fn verify_pop(
 ) -> Result<(), CryptoError> {
     let pop = Pop::try_from(pop_bytes)?;
     let public_key = PublicKey::try_from(public_key_bytes)?;
-    if crypto::verify_pop(&pop, &public_key) {
+    if crypto::verify_pop(&pop, &public_key) && !public_key.is_identity() {
         Ok(())
     } else {
         Err(CryptoError::PopVerification {
@@ -108,7 +108,9 @@ pub fn verify_individual(
 ) -> Result<(), CryptoError> {
     let signature = IndividualSignature::try_from(signature_bytes)?;
     let public_key = PublicKey::try_from(public_key_bytes)?;
-    if crypto::verify_individual_message_signature(message, &signature, &public_key) {
+    if crypto::verify_individual_message_signature(message, &signature, &public_key)
+        && !public_key.is_identity()
+    {
         Ok(())
     } else {
         Err(CryptoError::SignatureVerification {
