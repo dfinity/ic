@@ -48,7 +48,7 @@ fn munge(
             (
                 wholematch.start(),
                 prevmatch.as_str().to_string(),
-                KernelCommandLine::try_from(thematch.as_str().trim_matches('"'))?,
+                KernelCommandLine::try_from(thematch.as_str().trim().trim_matches('"'))?,
                 postmatch.as_str().to_string(),
                 wholematch.end(),
             )
