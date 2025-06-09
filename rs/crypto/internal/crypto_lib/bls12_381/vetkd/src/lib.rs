@@ -305,7 +305,9 @@ impl EncryptedKey {
         let mut valid_shares = Vec::with_capacity(reconstruction_threshold);
 
         for (node_index, node_pk, node_eks) in nodes.iter() {
-            if node_eks.is_valid(master_pk, node_pk, context, input, tpk) && !node_ids_seen.contains(node_index) {
+            if node_eks.is_valid(master_pk, node_pk, context, input, tpk)
+                && !node_ids_seen.contains(node_index)
+            {
                 node_ids_seen.insert(*node_index);
                 valid_shares.push((*node_index, node_eks.clone()));
 
