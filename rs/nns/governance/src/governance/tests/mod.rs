@@ -1692,3 +1692,89 @@ fn test_compute_ballots_for_new_proposal() {
         }
     );
 }
+
+mod backwards_compatibility_tests {
+    use crate::pb::v1::{
+        neuron::Followees as OldFollowees, Followees as NewFollowees, Governance as NewGovernance,
+        OldGovernance, ProposalData,
+    };
+
+    use ic_nns_common::pb::v1::{NeuronId, ProposalId};
+    use maplit::{btreemap, hashmap};
+    use prost::Message;
+
+    #[test]
+    fn test_old_governance_to_new_governance() {
+        let old_governance_with_default_followees = OldGovernance {
+            proposals: btreemap! {
+                1 => ProposalData {
+                    id: Some(ProposalId {
+                        id: 1
+                    }),
+                    ..Default::default()
+                }
+            },
+            default_followees: hashmap! {
+                1 =>  OldFollowees {
+                    followees: vec![
+                        NeuronId { id: 1 },
+                        NeuronId { id: 2 },
+                    ]
+                }
+            },
+            ..Default::default()
+        };
+        let encoded = old_governance_with_default_followees.encode_to_vec();
+        let decoded = NewGovernance::decode(&*encoded).unwrap();
+        assert_eq!(
+            decoded,
+            NewGovernance {
+                proposals: btreemap! {
+                    1 => ProposalData {
+                        id: Some(ProposalId {
+                            id: 1
+                        }),
+                        ..Default::default()
+                    }
+                },
+                default_followees: hashmap! {
+                    1 => NewFollowees {
+                        followees: vec![
+                            NeuronId { id: 1 },
+                            NeuronId { id: 2 },
+                        ]
+                    }
+                },
+                ..Default::default()
+            }
+        );
+
+        let old_governance_with_no_default_followees = OldGovernance {
+            proposals: btreemap! {
+                1 => ProposalData {
+                    id: Some(ProposalId {
+                        id: 1
+                    }),
+                    ..Default::default()
+                }
+            },
+            ..Default::default()
+        };
+        let encoded = old_governance_with_no_default_followees.encode_to_vec();
+        let decoded = NewGovernance::decode(&*encoded).unwrap();
+        assert_eq!(
+            decoded,
+            NewGovernance {
+                proposals: btreemap! {
+                    1 => ProposalData {
+                        id: Some(ProposalId {
+                            id: 1
+                        }),
+                        ..Default::default()
+                    }
+                },
+                ..Default::default()
+            }
+        );
+    }
+}

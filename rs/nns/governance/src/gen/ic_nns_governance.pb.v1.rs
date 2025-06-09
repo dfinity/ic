@@ -274,6 +274,20 @@ pub struct Neuron {
 }
 /// Nested message and enum types in `Neuron`.
 pub mod neuron {
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct Followees {
+        #[prost(message, repeated, tag = "1")]
+        pub followees: ::prost::alloc::vec::Vec<::ic_nns_common::pb::v1::NeuronId>,
+    }
+
     /// At any time, at most one of `when_dissolved` and
     /// `dissolve_delay` are specified.
     ///
@@ -5130,4 +5144,121 @@ impl ProposalRewardStatus {
             _ => None,
         }
     }
+}
+
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[compare_default]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct OldGovernance {
+    /// Proposals.
+    #[prost(btree_map = "uint64, message", tag = "2")]
+    pub proposals: ::prost::alloc::collections::BTreeMap<u64, ProposalData>,
+    /// The transfers that have been made to stake new neurons, but
+    /// haven't been claimed by the user, yet.
+    #[prost(message, repeated, tag = "3")]
+    pub to_claim_transfers: ::prost::alloc::vec::Vec<NeuronStakeTransfer>,
+    /// Also known as the 'normal voting period'. The maximum time a
+    /// proposal (of a topic with "normal" voting period) is open for
+    /// voting. If a proposal has not been decided (adopted or rejected)
+    /// within this time since the proposal was made, the proposal is
+    /// rejected.
+    ///
+    /// See also `short_voting_period_seconds`.
+    #[prost(uint64, tag = "5")]
+    pub wait_for_quiet_threshold_seconds: u64,
+    /// The network economics configuration parameters.
+    #[prost(message, optional, tag = "8")]
+    pub economics: ::core::option::Option<NetworkEconomics>,
+    /// The last reward event. Should never be missing.
+    #[prost(message, optional, tag = "9")]
+    pub latest_reward_event: ::core::option::Option<RewardEvent>,
+    /// Set of in-flight neuron ledger commands.
+    ///
+    /// Whenever we issue a ledger transfer (for disburse, split, spawn etc)
+    /// we store it in this map, keyed by the id of the neuron being changed
+    /// and remove the entry when it completes.
+    ///
+    /// An entry being present in this map acts like a "lock" on the neuron
+    /// and thus prevents concurrent changes that might happen due to the
+    /// interleaving of user requests and callback execution.
+    ///
+    /// If there are no ongoing requests, this map should be empty.
+    ///
+    /// If something goes fundamentally wrong (say we trap at some point
+    /// after issuing a transfer call) the neuron(s) involved are left in a
+    /// "locked" state, meaning new operations can't be applied without
+    /// reconciling the state.
+    ///
+    /// Because we know exactly what was going on, we should have the
+    /// information necessary to reconcile the state, using custom code
+    /// added on upgrade, if necessary.
+    #[prost(map = "fixed64, message", tag = "10")]
+    pub in_flight_commands: ::std::collections::HashMap<u64, governance::NeuronInFlightCommand>,
+    /// The timestamp, in seconds since the unix epoch, at which `canister_init` was run for
+    /// the governance canister, considered
+    /// the genesis of the IC for reward purposes.
+    #[prost(uint64, tag = "11")]
+    pub genesis_timestamp_seconds: u64,
+    /// The entities that own the nodes running the IC.
+    #[prost(message, repeated, tag = "12")]
+    pub node_providers: ::prost::alloc::vec::Vec<NodeProvider>,
+    /// Default followees
+    ///
+    /// A map of Topic (as i32) to Neuron id that is set as the default
+    /// following for all neurons created post-genesis.
+    ///
+    /// On initialization it's required that the Neurons present in this
+    /// map are present in the initial set of neurons.
+    ///
+    /// Default following can be changed via proposal.
+    #[prost(map = "int32, message", tag = "13")]
+    pub default_followees: ::std::collections::HashMap<i32, neuron::Followees>,
+    /// The maximum time a proposal of a topic with *short voting period*
+    /// is open for voting. If a proposal on a topic with short voting
+    /// period has not been decided (adopted or rejected) within this
+    /// time since the proposal was made, the proposal is rejected.
+    /// The short voting period is used for proposals that don't make sense to vote
+    /// on if the proposal is "old". For example, proposals to set the exchange
+    /// rate should not be voted on if they're days old because exchange rates
+    /// fluctuate regularly. Currently, only proposals to set the exchange rate
+    /// use the short voting period, and such proposals are deprecated.
+    #[prost(uint64, tag = "14")]
+    pub short_voting_period_seconds: u64,
+    /// The maximum time a proposal of a topic with *private voting period*
+    /// is open for voting. If a proposal on a topic with short voting
+    /// period has not been decided (adopted or rejected) within this
+    /// time since the proposal was made, the proposal is rejected.
+    /// This is useful for proposals that are for "private matters" like
+    /// NeuronManagement proposals. These proposals are not meant to be voted on
+    /// by the general public and have limited impact, so a different voting period
+    /// is appropriate.
+    #[prost(uint64, optional, tag = "25")]
+    pub neuron_management_voting_period_seconds: ::core::option::Option<u64>,
+    #[prost(message, optional, tag = "15")]
+    pub metrics: ::core::option::Option<governance::GovernanceCachedMetrics>,
+    #[prost(message, optional, tag = "16")]
+    pub most_recent_monthly_node_provider_rewards:
+        ::core::option::Option<MonthlyNodeProviderRewards>,
+    /// Cached value for the maturity modulation as calculated each day.
+    #[prost(int32, optional, tag = "17")]
+    pub cached_daily_maturity_modulation_basis_points: ::core::option::Option<i32>,
+    /// The last time that the maturity modulation value was updated.
+    #[prost(uint64, optional, tag = "18")]
+    pub maturity_modulation_last_updated_at_timestamp_seconds: ::core::option::Option<u64>,
+    /// Whether the heartbeat function is currently spawning neurons, meaning
+    /// that it should finish before being called again.
+    #[prost(bool, optional, tag = "19")]
+    pub spawning_neurons: ::core::option::Option<bool>,
+    #[prost(message, optional, tag = "20")]
+    pub making_sns_proposal: ::core::option::Option<governance::MakingSnsProposal>,
+    /// Local cache for XDR-related conversion rates (the source of truth is in the CMC canister).
+    #[prost(message, optional, tag = "26")]
+    pub xdr_conversion_rate: ::core::option::Option<XdrConversionRate>,
+    /// The summary of restore aging event.
+    #[prost(message, optional, tag = "27")]
+    pub restore_aging_summary: ::core::option::Option<RestoreAgingSummary>,
+    /// Used to initialize an internal pseudorandom number generator. This gets replaced periodically using a secure
+    /// source of randomness (from the platform)
+    #[prost(bytes = "vec", optional, tag = "28")]
+    pub rng_seed: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
