@@ -2,7 +2,7 @@ use crate::{
     neuron::{DecomposedNeuron, Neuron},
     neuron_store::NeuronStoreError,
     pb::v1::{
-        neuron::Followees, AbridgedNeuron, BallotInfo, KnownNeuronData, MaturityDisbursement,
+        AbridgedNeuron, BallotInfo, Followees, KnownNeuronData, MaturityDisbursement,
         NeuronStakeTransfer, Topic,
     },
     storage::validate_stable_btree_map,
