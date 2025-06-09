@@ -339,5 +339,13 @@ mod test {
             .get_routing_table_from_canister_range_records_or_panic(registry.latest_version());
 
         assert_eq!(recovered, routing_table);
+
+        // Simulate running it again, should produce no mutations
+        let mutations = maybe_write_routing_table_to_canister_ranges(&registry);
+        assert!(
+            mutations.is_empty(),
+            "Expected no mutations, got: {:?}",
+            mutations
+        );
     }
 }
