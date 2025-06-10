@@ -13,7 +13,6 @@ jobs:
   bazel-test-bare-metal:
     name: Bazel Test Bare Metal
     runs-on:
-      group: dm1
       labels: dind-large
     container:
       image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
@@ -59,7 +58,6 @@ jobs:
   fi-tests-nightly:
     name: Bazel Test FI Nightly
     runs-on:
-      group: dm1
       labels: dind-large
     container:
       image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
@@ -80,7 +78,6 @@ jobs:
   nns-tests-nightly:
     name: Bazel Test NNS Nightly
     runs-on:
-      group: dm1
       labels: dind-large
     container:
       image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
@@ -101,7 +98,6 @@ jobs:
   system-tests-benchmarks-nightly:
     name: Bazel System Test Benchmarks
     runs-on:
-      group: dm1
       labels: dind-large
     container:
       image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
@@ -136,7 +132,6 @@ jobs:
     if: false
     name: Dependency Scan Nightly
     runs-on:
-      group: dm1
       labels: dind-large
     container:
       image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
@@ -188,7 +183,6 @@ jobs:
   bazel-test-coverage:
     name: Bazel Test Coverage
     runs-on:
-      group: dm1
       labels: dind-large
     container:
       image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
