@@ -312,13 +312,9 @@ impl<T> ReducedResult<T> {
                 Ok(t) => Ok(t),
                 Err(e) => Err(MultiCallError::ConsistentError(e)),
             },
-            EvmMultiRpcResult::Inconsistent(results) => {
-                let mut multi_results = MultiCallResults::new();
-                results.into_iter().for_each(|(provider, result)| {
-                    multi_results.insert_once(provider, result);
-                });
-                Err(MultiCallError::InconsistentResults(multi_results))
-            }
+            EvmMultiRpcResult::Inconsistent(results) => Err(MultiCallError::InconsistentResults(
+                MultiCallResults::from_non_empty_iter(results),
+            )),
         };
         Self { result }
     }
