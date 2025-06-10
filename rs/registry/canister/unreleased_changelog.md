@@ -8,6 +8,11 @@ on the process that this file is part of, see
 
 ## Added
 
+- The RoutingTable is now also broken up into `canister_ranges_*` records, instead of only in a single
+  `routing_table` record. This will allow clients to migrate to the new format incrementally, as both will continue
+  to be available until all known clients have migrated to the new format, at which point `routing_table` will be
+  removed.
+
 ## Changed
 
 ## Deprecated

@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
-    pb::v1::{neuron::Followees, MaturityDisbursement},
+    pb::v1::{Followees, MaturityDisbursement},
     storage::with_stable_neuron_indexes,
     temporarily_enable_disburse_maturity,
 };
