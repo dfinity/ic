@@ -522,7 +522,7 @@ impl Ledger {
             .get_blocks_for_archiving(trigger_threshold, num_blocks)
     }
 
-    pub fn can_send(&self, principal_id: &PrincipalId) -> bool {
+    pub fn can_send(&self, _principal_id: &PrincipalId) -> bool {
         // If we include more principals here, we need to update the trap message
         // in `icrc1_transfer` and similar functions.
         true
