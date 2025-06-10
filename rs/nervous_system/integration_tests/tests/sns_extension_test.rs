@@ -3,6 +3,7 @@ use canister_test::Wasm;
 use ic_base_types::CanisterId;
 use ic_base_types::PrincipalId;
 use ic_icrc1_ledger::{InitArgsBuilder, LedgerArgument};
+use ic_nervous_system_agent::pocketic_impl::PocketIcAgent;
 use ic_nervous_system_agent::sns::governance::GovernanceCanister;
 use ic_nervous_system_agent::sns::index::IndexCanister;
 use ic_nervous_system_agent::sns::ledger::LedgerCanister;
@@ -32,11 +33,15 @@ use pocket_ic::PocketIcBuilder;
 use pretty_assertions::assert_eq;
 use sns_treasury_manager::Allowance;
 use sns_treasury_manager::Asset;
+use sns_treasury_manager::BalancesRequest;
 use sns_treasury_manager::DepositRequest;
 use sns_treasury_manager::TreasuryManagerResult;
+use sns_treasury_manager::WithdrawRequest;
 use sns_treasury_manager::{TreasuryManagerArg, TreasuryManagerInit};
 use std::str::FromStr;
 use std::time::Duration;
+
+const FEE: u64 = DEFAULT_TRANSFER_FEE.get_e8s();
 
 #[tokio::test]
 async fn test() {
@@ -147,11 +152,12 @@ async fn test_treasury_manager() {
     let sns_token = Asset::new_token("SNS", sns_ledger_canister_id).unwrap();
     let icp_token = Asset::new_token("ICP", LEDGER_CANISTER_ID).unwrap();
 
-    const FEE: u64 = DEFAULT_TRANSFER_FEE.get_e8s();
+    let adaptor_canister_id = deploy_kong_adaptor(&pocket_ic, &sns).await;
 
-    let kong_swap_adaptor = deploy_kong_adaptor(
+    topup_liquidity(
         &pocket_ic,
         &sns,
+        adaptor_canister_id,
         100 * E8 + 2 * FEE,
         350 * E8 + 2 * FEE,
         2 * FEE,
@@ -159,21 +165,10 @@ async fn test_treasury_manager() {
     )
     .await;
 
-    validate_balances(
-        "after deploy_kong_adaptor",
-        &sns,
-        &pocket_ic,
-        kong_swap_adaptor,
-        0,
-        0,
-    )
-    .await
-    .unwrap();
-
     topup_liquidity(
         &pocket_ic,
         &sns,
-        kong_swap_adaptor,
+        adaptor_canister_id,
         50 * E8 + 2 * FEE,
         175 * E8 + 2 * FEE,
         2 * FEE,
@@ -181,93 +176,34 @@ async fn test_treasury_manager() {
     )
     .await;
 
-    // let err = kong_swap_adaptor.refresh_balances().await.unwrap_err();
-    // assert_eq!(err, TransactionError::Backend("User not found".to_string()));
+    {
+        let request = BalancesRequest {};
+        let response = pocket_ic
+            .call(adaptor_canister_id, request)
+            .await
+            .unwrap()
+            .unwrap();
 
-    // assert_eq!(
-    //     kong_swap_adaptor.refresh_balances().await,
-    //     Ok(btreemap! {
-    //         sns_token => Nat::from(200 * E8),
-    //         icp_token => Nat::from(50 * E8),
-    //     }),
-    // );
+        println!(">>> Balances: {:#?}", response);
+    }
 
-    // // Kong-specific assertion.
-    // let response = lp_adaptor_agent
-    //     .call(kong_backend_canister_id, TokensArgs { symbol: None })
-    //     .await
-    //     .unwrap()
-    //     .unwrap();
-    // println!("second tokens response = {:#?}", response);
+    let withdrawn_amounts = {
+        let response = PocketIcAgent::new(&pocket_ic, sns.root.canister_id)
+            .call(adaptor_canister_id, WithdrawRequest {})
+            .await
+            .unwrap()
+            .unwrap();
 
-    // // Kong-specific assertion.
-    // let response = lp_adaptor_agent
-    //     .call(kong_backend_canister_id, PoolsArgs { symbol: None })
-    //     .await
-    //     .unwrap()
-    //     .unwrap();
-    // println!("second pools response = {:#?}", response);
+        assert_eq!(
+            response,
+            btreemap! {
+                icp_token => Nat::from(150 * E8),
+                sns_token => Nat::from(525 * E8),
+            },
+        );
+    };
 
-    // // Step 2: Increase the liquidity allocation.
-    // kong_swap_adaptor
-    //     .deposit(vec![
-    //         Allowance {
-    //             amount_decimals: Nat::from(140 * E8),
-    //             ledger_canister_id: sns_ledger_canister_id,
-    //         },
-    //         Allowance {
-    //             amount_decimals: Nat::from(35 * E8),
-    //             ledger_canister_id: LEDGER_CANISTER_ID,
-    //         },
-    //     ])
-    //     .await
-    //     .unwrap();
-
-    // assert_dao_balances(
-    //     &pocket_ic,
-    //     15 * E8 - 3 * DEFAULT_TRANSFER_FEE.get_e8s(),
-    //     10 * E8 - 3 * DEFAULT_TRANSFER_FEE.get_e8s(),
-    // )
-    // .await;
-
-    // // Debugging: Print the SNS Ledger block details.
-
-    // assert_eq!(
-    //     kong_swap_adaptor.refresh_balances().await,
-    //     Ok(btreemap! {
-    //         sns_token => Nat::from(340 * E8),
-    //         icp_token => Nat::from(85 * E8),
-    //     }),
-    // );
-
-    // // Kong-specific assertion.
-    // let response = lp_adaptor_agent
-    //     .call(kong_backend_canister_id, PoolsArgs { symbol: None })
-    //     .await
-    //     .unwrap()
-    //     .unwrap();
-    // println!("third pools response = {:#?}", response);
-
-    // let withdrawn_amounts = kong_swap_adaptor.withdraw().await.unwrap();
-
-    // println!("withdrawn_amounts = {:#?}", withdrawn_amounts);
-
-    // assert_eq!(
-    //     kong_swap_adaptor.refresh_balances().await,
-    //     Ok(btreemap! {
-    //         sns_token => Nat::from(0_u8),
-    //         icp_token => Nat::from(0_u8),
-    //     }),
-    // );
-
-    // assert_dao_balances(
-    //     &pocket_ic,
-    //     100 * E8 - 4 * DEFAULT_TRANSFER_FEE.get_e8s(),
-    //     350 * E8 - 4 * DEFAULT_TRANSFER_FEE.get_e8s(),
-    // )
-    // .await;
-
-    // let audit_trail = kong_swap_adaptor.audit_trail();
+    // let audit_trail = adaptor_canister_id.audit_trail();
 
     // println!("{:#?}", audit_trail.transactions());
 
@@ -394,14 +330,7 @@ async fn validate_balances(
     Ok((icp_account, sns_account))
 }
 
-async fn deploy_kong_adaptor(
-    pocket_ic: &PocketIc,
-    sns: &Sns,
-    initial_icp_token_allowance_e8s: u64,
-    initial_sns_token_allowance_e8s: u64,
-    expected_icp_fees_e8s: u64,
-    expected_sns_fees_e8s: u64,
-) -> PrincipalId {
+async fn deploy_kong_adaptor(pocket_ic: &PocketIc, sns: &Sns) -> PrincipalId {
     // First, the SNS creates the Adaptor canister without installing the Wasm yet.
     let topology = pocket_ic.topology().await;
     let fiduciary_subnet_id = topology.get_fiduciary().unwrap();
@@ -416,55 +345,7 @@ async fn deploy_kong_adaptor(
     .await
     .get();
 
-    // Second, the SNS sets up a treasury allowance for the Adaptor canister.
-
-    let (icp_account, sns_account) = validate_balances(
-        "deploy_kong_adaptor-0",
-        sns,
-        pocket_ic,
-        adaptor_canister_id,
-        0,
-        0,
-    )
-    .await
-    .unwrap();
-
-    nns::ledger::mint_icp(
-        &pocket_ic,
-        icp_account,
-        Tokens::from_e8s(initial_icp_token_allowance_e8s),
-        None,
-    )
-    .await;
-
-    sns::ledger::icrc1_transfer(
-        &pocket_ic,
-        sns.ledger.canister_id,
-        sns.root.canister_id,
-        TransferArg {
-            from_subaccount: None,
-            to: sns_account,
-            fee: None,
-            created_at_time: None,
-            memo: None,
-            amount: Nat::from(initial_sns_token_allowance_e8s),
-        },
-    )
-    .await
-    .unwrap();
-
-    validate_balances(
-        "deploy_kong_adaptor-1",
-        sns,
-        pocket_ic,
-        adaptor_canister_id,
-        initial_icp_token_allowance_e8s,
-        initial_sns_token_allowance_e8s,
-    )
-    .await
-    .unwrap();
-
-    // Finally, the SNS installs the Treasury Manager Wasm, specifying the initial allowances.
+    // Second, the SNS installs the Treasury Manager Wasm, specifying the initial allowances.
     let wasm_path = std::env::var("KONGSWAP_ADAPTOR_CANISTER_WASM_PATH")
         .expect("KONGSWAP_ADAPTOR_CANISTER_WASM_PATH must be set.");
 
@@ -474,18 +355,7 @@ async fn deploy_kong_adaptor(
     let icp_token = Asset::new_token("ICP", LEDGER_CANISTER_ID).unwrap();
 
     let arg = TreasuryManagerArg::Init(TreasuryManagerInit {
-        allowances: vec![
-            Allowance {
-                amount_decimals: Nat::from(initial_sns_token_allowance_e8s),
-                asset: sns_token,
-                expected_ledger_fee_decimals: Nat::from(DEFAULT_TRANSFER_FEE.get_e8s()),
-            },
-            Allowance {
-                amount_decimals: Nat::from(initial_icp_token_allowance_e8s),
-                asset: icp_token,
-                expected_ledger_fee_decimals: Nat::from(DEFAULT_TRANSFER_FEE.get_e8s()),
-            },
-        ],
+        assets: vec![sns_token, icp_token],
     });
     let arg = candid::encode_one(&arg).unwrap();
 
@@ -497,22 +367,6 @@ async fn deploy_kong_adaptor(
             Some(sns.root.canister_id.0),
         )
         .await;
-
-    for _ in 0..100 {
-        pocket_ic.advance_time(Duration::from_secs(1)).await;
-        pocket_ic.tick().await;
-    }
-
-    validate_balances(
-        "deploy_kong_adaptor-2",
-        sns,
-        pocket_ic,
-        adaptor_canister_id,
-        0,
-        0,
-    )
-    .await
-    .unwrap();
 
     adaptor_canister_id
 }
@@ -580,17 +434,17 @@ async fn topup_liquidity(
             Allowance {
                 amount_decimals: Nat::from(sns_token_allowance_e8s),
                 asset: sns_token,
-                expected_ledger_fee_decimals: Nat::from(DEFAULT_TRANSFER_FEE.get_e8s()),
+                expected_ledger_fee_decimals: Nat::from(FEE),
             },
             Allowance {
                 amount_decimals: Nat::from(icp_token_allowance_e8s),
                 asset: icp_token,
-                expected_ledger_fee_decimals: Nat::from(DEFAULT_TRANSFER_FEE.get_e8s()),
+                expected_ledger_fee_decimals: Nat::from(FEE),
             },
         ],
     };
 
-    let response = pocket_ic
+    let response = PocketIcAgent::new(&pocket_ic, sns.root.canister_id)
         .call(adaptor_canister_id, request)
         .await
         .unwrap()
