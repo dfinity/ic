@@ -253,11 +253,12 @@ mod scraping {
             LogScraping, ReceivedEthOrErc20LogScraping,
             RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC,
         };
-        use crate::eth_rpc::{FixedSizeData, Topic};
+        use crate::eth_rpc::Topic;
         use crate::lifecycle::EthereumNetwork;
         use crate::numeric::BlockNumber;
         use crate::state::eth_logs_scraping::LogScrapingId;
         use crate::test_fixtures::initial_state;
+        use evm_rpc_client::Hex32;
         use hex_literal::hex;
         use ic_ethereum_types::Address;
 
@@ -300,10 +301,10 @@ mod scraping {
             assert_eq!(
                 scrape_without_erc20.topics,
                 vec![
-                    Topic::Single(FixedSizeData(
+                    Topic::Single(Hex32::from(
                         RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC
                     )),
-                    Topic::Multiple(vec![FixedSizeData::ZERO])
+                    Topic::Multiple(vec![Hex32::from([0_u8; 32])])
                 ]
             );
 
@@ -325,7 +326,7 @@ mod scraping {
                         let mut topics = scrape_without_erc20.topics;
                         let _ = std::mem::replace(
                             &mut topics[1],
-                            Topic::Multiple(vec![FixedSizeData::ZERO, FixedSizeData(hex!("0000000000000000000000001c7d4b196cb0c7b01d743fbc6116a902379c7238"))]),
+                            Topic::Multiple(vec![Hex32::from([0_u8; 32]), Hex32::from(hex!("0000000000000000000000001c7d4b196cb0c7b01d743fbc6116a902379c7238"))]),
                         );
                         topics
                     },
@@ -338,9 +339,9 @@ mod scraping {
 
 mod parse_principal_from_slice {
     use crate::eth_logs::parse_principal_from_slice;
-    use crate::eth_rpc::FixedSizeData;
     use assert_matches::assert_matches;
     use candid::Principal;
+    use evm_rpc_client::Hex32;
     use std::str::FromStr;
 
     const PRINCIPAL: &str = "2chl6-4hpzw-vqaaa-aaaaa-c";
@@ -431,11 +432,8 @@ mod parse_principal_from_slice {
             "0x09efcdab00000000000100000000000000000000000000000000000000000000"
         );
 
-        let decoded_principal = parse_principal_from_slice(
-            FixedSizeData::from_str(&encoded_principal)
-                .unwrap()
-                .as_ref(),
-        );
+        let decoded_principal =
+            parse_principal_from_slice(Hex32::from_str(&encoded_principal).unwrap().as_ref());
 
         assert_eq!(decoded_principal, Ok(principal));
     }

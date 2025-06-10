@@ -2,7 +2,7 @@
 //! interface.
 
 use ethnum;
-use evm_rpc_client::HttpOutcallError;
+use evm_rpc_client::{Hex32, HttpOutcallError};
 use ic_cdk::api::call::RejectionCode;
 use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
@@ -48,58 +48,6 @@ impl std::str::FromStr for Data {
 impl AsRef<[u8]> for Data {
     fn as_ref(&self) -> &[u8] {
         &self.0
-    }
-}
-
-#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
-#[serde(transparent)]
-pub struct FixedSizeData(#[serde(with = "ic_ethereum_types::serde_data")] pub [u8; 32]);
-
-impl FixedSizeData {
-    pub const ZERO: Self = Self([0u8; 32]);
-}
-
-impl AsRef<[u8]> for FixedSizeData {
-    fn as_ref(&self) -> &[u8] {
-        &self.0
-    }
-}
-
-impl std::str::FromStr for FixedSizeData {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if !s.starts_with("0x") {
-            return Err("Ethereum hex string doesn't start with 0x".to_string());
-        }
-        let mut bytes = [0u8; 32];
-        hex::decode_to_slice(&s[2..], &mut bytes)
-            .map_err(|e| format!("failed to decode hash from hex: {}", e))?;
-        Ok(Self(bytes))
-    }
-}
-
-impl Debug for FixedSizeData {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:x}", self)
-    }
-}
-
-impl Display for FixedSizeData {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:x}", self)
-    }
-}
-
-impl LowerHex for FixedSizeData {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "0x{}", hex::encode(self.0))
-    }
-}
-
-impl UpperHex for FixedSizeData {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "0x{}", hex::encode_upper(self.0))
     }
 }
 
@@ -155,18 +103,12 @@ impl std::str::FromStr for Hash {
 /// A topic is either a 32 Bytes DATA, or an array of 32 Bytes DATA with "or" options.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Topic {
-    Single(FixedSizeData),
-    Multiple(Vec<FixedSizeData>),
+    Single(Hex32),
+    Multiple(Vec<Hex32>),
 }
 
-impl From<FixedSizeData> for Topic {
-    fn from(data: FixedSizeData) -> Self {
-        Topic::Single(data)
-    }
-}
-
-impl From<Vec<FixedSizeData>> for Topic {
-    fn from(data: Vec<FixedSizeData>) -> Self {
+impl From<Vec<Hex32>> for Topic {
+    fn from(data: Vec<Hex32>) -> Self {
         Topic::Multiple(data)
     }
 }

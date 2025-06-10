@@ -2,7 +2,7 @@ use crate::eth_logs::{
     report_transaction_error, LogParser, LogScraping, ReceivedErc20LogScraping,
     ReceivedEthLogScraping, ReceivedEthOrErc20LogScraping, ReceivedEvent, ReceivedEventError,
 };
-use crate::eth_rpc::{is_response_too_large, FixedSizeData, Topic};
+use crate::eth_rpc::{is_response_too_large, Topic};
 use crate::eth_rpc_client::{EthRpcClient, MultiCallError};
 use crate::guard::TimerGuard;
 use crate::logs::{DEBUG, INFO};
@@ -349,14 +349,11 @@ pub fn register_deposit_events(
 }
 
 fn into_evm_topic(topics: Vec<Topic>) -> Vec<Vec<Hex32>> {
-    let into_hex_32 = |data: FixedSizeData| Hex32::from(data.0);
     let mut result = Vec::with_capacity(topics.len());
     for topic in topics {
         result.push(match topic {
-            Topic::Single(single_topic) => vec![into_hex_32(single_topic)],
-            Topic::Multiple(multiple_topic) => {
-                multiple_topic.into_iter().map(into_hex_32).collect()
-            }
+            Topic::Single(single_topic) => vec![single_topic],
+            Topic::Multiple(multiple_topic) => multiple_topic.into_iter().collect(),
         });
     }
     result
