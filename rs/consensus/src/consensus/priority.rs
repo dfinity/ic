@@ -5,6 +5,10 @@ use ic_interfaces::{
 };
 use ic_types::{artifact::ConsensusMessageId, consensus::ConsensusMessageHash, Height};
 
+use crate::consensus::{
+    ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP, ACCEPTABLE_NOTARIZATION_CUP_GAP,
+};
+
 /// Return a bouncer function that matches the given consensus pool.
 pub fn new_bouncer(
     pool: &dyn ConsensusPool,
@@ -35,16 +39,6 @@ pub fn new_bouncer(
 /// We do not need to request artifacts that are too far ahead.
 const LOOK_AHEAD: u64 = 10;
 
-/// In order to have a bound on the validated consensus pool, we don't validate
-/// artifacts with a height greater than the given value above the next pending CUP.
-/// The only exception to this are CUPs, which have no upper bound on the height.
-const ACCEPTABLE_VALIDATION_CUP_GAP: u64 = 130;
-
-/// In order to have a bound on the validated consensus pool, we don't validate
-/// artifacts with a height greater than the given value above latest certification.
-/// The only exception to this are CUPs, which have no upper bound on the height.
-const ACCEPTABLE_VALIDATION_CERTIFICATION_GAP: u64 = 70;
-
 /// The actual bouncer computation utilizing cached BlockSets instead of
 /// having to read from the pool every time when it is called.
 fn compute_bouncer(
@@ -65,8 +59,8 @@ fn compute_bouncer(
     // Stash non-CUP artifacts, as long as they're too far ahead of the next CUP height.
     // This prevents nodes that have fallen behind to exceed their validated pool bounds.
     if !matches!(id.hash, ConsensusMessageHash::CatchUpPackage(_))
-        && (height > next_cup_height + Height::new(ACCEPTABLE_VALIDATION_CUP_GAP)
-            || height > certified_height + Height::new(ACCEPTABLE_VALIDATION_CERTIFICATION_GAP))
+        && (height > next_cup_height + Height::new(ACCEPTABLE_NOTARIZATION_CUP_GAP)
+            || height > certified_height + Height::new(ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP))
     {
         return MaybeWantsLater;
     }
@@ -161,11 +155,11 @@ mod tests {
 
             // Advance pool *without* producing CUP to the maximum height beyond
             // which we don't validate non-CUP artifacts anymore.
-            let max_validation_height = dkg_interval + ACCEPTABLE_VALIDATION_CUP_GAP + 1;
+            let max_validation_height = dkg_interval + ACCEPTABLE_NOTARIZATION_CUP_GAP + 1;
             pool.advance_round_normal_operation_no_cup_n(max_validation_height);
 
             let certified_height =
-                Height::new(max_validation_height - ACCEPTABLE_VALIDATION_CERTIFICATION_GAP + 1);
+                Height::new(max_validation_height - ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP + 1);
             let expected_batch_height = Height::from(1);
             let bouncer = new_bouncer(&pool, expected_batch_height, certified_height);
 
