@@ -1827,7 +1827,7 @@ impl SystemApiImpl {
 
 // Helper to deal with cycles being written to the heap.
 #[allow(clippy::type_complexity)]
-pub fn handle_heap_cycles<T>(
+fn handle_heap_cycles<T>(
     slf: T,
     f: &dyn Fn(T, usize, &mut [u8]) -> HypervisorResult<()>,
 ) -> HypervisorResult<Cycles> {
@@ -1839,7 +1839,7 @@ pub fn handle_heap_cycles<T>(
 // Helper to deal with cycles being written to the heap.
 // For methods with 1 additional argument.
 #[allow(clippy::type_complexity)]
-pub fn handle_heap_cycles_1<T, A>(
+fn handle_heap_cycles_1<T, A>(
     slf: T,
     a: A,
     f: &dyn Fn(T, A, usize, &mut [u8]) -> HypervisorResult<()>,
