@@ -395,32 +395,30 @@ mod tests {
     };
     use nix::sys::signal::SIGTERM;
     use regex::Regex;
-    use std::sync::Mutex;
+    use std::sync::{Mutex, MutexGuard};
     use virt::sys::VIR_DOMAIN_RUNNING_BOOTED;
 
     /// We must run each test case sequentially because they all work with the same libvirt mock
-    /// instance.
+    /// instance. Each test case must hold this mutex while using a libvirt connection.
     static LIBVIRT_CONN_MUTEX: Mutex<()> = Mutex::new(());
 
-    /// Test fixture for setting up test environment
-    struct TestFixture {
+    /// Test fixture for setting up the test environment
+    struct TestFixture<'a> {
         pub libvirt_connection: Connect,
         pub systemd_notifier: Arc<MockSystemdNotifier>,
         pub console_file: NamedTempFile,
         pub metrics_file: NamedTempFile,
-        _libvirt_lock: std::sync::MutexGuard<'static, ()>,
+        _libvirt_lock: &'a MutexGuard<'a, ()>,
     }
 
-    impl TestFixture {
-        fn new() -> Self {
-            let _libvirt_lock = LIBVIRT_CONN_MUTEX.lock().unwrap();
-
-            Self {
+    impl TestFixture<'_> {
+        fn new<'a>(libvirt_lock: &'a MutexGuard<()>) -> TestFixture<'a> {
+            TestFixture {
                 libvirt_connection: Connect::open(Some("test:///default")).unwrap(),
                 systemd_notifier: Arc::new(MockSystemdNotifier::new()),
                 console_file: NamedTempFile::new().unwrap(),
                 metrics_file: NamedTempFile::new().unwrap(),
-                _libvirt_lock,
+                _libvirt_lock: libvirt_lock,
             }
         }
 
@@ -564,7 +562,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_run_guest_vm() {
-        let fixture = TestFixture::new();
+        let libvirt_lock = LIBVIRT_CONN_MUTEX.lock().unwrap();
+        let fixture = TestFixture::new(&libvirt_lock);
         let mut service = fixture.create_service(valid_hostos_config());
 
         // Run the VM in the background
@@ -590,14 +589,13 @@ mod tests {
         fixture.assert_no_systemd_stopping_notification().await;
 
         // The domain should be destroyed
-        let domain = fixture.get_domain();
-        assert!(domain.get_state().is_err());
         fixture.assert_vm_not_exists();
     }
 
     #[tokio::test]
     async fn test_vm_killed() {
-        let fixture = TestFixture::new();
+        let libvirt_lock = LIBVIRT_CONN_MUTEX.lock().unwrap();
+        let fixture = TestFixture::new(&libvirt_lock);
         let mut service = fixture.create_service(valid_hostos_config());
 
         // Run the VM in the background
@@ -626,7 +624,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_vm_cannot_be_started() {
-        let fixture = TestFixture::new();
+        let libvirt_lock = LIBVIRT_CONN_MUTEX.lock().unwrap();
+        let fixture = TestFixture::new(&libvirt_lock);
         let mut service = fixture.create_service(invalid_hostos_config());
 
         // Run the VM and wait until it fails
@@ -645,7 +644,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_stops_already_running_vm() {
-        let fixture1 = TestFixture::new();
+        let libvirt_lock = LIBVIRT_CONN_MUTEX.lock().unwrap();
+        let fixture1 = TestFixture::new(&libvirt_lock);
         let mut service1 = fixture1.create_service(valid_hostos_config());
 
         // Run the first VM in the background
@@ -653,7 +653,7 @@ mod tests {
 
         fixture1.wait_for_systemd_ready().await;
 
-        let fixture2 = TestFixture::new();
+        let fixture2 = TestFixture::new(&libvirt_lock);
         let mut service2 = fixture2.create_service(valid_hostos_config());
 
         // Start the second VM in the background
