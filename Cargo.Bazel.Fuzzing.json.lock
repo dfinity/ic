@@ -1,5 +1,5 @@
 {
-  "checksum": "810e1cedfbe2974258947d7bdf173d3438cadc60f0abeb72e51f1435f17fe842",
+  "checksum": "57270950c21f27a9229522c727f42f7a146079035adee3b789ade74f8e89131e",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -75862,7 +75862,7 @@
           "common": {},
           "selects": {
             "x86_64-unknown-linux-gnu": {
-              "JEMALLOC_OVERRIDE": "$(location @jemalloc//:libjemalloc)"
+              "JEMALLOC_OVERRIDE": "$(execpath @jemalloc//:libjemalloc)"
             }
           }
         },
