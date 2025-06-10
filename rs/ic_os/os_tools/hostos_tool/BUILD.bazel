@@ -16,6 +16,7 @@ DEPENDENCIES = [
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
     "@crate_index//:virt",
+    "@libvirt",
 ]
 
 DEV_DEPENDENCIES = [
