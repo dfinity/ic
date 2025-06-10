@@ -1,5 +1,5 @@
 {
-  "checksum": "e283d0da52d8293db5dba34ed3c309d49c830b81a3e6c3edba891e98c34e5e63",
+  "checksum": "5063d0cb0c55333e16aad0a7cf3d2fee586026f58e4483b205c4598585892172",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -20325,7 +20325,7 @@
               "target": "ic_http_gateway"
             },
             {
-              "id": "ic-management-canister-types 0.3.0",
+              "id": "ic-management-canister-types 0.3.1",
               "target": "ic_management_canister_types"
             },
             {
@@ -31354,6 +31354,15 @@
           "selects": {}
         },
         "edition": "2018",
+        "rustc_flags": {
+          "common": [],
+          "selects": {
+            "x86_64-apple-darwin": [
+              "-C",
+              "opt-level=0"
+            ]
+          }
+        },
         "version": "0.14.27"
       },
       "license": "MIT",
@@ -31460,6 +31469,15 @@
           "selects": {}
         },
         "edition": "2021",
+        "rustc_flags": {
+          "common": [],
+          "selects": {
+            "x86_64-apple-darwin": [
+              "-C",
+              "opt-level=0"
+            ]
+          }
+        },
         "version": "1.6.0"
       },
       "license": "MIT",
@@ -33052,7 +33070,7 @@
               "target": "ic_error_types"
             },
             {
-              "id": "ic-management-canister-types 0.3.0",
+              "id": "ic-management-canister-types 0.3.1",
               "target": "ic_management_canister_types"
             },
             {
@@ -34141,14 +34159,14 @@
       ],
       "license_file": null
     },
-    "ic-management-canister-types 0.3.0": {
+    "ic-management-canister-types 0.3.1": {
       "name": "ic-management-canister-types",
-      "version": "0.3.0",
+      "version": "0.3.1",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-management-canister-types/0.3.0/download",
-          "sha256": "90253c6ac92f9a0b548a53a02c2d29dfa0f04a6c1ae919b86a6f54d4767d78b9"
+          "url": "https://static.crates.io/crates/ic-management-canister-types/0.3.1/download",
+          "sha256": "98554c2d8a30c00b6bfda18062fdcef21215cad07a52d8b8b1eb3130e51bfe71"
         }
       },
       "targets": [
@@ -34188,7 +34206,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.3.0"
+        "version": "0.3.1"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -54230,7 +54248,7 @@
               "target": "ic_certification"
             },
             {
-              "id": "ic-management-canister-types 0.3.0",
+              "id": "ic-management-canister-types 0.3.1",
               "target": "ic_management_canister_types"
             },
             {
@@ -91526,7 +91544,7 @@
     "ic-gateway 0.2.0",
     "ic-http-certification 3.0.3",
     "ic-http-gateway 0.3.0",
-    "ic-management-canister-types 0.3.0",
+    "ic-management-canister-types 0.3.1",
     "ic-metrics-encoder 1.1.1",
     "ic-response-verification 3.0.3",
     "ic-sha3 1.0.0",

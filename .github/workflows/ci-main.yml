@@ -106,7 +106,7 @@ jobs:
     name: Bazel Test All
     needs: [config]
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:efe6edcd9a9e169843a02f91af98b29514c00cda858ad6612cda28b231b80896
+      image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
     timeout-minutes: 90
@@ -244,12 +244,88 @@ jobs:
         with:
           name: pocket-ic-server-arm64-linux
           path: ./build/pocket-ic-server-arm64-linux
+  bazel-test-arm64-darwin:
+    name: Bazel Test macOS Apple Silicon
+    timeout-minutes: 120
+    runs-on: namespace-profile-darwin # profile created in namespace console
+    if: github.repository == 'dfinity/ic' # only run on public repo, not private since Namespace runners are not configured there, so these CI jobs get stuck otherwise.
+    steps:
+      - name: Set up Bazel cache
+        run: |
+          # Creates a bazelrc configuration fragment which tells bazel where the cache lives.
+          nsc bazel cache setup --bazelrc=/tmp/bazel-cache.bazelrc
+      - uses: actions/checkout@v4
+      # Build and test, excluding 'upload' jobs that are not required on macOS (used in reproducibility tests)
+      - name: Test
+        run: |
+          # Setup zig-cache
+          mkdir -p /tmp/zig-cache
+
+          bazel \
+            --noworkspace_rc \
+            --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc \
+            test \
+            --config=ci --config=macos_ci \
+            --test_tag_filters="test_macos,test_macos_slow" \
+            //packages/pocket-ic/... //rs/... //publish/binaries/...
+
+          mkdir -p build
+          cp \
+            ./bazel-bin/rs/pocket_ic_server/pocket-ic-server \
+            ./build/pocket-ic-server-arm64-darwin
+      - name: Upload pocket-ic-server
+        uses: actions/upload-artifact@v4
+        with:
+          name: pocket-ic-server-arm64-darwin
+          path: ./build/pocket-ic-server-arm64-darwin
+  # Upload arm64-linux artifacts, retrieved from the arm64 runner build.
+  upload-arm64-linux-artifacts:
+    name: Upload arm64 linux artifacts
+    runs-on:
+      labels: dind-large
+    container:
+      image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
+      options: >-
+        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
+    timeout-minutes: 90
+    needs: [bazel-test-arm64-linux, config]
+    if: needs.config.outputs.release_build
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download pocket-ic-server
+        uses: actions/download-artifact@v4
+        with:
+          name: pocket-ic-server-arm64-linux
+          # avoid downloading to workspace to avoid version being marked as dirty
+          path: ~/.cache/pocket-ic-server-arm64-linux
+      - name: Write AWS credentials
+        shell: bash
+        run: |
+          AWS_CREDS="${HOME}/.aws/credentials"
+          mkdir -p "$(dirname "${AWS_CREDS}")"
+          echo '${{ secrets.CLOUD_CREDENTIALS_CONTENT }}' >"$AWS_CREDS"
+      - name: Upload
+        id: build-ic
+        uses: ./.github/actions/bazel
+        with:
+          run: |
+            rootdir=$(mktemp -d)
+
+            # Create a "bundle" that the uploader can digest
+            mkdir -p "$rootdir/binaries/arm64-linux/"
+            cp ~/.cache/pocket-ic-server-arm64-linux/pocket-ic-server-arm64-linux "$rootdir/binaries/arm64-linux/pocket-ic-server-arm64-linux"
+            bazel run --config=stamped //:artifact-uploader -- "$rootdir"
+        env:
+          MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          RUN_ON_DIFF_ONLY: ${{ needs.config.outputs.diff_only }}
+          RELEASE_BUILD: ${{ needs.config.outputs.release_build }}
   bazel-build-fuzzers:
     name: Bazel Build Fuzzers
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:efe6edcd9a9e169843a02f91af98b29514c00cda858ad6612cda28b231b80896
+      image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
     timeout-minutes: 90
@@ -270,7 +346,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:efe6edcd9a9e169843a02f91af98b29514c00cda858ad6612cda28b231b80896
+      image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
     timeout-minutes: 90
@@ -291,7 +367,7 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:efe6edcd9a9e169843a02f91af98b29514c00cda858ad6612cda28b231b80896
+      image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
     timeout-minutes: 30
     steps:
       - name: Checkout
@@ -322,7 +398,7 @@ jobs:
     needs: [config]
     name: Build IC
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:efe6edcd9a9e169843a02f91af98b29514c00cda858ad6612cda28b231b80896
+      image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
     timeout-minutes: 90
@@ -403,7 +479,7 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:efe6edcd9a9e169843a02f91af98b29514c00cda858ad6612cda28b231b80896
+      image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
     timeout-minutes: 30
     steps:
       - name: Checkout
@@ -438,7 +514,7 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:efe6edcd9a9e169843a02f91af98b29514c00cda858ad6612cda28b231b80896
+      image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
     timeout-minutes: 30
     steps:
       - name: Checkout

@@ -3,7 +3,7 @@ use super::*;
 use crate::{
     governance::Environment,
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
-    pb::v1::{Governance as GovernanceProto, Subaccount},
+    pb::v1::Subaccount,
     temporarily_enable_disburse_maturity,
     test_utils::{MockEnvironment, MockRandomness},
 };
@@ -11,6 +11,7 @@ use crate::{
 use futures::FutureExt;
 use ic_nervous_system_canisters::{cmc::MockCMC, ledger::MockIcpLedger};
 use ic_nervous_system_common::NervousSystemError;
+use ic_nns_governance_api::Governance as GovernanceApi;
 use ic_stable_structures::{storable::Bound, Storable};
 use icp_ledger::AccountIdentifier;
 use mockall::Sequence;
@@ -520,7 +521,7 @@ fn set_governance_for_test(
     maturity_modulation: i32,
 ) {
     let mut governance = Governance::new(
-        GovernanceProto {
+        GovernanceApi {
             cached_daily_maturity_modulation_basis_points: Some(maturity_modulation),
             ..Default::default()
         },
