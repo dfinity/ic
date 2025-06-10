@@ -7,7 +7,7 @@ use axum::{
         Path, Request, State,
     },
     http::StatusCode,
-    response::{IntoResponse, Response},
+    response::IntoResponse,
     Extension,
 };
 use bytes::Bytes;
@@ -15,7 +15,7 @@ use candid::Principal;
 use http::header::{CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS};
 use ic_bn_lib::{
     http::headers::{CONTENT_TYPE_CBOR, X_CONTENT_TYPE_OPTIONS_NO_SNIFF, X_FRAME_OPTIONS_DENY},
-    pubsub::Broker,
+    pubsub::{Broker, Subscriber},
 };
 use ic_types::{
     messages::{HttpStatusResponse, ReplicaHealthStatus},
@@ -26,7 +26,7 @@ use tokio::{select, sync::broadcast::error::RecvError};
 
 use crate::{
     errors::{ApiError, ErrorCause},
-    routes::RequestContext,
+    routes::{Lookup, RequestContext},
     snapshot::Node,
 };
 
@@ -35,53 +35,63 @@ pub use crate::routes::{Health, Proxy, RootKey};
 #[derive(Clone, derive_new::new)]
 pub struct LogsState {
     broker: Arc<Broker<Bytes, Principal>>,
+    route_lookup: Arc<dyn Lookup>,
 }
 
 pub async fn logs_canister(
     ws: WebSocketUpgrade,
-    Path(canister_id): Path<Principal>,
+    Path(canister_id): Path<CanisterId>,
     State(state): State<LogsState>,
-) -> Response {
-    ws.on_upgrade(move |socket| websocket_logs_canister(socket, state, canister_id))
-}
+) -> impl IntoResponse {
+    if state
+        .route_lookup
+        .lookup_subnet_by_canister_id(&canister_id)
+        .is_err()
+    {
+        return (
+            StatusCode::NOT_FOUND,
+            "The provided canister ID wasn't found in the routing table",
+        )
+            .into_response();
+    }
 
-async fn websocket_logs_canister(mut socket: WebSocket, state: LogsState, canister_id: Principal) {
     // Try to subscribe to a given topic
-    let Some(mut sub) = state.broker.subscribe(&canister_id) else {
-        let _ = socket
-            .send(Message::Close(Some(CloseFrame {
-                code: 429,
-                reason: Utf8Bytes::from_static("Too many subscribers"),
-            })))
-            .await;
-
-        return;
+    let Ok(sub) = state.broker.subscribe(&canister_id.get().0) else {
+        return (StatusCode::TOO_MANY_REQUESTS, "Too many subscribers").into_response();
     };
 
+    ws.on_upgrade(move |socket| logs_canister_ws(socket, sub))
+        .into_response()
+}
+
+async fn logs_canister_ws(mut socket: WebSocket, mut sub: Subscriber<Bytes>) {
     loop {
         select! {
-            // Consume whatever client might send us and check for disconnects
-            msg = socket.recv() => {
-                if let Some(v) = msg {
-                    if v.is_err() {
-                        // Client disconnected
-                        return
-                    }
-                } else {
-                    // Stream closed
-                    return
+            biased;
+
+            // Discard whatever client might send us and check for disconnects
+            res = socket.recv() => {
+                match res {
+                    None => return,
+                    Some(Err(_)) => return,
+                    _ => {},
                 }
             }
 
-            // Read log messages
+            // Read log messages from the topic
             msg = sub.recv() => {
                 match msg {
                     Ok(v) => {
-                        let _ = socket.send(Message::Binary(v)).await;
+                        // Send the message to the client
+                        if socket.send(Message::Binary(v)).await.is_err() {
+                            return;
+                        }
                     },
+
                     Err(RecvError::Lagged(_)) => {
                         // Just ignore if the client is lagging
                     },
+
                     Err(RecvError::Closed) => {
                         let _ = socket
                             .send(Message::Close(Some(CloseFrame {

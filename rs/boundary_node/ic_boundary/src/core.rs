@@ -118,11 +118,12 @@ pub fn decoder_config() -> DecoderConfig {
     config
 }
 
-pub async fn main(cli: Cli) -> Result<(), Error> {
+pub async fn main(mut cli: Cli) -> Result<(), Error> {
     if cli.http_client.http_client_timeout_connect > cli.health.health_check_timeout {
-        return Err(anyhow!(
-            "Health check timeout should be longer than HTTP client connect timeout"
-        ));
+        cli.health.health_check_timeout = cli.http_client.http_client_timeout_connect;
+        warn!(
+            "Health check timeout should be longer than HTTP client connect timeout, capping it to client timeout"
+        );
     }
 
     if !(cli.registry.registry_local_store_path.is_none()
@@ -137,14 +138,14 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         && cli.listen.listen_https_port.is_none()
     {
         return Err(anyhow!(
-            "at least one of --http-port / --https-port / --http-unix-socket must be specified"
+            "at least one of --listen-http-port / --listen-https-port / --listen-http-unix-socket must be specified"
         ));
     }
 
     #[cfg(not(feature = "tls"))]
     if cli.listen.listen_http_port.is_none() && cli.listen.listen_http_unix_socket.is_none() {
         return Err(anyhow!(
-            "at least one of --http-port / --http-unix-socket must be specified"
+            "at least one of --listen-http-port / --listen-http-unix-socket must be specified"
         ));
     }
 
@@ -874,15 +875,6 @@ pub fn setup_router(
     // Init it early to avoid race conditions
     lazy_static::initialize(&UUID_REGEX);
 
-    let logs_broker = cli.obs.obs_log_websocket.then(|| {
-        Arc::new(
-            BrokerBuilder::new()
-                .with_buffer_size(10_000)
-                .with_idle_timeout(Duration::from_secs(1800))
-                .build(),
-        )
-    });
-
     let proxy_router = ProxyRouter::new(
         http_client.clone(),
         Arc::clone(&routing_table),
@@ -947,6 +939,19 @@ pub fn setup_router(
             geoip::middleware,
         )
     }));
+
+    // Create a PubSub broker for the logs subscription
+    let logs_broker = cli.obs.obs_log_websocket.then(|| {
+        Arc::new(
+            BrokerBuilder::new()
+                .with_buffer_size(cli.obs.obs_log_websocket_buffer)
+                .with_idle_timeout(cli.obs.obs_log_websocket_idle_timeout)
+                .with_max_subscribers(cli.obs.obs_log_websocket_max_subscribers)
+                .with_max_topics(cli.obs.obs_log_websocket_max_topics)
+                .with_metric_registry(metrics_registry)
+                .build(),
+        )
+    });
 
     let middleware_metrics = option_layer((!cli.obs.obs_disable_request_logging).then_some(
         middleware::from_fn_with_state(
@@ -1028,7 +1033,8 @@ pub fn setup_router(
 
     let middleware_bouncer =
         option_layer(bouncer.map(|x| middleware::from_fn_with_state(x, bouncer::middleware)));
-    let middleware_subnet_lookup = middleware::from_fn_with_state(lookup, routes::lookup_subnet);
+    let middleware_subnet_lookup =
+        middleware::from_fn_with_state(lookup.clone(), routes::lookup_subnet);
     let middleware_generic_limiter = option_layer(
         generic_limiter.map(|x| middleware::from_fn_with_state(x, generic::middleware)),
     );
@@ -1086,7 +1092,7 @@ pub fn setup_router(
         .merge(health_route);
 
     if let Some(v) = logs_broker {
-        let state = LogsState::new(v);
+        let state = LogsState::new(v, lookup);
         let logs_canister_router =
             Router::new().route("/canister/{canister_id}", any(logs_canister));
         let logs_router = Router::new()

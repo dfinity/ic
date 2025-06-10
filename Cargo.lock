@@ -6252,7 +6252,7 @@ dependencies = [
 [[package]]
 name = "ic-bn-lib"
 version = "0.1.0"
-source = "git+https://github.com/dfinity/ic-bn-lib?rev=54e61f4624b7a3759163a1ecf0c2be4ccd066578#54e61f4624b7a3759163a1ecf0c2be4ccd066578"
+source = "git+https://github.com/dfinity/ic-bn-lib?rev=620fb49a238b3d8a2caa436b5742ed7ca7012098#620fb49a238b3d8a2caa436b5742ed7ca7012098"
 dependencies = [
  "ahash 0.8.11",
  "anyhow",
@@ -6332,7 +6332,7 @@ dependencies = [
  "humantime",
  "ic-agent",
  "ic-base-types",
- "ic-bn-lib 0.1.0 (git+https://github.com/dfinity/ic-bn-lib?rev=54e61f4624b7a3759163a1ecf0c2be4ccd066578)",
+ "ic-bn-lib 0.1.0 (git+https://github.com/dfinity/ic-bn-lib?rev=620fb49a238b3d8a2caa436b5742ed7ca7012098)",
  "ic-certification-test-utils",
  "ic-config",
  "ic-crypto",
@@ -19669,7 +19669,7 @@ version = "0.9.0"
 dependencies = [
  "candid",
  "humantime",
- "ic-bn-lib 0.1.0 (git+https://github.com/dfinity/ic-bn-lib?rev=54e61f4624b7a3759163a1ecf0c2be4ccd066578)",
+ "ic-bn-lib 0.1.0 (git+https://github.com/dfinity/ic-bn-lib?rev=620fb49a238b3d8a2caa436b5742ed7ca7012098)",
  "indoc",
  "ipnet",
  "regex",
