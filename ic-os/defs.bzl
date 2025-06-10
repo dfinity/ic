@@ -471,23 +471,18 @@ dev_transition = transition(
 
 
 def _dev_wrapper_impl(ctx):
-    """Dev wrapper that forwards providers and creates a symlinked executable."""
-    if not ctx.attr.actual:
-        return [DefaultInfo()]
-
-    # Get the single dependency (actual is not a list in your rule definition)
-    dep = ctx.attr.actual
-    if type(dep) == type([]):
-        dep = dep[0]
+    actual = ctx.attr.actual
+    if type(actual) == type([]):
+        actual = actual[0]
     providers = []
 
     # Forward Rust-specific providers if they exist
     for provider in [CrateInfo, DepInfo]:
-        if provider in dep:
-            providers.append(dep[provider])
+        if provider in actual:
+            providers.append(actual[provider])
 
     # Handle DefaultInfo and executable symlinking
-    default_info = dep[DefaultInfo]
+    default_info = actual[DefaultInfo]
     original_executable = default_info.files_to_run.executable
 
     if not original_executable:
@@ -495,7 +490,7 @@ def _dev_wrapper_impl(ctx):
         providers.append(default_info)
         return providers
 
-    # Create symlinked executable in subdirectory to avoid collisions
+    # Create symlinked executable in subdirectory to avoid name collision
     new_executable = ctx.actions.declare_file(
         paths.join(ctx.label.name, original_executable.basename)
     )
@@ -523,6 +518,7 @@ dev_wrapper = rule(
     attrs = {
         "actual": attr.label(
             cfg = dev_transition,
+            mandatory = True,
         ),
     },
 )
