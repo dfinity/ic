@@ -121,7 +121,10 @@ filegroup(
 artifact_bundle(
     name = "bundle",
     testonly = True,
-    inputs = [":binaries", "//rs/sns/testing:sns_testing_bundle"],
+    inputs = [
+        ":binaries",
+        "//rs/sns/testing:sns_testing_bundle",
+    ],
     prefix = "binaries/" + os_info,
     visibility = ["//visibility:public"],
 )
