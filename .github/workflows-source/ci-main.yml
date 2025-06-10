@@ -317,7 +317,7 @@ jobs:
     name: Upload arm64 linux artifacts
     <<: *dind-large-setup
     needs: [bazel-test-arm64-linux, config]
-    if: needs.config.outputs.release_build
+    if: ${{ needs.config.outputs.release_build == 'true' }} # GHA output quirk, 'true' is a string
     steps:
       - uses: actions/checkout@v4
       - name: Download pocket-ic-server
