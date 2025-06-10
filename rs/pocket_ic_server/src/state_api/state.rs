@@ -732,12 +732,7 @@ impl ApiState {
                             )),
                     )
                     .fallback(|mut request: AxumRequest| async move {
-                        let conn_info = ConnInfo {
-                            remote_addr: ic_gateway::ic_bn_lib::http::server::Addr::Tcp(
-                                "127.0.0.1:8080".parse().unwrap(),
-                            ),
-                            ..Default::default()
-                        };
+                        let conn_info = ConnInfo::default();
                         request.extensions_mut().insert(Arc::new(conn_info));
                         ic_gateway_router.oneshot(request).await
                     })
