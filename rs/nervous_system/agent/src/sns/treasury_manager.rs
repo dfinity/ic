@@ -1,6 +1,7 @@
 use crate::Request;
 use sns_treasury_manager::{
-    AuditTrailRequest, BalancesRequest, DepositRequest, TreasuryManagerResult, WithdrawRequest
+    AuditTrail, AuditTrailRequest, BalancesRequest, DepositRequest, TreasuryManagerResult,
+    WithdrawRequest,
 };
 
 impl Request for DepositRequest {
