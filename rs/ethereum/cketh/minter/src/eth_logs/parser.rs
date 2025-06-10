@@ -164,7 +164,7 @@ impl LogParser for ReceivedEthOrErc20LogParser {
 fn ensure_not_pending(entry: &LogEntry) -> Result<(BlockNumber, EventSource), ReceivedEventError> {
     let _block_hash = entry
         .block_hash
-        .clone()
+        .as_ref()
         .ok_or(ReceivedEventError::PendingLogEntry)?;
     let block_number = entry
         .block_number
@@ -176,7 +176,7 @@ fn ensure_not_pending(entry: &LogEntry) -> Result<(BlockNumber, EventSource), Re
         .ok_or(ReceivedEventError::PendingLogEntry)?;
     let _transaction_index = entry
         .transaction_index
-        .clone()
+        .as_ref()
         .ok_or(ReceivedEventError::PendingLogEntry)?;
     let log_index = entry
         .log_index
