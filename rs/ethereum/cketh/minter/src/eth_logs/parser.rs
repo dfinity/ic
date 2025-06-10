@@ -227,14 +227,7 @@ fn parse_address(
     address: &Hex32,
     event_source: EventSource,
 ) -> Result<Address, ReceivedEventError> {
-    let array: &[u8; 32] =
-        address
-            .as_ref()
-            .try_into()
-            .map_err(|_| ReceivedEventError::InvalidEventSource {
-                source: event_source,
-                error: EventSourceError::InvalidEvent("Address must be 32 bytes".to_string()),
-            })?;
+    let array: &[u8; 32] = &Into::<[u8; 32]>::into(address.clone());
 
     Address::try_from(array).map_err(|err| ReceivedEventError::InvalidEventSource {
         source: event_source,
