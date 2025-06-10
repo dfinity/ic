@@ -34,7 +34,7 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:efe6edcd9a9e169843a02f91af98b29514c00cda858ad6612cda28b231b80896
+    image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
   dind-large-setup: &dind-large-setup
     runs-on:
       labels: dind-large
@@ -324,7 +324,8 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: pocket-ic-server-arm64-linux
-          path: pocket-ic-server-arm64-linux
+          # avoid downloading to workspace to avoid version being marked as dirty
+          path: ~/.cache/pocket-ic-server-arm64-linux
 
       - name: Write AWS credentials
         shell: bash
@@ -342,8 +343,8 @@ jobs:
 
             # Create a "bundle" that the uploader can digest
             mkdir -p "$rootdir/binaries/arm64-linux/"
-            cp ./pocket-ic-server-arm64-linux/pocket-ic-server-arm64-linux "$rootdir/binaries/arm64-linux/pocket-ic-server-arm64-linux"
-            bazel run //:artifact-uploader -- "$rootdir"
+            cp ~/.cache/pocket-ic-server-arm64-linux/pocket-ic-server-arm64-linux "$rootdir/binaries/arm64-linux/pocket-ic-server-arm64-linux"
+            bazel run --config=stamped //:artifact-uploader -- "$rootdir"
         env:
           MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
