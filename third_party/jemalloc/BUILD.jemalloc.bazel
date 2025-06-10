@@ -5,10 +5,18 @@ rebuilds when rules_rust, rustc or tikv-jemalloc-sys change.
 
 load("@rules_foreign_cc//foreign_cc:configure.bzl", "configure_make")
 
+# NOTE: we mark all the targets as "manual" because we don't actually care about building
+# jemalloc, and instead let targets that depend on it drive the build (with whatever config
+# they require).
+
 # Used in make build
 filegroup(
     name = "all",
     srcs = glob(["**"]),
+    tags = [
+        "manual",
+        "no-cache",
+    ],
 )
 
 # A copy of just the static archive, which can be used with `$(location ...)` in build (tikv-jemalloc-sys) that
@@ -27,6 +35,10 @@ genrule(
         fi
     done
     """,
+    tags = [
+        "manual",
+        "no-cache",
+    ],
     visibility = ["//visibility:public"],
 )
 

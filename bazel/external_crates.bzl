@@ -115,7 +115,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             build_script_env = crate.select(
                 {},
                 {
-                    "x86_64-unknown-linux-gnu": {"JEMALLOC_OVERRIDE": "$(location @jemalloc//:libjemalloc)"},
+                    "x86_64-unknown-linux-gnu": {"JEMALLOC_OVERRIDE": "$(execpath @jemalloc//:libjemalloc)"},
                 },
             ),
         )],
