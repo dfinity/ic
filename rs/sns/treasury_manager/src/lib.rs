@@ -1,7 +1,7 @@
-use std::collections::BTreeMap;
-use std::str::FromStr;
 use candid::{CandidType, Nat, Principal};
 use serde::Deserialize;
+use std::collections::BTreeMap;
+use std::str::FromStr;
 
 pub const MAX_SYMBOL_BYTES: usize = 10;
 
@@ -51,7 +51,7 @@ pub struct WithdrawRequest {}
 #[derive(CandidType, Clone, Debug, Deserialize, PartialEq)]
 pub struct AuditTrailRequest {}
 
-#[derive(CandidType, Clone, Copy, Debug)]
+#[derive(CandidType, Clone, Copy, Debug, Deserialize)]
 pub enum TreasuryManagerPhase {
     Deposit,
     Balances,
@@ -74,7 +74,7 @@ pub enum TransactionError {
     Postcondition(String),
 }
 
-#[derive(CandidType, Clone, Debug)]
+#[derive(CandidType, Clone, Debug, Deserialize)]
 pub struct Transaction {
     pub canister_id: Principal,
     // TODO: add low-level traces stores as JSON.
@@ -84,7 +84,7 @@ pub struct Transaction {
     pub treasury_operation_phase: TreasuryManagerPhase,
 }
 
-#[derive(CandidType, Clone, Debug)]
+#[derive(CandidType, Clone, Debug, Deserialize)]
 pub struct AuditTrail {
     transactions: Vec<Transaction>,
 }
@@ -145,18 +145,24 @@ pub enum Asset {
 
 #[derive(CandidType, Clone, Debug, PartialEq, Eq, Hash, Deserialize)]
 pub struct Allowance {
-    pub amount_decimals: Nat,
     pub asset: Asset,
+
+    // Total amount that may be consumed, including the fees.
+    pub amount_decimals: Nat,
+
+    // Sets the expected fee per ledger transaction; transactions should fail if the actual
+    // ledger fee is unexpected.
+    pub expected_ledger_fee_decimals: Nat,
 }
 
-#[derive(CandidType, Clone, Debug)]
+#[derive(CandidType, Clone, Debug, Deserialize)]
 pub struct Transfer {
     pub ledger_canister_id: String,
-    pub amount_deimals: Nat,
+    pub amount_decimals: Nat,
     pub block_index: Nat,
 }
 
-#[derive(CandidType, Clone, Debug)]
+#[derive(CandidType, Clone, Debug, Deserialize)]
 pub enum TransactionWitness {
     Ledger(Vec<Transfer>),
 
@@ -165,13 +171,11 @@ pub enum TransactionWitness {
     NonLedger(String),
 }
 
-/// Helper trait to extract transaction witness from a response.
-pub trait WithTransactionWitness {
-    fn witness(&self) -> TransactionWitness;
-}
-
 impl Asset {
-    pub fn new_token(symbol: &str, ledger_canister_id: impl Into<Principal> + Send) -> Result<Self, String> {
+    pub fn new_token(
+        symbol: &str,
+        ledger_canister_id: impl Into<Principal> + Send,
+    ) -> Result<Self, String> {
         let symbol = Symbol::try_from(symbol)?;
         let ledger_canister_id = ledger_canister_id.into();
         Ok(Asset::Token {
