@@ -347,18 +347,6 @@ def _ext4_image_impl(ctx):
 
     return [DefaultInfo(files = depset(outputs))]
 
-# Transition that enables dev flag
-def _dev_transition_impl(_settings, _attr):
-    return {
-        "//ic_os:dev": True,
-    }
-
-dev_transition = transition(
-    implementation = _dev_transition_impl,
-    inputs = [],
-    outputs = ["//ic_os:dev"],
-)
-
 ext4_image = _icos_build_rule(
     implementation = _ext4_image_impl,
     attrs = {
@@ -377,7 +365,6 @@ ext4_image = _icos_build_rule(
         ),
         "extra_files": attr.label_keyed_string_dict(
             allow_files = True,
-            cfg = dev_transition
         ),
         "_tool": attr.label(
             default = "//toolchains/sysimage:build_ext4_image",

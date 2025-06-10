@@ -20,22 +20,3 @@ config_setting(
         ":dev": "True",
     },
 )
-
-## Rule that applies the dev transition
-#def _config_dev_rule_impl(ctx):
-#    out = ctx.actions.declare_file(ctx.label.name)
-#    ctx.actions.run(
-#        executable = "cp",
-#        arguments = [ctx.files.binary[0].path, out.path],
-#        outputs = [out],
-#        inputs = ctx.files.binary,
-#    )
-#    return [DefaultInfo(files = depset([out]), runfiles = ctx.runfiles([out]))]
-#
-#config_dev_rule = rule(
-#    implementation = _config_dev_rule_impl,
-#    attrs = {
-#        "binary": attr.label(mandatory = True, cfg = dev_transition),
-#        "_allowlist_function_transition": attr.label(default = "@bazel_tools//tools/allowlists/function_transition_allowlist"),
-#    },
-#)

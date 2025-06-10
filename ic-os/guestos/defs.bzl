@@ -44,6 +44,7 @@ def image_deps(mode, malicious = False):
             "//publish/binaries:state-tool": "/opt/ic/bin/state-tool:0755",  # May be used during recoveries for calculating the state hash and inspecting the state more generally.
             "//publish/binaries:ic-regedit": "/opt/ic/bin/ic-regedit:0755",  # May be used for inspecting and recovering the registry.
             # Required by the GuestOS
+            "//rs/ic_os/config:config": "/opt/ic/bin/config:0755",
             "//rs/ic_os/release:fstrim_tool": "/opt/ic/bin/fstrim_tool:0755",  # The GuestOS periodically calls fstrim to trigger the host os to free the memory that stored old version of the secret key store, so that it can be garbage collected more quickly.
             "//rs/ic_os/release:guestos_tool": "/opt/ic/bin/guestos_tool:0755",  # Tool for generating network config and hardware observability.
             "//rs/ic_os/release:nft-exporter": "/opt/ic/bin/nft-exporter:0755",  # Firewall (NFTables) counter exporter for observability.
@@ -54,9 +55,6 @@ def image_deps(mode, malicious = False):
 
             # additional libraries to install
             "//rs/ic_os/release:nss_icos": "/usr/lib/x86_64-linux-gnu/libnss_icos.so.2:0644",  # Allows referring to the guest IPv6 by name guestos from host, and host as hostos from guest.
-
-            # Use the same config target with transitions based on mode
-            ("//rs/ic_os/config:config_dev" if mode == "dev" else "//rs/ic_os/config:config"): "/opt/ic/bin/config:0755",
         },
 
         # Set various configuration values
