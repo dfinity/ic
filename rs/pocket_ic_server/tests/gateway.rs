@@ -432,70 +432,47 @@ fn test_unresponsive_gateway_backend() {
 // Test that trying to bind the HTTP gateway to an invalid backend fails gracefully.
 
 #[test]
-fn test_gateway_backend_invalid_replica_url() {
+fn test_gateway_invalid_forward_to() {
     // Start a private server instance.
     let (server_url, _) = start_server_helper(None, None, false, false);
 
-    let create_gateway_endpoint = server_url.join("http_gateway").unwrap();
-    let backend_url = "http://240.0.0.0";
-    let http_gateway_config = HttpGatewayConfig {
-        ip_addr: None,
-        port: None,
-        forward_to: HttpGatewayBackend::Replica(backend_url.to_string()),
-        domains: None,
-        https_config: None,
-    };
-    let client = Client::new();
-    let res = client
-        .post(create_gateway_endpoint)
-        .json(&http_gateway_config)
-        .send()
-        .unwrap()
-        .json::<CreateHttpGatewayResponse>()
-        .unwrap();
-    match res {
-        CreateHttpGatewayResponse::Created(_info) => {
-            panic!("Suceeded to create http gateway!")
-        }
-        CreateHttpGatewayResponse::Error { message } => {
-            #[cfg(not(target_os = "macos"))]
-            assert!(message.contains(&format!("Timed out fetching root key from {}", backend_url)));
-            #[cfg(target_os = "macos")]
-            assert!(message.contains(&format!("An error happened during communication with the replica: error sending request for url ({}/api/v2/status)", backend_url)));
-        }
-    };
-}
-
-#[test]
-fn test_gateway_backend_invalid_pocketic_instance() {
-    // Start a private server instance.
-    let (server_url, _) = start_server_helper(None, None, false, false);
-
-    let create_gateway_endpoint = server_url.join("http_gateway").unwrap();
+    let invalid_backend_url = "http://240.0.0.0";
     let invalid_instance_id = 42;
-    let http_gateway_config = HttpGatewayConfig {
-        ip_addr: None,
-        port: None,
-        forward_to: HttpGatewayBackend::PocketIcInstance(invalid_instance_id),
-        domains: None,
-        https_config: None,
-    };
-    let client = Client::new();
-    let res = client
-        .post(create_gateway_endpoint)
-        .json(&http_gateway_config)
-        .send()
-        .unwrap()
-        .json::<CreateHttpGatewayResponse>()
-        .unwrap();
-    match res {
-        CreateHttpGatewayResponse::Created(_info) => {
-            panic!("Suceeded to create http gateway!")
-        }
-        CreateHttpGatewayResponse::Error { message } => {
-            assert!(message.contains("Instance not found"));
-        }
-    };
+    for (forward_to, expected_err) in [
+        (
+            HttpGatewayBackend::Replica(invalid_backend_url.to_string()),
+            "error: upstream_error",
+        ),
+        (
+            HttpGatewayBackend::PocketIcInstance(invalid_instance_id),
+            "Instance not found",
+        ),
+    ] {
+        let http_gateway_config = HttpGatewayConfig {
+            ip_addr: None,
+            port: None,
+            forward_to,
+            domains: None,
+            https_config: None,
+        };
+        let client = Client::new();
+        let create_gateway_endpoint = server_url.join("http_gateway").unwrap();
+        let res = client
+            .post(create_gateway_endpoint)
+            .json(&http_gateway_config)
+            .send()
+            .unwrap()
+            .json::<CreateHttpGatewayResponse>()
+            .unwrap();
+        match res {
+            CreateHttpGatewayResponse::Created(_info) => {
+                panic!("Suceeded to create http gateway!")
+            }
+            CreateHttpGatewayResponse::Error { message } => {
+                assert!(message.contains(expected_err));
+            }
+        };
+    }
 }
 
 // Test that trying to bind the HTTP gateway to the same port twice fails gracefully.

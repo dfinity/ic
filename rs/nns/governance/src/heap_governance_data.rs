@@ -1,7 +1,6 @@
 use crate::pb::v1::{
     governance::{GovernanceCachedMetrics, MakingSnsProposal, NeuronInFlightCommand},
-    neuron::Followees,
-    Governance as GovernanceProto, MonthlyNodeProviderRewards, NetworkEconomics, Neuron,
+    Followees, Governance as GovernanceProto, MonthlyNodeProviderRewards, NetworkEconomics, Neuron,
     NeuronStakeTransfer, NodeProvider, ProposalData, RestoreAgingSummary, RewardEvent,
     XdrConversionRate as XdrConversionRatePb,
 };
@@ -212,14 +211,13 @@ pub fn initialize_heap_governance_data(
 #[allow(clippy::type_complexity)]
 pub fn split_governance_proto(
     governance_proto: GovernanceProto,
-) -> (BTreeMap<u64, Neuron>, HeapGovernanceData, Option<[u8; 32]>) {
+) -> (HeapGovernanceData, Option<[u8; 32]>) {
     // DO NOT USE THE .. CATCH-ALL SYNTAX HERE.
     // OTHERWISE, YOU WILL ALMOST CERTAINLY EXPERIENCE
     //   **DATA LOSS**
     // FOR THE SAME REASON, DO NOT DO
     //     new_field: _,
     let GovernanceProto {
-        neurons,
         proposals,
         to_claim_transfers,
         wait_for_quiet_threshold_seconds,
@@ -258,7 +256,6 @@ pub fn split_governance_proto(
         .and_then(|seed| seed);
 
     (
-        neurons,
         HeapGovernanceData {
             proposals,
             to_claim_transfers,
@@ -287,7 +284,6 @@ pub fn split_governance_proto(
 /// Reassembles the GovernanceProto from the HeapGovernanceData and the neurons, so that
 /// it can be serialized into UPGRADES_MEMORY.
 pub fn reassemble_governance_proto(
-    neurons: BTreeMap<u64, Neuron>,
     heap_governance_proto: HeapGovernanceData,
     rng_seed: Option<[u8; 32]>,
 ) -> GovernanceProto {
@@ -323,7 +319,6 @@ pub fn reassemble_governance_proto(
     let xdr_conversion_rate = XdrConversionRatePb::from(xdr_conversion_rate);
 
     GovernanceProto {
-        neurons,
         proposals,
         to_claim_transfers,
         wait_for_quiet_threshold_seconds,
@@ -358,9 +353,6 @@ mod tests {
     // The members are chosen to be the simplest form that's not their default().
     fn simple_governance_proto() -> GovernanceProto {
         GovernanceProto {
-            neurons: btreemap! {
-                1 => Neuron::default(),
-            },
             proposals: btreemap! {
                 1 => ProposalData::default(),
             },
@@ -393,11 +385,10 @@ mod tests {
     fn split_and_reassemble_equal() {
         let governance_proto = simple_governance_proto();
 
-        let (heap_neurons, heap_governance_data, rng_seed) =
-            split_governance_proto(governance_proto.clone());
+        let (heap_governance_data, rng_seed) = split_governance_proto(governance_proto.clone());
 
         let reassembled_governance_proto =
-            reassemble_governance_proto(heap_neurons, heap_governance_data, rng_seed);
+            reassemble_governance_proto(heap_governance_data, rng_seed);
 
         assert_eq!(reassembled_governance_proto, governance_proto);
     }
