@@ -200,12 +200,19 @@ impl Destination {
         }
     }
 
-    /// Returns the account identifier to disburse to. This should normally not fail because all the
-    /// validations happens at `try_new`. Failure can only happen due to data corruption.
+    /// Returns the 32-byte account identifier (with checksum) to disburse to. This should not fail
+    /// because all the validations happens at `try_new`. Failure can only happen due to data
+    /// corruption. Note that even when the user specifies an icrc1 account, the corresponding
+    /// account identifier is still returned.
     pub fn into_account_identifier_proto(&self) -> Option<AccountIdentifierProto> {
-        self.try_into_account_identifier()
-            .ok()
-            .map(AccountIdentifierProto::from)
+        let account_identifer = self.try_into_account_identifier().ok()?;
+        // Note we should not use `AccountIdentifierProto::from` directly here, since it simply
+        // outputs a 28-byte hash without the 4-byte checksum. Instead, we should use the
+        // `AccountIdentifier::to_address` which computes and prepends the checksum.
+        let address = account_identifer.to_address();
+        Some(AccountIdentifierProto {
+            hash: address.to_vec(),
+        })
     }
 }
 
