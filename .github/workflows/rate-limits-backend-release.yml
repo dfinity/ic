@@ -29,7 +29,6 @@ jobs:
     name: Build and release the rate-limits backend canister
 
     runs-on:
-      group: zh1
       labels: dind-large
 
     container:
