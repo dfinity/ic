@@ -40,6 +40,6 @@ rust_binary(
 
 dev_wrapper(
     name = "launch-single-vm",
-    actual = ":launch-single-vm-base",
     testonly = True,
+    actual = ":launch-single-vm-base",
 )

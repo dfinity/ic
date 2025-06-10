@@ -70,8 +70,8 @@ rust_library(
 
 rust_library(
     name = "config_lib_dev",
-    srcs = LIB_SOURCES,
     testonly = True,
+    srcs = LIB_SOURCES,
     crate_features = ["dev"],
     crate_name = "config",
     visibility = [

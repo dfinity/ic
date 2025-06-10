@@ -9,14 +9,14 @@ This macro defines the overall build process for ICOS images, including:
   - Additional developer and test utilities.
 """
 
+load("@bazel_skylib//lib:paths.bzl", "paths")
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
+load("@rules_rust//rust:rust_common.bzl", "CrateInfo", "DepInfo")
 load("//bazel:defs.bzl", "zstd_compress")
 load("//ic-os/bootloader:defs.bzl", "build_grub_partition")
 load("//ic-os/components:defs.bzl", "tree_hash")
 load("//ic-os/components/conformance_tests:defs.bzl", "component_file_references_test")
 load("//toolchains/sysimage:toolchain.bzl", "build_container_base_image", "build_container_filesystem", "disk_image", "disk_image_no_tar", "ext4_image", "upgrade_image")
-load("@rules_rust//rust:rust_common.bzl", "CrateInfo", "DepInfo")
-load("@bazel_skylib//lib:paths.bzl", "paths")
 
 def icos_build(
         name,
@@ -469,7 +469,6 @@ dev_transition = transition(
     outputs = ["//ic-os:dev"],
 )
 
-
 def _dev_wrapper_impl(ctx):
     actual = ctx.attr.actual
     if type(actual) == type([]):
@@ -492,7 +491,7 @@ def _dev_wrapper_impl(ctx):
 
     # Create symlinked executable in subdirectory to avoid name collision
     new_executable = ctx.actions.declare_file(
-        paths.join(ctx.label.name, original_executable.basename)
+        paths.join(ctx.label.name, original_executable.basename),
     )
 
     ctx.actions.symlink(
