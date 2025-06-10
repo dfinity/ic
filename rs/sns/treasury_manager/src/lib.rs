@@ -7,7 +7,7 @@ pub const MAX_SYMBOL_BYTES: usize = 10;
 
 #[derive(CandidType, Clone, Debug, Deserialize)]
 pub struct TreasuryManagerInit {
-    pub allowances: Vec<Allowance>,
+    pub assets: Vec<Asset>,
 }
 
 #[derive(CandidType, Clone, Debug, Deserialize)]
@@ -52,7 +52,7 @@ pub struct WithdrawRequest {}
 pub struct AuditTrailRequest {}
 
 #[derive(CandidType, Clone, Copy, Debug, Deserialize)]
-pub enum TreasuryManagerPhase {
+pub enum TreasuryManagerOperation {
     Deposit,
     Balances,
     IssueReward,
@@ -65,7 +65,11 @@ pub enum TransactionError {
     Precondition(String),
 
     /// An error that occurred while calling a canister.
-    Call(String),
+    Call {
+        canister_id: Principal,
+        method: String,
+        error: String,
+    },
 
     /// Backend refers to, e.g., the DEX canister that this asset manager talks to.
     Backend(String),
@@ -80,8 +84,8 @@ pub struct Transaction {
     // TODO: add low-level traces stores as JSON.
     pub result: Result<TransactionWitness, TransactionError>,
     pub human_readable: String,
-    pub timestamp_seconds: u64,
-    pub treasury_operation_phase: TreasuryManagerPhase,
+    pub timestamp_ns: u64,
+    pub treasury_operation_phase: TreasuryManagerOperation,
 }
 
 #[derive(CandidType, Clone, Debug, Deserialize)]
