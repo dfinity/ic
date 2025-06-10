@@ -1,3 +1,4 @@
+use canister_test::WasmResult;
 use ic_management_canister_types_private::{
     CanisterSnapshotDataOffset, LoadCanisterSnapshotArgs, ReadCanisterSnapshotMetadataArgs,
     TakeCanisterSnapshotArgs, UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
@@ -182,6 +183,10 @@ fn upload_snapshot_with_checkpoint() {
     assert_eq!(res_1, res_2);
     let chunk_store_dl_2 = env.get_snapshot_chunk_store(&md_args_2).unwrap();
     assert_eq!(chunk_store_dl, chunk_store_dl_2);
+    // perform another checkpoint and make sure the canister endpoint behaves as expected
+    env.checkpointed_tick();
+    let res = env.execute_ingress(canister_id, "inc", vec![]).unwrap();
+    assert_eq!(res, WasmResult::Reply(u32::to_le_bytes(82).to_vec()));
 }
 
 /// Counter canister that also grows the stable memory by one page on "inc".
