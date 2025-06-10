@@ -185,7 +185,7 @@ fn ensure_not_pending(entry: &LogEntry) -> Result<(BlockNumber, EventSource), Re
     Ok((
         block_number.into(),
         EventSource {
-            transaction_hash: Hash(<[u8; 32]>::try_from(transaction_hash.as_ref()).unwrap()),
+            transaction_hash: Hash(transaction_hash.into()),
             log_index: log_index.into(),
         },
     ))
