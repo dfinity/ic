@@ -390,15 +390,15 @@ pub fn maybe_parse_canister_id_from_canister_ranges_key(key: &String) -> Option<
     if !key.starts_with(CANISTER_RANGES_PREFIX) {
         return None;
     }
-    key.strip_prefix(CANISTER_RANGES_PREFIX).map(|stripped| {
-        hex::decode(stripped).ok().and_then(|bytes| {
-            PrincipalId::try_from(bytes)
-                .ok()
-                .map(CanisterId::try_from_principal_id)
-                .flatten()
-                .flatten()
+    key.strip_prefix(CANISTER_RANGES_PREFIX)
+        .map(|stripped| {
+            hex::decode(stripped).ok().and_then(|bytes| {
+                PrincipalId::try_from(bytes)
+                    .ok()
+                    .and_then(|p| CanisterId::try_from_principal_id(p).ok())
+            })
         })
-    })
+        .flatten()
 }
 
 #[cfg(test)]
