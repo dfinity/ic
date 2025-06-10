@@ -56,7 +56,8 @@ fn compute_bouncer(
     if height < expected_batch_height.min(cup_height) {
         return Unwanted;
     }
-    // Stash non-CUP artifacts, as long as they're too far ahead of the next CUP height.
+    // Stash non-CUP artifacts, as long as they're too far ahead of the next pending CUP height,
+    // or the latest certified height.
     // This prevents nodes that have fallen behind to exceed their validated pool bounds.
     if !matches!(id.hash, ConsensusMessageHash::CatchUpPackage(_))
         && (height > next_cup_height + Height::new(ACCEPTABLE_NOTARIZATION_CUP_GAP)
