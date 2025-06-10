@@ -1,7 +1,6 @@
 use crate::pb::v1::{
     governance::{GovernanceCachedMetrics, MakingSnsProposal, NeuronInFlightCommand},
-    neuron::Followees,
-    Governance as GovernanceProto, MonthlyNodeProviderRewards, NetworkEconomics, Neuron,
+    Followees, Governance as GovernanceProto, MonthlyNodeProviderRewards, NetworkEconomics, Neuron,
     NeuronStakeTransfer, NodeProvider, ProposalData, RestoreAgingSummary, RewardEvent,
     XdrConversionRate as XdrConversionRatePb,
 };

@@ -2880,6 +2880,25 @@ fn registry_after_instance_restart() {
 }
 
 #[test]
+fn test_invalid_specified_id() {
+    // First determine an invalid `specified_id` by creating a canister on a PocketIC instance
+    // whose canister ID belongs to the canister allocation ranges of the PocketIC instance.
+    let pic = PocketIcBuilder::new().with_application_subnet().build();
+    let specified_id = pic.create_canister();
+    drop(pic);
+
+    // Now create a fresh PocketIC instance with the same topology.
+    let pic = PocketIcBuilder::new().with_application_subnet().build();
+
+    // Using the invalid `specified_id` should result in an error.
+    let err = pic
+        .create_canister_with_id(None, None, specified_id)
+        .unwrap_err();
+    let expected_err = format!("The `specified_id` {} is invalid because it belongs to the canister allocation ranges of the test environment.\\nUse a `specified_id` that matches a canister ID on the ICP mainnet and a test environment that supports canister creation with `specified_id` (e.g., PocketIC).", specified_id);
+    assert!(err.contains(&expected_err));
+}
+
+#[test]
 fn with_registry() {
     let _pic = PocketIcBuilder::new().with_registry().build();
 }
