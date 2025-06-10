@@ -556,8 +556,8 @@ fn test_archiving_in_chunks_returns_disjoint_block_range_locations() {
 }
 
 #[test]
-fn test_archiving_hits_instruction_limit_purging_blocks_from_ledger() {
-    ic_ledger_suite_state_machine_tests::archiving::test_archiving_hits_instruction_limit_purging_blocks_from_ledger(
+fn test_archiving_respects_num_blocks_to_archive_upper_limit() {
+    ic_ledger_suite_state_machine_tests::archiving::test_archiving_respects_num_blocks_to_archive_upper_limit(
         ledger_wasm(), encode_init_args, 250_000,
         ic_ledger_suite_state_machine_tests::archiving::query_icrc3_get_blocks,
         icrc_archives,

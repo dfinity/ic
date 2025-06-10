@@ -45,7 +45,6 @@ use crate::{
                 ClaimOrRefresh, Command, NeuronIdOrSubaccount,
             },
             maturity_disbursement::Destination,
-            neuron::Followees,
             neurons_fund_snapshot::NeuronsFundNeuronPortion as NeuronsFundNeuronPortionPb,
             proposal::Action,
             reward_node_provider::{RewardMode, RewardToAccount},
@@ -54,11 +53,11 @@ use crate::{
                 self, NeuronsFundNeuron as NeuronsFundNeuronPb,
             },
             swap_background_information, ArchivedMonthlyNodeProviderRewards, Ballot,
-            CreateServiceNervousSystem, ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest,
-            GetNeuronsFundAuditInfoResponse, Governance as GovernanceProto, GovernanceError,
-            InstallCode, KnownNeuron, ListKnownNeuronsResponse, ListProposalInfo, ManageNeuron,
-            MonthlyNodeProviderRewards, Motion, NetworkEconomics, NeuronState,
-            NeuronsFundAuditInfo, NeuronsFundData,
+            CreateServiceNervousSystem, ExecuteNnsFunction, Followees,
+            GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
+            Governance as GovernanceProto, GovernanceError, InstallCode, KnownNeuron,
+            ListKnownNeuronsResponse, ListProposalInfo, ManageNeuron, MonthlyNodeProviderRewards,
+            Motion, NetworkEconomics, NeuronState, NeuronsFundAuditInfo, NeuronsFundData,
             NeuronsFundParticipation as NeuronsFundParticipationPb,
             NeuronsFundSnapshot as NeuronsFundSnapshotPb, NnsFunction, NodeProvider, Proposal,
             ProposalData, ProposalRewardStatus, ProposalStatus, RestoreAgingSummary, RewardEvent,
@@ -1609,7 +1608,7 @@ impl Governance {
         cmc: Arc<dyn CMC>,
         mut randomness: Box<dyn RandomnessGenerator>,
     ) -> Self {
-        let (_, heap_governance_proto, maybe_rng_seed) = split_governance_proto(governance_proto);
+        let (heap_governance_proto, maybe_rng_seed) = split_governance_proto(governance_proto);
 
         // Carry over the previous rng seed to avoid race conditions in handling queued ingress
         // messages that may require a functioning RNG.
@@ -1638,14 +1637,7 @@ impl Governance {
     pub fn take_heap_proto(&mut self) -> GovernanceProto {
         let heap_governance_proto = std::mem::take(&mut self.heap_data);
         let rng_seed = self.randomness.get_rng_seed();
-        reassemble_governance_proto(BTreeMap::new(), heap_governance_proto, rng_seed)
-    }
-
-    pub fn __get_state_for_test(&self) -> GovernanceProto {
-        let neurons = self.neuron_store.__get_neurons_for_tests();
-        let heap_governance_proto = self.heap_data.clone();
-        let rng_seed = self.randomness.get_rng_seed();
-        reassemble_governance_proto(neurons, heap_governance_proto, rng_seed)
+        reassemble_governance_proto(heap_governance_proto, rng_seed)
     }
 
     pub fn seed_rng(&mut self, seed: [u8; 32]) {
