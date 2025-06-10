@@ -1,5 +1,5 @@
 {
-  "checksum": "5063d0cb0c55333e16aad0a7cf3d2fee586026f58e4483b205c4598585892172",
+  "checksum": "ea4b17fe8625c859ee314cc11d93e2c3e34db3149ecb3ae013e3dec38f287428",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -32454,7 +32454,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/ic-bn-lib",
           "commitish": {
-            "Rev": "23b3b0b76795c9b75eed96742c2185da0ce9ee2a"
+            "Rev": "620fb49a238b3d8a2caa436b5742ed7ca7012098"
           }
         }
       },
@@ -32583,6 +32583,14 @@
               "target": "prometheus"
             },
             {
+              "id": "prost 0.13.3",
+              "target": "prost"
+            },
+            {
+              "id": "prost-types 0.13.3",
+              "target": "prost_types"
+            },
+            {
               "id": "rand 0.8.5",
               "target": "rand"
             },
@@ -32669,6 +32677,10 @@
             {
               "id": "uuid 1.12.1",
               "target": "uuid"
+            },
+            {
+              "id": "vrl 0.23.0",
+              "target": "vrl"
             },
             {
               "id": "webpki-root-certs 0.26.6",
@@ -33667,7 +33679,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/ic-gateway",
           "commitish": {
-            "Rev": "73495da1d5ab99891a3580522958f0f635902a87"
+            "Rev": "1d087ad6b8e477159e0ce68b30b6cf09d7ce4938"
           }
         }
       },

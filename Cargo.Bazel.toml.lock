@@ -3486,7 +3486,7 @@ dependencies = [
  "hyper-socks2",
  "hyper-util",
  "ic-agent",
- "ic-bn-lib 0.1.0 (git+https://github.com/dfinity/ic-bn-lib?rev=620fb49a238b3d8a2caa436b5742ed7ca7012098)",
+ "ic-bn-lib",
  "ic-btc-interface",
  "ic-canister-log",
  "ic-canister-sig-creation",
@@ -5618,66 +5618,6 @@ dependencies = [
 [[package]]
 name = "ic-bn-lib"
 version = "0.1.0"
-source = "git+https://github.com/dfinity/ic-bn-lib?rev=23b3b0b76795c9b75eed96742c2185da0ce9ee2a#23b3b0b76795c9b75eed96742c2185da0ce9ee2a"
-dependencies = [
- "ahash 0.8.11",
- "anyhow",
- "arc-swap",
- "async-trait",
- "axum 0.8.4",
- "base64 0.22.1",
- "bytes",
- "candid",
- "chacha20poly1305",
- "clap 4.5.20",
- "derive-new",
- "fqdn 0.4.5",
- "futures",
- "futures-util",
- "hickory-proto 0.25.2",
- "hickory-resolver 0.25.2",
- "http 1.3.1",
- "http-body 1.0.1",
- "http-body-util",
- "humantime",
- "hyper 1.6.0",
- "hyper-util",
- "moka",
- "parse-size",
- "prometheus 0.14.0",
- "prost 0.13.3",
- "prost-types 0.13.3",
- "rand 0.8.5",
- "reqwest 0.12.15",
- "rustls 0.23.27",
- "rustls-pemfile 2.2.0",
- "rustls-platform-verifier",
- "scopeguard",
- "serde",
- "serde_json",
- "sha1",
- "strum 0.27.1",
- "strum_macros 0.27.1",
- "systemstat",
- "thiserror 2.0.12",
- "tokio",
- "tokio-io-timeout",
- "tokio-rustls 0.26.0",
- "tokio-util",
- "tower 0.5.2",
- "tower-service",
- "tracing",
- "url",
- "uuid",
- "vrl",
- "webpki-root-certs",
- "x509-parser 0.17.0",
- "zeroize",
-]
-
-[[package]]
-name = "ic-bn-lib"
-version = "0.1.0"
 source = "git+https://github.com/dfinity/ic-bn-lib?rev=620fb49a238b3d8a2caa436b5742ed7ca7012098#620fb49a238b3d8a2caa436b5742ed7ca7012098"
 dependencies = [
  "ahash 0.8.11",
@@ -5706,6 +5646,8 @@ dependencies = [
  "parse-size",
  "ppp",
  "prometheus 0.14.0",
+ "prost 0.13.3",
+ "prost-types 0.13.3",
  "rand 0.8.5",
  "reqwest 0.12.15",
  "rustls 0.23.27",
@@ -5729,6 +5671,7 @@ dependencies = [
  "tracing",
  "url",
  "uuid",
+ "vrl",
  "webpki-root-certs",
  "x509-parser 0.17.0",
  "zeroize",
@@ -5920,7 +5863,7 @@ dependencies = [
 [[package]]
 name = "ic-gateway"
 version = "0.2.0"
-source = "git+https://github.com/dfinity/ic-gateway?rev=73495da1d5ab99891a3580522958f0f635902a87#73495da1d5ab99891a3580522958f0f635902a87"
+source = "git+https://github.com/dfinity/ic-gateway?rev=1d087ad6b8e477159e0ce68b30b6cf09d7ce4938#1d087ad6b8e477159e0ce68b30b6cf09d7ce4938"
 dependencies = [
  "ahash 0.8.11",
  "anyhow",
@@ -5944,7 +5887,7 @@ dependencies = [
  "http-body-util",
  "humantime",
  "ic-agent",
- "ic-bn-lib 0.1.0 (git+https://github.com/dfinity/ic-bn-lib?rev=23b3b0b76795c9b75eed96742c2185da0ce9ee2a)",
+ "ic-bn-lib",
  "ic-http-gateway",
  "ic-transport-types 0.40.1",
  "itertools 0.14.0",
