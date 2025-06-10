@@ -1,13 +1,9 @@
 use crate::eth_logs::LedgerSubaccount;
-use crate::eth_rpc::Hash;
-use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::eth_rpc_client::EthRpcClient;
 use crate::eth_rpc_client::MultiCallError;
 use crate::guard::TimerGuard;
 use crate::logs::{DEBUG, INFO};
-use crate::numeric::{
-    BlockNumber, GasAmount, LedgerBurnIndex, LedgerMintIndex, TransactionCount, WeiPerGas,
-};
+use crate::numeric::{GasAmount, LedgerBurnIndex, LedgerMintIndex, TransactionCount};
 use crate::state::audit::{process_event, EventType};
 use crate::state::transactions::{
     create_transaction, CreateTransactionError, Reimbursed, ReimbursementIndex,
@@ -424,27 +420,12 @@ async fn finalize_transactions_batch() {
                 "ERROR: unexpected transaction receipts for some withdrawal IDs"
             );
             for (withdrawal_id, transaction_receipt) in receipts {
-                let transaction_receipt = TransactionReceipt {
-                    block_hash: Hash(transaction_receipt.block_hash.into()),
-                    block_number: BlockNumber::from(transaction_receipt.block_number),
-                    effective_gas_price: WeiPerGas::from(transaction_receipt.effective_gas_price),
-                    gas_used: GasAmount::from(transaction_receipt.gas_used),
-                    status: TransactionStatus::try_from(
-                        transaction_receipt
-                            .status
-                            .and_then(|s| s.as_ref().0.to_u8())
-                            .ok_or("invalid transaction status")
-                            .unwrap(), // From the doc `status` can be either 1 (success) or 0 (failure)
-                    )
-                    .unwrap(), // From the doc `status` can be either 1 (success) or 0 (failure)
-                    transaction_hash: Hash(transaction_receipt.transaction_hash.into()),
-                };
                 mutate_state(|s| {
                     process_event(
                         s,
                         EventType::FinalizedTransaction {
                             withdrawal_id,
-                            transaction_receipt,
+                            transaction_receipt: transaction_receipt.into(),
                         },
                     );
                 });
