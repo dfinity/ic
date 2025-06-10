@@ -1012,7 +1012,7 @@ async fn icrc1_transfer(
         .unwrap()
         .can_send(&PrincipalId::from(caller()))
     {
-        trap("Anonymous principal cannot hold tokens on the ledger.");
+        trap("Caller cannot hold tokens on the ledger.");
     }
 
     let from_account = Account {
@@ -1049,7 +1049,7 @@ async fn icrc2_transfer_from(arg: TransferFromArgs) -> Result<Nat, TransferFromE
         .unwrap()
         .can_send(&PrincipalId::from(caller()))
     {
-        trap("Anonymous principal cannot hold tokens on the ledger.");
+        trap("Caller cannot hold tokens on the ledger.");
     }
 
     if !LEDGER.read().unwrap().feature_flags.icrc2 {
@@ -1509,7 +1509,7 @@ fn query_encoded_blocks(
 
 fn icrc2_approve_not_async(caller: Principal, arg: ApproveArgs) -> Result<Nat, ApproveError> {
     if !LEDGER.read().unwrap().can_send(&PrincipalId::from(caller)) {
-        trap("Anonymous principal cannot approve token transfers on the ledger.");
+        trap("Caller cannot approve token transfers on the ledger.");
     }
 
     if !LEDGER.read().unwrap().feature_flags.icrc2 {
