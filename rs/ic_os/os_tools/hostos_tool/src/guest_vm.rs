@@ -180,8 +180,7 @@ impl GuestVmService {
         };
 
         // Wait for VM to shut down or for stop signal
-        let result = self.monitor_virtual_machine(&virtual_machine).await;
-        result
+        self.monitor_virtual_machine(&virtual_machine).await
     }
 
     async fn start_virtual_machine(&mut self) -> Result<VirtualMachine> {
