@@ -1,14 +1,12 @@
-use crate::systemd::{DefaultSystemdNotifier, SystemdNotifier};
+use crate::systemd::SystemdNotifier;
 use anyhow::{anyhow, bail, Context, Error, Result};
-use config::deserialize_config;
 use config::guest_vm_config::{assemble_config_media, generate_vm_config};
 use config_types::{HostOSConfig, Ipv6Config};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{calculate_deterministic_mac, IpVariant, MacAddr6Ext};
 use ic_metrics_tool::{Metric, MetricsWriter};
-use std::fs::File;
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 use tempfile::NamedTempFile;
@@ -136,13 +134,19 @@ pub struct GuestVmService {
 }
 
 impl GuestVmService {
+    #[cfg(not(target_os = "linux"))]
     pub fn new() -> Result<Self> {
-        let metrics_writer = MetricsWriter::new(PathBuf::from(METRICS_FILE_PATH));
+        bail!("GuestVM service is only supported on Linux");
+    }
+
+    #[cfg(target_os = "linux")]
+    pub fn new() -> Result<Self> {
+        let metrics_writer = MetricsWriter::new(std::path::PathBuf::from(METRICS_FILE_PATH));
         let libvirt_connection = Connect::open(None).context("Failed to connect to libvirt")?;
         let hostos_config: HostOSConfig =
-            deserialize_config(config::DEFAULT_HOSTOS_CONFIG_OBJECT_PATH)
+            crate::deserialize_config(config::DEFAULT_HOSTOS_CONFIG_OBJECT_PATH)
                 .context("Failed to read HostOS config file")?;
-        let console_tty = File::options()
+        let console_tty = std::fs::File::options()
             .write(true)
             .open(CONSOLE_TTY_PATH)
             .context("Failed to open console")?;
@@ -151,7 +155,7 @@ impl GuestVmService {
             metrics_writer,
             libvirt_connection,
             hostos_config,
-            systemd_notifier: Arc::new(DefaultSystemdNotifier),
+            systemd_notifier: Arc::new(crate::systemd::DefaultSystemdNotifier),
             console_tty: Box::new(console_tty),
         })
     }
@@ -359,7 +363,7 @@ impl GuestVmService {
         }
     }
 
-    /// Writes a message to the tty1 console and logs it
+    /// Writes a message to the console and stdout
     fn write_to_console(&mut self, message: &str) -> Result<()> {
         writeln!(self.console_tty, "{message}")?;
         self.console_tty.flush()?;
@@ -395,6 +399,8 @@ mod tests {
     };
     use nix::sys::signal::SIGTERM;
     use regex::Regex;
+    use std::fs::File;
+    use std::path::PathBuf;
     #[allow(clippy::disallowed_types)] // OK for testing
     use tokio::sync::{Mutex, MutexGuard};
     use virt::sys::VIR_DOMAIN_RUNNING_BOOTED;

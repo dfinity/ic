@@ -2,22 +2,24 @@ use anyhow::Result;
 
 /// A trait for notifying systemd about service state changes.
 pub trait SystemdNotifier: Send + Sync {
+    /// Notifies systemd that the service is ready to accept connections.
     fn notify_ready(&self) -> Result<()>;
+    /// Notifies systemd that the service is stopping with the given status message.
     fn notify_stopping(&self, status: &str) -> Result<()>;
 }
 
 /// Default implementation that calls systemd.
+#[cfg(target_os = "linux")]
 pub struct DefaultSystemdNotifier;
 
+#[cfg(target_os = "linux")]
 impl SystemdNotifier for DefaultSystemdNotifier {
     fn notify_ready(&self) -> Result<()> {
-        #[cfg(target_os = "linux")]
         systemd::daemon::notify(false, [(systemd::daemon::STATE_READY, "1")].iter())?;
         Ok(())
     }
 
     fn notify_stopping(&self, status: &str) -> Result<()> {
-        #[cfg(target_os = "linux")]
         systemd::daemon::notify(
             false,
             [
