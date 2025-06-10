@@ -11,10 +11,13 @@ package(default_visibility = ["//visibility:public"])
         deps = [
             # Keep sorted.
             "@crate_index//:candid",
+            "@crate_index//:futures",
+            "@crate_index//:ic-http-types",
             "@crate_index//:ic-management-canister-types",
             "@crate_index//:regex",
             "@crate_index//:serde",
             "@crate_index//:serde_bytes",
+            "@crate_index//:tokio",
         ] + extra_deps,
     )
     for (name_suffix, features, extra_deps) in [

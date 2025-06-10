@@ -12,11 +12,19 @@ documentation.workspace = true
 
 [dependencies]
 candid = { workspace = true }
-pocket-ic = { path = "../../packages/pocket-ic", optional = true }
+futures = { workspace = true, optional = true }
+ic-http-types = { path = "../../packages/ic-http-types" }
 ic-management-canister-types = { workspace = true }
+pocket-ic = { path = "../../packages/pocket-ic", optional = true }
 regex = "1.11.0"
 serde = { workspace = true }
 serde_bytes = { workspace = true }
+tokio = { workspace = true, optional = true }
 
 [features]
 pocket_ic = ["dep:pocket-ic"]
+pocket_ic_nonblocking = [
+    "dep:futures",
+    "dep:pocket-ic",
+    "dep:tokio",
+]
