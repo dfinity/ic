@@ -200,16 +200,10 @@ fi
 
 if "$BUILD_IMG"; then
     echo_green "##### GUESTOS SHA256SUMS #####"
-    pushd "$DISK_DIR_FULL/guestos/disk" >/dev/null
-    cat SHA256SUMS
-    popd >/dev/null
     pushd "$DISK_DIR_FULL/guestos/update" >/dev/null
     cat SHA256SUMS
     popd >/dev/null
     echo_green "##### HOSTOS SHA256SUMS #####"
-    pushd "$DISK_DIR_FULL/hostos/disk" >/dev/null
-    cat SHA256SUMS
-    popd >/dev/null
     pushd "$DISK_DIR_FULL/hostos/update" >/dev/null
     cat SHA256SUMS
     popd >/dev/null
