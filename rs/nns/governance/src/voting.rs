@@ -594,8 +594,8 @@ mod test {
         neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
         neuron_store::NeuronStore,
         pb::v1::{
-            neuron::Followees, proposal::Action, Ballot, Motion, Proposal, ProposalData, Tally,
-            Topic, Vote, VotingPowerEconomics, WaitForQuietState,
+            proposal::Action, Ballot, Followees, Motion, Proposal, ProposalData, Tally, Topic,
+            Vote, VotingPowerEconomics, WaitForQuietState,
         },
         storage::with_voting_state_machines_mut,
         test_utils::{
