@@ -66,16 +66,13 @@ def image_deps(mode, malicious = False):
         "expanded_size": "50G",
         "rootfs_size": "3G",
         "bootfs_size": "1G",
+        "grub_config": Label("//ic-os/bootloader:guestos_grub.cfg"),
 
         # Add any custom partitions to the manifest
         "custom_partitions": lambda _: [Label("//ic-os/guestos:partition-config.tzst")],
 
-        # We will install extra_boot_args onto the system, after substituting the
-        # hash of the root filesystem into it. Track the template (before
-        # substitution) as a dependency so that changes to the template file are
-        # reflected in the overall version hash (the root_hash must include the
-        # version hash, it cannot be the other way around).
-        "extra_boot_args_template": Label("//ic-os/guestos/context:extra_boot_args.template"),
+        # We will install boot_args_template onto the system, after substituting the
+        # hash of the root filesystem into it.
         "boot_args_template": Label("//ic-os/guestos/context:boot_args.template"),
     }
 
@@ -84,45 +81,22 @@ def image_deps(mode, malicious = False):
     dev_file_build_arg = "BASE_IMAGE=docker-base.dev"
     prod_file_build_arg = "BASE_IMAGE=docker-base.prod"
 
-    image_variants = {
-        "dev": {
+    # Determine build configuration based on mode name
+    if "dev" in mode:
+        deps.update({
             "build_args": dev_build_args,
             "file_build_arg": dev_file_build_arg,
-        },
-        "local-base-dev": {
-            "build_args": dev_build_args,
-            "file_build_arg": dev_file_build_arg,
-        },
-        "dev-malicious": {
-            "build_args": dev_build_args,
-            "file_build_arg": dev_file_build_arg,
-        },
-        "local-base-prod": {
+        })
+    else:
+        deps.update({
             "build_args": prod_build_args,
             "file_build_arg": prod_file_build_arg,
-        },
-        "prod": {
-            "build_args": prod_build_args,
-            "file_build_arg": prod_file_build_arg,
-        },
-    }
+        })
 
-    deps.update(image_variants[mode])
-
+    # Update dev rootfs
     if "dev" in mode:
         deps["rootfs"].pop("//rs/ic_os/release:config", None)
         deps["rootfs"].update({"//rs/ic_os/release:config_dev": "/opt/ic/bin/config:0755"})
-
-    # Add extra files depending on image variant
-    extra_rootfs_deps = {
-        "dev": {
-            "//ic-os/guestos/context:allow_console_root": "/etc/allow_console_root:0644",
-        },
-        "local-base-dev": {
-            "//ic-os/guestos/context:allow_console_root": "/etc/allow_console_root:0644",
-        },
-    }
-
-    deps["rootfs"].update(extra_rootfs_deps.get(mode, {}))
+        deps["rootfs"].update({"//ic-os/guestos/context:allow_console_root": "/etc/allow_console_root:0644"})
 
     return deps

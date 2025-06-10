@@ -345,10 +345,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 default_features = False,
             ),
             "canbench": crate.spec(
-                version = "^0.1.9",
+                version = "^0.1.15",
             ),
             "canbench-rs": crate.spec(
-                version = "^0.1.9",
+                version = "^0.1.15",
             ),
             "candid": crate.spec(
                 version = "^0.10.13",
@@ -654,7 +654,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.1.1",
             ),
             "ic-management-canister-types": crate.spec(
-                version = "0.3.0",
+                version = "0.3.1",
             ),
             "ic_principal": crate.spec(
                 version = "^0.1.1",

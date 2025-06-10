@@ -6,11 +6,9 @@ use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
     pb::v1::{
         manage_neuron::{Command, NeuronIdOrSubaccount, RegisterVote},
-        neuron::Followees,
         proposal::Action,
-        ExecuteNnsFunction, Governance as GovernanceProto, ListProposalInfo, ManageNeuron, Motion,
-        NetworkEconomics, NnsFunction, Proposal, ProposalRewardStatus, ProposalStatus, Topic,
-        WaitForQuietState,
+        ExecuteNnsFunction, Followees, ListProposalInfo, ManageNeuron, Motion, NetworkEconomics,
+        NnsFunction, Proposal, ProposalRewardStatus, ProposalStatus, Topic, WaitForQuietState,
     },
     test_utils::{MockEnvironment, MockRandomness, StubCMC, StubIcpLedger},
 };
@@ -21,7 +19,8 @@ use futures::FutureExt;
 use ic_nervous_system_common::{E8, ONE_YEAR_SECONDS};
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_governance_api::{
-    proposal::Action as ApiAction, ListProposalInfoResponse, ProposalInfo, Vote,
+    proposal::Action as ApiAction, Governance as ApiGovernance, ListProposalInfoResponse,
+    NetworkEconomics as ApiNetworkEconomics, ProposalInfo, Vote,
 };
 use ic_types::PrincipalId;
 use lazy_static::lazy_static;
@@ -37,8 +36,8 @@ lazy_static! {
 
 fn new_governance() -> Governance {
     Governance::new(
-        GovernanceProto {
-            economics: Some(NetworkEconomics::with_default_values()),
+        ApiGovernance {
+            economics: Some(ApiNetworkEconomics::with_default_values()),
             wait_for_quiet_threshold_seconds: *PROPOSAL_VOTING_PERIOD_SECONDS,
             ..Default::default()
         },

@@ -16,7 +16,7 @@ jobs:
       labels: dind-large
       group: dm1
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
+      image: ghcr.io/dfinity/ic-build@sha256:efe6edcd9a9e169843a02f91af98b29514c00cda858ad6612cda28b231b80896
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
     timeout-minutes: 120
@@ -39,7 +39,7 @@ jobs:
       labels: dind-large
       group: dm1
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
+      image: ghcr.io/dfinity/ic-build@sha256:efe6edcd9a9e169843a02f91af98b29514c00cda858ad6612cda28b231b80896
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
     timeout-minutes: 120
@@ -62,7 +62,7 @@ jobs:
       labels: dind-large
       group: dm1
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
+      image: ghcr.io/dfinity/ic-build@sha256:efe6edcd9a9e169843a02f91af98b29514c00cda858ad6612cda28b231b80896
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
     timeout-minutes: 120
