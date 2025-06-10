@@ -1,5 +1,5 @@
 {
-  "checksum": "64c49509d47ed140ddc08b3efc7bfa814c2266d019d75d0e2e5c8b07861b577e",
+  "checksum": "25c8513fdbfcdf35e102aa51dfe81d481dff20d26eaf604a32e2a9d0a83181b1",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -5264,7 +5264,8 @@
             "query",
             "tokio",
             "tower-log",
-            "tracing"
+            "tracing",
+            "ws"
           ],
           "selects": {}
         },
@@ -5273,6 +5274,10 @@
             {
               "id": "axum-core 0.5.2",
               "target": "axum_core"
+            },
+            {
+              "id": "base64 0.22.1",
+              "target": "base64"
             },
             {
               "id": "bytes 1.10.1",
@@ -5347,12 +5352,20 @@
               "target": "serde_urlencoded"
             },
             {
+              "id": "sha1 0.10.6",
+              "target": "sha1"
+            },
+            {
               "id": "sync_wrapper 1.0.1",
               "target": "sync_wrapper"
             },
             {
               "id": "tokio 1.45.0",
               "target": "tokio"
+            },
+            {
+              "id": "tokio-tungstenite 0.26.2",
+              "target": "tokio_tungstenite"
             },
             {
               "id": "tower 0.5.2",
@@ -32696,16 +32709,12 @@
               "target": "parse_size"
             },
             {
+              "id": "ppp 2.3.0",
+              "target": "ppp"
+            },
+            {
               "id": "prometheus 0.14.0",
               "target": "prometheus"
-            },
-            {
-              "id": "prost 0.13.3",
-              "target": "prost"
-            },
-            {
-              "id": "prost-types 0.13.3",
-              "target": "prost_types"
             },
             {
               "id": "rand 0.8.5",
@@ -32794,10 +32803,6 @@
             {
               "id": "uuid 1.12.1",
               "target": "uuid"
-            },
-            {
-              "id": "vrl 0.23.0",
-              "target": "vrl"
             },
             {
               "id": "webpki-root-certs 0.26.6",
@@ -54881,6 +54886,59 @@
         "MIT"
       ],
       "license_file": "LICENSE-Apache"
+    },
+    "ppp 2.3.0": {
+      "name": "ppp",
+      "version": "2.3.0",
+      "package_url": "https://github.com/misalcedo/ppp",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ppp/2.3.0/download",
+          "sha256": "1a7a2049cd2570bd67bf0228e86bf850f8ceb5190a345c471d03a909da6049e0"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ppp",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ppp",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "thiserror 1.0.68",
+              "target": "thiserror"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "2.3.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
     },
     "pprof 0.14.0": {
       "name": "pprof",
@@ -77538,6 +77596,74 @@
       ],
       "license_file": "LICENSE"
     },
+    "tokio-tungstenite 0.26.2": {
+      "name": "tokio-tungstenite",
+      "version": "0.26.2",
+      "package_url": "https://github.com/snapview/tokio-tungstenite",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/tokio-tungstenite/0.26.2/download",
+          "sha256": "7a9daff607c6d2bf6c16fd681ccb7eecc83e4e2cdc1ca067ffaadfca5de7f084"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "tokio_tungstenite",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "tokio_tungstenite",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "connect",
+            "default",
+            "handshake",
+            "stream"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "futures-util 0.3.31",
+              "target": "futures_util"
+            },
+            {
+              "id": "log 0.4.20",
+              "target": "log"
+            },
+            {
+              "id": "tokio 1.45.0",
+              "target": "tokio"
+            },
+            {
+              "id": "tungstenite 0.26.2",
+              "target": "tungstenite"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.26.2"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
     "tokio-util 0.7.13": {
       "name": "tokio-util",
       "version": "0.7.13",
@@ -80095,6 +80221,96 @@
         },
         "edition": "2018",
         "version": "0.21.0"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "tungstenite 0.26.2": {
+      "name": "tungstenite",
+      "version": "0.26.2",
+      "package_url": "https://github.com/snapview/tungstenite-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/tungstenite/0.26.2/download",
+          "sha256": "4793cb5e56680ecbb1d843515b23b6de9a75eb04b66643e256a396d43be33c13"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "tungstenite",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "tungstenite",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "data-encoding",
+            "handshake",
+            "http",
+            "httparse",
+            "sha1"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "bytes 1.10.1",
+              "target": "bytes"
+            },
+            {
+              "id": "data-encoding 2.4.0",
+              "target": "data_encoding"
+            },
+            {
+              "id": "http 1.3.1",
+              "target": "http"
+            },
+            {
+              "id": "httparse 1.10.1",
+              "target": "httparse"
+            },
+            {
+              "id": "log 0.4.20",
+              "target": "log"
+            },
+            {
+              "id": "rand 0.9.0",
+              "target": "rand"
+            },
+            {
+              "id": "sha1 0.10.6",
+              "target": "sha1"
+            },
+            {
+              "id": "thiserror 2.0.12",
+              "target": "thiserror"
+            },
+            {
+              "id": "utf-8 0.7.6",
+              "target": "utf8"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.26.2"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
