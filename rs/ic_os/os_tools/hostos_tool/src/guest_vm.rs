@@ -395,12 +395,14 @@ mod tests {
     };
     use nix::sys::signal::SIGTERM;
     use regex::Regex;
-    use std::sync::{Mutex, MutexGuard};
+    #[allow(clippy::disallowed_types)] // OK for testing
+    use tokio::sync::{Mutex, MutexGuard};
     use virt::sys::VIR_DOMAIN_RUNNING_BOOTED;
 
     /// We must run each test case sequentially because they all work with the same libvirt mock
     /// instance. Each test case must hold this mutex while using a libvirt connection.
-    static LIBVIRT_CONN_MUTEX: Mutex<()> = Mutex::new(());
+    #[allow(clippy::disallowed_types)]
+    static LIBVIRT_CONN_MUTEX: Mutex<()> = Mutex::const_new(());
 
     /// Test fixture for setting up the test environment
     struct TestFixture<'a> {
@@ -562,7 +564,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_run_guest_vm() {
-        let libvirt_lock = LIBVIRT_CONN_MUTEX.lock().unwrap();
+        let libvirt_lock = LIBVIRT_CONN_MUTEX.lock().await;
         let fixture = TestFixture::new(&libvirt_lock);
         let mut service = fixture.create_service(valid_hostos_config());
 
@@ -594,7 +596,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_vm_killed() {
-        let libvirt_lock = LIBVIRT_CONN_MUTEX.lock().unwrap();
+        let libvirt_lock = LIBVIRT_CONN_MUTEX.lock().await;
         let fixture = TestFixture::new(&libvirt_lock);
         let mut service = fixture.create_service(valid_hostos_config());
 
@@ -624,7 +626,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_vm_cannot_be_started() {
-        let libvirt_lock = LIBVIRT_CONN_MUTEX.lock().unwrap();
+        let libvirt_lock = LIBVIRT_CONN_MUTEX.lock().await;
         let fixture = TestFixture::new(&libvirt_lock);
         let mut service = fixture.create_service(invalid_hostos_config());
 
@@ -644,7 +646,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_stops_already_running_vm() {
-        let libvirt_lock = LIBVIRT_CONN_MUTEX.lock().unwrap();
+        let libvirt_lock = LIBVIRT_CONN_MUTEX.lock().await;
         let fixture1 = TestFixture::new(&libvirt_lock);
         let mut service1 = fixture1.create_service(valid_hostos_config());
 
