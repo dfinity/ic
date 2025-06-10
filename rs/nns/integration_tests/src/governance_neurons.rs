@@ -459,9 +459,9 @@ fn test_neuron_disburse_maturity() {
     state_machine.advance_time(Duration::from_secs(ONE_DAY_SECONDS * 3));
 
     // Step 4.1: Disburse 100% of maturity for neuron 2 through account identifier.
-    let disburse_destination_2_principal =
-        PrincipalId::new_self_authenticating(b"disburse_destination_2");
-    let disburse_destination_2 = AccountIdentifier::from(disburse_destination_2_principal);
+    let disburse_destination_2_hex =
+        "807077e900000000000000000000000000000000000000000000000000000000";
+    let disburse_destination_2 = AccountIdentifier::from_hex(disburse_destination_2_hex).unwrap();
     let disburse_response = nns_disburse_maturity(
         &state_machine,
         neuron_2_controller,
@@ -499,6 +499,13 @@ fn test_neuron_disburse_maturity() {
     assert_eq!(
         maturity_disbursement_2.amount_e8s.unwrap(),
         original_neuron_2_maturity_e8s_equivalent
+    );
+    assert_eq!(
+        maturity_disbursement_2
+            .account_identifier_to_disburse_to
+            .unwrap()
+            .hash,
+        hex::decode(disburse_destination_2_hex).unwrap()
     );
     assert_eq!(neuron_2.maturity_e8s_equivalent, 0);
 
