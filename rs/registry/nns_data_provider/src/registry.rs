@@ -6,7 +6,7 @@ use std::time::Duration;
 use url::Url;
 
 use ic_canister_client::{Agent, Sender};
-use ic_interfaces_registry::RegistryTransportRecord;
+use ic_interfaces_registry::RegistryRecord;
 use ic_registry_canister_api::{Chunk, GetChunkRequest};
 use ic_registry_transport::{
     dechunkify_delta, dechunkify_get_value_response_content, deserialize_atomic_mutate_response,
@@ -78,7 +78,7 @@ impl RegistryCanister {
         }
     }
 
-    fn new_with_agent_transformer<F>(url: Vec<Url>, f: F) -> Self
+    pub fn new_with_agent_transformer<F>(url: Vec<Url>, f: F) -> Self
     where
         F: FnMut(Agent) -> Agent,
     {
@@ -156,15 +156,12 @@ impl RegistryCanister {
     ///
     /// The registry records returned by this function are guaranteed to be
     /// sorted by version.
-    pub async fn get_changes_since_as_transport_records(
+    pub async fn get_changes_since_as_registry_records(
         &self,
         version: u64,
-    ) -> Result<(Vec<RegistryTransportRecord>, u64), Error> {
+    ) -> Result<(Vec<RegistryRecord>, u64), Error> {
         let (deltas, latest_version) = self.get_changes_since(version).await?;
-        Ok((
-            registry_deltas_to_registry_transport_records(deltas)?,
-            latest_version,
-        ))
+        Ok((registry_deltas_to_registry_records(deltas)?, latest_version))
     }
 
     /// Queries the registry for a prefix of all the changes that occurred since
@@ -176,7 +173,7 @@ impl RegistryCanister {
         &self,
         version: u64,
         nns_public_key: &ThresholdSigPublicKey,
-    ) -> Result<(Vec<RegistryTransportRecord>, RegistryVersion, Time), Error> {
+    ) -> Result<(Vec<RegistryRecord>, RegistryVersion, Time), Error> {
         let payload = serialize_get_changes_since_request(version).unwrap();
         let response = self
             .choose_random_agent()
@@ -317,10 +314,10 @@ impl RegistryCanister {
     }
 }
 
-/// Convert `Vec<RegistryDelta>` to `Vec<RegistryTransportRecord>`.
-pub fn registry_deltas_to_registry_transport_records(
+/// Convert `Vec<RegistryDelta>` to `Vec<RegistryRecord>`.
+pub fn registry_deltas_to_registry_records(
     deltas: Vec<RegistryDelta>,
-) -> Result<Vec<RegistryTransportRecord>, Error> {
+) -> Result<Vec<RegistryRecord>, Error> {
     let mut records = Vec::new();
     for delta in deltas.into_iter() {
         let string_key = std::str::from_utf8(&delta.key[..])
@@ -333,7 +330,7 @@ pub fn registry_deltas_to_registry_transport_records(
             .to_string();
 
         for value in delta.values.into_iter() {
-            records.push(RegistryTransportRecord {
+            records.push(RegistryRecord {
                 key: string_key.clone(),
                 value: if value.deletion_marker {
                     None

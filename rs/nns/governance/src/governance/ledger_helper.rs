@@ -8,12 +8,6 @@ use crate::{
 use ic_nervous_system_canisters::ledger::IcpLedger;
 use ic_nns_common::pb::v1::NeuronId;
 use icp_ledger::AccountIdentifier;
-use icrc_ledger_types::icrc1::account::Account;
-
-#[cfg(feature = "tla")]
-use super::tla::TLA_INSTRUMENTATION_STATE;
-#[cfg(feature = "tla")]
-use tla_instrumentation_proc_macros::tla_function;
 
 /// An object that represents the burning of neuron fees.
 #[derive(Clone, PartialEq, Debug)]
@@ -26,7 +20,6 @@ impl BurnNeuronFeesOperation {
     /// Burns the neuron fees by calling ledger and changing the neuron. Recoverable errors are
     /// returned while unrecoverable errors cause a panic. A neuron lock should be held before
     /// calling this.
-    #[cfg_attr(feature = "tla", tla_function)]
     pub async fn burn_neuron_fees_with_ledger(
         self,
         ledger: &dyn IcpLedger,
@@ -88,7 +81,6 @@ pub struct NeuronStakeTransferOperation {
 impl NeuronStakeTransferOperation {
     /// Transfers the stake from one neuron to another by calling ledger and changing the neurons.
     /// Recoverable errors are returned while unrecoverable errors cause a panic.
-    #[cfg_attr(feature = "tla", tla_function)]
     pub async fn transfer_neuron_stake_with_ledger(
         self,
         ledger: &dyn IcpLedger,
@@ -176,12 +168,12 @@ impl NeuronStakeTransferOperation {
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct MintIcpOperation {
-    account: Account,
+    account: AccountIdentifier,
     amount_e8s: u64,
 }
 
 impl MintIcpOperation {
-    pub fn new(account: Account, amount_e8s: u64) -> Self {
+    pub fn new(account: AccountIdentifier, amount_e8s: u64) -> Self {
         Self {
             amount_e8s,
             account,
@@ -195,13 +187,7 @@ impl MintIcpOperation {
         now_seconds: u64,
     ) -> Result<(), GovernanceError> {
         let _ = ledger
-            .transfer_funds(
-                self.amount_e8s,
-                0,
-                None,
-                AccountIdentifier::from(self.account),
-                now_seconds,
-            )
+            .transfer_funds(self.amount_e8s, 0, None, self.account, now_seconds)
             .await
             .map_err(|err| {
                 GovernanceError::new_with_message(

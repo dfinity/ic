@@ -147,7 +147,20 @@ runs:
             fi
 
             echo uploading artifacts to remote storage
+            upload_output=$(mktemp) # used in summary
+
             # with --check_up_to_date Bazel will error out if the artifacts
             # to be uploaded were not built in the build step above
             # (this ensures that the exact artifacts built above are uploaded)
-            bazel run --check_up_to_date //:upload-artifacts
+            bazel run --check_up_to_date //:upload-artifacts >"$upload_output"
+            n_uploaded=$(wc -l <"$upload_output")
+            echo "'$n_uploaded' artifacts uploaded"
+
+            # the upload list can get quite big, so we wrap in details/summary
+            {
+              echo '<details><summary>Uploaded '"$n_uploaded"' Artifacts</summary>';
+              cat "$upload_output"
+              echo '</details>';
+            } >>"$GITHUB_STEP_SUMMARY"
+
+            rm "$upload_output"

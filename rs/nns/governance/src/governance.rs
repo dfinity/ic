@@ -8,7 +8,8 @@ use crate::{
         split_neuron::{calculate_split_neuron_effect, SplitNeuronEffect},
     },
     heap_governance_data::{
-        reassemble_governance_proto, split_governance_proto, HeapGovernanceData, XdrConversionRate,
+        initialize_heap_governance_data, reassemble_governance_proto, split_governance_proto,
+        HeapGovernanceData, XdrConversionRate,
     },
     is_disburse_maturity_enabled,
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder, Visibility},
@@ -43,7 +44,7 @@ use crate::{
                 claim_or_refresh::{By, MemoAndController},
                 ClaimOrRefresh, Command, NeuronIdOrSubaccount,
             },
-            neuron::Followees,
+            maturity_disbursement::Destination,
             neurons_fund_snapshot::NeuronsFundNeuronPortion as NeuronsFundNeuronPortionPb,
             proposal::Action,
             reward_node_provider::{RewardMode, RewardToAccount},
@@ -52,18 +53,18 @@ use crate::{
                 self, NeuronsFundNeuron as NeuronsFundNeuronPb,
             },
             swap_background_information, ArchivedMonthlyNodeProviderRewards, Ballot,
-            CreateServiceNervousSystem, ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest,
-            GetNeuronsFundAuditInfoResponse, Governance as GovernanceProto, GovernanceError,
-            InstallCode, KnownNeuron, ListKnownNeuronsResponse, ListProposalInfo, ManageNeuron,
-            MonthlyNodeProviderRewards, Motion, NetworkEconomics, NeuronState,
-            NeuronsFundAuditInfo, NeuronsFundData,
+            CreateServiceNervousSystem, ExecuteNnsFunction, Followees,
+            GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
+            Governance as GovernanceProto, GovernanceError, InstallCode, KnownNeuron,
+            ListKnownNeuronsResponse, ListProposalInfo, ManageNeuron, MonthlyNodeProviderRewards,
+            Motion, NetworkEconomics, NeuronState, NeuronsFundAuditInfo, NeuronsFundData,
             NeuronsFundParticipation as NeuronsFundParticipationPb,
             NeuronsFundSnapshot as NeuronsFundSnapshotPb, NnsFunction, NodeProvider, Proposal,
             ProposalData, ProposalRewardStatus, ProposalStatus, RestoreAgingSummary, RewardEvent,
             RewardNodeProvider, RewardNodeProviders, SettleNeuronsFundParticipationRequest,
             SettleNeuronsFundParticipationResponse, StopOrStartCanister, Tally, Topic,
             UpdateCanisterSettings, UpdateNodeProvider, Vote, VotingPowerEconomics,
-            WaitForQuietState, XdrConversionRate as XdrConversionRatePb,
+            WaitForQuietState,
         },
     },
     proposals::{call_canister::CallCanister, sum_weighted_voting_power},
@@ -155,10 +156,10 @@ use crate::reward::distribution::RewardsDistribution;
 use crate::storage::with_voting_state_machines_mut;
 #[cfg(feature = "tla")]
 pub use tla::{
-    tla_update_method, InstrumentationState, ToTla, CLAIM_NEURON_DESC, DISBURSE_NEURON_DESC,
-    DISBURSE_TO_NEURON_DESC, MERGE_NEURONS_DESC, REFRESH_NEURON_DESC, SPAWN_NEURONS_DESC,
-    SPAWN_NEURON_DESC, SPLIT_NEURON_DESC, TLA_INSTRUMENTATION_STATE, TLA_TRACES_LKEY,
-    TLA_TRACES_MUTEX,
+    tla_update_method, InstrumentationState, ToTla, CLAIM_NEURON_DESC, DISBURSE_MATURITY_DESC,
+    DISBURSE_NEURON_DESC, DISBURSE_TO_NEURON_DESC, MERGE_NEURONS_DESC, REFRESH_NEURON_DESC,
+    SPAWN_NEURONS_DESC, SPAWN_NEURON_DESC, SPLIT_NEURON_DESC, TLA_INSTRUMENTATION_STATE,
+    TLA_TRACES_LKEY, TLA_TRACES_MUTEX,
 };
 
 // 70 KB (for executing NNS functions that are not canister upgrades)
@@ -214,7 +215,11 @@ pub const MAX_SUSTAINED_NEURONS_PER_HOUR: u64 = 15;
 
 pub const MINIMUM_SECONDS_BETWEEN_ALLOWANCE_INCREASE: u64 = 3600 / MAX_SUSTAINED_NEURONS_PER_HOUR;
 
-pub const MAX_NEURON_CREATION_SPIKE: u64 = MAX_SUSTAINED_NEURONS_PER_HOUR * 8;
+/// The maximum number of neurons that can be created in a spike. Note that such rate of neuron
+/// creation is not sustainable as the allowance will be exhausted after creating this many neurons
+/// in a short period of time, and the allowance will only be increased according to
+/// `MINIMUM_SECONDS_BETWEEN_ALLOWANCE_INCREASE`.
+pub const MAX_NEURON_CREATION_SPIKE: u64 = MAX_SUSTAINED_NEURONS_PER_HOUR * 20;
 
 /// The maximum number results returned by the method `list_proposals`.
 pub const MAX_LIST_PROPOSAL_RESULTS: u32 = 100;
@@ -1516,18 +1521,6 @@ impl TryFrom<SettleNeuronsFundParticipationRequest>
     }
 }
 
-impl XdrConversionRatePb {
-    /// This constructor should be used only at canister creation, and not, e.g., after upgrades.
-    /// The reason this function exists is because `Default::default` is already defined by prost.
-    /// However, the Governance canister relies on the fields of this structure being `Some`.
-    pub fn with_default_values() -> Self {
-        Self {
-            timestamp_seconds: Some(0),
-            xdr_permyriad_per_icp: Some(10_000),
-        }
-    }
-}
-
 /// This function is used to spawn a future in a way that is compatible with both the WASM and
 /// non-WASM environments that are used for testing.  This only actually spawns in the case where
 /// the WASM is running in the IC, or has some other source of asynchrony.  Otherwise, it
@@ -1576,50 +1569,15 @@ impl Governance {
     /// Initializes Governance for the first time from init payload. When restoring after an upgrade
     /// with its persisted state, `Governance::new_restored` should be called instead.
     pub fn new(
-        mut governance_proto: GovernanceProto,
+        initial_governance: api::Governance,
         env: Arc<dyn Environment>,
         ledger: Arc<dyn IcpLedger>,
         cmc: Arc<dyn CMC>,
         randomness: Box<dyn RandomnessGenerator>,
     ) -> Self {
-        // Step 1: Populate some fields governance_proto if they are blank.
+        let (neurons, heap_governance_proto) =
+            initialize_heap_governance_data(initial_governance, env.now());
 
-        // Step 1.1: genesis_timestamp_seconds. 0 indicates it hasn't been set already.
-        if governance_proto.genesis_timestamp_seconds == 0 {
-            governance_proto.genesis_timestamp_seconds = env.now();
-        }
-
-        // Step 1.2: latest_reward_event.
-        if governance_proto.latest_reward_event.is_none() {
-            // Introduce a dummy reward event to mark the origin of the IC era.
-            // This is required to be able to compute accurately the rewards for the
-            // very first reward distribution.
-            governance_proto.latest_reward_event = Some(RewardEvent {
-                actual_timestamp_seconds: env.now(),
-                day_after_genesis: 0,
-                settled_proposals: vec![],
-                distributed_e8s_equivalent: 0,
-                total_available_e8s_equivalent: 0,
-                rounds_since_last_distribution: Some(0),
-                latest_round_available_e8s_equivalent: Some(0),
-            })
-        }
-
-        // Step 1.3: xdr_conversion_rate.
-        if governance_proto.xdr_conversion_rate.is_none() {
-            governance_proto.xdr_conversion_rate = Some(XdrConversionRatePb::with_default_values());
-        }
-
-        // Step 2: Break out Neurons from governance_proto. Neurons are managed separately by
-        // NeuronStore. NeuronStore is in charge of Neurons, because some are stored in stable
-        // memory, while others are stored in heap. "inactive" Neurons live in stable memory, while
-        // the rest live in heap.
-
-        // Note: We do not carry over the RNG seed in new governance, only in restored governance.
-        let (neurons, heap_governance_proto, _maybe_rng_seed) =
-            split_governance_proto(governance_proto);
-
-        // Step 3: Final assembly.
         Self {
             heap_data: heap_governance_proto,
             neuron_store: NeuronStore::new(
@@ -1650,7 +1608,7 @@ impl Governance {
         cmc: Arc<dyn CMC>,
         mut randomness: Box<dyn RandomnessGenerator>,
     ) -> Self {
-        let (_, heap_governance_proto, maybe_rng_seed) = split_governance_proto(governance_proto);
+        let (heap_governance_proto, maybe_rng_seed) = split_governance_proto(governance_proto);
 
         // Carry over the previous rng seed to avoid race conditions in handling queued ingress
         // messages that may require a functioning RNG.
@@ -1679,14 +1637,7 @@ impl Governance {
     pub fn take_heap_proto(&mut self) -> GovernanceProto {
         let heap_governance_proto = std::mem::take(&mut self.heap_data);
         let rng_seed = self.randomness.get_rng_seed();
-        reassemble_governance_proto(BTreeMap::new(), heap_governance_proto, rng_seed)
-    }
-
-    pub fn __get_state_for_test(&self) -> GovernanceProto {
-        let neurons = self.neuron_store.__get_neurons_for_tests();
-        let heap_governance_proto = self.heap_data.clone();
-        let rng_seed = self.randomness.get_rng_seed();
-        reassemble_governance_proto(neurons, heap_governance_proto, rng_seed)
+        reassemble_governance_proto(heap_governance_proto, rng_seed)
     }
 
     pub fn seed_rng(&mut self, seed: [u8; 32]) {
@@ -1831,7 +1782,7 @@ impl Governance {
     /// - the maximum number of neurons has been reached, or
     /// - the given `neuron_id` already exists in `self.neuron_store.neurons`, or
     /// - the neuron's controller `PrincipalId` is not self-authenticating.
-    fn add_neuron(
+    pub(crate) fn add_neuron(
         &mut self,
         neuron_id: u64,
         neuron: Neuron,
@@ -2221,7 +2172,7 @@ impl Governance {
     /// - The neuron exists.
     /// - The caller is the controller of the the neuron.
     /// - The neuron's state is `Dissolved` at the current timestamp.
-    #[cfg_attr(feature = "tla", tla_update_method(DISBURSE_NEURON_DESC.clone()))]
+    #[cfg_attr(feature = "tla", tla_update_method(DISBURSE_NEURON_DESC.clone(), tla_snapshotter!()))]
     pub async fn disburse_neuron(
         &mut self,
         id: &NeuronId,
@@ -2411,7 +2362,7 @@ impl Governance {
     ///   stake.
     /// - The amount to split minus the transfer fee is more than the minimum
     ///   stake.
-    #[cfg_attr(feature = "tla", tla_update_method(SPLIT_NEURON_DESC.clone()))]
+    #[cfg_attr(feature = "tla", tla_update_method(SPLIT_NEURON_DESC.clone(), tla_snapshotter!()))]
     pub async fn split_neuron(
         &mut self,
         id: &NeuronId,
@@ -2667,7 +2618,7 @@ impl Governance {
     ///   it will be merged into the stake of the target neuron; if it is less
     ///   than the transaction fee, the maturity of the source neuron will
     ///   still be merged into the maturity of the target neuron.
-    #[cfg_attr(feature = "tla", tla_update_method(MERGE_NEURONS_DESC.clone()))]
+    #[cfg_attr(feature = "tla", tla_update_method(MERGE_NEURONS_DESC.clone(), tla_snapshotter!()))]
     pub async fn merge_neurons(
         &mut self,
         id: &NeuronId,
@@ -2851,7 +2802,7 @@ impl Governance {
     /// - The parent neuron is not spawning itself.
     /// - The maturity to move to the new neuron must be such that, with every maturity modulation, at least
     ///   NetworkEconomics::neuron_minimum_spawn_stake_e8s are created when the maturity is spawn.
-    #[cfg_attr(feature = "tla", tla_update_method(SPAWN_NEURON_DESC.clone()))]
+    #[cfg_attr(feature = "tla", tla_update_method(SPAWN_NEURON_DESC.clone(), tla_snapshotter!()))]
     pub fn spawn_neuron(
         &mut self,
         id: &NeuronId,
@@ -3096,7 +3047,7 @@ impl Governance {
     ///   stake.
     /// - The amount to split minus the transfer fee is more than the minimum
     ///   stake.
-    #[cfg_attr(feature = "tla", tla_update_method(DISBURSE_TO_NEURON_DESC.clone()))]
+    #[cfg_attr(feature = "tla", tla_update_method(DISBURSE_TO_NEURON_DESC.clone(), tla_snapshotter!()))]
     pub async fn disburse_to_neuron(
         &mut self,
         id: &NeuronId,
@@ -3309,6 +3260,7 @@ impl Governance {
         Ok(child_nid)
     }
 
+    #[cfg_attr(feature = "tla", tla_update_method(DISBURSE_MATURITY_DESC.clone(), tla_snapshotter!()))]
     fn disburse_maturity(
         &mut self,
         id: &NeuronId,
@@ -4753,6 +4705,11 @@ impl Governance {
             )
         })?;
 
+        let controller = self
+            .with_neuron_by_neuron_id_or_subaccount(&managed_id, |managed_neuron| {
+                managed_neuron.controller()
+            })?;
+
         // Early exit for deprecated commands.
         if let Command::MergeMaturity(_) = command {
             return Self::merge_maturity_removed_error();
@@ -4774,11 +4731,18 @@ impl Governance {
             // DisburseMaturity contains a subaccount which can be unbounded without checking. This
             // command is not implemented yet, and before we implement it we should also validate
             // its subaccount.
-            Command::DisburseMaturity(_) => {
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::PreconditionFailed,
-                    "Disburse maturity is not supported yet",
-                ))
+            Command::DisburseMaturity(disburse_maturity) => {
+                let destination = Destination::try_new(
+                    &disburse_maturity.to_account,
+                    &disburse_maturity.to_account_identifier,
+                    controller,
+                );
+                if destination.is_err() {
+                    return Err(GovernanceError::new_with_message(
+                        ErrorType::InvalidCommand,
+                        "The disburse destination is invalid",
+                    ));
+                }
             }
             // Similar to DisburseMaturity, Disburse has a blob as the ICP account address. A
             // successful conversion should indicate that the blob does not contain a large amount
@@ -5916,7 +5880,7 @@ impl Governance {
     }
 
     /// Refreshes the stake of a given neuron by checking it's account.
-    #[cfg_attr(feature = "tla", tla_update_method(REFRESH_NEURON_DESC.clone()))]
+    #[cfg_attr(feature = "tla", tla_update_method(REFRESH_NEURON_DESC.clone(), tla_snapshotter!()))]
     async fn refresh_neuron(
         &mut self,
         nid: NeuronId,
@@ -6002,7 +5966,7 @@ impl Governance {
     /// the neuron and lock it before we make the call, we know that any
     /// concurrent call to mutate the same neuron will need to wait for this
     /// one to finish before proceeding.
-    #[cfg_attr(feature = "tla", tla_update_method(CLAIM_NEURON_DESC.clone()))]
+    #[cfg_attr(feature = "tla", tla_update_method(CLAIM_NEURON_DESC.clone(), tla_snapshotter!()))]
     async fn claim_neuron(
         &mut self,
         subaccount: Subaccount,
@@ -6503,7 +6467,7 @@ impl Governance {
     /// This means that programming in this method needs to be extra-defensive on the handling of results so that
     /// we're sure not to trap after we've acquired the global lock and made an async call, as otherwise the global
     /// lock will be permanently held and no spawning will occur until a upgrade to fix it is made.
-    #[cfg_attr(feature = "tla", tla_update_method(SPAWN_NEURONS_DESC.clone()))]
+    #[cfg_attr(feature = "tla", tla_update_method(SPAWN_NEURONS_DESC.clone(), tla_snapshotter!()))]
     pub async fn maybe_spawn_neurons(&mut self) {
         if !self.can_spawn_neurons() {
             return;

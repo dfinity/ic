@@ -1950,9 +1950,9 @@ dependencies = [
 
 [[package]]
 name = "canbench"
-version = "0.1.9"
+version = "0.1.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c3eba78c84aa78e67f27c5c5a7d6c3d33cc301f95886171748e8f6ed8a31b258"
+checksum = "5c346cb41bf01bac3c8494eef82943d4dc49267981c8bcb548ba8f4cc69f3161"
 dependencies = [
  "canbench-rs",
  "candid",
@@ -1960,33 +1960,36 @@ dependencies = [
  "colored",
  "flate2",
  "hex",
+ "inferno 0.11.19",
  "pocket-ic",
  "reqwest 0.11.27",
+ "rustc-demangle",
  "semver",
  "serde",
  "serde_yaml 0.9.34+deprecated",
  "sha256",
  "tempfile",
+ "walrus 0.23.3",
  "wasmparser 0.119.0",
 ]
 
 [[package]]
 name = "canbench-rs"
-version = "0.1.9"
+version = "0.1.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "588701e2d05679b79603acca6a6f8b78fe0d21f5f7a9c06fe689f769ae797008"
+checksum = "c1c560e37bb75c6900e18e7d37174efaff09e266d138d9926e34f489d9d2f6a0"
 dependencies = [
  "canbench-rs-macros",
  "candid",
- "ic-cdk 0.12.2",
+ "ic-cdk 0.17.2",
  "serde",
 ]
 
 [[package]]
 name = "canbench-rs-macros"
-version = "0.1.9"
+version = "0.1.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e05fe21a7dfc85c3be8e40edbbcb3fe23b4c070fac4741eff18129f1d0f11aa9"
+checksum = "866a310ae95dfd273c2f1d17c8382d0d893c35851e9252cca98bd3a80a7e5635"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3497,10 +3500,10 @@ dependencies = [
  "ic-canister-sig-creation",
  "ic-cbor",
  "ic-cdk 0.17.2",
- "ic-cdk 0.18.0",
+ "ic-cdk 0.18.0-alpha.2",
  "ic-cdk-timers",
  "ic-certificate-verification",
- "ic-certification 3.0.3",
+ "ic-certification",
  "ic-certified-map",
  "ic-gateway",
  "ic-http-certification",
@@ -5592,7 +5595,7 @@ dependencies = [
  "hex",
  "http 1.3.1",
  "http-body 1.0.1",
- "ic-certification 3.0.3",
+ "ic-certification",
  "ic-transport-types 0.40.1",
  "ic-verify-bls-signature 0.5.0",
  "k256 0.13.4",
@@ -5622,7 +5625,7 @@ dependencies = [
 [[package]]
 name = "ic-bn-lib"
 version = "0.1.0"
-source = "git+https://github.com/dfinity/ic-bn-lib?rev=ec4a6b4abab2d94e09c4d5fee2d57d7bb1260835#ec4a6b4abab2d94e09c4d5fee2d57d7bb1260835"
+source = "git+https://github.com/dfinity/ic-bn-lib?rev=23b3b0b76795c9b75eed96742c2185da0ce9ee2a#23b3b0b76795c9b75eed96742c2185da0ce9ee2a"
 dependencies = [
  "ahash 0.8.11",
  "anyhow",
@@ -5708,7 +5711,7 @@ dependencies = [
  "candid",
  "hex",
  "ic-cdk 0.17.2",
- "ic-certification 3.0.3",
+ "ic-certification",
  "ic-representation-independent-hash",
  "lazy_static",
  "serde",
@@ -5725,23 +5728,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a0efada960a6c9fb023f45ed95801b757a033dafba071e4f386c6c112ca186d9"
 dependencies = [
  "candid",
- "ic-certification 3.0.3",
+ "ic-certification",
  "leb128",
  "nom",
  "thiserror 1.0.68",
-]
-
-[[package]]
-name = "ic-cdk"
-version = "0.12.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0e908da565d9e304e83732500069ebb959e3d2cad80f894889ea37207112c7a0"
-dependencies = [
- "candid",
- "ic-cdk-macros 0.8.4",
- "ic0 0.21.1",
- "serde",
- "serde_bytes",
 ]
 
 [[package]]
@@ -5760,12 +5750,12 @@ dependencies = [
 
 [[package]]
 name = "ic-cdk"
-version = "0.18.0"
+version = "0.18.0-alpha.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b11cc255410be6a7e47e1a756ea94c1f31a2397a79e696f6f7d207d5ebd3e144"
+checksum = "3c9c87d961de7d2935a0bf19f4d6afe76f3d508b853ff5267e999beadd7e9286"
 dependencies = [
  "candid",
- "ic-cdk-macros 0.18.0",
+ "ic-cdk-macros 0.18.0-alpha.2",
  "ic-error-types",
  "ic-management-canister-types",
  "ic0 0.24.0",
@@ -5783,20 +5773,6 @@ checksum = "903057edd3d4ff4b3fe44a64eaee1ceb73f579ba29e3ded372b63d291d7c16c2"
 
 [[package]]
 name = "ic-cdk-macros"
-version = "0.8.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a5a618e4020cea88e933d8d2f8c7f86d570ec06213506a80d4f2c520a9bba512"
-dependencies = [
- "candid",
- "proc-macro2",
- "quote",
- "serde",
- "serde_tokenstream 0.1.7",
- "syn 1.0.109",
-]
-
-[[package]]
-name = "ic-cdk-macros"
 version = "0.17.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "84cbaa50fa36d3e0616114becf81faa95a099e0d60948ed6978f30f1c77399fd"
@@ -5805,21 +5781,21 @@ dependencies = [
  "proc-macro2",
  "quote",
  "serde",
- "serde_tokenstream 0.2.1",
+ "serde_tokenstream",
  "syn 2.0.101",
 ]
 
 [[package]]
 name = "ic-cdk-macros"
-version = "0.18.0"
+version = "0.18.0-alpha.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "30bab0b748bc4059f19abbd2c2609761ca6d6c731979f01148b49afcc4fe7a9f"
+checksum = "4987a4c05c25d2871f8a0dd4b726733fbf4c55b5a82656976333ddd79d8e1ce6"
 dependencies = [
  "candid",
  "proc-macro2",
  "quote",
  "serde",
- "serde_tokenstream 0.2.1",
+ "serde_tokenstream",
  "syn 2.0.101",
 ]
 
@@ -5846,7 +5822,7 @@ dependencies = [
  "cached 0.54.0",
  "candid",
  "ic-cbor",
- "ic-certification 3.0.3",
+ "ic-certification",
  "lazy_static",
  "leb128",
  "miracl_core_bls12381",
@@ -5854,18 +5830,6 @@ dependencies = [
  "parking_lot 0.12.1",
  "sha2 0.10.9",
  "thiserror 1.0.68",
-]
-
-[[package]]
-name = "ic-certification"
-version = "2.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e64ee3d8b6e81b51f245716d3e0badb63c283c00f3c9fb5d5219afc30b5bf821"
-dependencies = [
- "hex",
- "serde",
- "serde_bytes",
- "sha2 0.10.9",
 ]
 
 [[package]]
@@ -5905,7 +5869,7 @@ dependencies = [
 [[package]]
 name = "ic-gateway"
 version = "0.2.0"
-source = "git+https://github.com/dfinity/ic-gateway?rev=ed8539d9edd45b97148c46b8020fa6d7ebd48c07#ed8539d9edd45b97148c46b8020fa6d7ebd48c07"
+source = "git+https://github.com/dfinity/ic-gateway?rev=73495da1d5ab99891a3580522958f0f635902a87#73495da1d5ab99891a3580522958f0f635902a87"
 dependencies = [
  "ahash 0.8.11",
  "anyhow",
@@ -5974,7 +5938,7 @@ dependencies = [
  "base64 0.22.1",
  "candid",
  "http 1.3.1",
- "ic-certification 3.0.3",
+ "ic-certification",
  "ic-representation-independent-hash",
  "serde",
  "serde_cbor",
@@ -6017,9 +5981,9 @@ dependencies = [
 
 [[package]]
 name = "ic-management-canister-types"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "90253c6ac92f9a0b548a53a02c2d29dfa0f04a6c1ae919b86a6f54d4767d78b9"
+checksum = "98554c2d8a30c00b6bfda18062fdcef21215cad07a52d8b8b1eb3130e51bfe71"
 dependencies = [
  "candid",
  "serde",
@@ -6055,7 +6019,7 @@ dependencies = [
  "http 1.3.1",
  "ic-cbor",
  "ic-certificate-verification",
- "ic-certification 3.0.3",
+ "ic-certification",
  "ic-http-certification",
  "ic-representation-independent-hash",
  "leb128",
@@ -6098,19 +6062,20 @@ dependencies = [
 
 [[package]]
 name = "ic-transport-types"
-version = "0.37.1"
+version = "0.39.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "875dc4704780383112e8e8b5063a1b98de114321d0c7d3e7f635dcf360a57fba"
+checksum = "979ee7bee5a67150a4c090fb012c93c294a528b4a867bad9a15cc6d01cb4227f"
 dependencies = [
  "candid",
  "hex",
- "ic-certification 2.6.0",
+ "ic-certification",
  "leb128",
  "serde",
  "serde_bytes",
+ "serde_cbor",
  "serde_repr",
  "sha2 0.10.9",
- "thiserror 1.0.68",
+ "thiserror 2.0.12",
 ]
 
 [[package]]
@@ -6121,7 +6086,7 @@ checksum = "a2e7706e55836e8104c98149ec0796d20d5213fef972ac01b544657d410f1883"
 dependencies = [
  "candid",
  "hex",
- "ic-certification 3.0.3",
+ "ic-certification",
  "leb128",
  "serde",
  "serde_bytes",
@@ -6223,7 +6188,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 1.0.68",
- "walrus",
+ "walrus 0.21.1",
 ]
 
 [[package]]
@@ -6241,12 +6206,6 @@ name = "ic0"
 version = "0.18.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "576c539151d4769fb4d1a0c25c4108dd18facd04c5695b02cf2d226ab4e43aa5"
-
-[[package]]
-name = "ic0"
-version = "0.21.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a54b5297861c651551676e8c43df805dad175cc33bc97dbd992edbbb85dcbcdf"
 
 [[package]]
 name = "ic0"
@@ -6592,6 +6551,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "321f0f839cd44a4686e9504b0a62b4d69a50b62072144c71c68f5873c167b8d9"
 dependencies = [
  "ahash 0.8.11",
+ "crossbeam-channel",
+ "crossbeam-utils",
+ "dashmap 5.5.3",
  "indexmap 2.7.1",
  "is-terminal",
  "itoa",
@@ -9299,15 +9261,18 @@ dependencies = [
 
 [[package]]
 name = "pocket-ic"
-version = "6.0.0"
+version = "9.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "124a2380ca6f557adf8b02517cbfd2f564113230e14cda6f6aadd3dfe156293c"
+checksum = "bc8ef97f44d4a20b43695690f478f6bfc4058f3ead7d51aff79be29bcfd810c5"
 dependencies = [
+ "backoff",
  "base64 0.13.1",
  "candid",
+ "flate2",
  "hex",
- "ic-certification 2.6.0",
- "ic-transport-types 0.37.1",
+ "ic-certification",
+ "ic-management-canister-types",
+ "ic-transport-types 0.39.3",
  "reqwest 0.12.15",
  "schemars",
  "serde",
@@ -9318,7 +9283,8 @@ dependencies = [
  "slog",
  "strum 0.26.3",
  "strum_macros 0.26.4",
- "thiserror 1.0.68",
+ "tempfile",
+ "thiserror 2.0.12",
  "tokio",
  "tracing",
  "tracing-appender",
@@ -11521,17 +11487,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.101",
-]
-
-[[package]]
-name = "serde_tokenstream"
-version = "0.1.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "797ba1d80299b264f3aac68ab5d12e5825a561749db4df7cd7c8083900c5d4e9"
-dependencies = [
- "proc-macro2",
- "serde",
- "syn 1.0.109",
 ]
 
 [[package]]
@@ -13830,9 +13785,25 @@ dependencies = [
  "id-arena",
  "leb128",
  "log",
- "walrus-macro",
+ "walrus-macro 0.19.0",
  "wasm-encoder 0.212.0",
  "wasmparser 0.212.0",
+]
+
+[[package]]
+name = "walrus"
+version = "0.23.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6481311b98508f4bc2d0abbfa5d42172e7a54b4b24d8f15e28b0dc650be0c59f"
+dependencies = [
+ "anyhow",
+ "gimli 0.26.2",
+ "id-arena",
+ "leb128",
+ "log",
+ "walrus-macro 0.22.0",
+ "wasm-encoder 0.214.0",
+ "wasmparser 0.214.0",
 ]
 
 [[package]]
@@ -13845,6 +13816,18 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "walrus-macro"
+version = "0.22.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "439ad39ff894c43c9649fa724cdde9a6fc50b855d517ef071a93e5df82fe51d3"
+dependencies = [
+ "heck 0.5.0",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.101",
 ]
 
 [[package]]
@@ -13983,6 +13966,15 @@ dependencies = [
 
 [[package]]
 name = "wasm-encoder"
+version = "0.214.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ff694f02a8d7a50b6922b197ae03883fbf18cdb2ae9fbee7b6148456f5f44041"
+dependencies = [
+ "leb128",
+]
+
+[[package]]
+name = "wasm-encoder"
 version = "0.228.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "05d30290541f2d4242a162bbda76b8f2d8b1ac59eab3568ed6f2327d52c9b2c4"
@@ -14043,6 +14035,20 @@ name = "wasmparser"
 version = "0.212.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8d28bc49ba1e5c5b61ffa7a2eace10820443c4b7d1c0b144109261d14570fdf8"
+dependencies = [
+ "ahash 0.8.11",
+ "bitflags 2.9.0",
+ "hashbrown 0.14.5",
+ "indexmap 2.7.1",
+ "semver",
+ "serde",
+]
+
+[[package]]
+name = "wasmparser"
+version = "0.214.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5309c1090e3e84dad0d382f42064e9933fdaedb87e468cc239f0eabea73ddcb6"
 dependencies = [
  "ahash 0.8.11",
  "bitflags 2.9.0",

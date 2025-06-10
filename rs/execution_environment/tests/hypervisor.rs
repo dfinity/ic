@@ -5554,7 +5554,7 @@ fn system_state_apply_change_fails() {
         WasmResult::Reply(_) => unreachable!("Expected the canister to reject the message"),
         WasmResult::Reject(err) => {
             assert!(
-                err.contains("exceeded its allowed memory allocation"),
+                err.contains("Canister cannot grow its memory usage"),
                 "{}",
                 err
             );

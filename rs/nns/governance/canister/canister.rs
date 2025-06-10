@@ -52,12 +52,13 @@ use std::{boxed::Box, time::Duration};
 #[cfg(feature = "test")]
 use ic_nns_governance::governance::TimeWarp as GovTimeWarp;
 
-#[cfg(not(feature = "tla"))]
-use ic_nervous_system_canisters::ledger::IcpLedgerCanister;
 use ic_nns_governance::canister_state::{with_governance, CanisterRandomnessGenerator};
 
 #[cfg(feature = "tla")]
 mod tla_ledger;
+
+#[cfg(not(feature = "tla"))]
+use ic_nervous_system_canisters::ledger::IcpLedgerCanister;
 #[cfg(feature = "tla")]
 use tla_ledger::LoggingIcpLedgerCanister as IcpLedgerCanister;
 
@@ -136,9 +137,8 @@ fn canister_init_(init_payload: ApiGovernanceProto) {
         init_payload.neurons.len()
     );
 
-    let governance_proto = InternalGovernanceProto::from(init_payload);
     set_governance(Governance::new(
-        governance_proto,
+        init_payload,
         Arc::new(CanisterEnv::new()),
         Arc::new(IcpLedgerCanister::<CdkRuntime>::new(LEDGER_CANISTER_ID)),
         Arc::new(CMCCanister::<CdkRuntime>::new()),
@@ -177,11 +177,10 @@ fn canister_post_upgrade() {
 
     println!(
         "{}canister_post_upgrade: Initializing with: economics: \
-          {:?}, genesis_timestamp_seconds: {}, neuron count: {}, xdr_conversion_rate: {:?}",
+          {:?}, genesis_timestamp_seconds: {}, xdr_conversion_rate: {:?}",
         LOG_PREFIX,
         restored_state.economics,
         restored_state.genesis_timestamp_seconds,
-        restored_state.neurons.len(),
         restored_state.xdr_conversion_rate,
     );
 
@@ -580,6 +579,21 @@ fn http_request(request: HttpRequest) -> HttpResponse {
 
 fn main() {
     // This block is intentionally left blank.
+}
+
+// A query method to get the TLA traces collected in a test run.
+#[cfg(all(feature = "tla", feature = "test"))]
+#[query(hidden = true)]
+fn get_tla_traces() -> Vec<tla_instrumentation::UpdateTrace> {
+    use ic_nns_governance::governance::tla::TLA_TRACES_MUTEX;
+    let mut traces = TLA_TRACES_MUTEX
+        .as_ref()
+        .expect("TLA_TRACES_MUTEX is None in get_tla_traces")
+        .write()
+        .expect("Couldn't acquire TLA_TRACES_MUTEX write lock in get_tla_traces");
+    let mut result = Vec::new();
+    std::mem::swap(&mut result, &mut *traces);
+    result
 }
 
 // In order for some of the test(s) within this mod to work,
