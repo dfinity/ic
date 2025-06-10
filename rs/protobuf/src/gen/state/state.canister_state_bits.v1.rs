@@ -437,6 +437,24 @@ pub struct CanisterLoadSnapshot {
     pub snapshot_id: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterRename {
+    #[prost(message, optional, tag = "1")]
+    pub canister_id: ::core::option::Option<super::super::super::types::v1::PrincipalId>,
+    #[prost(uint64, tag = "2")]
+    pub total_num_changes: u64,
+    #[prost(message, optional, tag = "3")]
+    pub rename_to: ::core::option::Option<RenameTo>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RenameTo {
+    #[prost(message, optional, tag = "1")]
+    pub canister_id: ::core::option::Option<super::super::super::types::v1::PrincipalId>,
+    #[prost(uint64, tag = "2")]
+    pub version: u64,
+    #[prost(uint64, tag = "3")]
+    pub total_num_changes: u64,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterChange {
     #[prost(uint64, tag = "1")]
     pub timestamp_nanos: u64,
@@ -444,7 +462,7 @@ pub struct CanisterChange {
     pub canister_version: u64,
     #[prost(oneof = "canister_change::ChangeOrigin", tags = "3, 4")]
     pub change_origin: ::core::option::Option<canister_change::ChangeOrigin>,
-    #[prost(oneof = "canister_change::ChangeDetails", tags = "5, 6, 7, 8, 9")]
+    #[prost(oneof = "canister_change::ChangeDetails", tags = "5, 6, 7, 8, 9, 10")]
     pub change_details: ::core::option::Option<canister_change::ChangeDetails>,
 }
 /// Nested message and enum types in `CanisterChange`.
@@ -468,6 +486,8 @@ pub mod canister_change {
         CanisterControllersChange(super::CanisterControllersChange),
         #[prost(message, tag = "9")]
         CanisterLoadSnapshot(super::CanisterLoadSnapshot),
+        #[prost(message, tag = "10")]
+        CanisterRename(super::CanisterRename),
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]

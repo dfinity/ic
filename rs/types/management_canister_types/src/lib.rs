@@ -135,6 +135,9 @@ pub enum Method {
     ReadCanisterSnapshotData,
     UploadCanisterSnapshotMetadata,
     UploadCanisterSnapshotData,
+
+    // Support for canister migration
+    RenameCanister,
 }
 
 fn candid_error_to_user_error(err: candid::Error) -> UserError {
@@ -349,6 +352,32 @@ impl CanisterLoadSnapshotRecord {
     }
 }
 
+/// `CandidType` for `CanisterRenameRecord`
+/// ```text
+/// record {
+///    canister_id : principal;
+///    total_num_changes : nat64;
+///    rename_to : record {
+///        canister_id : principal;
+///        version : nat64;
+///        total_num_changes : nat64;
+///    };
+/// }
+/// ```
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+pub struct CanisterRenameRecord {
+    canister_id: PrincipalId,
+    total_num_changes: u64,
+    rename_to: RenameToRecord,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+pub struct RenameToRecord {
+    canister_id: PrincipalId,
+    version: u64,
+    total_num_changes: u64,
+}
+
 /// `CandidType` for `CanisterChangeDetails`
 /// ```text
 /// variant {
@@ -382,6 +411,8 @@ pub enum CanisterChangeDetails {
     CanisterControllersChange(CanisterControllersChangeRecord),
     #[serde(rename = "load_snapshot")]
     CanisterLoadSnapshot(CanisterLoadSnapshotRecord),
+    #[serde(rename = "rename_canister")]
+    CanisterRename(CanisterRenameRecord),
 }
 
 impl CanisterChangeDetails {
@@ -415,6 +446,26 @@ impl CanisterChangeDetails {
             snapshot_id,
             taken_at_timestamp,
         })
+    }
+
+    pub fn rename_canister(
+        canister_id: PrincipalId,
+        total_num_changes: u64,
+        to_canister_id: PrincipalId,
+        to_version: u64,
+        to_total_num_changes: u64,
+    ) -> CanisterChangeDetails {
+        let rename_to = RenameToRecord {
+            canister_id: to_canister_id,
+            version: to_version,
+            total_num_changes: to_total_num_changes,
+        };
+        let record = CanisterRenameRecord {
+            canister_id,
+            total_num_changes,
+            rename_to,
+        };
+        CanisterChangeDetails::CanisterRename(record)
     }
 }
 
@@ -480,7 +531,8 @@ impl CanisterChange {
             }
             CanisterChangeDetails::CanisterCodeDeployment(_)
             | CanisterChangeDetails::CanisterCodeUninstall
-            | CanisterChangeDetails::CanisterLoadSnapshot(_) => 0,
+            | CanisterChangeDetails::CanisterLoadSnapshot(_)
+            | CanisterChangeDetails::CanisterRename(_) => 0,
         };
         NumBytes::from((size_of::<CanisterChange>() + controllers_memory_size) as u64)
     }
@@ -669,6 +721,19 @@ impl From<&CanisterChangeDetails> for pb_canister_state_bits::canister_change::C
                     },
                 )
             }
+            CanisterChangeDetails::CanisterRename(canister_rename) => {
+                pb_canister_state_bits::canister_change::ChangeDetails::CanisterRename(
+                    pb_canister_state_bits::CanisterRename {
+                        canister_id: Some(canister_rename.canister_id.into()),
+                        total_num_changes: canister_rename.total_num_changes,
+                        rename_to: Some(pb_canister_state_bits::RenameTo {
+                            canister_id: Some(canister_rename.rename_to.canister_id.into()),
+                            version: canister_rename.rename_to.version,
+                            total_num_changes: canister_rename.rename_to.total_num_changes,
+                        }),
+                    },
+                )
+            }
         }
     }
 }
@@ -733,6 +798,32 @@ impl TryFrom<pb_canister_state_bits::canister_change::ChangeDetails> for Caniste
                 canister_load_snapshot.snapshot_id,
                 canister_load_snapshot.taken_at_timestamp,
             )),
+            pb_canister_state_bits::canister_change::ChangeDetails::CanisterRename(
+                canister_rename,
+            ) => {
+                let rename_to = canister_rename
+                    .rename_to
+                    .ok_or(ProxyDecodeError::MissingField("CanisterRename::rename_to"))?;
+                Ok(CanisterChangeDetails::rename_canister(
+                    canister_rename
+                        .canister_id
+                        .as_ref()
+                        .ok_or(ProxyDecodeError::MissingField(
+                            "CanisterRename::canister_id",
+                        ))?
+                        .to_owned()
+                        .try_into()?,
+                    canister_rename.total_num_changes,
+                    rename_to
+                        .canister_id
+                        .as_ref()
+                        .ok_or(ProxyDecodeError::MissingField("RenameTo::canister_id"))?
+                        .to_owned()
+                        .try_into()?,
+                    rename_to.version,
+                    rename_to.total_num_changes,
+                ))
+            }
         }
     }
 }
@@ -3834,7 +3925,7 @@ pub struct ReadCanisterSnapshotMetadataResponse {
 
 /// An inner type of [`ReadCanisterSnapshotMetadataResponse`].
 ///
-/// Corresponds to the internal `CanisterTimer`, but is candid de/encodable.  
+/// Corresponds to the internal `CanisterTimer`, but is candid de/encodable.
 #[derive(Copy, Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub enum GlobalTimer {
     Inactive,
@@ -4213,6 +4304,49 @@ pub enum CanisterSnapshotDataOffset {
     MainMemory { offset: u64 },
     StableMemory { offset: u64 },
     WasmChunk,
+}
+
+/// Struct to encode/decode
+/// (record {
+///   canister_id : principal;
+///   rename_to : record {
+///     canister_id : principal;
+///     version : nat64;
+///     total_num_changes : nat64;
+///   };
+///   sender_canister_version : nat64;
+/// };)
+
+#[derive(Clone, Debug, Deserialize, CandidType, Serialize)]
+pub struct RenameCanisterArgs {
+    pub canister_id: PrincipalId,
+    pub rename_to: RenameToArgs,
+    pub sender_canister_version: u64,
+}
+
+impl Payload<'_> for RenameCanisterArgs {}
+
+impl RenameCanisterArgs {
+    pub fn get_canister_id(&self) -> CanisterId {
+        CanisterId::unchecked_from_principal(self.canister_id)
+    }
+
+    pub fn get_sender_canister_version(&self) -> Option<u64> {
+        Some(self.sender_canister_version)
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, CandidType, Serialize)]
+pub struct RenameToArgs {
+    pub canister_id: PrincipalId,
+    pub version: u64,
+    pub total_num_changes: u64,
+}
+
+impl RenameToArgs {
+    pub fn get_canister_id(&self) -> CanisterId {
+        CanisterId::unchecked_from_principal(self.canister_id)
+    }
 }
 
 #[cfg(test)]
