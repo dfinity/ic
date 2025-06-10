@@ -90,6 +90,21 @@ pub struct NeuronStakeTransfer {
     #[prost(uint64, tag = "7")]
     pub memo: u64,
 }
+/// Protobuf representing a list of followees of a neuron for a
+/// specific topic.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct Followees {
+    #[prost(message, repeated, tag = "1")]
+    pub followees: ::prost::alloc::vec::Vec<::ic_nns_common::pb::v1::NeuronId>,
+}
 /// This structure represents a neuron "at rest" in governance system of
 /// the Internet Computer IC.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
@@ -165,7 +180,7 @@ pub struct Neuron {
     /// Map `Topic` to followees. The key is represented by an integer as
     /// Protobuf does not support enum keys in maps.
     #[prost(map = "int32, message", tag = "11")]
-    pub followees: ::std::collections::HashMap<i32, neuron::Followees>,
+    pub followees: ::std::collections::HashMap<i32, Followees>,
     /// Information about how this neuron voted in the recent past. It
     /// only contains proposals that the neuron voted yes or no on.
     #[prost(message, repeated, tag = "12")]
@@ -259,21 +274,6 @@ pub struct Neuron {
 }
 /// Nested message and enum types in `Neuron`.
 pub mod neuron {
-    /// Protobuf representing a list of followees of a neuron for a
-    /// specific topic.
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        PartialEq,
-        ::prost::Message,
-    )]
-    pub struct Followees {
-        #[prost(message, repeated, tag = "1")]
-        pub followees: ::prost::alloc::vec::Vec<::ic_nns_common::pb::v1::NeuronId>,
-    }
     /// At any time, at most one of `when_dissolved` and
     /// `dissolve_delay` are specified.
     ///
@@ -594,7 +594,7 @@ pub struct RewardNodeProviders {
 )]
 pub struct SetDefaultFollowees {
     #[prost(map = "int32, message", tag = "1")]
-    pub default_followees: ::std::collections::HashMap<i32, neuron::Followees>,
+    pub default_followees: ::std::collections::HashMap<i32, Followees>,
 }
 /// Obsolete. Superseded by OpenSnsTokenSwap.
 #[derive(
@@ -2917,9 +2917,6 @@ pub mod update_canister_settings {
 #[compare_default]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Governance {
-    /// Current set of neurons.
-    #[prost(btree_map = "fixed64, message", tag = "1")]
-    pub neurons: ::prost::alloc::collections::BTreeMap<u64, Neuron>,
     /// Proposals.
     #[prost(btree_map = "uint64, message", tag = "2")]
     pub proposals: ::prost::alloc::collections::BTreeMap<u64, ProposalData>,
@@ -2982,7 +2979,7 @@ pub struct Governance {
     ///
     /// Default following can be changed via proposal.
     #[prost(map = "int32, message", tag = "13")]
-    pub default_followees: ::std::collections::HashMap<i32, neuron::Followees>,
+    pub default_followees: ::std::collections::HashMap<i32, Followees>,
     /// The maximum time a proposal of a topic with *short voting period*
     /// is open for voting. If a proposal on a topic with short voting
     /// period has not been decided (adopted or rejected) within this

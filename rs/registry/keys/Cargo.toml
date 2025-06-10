@@ -12,6 +12,7 @@ ic-base-types = { path = "../../types/base_types" }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-types = { path = "../../types/types" }
 serde = { workspace = true }
+hex = { workspace = true }
 
 [dev-dependencies]
 rand = { workspace = true }

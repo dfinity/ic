@@ -29,8 +29,6 @@ use ic_nns_governance::{
     pb::v1::{
         manage_neuron,
         manage_neuron::{Command, Merge, MergeMaturity, NeuronIdOrSubaccount},
-        neuron,
-        neuron::DissolveState,
         proposal, ExecuteNnsFunction, Governance as GovernanceProto, GovernanceError, ManageNeuron,
         Motion, NetworkEconomics, Neuron, NeuronType, NnsFunction, Proposal, ProposalData,
         RewardEvent, Topic, Vote, XdrConversionRate as XdrConversionRatePb,
@@ -753,7 +751,6 @@ impl From<&str> for ProposalNeuronBehavior {
 pub struct NNS {
     pub fixture: NNSFixture,
     pub governance: Governance,
-    pub(crate) initial_state: Option<NNSState>,
 }
 
 impl NNS {
@@ -766,30 +763,6 @@ impl NNS {
             .environment
             .advance_time_by(delta_seconds);
         self
-    }
-
-    pub fn capture_state(&mut self) -> &mut Self {
-        self.initial_state = Some(self.get_state());
-        self
-    }
-
-    // Must be mut because clone_proto must be mut, but should not affect state
-    pub(crate) fn get_state(&self) -> NNSState {
-        let accounts = self
-            .fixture
-            .nns_state
-            .try_lock()
-            .unwrap()
-            .ledger
-            .accounts
-            .clone();
-        let governance_proto = self.governance.__get_state_for_test();
-        NNSState {
-            now: self.now(),
-            accounts,
-            governance_proto,
-            latest_gc_num_proposals: self.governance.latest_gc_num_proposals,
-        }
     }
 
     pub fn run_periodic_tasks(&mut self) -> &mut Self {
@@ -1084,13 +1057,10 @@ impl NNSBuilder {
             environment = t(environment);
         }
         let randomness = Box::new(fixture.clone());
-        let mut nns = NNS {
+        NNS {
             fixture: fixture.clone(),
             governance: Governance::new(self.governance, environment, ledger, cmc, randomness),
-            initial_state: None,
-        };
-        nns.capture_state();
-        nns
+        }
     }
 
     pub fn set_start_time(mut self, seconds: u64) -> Self {
@@ -1104,12 +1074,7 @@ impl NNSBuilder {
         self
     }
 
-    pub fn set_economics(mut self, econ: NetworkEconomics) -> Self {
-        self.governance.economics = Some(econ.into());
-        self
-    }
-
-    pub fn set_economics_api(mut self, econ: api::NetworkEconomics) -> Self {
+    pub fn set_economics(mut self, econ: api::NetworkEconomics) -> Self {
         self.governance.economics = Some(econ);
         self
     }
@@ -1186,34 +1151,4 @@ impl NNSBuilder {
             .insert(proposal_data.id.unwrap().id, proposal_data);
         self
     }
-}
-
-#[macro_export]
-macro_rules! assert_changes {
-    ($nns:expr, $expected:expr) => {{
-        let new_state = $nns.get_state();
-        comparable::pretty_assert_changes!(
-            $nns.initial_state
-                .as_ref()
-                .expect("initial_state was never set"),
-            &new_state,
-            $expected,
-        );
-        $nns.initial_state = Some(new_state);
-    }};
-}
-
-#[macro_export]
-macro_rules! prop_assert_changes {
-    ($nns:expr, $expected:expr) => {{
-        let new_state = $nns.get_state();
-        comparable::prop_pretty_assert_changes!(
-            $nns.initial_state
-                .as_ref()
-                .expect("initial_state was never set"),
-            &new_state,
-            $expected,
-        );
-        $nns.initial_state = Some(new_state);
-    }};
 }
