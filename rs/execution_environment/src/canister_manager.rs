@@ -990,6 +990,12 @@ impl CanisterManager {
     ) -> Result<CanisterId, CanisterManagerError> {
         let new_canister_id = CanisterId::unchecked_from_principal(specified_id);
 
+        if !state.metadata.validate_specified_id(&new_canister_id) {
+            return Err(CanisterManagerError::InvalidSpecifiedId {
+                specified_id: new_canister_id,
+            });
+        }
+
         if state.canister_states.contains_key(&new_canister_id) {
             return Err(CanisterManagerError::CanisterAlreadyExists(new_canister_id));
         }
