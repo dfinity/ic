@@ -87,73 +87,75 @@ impl EthRpcClient {
         &self,
         params: GetLogsArgs,
     ) -> Result<Vec<LogEntry>, MultiCallError<Vec<LogEntry>>> {
-        convert_multirpcresult(self.evm_rpc_client.eth_get_logs(params).await)
+        let evm_rpc_result = self.evm_rpc_client.eth_get_logs(params).await;
+        ReducedResult::from_internal(evm_rpc_result).result
     }
 
     pub async fn eth_get_block_by_number(
         &self,
         block: BlockTag,
     ) -> Result<Block, MultiCallError<Block>> {
-        convert_multirpcresult(self.evm_rpc_client.eth_get_block_by_number(block).await)
+        let evm_rpc_result = self.evm_rpc_client.eth_get_block_by_number(block).await;
+        ReducedResult::from_internal(evm_rpc_result).result
     }
 
     pub async fn eth_get_transaction_receipt(
         &self,
         tx_hash: Hash,
     ) -> Result<Option<TransactionReceipt>, MultiCallError<Option<TransactionReceipt>>> {
-        convert_multirpcresult(
-            self.evm_rpc_client
-                .eth_get_transaction_receipt(tx_hash.to_string())
-                .await,
-        )
+        let evm_rpc_result = self
+            .evm_rpc_client
+            .eth_get_transaction_receipt(tx_hash.to_string())
+            .await;
+        ReducedResult::from_internal(evm_rpc_result).result
     }
 
     pub async fn eth_fee_history(
         &self,
         params: FeeHistoryArgs,
     ) -> Result<FeeHistory, MultiCallError<FeeHistory>> {
-        let results = self.evm_rpc_client.eth_fee_history(params).await;
-        ReduceWithStrategy::<StrictMajorityByKey>::reduce(results).into()
+        let evm_rpc_result = self.evm_rpc_client.eth_fee_history(params).await;
+        ReduceWithStrategy::<StrictMajorityByKey>::reduce(evm_rpc_result).result
     }
 
     pub async fn eth_send_raw_transaction(
         &self,
         raw_signed_transaction_hex: String,
     ) -> Result<SendRawTransactionStatus, MultiCallError<SendRawTransactionStatus>> {
-        let results = self
+        let evm_rpc_result = self
             .evm_rpc_client
             .eth_send_raw_transaction(raw_signed_transaction_hex)
             .await;
-        ReduceWithStrategy::<AnyOf>::reduce(results).into()
+        ReduceWithStrategy::<AnyOf>::reduce(evm_rpc_result).result
     }
 
     pub async fn eth_get_finalized_transaction_count(
         &self,
         address: Address,
     ) -> Result<TransactionCount, MultiCallError<TransactionCount>> {
-        convert_multirpcresult(
-            self.evm_rpc_client
-                .eth_get_transaction_count(EvmGetTransactionCountArgs {
-                    address: Hex20::from(address.into_bytes()),
-                    block: BlockTag::Finalized,
-                })
-                .await
-                .map(&|tx_count: Nat256| TransactionCount::from(tx_count)),
-        )
+        let evm_rpc_result = self
+            .evm_rpc_client
+            .eth_get_transaction_count(EvmGetTransactionCountArgs {
+                address: Hex20::from(address.into_bytes()),
+                block: BlockTag::Finalized,
+            })
+            .await
+            .map(&|tx_count: Nat256| TransactionCount::from(tx_count));
+        ReducedResult::from_internal(evm_rpc_result).result
     }
 
     pub async fn eth_get_latest_transaction_count(
         &self,
         address: Address,
     ) -> Result<TransactionCount, MultiCallError<TransactionCount>> {
-        let results = self
+        let evm_rpc_result = self
             .evm_rpc_client
             .eth_get_transaction_count(EvmGetTransactionCountArgs {
                 address: Hex20::from(address.into_bytes()),
                 block: BlockTag::Latest,
             })
             .await;
-        ReduceWithStrategy::<MinByKey>::reduce(results).into()
+        ReduceWithStrategy::<MinByKey>::reduce(evm_rpc_result).result
     }
 }
 
@@ -163,12 +165,6 @@ impl EthRpcClient {
 pub struct MultiCallResults<T> {
     ok_results: BTreeMap<EvmRpcService, T>,
     errors: BTreeMap<EvmRpcService, RpcError>,
-}
-
-impl<T> From<ReducedResult<T>> for Result<T, MultiCallError<T>> {
-    fn from(value: ReducedResult<T>) -> Self {
-        value.result
-    }
 }
 
 impl<T> Default for MultiCallResults<T> {
@@ -272,20 +268,6 @@ impl<T: PartialEq> MultiCallResults<T> {
 pub enum MultiCallError<T> {
     ConsistentError(RpcError),
     InconsistentResults(MultiCallResults<T>),
-}
-
-fn convert_multirpcresult<T>(result: EvmMultiRpcResult<T>) -> Result<T, MultiCallError<T>> {
-    match result {
-        EvmMultiRpcResult::Consistent(Ok(t)) => Ok(t),
-        EvmMultiRpcResult::Consistent(Err(e)) => Err(MultiCallError::ConsistentError(e)),
-        EvmMultiRpcResult::Inconsistent(results) => {
-            let mut multi_results = MultiCallResults::new();
-            results.into_iter().for_each(|(provider, result)| {
-                multi_results.insert_once(provider, result);
-            });
-            Err(MultiCallError::InconsistentResults(multi_results))
-        }
-    }
 }
 
 #[derive(Eq, PartialEq, Debug)]

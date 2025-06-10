@@ -20,7 +20,7 @@ mod multi_call_results {
             ]);
 
             let reduced: Result<TransactionCount, _> =
-                ReduceWithStrategy::<MinByKey>::reduce(results).into();
+                ReduceWithStrategy::<MinByKey>::reduce(results).result;
 
             assert_eq!(reduced, Ok(TransactionCount::new(123456)));
         }
@@ -43,7 +43,7 @@ mod multi_call_results {
             ]);
 
             let reduced: Result<FeeHistory, _> =
-                ReduceWithStrategy::<StrictMajorityByKey>::reduce(results).into();
+                ReduceWithStrategy::<StrictMajorityByKey>::reduce(results).result;
 
             assert_eq!(reduced, Ok(fee_history()));
         }
@@ -67,7 +67,7 @@ mod multi_call_results {
                 ]);
 
                 let reduced: Result<FeeHistory, _> =
-                    ReduceWithStrategy::<StrictMajorityByKey>::reduce(results).into();
+                    ReduceWithStrategy::<StrictMajorityByKey>::reduce(results).result;
 
                 assert_eq!(reduced, Ok(majority_fee));
             }
@@ -89,7 +89,7 @@ mod multi_call_results {
             ]);
 
             let reduced: Result<FeeHistory, _> =
-                ReduceWithStrategy::<StrictMajorityByKey>::reduce(results).into();
+                ReduceWithStrategy::<StrictMajorityByKey>::reduce(results).result;
 
             assert_eq!(reduced, Ok(fee_history()));
         }
@@ -117,7 +117,7 @@ mod multi_call_results {
 
             let reduced: Result<FeeHistory, _> =
                 ReduceWithStrategy::<StrictMajorityByKey>::reduce(three_distinct_results.clone())
-                    .into();
+                    .result;
 
             assert_eq!(
                 reduced,
@@ -137,7 +137,7 @@ mod multi_call_results {
 
             let reduced: Result<FeeHistory, _> =
                 ReduceWithStrategy::<StrictMajorityByKey>::reduce(two_distinct_results.clone())
-                    .into();
+                    .result;
 
             assert_eq!(
                 reduced,
@@ -166,7 +166,7 @@ mod multi_call_results {
             let reduced: Result<FeeHistory, _> = ReduceWithStrategy::<StrictMajorityByKey>::reduce(
                 two_distinct_results_and_error.clone(),
             )
-            .into();
+            .result;
 
             assert_eq!(
                 reduced,
@@ -195,7 +195,7 @@ mod multi_call_results {
             ]);
 
             let reduced: Result<FeeHistory, _> =
-                ReduceWithStrategy::<StrictMajorityByKey>::reduce(results).into();
+                ReduceWithStrategy::<StrictMajorityByKey>::reduce(results).result;
 
             assert_eq!(
                 reduced,
@@ -223,7 +223,7 @@ mod multi_call_results {
             ]);
 
             let reduced: Result<FeeHistory, _> =
-                ReduceWithStrategy::<StrictMajorityByKey>::reduce(results.clone()).into();
+                ReduceWithStrategy::<StrictMajorityByKey>::reduce(results.clone()).result;
 
             assert_eq!(
                 reduced,
