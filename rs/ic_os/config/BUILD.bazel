@@ -75,9 +75,8 @@ dev_wrapper(
 
 rust_test(
     name = "config_lib_test",
-    crate = ":config_lib",
+    crate = ":config_lib_dev",
     crate_features = ["dev"],
-    # You may add other deps that are specific to the test configuration
     deps = DEV_DEPENDENCIES,
 )
 
@@ -96,14 +95,18 @@ rust_binary(
     ] + DEPENDENCIES,
 )
 
+dev_wrapper(
+    name = "config_dev",
+    actual = ":config",
+)
+
 rust_test(
     name = "config_test",
-    crate = ":config",
+    crate = ":config_dev",
     crate_features = ["dev"],
     data = glob(["golden/*"]),
     env = {"CARGO_MANIFEST_DIR": "rs/ic_os/generate_guestos_vm_config"},
     # Run without sandbox so that goldenfiles can be updated by passing "--test_env UPDATE_GOLDENFILES=1"
     tags = ["local"],
-    # You may add other deps that are specific to the test configuration
     deps = DEV_DEPENDENCIES,
 )
