@@ -610,7 +610,7 @@ pub fn syscalls<
                 let index: usize = index.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu_and_mem(&mut caller, overhead::ENV_VAR_NAME_COPY, size)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.ic0_env_var_name_copy(dst, offset, size, index, memory)
+                    system_api.ic0_env_var_name_copy(index, dst, offset, size, memory)
                 })?;
                 if feature_flags.write_barrier == FlagStatus::Enabled {
                     mark_writes_on_bytemap(&mut caller, dst, size)

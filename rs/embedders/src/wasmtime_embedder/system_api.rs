@@ -1915,10 +1915,10 @@ impl SystemApi for SystemApiImpl {
 
     fn ic0_env_var_name_copy(
         &self,
+        index: usize,
         dst: usize,
         offset: usize,
         size: usize,
-        index: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
         let result = match &self.api_type {

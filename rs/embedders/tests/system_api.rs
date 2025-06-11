@@ -2292,16 +2292,16 @@ fn test_env_var_name_operations() {
     let mut heap = vec![0u8; 16];
 
     // Copy first variable name
-    api.ic0_env_var_name_copy(0, 0, 10, 0, &mut heap).unwrap();
+    api.ic0_env_var_name_copy(0, 0, 0, 10, &mut heap).unwrap();
     assert_eq!(&heap[0..10], b"TEST_VAR_1");
 
     // Copy second variable name
-    api.ic0_env_var_name_copy(0, 0, 11, 1, &mut heap).unwrap();
+    api.ic0_env_var_name_copy(1, 0, 0, 11, &mut heap).unwrap();
     assert_eq!(&heap[0..11], b"TEST_VAR_22");
 
     // Test invalid index
     assert!(matches!(
-        api.ic0_env_var_name_copy(0, 0, 9, 2, &mut heap),
+        api.ic0_env_var_name_copy(2, 0, 0, 9, &mut heap),
         Err(HypervisorError::EnvironmentVariableIndexOutOfBounds {
             index: 2,
             length: 2
@@ -2310,13 +2310,13 @@ fn test_env_var_name_operations() {
 
     // Test invalid offset
     assert!(matches!(
-        api.ic0_env_var_name_copy(0, 10, 10, 0, &mut heap),
+        api.ic0_env_var_name_copy(0, 0, 10, 10, &mut heap),
         Err(HypervisorError::ToolchainContractViolation { .. })
     ));
 
     // Test invalid size (destination buffer overflow)
     assert!(matches!(
-        api.ic0_env_var_name_copy(10, 0, 10, 0, &mut heap),
+        api.ic0_env_var_name_copy(0, 10, 0, 10, &mut heap),
         Err(HypervisorError::ToolchainContractViolation { .. })
     ));
 }
@@ -2428,7 +2428,7 @@ fn test_env_variables_empty() {
     // Test ic0_env_var_name_copy with invalid index on empty variables
     let mut heap = vec![0u8; 16];
     assert!(matches!(
-        api.ic0_env_var_name_copy(0, 0, 9, 0, &mut heap),
+        api.ic0_env_var_name_copy(0, 0, 0, 9, &mut heap),
         Err(HypervisorError::EnvironmentVariableIndexOutOfBounds {
             index: 0,
             length: 0
