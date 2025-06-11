@@ -5,7 +5,7 @@ pub mod system_state;
 mod tests;
 
 use crate::canister_state::queues::CanisterOutputQueuesIterator;
-use crate::canister_state::system_state::{ExecutionTask, SystemState};
+use crate::canister_state::system_state::{ExecutingSystemState, ExecutionTask, SystemState};
 use crate::{InputQueueType, MessageMemoryUsage, StateError};
 pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions};
 use ic_management_canister_types_private::{CanisterStatusType, LogVisibilityV2};
@@ -109,6 +109,12 @@ impl SchedulerState {
     }
 }
 
+pub struct ExecutingCanisterState {
+    pub executing_system_state: ExecutingSystemState,
+    pub execution_state: Option<ExecutionState>,
+    pub scheduler_state: SchedulerState,
+}
+
 /// The full state of a single canister.
 #[derive(Clone, PartialEq, Debug, ValidateEq)]
 pub struct CanisterState {
@@ -192,6 +198,33 @@ impl CanisterState {
             own_subnet_type,
             input_queue_type,
         )
+    }
+
+    pub fn pop_input_alt(
+        self,
+        time: Time,
+    ) -> Result<(CanisterMessage, ExecutingCanisterState), CanisterState> {
+        let Self {
+            system_state,
+            execution_state,
+            scheduler_state,
+        } = self;
+
+        match system_state.pop_input_alt(time) {
+            Ok((msg, executing_system_state)) => Ok((
+                msg,
+                ExecutingCanisterState {
+                    executing_system_state,
+                    execution_state,
+                    scheduler_state,
+                },
+            )),
+            Err(system_state) => Err(Self {
+                system_state,
+                execution_state,
+                scheduler_state,
+            }),
+        }
     }
 
     /// See `SystemState::pop_input` for documentation.
