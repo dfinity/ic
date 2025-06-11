@@ -540,6 +540,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "custom",
                 ],
             ),
+            "gptman": crate.spec(
+                version = "2.0",
+            ),
             "goldenfile": crate.spec(
                 version = "^1.8",
             ),
@@ -1316,6 +1319,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "systemd": crate.spec(
                 version = "0.10",
+            ),
+            "sys-mount": crate.spec(
+                version = "3.0",
             ),
             "tar": crate.spec(
                 version = "^0.4.38",

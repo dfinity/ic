@@ -1,3 +1,4 @@
+use crate::guest_direct_boot::prepare_direct_boot;
 use crate::systemd::SystemdNotifier;
 use anyhow::{anyhow, bail, Context, Error, Result};
 use config::guest_vm_config::{assemble_config_media, generate_vm_config};
@@ -5,8 +6,10 @@ use config_types::{HostOSConfig, Ipv6Config};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{calculate_deterministic_mac, IpVariant, MacAddr6Ext};
 use ic_metrics_tool::{Metric, MetricsWriter};
+use std::fs::File;
 use std::io::Write;
-use std::path::Path;
+use std::ops::Deref;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 use tempfile::NamedTempFile;
@@ -23,14 +26,17 @@ const CONSOLE_LOG_PATH: &str = "/var/log/libvirt/qemu/guestos-serial.log";
 const METRICS_FILE_PATH: &str = "/run/node_exporter/collector_textfile/hostos_guestos_service.prom";
 const CONSOLE_TTY_PATH: &str = "/dev/tty1";
 const GUESTOS_SERVICE_NAME: &str = "guestos.service";
+const DEFAULT_GUESTOS_DEVICE: &str = "/dev/hostlvm/guestos";
 
 /// Manages a libvirt-based virtual machine
 pub struct VirtualMachine {
     domain_id: u32,
     libvirt_connect: Connect,
-    // The config media is used by the virtual machine and must be kept alive until the virtual
+    // These temp files are used by the virtual machine and must be kept alive until the virtual
     // machine is destroyed.
     _config_media: NamedTempFile,
+    _kernel: NamedTempFile,
+    _initrd: NamedTempFile,
 }
 
 impl VirtualMachine {
@@ -40,6 +46,8 @@ impl VirtualMachine {
         libvirt_connect: &Connect,
         xml_config: &str,
         config_media: NamedTempFile,
+        kernel: NamedTempFile,
+        initrd: NamedTempFile,
     ) -> Result<Self> {
         let mut retries = 3;
         let domain = loop {
@@ -62,6 +70,8 @@ impl VirtualMachine {
             domain_id: domain.get_id().context("Domain does not have id")?,
             libvirt_connect: libvirt_connect.clone(),
             _config_media: config_media,
+            _kernel: kernel,
+            _initrd: initrd,
         })
     }
 
@@ -131,6 +141,7 @@ pub struct GuestVmService {
     hostos_config: HostOSConfig,
     systemd_notifier: Arc<dyn SystemdNotifier>,
     console_tty: Box<dyn Write + Send + Sync>,
+    guestos_device: PathBuf,
 }
 
 impl GuestVmService {
@@ -157,6 +168,7 @@ impl GuestVmService {
             hostos_config,
             systemd_notifier: Arc::new(crate::systemd::DefaultSystemdNotifier),
             console_tty: Box::new(console_tty),
+            guestos_device: DEFAULT_GUESTOS_DEVICE.into(),
         })
     }
 
@@ -188,22 +200,32 @@ impl GuestVmService {
     }
 
     async fn start_virtual_machine(&mut self) -> Result<VirtualMachine> {
+        let kernel = NamedTempFile::new()?;
+        let initrd = NamedTempFile::new()?;
         let config_media = NamedTempFile::new()?;
+
+        let direct_boot = prepare_direct_boot(&self.guestos_device, kernel.path(), initrd.path())?;
+
         assemble_config_media(&self.hostos_config, config_media.path())?;
 
-        let vm_config = generate_vm_config(&self.hostos_config, config_media.path())
+        let vm_config = generate_vm_config(&self.hostos_config, config_media.path(), &direct_boot)
             .context("Failed to generate GuestOS VM config")?;
 
         println!("Creating GuestOS virtual machine");
 
-        let virtual_machine =
-            match VirtualMachine::new(&self.libvirt_connection, &vm_config, config_media) {
-                Ok(virtual_machine) => virtual_machine,
-                Err(e) => {
-                    self.handle_startup_error(&e, &vm_config).await?;
-                    bail!("Failed to define GuestOS virtual machine: {e}");
-                }
-            };
+        let virtual_machine = match VirtualMachine::new(
+            &self.libvirt_connection,
+            &vm_config,
+            config_media,
+            kernel,
+            initrd,
+        ) {
+            Ok(virtual_machine) => virtual_machine,
+            Err(e) => {
+                self.handle_startup_error(&e, &vm_config).await?;
+                bail!("Failed to define GuestOS virtual machine: {e}");
+            }
+        };
 
         // Notify systemd that we're ready
         self.systemd_notifier.notify_ready()?;
@@ -416,16 +438,20 @@ mod tests {
         pub systemd_notifier: Arc<MockSystemdNotifier>,
         pub console_file: NamedTempFile,
         pub metrics_file: NamedTempFile,
+        pub guestos_device: NamedTempFile,
         _libvirt_lock: &'a MutexGuard<'a, ()>,
     }
 
     impl TestFixture<'_> {
         fn new<'a>(libvirt_lock: &'a MutexGuard<()>) -> TestFixture<'a> {
+            let guestos_device = NamedTempFile::new().unwrap();
+            std::fs::write(guestos_device.path(), vec![0; 1024 * 8]).unwrap();
             TestFixture {
                 libvirt_connection: Connect::open(Some("test:///default")).unwrap(),
                 systemd_notifier: Arc::new(MockSystemdNotifier::new()),
                 console_file: NamedTempFile::new().unwrap(),
                 metrics_file: NamedTempFile::new().unwrap(),
+                guestos_device,
                 _libvirt_lock: libvirt_lock,
             }
         }
@@ -446,6 +472,7 @@ mod tests {
                 hostos_config: config,
                 systemd_notifier: self.systemd_notifier.clone(),
                 console_tty,
+                guestos_device: self.guestos_device.path().to_path_buf(),
             }
         }
 

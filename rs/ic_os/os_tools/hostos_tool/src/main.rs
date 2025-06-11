@@ -9,7 +9,9 @@ use network::systemd::DEFAULT_SYSTEMD_NETWORK_DIR;
 use std::path::Path;
 use utils::to_cidr;
 
+mod guest_direct_boot;
 mod guest_vm;
+mod mount;
 mod systemd;
 
 #[derive(Subcommand)]
@@ -123,6 +125,5 @@ pub async fn main() -> Result<()> {
         None => Err(anyhow!(
             "No subcommand specified. Run with '--help' for subcommands"
         )),
-        Some(Commands::RunGuestVm { .. }) => guest_vm::run_guest_vm().await,
     }
 }

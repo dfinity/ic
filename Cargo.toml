@@ -145,6 +145,7 @@ members = [
     "rs/ic_os/config",
     "rs/ic_os/config_types",
     "rs/ic_os/fstrim_tool",
+    "rs/ic_os/grub",
     "rs/ic_os/metrics_tool",
     "rs/ic_os/os_tools/guestos_tool",
     "rs/ic_os/os_tools/hostos_tool",

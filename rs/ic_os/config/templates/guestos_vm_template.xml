@@ -36,12 +36,9 @@
     <loader readonly='yes' type='pflash'>/usr/share/OVMF/OVMF_CODE_4M.fd</loader>
     <nvram>/var/lib/libvirt/qemu/nvram/guestos_VARS.fd</nvram>
     <boot dev='hd'/>
-
-    {%- if let Some(direct_boot) = direct_boot %}
     <kernel>{{direct_boot.kernel}}</kernel>
     <initrd>{{direct_boot.initrd}}</initrd>
     <cmdline>{{direct_boot.kernel_cmdline}}</cmdline>
-    {%- endif %}
   </os>
   <features>
     <acpi/>

@@ -37,7 +37,7 @@ pub struct GuestOSTemplateProps {{
     pub mac_address: macaddr::MacAddr6,
     pub config_media: String,
     pub enable_sev: bool,
-    pub direct_boot: Option<DirectBoot>
+    pub direct_boot: DirectBoot
 }}
     "#,
             std::fs::read_to_string("templates/guestos_vm_template.xml").unwrap()

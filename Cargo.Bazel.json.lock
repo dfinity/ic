@@ -1,5 +1,5 @@
 {
-  "checksum": "f34f6bb22d8cb88b087e060d592e7a863e7475b5e0cfb8544da97358d8cc19a0",
+  "checksum": "1afd8cab98a0f25a57dc731a8efb2f07f91879791476ba6ef19c9f1c5f4eaaaf",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -7035,6 +7035,124 @@
         },
         "edition": "2015",
         "version": "1.3.3"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE.md"
+    },
+    "bincode 2.0.1": {
+      "name": "bincode",
+      "version": "2.0.1",
+      "package_url": "https://github.com/bincode-org/bincode",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/bincode/2.0.1/download",
+          "sha256": "36eaf5d7b090263e8150820482d5d93cd964a81e4019913c972f4edcc6edb740"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "bincode",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "bincode",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "alloc",
+            "bincode_derive",
+            "default",
+            "derive",
+            "serde",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "serde 1.0.217",
+              "target": "serde"
+            },
+            {
+              "id": "unty 0.0.4",
+              "target": "unty"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "bincode_derive 2.0.1",
+              "target": "bincode_derive"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "2.0.1"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE.md"
+    },
+    "bincode_derive 2.0.1": {
+      "name": "bincode_derive",
+      "version": "2.0.1",
+      "package_url": "https://github.com/bincode-org/bincode",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/bincode_derive/2.0.1/download",
+          "sha256": "bf95709a440f45e986983918d0e8a1f30a9b1df04918fc828670606804ac3c09"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "bincode_derive",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "bincode_derive",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "virtue 0.0.18",
+              "target": "virtue"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "2.0.1"
       },
       "license": "MIT",
       "license_ids": [
@@ -16205,6 +16323,93 @@
       ],
       "license_file": null
     },
+    "crc 3.3.0": {
+      "name": "crc",
+      "version": "3.3.0",
+      "package_url": "https://github.com/mrhooray/crc-rs.git",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/crc/3.3.0/download",
+          "sha256": "9710d3b3739c2e349eb44fe848ad0b7c8cb1e42bd87ee49371df2f7acaf3e675"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "crc",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "crc",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "crc-catalog 2.4.0",
+              "target": "crc_catalog"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "3.3.0"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "crc-catalog 2.4.0": {
+      "name": "crc-catalog",
+      "version": "2.4.0",
+      "package_url": "https://github.com/akhilles/crc-catalog.git",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/crc-catalog/2.4.0/download",
+          "sha256": "19d374276b40fb8bbdee95aef7c7fa6b5316ec764510eb64b8dd0e2ed0d7e7f5"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "crc_catalog",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "crc_catalog",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2018",
+        "version": "2.4.0"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSES"
+    },
     "crc32fast 1.3.2": {
       "name": "crc32fast",
       "version": "1.3.2",
@@ -20290,6 +20495,10 @@
               "target": "goldenfile"
             },
             {
+              "id": "gptman 2.0.0",
+              "target": "gptman"
+            },
+            {
               "id": "group 0.13.0",
               "target": "group"
             },
@@ -21035,6 +21244,10 @@
               "id": "syn 2.0.101",
               "target": "syn",
               "alias": "syn2"
+            },
+            {
+              "id": "sys-mount 3.0.1",
+              "target": "sys_mount"
             },
             {
               "id": "syscalls 0.6.18",
@@ -23816,6 +24029,7 @@
         ],
         "crate_features": {
           "common": [
+            "default",
             "std"
           ],
           "selects": {}
@@ -28515,6 +28729,86 @@
         "MIT"
       ],
       "license_file": null
+    },
+    "gptman 2.0.0": {
+      "name": "gptman",
+      "version": "2.0.0",
+      "package_url": "https://github.com/rust-disk-partition-management/gptman",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/gptman/2.0.0/download",
+          "sha256": "a325e29fe9027c78996860772f876bff79cf17a2b41a43cddff5c1b6bf68caff"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "gptman",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "gptman",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "nix"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "bincode 2.0.1",
+              "target": "bincode"
+            },
+            {
+              "id": "crc 3.3.0",
+              "target": "crc"
+            },
+            {
+              "id": "serde 1.0.217",
+              "target": "serde"
+            },
+            {
+              "id": "thiserror 2.0.12",
+              "target": "thiserror"
+            }
+          ],
+          "selects": {
+            "aarch64-unknown-linux-gnu": [
+              {
+                "id": "nix 0.30.1",
+                "target": "nix"
+              }
+            ],
+            "x86_64-unknown-linux-gnu": [
+              {
+                "id": "nix 0.30.1",
+                "target": "nix"
+              }
+            ]
+          }
+        },
+        "edition": "2021",
+        "version": "2.0.0"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE.Apache-2.0"
     },
     "group 0.12.1": {
       "name": "group",
@@ -43909,6 +44203,93 @@
       ],
       "license_file": null
     },
+    "loopdev-3 0.5.1": {
+      "name": "loopdev-3",
+      "version": "0.5.1",
+      "package_url": "https://github.com/stratis-storage/loopdev-3",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/loopdev-3/0.5.1/download",
+          "sha256": "90a97d7a5124296ee9124a815acdc3dc4a91f577b72812b3f1f99bb959b46e8d"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "loopdev",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "loopdev",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "errno 0.3.10",
+              "target": "errno"
+            },
+            {
+              "id": "libc 0.2.172",
+              "target": "libc"
+            },
+            {
+              "id": "loopdev-3 0.5.1",
+              "target": "build_script_build"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.5.1"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "compile_data_glob_excludes": [
+          "**/*.rs"
+        ],
+        "data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "bindgen 0.69.4",
+              "target": "bindgen"
+            }
+          ],
+          "selects": {}
+        }
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
     "lru 0.7.8": {
       "name": "lru",
       "version": "0.7.8",
@@ -47365,6 +47746,103 @@
         },
         "edition": "2021",
         "version": "0.29.0"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "compile_data_glob_excludes": [
+          "**/*.rs"
+        ],
+        "data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "cfg_aliases 0.2.1",
+              "target": "cfg_aliases"
+            }
+          ],
+          "selects": {}
+        }
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
+    "nix 0.30.1": {
+      "name": "nix",
+      "version": "0.30.1",
+      "package_url": "https://github.com/nix-rust/nix",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/nix/0.30.1/download",
+          "sha256": "74523f3a35e05aba87a1d978330aef40f67b0304ac79c1c00b294c9830543db6"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "nix",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "nix",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "ioctl"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "bitflags 2.9.0",
+              "target": "bitflags"
+            },
+            {
+              "id": "cfg-if 1.0.0",
+              "target": "cfg_if"
+            },
+            {
+              "id": "libc 0.2.172",
+              "target": "libc"
+            },
+            {
+              "id": "nix 0.30.1",
+              "target": "build_script_build"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.30.1"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -71413,6 +71891,61 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "smart-default 0.7.1": {
+      "name": "smart-default",
+      "version": "0.7.1",
+      "package_url": "https://github.com/idanarye/rust-smart-default",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/smart-default/0.7.1/download",
+          "sha256": "0eb01866308440fc64d6c44d9e86c5cc17adfe33c4d6eed55da9145044d0ffc1"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "smart_default",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "smart_default",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro2 1.0.95",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.40",
+              "target": "quote"
+            },
+            {
+              "id": "syn 2.0.101",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.7.1"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
     "snafu 0.7.5": {
       "name": "snafu",
       "version": "0.7.5",
@@ -73889,6 +74422,87 @@
       },
       "license": "MIT",
       "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
+    "sys-mount 3.0.1": {
+      "name": "sys-mount",
+      "version": "3.0.1",
+      "package_url": "https://github.com/pop-os/sys-mount",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/sys-mount/3.0.1/download",
+          "sha256": "a6acb8bb63826062d5a44b68298cf2e25b84bc151bc0c31c35a83b61f818682a"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "sys_mount",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "sys_mount",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "loop",
+            "loopdev"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "bitflags 2.9.0",
+              "target": "bitflags"
+            },
+            {
+              "id": "libc 0.2.172",
+              "target": "libc"
+            },
+            {
+              "id": "loopdev-3 0.5.1",
+              "target": "loopdev"
+            },
+            {
+              "id": "thiserror 1.0.68",
+              "target": "thiserror"
+            },
+            {
+              "id": "tracing 0.1.41",
+              "target": "tracing"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "smart-default 0.7.1",
+              "target": "smart_default"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "3.0.1"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
         "MIT"
       ],
       "license_file": "LICENSE"
@@ -81609,6 +82223,45 @@
       ],
       "license_file": "LICENSE.txt"
     },
+    "unty 0.0.4": {
+      "name": "unty",
+      "version": "0.0.4",
+      "package_url": "https://github.com/bincode-org/unty",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/unty/0.0.4/download",
+          "sha256": "6d49784317cd0d1ee7ec5c716dd598ec5b4483ea832a2dced265471cc0f690ae"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "unty",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "unty",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2021",
+        "version": "0.0.4"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "uriparse 0.6.4": {
       "name": "uriparse",
       "version": "0.6.4",
@@ -82360,6 +83013,44 @@
         "LGPL-2.1"
       ],
       "license_file": null
+    },
+    "virtue 0.0.18": {
+      "name": "virtue",
+      "version": "0.0.18",
+      "package_url": "https://github.com/bincode-org/virtue",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/virtue/0.0.18/download",
+          "sha256": "051eb1abcf10076295e815102942cc58f9d5e3b4560e46e53c21e8ff6f3af7b1"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "virtue",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "virtue",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2021",
+        "version": "0.0.18"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE.md"
     },
     "vrl 0.23.0": {
       "name": "vrl",
@@ -92128,6 +92819,7 @@
     "get_if_addrs 0.5.3",
     "getrandom 0.2.10",
     "goldenfile 1.8.0",
+    "gptman 2.0.0",
     "group 0.13.0",
     "hashlink 0.8.3",
     "hex 0.4.3",
@@ -92321,6 +93013,7 @@
     "subtle 2.6.1",
     "syn 1.0.109",
     "syn 2.0.101",
+    "sys-mount 3.0.1",
     "syscalls 0.6.18",
     "systemd 0.10.0",
     "tar 0.4.39",

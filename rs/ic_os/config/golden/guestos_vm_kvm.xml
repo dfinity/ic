@@ -22,6 +22,9 @@
     <loader readonly='yes' type='pflash'>/usr/share/OVMF/OVMF_CODE_4M.fd</loader>
     <nvram>/var/lib/libvirt/qemu/nvram/guestos_VARS.fd</nvram>
     <boot dev='hd'/>
+    <kernel>/tmp/test-kernel</kernel>
+    <initrd>/tmp/test-initrd</initrd>
+    <cmdline>security=selinux selinux=1 enforcing=0</cmdline>
   </os>
   <features>
     <acpi/>
