@@ -62,6 +62,7 @@ fn benchmark(c: &mut Criterion) {
         read_timeout: Some(Duration::from_secs(10)),
         write_timeout: Some(Duration::from_secs(10)),
         idle_timeout: Duration::from_secs(10),
+        proxy_protocol_mode: server::ProxyProtocolMode::Off,
     };
 
     let runtime = tokio::runtime::Builder::new_current_thread()
