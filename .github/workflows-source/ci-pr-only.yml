@@ -18,22 +18,20 @@ env:
 anchors:
   image: &image
     image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
+  container: &container
+    <<: *image
+    options: >-
+      -e NODE_NAME
   dind-small-setup: &dind-small-setup
     timeout-minutes: 30
     runs-on:
       labels: dind-small
-    container:
-      <<: *image
-      env:
-        NODE_NAME: ${{ env.NODE_NAME }}
+    <<: *container
   dind-large-setup: &dind-large-setup
     timeout-minutes: 90
     runs-on:
       labels: dind-large
-    container:
-      <<: *image
-      env:
-        NODE_NAME: ${{ env.NODE_NAME }}
+    <<: *container
   checkout: &checkout
     name: Checkout
     uses: actions/checkout@v4
