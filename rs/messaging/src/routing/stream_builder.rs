@@ -284,6 +284,11 @@ impl StreamBuilderImpl {
                            is_local_message: bool,
                            destination_subnet_type: SubnetType|
          -> bool {
+            if is_local_message {
+                // Don't enforce limits on the loopback stream.
+                return false;
+            }
+
             let stream = match stream {
                 btree_map::Entry::Occupied(occupied_entry) => occupied_entry.get(),
                 btree_map::Entry::Vacant(_) => return false,
@@ -301,8 +306,7 @@ impl StreamBuilderImpl {
             // At limit if system subnet limit is hit. This is only enforced for non-local
             // streams to system subnets (i.e., excluding the loopback stream on system
             // subnets).
-            !is_local_message
-                && destination_subnet_type == SubnetType::System
+            destination_subnet_type == SubnetType::System
                 && stream_messages_len >= 2 * SYSTEM_SUBNET_STREAM_MSG_LIMIT
         };
 
