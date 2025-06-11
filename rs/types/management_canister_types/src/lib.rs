@@ -258,16 +258,22 @@ impl CanisterChangeOrigin {
 /// ```text
 /// record {
 ///   controllers : vec principal;
+///   environment_variables_hash: opt blob;
 /// }
 /// ```
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct CanisterCreationRecord {
     controllers: Vec<PrincipalId>,
+    environment_variables_hash: Option<Vec<u8>>,
 }
 
 impl CanisterCreationRecord {
     pub fn controllers(&self) -> &[PrincipalId] {
         &self.controllers
+    }
+
+    pub fn environment_variables_hash(&self) -> Option<Vec<u8>> {
+        self.environment_variables_hash.clone()
     }
 }
 
@@ -350,6 +356,29 @@ impl CanisterLoadSnapshotRecord {
     }
 }
 
+/// `CandidType` for `CanisterSettingsChangeRecord`
+/// ``` text
+/// record {
+///   controllers : opt vec principal;
+///   environment_variables_hash: opt blob;
+/// }
+/// ```
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+pub struct CanisterSettingsChangeRecord {
+    controllers: Option<Vec<PrincipalId>>,
+    environment_variables_hash: Option<Vec<u8>>,
+}
+
+impl CanisterSettingsChangeRecord {
+    pub fn controllers(&self) -> Option<&[PrincipalId]> {
+        self.controllers.as_deref()
+    }
+
+    pub fn environment_variables_hash(&self) -> Option<Vec<u8>> {
+        self.environment_variables_hash.clone()
+    }
+}
+
 /// `CandidType` for `CanisterChangeDetails`
 /// ```text
 /// variant {
@@ -383,11 +412,19 @@ pub enum CanisterChangeDetails {
     CanisterControllersChange(CanisterControllersChangeRecord),
     #[serde(rename = "load_snapshot")]
     CanisterLoadSnapshot(CanisterLoadSnapshotRecord),
+    #[serde(rename = "settings_change")]
+    CanisterSettingsChange(CanisterSettingsChangeRecord),
 }
 
 impl CanisterChangeDetails {
-    pub fn canister_creation(controllers: Vec<PrincipalId>) -> CanisterChangeDetails {
-        CanisterChangeDetails::CanisterCreation(CanisterCreationRecord { controllers })
+    pub fn canister_creation(
+        controllers: Vec<PrincipalId>,
+        environment_variables_hash: Option<Vec<u8>>,
+    ) -> CanisterChangeDetails {
+        CanisterChangeDetails::CanisterCreation(CanisterCreationRecord {
+            controllers,
+            environment_variables_hash,
+        })
     }
 
     pub fn code_deployment(
@@ -415,6 +452,16 @@ impl CanisterChangeDetails {
             canister_version,
             snapshot_id,
             taken_at_timestamp,
+        })
+    }
+
+    pub fn settings_change(
+        controllers: Option<Vec<PrincipalId>>,
+        environment_variables_hash: Option<Vec<u8>>,
+    ) -> CanisterChangeDetails {
+        CanisterChangeDetails::CanisterSettingsChange(CanisterSettingsChangeRecord {
+            controllers,
+            environment_variables_hash,
         })
     }
 }
@@ -468,9 +515,10 @@ impl CanisterChange {
     }
 
     /// Returns the number of bytes to represent a canister change in memory.
-    /// The vector of controllers in `CanisterCreation` and `CanisterControllersChange`
-    /// is counted separately because the controllers are stored on heap
-    /// and thus not accounted for in `size_of::<CanisterChange>()`.
+    /// The vector of controllers in `CanisterCreation`, `CanisterControllersChange`
+    /// and `CanisterSettingsChange` is counted separately because
+    /// the controllers are stored on heap and thus not accounted
+    /// for in `size_of::<CanisterChange>()`.
     pub fn count_bytes(&self) -> NumBytes {
         let controllers_memory_size = match &self.details {
             CanisterChangeDetails::CanisterCreation(canister_creation) => {
@@ -478,6 +526,9 @@ impl CanisterChange {
             }
             CanisterChangeDetails::CanisterControllersChange(canister_controllers_change) => {
                 std::mem::size_of_val(canister_controllers_change.controllers())
+            }
+            CanisterChangeDetails::CanisterSettingsChange(canister_settings_change) => {
+                std::mem::size_of_val(canister_settings_change.controllers().unwrap_or(&vec![]))
             }
             CanisterChangeDetails::CanisterCodeDeployment(_)
             | CanisterChangeDetails::CanisterCodeUninstall
@@ -634,6 +685,9 @@ impl From<&CanisterChangeDetails> for pb_canister_state_bits::canister_change::C
                             .iter()
                             .map(|c| (*c).into())
                             .collect::<Vec<ic_protobuf::types::v1::PrincipalId>>(),
+                        environment_variables_hash: canister_creation
+                            .environment_variables_hash
+                            .clone(),
                     },
                 )
             }
@@ -670,6 +724,25 @@ impl From<&CanisterChangeDetails> for pb_canister_state_bits::canister_change::C
                     },
                 )
             }
+            CanisterChangeDetails::CanisterSettingsChange(canister_settings_change) => {
+                pb_canister_state_bits::canister_change::ChangeDetails::CanisterSettingsChange(
+                    pb_canister_state_bits::CanisterSettingsChange {
+                        controllers: canister_settings_change
+                            .controllers
+                            .as_ref()
+                            .map(|controllers| {
+                                controllers
+                                    .iter()
+                                    .map(|c| (*c).into())
+                                    .collect::<Vec<ic_protobuf::types::v1::PrincipalId>>()
+                            })
+                            .unwrap_or_default(),
+                        environment_variables_hash: canister_settings_change
+                            .environment_variables_hash
+                            .clone(),
+                    },
+                )
+            }
         }
     }
 }
@@ -689,6 +762,7 @@ impl TryFrom<pb_canister_state_bits::canister_change::ChangeDetails> for Caniste
                     .into_iter()
                     .map(TryInto::try_into)
                     .collect::<Result<Vec<PrincipalId>, _>>()?,
+                canister_creation.environment_variables_hash.clone(),
             )),
             pb_canister_state_bits::canister_change::ChangeDetails::CanisterCodeUninstall(_) => {
                 Ok(CanisterChangeDetails::CanisterCodeUninstall)
@@ -734,6 +808,24 @@ impl TryFrom<pb_canister_state_bits::canister_change::ChangeDetails> for Caniste
                 canister_load_snapshot.snapshot_id,
                 canister_load_snapshot.taken_at_timestamp,
             )),
+            pb_canister_state_bits::canister_change::ChangeDetails::CanisterSettingsChange(
+                canister_settings_change,
+            ) => {
+                let controllers = match canister_settings_change.controllers.is_empty() {
+                    true => None,
+                    false => Some(
+                        canister_settings_change
+                            .controllers
+                            .into_iter()
+                            .map(TryInto::try_into)
+                            .collect::<Result<Vec<PrincipalId>, _>>()?,
+                    ),
+                };
+                Ok(CanisterChangeDetails::settings_change(
+                    controllers,
+                    canister_settings_change.environment_variables_hash.clone(),
+                ))
+            }
         }
     }
 }

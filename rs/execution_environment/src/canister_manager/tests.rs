@@ -88,7 +88,7 @@ use maplit::{btreemap, btreeset};
 use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
 use serde::Deserialize;
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap},
+    collections::{BTreeMap, BTreeSet},
     convert::TryFrom,
     mem::size_of,
     path::Path,
@@ -6655,54 +6655,54 @@ fn memory_usage_updates_increment_subnet_available_memory() {
     assert_eq!(initial_subnet_available_memory, subnet_available_memory);
 }
 
-fn test_update_settings_environment_variables() {
-    let mut test = ExecutionTestBuilder::new().build();
-    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
+// fn test_update_settings_environment_variables() {
+//     let mut test = ExecutionTestBuilder::new().build();
+//     let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
 
-    // Create initial environment variables
-    let mut initial_env_vars = BTreeMap::new();
-    initial_env_vars.insert("KEY1".to_string(), "VALUE1".to_string());
-    initial_env_vars.insert("KEY2".to_string(), "VALUE2".to_string());
+//     // Create initial environment variables
+//     let mut initial_env_vars = BTreeMap::new();
+//     initial_env_vars.insert("KEY1".to_string(), "VALUE1".to_string());
+//     initial_env_vars.insert("KEY2".to_string(), "VALUE2".to_string());
 
-    let args = UpdateSettingsArgs {
-        canister_id: canister_id.get(),
-        settings: CanisterSettingsArgsBuilder::new()
-            .with_environment_variables(initial_env_vars.clone())
-            .build(),
-        sender_canister_version: None,
-    };
-    test.subnet_message(Method::UpdateSettings, args.encode())
-        .unwrap();
+//     let args = UpdateSettingsArgs {
+//         canister_id: canister_id.get(),
+//         settings: CanisterSettingsArgsBuilder::new()
+//             .with_environment_variables(initial_env_vars.clone())
+//             .build(),
+//         sender_canister_version: None,
+//     };
+//     test.subnet_message(Method::UpdateSettings, args.encode())
+//         .unwrap();
 
-    // Verify initial environment variables are set
-    let canister = test.canister_state(canister_id);
-    assert_eq!(
-        canister.system_state.environment_variables,
-        initial_env_vars
-    );
+//     // Verify initial environment variables are set
+//     let canister = test.canister_state(canister_id);
+//     assert_eq!(
+//         canister.system_state.environment_variables,
+//         initial_env_vars
+//     );
 
-    // Update environment variables
-    let mut updated_env_vars = BTreeMap::new();
-    updated_env_vars.insert("KEY1".to_string(), "VALUE1".to_string());
-    updated_env_vars.insert("KEY3".to_string(), "VALUE2".to_string());
+//     // Update environment variables
+//     let mut updated_env_vars = BTreeMap::new();
+//     updated_env_vars.insert("KEY1".to_string(), "VALUE1".to_string());
+//     updated_env_vars.insert("KEY3".to_string(), "VALUE2".to_string());
 
-    let args = UpdateSettingsArgs {
-        canister_id: canister_id.get(),
-        settings: CanisterSettingsArgsBuilder::new()
-            .with_environment_variables(updated_env_vars.clone())
-            .build(),
-        sender_canister_version: None,
-    };
-    test.subnet_message(Method::UpdateSettings, args.encode())
-        .unwrap();
+//     let args = UpdateSettingsArgs {
+//         canister_id: canister_id.get(),
+//         settings: CanisterSettingsArgsBuilder::new()
+//             .with_environment_variables(updated_env_vars.clone())
+//             .build(),
+//         sender_canister_version: None,
+//     };
+//     test.subnet_message(Method::UpdateSettings, args.encode())
+//         .unwrap();
 
-    // Verify environment variables are updated
-    let canister = test.canister_state(canister_id);
-    assert_eq!(
-        canister.system_state.environment_variables,
-        updated_env_vars
-    );
-}
+//     // Verify environment variables are updated
+//     let canister = test.canister_state(canister_id);
+//     assert_eq!(
+//         canister.system_state.environment_variables,
+//         updated_env_vars
+//     );
+// }
 
 #[test]
 fn test_create_canister_with_environment_variables() {

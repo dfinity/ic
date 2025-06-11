@@ -409,6 +409,8 @@ pub struct CanisterChangeFromCanister {
 pub struct CanisterCreation {
     #[prost(message, repeated, tag = "1")]
     pub controllers: ::prost::alloc::vec::Vec<super::super::super::types::v1::PrincipalId>,
+    #[prost(bytes = "vec", optional, tag = "2")]
+    pub environment_variables_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
 #[derive(Clone, Copy, PartialEq, ::prost::Message)]
 pub struct CanisterCodeUninstall {}
@@ -437,6 +439,13 @@ pub struct CanisterLoadSnapshot {
     pub snapshot_id: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterSettingsChange {
+    #[prost(message, repeated, tag = "1")]
+    pub controllers: ::prost::alloc::vec::Vec<super::super::super::types::v1::PrincipalId>,
+    #[prost(bytes = "vec", optional, tag = "2")]
+    pub environment_variables_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterChange {
     #[prost(uint64, tag = "1")]
     pub timestamp_nanos: u64,
@@ -444,7 +453,7 @@ pub struct CanisterChange {
     pub canister_version: u64,
     #[prost(oneof = "canister_change::ChangeOrigin", tags = "3, 4")]
     pub change_origin: ::core::option::Option<canister_change::ChangeOrigin>,
-    #[prost(oneof = "canister_change::ChangeDetails", tags = "5, 6, 7, 8, 9")]
+    #[prost(oneof = "canister_change::ChangeDetails", tags = "5, 6, 7, 8, 9, 10")]
     pub change_details: ::core::option::Option<canister_change::ChangeDetails>,
 }
 /// Nested message and enum types in `CanisterChange`.
@@ -468,6 +477,8 @@ pub mod canister_change {
         CanisterControllersChange(super::CanisterControllersChange),
         #[prost(message, tag = "9")]
         CanisterLoadSnapshot(super::CanisterLoadSnapshot),
+        #[prost(message, tag = "10")]
+        CanisterSettingsChange(super::CanisterSettingsChange),
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]

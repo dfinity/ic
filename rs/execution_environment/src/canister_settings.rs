@@ -1,4 +1,5 @@
 use ic_base_types::{NumBytes, NumSeconds};
+use ic_crypto_sha2::Sha256;
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
@@ -30,7 +31,7 @@ pub(crate) struct CanisterSettings {
     pub(crate) log_visibility: Option<LogVisibilityV2>,
     pub(crate) wasm_memory_limit: Option<NumBytes>,
     /// A map of environment variable names to their values
-    pub(crate) environment_variables: Option<BTreeMap<String, String>>,
+    pub(crate) environment_variables: Option<EnvironmentVariables>,
 }
 
 impl CanisterSettings {
@@ -54,7 +55,7 @@ impl CanisterSettings {
             reserved_cycles_limit,
             log_visibility,
             wasm_memory_limit,
-            environment_variables,
+            environment_variables: environment_variables.map(|env| EnvironmentVariables::new(env)),
         }
     }
 
@@ -90,7 +91,7 @@ impl CanisterSettings {
         self.wasm_memory_limit
     }
 
-    pub fn environment_variables(&self) -> Option<&BTreeMap<String, String>> {
+    pub fn environment_variables(&self) -> Option<&EnvironmentVariables> {
         self.environment_variables.as_ref()
     }
 }
@@ -194,7 +195,7 @@ pub(crate) struct CanisterSettingsBuilder {
     reserved_cycles_limit: Option<Cycles>,
     log_visibility: Option<LogVisibilityV2>,
     wasm_memory_limit: Option<NumBytes>,
-    environment_variables: Option<BTreeMap<String, String>>,
+    environment_variables: Option<EnvironmentVariables>,
 }
 
 #[allow(dead_code)]
@@ -288,7 +289,7 @@ impl CanisterSettingsBuilder {
         environment_variables: BTreeMap<String, String>,
     ) -> Self {
         Self {
-            environment_variables: Some(environment_variables),
+            environment_variables: Some(EnvironmentVariables::new(environment_variables)),
             ..self
         }
     }
@@ -366,6 +367,48 @@ impl From<InvalidMemoryAllocationError> for UpdateSettingsError {
     }
 }
 
+#[derive(Clone)]
+pub struct EnvironmentVariables {
+    environment_variables: BTreeMap<String, String>,
+}
+
+impl EnvironmentVariables {
+    pub fn new(environment_variables: BTreeMap<String, String>) -> Self {
+        Self {
+            environment_variables,
+        }
+    }
+
+    pub fn get_environment_variables(&self) -> &BTreeMap<String, String> {
+        &self.environment_variables
+    }
+    pub fn hash(&self) -> Vec<u8> {
+        // Create a vector to store the hashes of key-value pairs
+        let mut hashes: Vec<Vec<u8>> = Vec::new();
+
+        // For each key-value pair:
+        // 1. Hash the key
+        // 2. Hash the value
+        // 3. Concatenate the hashes
+        for (key, value) in &self.environment_variables {
+            let mut key_hash = Sha256::hash(key.as_bytes()).to_vec();
+            let mut value_hash = Sha256::hash(value.as_bytes()).to_vec();
+            key_hash.append(&mut value_hash);
+            hashes.push(key_hash);
+        }
+        // Sort the hashes to ensure deterministic ordering
+        hashes.sort();
+
+        // Hash the concatenation of all sorted hashes
+        let mut hasher = Sha256::new();
+        for hash in hashes {
+            hasher.write(&hash);
+        }
+
+        hasher.finish().to_vec()
+    }
+}
+
 pub(crate) struct ValidatedCanisterSettings {
     controllers: Option<Vec<PrincipalId>>,
     compute_allocation: Option<ComputeAllocation>,
@@ -376,7 +419,7 @@ pub(crate) struct ValidatedCanisterSettings {
     reservation_cycles: Cycles,
     log_visibility: Option<LogVisibilityV2>,
     wasm_memory_limit: Option<NumBytes>,
-    environment_variables: Option<BTreeMap<String, String>>,
+    environment_variables: Option<EnvironmentVariables>,
 }
 
 impl ValidatedCanisterSettings {
@@ -416,7 +459,7 @@ impl ValidatedCanisterSettings {
         self.wasm_memory_limit
     }
 
-    pub fn environment_variables(&self) -> Option<&BTreeMap<String, String>> {
+    pub fn environment_variables(&self) -> Option<&EnvironmentVariables> {
         self.environment_variables.as_ref()
     }
 }
