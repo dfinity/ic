@@ -251,7 +251,9 @@ pub fn get_system_state() -> SystemState {
     let mut env_vars = BTreeMap::new();
     env_vars.insert("TEST_VAR_1".to_string(), "Hello World".to_string());
     env_vars.insert("PATH".to_string(), "/usr/local/bin:/usr/bin".to_string());
-    let mut system_state = SystemStateBuilder::new().environment_variables(env_vars).build();
+    let mut system_state = SystemStateBuilder::new()
+        .environment_variables(env_vars)
+        .build();
     system_state
         .new_call_context(
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5), NO_DEADLINE),

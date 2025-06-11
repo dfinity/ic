@@ -2377,7 +2377,7 @@ fn test_env_var_value_operations() {
             .unwrap(),
         23 // length of "/usr/local/bin:/usr/bin"
     );
-    api.ic0_env_var_value_copy(0, path_var.len(),0, 0, 23, &mut heap)
+    api.ic0_env_var_value_copy(0, path_var.len(), 0, 0, 23, &mut heap)
         .unwrap();
     assert_eq!(&heap[0..23], b"/usr/local/bin:/usr/bin");
 
