@@ -5,6 +5,7 @@ use ic_protobuf::{
     registry::routing_table::v1 as pb,
     types::v1 as pb_types,
 };
+use std::collections::HashMap;
 use std::{
     collections::BTreeMap,
     convert::{TryFrom, TryInto},
@@ -78,20 +79,28 @@ impl TryFrom<pb::RoutingTable> for RoutingTable {
     type Error = ProxyDecodeError;
 
     fn try_from(src: pb::RoutingTable) -> Result<Self, Self::Error> {
-        let mut map = BTreeMap::new();
-        for entry in src.entries {
-            let range = try_from_option_field(entry.range, "RoutingTable::Entry::range")?;
-            let subnet_id =
-                try_from_option_field(entry.subnet_id, "RoutingTable::Entry::subnet_id")?;
-            let subnet_id = subnet_id_try_from_protobuf(subnet_id)?;
-            if let Some(prev_subnet_id) = map.insert(range, subnet_id) {
-                return Err(ProxyDecodeError::DuplicateEntry {
-                    key: format!("{:?}", range),
-                    v1: prev_subnet_id.to_string(),
-                    v2: subnet_id.to_string(),
-                });
-            }
+        let entries_count = src.entries.len();
+        let map: BTreeMap<_, _> = src
+            .entries
+            .into_iter()
+            .map(|entry| {
+                let range = try_from_option_field(entry.range, "RoutingTable::Entry::range")?;
+                let subnet_id =
+                    try_from_option_field(entry.subnet_id, "RoutingTable::Entry::subnet_id")?;
+                let subnet_id = subnet_id_try_from_protobuf(subnet_id)?;
+
+                Ok((range, subnet_id))
+            })
+            .collect::<Result<_, Self::Error>>()?;
+
+        if map.len() != entries_count {
+            let diff = entries_count.saturating_sub(map.len());
+            return Err(ProxyDecodeError::Other(format!(
+                "There were {} duplicate entries in the routing table",
+                diff
+            )));
         }
+
         Ok(map.try_into()?)
     }
 }

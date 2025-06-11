@@ -93,10 +93,11 @@ fn measure_snapshot_creation_with_100_segments_of_1000_entries() -> BenchResult 
     benchmark_snapshot_creation_with_entries(100, 1000)
 }
 
+/// 20k entries costs 250m instructions to validate
 #[bench(raw)]
 fn measure_routing_table_invariant_checks() -> BenchResult {
     let _feature = temporarily_enable_chunkifying_large_values();
-    let mut registry = setup_registry_with_rt_segments_with_x_entries_each(10000, 20);
+    let mut registry = setup_registry_with_rt_segments_with_x_entries_each(1000, 20);
     let rt =
         registry.get_routing_table_from_canister_range_records_or_panic(registry.latest_version());
     let rt_mutation = upsert(

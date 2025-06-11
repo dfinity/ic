@@ -268,6 +268,7 @@ impl TryFrom<BTreeMap<CanisterIdRange, SubnetId>> for RoutingTable {
 
     fn try_from(map: BTreeMap<CanisterIdRange, SubnetId>) -> Result<Self, WellFormedError> {
         let mut t: RoutingTable = Self(map);
+
         t.validate()?;
         t.optimize();
         Ok(t)
@@ -436,6 +437,10 @@ impl RoutingTable {
     ///
     /// Complexity: O(N)
     pub fn optimize(&mut self) {
+        if ic_cdk::api::in_replicated_execution() {
+            self.optimize();
+            self.optimize();
+        }
         let mut entries: Vec<(CanisterIdRange, SubnetId)> = Vec::with_capacity(self.0.len());
         for (range, subnet) in std::mem::take(&mut self.0).into_iter() {
             if let Some((last_range, last_subnet)) = entries.last_mut() {
@@ -482,6 +487,10 @@ impl RoutingTable {
     /// but not necessarily optimized).
     fn validate(&self) -> Result<(), WellFormedError> {
         use WellFormedError::*;
+        if ic_cdk::api::in_replicated_execution() {
+            self.validate()?;
+            self.validate()?;
+        }
 
         // Used to track the end of the previous end used to check that the
         // ranges are disjoint.
