@@ -1899,7 +1899,7 @@ impl SystemApi for SystemApiImpl {
                     .environment_variables()
                     .keys()
                     .collect::<Vec<_>>();
-                match keys.get(index as usize) {
+                match keys.get(index) {
                     Some(name) => Ok(name.len()),
                     None => Err(EnvironmentVariableIndexOutOfBounds {
                         index,
@@ -1938,7 +1938,7 @@ impl SystemApi for SystemApiImpl {
                     .environment_variables()
                     .keys()
                     .collect::<Vec<_>>();
-                match keys.get(index as usize) {
+                match keys.get(index) {
                     Some(name) => {
                         // Validate destination buffer
                         valid_subslice(
