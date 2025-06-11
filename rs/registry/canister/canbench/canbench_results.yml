@@ -5,47 +5,26 @@ benches:
       instructions: 20611966
       heap_increase: 0
       stable_memory_increase: 0
-    scopes: {}
-  measure_snapshot_creation_with_1000_segments_of_1000_entries:
-    total:
-      calls: 1
-      instructions: 71690203
-      heap_increase: 787
-      stable_memory_increase: 0
-    scopes: {}
+    scopes: { }
   measure_snapshot_creation_with_100_000_individual_entries:
     total:
       calls: 1
       instructions: 3578647862
       heap_increase: 195
       stable_memory_increase: 0
-    scopes: {}
+    scopes: { }
   measure_snapshot_creation_with_100_segments_of_1000_entries:
     total:
       calls: 1
       instructions: 6436390
       heap_increase: 72
       stable_memory_increase: 0
-    scopes: {}
-  measure_snapshot_creation_with_10_000_individual_entries:
-    total:
-      calls: 1
-      instructions: 281857410
-      heap_increase: 0
-      stable_memory_increase: 0
-    scopes: {}
-  measure_snapshot_creation_with_10_segments_of_1000_entries:
-    total:
-      calls: 1
-      instructions: 570879
-      heap_increase: 0
-      stable_memory_increase: 0
-    scopes: {}
+    scopes: { }
   measure_snapshot_creation_with_1_segment_of_1000_entries:
     total:
       calls: 1
       instructions: 54071
       heap_increase: 0
       stable_memory_increase: 0
-    scopes: {}
+    scopes: { }
 version: 0.1.15
