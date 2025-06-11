@@ -1,3 +1,4 @@
+use crate::flags::temporarily_enable_chunkifying_large_values;
 use crate::invariants::routing_table::check_routing_table_invariants;
 use crate::registry::Registry;
 use canbench_rs::{bench, bench_fn, BenchResult};
@@ -94,7 +95,8 @@ fn measure_snapshot_creation_with_100_segments_of_1000_entries() -> BenchResult 
 
 #[bench(raw)]
 fn measure_routing_table_invariant_checks() -> BenchResult {
-    let mut registry = setup_registry_with_rt_segments_with_x_entries_each(1000, 20);
+    let _feature = temporarily_enable_chunkifying_large_values();
+    let mut registry = setup_registry_with_rt_segments_with_x_entries_each(10000, 20);
     let rt =
         registry.get_routing_table_from_canister_range_records_or_panic(registry.latest_version());
     let rt_mutation = upsert(
@@ -103,5 +105,6 @@ fn measure_routing_table_invariant_checks() -> BenchResult {
     );
     registry.apply_mutations_for_test(vec![rt_mutation]);
     let snapshot = registry.take_latest_snapshot();
+
     bench_fn(|| check_routing_table_invariants(&snapshot))
 }
