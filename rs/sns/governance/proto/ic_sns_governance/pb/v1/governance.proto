@@ -1594,6 +1594,17 @@ message GetMetadataResponse {
   optional string description = 4;
 }
 
+// Request message for 'get_sns_status'
+message GetMetricsRequest {
+  uint64 time_window_seconds = 1;
+}
+
+// Response message for 'get_sns_status'
+message Metrics {
+  uint64 num_recently_submitted_proposals = 1;
+  uint64 last_ledger_block_timestamp = 2;
+}
+
 // Request message for 'get_sns_initialization_parameters'
 message GetSnsInitializationParametersRequest {}
 

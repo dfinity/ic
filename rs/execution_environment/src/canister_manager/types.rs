@@ -476,6 +476,9 @@ pub(crate) enum CanisterManagerError {
         requested: u64,
         allowed: u64,
     },
+    InvalidSpecifiedId {
+        specified_id: CanisterId,
+    },
 }
 
 impl AsErrorHelp for CanisterManagerError {
@@ -664,6 +667,10 @@ impl AsErrorHelp for CanisterManagerError {
             },
             CanisterManagerError::SliceTooLarge { .. } => ErrorHelp::UserError {
                 suggestion: format!("Use a slice size at most {}", MAX_SLICE_SIZE_BYTES),
+                doc_link: "".to_string(),
+            },
+            CanisterManagerError::InvalidSpecifiedId { .. } => ErrorHelp::UserError {
+                suggestion: "Use a `specified_id` that matches a canister ID on the ICP mainnet and a test environment that supports canister creation with `specified_id` (e.g., PocketIC).".to_string(),
                 doc_link: "".to_string(),
             }
         }
@@ -1005,6 +1012,12 @@ impl From<CanisterManagerError> for UserError {
                 Self::new(
                     ErrorCode::InvalidManagementPayload,
                     format!("Requested slice too large: {} > {}", requested, allowed),
+                )
+            }
+            InvalidSpecifiedId { specified_id } => {
+                Self::new(
+                    ErrorCode::InvalidManagementPayload,
+                    format!("The `specified_id` {specified_id} is invalid because it belongs to the canister allocation ranges of the test environment.{additional_help}")
                 )
             }
         }
