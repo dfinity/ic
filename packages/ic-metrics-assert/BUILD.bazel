@@ -8,6 +8,10 @@ package(default_visibility = ["//visibility:public"])
         srcs = glob(["src/**/*.rs"]),
         crate_features = features,
         crate_name = "ic_metrics_assert",
+        proc_macro_deps = [
+            # Keep sorted.
+            "@crate_index//:async-trait",
+        ],
         deps = [
             # Keep sorted.
             "//packages/ic-http-types",
@@ -16,10 +20,6 @@ package(default_visibility = ["//visibility:public"])
             "@crate_index//:serde",
             "@crate_index//:serde_bytes",
         ] + extra_deps,
-        proc_macro_deps = [
-            # Keep sorted.
-            "@crate_index//:async-trait",
-        ],
     )
     for (name_suffix, features, extra_deps) in [
         [
