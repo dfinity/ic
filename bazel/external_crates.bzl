@@ -119,11 +119,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 },
             ),
         )],
-        "cranelift-assembler-x64": [crate.annotation(
-            # Patch for determinism issues
-            patch_args = ["-p3"],
-            patches = ["@@//bazel:cranelift-assembler-lib.patch"],
-        )],
         "secp256k1-sys": [crate.annotation(
             # This specific version is used by ic-btc-kyt canister, which
             # requires an extra cfg flag to avoid linking issues.
