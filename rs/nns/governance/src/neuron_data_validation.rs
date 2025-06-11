@@ -1,5 +1,4 @@
 use crate::{
-    is_disburse_maturity_enabled,
     neuron::Neuron,
     neuron_store::NeuronStore,
     pb::v1::Topic,
@@ -228,14 +227,12 @@ impl ValidationInProgress {
         tasks.push_back(Box::new(CardinalitiesValidationTask::<
             KnownNeuronIndexValidator,
         >::new()));
-        if is_disburse_maturity_enabled() {
-            tasks.push_back(Box::new(NeuronRangeValidationTask::<
-                MaturityDisbursementIndexValidator,
-            >::new()));
-            tasks.push_back(Box::new(CardinalitiesValidationTask::<
-                MaturityDisbursementIndexValidator,
-            >::new()));
-        }
+        tasks.push_back(Box::new(NeuronRangeValidationTask::<
+            MaturityDisbursementIndexValidator,
+        >::new()));
+        tasks.push_back(Box::new(CardinalitiesValidationTask::<
+            MaturityDisbursementIndexValidator,
+        >::new()));
 
         Self {
             started_time_seconds: now,
@@ -867,10 +864,7 @@ mod tests {
         // data missing from indexes, and 2 issues for cardinality mismatches for subaccount and
         // known neuron, since those are checked for exact matches.
         let issue_groups = summary.current_issues_summary.unwrap().issue_groups;
-        assert_eq!(
-            issue_groups.len(),
-            if is_disburse_maturity_enabled() { 7 } else { 6 }
-        );
+        assert_eq!(issue_groups.len(), 7);
         assert!(
             issue_groups
                 .iter()
@@ -939,19 +933,17 @@ mod tests {
             "{:?}",
             issue_groups
         );
-        if is_disburse_maturity_enabled() {
-            assert!(
-                issue_groups
-                    .iter()
-                    .any(|issue_group| issue_group.issues_count == 2
-                        && matches!(
-                            issue_group.example_issues[0],
-                            ValidationIssue::MaturityDisbursementMissingFromIndex { .. }
-                        )),
-                "{:?}",
-                issue_groups
-            );
-        }
+        assert!(
+            issue_groups
+                .iter()
+                .any(|issue_group| issue_group.issues_count == 2
+                    && matches!(
+                        issue_group.example_issues[0],
+                        ValidationIssue::MaturityDisbursementMissingFromIndex { .. }
+                    )),
+            "{:?}",
+            issue_groups
+        );
     }
 
     #[test]
@@ -985,10 +977,7 @@ mod tests {
         // data missing from indexes, and 2 issues for cardinality mismatches for subaccount and
         // known neuron, since those are checked for exact matches.
         let issue_groups = summary.current_issues_summary.unwrap().issue_groups;
-        assert_eq!(
-            issue_groups.len(),
-            if is_disburse_maturity_enabled() { 5 } else { 4 }
-        );
+        assert_eq!(issue_groups.len(), 5);
         assert!(
             issue_groups
                 .iter()
@@ -1037,20 +1026,18 @@ mod tests {
             "{:?}",
             issue_groups
         );
-        if is_disburse_maturity_enabled() {
-            assert!(
-                issue_groups
-                    .iter()
-                    .any(|issue_group| issue_group.issues_count == 1
-                        && issue_group.example_issues[0]
-                            == ValidationIssue::MaturityDisbursementIndexCardinalityMismatch {
-                                primary: 0,
-                                index: 4
-                            }),
-                "{:?}",
-                issue_groups
-            );
-        }
+        assert!(
+            issue_groups
+                .iter()
+                .any(|issue_group| issue_group.issues_count == 1
+                    && issue_group.example_issues[0]
+                        == ValidationIssue::MaturityDisbursementIndexCardinalityMismatch {
+                            primary: 0,
+                            index: 4
+                        }),
+            "{:?}",
+            issue_groups
+        );
     }
 
     #[test]

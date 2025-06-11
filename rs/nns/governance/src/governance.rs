@@ -11,7 +11,6 @@ use crate::{
         initialize_governance, reassemble_governance_proto, split_governance_proto,
         HeapGovernanceData, XdrConversionRate,
     },
-    is_disburse_maturity_enabled,
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder, Visibility},
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
     neuron_store::{
@@ -3260,13 +3259,6 @@ impl Governance {
         caller: &PrincipalId,
         disburse_maturity: &manage_neuron::DisburseMaturity,
     ) -> Result<u64, GovernanceError> {
-        if !is_disburse_maturity_enabled() {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::InvalidCommand,
-                "DisburseMaturity is not yet supported.",
-            ));
-        }
-
         self.check_heap_can_grow()?;
 
         let now_seconds = self.env.now();
