@@ -1499,6 +1499,7 @@ fn handle_compute_manifest_request(
 
     release_lock_and_persist_metadata(log, metrics, state_layout, states, persist_metadata_guard);
 
+    let _timer = request_timer(&metrics, "compute_manifest_rehash");
     let start = Instant::now();
     let rehashed_manifest = crate::manifest::compute_manifest(
         thread_pool,
