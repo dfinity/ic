@@ -5,7 +5,6 @@ use ic_protobuf::registry::routing_table::v1::routing_table::Entry;
 use ic_protobuf::registry::routing_table::v1::RoutingTable;
 use ic_registry_keys::make_canister_ranges_key;
 use ic_registry_routing_table::CanisterIdRange;
-use ic_registry_transport::pb::v1::RegistryValue;
 use ic_registry_transport::upsert;
 use prost::Message;
 
