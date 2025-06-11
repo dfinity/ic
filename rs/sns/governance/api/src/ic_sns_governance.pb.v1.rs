@@ -1666,7 +1666,12 @@ pub mod get_metrics_response {
         Err(GovernanceError),
     }
 
-    #[derive(candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
+    impl Default for GetMetricsResult {
+        fn default() -> Self {
+            Self::Ok(Metrics::default())
+        }
+    }
+    #[derive(candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq, Default)]
     pub struct GetMetricsResponse {
         pub get_metrics_result: Option<GetMetricsResult>,
     }
