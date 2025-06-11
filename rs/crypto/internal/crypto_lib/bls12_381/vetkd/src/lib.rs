@@ -9,6 +9,7 @@ pub use ic_crypto_internal_bls12_381_type::{G1Affine, G2Affine, PairingInvalidPo
 use ic_crypto_internal_bls12_381_type::{G2Prepared, Gt, LagrangeCoefficients};
 
 use rand::{CryptoRng, RngCore};
+use std::collections::BTreeMap;
 
 /// The index of a node
 pub type NodeIndex = u32;
@@ -223,15 +224,17 @@ impl EncryptedKey {
     /// Combine, unchecked.
     /// The returned key may be invalid.
     fn combine_unchecked(
-        nodes: &[(NodeIndex, EncryptedKeyShare)],
+        nodes: &BTreeMap<NodeIndex, EncryptedKeyShare>,
         reconstruction_threshold: usize,
     ) -> Result<Self, EncryptedKeyCombinationError> {
         if nodes.len() < reconstruction_threshold {
             return Err(EncryptedKeyCombinationError::InsufficientShares);
         }
 
-        let l = LagrangeCoefficients::at_zero(&nodes.iter().map(|i| i.0).collect::<Vec<_>>())
-            .map_err(|_| EncryptedKeyCombinationError::DuplicateNodeIndex)?;
+        let l = LagrangeCoefficients::at_zero(
+            &nodes.iter().map(|(k, _v)| *k).collect::<Vec<NodeIndex>>(),
+        )
+        .map_err(|_| EncryptedKeyCombinationError::DuplicateNodeIndex)?;
 
         let c1 = l
             .interpolate_g1(&nodes.iter().map(|i| &i.1.c1).collect::<Vec<_>>())
@@ -252,7 +255,7 @@ impl EncryptedKey {
     /// Returns the combined key, if it is valid.
     /// Does not take the nodes' individual public keys as input.
     pub fn combine_all(
-        nodes: &[(NodeIndex, EncryptedKeyShare)],
+        nodes: &BTreeMap<NodeIndex, EncryptedKeyShare>,
         reconstruction_threshold: usize,
         master_pk: &G2Affine,
         tpk: &TransportPublicKey,
@@ -274,7 +277,7 @@ impl EncryptedKey {
     /// must be available: calculating them is comparatively expensive. Note that combine_all does not
     /// take the individual public keys as input.
     pub fn combine_valid_shares(
-        nodes: &[(NodeIndex, G2Affine, EncryptedKeyShare)],
+        nodes: &BTreeMap<NodeIndex, (G2Affine, EncryptedKeyShare)>,
         reconstruction_threshold: usize,
         master_pk: &G2Affine,
         tpk: &TransportPublicKey,
@@ -285,31 +288,12 @@ impl EncryptedKey {
             return Err(EncryptedKeyCombinationError::InsufficientShares);
         }
 
-        /*
-         * As we are called in practice by the vault, it should not be possible
-         * for there to be duplicated NodeIndex values in the `nodes` parameter,
-         * eg due to a duplicated share. However if this ever did occur, we might
-         * not correctly reconstruct the VetKey, even if sufficient valid shares
-         * were available.
-         *
-         * Handle this case by first verifying the share, then checking if it is
-         * a share for a node we have not already included in the reconstruction
-         * set. We do not track the node ids of shares which did not verify,
-         * since otherwise an invalid share that was purportedly from some node
-         * would prevent considering a valid share from that node that appeared
-         * later in the list.
-         */
-        let mut node_ids_seen = std::collections::HashSet::new();
-
         // Take the first reconstruction_threshold shares which pass validity check
-        let mut valid_shares = Vec::with_capacity(reconstruction_threshold);
+        let mut valid_shares = BTreeMap::new();
 
-        for (node_index, node_pk, node_eks) in nodes.iter() {
-            if node_eks.is_valid(master_pk, node_pk, context, input, tpk)
-                && !node_ids_seen.contains(node_index)
-            {
-                node_ids_seen.insert(*node_index);
-                valid_shares.push((*node_index, node_eks.clone()));
+        for (node_index, (node_pk, node_eks)) in nodes.iter() {
+            if node_eks.is_valid(master_pk, node_pk, context, input, tpk) {
+                valid_shares.insert(*node_index, node_eks.clone());
 
                 // Have we collected enough shares?
                 // If so stop verifying and proceed with reconstruction
