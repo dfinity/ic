@@ -3650,44 +3650,21 @@ fn can_detect_divergence_with_rehash() {
 
             let pages_per_chunk = DEFAULT_CHUNK_SIZE as u64 / PAGE_SIZE as u64;
             assert_eq!(DEFAULT_CHUNK_SIZE as usize % PAGE_SIZE, 0);
-            insert_dummy_canister(&mut state, canister_test_id(90));
             insert_dummy_canister(&mut state, canister_test_id(100));
-            insert_dummy_canister(&mut state, canister_test_id(110));
-
-            let canister_state = state.canister_state_mut(&canister_test_id(90)).unwrap();
-            let execution_state = canister_state.execution_state.as_mut().unwrap();
-            execution_state.wasm_memory.page_map.update(&[
-                (PageIndex::new(1), &[99u8; PAGE_SIZE]),
-                (PageIndex::new(300), &[99u8; PAGE_SIZE]),
-            ]);
 
             let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
-            canister_state
-                .execution_state
-                .as_mut()
-                .unwrap()
-                .stable_memory
-                .page_map
-                .update(&[(PageIndex::new(0), &[255u8; PAGE_SIZE])]);
             let execution_state = canister_state.execution_state.as_mut().unwrap();
-            execution_state.wasm_memory.page_map.update(&[
-                (PageIndex::new(1), &[100u8; PAGE_SIZE]),
-                (PageIndex::new(3000), &[100u8; PAGE_SIZE]),
-            ]);
-
-            let canister_state = state.canister_state_mut(&canister_test_id(110)).unwrap();
-            let execution_state = canister_state.execution_state.as_mut().unwrap();
-            execution_state.wasm_memory.page_map.update(&[
-                (PageIndex::new(0), &[111u8; PAGE_SIZE]),
-                (PageIndex::new(pages_per_chunk - 1), &[0; PAGE_SIZE]),
-                (PageIndex::new(pages_per_chunk), &[112u8; PAGE_SIZE]),
-                (PageIndex::new(2 * pages_per_chunk - 1), &[0; PAGE_SIZE]),
-            ]);
+            for i in 0..1000 {
+                execution_state
+                    .wasm_memory
+                    .page_map
+                    .update(&[(PageIndex::new(i), &[99u8; PAGE_SIZE])]);
+            }
 
             state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
             state_manager.flush_tip_channel();
 
-            // Corrupt some files
+            // Corrupt some data
             let state_layout = state_manager.state_layout();
             let mutable_cp_layout = CheckpointLayout::<RwPolicy<()>>::new_untracked(
                 state_layout
@@ -3699,24 +3676,24 @@ fn can_detect_divergence_with_rehash() {
             )
             .unwrap();
 
-            let canister_90_layout = mutable_cp_layout.canister(&canister_test_id(90)).unwrap();
-            let canister_90_memory = canister_90_layout
+            let canister_layout = mutable_cp_layout.canister(&canister_test_id(100)).unwrap();
+            let canister_memory = canister_layout
                 .vmemory_0()
                 .existing_overlays()
                 .unwrap()
                 .remove(0);
-            make_mutable(&canister_90_memory).unwrap();
+            make_mutable(&canister_memory).unwrap();
             std::fs::OpenOptions::new()
                 .write(true)
                 .create(false)
                 .truncate(false)
-                .open(&canister_90_memory)
+                .open(&canister_memory)
                 .unwrap()
                 .write_all_at(b"Garbage", 0)
                 .unwrap();
-            make_readonly(&canister_90_memory).unwrap();
+            make_readonly(&canister_memory).unwrap();
 
-            for i in 2..30 {
+            for i in 2..100 {
                 let (_height, state) = state_manager.take_tip();
                 state_manager.commit_and_certify(state, height(i), CertificationScope::Full, None);
                 state_manager.flush_tip_channel();
