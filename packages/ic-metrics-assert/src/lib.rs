@@ -152,10 +152,7 @@ pub trait CanisterHttpQuery<E: Debug> {
 
 /// Trait providing the ability to perform an async HTTP request to a canister.
 #[async_trait]
-pub trait AsyncCanisterHttpQuery<E>
-where
-    E: Debug,
-{
+pub trait AsyncCanisterHttpQuery<E: Debug> {
     /// Sends a serialized HTTP request to a canister and returns the serialized HTTP response.
     async fn http_query(&self, request: Vec<u8>) -> Result<Vec<u8>, E>;
 }
@@ -163,7 +160,9 @@ where
 #[cfg(feature = "pocket_ic")]
 mod pocket_ic_query_call {
     use super::*;
-    use pocket_ic::PocketIc;
+    use candid::Principal;
+    use ic_management_canister_types::CanisterId;
+    use pocket_ic::{PocketIc, RejectResponse};
 
     /// Provides an implementation of the [`CanisterHttpQuery`] trait in the case where the canister
     /// HTTP requests are made through an instance of [`PocketIc`].
