@@ -1,5 +1,6 @@
 load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("//ic-os:defs.bzl", "dev_wrapper")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
 
@@ -55,6 +56,10 @@ LIB_SOURCES = glob(
 rust_library(
     name = "config_lib",
     srcs = LIB_SOURCES,
+    crate_features = select({
+        "//ic-os:dev_mode": ["dev"],
+        "//conditions:default": [],
+    }),
     crate_name = "config",
     visibility = [
         "//rs:ic-os-pkg",
@@ -65,6 +70,7 @@ rust_library(
 
 rust_library(
     name = "config_lib_dev",
+    testonly = True,
     srcs = LIB_SOURCES,
     crate_features = ["dev"],
     crate_name = "config",
@@ -79,7 +85,6 @@ rust_test(
     name = "config_lib_test",
     crate = ":config_lib_dev",
     crate_features = ["dev"],
-    # You may add other deps that are specific to the test configuration
     deps = DEV_DEPENDENCIES,
 )
 
@@ -87,6 +92,10 @@ rust_binary(
     name = "config",
     srcs = BIN_SOURCES,
     aliases = ALIASES,
+    crate_features = select({
+        "//ic-os:dev_mode": ["dev"],
+        "//conditions:default": [],
+    }),
     crate_name = "config",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = [
@@ -94,16 +103,9 @@ rust_binary(
     ] + DEPENDENCIES,
 )
 
-rust_binary(
+dev_wrapper(
     name = "config_dev",
-    srcs = BIN_SOURCES,
-    aliases = ALIASES,
-    crate_features = ["dev"],
-    crate_name = "config",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = [
-        ":config_lib_dev",
-    ] + DEPENDENCIES,
+    actual = ":config",
 )
 
 rust_test(
@@ -114,6 +116,5 @@ rust_test(
     env = {"CARGO_MANIFEST_DIR": "rs/ic_os/generate_guestos_vm_config"},
     # Run without sandbox so that goldenfiles can be updated by passing "--test_env UPDATE_GOLDENFILES=1"
     tags = ["local"],
-    # You may add other deps that are specific to the test configuration
     deps = DEV_DEPENDENCIES,
 )

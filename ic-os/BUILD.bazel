@@ -1,6 +1,22 @@
+load("@bazel_skylib//rules:common_settings.bzl", "bool_setting")
+
 exports_files([
     "vuln-scan/vuln-scan.sh",
     "vuln-scan/vuln-scan.html",
     "dev-tools/launch-remote-vm.sh",
     "dev-tools/build-setupos-config-image.sh",
 ])
+
+# Dev flag setting
+bool_setting(
+    name = "dev",
+    build_setting_default = False,
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "dev_mode",
+    flag_values = {
+        ":dev": "True",
+    },
+)

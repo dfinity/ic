@@ -9,7 +9,9 @@ This macro defines the overall build process for ICOS images, including:
   - Additional developer and test utilities.
 """
 
+load("@bazel_skylib//lib:paths.bzl", "paths")
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
+load("@rules_rust//rust:rust_common.bzl", "CrateInfo", "DepInfo")
 load("//bazel:defs.bzl", "zstd_compress")
 load("//ic-os/bootloader:defs.bzl", "build_grub_partition")
 load("//ic-os/components:defs.bzl", "tree_hash")
@@ -158,6 +160,7 @@ def icos_build(
     for test_suffix in (["", "-test"] if upgrades else [""]):
         partition_root = "partition-root" + test_suffix
         partition_root_unsigned_tzst = partition_root + "-unsigned.tzst"
+        partition_root_unsigned_tzst_base = partition_root + "-unsigned-base.tzst"
         partition_root_signed_tzst = partition_root + ".tzst"
         partition_root_hash = partition_root + "-hash"
         partition_boot_tzst = "partition-boot" + test_suffix + ".tzst"
@@ -166,7 +169,7 @@ def icos_build(
         extra_boot_args = "extra_boot" + test_suffix + "_args"
 
         ext4_image(
-            name = partition_root_unsigned_tzst,
+            name = partition_root_unsigned_tzst_base,
             testonly = malicious,
             src = ":rootfs-tree.tar",
             file_contexts = ":file_contexts",
@@ -179,6 +182,10 @@ def icos_build(
             target_compatible_with = ["@platforms//os:linux"],
             tags = ["manual", "no-cache"],
         )
+        if mode == "dev":
+            dev_wrapper(name = partition_root_unsigned_tzst, actual = partition_root_unsigned_tzst_base, tags = ["manual", "no-cache"], testonly = malicious)
+        else:
+            native.alias(name = partition_root_unsigned_tzst, actual = partition_root_unsigned_tzst_base, tags = ["manual", "no-cache"])
 
         ext4_image(
             name = partition_boot_tzst,
@@ -438,6 +445,71 @@ tar_extract = rule(
             mandatory = True,
         ),
         "path": attr.string(
+            mandatory = True,
+        ),
+    },
+)
+
+# Transition that enables dev flag
+def _dev_transition_impl(_settings, _attr):
+    return {
+        "//ic-os:dev": True,
+    }
+
+dev_transition = transition(
+    implementation = _dev_transition_impl,
+    inputs = [],
+    outputs = ["//ic-os:dev"],
+)
+
+def _dev_wrapper_impl(ctx):
+    actual = ctx.attr.actual
+    if type(actual) == type([]):
+        actual = actual[0]
+    providers = []
+
+    # Forward Rust-specific providers if they exist
+    for provider in [CrateInfo, DepInfo]:
+        if provider in actual:
+            providers.append(actual[provider])
+
+    # Handle DefaultInfo and executable symlinking
+    default_info = actual[DefaultInfo]
+    original_executable = default_info.files_to_run.executable
+
+    if not original_executable:
+        # No executable to wrap, just forward existing providers
+        providers.append(default_info)
+        return providers
+
+    # Create symlinked executable in subdirectory to avoid name collision
+    new_executable = ctx.actions.declare_file(
+        paths.join(ctx.label.name, original_executable.basename),
+    )
+
+    ctx.actions.symlink(
+        output = new_executable,
+        target_file = original_executable,
+        is_executable = True,
+    )
+
+    # Create new DefaultInfo with symlinked executable
+    new_files = depset(direct = [new_executable], transitive = [default_info.files])
+    new_runfiles = default_info.default_runfiles.merge(ctx.runfiles([new_executable]))
+
+    providers.append(DefaultInfo(
+        files = new_files,
+        runfiles = new_runfiles,
+        executable = new_executable,
+    ))
+
+    return providers
+
+dev_wrapper = rule(
+    implementation = _dev_wrapper_impl,
+    attrs = {
+        "actual": attr.label(
+            cfg = dev_transition,
             mandatory = True,
         ),
     },

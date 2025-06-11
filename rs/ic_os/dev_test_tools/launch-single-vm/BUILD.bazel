@@ -1,10 +1,11 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("//ic-os:defs.bzl", "dev_wrapper")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/ic_os/config:config_lib_dev",
+    "//rs/ic_os/config:config_lib",
     "//rs/ic_os/config_types",
     "//rs/prep",
     "//rs/registry/subnet_type",
@@ -25,7 +26,7 @@ MACRO_DEPENDENCIES = []
 ALIASES = {}
 
 rust_binary(
-    name = "launch-single-vm",
+    name = "launch-single-vm-base",
     testonly = True,
     srcs = glob(["src/*.rs"]),
     aliases = ALIASES,
@@ -35,4 +36,10 @@ rust_binary(
         "@platforms//os:linux",
     ],
     deps = DEPENDENCIES,
+)
+
+dev_wrapper(
+    name = "launch-single-vm",
+    testonly = True,
+    actual = ":launch-single-vm-base",
 )
