@@ -71,7 +71,7 @@ pub(crate) fn sigsegv_memory_tracker_handler(
         // generate accesses extending beyond the guard pages on either end of
         // each memory. So any access within a given memory range is guaranteed
         // to be an access that was intended for that memory.
-        let (_, memory_tracker, memory_page_size) = memories
+        let (b, memory_tracker, memory_page_size) = memories
             .iter()
             .rev()
             .find(|(base, _, _)| *base as *mut c_void <= si_addr)

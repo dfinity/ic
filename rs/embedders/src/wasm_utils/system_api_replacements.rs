@@ -34,6 +34,8 @@ pub(super) fn replacement_functions(
     dirty_page_overhead: NumInstructions,
     main_memory_type: WasmMemoryType,
     max_wasm_memory_size: NumBytes,
+    read_index: u32,
+    write_index: u32,
 ) -> Vec<(SystemApiFunc, (FuncType, Body<'static>))> {
     let count_clean_pages_fn_index = special_indices.count_clean_pages_fn;
     let dirty_pages_counter_index = special_indices.dirty_pages_counter_ix;
@@ -252,6 +254,14 @@ pub(super) fn replacement_functions(
                                 function_index: decr_instruction_counter_fn,
                             },
                             Drop,
+                            // Call the memory barrier
+                            LocalGet { local_index: DST },
+                            I64ExtendI32U,
+                            LocalGet { local_index: LEN },
+                            I64ExtendI32U,
+                            Call {
+                                function_index: write_index,
+                            },
                             // if size is 0 we return
                             // (correctness of the code that follows depends on the size being > 0)
                             // note that we won't return errors if addresses are out of bounds
@@ -502,6 +512,12 @@ pub(super) fn replacement_functions(
                                 function_index: decr_instruction_counter_fn,
                             },
                             Drop,
+                            // Call the memory barrier
+                            LocalGet { local_index: DST },
+                            LocalGet { local_index: LEN },
+                            Call {
+                                function_index: write_index,
+                            },
                             // if size is 0 we return
                             // (correctness of the code that follows depends on the size being > 0)
                             // note that we won't return errors if addresses are out of bounds
@@ -781,6 +797,14 @@ pub(super) fn replacement_functions(
                                 function_index: decr_instruction_counter_fn,
                             },
                             Drop,
+                            // Call the memory barrier
+                            LocalGet { local_index: SRC },
+                            I64ExtendI32U,
+                            LocalGet { local_index: LEN },
+                            I64ExtendI32U,
+                            Call {
+                                function_index: read_index,
+                            },
                             // If memory is too big for 32bit api, we trap
                             MemorySize {
                                 mem: stable_memory_index,
@@ -1000,6 +1024,12 @@ pub(super) fn replacement_functions(
                                 function_index: decr_instruction_counter_fn,
                             },
                             Drop,
+                            // Call the memory barrier
+                            LocalGet { local_index: SRC },
+                            LocalGet { local_index: LEN },
+                            Call {
+                                function_index: read_index,
+                            },
                             // if size is 0 we return
                             // (correctness of the code that follows depends on the size being > 0)
                             // note that we won't return errors if addresses are out of bounds

@@ -126,7 +126,7 @@ use crate::wasmtime_embedder::{
     STABLE_BYTEMAP_MEMORY_NAME, STABLE_MEMORY_NAME, WASM_HEAP_BYTEMAP_MEMORY_NAME,
     WASM_HEAP_MEMORY_NAME,
 };
-use ic_wasm_transform::{self, Global, Module};
+use ic_wasm_transform::{self, Body, Global, Module};
 use wasmparser::{
     BlockType, CompositeInnerType, CompositeType, Export, ExternalKind, FuncType, GlobalType,
     Import, MemoryType, Operator, SubType, TypeRef, ValType,
@@ -1158,6 +1158,18 @@ fn replace_system_api_functions(
         .filter(|i| matches!(i.ty, TypeRef::Func(_)))
         .count();
 
+    // Add memory barrier functions
+    let (ty, body) = memory_read_barrier_function();
+    let read_index = (number_of_func_imports + module.functions.len()) as u32;
+    let type_idx = add_func_type(module, ty);
+    module.functions.push(type_idx);
+    module.code_sections.push(body);
+    let (ty, body) = memory_write_barrier_function();
+    let write_index = (number_of_func_imports + module.functions.len()) as u32;
+    let type_idx = add_func_type(module, ty);
+    module.functions.push(type_idx);
+    module.code_sections.push(body);
+
     // Collect a single map of all the function indexes that need to be
     // replaced.
     let mut func_index_replacements = BTreeMap::new();
@@ -1166,6 +1178,8 @@ fn replace_system_api_functions(
         dirty_page_overhead,
         main_memory_type,
         max_wasm_memory_size,
+        read_index,
+        write_index,
     ) {
         if let Some(old_index) = api_indexes.get(&api) {
             let type_idx = add_func_type(module, ty);
@@ -1739,7 +1753,7 @@ fn memory64_barrier_instructions<'a>(
     }
 
     // Trigger page guard for the first accessed byte only if needed.
-    let page_guard_import = match kind {
+    let page_guard_rmport = match kind {
         AccessKind::NativeLoad { .. } | AccessKind::ShortBulkLoad { .. } => {
             InjectedImports::MainReadPageGuard
         }
@@ -1895,12 +1909,12 @@ fn memory64_barrier_instructions<'a>(
 const IS_BULK_READ: i32 = 0;
 const IS_BULK_WRITE: i32 = 1;
 
-enum BulkAccessKind {
+pub(super) enum BulkAccessKind {
     Load,
     Store,
 }
 
-fn bulk_access_barrier_instructions<'a>(
+pub(super) fn bulk_access_barrier_instructions<'a>(
     kind: BulkAccessKind,
     address_argument_index: u32,
     length_argument_index: u32,
@@ -1994,6 +2008,42 @@ fn bulk_access_barrier_instructions<'a>(
         End, // End conditional for zero size
     ]);
     instructions
+}
+
+fn memory_read_barrier_function() -> (FuncType, Body<'static>) {
+    let ty = FuncType::new([ValType::I64, ValType::I64], []);
+    let mut instructions = vec![];
+    instructions.extend_from_slice(&bulk_access_barrier_instructions(
+        BulkAccessKind::Load,
+        0,
+        1,
+        2,
+        WasmMemoryType::Wasm64,
+    ));
+    instructions.push(Operator::End);
+    let body = Body {
+        locals: vec![(1, ValType::I32)],
+        instructions,
+    };
+    (ty, body)
+}
+
+fn memory_write_barrier_function() -> (FuncType, Body<'static>) {
+    let ty = FuncType::new([ValType::I64, ValType::I64], []);
+    let mut instructions = vec![];
+    instructions.extend_from_slice(&bulk_access_barrier_instructions(
+        BulkAccessKind::Store,
+        0,
+        1,
+        2,
+        WasmMemoryType::Wasm64,
+    ));
+    instructions.push(Operator::End);
+    let body = Body {
+        locals: vec![(1, ValType::I32)],
+        instructions,
+    };
+    (ty, body)
 }
 
 fn memory_copy_barrier_instructions<'a>(
