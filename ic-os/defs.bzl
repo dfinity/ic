@@ -53,6 +53,15 @@ def icos_build(
 
     image_deps = image_deps_func(mode, malicious)
 
+    # Validate that exactly one of boot_args_template or extra_boot_args is provided
+    has_boot_args_template = "boot_args_template" in image_deps
+    has_extra_boot_args = "extra_boot_args" in image_deps
+
+    if not has_boot_args_template and not has_extra_boot_args:
+        fail("Either 'boot_args_template' or 'extra_boot_args' must be provided in image_deps")
+    elif has_boot_args_template and has_extra_boot_args:
+        fail("Cannot provide both 'boot_args_template' and 'extra_boot_args' in image_deps - they are mutually exclusive")
+
     # -------------------- Version management --------------------
 
     copy_file(
@@ -190,8 +199,8 @@ def icos_build(
                 for k, v in (
                     image_deps["bootfs"].items() + [
                         (version_txt, "/version.txt:0644"),
-                        (extra_boot_args, "/extra_boot_args:0644"),
-                    ] + ([(boot_args, "/boot_args:0644")] if "boot_args_template" in image_deps else [])
+                    ] + ([(extra_boot_args, "/extra_boot_args:0644")] if "boot_args_template" not in image_deps else []) +
+                    ([(boot_args, "/boot_args:0644")] if "boot_args_template" in image_deps else [])
                 )
             },
             tags = ["manual", "no-cache"],
@@ -207,27 +216,12 @@ def icos_build(
         # - Stored statically on the boot partition
         # - Measured as part of the SEV launch measurement
         #
-        # For backwards compatibility in the GuestOS and compatibility with the HostOS and SetupOS, we continue
+        # For HostOS and SetupOS, we continue
         # to support the old way of calculating the dynamic args (see :extra_boot_args) and we derive boot_args
         # from it.
-        native.genrule(
-            name = "generate-" + boot_args,
-            outs = [boot_args],
-            srcs = [extra_boot_args, ":boot_args_template"],
-            cmd = """
-                source "$(location """ + extra_boot_args + """)"
-                if [ ! -v EXTRA_BOOT_ARGS ]; then
-                    echo "EXTRA_BOOT_ARGS is not set in $(location """ + extra_boot_args + """)"
-                    exit 1
-                fi
-                m4 --define=EXTRA_BOOT_ARGS="$${EXTRA_BOOT_ARGS}" "$(location :boot_args_template)" > $@
-            """,
-            tags = ["manual"],
-        )
 
-        # Sign only if extra_boot_args_template is provided
-        if "extra_boot_args_template" in image_deps:
-            extra_boot_args_template = str(image_deps["extra_boot_args_template"])
+        # Sign only for guestos builds (which have boot_args_template)
+        if "boot_args_template" in image_deps:
             native.genrule(
                 name = "generate-" + partition_root_signed_tzst,
                 testonly = malicious,
@@ -246,13 +240,12 @@ def icos_build(
                 ],
                 tags = ["manual", "no-cache"],
             )
-
             native.genrule(
-                name = "generate-" + extra_boot_args,
-                srcs = [extra_boot_args_template, partition_root_hash],
-                outs = [extra_boot_args],
+                name = "generate-" + boot_args,
+                outs = [boot_args],
+                srcs = [partition_root_hash, ":boot_args_template"],
                 cmd = "sed -e s/ROOT_HASH/$$(cat $(location " + partition_root_hash + "))/ " +
-                      "< $(location " + extra_boot_args_template + ") > $@",
+                      "< $(location :boot_args_template) > $@",
                 tags = ["manual"],
             )
         else:

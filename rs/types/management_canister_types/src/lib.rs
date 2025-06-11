@@ -3706,9 +3706,9 @@ impl TryFrom<pb_canister_state_bits::Global> for Global {
 
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
 pub struct ReadCanisterSnapshotMetadataArgs {
-    canister_id: PrincipalId,
+    pub canister_id: PrincipalId,
     #[serde(with = "serde_bytes")]
-    snapshot_id: Vec<u8>,
+    pub snapshot_id: Vec<u8>,
 }
 
 impl ReadCanisterSnapshotMetadataArgs {
@@ -3831,6 +3831,8 @@ pub struct ReadCanisterSnapshotMetadataResponse {
     pub global_timer: Option<GlobalTimer>,
     pub on_low_wasm_memory_hook_status: Option<OnLowWasmMemoryHookStatus>,
 }
+
+impl Payload<'_> for ReadCanisterSnapshotMetadataResponse {}
 
 /// An inner type of [`ReadCanisterSnapshotMetadataResponse`].
 ///
@@ -4008,6 +4010,8 @@ pub struct ReadCanisterSnapshotDataResponse {
     pub chunk: Vec<u8>,
 }
 
+impl Payload<'_> for ReadCanisterSnapshotDataResponse {}
+
 impl ReadCanisterSnapshotDataResponse {
     pub fn new(chunk: Vec<u8>) -> Self {
         Self { chunk }
@@ -4131,6 +4135,8 @@ pub struct UploadCanisterSnapshotMetadataResponse {
     #[serde(with = "serde_bytes")]
     pub snapshot_id: Vec<u8>,
 }
+
+impl Payload<'_> for UploadCanisterSnapshotMetadataResponse {}
 
 impl UploadCanisterSnapshotMetadataResponse {
     // TODO: EXC-1997.
