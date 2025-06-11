@@ -2,15 +2,11 @@
 
 #![forbid(missing_docs)]
 
-use candid::{Decode, Encode, Principal};
+use async_trait::async_trait;
+use candid::{Decode, Encode};
 use ic_http_types::{HttpRequest, HttpResponse};
-use ic_management_types::CanisterId;
-#[cfg(any(feature = "pocket_ic", feature = "pocket_ic_nonblocking"))]
-use pocket_ic::RejectResponse;
 #[cfg(feature = "pocket_ic")]
 pub use pocket_ic_query_call::PocketIcHttpQuery;
-#[cfg(feature = "pocket_ic_nonblocking")]
-pub use pocket_ic_query_call_nonblocking::PocketIcNonBlockingHttpQuery;
 use regex::Regex;
 use std::fmt::Debug;
 
@@ -72,26 +68,42 @@ impl<T> MetricsAssert<T> {
         T: CanisterHttpQuery<E>,
         E: Debug,
     {
+        let metrics =
+            Self::decode_metrics_response(actual.http_query(Self::encoded_metrics_request()));
+        Self { actual, metrics }
+    }
+
+    /// Initializes an instance of [`MetricsAssert`] by querying the metrics from the `/metrics`
+    /// endpoint of a canister via the [`AsyncCanisterHttpQuery::http_query`] method.
+    pub async fn from_async_http_query<E>(actual: T) -> Self
+    where
+        T: AsyncCanisterHttpQuery<E>,
+        E: Debug,
+    {
+        let metrics =
+            Self::decode_metrics_response(actual.http_query(Self::encoded_metrics_request()).await);
+        Self { actual, metrics }
+    }
+
+    fn encoded_metrics_request() -> Vec<u8> {
         let request = HttpRequest {
             method: "GET".to_string(),
             url: "/metrics".to_string(),
             headers: Default::default(),
             body: Default::default(),
         };
-        let response = Decode!(
-            &actual
-                .http_query(Encode!(&request).expect("failed to encode HTTP request"))
-                .expect("failed to retrieve metrics"),
-            HttpResponse
-        )
-        .unwrap();
+        Encode!(&request).expect("failed to encode HTTP request")
+    }
+
+    fn decode_metrics_response<E: Debug>(response: Result<Vec<u8>, E>) -> Vec<String> {
+        let response = Decode!(&response.expect("failed to retrieve metrics"), HttpResponse)
+            .expect("failed to decode HTTP response");
         assert_eq!(response.status_code, 200_u16);
-        let metrics = String::from_utf8_lossy(response.body.as_slice())
+        String::from_utf8_lossy(response.body.as_slice())
             .trim()
             .split('\n')
             .map(|line| line.to_string())
-            .collect::<Vec<_>>();
-        Self { metrics, actual }
+            .collect()
     }
 
     /// Returns the internal instance being tested.
@@ -138,6 +150,16 @@ pub trait CanisterHttpQuery<E: Debug> {
     fn http_query(&self, request: Vec<u8>) -> Result<Vec<u8>, E>;
 }
 
+/// Trait providing the ability to perform an async HTTP request to a canister.
+#[async_trait]
+pub trait AsyncCanisterHttpQuery<E>
+where
+    E: Debug,
+{
+    /// Sends a serialized HTTP request to a canister and returns the serialized HTTP response.
+    async fn http_query(&self, request: Vec<u8>) -> Result<Vec<u8>, E>;
+}
+
 #[cfg(feature = "pocket_ic")]
 mod pocket_ic_query_call {
     use super::*;
@@ -162,43 +184,5 @@ mod pocket_ic_query_call {
                 request,
             )
         }
-    }
-}
-
-#[cfg(feature = "pocket_ic_nonblocking")]
-mod pocket_ic_query_call_nonblocking {
-    use super::*;
-    use pocket_ic::nonblocking::PocketIc;
-
-    /// Provides an implementation of the [`CanisterHttpQuery`] trait in the case where the canister
-    /// HTTP requests are made through an instance of [`pocket_ic::nonblocking::PocketIc`].
-    ///
-    /// This implementation assumes the metrics are fetched within a [`tokio`] runtime environment,
-    /// e.g. inside a [`tokio`] test. Outside of a [`tokio`] environment, consider using the
-    /// blocking version of [`pocket_ic::PocketIc`].
-    pub trait PocketIcNonBlockingHttpQuery {
-        /// Returns a reference to the instance of [`PocketIc`] through which the HTTP requests are made.
-        fn get_pocket_ic(&self) -> &PocketIc;
-
-        /// Returns the ID of the canister to which HTTP requests will be made.
-        fn get_canister_id(&self) -> CanisterId;
-    }
-
-    impl<T: PocketIcNonBlockingHttpQuery> CanisterHttpQuery<RejectResponse> for T {
-        fn http_query(&self, request: Vec<u8>) -> Result<Vec<u8>, RejectResponse> {
-            block_on(self.get_pocket_ic().query_call(
-                self.get_canister_id(),
-                Principal::anonymous(),
-                "http_request",
-                request,
-            ))
-        }
-    }
-
-    fn block_on<F: std::future::Future>(future: F) -> F::Output {
-        let handle = tokio::runtime::Handle::try_current()
-            .unwrap_or_else(|_| panic!("Could not get current tokio runtime"));
-        let _ = handle.enter();
-        futures::executor::block_on(future)
     }
 }
