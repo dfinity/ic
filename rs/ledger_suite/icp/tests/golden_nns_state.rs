@@ -399,7 +399,7 @@ impl Setup {
         let modifier = if should_be_zero { "not " } else { "" };
         assert_eq!(
             should_be_zero,
-            balance == Nat::from(0u64),
+            balance == 0u64,
             "Balance of anonymous principal's default account should {}be zero, but is {}",
             modifier,
             balance
