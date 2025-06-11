@@ -58,12 +58,28 @@ async fn main() -> Result<(), Error> {
         .await
         .context("failed to copy config file")?;
 
+    // Print updated config.ini
+    println!("Updated config.ini:\n---");
+    let updated_config = config
+        .read_file(Path::new("/config.ini"))
+        .await
+        .context("failed to read updated config")?;
+    println!("{updated_config}");
+
     // Update node_operator_private_key.pem
     if let Some(key_path) = cli.node_operator_private_key {
         config
             .write_file(&key_path, Path::new("/node_operator_private_key.pem"))
             .await
             .context("failed to write node_operator_private_key.pem")?;
+
+        // Print updated node_operator_private_key.pem
+        println!("Updated node_operator_private_key.pem:\n---");
+        let updated_key = config
+            .read_file(Path::new("/node_operator_private_key.pem"))
+            .await
+            .context("failed to read updated node operator private key")?;
+        println!("{updated_key}");
     }
 
     // Print previous public keys
@@ -85,6 +101,14 @@ async fn main() -> Result<(), Error> {
             .write_file(public_keys.path(), Path::new("/ssh_authorized_keys/admin"))
             .await
             .context("failed to copy public keys")?;
+
+        // Print updated SSH keys
+        println!("Updated ssh_authorized_keys/admin:\n---");
+        let updated_admin_keys = config
+            .read_file(Path::new("/ssh_authorized_keys/admin"))
+            .await
+            .context("failed to read updated admin keys")?;
+        println!("{updated_admin_keys}");
     }
 
     // Close config partition
@@ -112,6 +136,14 @@ async fn main() -> Result<(), Error> {
         .await
         .context("failed to copy deployment config file")?;
 
+    // Print updated deployment.json
+    println!("Updated deployment.json:\n---");
+    let updated_deployment = data
+        .read_file(Path::new("/deployment.json"))
+        .await
+        .context("failed to read updated deployment config")?;
+    println!("{updated_deployment}");
+
     // Update NNS key
     if let Some(public_key) = cli.deployment.nns_public_key {
         let mut nns_key = NamedTempFile::new()?;
@@ -121,6 +153,14 @@ async fn main() -> Result<(), Error> {
         data.write_file(nns_key.path(), Path::new("/nns_public_key.pem"))
             .await
             .context("failed to copy nns key file")?;
+
+        // Print updated NNS key
+        println!("Updated nns_public_key.pem:\n---");
+        let updated_nns_key = data
+            .read_file(Path::new("/nns_public_key.pem"))
+            .await
+            .context("failed to read updated nns key")?;
+        println!("{updated_nns_key}");
     }
 
     // Close data partition

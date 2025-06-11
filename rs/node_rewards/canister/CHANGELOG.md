@@ -12,6 +12,16 @@
 INSERT NEW RELEASES HERE
 
 
+# 2025-04-25: Proposal 136893
+
+http://dashboard.internetcomputer.org/proposal/136893
+
+* Added performance-based rewards. This is mostly based on successful/failed block production.
+
+* Added a max_rewardable_nodes field to each node operator. Not used yet, but in
+  the future, it will limit how many nodes a node operator can onboard (per type).
+
+
 # 2025-04-25: Proposal 136372
 
 http://dashboard.internetcomputer.org/proposal/136372

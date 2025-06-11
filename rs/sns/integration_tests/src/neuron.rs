@@ -20,6 +20,8 @@ use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     itest_helpers::{forward_call_via_universal_canister, set_up_universal_canister, NnsCanisters},
 };
+use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
+
 use ic_sns_governance::{
     governance::Governance,
     neuron::{NeuronState, DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER},
@@ -1199,6 +1201,15 @@ async fn zero_total_reward_shares() {
         fn canister_id(&self) -> CanisterId {
             CanisterId::from_u64(1)
         }
+
+        async fn icrc3_get_blocks(
+            &self,
+            _args: Vec<GetBlocksRequest>,
+        ) -> Result<GetBlocksResult, NervousSystemError> {
+            Err(NervousSystemError {
+                error_message: "Not Implemented".to_string(),
+            })
+        }
     }
 
     let environment = NativeEnvironment::default();
@@ -1370,6 +1381,15 @@ async fn couple_of_neurons_who_voted_get_rewards() {
 
         fn canister_id(&self) -> CanisterId {
             CanisterId::from_u64(1)
+        }
+
+        async fn icrc3_get_blocks(
+            &self,
+            _args: Vec<GetBlocksRequest>,
+        ) -> Result<GetBlocksResult, NervousSystemError> {
+            Err(NervousSystemError {
+                error_message: "Not Implemented".to_string(),
+            })
         }
     }
 

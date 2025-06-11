@@ -110,13 +110,24 @@ pub struct ICOSDevSettings {}
 pub struct SetupOSSettings;
 
 /// HostOS-specific settings.
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone, Default)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct HostOSSettings {
     pub vm_memory: u32,
     pub vm_cpu: String,
     #[serde(default = "default_vm_nr_of_vcpus")]
     pub vm_nr_of_vcpus: u32,
     pub verbose: bool,
+}
+
+impl Default for HostOSSettings {
+    fn default() -> Self {
+        HostOSSettings {
+            vm_memory: Default::default(),
+            vm_cpu: Default::default(),
+            vm_nr_of_vcpus: default_vm_nr_of_vcpus(),
+            verbose: Default::default(),
+        }
+    }
 }
 
 const fn default_vm_nr_of_vcpus() -> u32 {

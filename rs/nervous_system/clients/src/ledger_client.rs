@@ -11,6 +11,7 @@ use icrc_ledger_types::icrc1::{
     account::{Account, Subaccount},
     transfer::{Memo, TransferArg},
 };
+use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
 use num_traits::ToPrimitive;
 
 // A ICRC1 client runtime that uses dfn_* functionalities
@@ -113,5 +114,40 @@ impl ICRC1Ledger for LedgerCanister {
     fn canister_id(&self) -> CanisterId {
         let principal_id = PrincipalId::from(self.client.ledger_canister_id);
         CanisterId::unchecked_from_principal(principal_id)
+    }
+
+    async fn icrc3_get_blocks(
+        &self,
+        args: Vec<GetBlocksRequest>,
+    ) -> Result<GetBlocksResult, NervousSystemError> {
+        use candid::{CandidType, Deserialize};
+        use serde::Serialize;
+
+        #[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
+        pub struct ICRC3GetBlocksArgs {
+            pub start: Nat,
+            pub length: Nat,
+        }
+
+        let result: Result<GetBlocksResult, (i32, String)> = self
+            .client
+            .runtime
+            .call(
+                self.canister_id().into(),
+                "icrc3_get_blocks",
+                (args
+                    .iter()
+                    .map(|arg| ICRC3GetBlocksArgs {
+                        start: arg.start.clone(),
+                        length: arg.length.clone(),
+                    })
+                    .collect::<Vec<_>>(),),
+            )
+            .await
+            .map(|result: (GetBlocksResult,)| result.0);
+
+        result.map_err(|(code, msg)| {
+            NervousSystemError::new_with_message(format!("Error calling method 'icrc3_get_blocks' of the ledger canister. Code: {:?}. Message: {}", code, msg))
+        })
     }
 }

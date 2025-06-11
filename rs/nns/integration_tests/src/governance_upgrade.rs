@@ -53,10 +53,9 @@ fn test_upgrade_after_state_shrink() {
             .hot_keys
             .push(hot_key);
 
-        let mut canister = runtime
-            .create_canister_at_id_max_cycles_with_retries(GOVERNANCE_CANISTER_ID.get())
-            .await
-            .unwrap();
+        let _registry_canister = runtime.create_canister(None).await.unwrap();
+        let mut canister = runtime.create_canister(None).await.unwrap();
+        assert_eq!(canister.canister_id(), GOVERNANCE_CANISTER_ID);
         install_governance_canister(&mut canister, governance_proto).await;
 
         // First let's do a self-upgrade

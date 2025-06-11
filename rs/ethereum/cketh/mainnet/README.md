@@ -178,7 +178,7 @@ Step 3 and (4,5) could happen in any order (first 3, then (4.5); or first (4,5),
 ## Test the proposals on a testnet
 
 To test the proposals with a testnet that uses the same canister IDs as in the proposals we need:
-* dynamic testnet with a boundary node
+* dynamic testnet with an API boundary node and an HTTP Gateway (`ic-gateway`)
 * 36 application subnets with one node each. This ensures that a high subnet index like the one of the fiduciary subnet is part of the topology.
 
 ### Spin up the dynamic testnet
@@ -210,7 +210,7 @@ and then spin up the dynamic testnet with a generous lifetime
 ict testnet create small --lifetime-mins=880 --output-dir=./small -- --test_tmpdir=./small
 ```
 
-Once the testnet is up and running, extract the external url of the boundary node from the logs, which should have the following format `https://ic<x>.farm.dfinity.systems`. In the following we will use `https://ic1.farm.dfinity.systems`.
+Once the testnet is up and running, extract the external url of the HTTP Gateway (`ic-gateway`) from the logs, which should have the following format `https://ic<x>.farm.dfinity.systems`. In the following we will use `https://ic1.farm.dfinity.systems`.
 
 ### Create the canisters
 

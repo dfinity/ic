@@ -20,7 +20,7 @@ Refer to link:../../rs/ic_os/config/README.md[rs/ic_os/config] and link:../compo
 
 HostOS creates a bootstrap config image containing a tar file with the GuestOS configuration files.
 
-Refer to link:../components/hostos-scripts/generate-guestos-config.sh[generate-guestos-config.sh] and link:../components/hostos-scripts/build-bootstrap-config-image.sh[build-bootstrap-config-image.sh] for more details.
+Refer to link:../../rs/ic_os/config/src/guest_vm_config.rs[guest_vm_config.rs] and link:../../rs/ic_os/config/src/guestos_bootstrap_image.rs[guestos_bootstrap_image.rs] for more details.
 
 When the HostOS launches the GuestOS, the bootstrap config image is attached to the GuestOS as a virtual USB. Refer to link:../../rs/ic_os/config/templates/guestos_vm_template.xml[guestos_vm_template.xml]
 
@@ -68,7 +68,7 @@ link:../../rs/ic_os/config/README.md[rs/ic_os/config].
 
 To add a new configuration file/directory:
 
-1. Add handling to `build-bootstrap-config-image.sh` to include the new file/directory in the bootstrap config image.
+1. Add handling to `guestos_bootstrap_image.rs` to include the new file/directory in the bootstrap config image.
 
 2. Add handling to `bootstrap-ic-node.sh` for the new file/directory.
 
@@ -89,7 +89,7 @@ Consider that values may be controlled by an attacker on boot. Bootstrapping a n
 === Testing
 
 For testing, to add new configuration bits, you can modify the config tool located at
-link:../../rs/ic_os/config/README.md[rs/ic_os/config]. Or, you may find it easier to update *build-bootstrap-config-image.sh* and *bootstrap-ic-node.sh* directly,
+link:../../rs/ic_os/config/README.md[rs/ic_os/config]. Or, you may find it easier to update *guestos_bootstrap_image.rs* and *bootstrap-ic-node.sh* directly,
 particularly if you wish to add a new configuration file (as opposed to just a new configuration _field_).
 
 * *ic_os config tool* can be run stand-alone to verify that it produces the intended configuration object.

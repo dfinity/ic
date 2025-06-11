@@ -1,6 +1,5 @@
 // TODO: Jira ticket NNS1-3556
 #![allow(static_mut_refs)]
-
 use async_trait::async_trait;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
@@ -30,9 +29,10 @@ use ic_sns_governance::{
     types::{Environment, HeapGrowthPotential},
     upgrade_journal::serve_journal,
 };
+use ic_sns_governance_api::pb::v1::GovernanceError;
+use ic_sns_governance_api::pb::v1::{get_metrics_response, governance_error::ErrorType};
 use ic_sns_governance_api::pb::v1::{
     get_running_sns_version_response::UpgradeInProgress,
-    get_sns_status_response,
     governance::Version,
     topics::{ListTopicsRequest, ListTopicsResponse},
     ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, FailStuckUpgradeInProgressRequest,
@@ -49,7 +49,7 @@ use ic_sns_governance_api::pb::v1::{
 #[cfg(feature = "test")]
 use ic_sns_governance_api::pb::v1::{
     AddMaturityRequest, AddMaturityResponse, AdvanceTargetVersionRequest,
-    AdvanceTargetVersionResponse, GovernanceError, MintTokensRequest, MintTokensResponse,
+    AdvanceTargetVersionResponse, MintTokensRequest, MintTokensResponse,
     RefreshCachedUpgradeStepsRequest, RefreshCachedUpgradeStepsResponse,
 };
 use prost::Message;
@@ -352,10 +352,37 @@ fn get_metadata(request: GetMetadataRequest) -> GetMetadataResponse {
     )
 }
 
-/// Returns aggregate SNS metrics.
+/// Returns statistics of the SNS
 #[query(composite = true)]
-async fn get_metrics(_request: GetMetricsRequest) -> get_sns_status_response::GetMetricsResponse {
-    unimplemented!()
+async fn get_metrics(request: GetMetricsRequest) -> get_metrics_response::GetMetricsResponse {
+    use get_metrics_response::*;
+
+    log!(INFO, "get_metrics");
+
+    let request = sns_gov_pb::GetMetricsRequest::try_from(request);
+
+    if let Err(error_message) = request {
+        return GetMetricsResponse {
+            get_metrics_result: Some(GetMetricsResult::Err(GovernanceError {
+                error_type: i32::from(ErrorType::InvalidCommand),
+                error_message,
+            })),
+        };
+    }
+
+    let result = governance().get_metrics(request.unwrap()).await;
+
+    let get_metrics_result = match result {
+        Ok(metrics) => {
+            let metrics = Metrics::from(metrics);
+            Some(GetMetricsResult::Ok(metrics))
+        }
+        Err(err) => {
+            let err = GovernanceError::from(err);
+            Some(GetMetricsResult::Err(err))
+        }
+    };
+    GetMetricsResponse { get_metrics_result }
 }
 
 /// Returns the initialization parameters used to spawn an SNS

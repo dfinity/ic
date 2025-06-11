@@ -88,6 +88,7 @@ system_test_nns(
         "long_test",  # since it takes longer than 5 minutes.
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    test_timeout = "eternal",  # the default 900 seconds (15 minutes) is not enough for this test, so we set it to 3600 seconds (1 hour).
     uses_guestos_dev_test = True,
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
@@ -114,6 +115,7 @@ system_test_nns(
         "long_test",  # since it takes longer than 5 minutes.
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    test_timeout = "eternal",  # the default 900 seconds (15 minutes) is not enough for this test, so we set it to 3600 seconds (1 hour).
     uses_guestos_dev_test = True,
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +

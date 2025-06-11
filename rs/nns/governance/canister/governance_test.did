@@ -126,6 +126,7 @@ type RefreshVotingPowerResponse = record {
 type DisburseMaturity = record {
   percentage_to_disburse : nat32;
   to_account : opt Account;
+  to_account_identifier: opt AccountIdentifier;
 };
 
 type Account = record {
@@ -1162,6 +1163,7 @@ type MaturityDisbursement = record {
   timestamp_of_disbursement_seconds : opt nat64;
   finalize_disbursement_timestamp_seconds : opt nat64;
   account_to_disburse_to : opt Account;
+  account_identifier_to_disburse_to : opt AccountIdentifier;
 };
 
 service : (Governance) -> {

@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use candid::{Encode, Principal};
 use ic_error_types::UserError;
-use ic_interfaces_registry::RegistryTransportRecord;
+use ic_interfaces_registry::RegistryRecord;
 use ic_nervous_system_agent::{pocketic_impl::PocketIcAgent, CallCanisters};
 use ic_nervous_system_chunks::test_data::{MegaBlob, MEGA_BLOB_CONTENT};
 use ic_nervous_system_integration_tests::pocket_ic_helpers::install_canister;
@@ -160,7 +160,7 @@ async fn test_registry_get_value_and_changes_since() {
     // Step 3.2: Verify result of get_changes_since.
     assert_eq!(changes.len(), 1);
     {
-        let RegistryTransportRecord {
+        let RegistryRecord {
             key,
             version,
             value,

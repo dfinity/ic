@@ -141,7 +141,6 @@ impl BackupManager {
                 blacklisted_nodes: blacklisted.clone(),
                 log: subnet_log.clone(),
             };
-            backup_helper.notification_client.push_metrics_version();
 
             backups.push(SubnetBackup {
                 nodes_syncing: subnet_config.nodes_syncing,
@@ -354,8 +353,17 @@ impl BackupManager {
         }
     }
 
+    /// Note: this method does some blocking operations so be careful when running it
+    /// in an async context.
     pub fn do_backups(self: Arc<BackupManager>) {
         let size = self.subnet_backups.len();
+
+        if let Some(backup) = self.subnet_backups.first() {
+            backup
+                .backup_helper
+                .notification_client
+                .push_metrics_version();
+        }
 
         for i in 0..size {
             // should we sync the subnet

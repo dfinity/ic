@@ -90,6 +90,21 @@ pub struct NeuronStakeTransfer {
     #[prost(uint64, tag = "7")]
     pub memo: u64,
 }
+/// Protobuf representing a list of followees of a neuron for a
+/// specific topic.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct Followees {
+    #[prost(message, repeated, tag = "1")]
+    pub followees: ::prost::alloc::vec::Vec<::ic_nns_common::pb::v1::NeuronId>,
+}
 /// This structure represents a neuron "at rest" in governance system of
 /// the Internet Computer IC.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
@@ -165,7 +180,7 @@ pub struct Neuron {
     /// Map `Topic` to followees. The key is represented by an integer as
     /// Protobuf does not support enum keys in maps.
     #[prost(map = "int32, message", tag = "11")]
-    pub followees: ::std::collections::HashMap<i32, neuron::Followees>,
+    pub followees: ::std::collections::HashMap<i32, Followees>,
     /// Information about how this neuron voted in the recent past. It
     /// only contains proposals that the neuron voted yes or no on.
     #[prost(message, repeated, tag = "12")]
@@ -259,21 +274,6 @@ pub struct Neuron {
 }
 /// Nested message and enum types in `Neuron`.
 pub mod neuron {
-    /// Protobuf representing a list of followees of a neuron for a
-    /// specific topic.
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        PartialEq,
-        ::prost::Message,
-    )]
-    pub struct Followees {
-        #[prost(message, repeated, tag = "1")]
-        pub followees: ::prost::alloc::vec::Vec<::ic_nns_common::pb::v1::NeuronId>,
-    }
     /// At any time, at most one of `when_dissolved` and
     /// `dissolve_delay` are specified.
     ///
@@ -594,7 +594,7 @@ pub struct RewardNodeProviders {
 )]
 pub struct SetDefaultFollowees {
     #[prost(map = "int32, message", tag = "1")]
-    pub default_followees: ::std::collections::HashMap<i32, neuron::Followees>,
+    pub default_followees: ::std::collections::HashMap<i32, Followees>,
 }
 /// Obsolete. Superseded by OpenSnsTokenSwap.
 #[derive(
@@ -1292,9 +1292,15 @@ pub mod manage_neuron {
         /// The percentage to disburse, from 1 to 100
         #[prost(uint32, tag = "1")]
         pub percentage_to_disburse: u32,
-        /// The (optional) principal to which to transfer the stake.
+        /// The (optional) principal to which to transfer the stake. It should not be set if
+        /// `to_account_identifier` is set.
         #[prost(message, optional, tag = "2")]
         pub to_account: ::core::option::Option<super::Account>,
+        /// The (optional) account identifier to which to transfer the stake. It should not be set if
+        /// `to_account` is set.
+        #[prost(message, optional, tag = "3")]
+        pub to_account_identifier:
+            ::core::option::Option<::icp_ledger::protobuf::AccountIdentifier>,
     }
     /// The ID of the neuron to manage. This can either be a subaccount or a neuron ID.
     #[derive(
@@ -2911,9 +2917,6 @@ pub mod update_canister_settings {
 #[compare_default]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Governance {
-    /// Current set of neurons.
-    #[prost(btree_map = "fixed64, message", tag = "1")]
-    pub neurons: ::prost::alloc::collections::BTreeMap<u64, Neuron>,
     /// Proposals.
     #[prost(btree_map = "uint64, message", tag = "2")]
     pub proposals: ::prost::alloc::collections::BTreeMap<u64, ProposalData>,
@@ -2976,7 +2979,7 @@ pub struct Governance {
     ///
     /// Default following can be changed via proposal.
     #[prost(map = "int32, message", tag = "13")]
-    pub default_followees: ::std::collections::HashMap<i32, neuron::Followees>,
+    pub default_followees: ::std::collections::HashMap<i32, Followees>,
     /// The maximum time a proposal of a topic with *short voting period*
     /// is open for voting. If a proposal on a topic with short voting
     /// period has not been decided (adopted or rejected) within this
@@ -4172,12 +4175,31 @@ pub struct MaturityDisbursement {
     /// The timestamp at which the maturity was disbursed.
     #[prost(uint64, tag = "2")]
     pub timestamp_of_disbursement_seconds: u64,
-    /// The account to disburse the maturity to.
-    #[prost(message, optional, tag = "3")]
-    pub account_to_disburse_to: ::core::option::Option<Account>,
     /// The timestamp at which the maturity disbursement should be finalized.
     #[prost(uint64, tag = "4")]
     pub finalize_disbursement_timestamp_seconds: u64,
+    #[prost(oneof = "maturity_disbursement::Destination", tags = "3, 5")]
+    pub destination: ::core::option::Option<maturity_disbursement::Destination>,
+}
+/// Nested message and enum types in `MaturityDisbursement`.
+pub mod maturity_disbursement {
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Oneof,
+    )]
+    pub enum Destination {
+        /// The icrc1 account to disburse the maturity to.
+        #[prost(message, tag = "3")]
+        AccountToDisburseTo(super::Account),
+        /// The account identifier to disburse the maturity to.
+        #[prost(message, tag = "5")]
+        AccountIdentifierToDisburseTo(::icp_ledger::protobuf::AccountIdentifier),
+    }
 }
 /// A map of neuron voting powers at a certain point in time. It can be used to initialize ballots of
 /// a proposal.
@@ -4238,6 +4260,9 @@ pub struct FinalizeDisburseMaturity {
     /// The original amount of maturity to be disbursed (before maturity modulation).
     #[prost(uint64, tag = "4")]
     pub original_maturity_e8s_equivalent: u64,
+    /// The account identifer to which to transfer the ICPs.
+    #[prost(message, optional, tag = "5")]
+    pub to_account_identifier: ::core::option::Option<::icp_ledger::protobuf::AccountIdentifier>,
 }
 /// Proposal types are organized into topics. Neurons can automatically
 /// vote based on following other neurons, and these follow

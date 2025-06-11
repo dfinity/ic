@@ -1821,6 +1821,45 @@ impl From<pb_api::GetMetadataRequest> for pb::GetMetadataRequest {
     }
 }
 
+impl From<pb::Metrics> for pb_api::get_metrics_response::Metrics {
+    fn from(item: pb::Metrics) -> Self {
+        let pb::Metrics {
+            num_recently_submitted_proposals,
+            last_ledger_block_timestamp,
+        } = item;
+
+        let num_recently_submitted_proposals = Some(num_recently_submitted_proposals);
+        let last_ledger_block_timestamp = if last_ledger_block_timestamp == 0 {
+            None
+        } else {
+            Some(last_ledger_block_timestamp)
+        };
+
+        Self {
+            num_recently_submitted_proposals,
+            last_ledger_block_timestamp,
+        }
+    }
+}
+
+impl TryFrom<pb_api::GetMetricsRequest> for pb::GetMetricsRequest {
+    type Error = String;
+
+    fn try_from(value: pb_api::GetMetricsRequest) -> Result<Self, Self::Error> {
+        let pb_api::GetMetricsRequest {
+            time_window_seconds,
+        } = value;
+
+        let Some(time_window_seconds) = time_window_seconds else {
+            return Err("field time_window_seconds must be specified.".to_string());
+        };
+
+        Ok(Self {
+            time_window_seconds,
+        })
+    }
+}
+
 impl From<pb::GetMetadataResponse> for pb_api::GetMetadataResponse {
     fn from(item: pb::GetMetadataResponse) -> Self {
         Self {

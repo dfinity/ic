@@ -40,12 +40,12 @@ pub fn get_apalache_path() -> PathBuf {
 
 pub fn check_tla_trace(trace: &UpdateTrace) {
     set_java_path();
-    let update = trace.update.clone();
+    let model_name = trace.model_name.clone();
     for pair in &trace.state_pairs {
         let constants = trace.constants.clone();
         println!("Constants: {:?}", constants);
         // NOTE: the 'process_id" is actually the tla module name
-        let tla_module = format!("{}_Apalache.tla", update.process_id);
+        let tla_module = format!("{}_Apalache.tla", model_name);
         let tla_module = get_tla_module_path(&tla_module);
         check_tla_code_link(
             &get_apalache_path(),

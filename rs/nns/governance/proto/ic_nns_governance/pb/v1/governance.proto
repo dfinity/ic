@@ -228,6 +228,12 @@ message NeuronStakeTransfer {
   uint64 memo = 7;
 }
 
+// Protobuf representing a list of followees of a neuron for a
+// specific topic.
+message Followees {
+  repeated ic_nns_common.pb.v1.NeuronId followees = 1;
+}
+
 // This structure represents a neuron "at rest" in governance system of
 // the Internet Computer IC.
 message Neuron {
@@ -329,12 +335,6 @@ message Neuron {
     // will get assigned to: `<timestamp when the action is taken> +
     // dissolve_delay_seconds`.
     uint64 dissolve_delay_seconds = 10;
-  }
-
-  // Protobuf representing a list of followees of a neuron for a
-  // specific topic.
-  message Followees {
-    repeated ic_nns_common.pb.v1.NeuronId followees = 1;
   }
 
   // Map `Topic` to followees. The key is represented by an integer as
@@ -769,7 +769,7 @@ message RewardNodeProviders {
 // This completely replaces the default followees so entries for all
 // Topics (except ManageNeuron) must be provided on each proposal.
 message SetDefaultFollowees {
-  map<int32, Neuron.Followees> default_followees = 1;
+  map<int32, Followees> default_followees = 1;
 }
 
 // Obsolete. Superseded by OpenSnsTokenSwap.
@@ -1113,8 +1113,13 @@ message ManageNeuron {
     // The percentage to disburse, from 1 to 100
     uint32 percentage_to_disburse = 1;
 
-    // The (optional) principal to which to transfer the stake.
+    // The (optional) principal to which to transfer the stake. It should not be set if
+    // `to_account_identifier` is set.
     Account to_account = 2;
+
+    // The (optional) account identifier to which to transfer the stake. It should not be set if
+    // `to_account` is set.
+    ic_ledger.pb.v1.AccountIdentifier to_account_identifier = 3;
   }
 
   oneof command {
@@ -2055,8 +2060,6 @@ message UpdateCanisterSettings {
 // information about the NNS governance system that must be kept
 // across upgrades of the NNS governance system.
 message Governance {
-  // Current set of neurons.
-  map<fixed64, Neuron> neurons = 1;
   // Proposals.
   map<uint64, ProposalData> proposals = 2;
   // The transfers that have been made to stake new neurons, but
@@ -2150,7 +2153,7 @@ message Governance {
   // map are present in the initial set of neurons.
   //
   // Default following can be changed via proposal.
-  map<int32, Neuron.Followees> default_followees = 13;
+  map<int32, Followees> default_followees = 13;
 
   // The maximum time a proposal of a topic with *short voting period*
   // is open for voting. If a proposal on a topic with short voting
@@ -2317,6 +2320,10 @@ message Governance {
   // Reserved id for deprecated `topic_followee_index`
   reserved 22;
   reserved "topic_followee_index";
+
+  // Reserved id for deprecated `neurons`
+  reserved 1;
+  reserved "neurons";
 }
 
 message XdrConversionRate {
@@ -2732,10 +2739,16 @@ message MaturityDisbursement {
   uint64 amount_e8s = 1;
   // The timestamp at which the maturity was disbursed.
   uint64 timestamp_of_disbursement_seconds = 2;
-  // The account to disburse the maturity to.
-  Account account_to_disburse_to = 3;
+
   // The timestamp at which the maturity disbursement should be finalized.
   uint64 finalize_disbursement_timestamp_seconds = 4;
+
+  oneof destination {
+    // The icrc1 account to disburse the maturity to.
+    Account account_to_disburse_to = 3;
+    // The account identifier to disburse the maturity to.
+    ic_ledger.pb.v1.AccountIdentifier account_identifier_to_disburse_to = 5;
+  }
 }
 
 // A map of neuron voting powers at a certain point in time. It can be used to initialize ballots of
@@ -2768,4 +2781,7 @@ message FinalizeDisburseMaturity {
 
   // The original amount of maturity to be disbursed (before maturity modulation).
   uint64 original_maturity_e8s_equivalent = 4;
+
+  // The account identifer to which to transfer the ICPs.
+  ic_ledger.pb.v1.AccountIdentifier to_account_identifier = 5;
 }

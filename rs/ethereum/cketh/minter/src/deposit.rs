@@ -2,7 +2,7 @@ use crate::eth_logs::{
     report_transaction_error, LogParser, LogScraping, ReceivedErc20LogScraping,
     ReceivedEthLogScraping, ReceivedEthOrErc20LogScraping, ReceivedEvent, ReceivedEventError,
 };
-use crate::eth_rpc::{FixedSizeData, HttpOutcallError, LogEntry, Topic};
+use crate::eth_rpc::{is_response_too_large, FixedSizeData, LogEntry, Topic};
 use crate::eth_rpc_client::{EthRpcClient, MultiCallError};
 use crate::guard::TimerGuard;
 use crate::logs::{DEBUG, INFO};
@@ -258,7 +258,7 @@ where
             }
             Err(e) => {
                 log!(INFO, "Failed to get {} logs in range {range}: {e:?}", S::ID);
-                if e.has_http_outcall_error_matching(HttpOutcallError::is_response_too_large) {
+                if e.has_http_outcall_error_matching(is_response_too_large) {
                     if from_block == to_block {
                         mutate_state(|s| {
                             process_event(

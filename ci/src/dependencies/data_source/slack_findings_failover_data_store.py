@@ -18,14 +18,12 @@ from model.team import Team
 from resources import resource_reader
 from resources.resource_reader import IgnoreList
 
-SUPPORTED_TEAMS = (Team.NODE_TEAM, Team.BOUNDARY_NODE_TEAM)
+SUPPORTED_TEAMS = {Team.NODE_TEAM}
 SLACK_CHANNEL_CONFIG_BY_TEAM = {
     Team.NODE_TEAM: SlackChannelConfig(channel_id="C05CYLM94KU", channel="#eng-node-psec"),
-    Team.BOUNDARY_NODE_TEAM: SlackChannelConfig(channel_id="C06KQKZ3EBW", channel="#eng-boundary-nodes-psec"),
 }
 SLACK_TEAM_RISK_ASSESSOR = {
     Team.NODE_TEAM: SlackRiskAssessor(name="<!subteam^S05FTRNRC5A>", wants_assessment_reminder=True),
-    Team.BOUNDARY_NODE_TEAM: SlackRiskAssessor(name="<!subteam^S0313LYB9FZ>", wants_assessment_reminder=False),
 }
 
 SLACK_LOG_TO_CONSOLE = False
@@ -39,9 +37,6 @@ FAILOVER_FINDING_PREFIXES = {
 }
 
 IGNORE_LIST_BY_PROJECT = {
-    "OSP: ic/ic-os/boundary-guestos/envs/prod (https://github.com/dfinity/ic/tree/master/ic-os/boundary-guestos/context)": resource_reader.read_ignore_list(
-        IgnoreList.BOUNDARY_GUEST_OS
-    ),
     "OSP: ic/ic-os/guestos/envs/prod (https://github.com/dfinity/ic/tree/master/ic-os/guestos/context)": resource_reader.read_ignore_list(
         IgnoreList.GUEST_OS
     ),
