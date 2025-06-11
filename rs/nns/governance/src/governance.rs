@@ -3278,6 +3278,19 @@ impl Governance {
         .map_err(GovernanceError::from)
     }
 
+    fn set_following(
+        &mut self,
+        id: &NeuronId,
+        caller: &PrincipalId,
+        set_following: &manage_neuron::SetFollowing,
+    ) -> Result<(), GovernanceError> {
+        for request in set_following.clone().into_vec_of_follow() {
+            self.follow(id, caller, &request)?;
+        }
+
+        Ok(())
+    }
+
     /// Set the status of a proposal that is 'being executed' to
     /// 'executed' or 'failed' depending on the value of 'success'.
     ///
@@ -6211,6 +6224,9 @@ impl Governance {
             Some(Command::DisburseMaturity(disburse_maturity)) => self
                 .disburse_maturity(&id, caller, disburse_maturity)
                 .map(ManageNeuronResponse::disburse_maturity_response),
+            Some(Command::SetFollowing(set_following)) => self
+                .set_following(&id, caller, set_following)
+                .map(ManageNeuronResponse::set_following_response),
             None => panic!(),
         }
     }

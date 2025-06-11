@@ -934,6 +934,15 @@ message ManageNeuron {
     ic_ledger.pb.v1.AccountIdentifier to_account_identifier = 3;
   }
 
+  message SetFollowing {
+    message FolloweesForTopic {
+      repeated ic_nns_common.pb.v1.NeuronId followees = 1;
+      optional Topic topic = 2;
+    }
+
+    repeated FolloweesForTopic topic_following = 1;
+  }
+
   oneof command {
     Configure configure = 2;
     Disburse disburse = 3;
@@ -949,6 +958,7 @@ message ManageNeuron {
     StakeMaturity stake_maturity = 15;
     RefreshVotingPower refresh_voting_power = 16;
     DisburseMaturity disburse_maturity = 17;
+    SetFollowing set_following = 18;
   }
 }
 
