@@ -66,17 +66,14 @@ def image_deps(mode, malicious = False):
         "expanded_size": "50G",
         "rootfs_size": "3G",
         "bootfs_size": "1G",
+        "grub_config": Label("//ic-os/bootloader:guestos_grub.cfg"),
+        "extra_boot_args_template": Label("//ic-os/bootloader:guestos_extra_boot_args.template"),
 
         # Add any custom partitions to the manifest
         "custom_partitions": lambda _: [Label("//ic-os/guestos:partition-config.tzst")],
-
-        # We will install extra_boot_args onto the system, after substituting the
-        # hash of the root filesystem into it. Track the template (before
-        # substitution) as a dependency so that changes to the template file are
-        # reflected in the overall version hash (the root_hash must include the
-        # version hash, it cannot be the other way around).
-        "extra_boot_args_template": Label("//ic-os/guestos/context:extra_boot_args.template"),
-        "boot_args_template": Label("//ic-os/guestos/context:boot_args.template"),
+        "boot_args_template": Label("//ic-os/bootloader:guestos_boot_args.template"),
+        # GuestOS requires dm-verity root partition signing
+        "requires_root_signing": True,
     }
 
     dev_build_args = ["BUILD_TYPE=dev", "ROOT_PASSWORD=root"]

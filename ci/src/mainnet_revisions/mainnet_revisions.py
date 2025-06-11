@@ -98,16 +98,14 @@ def commit_and_create_pr(
                     description,
                     "--title",
                     commit_message,
+                    "--label",
+                    "CI_ALL_BAZEL_TARGETS",
                 ],
                 cwd=repo_root,
             )
         pr_number = subprocess.check_output(
             ["gh", "pr", "view", "--json", "number", "-q", ".number"], cwd=repo_root, text=True
         ).strip()
-        subprocess.check_call(
-            ["gh", "pr", "edit", pr_number, "--add-label", "CI_ALL_BAZEL_TARGETS"],
-            cwd=repo_root,
-        )
         if enable_auto_merge:
             subprocess.check_call(["gh", "pr", "merge", pr_number, "--auto"], cwd=repo_root)
 

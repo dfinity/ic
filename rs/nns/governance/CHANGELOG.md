@@ -11,6 +11,15 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-06-06: Proposal 136890
+
+http://dashboard.internetcomputer.org/proposal/136890
+
+## Added
+
+* Support disbursing maturity to an account identifier, in addition to icrc1 account.
+
+
 # 2025-05-31: Proposal 136795
 
 http://dashboard.internetcomputer.org/proposal/136795

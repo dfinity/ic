@@ -183,44 +183,28 @@ def icos_build(
                 for k, v in (
                     image_deps["bootfs"].items() + [
                         (version_txt, "/version.txt:0644"),
+                        (boot_args, "/boot_args:0644"),
                         (extra_boot_args, "/extra_boot_args:0644"),
-                    ] + ([(boot_args, "/boot_args:0644")] if "boot_args_template" in image_deps else [])
+                    ]
                 )
             },
             tags = ["manual", "no-cache"],
         )
 
-        # The kernel command line (boot args) was previously split into two parts:
-        # 1. Dynamic args calculated at boot time in grub.cfg
-        # 2. Static args stored in EXTRA_BOOT_ARGS on the boot partition
+        # The kernel command line (boot args) is generated from boot_args_template:
+        # - For OS requiring root signing: Template includes ROOT_HASH placeholder that gets substituted with dm-verity hash
+        # - For OS not requiring root signing: Template is used as-is without ROOT_HASH substitution
         #
-        # For stable and predictable measurements with AMD SEV, we now pre-calculate and combine both parts
-        # into a single complete kernel command line that is:
-        # - Generated during image build
-        # - Stored statically on the boot partition
-        # - Measured as part of the SEV launch measurement
-        #
-        # For backwards compatibility in the GuestOS and compatibility with the HostOS and SetupOS, we continue
-        # to support the old way of calculating the dynamic args (see :extra_boot_args) and we derive boot_args
-        # from it.
-        native.genrule(
-            name = "generate-" + boot_args,
-            outs = [boot_args],
-            srcs = [extra_boot_args, ":boot_args_template"],
-            cmd = """
-                source "$(location """ + extra_boot_args + """)"
-                if [ ! -v EXTRA_BOOT_ARGS ]; then
-                    echo "EXTRA_BOOT_ARGS is not set in $(location """ + extra_boot_args + """)"
-                    exit 1
-                fi
-                m4 --define=EXTRA_BOOT_ARGS="$${EXTRA_BOOT_ARGS}" "$(location :boot_args_template)" > $@
-            """,
-            tags = ["manual"],
-        )
+        # This provides:
+        # - Consistent boot argument handling across all OS types
+        # - Predictable measurements for AMD SEV (especially important for signed root partitions)
+        # - Static boot arguments stored on the boot partition
 
-        # Sign only if extra_boot_args_template is provided
-        if "extra_boot_args_template" in image_deps:
-            extra_boot_args_template = str(image_deps["extra_boot_args_template"])
+        # For backwards compatibility in GuestOS and HostOS,
+        # we continue to support the old way of calculating the dynamic args (see :extra_boot_args).
+
+        if image_deps.get("requires_root_signing", False):
+            # Sign the root partition and substitute ROOT_HASH in boot args
             native.genrule(
                 name = "generate-" + partition_root_signed_tzst,
                 testonly = malicious,
@@ -239,18 +223,35 @@ def icos_build(
                 ],
                 tags = ["manual", "no-cache"],
             )
-
+            native.genrule(
+                name = "generate-" + boot_args,
+                outs = [boot_args],
+                srcs = [partition_root_hash, ":boot_args_template"],
+                cmd = "sed -e s/ROOT_HASH/$$(cat $(location " + partition_root_hash + "))/ " +
+                      "< $(location :boot_args_template) > $@",
+                tags = ["manual"],
+            )
             native.genrule(
                 name = "generate-" + extra_boot_args,
-                srcs = [extra_boot_args_template, partition_root_hash],
                 outs = [extra_boot_args],
+                srcs = [partition_root_hash, ":extra_boot_args_template"],
                 cmd = "sed -e s/ROOT_HASH/$$(cat $(location " + partition_root_hash + "))/ " +
-                      "< $(location " + extra_boot_args_template + ") > $@",
+                      "< $(location :extra_boot_args_template) > $@",
                 tags = ["manual"],
             )
         else:
+            # No signing required, no ROOT_HASH substitution
             native.alias(name = partition_root_signed_tzst, actual = partition_root_unsigned_tzst, tags = ["manual", "no-cache"])
-            native.alias(name = extra_boot_args, actual = image_deps["extra_boot_args"], tags = ["manual"])
+            native.alias(
+                name = boot_args,
+                actual = ":boot_args_template",
+                tags = ["manual"],
+            )
+            native.alias(
+                name = extra_boot_args,
+                actual = ":extra_boot_args_template",
+                tags = ["manual"],
+            )
 
     component_file_references_test(
         name = name + "_component_file_references_test",
@@ -260,11 +261,15 @@ def icos_build(
         tags = tags,
     )
 
-    if "boot_args_template" in image_deps:
-        native.alias(
-            name = "boot_args_template",
-            actual = image_deps["boot_args_template"],
-        )
+    native.alias(
+        name = "boot_args_template",
+        actual = image_deps["boot_args_template"],
+    )
+
+    native.alias(
+        name = "extra_boot_args_template",
+        actual = image_deps["extra_boot_args_template"],
+    )
 
     # -------------------- Assemble disk partitions ---------------
 

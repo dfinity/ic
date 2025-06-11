@@ -9,8 +9,6 @@ on the process that this file is part of, see
 
 ## Added
 
-* Support disbursing maturity to an account identifier, in addition to icrc1 account.
-
 ## Changed
 
 ## Deprecated
@@ -18,5 +16,8 @@ on the process that this file is part of, see
 ## Removed
 
 ## Fixed
+
+* The `account_identifier_to_disburse_to` in the maturity disbursement now contains a 32-byte
+  address rather than the 28-byte one without checksum.
 
 ## Security
