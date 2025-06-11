@@ -11,13 +11,16 @@ package(default_visibility = ["//visibility:public"])
         deps = [
             # Keep sorted.
             "//packages/ic-http-types",
-            "@crate_index//:async-trait",
             "@crate_index//:candid",
             "@crate_index//:ic-management-canister-types",
             "@crate_index//:regex",
             "@crate_index//:serde",
             "@crate_index//:serde_bytes",
         ] + extra_deps,
+        proc_macro_deps = [
+            # Keep sorted.
+            "@crate_index//:async-trait",
+        ],
     )
     for (name_suffix, features, extra_deps) in [
         [
