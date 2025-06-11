@@ -1527,6 +1527,11 @@ fn query_cache_future_proof_test() {
         | SystemApiCallId::StableRead
         | SystemApiCallId::StableSize
         | SystemApiCallId::StableWrite
+        | SystemApiCallId::EnvVarCount
+        | SystemApiCallId::EnvVarNameSize
+        | SystemApiCallId::EnvVarNameCopy
+        | SystemApiCallId::EnvVarValueSize
+        | SystemApiCallId::EnvVarValueCopy
         | SystemApiCallId::Time
         | SystemApiCallId::Trap
         | SystemApiCallId::TryGrowWasmMemory => {

@@ -824,7 +824,7 @@ fn api_availability_test(
             let var_name = b"TEST_VAR_1";
             copy_to_heap(&mut heap, var_name);
             assert_api_availability(
-                |api| api.ic0_env_var_value_size(0, 10, &mut heap.clone()),
+                |api| api.ic0_env_var_value_size(0, 10, &heap.clone()),
                 api_type,
                 &system_state,
                 cycles_account_manager,
