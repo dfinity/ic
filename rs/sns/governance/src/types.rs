@@ -159,6 +159,7 @@ pub mod native_action_ids {
             NervousSystemFunction::manage_dapp_canister_settings(),
             NervousSystemFunction::advance_sns_target_version(),
             NervousSystemFunction::set_topics_for_custom_proposals(),
+            NervousSystemFunction::register_extension(),
         ]
     }
 }
