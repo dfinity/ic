@@ -156,18 +156,6 @@ jobs:
         run: |
           set -xeuo pipefail
           # Determine which tests to skip
-          EXCLUDED_TEST_TAGS=(
-              system_test_hourly
-              system_test_nightly
-              system_test_nightly_nns
-              system_test_staging
-              system_test_hotfix
-              system_test_benchmark
-              fuzz_test
-              fi_tests_nightly
-              nns_tests_nightly
-          )
-
           if [[ '${{ needs.config.outputs.skip_long_tests }}' == 'true' ]]; then
             EXCLUDED_TEST_TAGS+=(long_test)
           fi
@@ -178,6 +166,7 @@ jobs:
           TEST_TAG_FILTERS=$(IFS=,; echo "${EXCLUDED_TEST_TAGS[*]/#/-}")
           # Determine BAZEL_EXTRA_ARGS based on event type or branch name
           BAZEL_EXTRA_ARGS=(
+            --config=ci
             "--test_tag_filters=$TEST_TAG_FILTERS"
             --config=lint # enable lint checks
             )
@@ -197,7 +186,7 @@ jobs:
           diff-only: ${{ needs.config.outputs.diff_only }}
           release-build: ${{ needs.config.outputs.release_build }}
           upload-artifacts: ${{ needs.config.outputs.release_build }}
-          BAZEL_COMMAND: test --config=ci ${{ steps.bazel-extra-args.outputs.BAZEL_EXTRA_ARGS }}
+          BAZEL_COMMAND: test ${{ steps.bazel-extra-args.outputs.BAZEL_EXTRA_ARGS }}
           BAZEL_TARGETS: //...
           CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}

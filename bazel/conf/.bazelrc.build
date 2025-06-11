@@ -51,11 +51,11 @@ common:stamped --workspace_status_command='$(pwd)/bazel/workspace_status.sh --st
 
 # Exclude system tests by default
 # https://github.com/bazelbuild/bazel/issues/8439
-build --build_tag_filters="-system_test,-fuzz_test"
-test --test_tag_filters="-system_test,-fuzz_test"
+build --build_tag_filters="-system_test_hourly,-system_test_nightly,-system_test_nightly_nns,-system_test_staging,-system_test_hotfix,-system_test_benchmark,-fuzz_test,-fi_tests_nightly,-nns_tests_nightly"
+test --test_tag_filters="-system_test_hourly,-system_test_nightly,-system_test_nightly_nns,-system_test_staging,-system_test_hotfix,-system_test_benchmark,-fuzz_test,-fi_tests_nightly,-nns_tests_nightly"
 test:alltests --test_tag_filters=""
 test:paritytests --test_tag_filters="-system_test"
-build:ci --build_tag_filters="-system_test,-fuzz_test"
+build:ci --build_tag_filters="-system_test_hourly,-system_test_nightly,-system_test_nightly_nns,-system_test_staging,-system_test_hotfix,-system_test_benchmark,-fuzz_test,-fi_tests_nightly,-nns_tests_nightly"
 
 test --test_output=errors
 
