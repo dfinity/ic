@@ -18,7 +18,6 @@ anchors:
   dind-large-setup: &dind-large-setup
     runs-on:
       labels: dind-large
-      group: dm1
     container:
       <<: *image
       options: >-
