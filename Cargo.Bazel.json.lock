@@ -1,5 +1,5 @@
 {
-  "checksum": "e283d0da52d8293db5dba34ed3c309d49c830b81a3e6c3edba891e98c34e5e63",
+  "checksum": "ea4b17fe8625c859ee314cc11d93e2c3e34db3149ecb3ae013e3dec38f287428",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -5268,7 +5268,8 @@
             "query",
             "tokio",
             "tower-log",
-            "tracing"
+            "tracing",
+            "ws"
           ],
           "selects": {}
         },
@@ -5277,6 +5278,10 @@
             {
               "id": "axum-core 0.5.2",
               "target": "axum_core"
+            },
+            {
+              "id": "base64 0.22.1",
+              "target": "base64"
             },
             {
               "id": "bytes 1.10.1",
@@ -5351,12 +5356,20 @@
               "target": "serde_urlencoded"
             },
             {
+              "id": "sha1 0.10.6",
+              "target": "sha1"
+            },
+            {
               "id": "sync_wrapper 1.0.1",
               "target": "sync_wrapper"
             },
             {
               "id": "tokio 1.45.0",
               "target": "tokio"
+            },
+            {
+              "id": "tokio-tungstenite 0.26.2",
+              "target": "tokio_tungstenite"
             },
             {
               "id": "tower 0.5.2",
@@ -20325,7 +20338,7 @@
               "target": "ic_http_gateway"
             },
             {
-              "id": "ic-management-canister-types 0.3.0",
+              "id": "ic-management-canister-types 0.3.1",
               "target": "ic_management_canister_types"
             },
             {
@@ -31354,6 +31367,15 @@
           "selects": {}
         },
         "edition": "2018",
+        "rustc_flags": {
+          "common": [],
+          "selects": {
+            "x86_64-apple-darwin": [
+              "-C",
+              "opt-level=0"
+            ]
+          }
+        },
         "version": "0.14.27"
       },
       "license": "MIT",
@@ -31460,6 +31482,15 @@
           "selects": {}
         },
         "edition": "2021",
+        "rustc_flags": {
+          "common": [],
+          "selects": {
+            "x86_64-apple-darwin": [
+              "-C",
+              "opt-level=0"
+            ]
+          }
+        },
         "version": "1.6.0"
       },
       "license": "MIT",
@@ -32423,7 +32454,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/ic-bn-lib",
           "commitish": {
-            "Rev": "23b3b0b76795c9b75eed96742c2185da0ce9ee2a"
+            "Rev": "620fb49a238b3d8a2caa436b5742ed7ca7012098"
           }
         }
       },
@@ -32542,6 +32573,10 @@
             {
               "id": "parse-size 1.1.0",
               "target": "parse_size"
+            },
+            {
+              "id": "ppp 2.3.0",
+              "target": "ppp"
             },
             {
               "id": "prometheus 0.14.0",
@@ -33052,7 +33087,7 @@
               "target": "ic_error_types"
             },
             {
-              "id": "ic-management-canister-types 0.3.0",
+              "id": "ic-management-canister-types 0.3.1",
               "target": "ic_management_canister_types"
             },
             {
@@ -33644,7 +33679,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/ic-gateway",
           "commitish": {
-            "Rev": "73495da1d5ab99891a3580522958f0f635902a87"
+            "Rev": "1d087ad6b8e477159e0ce68b30b6cf09d7ce4938"
           }
         }
       },
@@ -34141,14 +34176,14 @@
       ],
       "license_file": null
     },
-    "ic-management-canister-types 0.3.0": {
+    "ic-management-canister-types 0.3.1": {
       "name": "ic-management-canister-types",
-      "version": "0.3.0",
+      "version": "0.3.1",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-management-canister-types/0.3.0/download",
-          "sha256": "90253c6ac92f9a0b548a53a02c2d29dfa0f04a6c1ae919b86a6f54d4767d78b9"
+          "url": "https://static.crates.io/crates/ic-management-canister-types/0.3.1/download",
+          "sha256": "98554c2d8a30c00b6bfda18062fdcef21215cad07a52d8b8b1eb3130e51bfe71"
         }
       },
       "targets": [
@@ -34188,7 +34223,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.3.0"
+        "version": "0.3.1"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -54230,7 +54265,7 @@
               "target": "ic_certification"
             },
             {
-              "id": "ic-management-canister-types 0.3.0",
+              "id": "ic-management-canister-types 0.3.1",
               "target": "ic_management_canister_types"
             },
             {
@@ -54707,6 +54742,59 @@
         "MIT"
       ],
       "license_file": "LICENSE-Apache"
+    },
+    "ppp 2.3.0": {
+      "name": "ppp",
+      "version": "2.3.0",
+      "package_url": "https://github.com/misalcedo/ppp",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ppp/2.3.0/download",
+          "sha256": "1a7a2049cd2570bd67bf0228e86bf850f8ceb5190a345c471d03a909da6049e0"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ppp",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ppp",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "thiserror 1.0.68",
+              "target": "thiserror"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "2.3.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
     },
     "pprof 0.14.0": {
       "name": "pprof",
@@ -77408,6 +77496,74 @@
       ],
       "license_file": "LICENSE"
     },
+    "tokio-tungstenite 0.26.2": {
+      "name": "tokio-tungstenite",
+      "version": "0.26.2",
+      "package_url": "https://github.com/snapview/tokio-tungstenite",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/tokio-tungstenite/0.26.2/download",
+          "sha256": "7a9daff607c6d2bf6c16fd681ccb7eecc83e4e2cdc1ca067ffaadfca5de7f084"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "tokio_tungstenite",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "tokio_tungstenite",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "connect",
+            "default",
+            "handshake",
+            "stream"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "futures-util 0.3.31",
+              "target": "futures_util"
+            },
+            {
+              "id": "log 0.4.20",
+              "target": "log"
+            },
+            {
+              "id": "tokio 1.45.0",
+              "target": "tokio"
+            },
+            {
+              "id": "tungstenite 0.26.2",
+              "target": "tungstenite"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.26.2"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
     "tokio-util 0.7.13": {
       "name": "tokio-util",
       "version": "0.7.13",
@@ -79965,6 +80121,96 @@
         },
         "edition": "2018",
         "version": "0.21.0"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "tungstenite 0.26.2": {
+      "name": "tungstenite",
+      "version": "0.26.2",
+      "package_url": "https://github.com/snapview/tungstenite-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/tungstenite/0.26.2/download",
+          "sha256": "4793cb5e56680ecbb1d843515b23b6de9a75eb04b66643e256a396d43be33c13"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "tungstenite",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "tungstenite",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "data-encoding",
+            "handshake",
+            "http",
+            "httparse",
+            "sha1"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "bytes 1.10.1",
+              "target": "bytes"
+            },
+            {
+              "id": "data-encoding 2.4.0",
+              "target": "data_encoding"
+            },
+            {
+              "id": "http 1.3.1",
+              "target": "http"
+            },
+            {
+              "id": "httparse 1.10.1",
+              "target": "httparse"
+            },
+            {
+              "id": "log 0.4.20",
+              "target": "log"
+            },
+            {
+              "id": "rand 0.9.0",
+              "target": "rand"
+            },
+            {
+              "id": "sha1 0.10.6",
+              "target": "sha1"
+            },
+            {
+              "id": "thiserror 2.0.12",
+              "target": "thiserror"
+            },
+            {
+              "id": "utf-8 0.7.6",
+              "target": "utf8"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.26.2"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -91526,7 +91772,7 @@
     "ic-gateway 0.2.0",
     "ic-http-certification 3.0.3",
     "ic-http-gateway 0.3.0",
-    "ic-management-canister-types 0.3.0",
+    "ic-management-canister-types 0.3.1",
     "ic-metrics-encoder 1.1.1",
     "ic-response-verification 3.0.3",
     "ic-sha3 1.0.0",

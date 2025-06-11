@@ -689,7 +689,7 @@ mod tests {
 
     use crate::{
         neuron::{DissolveStateAndAge, NeuronBuilder},
-        pb::v1::{neuron::Followees, KnownNeuronData, MaturityDisbursement},
+        pb::v1::{Followees, KnownNeuronData, MaturityDisbursement},
         storage::with_stable_neuron_indexes_mut,
     };
 

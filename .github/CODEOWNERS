@@ -63,10 +63,6 @@ go_deps.bzl               @dfinity/idx
 
 # [IC-OS]
 /ic-os/                                                                 @dfinity/node
-/ic-os/boundary-guestos/                                                @dfinity/boundary-node @dfinity/node
-/ic-os/components/boundary-guestos/                                     @dfinity/boundary-node @dfinity/node
-/ic-os/components/boundary-guestos.bzl                                  @dfinity/boundary-node @dfinity/node
-/ic-os/components/init/bootstrap-ic-node/boundary-guestos/              @dfinity/boundary-node @dfinity/node
 /ic-os/components/ic/share/ic-boundary.env                              @dfinity/boundary-node @dfinity/node
 /toolchains/                                                            @dfinity/node
 

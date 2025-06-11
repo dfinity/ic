@@ -8,7 +8,8 @@ use crate::{
         split_neuron::{calculate_split_neuron_effect, SplitNeuronEffect},
     },
     heap_governance_data::{
-        reassemble_governance_proto, split_governance_proto, HeapGovernanceData, XdrConversionRate,
+        initialize_governance, reassemble_governance_proto, split_governance_proto,
+        HeapGovernanceData, XdrConversionRate,
     },
     is_disburse_maturity_enabled,
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder, Visibility},
@@ -44,7 +45,6 @@ use crate::{
                 ClaimOrRefresh, Command, NeuronIdOrSubaccount,
             },
             maturity_disbursement::Destination,
-            neuron::Followees,
             neurons_fund_snapshot::NeuronsFundNeuronPortion as NeuronsFundNeuronPortionPb,
             proposal::Action,
             reward_node_provider::{RewardMode, RewardToAccount},
@@ -53,18 +53,18 @@ use crate::{
                 self, NeuronsFundNeuron as NeuronsFundNeuronPb,
             },
             swap_background_information, ArchivedMonthlyNodeProviderRewards, Ballot,
-            CreateServiceNervousSystem, ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest,
-            GetNeuronsFundAuditInfoResponse, Governance as GovernanceProto, GovernanceError,
-            InstallCode, KnownNeuron, ListKnownNeuronsResponse, ListProposalInfo, ManageNeuron,
-            MonthlyNodeProviderRewards, Motion, NetworkEconomics, NeuronState,
-            NeuronsFundAuditInfo, NeuronsFundData,
+            CreateServiceNervousSystem, ExecuteNnsFunction, Followees,
+            GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
+            Governance as GovernanceProto, GovernanceError, InstallCode, KnownNeuron,
+            ListKnownNeuronsResponse, ListProposalInfo, ManageNeuron, MonthlyNodeProviderRewards,
+            Motion, NetworkEconomics, NeuronState, NeuronsFundAuditInfo, NeuronsFundData,
             NeuronsFundParticipation as NeuronsFundParticipationPb,
             NeuronsFundSnapshot as NeuronsFundSnapshotPb, NnsFunction, NodeProvider, Proposal,
             ProposalData, ProposalRewardStatus, ProposalStatus, RestoreAgingSummary, RewardEvent,
             RewardNodeProvider, RewardNodeProviders, SettleNeuronsFundParticipationRequest,
             SettleNeuronsFundParticipationResponse, StopOrStartCanister, Tally, Topic,
             UpdateCanisterSettings, UpdateNodeProvider, Vote, VotingPowerEconomics,
-            WaitForQuietState, XdrConversionRate as XdrConversionRatePb,
+            WaitForQuietState,
         },
     },
     proposals::{call_canister::CallCanister, sum_weighted_voting_power},
@@ -1521,18 +1521,6 @@ impl TryFrom<SettleNeuronsFundParticipationRequest>
     }
 }
 
-impl XdrConversionRatePb {
-    /// This constructor should be used only at canister creation, and not, e.g., after upgrades.
-    /// The reason this function exists is because `Default::default` is already defined by prost.
-    /// However, the Governance canister relies on the fields of this structure being `Some`.
-    pub fn with_default_values() -> Self {
-        Self {
-            timestamp_seconds: Some(0),
-            xdr_permyriad_per_icp: Some(10_000),
-        }
-    }
-}
-
 /// This function is used to spawn a future in a way that is compatible with both the WASM and
 /// non-WASM environments that are used for testing.  This only actually spawns in the case where
 /// the WASM is running in the IC, or has some other source of asynchrony.  Otherwise, it
@@ -1581,59 +1569,17 @@ impl Governance {
     /// Initializes Governance for the first time from init payload. When restoring after an upgrade
     /// with its persisted state, `Governance::new_restored` should be called instead.
     pub fn new(
-        mut governance_proto: GovernanceProto,
+        initial_governance: api::Governance,
         env: Arc<dyn Environment>,
         ledger: Arc<dyn IcpLedger>,
         cmc: Arc<dyn CMC>,
         randomness: Box<dyn RandomnessGenerator>,
     ) -> Self {
-        // Step 1: Populate some fields governance_proto if they are blank.
+        let (neurons, heap_governance_proto) = initialize_governance(initial_governance, env.now());
 
-        // Step 1.1: genesis_timestamp_seconds. 0 indicates it hasn't been set already.
-        if governance_proto.genesis_timestamp_seconds == 0 {
-            governance_proto.genesis_timestamp_seconds = env.now();
-        }
-
-        // Step 1.2: latest_reward_event.
-        if governance_proto.latest_reward_event.is_none() {
-            // Introduce a dummy reward event to mark the origin of the IC era.
-            // This is required to be able to compute accurately the rewards for the
-            // very first reward distribution.
-            governance_proto.latest_reward_event = Some(RewardEvent {
-                actual_timestamp_seconds: env.now(),
-                day_after_genesis: 0,
-                settled_proposals: vec![],
-                distributed_e8s_equivalent: 0,
-                total_available_e8s_equivalent: 0,
-                rounds_since_last_distribution: Some(0),
-                latest_round_available_e8s_equivalent: Some(0),
-            })
-        }
-
-        // Step 1.3: xdr_conversion_rate.
-        if governance_proto.xdr_conversion_rate.is_none() {
-            governance_proto.xdr_conversion_rate = Some(XdrConversionRatePb::with_default_values());
-        }
-
-        // Step 2: Break out Neurons from governance_proto. Neurons are managed separately by
-        // NeuronStore. NeuronStore is in charge of Neurons, because some are stored in stable
-        // memory, while others are stored in heap. "inactive" Neurons live in stable memory, while
-        // the rest live in heap.
-
-        // Note: We do not carry over the RNG seed in new governance, only in restored governance.
-        let (neurons, heap_governance_proto, _maybe_rng_seed) =
-            split_governance_proto(governance_proto);
-
-        // Step 3: Final assembly.
         Self {
             heap_data: heap_governance_proto,
-            neuron_store: NeuronStore::new(
-                // Neurons are converted from API type to internal type.
-                neurons
-                    .into_iter()
-                    .map(|(id, proto)| (id, Neuron::try_from(proto).expect("Invalid neuron")))
-                    .collect(),
-            ),
+            neuron_store: NeuronStore::new(neurons),
             env,
             ledger,
             cmc,
@@ -1655,7 +1601,7 @@ impl Governance {
         cmc: Arc<dyn CMC>,
         mut randomness: Box<dyn RandomnessGenerator>,
     ) -> Self {
-        let (_, heap_governance_proto, maybe_rng_seed) = split_governance_proto(governance_proto);
+        let (heap_governance_proto, maybe_rng_seed) = split_governance_proto(governance_proto);
 
         // Carry over the previous rng seed to avoid race conditions in handling queued ingress
         // messages that may require a functioning RNG.
@@ -1684,14 +1630,7 @@ impl Governance {
     pub fn take_heap_proto(&mut self) -> GovernanceProto {
         let heap_governance_proto = std::mem::take(&mut self.heap_data);
         let rng_seed = self.randomness.get_rng_seed();
-        reassemble_governance_proto(BTreeMap::new(), heap_governance_proto, rng_seed)
-    }
-
-    pub fn __get_state_for_test(&self) -> GovernanceProto {
-        let neurons = self.neuron_store.__get_neurons_for_tests();
-        let heap_governance_proto = self.heap_data.clone();
-        let rng_seed = self.randomness.get_rng_seed();
-        reassemble_governance_proto(neurons, heap_governance_proto, rng_seed)
+        reassemble_governance_proto(heap_governance_proto, rng_seed)
     }
 
     pub fn seed_rng(&mut self, seed: [u8; 32]) {
@@ -1836,7 +1775,7 @@ impl Governance {
     /// - the maximum number of neurons has been reached, or
     /// - the given `neuron_id` already exists in `self.neuron_store.neurons`, or
     /// - the neuron's controller `PrincipalId` is not self-authenticating.
-    fn add_neuron(
+    pub(crate) fn add_neuron(
         &mut self,
         neuron_id: u64,
         neuron: Neuron,
