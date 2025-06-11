@@ -119,11 +119,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 },
             ),
         )],
-        "cranelift-isle": [crate.annotation(
-            # Patch for determinism issues
-            patch_args = ["-p4"],
-            patches = ["@@//bazel:cranelift-isle.patch"],
-        )],
         "cranelift-assembler-x64": [crate.annotation(
             # Patch for determinism issues
             patch_args = ["-p3"],
@@ -1493,26 +1488,26 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.2",
             ),
             "wasm-encoder": crate.spec(
-                version = "^0.228.0",
+                version = "^0.229.0",
                 features = [
                     "wasmparser",
                 ],
             ),
             "wasm-smith": crate.spec(
-                version = "^0.228.0",
+                version = "^0.229.0",
                 default_features = False,
                 features = [
                     "wasmparser",
                 ],
             ),
             "wasmparser": crate.spec(
-                version = "^0.228.0",
+                version = "^0.229.0",
             ),
             "wasmprinter": crate.spec(
-                version = "^0.228.0",
+                version = "^0.229.0",
             ),
             "wasmtime": crate.spec(
-                version = "^32.0.0",
+                version = "^33.0.0",
                 default_features = False,
                 features = [
                     "cranelift",
@@ -1523,7 +1518,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "wasmtime-environ": crate.spec(
-                version = "^32.0.0",
+                version = "^33.0.0",
             ),
             "wast": crate.spec(
                 version = "^228.0.0",

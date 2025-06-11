@@ -776,9 +776,9 @@ url = { version = "2.5.3", features = ["serde"] }
 uuid = { version = "=1.12.1", features = ["v4", "serde"] }
 walkdir = "2.3.3"
 walrus = "0.23.3"
-wasm-encoder = { version = "0.228.0", features = ["wasmparser"] }
-wasmparser = "0.228.0"
-wasmprinter = "0.228.0"
+wasm-encoder = { version = "0.229.0", features = ["wasmparser"] }
+wasmparser = "0.229.0"
+wasmprinter = "0.229.0"
 wast = "228.0.0"
 wat = "1.228.0"
 which = "6.0.3"
