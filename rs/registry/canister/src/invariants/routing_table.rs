@@ -2,10 +2,13 @@ use crate::invariants::common::{InvariantCheckError, RegistrySnapshot};
 
 use std::convert::TryFrom;
 
+use ic_base_types::CanisterId;
 use ic_protobuf::registry::routing_table::v1::{
     CanisterMigrations as pbCanisterMigrations, RoutingTable as pbRoutingTable,
 };
-use ic_registry_keys::{make_canister_migrations_record_key, make_routing_table_record_key};
+use ic_registry_keys::{
+    make_canister_migrations_record_key, make_canister_ranges_key, make_routing_table_record_key,
+};
 use ic_registry_routing_table::{CanisterMigrations, RoutingTable};
 use prost::Message;
 
@@ -19,6 +22,10 @@ pub(crate) fn check_routing_table_invariants(
 
 // Return routing table from snapshot
 fn get_routing_table(snapshot: &RegistrySnapshot) -> RoutingTable {
+    let shards = get_routing_table_shards(snapshot);
+    RoutingTable::try_from(shards).expect("Could not reconstruct routing table from shards");
+
+    // TODO(NNS1-3781): Remove this once we have sharded table supported by all clients.
     match snapshot.get(make_routing_table_record_key().as_bytes()) {
         Some(routing_table_bytes) => {
             let routing_table_proto =
@@ -27,6 +34,22 @@ fn get_routing_table(snapshot: &RegistrySnapshot) -> RoutingTable {
         }
         None => panic!("No routing table in snapshot"),
     }
+}
+
+fn get_routing_table_shards(snapshot: &RegistrySnapshot) -> Vec<pbRoutingTable> {
+    let start = make_canister_ranges_key(CanisterId::from_u64(0)).into_bytes();
+    let end = make_canister_ranges_key(CanisterId::from_u64(u64::MAX)).into_bytes();
+    let mut shards = vec![];
+    for (_, value) in snapshot.range(start..=end) {
+        let routing_table_proto = pbRoutingTable::decode(value.as_slice()).unwrap();
+        shards.push(routing_table_proto);
+    }
+
+    if shards.is_empty() {
+        panic!("No routing table shards in snapshot");
+    }
+
+    shards
 }
 
 /// Iff `canister_migrations` is present, check that its invariants hold if reading and conversion succeed.

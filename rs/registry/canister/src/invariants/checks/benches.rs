@@ -93,10 +93,14 @@ fn measure_snapshot_creation_with_100_segments_of_1000_entries() -> BenchResult 
 }
 
 #[bench(raw)]
-fn measure_all_invariant_checks() -> BenchResult {
-    let registry = setup_registry_with_rt_segments_with_x_entries_each(1000, 20);
-    let rt = registry.get_routing_table_from_canister_range_records_or_panic();
-    let rt_mutation = upsert(make_routing_table_record_key(), rt.encode_to_vec());
+fn measure_routing_table_invariant_checks() -> BenchResult {
+    let mut registry = setup_registry_with_rt_segments_with_x_entries_each(1000, 20);
+    let rt =
+        registry.get_routing_table_from_canister_range_records_or_panic(registry.latest_version());
+    let rt_mutation = upsert(
+        make_routing_table_record_key(),
+        RoutingTable::from(rt).encode_to_vec(),
+    );
     registry.apply_mutations_for_test(vec![rt_mutation]);
     let snapshot = registry.take_latest_snapshot();
     bench_fn(|| check_routing_table_invariants(&snapshot))
