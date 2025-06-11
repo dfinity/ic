@@ -3676,7 +3676,7 @@ impl ExecutionEnvironment {
                                 .expected_compiled_wasms
                                 .insert(WasmHash::from(new_wasm_hash));
                         }
-                        debug!(
+                        info!(
                             self.log,
                             "Finished executing install_code message on canister {:?} after {:?}, old wasm hash {:?}, new wasm hash {:?}, instructions consumed: {}",
                             canister_id,
