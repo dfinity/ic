@@ -167,9 +167,9 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
             reserved_cycles_limit,
             input.log_visibility,
             wasm_memory_limit,
-            input.environment_variables.map(|env_vars| {
-                env_vars.into_iter().map(|e| (e.name, e.value)).collect()
-            }),
+            input
+                .environment_variables
+                .map(|env_vars| env_vars.into_iter().map(|e| (e.name, e.value)).collect()),
         ))
     }
 }

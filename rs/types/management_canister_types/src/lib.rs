@@ -1935,9 +1935,7 @@ impl CanisterSettingsArgsBuilder {
         environment_variables: BTreeMap<String, String>,
     ) -> Self {
         Self {
-            environment_variables: Some(
-                environment_variables.clone()
-            ),
+            environment_variables: Some(environment_variables.clone()),
             ..self
         }
     }

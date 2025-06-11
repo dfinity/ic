@@ -60,6 +60,7 @@ fn default_canister_state_bits() -> CanisterStateBits {
         wasm_memory_limit: None,
         next_snapshot_id: 0,
         snapshots_memory_usage: NumBytes::from(0),
+        environment_variables: BTreeMap::new(),
     }
 }
 
@@ -118,6 +119,41 @@ fn test_encode_decode_non_empty_controllers() {
     expected_controllers.insert(canister_test_id(0).get());
     expected_controllers.insert(IC_00.into());
     assert_eq!(canister_state_bits.controllers, expected_controllers);
+}
+
+#[test]
+fn test_encode_decode_empty_environment_variables() {
+    // A canister state with empty environment variables.
+    let canister_state_bits = CanisterStateBits {
+        environment_variables: BTreeMap::new(),
+        ..default_canister_state_bits()
+    };
+    let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
+
+    let decoded_canister_state_bits = CanisterStateBits::try_from(pb_bits).unwrap();
+    assert_eq!(
+        decoded_canister_state_bits.environment_variables,
+        BTreeMap::new()
+    );
+}
+
+#[test]
+fn test_encode_decode_non_empty_environment_variables() {
+    let mut environment_variables = BTreeMap::new();
+    environment_variables.insert("KEY1".to_string(), "VALUE1".to_string());
+    environment_variables.insert("KEY2".to_string(), "VALUE2".to_string());
+
+    // A canister state with non-empty environment variables.
+    let canister_state_bits = CanisterStateBits {
+        environment_variables: environment_variables.clone(),
+        ..default_canister_state_bits()
+    };
+    let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
+    let decoded_canister_state_bits = CanisterStateBits::try_from(pb_bits).unwrap();
+    assert_eq!(
+        decoded_canister_state_bits.environment_variables,
+        environment_variables
+    );
 }
 
 #[test]
