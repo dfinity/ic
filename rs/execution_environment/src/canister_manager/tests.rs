@@ -20,7 +20,7 @@ use ic_config::{
         MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER, SUBNET_CALLBACK_SOFT_LIMIT,
     },
     flag_status::FlagStatus,
-    subnet_config::{SchedulerConfig, SubnetConfig},
+    subnet_config::SchedulerConfig,
 };
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_embedders::{
@@ -42,7 +42,6 @@ use ic_management_canister_types_private::{
     UpdateSettingsArgs, UploadChunkArgs, UploadChunkReply, WasmMemoryPersistence, IC_00,
 };
 use ic_metrics::MetricsRegistry;
-use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET};
 use ic_registry_subnet_type::SubnetType;
@@ -56,10 +55,7 @@ use ic_replicated_state::{
     testing::{CanisterQueuesTesting, SystemStateTesting},
     CallContextManager, CallOrigin, CanisterState, CanisterStatus, ReplicatedState,
 };
-use ic_state_machine_tests::{
-    add_global_registry_records, add_initial_registry_records, StateMachine, StateMachineBuilder,
-    StateMachineConfig, Subnets,
-};
+use ic_state_machine_tests::{two_subnets_simple, StateMachineBuilder, StateMachineConfig};
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
     state_manager::FakeStateManager,
@@ -92,13 +88,7 @@ use lazy_static::lazy_static;
 use maplit::{btreemap, btreeset};
 use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
 use serde::Deserialize;
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    convert::TryFrom,
-    mem::size_of,
-    path::Path,
-    sync::{Arc, RwLock},
-};
+use std::{collections::BTreeSet, convert::TryFrom, mem::size_of, path::Path, sync::Arc};
 
 use super::InstallCodeResult;
 use prometheus::IntCounter;
@@ -6658,100 +6648,6 @@ fn memory_usage_updates_increment_subnet_available_memory() {
     // execution memory should get back to its initial value before growing stable memory
     let subnet_available_memory = test.subnet_available_memory();
     assert_eq!(initial_subnet_available_memory, subnet_available_memory);
-}
-
-struct SubnetsImpl {
-    subnets: Arc<RwLock<BTreeMap<SubnetId, Arc<StateMachine>>>>,
-}
-
-impl SubnetsImpl {
-    fn new() -> Self {
-        Self {
-            subnets: Arc::new(RwLock::new(BTreeMap::new())),
-        }
-    }
-}
-
-impl Subnets for SubnetsImpl {
-    fn insert(&self, state_machine: Arc<StateMachine>) {
-        self.subnets
-            .write()
-            .unwrap()
-            .insert(state_machine.get_subnet_id(), state_machine);
-    }
-    fn get(&self, subnet_id: SubnetId) -> Option<Arc<StateMachine>> {
-        self.subnets.read().unwrap().get(&subnet_id).cloned()
-    }
-}
-
-fn multi_subnet_setup(
-    subnets: Arc<SubnetsImpl>,
-    subnet_seed: u8,
-    subnet_type: SubnetType,
-    registry_data_provider: Arc<ProtoRegistryDataProvider>,
-) -> Arc<StateMachine> {
-    let config = StateMachineConfig::new(SubnetConfig::new(subnet_type), Config::default());
-    StateMachineBuilder::new()
-        .with_config(Some(config))
-        .with_subnet_seed([subnet_seed; 32])
-        .with_registry_data_provider(registry_data_provider)
-        .build_with_subnets(subnets)
-}
-
-/// Sets up two `StateMachine` that can communicate with each other.
-pub fn two_subnets_simple() -> (Arc<StateMachine>, Arc<StateMachine>) {
-    // Set up registry data provider.
-    let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
-
-    // Set up the two state machines for the two (app) subnets.
-    let subnets = Arc::new(SubnetsImpl::new());
-    let env1 = multi_subnet_setup(
-        subnets.clone(),
-        1,
-        SubnetType::Application,
-        registry_data_provider.clone(),
-    );
-    let env2 = multi_subnet_setup(
-        subnets.clone(),
-        2,
-        SubnetType::Application,
-        registry_data_provider.clone(),
-    );
-
-    // Set up routing table with two subnets.
-    let subnet_id1 = env1.get_subnet_id();
-    let subnet_id2 = env2.get_subnet_id();
-    let range1 = CanisterIdRange {
-        start: CanisterId::from_u64(0),
-        end: CanisterId::from_u64(CANISTER_IDS_PER_SUBNET - 1),
-    };
-    let range2 = CanisterIdRange {
-        start: CanisterId::from_u64(CANISTER_IDS_PER_SUBNET),
-        end: CanisterId::from_u64(2 * CANISTER_IDS_PER_SUBNET - 1),
-    };
-    let mut routing_table = RoutingTable::new();
-    routing_table.insert(range1, subnet_id1).unwrap();
-    routing_table.insert(range2, subnet_id2).unwrap();
-
-    // Set up subnet list for registry.
-    let subnet_list = vec![subnet_id1, subnet_id2];
-
-    // Add initial and global registry records.
-    add_initial_registry_records(registry_data_provider.clone());
-    add_global_registry_records(
-        subnet_id1,
-        routing_table,
-        subnet_list,
-        BTreeMap::new(),
-        registry_data_provider,
-    );
-
-    // Reload registry on the two state machines to make sure that
-    // both the state machines have a consistent view of the registry.
-    env1.reload_registry();
-    env2.reload_registry();
-
-    (env1, env2)
 }
 
 #[test]
