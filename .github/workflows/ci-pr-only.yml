@@ -19,9 +19,10 @@ jobs:
     timeout-minutes: 90
     runs-on:
       labels: dind-large
-    image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
-    options: >-
-      -e NODE_NAME
+    container:
+      image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
+      options: >-
+        -e NODE_NAME
     if: ${{ github.event_name != 'merge_group' }}
     steps:
       - name: Checkout
@@ -48,9 +49,10 @@ jobs:
     timeout-minutes: 30
     runs-on:
       labels: dind-small
-    image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
-    options: >-
-      -e NODE_NAME
+    container:
+      image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
+      options: >-
+        -e NODE_NAME
     if: ${{ github.event_name != 'merge_group' }}
     env:
       CI_EVENT_NAME: ${{ github.event_name }}
@@ -89,9 +91,10 @@ jobs:
     name: Generate Config Fixtures
     runs-on:
       labels: dind-small
-    image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
-    options: >-
-      -e NODE_NAME
+    container:
+      image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
+      options: >-
+        -e NODE_NAME
     timeout-minutes: 5
     if: ${{ github.event_name != 'merge_group' }}
     env:
@@ -124,9 +127,10 @@ jobs:
     name: Dependency Scan for PR
     runs-on:
       labels: dind-small
-    image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
-    options: >-
-      -e NODE_NAME
+    container:
+      image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
+      options: >-
+        -e NODE_NAME
     if: ${{ github.event_name != 'merge_group' }}
     timeout-minutes: 60
     permissions:
@@ -184,9 +188,10 @@ jobs:
     timeout-minutes: 90
     runs-on:
       labels: dind-large
-    image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
-    options: >-
-      -e NODE_NAME
+    container:
+      image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
+      options: >-
+        -e NODE_NAME
     if: contains(github.event.pull_request.labels.*.name, 'CI_COVERAGE')
     permissions:
       contents: read
