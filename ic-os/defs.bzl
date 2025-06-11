@@ -174,7 +174,7 @@ def icos_build(
             tags = ["manual", "no-cache"],
         )
         if mode == "dev":
-            dev_wrapper(name = partition_root_unsigned_tzst, actual = partition_root_unsigned_tzst_base, tags = ["manual", "no-cache"])
+            dev_wrapper(name = partition_root_unsigned_tzst, actual = partition_root_unsigned_tzst_base, tags = ["manual", "no-cache"], testonly = malicious)
         else:
             native.alias(name = partition_root_unsigned_tzst, actual = partition_root_unsigned_tzst_base, tags = ["manual", "no-cache"])
 
