@@ -271,7 +271,7 @@ pub struct XNetPayloadBuilderImpl {
     /// Conservative minimum slice size in bytes. We stop trying to add slices to
     /// the payload once we're this close to the payload size limit.
     ///
-    /// Always `SLICE_BUTE_SIZE_MIN` in production, can be overridden for testing.
+    /// Always `SLICE_BYTE_SIZE_MIN` in production, can be overridden for testing.
     slice_byte_size_min: usize,
 
     /// A deterministic pseudo-random number generator.
@@ -938,7 +938,7 @@ impl XNetPayloadBuilderImpl {
             // Note that if a stream only consists of signals, taking the header-only slice
             // will remove it from the pool, so a second `take_slice()` call with non-zero
             // message limit will return `None`. Hence we must actually add the header-only
-            // slices first; and then replace them with message slices, where avaulable.
+            // slices first; and then replace them with message slices, where available.
             let mut header_sizes = BTreeMap::new();
             for (subnet_id, begin) in shuffled_stream_positions.iter() {
                 if bytes_left < self.slice_byte_size_min {
