@@ -45,7 +45,7 @@ Contains the config store persisted across system upgrades.
 == *A_boot* / *B_boot* Boot partition for system A/B
 
 Contains the linux kernel to be booted as +vmlinuz+,
-optionally a file +extra_boot_args+ that sets additional
+optionally a file +boot_args+ that sets
 arguments to boot the kernel with, and a file +initrd.img+
 that is to be loaded as initial ram disk.
 
