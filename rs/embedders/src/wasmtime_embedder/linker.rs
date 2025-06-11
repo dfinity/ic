@@ -603,7 +603,7 @@ pub fn syscalls<
 
     linker
         .func_wrap("ic0", "env_var_name_copy", {
-            move |mut caller: Caller<'_, StoreData>, dst: I, offset: I, size: I, index: I| {
+            move |mut caller: Caller<'_, StoreData>, index: I, dst: I, offset: I, size: I| {
                 let dst: usize = dst.try_into().expect("Failed to convert I to usize");
                 let offset: usize = offset.try_into().expect("Failed to convert I to usize");
                 let size: usize = size.try_into().expect("Failed to convert I to usize");
