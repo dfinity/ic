@@ -69,7 +69,7 @@ impl<T> MetricsAssert<T> {
         E: Debug,
     {
         let metrics =
-            Self::decode_metrics_response(actual.http_query(Self::encoded_metrics_request()));
+            decode_metrics_response_or_unwrap(actual.http_query(encoded_metrics_request()));
         Self { actual, metrics }
     }
 
@@ -81,29 +81,8 @@ impl<T> MetricsAssert<T> {
         E: Debug,
     {
         let metrics =
-            Self::decode_metrics_response(actual.http_query(Self::encoded_metrics_request()).await);
+            decode_metrics_response_or_unwrap(actual.http_query(encoded_metrics_request()).await);
         Self { actual, metrics }
-    }
-
-    fn encoded_metrics_request() -> Vec<u8> {
-        let request = HttpRequest {
-            method: "GET".to_string(),
-            url: "/metrics".to_string(),
-            headers: Default::default(),
-            body: Default::default(),
-        };
-        Encode!(&request).expect("failed to encode HTTP request")
-    }
-
-    fn decode_metrics_response<E: Debug>(response: Result<Vec<u8>, E>) -> Vec<String> {
-        let response = Decode!(&response.expect("failed to retrieve metrics"), HttpResponse)
-            .expect("failed to decode HTTP response");
-        assert_eq!(response.status_code, 200_u16);
-        String::from_utf8_lossy(response.body.as_slice())
-            .trim()
-            .split('\n')
-            .map(|line| line.to_string())
-            .collect()
     }
 
     /// Returns the internal instance being tested.
@@ -142,6 +121,27 @@ impl<T> MetricsAssert<T> {
             .cloned()
             .collect()
     }
+}
+
+fn encoded_metrics_request() -> Vec<u8> {
+    let request = HttpRequest {
+        method: "GET".to_string(),
+        url: "/metrics".to_string(),
+        headers: Default::default(),
+        body: Default::default(),
+    };
+    Encode!(&request).expect("failed to encode HTTP request")
+}
+
+fn decode_metrics_response_or_unwrap<E: Debug>(response: Result<Vec<u8>, E>) -> Vec<String> {
+    let response = Decode!(&response.expect("failed to retrieve metrics"), HttpResponse)
+        .expect("failed to decode HTTP response");
+    assert_eq!(response.status_code, 200_u16);
+    String::from_utf8_lossy(response.body.as_slice())
+        .trim()
+        .split('\n')
+        .map(|line| line.to_string())
+        .collect()
 }
 
 /// Trait providing the ability to perform an HTTP request to a canister.
