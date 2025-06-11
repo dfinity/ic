@@ -11,6 +11,8 @@ mod conversions;
 mod convert_struct_to_enum;
 pub mod proposal_conversions;
 
+use v1::manage_neuron::{Follow, set_following::FolloweesForTopic, SetFollowing};
+
 impl Storable for ArchivedMonthlyNodeProviderRewards {
     fn to_bytes(&self) -> Cow<'_, [u8]> {
         Cow::from(self.encode_to_vec())
@@ -24,4 +26,35 @@ impl Storable for ArchivedMonthlyNodeProviderRewards {
     }
 
     const BOUND: Bound = Bound::Unbounded;
+}
+
+impl SetFollowing {
+    pub fn into_vec_of_follow(self) -> Vec<Follow> {
+        let SetFollowing {
+            topic_following,
+        } = self;
+
+        topic_following
+            .into_iter()
+            .map(|followees_for_topic| {
+                Follow::from(followees_for_topic)
+            })
+            .collect()
+    }
+}
+
+impl From<FolloweesForTopic> for Follow {
+    fn from(original: FolloweesForTopic) -> Self {
+        let FolloweesForTopic {
+            followees,
+            topic,
+        } = original;
+
+        let topic = topic.unwrap_or_default();
+
+        Self {
+            topic,
+            followees,
+        }
+    }
 }

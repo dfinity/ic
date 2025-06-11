@@ -783,7 +783,7 @@ pub struct ManageNeuron {
     pub neuron_id_or_subaccount: ::core::option::Option<manage_neuron::NeuronIdOrSubaccount>,
     #[prost(
         oneof = "manage_neuron::Command",
-        tags = "2, 3, 4, 5, 6, 7, 8, 9, 10, 13, 14, 15, 16, 17"
+        tags = "2, 3, 4, 5, 6, 7, 8, 9, 10, 13, 14, 15, 16, 17, 18"
     )]
     pub command: ::core::option::Option<manage_neuron::Command>,
 }
@@ -1146,6 +1146,8 @@ pub mod manage_neuron {
         #[prost(uint64, tag = "5")]
         pub nonce: u64,
     }
+    /// This is superseded by SetFollowing.
+    ///
     /// Add a rule that enables the neuron to vote automatically on
     /// proposals that belong to a specific topic, by specifying a group
     /// of followee neurons whose majority vote is followed. The
@@ -1296,6 +1298,37 @@ pub mod manage_neuron {
         #[prost(message, optional, tag = "2")]
         pub to_account: ::core::option::Option<super::Account>,
     }
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct SetFollowing {
+        #[prost(message, repeated, tag = "1")]
+        pub topic_following: ::prost::alloc::vec::Vec<set_following::FolloweesForTopic>,
+    }
+    /// Nested message and enum types in `SetFollowing`.
+    pub mod set_following {
+        #[derive(
+            candid::CandidType,
+            candid::Deserialize,
+            serde::Serialize,
+            comparable::Comparable,
+            Clone,
+            PartialEq,
+            ::prost::Message,
+        )]
+        pub struct FolloweesForTopic {
+            #[prost(message, repeated, tag = "1")]
+            pub followees: ::prost::alloc::vec::Vec<::ic_nns_common::pb::v1::NeuronId>,
+            #[prost(enumeration = "super::super::Topic", optional, tag = "2")]
+            pub topic: ::core::option::Option<i32>,
+        }
+    }
     /// The ID of the neuron to manage. This can either be a subaccount or a neuron ID.
     #[derive(
         candid::CandidType,
@@ -1329,6 +1362,7 @@ pub mod manage_neuron {
         Disburse(Disburse),
         #[prost(message, tag = "4")]
         Spawn(Spawn),
+        /// This is superseded by SetFollowing.
         #[prost(message, tag = "5")]
         Follow(Follow),
         #[prost(message, tag = "6")]
@@ -1351,6 +1385,8 @@ pub mod manage_neuron {
         RefreshVotingPower(RefreshVotingPower),
         #[prost(message, tag = "17")]
         DisburseMaturity(DisburseMaturity),
+        #[prost(message, tag = "18")]
+        SetFollowing(SetFollowing),
     }
 }
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
