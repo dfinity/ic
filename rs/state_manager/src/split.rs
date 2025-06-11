@@ -190,12 +190,14 @@ fn write_checkpoint(
     tip_handler
         .reset_tip_to(&state_layout, old_cp, Some(thread_pool))
         .map_err(|e| e.to_string())?;
+    let (diverged_heights_sender, _diverged_heights_receiver) = crossbeam_channel::bounded(1);
     let (_tip_thread, tip_channel) = spawn_tip_thread(
         log,
         tip_handler,
         state_layout,
         config.lsmt_config.clone(),
         metrics.clone(),
+        diverged_heights_sender,
         MaliciousFlags::default(),
     );
 

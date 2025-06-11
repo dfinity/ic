@@ -3640,6 +3640,93 @@ fn can_recover_from_corruption_on_state_sync() {
 }
 
 #[test]
+fn can_detect_divergence_with_rehash() {
+    use ic_state_layout::{CheckpointLayout, RwPolicy};
+
+    state_manager_crash_test(
+        vec![Box::new(|state_manager| {
+            use std::os::unix::fs::FileExt;
+            let (_height, mut state) = state_manager.take_tip();
+
+            let pages_per_chunk = DEFAULT_CHUNK_SIZE as u64 / PAGE_SIZE as u64;
+            assert_eq!(DEFAULT_CHUNK_SIZE as usize % PAGE_SIZE, 0);
+            insert_dummy_canister(&mut state, canister_test_id(90));
+            insert_dummy_canister(&mut state, canister_test_id(100));
+            insert_dummy_canister(&mut state, canister_test_id(110));
+
+            let canister_state = state.canister_state_mut(&canister_test_id(90)).unwrap();
+            let execution_state = canister_state.execution_state.as_mut().unwrap();
+            execution_state.wasm_memory.page_map.update(&[
+                (PageIndex::new(1), &[99u8; PAGE_SIZE]),
+                (PageIndex::new(300), &[99u8; PAGE_SIZE]),
+            ]);
+
+            let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+            canister_state
+                .execution_state
+                .as_mut()
+                .unwrap()
+                .stable_memory
+                .page_map
+                .update(&[(PageIndex::new(0), &[255u8; PAGE_SIZE])]);
+            let execution_state = canister_state.execution_state.as_mut().unwrap();
+            execution_state.wasm_memory.page_map.update(&[
+                (PageIndex::new(1), &[100u8; PAGE_SIZE]),
+                (PageIndex::new(3000), &[100u8; PAGE_SIZE]),
+            ]);
+
+            let canister_state = state.canister_state_mut(&canister_test_id(110)).unwrap();
+            let execution_state = canister_state.execution_state.as_mut().unwrap();
+            execution_state.wasm_memory.page_map.update(&[
+                (PageIndex::new(0), &[111u8; PAGE_SIZE]),
+                (PageIndex::new(pages_per_chunk - 1), &[0; PAGE_SIZE]),
+                (PageIndex::new(pages_per_chunk), &[112u8; PAGE_SIZE]),
+                (PageIndex::new(2 * pages_per_chunk - 1), &[0; PAGE_SIZE]),
+            ]);
+
+            state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
+            state_manager.flush_tip_channel();
+
+            // Corrupt some files
+            let state_layout = state_manager.state_layout();
+            let mutable_cp_layout = CheckpointLayout::<RwPolicy<()>>::new_untracked(
+                state_layout
+                    .checkpoint_verified(height(1))
+                    .unwrap()
+                    .raw_path()
+                    .to_path_buf(),
+                height(1),
+            )
+            .unwrap();
+
+            let canister_90_layout = mutable_cp_layout.canister(&canister_test_id(90)).unwrap();
+            let canister_90_memory = canister_90_layout
+                .vmemory_0()
+                .existing_overlays()
+                .unwrap()
+                .remove(0);
+            make_mutable(&canister_90_memory).unwrap();
+            std::fs::OpenOptions::new()
+                .write(true)
+                .create(false)
+                .truncate(false)
+                .open(&canister_90_memory)
+                .unwrap()
+                .write_all_at(b"Garbage", 0)
+                .unwrap();
+            make_readonly(&canister_90_memory).unwrap();
+
+            for i in 2..30 {
+                let (_height, state) = state_manager.take_tip();
+                state_manager.commit_and_certify(state, height(i), CertificationScope::Full, None);
+                state_manager.flush_tip_channel();
+            }
+        })],
+        |_metrics, _statte_manager| {},
+    );
+}
+
+#[test]
 fn do_not_crash_in_loop_due_to_corrupted_state_sync() {
     use ic_state_layout::{CheckpointLayout, RwPolicy};
     use std::panic::{self, AssertUnwindSafe};
@@ -4128,7 +4215,7 @@ fn can_short_circuit_state_sync() {
 
 #[test]
 fn can_reuse_chunk_hashes_when_computing_manifest() {
-    use ic_state_manager::manifest::{compute_manifest, validate_manifest};
+    use ic_state_manager::manifest::{compute_manifest, validate_manifest, RehashManifest};
     use ic_state_manager::ManifestMetrics;
     use ic_types::state_sync::CURRENT_STATE_SYNC_VERSION;
 
@@ -4191,6 +4278,7 @@ fn can_reuse_chunk_hashes_when_computing_manifest() {
             &checkpoint,
             DEFAULT_CHUNK_SIZE,
             None,
+            RehashManifest::No,
         )
         .expect("failed to compute manifest");
 

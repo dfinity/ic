@@ -2,6 +2,7 @@ use super::*;
 use crate::{
     checkpoint::make_unvalidated_checkpoint,
     flush_canister_snapshots_and_page_maps,
+    manifest::RehashManifest,
     state_sync::types::{FileInfo, Manifest},
     tip::{flush_tip_channel, spawn_tip_thread},
     CheckpointMetrics, ManifestMetrics, StateManagerMetrics, NUMBER_OF_CHECKPOINT_THREADS,
@@ -337,12 +338,14 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
     let layout = StateLayout::try_new(log.clone(), root.clone(), &metrics_registry).unwrap();
     let tip_handler = layout.capture_tip_handler();
     let state_manager_metrics = StateManagerMetrics::new(&metrics_registry, log.clone());
+    let (diverged_height_sender, _diverged_height_receiver) = crossbeam_channel::bounded(1);
     let (_tip_thread, tip_channel) = spawn_tip_thread(
         log,
         tip_handler,
         layout.clone(),
         lsmt_config_default(),
         state_manager_metrics.clone(),
+        diverged_height_sender,
         MaliciousFlags::default(),
     );
 
@@ -522,6 +525,7 @@ fn compute_manifest(
         &last_checkpoint_layout,
         1024,
         None,
+        RehashManifest::No,
     )
     .expect("failed to compute manifest");
 
