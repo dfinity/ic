@@ -1550,7 +1550,8 @@ mod test {
             let metrics_registry = ic_metrics::MetricsRegistry::new();
             let metrics = StateManagerMetrics::new(&metrics_registry, log.clone());
             let tip_handler = layout.capture_tip_handler();
-            let (diverged_height_sender, _diverged_height_receiver) = crossbeam_channel::bounded(1);
+            let (diverged_height_sender, _diverged_height_receiver) =
+                crossbeam_channel::unbounded();
             let (_h, _s) = spawn_tip_thread(
                 log,
                 tip_handler,
@@ -1593,6 +1594,8 @@ mod test {
                 tip: None,
             }));
 
+            let (diverged_height_sender, _diverged_height_receiver) =
+                crossbeam_channel::unbounded();
             // Trying to compute manifest for an unverified checkpoint should crash.
             handle_compute_manifest_request(
                 &mut scoped_threadpool::Pool::new(1),
@@ -1603,7 +1606,7 @@ mod test {
                 &checkpoint_layout,
                 None,
                 &Default::default(),
-                &crossbeam_channel::bounded(1).0,
+                &diverged_height_sender,
                 &Default::default(),
             );
         });

@@ -116,7 +116,7 @@ fn init(
 ) {
     let layout = StateLayout::try_new(log.clone(), root.clone(), &MetricsRegistry::new()).unwrap();
     let tip_handler = layout.capture_tip_handler();
-    let (diverged_heights_sender, _diverged_heights_receiver) = crossbeam_channel::bounded(1);
+    let (diverged_heights_sender, _diverged_heights_receiver) = crossbeam_channel::unbounded();
     let state_manager_metrics = state_manager_metrics(&log);
     let (h, s) = spawn_tip_thread(
         log.clone(),
@@ -228,19 +228,7 @@ fn can_recover_from_a_checkpoint() {
     with_test_replica_logger(|log| {
         let tmp = tmpdir("checkpoint");
         let root = tmp.path().to_path_buf();
-        let layout = StateLayout::try_new(log.clone(), root, &MetricsRegistry::new()).unwrap();
-        let tip_handler = layout.capture_tip_handler();
-        let state_manager_metrics = state_manager_metrics(&log);
-        let (diverged_heights_sender, _diverged_heights_receiver) = crossbeam_channel::bounded(1);
-        let (_tip_thread, tip_channel) = spawn_tip_thread(
-            log.clone(),
-            tip_handler,
-            layout.clone(),
-            lsmt_config_default(),
-            state_manager_metrics.clone(),
-            diverged_heights_sender,
-            MaliciousFlags::default(),
-        );
+        let (_tip_handler, tip_channel, layout, state_manager_metrics) = init(&root, &log);
 
         const HEIGHT: Height = Height::new(42);
         let canister_id: CanisterId = canister_test_id(10);

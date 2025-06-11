@@ -1198,7 +1198,7 @@ impl StateManagerImpl {
                 file_backed_memory_allocator: config.file_backed_memory_allocator,
             });
 
-        let (diverged_heights_sender, diverged_heights_receiver) = crossbeam_channel::bounded(1);
+        let (diverged_heights_sender, diverged_heights_receiver) = crossbeam_channel::unbounded();
         let (_tip_thread_handle, tip_channel) = spawn_tip_thread(
             log.clone(),
             state_layout.capture_tip_handler(),

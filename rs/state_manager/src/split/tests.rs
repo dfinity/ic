@@ -338,7 +338,7 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
     let layout = StateLayout::try_new(log.clone(), root.clone(), &metrics_registry).unwrap();
     let tip_handler = layout.capture_tip_handler();
     let state_manager_metrics = StateManagerMetrics::new(&metrics_registry, log.clone());
-    let (diverged_height_sender, _diverged_height_receiver) = crossbeam_channel::bounded(1);
+    let (diverged_height_sender, _diverged_height_receiver) = crossbeam_channel::unbounded();
     let (_tip_thread, tip_channel) = spawn_tip_thread(
         log,
         tip_handler,
