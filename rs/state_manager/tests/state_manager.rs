@@ -3648,8 +3648,6 @@ fn can_detect_divergence_with_rehash() {
             use std::os::unix::fs::FileExt;
             let (_height, mut state) = state_manager.take_tip();
 
-            let pages_per_chunk = DEFAULT_CHUNK_SIZE as u64 / PAGE_SIZE as u64;
-            assert_eq!(DEFAULT_CHUNK_SIZE as usize % PAGE_SIZE, 0);
             insert_dummy_canister(&mut state, canister_test_id(100));
 
             let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();

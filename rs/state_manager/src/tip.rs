@@ -129,11 +129,6 @@ pub(crate) enum TipRequest {
         own_subnet_type: SubnetType,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     },
-    RehashManifest {
-        checkpoint_layout: CheckpointLayout<ReadOnly>,
-        reference_manifest: crate::BundledManifest,
-        divergence_notifier: Sender<bool>,
-    },
     /// Wait for the message to be executed and notify back via sender.
     /// State: *
     Wait { sender: Sender<()> },
@@ -459,46 +454,6 @@ pub(crate) fn spawn_tip_thread(
                                     err
                                 )
                             }
-                        }
-                        TipRequest::RehashManifest {
-                            checkpoint_layout,
-                            reference_manifest,
-                            divergence_notifier,
-                        } => {
-                            let system_metadata = checkpoint_layout
-                                .system_metadata()
-                                .deserialize()
-                                .unwrap_or_else(|err| {
-                                    fatal!(
-                                        log,
-                                        "Failed to decode system metadata @{}: {}",
-                                        checkpoint_layout.height(),
-                                        err
-                                    )
-                                });
-
-                            let state_sync_version =
-                                system_metadata.state_sync_version.try_into().unwrap();
-                            let start = Instant::now();
-                            let manifest = crate::manifest::compute_manifest(
-                                &mut thread_pool,
-                                &metrics.manifest_metrics,
-                                &log,
-                                state_sync_version,
-                                &checkpoint_layout,
-                                crate::state_sync::types::DEFAULT_CHUNK_SIZE,
-                                None,
-                                RehashManifest::Yes,
-                            )
-                            .unwrap_or_else(|err| {
-                                fatal!(
-                                    log,
-                                    "Failed to rehash manifest for checkpoint @{} after {:?}: {}",
-                                    checkpoint_layout.height(),
-                                    start.elapsed(),
-                                    err
-                                )
-                            });
                         }
                     }
                 }

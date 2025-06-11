@@ -189,7 +189,7 @@ fn scratchpad_dir_is_deleted_if_checkpointing_failed() {
         let tmp = tmpdir("checkpoint");
         let root = tmp.path().to_path_buf();
         let checkpoints_dir = root.join(CHECKPOINTS_DIR);
-        let (_tip_handler, tip_channel, layout, state_manager_metrics) = init(&root, &log);
+        let (_tip_handler, tip_channel, _layout, state_manager_metrics) = init(&root, &log);
         const HEIGHT: Height = Height::new(42);
         let canister_id = canister_test_id(10);
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
