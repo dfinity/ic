@@ -149,8 +149,10 @@ fn request_timer(metrics: &StateManagerMetrics, name: &str) -> HistogramTimer {
 
 pub(crate) fn flush_tip_channel(tip_channel: &Sender<TipRequest>) {
     let (sender, recv) = bounded(1);
-    tip_channel.send(TipRequest::Wait { sender }); //.expect("failed to send TipHandler Wait message");
-    recv.recv(); // `.expect("failed to wait for TipHandler thread");
+    tip_channel
+        .send(TipRequest::Wait { sender })
+        .expect("failed to send TipHandler Wait message");
+    recv.recv().expect("failed to wait for TipHandler thread");
 }
 
 pub(crate) fn spawn_tip_thread(
