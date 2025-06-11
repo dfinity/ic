@@ -31,7 +31,7 @@ use ic_types::{
 use ic_utils::thread::maybe_parallel_map;
 use ic_wasm_types::{CanisterModule, MemoryMappableWasmFile, WasmHash};
 use prometheus::{Histogram, IntCounterVec, IntGauge};
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet};
 use std::convert::{identity, From, TryFrom, TryInto};
 use std::ffi::OsStr;
 use std::fs::OpenOptions;
@@ -182,7 +182,7 @@ pub struct CanisterStateBits {
     pub next_snapshot_id: u64,
     pub snapshots_memory_usage: NumBytes,
     pub task_queue: TaskQueue,
-    pub environment_variables: HashMap<String, Vec<u8>>,
+    pub environment_variables: BTreeMap<String, String>,
 }
 
 /// This struct contains bits of the `CanisterSnapshot` that are not already

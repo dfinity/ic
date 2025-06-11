@@ -9,8 +9,8 @@ use ic_types::{
     MemoryAllocation, PrincipalId,
 };
 use num_traits::{cast::ToPrimitive, SaturatingSub};
+use std::collections::BTreeMap;
 use std::convert::TryFrom;
-use std::collections::HashMap;
 
 use crate::canister_manager::types::CanisterManagerError;
 
@@ -30,7 +30,7 @@ pub(crate) struct CanisterSettings {
     pub(crate) log_visibility: Option<LogVisibilityV2>,
     pub(crate) wasm_memory_limit: Option<NumBytes>,
     /// A map of environment variable names to their values
-    pub(crate) environment_variables: Option<HashMap<String, Vec<u8>>>,
+    pub(crate) environment_variables: Option<BTreeMap<String, String>>,
 }
 
 impl CanisterSettings {
@@ -43,7 +43,7 @@ impl CanisterSettings {
         reserved_cycles_limit: Option<Cycles>,
         log_visibility: Option<LogVisibilityV2>,
         wasm_memory_limit: Option<NumBytes>,
-        environment_variables: Option<HashMap<String, Vec<u8>>>,
+        environment_variables: Option<BTreeMap<String, String>>,
     ) -> Self {
         Self {
             controllers,
@@ -90,7 +90,7 @@ impl CanisterSettings {
         self.wasm_memory_limit
     }
 
-    pub fn environment_variables(&self) -> Option<&HashMap<String, Vec<u8>>> {
+    pub fn environment_variables(&self) -> Option<&BTreeMap<String, String>> {
         self.environment_variables.as_ref()
     }
 }
@@ -167,7 +167,9 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
             reserved_cycles_limit,
             input.log_visibility,
             wasm_memory_limit,
-            input.environment_variables,
+            input.environment_variables.map(|env_vars| {
+                env_vars.into_iter().map(|e| (e.name, e.value)).collect()
+            }),
         ))
     }
 }
@@ -192,7 +194,7 @@ pub(crate) struct CanisterSettingsBuilder {
     reserved_cycles_limit: Option<Cycles>,
     log_visibility: Option<LogVisibilityV2>,
     wasm_memory_limit: Option<NumBytes>,
-    environment_variables: Option<HashMap<String, Vec<u8>>>,
+    environment_variables: Option<BTreeMap<String, String>>,
 }
 
 #[allow(dead_code)]
@@ -281,7 +283,10 @@ impl CanisterSettingsBuilder {
         }
     }
 
-    pub fn with_environment_variables(self, environment_variables: HashMap<String, Vec<u8>>) -> Self {
+    pub fn with_environment_variables(
+        self,
+        environment_variables: BTreeMap<String, String>,
+    ) -> Self {
         Self {
             environment_variables: Some(environment_variables),
             ..self
@@ -371,7 +376,7 @@ pub(crate) struct ValidatedCanisterSettings {
     reservation_cycles: Cycles,
     log_visibility: Option<LogVisibilityV2>,
     wasm_memory_limit: Option<NumBytes>,
-    environment_variables: Option<HashMap<String, Vec<u8>>>,
+    environment_variables: Option<BTreeMap<String, String>>,
 }
 
 impl ValidatedCanisterSettings {
@@ -411,7 +416,7 @@ impl ValidatedCanisterSettings {
         self.wasm_memory_limit
     }
 
-    pub fn environment_variables(&self) -> Option<&HashMap<String, Vec<u8>>> {
+    pub fn environment_variables(&self) -> Option<&BTreeMap<String, String>> {
         self.environment_variables.as_ref()
     }
 }

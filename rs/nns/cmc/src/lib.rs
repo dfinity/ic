@@ -206,7 +206,6 @@ impl From<CanisterSettingsArgs> for Ic00CanisterSettingsArgs {
             wasm_memory_threshold: settings.wasm_memory_threshold,
             environment_variables: None,
         }
-        
     }
 }
 

@@ -662,10 +662,10 @@ pub struct CanisterStateBits {
     #[prost(message, optional, tag = "54")]
     pub tasks: ::core::option::Option<TaskQueue>,
     /// A map of environment variable names to their values
-    #[prost(btree_map = "string, bytes", tag = "55")]
+    #[prost(btree_map = "string, string", tag = "55")]
     pub environment_variables: ::prost::alloc::collections::BTreeMap<
         ::prost::alloc::string::String,
-        ::prost::alloc::vec::Vec<u8>,
+        ::prost::alloc::string::String,
     >,
     #[prost(oneof = "canister_state_bits::CanisterStatus", tags = "11, 12, 13")]
     pub canister_status: ::core::option::Option<canister_state_bits::CanisterStatus>,

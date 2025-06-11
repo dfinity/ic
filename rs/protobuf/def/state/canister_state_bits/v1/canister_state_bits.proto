@@ -455,5 +455,5 @@ message CanisterStateBits {
   // canister.
   TaskQueue tasks = 54;
   // A map of environment variable names to their values
-  map<string, bytes> environment_variables = 55;
+  map<string, string> environment_variables = 55;
 }

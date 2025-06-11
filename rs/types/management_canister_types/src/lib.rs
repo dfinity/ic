@@ -36,10 +36,10 @@ use num_traits::cast::ToPrimitive;
 pub use provisional::{ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs};
 use serde::Serialize;
 use serde_bytes::ByteBuf;
+use std::collections::BTreeMap;
 use std::mem::size_of;
 use std::{collections::BTreeSet, convert::TryFrom, error::Error, fmt, slice::Iter, str::FromStr};
 use strum_macros::{Display, EnumCount, EnumIter, EnumString};
-use std::collections::HashMap;
 
 /// The id of the management canister.
 pub const IC_00: CanisterId = CanisterId::ic_00();
@@ -1752,6 +1752,17 @@ impl DataSize for PrincipalId {
 
 /// Struct used for encoding/decoding
 /// `(record {
+///     name: text;
+///     value: text;
+/// })`
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
+pub struct EnvironmentVariableEntry {
+    pub name: String,
+    pub value: String,
+}
+
+/// Struct used for encoding/decoding
+/// `(record {
 ///     controllers: opt vec principal;
 ///     compute_allocation: opt nat;
 ///     memory_allocation: opt nat;
@@ -1760,7 +1771,7 @@ impl DataSize for PrincipalId {
 ///     log_visibility : opt log_visibility;
 ///     wasm_memory_limit: opt nat;
 ///     wasm_memory_threshold: opt nat;
-///     environment_variables: opt record { text; blob };
+///     environment_variables: opt environment_variables;
 /// })`
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
 pub struct CanisterSettingsArgs {
@@ -1772,7 +1783,7 @@ pub struct CanisterSettingsArgs {
     pub log_visibility: Option<LogVisibilityV2>,
     pub wasm_memory_limit: Option<candid::Nat>,
     pub wasm_memory_threshold: Option<candid::Nat>,
-    pub environment_variables: Option<HashMap<String, Vec<u8>>>,
+    pub environment_variables: Option<Vec<EnvironmentVariableEntry>>,
 }
 
 impl Payload<'_> for CanisterSettingsArgs {}
@@ -1805,7 +1816,7 @@ pub struct CanisterSettingsArgsBuilder {
     log_visibility: Option<LogVisibilityV2>,
     wasm_memory_limit: Option<candid::Nat>,
     wasm_memory_threshold: Option<candid::Nat>,
-    environment_variables: Option<HashMap<String, Vec<u8>>>,
+    environment_variables: Option<BTreeMap<String, String>>,
 }
 
 #[allow(dead_code)]
@@ -1824,7 +1835,15 @@ impl CanisterSettingsArgsBuilder {
             log_visibility: self.log_visibility,
             wasm_memory_limit: self.wasm_memory_limit,
             wasm_memory_threshold: self.wasm_memory_threshold,
-            environment_variables: self.environment_variables,
+            environment_variables: self.environment_variables.map(|variables| {
+                variables
+                    .iter()
+                    .map(|(name, value)| EnvironmentVariableEntry {
+                        name: name.clone(),
+                        value: value.clone(),
+                    })
+                    .collect::<Vec<_>>()
+            }),
         }
     }
 
@@ -1911,9 +1930,14 @@ impl CanisterSettingsArgsBuilder {
     }
 
     /// Sets the environment variables map.
-    pub fn with_environment_variables(self, environment_variables: HashMap<String, Vec<u8>>) -> Self {
+    pub fn with_environment_variables(
+        self,
+        environment_variables: BTreeMap<String, String>,
+    ) -> Self {
         Self {
-            environment_variables: Some(environment_variables),
+            environment_variables: Some(
+                environment_variables.clone()
+            ),
             ..self
         }
     }

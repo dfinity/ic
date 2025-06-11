@@ -87,7 +87,13 @@ use lazy_static::lazy_static;
 use maplit::{btreemap, btreeset};
 use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
 use serde::Deserialize;
-use std::{collections::{BTreeSet, HashMap}, convert::TryFrom, mem::size_of, path::Path, sync::Arc};
+use std::{
+    collections::{BTreeMap, BTreeSet, HashMap},
+    convert::TryFrom,
+    mem::size_of,
+    path::Path,
+    sync::Arc,
+};
 
 use super::InstallCodeResult;
 use prometheus::IntCounter;
@@ -6654,9 +6660,9 @@ fn test_update_settings_environment_variables() {
     let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
 
     // Create initial environment variables
-    let mut initial_env_vars = HashMap::new();
-    initial_env_vars.insert("KEY1".to_string(), vec![1, 2, 3]);
-    initial_env_vars.insert("KEY2".to_string(), vec![4, 5, 6]);
+    let mut initial_env_vars = BTreeMap::new();
+    initial_env_vars.insert("KEY1".to_string(), "VALUE1".to_string());
+    initial_env_vars.insert("KEY2".to_string(), "VALUE2".to_string());
 
     let args = UpdateSettingsArgs {
         canister_id: canister_id.get(),
@@ -6676,9 +6682,9 @@ fn test_update_settings_environment_variables() {
     );
 
     // Update environment variables
-    let mut updated_env_vars = HashMap::new();
-    updated_env_vars.insert("KEY1".to_string(), vec![7, 8, 9]);
-    updated_env_vars.insert("KEY3".to_string(), vec![10, 11, 12]);
+    let mut updated_env_vars = BTreeMap::new();
+    updated_env_vars.insert("KEY1".to_string(), "VALUE1".to_string());
+    updated_env_vars.insert("KEY3".to_string(), "VALUE2".to_string());
 
     let args = UpdateSettingsArgs {
         canister_id: canister_id.get(),
@@ -6703,9 +6709,9 @@ fn test_create_canister_with_environment_variables() {
     let mut test = ExecutionTestBuilder::new().build();
 
     // Create initial environment variables
-    let mut env_vars = HashMap::new();
-    env_vars.insert("KEY1".to_string(), vec![1, 2, 3]);
-    env_vars.insert("KEY2".to_string(), vec![4, 5, 6]);
+    let mut env_vars = BTreeMap::new();
+    env_vars.insert("KEY1".to_string(), "VALUE1".to_string());
+    env_vars.insert("KEY2".to_string(), "VALUE2".to_string());
 
     let canister_id = test
         .create_canister_with_settings(
@@ -6718,8 +6724,5 @@ fn test_create_canister_with_environment_variables() {
 
     // Verify environment variables are set
     let canister = test.canister_state(canister_id);
-    assert_eq!(
-        canister.system_state.environment_variables,
-        env_vars
-    );
+    assert_eq!(canister.system_state.environment_variables, env_vars);
 }
