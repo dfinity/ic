@@ -41,7 +41,7 @@ mod tests;
 // Execute an inter-canister call message or a canister task.
 #[allow(clippy::too_many_arguments)]
 pub fn execute_call_or_task(
-    clean_canister: CanisterState,
+    clean_canister: ExecutingCanisterState,
     call_or_task: CanisterCallOrTask,
     method: WasmMethod,
     prepaid_execution_cycles: Option<Cycles>,
@@ -94,11 +94,11 @@ pub fn execute_call_or_task(
                             // (which calls `OnLowWasmMemoryHookStatus::update(true)`) to ensure desired behavior.
                             canister
                                 .system_state
-                                .task_queue
+                                .task_queue()
                                 .remove(ic_replicated_state::ExecutionTask::OnLowWasmMemory);
                             canister
                                 .system_state
-                                .task_queue
+                                .task_queue()
                                 .enqueue(ic_replicated_state::ExecutionTask::OnLowWasmMemory);
                         }
                         return finish_call_with_error(

@@ -14,7 +14,9 @@ use ic_types::batch::TotalQueryStats;
 use ic_types::methods::SystemMethod;
 use ic_types::time::UNIX_EPOCH;
 use ic_types::{
-    messages::{CanisterMessage, Ingress, Request, RequestOrResponse, Response},
+    messages::{
+        CanisterMessage, CanisterMessageOrTask, Ingress, Request, RequestOrResponse, Response,
+    },
     methods::WasmMethod,
     AccumulatedPriority, CanisterId, CanisterLog, ComputeAllocation, ExecutionRound,
     MemoryAllocation, NumBytes, PrincipalId, Time,
@@ -113,6 +115,90 @@ pub struct ExecutingCanisterState {
     pub executing_system_state: ExecutingSystemState,
     pub execution_state: Option<ExecutionState>,
     pub scheduler_state: SchedulerState,
+}
+
+impl ExecutingCanisterState {
+    pub fn new(canister_state: CanisterState, input: &CanisterMessageOrTask, time: Time) -> Self {
+        let CanisterState {
+            system_state,
+            execution_state,
+            scheduler_state,
+        } = canister_state;
+        Self {
+            executing_system_state: ExecutingSystemState::new(system_state, input, time),
+            execution_state,
+            scheduler_state,
+        }
+    }
+
+    pub fn canister_id(&self) -> CanisterId {
+        self.executing_system_state.canister_id()
+    }
+    
+    pub fn compute_allocation(&self) -> ComputeAllocation {
+        self.scheduler_state.compute_allocation
+    }
+
+    pub fn memory_allocation(&self) -> MemoryAllocation {
+        self.executing_system_state.system_state.memory_allocation
+    }
+    
+    pub fn memory_limit(&self, default_limit: NumBytes) -> NumBytes {
+        match self.memory_allocation() {
+            MemoryAllocation::Reserved(bytes) => bytes,
+            MemoryAllocation::BestEffort => default_limit,
+        }
+    }
+    
+    pub fn wasm_memory_limit(&self) -> Option<NumBytes> {
+        self.executing_system_state.system_state.wasm_memory_limit
+    }
+    
+    pub fn execution_memory_usage(&self) -> NumBytes {
+        self.execution_state
+            .as_ref()
+            .map_or(NumBytes::new(0), |es| es.memory_usage())
+    }
+    
+    pub fn canister_history_memory_usage(&self) -> NumBytes {
+        self.executing_system_state.system_state.canister_history_memory_usage()
+    }
+    
+    pub fn wasm_chunk_store_memory_usage(&self) -> NumBytes {
+        self.executing_system_state.system_state.wasm_chunk_store.memory_usage()
+    }
+    
+    pub fn snapshots_memory_usage(&self) -> NumBytes {
+        self.executing_system_state.system_state.snapshots_memory_usage
+    }
+
+    pub fn memory_usage(&self) -> NumBytes {
+        self.execution_memory_usage()
+            + self.canister_history_memory_usage()
+            + self.wasm_chunk_store_memory_usage()
+            + self.snapshots_memory_usage()
+    }
+
+    pub fn message_memory_usage(&self) -> MessageMemoryUsage {
+        MessageMemoryUsage {
+            guaranteed_response: self.executing_system_state.system_state.guaranteed_response_message_memory_usage(),
+            best_effort: self.executing_system_state.system_state.best_effort_message_memory_usage(),
+        }
+    }
+
+    pub fn finish(self) -> CanisterState {
+        let Self {
+            executing_system_state,
+            execution_state,
+            scheduler_state,
+        } = self;
+        // temporary
+        CanisterState {
+            system_state: executing_system_state.finish(),
+            execution_state,
+            scheduler_state,
+        }
+    }
 }
 
 /// The full state of a single canister.
