@@ -24,9 +24,11 @@ tokio = { workspace = true }
 sys-mount = { workspace = true }
 utils = { path = "../../utils" }
 virt = { workspace = true }
+async-trait = "0.1.86"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 systemd = { workspace = true }
 
 [dev-dependencies]
+partition_tools = { path = "../../build_tools/partition_tools" }
 regex = { workspace = true }

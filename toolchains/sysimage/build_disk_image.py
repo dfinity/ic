@@ -68,7 +68,8 @@ def generate_sfdisk_script(gpt_entries):
     lines = ["label: gpt", "label-id: 2B110BB7-CDEC-7D41-B97E-893EDCBE5428"]
     for entry in gpt_entries:
         lines.append(
-            "start=%d,size=%d,type=%s,uuid=%s" % (entry["start"], entry["size"], type_map[entry["type"]], entry["uuid"])
+            "start=%d,size=%d,type=%s,uuid=%s,name=%s" % (entry["start"], entry["size"], type_map[entry["type"]],
+                                                          entry["uuid"], entry["name"])
         )
     return "\n".join(lines) + "\n"
 
@@ -177,7 +178,7 @@ def main():
         prefix = "A_"
         name = entry["name"]
         if name.startswith(prefix):
-            name = name[len(prefix) :]
+            name = name[len(prefix):]
 
         partition_file = select_partition_file(name, partition_files)
 

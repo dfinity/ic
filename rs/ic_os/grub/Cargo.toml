@@ -6,4 +6,4 @@ edition = "2021"
 [dependencies]
 strum = { workspace = true }
 thiserror = { workspace = true }
-tempfile = { workspace = true }
+regex = "1.11.1"

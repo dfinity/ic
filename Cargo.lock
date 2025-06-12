@@ -5214,8 +5214,8 @@ dependencies = [
 name = "grub"
 version = "1.0.0"
 dependencies = [
- "strum_macros 0.26.4",
- "tempfile",
+ "regex",
+ "strum 0.26.3",
  "thiserror 2.0.12",
 ]
 
@@ -5634,6 +5634,7 @@ name = "hostos_tool"
 version = "1.0.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "clap 4.5.27",
  "config",
  "config_types",
@@ -5643,6 +5644,7 @@ dependencies = [
  "ic-metrics-tool",
  "network",
  "nix 0.24.3",
+ "partition_tools",
  "regex",
  "sys-mount",
  "systemd",

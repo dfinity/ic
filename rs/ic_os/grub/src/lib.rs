@@ -1,107 +1,166 @@
-use std::fs::File;
-use std::io::{BufRead, BufReader};
+use regex::Regex;
+use std::io::{BufRead, BufReader, Read, Write};
 use std::path::Path;
 use std::str::FromStr;
-use strum::EnumString;
+use strum::{Display, EnumString};
 use thiserror::Error;
 
-#[derive(Debug, Eq, PartialEq, Clone, Copy, EnumString)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy, EnumString, Display)]
 pub enum BootAlternative {
-    // Bash scripts depend on the string representations
+    // Bash scripts depend on the string representations, be very careful if you want to change them
     #[strum(serialize = "A")]
     A,
     #[strum(serialize = "B")]
     B,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Copy, EnumString)]
-pub enum BootCycle {
-    // Bash scripts depend on the string representations
-    #[strum(serialize = "first_boot")]
-    FirstBoot,
-    #[strum(serialize = "failsafe_check")]
-    FailsafeCheck,
-    #[strum(serialize = "stable")]
-    Stable,
+impl BootAlternative {
+    pub fn get_opposite(&self) -> BootAlternative {
+        match self {
+            BootAlternative::A => BootAlternative::B,
+            BootAlternative::B => BootAlternative::A,
+        }
+    }
 }
 
-#[derive(Error, Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy, EnumString, Display)]
+pub enum BootCycle {
+    // Bash scripts depend on the string representations, be very careful if you want to change them
+    /// This indicates that we consider the system given in boot_alternative as "good": we will
+    /// always try booting it.
+    #[strum(serialize = "stable")]
+    Stable,
+    /// This indicates that we are booting for the very first time after an upgrade into the
+    /// system given by "boot_alternative" we will boot this system and then go into
+    /// "failsafe_check" state.
+    #[strum(serialize = "first_boot")]
+    FirstBoot,
+    /// We have tried booting the currently active system, but the target system did not
+    /// 'acknowledge' that it got into a working state (by changing state to "stable" after
+    /// it booted successfully). We will fall back to the alternative system and declare it
+    /// stable.
+    #[strum(serialize = "failsafe_check")]
+    FailsafeCheck,
+    /// This state exists only once, after initial install of the system.
+    #[strum(serialize = "install")]
+    Install,
+}
+
+#[derive(Error, Debug, Eq, PartialEq, Clone)]
 pub enum GrubEnvVariableError {
-    #[error("Missing variable")]
-    Missing,
     #[error("Invalid variable value: {0}")]
     ParseError(String),
 }
 
-#[derive(Error, Debug)]
-pub enum GrubEnvReadError {
-    #[error("IO error: {0}")]
-    Io(#[from] std::io::Error),
-}
-
 #[derive(Debug)]
 pub struct GrubEnv {
-    pub boot_alternative: Result<BootAlternative, GrubEnvVariableError>,
-    pub boot_cycle: Result<BootCycle, GrubEnvVariableError>,
+    pub boot_alternative: Result<Option<BootAlternative>, GrubEnvVariableError>,
+    pub boot_cycle: Result<Option<BootCycle>, GrubEnvVariableError>,
+    /// The rest of the variables as key-value pairs.
+    pub other: Vec<(String, String)>,
+}
+
+impl GrubEnv {
+    pub fn read_from(read: impl Read) -> Result<Self, std::io::Error> {
+        let line_regex = Regex::new(r#"\s*(\w+)\s*=\s*([^#\s]*).*$"#).unwrap();
+        BufReader::new(read)
+            .lines()
+            .try_fold(GrubEnv::default(), |mut env, line| {
+                let line = line?;
+                let Some(captures) = line_regex.captures(&line) else {
+                    return Ok(env);
+                };
+                let key = captures.get(1).unwrap().as_str();
+                let value = captures.get(2).unwrap().as_str();
+                if key == "boot_alternative" {
+                    env.boot_alternative = BootAlternative::from_str(value)
+                        .map_err(|_| GrubEnvVariableError::ParseError(value.to_string()))
+                        .map(Some);
+                } else if key == "boot_cycle" {
+                    env.boot_cycle = BootCycle::from_str(value)
+                        .map_err(|_| GrubEnvVariableError::ParseError(value.to_string()))
+                        .map(Some);
+                } else {
+                    env.other.push((key.to_string(), value.to_string()));
+                }
+
+                Ok(env)
+            })
+    }
+
+    pub fn write_to_vec(&self) -> Result<Vec<u8>, std::io::Error> {
+        let mut buffer = Vec::new();
+        writeln!(buffer, "# GRUB Environment Block")?;
+        match &self.boot_alternative {
+            Ok(Some(value)) => writeln!(buffer, "boot_alternative={value}")?,
+            Ok(None) => {} // Don't write if None
+            Err(GrubEnvVariableError::ParseError(value)) => {
+                writeln!(buffer, "boot_alternative={value}")?
+            }
+        }
+
+        match &self.boot_cycle {
+            Ok(Some(value)) => writeln!(buffer, "boot_cycle={value}")?,
+            Ok(None) => {} // Don't write if None
+            Err(GrubEnvVariableError::ParseError(value)) => writeln!(buffer, "boot_cycle={value}")?,
+        }
+
+        // Write other variables
+        for (key, value) in &self.other {
+            writeln!(buffer, "{key}={value}")?;
+        }
+
+        if buffer.len() > 1024 {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Buffer too large",
+            ))
+        } else {
+            buffer.resize(1024, b'#');
+            Ok(buffer)
+        }
+    }
+
+    pub fn write_to_file(&self, path: &Path) -> Result<(), std::io::Error> {
+        // We write to string first so that the file is not changed if there is a problem.
+        // This is safer than writing to the file directly.
+        std::fs::write(path, self.write_to_vec()?)
+    }
 }
 
 impl Default for GrubEnv {
     fn default() -> Self {
         Self {
-            boot_alternative: Err(GrubEnvVariableError::Missing),
-            boot_cycle: Err(GrubEnvVariableError::Missing),
+            boot_alternative: Ok(None),
+            boot_cycle: Ok(None),
+            other: vec![],
         }
     }
-}
-
-pub fn read_grubenv(grubenv_path: &Path) -> Result<GrubEnv, GrubEnvReadError> {
-    BufReader::new(File::open(grubenv_path)?).lines().try_fold(
-        GrubEnv::default(),
-        |mut env, line| {
-            let line = line?;
-            // Remove comment after # char and trim whitespace
-            let line = line.split('#').next().unwrap().trim();
-
-            if let Some(value) = line.strip_prefix("boot_cycle=") {
-                env.boot_cycle = BootCycle::from_str(value)
-                    .map_err(|_| GrubEnvVariableError::ParseError(value.to_string()));
-            } else if let Some(value) = line.strip_prefix("boot_alternative=") {
-                env.boot_alternative = BootAlternative::from_str(value)
-                    .map_err(|_| GrubEnvVariableError::ParseError(value.to_string()));
-            }
-
-            Ok(env)
-        },
-    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
-    use tempfile::NamedTempFile;
-
-    fn create_temp_grubenv(content: &str) -> NamedTempFile {
-        let mut temp_file = NamedTempFile::new().expect("Failed to create temp file");
-        temp_file
-            .write_all(content.as_bytes())
-            .expect("Failed to write to temp file");
-        temp_file
-    }
+    use std::io::Cursor;
 
     #[test]
     fn test_complete_grubenv() {
-        let content = r#"# GRUB Environment Block
+        let content = r#"\
+# GRUB Environment Block
 boot_alternative=A
 boot_cycle=stable
-##################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################
-"#;
+##################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################"#;
 
-        let temp_file = create_temp_grubenv(content);
-        let result = read_grubenv(temp_file.path()).expect("Failed to read grubenv");
+        let result = GrubEnv::read_from(Cursor::new(content)).expect("Failed to read grubenv");
 
-        assert_eq!(result.boot_alternative, Ok(BootAlternative::A));
-        assert_eq!(result.boot_cycle, Ok(BootCycle::Stable));
+        assert_eq!(result.boot_alternative, Ok(Some(BootAlternative::A)));
+        assert_eq!(result.boot_cycle, Ok(Some(BootCycle::Stable)));
+
+        // Test writing back
+        assert_eq!(
+            String::from_utf8(result.write_to_vec().unwrap()).unwrap(),
+            content
+        );
     }
 
     #[test]
@@ -110,38 +169,64 @@ boot_cycle=stable
 boot_cycle=first_boot
 "#;
 
-        let temp_file = create_temp_grubenv(content);
-        let result = read_grubenv(temp_file.path()).expect("Failed to read grubenv");
+        let result = GrubEnv::read_from(Cursor::new(content)).expect("Failed to read grubenv");
 
-        assert_eq!(result.boot_alternative, Ok(BootAlternative::B));
-        assert_eq!(result.boot_cycle, Ok(BootCycle::FirstBoot));
+        assert_eq!(result.boot_alternative, Ok(Some(BootAlternative::B)));
+        assert_eq!(result.boot_cycle, Ok(Some(BootCycle::FirstBoot)));
+
+        // Test writing back
+        let expected_beginning = "\
+# GRUB Environment Block
+boot_alternative=B
+boot_cycle=first_boot
+#######################";
+
+        let actual = String::from_utf8(result.write_to_vec().unwrap()).unwrap();
+        assert!(actual.starts_with(expected_beginning), "{actual}");
+        assert_eq!(actual.len(), 1024);
     }
 
     #[test]
     fn test_failsafe_check() {
-        let content = r#"boot_alternative=A
+        let content = r#"\
+boot_alternative=A
 boot_cycle=failsafe_check
 "#;
 
-        let temp_file = create_temp_grubenv(content);
-        let result = read_grubenv(temp_file.path()).expect("Failed to read grubenv");
+        let result = GrubEnv::read_from(Cursor::new(content)).expect("Failed to read grubenv");
 
-        assert_eq!(result.boot_alternative, Ok(BootAlternative::A));
-        assert_eq!(result.boot_cycle, Ok(BootCycle::FailsafeCheck));
+        assert_eq!(result.boot_alternative, Ok(Some(BootAlternative::A)));
+        assert_eq!(result.boot_cycle, Ok(Some(BootCycle::FailsafeCheck)));
+        assert_eq!(result.other, vec![]);
+
+        // Test writing back
+        let expected_beginning = "\
+# GRUB Environment Block
+boot_alternative=A
+boot_cycle=failsafe_check
+#######################";
+        let actual = String::from_utf8(result.write_to_vec().unwrap()).unwrap();
+        assert!(actual.starts_with(expected_beginning), "{actual}");
+        assert_eq!(actual.len(), 1024);
     }
 
     #[test]
     fn test_missing_variables() {
-        let content = r#"# GRUB Environment Block
-some_other_variable=value
-##################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################
-"#;
+        let content = r#"\
+# GRUB Environment Block
+#######################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################"#;
 
-        let temp_file = create_temp_grubenv(content);
-        let result = read_grubenv(temp_file.path()).expect("Failed to read grubenv");
+        let result = GrubEnv::read_from(Cursor::new(content)).expect("Failed to read grubenv");
 
-        assert_eq!(result.boot_alternative, Err(GrubEnvVariableError::Missing));
-        assert_eq!(result.boot_cycle, Err(GrubEnvVariableError::Missing));
+        assert_eq!(result.boot_alternative, Ok(None));
+        assert_eq!(result.boot_cycle, Ok(None));
+        assert_eq!(result.other, vec![]);
+
+        // Test writing back
+        assert_eq!(
+            String::from_utf8(result.write_to_vec().unwrap()).unwrap(),
+            content
+        );
     }
 
     #[test]
@@ -149,68 +234,63 @@ some_other_variable=value
         let content = r#"boot_alternative=B
 "#;
 
-        let temp_file = create_temp_grubenv(content);
-        let result = read_grubenv(temp_file.path()).expect("Failed to read grubenv");
+        let result = GrubEnv::read_from(Cursor::new(content)).expect("Failed to read grubenv");
 
-        assert_eq!(result.boot_alternative, Ok(BootAlternative::B));
-        assert_eq!(result.boot_cycle, Err(GrubEnvVariableError::Missing));
+        assert_eq!(result.boot_alternative, Ok(Some(BootAlternative::B)));
+        assert_eq!(result.boot_cycle, Ok(None));
+        assert_eq!(result.other, vec![]);
+
+        // Test writing back
+        let expected_beginning = "\
+# GRUB Environment Block
+boot_alternative=B
+#######################";
+        let actual = String::from_utf8(result.write_to_vec().unwrap()).unwrap();
+        assert!(actual.starts_with(expected_beginning), "{actual}");
+        assert_eq!(actual.len(), 1024);
     }
 
     #[test]
-    fn test_partial_missing_boot_alternative() {
-        let content = r#"boot_cycle=stable
-"#;
+    fn test_invalid_values() {
+        let content = "\
+boot_alternative=C
+boot_cycle=invalid_cycle
+";
 
-        let temp_file = create_temp_grubenv(content);
-        let result = read_grubenv(temp_file.path()).expect("Failed to read grubenv");
-
-        assert_eq!(result.boot_alternative, Err(GrubEnvVariableError::Missing));
-        assert_eq!(result.boot_cycle, Ok(BootCycle::Stable));
-    }
-
-    #[test]
-    fn test_invalid_boot_alternative() {
-        let content = r#"boot_alternative=C
-boot_cycle=stable
-"#;
-
-        let temp_file = create_temp_grubenv(content);
-        let result = read_grubenv(temp_file.path()).expect("Failed to read grubenv");
+        let result = GrubEnv::read_from(Cursor::new(content)).expect("Failed to read grubenv");
 
         assert_eq!(
             result.boot_alternative,
             Err(GrubEnvVariableError::ParseError("C".to_string()))
         );
-        assert_eq!(result.boot_cycle, Ok(BootCycle::Stable));
-    }
-
-    #[test]
-    fn test_invalid_boot_cycle() {
-        let content = r#"boot_alternative=A
-boot_cycle=invalid_cycle
-"#;
-
-        let temp_file = create_temp_grubenv(content);
-        let result = read_grubenv(temp_file.path()).expect("Failed to read grubenv");
-
-        assert_eq!(result.boot_alternative, Ok(BootAlternative::A));
         assert_eq!(
             result.boot_cycle,
             Err(GrubEnvVariableError::ParseError(
                 "invalid_cycle".to_string()
             ))
         );
+        assert_eq!(result.other, vec![]);
+
+        // Test writing back
+        let expected_beginning = "\
+# GRUB Environment Block
+boot_alternative=C
+boot_cycle=invalid_cycle
+#######################";
+        let actual = String::from_utf8(result.write_to_vec().unwrap()).unwrap();
+        assert!(actual.starts_with(expected_beginning), "{actual}");
+        assert_eq!(actual.len(), 1024);
     }
 
     #[test]
     fn test_empty_file() {
         let content = "";
 
-        let temp_file = create_temp_grubenv(content);
-        let result = read_grubenv(temp_file.path()).expect("Failed to read grubenv");
+        let result = GrubEnv::read_from(Cursor::new(content)).expect("Failed to read grubenv");
 
-        assert_eq!(result.boot_alternative, Err(GrubEnvVariableError::Missing));
-        assert_eq!(result.boot_cycle, Err(GrubEnvVariableError::Missing));
+        assert_eq!(result.boot_alternative, Ok(None));
+        assert_eq!(result.boot_cycle, Ok(None));
+        assert_eq!(result.other, vec![]);
     }
 
     #[test]
@@ -221,20 +301,21 @@ boot_alternative=B
 boot_cycle=stable
 "#;
 
-        let temp_file = create_temp_grubenv(content);
-        let result = read_grubenv(temp_file.path()).expect("Failed to read grubenv");
+        let result = GrubEnv::read_from(Cursor::new(content)).expect("Failed to read grubenv");
 
-        assert_eq!(result.boot_alternative, Ok(BootAlternative::B));
-        assert_eq!(result.boot_cycle, Ok(BootCycle::Stable));
-    }
+        assert_eq!(result.boot_alternative, Ok(Some(BootAlternative::B)));
+        assert_eq!(result.boot_cycle, Ok(Some(BootCycle::Stable)));
+        assert_eq!(result.other, vec![]);
 
-    #[test]
-    fn test_nonexistent_file() {
-        let result = read_grubenv(Path::new("/nonexistent/path"));
-        assert!(matches!(
-            result.expect_err("Expected IO error"),
-            GrubEnvReadError::Io(_)
-        ));
+        // Test writing back
+        let expected_beginning = "\
+# GRUB Environment Block
+boot_alternative=B
+boot_cycle=stable
+#######################";
+        let actual = String::from_utf8(result.write_to_vec().unwrap()).unwrap();
+        assert!(actual.starts_with(expected_beginning), "{actual}");
+        assert_eq!(actual.len(), 1024);
     }
 
     #[test]
@@ -244,13 +325,27 @@ boot_cycle=stable
 boot_alternative=A
    boot_cycle=stable # some comment about boot_cycle
 # More comments
-other_var=ignored
+other_var=other_value
 "#;
 
-        let temp_file = create_temp_grubenv(content);
-        let result = read_grubenv(temp_file.path()).expect("Failed to read grubenv");
+        let result = GrubEnv::read_from(Cursor::new(content)).expect("Failed to read grubenv");
 
-        assert_eq!(result.boot_alternative, Ok(BootAlternative::A));
-        assert_eq!(result.boot_cycle, Ok(BootCycle::Stable));
+        assert_eq!(result.boot_alternative, Ok(Some(BootAlternative::A)));
+        assert_eq!(result.boot_cycle, Ok(Some(BootCycle::Stable)));
+        assert_eq!(
+            result.other,
+            vec![("other_var".to_string(), "other_value".to_string())]
+        );
+
+        // Test writing back
+        let expected_beginning = "\
+# GRUB Environment Block
+boot_alternative=A
+boot_cycle=stable
+other_var=other_value
+#######################";
+        let actual = String::from_utf8(result.write_to_vec().unwrap()).unwrap();
+        assert!(actual.starts_with(expected_beginning), "{actual}");
+        assert_eq!(actual.len(), 1024);
     }
 }
