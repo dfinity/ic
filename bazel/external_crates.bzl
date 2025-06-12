@@ -360,12 +360,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 default_features = False,
             ),
             "canbench": crate.spec(
-                git = "https://github.com/jasonz-dfinity/canbench",
-                rev = "f9fc1cb0f47cb36f678d60b4c58b2af5710b1b2e",
+                version = "^0.1.15",
             ),
             "canbench-rs": crate.spec(
-                git = "https://github.com/jasonz-dfinity/canbench",
-                rev = "f9fc1cb0f47cb36f678d60b4c58b2af5710b1b2e",
+                version = "^0.1.15",
             ),
             "candid": crate.spec(
                 version = "^0.10.13",

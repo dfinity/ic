@@ -5,7 +5,6 @@ use ic_protobuf::{
     registry::routing_table::v1 as pb,
     types::v1 as pb_types,
 };
-use std::collections::HashMap;
 use std::{
     collections::BTreeMap,
     convert::{TryFrom, TryInto},

@@ -11,7 +11,6 @@ candid = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-protobuf = { path = "../../protobuf" }
 serde = { workspace = true }
-ic-cdk = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }

@@ -12,7 +12,6 @@ rust_library(
         "//rs/protobuf",
         "//rs/types/base_types",
         "@crate_index//:candid",
-        "@crate_index//:ic-cdk",
         "@crate_index//:serde",
     ],
 )
