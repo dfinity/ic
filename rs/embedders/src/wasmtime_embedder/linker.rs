@@ -363,6 +363,7 @@ pub fn syscalls<
                 let offset: usize = offset.try_into().expect("Failed to convert I to usize");
                 let size: usize = size.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu_and_mem(&mut caller, overhead::MSG_CALLER_COPY, size)?;
+                main_bulk_access_guard(&mut caller, dst, size, 1)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_caller_copy(dst, offset, size, memory)
                 })?;
@@ -408,6 +409,7 @@ pub fn syscalls<
                 let offset: usize = offset.try_into().expect("Failed to convert I to usize");
                 let size: usize = size.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu_and_mem(&mut caller, overhead::MSG_ARG_DATA_COPY, size)?;
+                main_bulk_access_guard(&mut caller, dst, size, 1)?;
                 with_memory_and_system_api(&mut caller, |system_api, mem| {
                     system_api.ic0_msg_arg_data_copy(dst, offset, size, mem)
                 })?;
@@ -440,6 +442,7 @@ pub fn syscalls<
                 let offset: usize = offset.try_into().expect("Failed to convert I to usize");
                 let size: usize = size.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu_and_mem(&mut caller, overhead::MSG_METHOD_NAME_COPY, size)?;
+                main_bulk_access_guard(&mut caller, dst, size, 1)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_method_name_copy(dst, offset, size, memory)
                 })?;
@@ -471,6 +474,7 @@ pub fn syscalls<
                     overhead::MSG_REPLY_DATA_APPEND,
                     BYTE_TRANSMISSION_COST_FACTOR.saturating_mul(size),
                 )?;
+                main_bulk_access_guard(&mut caller, src, size, 0)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_reply_data_append(src, size, memory)
                 })
@@ -506,6 +510,7 @@ pub fn syscalls<
                     overhead::MSG_REJECT,
                     BYTE_TRANSMISSION_COST_FACTOR.saturating_mul(size),
                 )?;
+                main_bulk_access_guard(&mut caller, src, size, 0)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_reject(src, size, memory)
                 })
@@ -533,6 +538,7 @@ pub fn syscalls<
                 let offset: usize = offset.try_into().expect("Failed to convert I to usize");
                 let size: usize = size.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu_and_mem(&mut caller, overhead::MSG_REJECT_MSG_COPY, size)?;
+                main_bulk_access_guard(&mut caller, dst, size, 1)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_reject_msg_copy(dst, offset, size, memory)
                 })?;
@@ -565,6 +571,7 @@ pub fn syscalls<
                 let offset: usize = offset.try_into().expect("Failed to convert I to usize");
                 let size: usize = size.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu_and_mem(&mut caller, overhead::CANISTER_SELF_COPY, size)?;
+                main_bulk_access_guard(&mut caller, dst, size, 1)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_canister_self_copy(dst, offset, size, memory)
                 })?;
@@ -590,6 +597,7 @@ pub fn syscalls<
                 charge_for_cpu_and_mem(&mut caller, overhead::DEBUG_PRINT, num_bytes as usize)?;
                 let offset: usize = offset.try_into().expect("Failed to convert I to usize");
                 let length = length as usize;
+                main_bulk_access_guard(&mut caller, offset, length, 0)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.save_log_message(offset, length, memory);
                     if debug_print_is_enabled {
@@ -608,6 +616,7 @@ pub fn syscalls<
                 let offset: usize = offset.try_into().expect("Failed to convert I to usize");
                 let length: usize = length.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu_and_mem(&mut caller, overhead::TRAP, length)?;
+                main_bulk_access_guard(&mut caller, offset, length, 0)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_trap(offset, length, memory)
                 })
@@ -640,6 +649,8 @@ pub fn syscalls<
                     overhead::CALL_NEW,
                     callee_size.saturating_add(name_len),
                 )?;
+                main_bulk_access_guard(&mut caller, callee_src, callee_size, 0)?;
+                main_bulk_access_guard(&mut caller, name_src, name_len, 0)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     // A valid function index should be much smaller than u32::max
                     let reply_fun: u32 = reply_fun.try_into().unwrap_or(u32::MAX);
@@ -670,6 +681,7 @@ pub fn syscalls<
                     overhead::CALL_DATA_APPEND,
                     BYTE_TRANSMISSION_COST_FACTOR.saturating_mul(size),
                 )?;
+                main_bulk_access_guard(&mut caller, src, size, 0)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_call_data_append(src, size, memory)
                 })
@@ -789,6 +801,7 @@ pub fn syscalls<
         .func_wrap("ic0", "canister_cycle_balance128", {
             move |mut caller: Caller<'_, StoreData>, dst: I| {
                 let dst: usize = dst.try_into().expect("Failed to convert I to usize");
+                main_bulk_access_guard(&mut caller, dst, 16, 1)?;
                 charge_for_cpu(&mut caller, overhead::CANISTER_CYCLE_BALANCE128)?;
                 with_memory_and_system_api(&mut caller, |s, memory| {
                     s.ic0_canister_cycle_balance128(dst, memory)
@@ -807,6 +820,7 @@ pub fn syscalls<
             move |mut caller: Caller<'_, StoreData>, dst: I| {
                 let dst: usize = dst.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu(&mut caller, overhead::CANISTER_LIQUID_CYCLE_BALANCE128)?;
+                main_bulk_access_guard(&mut caller, dst, 16, 1)?;
                 with_memory_and_system_api(&mut caller, |s, memory| {
                     s.ic0_canister_liquid_cycle_balance128(dst, memory)
                 })?;
@@ -833,6 +847,7 @@ pub fn syscalls<
             move |mut caller: Caller<'_, StoreData>, dst: I| {
                 let dst: usize = dst.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu(&mut caller, overhead::MSG_CYCLES_AVAILABLE128)?;
+                main_bulk_access_guard(&mut caller, dst, 16, 1)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_cycles_available128(dst, memory)
                 })?;
@@ -859,6 +874,7 @@ pub fn syscalls<
             move |mut caller: Caller<'_, StoreData>, dst: I| {
                 let dst: usize = dst.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu(&mut caller, overhead::MSG_CYCLES_REFUNDED128)?;
+                main_bulk_access_guard(&mut caller, dst, 16, 1)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_cycles_refunded128(dst, memory)
                 })?;
@@ -885,6 +901,7 @@ pub fn syscalls<
             move |mut caller: Caller<'_, StoreData>, amount_high: u64, amount_low: u64, dst: I| {
                 let dst: usize = dst.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu(&mut caller, overhead::MSG_CYCLES_ACCEPT128)?;
+                main_bulk_access_guard(&mut caller, dst, 16, 1)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_cycles_accept128(
                         Cycles::from_parts(amount_high, amount_low),
@@ -937,6 +954,7 @@ pub fn syscalls<
                 let offset: usize = offset.try_into().expect("Failed to convert I to usize");
                 let size: usize = size.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu_and_mem(&mut caller, overhead::SUBNET_SELF_COPY, size)?;
+                main_bulk_access_guard(&mut caller, dst, size, 1)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_subnet_self_copy(dst, offset, size, memory)
                 })?;
@@ -1024,6 +1042,7 @@ pub fn syscalls<
                 let src: usize = src.try_into().expect("Failed to convert I to usize");
                 let size: usize = size.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu_and_mem(&mut caller, overhead::CERTIFIED_DATA_SET, size)?;
+                main_bulk_access_guard(&mut caller, src, size, 0)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_certified_data_set(src, size, memory)
                 })
@@ -1058,6 +1077,7 @@ pub fn syscalls<
             move |mut caller: Caller<'_, StoreData>, src: I, size: I| {
                 let src: usize = src.try_into().expect("Failed to convert I to usize");
                 let size: usize = size.try_into().expect("Failed to convert I to usize");
+                main_bulk_access_guard(&mut caller, src, size, 0)?;
                 charge_for_cpu_and_mem(&mut caller, overhead::IS_CONTROLLER, size)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_is_controller(src, size, memory)
@@ -1082,6 +1102,7 @@ pub fn syscalls<
                 let offset: usize = offset.try_into().expect("Failed to convert I to usize");
                 let size: usize = size.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu_and_mem(&mut caller, overhead::DATA_CERTIFICATE_COPY, size)?;
+                main_bulk_access_guard(&mut caller, dst, size, 1)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_data_certificate_copy(dst, offset, size, memory)
                 })?;
@@ -1105,8 +1126,9 @@ pub fn syscalls<
     linker
         .func_wrap("ic0", "mint_cycles128", {
             move |mut caller: Caller<'_, StoreData>, amount_high: u64, amount_low: u64, dst: I| {
+                let dst: usize = dst.try_into().expect("Failed to convert I to usize");
+                main_bulk_access_guard(&mut caller, dst, 16, 1)?;
                 with_memory_and_system_api(&mut caller, |s, memory| {
-                    let dst: usize = dst.try_into().expect("Failed to convert I to usize");
                     s.ic0_mint_cycles128(Cycles::from_parts(amount_high, amount_low), dst, memory)
                 })
                 .map_err(|e| anyhow::Error::msg(format!("ic0_mint_cycles128 failed: {}", e)))
@@ -1133,9 +1155,10 @@ pub fn syscalls<
                   method_name_size: u64,
                   payload_size: u64,
                   dst: I| {
+                let dst: usize = dst.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu(&mut caller, overhead::COST_CALL)?;
+                main_bulk_access_guard(&mut caller, dst, 16, 1)?;
                 with_memory_and_system_api(&mut caller, |s, memory| {
-                    let dst: usize = dst.try_into().expect("Failed to convert I to usize");
                     s.ic0_cost_call(method_name_size, payload_size, dst, memory)
                 })
                 .map_err(|e| anyhow::Error::msg(format!("ic0_cost_call failed: {}", e)))
@@ -1146,9 +1169,10 @@ pub fn syscalls<
     linker
         .func_wrap("ic0", "cost_create_canister", {
             move |mut caller: Caller<'_, StoreData>, dst: I| {
+                let dst: usize = dst.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu(&mut caller, overhead::COST_CREATE_CANISTER)?;
+                main_bulk_access_guard(&mut caller, dst, 16, 1)?;
                 with_memory_and_system_api(&mut caller, |s, memory| {
-                    let dst: usize = dst.try_into().expect("Failed to convert I to usize");
                     s.ic0_cost_create_canister(dst, memory)
                 })
                 .map_err(|e| anyhow::Error::msg(format!("ic0_cost_create_canister failed: {}", e)))
@@ -1162,9 +1186,10 @@ pub fn syscalls<
                   request_size: u64,
                   max_res_bytes: u64,
                   dst: I| {
+                let dst: usize = dst.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu(&mut caller, overhead::COST_HTTP_REQUEST)?;
+                main_bulk_access_guard(&mut caller, dst, 16, 1)?;
                 with_memory_and_system_api(&mut caller, |s, memory| {
-                    let dst: usize = dst.try_into().expect("Failed to convert I to usize");
                     s.ic0_cost_http_request(request_size, max_res_bytes, dst, memory)
                 })
                 .map_err(|e| anyhow::Error::msg(format!("ic0_cost_http_request failed: {}", e)))
@@ -1178,8 +1203,10 @@ pub fn syscalls<
                 let src: usize = src.try_into().expect("Failed to convert I to usize");
                 let size: usize = size.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu_and_mem(&mut caller, overhead::COST_ECDSA, size)?;
+                main_bulk_access_guard(&mut caller, src, size, 0)?;
+                let dst: usize = dst.try_into().expect("Failed to convert I to usize");
+                main_bulk_access_guard(&mut caller, dst, 16, 1)?;
                 with_memory_and_system_api(&mut caller, |s, memory| {
-                    let dst: usize = dst.try_into().expect("Failed to convert I to usize");
                     s.ic0_cost_sign_with_ecdsa(src, size, curve, dst, memory)
                 })
                 .map_err(|e| anyhow::Error::msg(format!("ic0_cost_sign_with_ecdsa failed: {}", e)))
@@ -1193,8 +1220,10 @@ pub fn syscalls<
                 let src: usize = src.try_into().expect("Failed to convert I to usize");
                 let size: usize = size.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu_and_mem(&mut caller, overhead::COST_SCHNORR, size)?;
+                main_bulk_access_guard(&mut caller, src, size, 0)?;
+                let dst: usize = dst.try_into().expect("Failed to convert I to usize");
+                main_bulk_access_guard(&mut caller, dst, 16, 1)?;
                 with_memory_and_system_api(&mut caller, |s, memory| {
-                    let dst: usize = dst.try_into().expect("Failed to convert I to usize");
                     s.ic0_cost_sign_with_schnorr(src, size, algorithm, dst, memory)
                 })
                 .map_err(|e| {
@@ -1210,8 +1239,10 @@ pub fn syscalls<
                 let src: usize = src.try_into().expect("Failed to convert I to usize");
                 let size: usize = size.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu_and_mem(&mut caller, overhead::COST_VETKD, size)?;
+                main_bulk_access_guard(&mut caller, src, size, 0)?;
+                let dst: usize = dst.try_into().expect("Failed to convert I to usize");
+                main_bulk_access_guard(&mut caller, dst, 16, 1)?;
                 with_memory_and_system_api(&mut caller, |s, memory| {
-                    let dst: usize = dst.try_into().expect("Failed to convert I to usize");
                     s.ic0_cost_vetkd_derive_key(src, size, curve, dst, memory)
                 })
                 .map_err(|e| anyhow::Error::msg(format!("ic0_cost_vetkd_derive_key failed: {}", e)))
@@ -1430,9 +1461,19 @@ pub fn syscalls<
         .unwrap();
 
     linker
+        .func_wrap("__", "barrier_debug", {
+            move |mut caller: Caller<'_, StoreData>, kind: i32, page_index: i32, value: i32| {
+                println!(
+                    "Read value {value} from page index {page_index} for access of kind {kind}"
+                );
+            }
+        })
+        .unwrap();
+
+    linker
         .func_wrap("__", "main_read_page_guard", {
             move |mut caller: Caller<'_, StoreData>, page_index: i32| {
-                main_read_page_guard(&mut caller, page_index as u32 as usize)
+                main_read_page_guard(&mut caller, page_index as u32 as usize, false)
             }
         })
         .unwrap();
@@ -1440,7 +1481,8 @@ pub fn syscalls<
     linker
         .func_wrap("__", "main_write_page_guard", {
             move |mut caller: Caller<'_, StoreData>, page_index: i32| {
-                main_write_page_guard(&mut caller, page_index as u32 as usize)
+                // println!("Write guard called from wasm");
+                main_write_page_guard(&mut caller, page_index as u32 as usize, false)
             }
         })
         .unwrap();
@@ -1494,13 +1536,19 @@ const READ_ONLY_ACCESS: u8 = 2;
 fn main_read_page_guard(
     mut caller: &mut Caller<'_, StoreData>,
     page_index: usize,
+    unchecked: bool,
 ) -> Result<(), anyhow::Error> {
-    with_memory_loader_and_bytemap(caller, |loader, bytemap| {
-        debug_assert!(bytemap[page_index] == NO_ACCESS);
+    // println!("read access on page {page_index}");
+    let first_access = with_memory_loader_and_bytemap(caller, |loader, bytemap| {
+        if bytemap[page_index] != NO_ACCESS {
+            return Ok(false);
+        }
         loader.load_page(bytemap, PageIndex::new(page_index as u64), AccessType::Read);
-        Ok(())
+        Ok(true)
     })?;
-    first_access_on_main_memory_page(&mut caller)?;
+    if first_access {
+        first_access_on_main_memory_page(&mut caller)?;
+    }
     Ok(())
 }
 
@@ -1510,11 +1558,20 @@ fn main_read_page_guard(
 fn main_write_page_guard(
     mut caller: &mut Caller<'_, StoreData>,
     page_index: usize,
+    unchecked: bool,
 ) -> Result<(), anyhow::Error> {
+    // println!("write access on page {page_index}");
+    // println!(
+    //     "{:#?}",
+    //     convert_backtrace(&WasmBacktrace::capture(&mut caller))
+    // );
+
     let first_access = with_memory_loader_and_bytemap(caller, |loader, bytemap| {
+        // println!("page 341 is currently {}", bytemap[341]);
         let first_access = bytemap[page_index] == NO_ACCESS;
+        // println!("Is first access: {first_access}");
         if !first_access {
-            debug_assert_eq!(bytemap[page_index], READ_ONLY_ACCESS);
+            return Ok(false);
         }
         loader.load_page(
             bytemap,
@@ -1543,11 +1600,12 @@ fn main_bulk_access_guard(
     let write_access = write_access != 0;
     let start_page = start_address / PAGE_SIZE;
     let end_page = (start_address + length - 1) / PAGE_SIZE;
+    // println!("bulk access write: {write_access} on pages {start_page}..{end_page}");
     for page_index in start_page..end_page + 1 {
         if write_access {
-            main_write_page_guard(&mut caller, page_index)?;
+            main_write_page_guard(&mut caller, page_index, true)?;
         } else {
-            main_read_page_guard(&mut caller, page_index)?;
+            main_read_page_guard(&mut caller, page_index, true)?;
         }
     }
     Ok(())

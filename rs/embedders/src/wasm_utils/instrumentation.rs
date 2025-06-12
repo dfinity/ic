@@ -163,11 +163,12 @@ pub(crate) enum InjectedImports {
     MainReadPageGuard = 5,
     MainWritePageGuard = 6,
     MainBulkAccessGuard = 7,
+    BarrierDebug = 8,
 }
 
 impl InjectedImports {
     fn count() -> usize {
-        8
+        9
     }
 }
 
@@ -723,6 +724,7 @@ const CANISTER_START_STR: &str = "canister_start";
 const MAIN_READ_PAGE_GUARD_NAME: &str = "main_read_page_guard";
 const MAIN_WRITE_PAGE_GUARD_NAME: &str = "main_write_page_guard";
 const MAIN_BULK_ACCESS_GUARD_NAME: &str = "main_bulk_access_guard";
+const BARRIER_DEBUG_NAME: &str = "barrier_debug";
 pub(crate) const MAIN_ACCESSED_PAGES_COUNTER_GLOBAL_NAME: &str =
     "canister accessed_main_memory_pages";
 pub(crate) const MAIN_DIRTY_PAGES_COUNTER_GLOBAL_NAME: &str = "canister accessed_main_memory_pages";
@@ -914,6 +916,14 @@ fn inject_helper_functions(mut module: Module, mem_type: WasmMemoryType) -> Modu
     };
     module.imports.push(bulk_access_guard_import);
 
+    let barrier_debug_type = FuncType::new([ValType::I32, ValType::I32, ValType::I32], []);
+    let barrier_debug_index = add_func_type(&mut module, barrier_debug_type);
+    let barrier_debug_import = Import {
+        module: INSTRUMENTED_FUN_MODULE,
+        name: BARRIER_DEBUG_NAME,
+        ty: TypeRef::Func(barrier_debug_index),
+    };
+    module.imports.push(barrier_debug_import);
     module.imports.append(&mut old_imports);
 
     // now increment all function references by InjectedImports::Count
@@ -1674,35 +1684,55 @@ fn memory64_barrier_instructions<'a>(
         }
     }
 
-    let static_byte_map_offset = match kind {
-        AccessKind::NativeLoad { offset, .. } | AccessKind::NativeStore { offset, .. } => {
-            // Analogous optimization for the offset as in `write_barrier_instructions`.
-            if offset as usize % PAGE_SIZE != 0 {
-                match mem_type {
-                    WasmMemoryType::Wasm32 => {
-                        instructions.append(&mut vec![
-                            I32Const {
-                                value: offset as i32,
-                            },
-                            I32Add,
-                        ]);
-                    }
-                    WasmMemoryType::Wasm64 => {
-                        instructions.append(&mut vec![
-                            I64Const {
-                                value: offset as i64,
-                            },
-                            I64Add,
-                        ]);
-                    }
-                }
-                0
-            } else {
-                offset / PAGE_SIZE as u64
+    if let AccessKind::NativeLoad { offset, .. } | AccessKind::NativeStore { offset, .. } = kind {
+        match mem_type {
+            WasmMemoryType::Wasm32 => {
+                instructions.append(&mut vec![
+                    I32Const {
+                        value: offset as i32,
+                    },
+                    I32Add,
+                ]);
             }
-        }
-        AccessKind::ShortBulkLoad { .. } | AccessKind::ShortBulkStore { .. } => 0,
-    };
+            WasmMemoryType::Wasm64 => {
+                instructions.append(&mut vec![
+                    I64Const {
+                        value: offset as i64,
+                    },
+                    I64Add,
+                ]);
+            }
+        };
+    }
+    // let static_byte_map_offset = match kind {
+    //     AccessKind::NativeLoad { offset, .. } | AccessKind::NativeStore { offset, .. } => {
+    //         // Analogous optimization for the offset as in `write_barrier_instructions`.
+    //         if offset as usize % PAGE_SIZE != 0 {
+    //             match mem_type {
+    //                 WasmMemoryType::Wasm32 => {
+    //                     instructions.append(&mut vec![
+    //                         I32Const {
+    //                             value: offset as i32,
+    //                         },
+    //                         I32Add,
+    //                     ]);
+    //                 }
+    //                 WasmMemoryType::Wasm64 => {
+    //                     instructions.append(&mut vec![
+    //                         I64Const {
+    //                             value: offset as i64,
+    //                         },
+    //                         I64Add,
+    //                     ]);
+    //                 }
+    //             }
+    //             0
+    //         } else {
+    //             offset / PAGE_SIZE as u64
+    //         }
+    //     }
+    //     AccessKind::ShortBulkLoad { .. } | AccessKind::ShortBulkStore { .. } => 0,
+    // };
 
     // Read the page-associated information in the byte map.
     match mem_type {
@@ -1733,11 +1763,38 @@ fn memory64_barrier_instructions<'a>(
             memarg: wasmparser::MemArg {
                 align: 0,
                 max_align: 0,
-                offset: static_byte_map_offset,
+                offset: 0,
                 memory: tracking_mem_idx,
             },
         },
     ]);
+
+    // let kind_encoding = match kind {
+    //     AccessKind::NativeLoad { .. } | AccessKind::ShortBulkLoad { .. } => 0,
+    //     AccessKind::NativeStore { .. } | AccessKind::ShortBulkStore { .. } => 1,
+    // };
+    // instructions.append(&mut vec![
+    //     I32Const {
+    //         value: kind_encoding,
+    //     },
+    //     LocalGet {
+    //         local_index: byte_map_index,
+    //     },
+    //     LocalGet {
+    //         local_index: byte_map_index,
+    //     },
+    //     I32Load8U {
+    //         memarg: wasmparser::MemArg {
+    //             align: 0,
+    //             max_align: 0,
+    //             offset: 0,
+    //             memory: tracking_mem_idx,
+    //         },
+    //     },
+    //     Call {
+    //         function_index: InjectedImports::BarrierDebug as u32,
+    //     },
+    // ]);
 
     // Check whether page guard should be triggered for the page of the first accessed byte:
     // * For read accesses, if it has not yet been previously read or written (i.e. state `0`).
@@ -1753,7 +1810,7 @@ fn memory64_barrier_instructions<'a>(
     }
 
     // Trigger page guard for the first accessed byte only if needed.
-    let page_guard_rmport = match kind {
+    let page_guard_import = match kind {
         AccessKind::NativeLoad { .. } | AccessKind::ShortBulkLoad { .. } => {
             InjectedImports::MainReadPageGuard
         }
@@ -1864,6 +1921,9 @@ fn memory64_barrier_instructions<'a>(
             If {
                 blockty: BlockType::Empty,
             },
+        ]);
+
+        instructions.append(&mut vec![
             // Page-crossing access. At most one subsequent page can be accessed because `length <= PAGE_SIZE`.
             // The guard is unconditionally triggered for the second accessed page. The guard logic checks whether
             // this access needs specific handling (updating the byte map and guarding the working set limit).

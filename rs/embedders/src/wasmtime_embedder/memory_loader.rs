@@ -195,6 +195,11 @@ impl MemoryLoader {
                 AccessType::Write,
             );
             // let updated_range = self.load_range(min_prefetch_range, max_prefetch_range);
+            // println!(
+            //     "setting {}..{} to {WRITE_ACCESS}",
+            //     min_prefetch_range.start.get(),
+            //     min_prefetch_range.end.get()
+            // );
             for i in min_prefetch_range.start.get() as usize..min_prefetch_range.end.get() as usize
             {
                 bytemap[i] = WRITE_ACCESS;
@@ -219,6 +224,7 @@ impl MemoryLoader {
                 AccessType::Read => READ_ONLY_ACCESS,
                 AccessType::Write => WRITE_ACCESS,
             };
+            // println!("setting {updated_range:?} to {new_value}");
             for i in updated_range {
                 bytemap[i as usize] = new_value;
             }
