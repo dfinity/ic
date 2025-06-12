@@ -83,15 +83,6 @@ runs:
               bazel_targets+=( "$tgt" )
             done
 
-            # jemalloc -- or rather, the "hermetic" zig toolchain -- has issues when too
-            # many targets are built concurrently (leads to determinism issues & linking
-            # errors).
-            #
-            # To work around this, we build jemalloc separately.
-            if [ $(uname -o) != "Darwin" ]; then
-              bazel build "${bazel_args[@]}" @@jemalloc//:libjemalloc
-            fi
-
             if [[ $diff_only == "true" ]]; then
                 target_pattern_file=$(mktemp)
                 trap "rm $target_pattern_file" INT TERM EXIT

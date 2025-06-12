@@ -50,13 +50,6 @@ configure_make(
     # Specify the name for the static archive instead of defaulting to <rulename>.a
     out_static_libs = ["libjemalloc.a"],
 
-    # The jemalloc build (most likely rules_foreign_cc) sometimes creates corrupt artifacts
-    # which can pollute the cache -- so we build it locally.
-    tags = [
-        "manual",
-        "no-cache",
-    ],
-
     # Ensures only the static archive is built. Otherwise (make) targets (including jemalloc.sh) cause
     # non-determinism in the build and aren't necessary for us.
     targets = [

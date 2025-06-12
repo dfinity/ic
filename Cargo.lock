@@ -19851,6 +19851,7 @@ dependencies = [
  "assert_matches",
  "build-info",
  "build-info-build",
+ "canbench-rs",
  "candid",
  "candid_parser",
  "canister-test",
