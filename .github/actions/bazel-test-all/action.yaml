@@ -50,13 +50,12 @@ runs:
         env:
           MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          NODE_NAME: ${{ env.NODE_NAME || 'unknown' }}
         with:
           GPG_PASSPHRASE: ${{ inputs.GPG_PASSPHRASE }}
           execlogs-artifact-name: ${{ inputs.execlogs-artifact-name }}
           run: |
             set -euo pipefail
-            echo "::notice::Node Name: ${{ inputs.NODE_NAME }}"
+            echo "::notice::Node Name: ${NODE_NAME}"
 
             diff_only='${{ inputs.diff-only }}'
             release_build='${{ inputs.release-build }}'
