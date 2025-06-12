@@ -5,7 +5,7 @@
 use candid::{Decode, Encode};
 use ic_http_types::{HttpRequest, HttpResponse};
 #[cfg(feature = "pocket_ic")]
-pub use pocket_ic_query_call::PocketIcHttpQuery;
+pub use pocket_ic_query_call::{PocketIcAsyncHttpQuery, PocketIcHttpQuery};
 use regex::Regex;
 use std::fmt::Debug;
 use std::future::Future;
