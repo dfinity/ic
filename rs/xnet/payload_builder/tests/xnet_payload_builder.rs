@@ -612,7 +612,7 @@ fn get_xnet_payload_byte_limit_exceeded(
             "Expecting 2 slices in payload, got {}",
             payload.len()
         );
-        // And exactly one message should be missing.
+        // And between zero and `msg_count1 + msg_count2 - 1` messages.
         let msg_count: usize = payload
             .values()
             .map(|slice| slice.messages().map_or(0, |m| m.len()))

@@ -891,9 +891,9 @@ impl XNetPayloadBuilderImpl {
                     {
                         // This is a bug: inconsistent size estimate between packed and unpacked slice.
                         let message = format!(
-                                "Slice from {} has packed byte size {}, unpacked byte size {}, limit was {}",
-                                subnet_id, byte_size, slice_bytes, byte_limit
-                            );
+                            "Slice from {} has packed byte size {}, unpacked byte size {}, limit was {}",
+                            subnet_id, byte_size, slice_bytes, byte_limit
+                        );
                         debug_assert!(false, "{}", message);
                         error!(
                             self.log,
