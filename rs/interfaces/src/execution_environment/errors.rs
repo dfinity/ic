@@ -393,7 +393,7 @@ impl std::fmt::Display for HypervisorError {
             Self::EnvironmentVariableIndexOutOfBounds { index, length } => {
                 write!(
                     f,
-                    "Environment variable index {} is out of bounds. Length is {}.",
+                    "Environment variable index {} is out of bounds. The number of environment variables is {}.",
                     index, length
                 )
             }

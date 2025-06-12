@@ -642,16 +642,16 @@ pub fn syscalls<
     linker
         .func_wrap("ic0", "env_var_value_copy", {
             move |mut caller: Caller<'_, StoreData>,
+                  name_src: I,
+                  name_size: I,
                   dst: I,
                   offset: I,
-                  size: I,
-                  name_src: I,
-                  name_size: I| {
+                  size: I| {
+                let name_src: usize = name_src.try_into().expect("Failed to convert I to usize");
+                let name_size: usize = name_size.try_into().expect("Failed to convert I to usize");
                 let dst: usize = dst.try_into().expect("Failed to convert I to usize");
                 let offset: usize = offset.try_into().expect("Failed to convert I to usize");
                 let size: usize = size.try_into().expect("Failed to convert I to usize");
-                let name_src: usize = name_src.try_into().expect("Failed to convert I to usize");
-                let name_size: usize = name_size.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu_and_mem(&mut caller, overhead::ENV_VAR_VALUE_COPY, size)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api

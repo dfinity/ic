@@ -63,6 +63,9 @@ const MAX_32_BIT_STABLE_MEMORY_IN_PAGES: u64 = 64 * 1024; // 4GiB
 /// best-effort responses represented in seconds.
 pub const MAX_CALL_TIMEOUT_SECONDS: u32 = 300;
 
+/// The maximum size of an environment variable name.
+pub const MAX_ENV_VAR_NAME_SIZE: usize = 100;
+
 // This macro is used in system calls for tracing.
 macro_rules! trace_syscall {
     ($self:ident, $name:ident, $result:expr $( , $args:expr )*) => {{
@@ -1994,6 +1997,14 @@ impl SystemApi for SystemApiImpl {
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
             | ApiType::InspectMessage { .. } => {
+                if name_size > MAX_ENV_VAR_NAME_SIZE {
+                    return Err(HypervisorError::UserContractViolation {
+                        error: "ic0.env_var_value_size: Variable name is too large.".to_string(),
+                        suggestion: "".to_string(),
+                        doc_link: "".to_string(),
+                    });
+                }
+
                 let name_bytes = valid_subslice(
                     "ic0.env_var_value_size heap",
                     InternalAddress::new(name_src),
@@ -2049,6 +2060,14 @@ impl SystemApi for SystemApiImpl {
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
             | ApiType::InspectMessage { .. } => {
+                if name_size > MAX_ENV_VAR_NAME_SIZE {
+                    return Err(HypervisorError::UserContractViolation {
+                        error: "ic0.env_var_value_size: Variable name is too large.".to_string(),
+                        suggestion: "".to_string(),
+                        doc_link: "".to_string(),
+                    });
+                }
+
                 let name_bytes = valid_subslice(
                     "ic0.env_var_value_copy name",
                     InternalAddress::new(name_src),
@@ -2058,7 +2077,7 @@ impl SystemApi for SystemApiImpl {
 
                 let name = std::str::from_utf8(name_bytes).map_err(|_| {
                     HypervisorError::UserContractViolation {
-                        error: "ic0.env_var_value_copy: the name is not a valid UTF-8 string."
+                        error: "ic0.env_var_value_copy: Variable name is not a valid UTF-8 string."
                             .to_string(),
                         suggestion:
                             "Provide a valid UTF-8 string for the environment variable name."
@@ -2098,7 +2117,7 @@ impl SystemApi for SystemApiImpl {
 
         trace_syscall!(
             self,
-            EnvVarNameCopy,
+            EnvVarValueCopy,
             result,
             dst,
             offset,

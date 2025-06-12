@@ -664,9 +664,17 @@ pub trait SystemApi {
     fn ic0_env_var_count(&self) -> HypervisorResult<usize>;
 
     /// Returns the size of the environment variable name at the given index.
+    ///
+    /// # Panics
+    ///
+    /// This traps if the index is out of bounds.
     fn ic0_env_var_name_size(&self, index: usize) -> HypervisorResult<usize>;
 
     /// Copies the environment variable name at the given index into memory.
+    ///
+    /// # Panics
+    ///
+    /// This traps if the index is out of bounds.
     fn ic0_env_var_name_copy(
         &self,
         index: usize,
@@ -677,6 +685,14 @@ pub trait SystemApi {
     ) -> HypervisorResult<()>;
 
     /// Returns the size of the value for the environment variable with the given name.
+    ///
+    ///
+    /// # Panics
+    ///
+    /// This traps if:
+    ///     - the name is too long
+    ///     - the name is not a valid UTF-8 string.
+    ///     - the environment variable with the given name is not found
     fn ic0_env_var_value_size(
         &self,
         name_src: usize,
@@ -685,6 +701,14 @@ pub trait SystemApi {
     ) -> HypervisorResult<usize>;
 
     /// Copies the value of the environment variable with the given name into memory.
+    ///
+    ///
+    /// # Panics
+    ///
+    /// This traps if:
+    ///     - the name is too long
+    ///     - the name is not a valid UTF-8 string.
+    ///     - the environment variable with the given name is not found.
     fn ic0_env_var_value_copy(
         &self,
         name_src: usize,

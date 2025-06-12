@@ -824,7 +824,7 @@ fn api_availability_test(
             let var_name = b"TEST_VAR_1";
             copy_to_heap(&mut heap, var_name);
             assert_api_availability(
-                |api| api.ic0_env_var_value_size(0, 10, &heap.clone()),
+                |api| api.ic0_env_var_value_size(0, var_name.len(), &heap.clone()),
                 api_type,
                 &system_state,
                 cycles_account_manager,
@@ -837,7 +837,7 @@ fn api_availability_test(
             let var_name = b"TEST_VAR_1";
             copy_to_heap(&mut heap, var_name);
             assert_api_availability(
-                |api| api.ic0_env_var_value_copy(0, 10, 0, 0, 0, &mut heap.clone()),
+                |api| api.ic0_env_var_value_copy(0, var_name.len(), 0, 0, 0, &mut heap.clone()),
                 api_type,
                 &system_state,
                 cycles_account_manager,
@@ -2330,9 +2330,14 @@ fn copy_to_heap(heap: &mut [u8], data: &[u8]) {
 fn test_env_var_value_operations() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let mut env_vars = BTreeMap::new();
-    env_vars.insert("TEST_VAR_1".to_string(), "Hello World".to_string());
+    let var_name_1 = "TEST_VAR_1".to_string();
+    let var_name_path = "PATH".to_string();
+    let var_name_empty = "EMPTY_VAR".to_string();
+    let var_value_1 = "Hello World".to_string();
+    let var_value_path = "/usr/local/bin:/usr/bin".to_string();
+    env_vars.insert(var_name_1.clone(), var_value_1.clone());
     env_vars.insert("EMPTY_VAR".to_string(), "".to_string());
-    env_vars.insert("PATH".to_string(), "/usr/local/bin:/usr/bin".to_string());
+    env_vars.insert(var_name_path.clone(), var_value_path.clone());
 
     let api = get_system_api(
         ApiTypeBuilder::build_update_api(),
@@ -2347,57 +2352,83 @@ fn test_env_var_value_operations() {
 
     let mut heap = vec![0u8; 64];
 
-    // Test getting value size for existing variable
-    let var_name = b"TEST_VAR_1";
-    copy_to_heap(&mut heap, var_name);
-    assert_eq!(
-        api.ic0_env_var_value_size(0, var_name.len(), &heap)
-            .unwrap(),
-        11 // length of "Hello World"
-    );
-
-    // Test copying value for existing variable
-    api.ic0_env_var_value_copy(0, var_name.len(), 0, 0, 11, &mut heap)
-        .unwrap();
-    assert_eq!(&heap[0..11], b"Hello World");
-
     // Test empty variable
-    let empty_var = b"EMPTY_VAR";
-    copy_to_heap(&mut heap, empty_var);
+    copy_to_heap(&mut heap, var_name_empty.as_bytes());
     assert_eq!(
-        api.ic0_env_var_value_size(0, empty_var.len(), &heap)
+        api.ic0_env_var_value_size(0, var_name_empty.len(), &heap)
             .unwrap(),
         0
     );
 
-    let path_var = b"PATH";
-    copy_to_heap(&mut heap, path_var);
-    assert_eq!(
-        api.ic0_env_var_value_size(0, path_var.len(), &heap)
-            .unwrap(),
-        23 // length of "/usr/local/bin:/usr/bin"
-    );
-    api.ic0_env_var_value_copy(0, path_var.len(), 0, 0, 23, &mut heap)
+    // Test copying an empty variable.
+    let mut expected_empty_value = vec![0u8; 64];
+    copy_to_heap(&mut expected_empty_value, var_name_empty.as_bytes());
+    api.ic0_env_var_value_copy(0, var_name_empty.len(), 0, 0, 0, &mut heap)
         .unwrap();
-    assert_eq!(&heap[0..23], b"/usr/local/bin:/usr/bin");
+    assert_eq!(&heap[0..64], expected_empty_value);
+
+    // Test getting value size for existing variable: TEST_VAR_1.
+    copy_to_heap(&mut heap, var_name_1.as_bytes());
+    assert_eq!(
+        api.ic0_env_var_value_size(0, var_name_1.len(), &heap)
+            .unwrap(),
+        var_value_1.len() // length of "Hello World"
+    );
+
+    // Test copying value for existing variable
+    api.ic0_env_var_value_copy(0, var_name_1.len(), 0, 0, var_value_1.len(), &mut heap)
+        .unwrap();
+    assert_eq!(&heap[0..11], var_value_1.as_bytes());
+
+    // Test getting value size for existing variable: PATH.
+    copy_to_heap(&mut heap, var_name_path.as_bytes());
+    assert_eq!(
+        api.ic0_env_var_value_size(0, var_name_path.len(), &heap)
+            .unwrap(),
+        var_value_path.len() // length of "/usr/local/bin:/usr/bin"
+    );
+    api.ic0_env_var_value_copy(
+        0,
+        var_name_path.len(),
+        0,
+        0,
+        var_value_path.len(),
+        &mut heap,
+    )
+    .unwrap();
+    assert_eq!(&heap[0..23], var_value_path.as_bytes());
+
+    // Test copying value for existing variable: PATH.
+    copy_to_heap(&mut heap, var_name_path.as_bytes());
+    api.ic0_env_var_value_copy(
+        0,
+        var_name_path.len(),
+        0,
+        0,
+        var_value_path.len(),
+        &mut heap,
+    )
+    .unwrap();
+    assert_eq!(&heap[0..23], var_value_path.as_bytes());
 
     // Test non-existent variable
-    let non_existent = b"NON_EXISTENT";
-    copy_to_heap(&mut heap, non_existent);
+    let non_existent = "NON_EXISTENT".to_string();
+    copy_to_heap(&mut heap, non_existent.as_bytes());
     assert_eq!(
         api.ic0_env_var_value_size(0, non_existent.len(), &heap),
         Err(HypervisorError::EnvironmentVariableNotFound {
-            name: "NON_EXISTENT".to_string()
+            name: non_existent.clone()
         })
     );
 
     // Test invalid UTF-8 in variable name
     let invalid_utf8 = &[0xFF, 0xFF];
     copy_to_heap(&mut heap, invalid_utf8);
-    assert!(matches!(
-        api.ic0_env_var_value_size(0, invalid_utf8.len(), &heap),
-        Err(HypervisorError::UserContractViolation { .. })
-    ));
+    let result = api.ic0_env_var_value_size(0, invalid_utf8.len(), &heap);
+    let error = result.unwrap_err();
+    assert!(error
+        .to_string()
+        .contains("ic0.env_var_value_size: Variable name is not a valid UTF-8 string."));
 }
 
 #[test]
