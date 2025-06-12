@@ -48,6 +48,8 @@ anchors:
       labels: dind-small
     container:
       <<: *image
+      options: >-
+        -e NODE_NAME
     timeout-minutes: 30
   checkout: &checkout
     name: Checkout

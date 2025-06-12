@@ -382,7 +382,7 @@ mod test {
         check_lookup(
             &contexts,
             "system_u:object_r:boot_t:s0",
-            "/extra_boot_args",
+            "/boot_args",
             Some("/boot"),
         );
     }
