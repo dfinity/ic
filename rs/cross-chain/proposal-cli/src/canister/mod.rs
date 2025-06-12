@@ -72,16 +72,12 @@ impl TargetCanister {
             | TargetCanister::IcpIndex
             | TargetCanister::IcpLedger
             | TargetCanister::LedgerSuiteOrchestrator => "https://github.com/dfinity/ic.git",
-            TargetCanister::EvmRpc => {
-                "https://github.com/internet-computer-protocol/evm-rpc-canister.git"
-            }
+            TargetCanister::EvmRpc => "https://github.com/dfinity/evm-rpc-canister.git",
             TargetCanister::CyclesLedger => "https://github.com/dfinity/cycles-ledger.git",
             TargetCanister::ExchangeRateCanister => {
                 "https://github.com/dfinity/exchange-rate-canister.git"
             }
-            TargetCanister::SolRpc => {
-                "https://github.com/internet-computer-protocol/sol-rpc-canister.git"
-            }
+            TargetCanister::SolRpc => "https://github.com/dfinity/sol-rpc-canister.git",
         }
     }
 
