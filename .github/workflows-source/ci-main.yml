@@ -369,6 +369,11 @@ jobs:
     <<: *dind-large-setup
     steps:
       - <<: *checkout
+      - name: Test NODE NAME
+        shell: bash
+        run: |
+          set -xeuo pipefail
+          echo "Node Name: $NODE_NAME"
       - name: Run Bazel Build Fuzzers
         id: bazel-build-fuzzers
         uses:  ./.github/actions/bazel-test-all/

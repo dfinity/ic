@@ -56,7 +56,7 @@ runs:
           execlogs-artifact-name: ${{ inputs.execlogs-artifact-name }}
           run: |
             set -euo pipefail
-            echo "| Node Name | ${NODE_NAME} |" >> "$GITHUB_STEP_SUMMARY"
+            echo "::notice::Node Name: ${{ inputs.NODE_NAME }}"
 
             diff_only='${{ inputs.diff-only }}'
             release_build='${{ inputs.release-build }}'
