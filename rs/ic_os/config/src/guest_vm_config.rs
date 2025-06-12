@@ -6,7 +6,6 @@ use config_types::{GuestOSConfig, HostOSConfig, Ipv6Config};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{calculate_deterministic_mac, IpVariant};
 use std::path::{Path, PathBuf};
-use tempfile::NamedTempFile;
 
 // See build.rs
 include!(concat!(env!("OUT_DIR"), "/guestos_vm_template.rs"));
@@ -14,9 +13,9 @@ include!(concat!(env!("OUT_DIR"), "/guestos_vm_template.rs"));
 #[derive(Debug)]
 pub struct DirectBootConfig {
     /// The kernel file
-    pub kernel: NamedTempFile,
+    pub kernel: PathBuf,
     /// The initrd file
-    pub initrd: NamedTempFile,
+    pub initrd: PathBuf,
     /// Kernel command line parameters
     pub kernel_cmdline: String,
 }
@@ -112,7 +111,7 @@ fn make_bootstrap_options(
 pub fn generate_vm_config(
     config: &HostOSConfig,
     media_path: &Path,
-    direct_boot: &DirectBootConfig,
+    direct_boot: &Option<DirectBootConfig>,
 ) -> Result<String> {
     let mac_address = calculate_deterministic_mac(
         &config.icos_settings.mgmt_mac,
@@ -127,27 +126,30 @@ pub fn generate_vm_config(
         "kvm"
     };
 
+    let mut direct_boot_props = None;
+    if let Some(direct_boot) = direct_boot {
+        direct_boot_props = Some(DirectBootProps {
+            kernel: direct_boot
+                .kernel
+                .to_str()
+                .context("Kernel path is not UTF-8")?
+                .to_string(),
+            initrd: direct_boot
+                .initrd
+                .to_str()
+                .context("Initrd path is not UTF-8")?
+                .to_string(),
+            kernel_cmdline: direct_boot.kernel_cmdline.clone(),
+        })
+    }
+
     GuestOSTemplateProps {
         cpu_domain: cpu_domain.to_string(),
         vm_memory: config.hostos_settings.vm_memory,
         nr_of_vcpus: config.hostos_settings.vm_nr_of_vcpus,
         mac_address,
         config_media: media_path.display().to_string(),
-        direct_boot: DirectBoot {
-            kernel: direct_boot
-                .kernel
-                .path()
-                .to_str()
-                .context("Kernel path is not UTF-8")?
-                .to_string(),
-            initrd: direct_boot
-                .initrd
-                .path()
-                .to_str()
-                .context("Initrd path is not UTF-8")?
-                .to_string(),
-            kernel_cmdline: direct_boot.kernel_cmdline.clone(),
-        },
+        direct_boot: direct_boot_props,
         enable_sev: config.icos_settings.enable_trusted_execution_environment,
     }
     .render()
@@ -252,6 +254,7 @@ mod tests {
     fn test_vm_config(
         hostos_settings: HostOSSettings,
         enable_trusted_execution_environment: bool,
+        enable_direct_boot: bool,
         filename: &str,
     ) {
         let mut mint = Mint::new(goldenfiles_path());
@@ -261,16 +264,18 @@ mod tests {
 
         config.hostos_settings = hostos_settings;
 
-        let vm_config = generate_vm_config(
-            &config,
-            Path::new("/tmp/config.img"),
-            &DirectBootConfig {
-                kernel: NamedTempFile::fr,
+        let direct_boot = if enable_direct_boot {
+            Some(DirectBootConfig {
+                kernel: PathBuf::from("/tmp/test-kernel"),
                 initrd: PathBuf::from("/tmp/test-initrd"),
                 kernel_cmdline: "security=selinux selinux=1 enforcing=0".to_string(),
-            },
-        )
-        .unwrap();
+            })
+        } else {
+            None
+        };
+
+        let vm_config =
+            generate_vm_config(&config, Path::new("/tmp/config.img"), &direct_boot).unwrap();
         std::fs::write(mint.new_goldenpath(filename).unwrap(), vm_config).unwrap();
     }
 
@@ -284,6 +289,7 @@ mod tests {
                 ..HostOSSettings::default()
             },
             /*enable_trusted_execution_environment=*/ false,
+            /*enable_direct_boot=*/ true,
             "guestos_vm_qemu.xml",
         );
     }
@@ -298,6 +304,7 @@ mod tests {
                 ..HostOSSettings::default()
             },
             /*enable_trusted_execution_environment=*/ false,
+            /*enable_direct_boot=*/ false,
             "guestos_vm_kvm.xml",
         );
     }
@@ -312,6 +319,7 @@ mod tests {
                 ..HostOSSettings::default()
             },
             /*enable_trusted_execution_environment=*/ true,
+            /*enable_direct_boot=*/ true,
             "guestos_vm_sev.xml",
         );
     }

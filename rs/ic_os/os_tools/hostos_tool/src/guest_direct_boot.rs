@@ -5,8 +5,29 @@ use config::guest_vm_config::DirectBootConfig;
 use grub::{BootAlternative, BootCycle, GrubEnv};
 use regex::Regex;
 use std::fs::File;
+use std::io::Write;
 use std::path::Path;
 use tempfile::NamedTempFile;
+
+#[derive(Debug)]
+pub struct DirectBoot {
+    /// The kernel file
+    pub kernel: NamedTempFile,
+    /// The initrd file
+    pub initrd: NamedTempFile,
+    /// Kernel command line parameters
+    pub kernel_cmdline: String,
+}
+
+impl DirectBoot {
+    pub fn to_config(&self) -> DirectBootConfig {
+        DirectBootConfig {
+            kernel: self.kernel.path().to_path_buf(),
+            initrd: self.initrd.path().to_path_buf(),
+            kernel_cmdline: self.kernel_cmdline.clone(),
+        }
+    }
+}
 
 /// Prepares a direct boot configuration by reading the GRUB environment and boot partition.
 ///
@@ -24,7 +45,7 @@ use tempfile::NamedTempFile;
 pub async fn prepare_direct_boot(
     should_refresh_grubenv: bool,
     partition_provider: &dyn PartitionProvider,
-) -> Result<Option<DirectBootConfig>> {
+) -> Result<Option<DirectBoot>> {
     let grub_partition = partition_provider.mount_partition("grub").await?;
     let grubenv_path = grub_partition.mount_point().join("grubenv");
     let mut grubenv = GrubEnv::read_from(File::open(&grubenv_path)?)?;
@@ -69,7 +90,7 @@ pub async fn prepare_direct_boot(
     tokio::fs::copy(boot_partition.mount_point().join("vmlinuz"), &kernel).await?;
     tokio::fs::copy(boot_partition.mount_point().join("initrd.img"), &initrd).await?;
 
-    Ok(Some(DirectBootConfig {
+    Ok(Some(DirectBoot {
         kernel,
         initrd,
         kernel_cmdline: boot_args,
@@ -126,158 +147,184 @@ mod tests {
     use std::sync::Arc;
     use tempfile::TempDir;
 
-    fn create_test_grub_partition(
-        boot_alternative: BootAlternative,
-        boot_cycle: BootCycle,
-    ) -> Arc<TempDir> {
-        let grub_dir = Arc::new(TempDir::new().expect("Failed to create temp dir"));
-        let grubenv_path = grub_dir.path().join("grubenv");
-
-        let mut grubenv = GrubEnv::default();
-        grubenv.boot_alternative = Ok(Some(boot_alternative));
-        grubenv.boot_cycle = Ok(Some(boot_cycle));
-        grubenv
-            .write_to_file(&grubenv_path)
-            .expect("Failed to write grubenv");
-
-        grub_dir
+    /// Test helper to create a complete test setup with GRUB and boot partitions
+    struct TestSetup {
+        provider: MockPartitionProvider,
+        grub_partition: Arc<TempDir>,
     }
 
-    fn create_test_boot_partition(boot_args_a: &str, boot_args_b: &str) -> Arc<TempDir> {
-        let boot_dir = Arc::new(TempDir::new().expect("Failed to create temp dir"));
+    impl TestSetup {
+        fn new(
+            boot_alternative: BootAlternative,
+            boot_cycle: BootCycle,
+            boot_args_a: &str,
+            boot_args_b: &str,
+        ) -> Self {
+            let grub_partition = Self::create_grub_partition(boot_alternative, boot_cycle);
+            let a_boot_partition = Self::create_boot_partition(boot_args_a, "SHOULD NOT BE USED");
+            let b_boot_partition = Self::create_boot_partition("SHOULD NOT BE USED", boot_args_b);
 
-        // Create boot_args file
-        let boot_args_file = File::create(boot_dir.path().join("boot_args")).unwrap();
-        writeln!(boot_args_file, "BOOT_ARGS_A=\"{boot_args_a}\"").unwrap();
-        writeln!(boot_args_file, "BOOT_ARGS_B=\"{boot_args_b}\"").unwrap();
+            let mut partitions = HashMap::new();
+            partitions.insert("grub".to_string(), grub_partition.clone());
+            partitions.insert("A_boot".to_string(), a_boot_partition);
+            partitions.insert("B_boot".to_string(), b_boot_partition);
 
-        // Create dummy kernel and initrd files
-        fs::write(boot_dir.path().join("vmlinuz"), b"fake kernel").expect("Failed to write kernel");
-        fs::write(boot_dir.path().join("initrd.img"), b"fake initrd")
-            .expect("Failed to write initrd");
+            Self {
+                provider: MockPartitionProvider::new(partitions),
+                grub_partition,
+            }
+        }
 
-        boot_dir
+        fn create_grub_partition(
+            boot_alternative: BootAlternative,
+            boot_cycle: BootCycle,
+        ) -> Arc<TempDir> {
+            let grub_dir = Arc::new(TempDir::new().expect("Failed to create temp dir"));
+            let grubenv_path = grub_dir.path().join("grubenv");
+
+            let mut grubenv = GrubEnv::default();
+            grubenv.boot_alternative = Ok(Some(boot_alternative));
+            grubenv.boot_cycle = Ok(Some(boot_cycle));
+            grubenv
+                .write_to_file(&grubenv_path)
+                .expect("Failed to write grubenv");
+
+            grub_dir
+        }
+
+        fn create_boot_partition(boot_args_a: &str, boot_args_b: &str) -> Arc<TempDir> {
+            let boot_dir = Arc::new(TempDir::new().expect("Failed to create temp dir"));
+
+            let mut boot_args_file = File::create(boot_dir.path().join("boot_args")).unwrap();
+            writeln!(boot_args_file, "BOOT_ARGS_A=\"{boot_args_a}\"").unwrap();
+            writeln!(boot_args_file, "BOOT_ARGS_B=\"{boot_args_b}\"").unwrap();
+
+            fs::write(boot_dir.path().join("vmlinuz"), b"fake kernel").unwrap();
+            fs::write(boot_dir.path().join("initrd.img"), b"fake initrd").unwrap();
+
+            boot_dir
+        }
+
+        fn get_grubenv(&self) -> GrubEnv {
+            let grubenv_path = self.grub_partition.path().join("grubenv");
+            GrubEnv::read_from(File::open(grubenv_path).unwrap()).unwrap()
+        }
     }
 
     #[tokio::test]
-    async fn test_prepare_direct_boot_alternative_a() {
-        let grub_partition = create_test_grub_partition(BootAlternative::A, BootCycle::Stable);
-        let boot_partition = create_test_boot_partition("favorite_letter=a", "favorite_letter=b");
+    async fn test_boot_alternative_a() {
+        let setup = TestSetup::new(BootAlternative::A, BootCycle::Stable, "args_a", "args_b");
 
-        let mut partitions = HashMap::new();
-        partitions.insert("grub".to_string(), grub_partition);
-        partitions.insert("A_boot".to_string(), boot_partition);
-
-        let config = prepare_direct_boot(false, &MockPartitionProvider::new(partitions))
+        let config = prepare_direct_boot(false, &setup.provider)
             .await
-            .expect("Failed to prepare direct boot")
-            .expect("Expected direct boot to be supported");
+            .unwrap()
+            .unwrap();
 
-        assert_eq!(config.kernel_cmdline, "favorite_letter=a");
-
-        // Verify files were copied
+        assert_eq!(config.kernel_cmdline, "args_a");
         assert_eq!(fs::read(&config.kernel).unwrap(), b"fake kernel");
         assert_eq!(fs::read(&config.initrd).unwrap(), b"fake initrd");
     }
 
     #[tokio::test]
-    async fn test_prepare_direct_boot_alternative_b() {
-        let grub_partition = create_test_grub_partition(BootAlternative::B, BootCycle::Stable);
-        let boot_partition = create_test_boot_partition(
-            "favorite_letter=a",
-            "favorite_letter=b other_favorite_letter=B",
+    async fn test_boot_alternative_b() {
+        let setup = TestSetup::new(
+            BootAlternative::B,
+            BootCycle::Stable,
+            "args_a",
+            "args_b extra",
         );
 
-        let mut partitions = HashMap::new();
-        partitions.insert("grub".to_string(), grub_partition);
-        partitions.insert("B_boot".to_string(), boot_partition);
-
-        let config = prepare_direct_boot(false, &MockPartitionProvider::new(partitions))
+        let config = prepare_direct_boot(false, &setup.provider)
             .await
-            .expect("Failed to prepare direct boot")
-            .expect("Expected direct boot to be supported");
+            .unwrap()
+            .unwrap();
 
-        assert_eq!(
-            config.kernel_cmdline,
-            "favorite_letter=b other_favorite_letter=B"
-        );
+        assert_eq!(config.kernel_cmdline, "args_b extra");
     }
 
     #[tokio::test]
-    async fn test_prepare_direct_boot_with_grubenv_refresh() {
-        let grub_partition = create_test_grub_partition(BootAlternative::A, BootCycle::FirstBoot);
-        let boot_partition = create_test_boot_partition("favorite_letter=a", "favorite_letter=b");
+    async fn test_grubenv_refresh_stable_no_change() {
+        let setup = TestSetup::new(BootAlternative::A, BootCycle::Stable, "args_a", "args_b");
 
-        let mut partitions = HashMap::new();
-        partitions.insert("grub".to_string(), grub_partition.clone());
-        partitions.insert("A_boot".to_string(), boot_partition);
+        prepare_direct_boot(true, &setup.provider).await.unwrap();
 
-        let temp_dir = TempDir::new().expect("Failed to create temp dir");
-        let kernel_path = temp_dir.path().join("kernel");
-        let initrd_path = temp_dir.path().join("initrd");
-
-        let config = prepare_direct_boot(true, &MockPartitionProvider::new(partitions))
-            .await
-            .expect("Failed to prepare direct boot")
-            .expect("Expected direct boot to be supported");
-
-        // Verify grubenv was updated
-        let grubenv_path = grub_partition.path().join("grubenv");
-        let updated_grubenv = GrubEnv::read_from(File::open(&grubenv_path).unwrap()).unwrap();
-        assert_eq!(
-            updated_grubenv.boot_cycle.unwrap(),
-            Some(BootCycle::FailsafeCheck)
-        );
-        assert_eq!(
-            updated_grubenv.boot_alternative.unwrap(),
-            Some(BootAlternative::A)
-        );
+        let grubenv = setup.get_grubenv();
+        assert_eq!(grubenv.boot_cycle.unwrap(), Some(BootCycle::Stable));
+        assert_eq!(grubenv.boot_alternative.unwrap(), Some(BootAlternative::A));
     }
 
     #[tokio::test]
-    async fn test_prepare_direct_boot_no_grubenv_refresh() {
-        let grub_partition = create_test_grub_partition(BootAlternative::A, BootCycle::FirstBoot);
-        let boot_partition = create_test_boot_partition("favorite_letter=a", "favorite_letter=b");
+    async fn test_grubenv_refresh_install_to_stable() {
+        let setup = TestSetup::new(BootAlternative::A, BootCycle::Install, "args_a", "args_b");
 
-        let mut partitions = HashMap::new();
-        partitions.insert("grub".to_string(), grub_partition.clone());
-        partitions.insert("A_boot".to_string(), boot_partition);
+        prepare_direct_boot(true, &setup.provider).await.unwrap();
 
-        let config = prepare_direct_boot(false, &MockPartitionProvider::new(partitions))
-            .await
-            .expect("Failed to prepare direct boot")
-            .expect("Expected direct boot to be supported");
+        let grubenv = setup.get_grubenv();
+        assert_eq!(grubenv.boot_cycle.unwrap(), Some(BootCycle::Stable));
+        assert_eq!(grubenv.boot_alternative.unwrap(), Some(BootAlternative::A));
+    }
 
-        // Verify grubenv was NOT updated
-        let grubenv_path = grub_partition.path().join("grubenv");
-        let grubenv = GrubEnv::read_from(File::open(&grubenv_path).unwrap()).unwrap();
+    #[tokio::test]
+    async fn test_grubenv_refresh_firstboot_to_failsafecheck() {
+        let setup = TestSetup::new(BootAlternative::B, BootCycle::FirstBoot, "args_a", "args_b");
+
+        prepare_direct_boot(true, &setup.provider).await.unwrap();
+
+        let grubenv = setup.get_grubenv();
+        assert_eq!(grubenv.boot_cycle.unwrap(), Some(BootCycle::FailsafeCheck));
+        assert_eq!(grubenv.boot_alternative.unwrap(), Some(BootAlternative::B));
+    }
+
+    #[tokio::test]
+    async fn test_grubenv_refresh_failsafecheck_to_stable_opposite() {
+        let setup = TestSetup::new(
+            BootAlternative::A,
+            BootCycle::FailsafeCheck,
+            "args_a",
+            "args_b",
+        );
+
+        prepare_direct_boot(true, &setup.provider).await.unwrap();
+
+        let grubenv = setup.get_grubenv();
+        assert_eq!(grubenv.boot_cycle.unwrap(), Some(BootCycle::Stable));
+        assert_eq!(grubenv.boot_alternative.unwrap(), Some(BootAlternative::B));
+    }
+
+    #[tokio::test]
+    async fn test_grubenv_refresh_failsafecheck_b_to_stable_a() {
+        let setup = TestSetup::new(
+            BootAlternative::B,
+            BootCycle::FailsafeCheck,
+            "args_a",
+            "args_b",
+        );
+
+        prepare_direct_boot(true, &setup.provider).await.unwrap();
+
+        let grubenv = setup.get_grubenv();
+        assert_eq!(grubenv.boot_cycle.unwrap(), Some(BootCycle::Stable));
+        assert_eq!(grubenv.boot_alternative.unwrap(), Some(BootAlternative::A));
+    }
+
+    #[tokio::test]
+    async fn test_no_grubenv_refresh() {
+        let setup = TestSetup::new(BootAlternative::A, BootCycle::FirstBoot, "args_a", "args_b");
+
+        prepare_direct_boot(false, &setup.provider).await.unwrap();
+
+        // Grubenv should remain unchanged
+        let grubenv = setup.get_grubenv();
         assert_eq!(grubenv.boot_cycle.unwrap(), Some(BootCycle::FirstBoot));
+        assert_eq!(grubenv.boot_alternative.unwrap(), Some(BootAlternative::A));
     }
 
     #[tokio::test]
-    async fn test_prepare_direct_boot_missing_grub_partition() {
-        // Intentionally not adding grub partition
+    async fn test_missing_grub_partition() {
         let provider = MockPartitionProvider::new(HashMap::new());
 
         let result = prepare_direct_boot(false, &provider).await;
 
-        assert!(result
-            .expect_err("Expected error when missing grub partition")
-            .to_string()
-            .contains("Could not find partition"));
-    }
-
-    #[tokio::test]
-    async fn test_prepare_direct_boot_missing_boot_partition() {
-        let grub_partition = create_test_grub_partition(BootAlternative::A, BootCycle::Stable);
-
-        let mut partitions = HashMap::new();
-        partitions.insert("grub".to_string(), grub_partition);
-        // Intentionally not adding A_boot partition
-
-        let result = prepare_direct_boot(false, &MockPartitionProvider::new(partitions)).await;
-
-        assert!(result.is_err());
         assert!(result
             .unwrap_err()
             .to_string()
@@ -285,14 +332,28 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_prepare_direct_boot_invalid_grubenv() {
-        let grub_dir = Arc::new(TempDir::new().expect("Failed to create temp dir"));
-        // Create invalid grubenv file
+    async fn test_missing_boot_partition() {
+        let grub_partition =
+            TestSetup::create_grub_partition(BootAlternative::A, BootCycle::Stable);
+        let mut partitions = HashMap::new();
+        partitions.insert("grub".to_string(), grub_partition);
+        let provider = MockPartitionProvider::new(partitions);
+
+        let result = prepare_direct_boot(false, &provider).await;
+
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Could not find partition"));
+    }
+
+    #[tokio::test]
+    async fn test_invalid_grubenv() {
+        let grub_dir = Arc::new(TempDir::new().unwrap());
         fs::write(grub_dir.path().join("grubenv"), b"invalid content").unwrap();
 
         let mut partitions = HashMap::new();
         partitions.insert("grub".to_string(), grub_dir);
-
         let provider = MockPartitionProvider::new(partitions);
 
         let result = prepare_direct_boot(false, &provider).await;
@@ -301,68 +362,63 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_prepare_direct_boot_missing_boot_args_file() {
-        let grub_partition = create_test_grub_partition(BootAlternative::A, BootCycle::Stable);
-        let boot_dir = Arc::new(TempDir::new().expect("Failed to create temp dir"));
-        // Don't create boot_args file
+    async fn test_missing_boot_args_file_returns_none() {
+        let grub_partition =
+            TestSetup::create_grub_partition(BootAlternative::A, BootCycle::Stable);
+        let boot_dir = Arc::new(TempDir::new().unwrap());
         fs::write(boot_dir.path().join("vmlinuz"), b"fake kernel").unwrap();
         fs::write(boot_dir.path().join("initrd.img"), b"fake initrd").unwrap();
 
         let mut partitions = HashMap::new();
         partitions.insert("grub".to_string(), grub_partition);
         partitions.insert("A_boot".to_string(), boot_dir);
+        let provider = MockPartitionProvider::new(partitions);
 
-        let result = prepare_direct_boot(false, &MockPartitionProvider::new(partitions))
-            .await
-            .expect("Expected no error");
+        let result = prepare_direct_boot(false, &provider).await.unwrap();
 
         assert!(result.is_none());
     }
 
     #[tokio::test]
-    async fn test_prepare_direct_boot_missing_kernel_file() {
-        let grub_partition = create_test_grub_partition(BootAlternative::A, BootCycle::Stable);
-        let boot_dir = Arc::new(TempDir::new().expect("Failed to create temp dir"));
-
-        // Create boot_args and initrd but not vmlinuz
+    async fn test_missing_kernel_file() {
+        let grub_partition =
+            TestSetup::create_grub_partition(BootAlternative::A, BootCycle::Stable);
+        let boot_dir = Arc::new(TempDir::new().unwrap());
         fs::write(boot_dir.path().join("boot_args"), "BOOT_ARGS_A=\"test\"").unwrap();
         fs::write(boot_dir.path().join("initrd.img"), b"fake initrd").unwrap();
 
         let mut partitions = HashMap::new();
         partitions.insert("grub".to_string(), grub_partition);
         partitions.insert("A_boot".to_string(), boot_dir);
+        let provider = MockPartitionProvider::new(partitions);
 
-        let result = prepare_direct_boot(false, &MockPartitionProvider::new(partitions))
-            .await
-            .expect_err("Expected error because of missing kernel file");
+        let result = prepare_direct_boot(false, &provider).await;
+
+        assert!(result.is_err());
     }
 
     #[tokio::test]
-    async fn test_prepare_direct_boot_boot_args_without_quotes() {
+    async fn test_boot_args_without_quotes() {
         let grub_partition =
-            create_test_grub_partition(BootAlternative::B, BootCycle::Stable).await?;
-        let boot_dir = Arc::new(TempDir::new()?);
-
-        // Create boot_args without quotes
-        let boot_args_content = "BOOT_ARGS_B=quiet splash\n";
-        fs::write(boot_dir.path().join("boot_args"), boot_args_content).await?;
-        fs::write(boot_dir.path().join("vmlinuz"), b"fake kernel").await?;
-        fs::write(boot_dir.path().join("initrd.img"), b"fake initrd").await?;
+            TestSetup::create_grub_partition(BootAlternative::B, BootCycle::Stable);
+        let boot_dir = Arc::new(TempDir::new().unwrap());
+        fs::write(
+            boot_dir.path().join("boot_args"),
+            "BOOT_ARGS_B=quiet splash\n",
+        )
+        .unwrap();
+        fs::write(boot_dir.path().join("vmlinuz"), b"fake kernel").unwrap();
+        fs::write(boot_dir.path().join("initrd.img"), b"fake initrd").unwrap();
 
         let mut partitions = HashMap::new();
         partitions.insert("grub".to_string(), grub_partition);
         partitions.insert("B_boot".to_string(), boot_dir);
-
         let provider = MockPartitionProvider::new(partitions);
-
-        let temp_dir = TempDir::new()?;
-        let kernel_path = temp_dir.path().join("kernel");
-        let initrd_path = temp_dir.path().join("initrd");
 
         let config = prepare_direct_boot(false, &provider)
             .await
-            .expect("Failed to prepare direct boot")
-            .expect("Expected direct boot to be supported");
+            .unwrap()
+            .unwrap();
 
         assert_eq!(config.kernel_cmdline, "quiet splash");
     }

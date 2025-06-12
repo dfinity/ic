@@ -73,7 +73,7 @@ impl PartitionProvider for GptPartitionProvider {
             .iter()
             .map(|(_, partition)| partition)
             .find(|partition| partition.partition_name.as_str() == partition_name)
-            .context("Could not find partition")?;
+            .with_context(|| format!("Could not find partition {partition_name}"))?;
 
         let offset_bytes = partition.starting_lba * self.gpt.sector_size;
         let len_bytes = partition.size()? * self.gpt.sector_size;
@@ -155,7 +155,7 @@ pub mod testing {
             let partition = self
                 .partitions
                 .get(partition_name)
-                .context("Could not find partition")?;
+                .with_context(|| format!("Could not find partition {partition_name}"))?;
             Ok(Box::new(MockMount {
                 mount_point: partition.clone(),
             }))

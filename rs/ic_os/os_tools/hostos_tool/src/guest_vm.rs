@@ -1,4 +1,4 @@
-use crate::guest_direct_boot::prepare_direct_boot;
+use crate::guest_direct_boot::{prepare_direct_boot, DirectBoot};
 use crate::mount::PartitionProvider;
 use crate::systemd::SystemdNotifier;
 use anyhow::{anyhow, bail, Context, Error, Result};
@@ -31,11 +31,10 @@ const DEFAULT_GUESTOS_DEVICE: &str = "/dev/hostlvm/guestos";
 pub struct VirtualMachine {
     domain_id: u32,
     libvirt_connect: Connect,
-    // These temp files are used by the virtual machine and must be kept alive until the virtual
-    // machine is destroyed.
+    // These fields hold resources (files) that are used by the virtual machine and must be kept
+    // alive until the virtual machine is destroyed.
     _config_media: NamedTempFile,
-    _kernel: NamedTempFile,
-    _initrd: NamedTempFile,
+    _direct_boot: Option<DirectBoot>,
 }
 
 impl VirtualMachine {
@@ -45,8 +44,7 @@ impl VirtualMachine {
         libvirt_connect: &Connect,
         xml_config: &str,
         config_media: NamedTempFile,
-        kernel: NamedTempFile,
-        initrd: NamedTempFile,
+        direct_boot: Option<DirectBoot>,
     ) -> Result<Self> {
         let mut retries = 3;
         let domain = loop {
@@ -69,8 +67,7 @@ impl VirtualMachine {
             domain_id: domain.get_id().context("Domain does not have id")?,
             libvirt_connect: libvirt_connect.clone(),
             _config_media: config_media,
-            _kernel: kernel,
-            _initrd: initrd,
+            _direct_boot: direct_boot,
         })
     }
 
@@ -211,8 +208,12 @@ impl GuestVmService {
 
         assemble_config_media(&self.hostos_config, config_media.path())?;
 
-        let vm_config = generate_vm_config(&self.hostos_config, config_media.path(), &direct_boot)
-            .context("Failed to generate GuestOS VM config")?;
+        let vm_config = generate_vm_config(
+            &self.hostos_config,
+            config_media.path(),
+            &direct_boot.as_ref().map(DirectBoot::to_config),
+        )
+        .context("Failed to generate GuestOS VM config")?;
 
         println!("Creating GuestOS virtual machine");
 
@@ -220,8 +221,7 @@ impl GuestVmService {
             &self.libvirt_connection,
             &vm_config,
             config_media,
-            kernel,
-            initrd,
+            direct_boot,
         ) {
             Ok(virtual_machine) => virtual_machine,
             Err(e) => {
@@ -445,7 +445,6 @@ mod tests {
         pub systemd_notifier: Arc<MockSystemdNotifier>,
         pub console_file: NamedTempFile,
         pub metrics_file: NamedTempFile,
-        pub guestos_device: Arc<NamedTempFile>,
         pub service_task: JoinHandle<Result<()>>,
         _libvirt_lock: &'a MutexGuard<'a, ()>,
     }
@@ -454,7 +453,7 @@ mod tests {
         fn new<'a>(
             libvirt_lock: &'a MutexGuard<()>,
             config: HostOSConfig,
-            guestos_device: Arc<NamedTempFile>,
+            guestos_device: &Path,
         ) -> TestFixture<'a> {
             let libvirt_connection = Connect::open(Some("test:///default")).unwrap();
             let systemd_notifier = Arc::new(MockSystemdNotifier::new());
@@ -478,7 +477,7 @@ mod tests {
                 console_tty,
                 partition_provider: Box::new(
                     mount::GptPartitionProvider::with_mounter(
-                        guestos_device.path().to_path_buf(),
+                        guestos_device.to_path_buf(),
                         Box::new(mount::testing::ExtractingFilesystemMounter::new()),
                     )
                     .unwrap(),
@@ -493,7 +492,6 @@ mod tests {
                 systemd_notifier,
                 console_file,
                 metrics_file,
-                guestos_device,
                 service_task,
                 _libvirt_lock: libvirt_lock,
             }
@@ -577,6 +575,18 @@ mod tests {
             config_media_path
         }
 
+        fn get_kernel_path(&self) -> PathBuf {
+            let domain = self.get_domain();
+            let vm_config = domain.get_xml_desc(0).unwrap();
+            let kernel_path = PathBuf::from(
+                &Regex::new("<kernel>([^']+)</kernel>")
+                    .unwrap()
+                    .captures(&vm_config)
+                    .expect("Kernel path not found in VM config")[1],
+            );
+            kernel_path
+        }
+
         async fn assert_no_systemd_stopping_notification(&mut self) {
             tokio::select! {
                 _ = self.systemd_notifier.await_stopping() => {
@@ -629,7 +639,7 @@ mod tests {
         hostos_config
     }
 
-    fn extract_guestos_image() -> Arc<NamedTempFile> {
+    fn extract_guestos_image() -> NamedTempFile {
         let guestos_image_dir = TempDir::new().unwrap();
         let icos_image_path =
             std::env::var("ICOS_IMAGE").expect("Could not find ICOS_IMAGE environment variable");
@@ -649,7 +659,7 @@ mod tests {
             guestos_device.path(),
         )
         .expect("Could not open guestos device");
-        Arc::new(guestos_device)
+        guestos_device
     }
 
     #[tokio::test]
@@ -658,7 +668,8 @@ mod tests {
         let guestos_device = extract_guestos_image();
 
         let libvirt_lock = LIBVIRT_CONN_MUTEX.lock().await;
-        let mut fixture = TestFixture::new(&libvirt_lock, valid_hostos_config(), guestos_device);
+        let mut fixture =
+            TestFixture::new(&libvirt_lock, valid_hostos_config(), guestos_device.path());
 
         // Wait for the service to start the VM and notify systemd
         fixture.wait_for_systemd_ready().await;
@@ -670,9 +681,11 @@ mod tests {
             "2001:db8::6800:d8ff:fecb:f597",
         ]);
 
-        // Ensure that the config media exists
+        // Ensure that the config media and kernel exist
         let config_media_path = fixture.get_config_media_path();
         assert!(config_media_path.exists());
+        let kernel_path = fixture.get_kernel_path();
+        assert!(kernel_path.exists());
 
         nix::sys::signal::raise(SIGTERM).expect("Failed to send SIGTERM");
 
@@ -689,7 +702,8 @@ mod tests {
         let guestos_device = extract_guestos_image();
 
         let libvirt_lock = LIBVIRT_CONN_MUTEX.lock().await;
-        let mut fixture = TestFixture::new(&libvirt_lock, valid_hostos_config(), guestos_device);
+        let mut fixture =
+            TestFixture::new(&libvirt_lock, valid_hostos_config(), guestos_device.path());
 
         // Wait for the service to start the VM and notify systemd
         fixture.wait_for_systemd_ready().await;
@@ -719,7 +733,11 @@ mod tests {
         let guestos_device = extract_guestos_image();
 
         let libvirt_lock = LIBVIRT_CONN_MUTEX.lock().await;
-        let mut fixture = TestFixture::new(&libvirt_lock, invalid_hostos_config(), guestos_device);
+        let mut fixture = TestFixture::new(
+            &libvirt_lock,
+            invalid_hostos_config(),
+            guestos_device.path(),
+        );
 
         // Wait until the service fails
         assert!(
@@ -745,11 +763,12 @@ mod tests {
 
         let libvirt_lock = LIBVIRT_CONN_MUTEX.lock().await;
         let mut fixture1 =
-            TestFixture::new(&libvirt_lock, valid_hostos_config(), guestos_device.clone());
+            TestFixture::new(&libvirt_lock, valid_hostos_config(), guestos_device.path());
 
         fixture1.wait_for_systemd_ready().await;
 
-        let mut fixture2 = TestFixture::new(&libvirt_lock, valid_hostos_config(), guestos_device);
+        let mut fixture2 =
+            TestFixture::new(&libvirt_lock, valid_hostos_config(), guestos_device.path());
 
         // Check that the first VM got stopped
         assert!(
