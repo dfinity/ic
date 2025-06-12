@@ -8,10 +8,9 @@ use crate::{
         split_neuron::{calculate_split_neuron_effect, SplitNeuronEffect},
     },
     heap_governance_data::{
-        initialize_heap_governance_data, reassemble_governance_proto, split_governance_proto,
+        initialize_governance, reassemble_governance_proto, split_governance_proto,
         HeapGovernanceData, XdrConversionRate,
     },
-    is_disburse_maturity_enabled,
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder, Visibility},
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
     neuron_store::{
@@ -1575,18 +1574,11 @@ impl Governance {
         cmc: Arc<dyn CMC>,
         randomness: Box<dyn RandomnessGenerator>,
     ) -> Self {
-        let (neurons, heap_governance_proto) =
-            initialize_heap_governance_data(initial_governance, env.now());
+        let (neurons, heap_governance_proto) = initialize_governance(initial_governance, env.now());
 
         Self {
             heap_data: heap_governance_proto,
-            neuron_store: NeuronStore::new(
-                // Neurons are converted from API type to internal type.
-                neurons
-                    .into_iter()
-                    .map(|(id, proto)| (id, Neuron::try_from(proto).expect("Invalid neuron")))
-                    .collect(),
-            ),
+            neuron_store: NeuronStore::new(neurons),
             env,
             ledger,
             cmc,
@@ -3267,13 +3259,6 @@ impl Governance {
         caller: &PrincipalId,
         disburse_maturity: &manage_neuron::DisburseMaturity,
     ) -> Result<u64, GovernanceError> {
-        if !is_disburse_maturity_enabled() {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::InvalidCommand,
-                "DisburseMaturity is not yet supported.",
-            ));
-        }
-
         self.check_heap_can_grow()?;
 
         let now_seconds = self.env.now();

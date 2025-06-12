@@ -4,7 +4,6 @@ use crate::{
     governance::Environment,
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
     pb::v1::Subaccount,
-    temporarily_enable_disburse_maturity,
     test_utils::{MockEnvironment, MockRandomness},
 };
 
@@ -12,11 +11,9 @@ use futures::FutureExt;
 use ic_nervous_system_canisters::{cmc::MockCMC, ledger::MockIcpLedger};
 use ic_nervous_system_common::NervousSystemError;
 use ic_nns_governance_api::Governance as GovernanceApi;
-use ic_stable_structures::{storable::Bound, Storable};
 use icp_ledger::AccountIdentifier;
 use mockall::Sequence;
-use prost::Message;
-use std::{borrow::Cow, collections::BTreeMap, sync::Arc};
+use std::{collections::BTreeMap, sync::Arc};
 
 static NOW_SECONDS: u64 = 1_234_567_890;
 static CONTROLLER: PrincipalId = PrincipalId::new_user_test_id(1);
@@ -122,6 +119,19 @@ fn test_initiate_maturity_disbursement_to_provided_account_successful() {
             finalize_disbursement_timestamp_seconds: NOW_SECONDS + ONE_DAY_SECONDS * 7,
         }
     );
+    // Since the correctness of the account identifier is outside the scope of governance, we simply
+    // verify that the length is expected.
+    assert_eq!(
+        maturity_disbursement
+            .destination
+            .as_ref()
+            .unwrap()
+            .into_account_identifier_proto()
+            .unwrap()
+            .hash
+            .len(),
+        32,
+    )
 }
 
 #[test]
@@ -130,7 +140,7 @@ fn test_initiate_maturity_disbursement_to_account_identifier_successful() {
     let neuron = create_neuron_builder().build();
     neuron_store.add_neuron(neuron).unwrap();
 
-    let account_identifier_proto = AccountIdentifierProto {
+    let account_identifier_proto: AccountIdentifierProto = AccountIdentifierProto {
         hash: [
             128, 112, 119, 233, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0,
@@ -164,11 +174,20 @@ fn test_initiate_maturity_disbursement_to_account_identifier_successful() {
         MaturityDisbursement {
             amount_e8s: 50_000_000_000,
             destination: Some(Destination::AccountIdentifierToDisburseTo(
-                account_identifier_proto
+                account_identifier_proto.clone()
             )),
             timestamp_of_disbursement_seconds: NOW_SECONDS,
             finalize_disbursement_timestamp_seconds: NOW_SECONDS + ONE_DAY_SECONDS * 7,
         }
+    );
+    assert_eq!(
+        maturity_disbursement
+            .destination
+            .as_ref()
+            .unwrap()
+            .into_account_identifier_proto()
+            .unwrap(),
+        account_identifier_proto
     );
 }
 
@@ -540,7 +559,6 @@ fn set_governance_for_test(
 #[tokio::test]
 async fn test_finalize_maturity_disbursement_successful() {
     // Step 1: Set up the test environment
-    let _t = temporarily_enable_disburse_maturity();
     set_governance_for_test(
         vec![create_neuron_builder().build()],
         mock_ledger(vec![MintIcpExpectation {
@@ -593,102 +611,9 @@ async fn test_finalize_maturity_disbursement_successful() {
     );
 }
 
-// TODO(NNS1-3851): clean this up after no old disbursement format is used anymore.
-/// The `MaturityDisbursement` prost type before changing `account_to_disburse_to` to `oneof
-/// destination` with either `account_to_disburse_to` or `account_identifier_to_disburse_to`. This
-/// type is used for testing whether the old disbursement format can be finalized correctly.
-#[derive(
-    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, prost::Message,
-)]
-pub struct OldMaturityDisbursement {
-    #[prost(uint64, tag = "1")]
-    pub amount_e8s: u64,
-    #[prost(uint64, tag = "2")]
-    pub timestamp_of_disbursement_seconds: u64,
-    #[prost(message, optional, tag = "3")]
-    pub account_to_disburse_to: Option<Account>,
-    #[prost(uint64, tag = "4")]
-    pub finalize_disbursement_timestamp_seconds: u64,
-}
-
-impl Storable for OldMaturityDisbursement {
-    fn to_bytes(&self) -> Cow<'_, [u8]> {
-        Cow::from(self.encode_to_vec())
-    }
-
-    fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
-        Self::decode(&bytes[..]).expect("Unable to deserialize MaturityDisbursement.")
-    }
-
-    const BOUND: Bound = Bound::Unbounded;
-}
-
-fn test_serialze_with_old_deserialize_with_new(
-    old: OldMaturityDisbursement,
-    expected_new: MaturityDisbursement,
-) {
-    // Serialize the old format
-    let serialized_old = old.to_bytes();
-
-    // Deserialize using the new format
-    let deserialized_new: MaturityDisbursement = MaturityDisbursement::from_bytes(serialized_old);
-
-    // Assert that the deserialized new format matches the expected new format
-    assert_eq!(deserialized_new, expected_new);
-}
-
-#[test]
-fn test_deserialize_maturity_disbursement_from_old_format() {
-    test_serialze_with_old_deserialize_with_new(
-        OldMaturityDisbursement {
-            amount_e8s: 1,
-            timestamp_of_disbursement_seconds: 2,
-            finalize_disbursement_timestamp_seconds: 3,
-            account_to_disburse_to: Some(Account {
-                owner: Some(CONTROLLER),
-                subaccount: None,
-            }),
-        },
-        MaturityDisbursement {
-            amount_e8s: 1,
-            timestamp_of_disbursement_seconds: 2,
-            finalize_disbursement_timestamp_seconds: 3,
-            destination: Some(Destination::AccountToDisburseTo(Account {
-                owner: Some(CONTROLLER),
-                subaccount: None,
-            })),
-        },
-    );
-    test_serialze_with_old_deserialize_with_new(
-        OldMaturityDisbursement {
-            amount_e8s: 1,
-            timestamp_of_disbursement_seconds: 2,
-            finalize_disbursement_timestamp_seconds: 3,
-            account_to_disburse_to: Some(Account {
-                owner: Some(CONTROLLER),
-                subaccount: Some(Subaccount {
-                    subaccount: vec![2u8; 32],
-                }),
-            }),
-        },
-        MaturityDisbursement {
-            amount_e8s: 1,
-            timestamp_of_disbursement_seconds: 2,
-            finalize_disbursement_timestamp_seconds: 3,
-            destination: Some(Destination::AccountToDisburseTo(Account {
-                owner: Some(CONTROLLER),
-                subaccount: Some(Subaccount {
-                    subaccount: vec![2u8; 32],
-                }),
-            })),
-        },
-    );
-}
-
 #[tokio::test]
 async fn test_finalize_maturity_disbursement_no_maturity_modulation() {
     // Step 1: Set up the test environment without maturity modulation.
-    let _t = temporarily_enable_disburse_maturity();
     set_governance_for_test(
         vec![create_neuron_builder().build()],
         MockIcpLedger::default(),
@@ -733,7 +658,6 @@ async fn test_finalize_maturity_disbursement_no_maturity_modulation() {
 async fn test_finalize_maturity_disbursement_ledger_failure() {
     // Step 1: Set up the test environment with a ledger which will fail the first minting attempt
     // but will succeed on the second.
-    let _t = temporarily_enable_disburse_maturity();
     set_governance_for_test(
         vec![create_neuron_builder().build()],
         mock_ledger(vec![
