@@ -13,6 +13,12 @@ on the process that this file is part of, see
 
 A new function, `get_metrics`, has been added to the SNS Governance canister. This allows front-end clients and SNS aggregators to query for activity metrics of an SNS over a specified time period. Currently, the metrics include the number of most-recent proposals and the timestamp of the latest SNS ledger transaction.
 
+### New `RegisterExtension` proposal type
+
+A new proposal type, `RegisterExtension`, is added for registering SNS extensions. 
+Extensions are a new class of SNS canisters that (unlike SNS-controlled dapp canisters)
+can operate on behalf of the DAO, e.g., by managing a portion of the treasury funds.
+
 ## Changed
 
 ## Deprecated
