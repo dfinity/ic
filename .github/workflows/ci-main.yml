@@ -110,6 +110,7 @@ jobs:
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
     timeout-minutes: 90
+    timeout: 120
     runs-on:
       labels: dind-large
     env:
