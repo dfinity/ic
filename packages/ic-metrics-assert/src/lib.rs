@@ -2,13 +2,14 @@
 
 #![forbid(missing_docs)]
 
-use async_trait::async_trait;
 use candid::{Decode, Encode};
 use ic_http_types::{HttpRequest, HttpResponse};
 #[cfg(feature = "pocket_ic")]
 pub use pocket_ic_query_call::PocketIcHttpQuery;
 use regex::Regex;
 use std::fmt::Debug;
+use std::future::Future;
+use std::pin::Pin;
 
 /// Provides fluent test assertions for metrics.
 ///
@@ -151,10 +152,12 @@ pub trait CanisterHttpQuery<E: Debug> {
 }
 
 /// Trait providing the ability to perform an async HTTP request to a canister.
-#[async_trait]
 pub trait AsyncCanisterHttpQuery<E: Debug> {
     /// Sends a serialized HTTP request to a canister and returns the serialized HTTP response.
-    async fn http_query(&self, request: Vec<u8>) -> Result<Vec<u8>, E>;
+    fn http_query<'a>(
+        &'a self,
+        request: Vec<u8>,
+    ) -> Pin<Box<dyn Future<Output = Result<Vec<u8>, E>> + Send + 'a>>;
 }
 
 #[cfg(feature = "pocket_ic")]
@@ -162,7 +165,7 @@ mod pocket_ic_query_call {
     use super::*;
     use candid::Principal;
     use ic_management_canister_types::CanisterId;
-    use pocket_ic::{PocketIc, RejectResponse};
+    use pocket_ic::{nonblocking, PocketIc, RejectResponse};
 
     /// Provides an implementation of the [`CanisterHttpQuery`] trait in the case where the canister
     /// HTTP requests are made through an instance of [`PocketIc`].
@@ -182,6 +185,30 @@ mod pocket_ic_query_call {
                 "http_request",
                 request,
             )
+        }
+    }
+
+    /// Provides an implementation of the [`CanisterHttpQuery`] trait in the case where the canister
+    /// HTTP requests are made through an instance of [`PocketIc`].
+    pub trait PocketIcAsyncHttpQuery {
+        /// Returns a reference to the instance of [`PocketIc`] through which the HTTP requests are made.
+        fn get_pocket_ic(&self) -> &nonblocking::PocketIc;
+
+        /// Returns the ID of the canister to which HTTP requests will be made.
+        fn get_canister_id(&self) -> CanisterId;
+    }
+
+    impl<T: PocketIcAsyncHttpQuery> AsyncCanisterHttpQuery<RejectResponse> for T {
+        fn http_query<'a>(
+            &'a self,
+            request: Vec<u8>,
+        ) -> Pin<Box<dyn Future<Output = Result<Vec<u8>, RejectResponse>> + Send + 'a>> {
+            let env = self.get_pocket_ic();
+            let canister_id = self.get_canister_id();
+            Box::pin(async move {
+                env.query_call(canister_id, Principal::anonymous(), "http_request", request)
+                    .await
+            })
         }
     }
 }
