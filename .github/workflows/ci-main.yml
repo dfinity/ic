@@ -180,6 +180,8 @@ jobs:
       labels: macOS
     # Run on protected branches, but only on public repo
     if: github.repository == 'dfinity/ic'
+    env:
+      NODE_NAME: ${{ runner.name }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
