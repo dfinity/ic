@@ -10,7 +10,6 @@ DRY_RUN="${DRY_RUN:-}"
 rclone_common_flags=(
     --stats-one-line
     --checksum
-    --immutable
     --s3-upload-cutoff=5G
     --s3-no-check-bucket
     --config /dev/null # don't use a config file
@@ -38,13 +37,20 @@ upload() {
 
     log "uploading to '$bucket_path' ('$artifact_localpath' -> '$bucket_dirname')"
     log "uploading to AWS"
+
+    # NOTE: we upload a "directory" and narrow down the upload with --files-from so that only
+    # the current artifact is uploaded. Without this, --immutable does not work as expected.
+    # https://github.com/rclone/rclone/issues/4921
     AWS_PROFILE=default rclone \
         "${rclone_common_flags[@]}" \
         --s3-provider=AWS \
         --s3-region=eu-central-1 \
         --s3-env-auth \
         copy \
-        "$artifact_localpath" \
+        --files-from <(echo "$(basename "$artifact_localpath")") \
+        --no-traverse \
+        --immutable \
+        "$(dirname "$artifact_localpath")" \
         ":s3:dfinity-download-public/$bucket_dirname"
     log "done uploading to AWS"
 
@@ -57,7 +63,10 @@ upload() {
         --s3-endpoint=https://64059940cc95339fc7e5888f431876ee.r2.cloudflarestorage.com \
         --s3-env-auth \
         copy \
-        "$artifact_localpath" \
+        --files-from <(echo "$(basename "$artifact_localpath")") \
+        --no-traverse \
+        --immutable \
+        "$(dirname "$artifact_localpath")" \
         ":s3:dfinity-download-public/$bucket_dirname"
     log "done uploading to Cloudflare"
 }
