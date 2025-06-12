@@ -142,6 +142,7 @@ impl Default for GrubEnv {
 mod tests {
     use super::*;
     use std::io::Cursor;
+    use tempfile::NamedTempFile;
 
     #[test]
     fn test_complete_grubenv() {
@@ -347,5 +348,23 @@ other_var=other_value
         let actual = String::from_utf8(result.write_to_vec().unwrap()).unwrap();
         assert!(actual.starts_with(expected_beginning), "{actual}");
         assert_eq!(actual.len(), 1024);
+    }
+
+    #[test]
+    fn test_too_long() {
+        let mut out = NamedTempFile::new().expect("Failed to create temp file");
+        out.write_all(b"test").unwrap();
+        out.flush().unwrap();
+        let mut grubenv = GrubEnv::default();
+        for i in 0..200 {
+            grubenv.other.push((format!("key{i}"), format!("value{i}")));
+        }
+
+        grubenv
+            .write_to_file(out.path())
+            .expect_err("Expected error");
+
+        // Check that output file wasn't changed
+        assert_eq!(std::fs::read_to_string(out.path()).unwrap(), "test");
     }
 }
