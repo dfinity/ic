@@ -343,6 +343,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
+      - name: Test NODE NAME
+        shell: bash
+        run: |
+          set -xeuo pipefail
+          echo "Node Name: $NODE_NAME"
       - name: Run Bazel Build Fuzzers
         id: bazel-build-fuzzers
         uses: ./.github/actions/bazel-test-all/
