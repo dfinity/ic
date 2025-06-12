@@ -6,16 +6,17 @@ use config_types::{GuestOSConfig, HostOSConfig, Ipv6Config};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{calculate_deterministic_mac, IpVariant};
 use std::path::{Path, PathBuf};
+use tempfile::NamedTempFile;
 
 // See build.rs
 include!(concat!(env!("OUT_DIR"), "/guestos_vm_template.rs"));
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug)]
 pub struct DirectBootConfig {
-    /// Path to the kernel file
-    pub kernel: PathBuf,
-    /// Path to the initrd file
-    pub initrd: PathBuf,
+    /// The kernel file
+    pub kernel: NamedTempFile,
+    /// The initrd file
+    pub initrd: NamedTempFile,
     /// Kernel command line parameters
     pub kernel_cmdline: String,
 }
@@ -135,11 +136,13 @@ pub fn generate_vm_config(
         direct_boot: DirectBoot {
             kernel: direct_boot
                 .kernel
+                .path()
                 .to_str()
                 .context("Kernel path is not UTF-8")?
                 .to_string(),
             initrd: direct_boot
                 .initrd
+                .path()
                 .to_str()
                 .context("Initrd path is not UTF-8")?
                 .to_string(),
@@ -262,7 +265,7 @@ mod tests {
             &config,
             Path::new("/tmp/config.img"),
             &DirectBootConfig {
-                kernel: PathBuf::from("/tmp/test-kernel"),
+                kernel: NamedTempFile::fr,
                 initrd: PathBuf::from("/tmp/test-initrd"),
                 kernel_cmdline: "security=selinux selinux=1 enforcing=0".to_string(),
             },

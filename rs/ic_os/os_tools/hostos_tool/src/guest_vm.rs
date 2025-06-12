@@ -1,5 +1,5 @@
 use crate::guest_direct_boot::prepare_direct_boot;
-use crate::mount::DeviceMounter;
+use crate::mount::PartitionProvider;
 use crate::systemd::SystemdNotifier;
 use anyhow::{anyhow, bail, Context, Error, Result};
 use config::guest_vm_config::{assemble_config_media, generate_vm_config};
@@ -8,13 +8,13 @@ use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{calculate_deterministic_mac, IpVariant, MacAddr6Ext};
 use ic_metrics_tool::{Metric, MetricsWriter};
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 use tempfile::NamedTempFile;
 use tokio::process::Command;
 use tokio::signal::unix::{signal, SignalKind};
-use tokio::time::{sleep, Instant};
+use tokio::time::sleep;
 use virt::connect::Connect;
 use virt::domain::Domain;
 use virt::error::{ErrorDomain, ErrorNumber};
@@ -140,8 +140,7 @@ pub struct GuestVmService {
     hostos_config: HostOSConfig,
     systemd_notifier: Arc<dyn SystemdNotifier>,
     console_tty: Box<dyn Write + Send + Sync>,
-    _guestos_device: PathBuf,
-    device_mounter: Box<dyn DeviceMounter>,
+    partition_provider: Box<dyn PartitionProvider>,
 }
 
 impl GuestVmService {
@@ -168,8 +167,9 @@ impl GuestVmService {
             hostos_config,
             systemd_notifier: Arc::new(crate::systemd::DefaultSystemdNotifier),
             console_tty: Box::new(console_tty),
-            _guestos_device: DEFAULT_GUESTOS_DEVICE.into(),
-            device_mounter: Box::new(crate::mount::TempMounter),
+            partition_provider: Box::new(crate::mount::GptPartitionProvider::new(
+                DEFAULT_GUESTOS_DEVICE.into(),
+            )?),
         })
     }
 
@@ -201,21 +201,13 @@ impl GuestVmService {
     }
 
     async fn start_virtual_machine(&mut self) -> Result<VirtualMachine> {
-        let kernel = NamedTempFile::new()?;
-        let initrd = NamedTempFile::new()?;
         let config_media = NamedTempFile::new()?;
 
-        let now = Instant::now();
         let direct_boot = prepare_direct_boot(
-            &self._guestos_device,
-            kernel.path(),
-            initrd.path(),
             true, // TODO: We should not refresh in Upgrade VMs once we add them
-            self.device_mounter.as_ref(),
+            self.partition_provider.as_ref(),
         )
         .await?;
-
-        eprintln!("DIRECT BOOT TOOK {:?}", now.elapsed());
 
         assemble_config_media(&self.hostos_config, config_media.path())?;
 
@@ -484,8 +476,13 @@ mod tests {
                 hostos_config: config,
                 systemd_notifier: systemd_notifier.clone(),
                 console_tty,
-                device_mounter: Box::new(mount::testing::TestMounter::new()),
-                _guestos_device: guestos_device.path().to_path_buf(),
+                partition_provider: Box::new(
+                    mount::GptPartitionProvider::with_mounter(
+                        guestos_device.path().to_path_buf(),
+                        Box::new(mount::testing::ExtractingFilesystemMounter::new()),
+                    )
+                    .unwrap(),
+                ),
             };
 
             // Start the service in the background
