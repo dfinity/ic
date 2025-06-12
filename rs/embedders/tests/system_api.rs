@@ -2261,8 +2261,13 @@ fn get_system_api_for_best_effort_response(
 fn test_env_var_name_operations() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let mut env_vars = BTreeMap::new();
-    env_vars.insert("TEST_VAR_1".to_string(), "TEST_VALUE_1".to_string());
-    env_vars.insert("TEST_VAR_22".to_string(), "TEST_VALUE_2".to_string());
+    let var_name_1 = "TEST_VAR_1".to_string();
+    let var_name_2 = "TEST_VAR_22".to_string();
+    let var_value_1 = "TEST_VALUE_1".to_string();
+    let var_value_2 = "TEST_VALUE_2".to_string();
+
+    env_vars.insert(var_name_1.clone(), var_value_1.clone());
+    env_vars.insert(var_name_2.clone(), var_value_2.clone());
 
     let api = get_system_api(
         ApiTypeBuilder::build_update_api(),
@@ -2276,8 +2281,8 @@ fn test_env_var_name_operations() {
     assert_eq!(api.ic0_env_var_count().unwrap(), 2);
 
     // Test ic0_env_var_name_size
-    assert_eq!(api.ic0_env_var_name_size(0).unwrap(), 10); // "TEST_VAR_1"
-    assert_eq!(api.ic0_env_var_name_size(1).unwrap(), 11); // "TEST_VAR_22"
+    assert_eq!(api.ic0_env_var_name_size(0).unwrap(), var_name_1.len()); // "TEST_VAR_1"
+    assert_eq!(api.ic0_env_var_name_size(1).unwrap(), var_name_2.len()); // "TEST_VAR_22"
 
     // Test ic0_env_var_name_size with invalid index
     assert!(matches!(
@@ -2293,11 +2298,11 @@ fn test_env_var_name_operations() {
 
     // Copy first variable name
     api.ic0_env_var_name_copy(0, 0, 0, 10, &mut heap).unwrap();
-    assert_eq!(&heap[0..10], b"TEST_VAR_1");
+    assert_eq!(&heap[0..10], var_name_1.as_bytes());
 
     // Copy second variable name
     api.ic0_env_var_name_copy(1, 0, 0, 11, &mut heap).unwrap();
-    assert_eq!(&heap[0..11], b"TEST_VAR_22");
+    assert_eq!(&heap[0..11], var_name_2.as_bytes());
 
     // Test invalid index
     assert!(matches!(

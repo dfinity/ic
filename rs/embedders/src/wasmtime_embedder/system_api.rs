@@ -2062,7 +2062,7 @@ impl SystemApi for SystemApiImpl {
             | ApiType::InspectMessage { .. } => {
                 if name_size > MAX_ENV_VAR_NAME_SIZE {
                     return Err(HypervisorError::UserContractViolation {
-                        error: "ic0.env_var_value_size: Variable name is too large.".to_string(),
+                        error: "ic0.env_var_value_copy: Variable name is too large.".to_string(),
                         suggestion: "".to_string(),
                         doc_link: "".to_string(),
                     });
