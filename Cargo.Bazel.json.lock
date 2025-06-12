@@ -1,5 +1,5 @@
 {
-  "checksum": "0cac208382b7a681e7b1517258cd897a2025065b802664fb52c5fc0ed47fa47e",
+  "checksum": "ea4b17fe8625c859ee314cc11d93e2c3e34db3149ecb3ae013e3dec38f287428",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -11449,12 +11449,9 @@
       "version": "0.1.15",
       "package_url": "https://github.com/dfinity/canbench",
       "repository": {
-        "Git": {
-          "remote": "https://github.com/jasonz-dfinity/canbench",
-          "commitish": {
-            "Rev": "f9fc1cb0f47cb36f678d60b4c58b2af5710b1b2e"
-          },
-          "strip_prefix": "canbench-bin"
+        "Http": {
+          "url": "https://static.crates.io/crates/canbench/0.1.15/download",
+          "sha256": "5c346cb41bf01bac3c8494eef82943d4dc49267981c8bcb548ba8f4cc69f3161"
         }
       },
       "targets": [
@@ -11575,12 +11572,9 @@
       "version": "0.1.15",
       "package_url": "https://github.com/dfinity/canbench",
       "repository": {
-        "Git": {
-          "remote": "https://github.com/jasonz-dfinity/canbench",
-          "commitish": {
-            "Rev": "f9fc1cb0f47cb36f678d60b4c58b2af5710b1b2e"
-          },
-          "strip_prefix": "canbench-rs"
+        "Http": {
+          "url": "https://static.crates.io/crates/canbench-rs/0.1.15/download",
+          "sha256": "c1c560e37bb75c6900e18e7d37174efaff09e266d138d9926e34f489d9d2f6a0"
         }
       },
       "targets": [
@@ -11642,12 +11636,9 @@
       "version": "0.1.15",
       "package_url": "https://github.com/dfinity/canbench",
       "repository": {
-        "Git": {
-          "remote": "https://github.com/jasonz-dfinity/canbench",
-          "commitish": {
-            "Rev": "f9fc1cb0f47cb36f678d60b4c58b2af5710b1b2e"
-          },
-          "strip_prefix": "canbench-rs-macros"
+        "Http": {
+          "url": "https://static.crates.io/crates/canbench-rs-macros/0.1.15/download",
+          "sha256": "866a310ae95dfd273c2f1d17c8382d0d893c35851e9252cca98bd3a80a7e5635"
         }
       },
       "targets": [
@@ -80357,7 +80348,7 @@
         "deps": {
           "common": [
             {
-              "id": "cfg-if 0.1.10",
+              "id": "cfg-if 1.0.0",
               "target": "cfg_if"
             },
             {
