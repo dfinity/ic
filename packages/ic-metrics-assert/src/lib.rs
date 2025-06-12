@@ -1,5 +1,6 @@
 //! Fluent assertions for metrics.
 
+#![forbid(unsafe_code)]
 #![forbid(missing_docs)]
 
 use candid::{Decode, Encode};
@@ -7,9 +8,7 @@ use ic_http_types::{HttpRequest, HttpResponse};
 #[cfg(feature = "pocket_ic")]
 pub use pocket_ic_query_call::{PocketIcAsyncHttpQuery, PocketIcHttpQuery};
 use regex::Regex;
-use std::fmt::Debug;
-use std::future::Future;
-use std::pin::Pin;
+use std::{fmt::Debug, future::Future, pin::Pin};
 
 /// Provides fluent test assertions for metrics.
 ///
@@ -188,10 +187,11 @@ mod pocket_ic_query_call {
         }
     }
 
-    /// Provides an implementation of the [`CanisterHttpQuery`] trait in the case where the canister
-    /// HTTP requests are made through an instance of [`PocketIc`].
+    /// Provides an implementation of the [`AsyncCanisterHttpQuery`] trait in the case where the
+    /// canister HTTP requests are made through an instance of [`nonblocking::PocketIc`].
     pub trait PocketIcAsyncHttpQuery {
-        /// Returns a reference to the instance of [`PocketIc`] through which the HTTP requests are made.
+        /// Returns a reference to the instance of [`nonblocking::PocketIc`] through which the HTTP
+        /// requests are made.
         fn get_pocket_ic(&self) -> &nonblocking::PocketIc;
 
         /// Returns the ID of the canister to which HTTP requests will be made.
