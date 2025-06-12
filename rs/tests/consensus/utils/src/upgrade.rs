@@ -27,14 +27,14 @@ pub enum UpdateImageType {
 
 pub fn get_public_update_image_url(git_revision: &str) -> String {
     format!(
-                "http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/update-img/update-img.tar.zst",
-                git_revision
-            )
+        "https://download.dfinity.systems/ic/{}/guest-os/update-img/update-img.tar.zst",
+        git_revision
+    )
 }
 
 pub fn get_public_update_image_sha_url(git_revision: &str) -> String {
     format!(
-        "http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/update-img/SHA256SUMS",
+        "https://download.dfinity.systems/ic/{}/guest-os/update-img/SHA256SUMS",
         git_revision
     )
 }

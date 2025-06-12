@@ -38,11 +38,11 @@ pub fn setup(env: TestEnv, config: IcConfig) {
                     IC_VERSION_FILE,
                 ),
                 (
-                    format!("http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/disk-img/disk-img.tar.zst", v),
+                    format!("https://download.dfinity.systems/ic/{}/guest-os/disk-img/disk-img.tar.zst", v),
                     GUESTOS_DISK_IMG_URL,
                 ),
                 (
-                    format!("http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/update-img/update-img.tar.zst", v),
+                    format!("https://download.dfinity.systems/ic/{}/guest-os/update-img/update-img.tar.zst", v),
                     GUESTOS_UPDATE_IMG_URL,
                 ),
             ],

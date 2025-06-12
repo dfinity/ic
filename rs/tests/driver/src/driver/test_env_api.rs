@@ -1160,12 +1160,20 @@ impl<T: HasTestEnv> HasIcDependencies for T {
 
     fn get_mainnet_ic_os_img_sha256(&self) -> Result<String> {
         let mainnet_version = get_mainnet_nns_revision();
-        fetch_sha256(format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/disk-img"), "disk-img.tar.zst", self.test_env().logger())
+        fetch_sha256(
+            format!("https://download.dfinity.systems/ic/{mainnet_version}/guest-os/disk-img"),
+            "disk-img.tar.zst",
+            self.test_env().logger(),
+        )
     }
 
     fn get_mainnet_ic_os_update_img_sha256(&self) -> Result<String> {
         let mainnet_version = get_mainnet_nns_revision();
-        fetch_sha256(format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/update-img"), "update-img.tar.zst", self.test_env().logger())
+        fetch_sha256(
+            format!("https://download.dfinity.systems/ic/{mainnet_version}/guest-os/update-img"),
+            "update-img.tar.zst",
+            self.test_env().logger(),
+        )
     }
 }
 
@@ -1244,13 +1252,15 @@ pub fn get_mainnet_application_subnet_revision() -> String {
 
 pub fn get_mainnet_ic_os_img_url() -> Result<Url> {
     let mainnet_version = get_mainnet_nns_revision();
-    let url = format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/disk-img/disk-img.tar.zst");
+    let url = format!(
+        "https://download.dfinity.systems/ic/{mainnet_version}/guest-os/disk-img/disk-img.tar.zst"
+    );
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_mainnet_ic_os_update_img_url() -> Result<Url> {
     let mainnet_version = get_mainnet_nns_revision();
-    let url = format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/update-img/update-img.tar.zst");
+    let url = format!("https://download.dfinity.systems/ic/{mainnet_version}/guest-os/update-img/update-img.tar.zst");
     Ok(Url::parse(&url)?)
 }
 
