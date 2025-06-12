@@ -3,7 +3,7 @@ use ic_config::{embedders::Config as EmbeddersConfig, subnet_config::SchedulerCo
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::wasmtime_embedder::system_api::{
     sandbox_safe_system_state::SandboxSafeSystemState, ApiType, DefaultOutOfInstructionsHandler,
-    NonReplicatedQueryKind, SystemApiImpl,
+    NonReplicatedQueryKind, SystemApiImpl, MAX_ENV_VAR_NAME_SIZE,
 };
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::{
@@ -2329,14 +2329,16 @@ fn copy_to_heap(heap: &mut [u8], data: &[u8]) {
 #[test]
 fn test_env_var_value_operations() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
-    let mut env_vars = BTreeMap::new();
+
     let var_name_1 = "TEST_VAR_1".to_string();
     let var_name_path = "PATH".to_string();
     let var_name_empty = "EMPTY_VAR".to_string();
     let var_value_1 = "Hello World".to_string();
     let var_value_path = "/usr/local/bin:/usr/bin".to_string();
+
+    let mut env_vars = BTreeMap::new();
     env_vars.insert(var_name_1.clone(), var_value_1.clone());
-    env_vars.insert("EMPTY_VAR".to_string(), "".to_string());
+    env_vars.insert(var_name_empty.clone(), "".to_string());
     env_vars.insert(var_name_path.clone(), var_value_path.clone());
 
     let api = get_system_api(
@@ -2346,13 +2348,20 @@ fn test_env_var_value_operations() {
             .build(),
         cycles_account_manager,
     );
+    let mut heap = vec![0u8; 256];
 
-    // Test ic0_env_var_count
+    // Test ic0_env_var_count.
     assert_eq!(api.ic0_env_var_count().unwrap(), 3);
 
-    let mut heap = vec![0u8; 64];
+    // Test copying value for null bytes as variable name.
+    assert_eq!(
+        api.ic0_env_var_value_copy(0, var_name_empty.len(), 0, 0, 0, &mut heap),
+        Err(HypervisorError::EnvironmentVariableNotFound {
+            name: String::from_utf8(heap[0..var_name_empty.len()].to_vec()).unwrap()
+        })
+    );
 
-    // Test empty variable
+    // Test empty variable.
     copy_to_heap(&mut heap, var_name_empty.as_bytes());
     assert_eq!(
         api.ic0_env_var_value_size(0, var_name_empty.len(), &heap)
@@ -2361,13 +2370,13 @@ fn test_env_var_value_operations() {
     );
 
     // Test copying an empty variable.
-    let mut expected_empty_value = vec![0u8; 64];
-    copy_to_heap(&mut expected_empty_value, var_name_empty.as_bytes());
     api.ic0_env_var_value_copy(0, var_name_empty.len(), 0, 0, 0, &mut heap)
         .unwrap();
+    let mut expected_empty_value = vec![0u8; 64];
+    copy_to_heap(&mut expected_empty_value, var_name_empty.as_bytes());
     assert_eq!(&heap[0..64], expected_empty_value);
 
-    // Test getting value size for existing variable: TEST_VAR_1.
+    // Test value size and copying for existing variable: TEST_VAR_1.
     copy_to_heap(&mut heap, var_name_1.as_bytes());
     assert_eq!(
         api.ic0_env_var_value_size(0, var_name_1.len(), &heap)
@@ -2375,31 +2384,17 @@ fn test_env_var_value_operations() {
         var_value_1.len() // length of "Hello World"
     );
 
-    // Test copying value for existing variable
     api.ic0_env_var_value_copy(0, var_name_1.len(), 0, 0, var_value_1.len(), &mut heap)
         .unwrap();
     assert_eq!(&heap[0..11], var_value_1.as_bytes());
 
-    // Test getting value size for existing variable: PATH.
+    // Test value size and copying for existing variable: PATH.
     copy_to_heap(&mut heap, var_name_path.as_bytes());
     assert_eq!(
         api.ic0_env_var_value_size(0, var_name_path.len(), &heap)
             .unwrap(),
         var_value_path.len() // length of "/usr/local/bin:/usr/bin"
     );
-    api.ic0_env_var_value_copy(
-        0,
-        var_name_path.len(),
-        0,
-        0,
-        var_value_path.len(),
-        &mut heap,
-    )
-    .unwrap();
-    assert_eq!(&heap[0..23], var_value_path.as_bytes());
-
-    // Test copying value for existing variable: PATH.
-    copy_to_heap(&mut heap, var_name_path.as_bytes());
     api.ic0_env_var_value_copy(
         0,
         var_name_path.len(),
@@ -2420,6 +2415,12 @@ fn test_env_var_value_operations() {
             name: non_existent.clone()
         })
     );
+    assert_eq!(
+        api.ic0_env_var_value_copy(0, non_existent.len(), 0, 0, 0, &mut heap),
+        Err(HypervisorError::EnvironmentVariableNotFound {
+            name: non_existent.clone()
+        })
+    );
 
     // Test invalid UTF-8 in variable name
     let invalid_utf8 = &[0xFF, 0xFF];
@@ -2429,6 +2430,24 @@ fn test_env_var_value_operations() {
     assert!(error
         .to_string()
         .contains("ic0.env_var_value_size: Variable name is not a valid UTF-8 string."));
+
+    let result = api.ic0_env_var_value_copy(0, invalid_utf8.len(), 0, 0, 0, &mut heap);
+    let error = result.unwrap_err();
+    println!("error: {:?}", error);
+    assert!(error
+        .to_string()
+        .contains("Variable name is not a valid UTF-8 string."));
+
+    // Test name too long
+    let long_name = "A".repeat(MAX_ENV_VAR_NAME_SIZE + 1);
+    copy_to_heap(&mut heap, long_name.as_bytes());
+    let result = api.ic0_env_var_value_size(0, long_name.len(), &heap);
+    let error = result.unwrap_err();
+    assert!(error.to_string().contains("Variable name is too large."));
+
+    let result = api.ic0_env_var_value_copy(0, long_name.len(), 0, 0, 0, &mut heap);
+    let error = result.unwrap_err();
+    assert!(error.to_string().contains("Variable name is too large."));
 }
 
 #[test]
