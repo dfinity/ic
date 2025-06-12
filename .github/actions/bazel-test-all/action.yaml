@@ -50,6 +50,7 @@ runs:
         env:
           MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          NODE_NAME: ${{ env.NODE_NAME || 'unknown' }}
         with:
           GPG_PASSPHRASE: ${{ inputs.GPG_PASSPHRASE }}
           execlogs-artifact-name: ${{ inputs.execlogs-artifact-name }}
