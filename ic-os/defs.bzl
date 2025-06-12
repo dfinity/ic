@@ -46,6 +46,11 @@ def icos_build(
       A struct containing the labels of the images that were built.
     """
 
+    # we "declare" lots of different image combinations, though most of
+    # them are not actually used. Because CI jobs make heavy use of '//...'
+    # we make sure that images aren't built unless explicitly depended on.
+    tags = ["manual"] + (tags if tags != None else [])
+
     if mode == None:
         mode = name
 
