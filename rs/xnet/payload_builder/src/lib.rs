@@ -956,23 +956,26 @@ impl XNetPayloadBuilderImpl {
 
             // Replace with / add "message slices" until we run out of payload space.
             for (subnet_id, begin) in shuffled_stream_positions {
-                if bytes_left < self.slice_byte_size_min && header_sizes.is_empty() {
+                if bytes_left < self.slice_byte_size_min {
                     break;
                 }
 
-                let header_bytes = header_sizes.remove(&subnet_id).unwrap_or_default();
+                let header_bytes = header_sizes.get(&subnet_id).cloned().unwrap_or_default();
                 let msg_limit = get_msg_limit(subnet_id, &state);
                 if let Some((slice, message_count, slice_bytes)) =
                     take_slice(subnet_id, begin, msg_limit, bytes_left + header_bytes)
                 {
                     debug_assert!(slice_bytes >= header_bytes);
+                    header_sizes.remove(&subnet_id);
                     bytes_left = (bytes_left + header_bytes).saturating_sub(slice_bytes);
                     stream_slices.insert(subnet_id, slice);
                     observe_slice(message_count, slice_bytes);
-                } else if header_bytes != 0 {
-                    // Already added a header-only slice above.
-                    observe_slice(0, header_bytes);
                 }
+            }
+
+            // Also observe all the header-only slices that we have not replaced.
+            for header_bytes in header_sizes.values() {
+                observe_slice(0, *header_bytes);
             }
         }
 
