@@ -459,6 +459,9 @@ pub(crate) enum CanisterManagerError {
     },
     CanisterSnapshotNotEnoughCycles(CanisterOutOfCyclesError),
     CanisterSnapshotImmutable,
+    CanisterSnapshotInconsistent {
+        message: String,
+    },
     LongExecutionAlreadyInProgress {
         canister_id: CanisterId,
     },

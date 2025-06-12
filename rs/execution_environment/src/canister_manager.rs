@@ -23,7 +23,7 @@ use ic_logger::{error, fatal, info, ReplicaLogger};
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterSnapshotDataKind,
     CanisterSnapshotDataOffset, CanisterSnapshotResponse, CanisterStatusResultV2,
-    CanisterStatusType, ChunkHash, GlobalTimer, Method as Ic00Method,
+    CanisterStatusType, ChunkHash, Global, GlobalTimer, Method as Ic00Method,
     ReadCanisterSnapshotDataResponse, ReadCanisterSnapshotMetadataResponse, SnapshotSource,
     StoredChunksReply, UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
     UploadChunkReply,
@@ -64,6 +64,7 @@ use ic_types::{
 use ic_wasm_types::WasmHash;
 use num_traits::{SaturatingAdd, SaturatingSub};
 use prometheus::IntCounter;
+use std::iter::zip;
 use std::path::PathBuf;
 use std::{convert::TryFrom, str::FromStr, sync::Arc};
 
@@ -1760,6 +1761,23 @@ impl CanisterManager {
                 }
             };
 
+            // If the snapshot was uploaded, make sure the snapshot's exported globals match the wasm module's.
+            if snapshot.source() == SnapshotSource::MetadataUpload {
+                if !globals_match(
+                    &new_execution_state.exported_globals,
+                    &execution_snapshot.exported_globals,
+                ) {
+                    return (
+                        Err(CanisterManagerError::CanisterSnapshotInconsistent {
+                            message: "Wasm exported globals of canister module and snapshot metadata do not match.".to_string(),
+                        }),
+                        instructions_used,
+                    );
+                }
+                // Also check the hook status
+                let snapshot_memory_hook_status = execution_snapshot.on_low_wasm_memory_hook_status;
+            }
+
             new_execution_state.exported_globals = execution_snapshot.exported_globals.clone();
             new_execution_state.stable_memory = Memory::from(&execution_snapshot.stable_memory);
             new_execution_state.wasm_memory = Memory::from(&execution_snapshot.wasm_memory);
@@ -2461,6 +2479,14 @@ pub fn uninstall_canister(
         });
 
     reject_responses
+}
+
+fn globals_match(g1: &Vec<Global>, g2: &Vec<Global>) -> bool {
+    use std::mem::discriminant;
+    if g1.len() != g2.len() {
+        return false;
+    }
+    zip(g1.iter(), g2.iter()).all(|(a, b)| discriminant(a) == discriminant(b))
 }
 
 #[cfg(test)]
