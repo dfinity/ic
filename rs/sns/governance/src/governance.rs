@@ -5003,6 +5003,7 @@ impl Governance {
     /// Current implementation only garbage collects proposals - not neurons.
     ///
     /// Returns true if GC was run and false otherwise.
+    /// Even if purgable, the last proposal cannot be purged.
     pub fn maybe_gc(&mut self) -> bool {
         let now_seconds = self.env.now();
         // Run GC if either (a) more than 24 hours have passed since it
@@ -5042,17 +5043,25 @@ impl Governance {
         // order of creation in the governance canister (i.e. chronologically). The following
         // data structure maintains the same chronological order for proposals in each action's
         // vector.
-        let action_to_proposals: HashMap<u64, Vec<u64>> = {
-            let mut tmp: HashMap<u64, Vec<u64>> = HashMap::new();
-            for (proposal_id, proposal) in self.proto.proposals.iter() {
-                tmp.entry(proposal.action).or_default().push(*proposal_id);
-            }
-            tmp
-        };
+        // We are not allowed to garbage collect the last proposal,
+        // as proposal-id assignment upon creation uses the proposal-id
+        // of the very last proposal. See `next_proposal_id`.
+        let action_to_proposals: HashMap<u64, Vec<u64>> = self
+            .proto
+            .proposals
+            .iter()
+            .take(self.proto.proposals.len().saturating_sub(1))
+            .fold(
+                HashMap::<u64, Vec<u64>>::new(),
+                |mut hm, (pid, proposal)| {
+                    hm.entry(proposal.action).or_default().push(*pid);
+                    hm
+                },
+            );
+
         // Only keep the latest 'max_proposals_to_keep_per_action'. This is a soft maximum
         // as garbage collection cannot purge un-finalized proposals, and only a subset of proposals
         // at the head of the list are examined.
-        // TODO NNS1-1259: Improve "best-effort" garbage collection of proposals
         for (proposal_action, proposals_of_action) in action_to_proposals {
             log!(
                 INFO,
@@ -5061,11 +5070,10 @@ impl Governance {
                 max_proposals_to_keep_per_action,
                 proposals_of_action.len()
             );
+            // If the number of proposals for a given action reaches
+            // `max_proposals_to_keep_per_action`, it triggers the garbage collection.
             if proposals_of_action.len() > max_proposals_to_keep_per_action {
-                for proposal_id in proposals_of_action
-                    .iter()
-                    .take(proposals_of_action.len() - max_proposals_to_keep_per_action)
-                {
+                for proposal_id in proposals_of_action.iter() {
                     // Check that this proposal can be purged.
                     if let Some(proposal) = self.proto.proposals.get(proposal_id) {
                         if proposal.can_be_purged(now_seconds) {
