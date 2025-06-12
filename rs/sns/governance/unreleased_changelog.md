@@ -15,9 +15,11 @@ A new function, `get_metrics`, has been added to the SNS Governance canister. Th
 
 ### New `RegisterExtension` proposal type
 
-A new proposal type, `RegisterExtension`, is added for registering SNS extensions. 
+A new proposal type, `RegisterExtension`, is added for registering SNS extensions.
 Extensions are a new class of SNS canisters that (unlike SNS-controlled dapp canisters)
 can operate on behalf of the DAO, e.g., by managing a portion of the treasury funds.
+
+Note that while `RegisterExtension` proposals are already recognized, they are not enabled yet.
 
 ## Changed
 
