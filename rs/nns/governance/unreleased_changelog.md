@@ -11,6 +11,9 @@ on the process that this file is part of, see
 
 ## Changed
 
+* Task execution metrics are added for `neuron_data_validation` and
+  `unstake_maturity_of_dissolved_neurons` timer tasks.
+
 ## Deprecated
 
 ## Removed
