@@ -211,7 +211,6 @@ jobs:
       labels: macOS
     # Run on protected branches, but only on public repo
     if: github.repository == 'dfinity/ic'
-
     steps:
       - <<: *checkout
       - name: Set PATH
@@ -232,6 +231,8 @@ jobs:
       - name: Run Bazel Checks on Darwin x86-64
         id: bazel-test-darwin-x86-64
         uses:  ./.github/actions/bazel-test-all/
+        env:
+          NODE_NAME: ${{ runner.name }}
         with:
           upload-artifacts: ${{ needs.config.outputs.release_build && needs.config.outputs.full_macos_build }}
           BAZEL_COMMAND: ${{ steps.cfg.outputs.build-command }}
