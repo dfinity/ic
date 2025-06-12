@@ -142,7 +142,7 @@ jobs:
     name: Bazel Test All
     needs: [ config ]
     <<: *dind-large-setup
-    timeout: 120
+    timeout-minutes: 120
     runs-on:
       labels: dind-large
     env:
