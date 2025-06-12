@@ -7,20 +7,29 @@ load("//publish:defs.bzl", "artifact_bundle")
 #       //ic-os/guestos/BUILD.bazel for examples
 #    or //ic-os/defs.bzl for the full list of targets.
 icos_images = icos_build(
-    name = "dev",
+    name = "recovery",
     image_deps_func = image_deps,
+    tags = [
+        "manual",
+        "no-cache",
+    ],
     visibility = [
         "//rs:ic-os-pkg",
-        "//rs:system-tests-pkg",
-        "//testnet/tools:icos_deploy-pkg",
     ],
 )
 
-# The icos_deploy testnet script needs this
 artifact_bundle(
-    name = "bundle-disk",
-    testonly = True,
-    inputs = [icos_images.disk_image],
-    prefix = "guest-os/disk-img-dev",
-    visibility = ["//visibility:public"],
+    name = "bundle-update",
+    inputs = [
+        icos_images.update_image,
+        icos_images.update_image_test,
+    ],
+    prefix = "guest-os/update-img-recovery",
+    tags = [
+        "manual",
+        "no-cache",
+    ],
+    visibility = [
+        "//rs:ic-os-pkg",
+    ],
 )
