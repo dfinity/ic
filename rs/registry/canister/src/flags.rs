@@ -16,7 +16,7 @@ pub fn temporarily_enable_chunkifying_large_values() -> Temporary {
     Temporary::new(&IS_CHUNKIFYING_LARGE_VALUES_ENABLED, true)
 }
 
-#[cfg(any(test, feature = "canbench-rs"))]
+#[cfg(any(test))]
 pub(crate) fn temporarily_disable_chunkifying_large_values() -> Temporary {
     Temporary::new(&IS_CHUNKIFYING_LARGE_VALUES_ENABLED, false)
 }

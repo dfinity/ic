@@ -23,17 +23,29 @@ pub(crate) fn check_routing_table_invariants(
 // Return routing table from snapshot
 fn get_routing_table(snapshot: &RegistrySnapshot) -> RoutingTable {
     let shards = get_routing_table_shards(snapshot);
-    RoutingTable::try_from(shards).expect("Could not reconstruct routing table from shards");
+    if shards.is_empty() {
+        panic!("No canister_ranges_ records found in the snapshot.");
+    }
+
+    let rt_from_shards = RoutingTable::try_from(shards).unwrap();
 
     // TODO(NNS1-3781): Remove this once we have sharded table supported by all clients.
-    match snapshot.get(make_routing_table_record_key().as_bytes()) {
-        Some(routing_table_bytes) => {
-            let routing_table_proto =
-                pbRoutingTable::decode(routing_table_bytes.as_slice()).unwrap();
-            RoutingTable::try_from(routing_table_proto).unwrap()
-        }
-        None => panic!("No routing table in snapshot"),
-    }
+    let rt_from_routing_table_record =
+        match snapshot.get(make_routing_table_record_key().as_bytes()) {
+            Some(routing_table_bytes) => {
+                let routing_table_proto =
+                    pbRoutingTable::decode(routing_table_bytes.as_slice()).unwrap();
+                RoutingTable::try_from(routing_table_proto).unwrap()
+            }
+            None => panic!("No routing table in snapshot"),
+        };
+
+    assert_eq!(
+        rt_from_shards, rt_from_routing_table_record,
+        "Routing tables from shards and routing table record do not match."
+    );
+
+    rt_from_shards
 }
 
 fn get_routing_table_shards(snapshot: &RegistrySnapshot) -> Vec<pbRoutingTable> {
@@ -43,10 +55,6 @@ fn get_routing_table_shards(snapshot: &RegistrySnapshot) -> Vec<pbRoutingTable> 
     for (_, value) in snapshot.range(start..=end) {
         let routing_table_proto = pbRoutingTable::decode(value.as_slice()).unwrap();
         shards.push(routing_table_proto);
-    }
-
-    if shards.is_empty() {
-        panic!("No routing table shards in snapshot");
     }
 
     shards
