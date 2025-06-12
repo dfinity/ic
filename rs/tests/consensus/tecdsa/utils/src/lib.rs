@@ -4,8 +4,12 @@ use ic_agent::AgentError;
 use ic_base_types::{NodeId, SubnetId};
 use ic_bls12_381::G1Affine;
 use ic_canister_client::Sender;
+use ic_cdk::api::management_canister::{
+    ecdsa::SignWithEcdsaResponse, schnorr::SignWithSchnorrResponse,
+};
 use ic_config::subnet_config::{ECDSA_SIGNATURE_FEE, SCHNORR_SIGNATURE_FEE, VETKD_FEE};
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
+use ic_management_canister_types::VetKDDeriveKeyResult;
 use ic_management_canister_types_private::{
     DerivationPath, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId,
     MasterPublicKeyId, Payload, SchnorrAlgorithm, SchnorrKeyId, SchnorrPublicKeyArgs,
@@ -20,6 +24,7 @@ use ic_nns_governance_api::{NnsFunction, ProposalStatus};
 use ic_nns_test_utils::governance::submit_external_update_proposal;
 use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
 use ic_registry_subnet_type::SubnetType;
+use ic_signer::{GenEcdsaParams, GenSchnorrParams, GenVetkdParams};
 use ic_system_test_driver::{
     canister_api::{CallMode, Request},
     driver::{
@@ -30,7 +35,7 @@ use ic_system_test_driver::{
         },
     },
     nns::vote_and_execute_proposal,
-    util::{block_on, MessageCanister},
+    util::{block_on, MessageCanister, SignerCanister},
 };
 use ic_types::{Height, PrincipalId, ReplicaVersion};
 use ic_types_test_utils::ids::subnet_test_id;
@@ -777,6 +782,140 @@ pub async fn get_vetkd_with_logger(
     Ok(result)
 }
 
+pub async fn generate_dummy_ecdsa_signature_with_logger(
+    derivation_path_length: usize,
+    derivation_path_element_size: usize,
+    key_id: &EcdsaKeyId,
+    sig_can: &SignerCanister<'_>,
+    logger: &Logger,
+) -> Result<SignWithEcdsaResponse, String> {
+    let signature_request = GenEcdsaParams {
+        derivation_path_length,
+        derivation_path_element_size,
+        key_id: cast_ecdsa_key_id(key_id.clone()),
+    };
+    info!(
+        logger,
+        "Sending a dummy ECDSA signing request: {:?}", signature_request
+    );
+
+    let mut count = 0;
+    let signature = loop {
+        // Ask for a signature.
+        let res = sig_can.gen_ecdsa_sig(signature_request.clone()).await;
+        match res {
+            Ok(signature) => {
+                break signature;
+            }
+            Err(err) => {
+                count += 1;
+                if count < GET_SIGNATURE_RETRIES {
+                    debug!(
+                        logger,
+                        "gen_ecdsa_sig returns `{}`. Trying again in 2 seconds...", err
+                    );
+                    tokio::time::sleep(Duration::from_secs(2)).await;
+                } else {
+                    return Err(err);
+                }
+            }
+        }
+    };
+    info!(logger, "gen_ecdsa_sig returns {:?}", signature);
+
+    Ok(signature)
+}
+
+pub async fn generate_dummy_schnorr_signature_with_logger(
+    message_size: usize,
+    derivation_path_length: usize,
+    derivation_path_element_size: usize,
+    key_id: &SchnorrKeyId,
+    sig_can: &SignerCanister<'_>,
+    logger: &Logger,
+) -> Result<SignWithSchnorrResponse, String> {
+    let signature_request = GenSchnorrParams {
+        message_size,
+        derivation_path_length,
+        derivation_path_element_size,
+        key_id: cast_schnorr_key_id(key_id.clone()),
+    };
+    info!(
+        logger,
+        "Sending a dummy Schnorr signing request: {:?}", signature_request
+    );
+
+    let mut count = 0;
+    let signature = loop {
+        // Ask for a signature.
+        let res = sig_can.gen_schnorr_sig(signature_request.clone()).await;
+        match res {
+            Ok(signature) => {
+                break signature;
+            }
+            Err(err) => {
+                count += 1;
+                if count < GET_SIGNATURE_RETRIES {
+                    debug!(
+                        logger,
+                        "gen_schnorr_sig returns `{}`. Trying again in 2 seconds...", err
+                    );
+                    tokio::time::sleep(Duration::from_secs(2)).await;
+                } else {
+                    return Err(err);
+                }
+            }
+        }
+    };
+    info!(logger, "gen_schnorr_sig returns {:?}", signature);
+
+    Ok(signature)
+}
+
+pub async fn generate_dummy_vetkd_key_with_logger(
+    context_size: usize,
+    input_size: usize,
+    key_id: &VetKdKeyId,
+    sig_can: &SignerCanister<'_>,
+    logger: &Logger,
+) -> Result<VetKDDeriveKeyResult, String> {
+    let key_request = GenVetkdParams {
+        context_size,
+        input_size,
+        key_id: cast_vetkd_key_id(key_id.clone()),
+    };
+
+    info!(
+        logger,
+        "Sending a dummy VetKD key request: {:?}", key_request
+    );
+
+    let mut count = 0;
+    let result = loop {
+        let res = sig_can.gen_vetkd_key(key_request.clone()).await;
+        match res {
+            Ok(encrypted_key) => {
+                break encrypted_key;
+            }
+            Err(err) => {
+                count += 1;
+                if count < GET_SIGNATURE_RETRIES {
+                    debug!(
+                        logger,
+                        "gen_vetkd_key returns `{}`. Trying again in 2 seconds...", err
+                    );
+                    tokio::time::sleep(Duration::from_secs(2)).await;
+                } else {
+                    return Err(err);
+                }
+            }
+        }
+    };
+
+    info!(logger, "gen_vetkd_key returns {:?}", result);
+    Ok(result)
+}
+
 pub async fn enable_chain_key_signing(
     governance: &Canister<'_>,
     subnet_id: SubnetId,
@@ -1005,11 +1144,56 @@ pub enum SignWithChainKeyReply {
     VetKd(VetKdDeriveKeyResult),
 }
 
+fn cast_ecdsa_key_id(key_id: EcdsaKeyId) -> ic_cdk::api::management_canister::ecdsa::EcdsaKeyId {
+    ic_cdk::api::management_canister::ecdsa::EcdsaKeyId {
+        curve: match key_id.curve {
+            EcdsaCurve::Secp256k1 => ic_cdk::api::management_canister::ecdsa::EcdsaCurve::Secp256k1,
+        },
+        name: key_id.name,
+    }
+}
+
+fn cast_schnorr_key_id(
+    key_id: SchnorrKeyId,
+) -> ic_cdk::api::management_canister::schnorr::SchnorrKeyId {
+    ic_cdk::api::management_canister::schnorr::SchnorrKeyId {
+        algorithm: match key_id.algorithm {
+            SchnorrAlgorithm::Bip340Secp256k1 => {
+                ic_cdk::api::management_canister::schnorr::SchnorrAlgorithm::Bip340secp256k1
+            }
+            SchnorrAlgorithm::Ed25519 => {
+                ic_cdk::api::management_canister::schnorr::SchnorrAlgorithm::Ed25519
+            }
+        },
+        name: key_id.name,
+    }
+}
+
+fn cast_vetkd_key_id(key_id: VetKdKeyId) -> ic_management_canister_types::VetKDKeyId {
+    ic_management_canister_types::VetKDKeyId {
+        curve: match key_id.curve {
+            VetKdCurve::Bls12_381_G2 => ic_management_canister_types::VetKDCurve::Bls12_381_G2,
+        },
+        name: key_id.name,
+    }
+}
+
 #[derive(Clone)]
 pub struct ChainSignatureRequest {
-    pub key_id: MasterPublicKeyId,
+    principal: Principal,
+    method_name: String,
+    key_id: MasterPublicKeyId,
+    payload: Vec<u8>,
+}
+
+pub struct LargeSigRequestParams {
     pub principal: Principal,
-    pub payload: Vec<u8>,
+    pub key_id: MasterPublicKeyId,
+    pub derivation_path_length: usize,
+    pub derivation_path_element_size: usize,
+    pub schnorr_message_size: usize,
+    pub vetkd_context_size: usize,
+    pub vetkd_input_size: usize,
 }
 
 impl ChainSignatureRequest {
@@ -1028,8 +1212,9 @@ impl ChainSignatureRequest {
         let payload = Encode!(&params).unwrap();
 
         Self {
-            key_id,
             principal,
+            method_name: String::from("forward"),
+            key_id,
             payload,
         }
     }
@@ -1077,6 +1262,93 @@ impl ChainSignatureRequest {
             payload: Encode!(&vetkd_request).unwrap(),
         }
     }
+
+    pub fn new_large(
+        LargeSigRequestParams {
+            principal,
+            key_id,
+            derivation_path_length,
+            derivation_path_element_size,
+            schnorr_message_size,
+            vetkd_context_size,
+            vetkd_input_size,
+        }: LargeSigRequestParams,
+    ) -> Self {
+        let (method_name, payload) = match key_id.clone() {
+            MasterPublicKeyId::Ecdsa(key_id) => (
+                String::from("gen_ecdsa_sig"),
+                Self::large_ecdsa_payload(
+                    derivation_path_length,
+                    derivation_path_element_size,
+                    key_id,
+                ),
+            ),
+            MasterPublicKeyId::Schnorr(key_id) => (
+                String::from("gen_schnorr_sig"),
+                Self::large_schnorr_payload(
+                    schnorr_message_size,
+                    derivation_path_length,
+                    0,
+                    key_id,
+                ),
+            ),
+            MasterPublicKeyId::VetKd(key_id) => (
+                String::from("gen_vetkd_key"),
+                Self::large_vetkd_payload(vetkd_context_size, vetkd_input_size, key_id),
+            ),
+        };
+
+        Self {
+            principal,
+            method_name,
+            key_id,
+            payload,
+        }
+    }
+
+    pub fn large_ecdsa_payload(
+        derivation_path_length: usize,
+        derivation_path_element_size: usize,
+        key_id: EcdsaKeyId,
+    ) -> Vec<u8> {
+        let params = GenEcdsaParams {
+            derivation_path_length,
+            derivation_path_element_size,
+            key_id: cast_ecdsa_key_id(key_id),
+        };
+
+        Encode!(&params).unwrap()
+    }
+
+    pub fn large_schnorr_payload(
+        message_size: usize,
+        derivation_path_length: usize,
+        derivation_path_element_size: usize,
+        key_id: SchnorrKeyId,
+    ) -> Vec<u8> {
+        let params = GenSchnorrParams {
+            message_size,
+            derivation_path_length,
+            derivation_path_element_size,
+            key_id: cast_schnorr_key_id(key_id),
+        };
+
+        Encode!(&params).unwrap()
+    }
+
+    pub fn large_vetkd_payload(
+        context_size: usize,
+        input_size: usize,
+        key_id: VetKdKeyId,
+    ) -> Vec<u8> {
+        let params = GenVetkdParams {
+            context_size,
+            input_size,
+            key_id: cast_vetkd_key_id(key_id),
+        };
+
+        Encode!(&params).unwrap()
+    }
 }
 
 impl Request<SignWithChainKeyReply> for ChainSignatureRequest {
@@ -1089,7 +1361,7 @@ impl Request<SignWithChainKeyReply> for ChainSignatureRequest {
     }
 
     fn method_name(&self) -> String {
-        "forward".to_string()
+        self.method_name.clone()
     }
 
     fn payload(&self) -> Vec<u8> {

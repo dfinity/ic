@@ -21,8 +21,9 @@ use anyhow::Result;
 
 use ic_config::subnet_config::SCHNORR_SIGNATURE_FEE;
 use ic_consensus_threshold_sig_system_test_utils::{
-    get_public_key_with_logger, get_signature_with_logger, make_bip340_key_id, make_eddsa_key_id,
-    verify_signature, DKG_INTERVAL, NUMBER_OF_NODES,
+    generate_dummy_schnorr_signature_with_logger, get_public_key_with_logger,
+    get_schnorr_signature_with_logger, make_bip340_key_id, make_eddsa_key_id, verify_signature,
+    DKG_INTERVAL, NUMBER_OF_NODES,
 };
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
@@ -35,20 +36,29 @@ use ic_system_test_driver::driver::test_env_api::{
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::*;
-use ic_types::Height;
+use ic_types::{Cycles, Height};
 use slog::{info, Logger};
 
 const KIB: usize = 1024;
 const MIB: usize = 1024 * KIB;
 
-// Note that local subnets should actually support signature requests for messages of
-// up to 10 MiB in size. However, the current ic.json5 enforces a 5 MiB limit on HTTP requests.
-// In order to raise the local limit below, we need to either:
-//      a) Support modifying the ic.json5 in system test setups
-//      b) Write our own test canister that generates the signature request itself and sends
-//         it to the management canister.
-const LOCAL_LIMIT: usize = 5 * MIB;
-const XNET_LIMIT: usize = 2 * MIB;
+enum LimitType {
+    Local,
+    XNet,
+}
+struct Limit {
+    limit_type: LimitType,
+    size: usize,
+}
+
+const LOCAL_LIMIT: Limit = Limit {
+    limit_type: LimitType::Local,
+    size: 10 * MIB,
+};
+const XNET_LIMIT: Limit = Limit {
+    limit_type: LimitType::XNet,
+    size: 2 * MIB,
+};
 
 fn make_schnorr_key_ids_for_all_algorithms() -> Vec<MasterPublicKeyId> {
     vec![make_eddsa_key_id(), make_bip340_key_id()]
@@ -57,7 +67,7 @@ fn make_schnorr_key_ids_for_all_algorithms() -> Vec<MasterPublicKeyId> {
 /// Creates one system subnet and two application subnets, the first one with schnorr keys enabled.
 fn setup(env: TestEnv) {
     use ic_system_test_driver::driver::test_env_api::*;
-    let size_limit: u64 = (2 * LOCAL_LIMIT).try_into().unwrap();
+    let size_limit: u64 = (2 * LOCAL_LIMIT.size).try_into().unwrap();
     InternetComputer::new()
         .add_subnet(Subnet::fast_single_node(SubnetType::System))
         .add_subnet(
@@ -106,10 +116,40 @@ fn setup(env: TestEnv) {
         .expect("Failed to install NNS canisters");
 }
 
-fn test_message_sizes(subnet: SubnetSnapshot, limit: usize, log: &Logger) {
+/// Requests a signature, either from the message canister or the signer canister,
+/// depending on the limit type. If the limit type is `Local`, then we use the
+/// signer canister as it can generate larger signatures than sending an ingress message
+/// to the message canister.
+async fn get_signature_depending_on_limit(
+    limit_type: &LimitType,
+    message: Vec<u8>,
+    cycles: Cycles,
+    key_id: &MasterPublicKeyId,
+    msg_can: &MessageCanister<'_>,
+    sig_can: &SignerCanister<'_>,
+    log: &Logger,
+) -> Result<Vec<u8>, String> {
+    let MasterPublicKeyId::Schnorr(key_id) = key_id else {
+        panic!("Unexpected key id type: {}", key_id);
+    };
+
+    Ok(match limit_type {
+        LimitType::Local => {
+            generate_dummy_schnorr_signature_with_logger(message.len(), 1, 0, key_id, sig_can, log)
+                .await
+                .map(|sig| sig.signature)?
+        }
+        LimitType::XNet => get_schnorr_signature_with_logger(message, cycles, key_id, msg_can, log)
+            .await
+            .map_err(|err| err.to_string())?,
+    })
+}
+
+fn test_message_sizes(subnet: SubnetSnapshot, limit: Limit, log: &Logger) {
     let node = subnet.nodes().next().unwrap();
     let agent = node.with_default_agent(|agent| async move { agent });
     let msg_can = block_on(MessageCanister::new(&agent, node.effective_canister_id()));
+    let sig_can = block_on(SignerCanister::new(&agent, node.effective_canister_id()));
     let cycles = SCHNORR_SIGNATURE_FEE;
 
     for key_id in &make_schnorr_key_ids_for_all_algorithms() {
@@ -122,47 +162,67 @@ fn test_message_sizes(subnet: SubnetSnapshot, limit: usize, log: &Logger) {
 
         let empty_message = vec![];
         info!(log, "Getting signature of empty message for {}", key_id);
-        let signature = block_on(async {
-            get_signature_with_logger(empty_message.clone(), cycles, key_id, &msg_can, log)
-                .await
-                .unwrap()
-        });
-        info!(log, "Verifying signature of empty message for {}", key_id);
-        verify_signature(key_id, &empty_message, &public_key, &signature);
+        let signature = block_on(get_signature_depending_on_limit(
+            &limit.limit_type,
+            empty_message.clone(),
+            cycles,
+            key_id,
+            &msg_can,
+            &sig_can,
+            log,
+        ))
+        .unwrap();
+        // With a Local limit, it is not our message that was signed, but one generated by the
+        // signer canister. We thus only verify the signature on XNet.
+        if matches!(limit.limit_type, LimitType::XNet) {
+            info!(log, "Verifying signature of empty message for {}", key_id);
+            verify_signature(key_id, &empty_message, &public_key, &signature);
+        }
 
         // Subtract 1 KIB to account for message overhead in addition to payload
-        let max_message = vec![0xabu8; limit - KIB];
+        let max_message = vec![0xabu8; limit.size - KIB];
         info!(
             log,
             "Getting signature of message with size {} for {}",
             max_message.len(),
             key_id
         );
-        let signature = block_on(async {
-            get_signature_with_logger(max_message.clone(), cycles, key_id, &msg_can, log)
-                .await
-                .unwrap()
-        });
-        info!(
+        let signature = block_on(get_signature_depending_on_limit(
+            &limit.limit_type,
+            max_message.clone(),
+            cycles,
+            key_id,
+            &msg_can,
+            &sig_can,
             log,
-            "Verifying signature of message with size {} for {}",
-            max_message.len(),
-            key_id
-        );
-        verify_signature(key_id, &max_message, &public_key, &signature);
+        ))
+        .unwrap();
+        // With a Local limit, it is not our message that was signed, but one generated by the
+        // signer canister. We thus only verify the signature on XNet.
+        if matches!(limit.limit_type, LimitType::XNet) {
+            info!(
+                log,
+                "Verifying signature of message with size {} for {}",
+                max_message.len(),
+                key_id
+            );
+            verify_signature(key_id, &max_message, &public_key, &signature);
+        }
 
-        let exceeding_message = vec![0xabu8; limit];
+        let exceeding_message = vec![0xabu8; limit.size];
         info!(
             log,
-            "Getting signature of message with size {} for {}",
+            "Getting signature of exceeding message with size {} for {}",
             exceeding_message.len(),
             key_id
         );
-        let result = block_on(get_signature_with_logger(
+        let result = block_on(get_signature_depending_on_limit(
+            &limit.limit_type,
             exceeding_message,
             cycles,
             key_id,
             &msg_can,
+            &sig_can,
             log,
         ));
         assert!(result.is_err());

@@ -169,3 +169,11 @@ UNIVERSAL_CANISTER_RUNTIME_DEPS = [
 UNIVERSAL_CANISTER_ENV = {
     "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
 }
+
+SIGNER_CANISTER_RUNTIME_DEPS = [
+    "//rs/tests/test_canisters/signer:signer.wasm.gz",
+]
+
+SIGNER_CANISTER_ENV = {
+    "SIGNER_CANISTER_WASM_PATH": "$(rootpath //rs/tests/test_canisters/signer:signer.wasm.gz)",
+}
