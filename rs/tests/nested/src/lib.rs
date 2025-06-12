@@ -7,10 +7,7 @@ use canister_test::PrincipalId;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
-    driver::{
-        ic::InternetComputer, nested::NestedVms, test_env::TestEnv,
-        test_env_api::*,
-    },
+    driver::{ic::InternetComputer, nested::NestedVms, test_env::TestEnv,test_env_api::*},
     retry_with_msg,
     util::block_on,
 };
