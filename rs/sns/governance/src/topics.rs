@@ -322,11 +322,18 @@ impl pb::Governance {
 
 impl pb::Topic {
     pub fn is_critical(&self) -> bool {
-        // Fall back to default proposal criticality (if a topic isn't defined).
-        //
         // Handled explicitly to avoid any doubts.
+        //
+        // We used to fall back to non-critical proposal criticality for backward compatibility,
+        // since when custom proposals were introduced, they were not categorized into topics
+        // and were all considered non-critical. Since the SNS now enforces that all new custom
+        // proposals are categorized into topics, their criticality is guranteed to be explicitly
+        // defined. For native proposals, however, the criticality needs to be defined based on
+        // the topic of the native function, as per `Governance::topic_descriptions`. We take
+        // some measures to enforce that all native functions have topics. If this assumption
+        // is still somehow violated, we now err on the side of caution.
         if *self == Self::Unspecified {
-            return false;
+            return true;
         }
 
         topic_descriptions()
