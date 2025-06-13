@@ -92,7 +92,7 @@ runs:
           bazel run //bazel:execution_log_compact_to_csv \
             $([[ "$(uname)" == "Linux" ]] && echo '--repository_cache=/cache/bazel') -- \
             --input_execlog="$execlog" \
-            --whitelist_pat='^//'
+            --blacklist_pat='(@@crate_index__cranelift-assembler-x64|@@crate_index__secp256k1-sys|@@crate_index__cranelift-isle)'
         done > '${{ steps.metrics-tmpdir.outputs.dir }}/execlogs.csv'
 
     - name: Upload execution log
