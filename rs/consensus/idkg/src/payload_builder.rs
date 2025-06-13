@@ -461,6 +461,8 @@ pub fn create_data_payload(
     idkg_payload_metrics: &IDkgPayloadMetrics,
     log: &ReplicaLogger,
 ) -> Result<idkg::Payload, IDkgPayloadError> {
+    let _time = idkg_payload_metrics.payload_duration.start_timer();
+
     // Return None if parent block does not have IDKG payload.
     if parent_block.payload.as_ref().as_idkg().is_none() {
         return Ok(None);
