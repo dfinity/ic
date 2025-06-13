@@ -22,7 +22,6 @@ use ic_nns_governance::{
         manage_neuron, manage_neuron::NeuronIdOrSubaccount, proposal, ExecuteNnsFunction,
         GovernanceError, ManageNeuron, Motion, NetworkEconomics, NnsFunction, Proposal, Vote,
     },
-    use_node_provider_reward_canister,
 };
 use ic_nns_governance_api::Neuron;
 use ic_nns_governance_api::{manage_neuron_response, ManageNeuronResponse};
@@ -578,32 +577,20 @@ impl Environment for FakeDriver {
         }
 
         if method_name == "get_node_providers_monthly_xdr_rewards" {
-            if use_node_provider_reward_canister() {
-                assert_eq!(PrincipalId::from(target), NODE_REWARDS_CANISTER_ID.get());
+            assert_eq!(PrincipalId::from(target), NODE_REWARDS_CANISTER_ID.get());
 
-                return Ok(Encode!(&GetNodeProvidersMonthlyXdrRewardsResponse {
-                    rewards: Some(ic_node_rewards_canister_api::monthly_rewards::NodeProvidersMonthlyXdrRewards {
+            return Ok(Encode!(&GetNodeProvidersMonthlyXdrRewardsResponse {
+                rewards: Some(
+                    ic_node_rewards_canister_api::monthly_rewards::NodeProvidersMonthlyXdrRewards {
                         rewards: btreemap! {
                             PrincipalId::new_user_test_id(1).0 => NODE_PROVIDER_REWARD,
                         },
                         registry_version: Some(5)
-                    }),
-                    error: None
-                })
-                .unwrap());
-            } else {
-                assert_eq!(PrincipalId::from(target), REGISTRY_CANISTER_ID.get());
-
-                return Ok(Encode!(&Ok::<NodeProvidersMonthlyXdrRewards, String>(
-                    NodeProvidersMonthlyXdrRewards {
-                        rewards: hashmap! {
-                            PrincipalId::new_user_test_id(1).to_string() => NODE_PROVIDER_REWARD,
-                        },
-                        registry_version: Some(5)
                     }
-                ))
-                .unwrap());
-            }
+                ),
+                error: None
+            })
+            .unwrap());
         }
 
         if method_name == "get_average_icp_xdr_conversion_rate" {

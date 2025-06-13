@@ -70,16 +70,7 @@ impl NodeInfo {
 
 #[test]
 fn test_list_node_provider_rewards() {
-    do_test_list_node_provider_rewards(&[]);
-}
-
-// TODO(NNS1-3763) after Node Reward Canister is by-default enabled, remove this test.
-#[test]
-fn test_list_node_provider_rewards_with_node_reward_canister() {
-    do_test_list_node_provider_rewards(&["test"]);
-}
-
-fn do_test_list_node_provider_rewards(features: &[&str]) {
+    let features = &[];
     let state_machine = state_machine_builder_for_nns_tests().build();
 
     let nns_init_payload = NnsInitPayloadsBuilder::new()
@@ -293,18 +284,7 @@ fn do_test_list_node_provider_rewards(features: &[&str]) {
 
 #[test]
 fn test_automated_node_provider_remuneration() {
-    do_test_automated_node_provider_remuneration(&[]);
-}
-
-// TODO(NNS1-3763) after Node Reward Canister is by-default enabled, remove this test.
-#[test]
-fn test_automated_node_provider_remuneration_with_node_reward_canister() {
-    do_test_automated_node_provider_remuneration(&["test"]);
-}
-
-// This test cannot depend on any specific "test" features to function, as
-// only one calling version uses the test feature flag.
-fn do_test_automated_node_provider_remuneration(features: &[&str]) {
+    let features = &[];
     let state_machine = state_machine_builder_for_nns_tests().build();
 
     let nns_init_payload = NnsInitPayloadsBuilder::new()
