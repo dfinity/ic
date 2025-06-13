@@ -147,6 +147,7 @@ members = [
     "rs/ic_os/grub",
     "rs/ic_os/metrics_tool",
     "rs/ic_os/os_tools/guestos_tool",
+    "rs/ic_os/os_tools/guest_vm_runner",
     "rs/ic_os/os_tools/hostos_tool",
     "rs/ic_os/build_tools/inject_files",
     "rs/ic_os/dev_test_tools/launch-single-vm",
