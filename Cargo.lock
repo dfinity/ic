@@ -7048,30 +7048,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-ckbtc-kyt"
-version = "0.9.0"
-dependencies = [
- "askama",
- "assert_matches",
- "candid",
- "candid_parser",
- "ciborium",
- "hex",
- "ic-cdk 0.17.2",
- "ic-http-types",
- "ic-management-canister-types-private",
- "ic-metrics-encoder",
- "ic-stable-structures",
- "ic-state-machine-tests",
- "ic-test-utilities-load-wasm",
- "ic-types",
- "num-traits",
- "serde",
- "serde_json",
- "time",
-]
-
-[[package]]
 name = "ic-ckbtc-minter"
 version = "0.9.0"
 dependencies = [
@@ -19851,6 +19827,7 @@ dependencies = [
  "assert_matches",
  "build-info",
  "build-info-build",
+ "canbench-rs",
  "candid",
  "candid_parser",
  "canister-test",
