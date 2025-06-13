@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -xEeuo pipefail
+set -Eeuo pipefail
 
 # We hold this in memory since it rarely changes (not during a script call)
 MAINNET_CANISTER_WASM_HASH_VERSIONS=""
