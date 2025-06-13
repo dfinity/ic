@@ -89,7 +89,7 @@ runs:
         trap "rm -f $execlog" INT TERM EXIT
         # The goal is to have as few non-reproducible bazel targets as possible.
         # So we forbid all of them except for the following known ones:
-        blacklist_patterns=(
+        excludes=(
           ^@@crate_index__cranelift-assembler-x64 # has a non reproducible generated-files.rs in its OUT_DIR.
           ^@@crate_index__cranelift-isle          # has a non reproducible isle_tests.rs in its OUT_DIR.
           ^@@crate_index__secp256k1-sys           # has non reproducible object files, like lax_der_parsing.o, in it OUT_DIR.
@@ -97,10 +97,10 @@ runs:
         )
         for execlog_zst in $(find '${{ steps.metrics-tmpdir.outputs.dir }}' -name 'execlog-*.zst'); do
           zstd -f -d "$execlog_zst" -o "$execlog"
-          IFS='|'; bazel run //bazel:execution_log_compact_to_csv \
+          bazel run //bazel:execution_log_compact_to_csv \
             $([[ "$(uname)" == "Linux" ]] && echo '--repository_cache=/cache/bazel') -- \
             --input_execlog="$execlog" \
-            --blacklist_pat="(${blacklist_patterns[*]})"
+            --exclude ${excludes[*]}
         done > '${{ steps.metrics-tmpdir.outputs.dir }}/execlogs.csv'
 
     - name: Upload execution log
