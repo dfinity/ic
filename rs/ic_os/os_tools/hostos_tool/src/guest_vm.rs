@@ -574,6 +574,9 @@ mod tests {
             }
         }
 
+        /// Starts a VM service in the background.
+        /// This roughly corresponds to invoking `run_guest_vm()` in prod code.
+        /// The returned instance can be used to interact with the newly started service.
         fn start_service(&self) -> TestServiceInstance {
             let console_file = NamedTempFile::new().expect("Failed to create console log file");
             let metrics_file = NamedTempFile::new().expect("Failed to create metrics file");
