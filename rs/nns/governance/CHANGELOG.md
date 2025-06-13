@@ -11,6 +11,21 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-06-13: Proposal 136987
+
+http://dashboard.internetcomputer.org/proposal/136987
+
+## Changed
+
+* Task execution metrics are added for `neuron_data_validation` and
+  `unstake_maturity_of_dissolved_neurons` timer tasks.
+
+## Fixed
+
+* The `account_identifier_to_disburse_to` in the maturity disbursement now contains a 32-byte
+  address rather than the 28-byte one without checksum.
+
+
 # 2025-06-06: Proposal 136890
 
 http://dashboard.internetcomputer.org/proposal/136890
