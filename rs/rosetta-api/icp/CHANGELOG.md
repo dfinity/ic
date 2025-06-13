@@ -5,6 +5,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## Unreleased
 
+## [2.1.5] - 2025-05-27
+### Fixed
+- Fixed heartbeat during initial sync to prevent premature watchdog timeouts ([#5293](https://github.com/dfinity/ic/pull/5293))
+
 ## [2.1.4] - 2025-05-10
 ### Added
 - Token-specific metrics for better monitoring in multi-token environments ([#4790](https://github.com/dfinity/ic/pull/4790))
