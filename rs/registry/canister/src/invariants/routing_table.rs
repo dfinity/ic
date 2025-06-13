@@ -22,13 +22,6 @@ pub(crate) fn check_routing_table_invariants(
 
 // Return routing table from snapshot
 fn get_routing_table(snapshot: &RegistrySnapshot) -> RoutingTable {
-    let shards = get_routing_table_shards(snapshot);
-    if shards.is_empty() {
-        panic!("No canister_ranges_ records found in the snapshot.");
-    }
-
-    let rt_from_shards = RoutingTable::try_from(shards).unwrap();
-
     // TODO(NNS1-3781): Remove this once we have sharded table supported by all clients.
     let rt_from_routing_table_record =
         match snapshot.get(make_routing_table_record_key().as_bytes()) {
@@ -40,12 +33,17 @@ fn get_routing_table(snapshot: &RegistrySnapshot) -> RoutingTable {
             None => panic!("No routing table in snapshot"),
         };
 
-    assert_eq!(
-        rt_from_shards, rt_from_routing_table_record,
-        "Routing tables from shards and routing table record do not match."
-    );
+    // If there are shards, they should match the routing table record.
+    let shards = get_routing_table_shards(snapshot);
+    if !shards.is_empty() {
+        let rt_from_shards = RoutingTable::try_from(shards).unwrap();
+        assert_eq!(
+            rt_from_shards, rt_from_routing_table_record,
+            "Routing tables from shards and routing table record do not match."
+        );
+    }
 
-    rt_from_shards
+    rt_from_routing_table_record
 }
 
 fn get_routing_table_shards(snapshot: &RegistrySnapshot) -> Vec<pbRoutingTable> {
