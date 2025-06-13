@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -Eeuo pipefail
+set -xEeuo pipefail
 
 # We hold this in memory since it rarely changes (not during a script call)
 MAINNET_CANISTER_WASM_HASH_VERSIONS=""
@@ -53,7 +53,7 @@ sns_wasm_hash_to_git_commit() {
         ${SNS_W} get_wasm "(record { hash = vec ${BYTE_ARRAY_HASH}: vec nat8})" \
         | $IDL2JSON | jq -r .wasm[0].wasm[] | wasm_bytes_write_to_binary "${WASM_FILE}.gz"
     gzip -d "${WASM_FILE}.gz"
-    GIT_COMMIT_ID=$($IC_WASM ${WASM_FILE} metadata git_commit_id)
+    GIT_COMMIT_ID=$("$IC_WASM" "${WASM_FILE}" metadata git_commit_id)
     rm -rf ${WASM_FILE}
 
     echo $GIT_COMMIT_ID
