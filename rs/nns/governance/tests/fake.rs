@@ -14,7 +14,7 @@ use ic_nns_common::{
 };
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID,
-    NODE_REWARDS_CANISTER_ID, REGISTRY_CANISTER_ID, SNS_WASM_CANISTER_ID,
+    NODE_REWARDS_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
 use ic_nns_governance::{
     governance::{Environment, Governance, HeapGrowthPotential, RngError},
@@ -31,10 +31,9 @@ use ic_sns_wasm::pb::v1::{DeployedSns, ListDeployedSnsesRequest, ListDeployedSns
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
 use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
 use lazy_static::lazy_static;
-use maplit::{btreemap, hashmap};
+use maplit::btreemap;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
-use registry_canister::pb::v1::NodeProvidersMonthlyXdrRewards;
 use std::{
     collections::{hash_map::Entry, BTreeMap, HashMap},
     convert::{TryFrom, TryInto},

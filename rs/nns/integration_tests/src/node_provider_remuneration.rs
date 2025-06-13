@@ -70,14 +70,13 @@ impl NodeInfo {
 
 #[test]
 fn test_list_node_provider_rewards() {
-    let features = &[];
     let state_machine = state_machine_builder_for_nns_tests().build();
 
     let nns_init_payload = NnsInitPayloadsBuilder::new()
         .with_initial_invariant_compliant_mutations()
         .with_test_neurons()
         .build();
-    setup_nns_canisters_with_features(&state_machine, nns_init_payload, features);
+    setup_nns_canisters_with_features(&state_machine, nns_init_payload, &[]);
 
     add_data_centers(&state_machine);
     add_node_rewards_table(&state_machine);
@@ -284,14 +283,13 @@ fn test_list_node_provider_rewards() {
 
 #[test]
 fn test_automated_node_provider_remuneration() {
-    let features = &[];
     let state_machine = state_machine_builder_for_nns_tests().build();
 
     let nns_init_payload = NnsInitPayloadsBuilder::new()
         .with_initial_invariant_compliant_mutations()
         .with_test_neurons()
         .build();
-    setup_nns_canisters_with_features(&state_machine, nns_init_payload, features);
+    setup_nns_canisters_with_features(&state_machine, nns_init_payload, &[]);
 
     add_data_centers(&state_machine);
     add_node_rewards_table(&state_machine);
