@@ -3,7 +3,7 @@ benches:
     total:
       calls: 1
       instructions: 563027802
-      heap_increase: 81
+      heap_increase: 69
       stable_memory_increase: 0
     scopes: {}
   measure_snapshot_creation_with_1000_individual_entries:
