@@ -634,12 +634,15 @@ mod tests {
         let mut service = fixture.create_service(invalid_hostos_config());
 
         // Run the VM and wait until it fails
-        assert!(tokio::time::timeout(Duration::from_secs(5), service.run())
+        let error = tokio::time::timeout(Duration::from_secs(5), service.run())
             .await
             .expect("Service should have failed but did not")
             .unwrap_err()
-            .to_string()
-            .contains("Failed to create domain"));
+            .to_string();
+        assert!(
+            error.contains("Failed to define GuestOS virtual machine"),
+            "Got unexpected error: \"{error}\""
+        );
 
         fixture.assert_metrics_contains("hostos_guestos_service_start 0");
         fixture.assert_vm_not_exists();
