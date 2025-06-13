@@ -147,7 +147,7 @@ impl Default for GrubEnv {
     }
 }
 
-trait WithDefault<T>
+pub trait WithDefault<T>
 where
     Self: Sized,
 {
