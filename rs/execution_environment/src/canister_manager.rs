@@ -316,6 +316,10 @@ impl CanisterManager {
         if let Some(wasm_memory_limit) = settings.wasm_memory_limit() {
             canister.system_state.wasm_memory_limit = Some(wasm_memory_limit);
         }
+        if let Some(environment_variables) = settings.environment_variables() {
+            canister.system_state.environment_variables =
+                environment_variables.get_environment_variables().clone();
+        }
     }
 
     /// Tries to apply the requested settings on the canister identified by
@@ -1060,6 +1064,9 @@ impl CanisterManager {
         let scheduler_state = SchedulerState::new(state.metadata.batch_time);
         let mut new_canister = CanisterState::new(system_state, None, scheduler_state);
 
+        let environment_variables_hash = settings
+            .environment_variables()
+            .map(|environment_variables| environment_variables.hash());
         self.do_update_settings(settings, &mut new_canister);
         let new_usage = new_canister.memory_usage();
         let new_mem = new_canister
@@ -1087,7 +1094,7 @@ impl CanisterManager {
         new_canister.system_state.add_canister_change(
             state.time(),
             origin,
-            CanisterChangeDetails::canister_creation(controllers),
+            CanisterChangeDetails::canister_creation(controllers, environment_variables_hash),
         );
 
         // Add new canister to the replicated state.
