@@ -236,8 +236,7 @@ pub fn add_global_registry_records(
     let registry_version = if registry_data_provider.is_empty() {
         INITIAL_REGISTRY_VERSION
     } else {
-        let latest_registry_version = registry_data_provider.latest_version();
-        RegistryVersion::from(latest_registry_version.get() + 1)
+        registry_data_provider.latest_version()
     };
 
     // root subnet record
@@ -352,14 +351,8 @@ fn add_subnet_local_registry_records(
     chain_keys_enabled_status: &BTreeMap<MasterPublicKeyId, bool>,
     ni_dkg_transcript: NiDkgTranscript,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
+    registry_version: RegistryVersion,
 ) -> FakeRegistryClient {
-    let registry_version = if registry_data_provider.is_empty() {
-        INITIAL_REGISTRY_VERSION
-    } else {
-        let latest_registry_version = registry_data_provider.latest_version();
-        RegistryVersion::from(latest_registry_version.get() + 1)
-    };
-
     for node in nodes {
         let node_record = NodeRecord {
             node_operator_id: vec![0],
@@ -989,6 +982,7 @@ pub struct StateMachineBuilder {
     log_level: Option<Level>,
     bitcoin_testnet_uds_path: Option<PathBuf>,
     remove_old_states: bool,
+    create_at_registry_version: RegistryVersion,
 }
 
 impl StateMachineBuilder {
@@ -1027,6 +1021,7 @@ impl StateMachineBuilder {
             log_level: Some(Level::Warning),
             bitcoin_testnet_uds_path: None,
             remove_old_states: true,
+            create_at_registry_version: INITIAL_REGISTRY_VERSION,
         }
     }
 
@@ -1249,6 +1244,13 @@ impl StateMachineBuilder {
         }
     }
 
+    pub fn create_at_registry_version(self, registry_version: RegistryVersion) -> Self {
+        Self {
+            create_at_registry_version: registry_version,
+            ..self
+        }
+    }
+
     pub fn build_internal(self) -> StateMachine {
         StateMachine::setup_from_dir(
             self.state_dir,
@@ -1282,6 +1284,7 @@ impl StateMachineBuilder {
             self.seed,
             self.log_level,
             self.remove_old_states,
+            self.create_at_registry_version,
         )
     }
 
@@ -1622,6 +1625,7 @@ impl StateMachine {
         seed: [u8; 32],
         log_level: Option<Level>,
         remove_old_states: bool,
+        create_at_registry_version: RegistryVersion,
     ) -> Self {
         let checkpoint_interval_length = checkpoint_interval_length.unwrap_or(match subnet_type {
             SubnetType::Application | SubnetType::VerifiedApplication => 499,
@@ -1697,6 +1701,7 @@ impl StateMachine {
             &chain_keys_enabled_status,
             ni_dkg_transcript,
             registry_data_provider.clone(),
+            create_at_registry_version,
         );
 
         let cycles_account_manager = Arc::new(CyclesAccountManager::new(
