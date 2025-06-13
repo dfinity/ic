@@ -1,5 +1,5 @@
 use crate::systemd::SystemdNotifier;
-use anyhow::{anyhow, bail, Context, Error, Result};
+use anyhow::{anyhow, Context, Error, Result};
 use config::guest_vm_config::{assemble_config_media, generate_vm_config};
 use config_types::{HostOSConfig, Ipv6Config};
 use deterministic_ips::node_type::NodeType;
@@ -136,7 +136,7 @@ pub struct GuestVmService {
 impl GuestVmService {
     #[cfg(not(target_os = "linux"))]
     pub fn new() -> Result<Self> {
-        bail!("GuestVM service is only supported on Linux");
+        anyhow::bail!("GuestVM service is only supported on Linux");
     }
 
     #[cfg(target_os = "linux")]
@@ -173,6 +173,7 @@ impl GuestVmService {
                 virtual_machine
             }
             Err(err) => {
+                self.handle_startup_error(&err).await?;
                 self.metrics_writer
                     .write_metrics(&[Metric::with_annotation(
                         "hostos_guestos_service_start",
@@ -197,13 +198,8 @@ impl GuestVmService {
         println!("Creating GuestOS virtual machine");
 
         let virtual_machine =
-            match VirtualMachine::new(&self.libvirt_connection, &vm_config, config_media) {
-                Ok(virtual_machine) => virtual_machine,
-                Err(e) => {
-                    self.handle_startup_error(&e, &vm_config).await?;
-                    bail!("Failed to define GuestOS virtual machine: {e}");
-                }
-            };
+            VirtualMachine::new(&self.libvirt_connection, &vm_config, config_media)
+                .context("Failed to define GuestOS virtual machine")?;
 
         // Notify systemd that we're ready
         self.systemd_notifier.notify_ready()?;
@@ -221,15 +217,15 @@ impl GuestVmService {
     }
 
     fn display_startup_messages(&mut self) -> Result<()> {
-        self.write_to_console("")?;
-        self.write_to_console("#################################################")?;
-        self.write_to_console("GuestOS virtual machine launched")?;
-        self.write_to_console("IF ONBOARDING, please wait for up to 10 MINUTES for a 'Join request successful!' message")?;
-        self.write_to_console(&format!(
+        self.write_to_console_and_stdout("");
+        self.write_to_console_and_stdout("#################################################");
+        self.write_to_console_and_stdout("GuestOS virtual machine launched");
+        self.write_to_console_and_stdout("IF ONBOARDING, please wait for up to 10 MINUTES for a 'Join request successful!' message");
+        self.write_to_console_and_stdout(&format!(
             "Host IPv6 address: {}",
             self.get_host_ipv6_address()
-        ))?;
-        self.write_to_console("#################################################")?;
+        ));
+        self.write_to_console_and_stdout("#################################################");
 
         Ok(())
     }
@@ -257,37 +253,35 @@ impl GuestVmService {
     }
 
     /// Handles errors that occur during VM startup
-    async fn handle_startup_error(&mut self, e: &Error, vm_config: &str) -> Result<()> {
+    async fn handle_startup_error(&mut self, e: &Error) -> Result<()> {
         // Give QEMU time to clear the console before printing error messages
         // (but not in unit tests otherwise tests take too long to finish).
         #[cfg(not(test))]
         sleep(Duration::from_secs(10)).await;
 
-        self.write_to_console("ERROR: Failed to start GuestOS virtual machine.")?;
-        self.write_to_console(&e.to_string())?;
-        self.write_to_console("#################################################")?;
-        self.write_to_console("###      LOGGING GUESTOS.SERVICE LOGS...      ###")?;
-        self.write_to_console("#################################################")?;
+        self.write_to_console_and_stdout("ERROR: Failed to start GuestOS virtual machine.");
+        // Write debug repr because it includes the cause.
+        self.write_to_console(&format!("{e:?}"));
+        self.write_to_console("#################################################");
+        self.write_to_console("###      LOGGING GUESTOS.SERVICE LOGS...      ###");
+        self.write_to_console("#################################################");
 
         self.display_systemd_logs().await?;
 
-        self.write_to_console("#################################################")?;
-        self.write_to_console("###          TROUBLESHOOTING INFO...          ###")?;
-        self.write_to_console("#################################################")?;
+        self.write_to_console("#################################################");
+        self.write_to_console("###          TROUBLESHOOTING INFO...          ###");
+        self.write_to_console("#################################################");
         self.write_to_console(&format!(
             "Host IPv6 address: {}",
             self.get_host_ipv6_address()
-        ))?;
-
-        println!("GuestVM config:");
-        println!("{vm_config}");
+        ));
 
         // Check for and display serial logs if they exist
         self.display_serial_logs().await?;
 
-        self.write_to_console(&format!(
+        self.write_to_console_and_stdout(&format!(
             "Exiting guestos so that systemd can restart {GUESTOS_SERVICE_NAME}"
-        ))?;
+        ));
 
         Ok(())
     }
@@ -302,7 +296,7 @@ impl GuestVmService {
 
         let logs = String::from_utf8_lossy(&journalctl_output.stdout);
         for line in logs.lines() {
-            self.write_to_console(line)?;
+            self.write_to_console(line);
         }
 
         Ok(())
@@ -312,9 +306,9 @@ impl GuestVmService {
     async fn display_serial_logs(&mut self) -> Result<()> {
         let serial_log_path = Path::new(CONSOLE_LOG_PATH);
         if serial_log_path.exists() {
-            self.write_to_console("#################################################")?;
-            self.write_to_console("###  LOGGING GUESTOS CONSOLE LOGS, IF ANY...  ###")?;
-            self.write_to_console("#################################################")?;
+            self.write_to_console_and_stdout("#################################################");
+            self.write_to_console_and_stdout("###  LOGGING GUESTOS CONSOLE LOGS, IF ANY...  ###");
+            self.write_to_console_and_stdout("#################################################");
 
             let tail_output = Command::new("tail")
                 .args(["-n", "30", serial_log_path.to_str().unwrap()])
@@ -324,10 +318,10 @@ impl GuestVmService {
 
             let logs = String::from_utf8_lossy(&tail_output.stdout);
             for line in logs.lines() {
-                self.write_to_console(line)?;
+                self.write_to_console_and_stdout(line);
             }
         } else {
-            self.write_to_console("No console log file found.")?;
+            self.write_to_console_and_stdout("No console log file found.");
         }
 
         Ok(())
@@ -363,15 +357,18 @@ impl GuestVmService {
         }
     }
 
-    /// Writes a message to the console and stdout
-    fn write_to_console(&mut self, message: &str) -> Result<()> {
-        writeln!(self.console_tty, "{message}")?;
-        self.console_tty.flush()?;
-
-        // Also log to stdout
+    // We have two different ways to log:
+    // 1. Log to stdout. These logs will end up in the systemd journal. Upon error,
+    //    display_systemd_logs() writes the journal logs to the console.
+    // 2. Log to the console. These logs will show up in the terminal but not in the journal.
+    fn write_to_console_and_stdout(&mut self, message: &str) {
+        self.write_to_console(message);
         println!("{message}");
+    }
 
-        Ok(())
+    fn write_to_console(&mut self, message: &str) {
+        let _ignore = writeln!(self.console_tty, "{message}");
+        let _ignore = self.console_tty.flush();
     }
 }
 
