@@ -1,0 +1,25 @@
+[package]
+name = "guest_vm_runner"
+edition = "2021"
+
+[[bin]]
+name = "guest_vm_runner"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1.0.95"
+askama = "*"
+async-trait = "0.1"
+gptman = "*"
+macaddr = "*"
+regex = "1.11.1"
+sys-mount = "*"
+systemd = "*"
+tempfile = "3.20.0"
+tokio = "1.45.0"
+virt = "*"
+
+[dev-dependencies]
+goldenfile = "*"
+nix = "*"
+url = "*"
