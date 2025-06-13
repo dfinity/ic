@@ -281,7 +281,7 @@ pub mod testing {
                 {
                     bail!(
                         "Could not open device as either FAT or EXT partition. \
-                         FAT error: {fat_err}, EXT error: {ext_err}"
+                         FAT error: {fat_err:?}, EXT error: {ext_err:?}"
                     )
                 }
             }

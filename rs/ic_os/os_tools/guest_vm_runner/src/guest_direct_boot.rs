@@ -1,7 +1,7 @@
+use crate::guest_vm_config::DirectBootConfig;
 use crate::mount::{MountOptions, PartitionProvider};
 use anyhow::Context;
 use anyhow::Result;
-use config::guest_vm_config::DirectBootConfig;
 use grub::{BootAlternative, BootCycle, GrubEnv};
 use regex::Regex;
 use std::fs::File;

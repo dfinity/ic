@@ -1,8 +1,8 @@
 use crate::guest_direct_boot::{prepare_direct_boot, DirectBoot};
+use crate::guest_vm_config::{assemble_config_media, generate_vm_config};
 use crate::mount::PartitionProvider;
 use crate::systemd::SystemdNotifier;
 use anyhow::{anyhow, Context, Error, Result};
-use config::guest_vm_config::{assemble_config_media, generate_vm_config};
 use config_types::{HostOSConfig, Ipv6Config};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{calculate_deterministic_mac, IpVariant, MacAddr6Ext};
@@ -20,12 +20,25 @@ use virt::domain::Domain;
 use virt::error::{ErrorDomain, ErrorNumber};
 use virt::sys::{VIR_DOMAIN_DESTROY_GRACEFUL, VIR_DOMAIN_RUNNING};
 
+mod guest_direct_boot;
+mod guest_vm_config;
+mod mount;
+mod systemd;
+
 const GUESTOS_DOMAIN_NAME: &str = "guestos";
 const CONSOLE_LOG_PATH: &str = "/var/log/libvirt/qemu/guestos-serial.log";
 const METRICS_FILE_PATH: &str = "/run/node_exporter/collector_textfile/hostos_guestos_service.prom";
 const CONSOLE_TTY_PATH: &str = "/dev/tty1";
 const GUESTOS_SERVICE_NAME: &str = "guestos.service";
 const DEFAULT_GUESTOS_DEVICE: &str = "/dev/hostlvm/guestos";
+
+#[tokio::main]
+pub async fn main() -> Result<()> {
+    println!("Starting GuestOS service");
+
+    let mut service = GuestVmService::new()?;
+    service.run().await
+}
 
 /// Manages a libvirt-based virtual machine
 pub struct VirtualMachine {
@@ -151,7 +164,7 @@ impl GuestVmService {
         let metrics_writer = MetricsWriter::new(std::path::PathBuf::from(METRICS_FILE_PATH));
         let libvirt_connection = Connect::open(None).context("Failed to connect to libvirt")?;
         let hostos_config: HostOSConfig =
-            crate::deserialize_config(config::DEFAULT_HOSTOS_CONFIG_OBJECT_PATH)
+            config::deserialize_config(config::DEFAULT_HOSTOS_CONFIG_OBJECT_PATH)
                 .context("Failed to read HostOS config file")?;
         let console_tty = std::fs::File::options()
             .write(true)
@@ -403,13 +416,6 @@ impl Drop for GuestVmService {
     }
 }
 
-/// The main async function that runs the GuestOS service
-pub async fn run_guest_vm() -> Result<()> {
-    println!("Starting GuestOS service");
-
-    let mut service = GuestVmService::new()?;
-    service.run().await
-}
 #[cfg(test)]
 mod tests {
     use super::*;
