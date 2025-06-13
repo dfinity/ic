@@ -12,11 +12,12 @@ use axum::{
     extract::Request,
     middleware,
     response::IntoResponse,
-    routing::method_routing::{get, post},
+    routing::method_routing::{any, get, post},
     Router,
 };
 use axum_extra::middleware::option_layer;
 use candid::{DecoderConfig, Principal};
+use ic_agent::{agent::EnvelopeContent, identity::AnonymousIdentity, Agent, Identity, Signature};
 use ic_bn_lib::{
     http::{
         self as bnhttp,
@@ -27,18 +28,21 @@ use ic_bn_lib::{
         },
     },
     prometheus::Registry,
+    pubsub::BrokerBuilder,
     tasks::TaskManager,
     tls::verify::NoopServerCertVerifier,
     types::RequestType,
 };
-use ic_canister_client::{Agent, Sender};
 use ic_config::crypto::CryptoConfig;
 use ic_crypto::CryptoComponent;
 use ic_crypto_utils_basic_sig::conversions::derive_node_id;
+use ic_crypto_utils_threshold_sig_der::{parse_threshold_sig_key, threshold_sig_public_key_to_der};
 use ic_interfaces::crypto::{BasicSigner, KeyManager};
 use ic_interfaces_registry::ZERO_REGISTRY_VERSION;
 use ic_logger::replica_logger::no_op_logger;
+use ic_protobuf::registry::crypto::v1::{AlgorithmId, PublicKey};
 use ic_registry_client::client::{RegistryClient, RegistryClientImpl};
+use ic_registry_client_helpers::{crypto::CryptoRegistry, subnet::SubnetRegistry};
 use ic_registry_local_store::{LocalStore, LocalStoreImpl};
 use ic_registry_replicator::RegistryReplicator;
 use ic_types::messages::MessageId;
@@ -61,7 +65,7 @@ use crate::{
     errors::ErrorCause,
     firewall::{FirewallGenerator, SystemdReloader},
     http::{
-        handlers::{self},
+        handlers::{self, logs_canister, LogsState},
         middleware::{
             cache::{cache_middleware, CacheState},
             geoip::{self},
@@ -114,11 +118,12 @@ pub fn decoder_config() -> DecoderConfig {
     config
 }
 
-pub async fn main(cli: Cli) -> Result<(), Error> {
+pub async fn main(mut cli: Cli) -> Result<(), Error> {
     if cli.http_client.http_client_timeout_connect > cli.health.health_check_timeout {
-        return Err(anyhow!(
-            "Health check timeout should be longer than HTTP client connect timeout"
-        ));
+        cli.health.health_check_timeout = cli.http_client.http_client_timeout_connect;
+        warn!(
+            "Health check timeout should be longer than HTTP client connect timeout, capping it to client timeout"
+        );
     }
 
     if !(cli.registry.registry_local_store_path.is_none()
@@ -133,14 +138,14 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         && cli.listen.listen_https_port.is_none()
     {
         return Err(anyhow!(
-            "at least one of --http-port / --https-port / --http-unix-socket must be specified"
+            "at least one of --listen-http-port / --listen-https-port / --listen-http-unix-socket must be specified"
         ));
     }
 
     #[cfg(not(feature = "tls"))]
     if cli.listen.listen_http_port.is_none() && cli.listen.listen_http_unix_socket.is_none() {
         return Err(anyhow!(
-            "at least one of --http-port / --http-unix-socket must be specified"
+            "at least one of --listen-http-port / --listen-http-unix-socket must be specified"
         ));
     }
 
@@ -279,10 +284,34 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
 
         let agent = create_agent(
             cli.misc.crypto_config.clone(),
-            registry_client,
+            registry_client.clone(),
             cli.listen.listen_http_port_loopback,
         )
         .await?;
+
+        if let Some(v) = &registry_client {
+            // Fetch the NNS root key from the local registry snapshot
+            let ver = v.get_latest_version();
+            let nns_subnet_id = v
+                .get_root_subnet_id(ver)
+                .context("unable to get root subnet id")?
+                .context("no root subnet")?;
+            let root_key = v
+                .get_threshold_signing_public_key_for_subnet(nns_subnet_id, ver)
+                .context("unable to get root NNS key")?
+                .context("no root NNS key")?;
+
+            let der_encoded_root_key = threshold_sig_public_key_to_der(root_key)
+                .context("failed to convert root NNS key to DER")?;
+
+            agent.set_root_key(der_encoded_root_key);
+        } else if let Some(v) = &cli.registry.registry_nns_pub_key_pem {
+            // Set the root key if it was provided
+            let root_key = parse_threshold_sig_key(v).context("failed to parse NNS public key")?;
+            let der_encoded_root_key = threshold_sig_public_key_to_der(root_key)
+                .context("failed to convert NNS key to DER")?;
+            agent.set_root_key(der_encoded_root_key);
+        }
 
         Some(agent)
     } else {
@@ -479,10 +508,64 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     Ok(())
 }
 
-async fn create_sender(
+type SignMessageId =
+    Arc<dyn Fn(&MessageId) -> Result<Vec<u8>, Box<dyn std::error::Error>> + Send + Sync>;
+
+/// Custom sender for the node, signing messages with its key.
+struct NodeSender {
+    /// DER encoded public key
+    der_encoded_pub_key: Vec<u8>,
+    /// Function that signs the message id
+    sign: SignMessageId,
+}
+
+impl NodeSender {
+    pub fn new(pub_key: PublicKey, sign: SignMessageId) -> Result<Self, String> {
+        if pub_key.algorithm() != AlgorithmId::Ed25519 {
+            return Err(format!(
+                "Unsupported algorithm: {}",
+                pub_key.algorithm().as_str_name()
+            ));
+        }
+
+        let der_encoded_pub_key = ic_ed25519::PublicKey::convert_raw_to_der(&pub_key.key_value)
+            .map_err(|err| err.to_string())?;
+
+        Ok(Self {
+            der_encoded_pub_key,
+            sign,
+        })
+    }
+}
+
+impl Identity for NodeSender {
+    fn sender(&self) -> Result<Principal, String> {
+        Ok(Principal::self_authenticating(
+            self.der_encoded_pub_key.as_slice(),
+        ))
+    }
+
+    fn public_key(&self) -> Option<Vec<u8>> {
+        Some(self.der_encoded_pub_key.clone())
+    }
+
+    fn sign(&self, content: &EnvelopeContent) -> Result<Signature, String> {
+        let msg = MessageId::from(*content.to_request_id());
+        let signature =
+            Some((self.sign)(&msg).map_err(|err| format!("Cannot create node signature: {err}"))?);
+        let public_key = self.public_key();
+        Ok(Signature {
+            public_key,
+            signature,
+            delegations: None,
+        })
+    }
+}
+
+async fn create_identity(
     crypto_config: CryptoConfig,
     registry_client: Arc<RegistryClientImpl>,
-) -> Result<Sender, Error> {
+) -> Result<Box<dyn Identity>, Error> {
     let crypto_component = tokio::task::spawn_blocking({
         let registry_client = Arc::clone(&registry_client);
 
@@ -514,20 +597,23 @@ async fn create_sender(
     let node_id = derive_node_id(&public_key).expect("failed to derive node id");
 
     // Custom Signer
-    Ok(Sender::Node {
-        pub_key: public_key.key_value,
-        sign: Arc::new(move |msg: &MessageId| {
-            #[allow(clippy::disallowed_methods)]
-            let sig = tokio::task::block_in_place(|| {
-                crypto_component
-                    .sign_basic(msg, node_id, registry_client.get_latest_version())
-                    .map(|value| value.get().0)
-                    .map_err(|err| anyhow!("failed to sign message: {err:?}"))
-            })?;
+    Ok(Box::new(
+        NodeSender::new(
+            public_key,
+            Arc::new(move |msg: &MessageId| {
+                #[allow(clippy::disallowed_methods)]
+                let sig = tokio::task::block_in_place(|| {
+                    crypto_component
+                        .sign_basic(msg, node_id, registry_client.get_latest_version())
+                        .map(|value| value.get().0)
+                        .map_err(|err| anyhow!("failed to sign message: {err:?}"))
+                })?;
 
-            Ok(sig)
-        }),
-    })
+                Ok(sig)
+            }),
+        )
+        .map_err(|err| anyhow!(err))?,
+    ))
 }
 
 async fn create_agent(
@@ -535,13 +621,17 @@ async fn create_agent(
     registry_client: Option<Arc<RegistryClientImpl>>,
     port: u16,
 ) -> Result<Agent, Error> {
-    let sender = if let (Some(v), Some(r)) = (crypto_config, registry_client) {
-        create_sender(v, r).await?
+    let identity = if let (Some(v), Some(r)) = (crypto_config, registry_client) {
+        create_identity(v, r).await?
     } else {
-        Sender::Anonymous
+        Box::new(AnonymousIdentity)
     };
 
-    let agent = Agent::new(format!("http://127.0.0.1:{port}").parse()?, sender);
+    let agent = Agent::builder()
+        .with_url(format!("http://127.0.0.1:{port}"))
+        .with_boxed_identity(identity)
+        .build()?;
+
     Ok(agent)
 }
 
@@ -621,8 +711,7 @@ fn setup_registry(
                 .expect("NNS public key is required to init Registry local store");
 
             Some(
-                ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key(&nns_pub_key_path)
-                    .expect("failed to parse NNS public key"),
+                parse_threshold_sig_key(&nns_pub_key_path).expect("failed to parse NNS public key"),
             )
         }
     };
@@ -851,6 +940,19 @@ pub fn setup_router(
         )
     }));
 
+    // Create a PubSub broker for the logs subscription
+    let logs_broker = cli.obs.obs_log_websocket.then(|| {
+        Arc::new(
+            BrokerBuilder::new()
+                .with_buffer_size(cli.obs.obs_log_websocket_buffer)
+                .with_idle_timeout(cli.obs.obs_log_websocket_idle_timeout)
+                .with_max_subscribers(cli.obs.obs_log_websocket_max_subscribers)
+                .with_max_topics(cli.obs.obs_log_websocket_max_topics)
+                .with_metric_registry(metrics_registry)
+                .build(),
+        )
+    });
+
     let middleware_metrics = option_layer((!cli.obs.obs_disable_request_logging).then_some(
         middleware::from_fn_with_state(
             HttpMetricParams::new(
@@ -858,6 +960,7 @@ pub fn setup_router(
                 "http_request",
                 cli.obs.obs_log_failed_requests_only,
                 anonymization_salt,
+                logs_broker.clone(),
             ),
             metrics::metrics_middleware,
         ),
@@ -930,7 +1033,8 @@ pub fn setup_router(
 
     let middleware_bouncer =
         option_layer(bouncer.map(|x| middleware::from_fn_with_state(x, bouncer::middleware)));
-    let middleware_subnet_lookup = middleware::from_fn_with_state(lookup, routes::lookup_subnet);
+    let middleware_subnet_lookup =
+        middleware::from_fn_with_state(lookup.clone(), routes::lookup_subnet);
     let middleware_generic_limiter = option_layer(
         generic_limiter.map(|x| middleware::from_fn_with_state(x, generic::middleware)),
     );
@@ -982,10 +1086,22 @@ pub fn setup_router(
         })
         .layer(service_subnet_read);
 
-    canister_read_call_query_routes
+    let mut router = canister_read_call_query_routes
         .merge(subnet_read_state_route)
         .merge(status_route)
-        .merge(health_route)
+        .merge(health_route);
+
+    if let Some(v) = logs_broker {
+        let state = LogsState::new(v, lookup);
+        let logs_canister_router =
+            Router::new().route("/canister/{canister_id}", any(logs_canister));
+        let logs_router = Router::new()
+            .nest("/logs", logs_canister_router)
+            .with_state(state);
+        router = router.merge(logs_router);
+    }
+
+    router
 }
 
 // Process error chain trying to find given error type

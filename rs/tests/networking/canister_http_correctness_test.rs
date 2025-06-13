@@ -60,7 +60,6 @@ const MAX_HEADER_NAME_LENGTH: usize = 8 * 1024;
 const MAX_HEADER_VALUE_LENGTH: usize = 8 * 1024;
 const TOTAL_HEADER_NAME_AND_VALUE_LENGTH: usize = 48 * 1024;
 const HTTP_HEADERS_MAX_NUMBER: usize = 64;
-const RESPONSE_OVERHEAD: u64 = 256;
 const HTTP_REQUEST_CYCLE_PAYMENT: u64 = 500_000_000_000;
 
 // httpbin-rs returns 5 headers in addition to the requested headers:
@@ -154,12 +153,15 @@ fn main() -> Result<()> {
                 .add_test(systest!(test_max_url_length_exceeded))
                 // This section tests the transform function scenarios
                 .add_test(systest!(test_transform_function_is_executed))
-                .add_test(systest!(test_composite_transform_function_is_executed))
+                .add_test(systest!(test_composite_transform_function_is_not_allowed))
                 .add_test(systest!(check_caller_id_on_transform_function))
                 .add_test(systest!(
                     test_transform_that_bloats_response_above_2mb_limit
                 ))
                 .add_test(systest!(test_transform_that_bloats_on_the_2mb_limit))
+                .add_test(systest!(
+                    test_transform_that_bloats_on_the_2mb_limit_with_custom_max_response_bytes
+                ))
                 .add_test(systest!(
                     reference_transform_function_exposed_by_different_canister
                 ))
@@ -310,7 +312,7 @@ fn test_non_existent_transform_function(env: TestEnv) {
     );
 }
 
-fn test_composite_transform_function_is_executed(env: TestEnv) {
+fn test_composite_transform_function_is_not_allowed(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -335,13 +337,11 @@ fn test_composite_transform_function_is_executed(env: TestEnv) {
         },
     ));
 
-    let response = response.expect("Http call should succeed");
-
-    assert_eq!(response.headers.len(), 2, "Headers: {:?}", response.headers);
-    assert_eq!(response.headers[0].0, "hello");
-    assert_eq!(response.headers[0].1, "bonjour");
-    assert_eq!(response.headers[1].0, "caller");
-    assert_eq!(response.headers[1].1, "aaaaa-aa");
+    let err = response.unwrap_err();
+    assert_eq!(err.reject_code, RejectCode::CanisterError);
+    assert!(err
+        .reject_message
+        .contains("Composite query cannot be used as transform in canister http outcalls."));
 }
 
 fn test_no_cycles_attached(env: TestEnv) {
@@ -610,13 +610,7 @@ fn test_max_response_bytes_2_mb_returns_ok(env: TestEnv) {
                 headers: vec![],
                 method: HttpMethod::GET,
                 body: Some("".as_bytes().to_vec()),
-                transform: Some(TransformContext {
-                    function: TransformFunc(candid::Func {
-                        principal: get_proxy_canister_id(&env).into(),
-                        method: "transform".to_string(),
-                    }),
-                    context: vec![0, 1, 2],
-                }),
+                transform: None,
                 max_response_bytes: Some((MAX_MAX_RESPONSE_BYTES) as u64),
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
@@ -638,13 +632,7 @@ fn test_max_response_bytes_too_large(env: TestEnv) {
                 headers: vec![],
                 method: HttpMethod::GET,
                 body: Some("".as_bytes().to_vec()),
-                transform: Some(TransformContext {
-                    function: TransformFunc(candid::Func {
-                        principal: get_proxy_canister_id(&env).into(),
-                        method: "transform".to_string(),
-                    }),
-                    context: vec![0, 1, 2],
-                }),
+                transform: None,
                 max_response_bytes: Some((MAX_MAX_RESPONSE_BYTES + 1) as u64),
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
@@ -690,6 +678,46 @@ fn test_transform_that_bloats_on_the_2mb_limit(env: TestEnv) {
     ));
 
     assert_matches!(response, Ok(r) if r.status==200);
+}
+
+fn test_transform_that_bloats_on_the_2mb_limit_with_custom_max_response_bytes(env: TestEnv) {
+    let handlers = Handlers::new(&env);
+    let webserver_ipv6 = get_universal_vm_address(&env);
+
+    let max_response_bytes = 1_000_000;
+
+    let (response, refunded_cycles) = block_on(submit_outcall(
+        &handlers,
+        RemoteHttpRequest {
+            request: UnvalidatedCanisterHttpRequestArgs {
+                url: format!("https://[{webserver_ipv6}]:20443"),
+                headers: vec![],
+                method: HttpMethod::GET,
+                body: Some("".as_bytes().to_vec()),
+                transform: Some(TransformContext {
+                    function: TransformFunc(candid::Func {
+                        principal: get_proxy_canister_id(&env).into(),
+                        method: "very_large_but_allowed_transform".to_string(),
+                    }),
+                    context: vec![0, 1, 2],
+                }),
+                max_response_bytes: Some(max_response_bytes),
+            },
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
+        },
+    ));
+
+    assert_matches!(
+        response,
+        Err(RejectResponse {
+            reject_code: RejectCode::SysFatal,
+            ..
+        })
+    );
+    assert_ne!(
+        refunded_cycles,
+        RefundedCycles::Cycles(HTTP_REQUEST_CYCLE_PAYMENT)
+    );
 }
 
 fn test_transform_that_bloats_response_above_2mb_limit(env: TestEnv) {
@@ -764,29 +792,29 @@ fn test_post_request(env: TestEnv) {
 fn test_http_endpoint_response_is_within_limits_with_custom_max_response_bytes(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
-    let max_response_bytes: u64 = 1_000_000;
+
+    let n = 1_000_000;
+
+    //   { Response headers
+    //       date: Jan 1 1970 00:00:00 GMT
+    //       content-type: application/octet-stream
+    //       content-length: 1xxxxxx
+    //       access-control-allow-origin: *
+    //       access-control-allow-credentials: true
+    //   }
+    let header_size = 148;
+    let max_response_bytes: u64 = n + header_size;
 
     let (response, _) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
-                url: format!(
-                    "https://[{webserver_ipv6}]:20443/bytes/{}",
-                    max_response_bytes
-                ),
+                url: format!("https://[{webserver_ipv6}]:20443/bytes/{}", n),
                 headers: vec![],
                 method: HttpMethod::GET,
                 body: Some("".as_bytes().to_vec()),
-                transform: Some(TransformContext {
-                    function: TransformFunc(candid::Func {
-                        principal: get_proxy_canister_id(&env).into(),
-                        method: "transform".to_string(),
-                    }),
-                    context: vec![0, 1, 2],
-                }),
-                // Note: the whole response will contain more than 1_000_000 bytes, it also contains a status code + headers etc.
-                // a 256B leeway is decent..
-                max_response_bytes: Some(max_response_bytes + RESPONSE_OVERHEAD),
+                transform: None,
+                max_response_bytes: Some(max_response_bytes),
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -799,65 +827,76 @@ fn test_http_endpoint_response_is_within_limits_with_custom_max_response_bytes(e
 fn test_http_endpoint_response_is_too_large_with_custom_max_response_bytes(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
-    let max_response_bytes = 1_000_000;
 
-    let (response, _) = block_on(submit_outcall(
-        &handlers,
-        RemoteHttpRequest {
-            request: UnvalidatedCanisterHttpRequestArgs {
-                url: format!(
-                    "https://[{webserver_ipv6}]:20443/bytes/{}",
-                    max_response_bytes + 1
-                ),
-                headers: vec![],
-                method: HttpMethod::GET,
-                body: Some("".as_bytes().to_vec()),
-                transform: Some(TransformContext {
-                    function: TransformFunc(candid::Func {
-                        principal: get_proxy_canister_id(&env).into(),
-                        method: "transform".to_string(),
-                    }),
-                    context: vec![0, 1, 2],
-                }),
-                max_response_bytes: Some(max_response_bytes),
+    let n = 1_000_000;
+
+    //   { Response headers
+    //       date: Jan 1 1970 00:00:00 GMT
+    //       content-type: application/octet-stream
+    //       content-length: 1xxxxxx
+    //       access-control-allow-origin: *
+    //       access-control-allow-credentials: true
+    //   }
+    let header_size = 148;
+    let max_response_bytes = n + header_size;
+
+    let const_transform = TransformContext {
+        function: TransformFunc(candid::Func {
+            principal: get_proxy_canister_id(&env).into(),
+            method: "transform".to_string(),
+        }),
+        context: vec![0, 1, 2],
+    };
+
+    for transform in [None, Some(const_transform)] {
+        let (response, _) = block_on(submit_outcall(
+            &handlers,
+            RemoteHttpRequest {
+                request: UnvalidatedCanisterHttpRequestArgs {
+                    url: format!("https://[{webserver_ipv6}]:20443/bytes/{}", n + 1),
+                    headers: vec![],
+                    method: HttpMethod::GET,
+                    body: Some("".as_bytes().to_vec()),
+                    transform,
+                    max_response_bytes: Some(max_response_bytes),
+                },
+                cycles: HTTP_REQUEST_CYCLE_PAYMENT,
             },
-            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
-        },
-    ));
+        ));
 
-    assert_matches!(
-        response,
-        Err(RejectResponse {
-            reject_code: RejectCode::SysFatal,
-            ..
-        })
-    );
+        assert_matches!(
+            response,
+            Err(RejectResponse {
+                reject_code: RejectCode::SysFatal,
+                ..
+            })
+        );
+    }
 }
 
 fn test_http_endpoint_response_is_within_limits_with_default_max_response_bytes(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
+    //   { Response headers
+    //       date: Jan 1 1970 00:00:00 GMT
+    //       content-type: application/octet-stream
+    //       content-length: 1xxxxxx
+    //       access-control-allow-origin: *
+    //       access-control-allow-credentials: true
+    //   }
+    let header_size = 148;
+    let n = DEFAULT_MAX_RESPONSE_BYTES - header_size;
+
     let (response, _) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
-                // Note: the whole response will contain more than (DEFAULT_MAX_RESPONSE_BYTES - 256) bytes, it also contains a status code + headers etc.
-                // a 256B leeway is decent..
-                url: format!(
-                    "https://[{webserver_ipv6}]:20443/bytes/{}",
-                    DEFAULT_MAX_RESPONSE_BYTES - RESPONSE_OVERHEAD
-                ),
+                url: format!("https://[{webserver_ipv6}]:20443/bytes/{}", n),
                 headers: vec![],
                 method: HttpMethod::GET,
                 body: Some("".as_bytes().to_vec()),
-                transform: Some(TransformContext {
-                    function: TransformFunc(candid::Func {
-                        principal: get_proxy_canister_id(&env).into(),
-                        method: "transform".to_string(),
-                    }),
-                    context: vec![0, 1, 2],
-                }),
+                transform: None,
                 max_response_bytes: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
@@ -872,37 +911,48 @@ fn test_http_endpoint_response_is_too_large_with_default_max_response_bytes(env:
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
-    let (response, _) = block_on(submit_outcall(
-        &handlers,
-        RemoteHttpRequest {
-            request: UnvalidatedCanisterHttpRequestArgs {
-                url: format!(
-                    "https://[{webserver_ipv6}]:20443/bytes/{}",
-                    DEFAULT_MAX_RESPONSE_BYTES + 1
-                ),
-                headers: vec![],
-                method: HttpMethod::GET,
-                body: Some("".as_bytes().to_vec()),
-                transform: Some(TransformContext {
-                    function: TransformFunc(candid::Func {
-                        principal: get_proxy_canister_id(&env).into(),
-                        method: "transform".to_string(),
-                    }),
-                    context: vec![0, 1, 2],
-                }),
-                max_response_bytes: None,
-            },
-            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
-        },
-    ));
+    //   { Response headers
+    //       date: Jan 1 1970 00:00:00 GMT
+    //       content-type: application/octet-stream
+    //       content-length: 1xxxxxx
+    //       access-control-allow-origin: *
+    //       access-control-allow-credentials: true
+    //   }
+    let header_size = 148;
+    let n = DEFAULT_MAX_RESPONSE_BYTES - header_size;
 
-    assert_matches!(
-        response,
-        Err(RejectResponse {
-            reject_code: RejectCode::SysFatal,
-            ..
-        })
-    );
+    let const_transform = TransformContext {
+        function: TransformFunc(candid::Func {
+            principal: get_proxy_canister_id(&env).into(),
+            method: "transform".to_string(),
+        }),
+        context: vec![0, 1, 2],
+    };
+
+    for transform in [None, Some(const_transform)] {
+        let (response, _) = block_on(submit_outcall(
+            &handlers,
+            RemoteHttpRequest {
+                request: UnvalidatedCanisterHttpRequestArgs {
+                    url: format!("https://[{webserver_ipv6}]:20443/bytes/{}", n + 1),
+                    headers: vec![],
+                    method: HttpMethod::GET,
+                    body: Some("".as_bytes().to_vec()),
+                    transform,
+                    max_response_bytes: None,
+                },
+                cycles: HTTP_REQUEST_CYCLE_PAYMENT,
+            },
+        ));
+
+        assert_matches!(
+            response,
+            Err(RejectResponse {
+                reject_code: RejectCode::SysFatal,
+                ..
+            })
+        );
+    }
 }
 
 fn test_http_endpoint_with_delayed_response_is_rejected(env: TestEnv) {
@@ -2261,9 +2311,12 @@ where
     match canister_response {
         Err(agent_error) => {
             let err_resp = match agent_error {
-                AgentError::CertifiedReject(response) | AgentError::UncertifiedReject(response) => {
-                    response
+                AgentError::CertifiedReject {
+                    reject: response, ..
                 }
+                | AgentError::UncertifiedReject {
+                    reject: response, ..
+                } => response,
                 _ => panic!("Unexpected error: {:?}", agent_error),
             };
             // If an agent_error is returned then it means that the http_request failed before

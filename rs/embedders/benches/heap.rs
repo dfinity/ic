@@ -1,4 +1,4 @@
-//! This benchmark runs periodically in CI, and the results are available in Grafana.
+//! This benchmark runs nightly in CI, and the results are available in Grafana.
 //! See: `schedule-rust-bench.yml`
 //!
 //! To run the benchmark locally:
@@ -6,6 +6,7 @@
 //! ```shell
 //! bazel run //rs/embedders:heap_bench
 //! ```
+
 use criterion::{criterion_group, criterion_main, Criterion, Throughput};
 use embedders_bench::SetupAction;
 use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
@@ -54,6 +55,8 @@ enum Size {
 
 #[derive(Copy, Clone, Display, EnumIter)]
 enum Step {
+    #[strum(serialize = "step_1")]
+    OneByte = 1,
     #[strum(serialize = "step_4k")]
     Page = PAGE_SIZE as isize,
     #[strum(serialize = "step_8k")]

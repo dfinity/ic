@@ -952,8 +952,12 @@ pub mod manage_neuron {
     pub struct DisburseMaturity {
         /// The percentage to disburse, from 1 to 100
         pub percentage_to_disburse: u32,
-        /// The (optional) principal to which to transfer the stake.
+        /// The (optional) principal to which to transfer the stake. It should not be set if
+        /// `to_account_identifier` is set.
         pub to_account: ::core::option::Option<super::Account>,
+        /// The (optional) account identifier to which to transfer the stake. It should not be set if
+        /// `to_account` is set.
+        pub to_account_identifier: ::core::option::Option<super::AccountIdentifier>,
     }
 
     /// The ID of the neuron to manage. This can either be a subaccount or a neuron ID.
@@ -1203,12 +1207,6 @@ pub mod manage_neuron_response {
                 command: Some(manage_neuron_response::Command::Spawn(
                     manage_neuron_response::SpawnResponse { created_neuron_id },
                 )),
-            }
-        }
-
-        pub fn merge_maturity_response(response: MergeMaturityResponse) -> Self {
-            ManageNeuronResponse {
-                command: Some(manage_neuron_response::Command::MergeMaturity(response)),
             }
         }
 
@@ -4384,4 +4382,6 @@ pub struct MaturityDisbursement {
     pub finalize_disbursement_timestamp_seconds: Option<u64>,
     /// The account to disburse the maturity to.
     pub account_to_disburse_to: Option<Account>,
+    /// The account identifier to disburse the maturity to.
+    pub account_identifier_to_disburse_to: Option<AccountIdentifier>,
 }

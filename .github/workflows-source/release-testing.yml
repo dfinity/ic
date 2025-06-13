@@ -25,7 +25,7 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
+    image: ghcr.io/dfinity/ic-build@sha256:e4862aca9dfa7e342f44cb4ba48923de4306099d26b067ee285f5e0ebe87162a
   dind-large-setup: &dind-large-setup
     runs-on:
       group: zh1
@@ -33,9 +33,7 @@ anchors:
     container:
       <<: *image
       options: >-
-        -e NODE_NAME
-        --privileged --cgroupns host
-        -v /cache:/cache
+        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
     timeout-minutes: 180 # 3 hours
   checkout: &checkout
     name: Checkout
@@ -156,3 +154,10 @@ jobs:
           BAZEL_COMMAND: test --config=ci --config=systest --keep_going --test_timeout=7200 --test_env=OLD_VERSION=${{ matrix.version }}
           BAZEL_TARGETS: "//rs/tests/dre:guest_os_qualification"
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+
+  repro-check:
+    name: Repro check for ${{ github.sha }}
+    uses: ./.github/workflows/repro-check.yml
+    needs: [ci-main]
+    with:
+      github_sha: ${{ github.sha }}

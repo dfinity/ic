@@ -7,6 +7,9 @@ inputs:
   release-build:
     required: false
     default: true
+  upload-artifacts:
+    required: false
+    default: false
   execlogs-artifact-name:
     required: false
     description: "When provided, the execlogs will be uploaded as an artifact with the specified name."
@@ -42,14 +45,6 @@ runs:
           chmod 0700 ~/.ssh
           echo -e "Host *\nUser github-runner\n" > ~/.ssh/config
 
-      - name: Write AWS credentials
-        shell: bash
-        if: inputs.CLOUD_CREDENTIALS_CONTENT != ''
-        run: |
-          AWS_CREDS="${HOME}/.aws/credentials"
-          mkdir -p "$(dirname "${AWS_CREDS}")"
-          echo '${{ inputs.CLOUD_CREDENTIALS_CONTENT }}' >"$AWS_CREDS"
-
       - name: Run Bazel Commands
         uses: ./.github/actions/bazel
         env:
@@ -60,14 +55,25 @@ runs:
           execlogs-artifact-name: ${{ inputs.execlogs-artifact-name }}
           run: |
             set -euo pipefail
+            echo "::notice::Node Name: ${NODE_NAME}"
 
             diff_only='${{ inputs.diff-only }}'
             release_build='${{ inputs.release-build }}'
 
-            bazel_args=( )
+            bazel_args=(
+                # default all tests to fail ...
+                #   ... after three attempts for tests marked as flaky
+                #   ... after three attempts for all tests in //rs/tests
+                #   ... after the first attempt for other tests
+                #   see also:
+                #     https://bazel.build/reference/command-line-reference#build-flag--flaky_test_attempts
+                --flaky_test_attempts=default
+                --flaky_test_attempts=//rs/tests/.*@3
+            )
 
             if [[ $release_build == "true" ]]; then
-              bazel_args+=( --config=release )
+              # make sure the version is stamped in
+              bazel_args+=( --config=stamped )
             fi
 
             BAZEL_TARGETS='${{ inputs.BAZEL_TARGETS }}'
@@ -76,7 +82,6 @@ runs:
             for tgt in $BAZEL_TARGETS; do
               bazel_targets+=( "$tgt" )
             done
-
 
             if [[ $diff_only == "true" ]]; then
                 target_pattern_file=$(mktemp)
@@ -112,8 +117,42 @@ runs:
             echo "Building as user: $(whoami)"
             echo "Bazel version: $(bazel version)"
 
-            if [[ $release_build == "true" ]]; then
-              bazel ${{ inputs.BAZEL_COMMAND }} "${bazel_args[@]}" --config=release
-            else
-              bazel ${{ inputs.BAZEL_COMMAND }} "${bazel_args[@]}"
+            bazel ${{ inputs.BAZEL_COMMAND }} "${bazel_args[@]}"
+
+      - name: Upload to S3
+        uses: ./.github/actions/bazel
+        if: inputs.upload-artifacts == 'true' && inputs.CLOUD_CREDENTIALS_CONTENT != ''
+        with:
+          run: |
+            release_build='${{ inputs.release-build }}'
+
+            if [[ $release_build != "true" ]]; then
+              echo "refusing to upload non-release artifacts"
+              exit 1
             fi
+
+            AWS_CREDS="${HOME}/.aws/credentials"
+            if ! [ -e "$AWS_CREDS" ]; then
+              echo writing remote storage credentials
+              mkdir -p "$(dirname "${AWS_CREDS}")"
+              echo '${{ inputs.CLOUD_CREDENTIALS_CONTENT }}' >"$AWS_CREDS"
+            fi
+
+            echo uploading artifacts to remote storage
+            upload_output=$(mktemp) # used in summary
+
+            # with --check_up_to_date Bazel will error out if the artifacts
+            # to be uploaded were not built in the build step above
+            # (this ensures that the exact artifacts built above are uploaded)
+            bazel run --check_up_to_date //:upload-artifacts >"$upload_output"
+            n_uploaded=$(wc -l <"$upload_output")
+            echo "'$n_uploaded' artifacts uploaded"
+
+            # the upload list can get quite big, so we wrap in details/summary
+            {
+              echo '<details><summary>Uploaded '"$n_uploaded"' Artifacts</summary>';
+              cat "$upload_output"
+              echo '</details>';
+            } >>"$GITHUB_STEP_SUMMARY"
+
+            rm "$upload_output"

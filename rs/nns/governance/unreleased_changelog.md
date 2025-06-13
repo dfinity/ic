@@ -9,11 +9,10 @@ on the process that this file is part of, see
 
 ## Added
 
-* The `DisburseMaturity` neuron command is enabled. See https://forum.dfinity.org/t/disburse-maturity-in-nns/43228 for more details.
-
 ## Changed
 
-* Proposal topics are persisted throughout its lifecycle instead of being recomputed every time.
+* Task execution metrics are added for `neuron_data_validation` and
+  `unstake_maturity_of_dissolved_neurons` timer tasks.
 
 ## Deprecated
 
@@ -21,5 +20,7 @@ on the process that this file is part of, see
 
 ## Fixed
 
+* The `account_identifier_to_disburse_to` in the maturity disbursement now contains a 32-byte
+  address rather than the 28-byte one without checksum.
+
 ## Security
-Enforce a lower bound for `min_participant_icp_e8s` of `1_000_000`.

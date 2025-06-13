@@ -139,7 +139,7 @@ def generate_image_tag(base: str) -> str:
     # See the (unwieldy) format spec:
     # https://github.com/opencontainers/distribution-spec/blob/main/spec.md#pulling-manifests
     # Replace disallowed chars with dashes
-    return base.translate(str.maketrans({"/": "-", ".": "-", ":": "-"}))
+    return base.translate(str.maketrans({"/": "-", ".": "-", ":": "-"})).lower()
 
 
 def build_and_export(
