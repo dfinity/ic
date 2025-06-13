@@ -105,6 +105,7 @@ function make_var_mount() {
 # Read current state
 mount /grub
 read_grubenv "/grub/grubenv"
+umount /grub
 CURRENT_SYSTEM="${boot_alternative}"
 
 make_boot_mount "$CURRENT_SYSTEM" >"$UNIT_DIR"/boot.mount
