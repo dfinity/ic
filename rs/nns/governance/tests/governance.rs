@@ -72,7 +72,6 @@ use ic_nns_governance::{
             MergeMaturity, NeuronIdOrSubaccount, RefreshVotingPower, SetVisibility, Spawn, Split,
             StartDissolving,
         },
-        neuron::DissolveState,
         neurons_fund_snapshot::NeuronsFundNeuronPortion,
         proposal::{self, Action},
         reward_node_provider::{RewardMode, RewardToAccount, RewardToNeuron},
@@ -80,7 +79,7 @@ use ic_nns_governance::{
         AddOrRemoveNodeProvider, Ballot, BallotInfo, CreateServiceNervousSystem, Empty,
         ExecuteNnsFunction, Followees, GovernanceError, IdealMatchedParticipationFunction,
         InstallCode, KnownNeuron, KnownNeuronData, ManageNeuron, MonthlyNodeProviderRewards,
-        Motion, NetworkEconomics, Neuron, NeuronType, NeuronsFundData, NeuronsFundEconomics,
+        Motion, NetworkEconomics, NeuronType, NeuronsFundData, NeuronsFundEconomics,
         NeuronsFundMatchedFundingCurveCoefficients, NeuronsFundParticipation, NeuronsFundSnapshot,
         NnsFunction, NodeProvider, Proposal, ProposalData,
         ProposalRewardStatus::{self, AcceptVotes, ReadyToSettle},
@@ -4469,7 +4468,7 @@ fn governance_with_staked_neuron(
 ///
 /// If `dissolved` is true, the returned neuron is in the "dissolved" state,
 /// otherwise the returned neuron is in the "not-dissolving" state.
-fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, Neuron) {
+fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, api::Neuron) {
     let from = *TEST_NEURON_1_OWNER_PRINCIPAL;
     // Compute the subaccount to which the transfer would have been made
     let nonce = 1234u64;
@@ -4569,7 +4568,7 @@ fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, Neuro
 
     let neuron = gov.get_full_neuron(&id, &from).unwrap();
 
-    (driver, gov, Neuron::from(neuron))
+    (driver, gov, neuron)
 }
 
 #[test]
@@ -7065,12 +7064,10 @@ fn test_manage_and_reward_node_providers() {
     let voter_pid = *init_neurons[&42].controller.as_ref().unwrap();
 
     let voter_neuron = init_neurons[&42].id.unwrap();
-    init_neurons.get_mut(&42).unwrap().dissolve_state = Some(
-        DissolveState::DissolveDelaySeconds(
+    init_neurons.get_mut(&42).unwrap().dissolve_state =
+        Some(api::neuron::DissolveState::DissolveDelaySeconds(
             VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS,
-        )
-        .into(),
-    );
+        ));
     let np_pid = PrincipalId::new_self_authenticating(&[14]);
 
     let (driver, mut gov) = governance_with_neurons(
@@ -7421,12 +7418,10 @@ fn test_manage_and_reward_multiple_node_providers() {
     let voter_pid = *init_neurons[&42].controller.as_ref().unwrap();
 
     let voter_neuron = init_neurons[&42].id.unwrap();
-    init_neurons.get_mut(&42).unwrap().dissolve_state = Some(
-        DissolveState::DissolveDelaySeconds(
+    init_neurons.get_mut(&42).unwrap().dissolve_state =
+        Some(api::neuron::DissolveState::DissolveDelaySeconds(
             VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS,
-        )
-        .into(),
-    );
+        ));
     let np_pid_0 = PrincipalId::new_self_authenticating(&[14]);
     let np_pid_1 = PrincipalId::new_self_authenticating(&[15]);
     let np_pid_2 = PrincipalId::new_self_authenticating(&[16]);
@@ -7801,12 +7796,10 @@ fn test_network_economics_proposal() {
 
     let voter_pid = *init_neurons[&42].controller.as_ref().unwrap();
     let voter_neuron = init_neurons[&42].id.unwrap();
-    init_neurons.get_mut(&42).unwrap().dissolve_state = Some(
-        DissolveState::DissolveDelaySeconds(
+    init_neurons.get_mut(&42).unwrap().dissolve_state =
+        Some(api::neuron::DissolveState::DissolveDelaySeconds(
             VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS,
-        )
-        .into(),
-    );
+        ));
     let (_, mut gov) = governance_with_neurons(
         init_neurons
             .values()
@@ -8358,7 +8351,7 @@ async fn test_id_v1_works() {
 
 #[test]
 fn test_can_follow_by_subaccount_and_neuron_id() {
-    fn test_can_follow_by(make_neuron_id: fn(&Neuron) -> NeuronIdOrSubaccount) {
+    fn test_can_follow_by(make_neuron_id: fn(&api::Neuron) -> NeuronIdOrSubaccount) {
         reset_stable_memory();
         let driver = fake::FakeDriver::default();
         let mut gov = Governance::new(
@@ -8378,7 +8371,7 @@ fn test_can_follow_by_subaccount_and_neuron_id() {
             .expect("Failed to get neuron");
         let f = neuron.followees.get(&(Topic::Unspecified as i32));
         assert_eq!(f, None);
-        let neuron_id_or_subaccount = make_neuron_id(&Neuron::from(neuron.clone()));
+        let neuron_id_or_subaccount = make_neuron_id(&neuron);
 
         // Start following
         gov.manage_neuron(
@@ -8427,14 +8420,12 @@ fn test_merge_maturity_returns_expected_error() {
         .create();
 
     let id = NeuronId { id: 100 };
-    let neuron = nns.get_neuron(&id);
-    let controller = *neuron.controller.as_ref().unwrap();
 
     // This is inlined because the method is removed, so we don't need a general purpose test method
     let result1 = nns
         .governance
         .manage_neuron(
-            &controller,
+            &principal(1),
             &ManageNeuron {
                 id: None,
                 neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(id)),

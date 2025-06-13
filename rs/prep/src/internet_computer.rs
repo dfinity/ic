@@ -42,7 +42,7 @@ use ic_protobuf::registry::{
 use ic_protobuf::types::v1::{PrincipalId as PrincipalIdProto, SubnetId as SubnetIdProto};
 use ic_registry_client::client::RegistryDataProviderError;
 use ic_registry_keys::{
-    make_api_boundary_node_record_key, make_blessed_replica_versions_key,
+    make_api_boundary_node_record_key, make_blessed_replica_versions_key, make_canister_ranges_key,
     make_data_center_record_key, make_firewall_rules_record_key, make_node_operator_record_key,
     make_provisional_whitelist_record_key, make_replica_version_key, make_routing_table_record_key,
     make_subnet_list_record_key, make_unassigned_nodes_config_record_key, FirewallRulesScope,
@@ -588,6 +588,17 @@ impl IcConfig {
             );
         }
 
+        write_registry_entry(
+            &data_provider,
+            self.target_dir.as_path(),
+            // The ranges can safely be written into a single entry, and Registry will shard the entry
+            // as needed on the next change.  This works up to the maximum size of a registry entry.
+            &make_canister_ranges_key(CanisterId::from_u64(0)),
+            version,
+            routing_table_record.clone(),
+        );
+
+        // TODO(NNS1-3781): Remove this once routing_table is no longer used by clients.
         write_registry_entry(
             &data_provider,
             self.target_dir.as_path(),

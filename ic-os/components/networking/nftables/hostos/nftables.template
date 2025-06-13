@@ -103,6 +103,7 @@ table ip6 filter {
       2604:1380:4641:6100::/56,       # DA11 Equinix boundary
       2600:3000:6100:200::/64,        # DL1
       2604:6800:258:1::/64,           # DM1 InfraDC annex
+      2602:fb2b:100::/48,             # DM1
       2600:3000:1300:1300::/64,       # DN1
       2001:470:1:c76::/64,            # FM1
       2602:fb2b:110::/48,             # FR1 InfraDC prefix
@@ -162,7 +163,7 @@ table ip6 filter {
       2602:fb2b:120::/48,             # CH1 InfraDC prefix
       2001:4d78:40d::/48,             # FR1-old
       2602:fb2b:110::/48,             # FR1 InfraDC prefix
-      2602:fb2b:100::/48              # SF1 InfraDC prefix
+      2602:fb2b:100::/48              # DM1
     } # comment "Telemetry infrastructure"
   }
 

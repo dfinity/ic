@@ -242,6 +242,26 @@ pub struct Observability {
     #[clap(env, long)]
     pub obs_log_journald: bool,
 
+    /// Enables Websocket endpoint to subscribe to logs
+    #[clap(env, long)]
+    pub obs_log_websocket: bool,
+
+    /// Websocket broker buffer size (per-topic)
+    #[clap(env, long, default_value = "1000")]
+    pub obs_log_websocket_buffer: usize,
+
+    /// Websocket broker topic idle timeout, after which the topic is removed.
+    #[clap(env, long, default_value = "10m", value_parser = parse_duration)]
+    pub obs_log_websocket_idle_timeout: Duration,
+
+    /// Websocket broker max topics
+    #[clap(env, long, default_value = "100000")]
+    pub obs_log_websocket_max_topics: u64,
+
+    /// Websocket broker max subscribers (per-topic)
+    #[clap(env, long, default_value = "1000")]
+    pub obs_log_websocket_max_subscribers: usize,
+
     /// Enables logging to /dev/null (to benchmark logging)
     #[clap(env, long)]
     pub obs_log_null: bool,

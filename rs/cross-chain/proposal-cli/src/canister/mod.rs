@@ -29,6 +29,7 @@ pub enum TargetCanister {
     EvmRpc,
     CyclesLedger,
     ExchangeRateCanister,
+    SolRpc,
 }
 
 impl TargetCanister {
@@ -49,6 +50,7 @@ impl TargetCanister {
             TargetCanister::EvmRpc => "evm_rpc",
             TargetCanister::CyclesLedger => "cycles-ledger",
             TargetCanister::ExchangeRateCanister => "xrc",
+            TargetCanister::SolRpc => "sol_rpc",
         }
     }
 
@@ -70,13 +72,12 @@ impl TargetCanister {
             | TargetCanister::IcpIndex
             | TargetCanister::IcpLedger
             | TargetCanister::LedgerSuiteOrchestrator => "https://github.com/dfinity/ic.git",
-            TargetCanister::EvmRpc => {
-                "https://github.com/internet-computer-protocol/evm-rpc-canister.git"
-            }
+            TargetCanister::EvmRpc => "https://github.com/dfinity/evm-rpc-canister.git",
             TargetCanister::CyclesLedger => "https://github.com/dfinity/cycles-ledger.git",
             TargetCanister::ExchangeRateCanister => {
                 "https://github.com/dfinity/exchange-rate-canister.git"
             }
+            TargetCanister::SolRpc => "https://github.com/dfinity/sol-rpc-canister.git",
         }
     }
 
@@ -114,6 +115,7 @@ impl TargetCanister {
             TargetCanister::EvmRpc => PathBuf::from("candid/evm_rpc.did"),
             TargetCanister::CyclesLedger => PathBuf::from("cycles-ledger/cycles-ledger.did"),
             TargetCanister::ExchangeRateCanister => PathBuf::from("src/xrc/xrc.did"),
+            TargetCanister::SolRpc => PathBuf::from("canister/sol_rpc_canister.did"),
         }
     }
 
@@ -139,7 +141,8 @@ impl TargetCanister {
             }
             TargetCanister::EvmRpc
             | TargetCanister::CyclesLedger
-            | TargetCanister::ExchangeRateCanister => None,
+            | TargetCanister::ExchangeRateCanister
+            | TargetCanister::SolRpc => None,
         }
     }
 
@@ -189,7 +192,8 @@ impl TargetCanister {
             | TargetCanister::LedgerSuiteOrchestrator
             | TargetCanister::EvmRpc
             | TargetCanister::CyclesLedger
-            | TargetCanister::ExchangeRateCanister => self.repo_dir().into_iter().collect(),
+            | TargetCanister::ExchangeRateCanister
+            | TargetCanister::SolRpc => self.repo_dir().into_iter().collect(),
         }
     }
 
@@ -216,6 +220,7 @@ impl TargetCanister {
             TargetCanister::EvmRpc
             | TargetCanister::CyclesLedger
             | TargetCanister::ExchangeRateCanister => PathBuf::from(self.artifact_file_name()),
+            TargetCanister::SolRpc => PathBuf::from("wasms").join(self.artifact_file_name()),
         }
     }
 
@@ -242,6 +247,7 @@ impl TargetCanister {
             TargetCanister::EvmRpc => "evm_rpc.wasm.gz",
             TargetCanister::CyclesLedger => "cycles-ledger.wasm.gz",
             TargetCanister::ExchangeRateCanister => "xrc.wasm.gz",
+            TargetCanister::SolRpc => "sol_rpc_canister.wasm.gz",
         }
     }
 
@@ -267,7 +273,7 @@ impl TargetCanister {
                 cmd.arg("--canisters");
                 cmd
             }
-            TargetCanister::EvmRpc | TargetCanister::CyclesLedger => {
+            TargetCanister::EvmRpc | TargetCanister::CyclesLedger | TargetCanister::SolRpc => {
                 Command::new("./scripts/docker-build")
             }
             TargetCanister::ExchangeRateCanister => {
@@ -307,6 +313,7 @@ impl TargetCanister {
             TargetCanister::EvmRpc
             | TargetCanister::CyclesLedger
             | TargetCanister::ExchangeRateCanister => PathBuf::from("canister_ids.json"),
+            TargetCanister::SolRpc => PathBuf::from("canister/prod/canister_ids.json"),
         }
     }
 
@@ -342,6 +349,7 @@ impl FromStr for TargetCanister {
             ["evm", "rpc"] => Ok(TargetCanister::EvmRpc),
             ["cycles", "ledger"] => Ok(TargetCanister::CyclesLedger),
             ["exchange", "rate"] => Ok(TargetCanister::ExchangeRateCanister),
+            ["sol", "rpc"] => Ok(TargetCanister::SolRpc),
             _ => Err(format!("Unknown canister name: {}", canister)),
         }
     }
@@ -369,6 +377,7 @@ impl Display for TargetCanister {
             TargetCanister::EvmRpc => write!(f, "EVM RPC"),
             TargetCanister::CyclesLedger => write!(f, "cycles ledger"),
             TargetCanister::ExchangeRateCanister => write!(f, "exchange rate canister"),
+            TargetCanister::SolRpc => write!(f, "SOL RPC"),
         }
     }
 }

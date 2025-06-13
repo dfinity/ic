@@ -30,8 +30,8 @@ use ic_nns_governance::{
         manage_neuron,
         manage_neuron::{Command, Merge, MergeMaturity, NeuronIdOrSubaccount},
         proposal, ExecuteNnsFunction, Governance as GovernanceProto, GovernanceError, ManageNeuron,
-        Motion, NetworkEconomics, Neuron, NeuronType, NnsFunction, Proposal, ProposalData,
-        RewardEvent, Topic, Vote, XdrConversionRate as XdrConversionRatePb,
+        Motion, NetworkEconomics, NeuronType, NnsFunction, Proposal, ProposalData, RewardEvent,
+        Topic, Vote, XdrConversionRate as XdrConversionRatePb,
     },
     storage::reset_stable_memory,
 };
@@ -139,10 +139,6 @@ impl LedgerBuilder {
     pub fn try_add_account(&mut self, ident: AccountIdentifier, amount: u64) -> &mut Self {
         self.ledger_fixture.accounts.entry(ident).or_insert(amount);
         self
-    }
-
-    pub fn neuron_account_id(neuron: &Neuron) -> AccountIdentifier {
-        neuron_subaccount(Subaccount::try_from(neuron.account.as_slice()).unwrap())
     }
 }
 
@@ -885,29 +881,6 @@ impl NNS {
                 })),
             },
         )
-    }
-
-    pub fn get_neuron(&self, ident: &NeuronId) -> Neuron {
-        self.governance
-            .neuron_store
-            .with_neuron(ident, |n| Neuron::from(n.clone()))
-            .unwrap()
-    }
-
-    pub fn get_account_balance(&self, account: AccountIdentifier) -> u64 {
-        self.account_balance(account)
-            .now_or_never()
-            .unwrap()
-            .unwrap()
-            .get_e8s()
-    }
-
-    pub fn get_neuron_account_id(&self, id: u64) -> AccountIdentifier {
-        LedgerBuilder::neuron_account_id(&self.get_neuron(&NeuronId { id }))
-    }
-
-    pub fn get_neuron_stake(&self, neuron: &Neuron) -> u64 {
-        self.get_account_balance(LedgerBuilder::neuron_account_id(neuron))
     }
 
     pub fn push_mocked_canister_reply(&mut self, call: impl Into<CanisterCallReply>) {

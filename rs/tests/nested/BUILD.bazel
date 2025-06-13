@@ -76,7 +76,7 @@ system_test_nns(
     env = MAINNET_ENV,
     extra_head_nns_tags = [],
     flaky = True,
-    tags = ["system_test_hourly"],
+    tags = ["long_test"],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_driver_target = ":upgrade_test_bin",
     test_timeout = "eternal",

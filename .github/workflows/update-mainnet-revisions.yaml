@@ -1,5 +1,10 @@
 name: Update IC versions file
 
+# NOTE: The workflow  update-nervous-system-wasms is crucial for keeping the currently deployed canister versions`
+# up to date.  SNS Canister release qualification tests (under rs/nervous_system/integration_tests) depend on the
+# version of the canister being up to date.  If it is disabled, tests might succeed that ought to fail.  Please do not
+# disable without consulting (or minimally informing) the team(s) maintaining the NNS and SNS (currently Governance).
+
 on:
   schedule:
     - cron: "0 */2 * * *"
@@ -35,6 +40,7 @@ jobs:
 
           time python ci/src/mainnet_revisions/mainnet_revisions.py subnets
 
+  # IMPORTANT: See note at the top of this file.
   update-nervous-system-wasms:
     runs-on:
       labels: dind-small

@@ -474,8 +474,16 @@ impl CanisterSnapshot {
         &self.execution_snapshot.stable_memory
     }
 
+    pub fn stable_memory_mut(&mut self) -> &mut PageMemory {
+        &mut self.execution_snapshot.stable_memory
+    }
+
     pub fn wasm_memory(&self) -> &PageMemory {
         &self.execution_snapshot.wasm_memory
+    }
+
+    pub fn wasm_memory_mut(&mut self) -> &mut PageMemory {
+        &mut self.execution_snapshot.wasm_memory
     }
 
     pub fn canister_module(&self) -> &CanisterModule {

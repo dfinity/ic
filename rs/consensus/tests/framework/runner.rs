@@ -168,6 +168,7 @@ impl<'a> ConsensusRunner<'a> {
         let consensus_bouncer = ic_consensus::consensus::ConsensusBouncer::new(
             &deps.metrics_registry,
             deps.message_routing.clone(),
+            deps.state_manager.clone(),
         );
         let dkg = ic_consensus_dkg::DkgImpl::new(
             deps.replica_config.node_id,

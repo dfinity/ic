@@ -425,9 +425,10 @@ pub fn check_success(
             m.latency_distribution.buckets().last().unwrap().1 + m.reject_responses;
         // All messages sent more than `targeted_latency_seconds` before the end of the
         // test should have gotten a response.
+        let runtime_seconds = config.runtime.as_secs();
         let responses_expected = ((m.calls_attempted - m.call_errors) as f64
-            * (config.runtime.as_secs() - config.targeted_latency_seconds) as f64
-            / config.runtime.as_secs() as f64) as usize;
+            * runtime_seconds.saturating_sub(config.targeted_latency_seconds) as f64
+            / runtime_seconds as f64) as usize;
         // Account for requests enqueued this round (in case canister messages were
         // executed before ingress messages, i.e. the heartbeat was executed before
         // metrics collection) or uncounted responses (if ingress executed first).
@@ -438,7 +439,7 @@ pub fn check_success(
             config.subnet_to_subnet_rate,
             responses_received
         );
-        let responses_expected = responses_expected - config.subnet_to_subnet_rate;
+        let responses_expected = responses_expected.saturating_sub(config.subnet_to_subnet_rate);
         let actual = format!(
             "{}/{}",
             responses_received,
