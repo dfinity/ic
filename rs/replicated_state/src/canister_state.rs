@@ -118,7 +118,7 @@ pub struct ExecutingCanisterState {
 }
 
 impl ExecutingCanisterState {
-    pub fn new(canister_state: CanisterState, input: &CanisterMessageOrTask, time: Time) -> Self {
+    pub fn for_message_or_task(canister_state: CanisterState, input: &CanisterMessageOrTask, time: Time) -> Self {
         let CanisterState {
             system_state,
             execution_state,
@@ -131,8 +131,33 @@ impl ExecutingCanisterState {
         }
     }
 
+    pub fn for_call_or_task(canister_state: CanisterState, input: &CanisterCallOrTask, time: Time) -> Self {
+        let CanisterState {
+            system_state,
+            execution_state,
+            scheduler_state,
+        } = canister_state;
+    }
+
+    pub fn for_response(canister_state: CanisterState, response: &Response, time: Time) -> Self {
+        let CanisterState {
+            system_state,
+            execution_state,
+            scheduler_state,
+        } = canister_state;
+        Self {
+            executing_system_state: ExecutingSystemState::for_response(system_state, response, time),
+            execution_state,
+            scheduler_state,
+        }
+    }
+
     pub fn canister_id(&self) -> CanisterId {
         self.executing_system_state.canister_id()
+    }
+
+    pub fn freeze_threshold(&self) -> NumSeconds {
+        self.executing_system_state.system_state.freeze_threshold
     }
     
     pub fn compute_allocation(&self) -> ComputeAllocation {

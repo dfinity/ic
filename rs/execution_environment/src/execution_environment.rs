@@ -2693,7 +2693,7 @@ impl ExecutionEnvironment {
     #[allow(clippy::too_many_arguments)]
     pub fn execute_canister_response(
         &self,
-        canister: CanisterState,
+        canister: ExecutingCanisterState,
         response: Arc<Response>,
         instruction_limits: InstructionLimits,
         time: Time,
