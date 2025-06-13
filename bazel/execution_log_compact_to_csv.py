@@ -92,8 +92,8 @@ def main():
                 id_to_entry[exec_log_entry.id] = exec_log_entry
             elif entry_type == "spawn":
                 label = exec_log_entry.spawn.target_label
-                if ((len(args.include) > 0 and all([not re.match(include, label) for include in args.include])) or
-                    (len(args.exclude) > 0 and any([re.match(exclude, label) for exclude in args.exclude]))
+                if (len(args.include) > 0 and all([not re.match(include, label) for include in args.include])) or (
+                    len(args.exclude) > 0 and any([re.match(exclude, label) for exclude in args.exclude])
                 ):
                     continue
                 for output in exec_log_entry.spawn.outputs:
