@@ -11,7 +11,6 @@ use ic_embedders::wasmtime_embedder::system_api::{
 };
 use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
 use ic_logger::replica_logger::no_op_logger;
-use ic_management_canister_types_private::IC_00;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
@@ -94,7 +93,6 @@ impl ApiTypeBuilder {
 
     pub fn build_system_task_api() -> ApiType {
         ApiType::system_task(
-            IC_00.get(),
             SystemMethod::CanisterHeartbeat,
             UNIX_EPOCH,
             CallContextId::from(1),
