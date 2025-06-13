@@ -772,6 +772,19 @@ mod tests {
     }
 
     #[test]
+    fn routing_table_must_have_a_0_canister_range() {
+        let registry = invariant_compliant_registry(0);
+        let subnet = SubnetId::new(PrincipalId::new_user_test_id(3));
+        let rt = rt_from_ranges(vec![((1, 200), subnet)]);
+
+        // If we try to create a routing table without 0 canister range, it should panic.
+        assert!(std::panic::catch_unwind(|| {
+            mutations_for_canister_ranges(&registry, &rt);
+        })
+        .is_err());
+    }
+
+    #[test]
     fn mixed_case_generates_delete_upsert() {
         let mut registry = invariant_compliant_registry(0);
         let subnet = SubnetId::new(PrincipalId::new_user_test_id(1));
