@@ -5092,6 +5092,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "grub"
+version = "1.0.0"
+dependencies = [
+ "regex",
+ "strum 0.26.3",
+ "tempfile",
+ "thiserror 2.0.12",
+]
+
+[[package]]
 name = "guestos_tool"
 version = "1.0.0"
 dependencies = [
