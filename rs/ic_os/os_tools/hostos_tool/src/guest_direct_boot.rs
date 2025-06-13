@@ -1,4 +1,4 @@
-use crate::mount::PartitionProvider;
+use crate::mount::{MountOptions, PartitionProvider};
 use anyhow::Context;
 use anyhow::Result;
 use config::guest_vm_config::DirectBootConfig;
@@ -46,7 +46,14 @@ pub async fn prepare_direct_boot(
     should_refresh_grubenv: bool,
     partition_provider: &dyn PartitionProvider,
 ) -> Result<Option<DirectBoot>> {
-    let grub_partition = partition_provider.mount_partition("grub").await?;
+    let grub_partition = partition_provider
+        .mount_partition(
+            "grub",
+            MountOptions {
+                readonly: !should_refresh_grubenv,
+            },
+        )
+        .await?;
     let grubenv_path = grub_partition.mount_point().join("grubenv");
     let mut grubenv = GrubEnv::read_from(File::open(&grubenv_path)?)?;
     if should_refresh_grubenv && refresh_grubenv(&mut grubenv)? {
@@ -72,7 +79,7 @@ pub async fn prepare_direct_boot(
     };
 
     let boot_partition = partition_provider
-        .mount_partition(boot_partition_name)
+        .mount_partition(boot_partition_name, MountOptions { readonly: true })
         .await?;
 
     let boot_args_path = boot_partition.mount_point().join("boot_args");

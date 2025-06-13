@@ -218,13 +218,13 @@ impl GuestVmService {
 
         println!("Creating GuestOS virtual machine");
 
-        let virtual_machine =  VirtualMachine::new(
+        let virtual_machine = VirtualMachine::new(
             &self.libvirt_connection,
             &vm_config,
             config_media,
             direct_boot,
         )
-            .context("Failed to define GuestOS virtual machine")?;
+        .context("Failed to define GuestOS virtual machine")?;
 
         // Notify systemd that we're ready
         self.systemd_notifier.notify_ready()?;
@@ -737,14 +737,15 @@ mod tests {
         );
 
         // Wait until the service fails
+        let error = tokio::time::timeout(VM_SERVICE_START_TIMEOUT, &mut fixture.service_task)
+            .await
+            .expect("Service should have failed but did not")
+            .unwrap()
+            .unwrap_err()
+            .to_string();
         assert!(
-            tokio::time::timeout(VM_SERVICE_START_TIMEOUT, &mut fixture.service_task)
-                .await
-                .expect("Service should have failed but did not")
-                .unwrap()
-                .unwrap_err()
-                .to_string()
-                .contains("Failed to create domain")
+            error.contains("Failed to define GuestOS virtual machine"),
+            "Got unexpected error: \"{error}\""
         );
 
         fixture.assert_metrics_contains("hostos_guestos_service_start 0");

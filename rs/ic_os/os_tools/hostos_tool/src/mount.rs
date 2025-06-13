@@ -22,7 +22,11 @@ use tempfile::TempDir;
 /// Trait for accessing partitions by name from a device
 #[async_trait]
 pub trait PartitionProvider: Send + Sync {
-    async fn mount_partition(&self, partition_name: &str) -> Result<Box<dyn MountedPartition>>;
+    async fn mount_partition(
+        &self,
+        partition_name: &str,
+        options: MountOptions,
+    ) -> Result<Box<dyn MountedPartition>>;
 }
 
 /// Handles mounting raw device ranges (offset + length) to filesystem paths
@@ -33,7 +37,13 @@ pub trait Mounter: Send + Sync {
         device: PathBuf,
         offset_bytes: u64,
         len_bytes: u64,
+        options: MountOptions,
     ) -> Result<Box<dyn MountedPartition>>;
+}
+
+#[derive(Copy, Clone)]
+pub struct MountOptions {
+    pub readonly: bool,
 }
 
 /// Represents a mounted partition with access to its filesystem.
@@ -67,7 +77,11 @@ impl GptPartitionProvider {
 
 #[async_trait]
 impl PartitionProvider for GptPartitionProvider {
-    async fn mount_partition(&self, partition_name: &str) -> Result<Box<dyn MountedPartition>> {
+    async fn mount_partition(
+        &self,
+        partition_name: &str,
+        options: MountOptions,
+    ) -> Result<Box<dyn MountedPartition>> {
         let partition = self
             .gpt
             .iter()
@@ -79,7 +93,7 @@ impl PartitionProvider for GptPartitionProvider {
         let len_bytes = partition.size()? * self.gpt.sector_size;
 
         self.mounter
-            .mount_range(self.device.clone(), offset_bytes, len_bytes)
+            .mount_range(self.device.clone(), offset_bytes, len_bytes, options)
             .await
     }
 }
@@ -108,6 +122,7 @@ impl Mounter for LoopDeviceMounter {
         device: PathBuf,
         offset_bytes: u64,
         _len_bytes: u64,
+        options: MountOptions,
     ) -> Result<Box<dyn MountedPartition>> {
         let mount = tokio::task::spawn_blocking(move || {
             let tempdir = TempDir::new()?;
@@ -115,7 +130,11 @@ impl Mounter for LoopDeviceMounter {
             Ok::<LoopDeviceMount, Error>(LoopDeviceMount {
                 mount: Mount::builder()
                     .loopback_offset(offset_bytes)
-                    .flags(MountFlags::RDONLY)
+                    .flags(if options.readonly {
+                        MountFlags::RDONLY
+                    } else {
+                        MountFlags::empty()
+                    })
                     .explicit_loopback()
                     .mount_autodrop(device, target, UnmountFlags::empty())?,
                 _tempdir: tempdir,
@@ -129,7 +148,7 @@ impl Mounter for LoopDeviceMounter {
 #[cfg(test)]
 pub mod testing {
     use super::*;
-    use anyhow::{bail, Context};
+    use anyhow::{bail, ensure, Context};
     use partition_tools::ext::ExtPartition;
     use partition_tools::fat::FatPartition;
     use partition_tools::Partition;
@@ -137,6 +156,7 @@ pub mod testing {
     use std::path::{Path, PathBuf};
     use std::sync::Arc;
     use tempfile::TempDir;
+    use tokio::process::Command;
 
     /// Test partition provider that uses pre-populated directories
     pub struct MockPartitionProvider {
@@ -151,13 +171,31 @@ pub mod testing {
 
     #[async_trait]
     impl PartitionProvider for MockPartitionProvider {
-        async fn mount_partition(&self, partition_name: &str) -> Result<Box<dyn MountedPartition>> {
-            let partition = self
+        async fn mount_partition(
+            &self,
+            partition_name: &str,
+            options: MountOptions,
+        ) -> Result<Box<dyn MountedPartition>> {
+            let partition_dir = self
                 .partitions
                 .get(partition_name)
                 .with_context(|| format!("Could not find partition {partition_name}"))?;
+
+            if options.readonly {
+                ensure!(
+                    Command::new("chmod")
+                        .arg("-R")
+                        .arg("-w")
+                        .arg(partition_dir.path())
+                        .status()
+                        .await?
+                        .success(),
+                    "Could not chmod directory"
+                );
+            }
+
             Ok(Box::new(MockMount {
-                mount_point: partition.clone(),
+                mount_point: partition_dir.clone(),
             }))
         }
     }
@@ -207,6 +245,7 @@ pub mod testing {
             device: PathBuf,
             offset_bytes: u64,
             len_bytes: u64,
+            options: MountOptions,
         ) -> Result<Box<dyn MountedPartition>> {
             async fn extract_partition<P: Partition>(
                 device: &Path,
@@ -221,18 +260,22 @@ pub mod testing {
                     .context("Could not copy files to tempdir")
             }
 
-            let target = TempDir::new().context("Could not create tempdir")?;
+            let extraction_dir = TempDir::new().context("Could not create tempdir")?;
 
             // Try to extract as FAT first, then EXT
-            if let Err(fat_err) =
-                extract_partition::<FatPartition>(&device, offset_bytes, len_bytes, target.path())
-                    .await
+            if let Err(fat_err) = extract_partition::<FatPartition>(
+                &device,
+                offset_bytes,
+                len_bytes,
+                extraction_dir.path(),
+            )
+            .await
             {
                 if let Err(ext_err) = extract_partition::<ExtPartition>(
                     &device,
                     offset_bytes,
                     len_bytes,
-                    target.path(),
+                    extraction_dir.path(),
                 )
                 .await
                 {
@@ -245,14 +288,14 @@ pub mod testing {
 
             // Apply test modifications
             for (path, new_content) in &self.file_overrides {
-                let full_path = target.path().join(path);
+                let full_path = extraction_dir.path().join(path);
                 if full_path.exists() {
                     tokio::fs::write(&full_path, new_content).await?;
                 }
             }
 
             for path in &self.file_deletions {
-                let full_path = target.path().join(path);
+                let full_path = extraction_dir.path().join(path);
                 if full_path.exists() {
                     tokio::fs::remove_file(&full_path)
                         .await
@@ -260,8 +303,21 @@ pub mod testing {
                 }
             }
 
+            if options.readonly {
+                ensure!(
+                    Command::new("chmod")
+                        .arg("-R")
+                        .arg("-w")
+                        .arg(extraction_dir.path())
+                        .status()
+                        .await?
+                        .success(),
+                    "Could not chmod directory"
+                );
+            }
+
             Ok(Box::new(MockMount {
-                mount_point: Arc::new(target),
+                mount_point: Arc::new(extraction_dir),
             }))
         }
     }

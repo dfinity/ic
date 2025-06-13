@@ -167,7 +167,6 @@ impl Partition for ExtPartition {
     }
 
     async fn copy_files_to(&mut self, output: &Path) -> Result<()> {
-        let start = Instant::now();
         ensure!(
             output.exists() && output.is_dir(),
             "output must be an existing directory"
@@ -188,8 +187,6 @@ impl Partition for ExtPartition {
 
         let out = cmd.wait_with_output().await?;
         Self::check_debugfs_result(&out)?;
-
-        println!("debugfs took {:?}", start.elapsed());
 
         Ok(())
     }

@@ -52,12 +52,5 @@ rust_test(
     crate = ":hostos_tool",
     data = ["//ic-os/guestos/envs/prod:disk-img.tar.zst"],
     env = {"ICOS_IMAGE": "$(rootpath //ic-os/guestos/envs/prod:disk-img.tar.zst)"},
-    tags = ["requires-fakeroot"],
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
-)
-
-sh_test(
-    name = "internal_mount_test",
-    srcs = ["internal_mount_test.sh"],
-    tags = ["requires-fakeroot"],
 )
