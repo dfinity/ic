@@ -1,5 +1,5 @@
 {
-  "checksum": "f0099add6a0ee59a28fda0b1fd84cabc0852c7284ddacca9988e0d5ea6d32d41",
+  "checksum": "482c96a11eedc563e64d2205ff5ffd8fd9d58f861c4f7f8f9cc9483ba602d578",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -82150,7 +82150,8 @@
         ],
         "crate_features": {
           "common": [
-            "default"
+            "default",
+            "linux5_7"
           ],
           "selects": {}
         },
@@ -82236,7 +82237,8 @@
         ],
         "crate_features": {
           "common": [
-            "default"
+            "default",
+            "linux5_7"
           ],
           "selects": {}
         },

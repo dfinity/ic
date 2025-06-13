@@ -749,16 +749,16 @@ pub fn uffd_handler(
     uffd: &Uffd,
     access_kind: ReadWrite,
     fault_address: *mut libc::c_void,
-) {
+) -> Option<usize> {
     if !tracker.memory_area.is_within(fault_address) {
         // This memory tracker is not responsible for handling this address.
-        return;
+        return None;
     };
 
     let faulting_page = tracker.page_index_from(fault_address);
     let mut accessed_bitmap = tracker.accessed_bitmap.borrow_mut();
 
-    match (access_kind, tracker.dirty_page_tracking) {
+    let prefetch_range = match (access_kind, tracker.dirty_page_tracking) {
         (_, DirtyPageTracking::Ignore) => {
             // We don't care about dirty pages here, so we can set up the page mapping for
             // for multiple pages as read/write right away.
@@ -776,6 +776,7 @@ pub fn uffd_handler(
                 max_prefetch_range,
             );
             accessed_bitmap.mark_range(&prefetch_range);
+            prefetch_range
         }
         (ReadWrite::Read, DirtyPageTracking::Track) => {
             // Set up the page mapping as read-only in order to get a signal on subsequent
@@ -794,6 +795,7 @@ pub fn uffd_handler(
                 max_prefetch_range,
             );
             accessed_bitmap.mark_range(&prefetch_range);
+            prefetch_range
         }
         (ReadWrite::Write, DirtyPageTracking::Track) => {
             let mut dirty_bitmap = tracker.dirty_bitmap.borrow_mut();
@@ -804,6 +806,10 @@ pub fn uffd_handler(
             let prefetch_range =
                 dirty_bitmap.restrict_range_to_unmarked(faulting_page, prefetch_range);
             if accessed_bitmap.is_marked(faulting_page) {
+                println!(
+                    "[memory tracker] Handling write access to already accessed page: {:?}",
+                    faulting_page
+                );
                 tracker
                     .read_before_write_stats
                     .read_before_write_count
@@ -830,8 +836,13 @@ pub fn uffd_handler(
                     .mprotect_count
                     .fetch_add(1, Ordering::Relaxed);
                 dirty_bitmap.mark_range(&prefetch_range);
-                tracker.add_dirty_pages(faulting_page, prefetch_range);
+                tracker.add_dirty_pages(faulting_page, prefetch_range.clone());
+                prefetch_range
             } else {
+                println!(
+                    "[memory tracker] Handling write access to a page that was missing: {:?}",
+                    faulting_page
+                );
                 tracker
                     .read_before_write_stats
                     .direct_write_count
@@ -853,12 +864,18 @@ pub fn uffd_handler(
                     prefetch_range.clone(),
                     prefetch_range,
                 );
+                println!(
+                    "[memory tracker] Handling write access for range {:?}",
+                    prefetch_range
+                );
                 accessed_bitmap.mark_range(&prefetch_range);
                 dirty_bitmap.mark_range(&prefetch_range);
-                tracker.add_dirty_pages(faulting_page, prefetch_range);
+                tracker.add_dirty_pages(faulting_page, prefetch_range.clone());
+                prefetch_range
             }
         }
-    }
+    };
+    Some(range_size_in_bytes(&prefetch_range))
 }
 
 /// Sets up page mapping for a given range. This function takes two ranges, `min_prefetch_range`
@@ -924,6 +941,10 @@ fn apply_memory_instructions(
                 FileDescriptor { fd },
                 offset,
             ) => {
+                println!(
+                    "Mapping range: {:?} from fd: {}, offset: {}",
+                    range, fd, offset
+                );
                 tracker
                     .memory_instructions_stats
                     .mmap_count
@@ -967,11 +988,12 @@ fn apply_memory_instructions(
                     debug_assert_eq!(data.len(), range_size_in_bytes(&range));
                     match uffd {
                         Some(uffd) => {
+                            println!("Copying data to uffd: {:?}", range);
                             uffd.copy(
                                 data.as_ptr() as *const libc::c_void,
                                 tracker.page_start_addr_from(range.start),
                                 range_size_in_bytes(&range),
-                                true,
+                                false,
                             )
                             .expect("uffd copy failed");
                         }

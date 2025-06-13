@@ -41,7 +41,7 @@ use crate::{
     serialized_module::SerializedModuleBytes, wasm_utils::validation::wasmtime_validation_config,
 };
 use std::{sync::MutexGuard, thread};
-use userfaultfd::{Event, UffdBuilder};
+use userfaultfd::{Event, FaultKind, ReadWrite, RegisterMode, UffdBuilder};
 
 use super::InstanceRunResult;
 
@@ -757,9 +757,18 @@ fn sigsegv_memory_tracker<S>(
             .user_mode_only(true)
             .create()
             .expect("Failed to create userfaultfd");
-        println!("Created userfaultfd: {:?} for mem_type {}", uffd, mem_type);
-        uffd.register(base, max_memory_size_in_pages * PAGE_SIZE)
-            .expect("Failed to register region");
+        println!(
+            "Created userfaultfd: {:?} for mem_type {}, size {}",
+            uffd,
+            mem_type,
+            max_memory_size_in_pages * PAGE_SIZE
+        );
+        uffd.register_with_mode(
+            base,
+            max_memory_size_in_pages * PAGE_SIZE,
+            RegisterMode::MISSING | RegisterMode::WRITE_PROTECT,
+        )
+        .expect("Failed to register region");
 
         result.insert(mem_type, Arc::clone(&sigsegv_memory_tracker));
 
@@ -767,47 +776,81 @@ fn sigsegv_memory_tracker<S>(
             loop {
                 let event = uffd.read_event().expect("Failed to read uffd event");
 
-                if let Some(Event::Pagefault {
-                    addr: fault_addr,
-                    rw,
-                    ..
-                }) = event
-                {
-                    println!("Page fault at address: {:p}", fault_addr);
+                if let Some(Event::Pagefault { addr, rw, kind }) = event {
+                    println!(
+                        "Page fault at for mem_type {}, address: {:p}",
+                        mem_type, addr
+                    );
 
                     let memory_tracker = sigsegv_memory_tracker.lock().unwrap();
 
                     let check_if_expanded =
                         move |tracker: &MutexGuard<SigsegvMemoryTracker>,
-                              fault_addr: *mut libc::c_void,
+                              addr: *mut libc::c_void,
                               current_size_in_pages: &MemoryPageSize| unsafe {
                             let page_count = current_size_in_pages.load(Ordering::SeqCst);
                             let heap_size = page_count * WASM_PAGE_SIZE_IN_BYTES;
                             let heap_start = tracker.area().addr() as *mut libc::c_void;
-                            if (heap_start <= fault_addr)
-                                && (fault_addr < { heap_start.add(heap_size) })
-                            {
+                            if (heap_start <= addr) && (addr < { heap_start.add(heap_size) }) {
                                 Some(heap_size)
                             } else {
                                 None
                             }
                         };
 
-                    if !memory_tracker.area().is_within(fault_addr) {
-                        println!("Uffd fault at address: {:p}", fault_addr);
+                    if !memory_tracker.area().is_within(addr) {
+                        println!("Uffd fault at address: {:p}", addr);
                         // The heap has expanded. Update tracked memory area.
-                        if let Some(heap_size) = check_if_expanded(
-                            &memory_tracker,
-                            fault_addr,
-                            &current_memory_size_in_pages,
-                        ) {
+                        if let Some(heap_size) =
+                            check_if_expanded(&memory_tracker, addr, &current_memory_size_in_pages)
+                        {
                             let delta =
                                 NumBytes::new(heap_size as u64) - memory_tracker.area().size();
                             memory_tracker.expand(delta);
                         }
                     }
 
-                    uffd_handler(&memory_tracker, &uffd, rw, fault_addr);
+                    let fault_addr = (addr as usize & !(PAGE_SIZE - 1)) as *mut libc::c_void;
+
+                    match (kind, rw) {
+                        (FaultKind::Missing, ReadWrite::Read) => {
+                            println!("[handler] Handling missing page fault for read access");
+
+                            let size = uffd_handler(&memory_tracker, &uffd, rw, fault_addr);
+
+                            if let Some(size) = size {
+                                // Undocumented requirement: write-protect ioctl on the region
+                                // can only happen after a missing page fault has been handled
+                                // (as opposed to performing it right after registration but
+                                // before any page fault).
+                                uffd.write_protect(fault_addr, size)
+                                    .expect("write_protect failed");
+
+                                uffd.wake(fault_addr, size).expect("wake failed");
+                            }
+                        }
+                        (FaultKind::Missing, ReadWrite::Write) => {
+                            println!("[handler] Handling missing page fault for write access");
+
+                            let size = uffd_handler(&memory_tracker, &uffd, rw, fault_addr);
+
+                            if let Some(size) = size {
+                                println!("[handler] Wake up faulting thread for write access");
+                                uffd.wake(fault_addr, size).expect("wake failed");
+                            }
+                        }
+                        (FaultKind::WriteProtected, ReadWrite::Read) => {
+                            unreachable!("Should not receive notification");
+                        }
+                        (FaultKind::WriteProtected, ReadWrite::Write) => {
+                            println!(
+                                "[handler] Handling write-protect page fault for write access"
+                            );
+                            // Page is already dirty, remove write protection.
+                            uffd.remove_write_protection(fault_addr, PAGE_SIZE, true)
+                                .expect("remove_write_protection failed");
+                        }
+                    }
                 }
             }
         });

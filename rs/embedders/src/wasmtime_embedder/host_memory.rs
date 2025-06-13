@@ -13,7 +13,7 @@ use ic_types::MAX_STABLE_MEMORY_IN_BYTES;
 use libc::c_void;
 use libc::MAP_FAILED;
 use libc::{mmap, munmap};
-use libc::{MAP_ANON, MAP_PRIVATE, PROT_NONE};
+use libc::{MAP_ANON, MAP_PRIVATE, PROT_READ, PROT_WRITE};
 use wasmtime::{LinearMemory, MemoryType};
 use wasmtime_environ::WASM32_MAX_SIZE;
 
@@ -164,7 +164,7 @@ impl MmapMemory {
             mmap(
                 ptr::null_mut(),
                 size_in_bytes,
-                PROT_NONE,
+                PROT_READ | PROT_WRITE,
                 MAP_PRIVATE | MAP_ANON,
                 -1,
                 0,

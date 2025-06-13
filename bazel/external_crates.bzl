@@ -1453,6 +1453,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
 	    "userfaultfd": crate.spec(
                 version = "^0.8.1",
+		features = ["linux5_7"],
 	    ),
             # DO NOT upgrade to >=1.13 unless you are ready to deal with problems.
             # This breaks `wasm32-unknown-unknown` compatibility.
