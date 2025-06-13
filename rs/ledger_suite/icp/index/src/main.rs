@@ -1,10 +1,10 @@
 use candid::{candid_method, Principal};
 use ic_base_types::PrincipalId;
 use ic_canister_log::{export as export_logs, log};
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::api::caller;
-use ic_cdk_macros::{init, post_upgrade, query};
+use ic_cdk::{init, post_upgrade, query};
 use ic_cdk_timers::TimerId;
+use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_icp_index::logs::{P0, P1};
 use ic_icp_index::{
     GetAccountIdentifierTransactionsArgs, GetAccountIdentifierTransactionsResponse,
@@ -669,6 +669,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
         match encode_metrics(&mut writer) {
             Ok(()) => HttpResponseBuilder::ok()
                 .header("Content-Type", "text/plain; version=0.0.4")
+                .header("Cache-Control", "no-store")
                 .with_body_and_content_length(writer.into_inner())
                 .build(),
             Err(err) => {

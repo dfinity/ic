@@ -5,7 +5,7 @@
 
 use candid::{CandidType, Deserialize};
 use core::fmt;
-use ic_base_types::{NodeId, SubnetId};
+use ic_base_types::{CanisterId, NodeId, SubnetId};
 use ic_management_canister_types_private::{EcdsaKeyId, MasterPublicKeyId};
 use ic_types::crypto::KeyPurpose;
 use ic_types::registry::RegistryClientError;
@@ -34,6 +34,7 @@ pub const CRYPTO_THRESHOLD_SIGNING_KEY_PREFIX: &str = "crypto_threshold_signing_
 pub const DATA_CENTER_KEY_PREFIX: &str = "data_center_record_";
 pub const ECDSA_SIGNING_SUBNET_LIST_KEY_PREFIX: &str = "key_id_";
 pub const CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX: &str = "master_public_key_id_";
+pub const CANISTER_RANGES_PREFIX: &str = "canister_ranges_";
 
 pub fn get_ecdsa_key_id_from_signing_subnet_list_key(
     signing_subnet_list_key: &str,
@@ -367,6 +368,22 @@ pub fn maybe_parse_crypto_node_key(key: &str) -> Option<(NodeId, KeyPurpose)> {
 /// canisters.
 pub fn make_nns_canister_records_key() -> String {
     "nns_canister_records".to_string()
+}
+
+/// Returns a key for the CanisterRange registry entry
+pub fn make_canister_ranges_key(range_start: CanisterId) -> String {
+    if CanisterId::try_from_principal_id(range_start.get()).is_err() {
+        // try_from_principal_id ensures the CanisterId is plausibly representing a u64
+        // which is currently an implied requirement for our routing table.
+        panic!("Non-routable CanisterId being used as a key");
+    }
+
+    // This has the same lexicographic ordering as the u64's that are used to create CanisterId, because
+    // the bytes are big-endian encoded in the Principal.
+    // If at some point we stop having the same length CanisterIds, we will need to prepend a length
+    // byte into this encoding to have the same properties apply, and that will also require a data migration.
+    let encoded_range_start = hex::encode(range_start.get().to_vec());
+    format!("{}{}", CANISTER_RANGES_PREFIX, encoded_range_start)
 }
 
 #[cfg(test)]

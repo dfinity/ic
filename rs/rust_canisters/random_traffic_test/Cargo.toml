@@ -11,8 +11,7 @@ path = "src/main.rs"
 candid = { workspace = true }
 futures = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
-ic-cdk = { git = "https://github.com/dfinity/cdk-rs", rev = "4e287ce51636b0e70768c193da38d2fc5324ea15" }
-ic-cdk-macros = { git = "https://github.com/dfinity/cdk-rs", rev = "4e287ce51636b0e70768c193da38d2fc5324ea15" }
+ic-cdk = "^0.18.0-alpha.2"
 ic-error-types = { path = "../../../packages/ic-error-types" }
 ic-types = { path = "../../types/types" }
 proptest = { workspace = true }

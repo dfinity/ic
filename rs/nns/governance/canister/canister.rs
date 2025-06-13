@@ -1,9 +1,9 @@
 use ic_base_types::PrincipalId;
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::{
     caller as ic_cdk_caller, heartbeat, init, post_upgrade, pre_upgrade, println, query, spawn,
     update,
 };
+use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_nervous_system_canisters::cmc::CMCCanister;
 use ic_nervous_system_common::{
     memory_manager_upgrade_storage::{load_protobuf, store_protobuf},
@@ -16,8 +16,6 @@ use ic_nns_common::{
     types::{NeuronId, ProposalId},
 };
 use ic_nns_constants::LEDGER_CANISTER_ID;
-#[cfg(feature = "test")]
-use ic_nns_governance::governance::TimeWarp as GovTimeWarp;
 use ic_nns_governance::{
     canister_state::{governance, governance_mut, set_governance, CanisterEnv},
     encode_metrics,
@@ -27,7 +25,9 @@ use ic_nns_governance::{
     storage::{grow_upgrades_memory_to, validate_stable_storage, with_upgrades_memory},
     timer_tasks::schedule_tasks,
 };
-use ic_nns_governance_api::pb::v1::{
+#[cfg(feature = "test")]
+use ic_nns_governance_api::test_api::TimeWarp;
+use ic_nns_governance_api::{
     claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshNeuronFromAccountResponseResult,
     governance::GovernanceCachedMetrics,
     governance_error::ErrorType,
@@ -46,17 +46,19 @@ use ic_nns_governance_api::pb::v1::{
     SettleCommunityFundParticipation, SettleNeuronsFundParticipationRequest,
     SettleNeuronsFundParticipationResponse, UpdateNodeProvider, Vote,
 };
-#[cfg(feature = "test")]
-use ic_nns_governance_api::test_api::TimeWarp;
 use std::sync::Arc;
 use std::{boxed::Box, time::Duration};
 
-#[cfg(not(feature = "tla"))]
-use ic_nervous_system_canisters::ledger::IcpLedgerCanister;
+#[cfg(feature = "test")]
+use ic_nns_governance::governance::TimeWarp as GovTimeWarp;
+
 use ic_nns_governance::canister_state::{with_governance, CanisterRandomnessGenerator};
 
 #[cfg(feature = "tla")]
 mod tla_ledger;
+
+#[cfg(not(feature = "tla"))]
+use ic_nervous_system_canisters::ledger::IcpLedgerCanister;
 #[cfg(feature = "tla")]
 use tla_ledger::LoggingIcpLedgerCanister as IcpLedgerCanister;
 
@@ -70,8 +72,6 @@ pub(crate) const LOG_PREFIX: &str = "[Governance] ";
 
 fn schedule_timers() {
     schedule_spawn_neurons();
-    schedule_unstake_maturity_of_dissolved_neurons();
-    schedule_neuron_data_validation();
     schedule_vote_processing();
     schedule_tasks();
 }
@@ -82,20 +82,6 @@ fn schedule_spawn_neurons() {
         spawn(async {
             governance_mut().maybe_spawn_neurons().await;
         });
-    });
-}
-
-const UNSTAKE_MATURITY_OF_DISSOLVED_NEURONS_INTERVAL: Duration = Duration::from_secs(60);
-fn schedule_unstake_maturity_of_dissolved_neurons() {
-    ic_cdk_timers::set_timer_interval(UNSTAKE_MATURITY_OF_DISSOLVED_NEURONS_INTERVAL, || {
-        governance_mut().unstake_maturity_of_dissolved_neurons();
-    });
-}
-
-const NEURON_DATA_VALIDATION_INTERNVAL: Duration = Duration::from_secs(5);
-fn schedule_neuron_data_validation() {
-    ic_cdk_timers::set_timer_interval(NEURON_DATA_VALIDATION_INTERNVAL, || {
-        governance_mut().maybe_run_validations();
     });
 }
 
@@ -135,9 +121,8 @@ fn canister_init_(init_payload: ApiGovernanceProto) {
         init_payload.neurons.len()
     );
 
-    let governance_proto = InternalGovernanceProto::from(init_payload);
     set_governance(Governance::new(
-        governance_proto,
+        init_payload,
         Arc::new(CanisterEnv::new()),
         Arc::new(IcpLedgerCanister::<CdkRuntime>::new(LEDGER_CANISTER_ID)),
         Arc::new(CMCCanister::<CdkRuntime>::new()),
@@ -176,11 +161,10 @@ fn canister_post_upgrade() {
 
     println!(
         "{}canister_post_upgrade: Initializing with: economics: \
-          {:?}, genesis_timestamp_seconds: {}, neuron count: {}, xdr_conversion_rate: {:?}",
+          {:?}, genesis_timestamp_seconds: {}, xdr_conversion_rate: {:?}",
         LOG_PREFIX,
         restored_state.economics,
         restored_state.genesis_timestamp_seconds,
-        restored_state.neurons.len(),
         restored_state.xdr_conversion_rate,
     );
 
@@ -335,7 +319,6 @@ fn get_full_neuron(neuron_id: NeuronId) -> Result<Neuron, GovernanceError> {
     debug_log("get_full_neuron");
     governance()
         .get_full_neuron(&NeuronIdProto::from(neuron_id), &caller())
-        .map(Neuron::from)
         .map_err(GovernanceError::from)
 }
 
@@ -580,6 +563,21 @@ fn http_request(request: HttpRequest) -> HttpResponse {
 
 fn main() {
     // This block is intentionally left blank.
+}
+
+// A query method to get the TLA traces collected in a test run.
+#[cfg(all(feature = "tla", feature = "test"))]
+#[query(hidden = true)]
+fn get_tla_traces() -> Vec<tla_instrumentation::UpdateTrace> {
+    use ic_nns_governance::governance::tla::TLA_TRACES_MUTEX;
+    let mut traces = TLA_TRACES_MUTEX
+        .as_ref()
+        .expect("TLA_TRACES_MUTEX is None in get_tla_traces")
+        .write()
+        .expect("Couldn't acquire TLA_TRACES_MUTEX write lock in get_tla_traces");
+    let mut result = Vec::new();
+    std::mem::swap(&mut result, &mut *traces);
+    result
 }
 
 // In order for some of the test(s) within this mod to work,

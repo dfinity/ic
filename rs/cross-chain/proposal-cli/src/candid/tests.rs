@@ -43,6 +43,7 @@ fn should_parse_constructor_parameters() {
             || canister == TargetCanister::EvmRpc
             || canister == TargetCanister::CyclesLedger
             || canister == TargetCanister::ExchangeRateCanister
+            || canister == TargetCanister::SolRpc
         {
             continue;
         }

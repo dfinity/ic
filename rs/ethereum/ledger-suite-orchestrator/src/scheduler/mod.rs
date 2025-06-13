@@ -834,6 +834,9 @@ async fn install_ledger_suite<R: CanisterRuntime>(
     let ledger_canister_id =
         create_canister_once::<Ledger, _>(&args.contract, runtime, cycles_for_ledger_creation)
             .await?;
+    let index_principal =
+        create_canister_once::<Index, _>(&args.contract, runtime, cycles_for_index_creation)
+            .await?;
 
     let more_controllers = read_state(|s| s.more_controller_ids().to_vec())
         .into_iter()
@@ -848,14 +851,12 @@ async fn install_ledger_suite<R: CanisterRuntime>(
             runtime.id().into(),
             more_controllers,
             cycles_for_archive_creation,
+            index_principal,
         )),
         runtime,
     )
     .await?;
 
-    let _index_principal =
-        create_canister_once::<Index, _>(&args.contract, runtime, cycles_for_index_creation)
-            .await?;
     let index_arg = Some(IndexArg::Init(IndexInitArg {
         ledger_id: ledger_canister_id,
         retrieve_blocks_from_ledger_interval_seconds: None,
@@ -898,6 +899,7 @@ fn icrc1_ledger_init_arg(
     archive_controller_id: PrincipalId,
     archive_more_controller_ids: Vec<PrincipalId>,
     cycles_for_archive_creation: Nat,
+    index_principal: Principal,
 ) -> LedgerInitArgs {
     use ic_icrc1_ledger::FeatureFlags as LedgerFeatureFlags;
     use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as LedgerMetadataValue;
@@ -932,6 +934,7 @@ fn icrc1_ledger_init_arg(
         ),
         max_memo_length: Some(MAX_MEMO_LENGTH),
         feature_flags: Some(ICRC2_FEATURE),
+        index_principal: Some(index_principal),
     }
 }
 

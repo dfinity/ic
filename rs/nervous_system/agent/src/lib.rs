@@ -12,6 +12,7 @@ pub mod mock;
 pub mod nns;
 mod null_request;
 pub mod pocketic_impl;
+mod registry;
 pub mod sns;
 #[cfg(feature = "test")]
 pub mod state_machine_impl;
@@ -54,6 +55,10 @@ pub trait CallCanisters: sealed::Sealed {
         &self,
         canister_id: impl Into<Principal> + Send,
     ) -> impl Future<Output = Result<CanisterInfo, Self::Error>> + Send;
+}
+
+pub trait AgentFor: sealed::Sealed {
+    fn agent_for(&self, principal: impl Into<Principal>) -> impl CallCanisters;
 }
 
 // Functions that use 'call' need to be able

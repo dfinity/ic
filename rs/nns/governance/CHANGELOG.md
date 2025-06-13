@@ -11,6 +11,81 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-06-06: Proposal 136890
+
+http://dashboard.internetcomputer.org/proposal/136890
+
+## Added
+
+* Support disbursing maturity to an account identifier, in addition to icrc1 account.
+
+
+# 2025-05-31: Proposal 136795
+
+http://dashboard.internetcomputer.org/proposal/136795
+
+## Added
+
+* Expose a new metric `voting_power_snapshots_latest_snapshot_is_spike`.
+* Enabling `DisburseMaturity` neuron management proposals.
+
+## Changed
+
+* `MAX_NEURON_CREATION_SPIKE` is increased from 120 to 300.
+
+
+# 2025-05-16: Proposal 136693
+
+http://dashboard.internetcomputer.org/proposal/136693
+
+## Added
+
+* The `DisburseMaturity` neuron command is enabled. See https://forum.dfinity.org/t/disburse-maturity-in-nns/43228 for more details.
+
+## Changed
+
+* Proposal topics are persisted throughout its lifecycle instead of being recomputed every time.
+
+## Removed
+
+* The `IcpXdrConversionRate` proposal is now obsolete and cannot be submitted.
+
+## Security
+Enforce a lower bound for `min_participant_icp_e8s` of `1_000_000`.
+
+
+# 2025-05-10: Proposal 136580
+
+http://dashboard.internetcomputer.org/proposal/136580
+
+## Removed
+
+* The `governance_heap_neuron_count` metric is removed as there are no neurons in the heap anymore.
+
+
+# 2025-05-02: Proposal 136427
+
+http://dashboard.internetcomputer.org/proposal/136427
+
+## Changed
+
+* The Governance canister will fetch rewards from the new Node Rewards Canister instead of from Registry.
+
+## Removed
+
+* All the `_pb` methods are removed as they already always panic, as well as decoding the init arg
+  as protobuf.
+
+
+# 2025-04-25: Proposal 136370
+
+http://dashboard.internetcomputer.org/proposal/136370
+
+## Fixed
+
+* Use `StableBTreeMap::init` instead of `::new` for voting power snapshots.
+
+
 # 2025-04-15: Proposal 136285
 
 http://dashboard.internetcomputer.org/proposal/136285

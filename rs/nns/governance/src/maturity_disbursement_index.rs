@@ -29,6 +29,15 @@ impl<M: Memory> MaturityDisbursementIndex<M> {
         self.finalization_timestamp_neuron_id_to_null.len() as usize
     }
 
+    pub fn contains_entry(
+        &self,
+        neuron_id: NeuronId,
+        finalization_timestamp: TimestampSeconds,
+    ) -> bool {
+        self.finalization_timestamp_neuron_id_to_null
+            .contains_key(&(finalization_timestamp, neuron_id))
+    }
+
     /// Adds (finalization_timestamp, neuron_id) pairs to the index, returns a list of timestamps
     /// that are not added because of clobbering.
     pub fn add_neuron_id_finalization_timestamps(

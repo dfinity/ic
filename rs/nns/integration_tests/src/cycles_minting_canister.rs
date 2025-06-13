@@ -2,11 +2,12 @@ use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat, Principal};
 use canister_test::Canister;
 use cycles_minting_canister::{
-    CanisterSettingsArgs, ChangeSubnetTypeAssignmentArgs, CreateCanister, CreateCanisterError,
-    IcpXdrConversionRateCertifiedResponse, NotifyCreateCanister, NotifyError, NotifyErrorCode,
-    NotifyMintCyclesArg, NotifyMintCyclesSuccess, NotifyTopUp, SubnetListWithType,
-    SubnetTypesToSubnetsResponse, UpdateSubnetTypeArgs, BAD_REQUEST_CYCLES_PENALTY,
-    MEANINGFUL_MEMOS, MEMO_CREATE_CANISTER, MEMO_MINT_CYCLES, MEMO_TOP_UP_CANISTER,
+    AuthorizedSubnetsResponse, CanisterSettingsArgs, ChangeSubnetTypeAssignmentArgs,
+    CreateCanister, CreateCanisterError, IcpXdrConversionRateCertifiedResponse,
+    NotifyCreateCanister, NotifyError, NotifyErrorCode, NotifyMintCyclesArg,
+    NotifyMintCyclesSuccess, NotifyTopUp, SubnetListWithType, SubnetTypesToSubnetsResponse,
+    UpdateSubnetTypeArgs, BAD_REQUEST_CYCLES_PENALTY, MEANINGFUL_MEMOS, MEMO_CREATE_CANISTER,
+    MEMO_MINT_CYCLES, MEMO_TOP_UP_CANISTER,
 };
 use dfn_candid::candid_one;
 use dfn_protobuf::protobuf;
@@ -28,7 +29,8 @@ use ic_nns_constants::{
     CYCLES_LEDGER_CANISTER_ID, CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID,
     LEDGER_CANISTER_ID, LEDGER_CANISTER_INDEX_IN_NNS_SUBNET, ROOT_CANISTER_ID,
 };
-use ic_nns_governance_api::pb::v1::{NnsFunction, ProposalStatus};
+use ic_nns_governance_api::{NnsFunction, ProposalStatus};
+use ic_nns_test_utils::state_test_helpers::cmc_set_authorized_subnetworks_for_principal;
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     governance::{submit_external_update_proposal, wait_for_final_state},
@@ -96,12 +98,13 @@ async fn set_icp_xdr_conversion_rate(
     )
     .await;
 
+    let proposal_info = wait_for_final_state(&nns.governance, proposal_id).await;
     // Wait for the proposal to be accepted and executed.
     assert_eq!(
-        wait_for_final_state(&nns.governance, proposal_id)
-            .await
-            .status,
-        ProposalStatus::Executed as i32
+        proposal_info.status,
+        ProposalStatus::Executed as i32,
+        "Proposal should have been executed but was not: {:?}",
+        proposal_info
     );
 
     let response: IcpXdrConversionRateCertifiedResponse = nns
@@ -1753,7 +1756,7 @@ fn cmc_notify_top_up_not_rate_limited_by_invalid_top_up() {
 }
 
 #[test]
-fn cmc_get_default_subnets() {
+fn test_cmc_set_and_get_authorized_subnets() {
     let account = AccountIdentifier::new(*TEST_USER1_PRINCIPAL, None);
     let icpts = Tokens::new(100, 0).unwrap();
     let neuron = get_neuron_1();
@@ -1775,6 +1778,20 @@ fn cmc_get_default_subnets() {
     let decoded = Decode!(default_subnets.bytes().as_slice(), Vec<PrincipalId>).unwrap();
     assert!(decoded.is_empty());
 
+    let authorized_subnets_response = state_machine
+        .execute_ingress(
+            CYCLES_MINTING_CANISTER_ID,
+            "get_principals_authorized_to_create_canisters_to_subnets",
+            candid::encode_one(()).unwrap(),
+        )
+        .unwrap();
+    let authorized_for_sam = Decode!(
+        &authorized_subnets_response.bytes().as_slice(),
+        AuthorizedSubnetsResponse
+    )
+    .unwrap();
+    assert_eq!(authorized_for_sam.data.len(), 0);
+
     let subnet_id = state_machine.get_subnet_id();
     cmc_set_default_authorized_subnetworks(
         &state_machine,
@@ -1792,4 +1809,45 @@ fn cmc_get_default_subnets() {
         .unwrap();
     let decoded = Decode!(default_subnets.bytes().as_slice(), Vec<PrincipalId>).unwrap();
     assert!(decoded.len() == 1);
+
+    let authorized_subnets_response = state_machine
+        .execute_ingress(
+            CYCLES_MINTING_CANISTER_ID,
+            "get_principals_authorized_to_create_canisters_to_subnets",
+            candid::encode_one(()).unwrap(),
+        )
+        .unwrap();
+    let authorized_subnets_response = Decode!(
+        &authorized_subnets_response.bytes().as_slice(),
+        AuthorizedSubnetsResponse
+    )
+    .unwrap();
+    assert_eq!(authorized_subnets_response.data.len(), 0);
+
+    let bob = PrincipalId::new_user_test_id(1010101);
+    cmc_set_authorized_subnetworks_for_principal(
+        &state_machine,
+        Some(bob),
+        vec![subnet_id],
+        neuron.principal_id,
+        neuron.neuron_id,
+    );
+
+    let authorized_subnets_response = state_machine
+        .execute_ingress(
+            CYCLES_MINTING_CANISTER_ID,
+            "get_principals_authorized_to_create_canisters_to_subnets",
+            candid::encode_one(()).unwrap(),
+        )
+        .unwrap();
+    let mut authorized_subnets_response = Decode!(
+        &authorized_subnets_response.bytes().as_slice(),
+        AuthorizedSubnetsResponse
+    )
+    .unwrap();
+    assert_eq!(authorized_subnets_response.data.len(), 1);
+    assert_eq!(
+        authorized_subnets_response.data.pop(),
+        Some((bob, vec![subnet_id]))
+    );
 }

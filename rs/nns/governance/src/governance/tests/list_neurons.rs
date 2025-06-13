@@ -1,13 +1,14 @@
+use crate::neuron::{DissolveStateAndAge, NeuronBuilder};
 use crate::test_utils::MockRandomness;
 use crate::{
     governance::Governance,
-    pb::v1::{neuron::DissolveState, NetworkEconomics, Neuron},
     test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
 };
 use ic_base_types::PrincipalId;
-use ic_nns_common::pb::v1::NeuronId;
-use ic_nns_governance_api::pb::v1::list_neurons::NeuronSubaccount;
-use ic_nns_governance_api::pb::v1::ListNeurons;
+use ic_nns_governance_api::{
+    list_neurons::NeuronSubaccount, Governance as ApiGovernance, ListNeurons, NetworkEconomics,
+};
+use icp_ledger::Subaccount;
 use std::sync::Arc;
 
 #[test]
@@ -16,36 +17,37 @@ fn test_list_neurons_with_paging() {
 
     let neurons = (1..1000u64)
         .map(|id| {
-            let dissolve_state = DissolveState::DissolveDelaySeconds(100);
-            let account = crate::test_utils::test_subaccount_for_neuron_id(id);
-            (
+            NeuronBuilder::new_for_test(
                 id,
-                Neuron {
-                    id: Some(NeuronId::from_u64(id)),
-                    controller: Some(user_id),
-                    account,
-                    dissolve_state: Some(dissolve_state),
-                    // Fill in the rest as needed (stake, maturity, etc.)
-                    ..Default::default()
+                DissolveStateAndAge::NotDissolving {
+                    dissolve_delay_seconds: 100,
+                    aging_since_timestamp_seconds: 0,
                 },
             )
+            .with_controller(user_id)
+            .build()
         })
-        .collect();
+        .collect::<Vec<_>>();
 
-    let governance = Governance::new(
-        crate::pb::v1::Governance {
-            neurons,
+    let mut governance = Governance::new(
+        ApiGovernance {
             economics: Some(NetworkEconomics {
                 voting_power_economics: Some(Default::default()),
                 ..Default::default()
             }),
-            ..crate::pb::v1::Governance::default()
+            ..Default::default()
         },
         Arc::new(MockEnvironment::new(Default::default(), 0)),
         Arc::new(StubIcpLedger {}),
         Arc::new(StubCMC {}),
         Box::new(MockRandomness::new()),
     );
+
+    for neuron in neurons {
+        governance
+            .add_neuron(neuron.id().id, neuron, false)
+            .unwrap();
+    }
 
     let mut request = ListNeurons {
         neuron_ids: vec![],
@@ -105,36 +107,43 @@ fn test_list_neurons_by_subaccounts_and_ids() {
 
     let neurons = (1..1000u64)
         .map(|id| {
-            let dissolve_state = DissolveState::DissolveDelaySeconds(100);
-            let account = crate::test_utils::test_subaccount_for_neuron_id(id);
-            (
+            NeuronBuilder::new_for_test(
                 id,
-                Neuron {
-                    id: Some(NeuronId::from_u64(id)),
-                    controller: Some(user_id),
-                    account,
-                    dissolve_state: Some(dissolve_state),
-                    // Fill in the rest as needed (stake, maturity, etc.)
-                    ..Default::default()
+                DissolveStateAndAge::NotDissolving {
+                    dissolve_delay_seconds: 100,
+                    aging_since_timestamp_seconds: 0,
                 },
             )
+            .with_subaccount(
+                Subaccount::try_from(
+                    crate::test_utils::test_subaccount_for_neuron_id(id).as_slice(),
+                )
+                .unwrap(),
+            )
+            .with_controller(user_id)
+            .build()
         })
-        .collect();
+        .collect::<Vec<_>>();
 
-    let governance = Governance::new(
-        crate::pb::v1::Governance {
-            neurons,
+    let mut governance = Governance::new(
+        ApiGovernance {
             economics: Some(NetworkEconomics {
                 voting_power_economics: Some(Default::default()),
                 ..Default::default()
             }),
-            ..crate::pb::v1::Governance::default()
+            ..Default::default()
         },
         Arc::new(MockEnvironment::new(Default::default(), 0)),
         Arc::new(StubIcpLedger {}),
         Arc::new(StubCMC {}),
         Box::new(MockRandomness::new()),
     );
+
+    for neuron in neurons {
+        governance
+            .add_neuron(neuron.id().id, neuron, false)
+            .unwrap();
+    }
 
     let request = ListNeurons {
         neuron_ids: (1..501).collect(),

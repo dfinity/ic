@@ -19,12 +19,11 @@ ciborium = { workspace = true }
 hex = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
 ic-canister-log = { path = "../../../rust_canisters/canister_log" }
-ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
 ic-cdk = { workspace = true }
-ic-cdk-macros = { workspace = true }
 ic-cdk-timers = { workspace = true }
 ic-certification = { workspace = true }
 ic-crypto-tree-hash = { path = "../../../crypto/tree_hash" }
+ic-http-types = { path = "../../../../packages/ic-http-types" }
 ic-icrc1 = { path = ".." }
 ic-icrc1-tokens-u256 = { path = "../tokens_u256", optional = true }
 ic-icrc1-tokens-u64 = { path = "../tokens_u64" }
@@ -54,6 +53,7 @@ ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
 num-bigint = { workspace = true }
 proptest = { workspace = true }
+test-strategy = "0.4.0"
 
 [features]
 default = []

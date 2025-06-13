@@ -1,8 +1,5 @@
 use ic_base_types::{NumBytes, NumSeconds, PrincipalIdBlobParseError};
-use ic_config::{
-    embedders::{BestEffortResponsesFeature, Config as EmbeddersConfig, FeatureFlags},
-    subnet_config::SchedulerConfig,
-};
+use ic_config::{embedders::Config as EmbeddersConfig, subnet_config::SchedulerConfig};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::wasmtime_embedder::system_api::{
     sandbox_safe_system_state::SandboxSafeSystemState, ApiType, DefaultOutOfInstructionsHandler,
@@ -224,6 +221,8 @@ fn is_supported(api_type: SystemApiCallId, context: &str) -> bool {
         SystemApiCallId::Stable64Grow => vec!["*", "s"],
         SystemApiCallId::Stable64Write => vec!["*", "s"],
         SystemApiCallId::Stable64Read => vec!["*", "s"],
+        SystemApiCallId::RootKeySize => vec!["I", "G", "U", "RQ", "Ry", "Rt", "C", "T"],
+        SystemApiCallId::RootKeyCopy => vec!["I", "G", "U", "RQ", "Ry", "Rt", "C", "T"],
         SystemApiCallId::CertifiedDataSet => vec!["I", "G", "U", "Ry", "Rt", "T"],
         SystemApiCallId::DataCertificatePresent => vec!["*"],
         SystemApiCallId::DataCertificateSize => vec!["NRQ", "CQ"],
@@ -674,6 +673,26 @@ fn api_availability_test(
         SystemApiCallId::DataCertificateCopy => {
             assert_api_availability(
                 |mut api| api.ic0_data_certificate_copy(0, 0, 0, &mut [42; 128]),
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
+        SystemApiCallId::RootKeySize => {
+            assert_api_availability(
+                |api| api.ic0_root_key_size(),
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
+        SystemApiCallId::RootKeyCopy => {
+            assert_api_availability(
+                |api| api.ic0_root_key_copy(0, 0, 0, &mut [42; 128]),
                 api_type,
                 &system_state,
                 cycles_account_manager,
@@ -2084,74 +2103,53 @@ fn in_replicated_execution_works_correctly() {
 }
 
 #[test]
-fn ic0_call_with_best_effort_response_feature_stages() {
-    use BestEffortResponsesFeature::*;
-
+fn ic0_call_with_best_effort_response() {
     let own_subnet_id = subnet_test_id(0);
-    let other_subnet_id = subnet_test_id(1);
-    for best_effort_responses in [
-        SpecificSubnets(vec![]),
-        SpecificSubnets(vec![other_subnet_id]),
-        SpecificSubnets(vec![own_subnet_id, other_subnet_id]),
-        ApplicationSubnetsOnly,
-        Enabled,
-    ] {
-        for subnet_type in SubnetType::iter() {
-            let mut system_state = SystemStateBuilder::default().build();
-            let mut api = get_system_api_for_best_effort_response_feature_test(
+
+    for subnet_type in SubnetType::iter() {
+        let mut system_state = SystemStateBuilder::default().build();
+        let mut api =
+            get_system_api_for_best_effort_response(own_subnet_id, subnet_type, &system_state);
+
+        // Make a call to something that isn't `IC_00`.
+        api.ic0_call_new(0, 1, 0, 1, 0, 0, 0, 0, &[42; 128])
+            .unwrap();
+        api.ic0_call_with_best_effort_response(13).unwrap();
+        api.ic0_call_perform().unwrap();
+
+        // Propagate system state changes
+        let system_state_modifications = api.take_system_state_modifications();
+        system_state_modifications
+            .apply_changes(
+                UNIX_EPOCH,
+                &mut system_state,
+                &default_network_topology(),
                 own_subnet_id,
-                subnet_type,
-                &best_effort_responses,
-                &system_state,
-            );
+                &no_op_logger(),
+            )
+            .unwrap();
 
-            // Make a call to something that isn't `IC_00`.
-            api.ic0_call_new(0, 1, 0, 1, 0, 0, 0, 0, &[42; 128])
-                .unwrap();
-            api.ic0_call_with_best_effort_response(13).unwrap();
-            api.ic0_call_perform().unwrap();
+        let RequestOrResponse::Request(req) = system_state.output_into_iter().next().unwrap()
+        else {
+            unreachable!();
+        };
+        let callback = system_state
+            .call_context_manager()
+            .unwrap()
+            .callbacks()
+            .values()
+            .next()
+            .unwrap();
 
-            // Propagate system state changes
-            let system_state_modifications = api.take_system_state_modifications();
-            system_state_modifications
-                .apply_changes(
-                    UNIX_EPOCH,
-                    &mut system_state,
-                    &default_network_topology(),
-                    own_subnet_id,
-                    &no_op_logger(),
-                )
-                .unwrap();
-
-            let RequestOrResponse::Request(req) = system_state.output_into_iter().next().unwrap()
-            else {
-                unreachable!();
-            };
-            let callback = system_state
-                .call_context_manager()
-                .unwrap()
-                .callbacks()
-                .values()
-                .next()
-                .unwrap();
-
-            if best_effort_responses.is_enabled_on(&own_subnet_id, subnet_type) {
-                // An actual best-effort request.
-                assert_ne!(req.deadline, NO_DEADLINE);
-                assert_ne!(callback.deadline, NO_DEADLINE);
-            } else {
-                // Silently converted to a guaranteed response request.
-                assert_eq!(req.deadline, NO_DEADLINE);
-                assert_eq!(callback.deadline, NO_DEADLINE);
-            }
-        }
+        // Expect an actual best-effort request.
+        assert_ne!(req.deadline, NO_DEADLINE);
+        assert_ne!(callback.deadline, NO_DEADLINE);
     }
 }
 
-fn get_system_api_for_best_effort_response_feature_test(
+fn get_system_api_for_best_effort_response(
     subnet_id: SubnetId,
     subnet_type: SubnetType,
-    best_effort_responses: &BestEffortResponsesFeature,
     system_state: &SystemState,
 ) -> SystemApiImpl {
     const SUBNET_MEMORY_CAPACITY: i64 = i64::MAX / 2;
@@ -2174,13 +2172,6 @@ fn get_system_api_for_best_effort_response_feature_test(
         api_type.caller(),
         api_type.call_context_id(),
     );
-    let embedders_config = EmbeddersConfig {
-        feature_flags: FeatureFlags {
-            best_effort_responses: best_effort_responses.clone(),
-            ..Default::default()
-        },
-        ..Default::default()
-    };
 
     SystemApiImpl::new(
         api_type,
@@ -2193,7 +2184,7 @@ fn get_system_api_for_best_effort_response_feature_test(
             SUBNET_MEMORY_CAPACITY,
             SUBNET_MEMORY_CAPACITY,
         ),
-        &embedders_config,
+        &EmbeddersConfig::default(),
         Memory::new_for_testing(),
         NumWasmPages::from(0),
         Rc::new(DefaultOutOfInstructionsHandler::default()),

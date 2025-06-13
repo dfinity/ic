@@ -21,10 +21,6 @@ path = "tests/governance.rs"
 name = "governance-interleaving-test"
 path = "tests/interleaving_tests.rs"
 
-[[bench]]
-name = "scale"
-harness = false
-
 [dependencies]
 build-info = { workspace = true }
 
@@ -35,12 +31,11 @@ cycles-minting-canister = { path = "../cmc" }
 dyn-clone = "1.0.14"
 futures = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
-ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
 ic-cdk = { workspace = true }
-ic-cdk-macros = { workspace = true }
 ic-cdk-timers = { workspace = true }
 ic-crypto-sha2 = { path = "../../crypto/sha2/" }
 ic-dummy-getrandom-for-wasm = { path = "../../../packages/ic-dummy-getrandom-for-wasm" }
+ic-http-types = { path = "../../../packages/ic-http-types" }
 ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-metrics-encoder = "1"

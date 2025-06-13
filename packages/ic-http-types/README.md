@@ -1,6 +1,7 @@
 # ic-http-types
 
-`ic-http-types` is a Rust crate that provides types for representing HTTP requests and responses. These types are designed to simplify working with HTTP communication in canister development on the Internet Computer.
+`ic-http-types` is a Rust crate that provides types for representing HTTP requests and responses. These types are
+designed to simplify working with HTTP communication in canister development on the Internet Computer.
 
 ## Features
 
@@ -20,7 +21,7 @@ ic-http-types = "0.1.0"
 #### Example
 
 ```rust
-use ic_canisters_http_types::{HttpRequest, HttpResponseBuilder};
+use ic_http_types::{HttpRequest, HttpResponseBuilder};
 use serde_bytes::ByteBuf;
 
 fn main() {
@@ -29,7 +30,7 @@ fn main() {
         method: "GET".to_string(),
         url: "/path/to/resource?query=1".to_string(),
         headers: vec![("Content-Type".to_string(), "application/json".to_string())],
-        body: ByteBuf::defaBult(),
+        body: ByteBuf::default(),
     };
 
     // Extract the path from the request URL
@@ -46,10 +47,13 @@ fn main() {
 ```
 
 ## Documentation
+
 For detailed documentation, visit the [Rust Docs](https://docs.rs/ic-http-types).
 
 ## License
+
 This project is licensed under the [Apache License 2.0](LICENSE).
 
 ## Contributing
+
 If you decide to contribute, we encourage you to announce it on the [Forum](https://forum.dfinity.org/)!

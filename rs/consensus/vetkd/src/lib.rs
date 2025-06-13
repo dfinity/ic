@@ -165,7 +165,7 @@ impl VetKdPayloadBuilderImpl {
             .into_iter()
             .map(|key_config| key_config.key_id)
             // Skip keys that don't need to run NIDKG protocol
-            .filter(|key_id| !key_id.is_idkg_key())
+            .filter(|key_id| key_id.is_vetkd_key())
             // Skip keys that are disabled
             .filter(|key_id| {
                 enabled_subnets
@@ -550,13 +550,13 @@ mod tests {
     use ic_interfaces::idkg::IDkgChangeAction;
     use ic_interfaces::p2p::consensus::MutablePool;
     use ic_interfaces::validation::ValidationError;
-    use ic_interfaces_state_manager::StateManagerError;
     use ic_logger::no_op_logger;
     use ic_management_canister_types_private::VetKdKeyId;
     use ic_registry_subnet_features::ChainKeyConfig;
     use ic_registry_subnet_features::KeyConfig;
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_types::consensus::idkg::IDkgMessage;
+    use ic_types::state_manager::StateManagerError;
     use ic_types::subnet_id_into_protobuf;
     use ic_types::time::current_time;
     use ic_types::time::UNIX_EPOCH;

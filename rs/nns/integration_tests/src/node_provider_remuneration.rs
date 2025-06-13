@@ -9,7 +9,7 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_nns_common::{pb::v1::NeuronId as ProtoNeuronId, types::UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     add_or_remove_node_provider::Change,
     manage_neuron_response::Command as CommandResponse,
     reward_node_provider::{RewardMode, RewardToAccount},
@@ -935,6 +935,7 @@ fn add_node_operator(
         dc_id: dc_id.into(),
         rewardable_nodes,
         ipv6: Some(ipv6.into()),
+        max_rewardable_nodes: None,
     };
 
     submit_nns_proposal(
