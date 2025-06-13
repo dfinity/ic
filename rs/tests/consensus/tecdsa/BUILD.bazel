@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "SIGNER_CANISTER_RUNTIME_DEPS", "SIGNER_CANISTER_ENV")
+load("//rs/tests:common.bzl", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "SIGNER_CANISTER_ENV", "SIGNER_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -55,8 +55,8 @@ system_test_nns(
 
 system_test_nns(
     name = "tschnorr_message_sizes_test",
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     env = SIGNER_CANISTER_ENV,
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
