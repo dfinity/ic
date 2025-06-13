@@ -84,14 +84,15 @@ pub(crate) fn mutations_for_canister_ranges(
     let zero_id = CanisterId::from_u64(0);
     // If we don't have any routing table fragments in the new_shards, we need to create a default one to
     // hold all the ranges until a split occurs.
-    if !new_shards.contains_key(&zero_id) {
-        new_shards.insert(zero_id, pb::RoutingTable { entries: vec![] });
-    }
+    new_shards
+        .entry(zero_id)
+        .or_insert_with(|| pb::RoutingTable { entries: vec![] });
 
     for (range, subnet) in new_rt.iter() {
         let range_start = range.start;
 
         // find the entry in the new_shards that is closest to the start of the range in the lower direction
+        // Because we always ensure there's a CanisterId(0) shard, this cannot fail.
         let key = *(new_shards
             .range(zero_id..=range_start)
             .next_back()
