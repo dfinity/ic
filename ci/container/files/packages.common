@@ -61,6 +61,7 @@ grub-efi-amd64-bin
 iputils-ping
 libselinux-dev
 libsystemd-dev
+libvirt-dev
 lsb-release
 lvm2
 mtools
