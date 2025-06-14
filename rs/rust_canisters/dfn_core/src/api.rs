@@ -82,7 +82,6 @@ pub mod ic0 {
         pub fn data_certificate_copy(dst: u32, offset: u32, size: u32);
         pub fn canister_status() -> u32;
         pub fn canister_version() -> u64;
-        pub fn mint_cycles(amount: u64) -> u64;
         pub fn is_controller(src: u32, size: u32) -> u32;
         pub fn in_replicated_execution() -> u32;
         pub fn call_with_best_effort_response(timeout_seconds: u32);
@@ -283,9 +282,6 @@ pub mod ic0 {
         wrong_arch("canister_version")
     }
 
-    pub unsafe fn mint_cycles(_amount: u64) -> u64 {
-        wrong_arch("mint_cycles")
-    }
     pub unsafe fn is_controller(_src: u32, _size: u32) -> u32 {
         wrong_arch("is_controller")
     }
@@ -873,10 +869,6 @@ pub fn canister_status() -> CanisterStatus {
 
 pub fn canister_version() -> u64 {
     unsafe { ic0::canister_version() }
-}
-
-pub fn mint_cycles(amount: u64) -> u64 {
-    unsafe { ic0::mint_cycles(amount) }
 }
 
 fn no_op(_: *mut ()) {}
