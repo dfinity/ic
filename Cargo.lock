@@ -5572,6 +5572,7 @@ dependencies = [
  "systemd",
  "tempfile",
  "tokio",
+ "tokio-util",
  "utils",
  "virt",
 ]
