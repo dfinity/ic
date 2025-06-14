@@ -20,6 +20,7 @@ utils = { path = "../../utils" }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 virt = { workspace = true }
+tokio-util = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 systemd = { workspace = true }

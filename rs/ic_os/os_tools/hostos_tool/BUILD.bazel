@@ -15,6 +15,7 @@ DEPENDENCIES = [
     "@crate_index//:systemd",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
+    "@crate_index//:tokio-util",
     "@crate_index//:virt",
     "@libvirt",
 ]
