@@ -44,7 +44,8 @@ impl VirtualMachine {
     ) -> Result<Self> {
         let mut retries = 3;
         let domain = loop {
-            let domain_result = Domain::create_xml(libvirt_connect, xml_config, 0);
+            let domain_result =
+                Domain::create_xml(libvirt_connect, xml_config, virt::sys::VIR_DOMAIN_NONE);
             match domain_result {
                 Ok(domain) => break domain,
                 Err(e)
@@ -511,6 +512,7 @@ mod tests {
             }
         }
 
+        #[allow(dead_code)] // Remove once used
         fn terminate(&self) {
             self.termination_token.cancel();
         }
