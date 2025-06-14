@@ -1,6 +1,8 @@
 use crate::{
     checkpoint::validate_and_finalize_checkpoint_and_remove_unverified_marker,
-    compute_bundled_manifest, release_lock_and_persist_metadata,
+    compute_bundled_manifest,
+    manifest::RehashManifest,
+    release_lock_and_persist_metadata,
     state_sync::types::{
         FILE_GROUP_CHUNK_ID_OFFSET, MANIFEST_CHUNK_ID_OFFSET, MAX_SUPPORTED_STATE_SYNC_VERSION,
     },
@@ -154,6 +156,7 @@ pub(crate) fn spawn_tip_thread(
     state_layout: StateLayout,
     lsmt_config: LsmtConfig,
     metrics: StateManagerMetrics,
+    diverged_heights_sender: Sender<Height>,
     malicious_flags: MaliciousFlags,
 ) -> (JoinOnDrop<()>, Sender<TipRequest>) {
     #[allow(clippy::disallowed_methods)]
@@ -412,6 +415,7 @@ pub(crate) fn spawn_tip_thread(
                                 &checkpoint_layout,
                                 manifest_delta,
                                 &persist_metadata_guard,
+                                &diverged_heights_sender,
                                 &malicious_flags,
                             );
                             tip_state.latest_checkpoint_state.has_manifest = true;
@@ -1335,6 +1339,7 @@ fn handle_compute_manifest_request(
     checkpoint_layout: &CheckpointLayout<ReadOnly>,
     manifest_delta: Option<crate::manifest::ManifestDelta>,
     persist_metadata_guard: &Arc<Mutex<()>>,
+    diverged_heights_sender: &Sender<Height>,
     #[allow(unused_variables)] malicious_flags: &MaliciousFlags,
 ) {
     let system_metadata = checkpoint_layout
@@ -1383,6 +1388,7 @@ fn handle_compute_manifest_request(
         checkpoint_layout,
         crate::state_sync::types::DEFAULT_CHUNK_SIZE,
         manifest_delta,
+        RehashManifest::No,
     )
     .unwrap_or_else(|err| {
         fatal!(
@@ -1430,7 +1436,7 @@ fn handle_compute_manifest_request(
 
     let num_file_group_chunks = crate::manifest::build_file_group_chunks(&manifest).len();
 
-    let bundled_manifest = compute_bundled_manifest(manifest);
+    let bundled_manifest = compute_bundled_manifest(manifest.clone());
 
     #[cfg(feature = "malicious_code")]
     let bundled_manifest = crate::BundledManifest {
@@ -1494,6 +1500,39 @@ fn handle_compute_manifest_request(
     }
 
     release_lock_and_persist_metadata(log, metrics, state_layout, states, persist_metadata_guard);
+
+    let _timer = request_timer(&metrics, "compute_manifest_rehash");
+    let start = Instant::now();
+    let rehashed_manifest = crate::manifest::compute_manifest(
+        thread_pool,
+        &metrics.manifest_metrics,
+        log,
+        state_sync_version,
+        checkpoint_layout,
+        crate::state_sync::types::DEFAULT_CHUNK_SIZE,
+        None,
+        RehashManifest::Yes,
+    )
+    .unwrap_or_else(|err| {
+        fatal!(
+            log,
+            "Failed to rehash manifest for checkpoint @{} after {:?}: {}",
+            checkpoint_layout.height(),
+            start.elapsed(),
+            err
+        )
+    });
+    if manifest != rehashed_manifest {
+        let height = checkpoint_layout.height();
+        diverged_heights_sender.send(height).unwrap_or_else(|err| {
+            fatal!(
+                log,
+                "Failed to send diverged checkpoint {}: {}",
+                height,
+                err
+            );
+        });
+    }
 }
 
 #[cfg(test)]
@@ -1513,12 +1552,15 @@ mod test {
             let metrics_registry = ic_metrics::MetricsRegistry::new();
             let metrics = StateManagerMetrics::new(&metrics_registry, log.clone());
             let tip_handler = layout.capture_tip_handler();
+            let (diverged_height_sender, _diverged_height_receiver) =
+                crossbeam_channel::unbounded();
             let (_h, _s) = spawn_tip_thread(
                 log,
                 tip_handler,
                 layout,
                 lsmt_config_default(),
                 metrics,
+                diverged_height_sender,
                 MaliciousFlags::default(),
             );
         });
@@ -1554,6 +1596,8 @@ mod test {
                 tip: None,
             }));
 
+            let (diverged_height_sender, _diverged_height_receiver) =
+                crossbeam_channel::unbounded();
             // Trying to compute manifest for an unverified checkpoint should crash.
             handle_compute_manifest_request(
                 &mut scoped_threadpool::Pool::new(1),
@@ -1564,6 +1608,7 @@ mod test {
                 &checkpoint_layout,
                 None,
                 &Default::default(),
+                &diverged_height_sender,
                 &Default::default(),
             );
         });
