@@ -21,7 +21,6 @@ use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, WasmExecutionOutput,
 };
 use ic_logger::{info, ReplicaLogger};
-use ic_management_canister_types_private::IC_00;
 use ic_replicated_state::{
     canister_state::execution_state::WasmExecutionMode, num_bytes_try_from, CallContextAction,
     CallOrigin, CanisterState,
@@ -178,19 +177,16 @@ pub fn execute_call_or_task(
             helper.call_context_id(),
         ),
         CanisterCallOrTask::Task(CanisterTask::Heartbeat) => ApiType::system_task(
-            IC_00.get(),
             SystemMethod::CanisterHeartbeat,
             time,
             helper.call_context_id(),
         ),
         CanisterCallOrTask::Task(CanisterTask::GlobalTimer) => ApiType::system_task(
-            IC_00.get(),
             SystemMethod::CanisterGlobalTimer,
             time,
             helper.call_context_id(),
         ),
         CanisterCallOrTask::Task(CanisterTask::OnLowWasmMemory) => ApiType::system_task(
-            IC_00.get(),
             SystemMethod::CanisterOnLowWasmMemory,
             time,
             helper.call_context_id(),
