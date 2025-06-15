@@ -60,7 +60,7 @@ pub fn start_main_event_loop(
             // tokio::time::Interval::tick which are all cancellation safe.
             tokio::select! {
                 event = connection_manager.receive_stream_event() => {
-                    println!("event received = {:?}", event);
+                    // println!("event received = {:?}", event);
                     if let Err(ProcessBitcoinNetworkMessageError::InvalidMessage) =
                         connection_manager.process_event(&event)
                     {

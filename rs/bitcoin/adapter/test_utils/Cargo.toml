@@ -15,5 +15,5 @@ tokio = { workspace = true }
 ic-btc-adapter = { path = ".." }
 
 [features]
-default = [ "dogecoin" ]
+default = []
 dogecoin = []

@@ -296,7 +296,7 @@ fn are_multiple_blocks_allowed(network: Network, anchor_height: BlockHeight) -> 
     #[cfg(feature = "dogecoin")]
     return false;
     #[cfg(not(feature = "dogecoin"))]
-    match network.into().is_mainnet() {
+    match network {
         Network::Bitcoin => anchor_height <= MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT,
         Network::Testnet | Network::Signet | Network::Regtest | Network::Testnet4 => true,
         other => unreachable!("Unsupported network: {:?}", other),

@@ -2,27 +2,25 @@
 
 #![allow(missing_docs)]
 
-pub use dogecoin::block::BlockHeader;
-pub type Version = u32;
-pub use dogecoin::block::BlockHash;
-// pub use dogecoin::blockdata::constants::genesis_block;
 pub use bitcoin::absolute;
+pub use bitcoin::block::Header as BlockHeader;
+pub use bitcoin::block::{BlockHash, Version};
 pub use bitcoin::consensus::{
     deserialize, deserialize_partial, encode, serialize, Decodable, Encodable,
 };
 pub use bitcoin::hashes::Hash;
 pub use bitcoin::io as bitcoin_io;
-pub use bitcoin::{Amount, Target, Work};
-pub use dogecoin::block::TxMerkleNode;
-pub use dogecoin::block::{genesis_block, Block};
-pub use dogecoin::network::Network;
-pub use dogecoin::p2p::message::{CommandString, NetworkMessage, RawNetworkMessage, MAX_INV_SIZE};
-pub use dogecoin::p2p::message_blockdata::{GetHeadersMessage, Inventory};
-pub use dogecoin::p2p::message_network::VersionMessage;
-pub use dogecoin::p2p::{Address as NetworkAddress, Magic, ServiceFlags};
-pub use dogecoin::script::Address;
-pub use dogecoin::transaction::Transaction;
-pub use dogecoin::transaction::Txid;
+pub use bitcoin::p2p::message::{CommandString, MAX_INV_SIZE};
+pub use bitcoin::p2p::message_blockdata::{GetHeadersMessage, Inventory};
+pub use bitcoin::p2p::message_network::VersionMessage;
+pub use bitcoin::p2p::{Address as NetworkAddress, Magic, ServiceFlags};
+pub use bitcoin::transaction::{Transaction, Txid};
+pub use bitcoin::{Amount, Target, TxMerkleNode, Work};
+
+pub use bitcoin::dogecoin::{genesis_block, Address, Block, Network};
+
+pub type RawNetworkMessage = bitcoin::p2p::message::RawNetworkMessage<Block>;
+pub type NetworkMessage = bitcoin::p2p::message::NetworkMessage<Block>;
 
 pub mod validation {
     pub use ic_btc_validation::ValidateHeaderError;
@@ -42,4 +40,25 @@ pub mod validation {
 
         fn get_height(&self) -> u32;
     }
+}
+
+pub fn new_version_message(
+    services: ServiceFlags,
+    timestamp: i64,
+    receiver: NetworkAddress,
+    sender: NetworkAddress,
+    nonce: u64,
+    user_agent: String,
+    start_height: i32,
+) -> VersionMessage {
+    VersionMessage::new(
+        services,
+        timestamp,
+        receiver,
+        sender,
+        nonce,
+        user_agent,
+        start_height,
+    )
+    .with_version(70015)
 }

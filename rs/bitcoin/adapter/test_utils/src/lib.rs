@@ -40,7 +40,6 @@ pub fn headers_to_hashes(headers: &[BlockHeader]) -> Vec<BlockHash> {
 
 /// Generates a singular large block.
 fn large_block(prev_blockhash: &BlockHash, prev_time: u32, tx: Transaction) -> Block {
-    #[cfg(not(feature = "dogecoin"))]
     let mut block = Block {
         header: BlockHeader {
             version: import::Version::ONE,
@@ -51,22 +50,9 @@ fn large_block(prev_blockhash: &BlockHash, prev_time: u32, tx: Transaction) -> B
             nonce: 0,
         },
         txdata: vec![],
-    };
-
-    #[cfg(feature = "dogecoin")]
-    let mut block = Block {
-        header: BlockHeader {
-            version: 1,
-            prev_blockhash: *prev_blockhash,
-            merkle_root: TxMerkleNode::all_zeros(),
-            time: prev_time + gen_time_delta(),
-            bits: TARGET.to_compact_lossy().to_consensus(),
-            nonce: 0,
-        },
-        txdata: vec![],
+        #[cfg(feature = "dogecoin")]
         auxpow: None,
     };
-
     for _ in 0..25_000 {
         // 25_000 transactions will generate just a bit over a 2 MiB block
         block.txdata.push(tx.clone());
@@ -133,22 +119,12 @@ pub fn generate_headers(
 
 /// This helper generates a single header with a given previous blockhash.
 pub fn generate_header(prev_blockhash: BlockHash, prev_time: u32, nonce: u32) -> BlockHeader {
-    #[cfg(not(feature = "dogecoin"))]
     let mut header = BlockHeader {
         version: import::Version::ONE,
         prev_blockhash,
         merkle_root: TxMerkleNode::all_zeros(),
         time: prev_time + gen_time_delta(),
         bits: TARGET.to_compact_lossy(),
-        nonce,
-    };
-    #[cfg(feature = "dogecoin")]
-    let mut header = BlockHeader {
-        version: 1,
-        prev_blockhash,
-        merkle_root: TxMerkleNode::all_zeros(),
-        time: prev_time + gen_time_delta(),
-        bits: TARGET.to_compact_lossy().to_consensus(),
         nonce,
     };
 

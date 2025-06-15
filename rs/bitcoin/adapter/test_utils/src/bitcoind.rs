@@ -89,7 +89,7 @@ async fn handle_getheaders(
     let locator = {
         let mut found = None;
 
-        for locator in msg.locator_hashes.as_ref() {
+        for locator in msg.locator_hashes.iter() {
             if cached_headers.contains_key(locator) {
                 found = Some(*locator);
                 break;

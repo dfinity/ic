@@ -173,11 +173,11 @@ impl TransactionStore {
         message: &NetworkMessage,
     ) -> Result<(), ProcessBitcoinNetworkMessageError> {
         if let NetworkMessage::GetData(inventory) = message {
-            if inventory.as_ref().len() > MAXIMUM_TRANSACTION_PER_INV {
+            if inventory.len() > MAXIMUM_TRANSACTION_PER_INV {
                 return Err(ProcessBitcoinNetworkMessageError::InvalidMessage);
             }
 
-            for inv in inventory.as_ref() {
+            for inv in inventory {
                 if let Inventory::Transaction(txid) = inv {
                     if let Some(TransactionInfo { transaction, .. }) = self.transactions.get(txid) {
                         channel

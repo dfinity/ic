@@ -6,6 +6,7 @@ use std::{
 
 use crate::import::{
     CommandString, Magic, NetworkAddress as Address, NetworkMessage, ServiceFlags, VersionMessage,
+    new_version_message,
 };
 use ic_logger::{error, info, trace, warn, ReplicaLogger};
 use rand::prelude::*;
@@ -346,7 +347,7 @@ impl ConnectionManager {
         let receiver = Address::new(addr, ServiceFlags::NETWORK | ServiceFlags::NETWORK_LIMITED);
         let nonce: u64 = self.rng.gen();
         let user_agent = String::from(USER_AGENT);
-        let message = NetworkMessage::Version(VersionMessage::new(
+        let message = NetworkMessage::Version(new_version_message(
             services,
             timestamp as i64,
             receiver,
@@ -710,7 +711,7 @@ mod test {
         let config = ConfigBuilder::new()
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
-        let mut version_message = VersionMessage::new(
+        let mut version_message = new_version_message(
             services,
             0,
             receiver,
@@ -739,7 +740,7 @@ mod test {
         let services = ServiceFlags::NETWORK | ServiceFlags::NETWORK_LIMITED;
         let receiver = Address::new(&socket_1, services);
         let sender = Address::new(&socket_2, ServiceFlags::NONE);
-        let version_message = VersionMessage::new(
+        let version_message = new_version_message(
             services,
             0,
             receiver,
@@ -773,7 +774,7 @@ mod test {
         let services = ServiceFlags::WITNESS;
         let receiver = Address::new(&socket_1, ServiceFlags::NONE);
         let sender = Address::new(&socket_2, ServiceFlags::NONE);
-        let version_message = VersionMessage::new(
+        let version_message = new_version_message(
             services,
             0,
             receiver,
@@ -846,7 +847,7 @@ mod test {
                         network_message_sender
                             .send((
                                 address,
-                                NetworkMessage::Version(VersionMessage::new(
+                                NetworkMessage::Version(new_version_message(
                                     services,
                                     since_epoch as i64,
                                     Address::new(&adapter_address, services),
@@ -1109,7 +1110,7 @@ mod test {
         let services = ServiceFlags::WITNESS;
         let receiver = Address::new(&socket_1, services);
         let sender = Address::new(&socket_2, ServiceFlags::NONE);
-        let version_message = VersionMessage::new(
+        let version_message = new_version_message(
             services,
             0,
             receiver,
@@ -1156,7 +1157,7 @@ mod test {
         let services = ServiceFlags::WITNESS;
         let receiver = Address::new(&socket_1, services);
         let sender = Address::new(&socket_2, ServiceFlags::NONE);
-        let version_message = VersionMessage::new(
+        let version_message = new_version_message(
             services,
             0,
             receiver,

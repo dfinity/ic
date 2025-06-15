@@ -264,7 +264,7 @@ fn sync_until_end_block(
 
     let end_hash = client.get_best_block_hash().unwrap();
     println!("end_hash = {:?}", end_hash);
-    let end_hash = end_hash.to_vec();
+    let end_hash = (end_hash.as_ref() as &[u8]).to_vec();
     while anchor != end_hash && tries < max_tries {
         let res = make_get_successors_request(adapter_client, anchor.clone(), headers.clone());
         println!("res = {:?}", res);
@@ -407,14 +407,8 @@ fn create_alice_and_bob_wallets(bitcoind: &BitcoinD) -> (Client, Client, Address
         .create_wallet("bob", None, None, None, None)
         .unwrap();
 
-    let alice_address = alice_client
-        .get_new_address(None, None)
-        .unwrap()
-        .assume_checked();
-    let bob_address = bob_client
-        .get_new_address(None, None)
-        .unwrap()
-        .assume_checked();
+    let alice_address = alice_client.get_new_address(None, None).unwrap();
+    let bob_address = bob_client.get_new_address(None, None).unwrap();
 
     (alice_client, bob_client, alice_address, bob_address)
 }
@@ -540,7 +534,7 @@ fn test_receives_blocks() {
     eprintln!("{:?}", client.get_blockchain_info());
     assert_eq!(0, client.get_blockchain_info().unwrap().blocks);
 
-    let address = client.get_new_address(None, None).unwrap().assume_checked();
+    let address = client.get_new_address(None, None).unwrap();
 
     client.generate_to_address(150, &address).unwrap();
 
@@ -842,19 +836,14 @@ fn test_receives_blocks_from_forks() {
     wait_for_connection(&client1, 2);
     wait_for_connection(&client2, 2);
 
-    let address1 = client1
-        .get_new_address(None, None)
-        .unwrap()
-        .assume_checked();
+    let address1 = client1.get_new_address(None, None).unwrap();
     client1.generate_to_address(10, &address1).unwrap();
 
     wait_for_blocks(&client1, 10);
     wait_for_blocks(&client2, 10);
 
-    let address2 = client2
-        .get_new_address(None, None)
-        .unwrap()
-        .assume_checked();
+    let address2 = client2.get_new_address(None, None).unwrap();
+
     client2.generate_to_address(10, &address2).unwrap();
 
     wait_for_blocks(&client1, 20);
@@ -918,10 +907,7 @@ fn test_bfs_order() {
     wait_for_connection(&client1, 2);
     wait_for_connection(&client2, 2);
 
-    let address1 = client1
-        .get_new_address(None, None)
-        .unwrap()
-        .assume_checked();
+    let address1 = client1.get_new_address(None, None).unwrap();
     // IMPORTANT:
     // Increasing the number of blocks in this test could lead to flakiness due to the number of "request rounds"
     // alligning with the round robin of the adapter's peers. Currently all blocks are tried and retried in a single round.
@@ -946,10 +932,7 @@ fn test_bfs_order() {
         .generate_to_address(branch_length, &address1)
         .unwrap();
 
-    let address2 = client2
-        .get_new_address(None, None)
-        .unwrap()
-        .assume_checked();
+    let address2 = client2.get_new_address(None, None).unwrap();
     let fork2 = client2
         .generate_to_address(branch_length, &address2)
         .unwrap();

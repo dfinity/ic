@@ -10,7 +10,7 @@ use crate::{
 };
 use hashlink::{LinkedHashMap, LinkedHashSet};
 use ic_btc_validation::ValidateHeaderError;
-use ic_logger::{debug, error, info, trace, warn, ReplicaLogger};
+use ic_logger::{debug, error, trace, warn, ReplicaLogger};
 use std::{
     collections::{HashMap, HashSet},
     net::SocketAddr,
@@ -360,9 +360,7 @@ impl BlockchainManager {
                     eprintln!(
                         //self.logger,
                         "Peer {}'s height = {}, tip = {}",
-                        addr,
-                        peer.height,
-                        peer.tip
+                        addr, peer.height, peer.tip
                     );
                 }
             }
@@ -642,7 +640,7 @@ impl BlockchainManager {
             NetworkMessage::Headers(headers) => {
                 eprintln!("here");
                 if let Err(err) = self.received_headers_message(channel, &addr, headers) {
-                eprintln!("received headers message returns error: {:?}", err);
+                    eprintln!("received headers message returns error: {:?}", err);
                     warn!(
                         self.logger,
                         "Received an invalid headers message form {}: {}", addr, err
@@ -819,7 +817,7 @@ pub mod test {
             matches!(&command.message, NetworkMessage::GetHeaders(GetHeadersMessage { version, locator_hashes: _, stop_hash: _ }) if *version == MINIMUM_VERSION_NUMBER)
         );
         assert!(
-            matches!(&command.message, NetworkMessage::GetHeaders(GetHeadersMessage { version: _, locator_hashes, stop_hash: _ }) if locator_hashes.as_ref()[0] == genesis_hash)
+            matches!(&command.message, NetworkMessage::GetHeaders(GetHeadersMessage { version: _, locator_hashes, stop_hash: _ }) if locator_hashes[0] == genesis_hash)
         );
 
         // Check peer info to ensure it has been updated.
@@ -888,7 +886,7 @@ pub mod test {
         };
         assert_eq!(
             get_headers_message.locator_hashes,
-            vec![genesis_hash].into(),
+            vec![genesis_hash],
             "Didn't send the right genesis hash for initial syncing"
         );
         assert_eq!(
@@ -925,8 +923,7 @@ pub mod test {
             },
         };
         assert_eq!(
-            get_headers_message.locator_hashes,
-            after_first_received_headers_message_hashes.into(),
+            get_headers_message.locator_hashes, after_first_received_headers_message_hashes,
             "Didn't send the right genesis hash for initial syncing"
         );
         assert_eq!(
@@ -1003,16 +1000,16 @@ pub mod test {
             );
             if let NetworkMessage::GetHeaders(get_headers_message) = &command.message {
                 assert!(
-                    !get_headers_message.locator_hashes.as_ref().is_empty(),
+                    !get_headers_message.locator_hashes.is_empty(),
                     "Sent 0 locator hashes in getheaders message"
                 );
                 assert_eq!(
-                    get_headers_message.locator_hashes.as_ref().first().unwrap(),
+                    get_headers_message.locator_hashes.first().unwrap(),
                     chain_hashes.last().unwrap(),
                     "Didn't send the right locator hashes in response to inv message"
                 );
                 assert_eq!(
-                    *get_headers_message.locator_hashes.as_ref().last().unwrap(),
+                    *get_headers_message.locator_hashes.last().unwrap(),
                     genesis_hash,
                     "Didn't send the right locator hashes in response to inv message"
                 );
