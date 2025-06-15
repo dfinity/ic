@@ -440,9 +440,7 @@ fn test_protocol_execution() {
     }
 
     // Here check that if we add a random duplicate (valid) share to the
-    // list, combine_valid succeeds iff the duplicated share does not
-    // appear in the first `threshold` many shares, since we only look
-    // at that many
+    // list, combine_valid still always succeeds
     for rec_threshold in threshold..nodes {
         let mut shares = random_subset(rng, &node_info, rec_threshold);
 
@@ -457,26 +455,29 @@ fn test_protocol_execution() {
         shares.push(node_info[random_duplicate_idx].clone());
         shares.shuffle(rng);
 
-        let result = proto.combine_valid(&shares);
+        proto.combine_valid(&shares).unwrap();
+    }
 
-        if result.is_ok() {
-            // This can still suceed since we only look at the first threshold shares
-            // If success, verify that the duplicate appears later in the list
+    // Here check that if we add a random invalid share to the
+    // list, combine_valid still always succeeds as long as there is sufficient shares
+    for rec_threshold in threshold..nodes {
+        let mut shares = random_subset(rng, &node_info, rec_threshold);
 
-            let indexes = shares
-                .iter()
-                .map(|s| s.0)
-                .enumerate()
-                .filter(|(_i, s)| *s == random_duplicate_idx as u32)
-                .map(|s| s.0)
-                .collect::<Vec<usize>>();
-            assert_eq!(indexes.len(), 2);
-            assert!(indexes[1] >= threshold);
-        } else {
-            assert_eq!(
-                result,
-                Err(EncryptedKeyCombinationError::DuplicateNodeIndex)
-            );
-        }
+        let node_to_dup_and_modify = loop {
+            let idx = (rng.gen::<usize>() % node_eks.len()) as u32;
+
+            if shares.iter().map(|x| x.0).any(|x| x == idx) {
+                break idx as usize;
+            }
+        };
+
+        let mut modified_share = node_info[node_to_dup_and_modify].clone();
+
+        modified_share.1 = G2Affine::from(modified_share.1 * Scalar::random(rng));
+
+        shares.push(modified_share);
+        shares.shuffle(rng);
+
+        proto.combine_valid(&shares).unwrap();
     }
 }
