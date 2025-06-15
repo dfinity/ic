@@ -12,6 +12,7 @@ type Action = variant {
   UpgradeSnsToNextVersion : record {};
   AdvanceSnsTargetVersion : AdvanceSnsTargetVersion;
   RegisterDappCanisters : RegisterDappCanisters;
+  ManageDappCanisterCapabilities : ManageDappCanisterCapabilities;
   TransferSnsTreasuryFunds : TransferSnsTreasuryFunds;
   UpgradeSnsControlledCanister : UpgradeSnsControlledCanister;
   DeregisterDappCanisters : DeregisterDappCanisters;
@@ -19,6 +20,7 @@ type Action = variant {
   Unspecified : record {};
   ManageSnsMetadata : ManageSnsMetadata;
   ExecuteGenericNervousSystemFunction : ExecuteGenericNervousSystemFunction;
+  ExecuteCapabilityBasedFunction : ExecuteCapabilityBasedFunction;
   ManageLedgerParameters : ManageLedgerParameters;
   Motion : Motion;
 };
@@ -227,6 +229,7 @@ type Followees = record {
 type FunctionType = variant {
   NativeNervousSystemFunction : record {};
   GenericNervousSystemFunction : GenericNervousSystemFunction;
+  CapabilityBasedFunction : CapabilityBasedFunctionDescription;
 };
 
 type GenericNervousSystemFunction = record {
@@ -234,6 +237,14 @@ type GenericNervousSystemFunction = record {
   target_canister_id : opt principal;
   validator_method_name : opt text;
   target_method_name : opt text;
+  topic : opt Topic;
+};
+
+type CapabilityBasedFunctionDescription = record {
+  dapp_canister_id : opt principal;
+  function_name : opt text;
+  capability_name : opt text;
+  description : opt text;
   topic : opt Topic;
 };
 
@@ -661,6 +672,74 @@ type QueryStats = record {
 
 type RegisterDappCanisters = record {
   canister_ids : vec principal;
+};
+
+type Icrc2Token = variant {
+  NativeSnsToken : record {};
+  Icp : record {};
+};
+
+type Icrc2Allowance = record {
+    token : opt Icrc2Token;
+    amount_e8s : opt nat64;
+};
+
+type Allowances = record {
+  icrc2_allowances : opt vec Icrc2Allowance;
+};
+
+type Deposit = record {
+  allowances : opt Allowances;
+};
+
+type Withdraw = record {};
+
+type TreasuryManagerFunction = variant {
+  Deposit : Deposit;
+  Withdraw : Withdraw;
+};
+
+type ExecuteCapabilityBasedFunction = record {
+  dapp_canister_id : opt principal;
+  function : opt CapabilityBasedFunction;
+};
+
+type CapabilityBasedFunction = variant {
+  TreasuryManagerFunction : TreasuryManagerFunction;
+};
+
+type TreasuryManager = record {
+  initial_deposit : opt Deposit;
+};
+
+type Capability = variant {
+  // This capability enabled a dapp canister to manage some treasury tokens on behalf of the SNS.
+  // The initial allowances can be set 
+  //
+  // Granting this capability will register the following capability-based functions:
+  // - deposit()
+  // - withdraw()
+  TreasuryManager : TreasuryManager;
+};
+
+type Capabilities = record {
+  capabilities : vec Capability;
+}
+
+type ManageDappCanisterCapabilities = record {
+  // Which dapp canister is being managed?
+  dapp_canister_id : opt principal;
+
+  // This field is used to specify the intended version of the dapp canister module for which
+  // the capabilities are being registered. Some capabilities may be granted only for specific
+  // canister versions modules, e.g., to ensure compatibility and safety. For these capabilities,
+  // the SNS will check the module hash of the dapp canister against this value. If it matches,
+  // the SNS will render the proposal text to indicate the most important aspects required for
+  // the voters to make a decision, e.g., the declared purpose, and where to find the source code.
+  module_hash : opt blob;
+
+  // Which capabilities should this dapp canister have?
+  capabilities : opt Capabilities;
 };
 
 type RegisterVote = record {
