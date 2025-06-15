@@ -53,14 +53,14 @@ pub enum BootCycle {
 pub enum GrubEnvVariableError {
     #[error("Invalid variable value: {0}")]
     ParseError(String),
-    #[error("Missing variable")]
-    Missing,
+    #[error("Undefined variable")]
+    Undefined,
 }
 
 #[derive(Debug)]
 pub struct GrubEnv {
     /// - `Ok(value)` if the variable is present and has a valid value.
-    /// - `Err(GrubEnvVariableError::Missing)` if the variable is not present.
+    /// - `Err(GrubEnvVariableError::Undefined)` if the variable is not present.
     /// - `Err(_)` if the variable is present but could not be parsed.
     pub boot_alternative: Result<BootAlternative, GrubEnvVariableError>,
     pub boot_cycle: Result<BootCycle, GrubEnvVariableError>,
@@ -98,11 +98,11 @@ impl GrubEnv {
     }
 
     pub fn write_to_vec(&self) -> Result<Vec<u8>, std::io::Error> {
-        let mut buffer = Vec::new();
+        let mut buffer = Vec::with_capacity(GRUB_ENV_SIZE);
         writeln!(buffer, "# GRUB Environment Block")?;
         match &self.boot_alternative {
             Ok(value) => writeln!(buffer, "boot_alternative={value}")?,
-            Err(GrubEnvVariableError::Missing) => {} // Don't write if None
+            Err(GrubEnvVariableError::Undefined) => {} // Don't write if None
             Err(GrubEnvVariableError::ParseError(value)) => {
                 writeln!(buffer, "boot_alternative={value}")?
             }
@@ -110,7 +110,7 @@ impl GrubEnv {
 
         match &self.boot_cycle {
             Ok(value) => writeln!(buffer, "boot_cycle={value}")?,
-            Err(GrubEnvVariableError::Missing) => {} // Don't write if None
+            Err(GrubEnvVariableError::Undefined) => {} // Don't write if None
             Err(GrubEnvVariableError::ParseError(value)) => writeln!(buffer, "boot_cycle={value}")?,
         }
 
@@ -131,8 +131,7 @@ impl GrubEnv {
     }
 
     pub fn write_to_file(&self, path: &Path) -> Result<(), std::io::Error> {
-        // We write to string first so that the file is not changed if there is a problem.
-        // This is safer than writing to the file directly.
+        // We write to a buffer first so that the file is not changed if there is a problem.
         std::fs::write(path, self.write_to_vec()?)
     }
 }
@@ -140,8 +139,8 @@ impl GrubEnv {
 impl Default for GrubEnv {
     fn default() -> Self {
         Self {
-            boot_alternative: Err(GrubEnvVariableError::Missing),
-            boot_cycle: Err(GrubEnvVariableError::Missing),
+            boot_alternative: Err(GrubEnvVariableError::Undefined),
+            boot_cycle: Err(GrubEnvVariableError::Undefined),
             other: vec![],
         }
     }
@@ -151,14 +150,17 @@ pub trait WithDefault<T>
 where
     Self: Sized,
 {
-    fn with_default(self, default: T) -> Self;
+    fn with_default_if_undefined(self, default: T) -> Self;
 }
 
 impl<T> WithDefault<T> for Result<T, GrubEnvVariableError> {
-    fn with_default(self, default: T) -> Self {
+    /// - Returns value if the variable is legal,
+    /// - Returns `default` if the value is undefined.
+    /// - Returns error if the variable contains an illegal value.
+    fn with_default_if_undefined(self, default: T) -> Self {
         match self {
             Ok(value) => Ok(value),
-            Err(GrubEnvVariableError::Missing) => Ok(default),
+            Err(GrubEnvVariableError::Undefined) => Ok(default),
             Err(error) => Err(error),
         }
     }
@@ -239,15 +241,18 @@ boot_cycle=failsafe_check
     }
 
     #[test]
-    fn test_missing_variables() {
+    fn test_undefined_variables() {
         let content = "\
 # GRUB Environment Block
 #######################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################";
 
         let result = GrubEnv::read_from(Cursor::new(content)).expect("Failed to read grubenv");
 
-        assert_eq!(result.boot_alternative, Err(GrubEnvVariableError::Missing));
-        assert_eq!(result.boot_cycle, Err(GrubEnvVariableError::Missing));
+        assert_eq!(
+            result.boot_alternative,
+            Err(GrubEnvVariableError::Undefined)
+        );
+        assert_eq!(result.boot_cycle, Err(GrubEnvVariableError::Undefined));
         assert_eq!(result.other, vec![]);
 
         // Test writing back
@@ -258,13 +263,13 @@ boot_cycle=failsafe_check
     }
 
     #[test]
-    fn test_partial_missing_boot_cycle() {
+    fn test_partial_undefined_boot_cycle() {
         let content = "boot_alternative=B";
 
         let result = GrubEnv::read_from(Cursor::new(content)).expect("Failed to read grubenv");
 
         assert_eq!(result.boot_alternative, Ok(BootAlternative::B));
-        assert_eq!(result.boot_cycle, Err(GrubEnvVariableError::Missing));
+        assert_eq!(result.boot_cycle, Err(GrubEnvVariableError::Undefined));
         assert_eq!(result.other, vec![]);
 
         // Test writing back
@@ -315,8 +320,11 @@ boot_cycle=invalid_cycle
 
         let result = GrubEnv::read_from(Cursor::new(content)).expect("Failed to read grubenv");
 
-        assert_eq!(result.boot_alternative, Err(GrubEnvVariableError::Missing));
-        assert_eq!(result.boot_cycle, Err(GrubEnvVariableError::Missing));
+        assert_eq!(
+            result.boot_alternative,
+            Err(GrubEnvVariableError::Undefined)
+        );
+        assert_eq!(result.boot_cycle, Err(GrubEnvVariableError::Undefined));
         assert_eq!(result.other, vec![]);
     }
 
@@ -398,25 +406,25 @@ other_var=other_value
 
     #[test]
     fn test_with_default() {
-        // Missing value
-        let missing: Result<BootAlternative, GrubEnvVariableError> =
-            Err(GrubEnvVariableError::Missing);
+        // Undefined value
+        let undefined: Result<BootAlternative, GrubEnvVariableError> =
+            Err(GrubEnvVariableError::Undefined);
         assert_eq!(
-            missing.with_default(BootAlternative::A),
+            undefined.with_default_if_undefined(BootAlternative::A),
             Ok(BootAlternative::A)
         );
 
         // Valid value
         let valid: Result<BootAlternative, GrubEnvVariableError> = Ok(BootAlternative::B);
         assert_eq!(
-            valid.with_default(BootAlternative::A),
+            valid.with_default_if_undefined(BootAlternative::A),
             Ok(BootAlternative::B)
         );
 
         // Parse error
         let invalid = Err(GrubEnvVariableError::ParseError("invalid".to_string()));
         assert_eq!(
-            invalid.with_default(BootAlternative::A),
+            invalid.with_default_if_undefined(BootAlternative::A),
             Err(GrubEnvVariableError::ParseError("invalid".to_string()))
         );
     }
