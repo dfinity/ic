@@ -56,6 +56,8 @@ jobs:
           RUST_BACKTRACE: "full"
         with:
           run: |
+            set -euo pipefail
+
             echo -e "\e[34mRunning rust benchmarks on dedicated machine fr1-spm15!\e[0m"
 
             while IFS= read -r tgt; do
