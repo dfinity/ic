@@ -157,12 +157,6 @@
       <target type='virtio' port='0'/>
       <alias name='console1'/>
     </console>
-    <channel type='unix'>
-      <source mode='bind' path='/var/lib/libvirt/qemu/channel/target/domain-1-ic/org.qemu.guest_agent.0'/>
-      <target type='virtio' name='org.qemu.guest_agent.0' state='connected'/>
-      <alias name='channel0'/>
-      <address type='virtio-serial' controller='0' bus='0' port='1'/>
-    </channel>
     <vsock model='virtio'>
       <cid auto='yes'/>
     </vsock>
