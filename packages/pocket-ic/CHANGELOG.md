@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+- The function `PocketIc::start_or_reuse_server` to manually start or reuse a PocketIC server.
+- The function `PocketIcBuilder::with_registry` to specify that the registry canister should be bootstrapped and kept in sync
+  with the PocketIC instance.
+
+
+
 ## 9.0.2 - 2025-06-06
 
 (Only PocketIC server version bump to v9.0.3.)
