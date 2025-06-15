@@ -1,5 +1,5 @@
 <domain type='{{cpu_domain}}' id='1'>
-  <name>guestos</name>
+  <name>{{domain_name}}</name>
   <uuid>fd897da5-8017-41c8-8575-a706dba30766</uuid>
   <metadata>
     <libosinfo:libosinfo xmlns:libosinfo="http://libosinfo.org/xmlns/libvirt/domain/1.0">
@@ -34,7 +34,7 @@
   <os>
     <type arch='x86_64' machine='pc-q35-5.0'>hvm</type>
     <loader readonly='yes' type='pflash'>/usr/share/OVMF/OVMF_CODE_4M.fd</loader>
-    <nvram>/var/lib/libvirt/qemu/nvram/guestos_VARS.fd</nvram>
+    <nvram>/var/lib/libvirt/qemu/nvram/{{domain_name}}_VARS.fd</nvram>
     <boot dev='hd'/>
     {%- if let Some(direct_boot) = direct_boot %}
     <kernel>{{direct_boot.kernel}}</kernel>
@@ -62,7 +62,7 @@
     <emulator>/usr/local/bin/qemu-system-x86_64</emulator>
     <disk type='block' device='disk'>
       <driver name='qemu' type='raw' cache='none' discard='unmap'/>
-      <source dev='/dev/hostlvm/guestos' index='1'/>
+      <source dev='{{disk_device}}' index='1'/>
       <backingStore/>
       <target dev='vda' bus='virtio'/>
       <alias name='virtio-disk0'/>
@@ -158,7 +158,7 @@
         <model name='isa-serial'/>
       </target>
       <alias name='serial0'/>
-      <log file='/var/log/libvirt/qemu/guestos-serial.log' append='off'/>
+      <log file='/var/log/libvirt/qemu/{{domain_name}}-serial.log' append='off'/>
     </serial>
     <console type='pty' tty='/dev/pts/3'>
       <source path='/dev/pts/3'/>
@@ -170,12 +170,6 @@
       <target type='virtio' port='0'/>
       <alias name='console1'/>
     </console>
-    <channel type='unix'>
-      <source mode='bind' path='/var/lib/libvirt/qemu/channel/target/domain-1-ic/org.qemu.guest_agent.0'/>
-      <target type='virtio' name='org.qemu.guest_agent.0' state='connected'/>
-      <alias name='channel0'/>
-      <address type='virtio-serial' controller='0' bus='0' port='1'/>
-    </channel>
     <vsock model='virtio'>
       <cid auto='yes'/>
     </vsock>

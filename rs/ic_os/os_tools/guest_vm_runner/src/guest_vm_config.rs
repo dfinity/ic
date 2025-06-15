@@ -1,8 +1,9 @@
+use crate::{vm_domain_name, GUESTOS_DEVICE};
 use anyhow::{bail, Context, Result};
 use askama::Template;
 use config::guestos_bootstrap_image::BootstrapOptions;
 use config::guestos_config::generate_guestos_config;
-use config_types::{GuestOSConfig, HostOSConfig, Ipv6Config};
+use config_types::{GuestOSConfig, GuestVMType, HostOSConfig, Ipv6Config};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{calculate_deterministic_mac, IpVariant};
 use std::path::{Path, PathBuf};
@@ -20,9 +21,13 @@ pub struct DirectBootConfig {
     pub kernel_cmdline: String,
 }
 
-pub fn assemble_config_media(hostos_config: &HostOSConfig, media_path: &Path) -> Result<()> {
-    let guestos_config =
-        generate_guestos_config(hostos_config).context("Failed to generate GuestOS config")?;
+pub fn assemble_config_media(
+    hostos_config: &HostOSConfig,
+    guest_vm_type: GuestVMType,
+    media_path: &Path,
+) -> Result<()> {
+    let guestos_config = generate_guestos_config(hostos_config, guest_vm_type)
+        .context("Failed to generate GuestOS config")?;
 
     let bootstrap_options = make_bootstrap_options(hostos_config, guestos_config)?;
 
@@ -112,12 +117,18 @@ pub fn generate_vm_config(
     config: &HostOSConfig,
     media_path: &Path,
     direct_boot: &Option<DirectBootConfig>,
+    guest_vm_type: GuestVMType,
 ) -> Result<String> {
+    let node_type = match guest_vm_type {
+        GuestVMType::Default => NodeType::GuestOS,
+        GuestVMType::Upgrade => NodeType::UpgradeGuestOS,
+    };
+
     let mac_address = calculate_deterministic_mac(
         &config.icos_settings.mgmt_mac,
         config.icos_settings.deployment_environment,
         IpVariant::V6,
-        NodeType::GuestOS,
+        node_type,
     );
 
     let cpu_domain = if config.hostos_settings.vm_cpu == "qemu" {
@@ -144,6 +155,8 @@ pub fn generate_vm_config(
     }
 
     GuestOSTemplateProps {
+        domain_name: vm_domain_name(guest_vm_type).to_string(),
+        disk_device: GUESTOS_DEVICE.to_string(),
         cpu_domain: cpu_domain.to_string(),
         vm_memory: config.hostos_settings.vm_memory,
         nr_of_vcpus: config.hostos_settings.vm_nr_of_vcpus,
@@ -216,7 +229,7 @@ mod tests {
         config.icos_settings.use_ssh_authorized_keys = true;
         config.icos_settings.use_node_operator_private_key = true;
 
-        let guestos_config = generate_guestos_config(&config).unwrap();
+        let guestos_config = generate_guestos_config(&config, GuestVMType::Default).unwrap();
 
         let options = make_bootstrap_options(&config, guestos_config.clone()).unwrap();
 
@@ -252,10 +265,11 @@ mod tests {
     }
 
     fn test_vm_config(
+        filename: &str,
         hostos_settings: HostOSSettings,
         enable_trusted_execution_environment: bool,
         enable_direct_boot: bool,
-        filename: &str,
+        guest_vm_type: GuestVMType,
     ) {
         let mut mint = Mint::new(goldenfiles_path());
         let mut config = create_test_hostos_config();
@@ -274,14 +288,20 @@ mod tests {
             None
         };
 
-        let vm_config =
-            generate_vm_config(&config, Path::new("/tmp/config.img"), &direct_boot).unwrap();
+        let vm_config = generate_vm_config(
+            &config,
+            Path::new("/tmp/config.img"),
+            &direct_boot,
+            guest_vm_type,
+        )
+        .unwrap();
         std::fs::write(mint.new_goldenpath(filename).unwrap(), vm_config).unwrap();
     }
 
     #[test]
     fn test_generate_vm_config_qemu() {
         test_vm_config(
+            "guestos_vm_qemu.xml",
             HostOSSettings {
                 vm_memory: 490,
                 vm_cpu: "qemu".to_string(),
@@ -290,13 +310,14 @@ mod tests {
             },
             /*enable_trusted_execution_environment=*/ false,
             /*enable_direct_boot=*/ true,
-            "guestos_vm_qemu.xml",
+            GuestVMType::Upgrade,
         );
     }
 
     #[test]
     fn test_generate_vm_config_kvm() {
         test_vm_config(
+            "guestos_vm_kvm.xml",
             HostOSSettings {
                 vm_memory: 490,
                 vm_cpu: "kvm".to_string(),
@@ -305,13 +326,14 @@ mod tests {
             },
             /*enable_trusted_execution_environment=*/ false,
             /*enable_direct_boot=*/ false,
-            "guestos_vm_kvm.xml",
+            GuestVMType::Default,
         );
     }
 
     #[test]
     fn test_generate_vm_config_sev() {
         test_vm_config(
+            "guestos_vm_sev.xml",
             HostOSSettings {
                 vm_memory: 490,
                 vm_cpu: "kvm".to_string(),
@@ -320,7 +342,7 @@ mod tests {
             },
             /*enable_trusted_execution_environment=*/ true,
             /*enable_direct_boot=*/ true,
-            "guestos_vm_sev.xml",
+            GuestVMType::Default,
         );
     }
 
@@ -330,7 +352,7 @@ mod tests {
         let media_path = temp_dir.path().join("config.img");
         let config = create_test_hostos_config();
 
-        let result = assemble_config_media(&config, &media_path);
+        let result = assemble_config_media(&config, GuestVMType::Upgrade, &media_path);
 
         assert!(
             result.is_ok(),

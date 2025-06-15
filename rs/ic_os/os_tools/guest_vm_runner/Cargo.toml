@@ -7,17 +7,26 @@ name = "guest_vm_runner"
 path = "src/main.rs"
 
 [dependencies]
-anyhow = "1.0.95"
-askama = "*"
-async-trait = "0.1"
-gptman = "*"
-macaddr = "*"
-regex = "1.11.1"
-sys-mount = "*"
-systemd = "*"
-tempfile = "3.20.0"
-tokio = "1.45.0"
-virt = "*"
+partition_tools = { path = "../../build_tools/partition_tools" }
+config = { path = "../../config" }
+config_types = { path = "../../config_types" }
+deterministic_ips = { path = "../../deterministic_ips" }
+grub = { path = "../../grub" }
+ic-metrics-tool = { path = "../../metrics_tool" }
+
+anyhow = { workspace = true }
+askama = { workspace = true }
+async-trait = { workspace = true }
+gptman = { workspace = true }
+macaddr = { workspace = true }
+regex = { workspace = true }
+sys-mount = { workspace = true }
+systemd = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }
+virt = { workspace = true }
+clap = { workspace = true } #REMOVE
+
 
 [dev-dependencies]
 goldenfile = "*"

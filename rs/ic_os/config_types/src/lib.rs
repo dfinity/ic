@@ -26,6 +26,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::str::FromStr;
+use strum::EnumString;
 use url::Url;
 
 pub const CONFIG_VERSION: &str = "1.2.0";
@@ -59,6 +60,14 @@ pub struct HostOSConfig {
     pub guestos_settings: GuestOSSettings,
 }
 
+#[derive(Serialize, Deserialize, Copy, Clone, Eq, PartialEq, Debug, EnumString)]
+#[serde(rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
+pub enum GuestVMType {
+    Default,
+    Upgrade,
+}
+
 /// GuestOS configuration. In production, this struct inherits settings from `HostOSConfig`.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct GuestOSConfig {
@@ -67,6 +76,8 @@ pub struct GuestOSConfig {
     pub network_settings: NetworkSettings,
     pub icos_settings: ICOSSettings,
     pub guestos_settings: GuestOSSettings,
+    pub guest_vm_type: GuestVMType,
+    pub upgrade_config: GuestOSUpgradeConfig,
 }
 
 #[serde_as]
@@ -132,6 +143,14 @@ impl Default for HostOSSettings {
 
 const fn default_vm_nr_of_vcpus() -> u32 {
     64
+}
+
+/// Config specific to the GuestOS upgrade process.
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Default, Clone)]
+pub struct GuestOSUpgradeConfig {
+    /// IPv6 address of the peer GuestOS instance.
+    #[serde(default)]
+    pub peer_guestos_address: Option<Ipv6Addr>,
 }
 
 /// GuestOS-specific settings.

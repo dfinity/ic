@@ -31,6 +31,8 @@ pub struct DirectBootProps {{
 #[derive(Template)]
 #[template(escape = "xml", source = {:?}, ext = "xml")]
 pub struct GuestOSTemplateProps {{
+    pub domain_name: String,
+    pub disk_device: String,
     pub cpu_domain: String,
     pub vm_memory: u32,
     pub nr_of_vcpus: u32,

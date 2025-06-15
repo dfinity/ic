@@ -1,11 +1,14 @@
 use anyhow::Result;
-use config_types::{FixedIpv6Config, GuestOSConfig, HostOSConfig, Ipv6Config};
+use config_types::{FixedIpv6Config, GuestOSConfig, GuestVMType, HostOSConfig, Ipv6Config};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{calculate_deterministic_mac, IpVariant, MacAddr6Ext};
 use utils::to_cidr;
 
 /// Generate the GuestOS configuration based on the provided HostOS configuration.
-pub fn generate_guestos_config(hostos_config: &HostOSConfig) -> Result<GuestOSConfig> {
+pub fn generate_guestos_config(
+    hostos_config: &HostOSConfig,
+    guest_vm_type: GuestVMType,
+) -> Result<GuestOSConfig> {
     let hostos_config = hostos_config.clone();
     // TODO: We won't have to modify networking between the hostos and
     // guestos config after completing the networking revamp (NODE-1327)
@@ -87,7 +90,7 @@ mod tests {
                 gateway: "2001:db8::1".parse().unwrap(),
             });
 
-        let guestos_config = generate_guestos_config(&hostos_config).unwrap();
+        let guestos_config = generate_guestos_config(&hostos_config, GuestVMType::Default).unwrap();
 
         assert_eq!(guestos_config.config_version, hostos_config.config_version);
         assert_eq!(
@@ -121,7 +124,7 @@ mod tests {
             gateway: "2001:db8::1".parse().unwrap(),
         });
 
-        let result = generate_guestos_config(&hostos_config);
+        let result = generate_guestos_config(&hostos_config, GuestVMType::Default);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Deterministic"));
     }

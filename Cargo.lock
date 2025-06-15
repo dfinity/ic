@@ -2601,11 +2601,9 @@ name = "config"
 version = "1.0.0"
 dependencies = [
  "anyhow",
- "askama",
  "clap 4.5.27",
  "config_types",
  "deterministic_ips",
- "goldenfile",
  "ic-types",
  "macaddr",
  "network",
@@ -2630,6 +2628,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_with 1.14.0",
+ "strum 0.26.3",
  "tempfile",
  "thiserror 2.0.12",
  "url",
@@ -5219,7 +5218,35 @@ version = "1.0.0"
 dependencies = [
  "regex",
  "strum 0.26.3",
+ "tempfile",
  "thiserror 2.0.12",
+]
+
+[[package]]
+name = "guest_vm_runner"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "askama",
+ "async-trait",
+ "clap 4.5.27",
+ "config",
+ "config_types",
+ "deterministic_ips",
+ "goldenfile",
+ "gptman",
+ "grub",
+ "ic-metrics-tool",
+ "macaddr",
+ "nix 0.24.3",
+ "partition_tools",
+ "regex",
+ "sys-mount",
+ "systemd",
+ "tempfile",
+ "tokio",
+ "url",
+ "virt",
 ]
 
 [[package]]
@@ -5637,24 +5664,12 @@ name = "hostos_tool"
 version = "1.0.0"
 dependencies = [
  "anyhow",
- "async-trait",
  "clap 4.5.27",
  "config",
  "config_types",
  "deterministic_ips",
- "gptman",
- "grub",
- "ic-metrics-tool",
  "network",
- "nix 0.24.3",
- "partition_tools",
- "regex",
- "sys-mount",
- "systemd",
- "tempfile",
- "tokio",
  "utils",
- "virt",
 ]
 
 [[package]]
