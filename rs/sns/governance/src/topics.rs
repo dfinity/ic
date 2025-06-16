@@ -327,7 +327,7 @@ impl pb::Topic {
         // We used to fall back to non-critical proposal criticality for backward compatibility,
         // since when custom proposals were introduced, they were not categorized into topics
         // and were all considered non-critical. Since the SNS now enforces that all new custom
-        // proposals are categorized into topics, their criticality is guranteed to be explicitly
+        // proposals are categorized into topics, their criticality is guaranteed to be explicitly
         // defined. For native proposals, however, the criticality needs to be defined based on
         // the topic of the native function, as per `Governance::topic_descriptions`. We take
         // some measures to enforce that all native functions have topics. If this assumption
