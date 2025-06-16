@@ -123,7 +123,7 @@ impl FeatureFlags {
             write_barrier: FlagStatus::Disabled,
             wasm64: FlagStatus::Enabled,
             canister_backtrace: FlagStatus::Enabled,
-            environment_variables: FlagStatus::Enabled,
+            environment_variables: FlagStatus::Disabled,
         }
     }
 }

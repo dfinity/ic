@@ -579,13 +579,17 @@ pub fn syscalls<
             move |mut caller: Caller<'_, StoreData>| {
                 charge_for_cpu(&mut caller, overhead::ENV_VAR_COUNT)?;
                 if feature_flags.environment_variables == FlagStatus::Enabled {
-                with_system_api(&mut caller, |s| s.ic0_env_var_count()).and_then(|s| {
-                    I::try_from(s).map_err(|e| {
-                        anyhow::Error::msg(format!("ic0::env_var_count failed: {}", e))
+                    println!("env_var_count ENABLED");
+                    with_system_api(&mut caller, |s| s.ic0_env_var_count()).and_then(|s| {
+                        I::try_from(s).map_err(|e| {
+                            anyhow::Error::msg(format!("ic0::env_var_count failed: {}", e))
                         })
                     })
                 } else {
-                    return Err(anyhow::Error::msg("Environment variables are not supported"));
+                    println!("env_var_count DISABED");
+                    return Err(anyhow::Error::msg(
+                        "Environment variables are not supported",
+                    ));
                 }
             }
         })
@@ -597,13 +601,15 @@ pub fn syscalls<
                 let index: usize = index.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu(&mut caller, overhead::ENV_VAR_NAME_SIZE)?;
                 if feature_flags.environment_variables == FlagStatus::Enabled {
-                with_system_api(&mut caller, |s| s.ic0_env_var_name_size(index)).and_then(|s| {
-                    I::try_from(s).map_err(|e| {
+                    with_system_api(&mut caller, |s| s.ic0_env_var_name_size(index)).and_then(|s| {
+                        I::try_from(s).map_err(|e| {
                             anyhow::Error::msg(format!("ic0::env_var_name_size failed: {}", e))
                         })
                     })
                 } else {
-                    return Err(anyhow::Error::msg("Environment variables are not supported"));
+                    return Err(anyhow::Error::msg(
+                        "Environment variables are not supported",
+                    ));
                 }
             }
         })
@@ -622,7 +628,9 @@ pub fn syscalls<
                         system_api.ic0_env_var_name_copy(index, dst, offset, size, memory)
                     })?;
                 } else {
-                    return Err(anyhow::Error::msg("Environment variables are not supported"));
+                    return Err(anyhow::Error::msg(
+                        "Environment variables are not supported",
+                    ));
                 }
                 if feature_flags.write_barrier == FlagStatus::Enabled {
                     mark_writes_on_bytemap(&mut caller, dst, size)
@@ -644,7 +652,9 @@ pub fn syscalls<
                         system_api.ic0_env_var_value_size(name_src, name_size, memory)
                     })
                 } else {
-                    return Err(anyhow::Error::msg("Environment variables are not supported"));
+                    return Err(anyhow::Error::msg(
+                        "Environment variables are not supported",
+                    ));
                 }
                 .and_then(|s| {
                     I::try_from(s).map_err(|e| {
@@ -675,7 +685,9 @@ pub fn syscalls<
                             .ic0_env_var_value_copy(name_src, name_size, dst, offset, size, memory)
                     })?;
                 } else {
-                    return Err(anyhow::Error::msg("Environment variables are not supported"));
+                    return Err(anyhow::Error::msg(
+                        "Environment variables are not supported",
+                    ));
                 }
                 if feature_flags.write_barrier == FlagStatus::Enabled {
                     mark_writes_on_bytemap(&mut caller, dst, size)

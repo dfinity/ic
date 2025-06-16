@@ -3492,6 +3492,7 @@ fn test_environment_variable_system_api() {
             PrincipalId::new_user_test_id(0),
             0.into(),
         ))
+        .with_config(config)
         .with_environment_variables(env_vars)
         .with_wat(wat)
         .build();
@@ -3506,4 +3507,35 @@ fn test_environment_variable_system_api() {
         result,
         Ok(Some(WasmResult::Reply(b"Hello WorldTest Value".to_vec())))
     );
+}
+
+#[test]
+fn test_environment_variable_system_api_not_enabled() {
+    let wat = r#"
+    (module
+        (import "ic0" "env_var_count" (func $ic0_env_var_count (result i32)))
+
+        (func (export "canister_update go")
+            (call $ic0_env_var_count)
+            drop
+        )
+    )"#;
+
+    let mut config = ic_config::embedders::Config::default();
+    config.feature_flags.environment_variables = FlagStatus::Disabled;
+
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_wat(wat)
+        .with_config(config)
+        .with_api_type(ApiType::update(
+            UNIX_EPOCH,
+            vec![],
+            Cycles::zero(),
+            PrincipalId::new_user_test_id(0),
+            0.into(),
+        ))
+        .build();
+
+    let run_result = instance.run(FuncRef::Method(WasmMethod::Update("go".to_string())));
+    assert!(run_result.is_err());
 }

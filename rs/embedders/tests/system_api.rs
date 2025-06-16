@@ -2297,11 +2297,13 @@ fn test_env_var_name_operations() {
     let mut heap = vec![0u8; 16];
 
     // Copy first variable name
-    api.ic0_env_var_name_copy(0, 0, 0, var_name_1.len(), &mut heap).unwrap();
+    api.ic0_env_var_name_copy(0, 0, 0, var_name_1.len(), &mut heap)
+        .unwrap();
     assert_eq!(&heap[0..10], var_name_1.as_bytes());
 
     // Copy second variable name
-    api.ic0_env_var_name_copy(1, 0, 0, var_name_2.len(), &mut heap).unwrap();
+    api.ic0_env_var_name_copy(1, 0, 0, var_name_2.len(), &mut heap)
+        .unwrap();
     assert_eq!(&heap[0..11], var_name_2.as_bytes());
 
     // Test invalid index
@@ -2329,7 +2331,7 @@ fn test_env_var_name_operations() {
     assert!(matches!(
         api.ic0_env_var_name_copy(0, 0, 0, 20, &mut heap),
         Err(HypervisorError::ToolchainContractViolation { .. })
-        ));
+    ));
 }
 
 // Helper function to copy test data to heap
