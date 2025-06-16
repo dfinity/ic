@@ -20,7 +20,7 @@ use ic_system_test_driver::{
 };
 use ic_tests_ckbtc::{
     create_canister, install_bitcoin_canister, install_btc_checker, install_ledger, install_minter,
-    setup, subnet_app, subnet_sys,
+    ckbtc_setup, subnet_app, subnet_sys,
     utils::{
         ensure_wallet, generate_blocks, get_btc_address, get_btc_client, retrieve_btc,
         send_to_btc_address, wait_for_finalization_no_new_blocks, wait_for_mempool_change,
@@ -319,7 +319,7 @@ pub fn test_batching(env: TestEnv) {
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_setup(setup)
+        .with_setup(ckbtc_setup)
         .add_test(systest!(test_batching))
         .execute_from_args()?;
     Ok(())

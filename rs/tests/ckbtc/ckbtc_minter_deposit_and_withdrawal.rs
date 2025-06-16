@@ -22,7 +22,7 @@ use ic_system_test_driver::{
 };
 use ic_tests_ckbtc::{
     create_canister, install_bitcoin_canister, install_btc_checker, install_ledger, install_minter,
-    setup, subnet_app, subnet_sys,
+    ckbtc_setup, subnet_app, subnet_sys,
     utils::{
         ensure_wallet, generate_blocks, get_btc_address, get_btc_client, send_to_btc_address,
         wait_for_finalization, wait_for_mempool_change, wait_for_signed_tx,
@@ -275,7 +275,7 @@ pub fn test_deposit_and_withdrawal(env: TestEnv) {
 }
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_setup(setup)
+        .with_setup(ckbtc_setup)
         .add_test(systest!(test_deposit_and_withdrawal))
         .execute_from_args()?;
     Ok(())
