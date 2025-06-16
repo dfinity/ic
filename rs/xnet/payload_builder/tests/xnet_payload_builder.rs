@@ -268,7 +268,7 @@ fn in_slice(
     log: &ReplicaLogger,
 ) -> CertifiedStreamSlice {
     let remote_state_manager =
-        StateManagerFixture::new(log.clone()).with_stream(OWN_SUBNET, stream.clone());
+        StateManagerFixture::remote(log.clone()).with_stream(OWN_SUBNET, stream.clone());
     remote_state_manager.get_partial_slice(OWN_SUBNET, witness_from, msg_from, msg_count)
 }
 
@@ -322,8 +322,7 @@ fn get_xnet_payload_respects_signal_limit(
         let signals_count_after_gc =
             (out_stream.signals_end() - in_stream.messages_begin()).get() as usize;
 
-        let mut state_manager =
-            StateManagerFixture::with_subnet_type(SubnetType::Application, log.clone());
+        let mut state_manager = StateManagerFixture::local(log.clone());
         state_manager = state_manager.with_stream(SUBNET_1, out_stream);
 
         let xnet_payload_builder = XNetPayloadBuilderFixture::new(state_manager);
@@ -384,8 +383,7 @@ fn get_xnet_payload_slice_alignment(
     let msg_count = msg_count - 1;
 
     with_test_replica_logger(|log| {
-        let mut state_manager =
-            StateManagerFixture::with_subnet_type(SubnetType::Application, log.clone());
+        let mut state_manager = StateManagerFixture::local(log.clone());
 
         // We will be creating 3 identical copies of the slice, each coming from a
         // different subnet.
@@ -477,8 +475,7 @@ fn get_xnet_payload_byte_limit_exceeded(
     let (stream2, from2, msg_count2) = test_slice2;
 
     with_test_replica_logger(|log| {
-        let mut state_manager =
-            StateManagerFixture::with_subnet_type(SubnetType::Application, log.clone());
+        let mut state_manager = StateManagerFixture::local(log.clone());
 
         // Create a matching outgoing stream within `state_manager` for each slice.
         state_manager = state_manager.with_stream(SUBNET_1, out_stream(&stream1, from1));
@@ -539,8 +536,7 @@ fn get_xnet_payload_byte_limit_too_small(
     let (stream, from, msg_count) = test_slice;
 
     with_test_replica_logger(|log| {
-        let mut state_manager =
-            StateManagerFixture::with_subnet_type(SubnetType::Application, log.clone());
+        let mut state_manager = StateManagerFixture::local(log.clone());
 
         // Create a matching outgoing stream within `state_manager` for each slice.
         state_manager = state_manager.with_stream(REMOTE_SUBNET, out_stream(&stream, from));
@@ -591,8 +587,7 @@ fn get_xnet_payload_empty_slice(
     );
 
     with_test_replica_logger(|log| {
-        let mut state_manager =
-            StateManagerFixture::with_subnet_type(SubnetType::Application, log.clone());
+        let mut state_manager = StateManagerFixture::local(log.clone());
 
         // Place outgoing stream into `state_manager`.
         state_manager = state_manager.with_stream(REMOTE_SUBNET, out_stream);
@@ -683,8 +678,9 @@ fn system_subnet_stream_throttling(
 
     with_test_replica_logger(|log| {
         // Fixtures.
-        let state_manager = StateManagerFixture::with_subnet_type(SubnetType::System, log.clone())
-            .with_stream(REMOTE_SUBNET, out_stream.clone());
+        let state_manager =
+            StateManagerFixture::for_subnet(OWN_SUBNET, SubnetType::System, log.clone())
+                .with_stream(REMOTE_SUBNET, out_stream.clone());
         let xnet_payload_builder = XNetPayloadBuilderFixture::new(state_manager);
 
         // Populate payload builder pool with the REMOTE_SUBNET -> OWN_SUBNET slice.
@@ -772,8 +768,7 @@ fn validate_xnet_payload(
     let (stream2, from2, msg_count2) = test_slice2;
 
     with_test_replica_logger(|log| {
-        let mut state_manager =
-            StateManagerFixture::with_subnet_type(SubnetType::Application, log.clone());
+        let mut state_manager = StateManagerFixture::local(log.clone());
 
         // Create a matching outgoing stream within `state_manager` for each slice.
         state_manager = state_manager.with_stream(SUBNET_1, out_stream(&stream1, from1));
