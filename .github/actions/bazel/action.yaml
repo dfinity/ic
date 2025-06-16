@@ -87,8 +87,8 @@ runs:
       run: |
         cd $(mktemp -d)
         curl -SLO 'https://github.com/dfinity/execlog2csv/releases/download/v0.0.2/execlog2csv_0.0.2_linux_amd64.zip'
-        unzip -p ./execlog2csv_0.0.2_linux_amd64.zip | sudo cat >/usr/bin/execlog2csv
-        sudo chmod +x /usr/bin/execlog2csv
+        unzip -p ./execlog2csv_0.0.2_linux_amd64.zip | sudo cat >/usr/local/bin/execlog2csv
+        sudo chmod +x /usr/local/bin/execlog2csv
         execlog2csv --help
 
     - name: Convert execlogs to CSV
