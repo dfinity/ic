@@ -59,7 +59,7 @@ pub(crate) struct ExecutionEnvironmentMetrics {
     pub(crate) long_execution_already_in_progress: IntCounter,
 
     /// Metrics for HTTP outcalls costs.
-    /// This is 
+    /// This is
     pub(crate) http_outcalls_metrics: HttpOutcallMetrics,
 }
 
@@ -212,7 +212,8 @@ impl ExecutionEnvironmentMetrics {
                 .price_decrease
                 .observe((old_price - new_price).get() as f64 / 1_000_000_000.0);
         }
-        if old_price.get() > 0 { // the price is always > 0; just being extra sure we don't panic.
+        if old_price.get() > 0 {
+            // the price is always > 0; just being extra sure we don't panic.
             self.http_outcalls_metrics
                 .ratio
                 .observe(new_price.get() as f64 / old_price.get() as f64);

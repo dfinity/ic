@@ -110,7 +110,7 @@ async fn leave_proxy_canister_running(proxy_canister: &Canister<'_>, url: String
                             transform: Some(TransformContext {
                                 function: TransformFunc(candid::Func {
                                     principal: proxy_canister.canister_id().get().0,
-                                    method: "very_large_but_allowed_transform".to_string(),
+                                    method: "transform_with_context".to_string(),
                                 }),
                                 context: context.as_bytes().to_vec(),
                             }),
