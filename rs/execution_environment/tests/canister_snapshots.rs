@@ -2,11 +2,12 @@ use canister_test::WasmResult;
 use ic_error_types::ErrorCode;
 use ic_management_canister_types_private::{
     CanisterSnapshotDataOffset, LoadCanisterSnapshotArgs, OnLowWasmMemoryHookStatus,
-    ReadCanisterSnapshotMetadataArgs, TakeCanisterSnapshotArgs, UploadCanisterSnapshotDataArgs,
-    UploadCanisterSnapshotMetadataArgs, UploadChunkArgs,
+    ReadCanisterSnapshotMetadataArgs, ReadCanisterSnapshotMetadataResponse,
+    TakeCanisterSnapshotArgs, UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
+    UploadChunkArgs,
 };
-use ic_state_machine_tests::StateMachineBuilder;
-use ic_types::SnapshotId;
+use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
+use ic_types::{CanisterId, SnapshotId};
 
 #[test]
 fn upload_snapshot_module_with_checkpoint() {
@@ -215,8 +216,38 @@ fn load_snapshot_inconsistent_metadata_fails() {
     let heap_dl = env.get_snapshot_heap(&md_args).unwrap();
     let stable_memory_dl = env.get_snapshot_stable_memory(&md_args).unwrap();
 
+    // load the snapshot with inconsistent hook status
+    load_faulty_snapshot(
+        &env,
+        Some(OnLowWasmMemoryHookStatus::Ready),
+        canister_id,
+        &md,
+        &module_dl,
+        &heap_dl,
+        &stable_memory_dl,
+    );
+    // load the snapshot with inconsistent hook status
+    load_faulty_snapshot(
+        &env,
+        Some(OnLowWasmMemoryHookStatus::Executed),
+        canister_id,
+        &md,
+        &module_dl,
+        &heap_dl,
+        &stable_memory_dl,
+    );
+}
+
+fn load_faulty_snapshot(
+    env: &StateMachine,
+    hook_status: Option<OnLowWasmMemoryHookStatus>,
+    canister_id: CanisterId,
+    md: &ReadCanisterSnapshotMetadataResponse,
+    module_dl: &[u8],
+    heap_dl: &[u8],
+    stable_memory_dl: &[u8],
+) {
     // create a new snapshot via metadata upload
-    // the OnLowWasmMemoryHookStatus is set Ready, which is inconsistent with the data, so we expect a failure on `snapshot_load`.
     let args = UploadCanisterSnapshotMetadataArgs::new(
         canister_id,
         None,
@@ -226,7 +257,7 @@ fn load_snapshot_inconsistent_metadata_fails() {
         stable_memory_dl.len() as u64,
         md.certified_data.clone(),
         None,
-        Some(OnLowWasmMemoryHookStatus::Ready),
+        hook_status,
     );
     let snapshot_id = env
         .upload_canister_snapshot_metadata(&args)
@@ -239,7 +270,7 @@ fn load_snapshot_inconsistent_metadata_fails() {
     env.upload_snapshot_stable_memory(
         canister_id,
         snapshot_id.clone(),
-        &stable_memory_dl,
+        stable_memory_dl,
         None,
         None,
     )
