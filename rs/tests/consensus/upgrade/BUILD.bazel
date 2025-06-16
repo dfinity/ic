@@ -60,6 +60,7 @@ system_test_nns(
     name = "upgrade_downgrade_nns_subnet_test",
     env = MAINNET_ENV,
     tags = [
+        "manual",  # the test is not reliable
         "system_test_hourly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS

@@ -25,6 +25,9 @@ on the process that this file is part of, see
   [announced at the end of March in a forum][chunking] (and various other
   channels). This release marks the end of the "migration window" described in
   the aforelinked forum post.
+* The `check_routing_table_invariants` method now checks the new canister_ranges_
+  and ensures they match the `routing_table` record. The old invariant check will be
+  removed once `routing_table` is removed.
 
 [chunking]: https://forum.dfinity.org/t/breaking-registry-changes-for-large-records/42893?u=daniel-wong
 
