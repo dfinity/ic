@@ -1,4 +1,4 @@
-use ic_interfaces_registry::{RegistryDataProvider, RegistryTransportRecord};
+use ic_interfaces_registry::{RegistryDataProvider, RegistryRecord};
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_types::{
     crypto::threshold_sig::ThresholdSigPublicKey, registry::RegistryDataProviderError,
@@ -44,14 +44,14 @@ impl RegistryDataProvider for NnsDataProvider {
     fn get_updates_since(
         &self,
         version: RegistryVersion,
-    ) -> Result<Vec<RegistryTransportRecord>, RegistryDataProviderError> {
+    ) -> Result<Vec<RegistryRecord>, RegistryDataProviderError> {
         let rt_handle = self.rt_handle.clone();
         let registry_canister = self.registry_canister.clone();
         #[allow(clippy::disallowed_methods)]
         tokio::task::block_in_place(|| {
             rt_handle.block_on(async move {
                 registry_canister
-                    .get_changes_since_as_transport_records(version.get())
+                    .get_changes_since_as_registry_records(version.get())
                     .await
                     .map(|v| v.0)
                     .map_err(|source| RegistryDataProviderError::Transfer {
@@ -80,7 +80,7 @@ impl RegistryDataProvider for CertifiedNnsDataProvider {
     fn get_updates_since(
         &self,
         version: RegistryVersion,
-    ) -> Result<Vec<RegistryTransportRecord>, RegistryDataProviderError> {
+    ) -> Result<Vec<RegistryRecord>, RegistryDataProviderError> {
         let rt_handle = self.rt_handle.clone();
         let registry_canister = self.registry_canister.clone();
         let nns_public_key = self.nns_public_key.clone();

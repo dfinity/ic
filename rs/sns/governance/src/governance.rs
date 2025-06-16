@@ -1,3 +1,5 @@
+use crate::icrc_ledger_helper::ICRCLedgerHelper;
+use crate::pb::v1::Metrics;
 use crate::{
     canister_control::{
         get_canister_id, perform_execute_generic_nervous_system_function_call,
@@ -53,17 +55,18 @@ use crate::{
             DisburseMaturityInProgress, Empty, ExecuteGenericNervousSystemFunction,
             FailStuckUpgradeInProgressRequest, FailStuckUpgradeInProgressResponse,
             GetMaturityModulationRequest, GetMaturityModulationResponse, GetMetadataRequest,
-            GetMetadataResponse, GetMode, GetModeResponse, GetNeuron, GetNeuronResponse,
-            GetProposal, GetProposalResponse, GetSnsInitializationParametersRequest,
-            GetSnsInitializationParametersResponse, Governance as GovernanceProto, GovernanceError,
-            ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
-            ListProposalsResponse, ManageDappCanisterSettings, ManageLedgerParameters,
-            ManageNeuron, ManageNeuronResponse, ManageSnsMetadata, MintSnsTokens,
-            MintTokensRequest, MintTokensResponse, NervousSystemFunction, NervousSystemParameters,
-            Neuron, NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType,
-            Proposal, ProposalData, ProposalDecisionStatus, ProposalId, ProposalRewardStatus,
-            RegisterDappCanisters, RewardEvent, SetTopicsForCustomProposals, Tally, Topic,
-            TransferSnsTreasuryFunds, UpgradeSnsControlledCanister, Vote, WaitForQuietState,
+            GetMetadataResponse, GetMetricsRequest, GetMode, GetModeResponse, GetNeuron,
+            GetNeuronResponse, GetProposal, GetProposalResponse,
+            GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
+            Governance as GovernanceProto, GovernanceError, ListNervousSystemFunctionsResponse,
+            ListNeurons, ListNeuronsResponse, ListProposals, ListProposalsResponse,
+            ManageDappCanisterSettings, ManageLedgerParameters, ManageNeuron, ManageNeuronResponse,
+            ManageSnsMetadata, MintSnsTokens, MintTokensRequest, MintTokensResponse,
+            NervousSystemFunction, NervousSystemParameters, Neuron, NeuronId, NeuronPermission,
+            NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData,
+            ProposalDecisionStatus, ProposalId, ProposalRewardStatus, RegisterDappCanisters,
+            RewardEvent, SetTopicsForCustomProposals, Tally, Topic, TransferSnsTreasuryFunds,
+            UpgradeSnsControlledCanister, Vote, WaitForQuietState,
         },
     },
     proposal::{
@@ -79,6 +82,7 @@ use crate::{
     },
     types::{is_registered_function_id, Environment, HeapGrowthPotential, LedgerUpdateLock, Wasm},
 };
+
 use candid::{Decode, Encode};
 #[cfg(not(target_arch = "wasm32"))]
 use futures::FutureExt;
@@ -2005,6 +2009,40 @@ impl Governance {
             })
             .min()
             .unwrap_or(u64::MAX);
+    }
+
+    pub async fn get_metrics(
+        &self,
+        request: GetMetricsRequest,
+    ) -> Result<Metrics, GovernanceError> {
+        let num_recently_submitted_proposals = self.recent_proposals(request.time_window_seconds);
+        let icrc_ledger_helper = ICRCLedgerHelper::with_ledger(self.ledger.as_ref());
+
+        let last_ledger_block_timestamp = icrc_ledger_helper
+            .get_latest_block_timestamp_seconds()
+            .await
+            .map_err(|error_mesage| {
+                GovernanceError::new_with_message(ErrorType::External, error_mesage)
+            })?;
+
+        Ok(Metrics {
+            num_recently_submitted_proposals,
+            last_ledger_block_timestamp,
+        })
+    }
+
+    fn recent_proposals(&self, time_window_seconds: u64) -> u64 {
+        self.proto
+            .proposals
+            .values()
+            .rev()
+            .take_while(|proposal| {
+                self.env
+                    .now()
+                    .saturating_sub(proposal.proposal_creation_timestamp_seconds)
+                    <= time_window_seconds
+            })
+            .count() as u64
     }
 
     /// Starts execution of the given proposal in the background.
@@ -4383,7 +4421,6 @@ impl Governance {
                 neuron_fees_e8s: 0,
                 created_timestamp_seconds: now,
                 aging_since_timestamp_seconds: now,
-                followees: neuron_recipe.construct_followees(),
                 topic_followees: Some(neuron_recipe.construct_topic_followees()),
                 maturity_e8s_equivalent: 0,
                 dissolve_state: Some(DissolveState::DissolveDelaySeconds(
@@ -4395,6 +4432,9 @@ impl Governance {
                 auto_stake_maturity: neuron_recipe.construct_auto_staking_maturity(),
                 vesting_period_seconds: None,
                 disburse_maturity_in_progress: vec![],
+
+                // Deprecated
+                followees: btreemap! {},
             };
 
             // Add the neuron to the various data structures and indexes to support neurons. This
@@ -6206,6 +6246,9 @@ mod proposal_topics_tests;
 
 #[cfg(test)]
 mod test_helpers;
+
+#[cfg(test)]
+mod get_metrics;
 
 #[cfg(feature = "canbench-rs")]
 mod benches;

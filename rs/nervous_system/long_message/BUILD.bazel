@@ -5,7 +5,7 @@ load("//bazel:defs.bzl", "rust_ic_test_suite")
 package(default_visibility = ["//rs/nervous_system:default_visibility"])
 
 DEPENDENCIES = [
-    "@crate_index//:ic_cdk_0_17_1",
+    "@crate_index//:ic-cdk",
     "@crate_index//:candid",
     "@crate_index//:serde",
     # Keep sorted.

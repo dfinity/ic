@@ -9,10 +9,11 @@ on the process that this file is part of, see
 
 ## Added
 
-## Changed
+### New `get_metrics` function for SNS Governance
 
-The DAO community settings topic is promoted to being critical. For context, please refer to
-the [forum thread](https://forum.dfinity.org/t/make-sns-topic-dao-community-settings-critical/46689).
+A new function, `get_metrics`, has been added to the SNS Governance canister. This allows front-end clients and SNS aggregators to query for activity metrics of an SNS over a specified time period. Currently, the metrics include the number of most-recent proposals and the timestamp of the latest SNS ledger transaction.
+
+## Changed
 
 ## Deprecated
 

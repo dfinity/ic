@@ -8,7 +8,7 @@ DEPENDENCIES = [
     "//rs/nns/constants",
     "//rs/types/base_types",
     "@crate_index//:candid",
-    "@crate_index//:ic_cdk_0_17_1",
+    "@crate_index//:ic-cdk",
     "@crate_index//:serde",
 ]
 

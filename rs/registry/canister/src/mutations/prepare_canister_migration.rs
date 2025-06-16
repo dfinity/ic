@@ -244,7 +244,6 @@ mod tests {
     use assert_matches::assert_matches;
     use ic_base_types::CanisterId;
     use ic_registry_routing_table::RoutingTable;
-    use ic_registry_transport::pb::v1::registry_mutation;
     use ic_test_utilities_types::ids::subnet_test_id;
 
     use crate::{
@@ -321,9 +320,8 @@ mod tests {
         )
         .unwrap();
 
-        let mutation =
-            routing_table_into_registry_mutation(rt, registry_mutation::Type::Update as i32);
-        registry.maybe_apply_mutation_internal(vec![mutation]);
+        let mutations = routing_table_into_registry_mutation(&registry, rt);
+        registry.maybe_apply_mutation_internal(mutations);
 
         registry
     }
@@ -467,9 +465,6 @@ mod tests {
             .prepare_canister_migration(payload)
             .expect_err("Canister migration preparation should fail");
 
-        assert_matches!(
-            err,
-            PrepareCanisterMigrationError::UnhostedCanisterIds { .. }
-        );
+        assert_matches!(err, PrepareCanisterMigrationError::UnhostedCanisterIds);
     }
 }

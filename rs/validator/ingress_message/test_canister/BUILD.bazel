@@ -10,12 +10,11 @@ DEPENDENCIES = [
     "//rs/validator/ingress_message",
     "@crate_index//:build-info",
     "@crate_index//:candid",
-    "@crate_index//:ic_cdk_0_17_1",
+    "@crate_index//:ic-cdk",
 ]
 
 MACRO_DEPENDENCIES = [
     # Keep sorted.
-    "@crate_index//:ic_cdk_macros_0_17_1",
 ]
 
 BUILD_DEPENDENCIES = [
