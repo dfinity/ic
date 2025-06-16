@@ -7,9 +7,12 @@ use ic_management_canister_types_private as ic00;
 use ic_metrics::buckets::{decimal_buckets, decimal_buckets_with_zero};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeCallId;
+use ic_types::canister_http::{CanisterHttpRequestContext, MAX_CANISTER_HTTP_RESPONSE_BYTES};
+use ic_types::messages::Response;
 use ic_types::{CanisterId, Cycles};
 use prometheus::{Histogram, HistogramVec, IntCounter};
 use std::str::FromStr;
+use std::sync::Arc;
 
 pub const FINISHED_OUTCOME_LABEL: &str = "finished";
 pub const SUBMITTED_OUTCOME_LABEL: &str = "submitted";
@@ -69,6 +72,9 @@ pub(crate) struct HttpOutcallMetrics {
     pub(crate) price_increase: Histogram,
     pub(crate) price_decrease: Histogram,
     pub(crate) price_ratio: Histogram,
+    pub(crate) request_size: Histogram,
+    pub(crate) max_response_bytes: Histogram,
+    pub(crate) payload_size: Histogram,
 }
 
 impl ExecutionEnvironmentMetrics {
@@ -150,6 +156,22 @@ impl ExecutionEnvironmentMetrics {
                     "Ratio of new to old price of HTTP outcalls.",
                     decimal_buckets(-3, 3),
                 ),
+                request_size: metrics_registry.histogram(
+                    "execution_http_outcalls_request_size",
+                    "Size of HTTP outcall requests, in bytes.",
+                    // Buckets: 0B, 1B, 2B, 5B, ... 1MB, 2MB, 5MB
+                    decimal_buckets_with_zero(0, 6),
+                ),
+                max_response_bytes: metrics_registry.histogram(
+                    "execution_http_outcalls_max_response_bytes",
+                    "Maximum size of HTTP outcall responses, in bytes.",
+                    decimal_buckets_with_zero(0, 6),
+                ),
+                payload_size: metrics_registry.histogram(
+                    "execution_http_outcalls_payload_size",
+                    "Size of HTTP outcall payloads, in bytes.",
+                    decimal_buckets_with_zero(0, 6),
+                ),
             },
         }
     }
@@ -194,6 +216,30 @@ impl ExecutionEnvironmentMetrics {
         };
 
         self.observe_message_with_label(method_name, duration, outcome_label, status_label)
+    }
+
+    pub(crate) fn observe_http_outcall_request(
+        &self,
+        context: &CanisterHttpRequestContext,
+        response: &Arc<Response>,
+    ) {
+        self.http_outcalls_metrics
+            .request_size
+            .observe(context.variable_parts_size().get() as f64);
+
+        let max_response_size = match context.max_response_bytes {
+            Some(response_size) => response_size.get(),
+            // Defaults to maximum response size.
+            None => MAX_CANISTER_HTTP_RESPONSE_BYTES,
+        };
+
+        self.http_outcalls_metrics
+            .max_response_bytes
+            .observe(max_response_size as f64);
+
+        self.http_outcalls_metrics
+            .payload_size
+            .observe(response.payload_size_bytes().get() as f64);
     }
 
     pub(crate) fn observe_http_outcall_price_change(&self, old_price: Cycles, new_price: Cycles) {

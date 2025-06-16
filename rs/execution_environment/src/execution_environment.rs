@@ -537,21 +537,17 @@ impl ExecutionEnvironment {
                                 registry_settings.subnet_size,
                             );
 
-                            let payload_size = match &response.response_payload {
-                                Payload::Data(data) => data.len(),
-                                // This is 0 because it's neglijable and hard to explain to canisters.
-                                Payload::Reject(_) => 0,
-                            };
-
                             let new_price = self.cycles_account_manager.http_request_fee_beta(
                                 context.variable_parts_size(),
                                 context.max_response_bytes,
                                 registry_settings.subnet_size,
-                                NumBytes::from(payload_size as u64),
+                                NumBytes::from(response.payload_size_bytes()),
                             );
 
                             self.metrics
                                 .observe_http_outcall_price_change(old_price, new_price);
+                            self.metrics
+                                .observe_http_outcall_request(context, &response);
                         }
 
                         self.metrics.observe_subnet_message(
