@@ -40,8 +40,10 @@ def image_deps(mode, _malicious = False):
         "partition_table": Label("//ic-os/setupos:partitions.csv"),
         "rootfs_size": "1750M",
         "bootfs_size": "100M",
-        "grub_config": Label("//ic-os/setupos:grub.cfg"),
-        "extra_boot_args": Label("//ic-os/setupos/context:extra_boot_args"),
+        "grub_config": Label("//ic-os/bootloader:setupos_grub.cfg"),
+        "boot_args_template": Label("//ic-os/bootloader:setupos_boot_args.template"),
+        "extra_boot_args_template": Label("//ic-os/bootloader:setupos_extra_boot_args.template"),
+        "requires_root_signing": False,
 
         # Add any custom partitions to the manifest
         "custom_partitions": _custom_partitions,
@@ -52,26 +54,22 @@ def image_deps(mode, _malicious = False):
     dev_file_build_arg = "BASE_IMAGE=docker-base.dev"
     prod_file_build_arg = "BASE_IMAGE=docker-base.prod"
 
-    image_variants = {
-        "dev": {
+    # Determine build configuration based on mode name
+    if "dev" in mode:
+        deps.update({
             "build_args": dev_build_args,
             "file_build_arg": dev_file_build_arg,
-        },
-        "local-base-dev": {
-            "build_args": dev_build_args,
-            "file_build_arg": dev_file_build_arg,
-        },
-        "local-base-prod": {
+        })
+    else:
+        deps.update({
             "build_args": prod_build_args,
             "file_build_arg": prod_file_build_arg,
-        },
-        "prod": {
-            "build_args": prod_build_args,
-            "file_build_arg": prod_file_build_arg,
-        },
-    }
+        })
 
-    deps.update(image_variants[mode])
+    # Update dev rootfs
+    if "dev" in mode:
+        deps["rootfs"].pop("//rs/ic_os/release:config", None)
+        deps["rootfs"].update({"//rs/ic_os/release:config_dev": "/opt/ic/bin/config:0755"})
 
     return deps
 

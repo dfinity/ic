@@ -1650,8 +1650,8 @@ pub struct GetMetadataResponse {
 pub struct GetMetricsRequest {
     pub time_window_seconds: Option<u64>,
 }
-/// Response message for 'get_metrics'.
-pub mod get_sns_status_response {
+
+pub mod get_metrics_response {
     use super::GovernanceError;
 
     #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
@@ -1666,9 +1666,9 @@ pub mod get_sns_status_response {
         Err(GovernanceError),
     }
 
-    #[derive(candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
+    #[derive(candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq, Default)]
     pub struct GetMetricsResponse {
-        get_metrics_result: Option<GetMetricsResult>,
+        pub get_metrics_result: Option<GetMetricsResult>,
     }
 }
 

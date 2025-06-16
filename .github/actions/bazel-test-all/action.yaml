@@ -55,6 +55,7 @@ runs:
           execlogs-artifact-name: ${{ inputs.execlogs-artifact-name }}
           run: |
             set -euo pipefail
+            echo "::notice::Node Name: ${NODE_NAME}"
 
             diff_only='${{ inputs.diff-only }}'
             release_build='${{ inputs.release-build }}'
@@ -81,15 +82,6 @@ runs:
             for tgt in $BAZEL_TARGETS; do
               bazel_targets+=( "$tgt" )
             done
-
-            # jemalloc -- or rather, the "hermetic" zig toolchain -- has issues when too
-            # many targets are built concurrently (leads to determinism issues & linking
-            # errors).
-            #
-            # To work around this, we build jemalloc separately.
-            if [ $(uname -o) != "Darwin" ]; then
-              bazel build "${bazel_args[@]}" @@jemalloc//:libjemalloc
-            fi
 
             if [[ $diff_only == "true" ]]; then
                 target_pattern_file=$(mktemp)
@@ -147,7 +139,20 @@ runs:
             fi
 
             echo uploading artifacts to remote storage
+            upload_output=$(mktemp) # used in summary
+
             # with --check_up_to_date Bazel will error out if the artifacts
             # to be uploaded were not built in the build step above
             # (this ensures that the exact artifacts built above are uploaded)
-            bazel run --check_up_to_date //:upload-artifacts >>"$GITHUB_STEP_SUMMARY"
+            bazel run --check_up_to_date //:upload-artifacts >"$upload_output"
+            n_uploaded=$(wc -l <"$upload_output")
+            echo "'$n_uploaded' artifacts uploaded"
+
+            # the upload list can get quite big, so we wrap in details/summary
+            {
+              echo '<details><summary>Uploaded '"$n_uploaded"' Artifacts</summary>';
+              cat "$upload_output"
+              echo '</details>';
+            } >>"$GITHUB_STEP_SUMMARY"
+
+            rm "$upload_output"
