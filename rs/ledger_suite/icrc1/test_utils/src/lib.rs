@@ -428,9 +428,16 @@ impl ArgWithCaller {
                     to: transfer_from_arg.to,
                     spender: Some(from), // The caller is the spender
                     amount: T::try_from(transfer_from_arg.amount.clone()).unwrap(),
-                    fee: transfer_from_arg.fee.clone().map(|f| T::try_from(f).unwrap()),
+                    fee: transfer_from_arg
+                        .fee
+                        .clone()
+                        .map(|f| T::try_from(f).unwrap()),
                 };
-                (operation, transfer_from_arg.created_at_time, transfer_from_arg.memo)
+                (
+                    operation,
+                    transfer_from_arg.created_at_time,
+                    transfer_from_arg.memo,
+                )
             }
         };
         Transaction::<T> {
@@ -473,7 +480,7 @@ impl TransactionsAndBalances {
         ) {
             return;
         };
-        
+
         // Store operation reference for incremental update
         let operation = &transaction.operation;
         match transaction.operation {
@@ -485,28 +492,33 @@ impl TransactionsAndBalances {
                 self.debit(from, amount.get_e8s());
             }
             Operation::Transfer {
-                from, to, amount, spender, ..
+                from,
+                to,
+                amount,
+                spender,
+                ..
             } => {
                 self.credit(to, amount.get_e8s());
                 let caller = spender.unwrap_or(from);
                 assert_eq!(tx.from(), caller);
                 self.debit(from, amount.get_e8s() + fee);
-                
+
                 // If spender is Some, this is a transfer_from operation - update allowances
                 if let Some(spender_account) = spender {
                     let used_allowance = amount.get_e8s() + fee;
-                    self.allowances
-                        .entry((from, spender_account))
-                        .and_modify(|current_allowance| {
+                    self.allowances.entry((from, spender_account)).and_modify(
+                        |current_allowance| {
                             let current_amount = current_allowance.get_e8s();
                             if current_amount >= used_allowance {
-                                *current_allowance = Tokens::from_e8s(current_amount - used_allowance);
+                                *current_allowance =
+                                    Tokens::from_e8s(current_amount - used_allowance);
                             } else {
                                 // This shouldn't happen if our strategy is correct, but handle gracefully
                                 *current_allowance = Tokens::from_e8s(0);
                             }
-                        });
-                    
+                        },
+                    );
+
                     // Remove allowance entry if it's now zero
                     if let Some(allowance) = self.allowances.get(&(from, spender_account)) {
                         if allowance.get_e8s() == 0 {
@@ -531,15 +543,18 @@ impl TransactionsAndBalances {
                     .or_insert(amount);
                 self.debit(from, fee);
             }
-
         };
         self.transactions.push(tx);
-        
+
         // Update valid_allowance_from incrementally based on the specific transaction
         self.update_valid_allowance_from_incremental(&operation, default_fee);
     }
-    
-    fn update_valid_allowance_from_incremental(&mut self, operation: &Operation<Tokens>, default_fee: u64) {
+
+    fn update_valid_allowance_from_incremental(
+        &mut self,
+        operation: &Operation<Tokens>,
+        default_fee: u64,
+    ) {
         match operation {
             Operation::Mint { to, .. } => {
                 // Check if the credited account should be added to valid_allowance_from
@@ -549,7 +564,9 @@ impl TransactionsAndBalances {
                 // Check if the debited account should be removed from valid_allowance_from
                 self.check_and_update_account_validity(*from, default_fee);
             }
-            Operation::Transfer { from, to, spender, .. } => {
+            Operation::Transfer {
+                from, to, spender, ..
+            } => {
                 // Check both accounts that had balance changes
                 if spender.is_some() {
                     // This is a transfer_from - check the from account (balance reduced)
@@ -567,15 +584,14 @@ impl TransactionsAndBalances {
             }
         }
     }
-    
+
     fn check_and_update_account_validity(&mut self, account: Account, default_fee: u64) {
         // Check if this account has any allowances and sufficient balance
-        let has_valid_allowances = self.allowances
+        let has_valid_allowances = self
+            .allowances
             .iter()
-            .any(|((from, _), allowance)| {
-                *from == account && allowance.get_e8s() > default_fee
-            });
-        
+            .any(|((from, _), allowance)| *from == account && allowance.get_e8s() > default_fee);
+
         if has_valid_allowances {
             if let Some(&balance) = self.balances.get(&account) {
                 if balance > default_fee {
@@ -951,9 +967,9 @@ pub fn valid_transactions_strategy(
         current_balances_pointer: Arc<HashMap<Account, u64>>,
     ) -> impl Strategy<Value = ArgWithCaller> {
         let minter: Account = minter_identity.sender().unwrap().into();
-        
+
         if valid_allowance_from.is_empty() {
-            // Return a strategy that will never generate values but has the right type  
+            // Return a strategy that will never generate values but has the right type
             return Just(ArgWithCaller {
                 caller: minter_identity.clone(),
                 arg: LedgerEndpointArg::TransferArg(TransferArg {
@@ -969,120 +985,139 @@ pub fn valid_transactions_strategy(
             .prop_filter("No valid transfer_from combinations available", |_| false)
             .boxed();
         }
-        
+
         // Select a from account that has valid allowances
         let valid_from_accounts: Vec<Account> = valid_allowance_from.into_iter().collect();
-        select(valid_from_accounts).prop_flat_map(move |from| {
-            let current_balances = current_balances_pointer.clone();
-            let allowance_map = allowance_map_pointer.clone();
-            let tx_hash_set_ptr = tx_hash_set_pointer.clone();
-            let account_to_basic_identity_ptr = account_to_basic_identity_pointer.clone();
-            
-            // Find all allowances for this from account
-            let allowances_for_from: Vec<(Account, Tokens)> = allowance_map
-                .iter()
-                .filter_map(|((f, spender), allowance)| {
-                    if *f == from {
-                        Some((*spender, *allowance))
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-            
-            // Select one of the allowances for this from account
-            select(allowances_for_from).prop_flat_map(move |(spender, allowance)| {
-                let tx_hash_set_ptr2 = tx_hash_set_ptr.clone();
-                let account_to_basic_identity_ptr2 = account_to_basic_identity_ptr.clone();
-                let current_balances2 = current_balances.clone();
-                let allowance_amount = allowance.get_e8s();
-                let fee_amount = default_fee;
-                
-                // Get the current balance for this account (may have changed since valid_allowance_from was built)
-                let current_balance = current_balances2.get(&from).copied().unwrap_or(0);
-                
-                // Calculate max transferable amount considering both allowance and current account balance
-                // Both allowance and from account balance must cover: transfer amount + fee
-                let allowance_max = if allowance_amount > fee_amount {
-                    allowance_amount - fee_amount
-                } else {
-                    0 // Cannot transfer if allowance doesn't cover fee
-                };
-                let balance_max = if current_balance > fee_amount {
-                    current_balance - fee_amount
-                } else {
-                    0 // Cannot transfer if balance doesn't cover fee
-                };
-                
-                let max_amount = std::cmp::min(allowance_max, balance_max);
-                
-                // If there's no valid amount, return an always-failing strategy
-                if max_amount == 0 {
-                    return Just(())
-                        .prop_filter("Insufficient balance or allowance for transfer_from", |_| false)
-                        .prop_map(|_| unreachable!())
-                        .boxed();
-                }
-                
-                // Select from valid amounts (1 to max_amount)
-                (1..=max_amount).prop_flat_map(move |amount| {
-                    let tx_hash_set = tx_hash_set_ptr2.clone();
-                    let account_to_basic_identity = account_to_basic_identity_ptr2.clone();
-                    let fee_amount = default_fee;
-                    
-                    (
-                        basic_identity_and_account_strategy(), // to account
-                        valid_created_at_time_strategy(now),
-                        arb_memo(),
-                        prop::option::of(Just(fee_amount)),
-                    )
-                        .prop_filter_map(
-                            "Invalid transfer_from transaction",
-                            move |(to_signer, created_at_time, memo, fee)| {
-                        let to = to_signer.account();
-                        
-                        let tx = Transaction {
-                            operation: Operation::Transfer::<Tokens> {
-                                from,
-                                to,
-                                spender: Some(spender),
-                                amount: Tokens::from_e8s(amount),
-                                fee: fee.map(Tokens::from_e8s),
-                            },
-                            created_at_time,
-                            memo: memo.clone(),
+        select(valid_from_accounts)
+            .prop_flat_map(move |from| {
+                let current_balances = current_balances_pointer.clone();
+                let allowance_map = allowance_map_pointer.clone();
+                let tx_hash_set_ptr = tx_hash_set_pointer.clone();
+                let account_to_basic_identity_ptr = account_to_basic_identity_pointer.clone();
+
+                // Find all allowances for this from account
+                let allowances_for_from: Vec<(Account, Tokens)> = allowance_map
+                    .iter()
+                    .filter_map(|((f, spender), allowance)| {
+                        if *f == from {
+                            Some((*spender, *allowance))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+
+                // Select one of the allowances for this from account
+                select(allowances_for_from)
+                    .prop_flat_map(move |(spender, allowance)| {
+                        let tx_hash_set_ptr2 = tx_hash_set_ptr.clone();
+                        let account_to_basic_identity_ptr2 = account_to_basic_identity_ptr.clone();
+                        let current_balances2 = current_balances.clone();
+                        let allowance_amount = allowance.get_e8s();
+                        let fee_amount = default_fee;
+
+                        // Get the current balance for this account (may have changed since valid_allowance_from was built)
+                        let current_balance = current_balances2.get(&from).copied().unwrap_or(0);
+
+                        // Calculate max transferable amount considering both allowance and current account balance
+                        // Both allowance and from account balance must cover: transfer amount + fee
+                        let allowance_max = if allowance_amount > fee_amount {
+                            allowance_amount - fee_amount
+                        } else {
+                            0 // Cannot transfer if allowance doesn't cover fee
+                        };
+                        let balance_max = if current_balance > fee_amount {
+                            current_balance - fee_amount
+                        } else {
+                            0 // Cannot transfer if balance doesn't cover fee
                         };
 
-                                if from == to || from == minter || to == minter || spender == from || spender == to || tx_hash_set.contains(&tx) {
-                                    None
-                                } else {
-                                    let caller = account_to_basic_identity.get(&spender.owner).unwrap().clone();
-                                    assert_eq!(caller.sender().unwrap(), spender.owner);
-                                    Some(ArgWithCaller {
-                                        caller,
-                                        arg: LedgerEndpointArg::TransferFromArg(TransferFromArgs {
-                                            spender_subaccount: spender.subaccount,
-                                            from,
-                                            to,
-                                            amount: amount.into(),
-                                            fee: fee.map(Nat::from),
-                                            memo,
-                                            created_at_time,
-                                        }),
-                                        principal_to_basic_identity: HashMap::from([
-                                            (to.owner, Arc::new(to_signer.identity)),
-                                        ]),
-                                    })
-                                }
-                            },
-                        )
-                        .boxed()
-                })
-                .boxed()
+                        let max_amount = std::cmp::min(allowance_max, balance_max);
+
+                        // If there's no valid amount, return an always-failing strategy
+                        if max_amount == 0 {
+                            return Just(())
+                                .prop_filter(
+                                    "Insufficient balance or allowance for transfer_from",
+                                    |_| false,
+                                )
+                                .prop_map(|_| unreachable!())
+                                .boxed();
+                        }
+
+                        // Select from valid amounts (1 to max_amount)
+                        (1..=max_amount)
+                            .prop_flat_map(move |amount| {
+                                let tx_hash_set = tx_hash_set_ptr2.clone();
+                                let account_to_basic_identity =
+                                    account_to_basic_identity_ptr2.clone();
+                                let fee_amount = default_fee;
+
+                                (
+                                    basic_identity_and_account_strategy(), // to account
+                                    valid_created_at_time_strategy(now),
+                                    arb_memo(),
+                                    prop::option::of(Just(fee_amount)),
+                                )
+                                    .prop_filter_map(
+                                        "Invalid transfer_from transaction",
+                                        move |(to_signer, created_at_time, memo, fee)| {
+                                            let to = to_signer.account();
+
+                                            let tx = Transaction {
+                                                operation: Operation::Transfer::<Tokens> {
+                                                    from,
+                                                    to,
+                                                    spender: Some(spender),
+                                                    amount: Tokens::from_e8s(amount),
+                                                    fee: fee.map(Tokens::from_e8s),
+                                                },
+                                                created_at_time,
+                                                memo: memo.clone(),
+                                            };
+
+                                            if from == to
+                                                || from == minter
+                                                || to == minter
+                                                || spender == from
+                                                || spender == to
+                                                || tx_hash_set.contains(&tx)
+                                            {
+                                                None
+                                            } else {
+                                                let caller = account_to_basic_identity
+                                                    .get(&spender.owner)
+                                                    .unwrap()
+                                                    .clone();
+                                                assert_eq!(caller.sender().unwrap(), spender.owner);
+                                                Some(ArgWithCaller {
+                                                    caller,
+                                                    arg: LedgerEndpointArg::TransferFromArg(
+                                                        TransferFromArgs {
+                                                            spender_subaccount: spender.subaccount,
+                                                            from,
+                                                            to,
+                                                            amount: amount.into(),
+                                                            fee: fee.map(Nat::from),
+                                                            memo,
+                                                            created_at_time,
+                                                        },
+                                                    ),
+                                                    principal_to_basic_identity: HashMap::from([(
+                                                        to.owner,
+                                                        Arc::new(to_signer.identity),
+                                                    )]),
+                                                })
+                                            }
+                                        },
+                                    )
+                                    .boxed()
+                            })
+                            .boxed()
+                    })
+                    .boxed()
             })
             .boxed()
-        })
-        .boxed()
     }
 
     fn generate_strategy(
@@ -1143,7 +1178,7 @@ pub fn valid_transactions_strategy(
                 (1, mint_strategy),
                 (1000, transfer_strategy),
             ];
-            
+
             // Set transfer_from weight if valid allowances exist
             if !state.valid_allowance_from.is_empty() {
                 let transfer_from_strategy = transfer_from_strategy(
@@ -1160,8 +1195,7 @@ pub fn valid_transactions_strategy(
                 options.push((100, transfer_from_strategy));
             }
 
-            proptest::strategy::Union::new_weighted(options)
-            .boxed()
+            proptest::strategy::Union::new_weighted(options).boxed()
         };
 
         (Just(state), arb_tx)
@@ -1169,13 +1203,7 @@ pub fn valid_transactions_strategy(
                 let minter_identity = minter_identity.clone();
                 let additional_length = additional_length - 1;
                 state.apply(minter_identity.clone(), default_fee, tx);
-                generate_strategy(
-                    state,
-                    minter_identity,
-                    default_fee,
-                    additional_length,
-                    now,
-                )
+                generate_strategy(state, minter_identity, default_fee, additional_length, now)
             })
             .boxed()
     }
@@ -1484,7 +1512,7 @@ mod tests {
             .new_tree(&mut TestRunner::default())
             .expect("Unable to run valid_transactions_strategy");
         let transactions = tree.current();
-        
+
         // Count transaction types
         let mut mint_count = 0;
         let mut transfer_count = 0;
@@ -1514,26 +1542,55 @@ mod tests {
                 }
             }
         }
-        
+
         println!("Transaction distribution:");
-        println!("  Mint: {} ({:.1}%)", mint_count, 100.0 * mint_count as f32 / size as f32);
-        println!("  Transfer: {} ({:.1}%)", transfer_count, 100.0 * transfer_count as f32 / size as f32);
-        println!("  Approve: {} ({:.1}%)", approve_count, 100.0 * approve_count as f32 / size as f32);
-        println!("  TransferFrom: {} ({:.1}%)", transfer_from_count, 100.0 * transfer_from_count as f32 / size as f32);
-        
+        println!(
+            "  Mint: {} ({:.1}%)",
+            mint_count,
+            100.0 * mint_count as f32 / size as f32
+        );
+        println!(
+            "  Transfer: {} ({:.1}%)",
+            transfer_count,
+            100.0 * transfer_count as f32 / size as f32
+        );
+        println!(
+            "  Approve: {} ({:.1}%)",
+            approve_count,
+            100.0 * approve_count as f32 / size as f32
+        );
+        println!(
+            "  TransferFrom: {} ({:.1}%)",
+            transfer_from_count,
+            100.0 * transfer_from_count as f32 / size as f32
+        );
+
         // Just verify basic functionality for now
-        assert_eq!(transactions.len(), size, "Should generate exactly the requested number of transactions");
-        
+        assert_eq!(
+            transactions.len(),
+            size,
+            "Should generate exactly the requested number of transactions"
+        );
+
         // Verify we have at least some transactions of different types
-        assert!(mint_count + transfer_count + approve_count + transfer_from_count == size, "All transactions should be categorized");
+        assert!(
+            mint_count + transfer_count + approve_count + transfer_from_count == size,
+            "All transactions should be categorized"
+        );
 
         // Verify that there is at least one mint
         assert!(mint_count > 0, "Should have at least one mint transaction");
 
         // Verify transfer is the most common (basic sanity check)
-        assert!(transfer_count > mint_count, "Transfer should be more common than mint");
-        assert!(transfer_count > approve_count, "Transfer should be more common than approve");
-        
+        assert!(
+            transfer_count > mint_count,
+            "Transfer should be more common than mint"
+        );
+        assert!(
+            transfer_count > approve_count,
+            "Transfer should be more common than approve"
+        );
+
         // Don't check transfer_from for now since it depends on allowances being built up
         println!("Test passed! Transaction generation is working.");
     }
