@@ -1020,28 +1020,25 @@ fn encoded_block_bytes_to_flat_transaction(
     block.into()
 }
 
-/// Returns the oldest known block index associated with the given account identifier.
+/// Returns the oldest known block index associated with the given account.
 ///
 /// Keys are stored as `(account_hash, Reverse(block_index))`, meaning newer blocks
-/// appear first in iteration. To find the oldest, we look for the last key matching
-/// the account prefix.
-///
-/// This function checks if index 0 exists (fast path), and if not,
-/// searches for the last block associated with the account.
+/// appear first in iteration. To find the oldest, we need the **last** key with the
+/// matching account hash.
 fn get_oldest_tx_id(account: Account) -> Option<BlockIndex64> {
     let key_for_index_0 = account_block_ids_key(account, 0);
     let hash = account_sha256(account);
-    with_account_block_ids(|account_block_ids| {
-        // Fast path: index 0 exists for this account
-        if account_block_ids.get(&key_for_index_0).is_some() {
+
+    with_account_block_ids(|map| {
+        // Fast path: account owns block index 0
+        if map.contains_key(&key_for_index_0) {
             return Some(0);
         }
 
-        // Scan in reverse and find the last key for this account
-        account_block_ids
-            .range(..=key_for_index_0)
-            .rev()
-            .find(|(key, _)| key.0 == hash)
+        // Scan forward and return the last key for the account (i.e., the oldest tx)
+        map.range((hash, Reverse(BlockIndex64::MAX))..) // start from highest index
+            .take_while(|(key, _)| key.0 == hash)
+            .last()
             .map(|(key, _)| key.1 .0)
     })
 }
