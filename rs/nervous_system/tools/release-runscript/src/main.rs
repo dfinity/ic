@@ -185,7 +185,7 @@ fn run_determine_targets(cmd: DetermineTargets) -> Result<()> {
         "Genesis-Token",
         "Node-Rewards",
     ];
-    let sns_candidates = ["Root", "Governance", "Swap", "Index", "Ledger", "Archive"];
+    let sns_candidates = ["Root", "Governance", "Swap", "Ledger", "Archive", "Index"];
 
     // Prepare vectors for selected releases.
     let mut nns_canisters: Vec<String> = Vec::new();
