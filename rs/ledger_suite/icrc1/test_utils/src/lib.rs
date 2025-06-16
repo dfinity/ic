@@ -1045,8 +1045,8 @@ pub fn valid_transactions_strategy(
                                 .boxed();
                         }
 
-                        // Select from valid amounts (1 to max_amount)
-                        (1..=max_amount)
+                        // Select from valid amounts (0 to max_amount)
+                        (0..=max_amount)
                             .prop_flat_map(move |amount| {
                                 let tx_hash_set = tx_hash_set_ptr2.clone();
                                 let account_to_basic_identity =
