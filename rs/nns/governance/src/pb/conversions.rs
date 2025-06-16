@@ -2681,6 +2681,7 @@ impl From<pb::governance::GovernanceCachedMetrics> for pb_api::governance::Gover
                 .total_voting_power_non_self_authenticating_controller,
             total_staked_e8s_non_self_authenticating_controller: item
                 .total_staked_e8s_non_self_authenticating_controller,
+            spawning_neurons_count: item.spawning_neurons_count,
             non_self_authenticating_controller_neuron_subset_metrics: item
                 .non_self_authenticating_controller_neuron_subset_metrics
                 .map(|x| x.into()),
@@ -2744,6 +2745,7 @@ impl From<pb_api::governance::GovernanceCachedMetrics> for pb::governance::Gover
                 .total_voting_power_non_self_authenticating_controller,
             total_staked_e8s_non_self_authenticating_controller: item
                 .total_staked_e8s_non_self_authenticating_controller,
+            spawning_neurons_count: item.spawning_neurons_count,
             non_self_authenticating_controller_neuron_subset_metrics: item
                 .non_self_authenticating_controller_neuron_subset_metrics
                 .map(|x| x.into()),

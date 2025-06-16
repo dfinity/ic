@@ -621,6 +621,7 @@ pub fn encode_metrics(
             dissolving_neurons_e8s_buckets_ect,
             not_dissolving_neurons_e8s_buckets_seed,
             not_dissolving_neurons_e8s_buckets_ect,
+            spawning_neurons_count,
 
             // Non-self-authenticating neurons.
             total_voting_power_non_self_authenticating_controller: _,
@@ -883,6 +884,12 @@ pub fn encode_metrics(
                 w,
             )?;
         }
+
+        w.encode_gauge(
+            "governance_spawning_neurons_count",
+            *spawning_neurons_count as f64,
+            "The number of neurons that are in the \"spawning\" state.",
+        )?;
     }
 
     Ok(())
