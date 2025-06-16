@@ -4595,19 +4595,20 @@ fn test_icrc21_transfer_message(
         },
     };
 
-    let expected_transfer_message = "# Approve the transfer of funds
+    let expected_transfer_message = "# Send XTST
 
-**Amount:**
-0.01 XTST
+You are approving a transfer of funds from your account.
 
 **From:**
-d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101
+`d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101`
+
+**Amount:** `0.01 XTST`
 
 **To:**
-6fyp7-3ibaa-aaaaa-aaaap-4ai-v57emui.202020202020202020202020202020202020202020202020202020202020202
+`6fyp7-3ibaa-aaaaa-aaaap-4ai-v57emui.202020202020202020202020202020202020202020202020202020202020202`
 
-**Fee:**
-0.0001 XTST
+**Fees:** `0.0001 XTST`
+Charged for processing the transfer.
 
 **Memo:**
 test_bytes";
@@ -4672,7 +4673,7 @@ test_bytes";
             .unwrap()
             .consent_message,
     );
-    let expected_message = expected_transfer_message.replace("\n\n**From:**\nd2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101","\n\n**From subaccount:**\n101010101010101010101010101010101010101010101010101010101010101" );
+    let expected_message = expected_transfer_message.replace("\n\n**From:**\n`d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101`","\n\n**From subaccount:**\n101010101010101010101010101010101010101010101010101010101010101" );
     assert_eq!(
         message, expected_message,
         "Expected: {}, got: {}",
@@ -4691,7 +4692,7 @@ test_bytes";
             .consent_message,
     );
 
-    let expected_message = expected_transfer_message.replace("\n\n**From:**\nd2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101","\n\n**From subaccount:**\n0000000000000000000000000000000000000000000000000000000000000000" );
+    let expected_message = expected_transfer_message.replace("\n\n**From:**\n`d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101`","\n\n**From subaccount:**\n0000000000000000000000000000000000000000000000000000000000000000" );
     assert_eq!(
         message, expected_message,
         "Expected: {}, got: {}",

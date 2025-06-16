@@ -150,7 +150,12 @@ impl ConsentMessageBuilder {
         };
         match self.function {
             Icrc21Function::Transfer => {
-                message.push_str("# Approve the transfer of funds");
+                let token_symbol = self.token_symbol.ok_or(Icrc21Error::GenericError {
+                    error_code: Nat::from(500u64),
+                    description: "Token Symbol must be specified.".to_owned(),
+                })?;
+                message.push_str(&format!("# Send {}", token_symbol));
+                message.push_str("\n\nYou are approving a transfer of funds from your account.");
                 let from_account = self.from.ok_or(Icrc21Error::GenericError {
                     error_code: Nat::from(500u64),
                     description: "From account has to be specified.".to_owned(),
@@ -166,10 +171,6 @@ impl ConsentMessageBuilder {
                     })?,
                     self.decimals,
                 )?;
-                let token_symbol = self.token_symbol.ok_or(Icrc21Error::GenericError {
-                    error_code: Nat::from(500u64),
-                    description: "Token Symbol must be specified.".to_owned(),
-                })?;
                 let amount = convert_tokens_to_string_representation(
                     self.amount.ok_or(Icrc21Error::GenericError {
                         error_code: Nat::from(500u64),
@@ -178,17 +179,17 @@ impl ConsentMessageBuilder {
                     self.decimals,
                 )?;
 
-                message.push_str(&format!("\n\n**Amount:**\n{} {}", amount, token_symbol));
                 if from_account.owner == Principal::anonymous() {
                     message.push_str(&format!(
                         "\n\n**From subaccount:**\n{}",
                         extract_subaccount(from_account)?
                     ));
                 } else {
-                    message.push_str(&format!("\n\n**From:**\n{}", from_account));
+                    message.push_str(&format!("\n\n**From:**\n`{}`", from_account));
                 }
-                message.push_str(&format!("\n\n**To:**\n{}", receiver_account));
-                message.push_str(&format!("\n\n**Fee:**\n{} {}", fee, token_symbol));
+                message.push_str(&format!("\n\n**Amount:** `{} {}`", amount, token_symbol));
+                message.push_str(&format!("\n\n**To:**\n`{}`", receiver_account));
+                message.push_str(&format!("\n\n**Fees:** `{} {}`\nCharged for processing the transfer.", fee, token_symbol));
             }
             Icrc21Function::Approve => {
                 message.push_str("# Authorize another address to withdraw from your account");
