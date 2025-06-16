@@ -25,7 +25,7 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::ValidationContext,
     consensus::{
-        dkg::{self, DkgDataPayload, DkgPayload, DkgPayloadCreationError, DkgSummary},
+        dkg::{DkgDataPayload, DkgPayload, DkgPayloadCreationError, DkgSummary},
         get_faults_tolerated, Block, BlockPayload,
     },
     crypto::threshold_sig::ni_dkg::{
@@ -247,7 +247,7 @@ pub(super) fn create_summary_payload(
     state_manager: &dyn StateManager<State = ReplicatedState>,
     validation_context: &ValidationContext,
     logger: ReplicaLogger,
-) -> Result<dkg::DkgSummary, DkgPayloadCreationError> {
+) -> Result<DkgSummary, DkgPayloadCreationError> {
     let all_dealings = utils::get_dkg_dealings(pool_reader, parent);
     let mut transcripts_for_remote_subnets = BTreeMap::new();
     let mut next_transcripts = BTreeMap::new();

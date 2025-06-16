@@ -1,6 +1,7 @@
 # This Python script converts bazel's compact execution log (--execution_log_compact_file)
 # to a CSV file that contains a row per output file for every bazel target matching the given
-# --whitelist_pat regular expression. Each row contains the columns: target, path, and hash.
+# --include regular expressions and not matching the --exclude.
+# Each row contains the columns: target, path, and hash.
 #
 # Example usage:
 #
@@ -17,7 +18,7 @@
 #   $ bazel build //bazel:execution_log_compact_to_csv && \
 #     bazel-bin/bazel/execution_log_compact_to_csv \
 #       --input_execlog=compact_execlog \
-#       --whitelist_pat='^//'
+#       --include ^//
 #
 #   //rs/http_endpoints/public:build_script_,bazel-out/k8-opt-exec-ST-d57f47055a04/bin/rs/http_endpoints/public/build_script_,4463251579c194bf83a24408a184da9a7f46d5777f753e33a77afa5c2287fd1d
 #   //rs/http_endpoints/public:build_script,bazel-out/k8-opt/bin/rs/http_endpoints/public/build_script.out_dir/dashboard.rs,f0ba2e4976ac312782190b6391ce945f57708b46126b741f6336b355968a8a84
@@ -44,9 +45,16 @@ def main():
         help="Path to the zstd _decompressed_ input file as generated with bazel's --execution_log_compact_file option.",
     )
     parser.add_argument(
-        "--whitelist_pat",
-        default=None,
-        help="Regex to match target labels to include in the CSV. If omitted, all targets are included.",
+        "--include",
+        default=[],
+        nargs="*",
+        help="A space separated list of regular expressions to match target labels to include in the CSV. If omitted, all targets are included.",
+    )
+    parser.add_argument(
+        "--exclude",
+        default=[],
+        nargs="*",
+        help="A space separated list of regular expressions to match target labels to exclude from the CSV.",
     )
     parser.add_argument(
         "--verbose",
@@ -84,7 +92,9 @@ def main():
                 id_to_entry[exec_log_entry.id] = exec_log_entry
             elif entry_type == "spawn":
                 label = exec_log_entry.spawn.target_label
-                if args.whitelist_pat is not None and not re.match(args.whitelist_pat, label):
+                if (len(args.include) > 0 and all([not re.match(include, label) for include in args.include])) or (
+                    len(args.exclude) > 0 and any([re.match(exclude, label) for exclude in args.exclude])
+                ):
                     continue
                 for output in exec_log_entry.spawn.outputs:
                     output_type = output.WhichOneof("type")

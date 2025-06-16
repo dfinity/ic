@@ -17,7 +17,7 @@ async fn test_() {
 
 // Example of ic_cdk canister - comment out the above to use
 // use ic_cdk::println;
-// use ic_cdk_macros::{init, update};
+// use ic_cdk::{init, update};
 // use std::time::Duration;
 //
 // #[init]

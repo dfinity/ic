@@ -33,9 +33,9 @@ BASE_DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:fs_extra",
     "@crate_index//:futures",
+    "@crate_index//:ic-cdk",
     "@crate_index//:ic-cdk-timers",
     "@crate_index//:ic-stable-structures",
-    "@crate_index//:ic_cdk_0_17_1",
     "@crate_index//:lazy_static",
     "@crate_index//:prometheus-parse",
     "@crate_index//:prost",
@@ -108,7 +108,6 @@ DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
 MACRO_DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:async-trait",
-    "@crate_index//:ic_cdk_macros_0_17_1",
 ] + select({
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [
     ],
@@ -258,11 +257,24 @@ rust_ic_test_suite_with_extra_srcs(
         ],
     ),
     aliases = ALIASES,
-    data = DEV_DATA,
-    env = DEV_ENV,
+    crate_features = select({
+        "//rs/nns/governance:tla_disabled": [],
+        "//conditions:default": ["tla"],
+    }),
+    data = DEV_DATA + [
+        "//rs/nns/governance:tla_models",
+        "@bazel_tools//tools/jdk:current_java_runtime",
+        "@tla_apalache//:bin/apalache-mc",
+    ],
+    env = DEV_ENV | {
+        "TLA_APALACHE_BIN": "$(rootpath @tla_apalache//:bin/apalache-mc)",
+        "TLA_MODULES": "$(locations //rs/nns/governance:tla_models)",
+        "JAVABASE": "$(JAVABASE)",
+    },
     extra_srcs = ["src/lib.rs"],
     flaky = True,  # flakiness rate of 1.29% over the month from 2025-02-11 till 2025-03-11 for the "governance_time_warp" test
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    toolchains = ["@bazel_tools//tools/jdk:current_java_runtime"],  # for TLA/Apalache
     deps = DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
 )
 

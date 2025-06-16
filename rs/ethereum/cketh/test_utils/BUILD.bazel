@@ -34,7 +34,7 @@ rust_library(
         "@crate_index//:ethers-core",
         "@crate_index//:evm_rpc_types",
         "@crate_index//:hex",
-        "@crate_index//:ic_cdk_0_17_1",
+        "@crate_index//:ic-cdk",
         "@crate_index//:num-traits",
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",

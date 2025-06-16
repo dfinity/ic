@@ -46,8 +46,9 @@ use ic_management_canister_types_private::{
     SchnorrAlgorithm, SchnorrPublicKeyArgs, SchnorrPublicKeyResponse, SetupInitialDKGArgs,
     SignWithECDSAArgs, SignWithSchnorrArgs, SignWithSchnorrAux, StoredChunksArgs, SubnetInfoArgs,
     SubnetInfoResponse, TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs,
-    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs, UploadChunkArgs,
-    VetKdDeriveKeyArgs, VetKdPublicKeyArgs, VetKdPublicKeyResult, IC_00,
+    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
+    UploadCanisterSnapshotMetadataResponse, UploadChunkArgs, VetKdDeriveKeyArgs,
+    VetKdPublicKeyArgs, VetKdPublicKeyResult, IC_00,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -1658,7 +1659,10 @@ impl ExecutionEnvironment {
             Ok(Ic00Method::ReadCanisterSnapshotMetadata) => {
                 let res = ReadCanisterSnapshotMetadataArgs::decode(payload).and_then(|args| {
                     match self.config.canister_snapshot_download {
-                        FlagStatus::Disabled => Ok((vec![], None)),
+                        FlagStatus::Disabled => Err(UserError::new(
+                            ErrorCode::UnknownManagementMessage,
+                            "Not yet implemented".to_string(),
+                        )),
                         FlagStatus::Enabled => {
                             let canister_id = args.get_canister_id();
                             self.read_canister_snapshot_metadata(*msg.sender(), &state, args)
@@ -1673,12 +1677,14 @@ impl ExecutionEnvironment {
             }
 
             Ok(Ic00Method::ReadCanisterSnapshotData) => {
-                #[allow(clippy::bind_instead_of_map)]
                 let res = ReadCanisterSnapshotDataArgs::decode(payload).and_then(|args| match self
                     .config
                     .canister_snapshot_download
                 {
-                    FlagStatus::Disabled => Ok((vec![], None)),
+                    FlagStatus::Disabled => Err(UserError::new(
+                        ErrorCode::UnknownManagementMessage,
+                        "Not yet implemented".to_string(),
+                    )),
                     FlagStatus::Enabled => {
                         let canister_id = args.get_canister_id();
                         self.read_snapshot_data(
@@ -1697,33 +1703,72 @@ impl ExecutionEnvironment {
             }
 
             Ok(Ic00Method::UploadCanisterSnapshotMetadata) => {
-                // TODO: EXC-1959
-                #[allow(clippy::bind_instead_of_map)]
-                let res =
-                    UploadCanisterSnapshotMetadataArgs::decode(payload).and_then(
-                        |_args| match self.config.canister_snapshot_upload {
-                            FlagStatus::Disabled => Ok((vec![], None)),
-                            FlagStatus::Enabled => Ok((vec![], None)),
+                match UploadCanisterSnapshotMetadataArgs::decode(payload) {
+                    Err(err) => ExecuteSubnetMessageResult::Finished {
+                        response: Err(err),
+                        refund: msg.take_cycles(),
+                    },
+                    Ok(args) => match self.config.canister_snapshot_upload {
+                        FlagStatus::Disabled => ExecuteSubnetMessageResult::Finished {
+                            response: Err(UserError::new(
+                                ErrorCode::UnknownManagementMessage,
+                                "Not yet implemented".to_string(),
+                            )),
+                            refund: msg.take_cycles(),
                         },
-                    );
-                ExecuteSubnetMessageResult::Finished {
-                    response: res,
-                    refund: msg.take_cycles(),
+                        FlagStatus::Enabled => {
+                            let canister_id = args.get_canister_id();
+                            let (result, instructions_used) = self.create_snapshot_from_metadata(
+                                *msg.sender(),
+                                &mut state,
+                                args,
+                                registry_settings.subnet_size,
+                                round_limits,
+                            );
+                            let msg_result = ExecuteSubnetMessageResult::Finished {
+                                response: result.map(|res| (res, Some(canister_id))),
+                                refund: msg.take_cycles(),
+                            };
+                            let state =
+                                self.finish_subnet_message_execution(state, msg, msg_result, since);
+                            return (state, Some(instructions_used));
+                        }
+                    },
                 }
             }
 
             Ok(Ic00Method::UploadCanisterSnapshotData) => {
-                // TODO: EXC-1960
-                #[allow(clippy::bind_instead_of_map)]
-                let res = UploadCanisterSnapshotDataArgs::decode(payload).and_then(|_args| {
-                    match self.config.canister_snapshot_upload {
-                        FlagStatus::Disabled => Ok((vec![], None)),
-                        FlagStatus::Enabled => Ok((vec![], None)),
-                    }
-                });
-                ExecuteSubnetMessageResult::Finished {
-                    response: res,
-                    refund: msg.take_cycles(),
+                match UploadCanisterSnapshotDataArgs::decode(payload) {
+                    Err(err) => ExecuteSubnetMessageResult::Finished {
+                        response: Err(err),
+                        refund: msg.take_cycles(),
+                    },
+                    Ok(args) => match self.config.canister_snapshot_upload {
+                        FlagStatus::Disabled => ExecuteSubnetMessageResult::Finished {
+                            response: Err(UserError::new(
+                                ErrorCode::UnknownManagementMessage,
+                                "Not yet implemented".to_string(),
+                            )),
+                            refund: msg.take_cycles(),
+                        },
+                        FlagStatus::Enabled => {
+                            let canister_id = args.get_canister_id();
+                            let (result, instructions_used) = self.write_snapshot_data(
+                                *msg.sender(),
+                                &mut state,
+                                args,
+                                registry_settings.subnet_size,
+                                round_limits,
+                            );
+                            let msg_result = ExecuteSubnetMessageResult::Finished {
+                                response: result.map(|res| (res, Some(canister_id))),
+                                refund: msg.take_cycles(),
+                            };
+                            let state =
+                                self.finish_subnet_message_execution(state, msg, msg_result, since);
+                            return (state, Some(instructions_used));
+                        }
+                    },
                 }
             }
 
@@ -2258,7 +2303,7 @@ impl ExecutionEnvironment {
             .upload_chunk(
                 sender,
                 canister,
-                &args.chunk,
+                args.chunk,
                 round_limits,
                 subnet_size,
                 resource_saturation,
@@ -2328,7 +2373,7 @@ impl ExecutionEnvironment {
         let resource_saturation =
             self.subnet_memory_saturation(&round_limits.subnet_available_memory);
         let replace_snapshot = args.replace_snapshot();
-        let (result, instructions_used) = self.canister_manager.take_canister_snapshot(
+        let result = self.canister_manager.take_canister_snapshot(
             subnet_size,
             sender,
             &mut canister,
@@ -2341,8 +2386,8 @@ impl ExecutionEnvironment {
         state.put_canister_state(canister);
 
         match result {
-            Ok(response) => (Ok(response.encode()), instructions_used),
-            Err(err) => (Err(err.into()), instructions_used),
+            Ok((response, instructions_used)) => (Ok(response.encode()), instructions_used),
+            Err(err) => (Err(err.into()), NumInstructions::new(0)),
         }
     }
 
@@ -2504,6 +2549,97 @@ impl ExecutionEnvironment {
             .read_snapshot_metadata(sender, snapshot_id, canister, state)
             .map(|res| Encode!(&res).unwrap())
             .map_err(UserError::from)
+    }
+
+    fn create_snapshot_from_metadata(
+        &self,
+        sender: PrincipalId,
+        state: &mut ReplicatedState,
+        args: UploadCanisterSnapshotMetadataArgs,
+        subnet_size: usize,
+        round_limits: &mut RoundLimits,
+    ) -> (Result<Vec<u8>, UserError>, NumInstructions) {
+        let canister_id = args.get_canister_id();
+        // Take canister out.
+        let mut canister = match state.take_canister_state(&canister_id) {
+            None => {
+                return (
+                    Err(UserError::new(
+                        ErrorCode::CanisterNotFound,
+                        format!("Canister {} not found.", &canister_id),
+                    )),
+                    NumInstructions::new(0),
+                )
+            }
+            Some(canister) => canister,
+        };
+
+        let resource_saturation =
+            self.subnet_memory_saturation(&round_limits.subnet_available_memory);
+        let result = self.canister_manager.create_snapshot_from_metadata(
+            sender,
+            &mut canister,
+            args,
+            state,
+            subnet_size,
+            round_limits,
+            &resource_saturation,
+        );
+        // Put canister back.
+        state.put_canister_state(canister);
+        match result {
+            Ok((snapshot_id, instructions_used)) => (
+                Ok(Encode!(&UploadCanisterSnapshotMetadataResponse {
+                    snapshot_id: snapshot_id.to_vec()
+                })
+                .unwrap()),
+                instructions_used,
+            ),
+            Err(e) => (Err(e), NumInstructions::new(0)),
+        }
+    }
+
+    fn write_snapshot_data(
+        &self,
+        sender: PrincipalId,
+        state: &mut ReplicatedState,
+        args: UploadCanisterSnapshotDataArgs,
+        subnet_size: usize,
+        round_limits: &mut RoundLimits,
+    ) -> (Result<Vec<u8>, UserError>, NumInstructions) {
+        let canister_id = args.get_canister_id();
+        // Take canister out.
+        let mut canister = match state.take_canister_state(&canister_id) {
+            None => {
+                return (
+                    Err(UserError::new(
+                        ErrorCode::CanisterNotFound,
+                        format!("Canister {} not found.", &canister_id),
+                    )),
+                    NumInstructions::new(0),
+                )
+            }
+            Some(canister) => canister,
+        };
+
+        let resource_saturation =
+            self.subnet_memory_saturation(&round_limits.subnet_available_memory);
+        let result = self.canister_manager.write_snapshot_data(
+            sender,
+            &mut canister,
+            &args,
+            state,
+            round_limits,
+            subnet_size,
+            &resource_saturation,
+        );
+        // Put canister back.
+        state.put_canister_state(canister);
+
+        match result {
+            Ok(instructions_used) => (Ok(Encode!(&()).unwrap()), instructions_used),
+            Err(e) => (Err(UserError::from(e)), NumInstructions::new(0)),
+        }
     }
 
     fn node_metrics_history(
@@ -2953,16 +3089,17 @@ impl ExecutionEnvironment {
             ));
         }
 
-        let dpk = ic_vetkd_utils::DerivedPublicKey::deserialize(&subnet_public_key.public_key)
-            .map_err(|err| {
+        let dpk = ic_vetkeys::MasterPublicKey::deserialize(&subnet_public_key.public_key).map_err(
+            |err| {
                 UserError::new(
                     ErrorCode::CanisterRejectedMessage,
                     format!("Invalid VetKD subnet key: {:?}", err),
                 )
-            })?;
+            },
+        )?;
 
         Ok(dpk
-            .derive_sub_key(caller.as_slice())
+            .derive_canister_key(caller.as_slice())
             .derive_sub_key(&context)
             .serialize())
     }
@@ -2997,7 +3134,7 @@ impl ExecutionEnvironment {
                 ),
             ));
         };
-        if !ic_vetkd_utils::is_valid_transport_public_key_encoding(&args.transport_public_key) {
+        if !ic_vetkeys::is_valid_transport_public_key_encoding(&args.transport_public_key) {
             return Err(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 "The provided transport public key is invalid.",
@@ -3320,14 +3457,6 @@ impl ExecutionEnvironment {
                     return (state, Some(NumInstructions::from(0)));
                 }
             };
-
-        // Track whether the deprecated fields in install_code were used.
-        if install_context.compute_allocation.is_some() {
-            self.metrics.compute_allocation_in_install_code_total.inc();
-        }
-        if install_context.memory_allocation.is_some() {
-            self.metrics.memory_allocation_in_install_code_total.inc();
-        }
 
         let call_id = match call_id {
             None => {

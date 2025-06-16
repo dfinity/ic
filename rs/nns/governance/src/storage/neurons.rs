@@ -2,7 +2,7 @@ use crate::{
     neuron::{DecomposedNeuron, Neuron},
     neuron_store::NeuronStoreError,
     pb::v1::{
-        neuron::Followees, AbridgedNeuron, BallotInfo, KnownNeuronData, MaturityDisbursement,
+        AbridgedNeuron, BallotInfo, Followees, KnownNeuronData, MaturityDisbursement,
         NeuronStakeTransfer, Topic,
     },
     storage::validate_stable_btree_map,
@@ -440,6 +440,7 @@ where
         self.main.len().min(usize::MAX as u64) as usize
     }
 
+    #[cfg(any(test, feature = "canbench-rs", feature = "tla"))]
     pub fn range_neurons<R>(&self, range: R) -> impl Iterator<Item = Neuron> + '_
     where
         R: RangeBounds<NeuronId> + Clone,

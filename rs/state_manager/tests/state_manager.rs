@@ -3400,6 +3400,46 @@ fn can_state_sync_based_on_old_checkpoint() {
 }
 
 #[test]
+fn state_sync_doesnt_load_already_existing_cp() {
+    state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
+        let (_height, state) = src_state_manager.take_tip();
+        src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
+
+        let hash = wait_for_checkpoint(&*src_state_manager, height(1));
+        let id = StateSyncArtifactId {
+            height: height(1),
+            hash: hash.get(),
+        };
+        let msg = src_state_sync
+            .get(&id)
+            .expect("failed to get state sync message");
+
+        assert_error_counters(src_metrics);
+
+        state_manager_test_with_state_sync(|dst_metrics, dst_state_manager, dst_state_sync| {
+            dst_state_manager.take_tip();
+
+            let chunkable =
+                set_fetch_state_and_start_start_sync(&dst_state_manager, &dst_state_sync, &id);
+            let state_layout = dst_state_manager.state_layout();
+            let cp1_path = state_layout
+                .raw_path()
+                .join("checkpoints")
+                .join("0000000000000001");
+            assert!(state_layout.checkpoint_in_verification(height(1)).is_err());
+            std::fs::create_dir(&cp1_path).unwrap();
+            assert!(state_layout.checkpoint_in_verification(height(1)).is_ok());
+            std::fs::create_dir(cp1_path.join("garbage")).unwrap(); // rust successfully renames a directory into another if destination is empty
+
+            pipe_state_sync(msg, chunkable);
+
+            assert_no_remaining_chunks(dst_metrics);
+            assert_error_counters(dst_metrics);
+        })
+    });
+}
+
+#[test]
 fn can_recover_from_corruption_on_state_sync() {
     use ic_state_layout::{CheckpointLayout, RwPolicy};
 
@@ -6697,6 +6737,98 @@ fn restore_chunk_store_from_snapshot() {
     assert!(env.execute_ingress(canister_id, "read", vec![],).is_err(),);
 }
 
+/// Simplified version of canister migration that only does the parts relevant to the state manager.
+fn migrate_canister(state: &mut ReplicatedState, old_id: CanisterId, new_id: CanisterId) {
+    // Take canister out.
+    let mut canister = state.take_canister_state(&old_id).unwrap();
+
+    canister.system_state.canister_id = new_id;
+    state
+        .metadata
+        .unflushed_checkpoint_ops
+        .rename_canister(old_id, new_id);
+
+    // Put canister with the new id
+    state.put_canister_state(canister);
+}
+
+#[test]
+fn can_rename_canister() {
+    fn can_rename_canister_impl(certification_scope: CertificationScope) {
+        state_manager_test(|_metrics, state_manager| {
+            let canister_id = canister_test_id(100);
+            let new_canister_id = canister_test_id(101);
+
+            // Install a canister and give it some initial state
+            let (_height, mut state) = state_manager.take_tip();
+            insert_dummy_canister(&mut state, canister_id);
+            let canister_state = state.canister_state_mut(&canister_id).unwrap();
+            let execution_state = canister_state.execution_state.as_mut().unwrap();
+            execution_state
+                .wasm_memory
+                .page_map
+                .update(&[(PageIndex::new(0), &[1u8; PAGE_SIZE])]);
+            execution_state
+                .stable_memory
+                .page_map
+                .update(&[(PageIndex::new(0), &[2u8; PAGE_SIZE])]);
+            canister_state
+                .system_state
+                .wasm_chunk_store
+                .page_map_mut()
+                .update(&[(PageIndex::new(0), &[3u8; PAGE_SIZE])]);
+            state_manager.commit_and_certify(state, height(1), certification_scope.clone(), None);
+
+            let (_height, mut state) = state_manager.take_tip();
+            migrate_canister(&mut state, canister_id, new_canister_id);
+
+            // Take a snapshot to make sure we can do both in the same round.
+            let new_snapshot = CanisterSnapshot::from_canister(
+                state.canister_state(&new_canister_id).unwrap(),
+                state.time(),
+            )
+            .unwrap();
+            let snapshot_id = SnapshotId::from((new_canister_id, 0));
+            state.take_snapshot(snapshot_id, Arc::new(new_snapshot));
+
+            // Trigger a flush either at the checkpoint or by committing exactly
+            // `NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY` rounds before the checkpoint.
+            if certification_scope == CertificationScope::Full {
+                state_manager.commit_and_certify(
+                    state,
+                    height(2),
+                    certification_scope.clone(),
+                    None,
+                );
+            } else {
+                state_manager.commit_and_certify(
+                    state,
+                    height(2),
+                    certification_scope.clone(),
+                    Some(BatchSummary {
+                        next_checkpoint_height: height(
+                            2 + NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY,
+                        ),
+                        current_interval_length: height(500),
+                    }),
+                );
+            }
+            state_manager.flush_tip_channel();
+            let tip = CheckpointLayout::<ReadOnly>::new_untracked(
+                state_manager.state_layout().raw_path().join("tip"),
+                height(0),
+            )
+            .unwrap();
+            assert_eq!(tip.canister_ids().unwrap(), vec![new_canister_id]);
+            assert_eq!(tip.snapshot_ids().unwrap(), vec![snapshot_id]);
+            let (_height, state) = state_manager.take_tip();
+            assert!(state.system_metadata().unflushed_checkpoint_ops.is_empty());
+        });
+    }
+    can_rename_canister_impl(CertificationScope::Metadata);
+    can_rename_canister_impl(CertificationScope::Full);
+}
+
 #[test_strategy::proptest]
 fn stream_store_encode_decode(
     #[strategy(arb_stream(
@@ -6718,9 +6850,9 @@ fn stream_store_encode_decode(
         /* certification verification should succeed  */
         true,
         /* modification between encoding and decoding  */
-        |state_manager, slice| {
+        |_state_manager, slice| {
             // we do not modify the slice before decoding it again - so this should succeed
-            (state_manager, slice)
+            slice
         },
     );
 }
@@ -6747,12 +6879,12 @@ fn stream_store_decode_with_modified_hash_fails(
         /* certification verification should succeed  */
         true,
         /* modification between encoding and decoding  */
-        |state_manager, mut slice| {
+        |_state_manager, mut slice| {
             let mut hash = slice.certification.signed.content.hash.get();
             *hash.0.first_mut().unwrap() = hash.0.first().unwrap().overflowing_add(1).0;
             slice.certification.signed.content.hash = CryptoHashOfPartialState::from(hash);
 
-            (state_manager, slice)
+            slice
         },
     );
 }
@@ -6779,10 +6911,9 @@ fn stream_store_decode_with_empty_witness_fails(
         /* certification verification should succeed */
         true,
         /* modification between encoding and decoding  */
-        |state_manager, mut slice| {
+        |_state_manager, mut slice| {
             slice.merkle_proof = vec![];
-
-            (state_manager, slice)
+            slice
         },
     );
 }
@@ -6974,10 +7105,10 @@ fn stream_store_decode_with_invalid_destination(
         /* certification verification should succeed */
         true,
         /* modification between encoding and decoding  */
-        |state_manager, slice| {
+        |_state_manager, slice| {
             // Do not modify the slice before decoding it again - the wrong
             // destination subnet should already make it fail
-            (state_manager, slice)
+            slice
         },
     );
 }
@@ -7004,10 +7135,10 @@ fn stream_store_decode_with_rejecting_verifier(
         /* certification verification should fail */
         false,
         /* modification between encoding and decoding  */
-        |state_manager, slice| {
+        |_state_manager, slice| {
             // Do not modify the slice before decoding it again - the signature validation
             // failure caused by passing the `RejectingVerifier` should already make it fail.
-            (state_manager, slice)
+            slice
         },
     );
 }
@@ -7036,10 +7167,10 @@ fn stream_store_decode_with_invalid_destination_and_rejecting_verifier(
         /* certification verification should fail  */
         false,
         /* modification between encoding and decoding  */
-        |state_manager, slice| {
+        |_state_manager, slice| {
             // Do not modify the slice, the wrong destination subnet and rejecting verifier
             // should make it fail regardless.
-            (state_manager, slice)
+            slice
         },
     );
 }

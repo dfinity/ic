@@ -106,10 +106,7 @@ pub(crate) fn fake_stripped_block_proposal_with_ingresses(
 }
 
 pub(crate) fn fake_summary_block_proposal() -> ConsensusMessage {
-    let block = make_genesis(ic_types::consensus::dkg::DkgSummary::fake())
-        .content
-        .block
-        .into_inner();
+    let block = make_genesis(DkgSummary::fake()).content.block.into_inner();
 
     ConsensusMessage::BlockProposal(BlockProposal::fake(block, node_test_id(0)))
 }

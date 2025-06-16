@@ -1,7 +1,6 @@
 [Unit]
 Description=Monitor GuestOS virtual machine
 After=guestos.service
-Wants=guestos.service
 
 [Service]
 Type=oneshot

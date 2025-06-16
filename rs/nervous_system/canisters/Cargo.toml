@@ -25,3 +25,15 @@ icp-ledger = { path = "../../ledger_suite/icp" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 mockall = { workspace = true }
 prost = { workspace = true }
+
+[dev-dependencies]
+canister-test = { path = "../../rust_canisters/canister_test" }
+pocket-ic = { path = "../../../packages/pocket-ic" }
+ic-crypto-sha2 = { path = "../../crypto/sha2" }
+ic-nervous-system-agent = { path = "../agent" }
+ic-nervous-system-chunks = { path = "../chunks" }
+ic-nervous-system-integration-tests = { path = "../integration_tests" }
+ic-nns-test-utils = { path = "../../nns/test_utils" }
+ic-registry-fetch-large-record-test-canister = { path = "../../registry/fetch_large_record_test_canister" }
+serde = { workspace = true }
+tokio = { workspace = true }

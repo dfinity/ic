@@ -162,6 +162,14 @@ pub fn deliver_batches(
         let (mut ni_dkg_subnet_public_keys, ni_dkg_ids) = get_vetkey_public_keys(dkg_summary, log);
         chain_key_subnet_public_keys.append(&mut ni_dkg_subnet_public_keys);
 
+        // If the subnet contains chain keys, log them on every summary block
+        if !chain_key_subnet_public_keys.is_empty() && block.payload.is_summary() {
+            info!(
+                log,
+                "Subnet {} contains chain keys: {:?}", subnet_id, chain_key_subnet_public_keys
+            );
+        }
+
         let mut batch_stats = BatchStats::new(height);
 
         // Compute consensus' responses to subnet calls.

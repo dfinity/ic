@@ -1035,7 +1035,7 @@ impl CyclesAccountManager {
     ) -> Result<Cycles, CyclesAccountManagerError> {
         if canister_id != CYCLES_MINTING_CANISTER_ID {
             let error_str = format!(
-                "ic0.mint_cycles cannot be executed on non Cycles Minting Canister: {} != {}",
+                "ic0.mint_cycles128 cannot be executed on non Cycles Minting Canister: {} != {}",
                 canister_id, CYCLES_MINTING_CANISTER_ID
             );
             Err(CyclesAccountManagerError::ContractViolation(error_str))

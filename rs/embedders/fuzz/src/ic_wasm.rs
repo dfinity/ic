@@ -297,8 +297,8 @@ fn get_persisted_global(g: wasmparser::Global) -> Option<Global> {
     match (
         g.ty.content_type,
         g.init_expr
-            .get_binary_reader()
-            .read_operator()
+            .get_operators_reader()
+            .read()
             .expect("Unable to read operator for ConstExpr"),
     ) {
         (ValType::I32, Operator::I32Const { value }) => Some(Global::I32(value)),

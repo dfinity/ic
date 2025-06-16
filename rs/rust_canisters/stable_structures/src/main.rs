@@ -20,7 +20,7 @@ thread_local! {
 
 // BTree Operations
 
-#[ic_cdk_macros::query]
+#[ic_cdk::query]
 fn query_btree_u64_single_read(count: u32) {
     STABLE_BTREE_U64.with(|map| {
         let map = map.borrow();
@@ -30,7 +30,7 @@ fn query_btree_u64_single_read(count: u32) {
     })
 }
 
-#[ic_cdk_macros::query]
+#[ic_cdk::query]
 fn query_btree_u64_sparse_read(count: u32) {
     STABLE_BTREE_U64.with(|map| {
         let map = map.borrow();
@@ -42,7 +42,7 @@ fn query_btree_u64_sparse_read(count: u32) {
     })
 }
 
-#[ic_cdk_macros::update]
+#[ic_cdk::update]
 fn update_btree_u64_single_write(count: u32) {
     STABLE_BTREE_U64.with(|map| {
         let mut map = map.borrow_mut();
@@ -52,7 +52,7 @@ fn update_btree_u64_single_write(count: u32) {
     })
 }
 
-#[ic_cdk_macros::update]
+#[ic_cdk::update]
 fn update_btree_u64_sparse_write(count: u32) {
     STABLE_BTREE_U64.with(|map| {
         let mut map = map.borrow_mut();
@@ -73,14 +73,14 @@ fn btree_u64_insert(count: u32) {
     })
 }
 
-#[ic_cdk_macros::update]
+#[ic_cdk::update]
 fn update_btree_u64_insert(count: u32) {
     btree_u64_insert(count)
 }
 
 // Vector Operations
 
-#[ic_cdk_macros::query]
+#[ic_cdk::query]
 fn query_vec_u64_single_read(count: u32) {
     STABLE_VEC_U64.with(|vec| {
         let vec = vec.borrow();
@@ -90,7 +90,7 @@ fn query_vec_u64_single_read(count: u32) {
     })
 }
 
-#[ic_cdk_macros::query]
+#[ic_cdk::query]
 fn query_vec_u64_sparse_read(count: u32) {
     STABLE_VEC_U64.with(|vec| {
         let vec = vec.borrow();
@@ -102,7 +102,7 @@ fn query_vec_u64_sparse_read(count: u32) {
     })
 }
 
-#[ic_cdk_macros::update]
+#[ic_cdk::update]
 fn update_vec_u64_single_write(count: u32) {
     STABLE_VEC_U64.with(|vec| {
         let vec = vec.borrow();
@@ -112,7 +112,7 @@ fn update_vec_u64_single_write(count: u32) {
     })
 }
 
-#[ic_cdk_macros::update]
+#[ic_cdk::update]
 fn update_vec_u64_sparse_write(count: u32) {
     STABLE_VEC_U64.with(|vec| {
         let vec = vec.borrow();
@@ -133,18 +133,18 @@ fn vec_u64_insert(count: u32) {
     })
 }
 
-#[ic_cdk_macros::update]
+#[ic_cdk::update]
 fn update_vec_u64_insert(count: u32) {
     vec_u64_insert(count)
 }
 
-#[ic_cdk_macros::update]
+#[ic_cdk::update]
 fn update_empty() {}
 
-#[ic_cdk_macros::query]
+#[ic_cdk::query]
 fn query_empty() {}
 
-#[ic_cdk_macros::init]
+#[ic_cdk::init]
 fn init(structure: String, count: u32) {
     match structure.deref() {
         "btree_u64" => btree_u64_insert(count),

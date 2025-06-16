@@ -3,17 +3,15 @@ use crate::{
         LOG_PREFIX, MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS,
         MAX_NUM_HOT_KEYS_PER_NEURON,
     },
-    is_disburse_maturity_enabled,
     neuron::{combine_aged_stakes, dissolve_state_and_age::DissolveStateAndAge, neuron_stake_e8s},
     neuron_store::NeuronStoreError,
     pb::v1::{
         self as pb,
-        abridged_neuron::DissolveState as AbridgedNeuronDissolveState,
+        abridged_neuron::DissolveState,
         governance_error::ErrorType,
         manage_neuron::{configure::Operation, Configure},
-        neuron::{DissolveState as NeuronDissolveState, Followees},
-        AbridgedNeuron, Ballot, BallotInfo, GovernanceError, KnownNeuronData, MaturityDisbursement,
-        Neuron as NeuronProto, NeuronStakeTransfer, NeuronState, NeuronType, Topic, Vote,
+        AbridgedNeuron, Ballot, BallotInfo, Followees, GovernanceError, KnownNeuronData,
+        MaturityDisbursement, NeuronStakeTransfer, NeuronState, NeuronType, Topic, Vote,
         VotingPowerEconomics,
     },
     DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS,
@@ -1131,83 +1129,12 @@ impl Neuron {
     }
 }
 
-impl From<Neuron> for NeuronProto {
-    fn from(neuron: Neuron) -> NeuronProto {
-        let visibility = Some(neuron.visibility() as i32);
-
-        let Neuron {
-            id,
-            subaccount,
-            controller,
-            dissolve_state_and_age,
-            hot_keys,
-            cached_neuron_stake_e8s,
-            neuron_fees_e8s,
-            created_timestamp_seconds,
-            spawn_at_timestamp_seconds,
-            followees,
-            recent_ballots,
-            kyc_verified,
-            transfer,
-            maturity_e8s_equivalent,
-            staked_maturity_e8s_equivalent,
-            auto_stake_maturity,
-            not_for_profit,
-            joined_community_fund_timestamp_seconds,
-            known_neuron_data,
-            neuron_type,
-            visibility: _,
-            voting_power_refreshed_timestamp_seconds,
-            recent_ballots_next_entry_index,
-            maturity_disbursements_in_progress,
-        } = neuron;
-
-        let id = Some(id);
-        let controller = Some(controller);
-        let account = subaccount.to_vec();
-        let StoredDissolveStateAndAge {
-            dissolve_state,
-            aging_since_timestamp_seconds,
-        } = StoredDissolveStateAndAge::from(dissolve_state_and_age);
-        let voting_power_refreshed_timestamp_seconds =
-            Some(voting_power_refreshed_timestamp_seconds);
-        let recent_ballots_next_entry_index = recent_ballots_next_entry_index.map(|x| x as u32);
-
-        NeuronProto {
-            id,
-            account,
-            controller,
-            dissolve_state,
-            aging_since_timestamp_seconds,
-            hot_keys,
-            cached_neuron_stake_e8s,
-            neuron_fees_e8s,
-            created_timestamp_seconds,
-            spawn_at_timestamp_seconds,
-            followees,
-            recent_ballots,
-            kyc_verified,
-            transfer,
-            maturity_e8s_equivalent,
-            staked_maturity_e8s_equivalent,
-            auto_stake_maturity,
-            not_for_profit,
-            joined_community_fund_timestamp_seconds,
-            known_neuron_data,
-            neuron_type,
-            visibility,
-            voting_power_refreshed_timestamp_seconds,
-            recent_ballots_next_entry_index,
-            maturity_disbursements_in_progress,
-        }
-    }
-}
-
-impl TryFrom<NeuronProto> for Neuron {
+impl TryFrom<api::Neuron> for Neuron {
     type Error = String;
 
-    fn try_from(proto: NeuronProto) -> Result<Self, Self::Error> {
-        let NeuronProto {
+    fn try_from(src: api::Neuron) -> Result<Self, Self::Error> {
+        // Step 1: destructure the API type.
+        let api::Neuron {
             id,
             account,
             controller,
@@ -1231,19 +1158,31 @@ impl TryFrom<NeuronProto> for Neuron {
             neuron_type,
             visibility,
             voting_power_refreshed_timestamp_seconds,
-            recent_ballots_next_entry_index,
-            maturity_disbursements_in_progress,
-        } = proto;
 
+            // We do not allow these fields to be initialized by the user.
+            deciding_voting_power: _,
+            potential_voting_power: _,
+            maturity_disbursements_in_progress: _,
+        } = src;
+
+        // Step 2: some trivial conversions.
+        let followees = followees
+            .into_iter()
+            .map(|(k, v)| (k, Followees::from(v)))
+            .collect();
+        let recent_ballots = recent_ballots.into_iter().map(BallotInfo::from).collect();
+        let transfer = transfer.map(NeuronStakeTransfer::from);
+        let known_neuron_data = known_neuron_data.map(KnownNeuronData::from);
+
+        // Step 3: some conversions that might fail.
         let id = id.ok_or("Neuron ID is missing")?;
         let subaccount = Subaccount::try_from(account.as_slice())
             .map_err(|_| "Invalid subaccount".to_string())?;
         let controller = controller.ok_or(format!("Controller is missing for neuron {}", id.id))?;
-        let dissolve_state_and_age = DissolveStateAndAge::try_from(StoredDissolveStateAndAge {
-            dissolve_state,
-            aging_since_timestamp_seconds,
-        })?;
+        let dissolve_state_and_age =
+            DissolveStateAndAge::from_api(dissolve_state, aging_since_timestamp_seconds)?;
 
+        // Step 4: visibility.
         // Log (and if non-release build, also panic) if there is an
         // inconsistency between known_neuron_data and visibility.
         //
@@ -1283,11 +1222,15 @@ impl TryFrom<NeuronProto> for Neuron {
                 .unwrap_or(Visibility::Private)
         };
 
+        // Step 5: voting power refreshed timestamp.
         let voting_power_refreshed_timestamp_seconds = voting_power_refreshed_timestamp_seconds
             .unwrap_or(DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS);
 
-        let recent_ballots_next_entry_index = recent_ballots_next_entry_index.map(|x| x as usize);
+        // Step 6: some fields that are not set by the API type.
+        let recent_ballots_next_entry_index = None;
+        let maturity_disbursements_in_progress = vec![];
 
+        // Step 7: build the neuron.
         Ok(Neuron {
             id,
             subaccount,
@@ -1314,15 +1257,6 @@ impl TryFrom<NeuronProto> for Neuron {
             recent_ballots_next_entry_index,
             maturity_disbursements_in_progress,
         })
-    }
-}
-
-impl TryFrom<api::Neuron> for Neuron {
-    type Error = String;
-
-    fn try_from(neuron: api::Neuron) -> Result<Self, Self::Error> {
-        let neuron = NeuronProto::from(neuron);
-        Neuron::try_from(neuron)
     }
 }
 
@@ -1370,10 +1304,7 @@ impl Neuron {
         let id = Some(id);
         let controller = Some(controller);
         let account = subaccount.to_vec();
-        let StoredDissolveStateAndAge {
-            dissolve_state,
-            aging_since_timestamp_seconds,
-        } = StoredDissolveStateAndAge::from(dissolve_state_and_age);
+        let (dissolve_state, aging_since_timestamp_seconds) = dissolve_state_and_age.into_api();
         let voting_power_refreshed_timestamp_seconds =
             Some(voting_power_refreshed_timestamp_seconds);
 
@@ -1385,25 +1316,18 @@ impl Neuron {
         let transfer = transfer.map(api::NeuronStakeTransfer::from);
         let known_neuron_data = known_neuron_data.map(api::KnownNeuronData::from);
 
-        // Almost the same as above, with the only minor difference being that
-        // Foo is in some inner (sub)module within api, not directly within api.
-        let dissolve_state = dissolve_state.map(api::neuron::DissolveState::from);
-
         let followees = followees
             .into_iter()
             .map(|(topic_id, followees)| (topic_id, api::neuron::Followees::from(followees)))
             .collect();
 
-        let maturity_disbursements_in_progress = if is_disburse_maturity_enabled() {
-            Some(
-                maturity_disbursements_in_progress
-                    .into_iter()
-                    .map(api::MaturityDisbursement::from)
-                    .collect(),
-            )
-        } else {
-            None
-        };
+        let maturity_disbursements_in_progress = Some(
+            maturity_disbursements_in_progress
+                .into_iter()
+                .map(api::MaturityDisbursement::from)
+                .collect(),
+        );
+
         api::Neuron {
             id,
             account,
@@ -1432,32 +1356,6 @@ impl Neuron {
 
             potential_voting_power,
             deciding_voting_power,
-        }
-    }
-}
-
-impl From<AbridgedNeuronDissolveState> for NeuronDissolveState {
-    fn from(source: AbridgedNeuronDissolveState) -> Self {
-        use AbridgedNeuronDissolveState as S;
-        use NeuronDissolveState as D;
-        match source {
-            S::WhenDissolvedTimestampSeconds(timestamp) => {
-                D::WhenDissolvedTimestampSeconds(timestamp)
-            }
-            S::DissolveDelaySeconds(delay) => D::DissolveDelaySeconds(delay),
-        }
-    }
-}
-
-impl From<NeuronDissolveState> for AbridgedNeuronDissolveState {
-    fn from(source: NeuronDissolveState) -> Self {
-        use AbridgedNeuronDissolveState as D;
-        use NeuronDissolveState as S;
-        match source {
-            S::WhenDissolvedTimestampSeconds(timestamp) => {
-                D::WhenDissolvedTimestampSeconds(timestamp)
-            }
-            S::DissolveDelaySeconds(delay) => D::DissolveDelaySeconds(delay),
         }
     }
 }
@@ -1536,7 +1434,6 @@ impl TryFrom<Neuron> for DecomposedNeuron {
             dissolve_state,
             aging_since_timestamp_seconds,
         } = StoredDissolveStateAndAge::from(dissolve_state_and_age);
-        let dissolve_state = dissolve_state.map(AbridgedNeuronDissolveState::from);
         let visibility = Some(visibility as i32);
         let voting_power_refreshed_timestamp_seconds =
             Some(voting_power_refreshed_timestamp_seconds);
@@ -1627,7 +1524,7 @@ impl From<DecomposedNeuron> for Neuron {
             Subaccount::try_from(account.as_slice()).expect("Neuron account is missing");
         let controller = controller.expect("Neuron controller is missing");
         let dissolve_state_and_age = DissolveStateAndAge::try_from(StoredDissolveStateAndAge {
-            dissolve_state: dissolve_state.map(NeuronDissolveState::from),
+            dissolve_state,
             aging_since_timestamp_seconds,
         })
         .expect("Neuron dissolve state and age is invalid");
@@ -1776,6 +1673,32 @@ impl NeuronBuilder {
             #[cfg(test)]
             maturity_disbursements_in_progress: Vec::new(),
         }
+    }
+
+    /// In tests, we often don't care about the subaccount, controller or creation timestamp, so we
+    /// provide a constructor that allows to set only the ID and the dissolve state and age.
+    #[cfg(test)]
+    pub fn new_for_test(id: u64, dissolve_state_and_age: DissolveStateAndAge) -> Self {
+        let neuron_id = NeuronId::from_u64(id);
+
+        let mut account = vec![0; 32];
+        // Populate account so that it's not all zeros.
+        for (destination, data) in account.iter_mut().zip(id.to_le_bytes().iter().cycle()) {
+            *destination = *data;
+        }
+        let subaccount = Subaccount::try_from(account.as_slice()).unwrap();
+
+        let controller = PrincipalId::new_self_authenticating(&id.to_le_bytes());
+
+        let created_timestamp_seconds = 0;
+
+        Self::new(
+            neuron_id,
+            subaccount,
+            controller,
+            dissolve_state_and_age,
+            created_timestamp_seconds,
+        )
     }
 
     #[cfg(test)]
@@ -2010,7 +1933,7 @@ impl NeuronBuilder {
 /// An intermediate struct to represent a neuron's dissolve state and age on the storage layer.
 #[derive(Clone, PartialEq, Debug)]
 pub(crate) struct StoredDissolveStateAndAge {
-    pub dissolve_state: Option<NeuronDissolveState>,
+    pub dissolve_state: Option<DissolveState>,
     pub aging_since_timestamp_seconds: u64,
 }
 
@@ -2021,15 +1944,13 @@ impl From<DissolveStateAndAge> for StoredDissolveStateAndAge {
                 dissolve_delay_seconds,
                 aging_since_timestamp_seconds,
             } => StoredDissolveStateAndAge {
-                dissolve_state: Some(NeuronDissolveState::DissolveDelaySeconds(
-                    dissolve_delay_seconds,
-                )),
+                dissolve_state: Some(DissolveState::DissolveDelaySeconds(dissolve_delay_seconds)),
                 aging_since_timestamp_seconds,
             },
             DissolveStateAndAge::DissolvingOrDissolved {
                 when_dissolved_timestamp_seconds,
             } => StoredDissolveStateAndAge {
-                dissolve_state: Some(NeuronDissolveState::WhenDissolvedTimestampSeconds(
+                dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
                     when_dissolved_timestamp_seconds,
                 )),
                 aging_since_timestamp_seconds: u64::MAX,
@@ -2052,7 +1973,7 @@ impl TryFrom<StoredDissolveStateAndAge> for DissolveStateAndAge {
         };
 
         match dissolve_state {
-            NeuronDissolveState::DissolveDelaySeconds(dissolve_delay_seconds) => {
+            DissolveState::DissolveDelaySeconds(dissolve_delay_seconds) => {
                 if dissolve_delay_seconds > 0 {
                     Ok(DissolveStateAndAge::NotDissolving {
                         dissolve_delay_seconds,
@@ -2062,9 +1983,7 @@ impl TryFrom<StoredDissolveStateAndAge> for DissolveStateAndAge {
                     Err("Dissolve delay must be greater than 0".to_string())
                 }
             }
-            NeuronDissolveState::WhenDissolvedTimestampSeconds(
-                when_dissolved_timestamp_seconds,
-            ) => {
+            DissolveState::WhenDissolvedTimestampSeconds(when_dissolved_timestamp_seconds) => {
                 if aging_since_timestamp_seconds == u64::MAX {
                     Ok(DissolveStateAndAge::DissolvingOrDissolved {
                         when_dissolved_timestamp_seconds,

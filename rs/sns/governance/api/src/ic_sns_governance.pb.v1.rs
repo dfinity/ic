@@ -1645,6 +1645,33 @@ pub struct GetMetadataResponse {
     pub name: Option<String>,
     pub description: Option<String>,
 }
+/// Request message for 'get_metrics'.
+#[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, Copy, PartialEq)]
+pub struct GetMetricsRequest {
+    pub time_window_seconds: Option<u64>,
+}
+
+pub mod get_metrics_response {
+    use super::GovernanceError;
+
+    #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
+    pub struct Metrics {
+        pub num_recently_submitted_proposals: Option<u64>,
+        pub last_ledger_block_timestamp: Option<u64>,
+    }
+
+    #[derive(candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
+    pub enum GetMetricsResult {
+        Ok(Metrics),
+        Err(GovernanceError),
+    }
+
+    #[derive(candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq, Default)]
+    pub struct GetMetricsResponse {
+        pub get_metrics_result: Option<GetMetricsResult>,
+    }
+}
+
 /// Request message for 'get_sns_initialization_parameters'
 #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, Copy, PartialEq)]
 pub struct GetSnsInitializationParametersRequest {}

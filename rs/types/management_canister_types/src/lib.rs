@@ -1571,8 +1571,6 @@ impl Payload<'_> for CanisterStatusResultV2 {}
 ///     canister_id: principal;
 ///     wasm_module: blob;
 ///     arg: blob;
-///     compute_allocation: opt nat;
-///     memory_allocation: opt nat;
 ///     sender_canister_version : opt nat64;
 /// })`
 #[derive(Clone, Debug, CandidType, Deserialize)]
@@ -1583,8 +1581,6 @@ pub struct InstallCodeArgs {
     pub wasm_module: Vec<u8>,
     #[serde(with = "serde_bytes")]
     pub arg: Vec<u8>,
-    pub compute_allocation: Option<candid::Nat>,
-    pub memory_allocation: Option<candid::Nat>,
     pub sender_canister_version: Option<u64>,
 }
 
@@ -1595,22 +1591,6 @@ impl std::fmt::Display for InstallCodeArgs {
         writeln!(f, "  canister_id: {:?}", &self.canister_id)?;
         writeln!(f, "  wasm_module: <{:?} bytes>", self.wasm_module.len())?;
         writeln!(f, "  arg: <{:?} bytes>", self.arg.len())?;
-        writeln!(
-            f,
-            "  compute_allocation: {:?}",
-            &self
-                .compute_allocation
-                .as_ref()
-                .map(|value| format!("{}", value))
-        )?;
-        writeln!(
-            f,
-            "  memory_allocation: {:?}",
-            &self
-                .memory_allocation
-                .as_ref()
-                .map(|value| format!("{}", value))
-        )?;
         writeln!(f, "}}")
     }
 }
@@ -1623,16 +1603,12 @@ impl InstallCodeArgs {
         canister_id: CanisterId,
         wasm_module: Vec<u8>,
         arg: Vec<u8>,
-        compute_allocation: Option<u64>,
-        memory_allocation: Option<u64>,
     ) -> Self {
         Self {
             mode,
             canister_id: canister_id.into(),
             wasm_module,
             arg,
-            compute_allocation: compute_allocation.map(candid::Nat::from),
-            memory_allocation: memory_allocation.map(candid::Nat::from),
             sender_canister_version: None,
         }
     }
@@ -1654,8 +1630,6 @@ pub struct InstallCodeArgsV2 {
     pub wasm_module: Vec<u8>,
     #[serde(with = "serde_bytes")]
     pub arg: Vec<u8>,
-    pub compute_allocation: Option<candid::Nat>,
-    pub memory_allocation: Option<candid::Nat>,
     pub sender_canister_version: Option<u64>,
 }
 
@@ -1666,22 +1640,6 @@ impl std::fmt::Display for InstallCodeArgsV2 {
         writeln!(f, "  canister_id: {:?}", &self.canister_id)?;
         writeln!(f, "  wasm_module: <{:?} bytes>", self.wasm_module.len())?;
         writeln!(f, "  arg: <{:?} bytes>", self.arg.len())?;
-        writeln!(
-            f,
-            "  compute_allocation: {:?}",
-            &self
-                .compute_allocation
-                .as_ref()
-                .map(|value| format!("{}", value))
-        )?;
-        writeln!(
-            f,
-            "  memory_allocation: {:?}",
-            &self
-                .memory_allocation
-                .as_ref()
-                .map(|value| format!("{}", value))
-        )?;
         writeln!(f, "}}")
     }
 }
@@ -1694,16 +1652,12 @@ impl InstallCodeArgsV2 {
         canister_id: CanisterId,
         wasm_module: Vec<u8>,
         arg: Vec<u8>,
-        compute_allocation: Option<u64>,
-        memory_allocation: Option<u64>,
     ) -> Self {
         Self {
             mode,
             canister_id: canister_id.into(),
             wasm_module,
             arg,
-            compute_allocation: compute_allocation.map(candid::Nat::from),
-            memory_allocation: memory_allocation.map(candid::Nat::from),
             sender_canister_version: None,
         }
     }
@@ -2577,6 +2531,11 @@ impl MasterPublicKeyId {
             Self::Ecdsa(_) | Self::Schnorr(_) => true,
             Self::VetKd(_) => false,
         }
+    }
+
+    /// Check whether this type of [`MasterPublicKeyId`] is a VetKd key
+    pub fn is_vetkd_key(&self) -> bool {
+        matches!(self, Self::VetKd(_))
     }
 
     /// Check whether this type of [`MasterPublicKeyId`] requires pre-signatures
@@ -3752,9 +3711,9 @@ impl TryFrom<pb_canister_state_bits::Global> for Global {
 
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
 pub struct ReadCanisterSnapshotMetadataArgs {
-    canister_id: PrincipalId,
+    pub canister_id: PrincipalId,
     #[serde(with = "serde_bytes")]
-    snapshot_id: Vec<u8>,
+    pub snapshot_id: Vec<u8>,
 }
 
 impl ReadCanisterSnapshotMetadataArgs {
@@ -3792,7 +3751,7 @@ impl<'a> Payload<'a> for ReadCanisterSnapshotMetadataArgs {
 pub enum SnapshotSource {
     #[default]
     TakenFromCanister,
-    UploadedManually,
+    MetadataUpload,
 }
 
 impl From<SnapshotSource> for pb_canister_snapshot_bits::SnapshotSource {
@@ -3801,7 +3760,7 @@ impl From<SnapshotSource> for pb_canister_snapshot_bits::SnapshotSource {
             SnapshotSource::TakenFromCanister => {
                 pb_canister_snapshot_bits::SnapshotSource::TakenFromCanister
             }
-            SnapshotSource::UploadedManually => {
+            SnapshotSource::MetadataUpload => {
                 pb_canister_snapshot_bits::SnapshotSource::UploadedManually
             }
         }
@@ -3823,7 +3782,7 @@ impl TryFrom<pb_canister_snapshot_bits::SnapshotSource> for SnapshotSource {
                 Ok(SnapshotSource::TakenFromCanister)
             }
             pb_canister_snapshot_bits::SnapshotSource::UploadedManually => {
-                Ok(SnapshotSource::UploadedManually)
+                Ok(SnapshotSource::MetadataUpload)
             }
         }
     }
@@ -3877,6 +3836,8 @@ pub struct ReadCanisterSnapshotMetadataResponse {
     pub global_timer: Option<GlobalTimer>,
     pub on_low_wasm_memory_hook_status: Option<OnLowWasmMemoryHookStatus>,
 }
+
+impl Payload<'_> for ReadCanisterSnapshotMetadataResponse {}
 
 /// An inner type of [`ReadCanisterSnapshotMetadataResponse`].
 ///
@@ -3987,7 +3948,20 @@ pub struct ReadCanisterSnapshotDataArgs {
     pub kind: CanisterSnapshotDataKind,
 }
 
-impl Payload<'_> for ReadCanisterSnapshotDataArgs {}
+// TODO: EXC-1997.
+impl<'a> Payload<'a> for ReadCanisterSnapshotDataArgs {
+    fn decode(blob: &'a [u8]) -> Result<Self, UserError> {
+        let args = Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error)?;
+        // Verify that snapshot ID has the correct format.
+        if let Err(err) = SnapshotId::try_from(&args.snapshot_id) {
+            return Err(UserError::new(
+                ErrorCode::InvalidManagementPayload,
+                format!("Payload deserialization error: {err:?}"),
+            ));
+        }
+        Ok(args)
+    }
+}
 
 impl ReadCanisterSnapshotDataArgs {
     pub fn new(
@@ -4041,6 +4015,8 @@ pub struct ReadCanisterSnapshotDataResponse {
     pub chunk: Vec<u8>,
 }
 
+impl Payload<'_> for ReadCanisterSnapshotDataResponse {}
+
 impl ReadCanisterSnapshotDataResponse {
     pub fn new(chunk: Vec<u8>) -> Self {
         Self { chunk }
@@ -4062,11 +4038,11 @@ impl ReadCanisterSnapshotDataResponse {
 ///     wasm_memory_size : nat64;
 ///     stable_memory_size : nat64;
 ///     certified_data : blob;
-///     global_timer : variant {
+///     global_timer : opt variant {
 ///         inactive;
 ///         active : nat64;
 ///     };
-///     on_low_wasm_memory_hook_status : variant {
+///     on_low_wasm_memory_hook_status : opt variant {
 ///         condition_not_satisfied;
 ///         ready;
 ///         executed;
@@ -4083,11 +4059,29 @@ pub struct UploadCanisterSnapshotMetadataArgs {
     pub stable_memory_size: u64,
     #[serde(with = "serde_bytes")]
     pub certified_data: Vec<u8>,
-    pub global_timer: GlobalTimer,
-    pub on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
+    pub global_timer: Option<GlobalTimer>,
+    pub on_low_wasm_memory_hook_status: Option<OnLowWasmMemoryHookStatus>,
 }
 
-impl Payload<'_> for UploadCanisterSnapshotMetadataArgs {}
+// TODO: EXC-1997.
+impl<'a> Payload<'a> for UploadCanisterSnapshotMetadataArgs {
+    fn decode(blob: &'a [u8]) -> Result<Self, UserError> {
+        let args = Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error)?;
+        // Verify that snapshot ID has the correct format.
+        match args.replace_snapshot {
+            None => {}
+            Some(ref snapshot_id) => {
+                if let Err(err) = SnapshotId::try_from(&snapshot_id.to_vec()) {
+                    return Err(UserError::new(
+                        ErrorCode::InvalidManagementPayload,
+                        format!("Payload deserialization error: {err:?}"),
+                    ));
+                }
+            }
+        }
+        Ok(args)
+    }
+}
 
 impl UploadCanisterSnapshotMetadataArgs {
     pub fn new(
@@ -4098,8 +4092,8 @@ impl UploadCanisterSnapshotMetadataArgs {
         wasm_memory_size: u64,
         stable_memory_size: u64,
         certified_data: Vec<u8>,
-        global_timer: GlobalTimer,
-        on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
+        global_timer: Option<GlobalTimer>,
+        on_low_wasm_memory_hook_status: Option<OnLowWasmMemoryHookStatus>,
     ) -> Self {
         Self {
             canister_id: canister_id.get(),
@@ -4116,6 +4110,43 @@ impl UploadCanisterSnapshotMetadataArgs {
 
     pub fn get_canister_id(&self) -> CanisterId {
         CanisterId::unchecked_from_principal(self.canister_id)
+    }
+
+    pub fn replace_snapshot(&self) -> Option<SnapshotId> {
+        self.replace_snapshot
+            .as_ref()
+            // TODO: EXC-1997.
+            .map(|bytes| SnapshotId::try_from(&bytes.clone().into_vec()).unwrap())
+    }
+
+    /// Returns the size of this snapshot, excluding the size of the wasm chunk store.
+    pub fn snapshot_size_bytes(&self) -> NumBytes {
+        let num_bytes = self.wasm_module_size
+            + self.wasm_memory_size
+            + self.stable_memory_size
+            + self.certified_data.len() as u64
+            + self.exported_globals.len() as u64 * size_of::<Global>() as u64;
+
+        NumBytes::new(num_bytes)
+    }
+}
+
+/// Struct to encode/decode
+/// (record {
+///     snapshot_id: blob;
+/// };)
+#[derive(Clone, Debug, Deserialize, CandidType, Serialize)]
+pub struct UploadCanisterSnapshotMetadataResponse {
+    #[serde(with = "serde_bytes")]
+    pub snapshot_id: Vec<u8>,
+}
+
+impl Payload<'_> for UploadCanisterSnapshotMetadataResponse {}
+
+impl UploadCanisterSnapshotMetadataResponse {
+    // TODO: EXC-1997.
+    pub fn get_snapshot_id(&self) -> SnapshotId {
+        SnapshotId::try_from(&self.snapshot_id).unwrap()
     }
 }
 
@@ -4148,18 +4179,31 @@ pub struct UploadCanisterSnapshotDataArgs {
     pub chunk: Vec<u8>,
 }
 
-impl Payload<'_> for UploadCanisterSnapshotDataArgs {}
+// TODO: EXC-1997.
+impl<'a> Payload<'a> for UploadCanisterSnapshotDataArgs {
+    fn decode(blob: &'a [u8]) -> Result<Self, UserError> {
+        let args = Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error)?;
+        // Verify that snapshot ID has the correct format.
+        if let Err(err) = SnapshotId::try_from(&args.snapshot_id) {
+            return Err(UserError::new(
+                ErrorCode::InvalidManagementPayload,
+                format!("Payload deserialization error: {err:?}"),
+            ));
+        }
+        Ok(args)
+    }
+}
 
 impl UploadCanisterSnapshotDataArgs {
     pub fn new(
         canister_id: CanisterId,
-        snapshot_id: Vec<u8>,
+        snapshot_id: SnapshotId,
         kind: CanisterSnapshotDataOffset,
         chunk: Vec<u8>,
     ) -> Self {
         Self {
             canister_id: canister_id.get(),
-            snapshot_id,
+            snapshot_id: snapshot_id.to_vec(),
             kind,
             chunk,
         }
@@ -4167,6 +4211,10 @@ impl UploadCanisterSnapshotDataArgs {
 
     pub fn get_canister_id(&self) -> CanisterId {
         CanisterId::unchecked_from_principal(self.canister_id)
+    }
+
+    pub fn get_snapshot_id(&self) -> SnapshotId {
+        SnapshotId::try_from(&self.snapshot_id).unwrap()
     }
 }
 

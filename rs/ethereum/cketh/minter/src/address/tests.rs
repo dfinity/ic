@@ -1,5 +1,6 @@
 mod validate_address_as_destination {
     use crate::address::{validate_address_as_destination, Address, AddressValidationError};
+    use crate::blocklist::SAMPLE_BLOCKED_ADDRESS;
     use assert_matches::assert_matches;
     use proptest::{prop_assert_eq, prop_assume, proptest};
     use std::str::FromStr;
@@ -14,11 +15,9 @@ mod validate_address_as_destination {
 
     #[test]
     fn should_fail_when_address_is_blocked() {
-        let blocked_address: Address = "0x01e2919679362dFBC9ee1644Ba9C6da6D6245BB1"
-            .parse()
-            .unwrap();
+        let blocked_address: Address = SAMPLE_BLOCKED_ADDRESS;
         assert_eq!(
-            validate_address_as_destination("0x01e2919679362dFBC9ee1644Ba9C6da6D6245BB1"),
+            validate_address_as_destination(SAMPLE_BLOCKED_ADDRESS.to_string().as_str()),
             Err(AddressValidationError::Blocked(blocked_address))
         );
     }
