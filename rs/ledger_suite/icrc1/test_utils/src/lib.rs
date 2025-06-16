@@ -481,10 +481,11 @@ impl TransactionsAndBalances {
                 self.debit(from, amount.get_e8s());
             }
             Operation::Transfer {
-                from, to, amount, ..
+                from, to, amount, spender, ..
             } => {
                 self.credit(to, amount.get_e8s());
-                assert_eq!(tx.from(), from);
+                let caller = spender.unwrap_or(from);
+                assert_eq!(tx.from(), caller);
                 self.debit(from, amount.get_e8s() + fee);
             }
             Operation::Approve {
@@ -872,6 +873,7 @@ pub fn valid_transactions_strategy(
             .collect();
         
         if allowance_entries.is_empty() {
+            println!("no allowances available for transfer_from");
             // Return a strategy that will never generate values but has the right type  
             return Just(ArgWithCaller {
                 caller: minter_identity.clone(),
@@ -917,9 +919,11 @@ pub fn valid_transactions_strategy(
                         if max_amount > 0 {
                             Some((from, spender, max_amount))
                         } else {
+                            println!("max amount is 0");
                             None
                         }
                     } else {
+                        println!("account does not match the allowance 'from' account");
                         None
                     }
                 })
@@ -953,6 +957,7 @@ pub fn valid_transactions_strategy(
                                 };
 
                                 if from == to || from == minter || to == minter || spender == from || spender == to || tx_hash_set.contains(&tx) {
+                                    println!("tx is a duplicate or self transfer");
                                     None
                                 } else {
                                     let caller = account_to_basic_identity.get(&spender.owner).unwrap().clone();
@@ -1044,13 +1049,20 @@ pub fn valid_transactions_strategy(
                 allowance_map_pointer.clone(),
             )
             .boxed();
-            proptest::strategy::Union::new_weighted(vec![
+            
+            let mut options = vec![
                 (10, approve_strategy),
                 (1, burn_strategy),
                 (1, mint_strategy),
                 (1000, transfer_strategy),
-                (100, transfer_from_strategy),
-            ])
+            ];
+            
+            // Set transfer_from weight if allowances exist
+            if !state.allowances.is_empty() {
+                options.push((100, transfer_from_strategy));
+            }
+
+            proptest::strategy::Union::new_weighted(options)
             .boxed()
         };
 
