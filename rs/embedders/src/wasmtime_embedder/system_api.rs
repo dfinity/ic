@@ -13,7 +13,7 @@ use ic_interfaces::execution_environment::{
 use ic_logger::{error, ReplicaLogger};
 use ic_management_canister_types_private::{
     EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
-    VetKdKeyId,
+    VetKdKeyId, IC_00,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
@@ -393,13 +393,12 @@ impl ApiType {
     }
 
     pub fn system_task(
-        caller: PrincipalId,
         system_task: SystemMethod,
         time: Time,
         call_context_id: CallContextId,
     ) -> Self {
         Self::SystemTask {
-            caller,
+            caller: IC_00.get(),
             time,
             call_context_id,
             outgoing_request: None,
@@ -407,7 +406,6 @@ impl ApiType {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn update(
         time: Time,
         incoming_payload: Vec<u8>,
@@ -661,16 +659,16 @@ impl ApiType {
     pub fn caller(&self) -> Option<PrincipalId> {
         match self {
             ApiType::Start { .. } => None,
-            ApiType::Init { caller, .. } => Some(*caller),
-            ApiType::SystemTask { .. } => None,
-            ApiType::Update { caller, .. } => Some(*caller),
-            ApiType::ReplicatedQuery { caller, .. } => Some(*caller),
-            ApiType::NonReplicatedQuery { caller, .. } => Some(*caller),
-            ApiType::ReplyCallback { caller, .. } => Some(*caller),
-            ApiType::RejectCallback { caller, .. } => Some(*caller),
-            ApiType::PreUpgrade { caller, .. } => Some(*caller),
-            ApiType::InspectMessage { caller, .. } => Some(*caller),
-            ApiType::Cleanup { caller, .. } => Some(*caller),
+            ApiType::Init { caller, .. }
+            | ApiType::SystemTask { caller, .. }
+            | ApiType::Update { caller, .. }
+            | ApiType::ReplicatedQuery { caller, .. }
+            | ApiType::NonReplicatedQuery { caller, .. }
+            | ApiType::ReplyCallback { caller, .. }
+            | ApiType::RejectCallback { caller, .. }
+            | ApiType::PreUpgrade { caller, .. }
+            | ApiType::InspectMessage { caller, .. }
+            | ApiType::Cleanup { caller, .. } => Some(*caller),
         }
     }
 
@@ -1249,22 +1247,6 @@ impl SystemApiImpl {
             being called in the correct message types."
                 .to_string(),
             doc_link: doc_ref("calling-a-system-api-from-the-wrong-mode"),
-        }
-    }
-
-    fn get_msg_caller_id(&self, method_name: &str) -> Result<PrincipalId, HypervisorError> {
-        match &self.api_type {
-            ApiType::Start { .. } => Err(self.error_for(method_name)),
-            ApiType::SystemTask { caller, .. }
-            | ApiType::Cleanup { caller, .. }
-            | ApiType::ReplyCallback { caller, .. }
-            | ApiType::RejectCallback { caller, .. }
-            | ApiType::Init { caller, .. }
-            | ApiType::Update { caller, .. }
-            | ApiType::ReplicatedQuery { caller, .. }
-            | ApiType::PreUpgrade { caller, .. }
-            | ApiType::InspectMessage { caller, .. }
-            | ApiType::NonReplicatedQuery { caller, .. } => Ok(*caller),
         }
     }
 
@@ -1862,8 +1844,10 @@ impl SystemApi for SystemApiImpl {
 
     fn ic0_msg_caller_size(&self) -> HypervisorResult<usize> {
         let result = self
-            .get_msg_caller_id("ic0_msg_caller_size")
-            .map(|caller_id| caller_id.as_slice().len());
+            .api_type
+            .caller()
+            .map(|caller_id| caller_id.as_slice().len())
+            .ok_or_else(|| self.error_for("ic0_msg_caller_size"));
         trace_syscall!(self, MsgCallerSize, result);
         result
     }
@@ -1875,8 +1859,8 @@ impl SystemApi for SystemApiImpl {
         size: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
-        let result = match self.get_msg_caller_id("ic0_msg_caller_copy") {
-            Ok(caller_id) => {
+        let result = match self.api_type.caller() {
+            Some(caller_id) => {
                 let id_bytes = caller_id.as_slice();
                 valid_subslice(
                     "ic0.msg_caller_copy heap",
@@ -1893,7 +1877,7 @@ impl SystemApi for SystemApiImpl {
                 deterministic_copy_from_slice(&mut heap[dst..dst + size], slice);
                 Ok(())
             }
-            Err(err) => Err(err),
+            None => Err(self.error_for("ic0_msg_caller_copy")),
         };
         trace_syscall!(
             self,
@@ -3435,35 +3419,19 @@ impl SystemApi for SystemApiImpl {
     }
 
     fn ic0_is_controller(&self, src: usize, size: usize, heap: &[u8]) -> HypervisorResult<u32> {
-        let result = match &self.api_type {
-            ApiType::Start { .. }
-            | ApiType::Init { .. }
-            | ApiType::SystemTask { .. }
-            | ApiType::Update { .. }
-            | ApiType::Cleanup { .. }
-            | ApiType::ReplicatedQuery { .. }
-            | ApiType::NonReplicatedQuery { .. }
-            | ApiType::PreUpgrade { .. }
-            | ApiType::ReplyCallback { .. }
-            | ApiType::RejectCallback { .. }
-            | ApiType::InspectMessage { .. } => {
-                let msg_bytes = valid_subslice(
-                    "ic0.is_controller",
-                    InternalAddress::new(src),
-                    InternalAddress::new(size),
-                    heap,
-                )?;
-                PrincipalId::try_from(msg_bytes)
-                    .map(|principal_id| {
-                        self.sandbox_safe_system_state
-                            .is_controller(&principal_id)
-                            .into()
-                    })
-                    .map_err(|e| {
-                        HypervisorError::InvalidPrincipalId(PrincipalIdBlobParseError(e.0))
-                    })
-            }
-        };
+        let msg_bytes = valid_subslice(
+            "ic0.is_controller",
+            InternalAddress::new(src),
+            InternalAddress::new(size),
+            heap,
+        )?;
+        let result = PrincipalId::try_from(msg_bytes)
+            .map(|principal_id| {
+                self.sandbox_safe_system_state
+                    .is_controller(&principal_id)
+                    .into()
+            })
+            .map_err(|e| HypervisorError::InvalidPrincipalId(PrincipalIdBlobParseError(e.0)));
 
         trace_syscall!(
             self,

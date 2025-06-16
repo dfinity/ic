@@ -23,7 +23,10 @@
 //! * A node must not issue new notarization share for any round older than the
 //!   latest round, which would break security if it has already finality-signed
 //!   for that round.
-use crate::consensus::metrics::NotaryMetrics;
+use crate::consensus::{
+    metrics::NotaryMetrics, ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP,
+    ACCEPTABLE_NOTARIZATION_CUP_GAP,
+};
 use ic_consensus_utils::{
     crypto::ConsensusCrypto,
     find_lowest_ranked_non_disqualified_proposals, get_notarization_delay_settings,
@@ -57,15 +60,6 @@ const ACCEPTABLE_FINALIZATION_CERTIFICATION_GAP: u64 = 1;
 /// for each height that the latest finalized block is ahead of the latest certified state.
 /// The value was chosen empirically.
 const BACKLOG_DELAY_MILLIS: u64 = 2_000;
-
-/// In order to have a bound on the advertised consensus pool, we place a limit on
-/// the notarization/certification gap.
-const ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP: u64 = 70;
-
-/// In order to have a bound on the advertised consensus pool, we place a limit on
-/// the gap between notarized height and the height of the next pending CUP.
-pub(crate) const ACCEPTABLE_NOTARIZATION_CUP_GAP: u64 = 70;
-
 pub struct Notary {
     time_source: Arc<dyn TimeSource>,
     replica_config: ReplicaConfig,
