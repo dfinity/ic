@@ -43,9 +43,9 @@ use ic_nns_governance_api::{
         self,
         claim_or_refresh::{self, MemoAndController},
         configure::Operation,
-        AddHotKey, ClaimOrRefresh, Configure, Disburse, DisburseMaturity, Follow,
-        IncreaseDissolveDelay, JoinCommunityFund, LeaveCommunityFund, RegisterVote, RemoveHotKey,
-        Split, StakeMaturity,
+        AddHotKey, ChangeAutoStakeMaturity, ClaimOrRefresh, Configure, Disburse, DisburseMaturity,
+        Follow, IncreaseDissolveDelay, JoinCommunityFund, LeaveCommunityFund, RegisterVote,
+        RemoveHotKey, Split, StakeMaturity,
     },
     manage_neuron_response::{self, ClaimOrRefreshResponse},
     Empty, ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
@@ -1485,6 +1485,23 @@ pub fn nns_stake_maturity(
 ) -> ManageNeuronResponse {
     let command = ManageNeuronCommandRequest::StakeMaturity(StakeMaturity {
         percentage_to_stake,
+    });
+
+    manage_neuron_or_panic(state_machine, sender, neuron_id, command)
+}
+
+pub fn nns_set_auto_stake_maturity(
+    state_machine: &StateMachine,
+    sender: PrincipalId,
+    neuron_id: NeuronId,
+    auto_stake: bool,
+) -> ManageNeuronResponse {
+    let command = ManageNeuronCommandRequest::Configure(Configure {
+        operation: Some(Operation::ChangeAutoStakeMaturity(
+            ChangeAutoStakeMaturity {
+                requested_setting_for_auto_stake_maturity: auto_stake,
+            },
+        )),
     });
 
     manage_neuron_or_panic(state_machine, sender, neuron_id, command)
