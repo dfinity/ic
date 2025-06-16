@@ -1,6 +1,6 @@
 use ic_crypto_internal_csp_proptest_utils::{
     arb_algorithm_id, arb_csp_multi_signature_error, arb_csp_multi_signature_keygen_error,
-    arb_csp_pop, arb_csp_public_key, arb_csp_signature, arb_key_id,
+    arb_csp_pop, arb_csp_public_key, arb_csp_signature,
 };
 use ic_crypto_temp_crypto_vault::RemoteVaultEnvironment;
 use ic_crypto_test_utils_local_csp_vault::MockLocalCspVault;
@@ -18,7 +18,6 @@ proptest! {
     #[test]
     fn should_delegate_for_multi_sign(
         algorithm_id in arb_algorithm_id(),
-        key_id in arb_key_id(),
         message in vec(any::<u8>(), 0..1024),
         expected_result in maybe_err(arb_csp_signature(), arb_csp_multi_signature_error())
     ) {
@@ -27,14 +26,14 @@ proptest! {
         local_vault
             .expect_multi_sign()
             .times(1)
-            .withf(move |algorithm_id_, message_, key_id_| {
-                *algorithm_id_ == algorithm_id && message_ == &expected_message && *key_id_ == key_id
+            .withf(move |algorithm_id_, message_| {
+                *algorithm_id_ == algorithm_id && message_ == &expected_message
             })
             .return_const(expected_result.clone());
         let env = RemoteVaultEnvironment::start_server_with_local_csp_vault(Arc::new(local_vault));
         let remote_vault = env.new_vault_client();
 
-        let result = remote_vault.multi_sign(algorithm_id, message, key_id);
+        let result = remote_vault.multi_sign(algorithm_id, message);
 
         prop_assert_eq!(result, expected_result);
     }
