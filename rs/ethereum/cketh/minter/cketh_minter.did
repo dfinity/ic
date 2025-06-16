@@ -83,6 +83,11 @@ type InitArg = record {
     // Block number to start scrapping from on the Ethereum network.
     // Scrapping the logs will resume at `last_scraped_block_number + 1` (inclusive).
     last_scraped_block_number : nat;
+
+    // The principal of the EVM RPC canister that handles the communication
+    // with the Ethereum blockchain. If not specified, uses the production or
+    // staging EVM RPC canister based on the ethereum_network field.
+    evm_rpc_id : opt principal;
 };
 
 type UpgradeArg = record {

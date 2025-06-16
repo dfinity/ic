@@ -7,7 +7,7 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/types/management_canister_types",
     "@crate_index//:candid",
-    "@crate_index//:ic_cdk_0_17_1",
+    "@crate_index//:ic-cdk",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
     "@crate_index//:serde_json",
@@ -15,7 +15,6 @@ DEPENDENCIES = [
 
 MACRO_DEPENDENCIES = [
     # Keep sorted.
-    "@crate_index//:ic_cdk_macros_0_17_1",
 ]
 
 DEV_DEPENDENCIES = []

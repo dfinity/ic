@@ -10,9 +10,9 @@ DEPENDENCIES = [
     "//rs/nns/constants",
     "//rs/rust_canisters/canister_log",
     "@crate_index//:candid",
+    "@crate_index//:ic-cdk",
     "@crate_index//:ic-cdk-timers",
     "@crate_index//:ic-stable-structures",
-    "@crate_index//:ic_cdk_0_17_1",
     "@crate_index//:prometheus",
     "@crate_index//:serde",
     "@crate_index//:serde_cbor",
@@ -22,7 +22,6 @@ DEPENDENCIES = [
 
 MACRO_DEPENDENCIES = [
     # Keep sorted.
-    "@crate_index//:ic_cdk_macros_0_17_1",
 ]
 
 rust_canister(

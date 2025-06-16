@@ -30,6 +30,7 @@ pub fn serve_metrics(
                                     "text/plain; version=0.0.4".to_string(),
                                 ),
                                 ("Content-Length".to_string(), body.len().to_string()),
+                                ("Cache-Control".to_string(), "no-store".to_string()),
                             ],
                             body: ByteBuf::from(body),
                         }

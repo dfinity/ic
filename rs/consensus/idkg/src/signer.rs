@@ -55,6 +55,21 @@ enum CreateSigShareError {
     VetKd(Box<VetKdKeyShareCreationError>),
 }
 
+impl CreateSigShareError {
+    fn is_nidkg_transcript_not_loaded(&self) -> bool {
+        match self {
+            CreateSigShareError::Ecdsa(_) => false,
+            CreateSigShareError::Schnorr(_) => false,
+            CreateSigShareError::VetKd(err) => {
+                matches!(
+                    err.as_ref(),
+                    &VetKdKeyShareCreationError::ThresholdSigDataNotFound(_)
+                )
+            }
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 enum VerifySigShareError {
     Ecdsa(ThresholdEcdsaVerifySigShareError),
@@ -70,6 +85,20 @@ impl VerifySigShareError {
             VerifySigShareError::Schnorr(err) => err.is_reproducible(),
             VerifySigShareError::VetKd(err) => err.is_reproducible(),
             VerifySigShareError::ThresholdSchemeMismatch => true,
+        }
+    }
+
+    fn is_nidkg_transcript_not_loaded(&self) -> bool {
+        match self {
+            VerifySigShareError::Ecdsa(_) => false,
+            VerifySigShareError::Schnorr(_) => false,
+            VerifySigShareError::VetKd(err) => {
+                matches!(
+                    err,
+                    &VetKdKeyShareVerificationError::ThresholdSigDataNotFound(_)
+                )
+            }
+            VerifySigShareError::ThresholdSchemeMismatch => false,
         }
     }
 }
@@ -297,7 +326,12 @@ impl ThresholdSignerImpl {
                     share_string,
                     error
                 );
-                self.metrics.sign_errors_inc("verify_sig_share_transient");
+                let label = if error.is_nidkg_transcript_not_loaded() {
+                    "verify_sig_share_nidkg_transcript_not_loaded"
+                } else {
+                    "verify_sig_share_transient"
+                };
+                self.metrics.sign_errors_inc(label);
                 None
             }
             Ok(share) => {
@@ -390,7 +424,12 @@ impl ThresholdSignerImpl {
                     request_id,
                     err
                 );
-                self.metrics.sign_errors_inc("create_sig_share");
+                let label = if err.is_nidkg_transcript_not_loaded() {
+                    "create_sig_share_nidkg_transcript_not_loaded"
+                } else {
+                    "create_sig_share"
+                };
+                self.metrics.sign_errors_inc(label);
                 Default::default()
             }
             Ok(share) => {

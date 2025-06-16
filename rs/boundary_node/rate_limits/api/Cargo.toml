@@ -8,7 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 candid = { workspace = true }
-humantime = "2.1"
+humantime = { workspace = true }
 ic-bn-lib = { workspace = true }
 ipnet = { workspace = true }
 regex = { workspace = true }

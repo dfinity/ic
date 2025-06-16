@@ -5,10 +5,15 @@ use ic_interfaces::{
 };
 use ic_types::{artifact::ConsensusMessageId, consensus::ConsensusMessageHash, Height};
 
+use crate::consensus::{
+    ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP, ACCEPTABLE_NOTARIZATION_CUP_GAP,
+};
+
 /// Return a bouncer function that matches the given consensus pool.
 pub fn new_bouncer(
     pool: &dyn ConsensusPool,
     expected_batch_height: Height,
+    certified_height: Height,
 ) -> Bouncer<ConsensusMessageId> {
     let pool_reader = PoolReader::new(pool);
     let cup_height = pool_reader.get_catch_up_height();
@@ -21,6 +26,7 @@ pub fn new_bouncer(
         compute_bouncer(
             cup_height,
             next_cup_height,
+            certified_height,
             expected_batch_height,
             finalized_height,
             notarized_height,
@@ -33,16 +39,12 @@ pub fn new_bouncer(
 /// We do not need to request artifacts that are too far ahead.
 const LOOK_AHEAD: u64 = 10;
 
-/// In order to have a bound on the validated consensus pool, we don't validate
-/// artifacts with a height greater than the given value above the next pending CUP.
-/// The only exception to this are CUPs, which have no upper bound on the height.
-const ACCEPTABLE_VALIDATION_CUP_GAP: u64 = 70;
-
 /// The actual bouncer computation utilizing cached BlockSets instead of
 /// having to read from the pool every time when it is called.
 fn compute_bouncer(
     cup_height: Height,
     next_cup_height: Height,
+    certified_height: Height,
     expected_batch_height: Height,
     finalized_height: Height,
     notarized_height: Height,
@@ -54,10 +56,12 @@ fn compute_bouncer(
     if height < expected_batch_height.min(cup_height) {
         return Unwanted;
     }
-    // Stash non-CUP artifacts, as long as they're too far ahead of the next CUP height.
+    // Stash non-CUP artifacts, as long as they're too far ahead of the next pending CUP height,
+    // or the latest certified height.
     // This prevents nodes that have fallen behind to exceed their validated pool bounds.
     if !matches!(id.hash, ConsensusMessageHash::CatchUpPackage(_))
-        && height > next_cup_height + Height::new(ACCEPTABLE_VALIDATION_CUP_GAP)
+        && (height > next_cup_height + Height::new(ACCEPTABLE_NOTARIZATION_CUP_GAP)
+            || height > certified_height + Height::new(ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP))
     {
         return MaybeWantsLater;
     }
@@ -135,9 +139,9 @@ mod tests {
     };
 
     #[test]
-    fn test_bouncer_for_validation_cup_gap() {
+    fn test_bouncer_for_validation_gap() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let dkg_interval = ACCEPTABLE_VALIDATION_CUP_GAP + 29;
+            let dkg_interval = 499;
             let committee = (0..4).map(node_test_id).collect::<Vec<_>>();
             let Dependencies { mut pool, .. } = dependencies_with_subnet_params(
                 pool_config,
@@ -152,11 +156,13 @@ mod tests {
 
             // Advance pool *without* producing CUP to the maximum height beyond
             // which we don't validate non-CUP artifacts anymore.
-            let max_validation_height = dkg_interval + ACCEPTABLE_VALIDATION_CUP_GAP + 1;
+            let max_validation_height = dkg_interval + ACCEPTABLE_NOTARIZATION_CUP_GAP + 1;
             pool.advance_round_normal_operation_no_cup_n(max_validation_height);
 
+            let certified_height =
+                Height::new(max_validation_height - ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP + 1);
             let expected_batch_height = Height::from(1);
-            let bouncer = new_bouncer(&pool, expected_batch_height);
+            let bouncer = new_bouncer(&pool, expected_batch_height, certified_height);
 
             // Artifacts at the next height are within look-ahead, but exceed
             // the validator-CUP gap. We should stash them, but not fetch them.
@@ -186,7 +192,7 @@ mod tests {
 
             // Insert CUP for next summary height and recompute bouncer function.
             pool.insert_validated(pool.make_catch_up_package(Height::new(dkg_interval + 1)));
-            let bouncer = new_bouncer(&pool, expected_batch_height);
+            let bouncer = new_bouncer(&pool, expected_batch_height, certified_height);
 
             // The artifacts are not outside the validation-CUP gap, and
             // within look-ahead distance. We should fetch them all.
@@ -194,6 +200,15 @@ mod tests {
             assert_eq!(bouncer(&block.get_id()), Wants);
             assert_eq!(bouncer(&notarization.get_id()), Wants);
             assert_eq!(bouncer(&equivocation_proof_id), Wants);
+
+            // If the certified height is lagging behind, we should stash them however.
+            let bouncer = new_bouncer(&pool, expected_batch_height, certified_height.decrement());
+            assert_eq!(bouncer(&beacon.get_id()), MaybeWantsLater);
+            assert_eq!(bouncer(&block.get_id()), MaybeWantsLater);
+            assert_eq!(bouncer(&notarization.get_id()), MaybeWantsLater);
+            assert_eq!(bouncer(&equivocation_proof_id), MaybeWantsLater);
+            // Regardless of bounds, we should always fetch CUPs.
+            assert_eq!(bouncer(&cup_id), Wants);
         })
     }
 
@@ -204,7 +219,8 @@ mod tests {
             pool.advance_round_normal_operation_n(2);
 
             let expected_batch_height = Height::from(1);
-            let bouncer = new_bouncer(&pool, expected_batch_height);
+            let certified_height = Height::from(1);
+            let bouncer = new_bouncer(&pool, expected_batch_height, certified_height);
             // New block ==> Wants
             pool.insert_validated(pool.make_next_beacon());
             let block = pool.make_next_block();
@@ -234,19 +250,19 @@ mod tests {
             // Move block back to unvalidated after attribute is computed
             pool.purge_validated_below(block.clone());
             pool.insert_unvalidated(block.clone());
-            let bouncer = new_bouncer(&pool, expected_batch_height);
+            let bouncer = new_bouncer(&pool, expected_batch_height, certified_height);
             assert_eq!(bouncer(&dup_notarization_id), Wants);
 
             // Moving block to validated does not affect result
             pool.remove_unvalidated(block.clone());
             pool.insert_validated(block.clone());
-            let bouncer = new_bouncer(&pool, expected_batch_height);
+            let bouncer = new_bouncer(&pool, expected_batch_height, certified_height);
             assert_eq!(bouncer(&dup_notarization_id), Wants);
 
             // Definite duplicate notarization ==> Wants but within look ahead window
             pool.insert_validated(notarization.clone());
             pool.remove_unvalidated(notarization);
-            let bouncer = new_bouncer(&pool, expected_batch_height);
+            let bouncer = new_bouncer(&pool, expected_batch_height, certified_height);
             assert_eq!(bouncer(&dup_notarization_id), Wants);
 
             // Put finalization in the unvalidated pool
@@ -260,13 +276,13 @@ mod tests {
             let mut dup_finalization = finalization.clone();
             let dup_finalization_id = dup_finalization.get_id();
             dup_finalization.signature.signers = vec![node_test_id(42)];
-            let bouncer = new_bouncer(&pool, expected_batch_height);
+            let bouncer = new_bouncer(&pool, expected_batch_height, certified_height);
             assert_eq!(bouncer(&dup_finalization_id), Wants);
 
             // Once finalized, possible duplicate finalization ==> Drop
             pool.insert_validated(finalization.clone());
             pool.remove_unvalidated(finalization);
-            let bouncer = new_bouncer(&pool, expected_batch_height);
+            let bouncer = new_bouncer(&pool, expected_batch_height, certified_height);
             assert_eq!(bouncer(&dup_finalization_id), Unwanted);
 
             // Add notarizations until we reach finalized_height + LOOK_AHEAD.
@@ -293,7 +309,7 @@ mod tests {
                     > PoolReader::new(&pool).get_finalized_height().get() + LOOK_AHEAD
             );
             // Recompute bouncer function since pool content has changed
-            let bouncer = new_bouncer(&pool, expected_batch_height);
+            let bouncer = new_bouncer(&pool, expected_batch_height, certified_height);
             // Still fetch even when notarization is much ahead of finalization
             assert_eq!(bouncer(&notarization.get_id()), Wants);
         })

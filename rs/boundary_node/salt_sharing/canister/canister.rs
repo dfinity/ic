@@ -7,7 +7,7 @@ use crate::storage::SALT;
 use ic_cdk::api::call::{accept_message, method_name};
 use ic_cdk::{api::time, spawn};
 use ic_cdk::{caller, trap};
-use ic_cdk_macros::{init, inspect_message, post_upgrade, query};
+use ic_cdk::{init, inspect_message, post_upgrade, query};
 use ic_cdk_timers::set_timer;
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use salt_sharing_api::{GetSaltError, GetSaltResponse, InitArg, SaltResponse};

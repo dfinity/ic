@@ -4,7 +4,7 @@ use ic_btc_interface::{
     MillisatoshiPerByte, Network, Utxo, UtxosFilterInRequest,
 };
 use ic_cdk::api::management_canister::bitcoin::{BitcoinNetwork, SendTransactionRequest};
-use ic_cdk_macros::{init, update};
+use ic_cdk::{init, update};
 use serde_bytes::ByteBuf;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};

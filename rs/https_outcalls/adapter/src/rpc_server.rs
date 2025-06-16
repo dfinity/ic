@@ -50,8 +50,8 @@ const MAX_HEADER_LIST_SIZE: u32 = 52 * 1024;
 /// The maximum number of times we will try to connect to a SOCKS proxy.
 const MAX_SOCKS_PROXY_TRIES: usize = 2;
 
-/// TODO(NET-1765): Make this 100.
-const NEW_SOCKS_PROXY_ROLLOUT: u32 = 50;
+/// TODO(NET-1765): Inline this constant into the code and remove the feature flag.
+const NEW_SOCKS_PROXY_ROLLOUT: u32 = 100;
 
 type OutboundRequestBody = Full<Bytes>;
 
@@ -137,11 +137,17 @@ impl CanisterHttp {
         http_connector
             .set_connect_timeout(Some(Duration::from_secs(self.http_connect_timeout_secs)));
 
+        let builder = HttpsConnectorBuilder::new()
+            .with_native_roots()
+            .expect("Failed to set native roots");
+
+        #[cfg(not(feature = "http"))]
+        let builder = builder.https_only();
+        #[cfg(feature = "http")]
+        let builder = builder.https_or_http();
+
         Client::builder(TokioExecutor::new()).build::<_, Full<Bytes>>(
-            HttpsConnectorBuilder::new()
-                .with_native_roots()
-                .expect("Failed to set native roots")
-                .https_only()
+            builder
                 .enable_all_versions()
                 .wrap_connector(SocksConnector {
                     proxy_addr,

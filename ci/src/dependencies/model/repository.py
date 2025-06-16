@@ -15,6 +15,8 @@ class Repository:
     projects: typing.List[Project] = field(default_factory=list)
     """version of the compilation engine"""
     engine_version: typing.Optional[str] = None
+    """whether this is a private repository"""
+    is_private: bool = False
 
     def __post_init__(self):
         """Validate field values after initialization"""

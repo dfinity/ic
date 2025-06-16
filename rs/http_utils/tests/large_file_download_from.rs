@@ -26,7 +26,8 @@ async fn get_hash(downloader: FileDownloader, version: &str) -> String {
 
 #[tokio::test]
 async fn test_large_file_download() {
-    let version = std::env::var("MAINNET_NNS_SUBNET_REVISION_ENV").unwrap();
+    // Known commit where the artifacts have been uploaded
+    let version = "6a5718d4e45acc80a26506f34d1525c482330b56".to_string();
 
     // Use a normal downloader since hash is required for further testing.
     let downloader = FileDownloader::new_with_timeout(None, std::time::Duration::from_secs(30));

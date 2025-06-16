@@ -88,6 +88,8 @@ const ETH_ADDRESS_BLOCKLIST: &[Address] = &[\n"""
         return """pub fn is_blocked(address: &Address) -> bool {
     ETH_ADDRESS_BLOCKLIST.binary_search(address).is_ok()
 }
+
+pub const SAMPLE_BLOCKED_ADDRESS: Address = ETH_ADDRESS_BLOCKLIST[0];
 """
 
     def format_address(self, address):

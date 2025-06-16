@@ -953,6 +953,7 @@ mod tests {
     use ic_types::{
         batch::ValidationContext,
         consensus::{
+            dkg::DkgSummary,
             idkg::{self, MasterKeyTranscript, TranscriptAttributes},
             Block, BlockPayload, CatchUpContent, HashedBlock, HashedRandomBeacon, Payload,
             RandomBeacon, RandomBeaconContent, Rank, SummaryPayload,
@@ -1050,8 +1051,7 @@ mod tests {
             Payload::new(
                 ic_types::crypto::crypto_hash,
                 BlockPayload::Summary(SummaryPayload {
-                    dkg: ic_types::consensus::dkg::Summary::fake()
-                        .with_current_transcripts(nidkg_transcripts),
+                    dkg: DkgSummary::fake().with_current_transcripts(nidkg_transcripts),
                     idkg: Some(idkg),
                 }),
             ),

@@ -1,6 +1,6 @@
 //! This module contains a canister used for testing responses with variable payload size
 use candid::{CandidType, Deserialize};
-use ic_cdk_macros::query;
+use ic_cdk::query;
 use serde::Serialize;
 
 /// All methods get this struct as an argument encoded in a JSON string.

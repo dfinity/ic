@@ -12,9 +12,9 @@ DEPENDENCIES = [
     "@crate_index//:anyhow",
     "@crate_index//:candid",
     "@crate_index//:getrandom",
+    "@crate_index//:ic-cdk",
     "@crate_index//:ic-cdk-timers",
     "@crate_index//:ic-stable-structures",
-    "@crate_index//:ic_cdk_0_17_1",
     "@crate_index//:mockall",
     "@crate_index//:prometheus",
     "@crate_index//:rand_chacha",
@@ -28,7 +28,6 @@ DEPENDENCIES = [
 
 MACRO_DEPENDENCIES = [
     # Keep sorted.
-    "@crate_index//:ic_cdk_macros_0_17_1",
 ]
 
 rust_canister(

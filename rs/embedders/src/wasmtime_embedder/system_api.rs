@@ -3016,6 +3016,92 @@ impl SystemApi for SystemApiImpl {
         result
     }
 
+    fn ic0_root_key_size(&self) -> HypervisorResult<usize> {
+        let method_name = "ic0_root_key_size";
+        let result = match &self.api_type {
+            ApiType::Start { .. }
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::InspectMessage { .. } => Err(self.error_for(method_name)),
+            ApiType::Init { .. }
+            | ApiType::SystemTask { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::Update { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::RejectCallback { .. }
+            | ApiType::PreUpgrade { .. } => {
+                // Reply and reject callbacks can be executed in non-replicated mode
+                // iff from within a composite query call. Always disallow in that case.
+                if self.execution_parameters.execution_mode == ExecutionMode::NonReplicated {
+                    return Err(self.error_for(method_name));
+                }
+
+                let root_key = self.sandbox_safe_system_state.get_root_key();
+                Ok(root_key.as_slice().len())
+            }
+        };
+
+        trace_syscall!(self, RootKeySize, result);
+        result
+    }
+
+    fn ic0_root_key_copy(
+        &self,
+        dst: usize,
+        offset: usize,
+        size: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()> {
+        let method_name = "ic0.root_key_copy";
+        let result = match &self.api_type {
+            ApiType::Start { .. }
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::InspectMessage { .. } => Err(self.error_for(method_name)),
+            ApiType::Init { .. }
+            | ApiType::SystemTask { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::Update { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::RejectCallback { .. }
+            | ApiType::PreUpgrade { .. } => {
+                // Reply and reject callbacks can be executed in non-replicated mode
+                // iff from within a composite query call. Always disallow in that case.
+                if self.execution_parameters.execution_mode == ExecutionMode::NonReplicated {
+                    return Err(self.error_for(method_name));
+                }
+
+                valid_subslice(
+                    "ic0.root_key_copy heap",
+                    InternalAddress::new(dst),
+                    InternalAddress::new(size),
+                    heap,
+                )?;
+                let root_key = self.sandbox_safe_system_state.get_root_key();
+                let root_key_bytes = root_key.as_slice();
+                let slice = valid_subslice(
+                    "ic0.root_key_copy bytes",
+                    InternalAddress::new(offset),
+                    InternalAddress::new(size),
+                    root_key_bytes,
+                )?;
+                deterministic_copy_from_slice(&mut heap[dst..dst + size], slice);
+
+                Ok(())
+            }
+        };
+        trace_syscall!(
+            self,
+            RootKeyCopy,
+            dst,
+            offset,
+            size,
+            summarize(heap, dst, size)
+        );
+
+        result
+    }
+
     fn ic0_data_certificate_present(&self) -> HypervisorResult<i32> {
         let result = match &self.api_type {
             ApiType::Start { .. } => Err(self.error_for("ic0_data_certificate_present")),

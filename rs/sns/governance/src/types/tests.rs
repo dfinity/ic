@@ -3,7 +3,6 @@ use crate::pb::v1::{
     claim_swap_neurons_request::neuron_recipe,
     governance::Mode::PreInitializationSwap,
     nervous_system_function::{FunctionType, GenericNervousSystemFunction},
-    neuron::Followees,
     ExecuteGenericNervousSystemFunction, Proposal, ProposalData, VotingRewardsParameters,
 };
 use candid::Nat;
@@ -1046,7 +1045,7 @@ fn test_neuron_permission_list_display_impl_doesnt_panic_unknown_permission() {
     );
 }
 
-mod neuron_recipe_construct_followees_tests {
+mod neuron_recipe_construct_topic_followees_tests {
     use super::*;
 
     #[test]
@@ -1057,36 +1056,59 @@ mod neuron_recipe_construct_followees_tests {
             neuron_id: Some(b0.clone()),
             ..NeuronRecipe::validate_default_direct_participant()
         };
-        assert_eq!(recipe.construct_followees(), btreemap! {});
+        assert_eq!(
+            recipe.construct_topic_followees(),
+            TopicFollowees::default()
+        );
     }
 
     #[test]
     fn test_direct_participant_single_followee() {
         let [b0, b1] = NeuronId::test_neuron_ids();
-        let w = u64::from(&Action::Unspecified(Empty {}));
+
         let recipe = NeuronRecipe {
             followees: Some(NeuronIds::from(vec![b0.clone()])),
             neuron_id: Some(b1.clone()),
             ..NeuronRecipe::validate_default_direct_participant()
         };
         assert_eq!(
-            recipe.construct_followees(),
-            btreemap! { w => Followees { followees: vec![b0.clone()] } }
+            recipe.construct_topic_followees(),
+            TopicFollowees {
+                topic_id_to_followees: btreemap! {
+                    1 => FolloweesForTopic { followees: vec![Followee { neuron_id: Some(b0.clone()), alias: Some("Neuron-basket-main".to_string()) }], topic: Some(1) },
+                    2 => FolloweesForTopic { followees: vec![Followee { neuron_id: Some(b0.clone()), alias: Some("Neuron-basket-main".to_string()) }], topic: Some(2) },
+                    3 => FolloweesForTopic { followees: vec![Followee { neuron_id: Some(b0.clone()), alias: Some("Neuron-basket-main".to_string()) }], topic: Some(3) },
+                    4 => FolloweesForTopic { followees: vec![Followee { neuron_id: Some(b0.clone()), alias: Some("Neuron-basket-main".to_string()) }], topic: Some(4) },
+                    5 => FolloweesForTopic { followees: vec![Followee { neuron_id: Some(b0.clone()), alias: Some("Neuron-basket-main".to_string()) }], topic: Some(5) },
+                    6 => FolloweesForTopic { followees: vec![Followee { neuron_id: Some(b0.clone()), alias: Some("Neuron-basket-main".to_string()) }], topic: Some(6) },
+                    7 => FolloweesForTopic { followees: vec![Followee { neuron_id: Some(b0.clone()), alias: Some("Neuron-basket-main".to_string()) }], topic: Some(7) },
+                }
+            }
         );
     }
 
     #[test]
     fn test_direct_participant_multiple_followees() {
         let [b0, b1, b2] = NeuronId::test_neuron_ids();
-        let w = u64::from(&Action::Unspecified(Empty {}));
+
         let recipe = NeuronRecipe {
             followees: Some(NeuronIds::from(vec![b0.clone(), b1.clone()])),
             neuron_id: Some(b2.clone()),
             ..NeuronRecipe::validate_default_direct_participant()
         };
         assert_eq!(
-            recipe.construct_followees(),
-            btreemap! { w => Followees { followees: vec![b0.clone(), b1.clone()] } }
+            recipe.construct_topic_followees(),
+            TopicFollowees {
+                topic_id_to_followees: btreemap! {
+                    1 => FolloweesForTopic { followees: vec![Followee { neuron_id: Some(b0.clone()), alias: Some("Followee-0".to_string()) }, Followee { neuron_id: Some(b1.clone()), alias: Some("Followee-1".to_string()) }], topic: Some(1) },
+                    2 => FolloweesForTopic { followees: vec![Followee { neuron_id: Some(b0.clone()), alias: Some("Followee-0".to_string()) }, Followee { neuron_id: Some(b1.clone()), alias: Some("Followee-1".to_string()) }], topic: Some(2) },
+                    3 => FolloweesForTopic { followees: vec![Followee { neuron_id: Some(b0.clone()), alias: Some("Followee-0".to_string()) }, Followee { neuron_id: Some(b1.clone()), alias: Some("Followee-1".to_string()) }], topic: Some(3) },
+                    4 => FolloweesForTopic { followees: vec![Followee { neuron_id: Some(b0.clone()), alias: Some("Followee-0".to_string()) }, Followee { neuron_id: Some(b1.clone()), alias: Some("Followee-1".to_string()) }], topic: Some(4) },
+                    5 => FolloweesForTopic { followees: vec![Followee { neuron_id: Some(b0.clone()), alias: Some("Followee-0".to_string()) }, Followee { neuron_id: Some(b1.clone()), alias: Some("Followee-1".to_string()) }], topic: Some(5) },
+                    6 => FolloweesForTopic { followees: vec![Followee { neuron_id: Some(b0.clone()), alias: Some("Followee-0".to_string()) }, Followee { neuron_id: Some(b1.clone()), alias: Some("Followee-1".to_string()) }], topic: Some(6) },
+                    7 => FolloweesForTopic { followees: vec![Followee { neuron_id: Some(b0.clone()), alias: Some("Followee-0".to_string()) }, Followee { neuron_id: Some(b1.clone()), alias: Some("Followee-1".to_string()) }], topic: Some(7) },
+                }
+            }
         );
     }
 
@@ -1098,36 +1120,59 @@ mod neuron_recipe_construct_followees_tests {
             neuron_id: Some(b1.clone()),
             ..NeuronRecipe::validate_default_neurons_fund()
         };
-        assert_eq!(recipe.construct_followees(), btreemap! {});
+        assert_eq!(
+            recipe.construct_topic_followees(),
+            TopicFollowees::default()
+        );
     }
 
     #[test]
     fn test_neurons_fund_single_followee() {
         let [b0, b1] = NeuronId::test_neuron_ids();
-        let w = u64::from(&Action::Unspecified(Empty {}));
+
         let recipe = NeuronRecipe {
             followees: Some(NeuronIds::from(vec![b0.clone()])),
             neuron_id: Some(b1.clone()),
             ..NeuronRecipe::validate_default_neurons_fund()
         };
         assert_eq!(
-            recipe.construct_followees(),
-            btreemap! { w => Followees { followees: vec![b0.clone()] } }
+            recipe.construct_topic_followees(),
+            TopicFollowees {
+                topic_id_to_followees: btreemap! {
+                    1 => FolloweesForTopic { followees: vec![Followee { neuron_id: Some(b0.clone()), alias: Some("Neuron-basket-main".to_string()) }], topic: Some(1) },
+                    2 => FolloweesForTopic { followees: vec![Followee { neuron_id: Some(b0.clone()), alias: Some("Neuron-basket-main".to_string()) }], topic: Some(2) },
+                    3 => FolloweesForTopic { followees: vec![Followee { neuron_id: Some(b0.clone()), alias: Some("Neuron-basket-main".to_string()) }], topic: Some(3) },
+                    4 => FolloweesForTopic { followees: vec![Followee { neuron_id: Some(b0.clone()), alias: Some("Neuron-basket-main".to_string()) }], topic: Some(4) },
+                    5 => FolloweesForTopic { followees: vec![Followee { neuron_id: Some(b0.clone()), alias: Some("Neuron-basket-main".to_string()) }], topic: Some(5) },
+                    6 => FolloweesForTopic { followees: vec![Followee { neuron_id: Some(b0.clone()), alias: Some("Neuron-basket-main".to_string()) }], topic: Some(6) },
+                    7 => FolloweesForTopic { followees: vec![Followee { neuron_id: Some(b0.clone()), alias: Some("Neuron-basket-main".to_string()) }], topic: Some(7) },
+                }
+            }
         );
     }
 
     #[test]
     fn test_neurons_fund_multiple_followees() {
         let [b0, b1, b2, b3] = NeuronId::test_neuron_ids();
-        let w = u64::from(&Action::Unspecified(Empty {}));
+
         let recipe = NeuronRecipe {
             followees: Some(NeuronIds::from(vec![b0.clone(), b1.clone(), b2.clone()])),
             neuron_id: Some(b3.clone()),
             ..NeuronRecipe::validate_default_neurons_fund()
         };
         assert_eq!(
-            recipe.construct_followees(),
-            btreemap! { w => Followees { followees: vec![b0.clone(), b1.clone(), b2.clone()] } }
+            recipe.construct_topic_followees(),
+            TopicFollowees {
+                topic_id_to_followees: btreemap! {
+                    1 => FolloweesForTopic { followees: vec![Followee { neuron_id: Some(b0.clone()), alias: Some("Followee-0".to_string()) }, Followee { neuron_id: Some(b1.clone()), alias: Some("Followee-1".to_string()) }, Followee { neuron_id: Some(b2.clone()), alias: Some("Followee-2".to_string()) }], topic: Some(1) },
+                    2 => FolloweesForTopic { followees: vec![Followee { neuron_id: Some(b0.clone()), alias: Some("Followee-0".to_string()) }, Followee { neuron_id: Some(b1.clone()), alias: Some("Followee-1".to_string()) }, Followee { neuron_id: Some(b2.clone()), alias: Some("Followee-2".to_string()) }], topic: Some(2) },
+                    3 => FolloweesForTopic { followees: vec![Followee { neuron_id: Some(b0.clone()), alias: Some("Followee-0".to_string()) }, Followee { neuron_id: Some(b1.clone()), alias: Some("Followee-1".to_string()) }, Followee { neuron_id: Some(b2.clone()), alias: Some("Followee-2".to_string()) }], topic: Some(3) },
+                    4 => FolloweesForTopic { followees: vec![Followee { neuron_id: Some(b0.clone()), alias: Some("Followee-0".to_string()) }, Followee { neuron_id: Some(b1.clone()), alias: Some("Followee-1".to_string()) }, Followee { neuron_id: Some(b2.clone()), alias: Some("Followee-2".to_string()) }], topic: Some(4) },
+                    5 => FolloweesForTopic { followees: vec![Followee { neuron_id: Some(b0.clone()), alias: Some("Followee-0".to_string()) }, Followee { neuron_id: Some(b1.clone()), alias: Some("Followee-1".to_string()) }, Followee { neuron_id: Some(b2.clone()), alias: Some("Followee-2".to_string()) }], topic: Some(5) },
+                    6 => FolloweesForTopic { followees: vec![Followee { neuron_id: Some(b0.clone()), alias: Some("Followee-0".to_string()) }, Followee { neuron_id: Some(b1.clone()), alias: Some("Followee-1".to_string()) }, Followee { neuron_id: Some(b2.clone()), alias: Some("Followee-2".to_string()) }], topic: Some(6) },
+                    7 => FolloweesForTopic { followees: vec![Followee { neuron_id: Some(b0.clone()), alias: Some("Followee-0".to_string()) }, Followee { neuron_id: Some(b1.clone()), alias: Some("Followee-1".to_string()) }, Followee { neuron_id: Some(b2.clone()), alias: Some("Followee-2".to_string()) }], topic: Some(7) },
+                }
+            }
         );
     }
 }
@@ -1533,6 +1578,7 @@ fn test_from_manage_ledger_parameters_into_ledger_upgrade_args() {
             max_memo_length: None,
             feature_flags: None,
             change_archive_options: None,
+            index_principal: None,
         }
     );
 }
@@ -1559,6 +1605,7 @@ fn test_from_manage_ledger_parameters_into_ledger_upgrade_args_no_logo() {
             max_memo_length: None,
             feature_flags: None,
             change_archive_options: None,
+            index_principal: None,
         }
     );
 }

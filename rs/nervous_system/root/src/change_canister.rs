@@ -71,11 +71,6 @@ pub struct ChangeCanisterRequest {
     /// The new canister args
     #[serde(with = "serde_bytes")]
     pub arg: Vec<u8>,
-
-    #[serde(serialize_with = "serialize_optional_nat")]
-    pub compute_allocation: Option<candid::Nat>,
-    #[serde(serialize_with = "serialize_optional_nat")]
-    pub memory_allocation: Option<candid::Nat>,
 }
 
 impl ChangeCanisterRequest {
@@ -94,8 +89,6 @@ impl ChangeCanisterRequest {
             .field("wasm_module_sha256", &format!("{:x?}", wasm_sha))
             .field("chunked_canister_wasm", &self.chunked_canister_wasm)
             .field("arg_sha256", &format!("{:x?}", arg_sha))
-            .field("compute_allocation", &self.compute_allocation)
-            .field("memory_allocation", &self.memory_allocation)
             .finish()
     }
 }
@@ -125,14 +118,7 @@ impl ChangeCanisterRequest {
             wasm_module: Vec::new(),
             chunked_canister_wasm: None,
             arg: Encode!().unwrap(),
-            compute_allocation: None,
-            memory_allocation: None,
         }
-    }
-
-    pub fn with_memory_allocation(mut self, n: u64) -> Self {
-        self.memory_allocation = Some(candid::Nat::from(n));
-        self
     }
 
     pub fn with_wasm(mut self, wasm_module: Vec<u8>) -> Self {
@@ -295,9 +281,6 @@ async fn install_code(request: ChangeCanisterRequest) -> ic_cdk::api::call::Call
         wasm_module,
         chunked_canister_wasm,
         arg,
-        compute_allocation,
-        memory_allocation,
-
         stop_before_installing: _,
     } = request;
 
@@ -338,8 +321,6 @@ async fn install_code(request: ChangeCanisterRequest) -> ic_cdk::api::call::Call
             canister_id,
             wasm_module,
             arg,
-            compute_allocation,
-            memory_allocation,
             sender_canister_version,
         };
         ic_cdk::api::call::call(

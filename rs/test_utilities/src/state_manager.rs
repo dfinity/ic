@@ -258,7 +258,7 @@ impl StateReader for FakeStateManager {
             .iter()
             .filter(|s| s.height > Height::from(0) && s.certification.is_some())
             .map(|s| s.height)
-            .last()
+            .next_back()
             .unwrap_or_else(|| Height::from(0))
     }
 

@@ -1373,7 +1373,7 @@ mod tests {
         .await;
 
         // Step 3: Inspect results.
-        ic_cdk::eprintln!(
+        eprintln!(
             "Should have panicked: {result:#?}, {:#?}",
             SNS_ROOT_CANISTER.with(|c| c.clone())
         );

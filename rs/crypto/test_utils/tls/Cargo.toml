@@ -7,7 +7,7 @@ edition.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-crypto-ecdsa-secp256r1 = { path = "../../ecdsa_secp256r1" }
+ic-secp256r1 = { path = "../../../../packages/ic-secp256r1" }
 ic-crypto-internal-basic-sig-ed25519 = { path = "../../internal/crypto_lib/basic_sig/ed25519" }
 ic-crypto-temp-crypto = { path = "../../temp_crypto" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../test_utils/reproducible_rng" }

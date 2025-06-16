@@ -27,10 +27,10 @@ DEPENDENCIES = [
     "@crate_index//:base64",
     "@crate_index//:build-info",
     "@crate_index//:candid",
+    "@crate_index//:ic-cdk",
     "@crate_index//:ic-certified-map",
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:ic-xrc-types",
-    "@crate_index//:ic_cdk_0_17_1",
     "@crate_index//:lazy_static",
     "@crate_index//:prost",
     "@crate_index//:rand",
@@ -44,7 +44,6 @@ MACRO_DEPENDENCIES = [
     # Keep sorted.
     "//rs/nervous_system/common/build_metadata",
     "@crate_index//:async-trait",
-    "@crate_index//:ic_cdk_macros_0_17_1",
 ]
 
 BUILD_DEPENDENCIES = [

@@ -920,6 +920,10 @@ pub struct Install<'a> {
     pub mode: CanisterInstallMode,
     pub runtime: &'a Runtime,
     pub wasm: Wasm,
+    // The compute and memory allocation fields are not used in `install_code`
+    // requests but rather in `update_settings`. This is a bit weird as they
+    // are part of a struct called `Install`. This should probably be cleaned
+    // up in the future.
     pub compute_allocation: Option<u64>,
     pub memory_allocation: Option<u64>,
     pub num_cycles: Option<u128>,
@@ -1119,8 +1123,6 @@ impl<'a> Install<'a> {
             canister.canister_id,
             self.wasm.0.clone(),
             payload,
-            self.compute_allocation,
-            self.memory_allocation,
         );
         eprintln!("Install args: {}", &install_args);
         match self.runtime {
@@ -1135,8 +1137,6 @@ impl<'a> Install<'a> {
                     canister_id,
                     wasm_module,
                     arg,
-                    compute_allocation: _,
-                    memory_allocation: _,
                     sender_canister_version: _,
                 } = install_args;
                 state_machine

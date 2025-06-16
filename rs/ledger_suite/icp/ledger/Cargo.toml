@@ -12,6 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 async-trait = { workspace = true }
+canbench-rs = { version = "0.1.7", optional = true }
 candid = { workspace = true }
 candid_parser = { workspace = true }
 ciborium = { workspace = true }
@@ -21,8 +22,7 @@ dfn_protobuf = { path = "../../../rust_canisters/dfn_protobuf" }
 hex = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
 ic-canister-log = { path = "../../../rust_canisters/canister_log" }
-ic-cdk = "0.17.1"
-ic-cdk-macros = "0.17.1"
+ic-cdk = { workspace = true }
 ic-cdk-timers = { workspace = true }
 ic-http-types = { path = "../../../../packages/ic-http-types" }
 ic-limits = { path = "../../../limits" }
@@ -58,3 +58,4 @@ notify-method = []
 icp-allowance-getter = []
 next-ledger-version = []
 prev-ledger-version = []
+canbench-rs = ["dep:canbench-rs"]

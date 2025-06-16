@@ -1016,6 +1016,38 @@ pub fn syscalls<
         .unwrap();
 
     linker
+        .func_wrap("ic0", "root_key_size", {
+            move |mut caller: Caller<'_, StoreData>| {
+                charge_for_cpu(&mut caller, overhead::ROOT_KEY_SIZE)?;
+                with_system_api(&mut caller, |s| s.ic0_root_key_size()).and_then(|s| {
+                    I::try_from(s).map_err(|e| {
+                        anyhow::Error::msg(format!("ic0::root_key_size failed: {}", e))
+                    })
+                })
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "root_key_copy", {
+            move |mut caller: Caller<'_, StoreData>, dst: I, offset: I, size: I| {
+                let dst: usize = dst.try_into().expect("Failed to convert I to usize");
+                let offset: usize = offset.try_into().expect("Failed to convert I to usize");
+                let size: usize = size.try_into().expect("Failed to convert I to usize");
+                charge_for_cpu_and_mem(&mut caller, overhead::ROOT_KEY_COPY, size)?;
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
+                    system_api.ic0_root_key_copy(dst, offset, size, memory)
+                })?;
+                if feature_flags.write_barrier == FlagStatus::Enabled {
+                    mark_writes_on_bytemap(&mut caller, dst, size)
+                } else {
+                    Ok(())
+                }
+            }
+        })
+        .unwrap();
+
+    linker
         .func_wrap("ic0", "certified_data_set", {
             move |mut caller: Caller<'_, StoreData>, src: I, size: I| {
                 let src: usize = src.try_into().expect("Failed to convert I to usize");

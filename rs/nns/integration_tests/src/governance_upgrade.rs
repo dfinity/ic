@@ -53,10 +53,9 @@ fn test_upgrade_after_state_shrink() {
             .hot_keys
             .push(hot_key);
 
-        let mut canister = runtime
-            .create_canister_at_id_max_cycles_with_retries(GOVERNANCE_CANISTER_ID.get())
-            .await
-            .unwrap();
+        let _registry_canister = runtime.create_canister(None).await.unwrap();
+        let mut canister = runtime.create_canister(None).await.unwrap();
+        assert_eq!(canister.canister_id(), GOVERNANCE_CANISTER_ID);
         install_governance_canister(&mut canister, governance_proto).await;
 
         // First let's do a self-upgrade
@@ -129,8 +128,6 @@ fn test_root_restarts_canister_during_upgrade_canister_with_stop_canister_timeou
         canister_id: GOVERNANCE_CANISTER_ID,
         wasm_module,
         arg: vec![],
-        compute_allocation: None,
-        memory_allocation: None,
         chunked_canister_wasm: None,
     };
 

@@ -12,7 +12,7 @@ from integration.github.github_workflow_config import GithubWorklow
 TOKEN_NOT_SET = "token-not-set"
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", TOKEN_NOT_SET)
 if GITHUB_TOKEN == TOKEN_NOT_SET:
-    logging.error("GITHUB_TOKEN is not set, can not send comments to Github")
+    logging.warning("GITHUB_TOKEN is not set, can not send comments to Github")
 
 GITHUB_REPOSITORY = os.environ.get("CI_PROJECT_PATH", "dfinity/ic")
 DELTA_HEADER = "*Vulnerable dependency information*"

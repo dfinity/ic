@@ -77,7 +77,9 @@ async fn main() {
         }
         _ => {
             let bm = BackupManager::new(log, args).await;
-            Arc::new(bm).do_backups();
+            tokio::task::spawn_blocking(|| Arc::new(bm).do_backups())
+                .await
+                .expect("Backup task failed");
         }
     }
 }

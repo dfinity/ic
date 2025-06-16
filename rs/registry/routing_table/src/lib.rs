@@ -55,7 +55,7 @@ impl CanisterIdRange {
     /// * `self.start` if `previous_canister_id` is `None`.
     /// * `self.start` if `previous_canister_id < self.start`.
     /// * `None` if `previous_canister_id >= self.end`
-    ///    or the entire range of 64 bit integers is exhausted.
+    ///   or the entire range of 64 bit integers is exhausted.
     /// * `previous_canister_id + 1` otherwise.
     pub fn generate_canister_id(
         &self,

@@ -44,6 +44,7 @@ rand = { workspace = true }
 rand_chacha = { workspace = true }
 rayon = { workspace = true }
 serde = { workspace = true }
+serde_bytes = { workspace = true }
 slog = { workspace = true }
 static_assertions = { workspace = true }
 strum = { workspace = true }

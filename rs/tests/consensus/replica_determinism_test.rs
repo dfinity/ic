@@ -27,8 +27,9 @@ use ic_system_test_driver::{
 use ic_types::{malicious_behaviour::MaliciousBehaviour, Height};
 use ic_universal_canister::wasm;
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use slog::info;
+use std::time::Duration;
 
 const DKG_INTERVAL: u64 = 9;
 const FAULT_HEIGHT: u64 = DKG_INTERVAL + 1;
@@ -45,12 +46,7 @@ fn setup(env: TestEnv) {
         )
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
-}
 
-/// As the malicious behavior `CorruptOwnStateAtHeights` is enabled, this test
-/// waits for the state to diverge and makes sure that the faulty replica is
-/// restarted and that it can contribute to consensus afterwards.
-fn test(env: TestEnv) {
     let log = env.logger();
     let topology = env.topology_snapshot();
     info!(log, "Checking readiness of all nodes after the IC setup...");
@@ -60,15 +56,40 @@ fn test(env: TestEnv) {
             .for_each(|node| node.await_status_is_healthy().unwrap())
     });
     info!(log, "All nodes are ready, IC setup succeeded.");
+}
+
+/// As the malicious behavior `CorruptOwnStateAtHeights` is enabled, this test
+/// waits for the state to diverge and makes sure that the faulty replica is
+/// restarted and that it can contribute to consensus afterwards.
+fn test(env: TestEnv) {
+    let log = env.logger();
+    let topology = env.topology_snapshot();
     let malicious_node = topology
         .root_subnet()
         .nodes()
         .find(|n| n.is_malicious())
         .expect("No malicious node found in the subnet.");
-    let agent = malicious_node.with_default_agent(|agent| async move { agent });
+
     let rt = tokio::runtime::Runtime::new().expect("could not create tokio runtime");
     rt.block_on({
         async move {
+            let agent = ic_system_test_driver::retry_with_msg_async!(
+                "Creating an agent for the malicious node",
+                &log,
+                Duration::from_secs(300),
+                Duration::from_secs(10),
+                || async {
+                    match malicious_node.try_build_default_agent_async().await {
+                        Ok(agent) => Ok(agent),
+                        Err(e) => {
+                            bail!("Failed to create agent: {}. This is okay as the malicious node is expected to eventually panic due to divergence.", e)
+                        }
+                    }
+                }
+            )
+            .await
+            .expect("Failed to create agent");
+
             let canister = UniversalCanister::new_with_retries(
                 &agent,
                 malicious_node.effective_canister_id(),
@@ -109,11 +130,9 @@ fn test(env: TestEnv) {
 
             // Wait until the malicious node restarts.
             malicious_node
-                .await_status_is_healthy()
+                .await_status_is_healthy_async()
+                .await
                 .expect("Node didn't report healthy");
-
-            // Recreate the agent after the restart.
-            let agent = malicious_node.build_default_agent_async().await;
 
             // For the same reason as before, if N = DKG_INTERVAL + 1, it's guaranteed
             // that a catch up package is proposed by the faulty node.

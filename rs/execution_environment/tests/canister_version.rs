@@ -118,15 +118,7 @@ fn test(wat: &str, mode: CanisterInstallMode, dts_install: bool, dts_upgrade: bo
         user_id,
         ic00::IC_00,
         Method::InstallCode,
-        InstallCodeArgs::new(
-            Install,
-            canister_id,
-            test_canister.clone(),
-            vec![],
-            None,
-            None,
-        )
-        .encode(),
+        InstallCodeArgs::new(Install, canister_id, test_canister.clone(), vec![]).encode(),
         dts_install,
     )
     .unwrap();
@@ -145,7 +137,7 @@ fn test(wat: &str, mode: CanisterInstallMode, dts_install: bool, dts_upgrade: bo
             user_id,
             ic00::IC_00,
             Method::InstallCode,
-            InstallCodeArgs::new(mode, canister_id, test_canister, vec![], None, None).encode(),
+            InstallCodeArgs::new(mode, canister_id, test_canister, vec![]).encode(),
             dts,
         )
         .unwrap();

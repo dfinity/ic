@@ -470,6 +470,23 @@ impl TipHandler {
         }
         Ok(())
     }
+
+    /// Moves the entire canister directory from one canister id to another.
+    pub fn move_canister_directory(
+        &mut self,
+        height: Height,
+        src: CanisterId,
+        dst: CanisterId,
+    ) -> Result<(), LayoutError> {
+        let tip = self.tip(height)?;
+        let src_path = tip.canister(&src)?.raw_path();
+        let dst_path = tip.canister(&dst)?.raw_path();
+        std::fs::rename(&src_path, &dst_path).map_err(|err| LayoutError::IoError {
+            path: src_path,
+            message: "Failed to rename canister".to_string(),
+            io_err: err,
+        })
+    }
 }
 
 enum CheckpointRemovalRequest {
@@ -720,18 +737,18 @@ impl StateLayout {
     /// the scratchpad is properly marked as unverified before transitioning it into a checkpoint.
     pub fn promote_scratchpad_to_unverified_checkpoint<T>(
         &self,
-        scratchpad_layout: CheckpointLayout<RwPolicy<'_, T>>,
+        scratchpad_layout: CheckpointLayout<RwPolicy<T>>,
         height: Height,
-    ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
+    ) -> Result<CheckpointLayout<RwPolicy<T>>, LayoutError> {
         scratchpad_layout.create_unverified_checkpoint_marker()?;
         self.scratchpad_to_checkpoint(scratchpad_layout, height)
     }
 
     fn scratchpad_to_checkpoint<T>(
         &self,
-        layout: CheckpointLayout<RwPolicy<'_, T>>,
+        layout: CheckpointLayout<RwPolicy<T>>,
         height: Height,
-    ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
+    ) -> Result<CheckpointLayout<RwPolicy<T>>, LayoutError> {
         // The scratchpad must have an unverified marker before it is promoted to a checkpoint.
         debug_assert!(!layout.is_checkpoint_verified());
         debug_assert_eq!(height, layout.height());
@@ -755,7 +772,7 @@ impl StateLayout {
             message: "Could not sync checkpoints".to_string(),
             io_err: err,
         })?;
-        self.checkpoint_in_verification(height)
+        self.checkpoint(height)
     }
 
     pub fn clone_checkpoint(&self, from: Height, to: Height) -> Result<(), LayoutError> {
@@ -778,7 +795,10 @@ impl StateLayout {
 
     /// Returns the layout of the checkpoint with the given height.
     /// If the checkpoint is not found, an error is returned.
-    fn checkpoint(&self, height: Height) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
+    fn checkpoint<T>(&self, height: Height) -> Result<CheckpointLayout<T>, LayoutError>
+    where
+        T: AccessPolicy,
+    {
         let cp_name = Self::checkpoint_name(height);
         let path = self.checkpoints().join(cp_name);
         if !path.exists() {
@@ -1576,17 +1596,16 @@ fn parse_and_sort_checkpoint_heights(names: &[String]) -> Result<Vec<Height>, La
     Ok(heights)
 }
 
-struct CheckpointLayoutImpl<Permissions: AccessPolicy> {
+struct CheckpointLayoutImpl {
     root: PathBuf,
     height: Height,
     // The StateLayout is used to make sure we never remove the CheckpointLayout when still in use.
     // Is not None for CheckpointLayout pointing to "real" checkpoints, that is checkpoints in
     // StateLayout's root/checkpoints/..., that are tracked by StateLayout
     state_layout: Option<StateLayout>,
-    permissions_tag: PhantomData<Permissions>,
 }
 
-impl<Permissions: AccessPolicy> Drop for CheckpointLayoutImpl<Permissions> {
+impl Drop for CheckpointLayoutImpl {
     fn drop(&mut self) {
         if let Some(state_layout) = &self.state_layout {
             state_layout.remove_checkpoint_ref(self.height)
@@ -1594,11 +1613,22 @@ impl<Permissions: AccessPolicy> Drop for CheckpointLayoutImpl<Permissions> {
     }
 }
 
-pub struct CheckpointLayout<Permissions: AccessPolicy>(Arc<CheckpointLayoutImpl<Permissions>>);
+pub struct CheckpointLayout<Permissions: AccessPolicy>(
+    Arc<CheckpointLayoutImpl>,
+    PhantomData<Permissions>,
+);
 
+// TODO(MR-676) prevent cloning when Permissions is intentinally non-cloneable
 impl<Permissions: AccessPolicy> Clone for CheckpointLayout<Permissions> {
     fn clone(&self) -> Self {
-        Self(self.0.clone())
+        CheckpointLayout(self.0.clone(), PhantomData)
+    }
+}
+
+impl<Permissions: ReadPolicy> CheckpointLayout<Permissions> {
+    /// Clone CheckpointLayout removing all access but ReadOnly.
+    pub fn as_readonly(&self) -> CheckpointLayout<ReadOnly> {
+        CheckpointLayout(Arc::clone(&self.0), PhantomData)
     }
 }
 
@@ -1620,22 +1650,26 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
         state_layout: StateLayout,
     ) -> Result<Self, LayoutError> {
         Permissions::check_dir(&root)?;
-        Ok(Self(Arc::new(CheckpointLayoutImpl::<Permissions> {
-            root,
-            height,
-            state_layout: Some(state_layout),
-            permissions_tag: PhantomData,
-        })))
+        Ok(Self(
+            Arc::new(CheckpointLayoutImpl {
+                root,
+                height,
+                state_layout: Some(state_layout),
+            }),
+            PhantomData,
+        ))
     }
 
     pub fn new_untracked(root: PathBuf, height: Height) -> Result<Self, LayoutError> {
         Permissions::check_dir(&root)?;
-        Ok(Self(Arc::new(CheckpointLayoutImpl::<Permissions> {
-            root,
-            height,
-            state_layout: None,
-            permissions_tag: PhantomData,
-        })))
+        Ok(Self(
+            Arc::new(CheckpointLayoutImpl {
+                root,
+                height,
+                state_layout: None,
+            }),
+            PhantomData,
+        ))
     }
 
     pub fn system_metadata(&self) -> ProtoFileWith<pb_metadata::SystemMetadata, Permissions> {

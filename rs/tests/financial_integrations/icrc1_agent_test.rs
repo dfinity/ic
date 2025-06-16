@@ -228,6 +228,8 @@ pub fn test(env: TestEnv) {
             Value::entry("icrc1:symbol", init_args.token_symbol),
             Value::entry("icrc1:fee", init_args.transfer_fee.clone()),
             Value::entry("icrc1:max_memo_length", 32u64),
+            Value::entry("icrc103:public_allowances", "true"),
+            Value::entry("icrc103:max_take_value", 500u64),
         ];
         assert_eq!(
             expected_metadata,

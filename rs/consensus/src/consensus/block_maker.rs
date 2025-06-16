@@ -22,7 +22,7 @@ use ic_types::{
     batch::{BatchPayload, ValidationContext},
     consensus::{
         block_maker::SubnetRecords,
-        dkg::{self, DkgDataPayload},
+        dkg::{DkgDataPayload, DkgPayload},
         hashed, Block, BlockMetadata, BlockPayload, BlockProposal, DataPayload, HasHeight, HasRank,
         HashedBlock, Payload, RandomBeacon, Rank, SummaryPayload,
     },
@@ -310,7 +310,7 @@ impl BlockMaker {
         let payload = Payload::new(
             ic_types::crypto::crypto_hash,
             match dkg_payload {
-                dkg::Payload::Summary(summary) => {
+                DkgPayload::Summary(summary) => {
                     // Summary block does not have batch payload.
                     self.metrics.report_byte_estimate_metrics(0, 0);
                     let idkg_summary = idkg::create_summary_payload(
@@ -331,7 +331,7 @@ impl BlockMaker {
                         idkg: idkg_summary,
                     })
                 }
-                dkg::Payload::Data(dkg) => {
+                DkgPayload::Data(dkg) => {
                     let (batch_payload, dkg, idkg_data) = match status::get_status(
                         height,
                         self.registry_client.as_ref(),
@@ -693,7 +693,7 @@ mod tests {
             let expected_payloads = PoolReader::new(&pool)
                 .get_payloads_from_height(certified_height.increment(), start.as_ref().clone());
             let returned_payload =
-                dkg::Payload::Data(dkg::DkgDataPayload::new_empty(Height::from(0)));
+                DkgPayload::Data(dkg::DkgDataPayload::new_empty(Height::from(0)));
             let pool_reader = PoolReader::new(&pool);
             let expected_time = expected_payloads[0].1
                 + get_block_maker_delay(
@@ -1056,9 +1056,9 @@ mod tests {
         #[case] expected_block_maker_delay: Duration,
     ) {
         // there should be 11 non-rank-0 blocks in the past 30 heights
-        let initial = std::iter::repeat(Rank(1)).take(5);
-        let mid = std::iter::repeat(Rank(0)).take(19);
-        let terminal = std::iter::repeat(Rank(2)).take(8);
+        let initial = std::iter::repeat_n(Rank(1), 5);
+        let mid = std::iter::repeat_n(Rank(0), 19);
+        let terminal = std::iter::repeat_n(Rank(2), 8);
 
         let ranks: Vec<Rank> = initial.chain(mid).chain(terminal).collect();
 
@@ -1078,9 +1078,9 @@ mod tests {
         #[case] expected_block_maker_delay: Duration,
     ) {
         // there should be 10 non-rank-0 blocks in the past 30 heights
-        let initial = std::iter::repeat(Rank(1)).take(5);
-        let mid = std::iter::repeat(Rank(0)).take(20);
-        let terminal = std::iter::repeat(Rank(2)).take(8);
+        let initial = std::iter::repeat_n(Rank(1), 5);
+        let mid = std::iter::repeat_n(Rank(0), 20);
+        let terminal = std::iter::repeat_n(Rank(2), 8);
 
         let ranks: Vec<Rank> = initial.chain(mid).chain(terminal).collect();
 
@@ -1092,7 +1092,7 @@ mod tests {
 
     #[test]
     fn get_block_maker_delay_short_chain_many_non_rank_0_blocks_test() {
-        let previous_ranks = std::iter::repeat(Rank(1)).take(11).collect::<Vec<_>>();
+        let previous_ranks = std::iter::repeat_n(Rank(1), 11).collect::<Vec<_>>();
         assert_eq!(
             block_maker_delay_test_case(
                 &previous_ranks,

@@ -8,6 +8,7 @@ use ic_interfaces::{
 };
 use ic_interfaces_certified_stream_store::{CertifiedStreamStore, DecodeStreamError};
 use ic_interfaces_state_manager::*;
+use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::execution_state::WasmBinary;
@@ -31,6 +32,7 @@ use ic_types::{
 };
 use ic_wasm_types::CanisterModule;
 use std::{collections::HashSet, sync::Arc};
+use tempfile::TempDir;
 
 pub const EMPTY_WASM: &[u8] = &[
     0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x00, 0x08, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x02,
@@ -107,17 +109,18 @@ impl Verifier for RejectingVerifier {
 /// `size_limit`, applies `f` to the encoded slice and tries to decode the
 /// slice returned by `f`.
 ///
-/// If `destination_subnet` is `Some(subnet)` it will address the stream at
-/// `subnet` and at `SubnetId::new(42)` otherwise. The flag
-/// `should_pass_verification` allows to control whether the verification of the
-/// certification contained in the encoded `CertifiedStreamSlice` should succeed
-/// or not.
+/// The slice is encoded by `subnet_test_id(13)` and decoded by
+/// `subnet_test_id(42)`. If `destination_subnet` is `None`, the stream is
+/// addressed to the latter; if it is `Some(subnet)`, it is instead addressed to
+/// `subnet`. The `should_pass_verification` flag controls whether the
+/// verification of the certification of the encoded `CertifiedStreamSlice`
+/// should succeed or not.
 ///
 /// # Panics
 /// Whenever encoding and/or decoding would under normal circumstances return an
 /// error.
 pub fn encode_decode_stream_test<
-    F: FnOnce(StateManagerImpl, CertifiedStreamSlice) -> (StateManagerImpl, CertifiedStreamSlice),
+    F: FnOnce(&StateManagerImpl, CertifiedStreamSlice) -> CertifiedStreamSlice,
 >(
     stream: Stream,
     size_limit: Option<usize>,
@@ -125,10 +128,18 @@ pub fn encode_decode_stream_test<
     should_pass_verification: bool,
     f: F,
 ) {
-    state_manager_test_with_verifier_result(should_pass_verification, |_metrics, state_manager| {
+    let sender_subnet = subnet_test_id(13);
+    let receiver_subnet = subnet_test_id(42);
+    state_manager_test_with_verifier_result(sender_subnet, true, |state_manager, _metrics, log| {
         let (_height, mut state) = state_manager.take_tip();
 
-        let destination_subnet = destination_subnet.unwrap_or_else(|| subnet_test_id(42));
+        if let Some(destination_subnet) = destination_subnet {
+            assert!(
+                destination_subnet != sender_subnet && destination_subnet != receiver_subnet,
+                "destination subnet, when specified, must be different from both sender and receiver subnets",
+            );
+        }
+        let destination_subnet = destination_subnet.unwrap_or(receiver_subnet);
 
         state.modify_streams(|streams| {
             streams.insert(destination_subnet, stream.clone());
@@ -142,10 +153,17 @@ pub fn encode_decode_stream_test<
             .encode_certified_stream_slice(destination_subnet, None, None, size_limit, None)
             .expect("failed to encode certified stream");
 
-        let (state_manager, slice) = f(state_manager, slice);
+        let slice = f(&state_manager, slice);
 
-        let decoded_slice = state_manager.decode_certified_stream_slice(
-            subnet_test_id(42),
+        let receiver_metrics = MetricsRegistry::new();
+        let (receiver_state_manager, _tmp) = state_manager_with_verifier_result(
+            receiver_subnet,
+            should_pass_verification,
+            &receiver_metrics,
+            log,
+        );
+        let decoded_slice = receiver_state_manager.decode_certified_stream_slice(
+            sender_subnet,
             RegistryVersion::new(1),
             &slice,
         );
@@ -180,10 +198,10 @@ pub fn encode_partial_slice_test(
     msg_limit: usize,
     byte_limit: usize,
 ) {
-    state_manager_test(|_metrics, state_manager| {
+    let sender_subnet = subnet_test_id(13);
+    let destination_subnet = subnet_test_id(42);
+    state_manager_test_with_verifier_result(sender_subnet, true, |state_manager, _metrics, log| {
         let (_height, mut state) = state_manager.take_tip();
-
-        let destination_subnet = subnet_test_id(42);
 
         state.modify_streams(|streams| {
             streams.insert(destination_subnet, stream.clone());
@@ -215,9 +233,13 @@ pub fn encode_partial_slice_test(
             .expect("failed to encode certified stream");
         assert_eq!(same_payload_slice.payload, slice.payload);
 
-        let decoded_slice = state_manager
+        let receiver_metrics = MetricsRegistry::new();
+        let (receiver_state_manager, _tmp) =
+            state_manager_with_verifier_result(destination_subnet, true, &receiver_metrics, log);
+
+        let decoded_slice = receiver_state_manager
             .decode_certified_stream_slice(
-                subnet_test_id(42),
+                sender_subnet,
                 RegistryVersion::new(1),
                 &same_payload_slice,
             )
@@ -239,8 +261,8 @@ pub fn encode_partial_slice_test(
         // Sanity check: if an actual partial slice, decoding should fail.
         if witness_begin != msg_begin {
             assert_matches!(
-                state_manager.decode_certified_stream_slice(
-                    subnet_test_id(42),
+                receiver_state_manager.decode_certified_stream_slice(
+                    sender_subnet,
                     RegistryVersion::new(1),
                     &slice,
                 ),
@@ -254,20 +276,19 @@ pub fn encode_partial_slice_test(
 ///
 /// Decodes the given `slice` and applies `f` to the decoded slice to obtain a
 /// new stream. The obtained stream is then committed, certified, and encoded
-/// into a `CertifiedStreamSlice` using `state_manager`. The function returns
-/// the `state_manager` with the new state committed and a
-/// `CertifiedStreamSlice` having `payload` set to the newly encoded payload,
-/// while retaining the remaining fields from `slice`.
+/// into a `CertifiedStreamSlice` using `state_manager`.
 ///
+/// Returns a `CertifiedStreamSlice` having `payload` set to the newly encoded
+/// payload, while retaining the remaining fields from `slice`.
 ///
 /// # Panics
 /// Whenever encoding and/or decoding would under normal circumstances return an
 /// error.
 pub fn modify_encoded_stream_helper<F: FnOnce(StreamSlice) -> Stream>(
-    state_manager: StateManagerImpl,
+    state_manager: &StateManagerImpl,
     slice: CertifiedStreamSlice,
     f: F,
-) -> (StateManagerImpl, CertifiedStreamSlice) {
+) -> CertifiedStreamSlice {
     let (_subnet, decoded_slice) =
         stream_encoding::decode_stream_slice(&slice.payload[..]).unwrap();
 
@@ -282,20 +303,17 @@ pub fn modify_encoded_stream_helper<F: FnOnce(StreamSlice) -> Stream>(
 
     state_manager.commit_and_certify(state, Height::new(2), CertificationScope::Metadata, None);
 
-    certify_height(&state_manager, Height::new(2));
+    certify_height(state_manager, Height::new(2));
 
     let new_slice = state_manager
         .encode_certified_stream_slice(subnet_test_id(42), None, None, None, None)
         .expect("failed to encode certified stream");
 
-    (
-        state_manager,
-        CertifiedStreamSlice {
-            payload: new_slice.payload,
-            merkle_proof: slice.merkle_proof,
-            certification: slice.certification,
-        },
-    )
+    CertifiedStreamSlice {
+        payload: new_slice.payload,
+        merkle_proof: slice.merkle_proof,
+        certification: slice.certification,
+    }
 }
 
 pub fn wait_for_checkpoint(state_manager: &impl StateManager, h: Height) -> CryptoHashOfState {
@@ -521,34 +539,57 @@ pub fn pipe_partial_state_sync(
     unreachable!()
 }
 
-pub fn state_manager_test_with_verifier_result<F: FnOnce(&MetricsRegistry, StateManagerImpl)>(
+/// Creates a `StateManagerImpl` with the given `own_subnet_id` and whose
+/// verifications either always succeed or always fail, as determined by the
+/// `should_pass_verification` flag.
+fn state_manager_with_verifier_result(
+    own_subnet_id: SubnetId,
     should_pass_verification: bool,
-    f: F,
-) {
+    metrics_registry: &MetricsRegistry,
+    log: ReplicaLogger,
+) -> (StateManagerImpl, TempDir) {
     let tmp = tmpdir("sm");
     let config = Config::new(tmp.path().into());
-    let metrics_registry = MetricsRegistry::new();
-    let own_subnet = subnet_test_id(42);
     let verifier: Arc<dyn Verifier> = if should_pass_verification {
         Arc::new(FakeVerifier::new())
     } else {
         Arc::new(RejectingVerifier)
     };
 
+    let state_manager = StateManagerImpl::new(
+        verifier,
+        own_subnet_id,
+        SubnetType::Application,
+        log,
+        metrics_registry,
+        &config,
+        None,
+        ic_types::malicious_flags::MaliciousFlags::default(),
+    );
+    (state_manager, tmp)
+}
+
+/// Fixture to run a test with a `StateManagerImpl` with the given
+/// `own_subnet_id` and whose verification either always succeeds or always
+/// fails.
+fn state_manager_test_with_verifier_result<
+    F: FnOnce(StateManagerImpl, &MetricsRegistry, ReplicaLogger),
+>(
+    own_subnet_id: SubnetId,
+    should_pass_verification: bool,
+    f: F,
+) {
+    let metrics_registry = MetricsRegistry::new();
+
     with_test_replica_logger(|log| {
-        f(
+        let (state_manager, _tmp) = state_manager_with_verifier_result(
+            own_subnet_id,
+            should_pass_verification,
             &metrics_registry,
-            StateManagerImpl::new(
-                verifier,
-                own_subnet,
-                SubnetType::Application,
-                log,
-                &metrics_registry,
-                &config,
-                None,
-                ic_types::malicious_flags::MaliciousFlags::default(),
-            ),
+            log.clone(),
         );
+
+        f(state_manager, &metrics_registry, log);
     })
 }
 
@@ -628,7 +669,11 @@ where
 }
 
 pub fn state_manager_test<F: FnOnce(&MetricsRegistry, StateManagerImpl)>(f: F) {
-    state_manager_test_with_verifier_result(true, f)
+    state_manager_test_with_verifier_result(
+        subnet_test_id(42),
+        true,
+        |state_manager, metrics_registry, _log| f(metrics_registry, state_manager),
+    )
 }
 
 pub fn state_manager_test_with_state_sync<

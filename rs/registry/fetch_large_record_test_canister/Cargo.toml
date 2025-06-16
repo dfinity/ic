@@ -1,0 +1,14 @@
+[package]
+name = "ic-registry-fetch-large-record-test-canister"
+version = "0.0.1"
+edition = { workspace = true }
+
+[dependencies]
+ic-crypto-sha2 = { path = "../../crypto/sha2" }
+ic-nervous-system-canisters = { path = "../../nervous_system/canisters" }
+ic-registry-transport = { path = "../transport" }
+ic-types = { path = "../../types/types" }
+
+candid = { workspace = true }
+ic-cdk = { workspace = true }
+serde = { workspace = true }

@@ -166,8 +166,8 @@ impl TryFrom<pb_metadata::CanisterHttpRequestContext> for CanisterHttpRequestCon
         let request: Request =
             try_from_option_field(context.request, "CanisterHttpRequestContext::request")?;
 
-        let transform_method_name = context.transform_method_name.map(From::from);
-        let transform_context = context.transform_context.map(From::from);
+        let transform_method_name = context.transform_method_name;
+        let transform_context = context.transform_context;
         let transform = match (transform_method_name, transform_context) {
             (Some(method_name), Some(context)) => Some(Transform {
                 method_name,
@@ -543,11 +543,21 @@ pub struct CanisterHttpHeader {
 }
 
 /// Specifies the HTTP method that is used in the [`CanisterHttpRequest`].
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, EnumIter, Serialize)]
+#[derive(Clone, Copy, Eq, PartialEq, Hash, Debug, Deserialize, EnumIter, Serialize)]
 pub enum CanisterHttpMethod {
     GET = 1,
     POST = 2,
     HEAD = 3,
+}
+
+impl CanisterHttpMethod {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            CanisterHttpMethod::GET => "GET",
+            CanisterHttpMethod::POST => "POST",
+            CanisterHttpMethod::HEAD => "HEAD",
+        }
+    }
 }
 
 impl From<&CanisterHttpMethod> for pb_metadata::HttpMethod {

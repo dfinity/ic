@@ -125,17 +125,12 @@ def _artifact_bundle_impl(ctx):
     # List of input files
     input_files = ctx.files.inputs
 
-    bundle_dir = "{}_bundle".format(ctx.attr.name)
+    bundle_root = ctx.actions.declare_directory("bundle-{}".format(ctx.attr.name))
 
-    # Declare output files (NOTE: not windows friendly)
-    out_checksums = ctx.actions.declare_file(bundle_dir + "/SHA256SUMS")
+    bundle_prefix = ctx.attr.prefix
 
-    def make_symlink(target):
-        symlink = ctx.actions.declare_file(bundle_dir + "/" + target.basename)
-        ctx.actions.symlink(output = symlink, target_file = target)
-        return symlink
-
-    symlinks = [make_symlink(file) for file in input_files]
+    if bundle_prefix == "":
+        fail("artifact bundle prefix must be set")
 
     # Compute checksums and print it to stdout & out file.
     # The filenames are stripped from anything but the basename.
@@ -144,32 +139,35 @@ def _artifact_bundle_impl(ctx):
     ctx.actions.run_shell(
         inputs = input_files,
         arguments = [file.path for file in input_files],
-        outputs = [out_checksums],
+        env = {
+            "BUNDLE_ROOT": bundle_root.path,
+            "BUNDLE_PREFIX": bundle_prefix,
+        },
+        outputs = [bundle_root],
         tools = [ctx.executable._sha256],
         command = """
         set -euo pipefail
 
-        out_checksums="{out}"
-        output=$(mktemp) # temporary file bc sha256 doesn't support writing to stdout (or /dev/stdout) directly
+        outdir="$BUNDLE_ROOT/$BUNDLE_PREFIX"
 
+        mkdir -p "$outdir"
+
+        out_checksums="$outdir/SHA256SUMS"
+
+        output=$(mktemp) # temporary file bc sha256 doesn't support writing to stdout (or /dev/stdout) directly
         for input in "$@"; do
-            if ! [[ $input =~ (\\.tar|\\.gz) ]]; then
-                echo "skipping non-archive file $input"
-                continue
-            fi
             {sha256} "$input" "$output"
             cat "$output" >> "$out_checksums"
             echo " $(basename $input)" >> "$out_checksums"
+            ln -s "$( realpath "$input" )" "$outdir/$(basename $input)"
         done
 
-        cat "$out_checksums"
-
         sort -o "$out_checksums" -k 2 "$out_checksums"
-        """.format(out = out_checksums.path, sha256 = ctx.executable._sha256.path),
+        """.format(sha256 = ctx.executable._sha256.path),
     )
 
     # Return the output file
-    return [DefaultInfo(files = depset([out_checksums] + symlinks))]
+    return [DefaultInfo(files = depset([bundle_root]))]
 
 # A rule that re-exports symlinks to all the inputs as well
 # as an extra file 'SHA256SUMS' containing the checksums of inputs.
@@ -178,6 +176,9 @@ artifact_bundle = rule(
     attrs = {
         "inputs": attr.label_list(
             allow_files = True,
+            mandatory = True,
+        ),
+        "prefix": attr.string(
             mandatory = True,
         ),
         # The bazel-provided sha256 tool to avoid relying on tools from the container/env

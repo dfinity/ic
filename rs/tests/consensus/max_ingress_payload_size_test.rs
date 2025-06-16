@@ -25,7 +25,6 @@ use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
-        boundary_node::{BoundaryNode, BoundaryNodeVm},
         group::SystemTestGroup,
         ic::InternetComputer,
         test_env::TestEnv,
@@ -36,7 +35,6 @@ use ic_system_test_driver::{
 };
 use ic_universal_canister::wasm;
 
-const BOUNDARY_NODE_NAME: &str = "boundary-node-1";
 const MAX_QUERY_MESSAGE_SIZE_BYTES: u64 = 4 * 1024 * 1024;
 const REQUEST_HEADERS_OVERHEAD: u64 = 360;
 // https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/413
@@ -52,25 +50,17 @@ fn setup(env: TestEnv) {
     InternetComputer::new()
         .add_fast_single_node_subnet(SubnetType::System)
         .add_fast_single_node_subnet(SubnetType::Application)
+        .with_api_boundary_nodes(1)
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 
     install_nns_and_check_progress(env.topology_snapshot());
 
-    BoundaryNode::new(String::from(BOUNDARY_NODE_NAME))
-        .allocate_vm(&env)
-        .expect("Allocation of BoundaryNode failed.")
-        .for_ic(&env, "")
-        .use_real_certs_and_dns()
-        .start(&env)
-        .expect("failed to setup BoundaryNode VM");
-
-    env.get_deployed_boundary_node(BOUNDARY_NODE_NAME)
-        .unwrap()
-        .get_snapshot()
-        .unwrap()
-        .await_status_is_healthy()
-        .expect("Boundary node did not come up healthy.");
+    for api_bn in env.topology_snapshot().api_boundary_nodes() {
+        api_bn
+            .await_status_is_healthy()
+            .expect("API boundary node did not come up healthy.");
+    }
 }
 
 fn get_first_node(env: &TestEnv, subnet_type: SubnetType) -> IcNodeSnapshot {
@@ -116,9 +106,15 @@ fn send_request(
     call: RequestType,
 ) -> Result<(), AgentError> {
     let node = get_first_node(env, subnet_type);
-    let deployed_boundary_node = env.get_deployed_boundary_node(BOUNDARY_NODE_NAME).unwrap();
-    let boundary_node_vm = deployed_boundary_node.get_snapshot().unwrap();
-    let agent = boundary_node_vm.build_default_agent();
+
+    // get an agent for the API boundary node
+    let api_bn = env
+        .topology_snapshot()
+        .api_boundary_nodes()
+        .next()
+        .expect("There should be at least one API boundary node");
+    let agent = api_bn.build_default_agent();
+
     let logger = env.logger();
 
     tokio::runtime::Runtime::new()

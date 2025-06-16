@@ -12,8 +12,8 @@ pub const ZERO_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(0);
 /// How often we poll the local store.
 pub const POLLING_PERIOD: Duration = Duration::from_secs(5);
 
-pub fn empty_zero_registry_record(key: &str) -> RegistryTransportRecord {
-    RegistryTransportRecord {
+pub fn empty_zero_registry_record(key: &str) -> RegistryRecord {
+    RegistryRecord {
         key: key.to_string(),
         version: ZERO_REGISTRY_VERSION,
         value: None,
@@ -137,9 +137,7 @@ pub type RegistryClientResult<T> = Result<Option<T>, RegistryClientError>;
 
 /// A RegistryRecord represents a versioned k/v-pair as stored in the registry
 /// canister.
-/// TODO(IC-102): This needs to be renamed to `RegistryRecord` after
-/// we removed the legacy `RegistryRecord`.
-pub type RegistryTransportRecord = RegistryVersionedRecord<Vec<u8>>;
+pub type RegistryRecord = RegistryVersionedRecord<Vec<u8>>;
 
 /// A `RegistryDataProvider` is the data source that backs the `RegistryClient`,
 /// i.e. the registry client uses an instances of this trait to get data from
@@ -161,5 +159,5 @@ pub trait RegistryDataProvider: Send + Sync {
     fn get_updates_since(
         &self,
         version: RegistryVersion,
-    ) -> Result<Vec<RegistryTransportRecord>, RegistryDataProviderError>;
+    ) -> Result<Vec<RegistryRecord>, RegistryDataProviderError>;
 }

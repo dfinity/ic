@@ -767,19 +767,20 @@ fn build_streams_with_best_effort_messages() {
 #[test]
 fn build_streams_with_oversized_payloads() {
     with_test_replica_logger(|log| {
-        use std::iter::repeat;
         let local_canister = canister_test_id(0);
         let remote_canister = canister_test_id(1);
         let method_name: String = ['a'; 13].iter().collect();
 
         // Payloads/error message that result in `get_payload_size()` returning exactly
         // `MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 + 1`.
-        let oversized_request_payload: Vec<u8> = repeat(0u8)
-            .take(MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize - method_name.len() + 1)
-            .collect();
-        let oversized_response_payload: Vec<u8> = repeat(0u8)
-            .take(MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize + 1)
-            .collect();
+        let oversized_request_payload: Vec<u8> = std::iter::repeat_n(
+            0u8,
+            MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize - method_name.len() + 1,
+        )
+        .collect();
+        let oversized_response_payload: Vec<u8> =
+            std::iter::repeat_n(0u8, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize + 1)
+                .collect();
         let oversized_error_message: String =
             "x".repeat(MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize);
 

@@ -6,8 +6,8 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/nervous_system/chunks",
     "//rs/registry/transport",
+    "@crate_index//:ic-cdk",
     "@crate_index//:ic-stable-structures",
-    "@crate_index//:ic_cdk_0_17_1",
     "@crate_index//:prost",
 ]
 

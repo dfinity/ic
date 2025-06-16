@@ -1,4 +1,9 @@
-use candid::{candid_method, Decode, Nat, Principal};
+#[cfg(feature = "canbench-rs")]
+mod canbench;
+
+#[cfg(not(feature = "canbench-rs"))]
+use candid::Decode;
+use candid::{candid_method, Nat, Principal};
 #[cfg(feature = "notify-method")]
 use dfn_candid::CandidOne;
 #[cfg(feature = "notify-method")]
@@ -11,7 +16,7 @@ use ic_cdk::api::{
     call::{arg_data_raw, reply_raw},
     caller, data_certificate, instruction_counter, print, set_certified_data, time, trap,
 };
-use ic_cdk_macros::{post_upgrade, pre_upgrade, query, update};
+use ic_cdk::{post_upgrade, pre_upgrade, query, update};
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_icrc1::endpoints::{convert_transfer_error, StandardRecord};
 use ic_ledger_canister_core::ledger::LedgerContext;
@@ -35,15 +40,16 @@ use ic_stable_structures::writer::{BufferedWriter, Writer};
 use icp_ledger::BlockRes;
 #[cfg(feature = "icp-allowance-getter")]
 use icp_ledger::IcpAllowanceArgs;
+#[cfg(not(feature = "canbench-rs"))]
+use icp_ledger::InitArgs;
 use icp_ledger::{
     from_proto_bytes, max_blocks_per_request, protobuf, to_proto_bytes, tokens_into_proto,
     AccountBalanceArgs, AccountIdBlob, AccountIdentifier, AccountIdentifierByteBuf, ArchiveInfo,
     ArchivedBlocksRange, ArchivedEncodedBlocksRange, Archives, BinaryAccountBalanceArgs, Block,
-    BlockArg, CandidBlock, Decimals, FeatureFlags, GetBlocksArgs, GetBlocksRes, InitArgs,
-    IterBlocksArgs, IterBlocksRes, LedgerCanisterPayload, Memo, Name, Operation, PaymentError,
-    QueryBlocksResponse, QueryEncodedBlocksResponse, SendArgs, Subaccount, Symbol, TipOfChainRes,
-    TotalSupplyArgs, Transaction, TransferArgs, TransferError, TransferFee, TransferFeeArgs,
-    MEMO_SIZE_BYTES,
+    BlockArg, CandidBlock, Decimals, FeatureFlags, GetBlocksArgs, GetBlocksRes, IterBlocksArgs,
+    IterBlocksRes, LedgerCanisterPayload, Memo, Name, Operation, PaymentError, QueryBlocksResponse,
+    QueryEncodedBlocksResponse, SendArgs, Subaccount, Symbol, TipOfChainRes, TotalSupplyArgs,
+    Transaction, TransferArgs, TransferError, TransferFee, TransferFeeArgs, MEMO_SIZE_BYTES,
 };
 use icrc_ledger_types::icrc1::transfer::TransferError as Icrc1TransferError;
 use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
@@ -148,6 +154,7 @@ fn init(
             ));
         }
     }
+    #[cfg(not(feature = "canbench-rs"))]
     set_certified_data(
         &LEDGER
             .read()
@@ -265,7 +272,7 @@ async fn send(
     Ok(height)
 }
 
-async fn icrc1_send(
+fn icrc1_send_not_async(
     memo: Option<icrc_ledger_types::icrc1::transfer::Memo>,
     amount: Nat,
     fee: Option<Nat>,
@@ -356,12 +363,39 @@ async fn icrc1_send(
             icrc1_memo: memo.map(|x| x.0),
             created_at_time,
         };
+
+        #[cfg(not(feature = "canbench-rs"))]
         let (block_index, hash) = apply_transaction(&mut *ledger, tx, now, effective_fee)?;
 
+        #[cfg(feature = "canbench-rs")]
+        let (block_index, _hash) = apply_transaction(&mut *ledger, tx, now, effective_fee)?;
+
+        #[cfg(not(feature = "canbench-rs"))]
         set_certified_data(&hash.into_bytes());
 
         block_index
     };
+    Ok(block_index)
+}
+
+async fn icrc1_send(
+    memo: Option<icrc_ledger_types::icrc1::transfer::Memo>,
+    amount: Nat,
+    fee: Option<Nat>,
+    from_account: Account,
+    to_account: Account,
+    spender_account: Option<Account>,
+    created_at_time: Option<u64>,
+) -> Result<BlockIndex, CoreTransferError<Tokens>> {
+    let block_index = icrc1_send_not_async(
+        memo,
+        amount,
+        fee,
+        from_account,
+        to_account,
+        spender_account,
+        created_at_time,
+    )?;
 
     let max_msg_size = *MAX_MESSAGE_SIZE_BYTES.read().unwrap();
     archive_blocks::<Access>(DebugOutSink, max_msg_size as u64).await;
@@ -405,6 +439,11 @@ pub async fn notify(
     NOTIFY_METHOD_CALLS.with(|n| *n.borrow_mut() += 1);
 
     let caller_principal_id = PrincipalId::from(caller());
+
+    print(format!(
+        "[ledger] notify method called by [{}]",
+        caller_principal_id
+    ));
 
     if !LEDGER.read().unwrap().can_send(&caller_principal_id) {
         panic!("Notifying from {} is not allowed", caller_principal_id);
@@ -579,10 +618,6 @@ fn block(block_index: BlockIndex) -> Option<Result<EncodedBlock, CanisterId>> {
         Some(Err(result))
     // Or the block may be in the ledger, or the block may not exist
     } else {
-        print(format!(
-            "[ledger] Checking the ledger for block [{}]",
-            block_index
-        ));
         state.blockchain.get(block_index).map(Ok)
     }
 }
@@ -730,6 +765,7 @@ fn canister_init(arg: LedgerCanisterPayload) {
     }
 }
 
+#[cfg(not(feature = "canbench-rs"))]
 #[export_name = "canister_init"]
 fn main() {
     ic_cdk::setup();
@@ -762,6 +798,9 @@ fn main() {
         }
     }
 }
+
+#[cfg(feature = "canbench-rs")]
+fn main() {}
 
 // We use 8MiB buffer
 const BUFFER_SIZE: usize = 8388608;
@@ -1416,6 +1455,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
         match encode_metrics(&mut writer) {
             Ok(()) => HttpResponseBuilder::ok()
                 .header("Content-Type", "text/plain; version=0.0.4")
+                .header("Cache-Control", "no-store")
                 .with_body_and_content_length(writer.into_inner())
                 .build(),
             Err(err) => {
@@ -1467,14 +1507,8 @@ fn query_encoded_blocks(
     }
 }
 
-#[update]
-#[candid_method(update)]
-async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
-    if !LEDGER
-        .read()
-        .unwrap()
-        .can_send(&PrincipalId::from(caller()))
-    {
+fn icrc2_approve_not_async(caller: Principal, arg: ApproveArgs) -> Result<Nat, ApproveError> {
+    if !LEDGER.read().unwrap().can_send(&PrincipalId::from(caller)) {
         trap("Anonymous principal cannot approve token transfers on the ledger.");
     }
 
@@ -1484,7 +1518,7 @@ async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
     let now = TimeStamp::from_nanos_since_unix_epoch(time());
 
     let from_account = Account {
-        owner: caller(),
+        owner: caller,
         subaccount: arg.from_subaccount,
     };
     let from = AccountIdentifier::from(from_account);
@@ -1549,7 +1583,7 @@ async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
             memo: Memo(0),
             icrc1_memo: arg.memo.map(|x| x.0),
         };
-        let (block_index, hash) = apply_transaction(&mut *ledger, tx, now, expected_fee)
+        let result = apply_transaction(&mut *ledger, tx, now, expected_fee)
             .map_err(convert_transfer_error)
             .map_err(|err| {
                 let err: ApproveError = match ApproveError::try_from(err) {
@@ -1559,14 +1593,29 @@ async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
                 err
             })?;
 
+        #[cfg(not(feature = "canbench-rs"))]
+        let (block_index, hash) = result;
+
+        #[cfg(feature = "canbench-rs")]
+        let (block_index, _hash) = result;
+
+        #[cfg(not(feature = "canbench-rs"))]
         set_certified_data(&hash.into_bytes());
 
         block_index
     };
 
+    Ok(Nat::from(block_index))
+}
+
+#[update]
+#[candid_method(update)]
+async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
+    let block_index = icrc2_approve_not_async(caller(), arg)?;
+
     let max_msg_size = *MAX_MESSAGE_SIZE_BYTES.read().unwrap();
     archive_blocks::<Access>(DebugOutSink, max_msg_size as u64).await;
-    Ok(Nat::from(block_index))
+    Ok(block_index)
 }
 
 fn get_allowance(from: AccountIdentifier, spender: AccountIdentifier) -> Allowance {

@@ -40,10 +40,10 @@ LEDGER_CANISTER_DEPS = [
     "//rs/types/base_types",
     "@crate_index//:candid",
     "@crate_index//:ciborium",
+    "@crate_index//:ic-cdk",
     "@crate_index//:ic-cdk-timers",
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:ic-stable-structures",
-    "@crate_index//:ic_cdk_0_17_1",
     "@crate_index//:num-traits",
     "@crate_index//:serde_bytes",
 ]
@@ -60,6 +60,5 @@ def rust_ledger_canister(name, extra_deps = [":ledger"], crate_features = None):
         crate_features = crate_features if crate_features else [],
         proc_macro_deps = [
             # Keep sorted.
-            "@crate_index//:ic_cdk_macros_0_17_1",
         ],
     )

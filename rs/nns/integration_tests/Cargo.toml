@@ -22,6 +22,8 @@ path = "test_canisters/unstoppable_sns_root_canister.rs"
 name = "canister-playground-canister"
 path = "test_canisters/canister_playground_canister.rs"
 
+[features]
+tla = []
 
 # Dependencies required to compile the test canisters.
 [dependencies]
@@ -36,8 +38,7 @@ dfn_json = { path = "../../rust_canisters/dfn_json" }
 dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
 futures = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
-ic-cdk = "0.17.1"
-ic-cdk-macros = "0.17.1"
+ic-cdk = { workspace = true }
 ic-cdk-timers = { workspace = true }
 ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
 ic-limits = { path = "../../limits" }

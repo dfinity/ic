@@ -3,7 +3,6 @@ use crate::{
     types::{self, AddConfigError, IncidentId, Timestamp},
 };
 use anyhow::{anyhow, Context};
-use getrandom::getrandom;
 use rate_limits_api as api;
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
@@ -186,7 +185,7 @@ impl<A: CanisterApi> AddsConfig for ConfigAdder<A> {
 
 fn generate_random_uuid() -> Result<Uuid, anyhow::Error> {
     let mut buf = [0u8; 16];
-    getrandom(&mut buf)
+    getrandom::getrandom(&mut buf)
         .map_err(|e| anyhow::anyhow!(e))
         .context("Failed to generate random bytes")?;
     let uuid = Uuid::from_slice(&buf).context("Failed to create UUID from bytes")?;

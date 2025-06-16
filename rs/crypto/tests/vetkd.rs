@@ -36,16 +36,16 @@ fn should_consistently_derive_the_same_vetkey_given_sufficient_shares() {
         .expect("invalid transcript")
         .into_bytes();
 
-    let transcript_key = ic_vetkd_utils::DerivedPublicKey::deserialize(&transcript_key)
+    let transcript_key = ic_vetkeys::MasterPublicKey::deserialize(&transcript_key)
         .expect("failed to deserialize transcript public key");
 
     let derived_public_key = transcript_key
-        .derive_sub_key(caller.as_slice())
+        .derive_canister_key(caller.as_slice())
         .derive_sub_key(context)
         .serialize();
 
     let transport_secret_key =
-        ic_vetkd_utils::TransportSecretKey::from_seed(rng.gen::<[u8; 32]>().to_vec())
+        ic_vetkeys::TransportSecretKey::from_seed(rng.gen::<[u8; 32]>().to_vec())
             .expect("failed to create transport secret key");
     let vetkd_args = VetKdArgs {
         ni_dkg_id: dkg_id,
@@ -79,11 +79,10 @@ fn should_consistently_derive_the_same_vetkey_given_sufficient_shares() {
             Ok(())
         );
 
-        let encrypted_key =
-            ic_vetkd_utils::EncryptedVetKey::deserialize(&encrypted_key.encrypted_key)
-                .expect("failed to deserialize encrypted VetKey");
+        let encrypted_key = ic_vetkeys::EncryptedVetKey::deserialize(&encrypted_key.encrypted_key)
+            .expect("failed to deserialize encrypted VetKey");
 
-        let derived_public_key = ic_vetkd_utils::DerivedPublicKey::deserialize(&derived_public_key)
+        let derived_public_key = ic_vetkeys::DerivedPublicKey::deserialize(&derived_public_key)
             .expect("failed to deserialize derived public key");
         let decrypted_key = encrypted_key
             .decrypt_and_verify(

@@ -105,7 +105,7 @@ fn slice_garbage_collect(
             );
             if msg_count > 1 {
                 let from_middle = from + StreamIndex::from(msg_count as u64 / 2);
-                let msgs_from_middle = (msg_count + 1) / 2;
+                let msgs_from_middle = msg_count.div_ceil(2);
                 // Garbage collecting some messages and no signals should truncate the slice.
                 assert_opt_slices_eq(
                     Some(fixture.get_slice(DST_SUBNET, from_middle, msgs_from_middle)),

@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -42,6 +42,7 @@ DEPENDENCIES = [
     "//rs/registry/transport",
     "//rs/sns/init",
     "//rs/sns/swap",
+    "//rs/types/base_types",
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "@crate_index//:anyhow",
@@ -75,9 +76,12 @@ MACRO_DEPENDENCIES = [
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "//packages/pocket-ic",
+    "//rs/nervous_system/agent",
+    "//rs/nervous_system/chunks",
     "//rs/nervous_system/integration_tests:nervous_system_integration_tests",
     "//rs/pocket_ic_server:pocket-ic-server",
     "//rs/registry/admin:ic-admin",
+    "//rs/registry/canister/api",
 ]
 
 DEV_DATA = [
@@ -86,12 +90,14 @@ DEV_DATA = [
     "//rs/nns/sns-wasm:sns-wasm-canister",
     "//rs/nns/handlers/lifeline/impl:lifeline_canister",
     "//rs/registry/canister:registry-canister",
+    "//rs/registry/canister:registry-canister-test",
     "//rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method",
 ]
 
 DEV_ENV = {
     "GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister)",
     "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
+    "REGISTRY_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister-test)",
     "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method)",
     "LIFELINE_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/lifeline/impl:lifeline_canister)",
     "SNS_WASM_CANISTER_WASM_PATH": "$(rootpath //rs/nns/sns-wasm:sns-wasm-canister)",
@@ -102,10 +108,42 @@ DEV_ENV = {
 
 ALIASES = {}
 
+# Warning: In general, to avoid confusion, it is best that libraries and
+# binaries NOT share the same source files. Explicitly listing BINARY_SRC
+# (instead of glob) and making LIBRARY_SRCS exclude BINARY_SRCS ensures that
+# such sharing does not occur.
+BINARY_SRCS = [
+    "src/create_subnet.rs",
+    "src/helpers.rs",
+    "src/main.rs",
+    "src/recover_subnet.rs",
+    "src/types.rs",
+    "src/update_subnet.rs",
+]
+
+LIBRARY_SRCS = glob(
+    ["src/**/*.rs"],
+    exclude = BINARY_SRCS + [
+        "**/*tests*/**",
+        "**/*tests.rs",
+    ],
+)
+
+rust_library(
+    name = "admin",
+    # TODO: Get rid of this. This is only because there are a few test_only
+    # things in DEPENDENCIES.
+    testonly = True,
+    srcs = LIBRARY_SRCS,
+    crate_name = "ic_admin",
+    version = "0.0.1",
+    deps = DEPENDENCIES,
+)
+
 rust_binary(
     name = "ic-admin",
     testonly = True,
-    srcs = glob(["src/**/*.rs"]),
+    srcs = BINARY_SRCS,
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
@@ -113,7 +151,8 @@ rust_binary(
 
 rust_test(
     name = "ic-admin_unit_test",
-    crate = ":ic-admin",
+    srcs = BINARY_SRCS + glob(["src/**/*tests.rs"]),
+    crate_root = "src/main.rs",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
@@ -125,5 +164,5 @@ rust_test(
     data = DEV_DATA,
     env = DEV_ENV,
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":admin"],
 )

@@ -162,7 +162,7 @@ pub async fn test_async(env: TestEnv) {
         // while the long running test is running we are generous
         // with error thresholds.
         75.0,
-        60,
+        120,
     );
 
     let mainnet_version = get_mainnet_nns_revision();

@@ -1,5 +1,5 @@
 use candid::candid_method;
-use ic_cdk_macros::update;
+use ic_cdk::update;
 
 /// Macro to create a chain of function calls resulting in the provided
 /// expression and expose it via an update with the provided name.

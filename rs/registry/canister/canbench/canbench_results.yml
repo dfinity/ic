@@ -1,0 +1,37 @@
+benches:
+  measure_routing_table_invariant_checks_shards_and_unsharded:
+    total:
+      calls: 1
+      instructions: 563027802
+      heap_increase: 69
+      stable_memory_increase: 0
+    scopes: {}
+  measure_snapshot_creation_with_1000_individual_entries:
+    total:
+      calls: 1
+      instructions: 20601263
+      heap_increase: 2
+      stable_memory_increase: 0
+    scopes: {}
+  measure_snapshot_creation_with_100_000_individual_entries:
+    total:
+      calls: 1
+      instructions: 3576644589
+      heap_increase: 177
+      stable_memory_increase: 0
+    scopes: {}
+  measure_snapshot_creation_with_100_segments_of_1000_entries:
+    total:
+      calls: 1
+      instructions: 6424399
+      heap_increase: 30
+      stable_memory_increase: 0
+    scopes: {}
+  measure_snapshot_creation_with_1_segment_of_1000_entries:
+    total:
+      calls: 1
+      instructions: 53559
+      heap_increase: 0
+      stable_memory_increase: 0
+    scopes: {}
+version: 0.1.15

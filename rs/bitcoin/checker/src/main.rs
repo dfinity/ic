@@ -292,6 +292,7 @@ fn http_request(req: http::HttpRequest) -> http::HttpResponse {
 
         http::HttpResponseBuilder::ok()
             .header("Content-Type", "text/plain; version=0.0.4")
+            .header("Cache-Control", "no-store")
             .with_body_and_content_length(writer.into_inner())
             .build()
     } else if req.path() == "/logs" {

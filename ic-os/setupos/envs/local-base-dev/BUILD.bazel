@@ -15,7 +15,6 @@ icos_build(
         "no-cache",
     ],
     upgrades = False,
-    upload_prefix = None,  # Do not upload locally built base images
     visibility = ["//rs:ic-os-pkg"],
     vuln_scan = False,
 )

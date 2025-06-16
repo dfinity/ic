@@ -107,7 +107,7 @@ pub(crate) fn execute_upgrade(
     let mut helper = InstallCodeHelper::new(&clean_canister, &original);
 
     // Stage 0: validate input.
-    if let Err(err) = helper.validate_input(&original, &round, round_limits) {
+    if let Err(err) = helper.validate_input(&original) {
         return finish_err(
             clean_canister,
             helper.instructions_left(),
@@ -323,7 +323,6 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
         instructions_from_compilation,
         result,
         memory_handling,
-        &original,
     ) {
         let instructions_left = helper.instructions_left();
         return finish_err(
@@ -592,7 +591,6 @@ impl PausedInstallCodeExecution for PausedPreUpgradeExecution {
             self.paused_helper,
             &self.original,
             &round,
-            round_limits,
         ) {
             Ok(helper) => helper,
             Err((err, instructions_left, new_canister_log)) => {
@@ -697,7 +695,6 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringUpgrade {
             self.paused_helper,
             &self.original,
             &round,
-            round_limits,
         ) {
             Ok(helper) => helper,
             Err((err, instructions_left, new_canister_log)) => {
@@ -801,7 +798,6 @@ impl PausedInstallCodeExecution for PausedPostUpgradeExecution {
             self.paused_helper,
             &self.original,
             &round,
-            round_limits,
         ) {
             Ok(helper) => helper,
             Err((err, instructions_left, new_canister_log)) => {

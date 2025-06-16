@@ -7,7 +7,7 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:candid",
-    "@crate_index//:ic_cdk_0_17_1",
+    "@crate_index//:ic-cdk",
     "@crate_index//:lazy_static",
     "@crate_index//:rand",
     "@crate_index//:rand_pcg",
@@ -26,7 +26,6 @@ DEV_DEPENDENCIES = [
 
 MACRO_DEPENDENCIES = [
     # Keep sorted.
-    "@crate_index//:ic_cdk_macros_0_17_1",
 ]
 
 rust_binary(

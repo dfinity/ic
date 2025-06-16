@@ -287,7 +287,13 @@ impl VotingPowerEconomics {
     pub const DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS: u64 = 6 * ONE_MONTH_SECONDS;
 
     /// A proposal to set `VotingPowerEconomics.min_dissolve_delay_seconds` must specify a value
-    /// for this field that falls within this range.
+    /// for this field that falls within this range. Changing the lower bound of this parameter
+    /// requires manually checking how it might interact with other aspects of the NNS.
+    /// In particular, it is not currently possible for a dissolved neuron to cast a vote, as
+    /// the minimal dissolve delay to be eligible for voting exceeds the maximal voting period.
+    /// Thus, there may be implicit dependencies of the NNS itself or its clients on this aspect,
+    /// which originate from the time when the minimum dissolve delay to vote was an internal NNS
+    /// constant.
     pub const NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS_BOUNDS: RangeInclusive<u64> =
         (3 * ONE_MONTH_SECONDS)..=(6 * ONE_MONTH_SECONDS);
 

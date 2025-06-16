@@ -9,11 +9,11 @@ use ic_interfaces::{
 use ic_protobuf::types::v1 as pb;
 use ic_types::{
     batch::ValidationContext,
-    consensus::idkg::{IDkgBlockReader, IDkgStats, RequestId},
     consensus::{
-        dkg, Block, BlockPayload, CatchUpContent, CatchUpPackage, ConsensusMessageHashable,
-        HasHeight, HashedBlock, HashedRandomBeacon, Payload, RandomBeaconContent, Rank,
-        SummaryPayload,
+        dkg::DkgSummary,
+        idkg::{IDkgBlockReader, IDkgStats, RequestId},
+        Block, BlockPayload, CatchUpContent, CatchUpPackage, ConsensusMessageHashable, HasHeight,
+        HashedBlock, HashedRandomBeacon, Payload, RandomBeaconContent, Rank, SummaryPayload,
     },
     crypto::{
         canister_threshold_sig::idkg::{IDkgDealingSupport, IDkgTranscriptParams},
@@ -134,7 +134,7 @@ impl ConsensusPoolCache for FakeConsensusPoolCache {
 }
 
 /// Return the genesis BlockProposal and RandomBeacon made for the given height.
-pub fn make_genesis(summary: dkg::Summary) -> CatchUpPackage {
+pub fn make_genesis(summary: DkgSummary) -> CatchUpPackage {
     // Use the registry version and height, from which the summary package was
     // created.
     let registry_version = summary.registry_version;

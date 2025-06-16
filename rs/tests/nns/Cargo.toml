@@ -14,7 +14,6 @@ ic-agent = { workspace = true }
 ic-btc-interface = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-config = { path = "../../config" }
-ic-mainnet-nns-recovery = { path = "../../tests/nns/ic_mainnet_nns_recovery" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-nns-governance-api = { path = "../../nns/governance/api" }
 ic-nns-test-utils = { path = "../../nns/test_utils" }
@@ -53,10 +52,6 @@ axum = { workspace = true }
 ic-registry-transport = { path = "../../registry/transport" }
 prost = { workspace = true }
 url = { workspace = true }
-
-[[bin]]
-name = "nns_upgrade_test"
-path = "nns_upgrade_test.rs"
 
 [[bin]]
 name = "certified_registry_test"

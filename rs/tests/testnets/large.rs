@@ -1,5 +1,5 @@
 // Set up a testnet containing:
-//   one 4-node System, one 4-node Application, and one 1-node Application subnets, a single boundary node, and a p8s (with grafana) VM.
+//   one 4-node System, one 4-node Application, and one 1-node Application subnets, a single API boundary node, single ic-gateway/s and a p8s (with grafana) VM.
 // All replica nodes use the following resources: 64 vCPUs, 480GiB of RAM, and 2,000 GiB disk.
 //
 // You can setup this testnet with a lifetime of 180 mins by executing the following commands:
@@ -42,16 +42,15 @@ use anyhow::Result;
 
 use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::driver::boundary_node::BoundaryNodeVm;
 use ic_system_test_driver::driver::ic::{
     AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources,
 };
+use ic_system_test_driver::driver::ic_gateway_vm::{HasIcGatewayVm, IcGatewayVm};
 use ic_system_test_driver::driver::{
-    boundary_node::BoundaryNode,
     group::SystemTestGroup,
     prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
-    test_env_api::{await_boundary_node_healthy, HasTopologySnapshot, IcNodeContainer},
+    test_env_api::{HasTopologySnapshot, IcNodeContainer},
 };
 use ic_system_test_driver::sns_client::add_all_wasms_to_sns_wasm;
 use nns_dapp::{
@@ -61,7 +60,7 @@ use nns_dapp::{
 
 const NUM_FULL_CONSENSUS_APP_SUBNETS: u64 = 1;
 const NUM_SINGLE_NODE_APP_SUBNETS: u64 = 1;
-const NUM_BN: u64 = 1;
+const NUM_IC_GATEWAYS: u64 = 1;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
@@ -82,7 +81,9 @@ pub fn setup(env: TestEnv) {
         memory_kibibytes: Some(AmountOfMemoryKiB::new(480 << 20)),
         boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(2000)),
     };
-    let mut ic = InternetComputer::new().with_default_vm_resources(vm_resources);
+    let mut ic = InternetComputer::new()
+        .with_api_boundary_nodes(1)
+        .with_default_vm_resources(vm_resources);
     ic = ic.add_subnet(Subnet::new(SubnetType::System).add_nodes(4));
     for _ in 0..NUM_FULL_CONSENSUS_APP_SUBNETS {
         ic = ic.add_subnet(Subnet::new(SubnetType::Application).add_nodes(4));
@@ -105,51 +106,35 @@ pub fn setup(env: TestEnv) {
     // sets the exchange rate to 12 XDR per 1 ICP
     set_authorized_subnets(&env);
 
-    // deploys the boundary node(s)
-    let mut farm_url: Option<String> = None;
-    for i in 0..NUM_BN {
-        let bn_name = format!("boundary-node-{}", i);
-        BoundaryNode::new(bn_name.clone())
-            .allocate_vm(&env)
-            .expect("Allocation of BoundaryNode failed.")
-            .for_ic(&env, "")
-            .use_real_certs_and_dns()
+    // deploys the ic-gateway/s
+    for i in 0..NUM_IC_GATEWAYS {
+        let ic_gatway_name = format!("ic-gateway-{}", i);
+        IcGatewayVm::new(&ic_gatway_name)
             .start(&env)
-            .expect("failed to setup BoundaryNode VM");
-        if farm_url.is_none() {
-            let boundary_node = env
-                .get_deployed_boundary_node(bn_name.as_str())
-                .unwrap()
-                .get_snapshot()
-                .unwrap();
-            farm_url = Some(boundary_node.get_playnet().unwrap());
-        }
+            .expect("failed to setup ic-gateway");
     }
-    env.sync_with_prometheus_by_name("", farm_url);
+    let ic_gateway = env.get_deployed_ic_gateway("ic-gateway-0").unwrap();
+    let ic_gateway_url = ic_gateway.get_public_url();
+    let ic_gateway_domain = ic_gateway_url.domain().unwrap();
+    env.sync_with_prometheus_by_name("", Some(ic_gateway_domain.to_string()));
 
-    for i in 0..NUM_BN {
-        let bn_name = format!("boundary-node-{}", i);
-        await_boundary_node_healthy(&env, &bn_name);
-        if i == 0 {
-            // pick an SNS subnet among the application subnets
-            let topology = env.topology_snapshot();
-            let mut app_subnets = topology
-                .subnets()
-                .filter(|s| s.subnet_type() == SubnetType::Application);
-            let sns_subnet = app_subnets.next().unwrap();
+    // pick an SNS subnet among the application subnets
+    let topology = env.topology_snapshot();
+    let mut app_subnets = topology
+        .subnets()
+        .filter(|s| s.subnet_type() == SubnetType::Application);
+    let sns_subnet = app_subnets.next().unwrap();
 
-            // install the SNS aggregator canister onto the SNS subnet
-            let sns_node = sns_subnet.nodes().next().unwrap();
-            let sns_aggregator_canister_id = install_sns_aggregator(&env, &bn_name, sns_node);
+    // install the SNS aggregator canister onto the SNS subnet
+    let sns_node = sns_subnet.nodes().next().unwrap();
+    let sns_aggregator_canister_id = install_sns_aggregator(&env, &ic_gateway_url, sns_node);
 
-            // register the SNS subnet with the NNS
-            set_sns_subnet(&env, sns_subnet.subnet_id);
+    // register the SNS subnet with the NNS
+    set_sns_subnet(&env, sns_subnet.subnet_id);
 
-            // upload SNS canister WASMs to the SNS-W canister
-            add_all_wasms_to_sns_wasm(&env);
+    // upload SNS canister WASMs to the SNS-W canister
+    add_all_wasms_to_sns_wasm(&env);
 
-            // install II, NNS dapp, and Subnet Rental Canister
-            install_ii_nns_dapp_and_subnet_rental(&env, &bn_name, Some(sns_aggregator_canister_id));
-        }
-    }
+    // install II, NNS dapp, and Subnet Rental Canister
+    install_ii_nns_dapp_and_subnet_rental(&env, &ic_gateway_url, Some(sns_aggregator_canister_id));
 }

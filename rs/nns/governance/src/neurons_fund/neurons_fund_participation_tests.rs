@@ -1,3 +1,4 @@
+use self::println;
 use super::*;
 use ic_neurons_fund::test_functions::SimpleLinearFunction;
 

@@ -13,6 +13,7 @@ use std::{
 #[derive(Copy, Clone)]
 pub enum SetupAction {
     PerformCheckpoint,
+    PerformCheckpointCallSetup,
     None,
 }
 
@@ -67,8 +68,6 @@ fn initialize_execution_test(
         canister_id,
         wasm.to_vec(),
         initialization_arg.to_vec(),
-        None,
-        None,
     );
     let result = test.install_code(args).unwrap();
     if let WasmResult::Reject(s) = result {
@@ -77,6 +76,11 @@ fn initialize_execution_test(
     match setup_action {
         SetupAction::PerformCheckpoint => {
             test.checkpoint_canister_memories();
+        }
+        SetupAction::PerformCheckpointCallSetup => {
+            test.checkpoint_canister_memories();
+            test.ingress(canister_id, "setup", Encode!(&()).unwrap())
+                .unwrap();
         }
         SetupAction::None => {}
     }
@@ -122,6 +126,11 @@ pub fn update_bench(
                 match setup_action {
                     SetupAction::PerformCheckpoint => {
                         test.checkpoint_canister_memories();
+                    }
+                    SetupAction::PerformCheckpointCallSetup => {
+                        panic!(
+                            "Error executing `update_bench()`, use `update_bench_once()` instead"
+                        );
                     }
                     SetupAction::None => {}
                 }

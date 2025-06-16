@@ -1,17 +1,17 @@
 use std::cell::Cell;
 
-#[cfg(test)]
+#[cfg(any(test, feature = "canbench-rs"))]
 use ic_nervous_system_temporary::Temporary;
 
 thread_local! {
-    static IS_CHUNKIFYING_LARGE_VALUES_ENABLED: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
+    static IS_CHUNKIFYING_LARGE_VALUES_ENABLED: Cell<bool> = const { Cell::new(true) };
 }
 
 pub(crate) fn is_chunkifying_large_values_enabled() -> bool {
     IS_CHUNKIFYING_LARGE_VALUES_ENABLED.get()
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "canbench-rs"))]
 pub fn temporarily_enable_chunkifying_large_values() -> Temporary {
     Temporary::new(&IS_CHUNKIFYING_LARGE_VALUES_ENABLED, true)
 }

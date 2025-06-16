@@ -27,10 +27,6 @@ const TRANSFER_MULTIPLIER: u64 = 1000;
 const APPROVE_MULTIPLIER: u64 = 100;
 const TRANSFER_FROM_MULTIPLIER: u64 = 10;
 const BURN_MULTIPLIER: u64 = 1;
-// Corresponds to ic_icrc1_ledger::LEDGER_VERSION where allowances and balances are
-// migrated to stable structures
-const LEDGER_VERSION_2: u64 = 2;
-#[cfg(not(feature = "u256-tokens"))]
 // Corresponds to ic_icrc1_ledger::LEDGER_VERSION where blocks are migrated to stable structures
 const LEDGER_VERSION_3: u64 = 3;
 
@@ -52,7 +48,7 @@ lazy_static! {
         Wasm::from_bytes(load_wasm_using_env_var(
             "CKBTC_IC_ICRC1_ARCHIVE_DEPLOYED_VERSION_WASM_PATH",
         )),
-        LEDGER_VERSION_2,
+        LEDGER_VERSION_3,
         None,
     );
     pub static ref MAINNET_SNS_WASMS: Wasms = Wasms::new(
@@ -97,7 +93,7 @@ lazy_static! {
         Wasm::from_bytes(load_wasm_using_env_var(
             "CKETH_IC_ICRC1_ARCHIVE_DEPLOYED_VERSION_WASM_PATH",
         )),
-        LEDGER_VERSION_2,
+        LEDGER_VERSION_3,
         None,
     );
     pub static ref MASTER_WASMS: Wasms = Wasms::new(

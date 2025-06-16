@@ -99,8 +99,6 @@ impl InstallCode {
         let canister_id = self.valid_canister_id()?;
         let wasm_module = self.valid_wasm_module()?.clone();
         let arg = self.valid_arg()?.clone();
-        let compute_allocation = None;
-        let memory_allocation = None;
 
         Encode!(&ChangeCanisterRequest {
             stop_before_installing,
@@ -108,8 +106,6 @@ impl InstallCode {
             canister_id,
             wasm_module,
             arg,
-            compute_allocation,
-            memory_allocation,
             chunked_canister_wasm: None,
         })
         .map_err(|e| invalid_proposal_error(&format!("Failed to encode payload: {}", e)))
@@ -311,8 +307,6 @@ mod tests {
                 canister_id: REGISTRY_CANISTER_ID,
                 wasm_module: vec![1, 2, 3],
                 arg: vec![4, 5, 6],
-                compute_allocation: None,
-                memory_allocation: None,
                 chunked_canister_wasm: None,
             }
         );
@@ -384,8 +378,6 @@ mod tests {
                 canister_id: SNS_WASM_CANISTER_ID,
                 wasm_module: vec![1, 2, 3],
                 arg: vec![],
-                compute_allocation: None,
-                memory_allocation: None,
                 chunked_canister_wasm: None,
             }
         );

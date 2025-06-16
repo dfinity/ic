@@ -29,8 +29,8 @@ rust_library(
         "//rs/universal_canister/lib",
         "@crate_index//:assert_matches",
         "@crate_index//:candid",
+        "@crate_index//:ic-cdk",
         "@crate_index//:ic-management-canister-types",
-        "@crate_index//:ic_cdk_0_17_1",
         "@crate_index//:proptest",
     ],
 )

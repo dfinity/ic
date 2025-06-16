@@ -4,7 +4,6 @@ from typing import Set
 
 
 class IgnoreList(str, Enum):
-    BOUNDARY_GUEST_OS = "container_scanner_finding_failover_ignore_list_boundary_guestos.txt"
     GUEST_OS = "container_scanner_finding_failover_ignore_list_guestos.txt"
 
 

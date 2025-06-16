@@ -66,6 +66,7 @@ pub fn update_guestos_config() -> Result<()> {
             nns_urls,
             use_node_operator_private_key,
             use_ssh_authorized_keys,
+            enable_trusted_execution_environment: false,
             icos_dev_settings: ICOSDevSettings::default(),
         };
 
@@ -290,6 +291,7 @@ pub fn update_hostos_config(
             domain_name,
             verbose,
             node_reward_type,
+            enable_trusted_execution_environment,
         } = get_config_ini_settings(config_ini_path)?;
 
         let deterministic_config = DeterministicIpv6Config {
@@ -334,6 +336,7 @@ pub fn update_hostos_config(
             use_nns_public_key,
             nns_urls: deployment_json_settings.nns.url.clone(),
             use_node_operator_private_key,
+            enable_trusted_execution_environment,
             use_ssh_authorized_keys,
             icos_dev_settings: ICOSDevSettings::default(),
         };

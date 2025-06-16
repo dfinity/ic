@@ -14,7 +14,7 @@ use ic_test_utilities_types::{
     ids::{node_test_id, subnet_test_id},
     messages::SignedIngressBuilder,
 };
-use ic_types::consensus::dkg::DkgDataPayload;
+use ic_types::consensus::dkg::{DkgDataPayload, DkgSummary};
 use ic_types::consensus::{BlockPayload, DataPayload};
 use ic_types::{
     batch::{BatchPayload, IngressPayload},
@@ -34,7 +34,7 @@ where
         let mut consensus_pool = ConsensusPoolImpl::new(
             node_test_id(0),
             subnet_test_id(0),
-            (&make_genesis(ic_types::consensus::dkg::Summary::fake())).into(),
+            (&make_genesis(DkgSummary::fake())).into(),
             pool_config,
             ic_metrics::MetricsRegistry::new(),
             no_op_logger(),

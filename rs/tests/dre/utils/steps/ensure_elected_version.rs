@@ -31,8 +31,6 @@ impl Step for EnsureElectedVersion {
         rt.block_on(bless_public_replica_version(
             &nns_node,
             &self.version,
-            ic_consensus_system_test_utils::upgrade::UpdateImageType::Image,
-            ic_consensus_system_test_utils::upgrade::UpdateImageType::Image,
             &env.logger(),
         ));
 

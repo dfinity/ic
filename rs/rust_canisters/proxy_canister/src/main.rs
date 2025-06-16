@@ -10,12 +10,13 @@ use futures::future::join_all;
 use ic_cdk::api::call::RejectionCode;
 use ic_cdk::api::time;
 use ic_cdk::{caller, spawn};
-use ic_cdk_macros::{query, update};
+use ic_cdk::{query, update};
 use ic_management_canister_types_private::{
     CanisterHttpResponsePayload, HttpHeader, Payload, TransformArgs,
 };
 use proxy_canister::{
     RemoteHttpRequest, RemoteHttpResponse, RemoteHttpStressRequest, RemoteHttpStressResponse,
+    ResponseWithRefundedCycles,
 };
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -118,13 +119,13 @@ async fn run_continuous_request_loop(request: RemoteHttpRequest) {
 }
 
 #[update]
-async fn send_request(
+async fn send_request_with_refund_callback(
     request: RemoteHttpRequest,
-) -> Result<RemoteHttpResponse, (RejectionCode, String)> {
+) -> ResponseWithRefundedCycles {
     let RemoteHttpRequest { request, cycles } = request;
     let request_url = request.url.clone();
     println!("send_request making IC call.");
-    match ic_cdk::api::call::call_raw(
+    let result = match ic_cdk::api::call::call_raw(
         Principal::management_canister(),
         "http_request",
         &request.encode(),
@@ -163,7 +164,21 @@ async fn send_request(
             });
             Err((r, m))
         }
+    };
+    let refunded_cycles = ic_cdk::api::call::msg_cycles_refunded();
+    ResponseWithRefundedCycles {
+        result,
+        refunded_cycles,
     }
+}
+
+#[update]
+async fn send_request(
+    request: RemoteHttpRequest,
+) -> Result<RemoteHttpResponse, (RejectionCode, String)> {
+    let ResponseWithRefundedCycles { result, .. } =
+        send_request_with_refund_callback(request).await;
+    result
 }
 
 #[query]

@@ -7,7 +7,7 @@ edition = "2021"
 async-trait = { workspace = true }
 candid = { workspace = true }
 ic-base-types = { path = "../../../../types/base_types" }
-ic-cdk = "0.17.1"
+ic-cdk = { workspace = true }
 ic-nervous-system-clients = { path = "../../../../nervous_system/clients" }
 ic-nns-constants = { path = "../../../../nns/constants" }
 serde = { workspace = true }

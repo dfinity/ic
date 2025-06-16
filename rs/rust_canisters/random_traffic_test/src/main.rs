@@ -5,7 +5,7 @@ use ic_cdk::{
     api,
     call::{Call, CallFailed, CallFuture, Response as CallResponse},
 };
-use ic_cdk_macros::{heartbeat, init, query, update};
+use ic_cdk::{heartbeat, init, query, update};
 use rand::{
     distributions::{Distribution, WeightedIndex},
     rngs::StdRng,

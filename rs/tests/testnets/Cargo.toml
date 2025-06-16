@@ -10,7 +10,6 @@ version.workspace = true
 anyhow = { workspace = true }
 candid = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
-ic-mainnet-nns-recovery = { path = "../nns/ic_mainnet_nns_recovery" }
 ic-registry-subnet-features = { path = "../../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-system-test-driver = { path = "../driver" }
@@ -32,10 +31,6 @@ path = "large.rs"
 [[bin]]
 name = "medium"
 path = "medium.rs"
-
-[[bin]]
-name = "recovered_mainnet_nns"
-path = "recovered_mainnet_nns.rs"
 
 [[bin]]
 name = "single_app_large_node"
@@ -76,3 +71,11 @@ path = "src_testing.rs"
 [[bin]]
 name = "from_config"
 path = "from_config.rs"
+
+[[bin]]
+name = "single_app_large_node_with_nns"
+path = "single_app_large_node_with_nns.rs"
+
+[[bin]]
+name = "small_with_query_stats"
+path = "small_with_query_stats.rs"

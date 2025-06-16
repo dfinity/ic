@@ -1,3 +1,4 @@
+use self::println;
 use super::*;
 use crate::{DeserializableFunction, SerializableFunction, E8};
 use assert_matches::assert_matches;

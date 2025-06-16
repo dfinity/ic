@@ -16,7 +16,7 @@ const MEMORY_LIMIT: i32 = 64 * 1_024;
 
 enum FnCall {
     StableGrow(i32),
-    StableRead(i32, i32),
+    StableRead(i32, i32, i32),
     GlobalTimerSet(i64),
     DebugPrint(Vec<u8>),
     Trap(Vec<u8>),
@@ -46,8 +46,8 @@ impl WatFnCode {
     }
 
     /// Call the `ic0.stable_read` function.
-    pub fn stable_read(mut self, offset: i32, size: i32) -> Self {
-        self.calls.push(FnCall::StableRead(offset, size));
+    pub fn stable_read(mut self, dst: i32, offset: i32, size: i32) -> Self {
+        self.calls.push(FnCall::StableRead(dst, offset, size));
         self
     }
 
@@ -112,14 +112,18 @@ impl WatCall {
         Self {
             func: "ic0_stable_grow".to_string(),
             params: vec![WatConst::I32(new_pages)],
-            drop_result: false,
+            drop_result: true,
         }
     }
 
-    fn stable_read(offset: i32, size: i32) -> Self {
+    fn stable_read(dst: i32, offset: i32, size: i32) -> Self {
         Self {
             func: "ic0_stable_read".to_string(),
-            params: vec![WatConst::I32(offset), WatConst::I32(size)],
+            params: vec![
+                WatConst::I32(dst),
+                WatConst::I32(offset),
+                WatConst::I32(size),
+            ],
             drop_result: false,
         }
     }
@@ -473,7 +477,7 @@ impl WatCanisterBuilder {
             .iter()
             .map(|call| match call {
                 FnCall::StableGrow(new_pages) => WatCall::stable_grow(*new_pages),
-                FnCall::StableRead(offset, size) => WatCall::stable_read(*offset, *size),
+                FnCall::StableRead(dst, offset, size) => WatCall::stable_read(*dst, *offset, *size),
                 FnCall::GlobalTimerSet(timestamp) => WatCall::global_timer_set(*timestamp),
                 FnCall::DebugPrint(message) => {
                     WatCall::debug_print(self.get_memory_offset(message), message.len() as i32)
@@ -509,11 +513,11 @@ mod tests {
         let test_cases = vec![
             (
                 WatCall::stable_grow(7),
-                "(call $ic0_stable_grow (i32.const 7))",
+                "(drop (call $ic0_stable_grow (i32.const 7)))",
             ),
             (
-                WatCall::stable_read(4, 7),
-                "(call $ic0_stable_read (i32.const 4) (i32.const 7))",
+                WatCall::stable_read(0, 4, 7),
+                "(call $ic0_stable_read (i32.const 0) (i32.const 4) (i32.const 7))",
             ),
             (
                 WatCall::global_timer_set(42),
@@ -684,7 +688,7 @@ mod tests {
                 name: "test".to_string(),
                 calls: vec![
                     WatCall::stable_grow(1),
-                    WatCall::stable_read(4, 7),
+                    WatCall::stable_read(0, 4, 7),
                     WatCall::global_timer_set(1),
                     WatCall::debug_print(0, 4),
                     WatCall::trap(10, 4),
@@ -694,8 +698,8 @@ mod tests {
             .to_string(),
             r#"
             (func $test (export "canister_update test")
-                (call $ic0_stable_grow (i32.const 1))
-                (call $ic0_stable_read (i32.const 4) (i32.const 7))
+                (drop (call $ic0_stable_grow (i32.const 1)))
+                (call $ic0_stable_read (i32.const 0) (i32.const 4) (i32.const 7))
                 (drop (call $ic0_global_timer_set (i64.const 1)))
                 (call $ic0_debug_print (i32.const 0) (i32.const 4))
                 (call $ic0_trap (i32.const 10) (i32.const 4))

@@ -7,12 +7,12 @@ use ic_nns_governance::timer_tasks::schedule_tasks;
 use ic_nns_governance::{
     governance::{Governance, REWARD_DISTRIBUTION_PERIOD_SECONDS},
     pb::v1::{
-        neuron::DissolveState, proposal::Action, Ballot, Governance as GovernanceProto,
-        NetworkEconomics, Neuron, Proposal, ProposalData, ProposalRewardStatus, Vote,
+        proposal::Action, Ballot, Proposal, ProposalData, ProposalRewardStatus, Topic, Vote,
         WaitForQuietState,
     },
     proposals::sum_weighted_voting_power,
 };
+use ic_nns_governance_api as api;
 use icp_ledger::Tokens;
 use lazy_static::lazy_static;
 use maplit::{btreemap, hashmap};
@@ -25,26 +25,26 @@ pub mod fake;
 const NOW_SECONDS: u64 = 1735689600;
 
 lazy_static! {
-    static ref NEURONS: BTreeMap<u64, Neuron> = {
-        let base = Neuron {
+    static ref NEURONS: BTreeMap<u64, api::Neuron> = {
+        let base = api::Neuron {
             controller: Some(PrincipalId::new_user_test_id(783_068_996)),
-            dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(NOW_SECONDS)),
+            dissolve_state: Some(api::neuron::DissolveState::WhenDissolvedTimestampSeconds(NOW_SECONDS)),
             aging_since_timestamp_seconds: u64::MAX,
             ..Default::default()
         };
 
         let result = btreemap! {
-            1042 => Neuron {
+            1042 => api::Neuron {
                 id: Some(NeuronId { id: 1042 }),
                 account: vec![42; 32],
                 ..base.clone()
             },
-            1043 => Neuron {
+            1043 => api::Neuron {
                 id: Some(NeuronId { id: 1043 }),
                 account: vec![43; 32],
                 ..base.clone()
             },
-            1044 => Neuron {
+            1044 => api::Neuron {
                 id: Some(NeuronId { id: 1044 }),
                 account: vec![44; 32],
                 ..base.clone()
@@ -98,6 +98,7 @@ lazy_static! {
             wait_for_quiet_state: Some(WaitForQuietState {
                 current_deadline_timestamp_seconds: NOW_SECONDS - 5 * ONE_DAY_SECONDS,
             }),
+            topic: Some(Topic::ParticipantManagement as i32),
             ..Default::default()
         };
 
@@ -134,6 +135,7 @@ lazy_static! {
             79 => {
                 let mut proposal_data = proposal_data;
                 proposal_data.id = Some(ProposalId { id: 79 });
+                proposal_data.topic = Some(Topic::Governance as i32);
 
                 let proposal = proposal_data.proposal.as_mut().unwrap();
                 proposal.action = Some(Action::Motion(Default::default()));
@@ -166,14 +168,6 @@ lazy_static! {
         );
 
         proposals
-    };
-
-    static ref GOVERNANCE_PROTO: GovernanceProto = GovernanceProto {
-        neurons: NEURONS.clone(),
-        proposals: PROPOSALS.clone(),
-        genesis_timestamp_seconds: NOW_SECONDS - REWARD_DISTRIBUTION_PERIOD_SECONDS,
-        economics: Some(NetworkEconomics::with_default_values()),
-        ..Default::default()
     };
 }
 
@@ -217,13 +211,20 @@ async fn test_distribute_rewards_with_total_potential_voting_power() {
         .at(NOW_SECONDS)
         .with_supply(Tokens::from_tokens(100).unwrap());
 
-    let governance = Governance::new(
-        GOVERNANCE_PROTO.clone(),
+    let governance_init = api::Governance {
+        neurons: NEURONS.clone(),
+        genesis_timestamp_seconds: NOW_SECONDS - REWARD_DISTRIBUTION_PERIOD_SECONDS,
+        economics: Some(api::NetworkEconomics::with_default_values()),
+        ..Default::default()
+    };
+    let mut governance = Governance::new(
+        governance_init,
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
         fake_driver.get_fake_cmc(),
         fake_driver.get_fake_randomness_generator(),
     );
+    governance.heap_data.proposals = PROPOSALS.clone();
 
     set_governance_for_tests(governance);
     let governance = governance_mut();

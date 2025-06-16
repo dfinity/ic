@@ -9,7 +9,7 @@ candid = { workspace = true }
 cycles-minting-canister = { path = "../../../nns/cmc" }
 futures = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
-ic-cdk = "0.17.1"
+ic-cdk = { workspace = true }
 ic-nervous-system-common = { path = "../../../nervous_system/common" }
 ic-nervous-system-initial-supply = { path = "../../../nervous_system/initial_supply" }
 ic-nervous-system-runtime = { path = "../../../nervous_system/runtime" }

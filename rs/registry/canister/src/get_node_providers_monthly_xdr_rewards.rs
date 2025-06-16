@@ -101,6 +101,7 @@ mod tests {
             dc_id: "ny1".into(),
             rewardable_nodes: btreemap! {},
             ipv6: None,
+            max_rewardable_nodes: None,
         };
 
         registry.do_add_node_operator(node_operator_payload);
@@ -199,6 +200,7 @@ mod tests {
             dc_id: dc_id.clone(),
             rewardable_nodes: rewardable_nodes.clone(),
             ipv6: None,
+            max_rewardable_nodes: None,
         };
         registry.do_add_node_operator(node_operator_payload);
 

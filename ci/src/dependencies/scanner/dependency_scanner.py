@@ -11,6 +11,7 @@ from data_source.commit_type import CommitType
 from data_source.finding_data_source import FindingDataSource
 from data_source.findings_failover_data_store import FindingsFailoverDataStore
 from integration.github.github_api import GithubApi
+from integration.github.github_app import GithubApp
 from model.finding import Finding
 from model.repository import Repository
 from model.security_risk import SecurityRisk
@@ -33,28 +34,32 @@ class DependencyScanner:
         finding_data_source: FindingDataSource,
         scanner_subscribers: typing.List[ScannerSubscriber],
         failover_data_store: typing.Optional[FindingsFailoverDataStore] = None,
+        github_app: GithubApp = None,
     ):
         self.subscribers = scanner_subscribers
         self.dependency_manager = dependency_manager
         self.finding_data_source = finding_data_source
         self.failover_data_store = failover_data_store
+        self.github_app = github_app
         self.job_id = os.environ.get("CI_PIPELINE_ID", "CI_PIPELINE_ID")
         self.root = PROJECT_ROOT
 
-    @staticmethod
-    def __clone_repository_from_url(url: str, path: pathlib.Path):
+    def __clone_repository_from_url(self, url: str, path: pathlib.Path):
         environment = {}
         cwd = path
-        command = f"git clone --depth=1 {url}"
+
+        if self.github_app:
+            checkout_url = self.github_app.get_checkout_url(url)
+        else:
+            checkout_url = url
+        command = f"git clone --depth=1 {checkout_url}"
         logging.info(f"Performing git clone {url}")
-        _ = ProcessExecutor.execute_command(command, cwd.resolve(), environment)
+        _ = ProcessExecutor.execute_command(command, cwd.resolve(), environment, log_command=False)
         return
 
     def do_periodic_scan(self, repositories: typing.List[Repository]):
-        current_repo_name = ""
-        try:
-            for repository in repositories:
-                current_repo_name = repository.name
+        for repository in repositories:
+            try:
                 finding_by_id: typing.Dict[typing.Tuple[str, str, str, str], Finding] = {}
                 if repository.name != "ic":
                     # we are cloning an external repository
@@ -161,21 +166,24 @@ class DependencyScanner:
                 findings_to_remove = set(existing_findings.keys()).difference(map(lambda x: x.id(), current_findings))
                 for key in findings_to_remove:
                     self.finding_data_source.delete_finding(existing_findings[key])
-            for subscriber in self.subscribers:
-                subscriber.on_scan_job_succeeded(
-                    self.dependency_manager.get_scanner_id(), ScannerJobType.PERIODIC_SCAN, self.job_id
+            except Exception as err:
+                logging.error(
+                    f"{self.dependency_manager.get_scanner_id()} for {repository.name} failed for {self.job_id}."
                 )
-        except Exception as err:
-            logging.error(
-                f"{self.dependency_manager.get_scanner_id()} for {current_repo_name} failed for {self.job_id}."
-            )
-            logging.debug(
-                f"{self.dependency_manager.get_scanner_id()} for {current_repo_name} failed for {self.job_id} with error:\n{traceback.format_exc()}"
-            )
-            for subscriber in self.subscribers:
-                subscriber.on_scan_job_failed(
-                    self.dependency_manager.get_scanner_id(), ScannerJobType.PERIODIC_SCAN, self.job_id, str(err)
+                logging.debug(
+                    f"{self.dependency_manager.get_scanner_id()} for {repository.name} failed for {self.job_id} with error:\n{traceback.format_exc()}"
                 )
+                for subscriber in self.subscribers:
+                    subscriber.on_scan_job_failed(
+                        self.dependency_manager.get_scanner_id() + f"_{repository.name}",
+                        ScannerJobType.PERIODIC_SCAN,
+                        self.job_id,
+                        str(err),
+                    )
+        for subscriber in self.subscribers:
+            subscriber.on_scan_job_succeeded(
+                self.dependency_manager.get_scanner_id(), ScannerJobType.PERIODIC_SCAN, self.job_id
+            )
 
     def do_merge_request_scan(self, repository: Repository):
         should_fail_job = False

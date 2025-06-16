@@ -5,12 +5,11 @@ package(default_visibility = ["//visibility:public"])
 rust_canister(
     name = "stable_structures_canister",
     srcs = ["src/main.rs"],
-    proc_macro_deps = ["@crate_index//:ic_cdk_macros_0_17_1"],
     service_file = ":stable_structures.did",
     deps = [
         # Keep sorted.
         "@crate_index//:candid",
+        "@crate_index//:ic-cdk",
         "@crate_index//:ic-stable-structures",
-        "@crate_index//:ic_cdk_0_17_1",
     ],
 )

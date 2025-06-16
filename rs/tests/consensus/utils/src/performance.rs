@@ -351,7 +351,7 @@ pub async fn persist_metrics(
 ) {
     // elastic search url
     const ES_URL: &str =
-        "https://elasticsearch.ch1-obsdev1.dfinity.network/ci-consensus-performance-test/_doc";
+        "https://elasticsearch.testnet.dfinity.network/ci-consensus-performance-test/_doc";
 
     let timestamp =
         chrono::DateTime::<chrono::Utc>::from(std::time::SystemTime::now()).to_rfc3339();

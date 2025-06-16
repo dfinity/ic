@@ -10,8 +10,7 @@ documentation.workspace = true
 build-info = { workspace = true }
 
 candid = { workspace = true }
-ic-cdk = "0.17.1"
-ic-cdk-macros = "0.17.1"
+ic-cdk = { workspace = true }
 ic-types = { path = "../../../types/types" }
 ic-validator-ingress-message = { path = ".." }
 

@@ -186,8 +186,6 @@ fn install_canister(
                 canister_id,
                 wasm,
                 vec![],
-                None,
-                None,
             )
             .encode(),
         )

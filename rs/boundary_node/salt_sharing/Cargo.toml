@@ -9,8 +9,7 @@ documentation.workspace = true
 [dependencies]
 candid = { workspace = true }
 ic-canister-log = { path = "../../rust_canisters/canister_log" }
-ic-cdk = "0.17.1"
-ic-cdk-macros = "0.17.1"
+ic-cdk = { workspace = true }
 ic-cdk-timers = { workspace = true }
 ic-http-types = { path = "../../../packages/ic-http-types" }
 ic-nns-constants = { path = "../../nns/constants" }

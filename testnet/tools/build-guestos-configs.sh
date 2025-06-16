@@ -314,19 +314,12 @@ function build_bootstrap_images() {
         fi
 
         set -x
-        "${REPO_ROOT}"/ic-os/components/hostos-scripts/build-bootstrap-config-image.sh \
-            "${OUTPUT}/${NODE_PREFIX}.img" \
-            ${root_subnet:+"--ic_registry_local_store"} ${root_subnet:+"${IC_PREP_DIR}/ic_registry_local_store"} \
-            ${use_crypto:+"--ic_crypto"} ${use_crypto:+"${IC_PREP_DIR}/node-${node_idx}/crypto/"} \
-            "--nns_urls" "${NNS_URLS}" \
-            "--nns_public_key" "${IC_PREP_DIR}/nns_public_key.pem" \
-            "--node_reward_type type3.1" \
-            "--hostname" "${hostname}" \
-            "--accounts_ssh_authorized_keys" "${SSH}" \
-            ${ELASTICSEARCH_HOSTS:+"--elasticsearch_hosts"} ${ELASTICSEARCH_HOSTS:+"${ELASTICSEARCH_HOSTS}"} \
-            ${ELASTICSEARCH_TAGS:+"--elasticsearch_tags"} ${ELASTICSEARCH_TAGS:+"${ELASTICSEARCH_TAGS}"} \
-            ${NODE_OPERATOR_PRIVATE_KEY:+"--node_operator_private_key"} ${NODE_OPERATOR_PRIVATE_KEY:+"${NODE_OPERATOR_PRIVATE_KEY}"} \
-            "--socks_proxy" "socks5://socks5.testnet.dfinity.network:1080"
+        # FIXME: There used to be a call to `build-bootstrap-config-image` here, but it was removed as
+        #  part of the migration to `config::guestos_bootstrap_image`. Therefore this script is broken
+        #  at the moment. If you need this script to work (which you probably shouldn't), add a CLI interface for
+        #  `config::guestos_bootstrap_image` and find for the correct invocation in the git history of this file.
+        echo "build-bootstrap-config-image is not implemented."
+        exit 1
         set +x
     done
 

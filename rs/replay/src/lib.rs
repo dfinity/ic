@@ -19,7 +19,6 @@ use crate::{
     ingress::*,
     player::{Player, ReplayResult},
 };
-use ic_canister_client::{Agent, Sender};
 use ic_config::{Config, ConfigSource};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_protobuf::{registry::subnet::v1::InitialNiDkgTranscriptRecord, types::v1 as pb};
@@ -144,12 +143,7 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
             }
 
             let extra = move |player: &Player, time| -> Vec<IngressWithPrinter> {
-                // Use a dummy URL here because we don't send any outgoing ingress.
-                // The agent is only used to construct ingress messages.
-                let agent = &Agent::new(
-                    url::Url::parse("http://localhost").unwrap(),
-                    Sender::PrincipalId(canister_caller_id.into()),
-                );
+                let agent = &agent_with_principal_as_sender(&canister_caller_id.get()).unwrap();
                 match subcmd {
                     Some(SubCommand::AddAndBlessReplicaVersion(cmd)) => {
                         cmd_add_and_bless_replica_version(agent, player, cmd, time)

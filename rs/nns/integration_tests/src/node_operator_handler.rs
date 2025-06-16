@@ -195,6 +195,7 @@ async fn add_node_operator(nns_canisters: &NnsCanisters<'_>, node_operator_id: &
         dc_id: "DC".into(),
         rewardable_nodes: rewardable_nodes.clone(),
         ipv6: Some("0:0:0:0:0:0:0:0".into()),
+        max_rewardable_nodes: None,
     };
 
     let node_operator_record_key = make_node_operator_record_key(*node_operator_id).into_bytes();

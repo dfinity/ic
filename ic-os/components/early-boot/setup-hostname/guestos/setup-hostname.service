@@ -10,4 +10,4 @@ WantedBy=multi-user.target
 [Service]
 Type=oneshot
 RemainAfterExit=true
-ExecStart=/opt/ic/bin/setup-hostname.sh
+ExecStart=/opt/ic/bin/setup-hostname.sh --type=guest

@@ -18,7 +18,7 @@ use ic_cdk::{
     api::{id, time},
     caller, post_upgrade, pre_upgrade, trap,
 };
-use ic_cdk_macros::{init, query, update};
+use ic_cdk::{init, query, update};
 use ic_cdk_timers::set_timer_interval;
 use ic_stable_structures::{
     memory_manager::{MemoryId, MemoryManager, VirtualMemory},

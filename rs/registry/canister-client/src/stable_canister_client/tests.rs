@@ -330,8 +330,7 @@ fn test_error_on_local_too_large() {
 
 #[test]
 fn test_caching_behavior_of_get_latest_version() {
-    let (client, fake_registry) = client_for_tests();
-    fake_registry.set_value_at_version("Foo", 4, Some(vec![4]));
+    let (client, _) = client_for_tests();
 
     let current_latest = client.get_latest_version();
     assert_eq!(current_latest, ZERO_REGISTRY_VERSION);
@@ -357,8 +356,20 @@ fn test_caching_behavior_of_get_latest_version() {
     let current_latest = client.get_latest_version();
     assert_eq!(current_latest, RegistryVersion::new(2));
 
-    // This is not a code path that should be utilized in production but for testing
-    // we are going around the sync so we can test the caching behavior
+    // Now we reset the client so it has no cached version
+    let (client, fake_registry) = client_for_tests();
+    fake_registry.set_value_at_version("Foo", 4, Some(vec![4]));
+
+    let cached_version = client.latest_version.load(AtomicOrdering::SeqCst);
+    assert_eq!(cached_version, ZERO_REGISTRY_VERSION.get());
+
+    let latest_version = client.get_latest_version();
+    assert_eq!(latest_version, RegistryVersion::new(2));
+    // Cache should now be updated.
+    let cached_version = client.latest_version.load(AtomicOrdering::SeqCst);
+    assert_eq!(cached_version, latest_version.get());
+
+    // Add a random delta, cache should be updated
     client
         .add_deltas(vec![RegistryDelta {
             key: "Foo".as_bytes().to_vec(),
@@ -372,7 +383,7 @@ fn test_caching_behavior_of_get_latest_version() {
 
     // Cache is not updated (b/c we didn't run sync
     let current_latest = client.get_latest_version();
-    assert_eq!(current_latest, RegistryVersion::new(2));
+    assert_eq!(current_latest, RegistryVersion::new(3));
 
     client
         .sync_registry_stored()

@@ -174,7 +174,7 @@ impl AsInt for (CoarseTime, Id) {
 
     #[inline]
     fn as_int(&self) -> u128 {
-        (self.0.as_secs_since_unix_epoch() as u128) << 64 | self.1 .0 as u128
+        ((self.0.as_secs_since_unix_epoch() as u128) << 64) | self.1 .0 as u128
     }
 }
 
@@ -183,7 +183,7 @@ impl AsInt for (usize, Id) {
 
     #[inline]
     fn as_int(&self) -> u128 {
-        (self.0 as u128) << 64 | self.1 .0 as u128
+        ((self.0 as u128) << 64) | self.1 .0 as u128
     }
 }
 
@@ -199,7 +199,7 @@ where
     /// Constructs a new `Reference<T>` of the given `class` and `kind`.
     fn new(class: Class, kind: Kind, generator: u64) -> Self {
         Self(
-            T::context() as u64 | class as u64 | kind as u64 | generator << Id::BITMASK_LEN,
+            T::context() as u64 | class as u64 | kind as u64 | (generator << Id::BITMASK_LEN),
             PhantomData,
         )
     }

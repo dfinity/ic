@@ -55,7 +55,7 @@ pub trait BatchPayloadBuilder: Send + Sync {
     /// # Arguments
     /// - `max_size`: The maximum size the payload is supposed to have
     /// - `past_payloads`: A collection of past payloads. Allows the payload builder
-    ///     to deduplicate messages.
+    ///   to deduplicate messages.
     /// - `context`: [`ValidationContext`] under which the payload is supposed to be validated
     ///
     /// # Returns
@@ -74,7 +74,7 @@ pub trait BatchPayloadBuilder: Send + Sync {
     /// # Arguments
     /// - `payload`: The payload to validate
     /// - `past_payloads`: A collection of past payloads. Allows the payload builder
-    ///     to deduplicate messages
+    ///   to deduplicate messages
     /// - `context`: [`ValidationContext`] under which to validate the payload
     ///
     /// # Returns

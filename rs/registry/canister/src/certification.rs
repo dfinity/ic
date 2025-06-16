@@ -19,6 +19,8 @@
 
 #[cfg(target_arch = "wasm32")]
 use dfn_core::api::set_certified_data;
+#[cfg(all(not(target_arch = "wasm32"), test))]
+use ic_cdk::println;
 use ic_certified_map::{labeled, HashTree};
 use ic_protobuf::messaging::xnet::v1 as pb;
 

@@ -170,6 +170,8 @@ fn dts_env(
             slice_instruction_limit,
         ))))
         .with_subnet_type(SubnetType::Application)
+        .with_snapshot_download_enabled(true)
+        .with_snapshot_upload_enabled(true)
         .build()
 }
 
@@ -303,8 +305,6 @@ fn setup_dts_install_code(
             canister_id,
             wat::parse_str(DTS_INSTALL_WAT).unwrap(),
             vec![],
-            None,
-            None,
         )
         .encode(),
     );
@@ -319,7 +319,7 @@ fn setup_dts_install_code(
 
 // These numbers were obtained by running the test and printing the costs.
 // They need to be adjusted if we change fees or the Wasm source code.
-const INSTALL_CODE_INGRESS_COST: u128 = 1_952_000;
+const INSTALL_CODE_INGRESS_COST: u128 = 1_920_000;
 const INSTALL_CODE_EXECUTION_COST: u128 = 5_986_224;
 const NORMAL_INGRESS_COST: u128 = 1_224_000;
 const MAX_EXECUTION_COST: u128 = 6_000_000;
@@ -366,8 +366,6 @@ fn dts_install_code_with_concurrent_ingress_sufficient_cycles() {
             canister_id,
             wat::parse_str(DTS_INSTALL_WAT).unwrap(),
             vec![],
-            None,
-            None,
         )
         .encode(),
     )
@@ -386,8 +384,6 @@ fn dts_install_code_with_concurrent_ingress_sufficient_cycles() {
             canister_id,
             wat::parse_str(DTS_INSTALL_WAT).unwrap(),
             vec![],
-            None,
-            None,
         )
         .encode(),
     );
@@ -549,14 +545,7 @@ fn dts_pending_upgrade_with_heartbeat() {
     env.set_checkpoints_enabled(true);
 
     let upgrade = {
-        let args = InstallCodeArgs::new(
-            CanisterInstallMode::Upgrade,
-            canister,
-            binary,
-            vec![],
-            None,
-            None,
-        );
+        let args = InstallCodeArgs::new(CanisterInstallMode::Upgrade, canister, binary, vec![]);
         let payload = wasm()
             .call_simple(
                 IC_00,
@@ -647,14 +636,7 @@ fn dts_scheduling_of_install_code() {
 
     let mut ingress = vec![];
     for c in canister.iter() {
-        let args = InstallCodeArgs::new(
-            CanisterInstallMode::Install,
-            *c,
-            binary.clone(),
-            vec![],
-            None,
-            None,
-        );
+        let args = InstallCodeArgs::new(CanisterInstallMode::Install, *c, binary.clone(), vec![]);
         let install = wasm()
             .call_simple(
                 IC_00,
@@ -813,8 +795,6 @@ fn dts_pending_install_code_does_not_block_subnet_messages_of_other_canisters() 
             canister[i],
             binary.clone(),
             vec![],
-            None,
-            None,
         );
         let payload = wasm()
             .call_simple(
@@ -928,14 +908,7 @@ fn dts_pending_execution_blocks_subnet_messages_to_the_same_canister() {
     };
 
     let upgrade = {
-        let args = InstallCodeArgs::new(
-            CanisterInstallMode::Upgrade,
-            canister,
-            binary,
-            vec![],
-            None,
-            None,
-        );
+        let args = InstallCodeArgs::new(CanisterInstallMode::Upgrade, canister, binary, vec![]);
         env.send_ingress(user_id, IC_00, Method::InstallCode, args.encode())
     };
 
@@ -1017,9 +990,27 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
         }
 
         let (method, args) = f(aborted_canister_id);
-        if method == Method::DeleteCanisterSnapshot {
+        if method == Method::DeleteCanisterSnapshot
+            || method == Method::ReadCanisterSnapshotMetadata
+            || method == Method::ReadCanisterSnapshotData
+        {
             env.take_canister_snapshot(TakeCanisterSnapshotArgs::new(aborted_canister_id, None))
                 .unwrap();
+        }
+
+        if method == Method::UploadCanisterSnapshotData {
+            env.upload_canister_snapshot_metadata(&UploadCanisterSnapshotMetadataArgs {
+                canister_id: aborted_canister_id.into(),
+                replace_snapshot: None,
+                wasm_module_size: 1024,
+                exported_globals: vec![],
+                wasm_memory_size: 1 << 16,
+                stable_memory_size: 1 << 16,
+                certified_data: vec![],
+                global_timer: None,
+                on_low_wasm_memory_hook_status: None,
+            })
+            .unwrap();
         }
 
         let args = args
@@ -1134,8 +1125,6 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
                     mode: CanisterInstallMode::Install,
                     wasm_module: UNIVERSAL_CANISTER_WASM.to_vec(),
                     arg: vec![],
-                    compute_allocation: None,
-                    memory_allocation: None,
                     sender_canister_version: None,
                 }
                 .encode();
@@ -1239,13 +1228,13 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
                 let args = UploadCanisterSnapshotMetadataArgs::new(
                     aborted_canister_id,
                     None,
-                    0,
+                    1024,
                     vec![],
-                    0,
-                    0,
+                    1 << 16,
+                    1 << 16,
                     vec![],
-                    GlobalTimer::Inactive,
-                    OnLowWasmMemoryHookStatus::Ready,
+                    Some(GlobalTimer::Inactive),
+                    Some(OnLowWasmMemoryHookStatus::ConditionNotSatisfied),
                 )
                 .encode();
                 (method, call_args().other_side(args))
@@ -1253,9 +1242,9 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
             Method::UploadCanisterSnapshotData => test_supported(|aborted_canister_id| {
                 let args = UploadCanisterSnapshotDataArgs::new(
                     aborted_canister_id,
-                    vec![],
-                    CanisterSnapshotDataOffset::WasmChunk,
-                    vec![],
+                    (aborted_canister_id, 0).into(),
+                    CanisterSnapshotDataOffset::WasmModule { offset: 0 },
+                    vec![42; 42],
                 )
                 .encode();
                 (method, call_args().other_side(args))
@@ -1370,8 +1359,6 @@ fn dts_pending_install_code_blocks_update_messages_to_the_same_canister() {
         canister,
         binary.clone(),
         vec![],
-        None,
-        None,
     );
     env.execute_ingress_as(user_id, IC_00, Method::InstallCode, payload.encode())
         .unwrap();
@@ -1381,14 +1368,8 @@ fn dts_pending_install_code_blocks_update_messages_to_the_same_canister() {
     env.set_checkpoints_enabled(true);
 
     let install = {
-        let payload = InstallCodeArgs::new(
-            CanisterInstallMode::Reinstall,
-            canister,
-            binary,
-            vec![],
-            None,
-            None,
-        );
+        let payload =
+            InstallCodeArgs::new(CanisterInstallMode::Reinstall, canister, binary, vec![]);
         env.send_ingress(user_id, IC_00, Method::InstallCode, payload.encode())
     };
 
@@ -1480,8 +1461,6 @@ fn dts_long_running_install_and_update() {
             canister[i],
             UNIVERSAL_CANISTER_WASM.to_vec(),
             vec![],
-            None,
-            None,
         );
         let payload = wasm()
             .call_simple(
@@ -1665,14 +1644,7 @@ fn dts_unrelated_subnet_messages_make_progress() {
     env.set_checkpoints_enabled(true);
 
     let upgrade = {
-        let args = InstallCodeArgs::new(
-            CanisterInstallMode::Upgrade,
-            canister,
-            binary,
-            vec![],
-            None,
-            None,
-        );
+        let args = InstallCodeArgs::new(CanisterInstallMode::Upgrade, canister, binary, vec![]);
         env.send_ingress(user_id, IC_00, Method::InstallCode, args.encode())
     };
 
@@ -1786,14 +1758,7 @@ fn dts_ingress_status_of_install_is_correct() {
     let original_time = env.time();
 
     let install = {
-        let args = InstallCodeArgs::new(
-            CanisterInstallMode::Reinstall,
-            canister,
-            binary,
-            vec![],
-            None,
-            None,
-        );
+        let args = InstallCodeArgs::new(CanisterInstallMode::Reinstall, canister, binary, vec![]);
         env.send_ingress(user_id, IC_00, Method::InstallCode, args.encode())
     };
 
@@ -1864,14 +1829,7 @@ fn dts_ingress_status_of_upgrade_is_correct() {
     let original_time = env.time();
 
     let install = {
-        let args = InstallCodeArgs::new(
-            CanisterInstallMode::Upgrade,
-            canister,
-            binary,
-            vec![],
-            None,
-            None,
-        );
+        let args = InstallCodeArgs::new(CanisterInstallMode::Upgrade, canister, binary, vec![]);
         env.send_ingress(user_id, IC_00, Method::InstallCode, args.encode())
     };
 
@@ -2041,14 +1999,7 @@ fn dts_canister_uninstalled_due_to_resource_charges_with_aborted_updrade() {
     env.set_checkpoints_enabled(true);
 
     let upgrade = {
-        let args = InstallCodeArgs::new(
-            CanisterInstallMode::Upgrade,
-            canister,
-            binary,
-            vec![],
-            None,
-            None,
-        );
+        let args = InstallCodeArgs::new(CanisterInstallMode::Upgrade, canister, binary, vec![]);
         env.send_ingress(user_id, IC_00, Method::InstallCode, args.encode())
     };
 
@@ -3060,8 +3011,6 @@ fn heavy_install_code_prevents_another_install_code_to_start_in_the_same_round()
                 canister_id,
                 UNIVERSAL_CANISTER_WASM.to_vec(),
                 canister_init,
-                None,
-                None,
             )
             .encode(),
         );
@@ -3128,8 +3077,6 @@ fn yield_for_dirty_pages_copy_works_for_install_code() {
                 canister_id,
                 wasm.clone(),
                 vec![],
-                None,
-                None,
             )
             .encode(),
         );
@@ -3187,8 +3134,6 @@ fn yield_for_dirty_pages_copy_works_for_install_code_and_many_canisters() {
                     canister_id,
                     wasm.clone(),
                     vec![],
-                    None,
-                    None,
                 )
                 .encode(),
             );
