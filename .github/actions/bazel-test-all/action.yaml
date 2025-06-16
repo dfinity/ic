@@ -78,6 +78,7 @@ runs:
 
             BAZEL_TARGETS='${{ inputs.BAZEL_TARGETS }}'
 
+            set -x
             bazel_targets=( )
             for tgt in $BAZEL_TARGETS; do
               bazel_targets+=( "$tgt" )

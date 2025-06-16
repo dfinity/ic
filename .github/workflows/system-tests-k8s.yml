@@ -47,7 +47,7 @@ jobs:
   system-tests-k8s:
     name: System Tests K8s
     runs-on:
-      group: ln1
+      group: dm1
       labels: dind-large
     container:
       image: ghcr.io/dfinity/ic-build@sha256:e4862aca9dfa7e342f44cb4ba48923de4306099d26b067ee285f5e0ebe87162a
@@ -60,12 +60,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Before script
-        id: before-script
-        shell: bash
-        run: |
-          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
-
       - name: Set KUBECONFIG
         shell: bash
         run: |
@@ -77,16 +71,11 @@ jobs:
       - name: Run System Tests on K8s
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
-        env:
-          CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
         with:
-          BAZEL_COMMAND: >-
-            test
-              --config=ci
-              --local_test_jobs=${{ env.JOBS }} --test_tag_filters=k8s,-manual,-colocated,-long_test,-system_test_hourly,-system_test_nightly --k8s
+          BAZEL_COMMAND: test --config=ci --local_test_jobs=12 --test_tag_filters=k8s,-manual,-colocated,-long_test,-system_test_hourly,-system_test_nightly --k8s
           BAZEL_TARGETS: ${{ env.TARGETS }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
 
       - name: Upload bazel-bep
         uses: actions/upload-artifact@v4
@@ -103,7 +92,7 @@ jobs:
   system-tests-k8s-hourly:
     name: System Tests K8s Hourly
     runs-on:
-      group: ln1
+      group: dm1
       labels: dind-large
     container:
       image: ghcr.io/dfinity/ic-build@sha256:e4862aca9dfa7e342f44cb4ba48923de4306099d26b067ee285f5e0ebe87162a
@@ -149,10 +138,7 @@ jobs:
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
         with:
-          BAZEL_COMMAND: >-
-            test
-              --config=ci
-              --local_test_jobs=${{ env.JOBS }} --test_tag_filters=k8s --k8s --flaky_test_attempts=3
+          BAZEL_COMMAND: test --config=ci --local_test_jobs=${{ env.JOBS }} --test_tag_filters=k8s --k8s --flaky_test_attempts=3
           BAZEL_TARGETS: ${{ env.TARGETS }}
           CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
