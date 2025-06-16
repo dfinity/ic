@@ -411,7 +411,7 @@ impl ThresholdSigVerifierInternal {
 
 // TODO (DFN-1186): improve the error handling by introducing more specific
 // errors on CSP level.
-fn map_verify_combined_error(error: CryptoError) -> CryptoError {
+pub(crate) fn map_verify_combined_error(error: CryptoError) -> CryptoError {
     match error {
         CryptoError::SignatureVerification { .. }
         | CryptoError::MalformedSignature { .. }
@@ -459,7 +459,7 @@ impl ThresholdSigVerifierInternal {
     }
 }
 
-fn initial_high_threshold_ni_dkg_transcript_from_registry(
+pub(crate) fn initial_high_threshold_ni_dkg_transcript_from_registry(
     registry: &dyn RegistryClient,
     subnet_id: SubnetId,
     registry_version: RegistryVersion,
