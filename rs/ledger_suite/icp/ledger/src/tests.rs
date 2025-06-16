@@ -1347,3 +1347,32 @@ fn allowance_serialization() {
         );
     })
 }
+
+#[test]
+fn test_max_encoded_block_size() {
+    use ic_ledger_core::block::BlockType;
+
+    let block = Block::from_transaction(
+        Some(ic_ledger_hash_of::HashOf::new([42u8; 32])),
+        Transaction::new(
+            AccountIdentifier::new(PrincipalId::new_user_test_id(1), None),
+            AccountIdentifier::new(PrincipalId::new_user_test_id(2), None),
+            Some(AccountIdentifier::new(
+                PrincipalId::new_user_test_id(3),
+                None,
+            )),
+            Tokens::from_e8s(u64::MAX),
+            Tokens::from_e8s(u64::MAX),
+            Memo(u64::MAX),
+            TimeStamp::from_nanos_since_unix_epoch(u64::MAX),
+        ),
+        TimeStamp::from_nanos_since_unix_epoch(u64::MAX),
+        Tokens::MAX,
+        Some(ic_ledger_core::block::FeeCollector::from(
+            AccountIdentifier::new(PrincipalId::new_user_test_id(88), None),
+        )),
+    );
+
+    let max_size_encoded_block = block.encode();
+    assert_eq!(max_size_encoded_block.size_bytes(), 217);
+}
