@@ -2406,6 +2406,10 @@ fn apply_arg_with_caller(
             send_transfer(env, ledger_id, arg.caller.sender().unwrap(), transfer_arg)
                 .expect("transfer failed")
         }
+        LedgerEndpointArg::TransferFromArg(transfer_from_arg) => {
+            send_transfer_from(env, ledger_id, arg.caller.sender().unwrap(), transfer_from_arg)
+                .expect("transfer_from failed")
+        }
     }
 }
 

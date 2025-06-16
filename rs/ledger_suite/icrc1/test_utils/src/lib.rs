@@ -13,6 +13,7 @@ use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg};
 use icrc_ledger_types::icrc2::approve::ApproveArgs;
+use icrc_ledger_types::icrc2::transfer_from::TransferFromArgs;
 use num_traits::cast::ToPrimitive;
 use proptest::prelude::*;
 use proptest::sample::select;
@@ -306,6 +307,7 @@ pub fn transfer_args_with_sender(
 pub enum LedgerEndpointArg {
     ApproveArg(ApproveArgs),
     TransferArg(TransferArg),
+    TransferFromArg(TransferFromArgs),
 }
 
 impl LedgerEndpointArg {
@@ -313,6 +315,7 @@ impl LedgerEndpointArg {
         match self {
             Self::ApproveArg(arg) => arg.from_subaccount,
             Self::TransferArg(arg) => arg.from_subaccount,
+            Self::TransferFromArg(arg) => arg.spender_subaccount,
         }
     }
 }
@@ -347,8 +350,17 @@ impl ArgWithCaller {
 
     pub fn accounts(&self) -> Vec<Account> {
         let mut res = vec![self.from()];
-        if let LedgerEndpointArg::TransferArg(arg) = &self.arg {
-            res.push(arg.to)
+        match &self.arg {
+            LedgerEndpointArg::TransferArg(arg) => {
+                res.push(arg.to);
+            }
+            LedgerEndpointArg::TransferFromArg(arg) => {
+                res.push(arg.from);
+                res.push(arg.to);
+            }
+            LedgerEndpointArg::ApproveArg(_) => {
+                // Approve doesn't add additional accounts beyond the caller
+            }
         }
         res
     }
@@ -357,6 +369,7 @@ impl ArgWithCaller {
         let fee = match &self.arg {
             LedgerEndpointArg::ApproveArg(arg) => arg.fee.as_ref(),
             LedgerEndpointArg::TransferArg(arg) => arg.fee.as_ref(),
+            LedgerEndpointArg::TransferFromArg(arg) => arg.fee.as_ref(),
         };
         fee.as_ref().map(|fee| fee.0.to_u64().unwrap())
     }
@@ -408,6 +421,16 @@ impl ArgWithCaller {
                 };
 
                 (operation, transfer_arg.created_at_time, transfer_arg.memo)
+            }
+            LedgerEndpointArg::TransferFromArg(transfer_from_arg) => {
+                let operation = Operation::Transfer {
+                    from: transfer_from_arg.from,
+                    to: transfer_from_arg.to,
+                    spender: Some(from), // The caller is the spender
+                    amount: T::try_from(transfer_from_arg.amount.clone()).unwrap(),
+                    fee: transfer_from_arg.fee.clone().map(|f| T::try_from(f).unwrap()),
+                };
+                (operation, transfer_from_arg.created_at_time, transfer_from_arg.memo)
             }
         };
         Transaction::<T> {
@@ -480,6 +503,7 @@ impl TransactionsAndBalances {
                     .or_insert(amount);
                 self.debit(from, fee);
             }
+
         };
         self.transactions.push(tx);
     }
@@ -829,6 +853,135 @@ pub fn valid_transactions_strategy(
         })
     }
 
+    fn transfer_from_strategy(
+        account_balance: impl Strategy<Value = (Account, u64)> + Clone + 'static,
+        minter_identity: Arc<BasicIdentity>,
+        default_fee: u64,
+        now: SystemTime,
+        tx_hash_set_pointer: Arc<HashSet<Transaction<Tokens>>>,
+        account_to_basic_identity_pointer: Arc<HashMap<Principal, Arc<BasicIdentity>>>,
+        allowance_map_pointer: Arc<HashMap<(Account, Account), Tokens>>,
+    ) -> impl Strategy<Value = ArgWithCaller> {
+        let minter: Account = minter_identity.sender().unwrap().into();
+        
+        // First, extract all (from, spender, allowance_amount) from the allowance map
+        let allowance_entries: Vec<(Account, Account, u64)> = allowance_map_pointer
+            .as_ref()
+            .iter()
+            .map(|((from, spender), allowance)| (*from, *spender, allowance.get_e8s()))
+            .collect();
+        
+        if allowance_entries.is_empty() {
+            // Return a strategy that will never generate values but has the right type  
+            return Just(ArgWithCaller {
+                caller: minter_identity.clone(),
+                arg: LedgerEndpointArg::TransferArg(TransferArg {
+                    from_subaccount: None,
+                    to: Account::from(minter_identity.sender().unwrap()),
+                    amount: 0u64.into(),
+                    created_at_time: None,
+                    fee: None,
+                    memo: None,
+                }),
+                principal_to_basic_identity: HashMap::new(),
+            })
+            .prop_filter("No allowances available for transfer_from", |_| false)
+            .boxed();
+        }
+        
+        // Select a random (from, spender, allowance_amount) from existing allowances
+        select(allowance_entries).prop_flat_map(move |(from, spender, allowance_amount)| {
+            let account_balance_clone = account_balance.clone();
+            let tx_hash_set_pointer_clone = tx_hash_set_pointer.clone();
+            let account_to_basic_identity_pointer_clone = account_to_basic_identity_pointer.clone();
+            
+            // Now cross-reference with account_balance to find the balance for this specific `from` account
+            account_balance_clone
+                .prop_filter_map("Account must match the allowance 'from' account", move |(account, balance)| {
+                    if account == from {
+                        let fee_amount = default_fee;
+                        
+                        // Calculate max transferable amount considering both allowance and account balance
+                        let allowance_max = if allowance_amount > fee_amount {
+                            allowance_amount - fee_amount
+                        } else {
+                            0
+                        };
+                        let balance_max = if balance > fee_amount {
+                            balance - fee_amount
+                        } else {
+                            0
+                        };
+                        let max_amount = std::cmp::min(allowance_max, balance_max);
+                        
+                        if max_amount > 0 {
+                            Some((from, spender, max_amount))
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                })
+                .prop_flat_map(move |(from, spender, max_amount)| {
+                    let tx_hash_set = tx_hash_set_pointer_clone.clone();
+                    let account_to_basic_identity = account_to_basic_identity_pointer_clone.clone();
+                    let fee_amount = default_fee;
+                    
+                    (
+                        basic_identity_and_account_strategy(), // to account
+                        1..=max_amount,                        // amount within min(allowance, balance)
+                        valid_created_at_time_strategy(now),
+                        arb_memo(),
+                        prop::option::of(Just(fee_amount)),
+                    )
+                        .prop_filter_map(
+                            "Invalid transfer_from transaction",
+                            move |(to_signer, amount, created_at_time, memo, fee)| {
+                                let to = to_signer.account();
+                                
+                                let tx = Transaction {
+                                    operation: Operation::Transfer::<Tokens> {
+                                        from,
+                                        to,
+                                        spender: Some(spender),
+                                        amount: Tokens::from_e8s(amount),
+                                        fee: fee.map(Tokens::from_e8s),
+                                    },
+                                    created_at_time,
+                                    memo: memo.clone(),
+                                };
+
+                                if from == to || from == minter || to == minter || spender == from || spender == to || tx_hash_set.contains(&tx) {
+                                    None
+                                } else {
+                                    let caller = account_to_basic_identity.get(&spender.owner).unwrap().clone();
+                                    assert_eq!(caller.sender().unwrap(), spender.owner);
+                                    Some(ArgWithCaller {
+                                        caller,
+                                        arg: LedgerEndpointArg::TransferFromArg(TransferFromArgs {
+                                            spender_subaccount: spender.subaccount,
+                                            from,
+                                            to,
+                                            amount: amount.into(),
+                                            fee: fee.map(Nat::from),
+                                            memo,
+                                            created_at_time,
+                                        }),
+                                        principal_to_basic_identity: HashMap::from([
+                                            (to.owner, Arc::new(to_signer.identity)),
+                                        ]),
+                                    })
+                                }
+                            },
+                        )
+                        .boxed()
+                })
+                .boxed()
+        })
+        .boxed()
+    }
+
     fn generate_strategy(
         state: TransactionsAndBalances,
         minter_identity: Arc<BasicIdentity>,
@@ -873,7 +1026,7 @@ pub fn valid_transactions_strategy(
             )
             .boxed();
             let transfer_strategy = transfer_strategy(
-                account_balance,
+                account_balance.clone(),
                 minter_identity.clone(),
                 default_fee,
                 now,
@@ -881,11 +1034,22 @@ pub fn valid_transactions_strategy(
                 account_to_basic_identity_pointer.clone(),
             )
             .boxed();
+            let transfer_from_strategy = transfer_from_strategy(
+                account_balance,
+                minter_identity.clone(),
+                default_fee,
+                now,
+                tx_hashes_pointer.clone(),
+                account_to_basic_identity_pointer.clone(),
+                allowance_map_pointer.clone(),
+            )
+            .boxed();
             proptest::strategy::Union::new_weighted(vec![
                 (10, approve_strategy),
                 (1, burn_strategy),
                 (1, mint_strategy),
                 (1000, transfer_strategy),
+                (100, transfer_from_strategy),
             ])
             .boxed()
         };
