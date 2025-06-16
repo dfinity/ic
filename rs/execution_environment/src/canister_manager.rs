@@ -2376,7 +2376,7 @@ impl CanisterManager {
             return Err(CanisterManagerError::RenameCanisterNotStopped(old_id));
         }
 
-        if canister.snapshots_memory_usage() > NumBytes::new(0) {
+        if state.canister_snapshots.count_by_canister(&old_id) > 0 {
             return Err(CanisterManagerError::RenameCanisterHasSnapshot(old_id));
         }
 
