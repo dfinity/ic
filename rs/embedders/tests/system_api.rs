@@ -7,9 +7,8 @@ use ic_embedders::wasmtime_embedder::system_api::{
 };
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::{
-    CanisterOutOfCyclesError, ExecutionMode, HypervisorError, HypervisorResult,
-    PerformanceCounterType, StableMemoryApi, SubnetAvailableMemory, SystemApi, SystemApiCallId,
-    TrapCode,
+    CanisterOutOfCyclesError, HypervisorError, HypervisorResult, PerformanceCounterType,
+    StableMemoryApi, SubnetAvailableMemory, SystemApi, SystemApiCallId, TrapCode,
 };
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::replica_logger::no_op_logger;
@@ -155,16 +154,14 @@ fn cleanup_api() -> ApiType {
     ApiType::Cleanup {
         caller: PrincipalId::new_anonymous(),
         time: UNIX_EPOCH,
-        execution_mode: ExecutionMode::Replicated,
         call_context_instructions_executed: 0.into(),
     }
 }
 
 fn composite_cleanup_api() -> ApiType {
-    ApiType::Cleanup {
+    ApiType::CompositeCleanup {
         caller: PrincipalId::new_anonymous(),
         time: UNIX_EPOCH,
-        execution_mode: ExecutionMode::NonReplicated,
         call_context_instructions_executed: 0.into(),
     }
 }
@@ -2242,15 +2239,14 @@ fn get_system_api_for_best_effort_response(
     )
 }
 
-#[test]
-fn composite_queries_do_not_return_state_changes_on_trap() {
+fn composite_context_does_not_return_state_changes_on_trap_helper(api_type: ApiType) {
     let cycles_amount = Cycles::from(1_000_000_000_000u128);
     let max_num_instructions = NumInstructions::from(1 << 30);
     let cycles_account_manager = CyclesAccountManagerBuilder::new()
         .with_max_num_instructions(max_num_instructions)
         .build();
     let mut api = get_system_api(
-        ApiTypeBuilder::build_composite_query_api(),
+        api_type,
         &get_system_state_with_cycles(cycles_amount),
         cycles_account_manager,
     );
@@ -2269,6 +2265,21 @@ fn composite_queries_do_not_return_state_changes_on_trap() {
         api.take_system_state_modifications(),
         SystemStateModifications::default()
     );
+}
+
+#[test]
+fn composite_queries_do_not_return_state_changes_on_trap() {
+    composite_context_does_not_return_state_changes_on_trap_helper(composite_query_api());
+}
+
+#[test]
+fn composite_replies_do_not_return_state_changes_on_trap() {
+    composite_context_does_not_return_state_changes_on_trap_helper(composite_reply_api());
+}
+
+#[test]
+fn composite_rejects_do_not_return_state_changes_on_trap() {
+    composite_context_does_not_return_state_changes_on_trap_helper(composite_reject_api());
 }
 
 #[test]
