@@ -3509,6 +3509,7 @@ fn test_environment_variable_system_api() {
     );
 }
 
+// TODO(EXC-2071): Delete test when feature flag is removed.
 #[test]
 fn test_environment_variable_system_api_not_enabled() {
     let wat = r#"
