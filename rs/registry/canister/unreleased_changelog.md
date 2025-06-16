@@ -15,6 +15,22 @@ on the process that this file is part of, see
 
 ## Changed
 
+* When performing "large" mutations (greater than approximately 1.3 MiB),
+  chunking is used. This has no effect on how mutations are written. Rather,
+  this affects how large mutations and records are read. For non-large
+  mutations, this has no effect. Chunking means that to fetch a large mutation
+  or record, clients must make follow up `get_chunk` canister method calls.
+  Because of this requirement, this is a breaking change (for clients who read
+  large mutations/records). This breaking change and how clients migrate was
+  [announced at the end of March in a forum][chunking] (and various other
+  channels). This release marks the end of the "migration window" described in
+  the aforelinked forum post.
+* The `check_routing_table_invariants` method now checks the new canister_ranges_
+  and ensures they match the `routing_table` record. The old invariant check will be
+  removed once `routing_table` is removed.
+
+[chunking]: https://forum.dfinity.org/t/breaking-registry-changes-for-large-records/42893?u=daniel-wong
+
 ## Deprecated
 
 ## Removed
