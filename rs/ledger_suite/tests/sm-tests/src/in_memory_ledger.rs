@@ -502,33 +502,33 @@ where
                 self.fee_collector = Some(fee_collector);
             }
             match &block.transaction.operation {
-                Operation::Mint { to, amount } => self.process_mint(to, amount),
-                Operation::Transfer {
+                Some(Operation::Mint { to, amount }) => self.process_mint(to, amount),
+                Some(Operation::Transfer {
                     from,
                     to,
                     spender,
                     amount,
                     fee,
-                } => self.process_transfer(
+                }) => self.process_transfer(
                     from,
                     to,
                     spender,
                     amount,
                     &fee.clone().or(block.effective_fee.clone()),
                 ),
-                Operation::Burn {
+                Some(Operation::Burn {
                     from,
                     spender,
                     amount,
-                } => self.process_burn(from, spender, amount, index),
-                Operation::Approve {
+                }) => self.process_burn(from, spender, amount, index),
+                Some(Operation::Approve {
                     from,
                     spender,
                     amount,
                     expected_allowance,
                     expires_at,
                     fee,
-                } => self.process_approve(
+                }) => self.process_approve(
                     from,
                     spender,
                     amount,
@@ -537,6 +537,7 @@ where
                     &fee.clone().or(block.effective_fee.clone()),
                     TimeStamp::from_nanos_since_unix_epoch(block.timestamp),
                 ),
+                None => panic!("Blocks without operation are not supported (yet)"),
             }
         }
         self.post_process_ledger_blocks(blocks);

@@ -381,13 +381,13 @@ pub fn rosetta_core_operations_to_icrc1_operation(
 }
 
 pub fn icrc1_operation_to_rosetta_core_operations(
-    operation: IcrcOperation,
+    operation: Option<IcrcOperation>,
     currency: Currency,
     fee_payed: Option<Nat>,
 ) -> anyhow::Result<Vec<rosetta_core::objects::Operation>> {
     let mut operations = vec![];
     match operation {
-        crate::common::storage::types::IcrcOperation::Mint { to, amount } => {
+        Some(crate::common::storage::types::IcrcOperation::Mint { to, amount }) => {
             operations.push(rosetta_core::objects::Operation::new(
                 0,
                 OperationType::Mint.to_string(),
@@ -401,11 +401,11 @@ pub fn icrc1_operation_to_rosetta_core_operations(
             ))
         }
 
-        crate::common::storage::types::IcrcOperation::Burn {
+        Some(crate::common::storage::types::IcrcOperation::Burn {
             from,
             spender,
             amount,
-        } => {
+        }) => {
             operations.push(rosetta_core::objects::Operation::new(
                 0,
                 OperationType::Burn.to_string(),
@@ -430,13 +430,13 @@ pub fn icrc1_operation_to_rosetta_core_operations(
             }
         }
 
-        crate::common::storage::types::IcrcOperation::Transfer {
+        Some(crate::common::storage::types::IcrcOperation::Transfer {
             from,
             to,
             spender,
             amount,
             fee,
-        } => {
+        }) => {
             operations.push(rosetta_core::objects::Operation::new(
                 0,
                 OperationType::Transfer.to_string(),
@@ -499,14 +499,14 @@ pub fn icrc1_operation_to_rosetta_core_operations(
             }
         }
 
-        crate::common::storage::types::IcrcOperation::Approve {
+        Some(crate::common::storage::types::IcrcOperation::Approve {
             from,
             spender,
             amount,
             expected_allowance,
             expires_at,
             fee,
-        } => {
+        }) => {
             operations.push(rosetta_core::objects::Operation::new(
                 0,
                 OperationType::Approve.to_string(),
@@ -556,6 +556,9 @@ pub fn icrc1_operation_to_rosetta_core_operations(
                     ),
                 ));
             }
+        }
+        None => {
+            panic!("Operation is None, this is not supported (yet)");
         }
     };
 
@@ -690,7 +693,9 @@ pub fn rosetta_core_transaction_to_icrc1_transaction(
     let metadata = TransactionMetadata::try_from(transaction.metadata)?;
 
     Ok(crate::common::storage::types::IcrcTransaction {
-        operation: rosetta_core_operations_to_icrc1_operation(transaction.operations)?,
+        operation: Some(rosetta_core_operations_to_icrc1_operation(
+            transaction.operations,
+        )?),
         created_at_time: metadata.created_at_time,
         memo: metadata.memo.map(|memo| memo.into()),
     })

@@ -126,7 +126,7 @@ pub fn build_icrc1_transaction_from_canister_method_args(
                 expires_at,
             };
             crate::common::storage::types::IcrcTransaction {
-                operation,
+                operation: Some(operation),
                 memo,
                 created_at_time,
             }
@@ -158,7 +158,7 @@ pub fn build_icrc1_transaction_from_canister_method_args(
                 fee,
             };
             crate::common::storage::types::IcrcTransaction {
-                operation,
+                operation: Some(operation),
                 memo,
                 created_at_time,
             }
@@ -186,7 +186,7 @@ pub fn build_icrc1_transaction_from_canister_method_args(
                 fee,
             };
             crate::common::storage::types::IcrcTransaction {
-                operation,
+                operation: Some(operation),
                 memo,
                 created_at_time,
             }
@@ -477,8 +477,12 @@ pub fn handle_construction_parse(
             )?;
 
             let fee = match &icrc1_transaction.operation {
-                crate::common::storage::types::IcrcOperation::Transfer { fee, .. } => fee.clone(),
-                crate::common::storage::types::IcrcOperation::Approve { fee, .. } => fee.clone(),
+                Some(crate::common::storage::types::IcrcOperation::Transfer { fee, .. }) => {
+                    fee.clone()
+                }
+                Some(crate::common::storage::types::IcrcOperation::Approve { fee, .. }) => {
+                    fee.clone()
+                }
                 _ => bail!(
                     "Operation type not supported: {:?}",
                     icrc1_transaction.operation
@@ -587,13 +591,15 @@ mod test {
                             LedgerEndpointArg::TransferArg(args) => {
                                 // ICRC Rosetta only supports transfer and approve operations, no burn or mint
                                 match icrc1_transaction.operation {
-                                    crate::common::storage::types::IcrcOperation::Transfer {
-                                        to,
-                                        amount,
-                                        from,
-                                        fee,
-                                        ..
-                                    } => {
+                                    Some(
+                                        crate::common::storage::types::IcrcOperation::Transfer {
+                                            to,
+                                            amount,
+                                            from,
+                                            fee,
+                                            ..
+                                        },
+                                    ) => {
                                         assert_eq!(to, args.to);
                                         assert_eq!(args.amount, amount);
                                         assert_eq!(
@@ -616,14 +622,16 @@ mod test {
                             LedgerEndpointArg::ApproveArg(args) => {
                                 // ICRC Rosetta only supports transfer and approve operations, no burn or mint
                                 match icrc1_transaction.operation {
-                                    crate::common::storage::types::IcrcOperation::Approve {
-                                        spender,
-                                        amount,
-                                        from,
-                                        fee,
-                                        expected_allowance,
-                                        expires_at,
-                                    } => {
+                                    Some(
+                                        crate::common::storage::types::IcrcOperation::Approve {
+                                            spender,
+                                            amount,
+                                            from,
+                                            fee,
+                                            expected_allowance,
+                                            expires_at,
+                                        },
+                                    ) => {
                                         assert_eq!(spender, args.spender);
                                         assert_eq!(amount, args.amount);
                                         assert_eq!(
