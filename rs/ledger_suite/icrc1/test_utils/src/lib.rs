@@ -448,7 +448,7 @@ struct TransactionsAndBalances {
     txs: HashSet<Transaction<Tokens>>,
     principal_to_basic_identity: HashMap<Principal, Arc<BasicIdentity>>,
     allowances: HashMap<(Account, Account), Tokens>,
-    valid_allowance_from: HashMap<Account, u64>, // Accounts with allowances and sufficient balances
+    valid_allowance_from: HashSet<Account>, // Accounts with allowances and sufficient balances
 }
 
 impl TransactionsAndBalances {
@@ -473,6 +473,9 @@ impl TransactionsAndBalances {
         ) {
             return;
         };
+        
+        // Store operation reference for incremental update
+        let operation = &transaction.operation;
         match transaction.operation {
             Operation::Mint { to, amount, .. } => {
                 self.credit(to, amount.get_e8s());
@@ -532,25 +535,63 @@ impl TransactionsAndBalances {
         };
         self.transactions.push(tx);
         
-        // Update valid_allowance_from after applying transaction
-        self.update_valid_allowance_from(default_fee);
+        // Update valid_allowance_from incrementally based on the specific transaction
+        self.update_valid_allowance_from_incremental(&operation, default_fee);
     }
     
-    fn update_valid_allowance_from(&mut self, default_fee: u64) {
-        self.valid_allowance_from.clear();
-        
-        // For each account that has allowances, check if it has sufficient balance
-        for ((from, _spender), allowance) in &self.allowances {
-            if let Some(&balance) = self.balances.get(from) {
-                let allowance_amount = allowance.get_e8s();
-                
-                // Both balance and allowance must cover: minimum transfer amount (1) + fee
-                // This ensures at least one valid transfer_from transaction is possible
-                if balance > default_fee && allowance_amount > default_fee {
-                    // Just mark this account as having valid allowances (no need to store balance)
-                    self.valid_allowance_from.insert(*from, 1);
+    fn update_valid_allowance_from_incremental(&mut self, operation: &Operation<Tokens>, default_fee: u64) {
+        match operation {
+            Operation::Mint { to, .. } => {
+                // Check if the credited account should be added to valid_allowance_from
+                self.check_and_update_account_validity(*to, default_fee);
+            }
+            Operation::Burn { from, .. } => {
+                // Check if the debited account should be removed from valid_allowance_from
+                self.check_and_update_account_validity(*from, default_fee);
+            }
+            Operation::Transfer { from, to, spender, .. } => {
+                // Check both accounts that had balance changes
+                if spender.is_some() {
+                    // This is a transfer_from - check the from account (balance reduced)
+                    self.check_and_update_account_validity(*from, default_fee);
+                } else {
+                    // Regular transfer - check both from and to accounts
+                    self.check_and_update_account_validity(*from, default_fee);
+                    self.check_and_update_account_validity(*to, default_fee);
                 }
             }
+            Operation::Approve { from, .. } => {
+                // Check if the from account should be added/removed from valid_allowance_from
+                // (allowance was added/modified for this account)
+                self.check_and_update_account_validity(*from, default_fee);
+            }
+        }
+    }
+    
+    fn check_and_update_account_validity(&mut self, account: Account, default_fee: u64) {
+        // Check if this account has any allowances and sufficient balance
+        let has_valid_allowances = self.allowances
+            .iter()
+            .any(|((from, _), allowance)| {
+                *from == account && allowance.get_e8s() > default_fee
+            });
+        
+        if has_valid_allowances {
+            if let Some(&balance) = self.balances.get(&account) {
+                if balance > default_fee {
+                    // Account has valid allowances and sufficient balance
+                    self.valid_allowance_from.insert(account);
+                } else {
+                    // Account doesn't have sufficient balance
+                    self.valid_allowance_from.remove(&account);
+                }
+            } else {
+                // Account has no balance
+                self.valid_allowance_from.remove(&account);
+            }
+        } else {
+            // Account has no valid allowances
+            self.valid_allowance_from.remove(&account);
         }
     }
 
@@ -900,7 +941,7 @@ pub fn valid_transactions_strategy(
     }
 
     fn transfer_from_strategy(
-        valid_allowance_from: HashMap<Account, u64>,
+        valid_allowance_from: HashSet<Account>,
         minter_identity: Arc<BasicIdentity>,
         default_fee: u64,
         now: SystemTime,
@@ -930,7 +971,7 @@ pub fn valid_transactions_strategy(
         }
         
         // Select a from account that has valid allowances
-        let valid_from_accounts: Vec<Account> = valid_allowance_from.keys().cloned().collect();
+        let valid_from_accounts: Vec<Account> = valid_allowance_from.into_iter().collect();
         select(valid_from_accounts).prop_flat_map(move |from| {
             let current_balances = current_balances_pointer.clone();
             let allowance_map = allowance_map_pointer.clone();
@@ -1050,7 +1091,6 @@ pub fn valid_transactions_strategy(
         default_fee: u64,
         additional_length: usize,
         now: SystemTime,
-        total_length: usize,
     ) -> BoxedStrategy<TransactionsAndBalances> {
         if additional_length == 0 {
             return Just(state).boxed();
@@ -1105,24 +1145,19 @@ pub fn valid_transactions_strategy(
             ];
             
             // Set transfer_from weight if valid allowances exist
-            // For large transaction counts (like upgrade tests), significantly reduce or disable transfer_from
             if !state.valid_allowance_from.is_empty() {
-                let transfer_from_weight = if total_length > 200 { 0 } else if total_length > 100 { 1 } else { 100 };
-                
-                if transfer_from_weight > 0 {
-                    let transfer_from_strategy = transfer_from_strategy(
-                        state.valid_allowance_from.clone(),
-                        minter_identity.clone(),
-                        default_fee,
-                        now,
-                        tx_hashes_pointer.clone(),
-                        account_to_basic_identity_pointer.clone(),
-                        allowance_map_pointer.clone(),
-                        Arc::new(state.balances.clone()),
-                    )
-                    .boxed();
-                    options.push((transfer_from_weight, transfer_from_strategy));
-                }
+                let transfer_from_strategy = transfer_from_strategy(
+                    state.valid_allowance_from.clone(),
+                    minter_identity.clone(),
+                    default_fee,
+                    now,
+                    tx_hashes_pointer.clone(),
+                    account_to_basic_identity_pointer.clone(),
+                    allowance_map_pointer.clone(),
+                    Arc::new(state.balances.clone()),
+                )
+                .boxed();
+                options.push((100, transfer_from_strategy));
             }
 
             proptest::strategy::Union::new_weighted(options)
@@ -1140,7 +1175,6 @@ pub fn valid_transactions_strategy(
                     default_fee,
                     additional_length,
                     now,
-                    total_length,
                 )
             })
             .boxed()
@@ -1152,7 +1186,6 @@ pub fn valid_transactions_strategy(
         default_fee,
         length,
         now,
-        length,
     )
     .prop_map(|res| res.transactions.clone())
 }
@@ -1439,7 +1472,7 @@ mod tests {
 
     #[test]
     fn test_valid_transactions_strategy_respects_weights() {
-        let size = 500; // Large enough to test functionality, avoid stack overflow
+        let size = 500;
         let minter_identity_arc = Arc::new(minter_identity());
         let strategy = valid_transactions_strategy(
             minter_identity_arc.clone(),
