@@ -60,14 +60,16 @@ pub(crate) struct ExecutionEnvironmentMetrics {
     /// while already in progress a long-running message.
     pub(crate) long_execution_already_in_progress: IntCounter,
 
-    //TODO(urgent): Add comments.
+    /// Metrics for HTTP outcalls costs.
+    /// This is 
     pub(crate) http_outcalls_metrics: HttpOutcallMetrics,
 }
 
 pub(crate) struct HttpOutcallMetrics {
     pub(crate) old_price: Histogram,
     pub(crate) new_price: Histogram,
-    pub(crate) price_change: Histogram,
+    pub(crate) price_increase: Histogram,
+    pub(crate) price_decrease: Histogram,
     pub(crate) ratio: Histogram,
 }
 
@@ -129,13 +131,12 @@ impl ExecutionEnvironmentMetrics {
                 "Total number of intra-subnet messages that exceed the 2 MiB limit for inter-subnet messages."
             ),
             long_execution_already_in_progress: metrics_registry.error_counter("execution_environment_long_execution_already_in_progress"),
-            //TODO(urgent): revisit those buckets.
             // The minimum price of an outcall is ~50 million cycles, while the maximum price is ~30 billion.
             http_outcalls_metrics: HttpOutcallMetrics {
                 old_price: metrics_registry.histogram(
                     "execution_http_outcalls_old_price",
                     "Old price of HTTP outcalls, in B cycles.",
-                    // Buckets: 1 million, 2 million, 5 million, ..., 100 billion, 200 billion, 500 billion
+                    // Buckets: 10M, 20M, 50M, 100M, 200M, 500M, 1B, 2B, 5B, 10B, 20B, 50B
                     decimal_buckets(-2, 1),
                 ),
                 new_price: metrics_registry.histogram(
@@ -143,16 +144,20 @@ impl ExecutionEnvironmentMetrics {
                     "New price of HTTP outcalls, in B cycles.",
                     decimal_buckets(-2, 1),
                 ),
-                price_change: metrics_registry.histogram(
+                price_increase: metrics_registry.histogram(
                     "execution_http_outcalls_price_change",
-                    "Change in price of HTTP outcalls, in B cycles.",
+                    "Increase in price of HTTP outcalls, in B cycles.",
                     decimal_buckets(-2, 1),
                 ),
-                // The ratio can go from -1000 to +1000.
+                price_decrease: metrics_registry.histogram(
+                    "execution_http_outcalls_price_change",
+                    "Decrease in price of HTTP outcalls, in B cycles.",
+                    decimal_buckets(-2, 1),
+                ),
+                // The ratio can go from 1/1000 to 1000.
                 ratio: metrics_registry.histogram(
                     "execution_http_outcalls_ratio",
                     "Ratio of new to old price of HTTP outcalls.",
-                    //TODO(urgent): these should be different buckets.
                     decimal_buckets(-3, 3),
                 ),
             },
@@ -208,14 +213,20 @@ impl ExecutionEnvironmentMetrics {
         self.http_outcalls_metrics
             .new_price
             .observe(new_price.get() as f64 / 1_000_000_000.0);
-        self.http_outcalls_metrics
-            .price_change
-        //TODO(urgent): this can get negative. 
-            .observe((new_price - old_price).get() as f64 / 1_000_000_000.0);
-        //TODO(urgent): explain why we can divide by 0.
-        self.http_outcalls_metrics
-            .ratio
-            .observe(new_price.get() as f64 / old_price.get() as f64);
+        if new_price > old_price {
+            self.http_outcalls_metrics
+                .price_increase
+                .observe((new_price - old_price).get() as f64 / 1_000_000_000.0);
+        } else {
+            self.http_outcalls_metrics
+                .price_decrease
+                .observe((old_price - new_price).get() as f64 / 1_000_000_000.0);
+        }
+        if old_price.get() > 0 { // the price is always > 0; just being extra sure we don't panic.
+            self.http_outcalls_metrics
+                .ratio
+                .observe(new_price.get() as f64 / old_price.get() as f64);
+        }
     }
 
     /// Helper function to observe the duration and count of subnet messages.

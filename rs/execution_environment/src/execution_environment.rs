@@ -554,7 +554,6 @@ impl ExecutionEnvironment {
                                 NumBytes::from(payload_size as u64),
                             );
 
-                            //TODO(urgent): log those metrics:
                             self.metrics
                                 .observe_http_outcall_price_change(old_price, new_price);
                         }
