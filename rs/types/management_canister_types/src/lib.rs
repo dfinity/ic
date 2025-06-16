@@ -2533,6 +2533,11 @@ impl MasterPublicKeyId {
         }
     }
 
+    /// Check whether this type of [`MasterPublicKeyId`] is a VetKd key
+    pub fn is_vetkd_key(&self) -> bool {
+        matches!(self, Self::VetKd(_))
+    }
+
     /// Check whether this type of [`MasterPublicKeyId`] requires pre-signatures
     pub fn requires_pre_signatures(&self) -> bool {
         match self {

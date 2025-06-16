@@ -157,7 +157,6 @@ upload_artifacts(
     testonly = True,
     inputs = [
         "//publish/binaries:bundle",
-        "//publish/binaries:bundle-sns-testing",
     ] + select({
         "@platforms//os:osx": [],
         "//conditions:default": [

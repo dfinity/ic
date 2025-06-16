@@ -45,8 +45,7 @@ use ic_consensus_system_test_utils::{
     },
 };
 use ic_consensus_threshold_sig_system_test_utils::{
-    create_new_subnet_with_keys, make_key_ids_for_all_idkg_schemes, make_key_ids_for_all_schemes,
-    run_chain_key_signature_test,
+    create_new_subnet_with_keys, make_key_ids_for_all_schemes, run_chain_key_signature_test,
 };
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
@@ -76,7 +75,7 @@ use std::{io::Read, time::Duration};
 use std::{io::Write, path::Path};
 use url::Url;
 
-const DKG_INTERVAL: u64 = 24;
+const DKG_INTERVAL: u64 = 14;
 const NNS_NODES: usize = 4;
 const APP_NODES: usize = 4;
 const UNASSIGNED_NODES: usize = 4;
@@ -90,13 +89,7 @@ pub const CHAIN_KEY_SUBNET_RECOVERY_TIMEOUT: Duration = Duration::from_secs(15 *
 /// Setup an IC with the given number of unassigned nodes and
 /// an app subnet with the given number of nodes
 fn setup(env: TestEnv, cfg: SetupConfig) {
-    // TODO(CON-1471): Enable vetKD in large subnet recovery test once
-    // large registry deltas are supported.
-    let key_ids = if cfg.nns_nodes == NNS_NODES_LARGE {
-        make_key_ids_for_all_idkg_schemes()
-    } else {
-        make_key_ids_for_all_schemes()
-    };
+    let key_ids = make_key_ids_for_all_schemes();
 
     let key_configs = key_ids
         .into_iter()
@@ -337,13 +330,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         .any(|s| s.subnet_type() == SubnetType::Application && s.subnet_id != source_subnet_id);
     assert!(cfg.chain_key >= create_new_subnet);
 
-    // TODO(CON-1471): Enable vetKD in large subnet recovery test once
-    // large registry deltas are supported.
-    let key_ids = if topology_snapshot.root_subnet().nodes().count() == NNS_NODES_LARGE {
-        make_key_ids_for_all_idkg_schemes()
-    } else {
-        make_key_ids_for_all_schemes()
-    };
+    let key_ids = make_key_ids_for_all_schemes();
     let chain_key_pub_keys = cfg.chain_key.then(|| {
         info!(
             logger,
