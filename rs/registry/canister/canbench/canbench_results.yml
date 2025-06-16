@@ -1,4 +1,11 @@
 benches:
+  measure_routing_table_invariant_checks_shards_and_unsharded:
+    total:
+      calls: 1
+      instructions: 563027802
+      heap_increase: 69
+      stable_memory_increase: 0
+    scopes: {}
   measure_snapshot_creation_with_1000_individual_entries:
     total:
       calls: 1

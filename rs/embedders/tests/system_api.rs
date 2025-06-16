@@ -3,7 +3,7 @@ use ic_config::{embedders::Config as EmbeddersConfig, subnet_config::SchedulerCo
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::wasmtime_embedder::system_api::{
     sandbox_safe_system_state::SandboxSafeSystemState, ApiType, DefaultOutOfInstructionsHandler,
-    NonReplicatedQueryKind, SystemApiImpl,
+    SystemApiImpl,
 };
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::{
@@ -240,7 +240,6 @@ fn is_supported(api_type: SystemApiCallId, context: &str) -> bool {
         SystemApiCallId::CostVetkdDeriveKey => vec!["*", "s"],
         SystemApiCallId::DebugPrint => vec!["*", "s"],
         SystemApiCallId::Trap => vec!["*", "s"],
-        SystemApiCallId::MintCycles => vec!["U", "Ry", "Rt", "T"],
         SystemApiCallId::MintCycles128 => vec!["U", "Ry", "Rt", "T"],
         SystemApiCallId::SubnetSelfSize => vec!["*"],
         SystemApiCallId::SubnetSelfCopy => vec!["*"],
@@ -720,11 +719,6 @@ fn api_availability_test(
                 context,
             );
         }
-        SystemApiCallId::MintCycles => {
-            // ic0.mint_cycles is only supported for CMC which is tested separately
-            let mut api = get_system_api(api_type, &system_state, cycles_account_manager);
-            assert_api_not_supported(api.ic0_mint_cycles(0));
-        }
         SystemApiCallId::MintCycles128 => {
             // ic0.mint_cycles128 is only supported for CMC which is tested separately
             let mut api = get_system_api(api_type, &system_state, cycles_account_manager);
@@ -830,16 +824,8 @@ fn system_api_availability() {
                 .with_subnet_type(subnet_type)
                 .build();
 
-            // check ic0.mint_cycles, ic0.mint_cycles128 API availability for CMC
+            // check ic0.mint_cycles128 API availability for CMC
             let cmc_system_state = get_cmc_system_state();
-            assert_api_availability(
-                |mut api| api.ic0_mint_cycles(0),
-                api_type.clone(),
-                &cmc_system_state,
-                cycles_account_manager,
-                SystemApiCallId::MintCycles,
-                context,
-            );
             assert_api_availability(
                 |mut api| api.ic0_mint_cycles128(Cycles::zero(), 0, &mut [0u8; 16]),
                 api_type.clone(),
@@ -1163,7 +1149,6 @@ fn data_certificate_copy() {
             subnet_test_id(1),
             vec![],
             Some(vec![1, 2, 3, 4, 5, 6]),
-            NonReplicatedQueryKind::Pure,
         ),
         &system_state,
         cycles_account_manager,
