@@ -326,10 +326,10 @@ impl pb::Topic {
         //
         // We used to fall back to non-critical proposal criticality for backward compatibility,
         // since when custom proposals were introduced, they were not categorized into topics
-        // and were all considered non-critical. Since the SNS now enforces that all new custom
-        // proposals are categorized into topics, their criticality is guaranteed to be explicitly
-        // defined. For native proposals, however, the criticality needs to be defined based on
-        // the topic of the native function, as per `Governance::topic_descriptions`. We take
+        // and were all considered non-critical. Since the SNS now enforces that all newly submitted
+        // proposals are have topics, their criticality is guaranteed to be explicitly defined
+        // (by the topic). Note that for native proposals, the criticality needs to be defined
+        // via the topic assigned statically in `Governance::topic_descriptions`. We take
         // some measures to enforce that all native functions have topics. If this assumption
         // is still somehow violated, we now err on the side of caution.
         if *self == Self::Unspecified {
