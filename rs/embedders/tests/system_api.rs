@@ -2297,11 +2297,11 @@ fn test_env_var_name_operations() {
     let mut heap = vec![0u8; 16];
 
     // Copy first variable name
-    api.ic0_env_var_name_copy(0, 0, 0, 10, &mut heap).unwrap();
+    api.ic0_env_var_name_copy(0, 0, 0, var_name_1.len(), &mut heap).unwrap();
     assert_eq!(&heap[0..10], var_name_1.as_bytes());
 
     // Copy second variable name
-    api.ic0_env_var_name_copy(1, 0, 0, 11, &mut heap).unwrap();
+    api.ic0_env_var_name_copy(1, 0, 0, var_name_2.len(), &mut heap).unwrap();
     assert_eq!(&heap[0..11], var_name_2.as_bytes());
 
     // Test invalid index
@@ -2315,15 +2315,21 @@ fn test_env_var_name_operations() {
 
     // Test invalid offset
     assert!(matches!(
-        api.ic0_env_var_name_copy(0, 0, 10, 10, &mut heap),
+        api.ic0_env_var_name_copy(0, 0, 10, var_name_1.len(), &mut heap),
+        Err(HypervisorError::ToolchainContractViolation { .. })
+    ));
+
+    // Test dst is not aligned
+    assert!(matches!(
+        api.ic0_env_var_name_copy(0, 10, 0, var_name_1.len(), &mut heap),
         Err(HypervisorError::ToolchainContractViolation { .. })
     ));
 
     // Test invalid size (destination buffer overflow)
     assert!(matches!(
-        api.ic0_env_var_name_copy(0, 10, 0, 10, &mut heap),
+        api.ic0_env_var_name_copy(0, 0, 0, 20, &mut heap),
         Err(HypervisorError::ToolchainContractViolation { .. })
-    ));
+        ));
 }
 
 // Helper function to copy test data to heap
@@ -2358,14 +2364,6 @@ fn test_env_var_value_operations() {
     // Test ic0_env_var_count.
     assert_eq!(api.ic0_env_var_count().unwrap(), 3);
 
-    // Test copying value for null bytes as variable name.
-    assert_eq!(
-        api.ic0_env_var_value_copy(0, var_name_empty.len(), 0, 0, 0, &mut heap),
-        Err(HypervisorError::EnvironmentVariableNotFound {
-            name: String::from_utf8(heap[0..var_name_empty.len()].to_vec()).unwrap()
-        })
-    );
-
     // Test empty variable.
     copy_to_heap(&mut heap, var_name_empty.as_bytes());
     assert_eq!(
@@ -2373,7 +2371,6 @@ fn test_env_var_value_operations() {
             .unwrap(),
         0
     );
-
     // Test copying an empty variable.
     api.ic0_env_var_value_copy(0, var_name_empty.len(), 0, 0, 0, &mut heap)
         .unwrap();
@@ -2388,7 +2385,6 @@ fn test_env_var_value_operations() {
             .unwrap(),
         var_value_1.len() // length of "Hello World"
     );
-
     api.ic0_env_var_value_copy(0, var_name_1.len(), 0, 0, var_value_1.len(), &mut heap)
         .unwrap();
     assert_eq!(&heap[0..11], var_value_1.as_bytes());

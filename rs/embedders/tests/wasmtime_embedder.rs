@@ -3418,3 +3418,92 @@ fn wasm64_saturate_fun_index() {
         }
     }
 }
+
+#[test]
+fn test_environment_variable_system_api() {
+    let wat = r#"
+  (module
+      (import "ic0" "msg_reply" (func $msg_reply))
+      (import "ic0" "msg_reply_data_append"
+            (func $msg_reply_data_append (param i32 i32)))
+      (import "ic0" "env_var_count" (func $ic0_env_var_count (result i32)))
+      (import "ic0" "env_var_name_size" (func $env_var_name_size (param i32) (result i32)))
+      (import "ic0" "env_var_name_copy" (func $env_var_name_copy (param i32 i32 i32 i32)))
+      (import "ic0" "env_var_value_size" (func $env_var_value_size (param i32 i32) (result i32)))
+      (import "ic0" "env_var_value_copy" (func $env_var_value_copy (param i32 i32 i32 i32 i32)))
+    
+            
+      (func (export "canister_update go")
+        (call $ic0_env_var_count)
+        drop
+
+        ;; Get and print first variable
+        ;; Get name size: 10.
+        (call $env_var_name_size (i32.const 0))
+        drop
+
+        ;; Copy first name to memory
+        (call $env_var_name_copy (i32.const 0) (i32.const 0) (i32.const 0) (i32.const 10))
+
+        ;; Get value size: 11.
+        (call $env_var_value_size (i32.const 0) (i32.const 10))
+        drop
+
+        ;; Copy value to memory
+        (call $env_var_value_copy (i32.const 0) (i32.const 10) (i32.const 20) (i32.const 0) (i32.const 11))
+
+        (call $msg_reply_data_append (i32.const 20) (i32.const 11))
+
+        ;; Get second variable
+        ;; Get name size: 10.
+        (call $env_var_name_size (i32.const 1))
+        drop
+
+        ;; Copy second name to memory
+        (call $env_var_name_copy (i32.const 1) (i32.const 0) (i32.const 0) (i32.const 10))
+
+        ;; Get value size: 10.
+        (call $env_var_value_size (i32.const 0) (i32.const 10))
+        drop
+
+        ;; Copy value to memory
+        (call $env_var_value_copy (i32.const 0) (i32.const 10) (i32.const 20) (i32.const 0) (i32.const 10))
+
+
+        (call $msg_reply_data_append (i32.const 20) (i32.const 10))
+        (call $msg_reply)
+      )
+      (memory (export "memory") 10)
+  )"#;
+
+    // Add test environment variables
+    let mut env_vars = std::collections::BTreeMap::new();
+    env_vars.insert("TEST_VAR_1".to_string(), "Hello World".to_string());
+    env_vars.insert("TEST_VAR_2".to_string(), "Test Value".to_string());
+
+    let mut config = ic_config::embedders::Config::default();
+    config.feature_flags.environment_variables = FlagStatus::Enabled;
+
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_api_type(ApiType::update(
+            UNIX_EPOCH,
+            vec![],
+            Cycles::zero(),
+            PrincipalId::new_user_test_id(0),
+            0.into(),
+        ))
+        .with_environment_variables(env_vars)
+        .with_wat(wat)
+        .build();
+    let run_result = instance.run(FuncRef::Method(WasmMethod::Update("go".to_string())));
+    let result = instance
+        .store_data_mut()
+        .system_api_mut()
+        .unwrap()
+        .take_execution_result(run_result.as_ref().err());
+
+    assert_eq!(
+        result,
+        Ok(Some(WasmResult::Reply(b"Hello WorldTest Value".to_vec())))
+    );
+}

@@ -578,11 +578,15 @@ pub fn syscalls<
         .func_wrap("ic0", "env_var_count", {
             move |mut caller: Caller<'_, StoreData>| {
                 charge_for_cpu(&mut caller, overhead::ENV_VAR_COUNT)?;
+                if feature_flags.environment_variables == FlagStatus::Enabled {
                 with_system_api(&mut caller, |s| s.ic0_env_var_count()).and_then(|s| {
                     I::try_from(s).map_err(|e| {
                         anyhow::Error::msg(format!("ic0::env_var_count failed: {}", e))
+                        })
                     })
-                })
+                } else {
+                    return Err(anyhow::Error::msg("Environment variables are not supported"));
+                }
             }
         })
         .unwrap();
@@ -592,11 +596,15 @@ pub fn syscalls<
             move |mut caller: Caller<'_, StoreData>, index: I| {
                 let index: usize = index.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu(&mut caller, overhead::ENV_VAR_NAME_SIZE)?;
+                if feature_flags.environment_variables == FlagStatus::Enabled {
                 with_system_api(&mut caller, |s| s.ic0_env_var_name_size(index)).and_then(|s| {
                     I::try_from(s).map_err(|e| {
-                        anyhow::Error::msg(format!("ic0::env_var_name_size failed: {}", e))
+                            anyhow::Error::msg(format!("ic0::env_var_name_size failed: {}", e))
+                        })
                     })
-                })
+                } else {
+                    return Err(anyhow::Error::msg("Environment variables are not supported"));
+                }
             }
         })
         .unwrap();
@@ -609,9 +617,13 @@ pub fn syscalls<
                 let size: usize = size.try_into().expect("Failed to convert I to usize");
                 let index: usize = index.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu_and_mem(&mut caller, overhead::ENV_VAR_NAME_COPY, size)?;
-                with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.ic0_env_var_name_copy(index, dst, offset, size, memory)
-                })?;
+                if feature_flags.environment_variables == FlagStatus::Enabled {
+                    with_memory_and_system_api(&mut caller, |system_api, memory| {
+                        system_api.ic0_env_var_name_copy(index, dst, offset, size, memory)
+                    })?;
+                } else {
+                    return Err(anyhow::Error::msg("Environment variables are not supported"));
+                }
                 if feature_flags.write_barrier == FlagStatus::Enabled {
                     mark_writes_on_bytemap(&mut caller, dst, size)
                 } else {
@@ -627,9 +639,13 @@ pub fn syscalls<
                 let name_src: usize = name_src.try_into().expect("Failed to convert I to usize");
                 let name_size: usize = name_size.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu(&mut caller, overhead::ENV_VAR_VALUE_SIZE)?;
-                with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.ic0_env_var_value_size(name_src, name_size, memory)
-                })
+                if feature_flags.environment_variables == FlagStatus::Enabled {
+                    with_memory_and_system_api(&mut caller, |system_api, memory| {
+                        system_api.ic0_env_var_value_size(name_src, name_size, memory)
+                    })
+                } else {
+                    return Err(anyhow::Error::msg("Environment variables are not supported"));
+                }
                 .and_then(|s| {
                     I::try_from(s).map_err(|e| {
                         anyhow::Error::msg(format!("ic0::env_var_value_size failed: {}", e))
@@ -653,10 +669,14 @@ pub fn syscalls<
                 let offset: usize = offset.try_into().expect("Failed to convert I to usize");
                 let size: usize = size.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu_and_mem(&mut caller, overhead::ENV_VAR_VALUE_COPY, size)?;
-                with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api
-                        .ic0_env_var_value_copy(name_src, name_size, dst, offset, size, memory)
-                })?;
+                if feature_flags.environment_variables == FlagStatus::Enabled {
+                    with_memory_and_system_api(&mut caller, |system_api, memory| {
+                        system_api
+                            .ic0_env_var_value_copy(name_src, name_size, dst, offset, size, memory)
+                    })?;
+                } else {
+                    return Err(anyhow::Error::msg("Environment variables are not supported"));
+                }
                 if feature_flags.write_barrier == FlagStatus::Enabled {
                     mark_writes_on_bytemap(&mut caller, dst, size)
                 } else {
