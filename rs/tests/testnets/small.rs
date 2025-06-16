@@ -77,7 +77,7 @@ fn main() -> Result<()> {
 }
 
 pub fn setup(env: TestEnv) {
-    let key_ids = vec![
+    let key_ids = [
         MasterPublicKeyId::Ecdsa(EcdsaKeyId {
             curve: EcdsaCurve::Secp256k1,
             name: "key_1".into(),
@@ -163,7 +163,7 @@ pub fn setup(env: TestEnv) {
     let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     let governance = Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
 
-    let app_subnet_id = snapshot.subnets().skip(1).next().unwrap().subnet_id;
+    let app_subnet_id = snapshot.subnets().nth(1).unwrap().subnet_id;
 
     let logger = env.logger();
     info!(logger, "Creating new subnet with keys.");
