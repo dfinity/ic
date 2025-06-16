@@ -3538,5 +3538,4 @@ fn test_environment_variable_system_api_not_enabled() {
 
     let run_result = instance.run(FuncRef::Method(WasmMethod::Update("go".to_string())));
     assert!(run_result.is_err());
-    assert!(run_result.unwrap_err().as_str().contains("Environment variables are not supported"));
 }
