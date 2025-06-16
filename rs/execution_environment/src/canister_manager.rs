@@ -1803,7 +1803,8 @@ impl CanisterManager {
             let snapshot_hook_status = snapshot.execution_snapshot().on_low_wasm_memory_hook_status;
             match (hook_condition, snapshot_hook_status) {
                 (true, Some(OnLowWasmMemoryHookStatus::ConditionNotSatisfied))
-                | (false, Some(OnLowWasmMemoryHookStatus::Ready)) => {
+                | (false, Some(OnLowWasmMemoryHookStatus::Ready))
+                | (false, Some(OnLowWasmMemoryHookStatus::Executed)) => {
                     return (
                         Err(CanisterManagerError::CanisterSnapshotInconsistent {
                             message: format!("Hook status ({:?}) of uploaded snapshot is inconsistent with the canister's state (hook condition satisfied: {}).", snapshot_hook_status, hook_condition),
