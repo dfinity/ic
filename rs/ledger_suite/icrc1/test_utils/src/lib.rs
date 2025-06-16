@@ -544,9 +544,9 @@ impl TransactionsAndBalances {
             if let Some(&balance) = self.balances.get(from) {
                 let allowance_amount = allowance.get_e8s();
                 
-                // Check if account has enough balance to cover any transfer_from (amount + fee)
-                // We need at least fee for the transfer_from itself, plus some allowance amount
-                if balance > default_fee && allowance_amount > 0 {
+                // Both balance and allowance must cover: minimum transfer amount (1) + fee
+                // This ensures at least one valid transfer_from transaction is possible
+                if balance > default_fee && allowance_amount > default_fee {
                     // Use the current balance as the value
                     self.valid_allowance_from.insert(*from, balance);
                 }
@@ -955,19 +955,21 @@ pub fn valid_transactions_strategy(
                 let fee_amount = default_fee;
                 
                 // Calculate max transferable amount considering both allowance and account balance
+                // Both allowance and from account balance must cover: transfer amount + fee
                 let allowance_max = if allowance_amount > fee_amount {
                     allowance_amount - fee_amount
                 } else {
-                    1 // At least 1 to avoid empty range
+                    0 // Cannot transfer if allowance doesn't cover fee
                 };
                 let balance_max = if balance > fee_amount {
                     balance - fee_amount
                 } else {
-                    1 // At least 1 to avoid empty range
+                    0 // Cannot transfer if balance doesn't cover fee
                 };
+                
                 let max_amount = std::cmp::min(allowance_max, balance_max).max(1);
                 
-                // Select from pre-computed valid combinations
+                // Select from pre-computed valid combinations  
                 (1..=max_amount).prop_flat_map(move |amount| {
                     let tx_hash_set = tx_hash_set_ptr2.clone();
                     let account_to_basic_identity = account_to_basic_identity_ptr2.clone();
