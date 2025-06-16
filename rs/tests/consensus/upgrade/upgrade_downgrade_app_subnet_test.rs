@@ -118,6 +118,7 @@ fn upgrade_downgrade_app_subnet(env: TestEnv) {
         SubnetType::Application,
         None,
     );
+
     let mainnet_version = get_mainnet_nns_revision();
     upgrade(
         &env,

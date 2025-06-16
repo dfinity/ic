@@ -1,7 +1,7 @@
 use canister_test::WasmResult;
 use ic_error_types::ErrorCode;
 use ic_management_canister_types_private::{
-    CanisterSnapshotDataOffset, LoadCanisterSnapshotArgs, OnLowWasmMemoryHookStatus,
+    CanisterSnapshotDataOffset, Global, LoadCanisterSnapshotArgs, OnLowWasmMemoryHookStatus,
     ReadCanisterSnapshotMetadataArgs, ReadCanisterSnapshotMetadataResponse,
     TakeCanisterSnapshotArgs, UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
     UploadChunkArgs,
@@ -192,7 +192,7 @@ fn upload_snapshot_with_checkpoint() {
 }
 
 #[test]
-fn load_snapshot_inconsistent_metadata_fails() {
+fn load_snapshot_inconsistent_metadata_hook_status_fails() {
     let env = StateMachineBuilder::new()
         .with_snapshot_download_enabled(true)
         .with_snapshot_upload_enabled(true)
@@ -286,6 +286,72 @@ fn load_faulty_snapshot(
     assert!(err
         .description()
         .contains("uploaded snapshot is inconsistent with the canister's state"));
+}
+
+#[test]
+fn load_snapshot_inconsistent_metadata_globals_fails() {
+    let env = StateMachineBuilder::new()
+        .with_snapshot_download_enabled(true)
+        .with_snapshot_upload_enabled(true)
+        .build();
+    let counter_canister_wasm = wat::parse_str(COUNTER_GROW_CANISTER_WAT).unwrap();
+    let canister_id = env
+        .install_canister(counter_canister_wasm.clone(), vec![], None)
+        .unwrap();
+
+    env.execute_ingress(canister_id, "inc", vec![]).unwrap();
+    // take snapshot to learn valid metadata
+    let snapshot_id_orig = env
+        .take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None))
+        .unwrap()
+        .snapshot_id();
+    let md_args = ReadCanisterSnapshotMetadataArgs::new(canister_id, snapshot_id_orig);
+    let md = env.read_canister_snapshot_metadata(&md_args).unwrap();
+    // download all data
+    let module_dl = env.get_snapshot_module(&md_args).unwrap();
+    assert_eq!(counter_canister_wasm, module_dl);
+    let heap_dl = env.get_snapshot_heap(&md_args).unwrap();
+    let stable_memory_dl = env.get_snapshot_stable_memory(&md_args).unwrap();
+
+    // passing globals that are inconsistent with the module, expecting a failure on snapshot_load
+    let args = UploadCanisterSnapshotMetadataArgs::new(
+        canister_id,
+        None,
+        module_dl.len() as u64,
+        vec![Global::I32(1), Global::I64(1999996623), Global::I32(2)],
+        heap_dl.len() as u64,
+        stable_memory_dl.len() as u64,
+        md.certified_data.clone(),
+        None,
+        None,
+    );
+    let snapshot_id = env
+        .upload_canister_snapshot_metadata(&args)
+        .unwrap()
+        .snapshot_id;
+    env.upload_snapshot_module(canister_id, snapshot_id.clone(), module_dl, None, None)
+        .unwrap();
+    env.upload_snapshot_heap(canister_id, snapshot_id.clone(), heap_dl, None, None)
+        .unwrap();
+    env.upload_snapshot_stable_memory(
+        canister_id,
+        snapshot_id.clone(),
+        stable_memory_dl,
+        None,
+        None,
+    )
+    .unwrap();
+    let _ = env.execute_ingress(canister_id, "inc", vec![]).unwrap();
+    let load_args = LoadCanisterSnapshotArgs::new(
+        canister_id,
+        SnapshotId::try_from(snapshot_id).unwrap(),
+        None,
+    );
+    let err = env.load_canister_snapshot(load_args).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidManagementPayload);
+    assert!(err
+        .description()
+        .contains("Wasm exported globals of canister module and snapshot metadata do not match"));
 }
 
 /// Counter canister that also grows the stable memory by one page on "inc".
