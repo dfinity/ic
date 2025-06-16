@@ -52,14 +52,14 @@ use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
-        boundary_node::BoundaryNode,
         group::SystemTestGroup,
         ic::{InternetComputer, Subnet},
+        ic_gateway_vm::{HasIcGatewayVm, IcGatewayVm, IC_GATEWAY_VM_NAME},
         prometheus_vm::{HasPrometheus, PrometheusVm},
         test_env::TestEnv,
         test_env_api::{
-            await_boundary_node_healthy, HasIcDependencies, HasPublicApiUrl, HasRegistryVersion,
-            HasTopologySnapshot, IcNodeContainer, NnsCustomizations,
+            HasIcDependencies, HasPublicApiUrl, HasRegistryVersion, HasTopologySnapshot,
+            IcNodeContainer, NnsCustomizations,
         },
     },
     util::{block_on, runtime_from_url, MessageCanister},
@@ -140,13 +140,20 @@ pub fn setup(env: TestEnv) {
                 }),
         )
         .with_unassigned_nodes(34)
+        .with_api_boundary_nodes(1)
         .setup_and_start(&env)
         .expect("Failed to setup IC under test");
-    
+
     install_nns_with_customizations_and_check_progress(
         env.topology_snapshot(),
         NnsCustomizations::default(),
     );
+    IcGatewayVm::new(IC_GATEWAY_VM_NAME)
+        .start(&env)
+        .expect("failed to setup ic-gateway");
+    let ic_gateway = env.get_deployed_ic_gateway(IC_GATEWAY_VM_NAME).unwrap();
+    let ic_gateway_url = ic_gateway.get_public_url();
+    let ic_gateway_domain = ic_gateway_url.domain().unwrap();
 
     let snapshot = env.topology_snapshot();
     let registry_version = snapshot.get_registry_version();
@@ -175,7 +182,7 @@ pub fn setup(env: TestEnv) {
     let _snapshot =
         block_on(snapshot.block_for_min_registry_version(registry_version.increment())).unwrap();
 
-    env.sync_with_prometheus_by_name("", env.get_playnet_url(BOUNDARY_NODE_NAME));
+    env.sync_with_prometheus_by_name("", Some(ic_gateway_domain.to_string()));
 
     let agent = nns_node.with_default_agent(|agent| async move { agent });
     let nns_canister = block_on(MessageCanister::new(

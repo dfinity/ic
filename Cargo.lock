@@ -22503,7 +22503,6 @@ dependencies = [
  "candid",
  "canister-test",
  "ic-base-types",
- "ic-mainnet-nns-recovery",
  "ic-management-canister-types-private",
  "ic-nns-constants",
  "ic-registry-subnet-features",
