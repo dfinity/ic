@@ -30,7 +30,6 @@ use ic_management_canister_types_private::{
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_replicated_state::canister_snapshots::ValidatedSnapshotMetadata;
-use ic_replicated_state::canister_state::system_state::is_low_wasm_memory_hook_condition_satisfied;
 use ic_replicated_state::canister_state::system_state::wasm_chunk_store::{
     ChunkValidationResult, WasmChunkHash, CHUNK_SIZE,
 };
@@ -1763,18 +1762,18 @@ impl CanisterManager {
             };
 
             // If the snapshot was uploaded, make sure the snapshot's exported globals match the wasm module's.
-            if snapshot.source() == SnapshotSource::MetadataUpload {
-                if !globals_match(
+            if snapshot.source() == SnapshotSource::MetadataUpload
+                && !globals_match(
                     &new_execution_state.exported_globals,
                     &execution_snapshot.exported_globals,
-                ) {
-                    return (
+                )
+            {
+                return (
                         Err(CanisterManagerError::CanisterSnapshotInconsistent {
                             message: "Wasm exported globals of canister module and snapshot metadata do not match.".to_string(),
                         }),
                         instructions_used,
                     );
-                }
             }
 
             new_execution_state.exported_globals = execution_snapshot.exported_globals.clone();
@@ -2500,7 +2499,7 @@ pub fn uninstall_canister(
     reject_responses
 }
 
-fn globals_match(g1: &Vec<Global>, g2: &Vec<Global>) -> bool {
+fn globals_match(g1: &[Global], g2: &[Global]) -> bool {
     use std::mem::discriminant;
     if g1.len() != g2.len() {
         return false;
