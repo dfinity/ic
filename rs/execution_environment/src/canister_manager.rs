@@ -24,12 +24,13 @@ use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterSnapshotDataKind,
     CanisterSnapshotDataOffset, CanisterSnapshotResponse, CanisterStatusResultV2,
     CanisterStatusType, ChunkHash, Global, GlobalTimer, Method as Ic00Method,
-    ReadCanisterSnapshotDataResponse, ReadCanisterSnapshotMetadataResponse, SnapshotSource,
-    StoredChunksReply, UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
-    UploadChunkReply,
+    OnLowWasmMemoryHookStatus, ReadCanisterSnapshotDataResponse,
+    ReadCanisterSnapshotMetadataResponse, SnapshotSource, StoredChunksReply,
+    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs, UploadChunkReply,
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_replicated_state::canister_snapshots::ValidatedSnapshotMetadata;
+use ic_replicated_state::canister_state::system_state::is_low_wasm_memory_hook_condition_satisfied;
 use ic_replicated_state::canister_state::system_state::wasm_chunk_store::{
     ChunkValidationResult, WasmChunkHash, CHUNK_SIZE,
 };
@@ -1774,8 +1775,6 @@ impl CanisterManager {
                         instructions_used,
                     );
                 }
-                // Also check the hook status
-                let snapshot_memory_hook_status = execution_snapshot.on_low_wasm_memory_hook_status;
             }
 
             new_execution_state.exported_globals = execution_snapshot.exported_globals.clone();
@@ -1797,6 +1796,26 @@ impl CanisterManager {
         let mut new_canister =
             CanisterState::new(system_state, new_execution_state, scheduler_state);
         let new_memory_usage = new_canister.memory_usage();
+
+        // If the snapshot was uploaded, make sure the snapshot's memory hook status matches the actual status.
+        // Otherwise, the snapshot is invalid.
+        if snapshot.source() == SnapshotSource::MetadataUpload {
+            let hook_condition = new_canister.is_low_wasm_memory_hook_condition_satisfied();
+            let snapshot_hook_status = snapshot.execution_snapshot().on_low_wasm_memory_hook_status;
+            match (hook_condition, snapshot_hook_status) {
+                (true, Some(OnLowWasmMemoryHookStatus::ConditionNotSatisfied))
+                | (false, Some(OnLowWasmMemoryHookStatus::Ready)) => {
+                    return (
+                        Err(CanisterManagerError::CanisterSnapshotInconsistent {
+                            message: format!("Hook status ({:?}) of uploaded snapshot is inconsistent with the canister's state (hook condition satisfied: {}).", snapshot_hook_status, hook_condition),
+                        }),
+                        instructions_used,
+                    );
+                }
+                // all other combinations are valid
+                _ => {}
+            }
+        }
 
         let validated_memory_usage = match self.memory_usage_checks(
             subnet_size,
