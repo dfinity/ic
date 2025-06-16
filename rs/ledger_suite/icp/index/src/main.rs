@@ -510,24 +510,28 @@ fn get_block_range_from_stable_memory(
     })
 }
 
-fn get_oldest_tx_id(account_identifier: AccountIdentifier) -> Option<BlockIndex> {
-    // There is no easy way to get the oldest index for an account_identifier
-    // in one step. Instead, we do it in two steps:
-    // 1. check if index 0 is owned by the account_identifier
-    // 2. if not then return the oldest index of the account_identifier that
-    //    is not 0 via iter_upper_bound
-    let last_key = account_identifier_block_ids_key(account_identifier, 0);
-    with_account_identifier_block_ids(|account_identifier_block_ids| {
-        account_identifier_block_ids
-            .get(&last_key)
-            .map(|_| 0)
-            .or_else(|| {
-                account_identifier_block_ids
-                    .iter_upper_bound(&last_key)
-                    .take_while(|(k, _)| k.0 == account_identifier.hash)
-                    .next()
-                    .map(|(key, _)| key.1 .0)
-            })
+/// Returns the oldest known block index associated with the given account identifier.
+///
+/// Keys are stored as `(account_hash, Reverse(block_index))`, meaning newer blocks
+/// appear first in iteration. To find the oldest, we look for the last key matching
+/// the account prefix.
+///
+/// This function checks if index 0 exists (fast path), and if not,
+/// searches for the last block associated with the account.
+fn get_oldest_tx_id(account_id: AccountIdentifier) -> Option<BlockIndex> {
+    let key_for_index_0 = account_identifier_block_ids_key(account_id, 0);
+
+    with_account_identifier_block_ids(|map| {
+        // Fast path: index 0 exists for this account
+        if map.get(&key_for_index_0).is_some() {
+            return Some(0);
+        }
+
+        // Scan in reverse and find the last key for this account
+        map.range(..=key_for_index_0)
+            .rev()
+            .find(|(key, _)| key.0 == account_id.hash)
+            .map(|(key, _)| key.1 .0)
     })
 }
 
