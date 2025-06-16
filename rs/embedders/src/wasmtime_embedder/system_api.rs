@@ -3420,35 +3420,19 @@ impl SystemApi for SystemApiImpl {
     }
 
     fn ic0_is_controller(&self, src: usize, size: usize, heap: &[u8]) -> HypervisorResult<u32> {
-        let result = match &self.api_type {
-            ApiType::Start { .. }
-            | ApiType::Init { .. }
-            | ApiType::SystemTask { .. }
-            | ApiType::Update { .. }
-            | ApiType::Cleanup { .. }
-            | ApiType::ReplicatedQuery { .. }
-            | ApiType::NonReplicatedQuery { .. }
-            | ApiType::PreUpgrade { .. }
-            | ApiType::ReplyCallback { .. }
-            | ApiType::RejectCallback { .. }
-            | ApiType::InspectMessage { .. } => {
-                let msg_bytes = valid_subslice(
-                    "ic0.is_controller",
-                    InternalAddress::new(src),
-                    InternalAddress::new(size),
-                    heap,
-                )?;
-                PrincipalId::try_from(msg_bytes)
-                    .map(|principal_id| {
-                        self.sandbox_safe_system_state
-                            .is_controller(&principal_id)
-                            .into()
-                    })
-                    .map_err(|e| {
-                        HypervisorError::InvalidPrincipalId(PrincipalIdBlobParseError(e.0))
-                    })
-            }
-        };
+        let msg_bytes = valid_subslice(
+            "ic0.is_controller",
+            InternalAddress::new(src),
+            InternalAddress::new(size),
+            heap,
+        )?;
+        let result = PrincipalId::try_from(msg_bytes)
+            .map(|principal_id| {
+                self.sandbox_safe_system_state
+                    .is_controller(&principal_id)
+                    .into()
+            })
+            .map_err(|e| HypervisorError::InvalidPrincipalId(PrincipalIdBlobParseError(e.0)));
 
         trace_syscall!(
             self,
