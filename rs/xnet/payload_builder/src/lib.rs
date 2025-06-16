@@ -1300,7 +1300,7 @@ pub const POOL_SLICE_BYTE_SIZE_MAX: usize = 4 << 20;
 
 /// Conservative minimum slice size in bytes. We stop trying to add slices to
 /// the payload once we're this close to the payload size limit.
-pub const SLICE_BYTE_SIZE_MIN: usize = 600;
+pub const SLICE_BYTE_SIZE_MIN: usize = 1 << 10;
 
 /// This struct stores stream indices and byte limit used for refilling
 /// stream slices of a subnet in a certified slice pool.
