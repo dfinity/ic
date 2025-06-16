@@ -579,14 +579,12 @@ pub fn syscalls<
             move |mut caller: Caller<'_, StoreData>| {
                 charge_for_cpu(&mut caller, overhead::ENV_VAR_COUNT)?;
                 if feature_flags.environment_variables == FlagStatus::Enabled {
-                    println!("env_var_count ENABLED");
                     with_system_api(&mut caller, |s| s.ic0_env_var_count()).and_then(|s| {
                         I::try_from(s).map_err(|e| {
                             anyhow::Error::msg(format!("ic0::env_var_count failed: {}", e))
                         })
                     })
                 } else {
-                    println!("env_var_count DISABED");
                     return Err(anyhow::Error::msg(
                         "Environment variables are not supported",
                     ));
