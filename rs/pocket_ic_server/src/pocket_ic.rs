@@ -530,8 +530,6 @@ impl PocketIcSubnets {
             .with_registry_data_provider(registry_data_provider.clone())
             .with_log_level(log_level)
             .with_bitcoin_testnet_uds_path(bitcoin_adapter_uds_path)
-            .with_snapshot_download_enabled(nonmainnet_features)
-            .with_snapshot_upload_enabled(nonmainnet_features)
     }
 
     fn new(
