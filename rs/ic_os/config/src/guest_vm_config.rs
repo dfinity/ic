@@ -103,6 +103,9 @@ fn run(
     Ok(())
 }
 
+First change
+
+
 fn assemble_config_media(hostos_config: &HostOSConfig, media_path: &Path) -> Result<()> {
     let guestos_config =
         generate_guestos_config(hostos_config).context("Failed to generate GuestOS config")?;
