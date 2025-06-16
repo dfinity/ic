@@ -14,7 +14,7 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:efe6edcd9a9e169843a02f91af98b29514c00cda858ad6612cda28b231b80896
+    image: ghcr.io/dfinity/ic-build@sha256:e4862aca9dfa7e342f44cb4ba48923de4306099d26b067ee285f5e0ebe87162a
   dind-large-setup: &dind-large-setup
     runs-on:
       labels: dind-large
@@ -47,9 +47,6 @@ jobs:
   bazel-system-test-hourly:
     name: Bazel System Tests Hourly
     <<: *dind-large-setup
-    runs-on:
-      group: zh1
-      labels: dind-large
     steps:
       - <<: *checkout
       - name: Run Bazel System Test Hourly
@@ -66,9 +63,6 @@ jobs:
   bazel-run-fuzzers-hourly:
     name: Bazel Run Fuzzers Hourly
     <<: *dind-large-setup
-    runs-on:
-      group: zh1
-      labels: dind-large
     steps:
       - <<: *checkout
       - name: Run Libfuzzer targets

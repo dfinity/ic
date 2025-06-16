@@ -98,13 +98,15 @@ def commit_and_create_pr(
                     description,
                     "--title",
                     commit_message,
+                    "--label",
+                    "CI_ALL_BAZEL_TARGETS",
                 ],
                 cwd=repo_root,
             )
+        pr_number = subprocess.check_output(
+            ["gh", "pr", "view", "--json", "number", "-q", ".number"], cwd=repo_root, text=True
+        ).strip()
         if enable_auto_merge:
-            pr_number = subprocess.check_output(
-                ["gh", "pr", "view", "--json", "number", "-q", ".number"], cwd=repo_root, text=True
-            ).strip()
             subprocess.check_call(["gh", "pr", "merge", pr_number, "--auto"], cwd=repo_root)
 
 
@@ -286,7 +288,7 @@ This PR is created automatically using [`mainnet_revisions.py`](https://github.c
             branch,
             [MAINNET_ICOS_REVISIONS_FILE],
             logger,
-            "chore: Update Mainnet IC revisions file",
+            "chore: Update Mainnet ICOS revisions file",
             pr_description.format(
                 description="Update mainnet revisions file to include the latest version released on the mainnet."
             ),

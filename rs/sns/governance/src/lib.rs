@@ -18,6 +18,8 @@ mod treasury;
 pub mod types;
 pub mod upgrade_journal;
 
+pub mod icrc_ledger_helper;
+
 trait Len {
     fn len(&self) -> usize;
 }
