@@ -2299,12 +2299,12 @@ fn test_env_var_name_operations() {
     // Copy first variable name
     api.ic0_env_var_name_copy(0, 0, 0, var_name_1.len(), &mut heap)
         .unwrap();
-    assert_eq!(&heap[0..10], var_name_1.as_bytes());
+    assert_eq!(&heap[0..var_name_1.len()], var_name_1.as_bytes());
 
     // Copy second variable name
     api.ic0_env_var_name_copy(1, 0, 0, var_name_2.len(), &mut heap)
         .unwrap();
-    assert_eq!(&heap[0..11], var_name_2.as_bytes());
+    assert_eq!(&heap[0..var_name_2.len()], var_name_2.as_bytes());
 
     // Test invalid index
     assert!(matches!(
@@ -2378,7 +2378,7 @@ fn test_env_var_value_operations() {
         .unwrap();
     let mut expected_empty_value = vec![0u8; 64];
     copy_to_heap(&mut expected_empty_value, var_name_empty.as_bytes());
-    assert_eq!(&heap[0..64], expected_empty_value);
+    assert_eq!(&heap[0..expected_empty_value.len()], expected_empty_value);
 
     // Test value size and copying for existing variable: TEST_VAR_1.
     copy_to_heap(&mut heap, var_name_1.as_bytes());
@@ -2389,7 +2389,7 @@ fn test_env_var_value_operations() {
     );
     api.ic0_env_var_value_copy(0, var_name_1.len(), 0, 0, var_value_1.len(), &mut heap)
         .unwrap();
-    assert_eq!(&heap[0..11], var_value_1.as_bytes());
+    assert_eq!(&heap[0..var_value_1.len()], var_value_1.as_bytes());
 
     // Test value size and copying for existing variable: PATH.
     copy_to_heap(&mut heap, var_name_path.as_bytes());
@@ -2407,7 +2407,7 @@ fn test_env_var_value_operations() {
         &mut heap,
     )
     .unwrap();
-    assert_eq!(&heap[0..23], var_value_path.as_bytes());
+    assert_eq!(&heap[0..var_value_path.len()], var_value_path.as_bytes());
 
     // Test non-existent variable
     let non_existent = "NON_EXISTENT".to_string();

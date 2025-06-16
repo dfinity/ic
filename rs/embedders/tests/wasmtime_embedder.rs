@@ -3525,7 +3525,8 @@ fn test_environment_variable_system_api_not_enabled() {
     let mut config = ic_config::embedders::Config::default();
     config.feature_flags.environment_variables = FlagStatus::Disabled;
 
-    let mut instance = WasmtimeInstanceBuilder::new()
+
+   let builder = WasmtimeInstanceBuilder::new()
         .with_wat(wat)
         .with_config(config)
         .with_api_type(ApiType::update(
@@ -3534,9 +3535,10 @@ fn test_environment_variable_system_api_not_enabled() {
             Cycles::zero(),
             PrincipalId::new_user_test_id(0),
             0.into(),
-        ))
-        .build();
+        ));
 
-    let run_result = instance.run(FuncRef::Method(WasmMethod::Update("go".to_string())));
-    assert!(run_result.is_err());
+    let instance = builder.try_build();
+    assert!(instance.is_err());
+    assert_matches!(instance.err().unwrap().0, 
+    HypervisorError::WasmEngineError {..});
 }
