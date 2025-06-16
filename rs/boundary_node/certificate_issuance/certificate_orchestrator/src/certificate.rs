@@ -241,18 +241,18 @@ impl Export for Exporter {
             self.registrations.with(|regs| {
                 let pairs = pairs.borrow();
                 let iter = match key.clone() {
-                    None => pairs.iter(),
+                    None => {
+                        // No starting key given: return full iterator from the beginning.
+                        pairs.iter()
+                    }
                     Some(s) => {
                         let k = StorableId::from(s);
+                        // If the given key exists, start iteration from it (inclusive).
+                        // Otherwise, fall back to iterating from the beginning.
                         if pairs.contains_key(&k) {
-                            let mut i = pairs.iter_upper_bound(&k);
-                            if i.next().is_none() {
-                                pairs.iter()
-                            } else {
-                                i
-                            }
+                            pairs.range(k..)
                         } else {
-                            pairs.iter_upper_bound(&k)
+                            pairs.iter()
                         }
                     }
                 };
