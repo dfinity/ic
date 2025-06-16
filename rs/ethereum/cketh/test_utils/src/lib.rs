@@ -630,7 +630,7 @@ impl CkEthSetup {
             initial_estimate << 7,
             initial_estimate << 8,
             initial_estimate << 9,
-            2_000_000 - HEADER_SIZE_LIMIT,
+            2_000_000,
         ]
     }
 }
