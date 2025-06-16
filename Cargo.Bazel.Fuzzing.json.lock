@@ -1,5 +1,5 @@
 {
-  "checksum": "4818e47450880951f051e445196bc24f31ba30adf342d468988c4f7d624ec271",
+  "checksum": "7941c35f4aeb65b342fd1786d7070194f9eab272de57764544654b8ff87486ce",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -20331,7 +20331,7 @@
               "target": "ethnum"
             },
             {
-              "id": "evm_rpc_types 1.3.0",
+              "id": "evm_rpc_types 1.4.0",
               "target": "evm_rpc_types"
             },
             {
@@ -24865,14 +24865,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "evm_rpc_types 1.3.0": {
+    "evm_rpc_types 1.4.0": {
       "name": "evm_rpc_types",
-      "version": "1.3.0",
+      "version": "1.4.0",
       "package_url": "https://github.com/internet-computer-protocol/evm-rpc-canister",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/evm_rpc_types/1.3.0/download",
-          "sha256": "fa134314bce7c35b9214710572fb7305edc7f4223c5bd03b5857ed08bbb05897"
+          "url": "https://static.crates.io/crates/evm_rpc_types/1.4.0/download",
+          "sha256": "24fa2b6929665ce97f4a261dd969f87bd717d2c5ec274addf59793118ca61886"
         }
       },
       "targets": [
@@ -24917,7 +24917,7 @@
               "target": "serde"
             },
             {
-              "id": "strum 0.26.3",
+              "id": "strum 0.27.1",
               "target": "strum"
             },
             {
@@ -24932,7 +24932,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.3.0"
+        "version": "1.4.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -91995,7 +91995,7 @@
     "escargot 0.5.8",
     "ethers-core 2.0.10",
     "ethnum 1.4.0",
-    "evm_rpc_types 1.3.0",
+    "evm_rpc_types 1.4.0",
     "exec 0.3.1",
     "eyre 0.6.8",
     "ff 0.12.1",
