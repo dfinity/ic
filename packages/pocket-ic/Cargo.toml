@@ -1,6 +1,6 @@
 [package]
 name = "pocket-ic"
-version = "9.0.0"
+version = "9.0.2"
 license = "Apache-2.0"
 description = "PocketIC: A Canister Smart Contract Testing Platform"
 repository = "https://github.com/dfinity/ic"
@@ -54,9 +54,9 @@ bitcoin = { version = "0.28.2" }
 candid_parser = { workspace = true }
 ed25519-dalek = { workspace = true }
 flate2 = { workspace = true }
-ic-cdk = "0.17.1"
+ic-cdk = { workspace = true }
 ic-error-types = { path = "../ic-error-types" }
-ic-vetkd-utils = { path = "../ic-vetkd-utils" }
+ic-vetkeys = { workspace = true }
 k256 = { workspace = true }
 lazy_static = { workspace = true }
 wat = { workspace = true }

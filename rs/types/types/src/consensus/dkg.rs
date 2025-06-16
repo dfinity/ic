@@ -585,7 +585,7 @@ pub enum DkgPayloadCreationError {
 pub enum InvalidDkgPayloadReason {
     CryptoError(CryptoError),
     DkgVerifyDealingError(DkgVerifyDealingError),
-    MismatchedDkgSummary(dkg::DkgSummary, dkg::DkgSummary),
+    MismatchedDkgSummary(DkgSummary, DkgSummary),
     MissingDkgConfigForDealing,
     DkgStartHeightDoesNotMatchParentBlock,
     DkgSummaryAtNonStartHeight(Height),

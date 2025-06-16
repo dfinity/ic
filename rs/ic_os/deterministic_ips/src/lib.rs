@@ -69,6 +69,7 @@ pub enum IpVariant {
 pub fn calculate_deterministic_mac(
     mgmt_mac: &MacAddr6,
     deployment_environment: DeploymentEnvironment,
+    // TODO(NODE-1609): consider removing IpVariant as it's always set to V6 in prod.
     ip_version: IpVariant,
     node_type: NodeType,
 ) -> MacAddr6 {

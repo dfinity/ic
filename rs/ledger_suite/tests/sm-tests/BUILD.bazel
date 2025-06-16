@@ -31,6 +31,7 @@ DEPENDENCIES = [
     "@crate_index//:ic-agent",
     "@crate_index//:icrc1-test-env",
     "@crate_index//:icrc1-test-suite",
+    "@crate_index//:num-bigint",
     "@crate_index//:num-traits",
     "@crate_index//:proptest",
 ]

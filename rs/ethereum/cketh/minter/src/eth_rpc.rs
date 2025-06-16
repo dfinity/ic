@@ -1,20 +1,14 @@
 //! This module contains definitions for communicating with an Ethereum API using the [JSON RPC](https://ethereum.org/en/developers/docs/apis/json-rpc/)
 //! interface.
 
-use crate::endpoints::CandidBlockTag;
-use crate::numeric::{BlockNumber, LogIndex, Wei, WeiPerGas};
-use candid::CandidType;
+use crate::numeric::{BlockNumber, LogIndex};
 use ethnum;
-use evm_rpc_client::{
-    HttpOutcallError as EvmHttpOutcallError,
-    SendRawTransactionStatus as EvmSendRawTransactionStatus,
-};
+use evm_rpc_client::HttpOutcallError;
 use ic_cdk::api::call::RejectionCode;
 use ic_ethereum_types::Address;
 use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::fmt;
 use std::fmt::{Debug, Display, Formatter, LowerHex, UpperHex};
 
 #[cfg(test)]
@@ -111,27 +105,6 @@ impl UpperHex for FixedSizeData {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
-pub enum SendRawTransactionResult {
-    Ok,
-    InsufficientFunds,
-    NonceTooLow,
-    NonceTooHigh,
-}
-
-impl From<EvmSendRawTransactionStatus> for SendRawTransactionResult {
-    fn from(value: EvmSendRawTransactionStatus) -> Self {
-        match value {
-            EvmSendRawTransactionStatus::Ok(_) => SendRawTransactionResult::Ok,
-            EvmSendRawTransactionStatus::InsufficientFunds => {
-                SendRawTransactionResult::InsufficientFunds
-            }
-            EvmSendRawTransactionStatus::NonceTooLow => SendRawTransactionResult::NonceTooLow,
-            EvmSendRawTransactionStatus::NonceTooHigh => SendRawTransactionResult::NonceTooHigh,
-        }
-    }
-}
-
 #[derive(
     Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Decode, Deserialize, Encode, Serialize,
 )]
@@ -178,88 +151,6 @@ impl std::str::FromStr for Hash {
         hex::decode_to_slice(&s[2..], &mut bytes)
             .map_err(|e| format!("failed to decode hash from hex: {}", e))?;
         Ok(Self(bytes))
-    }
-}
-
-/// Block tags.
-/// See <https://ethereum.org/en/developers/docs/apis/json-rpc/#default-block>
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
-#[serde(rename_all = "lowercase")]
-pub enum BlockTag {
-    /// The latest mined block.
-    #[default]
-    Latest,
-    /// The latest safe head block.
-    /// See
-    /// <https://www.alchemy.com/overviews/ethereum-commitment-levels#what-are-ethereum-commitment-levels>
-    Safe,
-    /// The latest finalized block.
-    /// See
-    /// <https://www.alchemy.com/overviews/ethereum-commitment-levels#what-are-ethereum-commitment-levels>
-    Finalized,
-}
-
-impl From<CandidBlockTag> for BlockTag {
-    fn from(block_tag: CandidBlockTag) -> BlockTag {
-        match block_tag {
-            CandidBlockTag::Latest => BlockTag::Latest,
-            CandidBlockTag::Safe => BlockTag::Safe,
-            CandidBlockTag::Finalized => BlockTag::Finalized,
-        }
-    }
-}
-
-impl From<BlockTag> for CandidBlockTag {
-    fn from(value: BlockTag) -> Self {
-        match value {
-            BlockTag::Latest => CandidBlockTag::Latest,
-            BlockTag::Safe => CandidBlockTag::Safe,
-            BlockTag::Finalized => CandidBlockTag::Finalized,
-        }
-    }
-}
-
-impl Display for BlockTag {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Latest => write!(f, "latest"),
-            Self::Safe => write!(f, "safe"),
-            Self::Finalized => write!(f, "finalized"),
-        }
-    }
-}
-
-/// The block specification indicating which block to query.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
-#[serde(untagged)]
-pub enum BlockSpec {
-    /// Query the block with the specified index.
-    Number(BlockNumber),
-    /// Query the block with the specified tag.
-    Tag(BlockTag),
-}
-
-impl Default for BlockSpec {
-    fn default() -> Self {
-        Self::Tag(BlockTag::default())
-    }
-}
-
-impl std::str::FromStr for BlockSpec {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.starts_with("0x") {
-            let block_number = BlockNumber::from_str_hex(s)
-                .map_err(|e| format!("failed to parse block number '{s}': {e}"))?;
-            return Ok(BlockSpec::Number(block_number));
-        }
-        Ok(BlockSpec::Tag(match s {
-            "latest" => BlockTag::Latest,
-            "safe" => BlockTag::Safe,
-            "finalized" => BlockTag::Finalized,
-            _ => return Err(format!("unknown block tag '{s}'")),
-        }))
     }
 }
 
@@ -331,116 +222,12 @@ pub struct LogEntry {
     pub removed: bool,
 }
 
-/// Parameters of the [`eth_feeHistory`](https://ethereum.github.io/execution-apis/api-documentation/) call.
-#[derive(Clone, Debug, Serialize)]
-#[serde(into = "(Quantity, BlockSpec, Vec<u8>)")]
-pub struct FeeHistoryParams {
-    /// Number of blocks in the requested range.
-    /// Typically providers request this to be between 1 and 1024.
-    pub block_count: Quantity,
-    /// Highest block of the requested range.
-    /// Integer block number, or "latest" for the last mined block or "pending", "earliest" for not yet mined transactions.
-    pub highest_block: BlockSpec,
-    /// A monotonically increasing list of percentile values between 0 and 100.
-    /// For each block in the requested range, the transactions will be sorted in ascending order
-    /// by effective tip per gas and the corresponding effective tip for the percentile
-    /// will be determined, accounting for gas consumed.
-    pub reward_percentiles: Vec<u8>,
-}
-
-impl From<FeeHistoryParams> for (Quantity, BlockSpec, Vec<u8>) {
-    fn from(value: FeeHistoryParams) -> Self {
-        (
-            value.block_count,
-            value.highest_block,
-            value.reward_percentiles,
-        )
-    }
-}
-
-#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct FeeHistory {
-    /// Lowest number block of the returned range.
-    pub oldest_block: BlockNumber,
-    /// An array of block base fees per gas.
-    /// This includes the next block after the newest of the returned range,
-    /// because this value can be derived from the newest block.
-    /// Zeroes are returned for pre-EIP-1559 blocks.
-    pub base_fee_per_gas: Vec<WeiPerGas>,
-    /// A two-dimensional array of effective priority fees per gas at the requested block percentiles.
-    pub reward: Vec<Vec<WeiPerGas>>,
-}
-
-impl From<BlockNumber> for BlockSpec {
-    fn from(value: BlockNumber) -> Self {
-        BlockSpec::Number(value)
-    }
-}
-
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Block {
-    ///The block number. `None` when its pending block.
-    pub number: BlockNumber,
-    /// Base fee value of this block
-    pub base_fee_per_gas: Wei,
-}
-
-/// An envelope for all JSON-RPC replies.
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub enum JsonRpcResult<T> {
-    Result(T),
-    Error { code: i64, message: String },
-}
-
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
-pub enum HttpOutcallError {
-    /// Error from the IC system API.
-    IcError {
-        code: RejectionCode,
-        message: String,
-    },
-    /// Response is not a valid JSON-RPC response,
-    /// which means that the response was not successful (status other than 2xx)
-    /// or that the response body could not be deserialized into a JSON-RPC response.
-    InvalidHttpJsonRpcResponse {
-        status: u16,
-        body: String,
-        parsing_error: Option<String>,
-    },
-}
-
-impl From<EvmHttpOutcallError> for HttpOutcallError {
-    fn from(value: EvmHttpOutcallError) -> Self {
-        match value {
-            EvmHttpOutcallError::IcError { code, message } => Self::IcError { code, message },
-            EvmHttpOutcallError::InvalidHttpJsonRpcResponse {
-                status,
-                body,
-                parsing_error,
-            } => Self::InvalidHttpJsonRpcResponse {
-                status,
-                body,
-                parsing_error,
-            },
+pub fn is_response_too_large(response: &HttpOutcallError) -> bool {
+    match response {
+        HttpOutcallError::IcError { code, message } => {
+            code == &RejectionCode::SysFatal
+                && (message.contains("size limit") || message.contains("length limit"))
         }
+        _ => false,
     }
 }
-
-impl HttpOutcallError {
-    pub fn is_response_too_large(&self) -> bool {
-        match self {
-            Self::IcError { code, message } => is_response_too_large(code, message),
-            _ => false,
-        }
-    }
-}
-
-pub fn is_response_too_large(code: &RejectionCode, message: &str) -> bool {
-    code == &RejectionCode::SysFatal
-        && (message.contains("size limit") || message.contains("length limit"))
-}
-
-pub type HttpOutcallResult<T> = Result<T, HttpOutcallError>;

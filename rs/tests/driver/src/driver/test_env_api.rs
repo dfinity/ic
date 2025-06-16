@@ -139,7 +139,6 @@ use super::{
 };
 use crate::{
     driver::{
-        boundary_node::BoundaryNodeVm,
         constants::{self, kibana_link, GROUP_TTL, SSH_USERNAME},
         farm::{Farm, GroupSpec},
         log_events,
@@ -1564,10 +1563,14 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
     }
 
     fn status(&self) -> Result<HttpStatusResponse> {
+        block_on(self.status_async())
+    }
+
+    async fn status_async(&self) -> Result<HttpStatusResponse> {
         let url = self.get_public_url();
         let addr = self.get_public_addr();
 
-        let client = reqwest::blocking::Client::builder()
+        let client = reqwest::Client::builder()
             .danger_accept_invalid_certs(self.uses_snake_oil_certs())
             .timeout(READY_RESPONSE_TIMEOUT);
         let client = match (self.uses_dns(), url.domain()) {
@@ -1578,11 +1581,13 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
             .build()
             .expect("cannot build a reqwest client")
             .get(url.join("api/v2/status").expect("failed to join URLs"))
-            .send()?;
+            .send()
+            .await?;
 
         let status = response.status();
         let body = response
             .bytes()
+            .await
             .expect("failed to convert a response to bytes")
             .to_vec();
         if status.is_client_error() || status.is_server_error() {
@@ -1601,7 +1606,11 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
 
     /// The status-endpoint reports `healthy`.
     fn status_is_healthy(&self) -> Result<bool> {
-        match self.status() {
+        block_on(self.status_is_healthy_async())
+    }
+
+    async fn status_is_healthy_async(&self) -> Result<bool> {
+        match self.status_async().await {
             Ok(s) if s.replica_health_status.is_some() => {
                 let healthy = Some(ReplicaHealthStatus::Healthy) == s.replica_health_status;
                 if !healthy {
@@ -1628,16 +1637,26 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
 
     /// Waits until the is_healthy() returns true
     fn await_status_is_healthy(&self) -> Result<()> {
-        retry_with_msg!(
+        block_on(self.await_status_is_healthy_async())
+    }
+
+    async fn await_status_is_healthy_async(&self) -> Result<()> {
+        retry_with_msg_async!(
             &format!("await_status_is_healthy of {}", self.get_public_url()),
-            self.test_env().logger(),
+            &self.test_env().logger(),
             READY_WAIT_TIMEOUT,
             RETRY_BACKOFF,
-            || {
-                self.status_is_healthy()
-                    .and_then(|s| if !s { bail!("Not ready!") } else { Ok(()) })
+            || async {
+                self.status_is_healthy_async().await.and_then(|s| {
+                    if !s {
+                        bail!("Not ready!")
+                    } else {
+                        Ok(())
+                    }
+                })
             }
         )
+        .await
     }
 
     /// Checks if the Orchestrator dashboard endpoint is accessible
@@ -2429,17 +2448,6 @@ impl TestEnvAttribute for InitialReplicaVersion {
     fn attribute_name() -> String {
         "initial_replica_version".to_string()
     }
-}
-
-pub fn await_boundary_node_healthy(env: &TestEnv, boundary_node_name: &str) {
-    let boundary_node = env
-        .get_deployed_boundary_node(boundary_node_name)
-        .unwrap()
-        .get_snapshot()
-        .unwrap();
-    boundary_node
-        .await_status_is_healthy()
-        .expect("BN did not come up!");
 }
 
 pub fn emit_group_event(log: &slog::Logger, group: &str) {

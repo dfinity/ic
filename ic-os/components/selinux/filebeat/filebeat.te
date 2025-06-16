@@ -20,7 +20,7 @@ type filebeat_var_log_t;
 files_type(filebeat_var_log_t)
 
 # The run-time generated configuration file (and its parent directory):
-# /run/ic-node/etc/filebeat{/filebeat.conf)
+# /run/ic-node/etc/filebeat{/filebeat.yml}
 type filebeat_conf_t;
 files_type(filebeat_conf_t)
 
