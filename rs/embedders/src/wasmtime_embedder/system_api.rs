@@ -406,7 +406,6 @@ impl ApiType {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn update(
         time: Time,
         incoming_payload: Vec<u8>,
