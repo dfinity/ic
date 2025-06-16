@@ -1,6 +1,8 @@
 pub mod config_ini;
 pub mod deployment_json;
 pub mod generate_testnet_config;
+pub mod guestos_bootstrap_image;
+pub mod guestos_config;
 pub mod update_config;
 
 use anyhow::{Context, Result};
@@ -69,6 +71,7 @@ mod tests {
             use_nns_public_key: true,
             nns_urls: vec!["http://localhost".parse().unwrap()],
             use_node_operator_private_key: true,
+            enable_trusted_execution_environment: true,
             use_ssh_authorized_keys: false,
             icos_dev_settings,
         };

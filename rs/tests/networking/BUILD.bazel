@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "CANISTER_HTTP_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "CANISTER_HTTP_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -115,6 +115,7 @@ system_test_nns(
     ],
 )
 
+# NOTE: This test is currently non-functional because API boundary nodes running GuestOS on Farm VMs do not support IPv4.
 system_test_nns(
     name = "canister_http_socks_test",
     env = {
@@ -130,7 +131,6 @@ system_test_nns(
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
-        BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS +
         CANISTER_HTTP_RUNTIME_DEPS + PROXY_CANISTER_RUNTIME_DEPS,
     deps = CANISTER_HTTP_BASE_DEPS + [
         "//rs/registry/subnet_features",
@@ -229,6 +229,7 @@ system_test_nns(
         "@crate_index//:futures",
         "@crate_index//:ic-agent",
         "@crate_index//:leb128",
+        "@crate_index//:serde_cbor",
         "@crate_index//:slog",
         "@crate_index//:tokio",
     ],

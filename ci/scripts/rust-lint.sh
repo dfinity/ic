@@ -3,7 +3,7 @@ set -xeuo pipefail
 
 cd "${CI_PROJECT_DIR:-$(git rev-parse --show-toplevel)}"
 cargo fmt -- --check
-cargo clippy --locked --all-features --workspace --all-targets -- \
+cargo clippy --locked --all-features --workspace --all-targets --keep-going -- \
     -D warnings \
     -D clippy::all \
     -D clippy::mem_forget \

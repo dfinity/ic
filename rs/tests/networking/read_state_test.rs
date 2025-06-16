@@ -21,8 +21,15 @@ Success::
     . The anonymous identity
     . An Identity that isn't the canister controller
 . A canister's private metadata sections can only be read by the canister controller.
+. Requests for the paths /canister/C/module_hash and /canister/C/controllers succeed for
+  both empty and non-empty canisters (with zero, one, and two controllers) and return correct values:
+    . module_hash is absent for empty canisters;
+    . module_hash is a blob for non-empty canisters;
+    . controllers are always present for existing canisters and consist of a list of principals
 
 end::catalog[] */
+
+use std::collections::BTreeSet;
 
 use anyhow::Result;
 use assert_matches::assert_matches;
@@ -44,7 +51,7 @@ use ic_system_test_driver::{
     },
     systest,
 };
-use ic_types::CanisterId;
+use ic_types::{CanisterId, PrincipalId};
 use slog::info;
 use wabt_tests::with_custom_sections;
 
@@ -103,12 +110,36 @@ fn read_state_with_identity(
     identity: impl Identity + 'static,
 ) -> Result<Certificate, AgentError> {
     let node = get_first_app_node(env);
+    read_state_with_identity_and_canister_id(env, paths, identity, node.effective_canister_id())
+}
+
+/// Call "read_state" with the given paths and canister ID for the default identity
+fn read_state_with_canister_id(
+    env: &TestEnv,
+    paths: Vec<Vec<Label<Vec<u8>>>>,
+    effective_canister_id: CanisterId,
+) -> Result<Certificate, AgentError> {
+    read_state_with_identity_and_canister_id(
+        env,
+        paths,
+        get_identity(),
+        effective_canister_id.get(),
+    )
+}
+
+/// Call "read_state" with the given paths, identity and canister ID
+fn read_state_with_identity_and_canister_id(
+    env: &TestEnv,
+    paths: Vec<Vec<Label<Vec<u8>>>>,
+    identity: impl Identity + 'static,
+    effective_canister_id: PrincipalId,
+) -> Result<Certificate, AgentError> {
     tokio::runtime::Runtime::new()
         .unwrap()
         .block_on(async move {
             let agent = build_agent_with_identity(env, identity).await;
             agent
-                .read_state_raw(paths, node.effective_canister_id().into())
+                .read_state_raw(paths, effective_canister_id.into())
                 .await
         })
 }
@@ -252,7 +283,7 @@ fn lookup_metadata(
     lookup_value(&cert, path).map(|s| s.to_vec())
 }
 
-fn test_metadata(env: TestEnv) {
+fn test_metadata_path(env: TestEnv) {
     let node = get_first_app_node(&env);
     let runtime = runtime_from_url(node.get_public_url(), node.effective_canister_id());
     let mut canister: Canister<'_> =
@@ -342,6 +373,90 @@ fn test_metadata(env: TestEnv) {
     }
 }
 
+fn test_canister_path(env: TestEnv) {
+    let identities = [
+        PrincipalId::from(get_identity().sender().unwrap()),
+        PrincipalId::from(random_ed25519_identity().sender().unwrap()),
+    ];
+
+    let node = get_first_app_node(&env);
+    let runtime = runtime_from_url(node.get_public_url(), node.effective_canister_id());
+
+    // Create an empty canister
+    let empty_canister: Canister<'_> =
+        block_on(runtime.create_canister_max_cycles_with_retries()).unwrap();
+
+    // Create a canister with some installed WASM
+    let mut installed_canister: Canister<'_> =
+        block_on(runtime.create_canister_max_cycles_with_retries()).unwrap();
+    let wasm = wasm_with_custom_sections(vec![]);
+    block_on(wasm.install_with_retries_onto_canister(&mut installed_canister, None, None)).unwrap();
+
+    // Test /module_hash and /controllers paths by setting canister controllers to:
+    // 1. [default_identity, random_identity]
+    // 2. [default_identity]
+    // 3. []
+    // Identities must be ordered such that the default identity (the one sending updates/requests)
+    // is removed last. Otherwise, it would fail to remove itself as the last controller.
+    for i in [2, 1, 0] {
+        let controllers = identities[..i].to_vec();
+
+        // Test `module_hash` and `controllers` endpoints for both canisters
+        test_module_hash_and_controllers(&env, &empty_canister, controllers.clone(), |res| {
+            // Empty canister should not have a module hash
+            matches!(res, Err(AgentError::LookupPathAbsent(_)))
+        });
+        test_module_hash_and_controllers(&env, &installed_canister, controllers, |res| {
+            // Installed canister should have a module hash
+            !res.unwrap().is_empty()
+        });
+    }
+}
+
+fn test_module_hash_and_controllers<F>(
+    env: &TestEnv,
+    canister: &Canister<'_>,
+    controllers: Vec<PrincipalId>,
+    assert_module_hash: F,
+) where
+    F: FnOnce(Result<&[u8], AgentError>) -> bool,
+{
+    let canister_id = canister.canister_id();
+    info!(
+        env.logger(),
+        "Setting controllers of {} to {:?}", canister_id, controllers
+    );
+    block_on(canister.set_controllers(controllers.clone())).unwrap();
+
+    let module_hash_path = vec![
+        "canister".into(),
+        canister_id.get_ref().as_slice().into(),
+        "module_hash".into(),
+    ];
+    let cert =
+        read_state_with_canister_id(env, vec![module_hash_path.clone()], canister_id).unwrap();
+    let value = lookup_value(&cert, module_hash_path);
+    assert!(assert_module_hash(value));
+
+    let controllers_path = vec![
+        "canister".into(),
+        canister_id.get_ref().as_slice().into(),
+        "controllers".into(),
+    ];
+    let cert =
+        read_state_with_canister_id(env, vec![controllers_path.clone()], canister_id).unwrap();
+    let value = lookup_value(&cert, controllers_path).unwrap();
+    let controllers_read_state: Vec<PrincipalId> =
+        serde_cbor::from_slice(value).expect("Failed to decode CBOR");
+
+    // The returned controllers should be equal to what we set them to
+    assert_eq!(controllers_read_state.len(), controllers.len());
+    assert_eq!(
+        BTreeSet::from_iter(controllers_read_state),
+        BTreeSet::from_iter(controllers)
+    );
+}
+
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
@@ -351,7 +466,8 @@ fn main() -> Result<()> {
         .add_test(systest!(test_invalid_request_rejected))
         .add_test(systest!(test_absent_request))
         .add_test(systest!(test_invalid_path_rejected))
-        .add_test(systest!(test_metadata))
+        .add_test(systest!(test_metadata_path))
+        .add_test(systest!(test_canister_path))
         .execute_from_args()?;
     Ok(())
 }

@@ -17,8 +17,8 @@ use ic_icrc1::{
 };
 use ic_icrc1_ledger::{
     balances_len, clear_stable_allowance_data, clear_stable_balances_data,
-    clear_stable_blocks_data, is_ready, ledger_state, panic_if_not_ready, set_ledger_state,
-    LEDGER_VERSION, UPGRADES_MEMORY,
+    clear_stable_blocks_data, get_allowances, is_ready, ledger_state, panic_if_not_ready,
+    set_ledger_state, LEDGER_VERSION, UPGRADES_MEMORY,
 };
 use ic_icrc1_ledger::{InitArgs, Ledger, LedgerArgument, LedgerField, LedgerState};
 use ic_ledger_canister_core::ledger::{
@@ -31,6 +31,10 @@ use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::Zero;
 use ic_stable_structures::reader::{BufferedReader, Reader};
 use ic_stable_structures::writer::{BufferedWriter, Writer};
+use icrc_ledger_types::icrc103::get_allowances::{
+    Allowances, GetAllowancesArgs, GetAllowancesError,
+};
+use icrc_ledger_types::icrc106::errors::Icrc106Error;
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc21::{
     errors::Icrc21Error, lib::build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints,
@@ -561,6 +565,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
         match encode_metrics(&mut writer) {
             Ok(()) => HttpResponseBuilder::ok()
                 .header("Content-Type", "text/plain; version=0.0.4")
+                .header("Cache-Control", "no-store")
                 .with_body_and_content_length(writer.into_inner())
                 .build(),
             Err(err) => {
@@ -871,6 +876,14 @@ fn supported_standards() -> Vec<StandardRecord> {
             name: "ICRC-21".to_string(),
             url: "https://github.com/dfinity/wg-identity-authentication/blob/main/topics/ICRC-21/icrc_21_consent_msg.md".to_string(),
         },
+        StandardRecord {
+            name: "ICRC-103".to_string(),
+            url: "https://github.com/dfinity/ICRC/tree/main/ICRCs/ICRC-103".to_string(),
+        },
+        StandardRecord {
+            name: "ICRC-106".to_string(),
+            url: "https://github.com/dfinity/ICRC/pull/106".to_string(),
+        },
     ];
     standards
 }
@@ -1073,6 +1086,15 @@ fn icrc10_supported_standards() -> Vec<StandardRecord> {
     supported_standards()
 }
 
+#[query]
+#[candid_method(query)]
+fn icrc106_get_index_principal() -> Result<Principal, Icrc106Error> {
+    Access::with_ledger(|ledger| match ledger.index_principal() {
+        None => Err(Icrc106Error::IndexPrincipalNotSet),
+        Some(index_principal) => Ok(index_principal),
+    })
+}
+
 #[update]
 #[candid_method(update)]
 fn icrc21_canister_call_consent_message(
@@ -1096,6 +1118,27 @@ fn icrc21_canister_call_consent_message(
 #[candid_method(query)]
 fn is_ledger_ready() -> bool {
     is_ready()
+}
+
+#[query]
+#[candid_method(query)]
+fn icrc103_get_allowances(arg: GetAllowancesArgs) -> Result<Allowances, GetAllowancesError> {
+    let from_account = arg.from_account.unwrap_or_else(|| Account {
+        owner: ic_cdk::api::caller(),
+        subaccount: None,
+    });
+    let max_take_allowances = Access::with_ledger(|ledger| ledger.max_take_allowances());
+    let max_results = arg
+        .take
+        .map(|take| take.0.to_u64().unwrap_or(max_take_allowances))
+        .map(|take| std::cmp::min(take, max_take_allowances))
+        .unwrap_or(max_take_allowances);
+    Ok(get_allowances(
+        from_account,
+        arg.prev_spender,
+        max_results,
+        ic_cdk::api::time(),
+    ))
 }
 
 candid::export_service!();

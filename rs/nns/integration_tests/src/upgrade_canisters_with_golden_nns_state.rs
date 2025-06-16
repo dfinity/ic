@@ -7,8 +7,9 @@ use ic_nervous_system_common::ONE_MONTH_SECONDS;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{
     CYCLES_LEDGER_CANISTER_ID, CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID,
-    GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, NODE_REWARDS_CANISTER_ID,
-    REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
+    GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, NNS_UI_CANISTER_ID,
+    NODE_REWARDS_CANISTER_ID, PROTOCOL_CANISTER_IDS, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
+    SNS_WASM_CANISTER_ID,
 };
 use ic_nns_governance_api::{
     MonthlyNodeProviderRewards, NetworkEconomics, Vote, VotingPowerEconomics,
@@ -180,27 +181,17 @@ fn get_well_known_public_neurons() -> Vec<(NeuronId, PrincipalId)> {
 /// mechanism is in place to prevent this exact situation. Instead, here we use the super power
 /// given by the StateMachine test framework where any principal can be impersonated, which is
 /// clearly unavailable on the mainnet.
-fn vote_yes_with_well_known_public_neurons(
-    state_machine: &StateMachine,
-    proposal_id: u64,
-    check_vote_should_succeed: bool,
-) {
+fn vote_yes_with_well_known_public_neurons(state_machine: &StateMachine, proposal_id: u64) {
     for (voter_neuron_id, voter_controller) in get_well_known_public_neurons() {
         // Note that the voting can fail if the proposal already reaches absolute
         // majority and the NNS Governance starts to upgrade.
-        let result = nns_cast_vote(
+        let _ = nns_cast_vote(
             state_machine,
             voter_controller,
             voter_neuron_id,
             proposal_id,
             Vote::Yes,
         );
-        if check_vote_should_succeed {
-            result.unwrap().panic_if_error(&format!(
-                "Voting with well-known public neuron {:?} on proposal {} failed",
-                voter_neuron_id, proposal_id
-            ));
-        }
     }
 }
 
@@ -318,11 +309,7 @@ fn test_upgrade_canisters_with_golden_nns_state() {
                 // Impersonate some public neurons to vote on the proposal. Note that we do not
                 // check whether votes succeed, as the governance upgrade can start at any point
                 // which will make the canister unresponsive.
-                vote_yes_with_well_known_public_neurons(
-                    &state_machine,
-                    proposal_id.id,
-                    false, /* check_vote_should_succeed */
-                );
+                vote_yes_with_well_known_public_neurons(&state_machine, proposal_id.id);
 
                 // Step 3: Verify result(s): In a short while, the canister should
                 // be running the new code.
@@ -357,11 +344,7 @@ fn test_upgrade_canisters_with_golden_nns_state() {
         neuron_controller,
         neuron_id,
     );
-    vote_yes_with_well_known_public_neurons(
-        &state_machine,
-        proposal_id.id,
-        true, /* check_vote_should_succeed */
-    );
+    vote_yes_with_well_known_public_neurons(&state_machine, proposal_id.id);
     nns_wait_for_proposal_execution(&state_machine, proposal_id.id);
 
     perform_sequence_of_upgrades(&nns_canister_upgrade_sequence);
@@ -374,6 +357,8 @@ fn test_upgrade_canisters_with_golden_nns_state() {
     perform_sequence_of_upgrades(&nns_canister_upgrade_sequence);
 
     perform_sanity_check_after_upgrade(&state_machine, &nns_canister_upgrade_sequence);
+
+    check_canisters_are_all_protocol_canisters(&state_machine);
 }
 
 fn perform_sanity_check_after_upgrade(
@@ -463,4 +448,23 @@ fn perform_sanity_check_after_upgrade_governance(state_machine: &StateMachine) {
         "After advancing some time after upgrade, total minted node provider rewards decreased too much. Before: {}, After: {}",
         total_rewards_xdr_e8s_before, total_rewards_xdr_e8s_after
     );
+}
+
+// Check that all canisters in the NNS subnet (except for exempted ones) are protocol canisters. If
+// this fails, either add the canister id into `non_protocol_canister_ids_in_nns_subnet` or
+// `PROTOCOL_CANISTER_IDS`.
+fn check_canisters_are_all_protocol_canisters(state_machine: &StateMachine) {
+    let canister_ids = state_machine.get_canister_ids();
+    let non_protocol_canister_ids_in_nns_subnet = [NNS_UI_CANISTER_ID, SNS_WASM_CANISTER_ID];
+
+    for canister_id in canister_ids {
+        if non_protocol_canister_ids_in_nns_subnet.contains(&canister_id) {
+            continue;
+        }
+        assert!(
+            PROTOCOL_CANISTER_IDS.contains(&&canister_id),
+            "Canister {} is in the NNS subnet but not a protocol canister",
+            canister_id,
+        );
+    }
 }
