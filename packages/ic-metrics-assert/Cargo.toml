@@ -11,6 +11,7 @@ edition.workspace = true
 documentation.workspace = true
 
 [dependencies]
+async-trait = { workspace = true }
 candid = { workspace = true }
 ic-http-types = { version = "0.1.0", path = "../ic-http-types" }
 ic-management-canister-types = { workspace = true, optional = true }
