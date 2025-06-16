@@ -3437,13 +3437,8 @@ fn test_environment_variable_system_api() {
         (call $ic0_env_var_count)
         drop
 
-        ;; Get and print first variable
-        ;; Get name size: 10.
-        (call $env_var_name_size (i32.const 0))
-        drop
-
         ;; Copy first name to memory
-        (call $env_var_name_copy (i32.const 0) (i32.const 0) (i32.const 0) (i32.const 10))
+        (call $env_var_name_copy (i32.const 0) (i32.const 0) (i32.const 0) (call $env_var_name_size (i32.const 0)))
 
         ;; Get value size: 11.
         (call $env_var_value_size (i32.const 0) (i32.const 10))
@@ -3454,13 +3449,8 @@ fn test_environment_variable_system_api() {
 
         (call $msg_reply_data_append (i32.const 20) (i32.const 11))
 
-        ;; Get second variable
-        ;; Get name size: 10.
-        (call $env_var_name_size (i32.const 1))
-        drop
-
         ;; Copy second name to memory
-        (call $env_var_name_copy (i32.const 1) (i32.const 0) (i32.const 0) (i32.const 10))
+        (call $env_var_name_copy (i32.const 1) (i32.const 0) (i32.const 0) (call $env_var_name_size (i32.const 1)))
 
         ;; Get value size: 10.
         (call $env_var_value_size (i32.const 0) (i32.const 10))
@@ -3525,8 +3515,7 @@ fn test_environment_variable_system_api_not_enabled() {
     let mut config = ic_config::embedders::Config::default();
     config.feature_flags.environment_variables = FlagStatus::Disabled;
 
-
-   let builder = WasmtimeInstanceBuilder::new()
+    let builder = WasmtimeInstanceBuilder::new()
         .with_wat(wat)
         .with_config(config)
         .with_api_type(ApiType::update(
@@ -3539,6 +3528,8 @@ fn test_environment_variable_system_api_not_enabled() {
 
     let instance = builder.try_build();
     assert!(instance.is_err());
-    assert_matches!(instance.err().unwrap().0, 
-    HypervisorError::WasmEngineError {..});
+    assert_matches!(
+        instance.err().unwrap().0,
+        HypervisorError::WasmEngineError { .. }
+    );
 }
