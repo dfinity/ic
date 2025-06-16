@@ -68,7 +68,7 @@ pub(crate) struct HttpOutcallMetrics {
     pub(crate) new_price: Histogram,
     pub(crate) price_increase: Histogram,
     pub(crate) price_decrease: Histogram,
-    pub(crate) ratio: Histogram,
+    pub(crate) price_ratio: Histogram,
 }
 
 impl ExecutionEnvironmentMetrics {
@@ -135,18 +135,18 @@ impl ExecutionEnvironmentMetrics {
                     decimal_buckets(-2, 1),
                 ),
                 price_increase: metrics_registry.histogram(
-                    "execution_http_outcalls_price_change",
+                    "execution_http_outcalls_price_increase",
                     "Increase in price of HTTP outcalls, in B cycles.",
                     decimal_buckets(-2, 1),
                 ),
                 price_decrease: metrics_registry.histogram(
-                    "execution_http_outcalls_price_change",
+                    "execution_http_outcalls_price_decrease",
                     "Decrease in price of HTTP outcalls, in B cycles.",
                     decimal_buckets(-2, 1),
                 ),
                 // The ratio can go from 1/1000 to 1000.
-                ratio: metrics_registry.histogram(
-                    "execution_http_outcalls_ratio",
+                price_ratio: metrics_registry.histogram(
+                    "execution_http_outcalls_price_ratio",
                     "Ratio of new to old price of HTTP outcalls.",
                     decimal_buckets(-3, 3),
                 ),
@@ -215,7 +215,7 @@ impl ExecutionEnvironmentMetrics {
         if old_price.get() > 0 {
             // the price is always > 0; just being extra sure we don't panic.
             self.http_outcalls_metrics
-                .ratio
+                .price_ratio
                 .observe(new_price.get() as f64 / old_price.get() as f64);
         }
     }
