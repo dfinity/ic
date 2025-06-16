@@ -501,7 +501,7 @@ impl CyclesAccountManager {
     /// the canister balance above the freezing threshold.
     pub fn prepay_execution_cycles(
         &self,
-        system_state: &mut SystemState,
+        system_state: &mut ExecutingSystemState,
         canister_current_memory_usage: NumBytes,
         canister_current_message_memory_usage: MessageMemoryUsage,
         canister_compute_allocation: ComputeAllocation,
@@ -928,7 +928,7 @@ impl CyclesAccountManager {
     /// cycles are not being sent somewhere else.
     pub fn consume_with_threshold(
         &self,
-        system_state: &mut SystemState,
+        system_state: &mut ExecutingSystemState,
         cycles: Cycles,
         threshold: Cycles,
         use_case: CyclesUseCase,
@@ -955,7 +955,7 @@ impl CyclesAccountManager {
         };
 
         self.verify_cycles_balance_with_threshold(
-            system_state.canister_id,
+            system_state.canister_id(),
             effective_cycles_balance,
             cycles,
             threshold,

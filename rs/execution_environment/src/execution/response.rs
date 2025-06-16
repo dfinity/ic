@@ -894,7 +894,7 @@ impl PausedExecution for PausedCleanupExecution {
 /// without any changes.
 #[allow(clippy::too_many_arguments)]
 pub fn execute_response(
-    clean_canister: CanisterState,
+    clean_canister: ExecutingCanisterState,
     response: Arc<Response>,
     time: Time,
     execution_parameters: ExecutionParameters,
@@ -906,6 +906,7 @@ pub fn execute_response(
     log_dirty_pages: FlagStatus,
     deallocation_sender: &DeallocationSender,
 ) -> ExecuteMessageResult {
+    /*
     let (callback, callback_id, call_context, call_context_id) =
         match common::get_call_context_and_callback(
             &clean_canister,
@@ -926,10 +927,10 @@ pub fn execute_response(
                 };
             }
         };
-
+    */
     let freezing_threshold = round.cycles_account_manager.freeze_threshold_cycles(
-        clean_canister.system_state.freeze_threshold,
-        clean_canister.system_state.memory_allocation,
+        clean_canister.freeze_threshold(),
+        clean_canister.memory_allocation(),
         clean_canister.memory_usage(),
         clean_canister.message_memory_usage(),
         clean_canister.compute_allocation(),
