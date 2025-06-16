@@ -882,27 +882,21 @@ pub async fn create_new_subnet_with_keys(
             .into_iter()
             .map(|(key_id, subnet_id)| KeyConfigRequest {
                 key_config: Some(KeyConfigCreate {
-<<<<<<< HEAD
-                    key_id: Some(key_id),
-                    pre_signatures_to_create_in_advance: Some(7),
-                    max_queue_size: Some(20),
-=======
                     pre_signatures_to_create_in_advance: Some(
                         if key_id.requires_pre_signatures() {
-                            4
+                            5
                         } else {
                             0
                         },
                     ),
                     max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
                     key_id: Some(key_id),
->>>>>>> master
                 }),
                 subnet_id: Some(subnet_id),
             })
             .collect(),
         signature_request_timeout_ns: Some(1800000000000),
-        idkg_key_rotation_period_ms: Some(604800000),
+        idkg_key_rotation_period_ms: Some(1209600000),
     };
     let config = ic_prep_lib::subnet_configuration::get_default_config_params(
         SubnetType::Application,

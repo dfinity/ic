@@ -50,7 +50,6 @@ use ic_management_canister_types_private::{
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
 use ic_registry_subnet_type::SubnetType;
-<<<<<<< HEAD
 use ic_system_test_driver::{
     driver::{
         boundary_node::BoundaryNode,
@@ -64,15 +63,6 @@ use ic_system_test_driver::{
         },
     },
     util::{block_on, runtime_from_url, MessageCanister},
-=======
-use ic_system_test_driver::driver::{
-    group::SystemTestGroup,
-    ic::{InternetComputer, Subnet},
-    ic_gateway_vm::{HasIcGatewayVm, IcGatewayVm, IC_GATEWAY_VM_NAME},
-    prometheus_vm::{HasPrometheus, PrometheusVm},
-    test_env::TestEnv,
-    test_env_api::{HasTopologySnapshot, NnsCustomizations},
->>>>>>> master
 };
 use ic_types::Height;
 use slog::info;
@@ -90,33 +80,33 @@ pub fn setup(env: TestEnv) {
     let key_ids = vec![
         MasterPublicKeyId::Ecdsa(EcdsaKeyId {
             curve: EcdsaCurve::Secp256k1,
-            name: "test_key_1".into(),
+            name: "key_1".into(),
         }),
         MasterPublicKeyId::Schnorr(SchnorrKeyId {
             algorithm: SchnorrAlgorithm::Bip340Secp256k1,
-            name: "test_key_1".into(),
+            name: "key_1".into(),
         }),
         MasterPublicKeyId::Schnorr(SchnorrKeyId {
             algorithm: SchnorrAlgorithm::Ed25519,
-            name: "test_key_1".into(),
+            name: "key_1".into(),
         }),
     ];
     let key_ids_vetkd = vec![
         MasterPublicKeyId::Ecdsa(EcdsaKeyId {
             curve: EcdsaCurve::Secp256k1,
-            name: "test_key_1".into(),
+            name: "key_1".into(),
         }),
         MasterPublicKeyId::Schnorr(SchnorrKeyId {
             algorithm: SchnorrAlgorithm::Bip340Secp256k1,
-            name: "test_key_1".into(),
+            name: "key_1".into(),
         }),
         MasterPublicKeyId::Schnorr(SchnorrKeyId {
             algorithm: SchnorrAlgorithm::Ed25519,
-            name: "test_key_1".into(),
+            name: "key_1".into(),
         }),
         MasterPublicKeyId::VetKd(VetKdKeyId {
             curve: VetKdCurve::Bls12_381_G2,
-            name: "test_key_1".into(),
+            name: "key_1".into(),
         }),
     ];
 
@@ -125,7 +115,6 @@ pub fn setup(env: TestEnv) {
         .start(&env)
         .expect("Failed to start prometheus VM");
     InternetComputer::new()
-<<<<<<< HEAD
         .with_mainnet_config()
         .add_subnet(
             Subnet::new(SubnetType::System)
@@ -134,7 +123,7 @@ pub fn setup(env: TestEnv) {
         )
         .add_subnet(
             Subnet::new(SubnetType::Application)
-                .add_nodes(13)
+                .add_nodes(34)
                 .with_dkg_interval_length(dkg_interval)
                 .with_chain_key_config(ChainKeyConfig {
                     key_configs: key_ids_vetkd
@@ -142,32 +131,22 @@ pub fn setup(env: TestEnv) {
                         .cloned()
                         .map(|key_id| KeyConfig {
                             key_id,
-                            pre_signatures_to_create_in_advance: 7,
+                            pre_signatures_to_create_in_advance: 5,
                             max_queue_size: 20,
                         })
                         .collect(),
                     signature_request_timeout_ns: Some(1800000000000),
-                    idkg_key_rotation_period_ms: Some(604800000),
+                    idkg_key_rotation_period_ms: Some(1209600000),
                 }),
         )
-        .with_unassigned_nodes(13)
-=======
-        .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
-        .add_subnet(Subnet::new(SubnetType::Application).add_nodes(1))
-        .with_unassigned_nodes(1)
-        .with_api_boundary_nodes(1)
->>>>>>> master
+        .with_unassigned_nodes(34)
         .setup_and_start(&env)
         .expect("Failed to setup IC under test");
+    
     install_nns_with_customizations_and_check_progress(
         env.topology_snapshot(),
         NnsCustomizations::default(),
     );
-    IcGatewayVm::new(IC_GATEWAY_VM_NAME)
-        .start(&env)
-<<<<<<< HEAD
-        .expect("failed to setup BoundaryNode VM");
-    await_boundary_node_healthy(&env, BOUNDARY_NODE_NAME);
 
     let snapshot = env.topology_snapshot();
     let registry_version = snapshot.get_registry_version();
@@ -221,11 +200,4 @@ pub fn setup(env: TestEnv) {
         }
         std::thread::sleep(Duration::from_secs(60));
     }
-=======
-        .expect("failed to setup ic-gateway");
-    let ic_gateway = env.get_deployed_ic_gateway(IC_GATEWAY_VM_NAME).unwrap();
-    let ic_gateway_url = ic_gateway.get_public_url();
-    let ic_gateway_domain = ic_gateway_url.domain().unwrap();
-    env.sync_with_prometheus_by_name("", Some(ic_gateway_domain.to_string()));
->>>>>>> master
 }
