@@ -810,6 +810,8 @@ fn sigsegv_memory_tracker<S>(
                         }
                     }
 
+                    // We need to handle page faults in units of pages(!). So, round faulting
+                    // address down to page boundary.
                     let fault_addr = (addr as usize & !(PAGE_SIZE - 1)) as *mut libc::c_void;
 
                     match (kind, rw) {
