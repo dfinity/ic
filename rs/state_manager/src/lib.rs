@@ -1049,7 +1049,7 @@ fn report_last_diverged_state(
     )
 }
 
-/// Type for the return value of populate_metadata
+/// Type for the return value of `populate_metadata`
 #[derive(Default)]
 struct PopulatedMetadata {
     certifications_metadata: CertificationsMetadata,
@@ -1396,6 +1396,20 @@ impl StateManagerImpl {
         metrics.min_resident_height.set(last_snapshot_height);
         metrics.max_resident_height.set(last_snapshot_height);
 
+
+
+        let (base_height, base_manifest, base_checkpoint) = states_metadata
+            .last_key_value()
+            .map(|(base_height, metadata)| {
+                let base_manifest = metadata.bundled_manifest.clone().unwrap().manifest;
+                let base_checkpoint = metadata.checkpoint_layout.clone().unwrap();
+                (base_height, base_manifest, base_checkpoint)
+            })
+            .unwrap();
+        let target_height: Height = latest_state_height.load(Ordering::Relaxed).into();
+
+
+
         let states = Arc::new(parking_lot::RwLock::new(SharedState {
             certifications_metadata,
             states_metadata,
@@ -1415,6 +1429,14 @@ impl StateManagerImpl {
                 .send(TipRequest::ComputeManifest {
                     checkpoint_layout,
                     manifest_delta: None,
+/*
+                    manifest_delta: Some(crate::manifest::ManifestDelta {
+                        base_manifest: states.metadata.get(&states.last_advertised).unwrap().bundled_manifest.unwrap().manifest.clone(), 
+                        base_height: states.last_advertised,
+                        target_height: latest_state_height.load(Ordering::Relaxed).into(),
+                        base_checkpoint: checkpoint_layout,
+                    }),
+*/
                     states: states.clone(),
                     persist_metadata_guard: persist_metadata_guard.clone(),
                 })
@@ -1442,6 +1464,7 @@ impl StateManagerImpl {
             latest_height_update_time: Arc::new(Mutex::new(Instant::now())),
         }
     }
+    
     /// Returns the Page Allocator file descriptor factory. This will then be
     /// used down the line in hypervisor and state to pass to the page allocators
     /// that are instantiated by the page maps
