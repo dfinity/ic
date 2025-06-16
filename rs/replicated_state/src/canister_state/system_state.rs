@@ -28,9 +28,9 @@ use ic_protobuf::state::canister_state_bits::v1 as pb;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{
-    CallContextId, CallbackId, CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask,
-    Ingress, Payload, RejectContext, Request, RequestMetadata, RequestOrResponse, Response,
-    StopCanisterContext, NO_DEADLINE,
+    CallContextId, CallbackId, CanisterCall, CanisterCallOrTask, CanisterMessage,
+    CanisterMessageOrTask, CanisterTask, Ingress, Payload, RejectContext, Request, RequestMetadata,
+    RequestOrResponse, Response, StopCanisterContext, NO_DEADLINE,
 };
 use ic_types::methods::Callback;
 use ic_types::nominal_cycles::NominalCycles;
@@ -288,6 +288,7 @@ impl CanisterHistory {
 pub struct ExecutingSystemState {
     pub(super) system_state: SystemState,
     call_context: CallContext,
+    call_context_id: CallContextId,
     callback: Option<Arc<Callback>>,
 }
 
@@ -308,16 +309,21 @@ impl ExecutingSystemState {
             metadata,
             instructions_executed: NumInstructions::default(),
         };
+        let call_context_id = system_state
+            .call_context_manager()
+            .unwrap()
+            .next_call_context_id();
         Self {
             system_state,
             call_context,
+            call_context_id,
             callback: None,
         }
     }
 
-    fn for_ingress(system_state: SystemState, ingress: &Ingress, time: Time) -> Self {
+    fn for_ingress(state: SystemState, ingress: &Ingress, time: Time) -> Self {
         Self::with_new_call_context(
-            system_state,
+            state,
             CallOrigin::Ingress(ingress.source, ingress.message_id.clone()),
             Cycles::zero(),
             time,
@@ -325,9 +331,9 @@ impl ExecutingSystemState {
         )
     }
 
-    fn for_request(system_state: SystemState, request: &Request, time: Time) -> Self {
+    fn for_request(state: SystemState, request: &Request, time: Time) -> Self {
         Self::with_new_call_context(
-            system_state,
+            state,
             CallOrigin::CanisterUpdate(
                 request.sender,
                 request.sender_reply_callback,
@@ -339,7 +345,7 @@ impl ExecutingSystemState {
         )
     }
 
-    pub(super) fn for_response(mut system_state: SystemState, response: &Response, time: Time) -> Self {
+    pub(super) fn for_response(mut system_state: SystemState, response: &Response) -> Self {
         let callback = system_state
             .call_context_manager()
             .unwrap()
@@ -347,25 +353,35 @@ impl ExecutingSystemState {
             .get(&response.originator_reply_callback)
             .unwrap()
             .clone();
+        let call_context_id = callback.call_context_id;
         let call_context = call_context_manager_mut(&mut system_state.status)
             .unwrap()
-            .take_call_context(&callback.call_context_id)
+            .take_call_context(&call_context_id)
             .unwrap();
         Self {
             system_state,
             call_context,
+            call_context_id,
             callback: Some(callback),
         }
     }
 
-    fn for_task(system_state: SystemState, time: Time) -> Self {
+    fn for_task(state: SystemState, time: Time) -> Self {
         Self::with_new_call_context(
-            system_state,
+            state,
             CallOrigin::SystemTask,
             Cycles::zero(),
             time,
             RequestMetadata::for_new_call_tree(time),
         )
+    }
+
+    fn for_message(state: SystemState, msg: &CanisterMessage, time: Time) -> Self {
+        match msg {
+            CanisterMessage::Ingress(msg) => Self::for_ingress(state, msg, time),
+            CanisterMessage::Request(msg) => Self::for_request(state, msg, time),
+            CanisterMessage::Response(msg) => Self::for_response(state, msg),
+        }
     }
 
     pub(super) fn for_message_or_task(
@@ -374,12 +390,8 @@ impl ExecutingSystemState {
         time: Time,
     ) -> Self {
         match input {
-            CanisterMessageOrTask::Message(msg) => match msg {
-                CanisterMessage::Ingress() => Self::for_ingress(state, msg, time),
-                CanisterMessage::Request(msg) => Self::for_request(state, msg, time),
-                CanisterMessage::Response(msg) => Self::for_response(state, msg, time),
-            }
-            CanisterMessageOrTask::Task(_) => Self::for_task(system_state, time),
+            CanisterMessageOrTask::Message(msg) => Self::for_message(state, msg, time),
+            CanisterMessageOrTask::Task(_) => Self::for_task(state, time),
         }
     }
 
@@ -389,16 +401,36 @@ impl ExecutingSystemState {
         time: Time,
     ) -> Self {
         match input {
-            CanisterCallOrTask::Call(call) => match call {
+            CanisterCallOrTask::Query(call) | CanisterCallOrTask::Update(call) => match call {
                 CanisterCall::Ingress(msg) => Self::for_ingress(state, msg, time),
                 CanisterCall::Request(msg) => Self::for_request(state, msg, time),
-            }
+            },
             CanisterCallOrTask::Task(_) => Self::for_task(state, time),
         }
     }
-    
+
     pub fn canister_id(&self) -> CanisterId {
         self.system_state.canister_id
+    }
+
+    pub fn canister_version(&self) -> u64 {
+        self.system_state.canister_version
+    }
+
+    pub fn controllers(&self) -> &BTreeSet<PrincipalId> {
+        &self.system_state.controllers
+    }
+
+    pub fn call_context(&self) -> &CallContext {
+        &self.call_context
+    }
+
+    pub fn call_context_id(&self) -> CallContextId {
+        self.call_context_id
+    }
+
+    pub fn next_callback_id(&self) -> u64 {
+        self.system_state.call_context_manager().unwrap().next_callback_id()
     }
 
     pub fn call_origin(&self) -> &CallOrigin {
@@ -406,7 +438,7 @@ impl ExecutingSystemState {
     }
 
     pub fn request_metadata(&self) -> &RequestMetadata {
-        &self.call_context.request_metadata
+        &self.call_context.metadata
     }
 
     pub fn balance(&self) -> Cycles {
@@ -416,7 +448,7 @@ impl ExecutingSystemState {
     pub fn reserved_balance(&self) -> Cycles {
         self.system_state.reserved_balance
     }
-    
+
     pub fn remove_cycles(&mut self, requested_amount: Cycles, use_case: CyclesUseCase) {
         self.system_state.remove_cycles(requested_amount, use_case)
     }
@@ -425,8 +457,18 @@ impl ExecutingSystemState {
         &mut self.system_state.task_queue
     }
 
-    pub fn global_timer(&mut self) -> &mut GlobalTimer {
+    pub fn global_timer(&mut self) -> &mut CanisterTimer {
         &mut self.system_state.global_timer
+    }
+
+    pub fn callbacks_count(&self) -> Option<usize> {
+        self.system_state
+            .call_context_manager()
+            .map(|ccm| ccm.callbacks().len())
+    }
+
+    pub fn available_output_request_slots(&self) -> BTreeMap<CanisterId, usize> {
+        self.system_state.available_output_request_slots()
     }
 
     pub fn finish(self) -> SystemState {
@@ -1355,7 +1397,7 @@ impl SystemState {
     ) -> Result<(CanisterMessage, ExecutingSystemState), SystemState> {
         match self.pop_input() {
             Some(msg) => {
-                let state = ExecutingSystemState::for_canister_message(self, &msg, time);
+                let state = ExecutingSystemState::for_message(self, &msg, time);
                 Ok((msg, state))
             }
             None => Err(self),

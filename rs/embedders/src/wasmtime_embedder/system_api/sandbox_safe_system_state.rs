@@ -617,7 +617,7 @@ pub struct SandboxSafeSystemState {
     global_timer: CanisterTimer,
     canister_version: u64,
     controllers: BTreeSet<PrincipalId>,
-    pub(super) request_metadata: RequestMetadata,
+    //pub(super) request_metadata: RequestMetadata,
     caller: Option<PrincipalId>,
     pub is_wasm64_execution: bool,
     network_topology: NetworkTopology,
@@ -651,7 +651,7 @@ impl SandboxSafeSystemState {
         global_timer: CanisterTimer,
         canister_version: u64,
         controllers: BTreeSet<PrincipalId>,
-        request_metadata: RequestMetadata,
+        //request_metadata: RequestMetadata,
         caller: Option<PrincipalId>,
         next_canister_log_record_idx: u64,
         is_wasm64_execution: bool,
@@ -688,7 +688,7 @@ impl SandboxSafeSystemState {
             global_timer,
             canister_version,
             controllers,
-            request_metadata,
+            //request_metadata,
             caller,
             is_wasm64_execution,
             network_topology,
@@ -713,26 +713,28 @@ impl SandboxSafeSystemState {
             dirty_page_overhead,
             compute_allocation,
             available_callbacks,
-            request_metadata,
+            //request_metadata,
             caller,
-            call_context_id,
+            //call_context_id,
             // We can assume a Wasm32 environment in tests for now.
             false,
         )
     }
 
     pub fn new(
-        system_state: &SystemState,
+        system_state: &ExecutingSystemState,
         cycles_account_manager: CyclesAccountManager,
         network_topology: &NetworkTopology,
         dirty_page_overhead: NumInstructions,
         compute_allocation: ComputeAllocation,
         available_callbacks: u64,
-        request_metadata: RequestMetadata,
+        //request_metadata: RequestMetadata,
         caller: Option<PrincipalId>,
-        call_context_id: Option<CallContextId>,
+        //call_context_id: Option<CallContextId>,
         is_wasm64_execution: bool,
     ) -> Self {
+        let call_context = system_state.call_context();
+        /*
         let call_context = call_context_id.and_then(|call_context_id| {
             system_state
                 .call_context_manager()
@@ -740,10 +742,14 @@ impl SandboxSafeSystemState {
                     call_context_manager.call_contexts().get(&call_context_id)
                 })
         });
+        */
 
-        let call_context_balance = call_context.map(|call_context| call_context.available_cycles());
+        let call_context_balance = Some(call_context.available_cycles());
+        let call_context_deadline = Some(call_context.deadline());
 
-        let call_context_deadline = call_context.and_then(|call_context| call_context.deadline());
+        //let call_context_balance = call_context.map(|call_context| call_context.available_cycles());
+
+        //let call_context_deadline = call_context.and_then(|call_context| call_context.deadline());
 
         let available_request_slots = system_state.available_output_request_slots();
 
@@ -790,19 +796,20 @@ impl SandboxSafeSystemState {
             call_context_balance,
             call_context_deadline,
             cycles_account_manager,
-            system_state
-                .call_context_manager()
-                .map(|c| c.next_callback_id()),
+            Some(system_state.next_callback_id()),
+//            system_state
+//                .call_context_manager()
+//                .map(|c| c.next_callback_id()),
             available_callbacks,
             available_request_slots,
             ic00_available_request_slots,
             ic00_aliases,
             subnet_size,
             dirty_page_overhead,
-            system_state.global_timer,
-            system_state.canister_version,
+            system_state.global_timer(),
+            system_state.canister_version(),
             system_state.controllers.clone(),
-            request_metadata,
+            //request_metadata,
             caller,
             system_state.canister_log.next_idx(),
             is_wasm64_execution,

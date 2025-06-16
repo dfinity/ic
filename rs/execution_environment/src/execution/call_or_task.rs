@@ -125,17 +125,17 @@ pub fn execute_call_or_task(
         subnet_size,
         clean_canister.system_state.reserved_balance(),
     );
-/*
-    let request_metadata = match &call_or_task {
-        CanisterCallOrTask::Update(CanisterCall::Request(request))
-        | CanisterCallOrTask::Query(CanisterCall::Request(request)) => {
-            request.metadata.for_downstream_call()
-        }
-        CanisterCallOrTask::Update(CanisterCall::Ingress(_))
-        | CanisterCallOrTask::Query(CanisterCall::Ingress(_))
-        | CanisterCallOrTask::Task(_) => RequestMetadata::for_new_call_tree(time),
-    };
-*/
+    /*
+        let request_metadata = match &call_or_task {
+            CanisterCallOrTask::Update(CanisterCall::Request(request))
+            | CanisterCallOrTask::Query(CanisterCall::Request(request)) => {
+                request.metadata.for_downstream_call()
+            }
+            CanisterCallOrTask::Update(CanisterCall::Ingress(_))
+            | CanisterCallOrTask::Query(CanisterCall::Ingress(_))
+            | CanisterCallOrTask::Task(_) => RequestMetadata::for_new_call_tree(time),
+        };
+    */
     let original = OriginalContext {
         //call_origin: CallOrigin::from(&call_or_task),
         method,
@@ -169,31 +169,31 @@ pub fn execute_call_or_task(
             msg.method_payload().to_vec(),
             msg.cycles(),
             *msg.sender(),
-            helper.call_context_id(),
+            //            helper.call_context_id(),
         ),
         CanisterCallOrTask::Query(msg) => ApiType::replicated_query(
             time,
             msg.method_payload().to_vec(),
             *msg.sender(),
-            helper.call_context_id(),
+            //            helper.call_context_id(),
         ),
         CanisterCallOrTask::Task(CanisterTask::Heartbeat) => ApiType::system_task(
             IC_00.get(),
             SystemMethod::CanisterHeartbeat,
             time,
-            helper.call_context_id(),
+            //            helper.call_context_id(),
         ),
         CanisterCallOrTask::Task(CanisterTask::GlobalTimer) => ApiType::system_task(
             IC_00.get(),
             SystemMethod::CanisterGlobalTimer,
             time,
-            helper.call_context_id(),
+            //            helper.call_context_id(),
         ),
         CanisterCallOrTask::Task(CanisterTask::OnLowWasmMemory) => ApiType::system_task(
             IC_00.get(),
             SystemMethod::CanisterOnLowWasmMemory,
             time,
-            helper.call_context_id(),
+            //            helper.call_context_id(),
         ),
     };
 
@@ -207,7 +207,7 @@ pub fn execute_call_or_task(
         message_memory_usage,
         original.execution_parameters.clone(),
         FuncRef::Method(original.method.clone()),
-        original.request_metadata.clone(),
+        //        original.request_metadata.clone(),
         round_limits,
         round.network_topology,
     );
@@ -387,17 +387,17 @@ impl CallOrTaskHelper {
                 }
             }
         }
-/*
-        let call_context_id = canister
-            .system_state
-            .new_call_context(
-                original.call_origin.clone(),
-                original.call_or_task.cycles(),
-                original.time,
-                original.request_metadata.clone(),
-            )
-            .unwrap();
-*/
+        /*
+                let call_context_id = canister
+                    .system_state
+                    .new_call_context(
+                        original.call_origin.clone(),
+                        original.call_or_task.cycles(),
+                        original.time,
+                        original.request_metadata.clone(),
+                    )
+                    .unwrap();
+        */
         let initial_cycles_balance = canister.system_state.balance();
 
         match original.call_or_task {
@@ -413,7 +413,7 @@ impl CallOrTaskHelper {
 
         Ok(Self {
             canister,
-//            call_context_id,
+            //            call_context_id,
             initial_cycles_balance,
             deallocation_sender: deallocation_sender.clone(),
         })
@@ -672,11 +672,11 @@ impl CallOrTaskHelper {
     fn canister(&self) -> &CanisterState {
         &self.canister
     }
-/*
-    fn call_context_id(&self) -> CallContextId {
-        self.call_context_id
-    }
-*/
+    /*
+        fn call_context_id(&self) -> CallContextId {
+            self.call_context_id
+        }
+    */
 }
 
 #[derive(Debug)]

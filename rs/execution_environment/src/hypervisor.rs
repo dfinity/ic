@@ -344,12 +344,12 @@ impl Hypervisor {
         &self,
         api_type: ApiType,
         execution_state: &ExecutionState,
-        system_state: &SystemState,
+        system_state: &ExecutingSystemState,
         canister_current_memory_usage: NumBytes,
         canister_current_message_memory_usage: MessageMemoryUsage,
         execution_parameters: ExecutionParameters,
         func_ref: FuncRef,
-        request_metadata: RequestMetadata,
+        //request_metadata: RequestMetadata,
         round_limits: &mut RoundLimits,
         network_topology: &NetworkTopology,
     ) -> WasmExecutionResult {
@@ -365,6 +365,15 @@ impl Hypervisor {
         }
         let caller = api_type.caller();
         let subnet_available_callbacks = round_limits.subnet_available_callbacks.max(0) as u64;
+        // None comes from canister in stopped state. unwrap here?
+        let remaining_canister_callback_quota = system_state.callbacks_count().map_or(
+            self.canister_guaranteed_callback_quota,
+            |count| {
+                self.canister_guaranteed_callback_quota
+                    .saturating_sub(count)
+            },
+        ) as u64;
+        /*
         let remaining_canister_callback_quota = system_state.call_context_manager().map_or(
             // The default is never used (since we would never end up here with no
             // `CallContextManager`) but preferrable to an `unwrap()`.
@@ -374,6 +383,7 @@ impl Hypervisor {
                     .saturating_sub(ccm.callbacks().len())
             },
         ) as u64;
+        */
         // Maximum between remaining canister quota and available subnet shared pool.
         let available_callbacks = subnet_available_callbacks.max(remaining_canister_callback_quota);
         let static_system_state = SandboxSafeSystemState::new(
@@ -383,9 +393,9 @@ impl Hypervisor {
             self.dirty_page_overhead,
             execution_parameters.compute_allocation,
             available_callbacks,
-            request_metadata,
+            //request_metadata,
             api_type.caller(),
-            api_type.call_context_id(),
+            //api_type.call_context_id(),
             execution_state.wasm_execution_mode.is_wasm64(),
         );
         let (compilation_result, mut execution_result) = Arc::clone(&self.wasm_executor).execute(

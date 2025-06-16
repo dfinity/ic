@@ -586,6 +586,10 @@ impl CallContextManager {
         id
     }
 
+    pub(super) fn next_call_context_id(&self) -> CallContextId {
+        (self.next_call_context_id + 1).into()
+    }
+
     pub(super) fn take_call_context(&mut self, id: &CallContextId) -> Option<CallContext> {
         self.call_contexts.remove(id)
     }

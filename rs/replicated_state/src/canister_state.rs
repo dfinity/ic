@@ -8,6 +8,7 @@ use crate::canister_state::queues::CanisterOutputQueuesIterator;
 use crate::canister_state::system_state::{ExecutingSystemState, ExecutionTask, SystemState};
 use crate::{InputQueueType, MessageMemoryUsage, StateError};
 pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions};
+use ic_base_types::NumSeconds;
 use ic_management_canister_types_private::{CanisterStatusType, LogVisibilityV2};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::batch::TotalQueryStats;
@@ -15,7 +16,8 @@ use ic_types::methods::SystemMethod;
 use ic_types::time::UNIX_EPOCH;
 use ic_types::{
     messages::{
-        CanisterMessage, CanisterMessageOrTask, Ingress, Request, RequestOrResponse, Response,
+        CanisterCallOrTask, CanisterMessage, CanisterMessageOrTask, Ingress, Request,
+        RequestOrResponse, Response,
     },
     methods::WasmMethod,
     AccumulatedPriority, CanisterId, CanisterLog, ComputeAllocation, ExecutionRound,
@@ -118,35 +120,56 @@ pub struct ExecutingCanisterState {
 }
 
 impl ExecutingCanisterState {
-    pub fn for_message_or_task(canister_state: CanisterState, input: &CanisterMessageOrTask, time: Time) -> Self {
+    pub fn for_message_or_task(
+        canister_state: CanisterState,
+        input: &CanisterMessageOrTask,
+        time: Time,
+    ) -> Self {
         let CanisterState {
             system_state,
             execution_state,
             scheduler_state,
         } = canister_state;
         Self {
-            executing_system_state: ExecutingSystemState::new(system_state, input, time),
+            executing_system_state: ExecutingSystemState::for_message_or_task(
+                system_state,
+                input,
+                time,
+            ),
             execution_state,
             scheduler_state,
         }
     }
 
-    pub fn for_call_or_task(canister_state: CanisterState, input: &CanisterCallOrTask, time: Time) -> Self {
-        let CanisterState {
-            system_state,
-            execution_state,
-            scheduler_state,
-        } = canister_state;
-    }
-
-    pub fn for_response(canister_state: CanisterState, response: &Response, time: Time) -> Self {
+    pub fn for_call_or_task(
+        canister_state: CanisterState,
+        input: &CanisterCallOrTask,
+        time: Time,
+    ) -> Self {
         let CanisterState {
             system_state,
             execution_state,
             scheduler_state,
         } = canister_state;
         Self {
-            executing_system_state: ExecutingSystemState::for_response(system_state, response, time),
+            executing_system_state: ExecutingSystemState::for_call_or_task(
+                system_state,
+                input,
+                time,
+            ),
+            execution_state,
+            scheduler_state,
+        }
+    }
+
+    pub fn for_response(canister_state: CanisterState, response: &Response) -> Self {
+        let CanisterState {
+            system_state,
+            execution_state,
+            scheduler_state,
+        } = canister_state;
+        Self {
+            executing_system_state: ExecutingSystemState::for_response(system_state, response),
             execution_state,
             scheduler_state,
         }
@@ -159,7 +182,7 @@ impl ExecutingCanisterState {
     pub fn freeze_threshold(&self) -> NumSeconds {
         self.executing_system_state.system_state.freeze_threshold
     }
-    
+
     pub fn compute_allocation(&self) -> ComputeAllocation {
         self.scheduler_state.compute_allocation
     }
@@ -167,34 +190,41 @@ impl ExecutingCanisterState {
     pub fn memory_allocation(&self) -> MemoryAllocation {
         self.executing_system_state.system_state.memory_allocation
     }
-    
+
     pub fn memory_limit(&self, default_limit: NumBytes) -> NumBytes {
         match self.memory_allocation() {
             MemoryAllocation::Reserved(bytes) => bytes,
             MemoryAllocation::BestEffort => default_limit,
         }
     }
-    
+
     pub fn wasm_memory_limit(&self) -> Option<NumBytes> {
         self.executing_system_state.system_state.wasm_memory_limit
     }
-    
+
     pub fn execution_memory_usage(&self) -> NumBytes {
         self.execution_state
             .as_ref()
             .map_or(NumBytes::new(0), |es| es.memory_usage())
     }
-    
+
     pub fn canister_history_memory_usage(&self) -> NumBytes {
-        self.executing_system_state.system_state.canister_history_memory_usage()
+        self.executing_system_state
+            .system_state
+            .canister_history_memory_usage()
     }
-    
+
     pub fn wasm_chunk_store_memory_usage(&self) -> NumBytes {
-        self.executing_system_state.system_state.wasm_chunk_store.memory_usage()
+        self.executing_system_state
+            .system_state
+            .wasm_chunk_store
+            .memory_usage()
     }
-    
+
     pub fn snapshots_memory_usage(&self) -> NumBytes {
-        self.executing_system_state.system_state.snapshots_memory_usage
+        self.executing_system_state
+            .system_state
+            .snapshots_memory_usage
     }
 
     pub fn memory_usage(&self) -> NumBytes {
@@ -206,8 +236,14 @@ impl ExecutingCanisterState {
 
     pub fn message_memory_usage(&self) -> MessageMemoryUsage {
         MessageMemoryUsage {
-            guaranteed_response: self.executing_system_state.system_state.guaranteed_response_message_memory_usage(),
-            best_effort: self.executing_system_state.system_state.best_effort_message_memory_usage(),
+            guaranteed_response: self
+                .executing_system_state
+                .system_state
+                .guaranteed_response_message_memory_usage(),
+            best_effort: self
+                .executing_system_state
+                .system_state
+                .best_effort_message_memory_usage(),
         }
     }
 
