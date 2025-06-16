@@ -368,7 +368,7 @@ impl From<RequestOrResponse> for CanisterMessage {
     }
 }
 
-/// A wrapper around a canister request and an ingress message.
+/// A wrapper around a canister request or an ingress message.
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum CanisterCall {
     Request(Arc<Request>),

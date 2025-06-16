@@ -5,16 +5,20 @@ pub mod system_state;
 mod tests;
 
 use crate::canister_state::queues::CanisterOutputQueuesIterator;
-use crate::canister_state::system_state::{ExecutionTask, SystemState};
+use crate::canister_state::system_state::{ExecutingSystemState, ExecutionTask, SystemState};
 use crate::{InputQueueType, MessageMemoryUsage, StateError};
 pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions};
+use ic_base_types::NumSeconds;
 use ic_management_canister_types_private::{CanisterStatusType, LogVisibilityV2};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::batch::TotalQueryStats;
 use ic_types::methods::SystemMethod;
 use ic_types::time::UNIX_EPOCH;
 use ic_types::{
-    messages::{CanisterMessage, Ingress, Request, RequestOrResponse, Response},
+    messages::{
+        CanisterCallOrTask, CanisterMessage, CanisterMessageOrTask, Ingress, Request,
+        RequestOrResponse, Response,
+    },
     methods::WasmMethod,
     AccumulatedPriority, CanisterId, CanisterLog, ComputeAllocation, ExecutionRound,
     MemoryAllocation, NumBytes, PrincipalId, Time,
@@ -109,6 +113,155 @@ impl SchedulerState {
     }
 }
 
+pub struct ExecutingCanisterState {
+    pub executing_system_state: ExecutingSystemState,
+    pub execution_state: Option<ExecutionState>,
+    pub scheduler_state: SchedulerState,
+}
+
+impl ExecutingCanisterState {
+    pub fn for_message_or_task(
+        canister_state: CanisterState,
+        input: &CanisterMessageOrTask,
+        time: Time,
+    ) -> Self {
+        let CanisterState {
+            system_state,
+            execution_state,
+            scheduler_state,
+        } = canister_state;
+        Self {
+            executing_system_state: ExecutingSystemState::for_message_or_task(
+                system_state,
+                input,
+                time,
+            ),
+            execution_state,
+            scheduler_state,
+        }
+    }
+
+    pub fn for_call_or_task(
+        canister_state: CanisterState,
+        input: &CanisterCallOrTask,
+        time: Time,
+    ) -> Self {
+        let CanisterState {
+            system_state,
+            execution_state,
+            scheduler_state,
+        } = canister_state;
+        Self {
+            executing_system_state: ExecutingSystemState::for_call_or_task(
+                system_state,
+                input,
+                time,
+            ),
+            execution_state,
+            scheduler_state,
+        }
+    }
+
+    pub fn for_response(canister_state: CanisterState, response: &Response) -> Self {
+        let CanisterState {
+            system_state,
+            execution_state,
+            scheduler_state,
+        } = canister_state;
+        Self {
+            executing_system_state: ExecutingSystemState::for_response(system_state, response),
+            execution_state,
+            scheduler_state,
+        }
+    }
+
+    pub fn canister_id(&self) -> CanisterId {
+        self.executing_system_state.canister_id()
+    }
+
+    pub fn freeze_threshold(&self) -> NumSeconds {
+        self.executing_system_state.system_state.freeze_threshold
+    }
+
+    pub fn compute_allocation(&self) -> ComputeAllocation {
+        self.scheduler_state.compute_allocation
+    }
+
+    pub fn memory_allocation(&self) -> MemoryAllocation {
+        self.executing_system_state.system_state.memory_allocation
+    }
+
+    pub fn memory_limit(&self, default_limit: NumBytes) -> NumBytes {
+        match self.memory_allocation() {
+            MemoryAllocation::Reserved(bytes) => bytes,
+            MemoryAllocation::BestEffort => default_limit,
+        }
+    }
+
+    pub fn wasm_memory_limit(&self) -> Option<NumBytes> {
+        self.executing_system_state.system_state.wasm_memory_limit
+    }
+
+    pub fn execution_memory_usage(&self) -> NumBytes {
+        self.execution_state
+            .as_ref()
+            .map_or(NumBytes::new(0), |es| es.memory_usage())
+    }
+
+    pub fn canister_history_memory_usage(&self) -> NumBytes {
+        self.executing_system_state
+            .system_state
+            .canister_history_memory_usage()
+    }
+
+    pub fn wasm_chunk_store_memory_usage(&self) -> NumBytes {
+        self.executing_system_state
+            .system_state
+            .wasm_chunk_store
+            .memory_usage()
+    }
+
+    pub fn snapshots_memory_usage(&self) -> NumBytes {
+        self.executing_system_state
+            .system_state
+            .snapshots_memory_usage
+    }
+
+    pub fn memory_usage(&self) -> NumBytes {
+        self.execution_memory_usage()
+            + self.canister_history_memory_usage()
+            + self.wasm_chunk_store_memory_usage()
+            + self.snapshots_memory_usage()
+    }
+
+    pub fn message_memory_usage(&self) -> MessageMemoryUsage {
+        MessageMemoryUsage {
+            guaranteed_response: self
+                .executing_system_state
+                .system_state
+                .guaranteed_response_message_memory_usage(),
+            best_effort: self
+                .executing_system_state
+                .system_state
+                .best_effort_message_memory_usage(),
+        }
+    }
+
+    pub fn finish(self) -> CanisterState {
+        let Self {
+            executing_system_state,
+            execution_state,
+            scheduler_state,
+        } = self;
+        // temporary
+        CanisterState {
+            system_state: executing_system_state.finish(),
+            execution_state,
+            scheduler_state,
+        }
+    }
+}
+
 /// The full state of a single canister.
 #[derive(Clone, PartialEq, Debug, ValidateEq)]
 pub struct CanisterState {
@@ -192,6 +345,33 @@ impl CanisterState {
             own_subnet_type,
             input_queue_type,
         )
+    }
+
+    pub fn pop_input_alt(
+        self,
+        time: Time,
+    ) -> Result<(CanisterMessage, ExecutingCanisterState), CanisterState> {
+        let Self {
+            system_state,
+            execution_state,
+            scheduler_state,
+        } = self;
+
+        match system_state.pop_input_alt(time) {
+            Ok((msg, executing_system_state)) => Ok((
+                msg,
+                ExecutingCanisterState {
+                    executing_system_state,
+                    execution_state,
+                    scheduler_state,
+                },
+            )),
+            Err(system_state) => Err(Self {
+                system_state,
+                execution_state,
+                scheduler_state,
+            }),
+        }
     }
 
     /// See `SystemState::pop_input` for documentation.

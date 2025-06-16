@@ -254,7 +254,7 @@ pub enum ApiType {
         incoming_payload: Vec<u8>,
         incoming_cycles: Cycles,
         caller: PrincipalId,
-        call_context_id: CallContextId,
+        //call_context_id: CallContextId,
         /// Begins as empty and used to accumulate data for sending replies.
         #[serde(with = "serde_bytes")]
         response_data: Vec<u8>,
@@ -271,7 +271,7 @@ pub enum ApiType {
         #[serde(with = "serde_bytes")]
         incoming_payload: Vec<u8>,
         caller: PrincipalId,
-        call_context_id: CallContextId,
+        //call_context_id: CallContextId,
         #[serde(with = "serde_bytes")]
         response_data: Vec<u8>,
         response_status: ResponseStatus,
@@ -300,7 +300,7 @@ pub enum ApiType {
         #[serde(with = "serde_bytes")]
         incoming_payload: Vec<u8>,
         incoming_cycles: Cycles,
-        call_context_id: CallContextId,
+        //call_context_id: CallContextId,
         // Begins as empty and used to accumulate data for sending replies.
         #[serde(with = "serde_bytes")]
         response_data: Vec<u8>,
@@ -320,7 +320,7 @@ pub enum ApiType {
         caller: PrincipalId,
         reject_context: RejectContext,
         incoming_cycles: Cycles,
-        call_context_id: CallContextId,
+        //call_context_id: CallContextId,
         // Begins as empty and used to accumulate data for sending replies.
         #[serde(with = "serde_bytes")]
         response_data: Vec<u8>,
@@ -358,7 +358,7 @@ pub enum ApiType {
         /// Only `canister_heartbeat`, `canister_global_timer`, and `canister_on_low_wasm_memory` are allowed.
         system_task: SystemMethod,
         time: Time,
-        call_context_id: CallContextId,
+        //call_context_id: CallContextId,
         /// Optional outgoing request under construction. If `None` no outgoing
         /// request is currently under construction.
         outgoing_request: Option<RequestInPrep>,
@@ -395,12 +395,12 @@ impl ApiType {
     pub fn system_task(
         system_task: SystemMethod,
         time: Time,
-        call_context_id: CallContextId,
+        //call_context_id: CallContextId,
     ) -> Self {
         Self::SystemTask {
             caller: IC_00.get(),
             time,
-            call_context_id,
+            //call_context_id,
             outgoing_request: None,
             system_task,
         }
@@ -411,14 +411,14 @@ impl ApiType {
         incoming_payload: Vec<u8>,
         incoming_cycles: Cycles,
         caller: PrincipalId,
-        call_context_id: CallContextId,
+        //call_context_id: CallContextId,
     ) -> Self {
         Self::Update {
             time,
             incoming_payload,
             incoming_cycles,
             caller,
-            call_context_id,
+            //call_context_id,
             response_data: vec![],
             response_status: ResponseStatus::NotRepliedYet,
             outgoing_request: None,
@@ -430,13 +430,13 @@ impl ApiType {
         time: Time,
         incoming_payload: Vec<u8>,
         caller: PrincipalId,
-        call_context_id: CallContextId,
+        //call_context_id: CallContextId,
     ) -> Self {
         Self::ReplicatedQuery {
             time,
             incoming_payload,
             caller,
-            call_context_id,
+            //call_context_id,
             response_data: vec![],
             response_status: ResponseStatus::NotRepliedYet,
             max_reply_size: MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
@@ -471,7 +471,7 @@ impl ApiType {
         caller: PrincipalId,
         incoming_payload: Vec<u8>,
         incoming_cycles: Cycles,
-        call_context_id: CallContextId,
+        //call_context_id: CallContextId,
         replied: bool,
         execution_mode: ExecutionMode,
         call_context_instructions_executed: NumInstructions,
@@ -481,7 +481,7 @@ impl ApiType {
             caller,
             incoming_payload,
             incoming_cycles,
-            call_context_id,
+            //call_context_id,
             response_data: vec![],
             response_status: if replied {
                 ResponseStatus::AlreadyReplied
@@ -501,7 +501,7 @@ impl ApiType {
         caller: PrincipalId,
         reject_context: RejectContext,
         incoming_cycles: Cycles,
-        call_context_id: CallContextId,
+        //call_context_id: CallContextId,
         replied: bool,
         execution_mode: ExecutionMode,
         call_context_instructions_executed: NumInstructions,
@@ -511,7 +511,7 @@ impl ApiType {
             caller,
             reject_context,
             incoming_cycles,
-            call_context_id,
+            //call_context_id,
             response_data: vec![],
             response_status: if replied {
                 ResponseStatus::AlreadyReplied
@@ -584,43 +584,43 @@ impl ApiType {
             ApiType::Cleanup { execution_mode, .. } => execution_mode.clone(),
         }
     }
-
-    pub fn call_context_id(&self) -> Option<CallContextId> {
-        match *self {
-            ApiType::Start { .. }
-            | ApiType::Init { .. }
-            | ApiType::PreUpgrade { .. }
-            | ApiType::Cleanup { .. }
-            | ApiType::InspectMessage { .. }
-            | ApiType::NonReplicatedQuery {
-                query_kind: NonReplicatedQueryKind::Pure,
-                ..
-            } => None,
-            ApiType::Update {
-                call_context_id, ..
+    /*
+        pub fn call_context_id(&self) -> Option<CallContextId> {
+            match *self {
+                ApiType::Start { .. }
+                | ApiType::Init { .. }
+                | ApiType::PreUpgrade { .. }
+                | ApiType::Cleanup { .. }
+                | ApiType::InspectMessage { .. }
+                | ApiType::NonReplicatedQuery {
+                    query_kind: NonReplicatedQueryKind::Pure,
+                    ..
+                } => None,
+                ApiType::Update {
+                    call_context_id, ..
+                }
+                | ApiType::ReplicatedQuery {
+                    call_context_id, ..
+                }
+                | ApiType::NonReplicatedQuery {
+                    query_kind:
+                        NonReplicatedQueryKind::Stateful {
+                            call_context_id, ..
+                        },
+                    ..
+                }
+                | ApiType::ReplyCallback {
+                    call_context_id, ..
+                }
+                | ApiType::RejectCallback {
+                    call_context_id, ..
+                }
+                | ApiType::SystemTask {
+                    call_context_id, ..
+                } => Some(call_context_id),
             }
-            | ApiType::ReplicatedQuery {
-                call_context_id, ..
-            }
-            | ApiType::NonReplicatedQuery {
-                query_kind:
-                    NonReplicatedQueryKind::Stateful {
-                        call_context_id, ..
-                    },
-                ..
-            }
-            | ApiType::ReplyCallback {
-                call_context_id, ..
-            }
-            | ApiType::RejectCallback {
-                call_context_id, ..
-            }
-            | ApiType::SystemTask {
-                call_context_id, ..
-            } => Some(call_context_id),
         }
-    }
-
+    */
     /// Returns a string slice representation of the enum variant name for use
     /// e.g. as a metric label.
     pub fn as_str(&self) -> &'static str {

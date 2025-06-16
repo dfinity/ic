@@ -57,7 +57,7 @@ use ic_replicated_state::{
     canister_state::{
         execution_state::WasmExecutionMode,
         system_state::{CyclesUseCase, PausedExecutionId},
-        NextExecution,
+        ExecutingCanisterState, NextExecution,
     },
     metadata_state::subnet_call_context_manager::{
         EcdsaArguments, InstallCodeCall, InstallCodeCallId, ReshareChainKeyContext,
@@ -1836,7 +1836,7 @@ impl ExecutionEnvironment {
     #[allow(clippy::too_many_arguments)]
     pub fn execute_canister_input(
         &self,
-        canister: CanisterState,
+        canister: ExecutingCanisterState,
         instruction_limits: InstructionLimits,
         max_instructions_per_message_without_dts: NumInstructions,
         input: CanisterMessageOrTask,
@@ -1997,7 +1997,7 @@ impl ExecutionEnvironment {
     /// Executes a canister task of a given canister.
     fn execute_canister_task(
         &self,
-        canister: CanisterState,
+        canister: ExecutingCanisterState,
         task: CanisterTask,
         prepaid_execution_cycles: Option<Cycles>,
         instruction_limits: InstructionLimits,
@@ -2045,7 +2045,7 @@ impl ExecutionEnvironment {
     /// instruction limit and available subnet memory counter.
     fn execution_parameters(
         &self,
-        canister: &CanisterState,
+        canister: &ExecutingCanisterState,
         instruction_limits: InstructionLimits,
         execution_mode: ExecutionMode,
         subnet_memory_saturation: ResourceSaturation,
@@ -2693,7 +2693,7 @@ impl ExecutionEnvironment {
     #[allow(clippy::too_many_arguments)]
     pub fn execute_canister_response(
         &self,
-        canister: CanisterState,
+        canister: ExecutingCanisterState,
         response: Arc<Response>,
         instruction_limits: InstructionLimits,
         time: Time,
@@ -4228,7 +4228,7 @@ fn execute_canister_input(
     input: CanisterMessageOrTask,
     prepaid_execution_cycles: Option<Cycles>,
     exec_env: &ExecutionEnvironment,
-    canister: CanisterState,
+    canister: ExecutingCanisterState,
     instruction_limits: InstructionLimits,
     max_instructions_per_message_without_dts: NumInstructions,
     network_topology: Arc<NetworkTopology>,
@@ -4282,8 +4282,84 @@ pub fn execute_canister(
         }
         NextExecution::StartNew | NextExecution::ContinueLong => {}
     }
+    /*
+        let (input, prepaid_execution_cycles) = match canister.system_state.task_queue.pop_front() {
+            Some(task) => match task {
+                ExecutionTask::PausedExecution { id, .. } => {
+                    let paused = exec_env.take_paused_execution(id).unwrap();
+                    let round_counters = RoundCounters {
+                        execution_refund_error: &exec_env.metrics.execution_cycles_refund_error,
+                        state_changes_error: &exec_env.metrics.state_changes_error,
+                        invalid_system_call_error: &exec_env.metrics.invalid_system_call_error,
+                        charging_from_balance_error: &exec_env.metrics.charging_from_balance_error,
+                        unexpected_response_error: &exec_env.metrics.unexpected_response_error,
+                        response_cycles_refund_error: &exec_env.metrics.response_cycles_refund_error,
+                        invalid_canister_state_error: &exec_env.metrics.invalid_canister_state_error,
+                        ingress_with_cycles_error: &exec_env.metrics.ingress_with_cycles_error,
+                    };
+                    let round_context = RoundContext {
+                        network_topology: &network_topology,
+                        hypervisor: &exec_env.hypervisor,
+                        cycles_account_manager: &exec_env.cycles_account_manager,
+                        counters: round_counters,
+                        log: &exec_env.log,
+                        time,
+                    };
+                    let result = paused.resume(
+                        canister,
+                        round_context,
+                        round_limits,
+                        subnet_size,
+                        &exec_env.call_tree_metrics,
+                        exec_env.deallocator_thread.sender(),
+                    );
+                    let (canister, instructions_used, heap_delta, ingress_status) =
+                        exec_env.process_result(result);
+                    return ExecuteCanisterResult {
+                        canister,
+                        instructions_used,
+                        heap_delta,
+                        ingress_status,
+                        description: Some("paused execution".to_string()),
+                    };
+                }
+                ExecutionTask::Heartbeat => {
+                    let task = CanisterMessageOrTask::Task(CanisterTask::Heartbeat);
+                    (task, None)
+                }
+                ExecutionTask::GlobalTimer => {
+                    let task = CanisterMessageOrTask::Task(CanisterTask::GlobalTimer);
+                    (task, None)
+                }
+                ExecutionTask::OnLowWasmMemory => {
+                    let task = CanisterMessageOrTask::Task(CanisterTask::OnLowWasmMemory);
+                    (task, None)
+                }
+                ExecutionTask::AbortedExecution {
+                    input,
+                    prepaid_execution_cycles,
+                } => (input, Some(prepaid_execution_cycles)),
+                ExecutionTask::PausedInstallCode(..) | ExecutionTask::AbortedInstallCode { .. } => {
+                    unreachable!("The guard at the beginning filters these cases out")
+                }
+            },
+            None => {
+                let message = canister.pop_input().unwrap();
+                if let CanisterMessage::Request(req) = &message {
+                    if req.payload_size_bytes() > MAX_INTER_CANISTER_PAYLOAD_IN_BYTES {
+                        exec_env.metrics.oversize_intra_subnet_messages.inc();
+                    }
+                }
+                (CanisterMessageOrTask::Message(message), None)
+            }
+        };
+    */
 
-    let (input, prepaid_execution_cycles) = match canister.system_state.task_queue.pop_front() {
+    let (input, canister, prepaid_execution_cycles) = match canister
+        .system_state
+        .task_queue
+        .pop_front()
+    {
         Some(task) => match task {
             ExecutionTask::PausedExecution { id, .. } => {
                 let paused = exec_env.take_paused_execution(id).unwrap();
@@ -4325,34 +4401,41 @@ pub fn execute_canister(
             }
             ExecutionTask::Heartbeat => {
                 let task = CanisterMessageOrTask::Task(CanisterTask::Heartbeat);
-                (task, None)
+                let canister = ExecutingCanisterState::new(canister, &task, time);
+                (task, canister, None)
             }
-            ExecutionTask::GlobalTimer => {
+            ExecutionTask::GlobalTime => {
                 let task = CanisterMessageOrTask::Task(CanisterTask::GlobalTimer);
-                (task, None)
+                let canister = ExecutingCanisterState::new(canister, &task, time);
+                (task, canister, None)
             }
             ExecutionTask::OnLowWasmMemory => {
                 let task = CanisterMessageOrTask::Task(CanisterTask::OnLowWasmMemory);
-                (task, None)
+                let canister = ExecutingCanisterState::new(canister, &task, time);
+                (task, canister, None)
             }
             ExecutionTask::AbortedExecution {
                 input,
                 prepaid_execution_cycles,
-            } => (input, Some(prepaid_execution_cycles)),
+            } => {
+                let state = ExecutingCanisterState::new(canister, &input, time);
+                (input, canister, None)
+            }
             ExecutionTask::PausedInstallCode(..) | ExecutionTask::AbortedInstallCode { .. } => {
                 unreachable!("The guard at the beginning filters these cases out")
             }
         },
         None => {
-            let message = canister.pop_input().unwrap();
+            let (message, canister) = canister.pop_input_alt(time).unwrap();
             if let CanisterMessage::Request(req) = &message {
                 if req.payload_size_bytes() > MAX_INTER_CANISTER_PAYLOAD_IN_BYTES {
                     exec_env.metrics.oversize_intra_subnet_messages.inc();
                 }
             }
-            (CanisterMessageOrTask::Message(message), None)
+            (CanisterMessageOrTask::Message(message), canister, None)
         }
     };
+
     execute_canister_input(
         input,
         prepaid_execution_cycles,

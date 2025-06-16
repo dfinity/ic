@@ -32,30 +32,30 @@ use std::collections::BTreeMap;
 pub struct CallContext {
     /// Tracks relevant information about who sent the request that created the
     /// `CallContext` needed to form the eventual reply.
-    call_origin: CallOrigin,
+    pub(super) call_origin: CallOrigin,
 
     /// A `CallContext` may still be alive after the canister has replied on it
     /// already (e.g. it replies without executing all callbacks).
     ///
     /// Tracks the current status.
-    responded: bool,
+    pub(super) responded: bool,
 
     /// True if the `CallContext` associated with the callback has been deleted
     /// (e.g. during uninstall); false otherwise.
-    deleted: bool,
+    pub(super) deleted: bool,
 
     /// Cycles that were sent in the request that created the `CallContext`.
-    available_cycles: Cycles,
+    pub(super) available_cycles: Cycles,
 
     /// Point in time at which the `CallContext` was created.
-    time: Time,
+    pub(super) time: Time,
 
     /// Metadata for requests generated within this `CallContext`.
-    metadata: RequestMetadata,
+    pub(super) metadata: RequestMetadata,
 
     /// The total number of instructions executed in the given call context.
     /// This value is used for the `ic0.performance_counter` type 1.
-    instructions_executed: NumInstructions,
+    pub(super) instructions_executed: NumInstructions,
 }
 
 impl CallContext {
@@ -584,6 +584,14 @@ impl CallContextManager {
         debug_assert!(self.stats_ok());
 
         id
+    }
+
+    pub(super) fn next_call_context_id(&self) -> CallContextId {
+        (self.next_call_context_id + 1).into()
+    }
+
+    pub(super) fn take_call_context(&mut self, id: &CallContextId) -> Option<CallContext> {
+        self.call_contexts.remove(id)
     }
 
     /// Returns the currently open `CallContexts` maintained by this

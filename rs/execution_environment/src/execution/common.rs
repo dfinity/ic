@@ -525,7 +525,7 @@ pub fn apply_canister_state_changes(
 
 pub(crate) fn finish_call_with_error(
     user_error: UserError,
-    canister: CanisterState,
+    canister: ExecutingCanisterState,
     call_or_task: CanisterCallOrTask,
     instructions_used: NumInstructions,
     time: Time,
@@ -578,7 +578,7 @@ pub(crate) fn finish_call_with_error(
         }
     };
     ExecuteMessageResult::Finished {
-        canister,
+        canister: canister.finish(),
         response,
         instructions_used,
         heap_delta: NumBytes::from(0),
