@@ -86,10 +86,32 @@ runs:
       if: (success() || failure()) && inputs.execlogs-artifact-name != ''
       run: |
         cd $(mktemp -d)
-        curl -SLO 'https://github.com/dfinity/execlog2csv/releases/download/v0.0.2/execlog2csv_0.0.2_linux_amd64.zip'
-        unzip ./execlog2csv_0.0.2_linux_amd64.zip
-        sudo mv ./execlog2csv_v0.0.2 /usr/local/bin/execlog2csv
-        rm ./execlog2csv_0.0.2_linux_amd64.zip
+
+        # see full list: https://github.com/dfinity/execlog2csv/releases/latest
+        arch="amd64"
+        if [[ $(uname -m) != "x86_64" ]]; then
+          echo "only works on amd64"
+          exit 1
+        fi
+
+        if [[ $(uname) == "Linux" ]]; then
+          os="linux"
+        elif [[ $(uname) == "Darwin" ]]; then
+          os="darwin"
+        else
+          echo "expecting linux or darwin, got $(uname)"
+          exit 1
+        fi
+
+        version="0.0.2"
+        filename="execlog2csv_${version}_${os}_${arch}"
+        echo "filename: $filename"
+        dl_url="https://github.com/dfinity/execlog2csv/releases/download/v$version/$filename.zip"
+        echo "downloading '$dl_url'"
+        curl -SLO "$dl_url"
+        unzip "$filename.zip"
+        sudo mv "./execlog2csv_v$version" /usr/local/bin/execlog2csv
+        rm "$filename.zip"
         execlog2csv --help
 
     - name: Convert execlogs to CSV
