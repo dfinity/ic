@@ -540,12 +540,7 @@ impl ExecutionEnvironment {
                             let payload_size = match &response.response_payload {
                                 Payload::Data(data) => data.len(),
                                 // This is 0 because it's neglijable and hard to explain to canisters.
-                                Payload::Reject(reject) => {
-                                    if context.request.sender_reply_callback.get() % 100 == 0 {
-                                        info!(self.log, "debuggg rejecting message: {:?}", reject);
-                                    }
-                                    0
-                                }
+                                Payload::Reject(_) => 0
                             };
 
                             let new_price = self.cycles_account_manager.http_request_fee_beta(
