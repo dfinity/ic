@@ -81,6 +81,16 @@ runs:
           ${{ steps.metrics-tmpdir.outputs.dir }}/bazel-bep-*.pb.gpg
           ${{ steps.metrics-tmpdir.outputs.dir }}/profile-*.json
 
+    - name: Install execlog2csv
+      shell: bash
+      if: (success() || failure()) && inputs.execlogs-artifact-name != ''
+      run: |
+        cd $(mktemp -d)
+        curl -SLO 'https://github.com/dfinity/execlog2csv/releases/download/v0.0.2/execlog2csv_0.0.2_linux_amd64.zip'
+        unzip -p ./execlog2csv_0.0.2_linux_amd64.zip | sudo cat >/usr/bin/execlog2csv
+        sudo chmod +x /usr/bin/execlog2csv
+        execlog2csv --help
+
     - name: Convert execlogs to CSV
       shell: bash
       if: (success() || failure()) && inputs.execlogs-artifact-name != ''
@@ -97,8 +107,7 @@ runs:
         )
         for execlog_zst in $(find '${{ steps.metrics-tmpdir.outputs.dir }}' -name 'execlog-*.zst'); do
           zstd -f -d "$execlog_zst" -o "$execlog"
-          bazel run //bazel:execution_log_compact_to_csv \
-            $([[ "$(uname)" == "Linux" ]] && echo '--repository_cache=/cache/bazel') -- \
+          execlog2csv \
             --input_execlog="$execlog" \
             --exclude ${excludes[*]}
         done > '${{ steps.metrics-tmpdir.outputs.dir }}/execlogs.csv'
