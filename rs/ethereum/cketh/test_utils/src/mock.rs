@@ -148,10 +148,9 @@ impl JsonRpcRequestMatcher {
 
 impl Matcher for JsonRpcRequestMatcher {
     fn matches(&self, context: &CanisterHttpRequestContext) -> bool {
-        let has_json_content_type_header = context
-            .headers
-            .iter()
-            .any(|header| header.name == "Content-Type" && header.value == "application/json");
+        let has_json_content_type_header = context.headers.iter().any(|header| {
+            header.name.to_lowercase() == "content-type" && header.value == "application/json"
+        });
         let has_expected_max_response_bytes =
             match (self.max_response_bytes, context.max_response_bytes) {
                 (Some(expected), Some(actual)) => expected == actual.get(),
