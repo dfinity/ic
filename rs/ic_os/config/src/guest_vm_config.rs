@@ -153,6 +153,8 @@ fn make_bootstrap_options(
 
     FIRST I WILL MAKE THIS CHANGE
 
+    then I will move on the secod change
+
     bootstrap_options.ipv6_address = Some(guestos_ipv6_config.address.clone());
     bootstrap_options.ipv6_gateway = Some(guestos_ipv6_config.gateway.to_string());
 
