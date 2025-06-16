@@ -1028,10 +1028,10 @@ fn encoded_block_bytes_to_flat_transaction(
 ///
 /// This function checks if index 0 exists (fast path), and if not,
 /// searches for the last block associated with the account.
-fn get_oldest_tx_id(account_id: AccountIdentifier) -> Option<BlockIndex> {
-    let key_for_index_0 = account_identifier_block_ids_key(account_id, 0);
-
-    with_account_identifier_block_ids(|map| {
+fn get_oldest_tx_id(account: Account) -> Option<BlockIndex64> {
+    let key_for_index_0 = account_block_ids_key(account, 0);
+    let hash = account_sha256(account);
+    with_account_block_ids(|map| {
         // Fast path: index 0 exists for this account
         if map.get(&key_for_index_0).is_some() {
             return Some(0);
@@ -1040,7 +1040,7 @@ fn get_oldest_tx_id(account_id: AccountIdentifier) -> Option<BlockIndex> {
         // Scan in reverse and find the last key for this account
         map.range(..=key_for_index_0)
             .rev()
-            .find(|(key, _)| key.0 == account_id.hash)
+            .find(|(key, _)| key.0 == hash)
             .map(|(key, _)| key.1 .0)
     })
 }
