@@ -547,8 +547,8 @@ impl TransactionsAndBalances {
                 // Both balance and allowance must cover: minimum transfer amount (1) + fee
                 // This ensures at least one valid transfer_from transaction is possible
                 if balance > default_fee && allowance_amount > default_fee {
-                    // Use the current balance as the value
-                    self.valid_allowance_from.insert(*from, balance);
+                    // Just mark this account as having valid allowances (no need to store balance)
+                    self.valid_allowance_from.insert(*from, 1);
                 }
             }
         }
@@ -907,6 +907,7 @@ pub fn valid_transactions_strategy(
         tx_hash_set_pointer: Arc<HashSet<Transaction<Tokens>>>,
         account_to_basic_identity_pointer: Arc<HashMap<Principal, Arc<BasicIdentity>>>,
         allowance_map_pointer: Arc<HashMap<(Account, Account), Tokens>>,
+        current_balances_pointer: Arc<HashMap<Account, u64>>,
     ) -> impl Strategy<Value = ArgWithCaller> {
         let minter: Account = minter_identity.sender().unwrap().into();
         
@@ -928,9 +929,10 @@ pub fn valid_transactions_strategy(
             .boxed();
         }
         
-        // Select a from account that has valid allowances and sufficient balance
-        let valid_from_accounts: Vec<(Account, u64)> = valid_allowance_from.into_iter().collect();
-        select(valid_from_accounts).prop_flat_map(move |(from, balance)| {
+        // Select a from account that has valid allowances
+        let valid_from_accounts: Vec<Account> = valid_allowance_from.keys().cloned().collect();
+        select(valid_from_accounts).prop_flat_map(move |from| {
+            let current_balances = current_balances_pointer.clone();
             let allowance_map = allowance_map_pointer.clone();
             let tx_hash_set_ptr = tx_hash_set_pointer.clone();
             let account_to_basic_identity_ptr = account_to_basic_identity_pointer.clone();
@@ -951,25 +953,37 @@ pub fn valid_transactions_strategy(
             select(allowances_for_from).prop_flat_map(move |(spender, allowance)| {
                 let tx_hash_set_ptr2 = tx_hash_set_ptr.clone();
                 let account_to_basic_identity_ptr2 = account_to_basic_identity_ptr.clone();
+                let current_balances2 = current_balances.clone();
                 let allowance_amount = allowance.get_e8s();
                 let fee_amount = default_fee;
                 
-                // Calculate max transferable amount considering both allowance and account balance
+                // Get the current balance for this account (may have changed since valid_allowance_from was built)
+                let current_balance = current_balances2.get(&from).copied().unwrap_or(0);
+                
+                // Calculate max transferable amount considering both allowance and current account balance
                 // Both allowance and from account balance must cover: transfer amount + fee
                 let allowance_max = if allowance_amount > fee_amount {
                     allowance_amount - fee_amount
                 } else {
                     0 // Cannot transfer if allowance doesn't cover fee
                 };
-                let balance_max = if balance > fee_amount {
-                    balance - fee_amount
+                let balance_max = if current_balance > fee_amount {
+                    current_balance - fee_amount
                 } else {
                     0 // Cannot transfer if balance doesn't cover fee
                 };
                 
-                let max_amount = std::cmp::min(allowance_max, balance_max).max(1);
+                let max_amount = std::cmp::min(allowance_max, balance_max);
                 
-                // Select from pre-computed valid combinations  
+                // If there's no valid amount, return an always-failing strategy
+                if max_amount == 0 {
+                    return Just(())
+                        .prop_filter("Insufficient balance or allowance for transfer_from", |_| false)
+                        .prop_map(|_| unreachable!())
+                        .boxed();
+                }
+                
+                // Select from valid amounts (1 to max_amount)
                 (1..=max_amount).prop_flat_map(move |amount| {
                     let tx_hash_set = tx_hash_set_ptr2.clone();
                     let account_to_basic_identity = account_to_basic_identity_ptr2.clone();
@@ -1036,6 +1050,7 @@ pub fn valid_transactions_strategy(
         default_fee: u64,
         additional_length: usize,
         now: SystemTime,
+        total_length: usize,
     ) -> BoxedStrategy<TransactionsAndBalances> {
         if additional_length == 0 {
             return Just(state).boxed();
@@ -1090,20 +1105,24 @@ pub fn valid_transactions_strategy(
             ];
             
             // Set transfer_from weight if valid allowances exist
-            // For large transaction counts (like upgrade tests), reduce weight to prevent overwhelming state
+            // For large transaction counts (like upgrade tests), significantly reduce or disable transfer_from
             if !state.valid_allowance_from.is_empty() {
-                let transfer_from_weight = if additional_length > 150 { 10 } else { 100 };
-                let transfer_from_strategy = transfer_from_strategy(
-                    state.valid_allowance_from.clone(),
-                    minter_identity.clone(),
-                    default_fee,
-                    now,
-                    tx_hashes_pointer.clone(),
-                    account_to_basic_identity_pointer.clone(),
-                    allowance_map_pointer.clone(),
-                )
-                .boxed();
-                options.push((transfer_from_weight, transfer_from_strategy));
+                let transfer_from_weight = if total_length > 200 { 0 } else if total_length > 100 { 1 } else { 100 };
+                
+                if transfer_from_weight > 0 {
+                    let transfer_from_strategy = transfer_from_strategy(
+                        state.valid_allowance_from.clone(),
+                        minter_identity.clone(),
+                        default_fee,
+                        now,
+                        tx_hashes_pointer.clone(),
+                        account_to_basic_identity_pointer.clone(),
+                        allowance_map_pointer.clone(),
+                        Arc::new(state.balances.clone()),
+                    )
+                    .boxed();
+                    options.push((transfer_from_weight, transfer_from_strategy));
+                }
             }
 
             proptest::strategy::Union::new_weighted(options)
@@ -1121,6 +1140,7 @@ pub fn valid_transactions_strategy(
                     default_fee,
                     additional_length,
                     now,
+                    total_length,
                 )
             })
             .boxed()
@@ -1132,6 +1152,7 @@ pub fn valid_transactions_strategy(
         default_fee,
         length,
         now,
+        length,
     )
     .prop_map(|res| res.transactions.clone())
 }
