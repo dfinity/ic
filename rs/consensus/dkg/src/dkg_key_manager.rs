@@ -5,7 +5,7 @@
 //! thread-handles.
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
 use ic_interfaces::crypto::{ErrorReproducibility, LoadTranscriptResult, NiDkgAlgorithm};
-use ic_logger::{error, info, warn, ReplicaLogger};
+use ic_logger::{debug, error, info, warn, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_types::{
     consensus::{dkg::DkgSummary, HasHeight},
@@ -264,7 +264,7 @@ impl DkgKeyManager {
             .drain()
             .partition(|(_, (deadline, _))| next_random_beacon_height >= *deadline);
         let number_of_transcripts = expired.len();
-        info!(
+        debug!(
             self.logger,
             "Waiting on {} transcripts to be loaded for height {}",
             number_of_transcripts,
@@ -287,7 +287,7 @@ impl DkgKeyManager {
             }
         }
 
-        info!(
+        debug!(
             self.logger,
             "Finished waiting on {} transcripts to be loaded for height {}",
             number_of_transcripts,
@@ -352,7 +352,7 @@ impl DkgKeyManager {
                     match &result {
                         // Key loaded successfully
                         Ok(LoadTranscriptResult::SigningKeyAvailable) => {
-                            info!(
+                            debug!(
                                 logger,
                                 "Finished loading transcript {} after {}s",
                                 dkg_id_log_msg(&dkg_id),
