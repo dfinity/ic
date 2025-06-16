@@ -50,7 +50,7 @@ jobs:
       group: ln1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
+      image: ghcr.io/dfinity/ic-build@sha256:e4862aca9dfa7e342f44cb4ba48923de4306099d26b067ee285f5e0ebe87162a
       options: >-
         -e NODE_NAME -e KUBECONFIG
         --privileged --cgroupns host
@@ -73,14 +73,6 @@ jobs:
           echo "KUBECONFIG=/tmp/kubeconfig" >> $GITHUB_ENV
         env:
           TNET_KUBECONFIG: ${{ secrets.TNET_KUBECONFIG }}
-
-      - name: Write AWS credentials
-        shell: bash
-        if: inputs.CLOUD_CREDENTIALS_CONTENT != ''
-        run: |
-          AWS_CREDS="${HOME}/.aws/credentials"
-          mkdir -p "$(dirname "${AWS_CREDS}")"
-          echo '${{ inputs.CLOUD_CREDENTIALS_CONTENT }}' >"$AWS_CREDS"
 
       - name: Run System Tests on K8s
         id: bazel-test-all
@@ -114,7 +106,7 @@ jobs:
       group: ln1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
+      image: ghcr.io/dfinity/ic-build@sha256:e4862aca9dfa7e342f44cb4ba48923de4306099d26b067ee285f5e0ebe87162a
       options: >-
         -e NODE_NAME -e KUBECONFIG --privileged --cgroupns host -v /cache:/cache
     timeout-minutes: 150
@@ -152,14 +144,6 @@ jobs:
 
           # Export to GitHub environment
           echo "TARGETS=$T" >> $GITHUB_ENV
-
-      - name: Write AWS credentials
-        shell: bash
-        if: inputs.CLOUD_CREDENTIALS_CONTENT != ''
-        run: |
-          AWS_CREDS="${HOME}/.aws/credentials"
-          mkdir -p "$(dirname "${AWS_CREDS}")"
-          echo '${{ inputs.CLOUD_CREDENTIALS_CONTENT }}' >"$AWS_CREDS"
 
       - name: Run System Tests on K8s
         id: bazel-test-all

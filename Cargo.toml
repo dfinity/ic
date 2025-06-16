@@ -30,7 +30,6 @@ members = [
     "rs/bitcoin/service",
     "rs/bitcoin/ckbtc/agent",
     "rs/bitcoin/ckbtc/minter",
-    "rs/bitcoin/ckbtc/kyt",
     "rs/bitcoin/consensus",
     "rs/bitcoin/checker",
     "rs/bitcoin/mock",
@@ -242,6 +241,7 @@ members = [
     "rs/nns/sns-wasm/protobuf_generator",
     "rs/node_rewards/canister",
     "rs/node_rewards/canister/api",
+    "rs/node_rewards/rewards_calculation",
     "rs/determinism_test",
     "rs/orchestrator",
     "rs/orchestrator/dashboard",
@@ -415,7 +415,6 @@ members = [
     "rs/tests/nns",
     "rs/tests/nns/sns",
     "rs/tests/nns/sns/lib",
-    "rs/tests/nns/ic_mainnet_nns_recovery",
     "rs/tests/nns/cycles_minting",
     "rs/tests/nns/nns_dapp",
     "rs/tests/node",
@@ -515,7 +514,7 @@ assert_matches = "1.5.0"
 async-recursion = "1.0.5"
 async-stream = "0.3.6"
 async-trait = "0.1.83"
-axum = "0.8.4"
+axum = { version = "0.8.4", features = ["ws"] }
 axum-extra = { version = "0.10.1", features = ["typed-header"] }
 axum-server = { version = "0.7.2", features = ["tls-rustls-no-provider"] }
 backoff = "0.4"
@@ -548,7 +547,7 @@ curve25519-dalek = { version = "4.1.3", features = [
     "precomputed-tables",
 ] }
 derive-new = "0.7.0"
-dfx-core = { version = "0.1.3" }
+dfx-core = { version = "0.1.4" }
 ed25519-dalek = { version = "2.1.1", features = [
     "std",
     "zeroize",
@@ -563,6 +562,7 @@ flate2 = "1.0.31"
 futures = "0.3.31"
 futures-util = "0.3.31"
 getrandom = { version = "0.2", features = ["custom"] }
+goldenfile = "1.8.0"
 hex = { version = "0.4.3", features = ["serde"] }
 http = "1.3.1"
 http-body = "1.0.1"
@@ -579,8 +579,8 @@ hyper-rustls = { version = "0.27.5", default-features = false, features = [
 ] }
 hyper-socks2 = { version = "0.9.1", default-features = false }
 hyper-util = { version = "0.1.12", features = ["full"] }
-ic-agent = { version = "0.39.2", features = ["pem", "ring"] }
-ic-bn-lib = { git = "https://github.com/dfinity/ic-bn-lib", rev = "ec4a6b4abab2d94e09c4d5fee2d57d7bb1260835", features = [
+ic-agent = { version = "0.40.1", features = ["pem", "ring"] }
+ic-bn-lib = { git = "https://github.com/dfinity/ic-bn-lib", rev = "620fb49a238b3d8a2caa436b5742ed7ca7012098", features = [
     "acme_alpn",
 ] }
 ic-btc-interface = "0.2.2"
@@ -590,15 +590,15 @@ ic-cdk = "0.17.2"
 ic-cdk-timers = "0.11.0"
 ic-certificate-verification = "3"
 ic-certification = "3"
-ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "ed8539d9edd45b97148c46b8020fa6d7ebd48c07", default-features = false }
+ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "1d087ad6b8e477159e0ce68b30b6cf09d7ce4938", default-features = false }
 ic-http-certification = "3.0.3"
-ic-http-gateway = "0.2.0"
+ic-http-gateway = "0.3.0"
 ic-management-canister-types = "0.3.0"
 ic-response-verification = "3"
 ic-sha3 = "1.0.0"
 ic-stable-structures = "0.6.8"
-ic-transport-types = { version = "0.39.2" }
-ic-utils = { version = "0.39", features = ["raw"] }
+ic-transport-types = { version = "0.40.1" }
+ic-utils = { version = "0.40.1", features = ["raw"] }
 ic-vetkeys = { git = "https://github.com/dfinity/vetkeys", rev = "5885675b6ccb5269cfac9740dc3da6f14f75347f" }
 ic_bls12_381 = { version = "0.10.1", default-features = false, features = [
     "groups",

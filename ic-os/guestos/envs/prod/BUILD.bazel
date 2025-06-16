@@ -31,8 +31,11 @@ file_size_check(
 # Export checksums & build artifacts
 # (image is used for GuestOS upgrades)
 artifact_bundle(
-    name = "bundle",
-    inputs = [":prod"],
+    name = "bundle-update",
+    inputs = [
+        icos_images.update_image,
+        icos_images.update_image_test,
+    ],
     prefix = "guest-os/update-img",
     visibility = ["//visibility:public"],
 )

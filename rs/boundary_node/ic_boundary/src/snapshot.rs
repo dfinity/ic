@@ -12,6 +12,7 @@ use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use candid::Principal;
 use ic_bn_lib::tasks::Run;
+use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
 use ic_registry_client::client::{RegistryClient, ThresholdSigPublicKey};
 use ic_registry_client_helpers::{
     api_boundary_node::ApiBoundaryNodeRegistry,
@@ -34,9 +35,6 @@ use crate::{
     metrics::{MetricParamsSnapshot, WithMetricsSnapshot},
     routes::RequestType,
 };
-
-// Some magical prefix that the public key should have
-const DER_PREFIX: &[u8; 37] = b"\x30\x81\x82\x30\x1d\x06\x0d\x2b\x06\x01\x04\x01\x82\xdc\x7c\x05\x03\x01\x02\x01\x06\x0c\x2b\x06\x01\x04\x01\x82\xdc\x7c\x05\x03\x02\x01\x03\x61\x00";
 
 #[derive(Clone, Debug)]
 pub struct Node {
@@ -363,13 +361,13 @@ impl Snapshotter {
             .collect::<Result<Vec<Subnet>, Error>>()
             .context("unable to get subnets")?;
 
-        let mut nns_key_with_prefix = DER_PREFIX.to_vec();
-        nns_key_with_prefix.extend_from_slice(&nns_public_key.into_bytes());
+        let der_encoded_nns_key = threshold_sig_public_key_to_der(nns_public_key)
+            .context("failed to convert NNS key to DER")?;
 
         Ok(RegistrySnapshot {
             version: version.get(),
             timestamp,
-            nns_public_key: nns_key_with_prefix,
+            nns_public_key: der_encoded_nns_key,
             subnets,
             nodes: nodes_map,
             api_bns,

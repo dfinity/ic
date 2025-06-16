@@ -2790,6 +2790,20 @@ fn can_create_canister_with_specified_id() {
         create_canister_with_specified_id(&mut test, &canister, Some(specified_id.get()));
 
     assert_eq!(specified_id, new_canister.get_canister_id());
+
+    // creating a canister with the same `specified_id` again is an error
+    let args = Encode!(&ProvisionalCreateCanisterWithCyclesArgs::new(
+        None,
+        Some(specified_id.into()),
+    ))
+    .unwrap();
+    let err = test
+        .subnet_message("provisional_create_canister_with_cycles", args)
+        .unwrap_err();
+    assert_eq!(ErrorCode::CanisterAlreadyInstalled, err.code());
+    assert!(err
+        .description()
+        .contains(&format!("Canister {} is already installed.", specified_id)));
 }
 
 // Returns CanisterId by formula 'range_start + (range_end - range_start) * percentile'
@@ -2846,6 +2860,58 @@ fn create_multiple_canisters_with_specified_id() {
         inc(first_canister_without_specified_id.get_canister_id()),
         second_canister_without_specified_id.get_canister_id()
     );
+}
+
+#[test]
+fn create_canister_with_invalid_specified_id() {
+    // First determine an invalid `specified_id` by creating a canister on a test instance
+    // whose canister ID belongs to the canister allocation ranges of the test instance.
+    let mut test = ExecutionTestBuilder::new()
+        .with_provisional_whitelist_all()
+        .build_with_routing_table_for_specified_ids();
+    let _proxy_canister_id = test.universal_canister().unwrap();
+    let specified_id = test.universal_canister().unwrap();
+    drop(test);
+
+    // Now create a fresh test instance with the same topology.
+    let mut test = ExecutionTestBuilder::new()
+        .with_provisional_whitelist_all()
+        .build_with_routing_table_for_specified_ids();
+
+    // Using the invalid `specified_id` should result in an error.
+    let args = Encode!(&ProvisionalCreateCanisterWithCyclesArgs::new(
+        None,
+        Some(specified_id.into()),
+    ))
+    .unwrap();
+    let expected_err = format!("The `specified_id` {} is invalid because it belongs to the canister allocation ranges of the test environment.\nUse a `specified_id` that matches a canister ID on the ICP mainnet and a test environment that supports canister creation with `specified_id` (e.g., PocketIC).", specified_id);
+
+    // Both in an ingress message to create a canister
+    let err = test
+        .subnet_message("provisional_create_canister_with_cycles", args.clone())
+        .unwrap_err();
+    assert_eq!(ErrorCode::InvalidManagementPayload, err.code());
+    assert_eq!(err.description(), expected_err,);
+
+    // as well as in an inter-canister call to create a canister.
+    let create_canister = wasm()
+        .call_simple(
+            ic00::IC_00,
+            Method::ProvisionalCreateCanisterWithCycles,
+            call_args()
+                .other_side(args)
+                .on_reject(wasm().reject_message().reject()),
+        )
+        .build();
+
+    let proxy_canister_id = test.universal_canister().unwrap();
+    let result = test
+        .ingress(proxy_canister_id, "update", create_canister)
+        .unwrap();
+    match result {
+        WasmResult::Reply(bytes) => panic!("Unexpected reply: {:?}", bytes),
+        WasmResult::Reject(err) => assert_eq!(err, expected_err),
+    };
 }
 
 #[test]

@@ -98,7 +98,7 @@ use wslpath::windows_to_wsl;
 pub mod common;
 pub mod nonblocking;
 
-pub const EXPECTED_SERVER_VERSION: &str = "9.0.2";
+pub const EXPECTED_SERVER_VERSION: &str = "9.0.3";
 
 // the default timeout of a PocketIC operation
 const DEFAULT_MAX_REQUEST_TIME_MS: u64 = 300_000;
@@ -1554,6 +1554,7 @@ pub enum ErrorCode {
     CanisterRejectedMessage = 406,
     UnknownManagementMessage = 407,
     InvalidManagementPayload = 408,
+    CanisterSnapshotImmutable = 409,
     // 5xx -- `RejectCode::CanisterError`
     CanisterTrapped = 502,
     CanisterCalledTrap = 503,
@@ -1623,6 +1624,7 @@ impl TryFrom<u64> for ErrorCode {
             406 => Ok(ErrorCode::CanisterRejectedMessage),
             407 => Ok(ErrorCode::UnknownManagementMessage),
             408 => Ok(ErrorCode::InvalidManagementPayload),
+            409 => Ok(ErrorCode::CanisterSnapshotImmutable),
             // 5xx -- `RejectCode::CanisterError`
             502 => Ok(ErrorCode::CanisterTrapped),
             503 => Ok(ErrorCode::CanisterCalledTrap),

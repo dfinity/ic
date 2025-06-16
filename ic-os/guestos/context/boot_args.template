@@ -1,7 +1,0 @@
-dnl We substitute EXTRA_BOOT_ARGS from the extra_boot_args target at build time in ic-os/defs.bzl using m4
-dnl When changing the boot args, don't forget to update the fallback in ../grub.cfg
-
-# Kernel cmdline parameters for launching the GuestOS.
-# BOOT_ARGS_A targets partition set "A" while BOOT_ARGS_B targets partition set "B"
-BOOT_ARGS_A="root=/dev/vda5 console=ttyS0 nomodeset dfinity.system=A EXTRA_BOOT_ARGS"
-BOOT_ARGS_B="root=/dev/vda8 console=ttyS0 nomodeset dfinity.system=B EXTRA_BOOT_ARGS"
