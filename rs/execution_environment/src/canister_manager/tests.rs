@@ -6937,7 +6937,7 @@ fn cannot_rename_from_non_nns() {
     let (env1, env2) = two_subnets_simple();
 
     // Create a canister on each of the two subnets.
-    let canister_id1 = env1
+    let canister_id2 = env2
         .install_canister_with_cycles(
             UNIVERSAL_CANISTER_WASM.to_vec(),
             vec![],
@@ -6945,11 +6945,15 @@ fn cannot_rename_from_non_nns() {
             INITIAL_CYCLES_BALANCE,
         )
         .unwrap();
-    let canister_id2 = env2
+    let canister_id1 = env1
         .install_canister_with_cycles(
             UNIVERSAL_CANISTER_WASM.to_vec(),
             vec![],
-            None,
+            Some(
+                CanisterSettingsArgsBuilder::new()
+                    .with_controllers(vec![PrincipalId::new_anonymous(), canister_id2.into()])
+                    .build(),
+            ),
             INITIAL_CYCLES_BALANCE,
         )
         .unwrap();
@@ -6994,4 +6998,84 @@ fn cannot_rename_from_non_nns() {
     let wasm_result = env2.await_ingress(msg_id, MAX_TICKS).unwrap();
 
     assert_matches!(wasm_result, WasmResult::Reject(r) if r.contains("It can only be called by NNS."));
+}
+
+#[test]
+fn cannot_rename_if_target_exists() {
+    const INITIAL_CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
+    const MAX_TICKS: usize = 100;
+    let user_id = user_test_id(1).get();
+
+    let (env1, env2) = two_subnets_simple();
+
+    // Create a canister on each of the two subnets.
+    let canister_id1 = env1
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            vec![],
+            None,
+            INITIAL_CYCLES_BALANCE,
+        )
+        .unwrap();
+    let canister_id2 = env2
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            vec![],
+            Some(
+                CanisterSettingsArgsBuilder::new()
+                    .with_controllers(vec![PrincipalId::new_anonymous(), canister_id1.into()])
+                    .build(),
+            ),
+            INITIAL_CYCLES_BALANCE,
+        )
+        .unwrap();
+
+    // Install target canister id.
+    let new_canister_id = env2
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            vec![],
+            None,
+            INITIAL_CYCLES_BALANCE,
+        )
+        .unwrap();
+
+    env2.stop_canister(canister_id2).unwrap();
+
+    let arguments = RenameCanisterArgs {
+        canister_id: canister_id2.into(),
+        rename_to: RenameToArgs {
+            canister_id: new_canister_id.into(),
+            version: 0,
+            total_num_changes: 0,
+        },
+        sender_canister_version: 2,
+    };
+
+    let msg_id = env1
+        .submit_ingress_as(
+            user_id,
+            canister_id1,
+            "update",
+            wasm()
+                .call_simple(
+                    IC_00,
+                    Method::RenameCanister,
+                    call_args()
+                        .other_side(arguments.encode())
+                        .on_reject(PayloadBuilder::default().reject_message().reject().build()),
+                )
+                .build(),
+        )
+        .unwrap();
+
+    env1.execute_round();
+    env2.execute_round();
+    env1.execute_round();
+    env2.execute_round();
+    env1.execute_round();
+
+    let wasm_result = env1.await_ingress(msg_id, MAX_TICKS).unwrap();
+
+    assert_matches!(wasm_result, WasmResult::Reject(r) if r.contains("is already installed"));
 }
