@@ -608,7 +608,7 @@ mod tests {
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
         consensus::{
-            dkg::{self, DkgPayload, DkgSummary},
+            dkg::{self, DkgDataPayload, DkgPayload},
             HasHeight, HasVersion,
         },
         crypto::CryptoHash,
@@ -631,7 +631,6 @@ mod tests {
                 time_source,
                 replica_config,
                 state_manager,
-                dkg_pool,
                 idkg_pool,
                 ..
             } = dependencies_with_subnet_params(
@@ -702,8 +701,7 @@ mod tests {
             let start_hash = start.content.get_hash();
             let expected_payloads = PoolReader::new(&pool)
                 .get_payloads_from_height(certified_height.increment(), start.as_ref().clone());
-            let returned_payload =
-                DkgPayload::Data(dkg::DkgDataPayload::new_empty(Height::from(0)));
+            let returned_payload = DkgPayload::Data(DkgDataPayload::new_empty(Height::from(0)));
             let pool_reader = PoolReader::new(&pool);
             let expected_time = expected_payloads[0].1
                 + get_block_maker_delay(
@@ -993,7 +991,6 @@ mod tests {
                 replica_config,
                 state_manager,
                 registry_data_provider,
-                dkg_pool,
                 idkg_pool,
                 ..
             } = dependencies_with_subnet_params(pool_config, subnet_id, vec![(1, record.clone())]);
@@ -1008,10 +1005,7 @@ mod tests {
                 replica_config.subnet_id,
             ));
 
-            let mut dkg_payload_builder = MockDkgPayloadBuilder::new();
-            // dkg_payload_builder
-            //     .expect_create_payload()
-            //     .return_const(DkgPayload::default());
+            let dkg_payload_builder = MockDkgPayloadBuilder::new();
 
             let mut block_maker = BlockMaker::new(
                 Arc::clone(&time_source) as Arc<_>,
