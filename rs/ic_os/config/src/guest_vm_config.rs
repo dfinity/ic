@@ -151,6 +151,9 @@ fn make_bootstrap_options(
             Some(PathBuf::from("/boot/config/node_operator_private_key.pem"));
     }
 
+    FIRST I WILL MAKE THIS CHANGE and I was asked to change this too
+    and this too
+
     bootstrap_options.ipv6_address = Some(guestos_ipv6_config.address.clone());
     bootstrap_options.ipv6_gateway = Some(guestos_ipv6_config.gateway.to_string());
 
