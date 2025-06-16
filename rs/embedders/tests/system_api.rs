@@ -3,7 +3,7 @@ use ic_config::{embedders::Config as EmbeddersConfig, subnet_config::SchedulerCo
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::wasmtime_embedder::system_api::{
     sandbox_safe_system_state::SandboxSafeSystemState, ApiType, DefaultOutOfInstructionsHandler,
-    NonReplicatedQueryKind, SystemApiImpl,
+    SystemApiImpl,
 };
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::{
@@ -1149,7 +1149,6 @@ fn data_certificate_copy() {
             subnet_test_id(1),
             vec![],
             Some(vec![1, 2, 3, 4, 5, 6]),
-            NonReplicatedQueryKind::Pure,
         ),
         &system_state,
         cycles_account_manager,
