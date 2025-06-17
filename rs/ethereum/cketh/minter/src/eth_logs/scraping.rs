@@ -125,5 +125,5 @@ fn erc20_smart_contracts_addresses_as_topics(state: &State) -> impl Iterator<Ite
     state
         .ckerc20_tokens
         .alt_keys()
-        .map(|address| Hex32::from(Into::<[u8; 32]>::into(address)))
+        .map(|address| Hex32::from(<[u8; 32]>::from(address)))
 }
