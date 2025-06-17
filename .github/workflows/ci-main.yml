@@ -109,7 +109,7 @@ jobs:
     container:
       image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
       options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
+        -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 120
     runs-on:
       labels: dind-large
@@ -288,7 +288,7 @@ jobs:
     container:
       image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
       options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
+        -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 90
     needs: [bazel-test-arm64-linux, bazel-test-arm64-darwin, config]
     if: ${{ needs.config.outputs.release_build == 'true' }} # GHA output quirk, 'true' is a string
@@ -339,7 +339,7 @@ jobs:
     container:
       image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
       options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
+        -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 90
     steps:
       - name: Checkout
@@ -360,7 +360,7 @@ jobs:
     container:
       image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
       options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
+        -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 90
     steps:
       - name: Checkout
@@ -414,7 +414,7 @@ jobs:
     container:
       image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
       options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
+        -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 90
     # keep options from dind-large-setup but run on dind-small-setup
     runs-on:

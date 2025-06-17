@@ -10477,7 +10477,7 @@ dependencies = [
 
 [[package]]
 name = "ic-metrics-assert"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-trait",
  "candid",
