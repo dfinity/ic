@@ -1,6 +1,8 @@
-use crate::extensions::{validate_extension_wasm, ValidatedChunkedCanisterWasm, ValidatedRegisterExtension};
+use crate::extensions::{validate_extension_wasm, ValidatedRegisterExtension};
 use crate::icrc_ledger_helper::ICRCLedgerHelper;
-use crate::pb::v1::{Metrics, RegisterExtension};
+use crate::pb::v1::{
+    precise_value, ExtensionInit, Metrics, PreciseMap, PreciseValue, RegisterExtension,
+};
 use crate::{
     canister_control::{
         get_canister_id, perform_execute_generic_nervous_system_function_call,
@@ -84,7 +86,7 @@ use crate::{
     types::{is_registered_function_id, Environment, HeapGrowthPotential, LedgerUpdateLock, Wasm},
 };
 
-use candid::{Decode, Encode};
+use candid::{Decode, Encode, Nat};
 #[cfg(not(target_arch = "wasm32"))]
 use futures::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
@@ -120,7 +122,9 @@ use lazy_static::lazy_static;
 use maplit::{btreemap, hashset};
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
-use sns_treasury_manager::{Asset, TreasuryManagerArg, TreasuryManagerInit};
+use sns_treasury_manager::{
+    Allowance, Asset, DepositRequest, TreasuryManagerArg, TreasuryManagerInit,
+};
 use std::{
     cell::RefCell,
     cmp::Ordering,
@@ -2120,8 +2124,7 @@ impl Governance {
                     .await
             }
             Action::RegisterExtension(register_extension) => {
-                self.perform_register_extension(register_extension)
-                    .await
+                self.perform_register_extension(register_extension).await
             }
             Action::DeregisterDappCanisters(deregister_dapp_canisters) => {
                 self.perform_deregister_dapp_canisters(deregister_dapp_canisters)
@@ -2255,80 +2258,39 @@ impl Governance {
     ) -> Result<(), GovernanceError> {
         // Step 0. Validate the RegisterExtension proposal.
         let ValidatedRegisterExtension {
-            chunked_canister_wasm: ValidatedChunkedCanisterWasm {
-                wasm_module_hash,
-                store_canister_id,
-                chunk_hashes_list,
-            },
+            wasm,
             extension_init,
-        } = register_extension.try_into()
-            .map_err(|err| {
-                GovernanceError::new_with_message(
-                    ErrorType::InvalidProposal,
-                    format!("Invalid RegisterExtension: {err:?}"),
-                )
-            })?;
+        } = register_extension.try_into().map_err(|err| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!("Invalid RegisterExtension: {err:?}"),
+            )
+        })?;
 
-        let extension_spec = validate_extension_wasm(&wasm_module_hash)
-            .map_err(|err| {
-                GovernanceError::new_with_message(
-                    ErrorType::InvalidProposal,
-                    format!("Invalid extension wasm: {err:?}"),
-                )
-            })?;
+        let Wasm::Chunked {
+            wasm_module_hash,
+            store_canister_id,
+            chunk_hashes_list,
+        } = wasm
+        else {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                "RegisterExtension proposal must contain a chunked wasm module.",
+            ));
+        };
+
+        let extension_spec = validate_extension_wasm(&wasm_module_hash).map_err(|err| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!("Invalid extension wasm: {err:?}"),
+            )
+        })?;
 
         // Step 1. Register the extension as a dapp canister.
         self.perform_register_dapp_canisters(RegisterDappCanisters {
             canister_ids: vec![store_canister_id.get()],
-        }).await?;
-
-        // Step 2. Perform pre-installation actions.
-        // {
-        //     let amount_icp_e8s = 
-
-        //     self
-        //         .nns_ledger
-        //         .transfer_funds(
-        //             transfer.amount_e8s,
-        //             NNS_DEFAULT_TRANSFER_FEE.get_e8s(),
-        //             None,
-        //             to,
-        //             transfer.memo.unwrap_or(0),
-        //         )
-        //         .await
-        //         .map(|_| ())
-        //         .map_err(|e| {
-        //             GovernanceError::new_with_message(
-        //                 ErrorType::External,
-        //                 format!("Error making ICP treasury transfer: {}", e),
-        //             )
-        //         })?;
-
-        //     {
-        //         let transaction_fee_e8s = self.transaction_fee_e8s_or_panic();
-        //         // See ic_sns_init::distributions::FractionalDeveloperVotingPower.insert_treasury_accounts
-        //         let treasury_subaccount = compute_distribution_subaccount_bytes(
-        //             self.env.canister_id().get(),
-        //             TREASURY_SUBACCOUNT_NONCE,
-        //         );
-        //         self.ledger
-        //             .transfer_funds(
-        //                 transfer.amount_e8s,
-        //                 transaction_fee_e8s,
-        //                 Some(treasury_subaccount),
-        //                 to,
-        //                 transfer.memo.unwrap_or(0),
-        //             )
-        //             .await
-        //             .map(|_| ())
-        //             .map_err(|e| {
-        //                 GovernanceError::new_with_message(
-        //                     ErrorType::External,
-        //                     format!("Error making SNS Token treasury transfer: {}", e),
-        //                 )
-        //             })
-        //     }
-        // }
+        })
+        .await?;
 
         // Step 2. Install the code.
         let sns_token = Asset::new_token("SNS", self.ledger.canister_id().get()).unwrap();
@@ -2346,10 +2308,152 @@ impl Governance {
             },
             arg,
             CanisterInstallMode::Install,
-        ).await?;
+        )
+        .await?;
+
+        // Step 2. Perform pre-installation actions.
+        let (sns_token_allowance_e8s, icp_token_allowance_e8s) = if let Some(ExtensionInit {
+            value:
+                Some(PreciseValue {
+                    precise_value: Some(precise_value::PreciseValue::Map(PreciseMap { mut map })),
+                }),
+        }) = extension_init
+        {
+            if map.len() != 2 {
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    "ExtensionInit must contain exactly two entries in the map.",
+                ));
+            }
+
+            let icp_amount_e8s = map
+                .remove("treasury_allocation_icp_e8s")
+                .and_then(|v| {
+                    if let PreciseValue {
+                        precise_value: Some(precise_value::PreciseValue::Nat(amount_e8s)),
+                    } = v
+                    {
+                        Some(amount_e8s)
+                    } else {
+                        None
+                    }
+                })
+                .ok_or_else(|| {
+                    GovernanceError::new_with_message(
+                        ErrorType::InvalidProposal,
+                        "ExtensionInit must contain an ICP allowance.",
+                    )
+                })?;
+
+            let sns_amount_e8s = map
+                .remove("treasury_allocation_sns_e8s")
+                .and_then(|v| {
+                    if let PreciseValue {
+                        precise_value: Some(precise_value::PreciseValue::Nat(amount_e8s)),
+                    } = v
+                    {
+                        Some(amount_e8s)
+                    } else {
+                        None
+                    }
+                })
+                .ok_or_else(|| {
+                    GovernanceError::new_with_message(
+                        ErrorType::InvalidProposal,
+                        "ExtensionInit must contain an ICP allowance.",
+                    )
+                })?;
+
+            let to = Account {
+                owner: store_canister_id.get().0,
+                subaccount: None,
+            };
+
+            self.nns_ledger
+                .transfer_funds(
+                    icp_amount_e8s,
+                    NNS_DEFAULT_TRANSFER_FEE.get_e8s(),
+                    None,
+                    to,
+                    1234, // TODO
+                )
+                .await
+                .map(|_| ())
+                .map_err(|e| {
+                    GovernanceError::new_with_message(
+                        ErrorType::External,
+                        format!("Error making ICP treasury transfer: {}", e),
+                    )
+                })?;
+
+            {
+                let transaction_fee_e8s = self.transaction_fee_e8s_or_panic();
+                // See ic_sns_init::distributions::FractionalDeveloperVotingPower.insert_treasury_accounts
+                let treasury_subaccount = compute_distribution_subaccount_bytes(
+                    self.env.canister_id().get(),
+                    TREASURY_SUBACCOUNT_NONCE,
+                );
+                self.ledger
+                    .transfer_funds(
+                        sns_amount_e8s,
+                        transaction_fee_e8s,
+                        Some(treasury_subaccount),
+                        to,
+                        1234, // TODO
+                    )
+                    .await
+                    .map(|_| ())
+                    .map_err(|e| {
+                        GovernanceError::new_with_message(
+                            ErrorType::External,
+                            format!("Error making SNS Token treasury transfer: {}", e),
+                        )
+                    })?;
+            }
+
+            (sns_amount_e8s, icp_amount_e8s)
+        } else {
+            (0, 0)
+        };
+
+        let request = DepositRequest {
+            allowances: vec![
+                Allowance {
+                    amount_decimals: Nat::from(sns_token_allowance_e8s),
+                    asset: sns_token,
+                    expected_ledger_fee_decimals: Nat::from(self.transaction_fee_e8s_or_panic()),
+                },
+                Allowance {
+                    amount_decimals: Nat::from(icp_token_allowance_e8s),
+                    asset: icp_token,
+                    expected_ledger_fee_decimals: Nat::from(NNS_DEFAULT_TRANSFER_FEE.get_e8s()),
+                },
+            ],
+        };
+
+        let arg = candid::encode_one(&request).map_err(|err| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!("Could not encode DepositRequest: {err:?}"),
+            )
+        })?;
+
+        // self.env
+        //     .call_canister(
+        //         store_canister_id,
+        //         "deposit",
+        //         arg,
+        //     )
+        //     .await
+        //     .map_err(|err| {
+        //         GovernanceError::new_with_message(
+        //             ErrorType::External,
+        //             format!("TreasuryManager.deposit call failed: {err:?}"),
+        //         )
+        //     })?;
 
         Ok(())
-    }   
+    }
 
     /// Registers a list of Dapp canister ids in the root canister.
     async fn perform_register_dapp_canisters(

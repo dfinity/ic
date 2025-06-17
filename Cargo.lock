@@ -12787,6 +12787,7 @@ dependencies = [
  "itertools 0.12.1",
  "json-patch",
  "lazy_static",
+ "maplit",
  "pretty_assertions",
  "serde",
  "serde_cbor",

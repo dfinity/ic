@@ -20,11 +20,12 @@ use ic_nns_constants::CYCLES_LEDGER_CANISTER_ID;
 use ic_sns_governance_api::pb::v1::{
     get_proposal_response,
     proposal::{self, Action},
-    ChunkedCanisterWasm, ExtensionInit, Proposal, ProposalData, ProposalId, RegisterExtension,
-    UpgradeSnsControlledCanister,
+    ChunkedCanisterWasm, ExtensionInit, PreciseValue, Proposal, ProposalData, ProposalId,
+    RegisterExtension, UpgradeSnsControlledCanister,
 };
 use ic_wasm::{metadata, utils::parse_wasm};
 use itertools::{Either, Itertools};
+use maplit::btreemap;
 use serde::Deserialize;
 use std::{
     collections::BTreeSet,
@@ -54,6 +55,8 @@ pub struct RegisterExtensionArgs {
 
     pub sns_root_canister_id: CanisterId,
 
+    pub fiduciary_subnet_id: Option<PrincipalId>,
+
     /// Path to a ICP WASM module file (may be gzipped).
     #[clap(long)]
     pub wasm_path: PathBuf,
@@ -65,6 +68,9 @@ pub struct RegisterExtensionArgs {
     /// Human-readable text explaining why this upgrade is being done (may be markdown).
     #[clap(long)]
     pub summary: String,
+
+    pub treasury_allocation_icp_e8s: Option<u64>,
+    pub treasury_allocation_sns_e8s: Option<u64>,
 }
 
 pub struct Wasm {
@@ -196,19 +202,21 @@ pub fn validate_candid_arg_for_wasm(wasm: &Wasm, args: Option<String>) -> Result
 /// Returns the ID of the newly created canister in the Ok result.
 pub async fn create_extension_canister<C: CallCanisters>(
     agent: &C,
+    fiduciary_subnet_id: Option<PrincipalId>,
     controllers: Vec<PrincipalId>,
     cycles_amount: u128,
     name: &str,
 ) -> Result<CanisterId> {
-    // This is expected to be `None` if we're running against a local replica.
-    let subnet_selection = Some(SubnetSelection::Subnet {
-        subnet: SubnetId::new(
-            PrincipalId::from_str(
-                "pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt45d-h3h6c-q3mxf-vpeq5-fk5o7-yae",
-            )
-            .unwrap(),
-        ),
-    });
+    let subnet = if let Some(subnet) = fiduciary_subnet_id {
+        subnet
+    } else {
+        PrincipalId::from_str("pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt45d-h3h6c-q3mxf-vpeq5-fk5o7-yae")
+            .unwrap()
+    };
+
+    let subnet = SubnetId::new(subnet);
+
+    let subnet_selection = Some(SubnetSelection::Subnet { subnet });
 
     let canister_id = cycles_ledger_create_canister(
         agent,
@@ -252,9 +260,10 @@ impl<E: std::error::Error> From<E> for UpgradeSnsControlledCanisterError<E> {
     }
 }
 
-pub struct UpgradeSnsControlledCanisterInfo {
+pub struct RegisterExtensionInfo {
     pub wasm_module_hash: Vec<u8>,
     pub proposal_id: Option<ProposalId>,
+    pub extension_canister_id: CanisterId,
 }
 
 pub async fn find_sns<C: CallCanisters>(
@@ -275,13 +284,16 @@ pub async fn find_sns<C: CallCanisters>(
 pub async fn exec<C: CallCanisters>(
     args: RegisterExtensionArgs,
     agent: &C,
-) -> Result<UpgradeSnsControlledCanisterInfo, UpgradeSnsControlledCanisterError<C::Error>> {
+) -> Result<RegisterExtensionInfo, UpgradeSnsControlledCanisterError<C::Error>> {
     let RegisterExtensionArgs {
         sns_neuron_id,
         sns_root_canister_id,
+        fiduciary_subnet_id,
         wasm_path,
         proposal_url,
         summary,
+        treasury_allocation_icp_e8s,
+        treasury_allocation_sns_e8s,
     } = args;
 
     let caller_principal = PrincipalId(agent.caller()?);
@@ -303,6 +315,7 @@ pub async fn exec<C: CallCanisters>(
     let cycles_amount = EXTENSION_CANISTER_INITIAL_CYCLES_BALANCE;
     let extension_canister_id = create_extension_canister(
         agent,
+        fiduciary_subnet_id,
         extension_canister_controllers,
         cycles_amount,
         "my-extension-canister",
@@ -352,7 +365,10 @@ pub async fn exec<C: CallCanisters>(
                 chunk_hashes_list,
             }),
             extension_init: Some(ExtensionInit {
-                value: None, // TODO
+                value: Some(PreciseValue::Map(btreemap! {
+                    "treasury_allocation_icp_e8s".to_string() => PreciseValue::Nat(treasury_allocation_icp_e8s.unwrap()),
+                    "treasury_allocation_sns_e8s".to_string() => PreciseValue::Nat(treasury_allocation_sns_e8s.unwrap()),
+                })),
             }),
         })),
     };
@@ -383,9 +399,10 @@ pub async fn exec<C: CallCanisters>(
         None
     };
 
-    Ok(UpgradeSnsControlledCanisterInfo {
+    Ok(RegisterExtensionInfo {
         wasm_module_hash: wasm.module_hash().to_vec(),
         proposal_id,
+        extension_canister_id,
     })
 }
 
