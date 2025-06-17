@@ -106,6 +106,7 @@ def image_deps(mode, malicious = False):
         deps["rootfs"].update({"//rs/ic_os/release:config_dev": "/opt/ic/bin/config:0755"})
 
     # Update recovery component_files
+    # Service files must be added to components instead of rootfs so that the service is enabled by the Dockerfile
     if "recovery" in mode:
         local_component_files.update({
             Label("//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.sh"): "/opt/ic/bin/guestos-recovery-engine.sh",
