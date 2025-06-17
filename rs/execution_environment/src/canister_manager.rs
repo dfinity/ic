@@ -24,9 +24,9 @@ use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterSnapshotDataKind,
     CanisterSnapshotDataOffset, CanisterSnapshotResponse, CanisterStatusResultV2,
     CanisterStatusType, ChunkHash, Global, GlobalTimer, Method as Ic00Method,
-    OnLowWasmMemoryHookStatus, ReadCanisterSnapshotDataResponse,
-    ReadCanisterSnapshotMetadataResponse, SnapshotSource, StoredChunksReply,
-    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs, UploadChunkReply,
+    ReadCanisterSnapshotDataResponse, ReadCanisterSnapshotMetadataResponse, SnapshotSource,
+    StoredChunksReply, UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
+    UploadChunkReply,
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_replicated_state::canister_snapshots::ValidatedSnapshotMetadata;
@@ -1801,19 +1801,16 @@ impl CanisterManager {
         if snapshot.source() == SnapshotSource::MetadataUpload {
             let hook_condition = new_canister.is_low_wasm_memory_hook_condition_satisfied();
             let snapshot_hook_status = snapshot.execution_snapshot().on_low_wasm_memory_hook_status;
-            match (hook_condition, snapshot_hook_status) {
-                (true, Some(OnLowWasmMemoryHookStatus::ConditionNotSatisfied))
-                | (false, Some(OnLowWasmMemoryHookStatus::Ready))
-                | (false, Some(OnLowWasmMemoryHookStatus::Executed)) => {
-                    return (
+            if !snapshot_hook_status
+                .map(|h| h.is_consistent_with(hook_condition))
+                .unwrap_or(true)
+            {
+                return (
                         Err(CanisterManagerError::CanisterSnapshotInconsistent {
                             message: format!("Hook status ({:?}) of uploaded snapshot is inconsistent with the canister's state (hook condition satisfied: {}).", snapshot_hook_status, hook_condition),
                         }),
                         instructions_used,
                     );
-                }
-                // all other combinations are valid
-                _ => {}
             }
         }
 

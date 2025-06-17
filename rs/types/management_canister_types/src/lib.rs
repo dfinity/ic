@@ -3874,6 +3874,18 @@ impl OnLowWasmMemoryHookStatus {
     pub fn is_ready(&self) -> bool {
         *self == Self::Ready
     }
+
+    /// Used to compare the hook status from snapshot metadata with a recently checked hook_condition
+    /// (via `CanisterState::is_low_wasm_memory_hook_condition_satisfied`).
+    pub fn is_consistent_with(&self, hook_condition: bool) -> bool {
+        match (hook_condition, self) {
+            (true, OnLowWasmMemoryHookStatus::ConditionNotSatisfied)
+            | (false, OnLowWasmMemoryHookStatus::Ready)
+            | (false, OnLowWasmMemoryHookStatus::Executed) => false,
+            // all other combinations are valid
+            _ => true,
+        }
+    }
 }
 
 impl From<&OnLowWasmMemoryHookStatus> for pb_canister_state_bits::OnLowWasmMemoryHookStatus {
