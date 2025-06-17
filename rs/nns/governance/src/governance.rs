@@ -41,7 +41,7 @@ use crate::{
             manage_neuron::{
                 self,
                 claim_or_refresh::{By, MemoAndController},
-                ClaimOrRefresh, Command, NeuronIdOrSubaccount,
+                ClaimOrRefresh, Command, Follow, NeuronIdOrSubaccount,
             },
             maturity_disbursement::Destination,
             neurons_fund_snapshot::NeuronsFundNeuronPortion as NeuronsFundNeuronPortionPb,
@@ -3284,7 +3284,9 @@ impl Governance {
         caller: &PrincipalId,
         set_following: &manage_neuron::SetFollowing,
     ) -> Result<(), GovernanceError> {
-        for request in set_following.clone().into_vec_of_follow() {
+        set_following.validate()?;
+
+        for request in Vec::<Follow>::from(set_following.clone()) {
             self.follow(id, caller, &request)?;
         }
 
@@ -4762,6 +4764,9 @@ impl Governance {
                         ),
                     ));
                 }
+            }
+            Command::SetFollowing(set_following) => {
+                set_following.validate()?;
             }
             _ => {}
         };
