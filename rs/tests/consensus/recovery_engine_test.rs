@@ -34,7 +34,7 @@ pub fn test(env: TestEnv) {
     let node = env.get_first_healthy_node_snapshot();
     slog::info!(log, "Node {} is available.", node.node_id);
 
-    std::thread::sleep(std::time::Duration::from_secs(3600)); // Sleep for 1 hour
+    std::thread::sleep(std::time::Duration::from_secs(60 * 60));
 
     // TODO: Verify successful recovery
 

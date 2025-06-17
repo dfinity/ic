@@ -257,6 +257,7 @@ system_test(
     name = "recovery_engine_test",
     tags = [
         "k8s",
+        "manual",
     ],
     target_compatible_with = ["@platforms//os:linux"],
     uses_guestos_recovery = True,
