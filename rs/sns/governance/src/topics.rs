@@ -1,3 +1,4 @@
+use crate::extensions;
 use crate::logs::ERROR;
 use crate::pb::v1::{self as pb, NervousSystemFunction};
 use crate::types::native_action_ids::{self, SET_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION};
@@ -43,12 +44,12 @@ pub struct ListTopicsResponse {
 }
 
 /// Returns an exhaustive list of topic descriptions, each corresponding to a topic.
-/// Topics may be nested within other topics, and each topic may have a list of built-in functions that are categorized within that topic.
+/// Each topic may have a list of built-in functions that are categorized within that topic.
 pub fn topic_descriptions() -> [TopicInfo<NativeFunctions>; 7] {
     use crate::types::native_action_ids::{
         ADD_GENERIC_NERVOUS_SYSTEM_FUNCTION, ADVANCE_SNS_TARGET_VERSION, DEREGISTER_DAPP_CANISTERS,
         MANAGE_DAPP_CANISTER_SETTINGS, MANAGE_LEDGER_PARAMETERS, MANAGE_NERVOUS_SYSTEM_PARAMETERS,
-        MANAGE_SNS_METADATA, MINT_SNS_TOKENS, MOTION, REGISTER_DAPP_CANISTERS, REGISTER_EXTENSION,
+        MANAGE_SNS_METADATA, MINT_SNS_TOKENS, MOTION, REGISTER_DAPP_CANISTERS,
         REMOVE_GENERIC_NERVOUS_SYSTEM_FUNCTION, TRANSFER_SNS_TREASURY_FUNDS,
         UPGRADE_SNS_CONTROLLED_CANISTER, UPGRADE_SNS_TO_NEXT_VERSION,
     };
@@ -132,7 +133,6 @@ pub fn topic_descriptions() -> [TopicInfo<NativeFunctions>; 7] {
                     ADD_GENERIC_NERVOUS_SYSTEM_FUNCTION,
                     REMOVE_GENERIC_NERVOUS_SYSTEM_FUNCTION,
                     SET_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION,
-                    REGISTER_EXTENSION,
                 ],
             },
             is_critical: true,
@@ -363,6 +363,22 @@ impl pb::Topic {
     }
 
     pub fn get_topic_for_native_action(action: &pb::proposal::Action) -> Option<Self> {
+        // Check if the topic comes from the extension spec.
+        if let pb::proposal::Action::RegisterExtension(pb::RegisterExtension {
+            chunked_canister_wasm,
+            ..
+        }) = action
+        {
+            if let Some(pb::ChunkedCanisterWasm {
+                wasm_module_hash, ..
+            }) = chunked_canister_wasm
+            {
+                if let Ok(extension_spec) = extensions::validate_extension_wasm(wasm_module_hash) {
+                    return Some(extension_spec.topic);
+                }
+            }
+        }
+
         let action_code = u64::from(action);
 
         topic_descriptions()
