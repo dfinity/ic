@@ -10,6 +10,7 @@ use super::test_helpers::{
     TEST_LEDGER_CANISTER_ID, TEST_ROOT_CANISTER_ID, TEST_SWAP_CANISTER_ID,
 };
 use super::*;
+use crate::types::native_action_ids;
 use crate::{
     pb::v1::{
         governance::{CachedUpgradeSteps as CachedUpgradeStepsPb, Versions},
@@ -4995,4 +4996,76 @@ fn test_list_topics() {
         },
     ];
     assert_eq!(topic_infos, expected_topic_infos);
+
+    // Test that all actions have a topic that they're assigned to.
+
+    // Skip `Action::Unspecified` and `Action::ExecuteGenericNervousSystemFunction`.
+    let actions = Action::iter()
+        .enumerate()
+        .filter_map(|(id, _)| {
+            let id = id as u64;
+            if [
+                native_action_ids::UNSPECIFIED,
+                native_action_ids::EXECUTE_GENERIC_NERVOUS_SYSTEM_FUNCTION,
+            ]
+            .contains(&id)
+            {
+                None
+            } else {
+                Some(id)
+            }
+        })
+        .collect::<BTreeSet<_>>();
+
+    let actions_with_topics = topic_infos
+        .iter()
+        .flat_map(|topic_info| {
+            topic_info
+                .functions
+                .native_functions
+                .iter()
+                .filter_map(|function| {
+                    function.function_type.as_ref().and_then(|function_type| {
+                        if let FunctionType::NativeNervousSystemFunction(_) = function_type {
+                            Some(function.id)
+                        } else {
+                            None
+                        }
+                    })
+                })
+        })
+        .collect::<BTreeSet<_>>();
+
+    assert_eq!(
+        actions_with_topics, actions,
+        "All actions should have a topic specified in `Governance::list_topics`."
+    );
+}
+
+#[test]
+fn test_all_actions_have_native_functions() {
+    let native_functions = native_action_ids::nervous_system_functions()
+        .into_iter()
+        .filter_map(|function| {
+            function
+                .function_type
+                .map(|function_type| (function_type, function.id))
+        })
+        .filter_map(|(function_type, id)| match function_type {
+            FunctionType::NativeNervousSystemFunction(_) => Some(id),
+            _ => None,
+        })
+        .collect::<BTreeSet<_>>();
+
+    // Numeration starts from 1 since we skip `Action::Unspecified`.
+    let actions = Action::iter()
+        .enumerate()
+        .skip(1)
+        .map(|(id, _)| id as u64)
+        .collect::<BTreeSet<_>>();
+
+    assert_eq!(
+        native_functions, actions,
+        "All native actions should listed in `native_action_ids::nervous_system_functions`."
+    );
 }
