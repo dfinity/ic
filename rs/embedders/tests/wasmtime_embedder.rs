@@ -3274,10 +3274,10 @@ fn large_wasm64_stable_read_write_test() {
            
             (drop (call $stable_grow (i64.const 10)))
 
-            ;; Write to stable memory from large heap offset.
-            (call $ic0_stable64_write (i64.const 0) (i64.const 4294967312) (i64.const 5))
             ;; Read from stable memory at a different heap offset.
             (call $ic0_stable64_read (i64.const 4294967320) (i64.const 0) (i64.const 5))
+            ;; Write to stable memory from large heap offset.
+            (call $ic0_stable64_write (i64.const 0) (i64.const 4294967312) (i64.const 5))
            
             ;; Return the result of the read operation.
             (call $msg_reply_data_append (i64.const 4294967320) (i64.const 5))
@@ -3317,6 +3317,7 @@ fn large_wasm64_stable_read_write_test() {
         wasm_res,
         Ok(Some(WasmResult::Reply(vec![72, 101, 108, 108, 111])))
     );
+    assert_eq!(1, 2);
 }
 
 #[test]

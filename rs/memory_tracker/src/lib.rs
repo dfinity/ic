@@ -323,20 +323,20 @@ impl SigsegvMemoryTracker {
         };
 
         // Map the memory and make the range inaccessible to track it with SIGSEGV.
-        if tracker.use_new_signal_handler {
-            let mut instructions = tracker.page_map.get_base_memory_instructions();
+        // if tracker.use_new_signal_handler {
+        //     let mut instructions = tracker.page_map.get_base_memory_instructions();
 
-            // Restrict to tracked range before applying
-            instructions.restrict_to_range(&tracker.page_range());
+        //     // Restrict to tracked range before applying
+        //     instructions.restrict_to_range(&tracker.page_range());
 
-            apply_memory_instructions(&tracker, None, ProtFlags::PROT_NONE, instructions);
-        } else {
-            unsafe { mprotect(addr, size.get() as usize, ProtFlags::PROT_NONE)? }
-            tracker
-                .memory_instructions_stats
-                .mprotect_count
-                .fetch_add(1, Ordering::Relaxed);
-        }
+        //     apply_memory_instructions(&tracker, None, ProtFlags::PROT_NONE, instructions);
+        // } else {
+        //     unsafe { mprotect(addr, size.get() as usize, ProtFlags::PROT_NONE)? }
+        //     tracker
+        //         .memory_instructions_stats
+        //         .mprotect_count
+        //         .fetch_add(1, Ordering::Relaxed);
+        // }
 
         Ok(tracker)
     }
@@ -895,6 +895,8 @@ fn map_unaccessed_pages(
     min_prefetch_range: Range<PageIndex>,
     max_prefetch_range: Range<PageIndex>,
 ) -> Range<PageIndex> {
+    println!("[memory tracker] Mapping unaccessed pages: min_prefetch_range:{:?}, max_prefetch_range:{:?}",
+        min_prefetch_range, max_prefetch_range);
     debug_assert!(
         min_prefetch_range.start >= max_prefetch_range.start
             && min_prefetch_range.end <= max_prefetch_range.end,
@@ -922,6 +924,10 @@ fn apply_memory_instructions(
     page_protection_flags: ProtFlags,
     memory_instructions: MemoryInstructions,
 ) {
+    println!(
+        "[memory tracker] Applying memory instructions: page_protection_flags:{:?}, memory_instructions:{:?}",
+        page_protection_flags, memory_instructions
+    );
     let MemoryInstructions {
         range: prefetch_range,
         instructions,
@@ -930,7 +936,7 @@ fn apply_memory_instructions(
     // As long as we only have mmap instructions, we mmap them with protection flag PROT_NONE, such that the entire range
     // remains uniformly PROT_NONE. Before the first time we copy, we mark the entire range read/write and maintain that
     // for any later mmap calls.
-    let mut current_prot_flags = ProtFlags::PROT_NONE;
+    // let current_prot_flags = ProtFlags::PROT_NONE;
     for (range, mmap_or_data) in instructions {
         debug_assert!(
             range.start.get() >= prefetch_range.start.get()
@@ -953,7 +959,7 @@ fn apply_memory_instructions(
                     mmap(
                         tracker.page_start_addr_from(range.start),
                         range_size_in_bytes(&range),
-                        current_prot_flags,
+                        ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
                         MapFlags::MAP_PRIVATE | MapFlags::MAP_FIXED,
                         fd,
                         offset as i64,
@@ -968,22 +974,22 @@ fn apply_memory_instructions(
                     Ordering::Relaxed,
                 );
 
-                if current_prot_flags != ProtFlags::PROT_READ | ProtFlags::PROT_WRITE {
-                    current_prot_flags = ProtFlags::PROT_READ | ProtFlags::PROT_WRITE;
-                    unsafe {
-                        mprotect(
-                            tracker.page_start_addr_from(prefetch_range.start),
-                            range_size_in_bytes(&prefetch_range),
-                            current_prot_flags,
-                        )
-                        .map_err(print_enomem_help)
-                        .unwrap()
-                    };
-                    tracker
-                        .memory_instructions_stats
-                        .mprotect_count
-                        .fetch_add(1, Ordering::Relaxed);
-                }
+                // if current_prot_flags != ProtFlags::PROT_READ | ProtFlags::PROT_WRITE {
+                //     current_prot_flags = ProtFlags::PROT_READ | ProtFlags::PROT_WRITE;
+                //     unsafe {
+                //         mprotect(
+                //             tracker.page_start_addr_from(prefetch_range.start),
+                //             range_size_in_bytes(&prefetch_range),
+                //             current_prot_flags,
+                //         )
+                //         .map_err(print_enomem_help)
+                //         .unwrap()
+                //     };
+                //     tracker
+                //         .memory_instructions_stats
+                //         .mprotect_count
+                //         .fetch_add(1, Ordering::Relaxed);
+                // }
                 unsafe {
                     debug_assert_eq!(data.len(), range_size_in_bytes(&range));
                     match uffd {
@@ -997,11 +1003,14 @@ fn apply_memory_instructions(
                             )
                             .expect("uffd copy failed");
                         }
-                        None => std::ptr::copy_nonoverlapping(
-                            data.as_ptr() as *const libc::c_void,
-                            tracker.page_start_addr_from(range.start),
-                            range_size_in_bytes(&range),
-                        ),
+                        None => {
+                            println!("Copying data to memory: {:?}", range);
+                            std::ptr::copy_nonoverlapping(
+                                data.as_ptr() as *const libc::c_void,
+                                tracker.page_start_addr_from(range.start),
+                                range_size_in_bytes(&range),
+                            );
+                        }
                     }
                 }
             }
@@ -1012,21 +1021,21 @@ fn apply_memory_instructions(
     // 1. `page_protection_flags` is PROT_NONE, and we only did mmap calls with PROT_NONE
     // 2. `page_protection_flags` is read/write, and we already made the whole range read/write
     //    just before the first copy
-    if page_protection_flags != current_prot_flags {
-        unsafe {
-            mprotect(
-                tracker.page_start_addr_from(prefetch_range.start),
-                range_size_in_bytes(&prefetch_range),
-                page_protection_flags,
-            )
-            .map_err(print_enomem_help)
-            .unwrap()
-        };
-        tracker
-            .memory_instructions_stats
-            .mprotect_count
-            .fetch_add(1, Ordering::Relaxed);
-    }
+    // if page_protection_flags != current_prot_flags {
+    //     unsafe {
+    //         mprotect(
+    //             tracker.page_start_addr_from(prefetch_range.start),
+    //             range_size_in_bytes(&prefetch_range),
+    //             page_protection_flags,
+    //         )
+    //         .map_err(print_enomem_help)
+    //         .unwrap()
+    //     };
+    //     tracker
+    //         .memory_instructions_stats
+    //         .mprotect_count
+    //         .fetch_add(1, Ordering::Relaxed);
+    // }
 }
 
 fn range_intersection(range1: &Range<PageIndex>, range2: &Range<PageIndex>) -> Range<PageIndex> {

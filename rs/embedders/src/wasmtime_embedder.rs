@@ -818,7 +818,7 @@ fn sigsegv_memory_tracker<S>(
                         (FaultKind::Missing, ReadWrite::Read) => {
                             println!("[handler] Handling missing page fault for read access");
 
-                            let size = uffd_handler(&memory_tracker, &uffd, rw, fault_addr);
+                            let size = uffd_handler(&memory_tracker, &uffd, rw, addr);
 
                             if let Some(size) = size {
                                 // Undocumented requirement: write-protect ioctl on the region
@@ -834,7 +834,7 @@ fn sigsegv_memory_tracker<S>(
                         (FaultKind::Missing, ReadWrite::Write) => {
                             println!("[handler] Handling missing page fault for write access");
 
-                            let size = uffd_handler(&memory_tracker, &uffd, rw, fault_addr);
+                            let size = uffd_handler(&memory_tracker, &uffd, rw, addr);
 
                             if let Some(size) = size {
                                 println!("[handler] Wake up faulting thread for write access");
