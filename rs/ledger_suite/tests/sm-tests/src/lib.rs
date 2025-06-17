@@ -4990,6 +4990,7 @@ Charged for processing the transfer.
         expected_message, message
     );
 
+    // If the spender is anonymous and spender_subaccount is default, the spender information should be skipped.
     args.arg = Encode!(&TransferFromArgs {
         spender_subaccount: None,
         ..transfer_from_args.clone()
