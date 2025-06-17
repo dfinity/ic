@@ -68,7 +68,7 @@ use ic_replicated_state::{
     CanisterState, ExecutionTask, NetworkTopology, ReplicatedState,
 };
 use ic_types::{
-    canister_http::CanisterHttpRequestContext,
+    canister_http::{CanisterHttpRequestContext, MAX_CANISTER_HTTP_RESPONSE_BYTES},
     crypto::{
         canister_threshold_sig::{MasterPublicKey, PublicKey},
         threshold_sig::ni_dkg::NiDkgTargetId,
@@ -548,6 +548,14 @@ impl ExecutionEnvironment {
                                 .observe_http_outcall_price_change(old_price, new_price);
                             self.metrics
                                 .observe_http_outcall_request(context, &response);
+
+                            info!(
+                                self.log,
+                                "Canister HTTP request completed. Request size: {}, payload size: {}, max response size: {:?}",
+                                context.variable_parts_size(),
+                                response.payload_size_bytes(),
+                                context.max_response_bytes
+                            );
                         }
 
                         self.metrics.observe_subnet_message(
