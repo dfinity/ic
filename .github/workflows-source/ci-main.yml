@@ -558,7 +558,7 @@ jobs:
       - name: Create temporary branch
         run: |
           TEMP_BRANCH="recovery-engine-test-$(date +%s)"
-          git checkout -b $TEMP_BRANCH
+          git checkout -b "$TEMP_BRANCH"
           echo "This is a dummy file for testing" > dummy_test_file.txt
 
       - name: Run tests
@@ -573,4 +573,4 @@ jobs:
         if: always()
         run: |
           git checkout -
-          git branch -D $TEMP_BRANCH
+          git branch -D "$TEMP_BRANCH"
