@@ -10416,7 +10416,9 @@ dependencies = [
 name = "ic-metrics-assert"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "candid",
+ "ic-http-types",
  "ic-management-canister-types",
  "pocket-ic",
  "regex",
