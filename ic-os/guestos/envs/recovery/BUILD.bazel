@@ -15,6 +15,7 @@ icos_images = icos_build(
     ],
     visibility = [
         "//rs:ic-os-pkg",
+        "//rs:system-tests-pkg",
     ],
 )
 
