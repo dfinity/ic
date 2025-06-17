@@ -296,9 +296,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             max_response_size_bytes: 512,
             socks_proxy_allowed: false,
             // Suppose there is a socks proxy passed. It should not be tried.
-            socks_proxy_addrs: vec![
-                format!("socks5://{}", unreachable_url),
-            ],
+            socks_proxy_addrs: vec![format!("socks5://{}", unreachable_url)],
         });
         // The requests succeeds.
         let response = client.https_outcall(request).await;
