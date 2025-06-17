@@ -489,7 +489,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 features = ["serde"],
             ),
             "evm_rpc_types": crate.spec(
-                version = "^1.3.0",
+                version = "^1.4.0",
             ),
             "exec": crate.spec(
                 version = "^0.3.1",
@@ -646,7 +646,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic-gateway": crate.spec(
                 git = "https://github.com/dfinity/ic-gateway",
-                rev = "1d087ad6b8e477159e0ce68b30b6cf09d7ce4938",
+                rev = "b78562340bd00f05f9c055dcba3ec0f74758c927",
                 default_features = False,
             ),
             "ic-http-certification": crate.spec(

@@ -4420,16 +4420,16 @@ dependencies = [
 
 [[package]]
 name = "evm_rpc_types"
-version = "1.3.0"
+version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fa134314bce7c35b9214710572fb7305edc7f4223c5bd03b5857ed08bbb05897"
+checksum = "24fa2b6929665ce97f4a261dd969f87bd717d2c5ec274addf59793118ca61886"
 dependencies = [
  "candid",
  "hex",
  "ic-cdk 0.17.2",
  "num-bigint 0.4.6",
  "serde",
- "strum 0.26.3",
+ "strum 0.27.1",
  "thiserror 2.0.12",
  "url",
 ]
@@ -9036,7 +9036,7 @@ dependencies = [
 [[package]]
 name = "ic-gateway"
 version = "0.2.0"
-source = "git+https://github.com/dfinity/ic-gateway?rev=1d087ad6b8e477159e0ce68b30b6cf09d7ce4938#1d087ad6b8e477159e0ce68b30b6cf09d7ce4938"
+source = "git+https://github.com/dfinity/ic-gateway?rev=b78562340bd00f05f9c055dcba3ec0f74758c927#b78562340bd00f05f9c055dcba3ec0f74758c927"
 dependencies = [
  "ahash 0.8.11",
  "anyhow",
@@ -10414,9 +10414,11 @@ dependencies = [
 
 [[package]]
 name = "ic-metrics-assert"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
+ "async-trait",
  "candid",
+ "ic-http-types",
  "ic-management-canister-types",
  "pocket-ic",
  "regex",

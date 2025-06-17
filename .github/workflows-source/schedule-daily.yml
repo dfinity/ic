@@ -21,7 +21,7 @@ anchors:
     container:
       <<: *image
       options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
+        -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 120
   checkout: &checkout
     name: Checkout
