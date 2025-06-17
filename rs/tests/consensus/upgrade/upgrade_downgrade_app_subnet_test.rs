@@ -1,6 +1,8 @@
+use std::str::FromStr;
 use std::time::Duration;
 
 use anyhow::Result;
+use candid::{CandidType, Encode};
 use futures::future::join_all;
 use slog::Logger;
 use tokio::runtime::{Builder, Runtime};
@@ -31,7 +33,7 @@ use ic_system_test_driver::generic_workload_engine::metrics::{
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{block_on, get_app_subnet_and_node, MessageCanister};
-use ic_types::Height;
+use ic_types::{CanisterId, Height};
 
 const SCHNORR_MSG_SIZE_BYTES: usize = 32;
 const DKG_INTERVAL: u64 = 9;
@@ -118,6 +120,23 @@ fn upgrade_downgrade_app_subnet(env: TestEnv) {
         SubnetType::Application,
         None,
     );
+    // create a snapshot of a canister
+
+    #[derive(CandidType)]
+    struct TakeCanisterSnapshotArgs {
+        pub canister_id: CanisterId,
+        pub replace_snapshot: Option<Vec<u8>>,
+    }
+    let args = TakeCanisterSnapshotArgs {
+        canister_id: CanisterId::from_str("rwlgt-iiaaa-aaaaa-aaaaa-cai").unwrap(), // registry canister
+        replace_snapshot: None,
+    };
+    let fut = app_agent
+        .update(&CanisterId::ic_00().into(), "take_canister_snapshot")
+        .with_arg(Encode!(&args).unwrap())
+        .call_and_wait();
+    rt.block_on(fut).unwrap();
+
     let mainnet_version = get_mainnet_nns_revision();
     upgrade(
         &env,
