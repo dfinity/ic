@@ -172,19 +172,16 @@ impl Partition for ExtPartition {
         );
 
         // Use debugfs to dump the entire filesystem
-        let cmd = Command::new(debugfs().context("debugfs is needed to extract contents")?)
+        let out = Command::new(debugfs().context("debugfs is needed to extract contents")?)
             .args([
                 "-R",
                 &format!("rdump / {}", output.display()),
                 self.backing_dir.path().join(STORE_NAME).to_str().unwrap(),
             ])
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
+            .output()
+            .await
             .context("failed to run debugfs for extraction")?;
 
-        let out = cmd.wait_with_output().await?;
         Self::check_debugfs_result(&out)?;
 
         Ok(())
