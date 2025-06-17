@@ -4680,6 +4680,7 @@ Charged for processing the transfer.
         expected_message, message
     );
 
+    // If from_subaccount is not specified, no from information should be included.
     args.arg = Encode!(&TransferArg {
         from_subaccount: None,
         ..transfer_args.clone()
