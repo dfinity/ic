@@ -1,4 +1,4 @@
-use crate::systemd::SystemdNotifier;
+use crate::systemd_notifier::SystemdNotifier;
 use anyhow::{anyhow, Context, Error, Result};
 use config::guest_vm_config::{assemble_config_media, generate_vm_config};
 use config_types::{HostOSConfig, Ipv6Config};
@@ -157,13 +157,13 @@ impl GuestVmService {
             metrics_writer,
             libvirt_connection,
             hostos_config,
-            systemd_notifier: Arc::new(crate::systemd::DefaultSystemdNotifier),
+            systemd_notifier: Arc::new(crate::systemd_notifier::DefaultSystemdNotifier),
             console_tty: Box::new(console_tty),
         })
     }
 
     /// Runs the GuestOS service
-    pub async fn run(&mut self, cancellation_token: CancellationToken) -> Result<()> {
+    pub async fn run(&mut self, termination_token: CancellationToken) -> Result<()> {
         let virtual_machine = match self.start_virtual_machine().await {
             Ok(virtual_machine) => {
                 self.metrics_writer
@@ -187,7 +187,7 @@ impl GuestVmService {
         };
 
         // Wait for VM to shut down or for stop signal
-        self.monitor_virtual_machine(&virtual_machine, cancellation_token)
+        self.monitor_virtual_machine(&virtual_machine, termination_token)
             .await
     }
 
@@ -404,7 +404,7 @@ pub async fn run_guest_vm() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::systemd::testing::MockSystemdNotifier;
+    use crate::systemd_notifier::testing::MockSystemdNotifier;
     use config_types::{
         DeploymentEnvironment, DeterministicIpv6Config, HostOSSettings, ICOSSettings,
         NetworkSettings,

@@ -10,7 +10,7 @@ use std::path::Path;
 use utils::to_cidr;
 
 mod guest_vm;
-mod systemd;
+mod systemd_notifier;
 
 #[derive(Subcommand)]
 pub enum Commands {
