@@ -32,9 +32,9 @@ pub fn benchmark_with_confirmation(name: &str, code: &str) -> Vec<common::Benchm
 
     vec![
         benchmark(&format!("wasm32/{name}"), i, r, code),
-        benchmark(&format!("wasm32/{name}/confirmation"), i, c, code),
-        benchmark(&format!("wasm64/{name}"), i, r, code),
-        benchmark(&format!("wasm64/{name}/confirmation"), i, c, code),
+        // benchmark(&format!("wasm32/{name}/confirmation"), i, c, code),
+        // benchmark(&format!("wasm64/{name}"), i, r, code),
+        // benchmark(&format!("wasm64/{name}/confirmation"), i, c, code),
     ]
 }
 
@@ -48,9 +48,9 @@ pub fn benchmark_with_loop_confirmation(name: &str, code: &str) -> Vec<common::B
     let r = DEFAULT_REPEAT_TIMES;
     vec![
         benchmark(&format!("wasm32/{name}"), i, r, code),
-        benchmark(&format!("wasm32/{name}/confirmation"), c, r, code),
-        benchmark(&format!("wasm64/{name}"), i, r, code),
-        benchmark(&format!("wasm64/{name}/confirmation"), c, r, code),
+        // benchmark(&format!("wasm32/{name}/confirmation"), c, r, code),
+        // benchmark(&format!("wasm64/{name}"), i, r, code),
+        // benchmark(&format!("wasm64/{name}/confirmation"), c, r, code),
     ]
 }
 

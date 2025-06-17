@@ -896,6 +896,37 @@ impl WasmtimeInstance {
                 .i64()
                 .unwrap()) as usize;
 
+        let heap_bytemap = self
+            .get_memory(WASM_HEAP_BYTEMAP_MEMORY_NAME)?
+            .data(&self.store);
+        let heap_marked_write: Vec<_> = heap_bytemap
+            .iter()
+            .enumerate()
+            .filter(|(_, b)| b == &&1)
+            .map(|(i, _)| i)
+            .collect();
+
+        let mut wasm_dirty_pages = vec![];
+        let memory = self.get_memory(WASM_HEAP_MEMORY_NAME)?.data(&self.store);
+        // println!("memory size: {}", memory.len());
+        // println!("{heap_marked_write:?}");
+        for i in heap_marked_write {
+            let original = self
+                .store
+                .data()
+                .heap_memory_loader
+                .as_ref()
+                .unwrap()
+                .get_page(PageIndex::new(i as u64));
+            // if i == 0 {
+            //     println!("{:?}", &original);
+            //     println!("{:?}", &memory[0..4096]);
+            // };
+            if i * 4096 < memory.len() && &memory[i * 4096..(i + 1) * 4096] != original {
+                wasm_dirty_pages.push(PageIndex::new(i as u64));
+            }
+        }
+
         if !self.memory_trackers.contains_key(&CanisterMemoryType::Heap) {
             debug!(
                 self.log,
@@ -904,104 +935,106 @@ impl WasmtimeInstance {
             Ok(PageAccessResults {
                 stable_dirty_pages,
                 stable_accessed_pages,
+                wasm_dirty_pages,
                 ..PageAccessResults::default()
             })
         } else {
-            let wasm_dirty_pages = match self.modification_tracking {
-                ModificationTracking::Track => match self.write_barrier {
-                    FlagStatus::Enabled => {
-                        self.dirty_pages_from_bytemap(CanisterMemoryType::Heap)?
-                    }
-                    FlagStatus::Disabled => {
-                        let tracker = self
-                            .memory_trackers
-                            .get(&CanisterMemoryType::Heap)
-                            .unwrap()
-                            .lock()
-                            .unwrap();
-                        let speculatively_dirty_pages = tracker.take_speculatively_dirty_pages();
-                        let dirty_pages = tracker.take_dirty_pages();
-                        dirty_pages
-                            .into_iter()
-                            .chain(speculatively_dirty_pages)
-                            .filter_map(|p| tracker.validate_speculatively_dirty_page(p))
-                            .collect::<Vec<PageIndex>>()
-                    }
-                },
-                ModificationTracking::Ignore => {
-                    vec![]
-                }
-            };
+            panic!("Unexpected error because of tracker");
+            // let wasm_dirty_pages = match self.modification_tracking {
+            //     ModificationTracking::Track => match self.write_barrier {
+            //         FlagStatus::Enabled => {
+            //             self.dirty_pages_from_bytemap(CanisterMemoryType::Heap)?
+            //         }
+            //         FlagStatus::Disabled => {
+            //             let tracker = self
+            //                 .memory_trackers
+            //                 .get(&CanisterMemoryType::Heap)
+            //                 .unwrap()
+            //                 .lock()
+            //                 .unwrap();
+            //             let speculatively_dirty_pages = tracker.take_speculatively_dirty_pages();
+            //             let dirty_pages = tracker.take_dirty_pages();
+            //             dirty_pages
+            //                 .into_iter()
+            //                 .chain(speculatively_dirty_pages)
+            //                 .filter_map(|p| tracker.validate_speculatively_dirty_page(p))
+            //                 .collect::<Vec<PageIndex>>()
+            //         }
+            //     },
+            //     ModificationTracking::Ignore => {
+            //         vec![]
+            //     }
+            // };
 
-            let wasm_tracker = self
-                .memory_trackers
-                .get(&CanisterMemoryType::Heap)
-                .unwrap()
-                .lock()
-                .unwrap();
+            // let wasm_tracker = self
+            //     .memory_trackers
+            //     .get(&CanisterMemoryType::Heap)
+            //     .unwrap()
+            //     .lock()
+            //     .unwrap();
 
-            let wasm_sigsegv_handler_duration = Duration::from_nanos(
-                wasm_tracker
-                    .metrics
-                    .sigsegv_handler_duration_nanos
-                    .load(Ordering::Relaxed),
-            );
+            // let wasm_sigsegv_handler_duration = Duration::from_nanos(
+            //     wasm_tracker
+            //         .metrics
+            //         .sigsegv_handler_duration_nanos
+            //         .load(Ordering::Relaxed),
+            // );
 
-            // We don't have a tracker for stable memory.
-            if !self
-                .memory_trackers
-                .contains_key(&CanisterMemoryType::Stable)
-            {
-                return Ok(PageAccessResults {
-                    wasm_dirty_pages,
-                    wasm_num_accessed_pages: wasm_tracker.num_accessed_pages(),
-                    wasm_read_before_write_count: wasm_tracker.read_before_write_count(),
-                    wasm_direct_write_count: wasm_tracker.direct_write_count(),
-                    wasm_sigsegv_count: wasm_tracker.sigsegv_count(),
-                    wasm_mmap_count: wasm_tracker.mmap_count(),
-                    wasm_mprotect_count: wasm_tracker.mprotect_count(),
-                    wasm_copy_page_count: wasm_tracker.copy_page_count(),
-                    wasm_sigsegv_handler_duration,
-                    stable_dirty_pages,
-                    stable_accessed_pages,
-                    ..Default::default()
-                });
-            }
+            // // We don't have a tracker for stable memory.
+            // if !self
+            //     .memory_trackers
+            //     .contains_key(&CanisterMemoryType::Stable)
+            // {
+            //     return Ok(PageAccessResults {
+            //         wasm_dirty_pages,
+            //         wasm_num_accessed_pages: wasm_tracker.num_accessed_pages(),
+            //         wasm_read_before_write_count: wasm_tracker.read_before_write_count(),
+            //         wasm_direct_write_count: wasm_tracker.direct_write_count(),
+            //         wasm_sigsegv_count: wasm_tracker.sigsegv_count(),
+            //         wasm_mmap_count: wasm_tracker.mmap_count(),
+            //         wasm_mprotect_count: wasm_tracker.mprotect_count(),
+            //         wasm_copy_page_count: wasm_tracker.copy_page_count(),
+            //         wasm_sigsegv_handler_duration,
+            //         stable_dirty_pages,
+            //         stable_accessed_pages,
+            //         ..Default::default()
+            //     });
+            // }
 
-            let stable_tracker = self
-                .memory_trackers
-                .get(&CanisterMemoryType::Stable)
-                .unwrap()
-                .lock()
-                .unwrap();
+            // let stable_tracker = self
+            //     .memory_trackers
+            //     .get(&CanisterMemoryType::Stable)
+            //     .unwrap()
+            //     .lock()
+            //     .unwrap();
 
-            let stable_sigsegv_handler_duration = Duration::from_nanos(
-                stable_tracker
-                    .metrics
-                    .sigsegv_handler_duration_nanos
-                    .load(Ordering::Relaxed),
-            );
+            // let stable_sigsegv_handler_duration = Duration::from_nanos(
+            //     stable_tracker
+            //         .metrics
+            //         .sigsegv_handler_duration_nanos
+            //         .load(Ordering::Relaxed),
+            // );
 
-            Ok(PageAccessResults {
-                wasm_dirty_pages,
-                wasm_num_accessed_pages: wasm_tracker.num_accessed_pages(),
-                wasm_read_before_write_count: wasm_tracker.read_before_write_count(),
-                wasm_direct_write_count: wasm_tracker.direct_write_count(),
-                wasm_sigsegv_count: wasm_tracker.sigsegv_count(),
-                wasm_mmap_count: wasm_tracker.mmap_count(),
-                wasm_mprotect_count: wasm_tracker.mprotect_count(),
-                wasm_copy_page_count: wasm_tracker.copy_page_count(),
-                wasm_sigsegv_handler_duration,
-                stable_dirty_pages,
-                stable_accessed_pages,
-                stable_read_before_write_count: stable_tracker.read_before_write_count(),
-                stable_direct_write_count: stable_tracker.direct_write_count(),
-                stable_sigsegv_count: stable_tracker.sigsegv_count(),
-                stable_mmap_count: stable_tracker.mmap_count(),
-                stable_mprotect_count: stable_tracker.mprotect_count(),
-                stable_copy_page_count: stable_tracker.copy_page_count(),
-                stable_sigsegv_handler_duration,
-            })
+            // Ok(PageAccessResults {
+            //     wasm_dirty_pages,
+            //     wasm_num_accessed_pages: wasm_tracker.num_accessed_pages(),
+            //     wasm_read_before_write_count: wasm_tracker.read_before_write_count(),
+            //     wasm_direct_write_count: wasm_tracker.direct_write_count(),
+            //     wasm_sigsegv_count: wasm_tracker.sigsegv_count(),
+            //     wasm_mmap_count: wasm_tracker.mmap_count(),
+            //     wasm_mprotect_count: wasm_tracker.mprotect_count(),
+            //     wasm_copy_page_count: wasm_tracker.copy_page_count(),
+            //     wasm_sigsegv_handler_duration,
+            //     stable_dirty_pages,
+            //     stable_accessed_pages,
+            //     stable_read_before_write_count: stable_tracker.read_before_write_count(),
+            //     stable_direct_write_count: stable_tracker.direct_write_count(),
+            //     stable_sigsegv_count: stable_tracker.sigsegv_count(),
+            //     stable_mmap_count: stable_tracker.mmap_count(),
+            //     stable_mprotect_count: stable_tracker.mprotect_count(),
+            //     stable_copy_page_count: stable_tracker.copy_page_count(),
+            //     stable_sigsegv_handler_duration,
+            // })
         }
     }
 

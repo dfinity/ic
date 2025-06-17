@@ -264,4 +264,8 @@ impl MemoryLoader {
             }
         }
     }
+
+    pub(crate) fn get_page(&self, page_index: PageIndex) -> &[u8] {
+        self.page_map.get_page(page_index)
+    }
 }

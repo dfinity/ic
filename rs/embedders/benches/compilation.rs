@@ -44,19 +44,18 @@ fn generate_binaries() -> Vec<(String, BinaryEncodedWasm)> {
                     r#"
                     (module
                         (import "ic0" "msg_reply" (func $ic0_msg_reply))
-                        (import "ic0" "msg_caller_size" (func $ic0_msg_caller_size (result i32)))
-                        (import "ic0" "msg_caller_copy" (func $ic0_msg_caller_copy (param i32 i32 i32)))
-                        (import "ic0" "stable64_grow" (func $stable_grow (param i64) (result i64)))
-                        (import "ic0" "stable64_read" (func $stable_read (param i64 i64 i64)))
-                        (import "ic0" "stable64_write" (func $stable_write (param i64 i64 i64)))
                         (memory 100)
                         (func (export "canister_update update_empty")
                             (call $ic0_msg_reply)
                         )
+                        (func (export "canister_init")
+                            (i32.store (i32.const 10) (i32.const 10))
+                        )   
                         (func (export "canister_query go")
-                            (drop (call $stable_grow (i64.const 5)))
-                            (call $stable_write (i64.const 0) (i64.const 0) (i64.const 10000))
+                            (i32.eq (i32.const 10) (i32.load (i32.const 10)))
+                            if
                             (call $ic0_msg_reply)
+                            end
                         )
                     )
             "#,
