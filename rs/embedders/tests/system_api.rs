@@ -2308,20 +2308,20 @@ fn test_env_var_name_operations() {
 
     // Test invalid index
     assert!(matches!(
-        api.ic0_env_var_name_copy(2, 0, 0, 9, &mut heap),
+        api.ic0_env_var_name_copy(2, 0, 0, 0, &mut heap),
         Err(HypervisorError::EnvironmentVariableIndexOutOfBounds {
             index: 2,
             length: 2
         })
     ));
 
-    // Test invalid offset
+    // Test invalid offset (destination buffer overflow)
     assert!(matches!(
         api.ic0_env_var_name_copy(0, 0, 10, var_name_1.len(), &mut heap),
         Err(HypervisorError::ToolchainContractViolation { .. })
     ));
 
-    // Test dst is not aligned
+    // Test invalid dst (destination buffer overflow)
     assert!(matches!(
         api.ic0_env_var_name_copy(0, 10, 0, var_name_1.len(), &mut heap),
         Err(HypervisorError::ToolchainContractViolation { .. })
@@ -2348,6 +2348,7 @@ fn test_env_var_value_operations() {
     let var_name_empty = "EMPTY_VAR".to_string();
     let var_value_1 = "Hello World".to_string();
     let var_value_path = "/usr/local/bin:/usr/bin".to_string();
+    let var_value_empty = "".to_string();
 
     let mut env_vars = BTreeMap::new();
     env_vars.insert(var_name_1.clone(), var_value_1.clone());
@@ -2366,48 +2367,26 @@ fn test_env_var_value_operations() {
     // Test ic0_env_var_count.
     assert_eq!(api.ic0_env_var_count().unwrap(), 3);
 
-    // Test empty variable.
-    copy_to_heap(&mut heap, var_name_empty.as_bytes());
-    assert_eq!(
-        api.ic0_env_var_value_size(0, var_name_empty.len(), &heap)
-            .unwrap(),
-        0
-    );
-    // Test copying an empty variable.
-    api.ic0_env_var_value_copy(0, var_name_empty.len(), 0, 0, 0, &mut heap)
-        .unwrap();
-    let mut expected_empty_value = vec![0u8; 64];
-    copy_to_heap(&mut expected_empty_value, var_name_empty.as_bytes());
-    assert_eq!(&heap[0..expected_empty_value.len()], expected_empty_value);
+    for (var_name, var_value) in [
+        (var_name_empty, var_value_empty),
+        (var_name_1, var_value_1),
+        (var_name_path, var_value_path),
+    ] {
+        // Test API for the size of the value.
+        copy_to_heap(&mut heap, var_name.as_bytes());
+        assert_eq!(
+            api.ic0_env_var_value_size(0, var_name.len(), &heap)
+                .unwrap(),
+            var_value.len(),
+        );
 
-    // Test value size and copying for existing variable: TEST_VAR_1.
-    copy_to_heap(&mut heap, var_name_1.as_bytes());
-    assert_eq!(
-        api.ic0_env_var_value_size(0, var_name_1.len(), &heap)
-            .unwrap(),
-        var_value_1.len() // length of "Hello World"
-    );
-    api.ic0_env_var_value_copy(0, var_name_1.len(), 0, 0, var_value_1.len(), &mut heap)
-        .unwrap();
-    assert_eq!(&heap[0..var_value_1.len()], var_value_1.as_bytes());
-
-    // Test value size and copying for existing variable: PATH.
-    copy_to_heap(&mut heap, var_name_path.as_bytes());
-    assert_eq!(
-        api.ic0_env_var_value_size(0, var_name_path.len(), &heap)
-            .unwrap(),
-        var_value_path.len() // length of "/usr/local/bin:/usr/bin"
-    );
-    api.ic0_env_var_value_copy(
-        0,
-        var_name_path.len(),
-        0,
-        0,
-        var_value_path.len(),
-        &mut heap,
-    )
-    .unwrap();
-    assert_eq!(&heap[0..var_value_path.len()], var_value_path.as_bytes());
+        // Test API for copying the value.
+        let mut expected_heap = heap.clone();
+        copy_to_heap(&mut expected_heap, var_value.as_bytes());
+        api.ic0_env_var_value_copy(0, var_name.len(), 0, 0, var_value.len(), &mut heap)
+            .unwrap();
+        assert_eq!(expected_heap, heap);
+    }
 
     // Test non-existent variable
     let non_existent = "NON_EXISTENT".to_string();
@@ -2436,7 +2415,6 @@ fn test_env_var_value_operations() {
 
     let result = api.ic0_env_var_value_copy(0, invalid_utf8.len(), 0, 0, 0, &mut heap);
     let error = result.unwrap_err();
-    println!("error: {:?}", error);
     assert!(error
         .to_string()
         .contains("Variable name is not a valid UTF-8 string."));
@@ -2481,7 +2459,7 @@ fn test_env_variables_empty() {
     // Test ic0_env_var_name_copy with invalid index on empty variables
     let mut heap = vec![0u8; 16];
     assert!(matches!(
-        api.ic0_env_var_name_copy(0, 0, 0, 9, &mut heap),
+        api.ic0_env_var_name_copy(0, 0, 0, 0, &mut heap),
         Err(HypervisorError::EnvironmentVariableIndexOutOfBounds {
             index: 0,
             length: 0
