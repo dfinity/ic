@@ -34,7 +34,7 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
+    image: ghcr.io/dfinity/ic-build@sha256:e4862aca9dfa7e342f44cb4ba48923de4306099d26b067ee285f5e0ebe87162a
   dind-large-setup: &dind-large-setup
     runs-on:
       labels: dind-large
@@ -142,6 +142,7 @@ jobs:
     name: Bazel Test All
     needs: [ config ]
     <<: *dind-large-setup
+    timeout-minutes: 120
     runs-on:
       labels: dind-large
     env:
@@ -210,7 +211,6 @@ jobs:
       labels: macOS
     # Run on protected branches, but only on public repo
     if: github.repository == 'dfinity/ic'
-
     steps:
       - <<: *checkout
       - name: Set PATH
@@ -231,6 +231,8 @@ jobs:
       - name: Run Bazel Checks on Darwin x86-64
         id: bazel-test-darwin-x86-64
         uses:  ./.github/actions/bazel-test-all/
+        env:
+          NODE_NAME: ${{ runner.name }}
         with:
           upload-artifacts: ${{ needs.config.outputs.release_build && needs.config.outputs.full_macos_build }}
           BAZEL_COMMAND: ${{ steps.cfg.outputs.build-command }}

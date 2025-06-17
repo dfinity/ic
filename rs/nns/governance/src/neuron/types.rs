@@ -3,7 +3,6 @@ use crate::{
         LOG_PREFIX, MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS,
         MAX_NUM_HOT_KEYS_PER_NEURON,
     },
-    is_disburse_maturity_enabled,
     neuron::{combine_aged_stakes, dissolve_state_and_age::DissolveStateAndAge, neuron_stake_e8s},
     neuron_store::NeuronStoreError,
     pb::v1::{
@@ -1322,16 +1321,13 @@ impl Neuron {
             .map(|(topic_id, followees)| (topic_id, api::neuron::Followees::from(followees)))
             .collect();
 
-        let maturity_disbursements_in_progress = if is_disburse_maturity_enabled() {
-            Some(
-                maturity_disbursements_in_progress
-                    .into_iter()
-                    .map(api::MaturityDisbursement::from)
-                    .collect(),
-            )
-        } else {
-            None
-        };
+        let maturity_disbursements_in_progress = Some(
+            maturity_disbursements_in_progress
+                .into_iter()
+                .map(api::MaturityDisbursement::from)
+                .collect(),
+        );
+
         api::Neuron {
             id,
             account,
