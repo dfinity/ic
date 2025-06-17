@@ -591,7 +591,7 @@ ic-cdk = "0.17.2"
 ic-cdk-timers = "0.11.0"
 ic-certificate-verification = "3"
 ic-certification = "3"
-ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "1d087ad6b8e477159e0ce68b30b6cf09d7ce4938", default-features = false }
+ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "b78562340bd00f05f9c055dcba3ec0f74758c927", default-features = false }
 ic-http-certification = "3.0.3"
 ic-http-gateway = "0.3.0"
 ic-management-canister-types = "0.3.0"

@@ -28,7 +28,6 @@ anchors:
     image: ghcr.io/dfinity/ic-build@sha256:d0bdca4c4e1043a5977abf4437cfdf4e7c83de9835ce9a2385d024353c793576
   dind-large-setup: &dind-large-setup
     runs-on:
-      group: zh1
       labels: dind-large
     container:
       <<: *image

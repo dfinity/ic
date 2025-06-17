@@ -691,6 +691,7 @@ impl ApiState {
                     args.push("127.0.0.1".to_string());
                 }
                 args.push("--domain-canister-id-from-query-params".to_string());
+                args.push("--domain-canister-id-from-referer".to_string());
                 args.push("--ic-unsafe-root-key-fetch".to_string());
                 let cli = Cli::parse_from(args);
 
