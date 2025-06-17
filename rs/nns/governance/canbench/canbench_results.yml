@@ -46,7 +46,7 @@ benches:
       calls: 1
       instructions: 1845820
       heap_increase: 0
-      stable_memory_increase: 0
+      stable_memory_increase: 256
     scopes: {}
   distribute_rewards_with_stable_neurons:
     total:
