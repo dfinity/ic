@@ -109,7 +109,7 @@ impl SetFollowing {
                     ErrorType::InvalidCommand,
                     format!(
                         "Too many followees (on topic {:?}): {} followees vs. at most {} is allowed.",
-                        topic.clone().map(Topic::try_from), followees.len(), MAX_FOLLOWEES_PER_TOPIC,
+                        topic.map(Topic::try_from), followees.len(), MAX_FOLLOWEES_PER_TOPIC,
                     ),
                 ));
             }
