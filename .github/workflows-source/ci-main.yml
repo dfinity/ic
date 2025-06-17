@@ -547,3 +547,30 @@ jobs:
           set -eExuo pipefail
           export CARGO_TERM_COLOR=always # ensure output has colors
           cargo build --release --locked
+
+  # TODO: REMOVE. Only for development purposes. Do not merge.
+  recovery-engine-test:
+    name: Recovery Engine Test
+    <<: *dind-large-setup
+    timeout-minutes: 60
+    steps:
+      - <<: *checkout
+      - name: Create temporary branch
+        run: |
+          TEMP_BRANCH="recovery-engine-test-$(date +%s)"
+          git checkout -b $TEMP_BRANCH
+          echo "This is a dummy file for testing" > dummy_test_file.txt
+
+      - name: Run tests
+        id: bazel-test-all
+        uses: ./.github/actions/bazel-test-all/
+        with:
+          BAZEL_COMMAND: test --config=ci --keep_going --test_tag_filters=system_test_nightly
+          BAZEL_TARGETS: //rs/tests/consensus:recovery_engine_test
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+
+      - name: Cleanup
+        if: always()
+        run: |
+          git checkout -
+          git branch -D $TEMP_BRANCH
