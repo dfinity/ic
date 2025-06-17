@@ -624,6 +624,10 @@ pub fn sigsegv_fault_handler_new(
     access_kind: AccessKind,
     fault_address: *mut libc::c_void,
 ) -> bool {
+    println!(
+        "sigsegv_fault_handler_new: access_kind={:?}, fault_address={:?}",
+        access_kind, fault_address
+    );
     if !tracker.memory_area.is_within(fault_address) {
         // This memory tracker is not responsible for handling this address.
         return false;
@@ -791,6 +795,10 @@ fn apply_memory_instructions(
     // remains uniformly PROT_NONE. Before the first time we copy, we mark the entire range read/write and maintain that
     // for any later mmap calls.
     let mut current_prot_flags = ProtFlags::PROT_NONE;
+    println!(
+        "apply_memory_instructions: prefetch_range={:?}, instructions={:?}",
+        prefetch_range, instructions
+    );
     for (range, mmap_or_data) in instructions {
         debug_assert!(
             range.start.get() >= prefetch_range.start.get()
@@ -801,6 +809,10 @@ fn apply_memory_instructions(
                 FileDescriptor { fd },
                 offset,
             ) => {
+                println!(
+                    "Mmaping the data: range={:?}, fd={:?}, offset={}",
+                    range, fd, offset
+                );
                 tracker
                     .memory_instructions_stats
                     .mmap_count
@@ -819,6 +831,11 @@ fn apply_memory_instructions(
                 };
             }
             ic_replicated_state::page_map::MemoryMapOrData::Data(data) => {
+                println!(
+                    "Copying the data: range={:?}, data.len()={}",
+                    range,
+                    data.len()
+                );
                 tracker.memory_instructions_stats.copy_page_count.fetch_add(
                     (range.end.get() - range.start.get()) as usize,
                     Ordering::Relaxed,
