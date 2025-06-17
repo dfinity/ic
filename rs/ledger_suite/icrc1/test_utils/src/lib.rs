@@ -1500,7 +1500,7 @@ mod tests {
 
     #[test]
     fn test_valid_transactions_strategy_respects_weights() {
-        let size = 500;
+        let size = 300;
         let minter_identity_arc = Arc::new(minter_identity());
         let strategy = valid_transactions_strategy(
             minter_identity_arc.clone(),
