@@ -46,6 +46,7 @@ use std::{
     time::Duration,
 };
 
+pub mod adapter;
 pub mod utils;
 
 pub const TEST_KEY_LOCAL: &str = "an_arbitrary_key_id";
