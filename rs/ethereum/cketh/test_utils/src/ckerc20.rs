@@ -376,7 +376,7 @@ impl CkErc20Setup {
     pub fn supported_erc20_contract_address_topics(&self) -> Vec<String> {
         self.supported_erc20_contract_addresses()
             .iter()
-            .map(|erc20_address| Hex32::from(Into::<[u8; 32]>::into(erc20_address)).to_string())
+            .map(|erc20_address| Hex32::from(<[u8; 32]>::from(erc20_address)).to_string())
             .collect()
     }
 
