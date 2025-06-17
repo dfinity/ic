@@ -10470,7 +10470,6 @@ dependencies = [
  "registry-canister",
  "serde",
  "serde_cbor",
- "sns-treasury-manager",
  "tempfile",
  "thiserror 2.0.12",
  "tokio",
