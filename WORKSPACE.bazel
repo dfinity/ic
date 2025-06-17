@@ -310,6 +310,7 @@ cc_library(
 )
 
 # Use libvirt from the host environment
+# Used for managing virtual machines programmatically.
 new_local_repository(
     name = "libvirt",
     build_file_content = """
