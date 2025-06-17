@@ -18,7 +18,7 @@ USER root:root
 RUN mkdir -p /config \
              /data \
              /boot/efi \
-             /boot/grub
+             /grub
 COPY etc /etc
 
 # Deactivate motd, it tries creating $HOME/.cache/motd.legal-displayed,

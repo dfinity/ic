@@ -1,14 +1,14 @@
 use crate::common::{send_signal_to_pic, start_server, start_server_helper};
 use candid::{Encode, Principal};
-use ic_utils::interfaces::ManagementCanister;
 use nix::sys::signal::Signal;
 use pocket_ic::common::rest::{
     CreateHttpGatewayResponse, HttpGatewayBackend, HttpGatewayConfig, HttpGatewayDetails,
     HttpsConfig, Topology,
 };
-use pocket_ic::PocketIcBuilder;
+use pocket_ic::{PocketIc, PocketIcBuilder};
 use rcgen::{CertificateParams, KeyPair};
 use reqwest::blocking::Client;
+use reqwest::header;
 use reqwest::Url;
 use reqwest::{Client as NonblockingClient, StatusCode};
 use std::io::Write;
@@ -18,29 +18,59 @@ use tempfile::NamedTempFile;
 
 mod common;
 
+fn deploy_ii(pic: &PocketIc) -> Principal {
+    let canister_id = pic.create_canister();
+    let ii_path = std::env::var_os("II_WASM").expect("Missing II_WASM (path to II wasm) in env.");
+    let ii_wasm = std::fs::read(ii_path).expect("Could not read II wasm file.");
+    pic.add_cycles(canister_id, 1_000_000_000_000);
+    let arg = Encode!(&()).unwrap();
+    pic.install_canister(canister_id, ii_wasm, arg, None);
+    canister_id
+}
+
+async fn deploy_ii_async(pic: &pocket_ic::nonblocking::PocketIc) -> Principal {
+    let canister_id = pic.create_canister().await;
+    let ii_path = std::env::var_os("II_WASM").expect("Missing II_WASM (path to II wasm) in env.");
+    let ii_wasm = std::fs::read(ii_path).expect("Could not read II wasm file.");
+    pic.add_cycles(canister_id, 1_000_000_000_000).await;
+    let arg = Encode!(&()).unwrap();
+    pic.install_canister(canister_id, ii_wasm, arg, None).await;
+    canister_id
+}
+
+// Test the server endpoint to list HTTP gateways and the following HTTP gateway endpoints:
+// - http://127.0.0.1:<port>/?canisterId=<canister-id>
+// - http(s)://localhost:<port>/?canisterId=<canister-id>
+// - http(s)://<canister-id>.localhost:<port>
+// - http(s)://<canister-id>.raw.localhost:<port>
+// - http(s)://<canister-id>.example.com:<port>
+// - http(s)://<canister-id>.raw.example.com:<port>
+// and the following referer headers:
+// - http(s)://<canister-id>.localhost:<port>
+// - http(s)://<canister-id>.raw.localhost:<port>
+// - http(s)://localhost:<port>/?canisterId=<canister-id>
+
 async fn test_gateway(server_url: Url, https: bool) {
-    // create PocketIC instance
+    // Create a PocketIC instance.
     let mut pic = PocketIcBuilder::new()
         .with_nns_subnet()
         .with_application_subnet()
         .build_async()
         .await;
 
-    // retrieve the first canister ID on the application subnet
-    // which will be the effective and expected canister ID for canister creation
-    let topology = pic.topology().await;
-    let effective_canister_id: Principal = topology.default_effective_canister_id.into();
+    // Deploy II onto that instance.
+    let canister_id = deploy_ii_async(&pic).await;
 
     // define HTTP protocol for this test
     let proto = if https { "https" } else { "http" };
 
     // define two domains for canister ID resolution
     let localhost = "localhost";
-    let sub_localhost = &format!("{}.{}", effective_canister_id, localhost);
-    let sub_raw_localhost = &format!("{}.raw.{}", effective_canister_id, localhost);
+    let sub_localhost = &format!("{}.{}", canister_id, localhost);
+    let sub_raw_localhost = &format!("{}.raw.{}", canister_id, localhost);
     let alt_domain = "example.com";
-    let sub_alt_domain = &format!("{}.{}", effective_canister_id, alt_domain);
-    let sub_raw_alt_domain = &format!("{}.raw.{}", effective_canister_id, alt_domain);
+    let sub_alt_domain = &format!("{}.{}", canister_id, alt_domain);
+    let sub_raw_alt_domain = &format!("{}.raw.{}", canister_id, alt_domain);
 
     // generate root TLS certificate (only used if `https` is set to `true`,
     // but defining it here unconditionally simplifies the test)
@@ -73,9 +103,10 @@ async fn test_gateway(server_url: Url, https: bool) {
     } else {
         None
     };
+    let bind_address = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
     let port = pic
         .make_live_with_params(
-            Some(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))),
+            Some(bind_address),
             None,
             domains.clone(),
             https_config.clone(),
@@ -116,10 +147,7 @@ async fn test_gateway(server_url: Url, https: bool) {
         sub_alt_domain,
         sub_raw_alt_domain,
     ] {
-        builder = builder.resolve(
-            domain,
-            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port),
-        );
+        builder = builder.resolve(domain, SocketAddr::new(bind_address, port));
     }
     // add a custom root certificate
     if https {
@@ -128,34 +156,6 @@ async fn test_gateway(server_url: Url, https: bool) {
         );
     }
     let client = builder.build().unwrap();
-
-    // create agent
-    let agent = ic_agent::Agent::builder()
-        .with_url(format!("{}://{}:{}", proto, localhost, port))
-        .with_http_client(client.clone())
-        .build()
-        .unwrap();
-    agent.fetch_root_key().await.unwrap();
-
-    // deploy II canister to PocketIC instance using agent and proxying through HTTP(S) gateway
-    let ic00 = ManagementCanister::create(&agent);
-    let (canister_id,) = ic00
-        .create_canister()
-        .as_provisional_create_with_amount(None)
-        .with_effective_canister_id(effective_canister_id)
-        .call_and_wait()
-        .await
-        .unwrap();
-    assert_eq!(canister_id, effective_canister_id);
-
-    // install II canister WASM
-    let ii_path = std::env::var_os("II_WASM").expect("Missing II_WASM (path to II wasm) in env.");
-    let ii_wasm = std::fs::read(ii_path).expect("Could not read II wasm file.");
-    ic00.install_code(&canister_id, &ii_wasm)
-        .with_raw_arg(Encode!(&()).unwrap())
-        .call_and_wait()
-        .await
-        .unwrap();
 
     // perform frontend asset request for the title page at http://127.0.0.1:<port>/?canisterId=<canister-id>
     let mut test_urls = vec![];
@@ -197,6 +197,37 @@ async fn test_gateway(server_url: Url, https: bool) {
         assert!(page.contains("<title>Internet Identity</title>"));
     }
 
+    // infer canister ID from the referer header
+    let mut test_referers = vec![];
+
+    // perform request where canister ID is specified in the referer header host
+    let referer_url = format!("{}://{}.{}:{}", proto, canister_id, localhost, port);
+    test_referers.push(referer_url);
+
+    let referer_url = format!("{}://{}.raw.{}:{}", proto, canister_id, localhost, port);
+    test_referers.push(referer_url);
+
+    // perform request where canister ID is specified in the referer header query parameters
+    let referer_url = format!(
+        "{}://{}:{}/?canisterId={}",
+        proto, localhost, port, canister_id
+    );
+    test_referers.push(referer_url);
+
+    let test_url = format!("{}://{}:{}", proto, localhost, port);
+
+    for referer in test_referers {
+        // perform request where canister ID is specified in the referer header
+        let res = client
+            .get(&test_url)
+            .header(header::REFERER, referer)
+            .send()
+            .await
+            .unwrap();
+        let page = String::from_utf8(res.bytes().await.unwrap().to_vec()).unwrap();
+        assert!(page.contains("<title>Internet Identity</title>"));
+    }
+
     // stop HTTP gateway and disable auto progress
     pic.stop_live().await;
 
@@ -223,6 +254,8 @@ async fn test_https_gateway() {
     test_gateway(server_url, true).await;
 }
 
+// Test that the HTTP gateway exits gracefully upon receiving a signal.
+
 fn kill_gateway_with_signal(shutdown_signal: Signal) {
     let (server_url, child) = start_server_helper(None, None, false, false);
     let mut pic = PocketIcBuilder::new()
@@ -245,7 +278,77 @@ fn kill_gateway_with_sigterm() {
     kill_gateway_with_signal(Signal::SIGTERM);
 }
 
-/// Tests that HTTP gateway can handle requests with IP address hosts.
+// Test that the HTTP gateway handles `/_/dashboard` and `/_/topology` correctly.
+
+#[test]
+fn http_gateway_route_underscore() {
+    let mut pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build();
+    let gateway = pic.make_live(None);
+
+    let client = Client::new();
+
+    let dashboard_url = gateway.join("_/dashboard").unwrap().to_string();
+    let dashboard = client.get(dashboard_url).send().unwrap();
+    let page = String::from_utf8(dashboard.bytes().unwrap().to_vec()).unwrap();
+    assert!(page.contains("<h1>PocketIC Dashboard</h1>"));
+
+    let topology_url = gateway.join("_/topology").unwrap().to_string();
+    let topology_bytes = client.get(topology_url).send().unwrap();
+    let topology_json = String::from_utf8(topology_bytes.bytes().unwrap().to_vec()).unwrap();
+    let topology: Topology = serde_json::from_str(&topology_json).unwrap();
+    assert_eq!(topology.get_app_subnets().len(), 1);
+}
+
+// Test that the HTTP reports the expected error if canister does not exist.
+
+#[test]
+fn http_gateway_canister_not_found() {
+    let mut pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build();
+    let gateway = pic.make_live(None);
+
+    let client = Client::new();
+
+    for path in [
+        "_/foo?canisterId=rwlgt-iiaaa-aaaaa-aaaaa-cai",
+        "foo?canisterId=rwlgt-iiaaa-aaaaa-aaaaa-cai",
+    ] {
+        let invalid_url = gateway.join(path).unwrap().to_string();
+        let error_page = client.get(invalid_url).send().unwrap();
+        assert_eq!(error_page.status(), StatusCode::NOT_FOUND);
+        let page = String::from_utf8(error_page.bytes().unwrap().to_vec()).unwrap();
+        assert!(page.contains("404 - canister not found"));
+    }
+}
+
+// Test that the HTTP reports the expected error if canister id could not be resolved.
+
+#[test]
+fn http_gateway_missing_canister_id() {
+    let mut pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build();
+    let gateway = pic.make_live(None);
+
+    let client = Client::new();
+
+    for path in ["_/foo", "foo"] {
+        let invalid_url = gateway.join(path).unwrap().to_string();
+        let error_page = client.get(invalid_url).send().unwrap();
+        assert_eq!(error_page.status(), StatusCode::BAD_REQUEST);
+        let page = String::from_utf8(error_page.bytes().unwrap().to_vec()).unwrap();
+        assert!(page.contains("400 - canister id not resolved"));
+    }
+}
+
+// Test that the HTTP gateway can handle `/api` requests with an IP address as the host.
+
 #[test]
 fn test_gateway_ip_addr_host() {
     // Create PocketIC instance with one NNS subnet and one app subnet.
@@ -261,6 +364,7 @@ fn test_gateway_ip_addr_host() {
     // We create a canister on the app subnet.
     pic.create_canister_on_subnet(None, None, app_subnet);
 
+    // Start an HTTP gateway and override its host to `127.0.0.1`.
     let mut endpoint = pic.make_live(None);
     endpoint
         .set_ip_host(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)))
@@ -282,19 +386,29 @@ fn test_gateway_ip_addr_host() {
     })
 }
 
+// Test that the HTTP gateway fails gracefully in case of an unresponsive backend.
+
 #[test]
 fn test_unresponsive_gateway_backend() {
     let client = Client::new();
 
-    // Create PocketIC instance with one NNS subnet and one app subnet.
+    // Start a private server instance.
     let (backend_server_url, mut backend_process) = start_server_helper(None, None, false, false);
+
+    // Create a PocketIC instance on that server instance.
     let pic = PocketIcBuilder::new()
         .with_nns_subnet()
         .with_application_subnet()
         .with_server_url(backend_server_url.clone())
         .build();
 
-    // Create HTTP gateway on a different gateway server.
+    // Deploy II onto that instance.
+    let canister_id = deploy_ii(&pic);
+
+    // Enable auto progress for asset certification to work.
+    pic.auto_progress();
+
+    // Create an HTTP gateway on a different (private) server instance.
     let (gateway_server_url, _) = start_server_helper(None, None, false, false);
     let create_gateway_endpoint = gateway_server_url.join("http_gateway").unwrap();
     let backend_instance_url = backend_server_url
@@ -324,111 +438,80 @@ fn test_unresponsive_gateway_backend() {
         }
     };
 
-    // Query the status endpoint via HTTP gateway.
-    let resp = client
-        .get(endpoint.join("api/v2/status").unwrap())
-        .send()
-        .unwrap();
-    assert_eq!(resp.status(), StatusCode::OK);
+    // Query a few endpoints on the HTTP gateway:
+    // - a custom dashboard endpoint (handled by the PocketIC server);
+    // - an /api endpoint (proxied by `ic-gateway`);
+    // - an asset endpoint (handled by `ic-http-gateway`).
+    let paths = vec![
+        "_/dashboard".to_string(),
+        "api/v2/status".to_string(),
+        format!("favicon.ico?canisterId={}", canister_id),
+    ];
+    for path in &paths {
+        let resp = client.get(endpoint.join(path).unwrap()).send().unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
 
     // Kill the backend server, but keep the HTTP gateway running.
     drop(pic);
     backend_process.kill().unwrap();
 
-    // Query the status endpoint via HTTP gateway again.
-    let resp = client
-        .get(endpoint.join("api/v2/status").unwrap())
-        .send()
-        .unwrap();
-    assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
-    let page = String::from_utf8(resp.bytes().unwrap().as_ref().to_vec()).unwrap();
-    assert!(page.contains("error: upstream_error"));
-}
-
-#[test]
-fn test_invalid_gateway_backend() {
-    // Create HTTP gateway with an invalid backend URL
-    let (gateway_server_url, _) = start_server_helper(None, None, false, false);
-    let create_gateway_endpoint = gateway_server_url.join("http_gateway").unwrap();
-    let backend_url = "http://240.0.0.0";
-    let http_gateway_config = HttpGatewayConfig {
-        ip_addr: None,
-        port: None,
-        forward_to: HttpGatewayBackend::Replica(backend_url.to_string()),
-        domains: None,
-        https_config: None,
-    };
-    let client = Client::new();
-    let res = client
-        .post(create_gateway_endpoint)
-        .json(&http_gateway_config)
-        .send()
-        .unwrap()
-        .json::<CreateHttpGatewayResponse>()
-        .unwrap();
-    match res {
-        CreateHttpGatewayResponse::Created(_info) => {
-            panic!("Suceeded to create http gateway!")
-        }
-        CreateHttpGatewayResponse::Error { message } => {
-            assert!(message.contains(&format!("Timed out fetching root key from {}", backend_url))
-            || message.contains(&format!("An error happened during communication with the replica: error sending request for url ({}/api/v2/status)", backend_url)));
-        }
-    };
-}
-
-#[test]
-fn http_gateway_route_underscore() {
-    let mut pic = PocketIcBuilder::new()
-        .with_nns_subnet()
-        .with_application_subnet()
-        .build();
-    let gateway = pic.make_live(None);
-
-    let client = Client::new();
-
-    // Requests to paths starting with `/_/dashboard` and `/_/topology` are routed directly to the PocketIC instance/replica.
-
-    let dashboard_url = gateway.join("_/dashboard").unwrap().to_string();
-    let dashboard = client.get(dashboard_url).send().unwrap();
-    let page = String::from_utf8(dashboard.bytes().unwrap().to_vec()).unwrap();
-    assert!(page.contains("<h1>PocketIC Dashboard</h1>"));
-
-    let topology_url = gateway.join("_/topology").unwrap().to_string();
-    let topology_bytes = client.get(topology_url).send().unwrap();
-    let topology_json = String::from_utf8(topology_bytes.bytes().unwrap().to_vec()).unwrap();
-    let topology: Topology = serde_json::from_str(&topology_json).unwrap();
-    assert_eq!(topology.get_app_subnets().len(), 1);
-
-    // If a canister ID can be found,
-    // then the HTTP gateway tries to handle the request
-    // (which fails because the canister does not exist).
-
-    for invalid_suffix in [
-        "_/foo?canisterId=rwlgt-iiaaa-aaaaa-aaaaa-cai",
-        "foo?canisterId=rwlgt-iiaaa-aaaaa-aaaaa-cai",
-    ] {
-        let invalid_url = gateway.join(invalid_suffix).unwrap().to_string();
-        let error_page = client.get(invalid_url).send().unwrap();
-        let page = String::from_utf8(error_page.bytes().unwrap().to_vec()).unwrap();
-        assert!(page.contains("404 - canister not found"));
+    // Query the endpoints again.
+    for path in &paths {
+        let resp = client.get(endpoint.join(path).unwrap()).send().unwrap();
+        assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
+        let page = String::from_utf8(resp.bytes().unwrap().as_ref().to_vec()).unwrap();
+        assert!(page.contains("upstream_error") || page.contains("upstream error"));
     }
-
-    // If no canister ID can be found,
-    // then the HTTP gateway complains that it could not find a canister ID.
-
-    let invalid_url = gateway.join("_/foo").unwrap().to_string();
-    let error_page = client.get(invalid_url).send().unwrap();
-    assert_eq!(error_page.status(), StatusCode::BAD_REQUEST);
-    let page = String::from_utf8(error_page.bytes().unwrap().to_vec()).unwrap();
-    assert!(page.contains("400 - canister id not resolved"));
-
-    let invalid_url = gateway.join("foo").unwrap().to_string();
-    let error_page = client.get(invalid_url).send().unwrap();
-    assert_eq!(error_page.status(), StatusCode::BAD_REQUEST);
-    let page = String::from_utf8(error_page.bytes().unwrap().to_vec()).unwrap();
-    assert!(page.contains("400 - canister id not resolved"));
 }
+
+// Test that trying to bind the HTTP gateway to an invalid backend fails gracefully.
+
+#[test]
+fn test_gateway_invalid_forward_to() {
+    // Start a private server instance.
+    let (server_url, _) = start_server_helper(None, None, false, false);
+
+    let invalid_backend_url = "http://240.0.0.0";
+    let invalid_instance_id = 42;
+    for (forward_to, expected_err) in [
+        (
+            HttpGatewayBackend::Replica(invalid_backend_url.to_string()),
+            "error: upstream_error",
+        ),
+        (
+            HttpGatewayBackend::PocketIcInstance(invalid_instance_id),
+            "Instance not found",
+        ),
+    ] {
+        let http_gateway_config = HttpGatewayConfig {
+            ip_addr: None,
+            port: None,
+            forward_to,
+            domains: None,
+            https_config: None,
+        };
+        let client = Client::new();
+        let create_gateway_endpoint = server_url.join("http_gateway").unwrap();
+        let res = client
+            .post(create_gateway_endpoint)
+            .json(&http_gateway_config)
+            .send()
+            .unwrap()
+            .json::<CreateHttpGatewayResponse>()
+            .unwrap();
+        match res {
+            CreateHttpGatewayResponse::Created(_info) => {
+                panic!("Suceeded to create http gateway!")
+            }
+            CreateHttpGatewayResponse::Error { message } => {
+                assert!(message.contains(expected_err));
+            }
+        };
+    }
+}
+
+// Test that trying to bind the HTTP gateway to the same port twice fails gracefully.
 
 fn create_gateway(
     server_url: Url,
@@ -458,16 +541,17 @@ fn create_gateway(
 
 #[test]
 fn test_gateway_address_in_use() {
+    // Start a private server instance.
     let (server_url, _) = start_server_helper(None, None, false, false);
 
-    // create PocketIC instance
+    // Create a PocketIC instance on that server.
     let pic = PocketIcBuilder::new()
         .with_server_url(server_url.clone())
         .with_nns_subnet()
         .with_application_subnet()
         .build();
 
-    // create an HTTP gateway at an arbitrary port
+    // Create an HTTP gateway at an arbitrary port.
     let port = create_gateway(
         server_url.clone(),
         None,
@@ -475,7 +559,7 @@ fn test_gateway_address_in_use() {
     )
     .unwrap();
 
-    // try to create another HTTP gateway at the same port
+    // Trying to create another HTTP gateway at the same port fails.
     let err = create_gateway(
         server_url,
         Some(port),

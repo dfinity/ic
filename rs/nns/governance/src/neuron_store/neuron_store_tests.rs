@@ -1,9 +1,8 @@
 use super::*;
 use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
-    pb::v1::{neuron::Followees, MaturityDisbursement},
+    pb::v1::{Followees, MaturityDisbursement},
     storage::with_stable_neuron_indexes,
-    temporarily_enable_disburse_maturity,
 };
 use ic_nervous_system_common::ONE_MONTH_SECONDS;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
@@ -377,8 +376,6 @@ fn create_maturity_disbursement(
 
 #[test]
 fn test_maturity_disbursement_index() {
-    let _t = temporarily_enable_disburse_maturity();
-
     // Set up 2 neurons with no maturity disbursements.
     let mut neuron_store = NeuronStore::new(btreemap! {
         1 => simple_neuron_builder(1).build(),
