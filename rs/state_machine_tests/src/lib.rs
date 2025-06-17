@@ -1364,6 +1364,7 @@ impl StateMachineBuilder {
             sm.state_manager.clone(),
             sm.registry_client.clone(),
             rng,
+            None,
             xnet_slice_pool_impl,
             refill_task_handle,
             metrics,

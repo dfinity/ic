@@ -1,0 +1,12 @@
+[package]
+name = "grub"
+version = "1.0.0"
+edition = "2021"
+
+[dependencies]
+strum = { workspace = true }
+thiserror = { workspace = true }
+regex = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

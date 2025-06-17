@@ -601,16 +601,6 @@ fn get_valid_system_apis_common(I: ValType) -> HashMap<String, HashMap<String, F
             )],
         ),
         (
-            "mint_cycles",
-            vec![(
-                API_VERSION_IC0,
-                FunctionSignature {
-                    param_types: vec![ValType::I64],
-                    return_type: vec![ValType::I64],
-                },
-            )],
-        ),
-        (
             "mint_cycles128",
             vec![(
                 API_VERSION_IC0,
@@ -945,7 +935,7 @@ fn set_imports_details(import_details: &mut WasmImportsDetails, import_module: &
         "msg_cycles_available" => import_details.imports_msg_cycles_available = true,
         "msg_cycles_refunded" => import_details.imports_msg_cycles_refunded = true,
         "msg_cycles_accept" => import_details.imports_msg_cycles_accept = true,
-        "mint_cycles" => import_details.imports_mint_cycles = true,
+        "mint_cycles128" => import_details.imports_mint_cycles = true,
         _ => {}
     }
 }

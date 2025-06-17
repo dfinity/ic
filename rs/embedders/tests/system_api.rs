@@ -2,8 +2,8 @@ use ic_base_types::{NumBytes, NumSeconds, PrincipalIdBlobParseError};
 use ic_config::{embedders::Config as EmbeddersConfig, subnet_config::SchedulerConfig};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::wasmtime_embedder::system_api::{
-    sandbox_safe_system_state::SandboxSafeSystemState, ApiType, DefaultOutOfInstructionsHandler,
-    NonReplicatedQueryKind, SystemApiImpl, MAX_ENV_VAR_NAME_SIZE,
+    sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateModifications},
+    ApiType, DefaultOutOfInstructionsHandler, SystemApiImpl, MAX_ENV_VAR_NAME_SIZE
 };
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::{
@@ -244,7 +244,6 @@ fn is_supported(api_type: SystemApiCallId, context: &str) -> bool {
         SystemApiCallId::CostVetkdDeriveKey => vec!["*", "s"],
         SystemApiCallId::DebugPrint => vec!["*", "s"],
         SystemApiCallId::Trap => vec!["*", "s"],
-        SystemApiCallId::MintCycles => vec!["U", "Ry", "Rt", "T"],
         SystemApiCallId::MintCycles128 => vec!["U", "Ry", "Rt", "T"],
         SystemApiCallId::SubnetSelfSize => vec!["*"],
         SystemApiCallId::SubnetSelfCopy => vec!["*"],
@@ -729,11 +728,6 @@ fn api_availability_test(
                 context,
             );
         }
-        SystemApiCallId::MintCycles => {
-            // ic0.mint_cycles is only supported for CMC which is tested separately
-            let mut api = get_system_api(api_type, &system_state, cycles_account_manager);
-            assert_api_not_supported(api.ic0_mint_cycles(0));
-        }
         SystemApiCallId::MintCycles128 => {
             // ic0.mint_cycles128 is only supported for CMC which is tested separately
             let mut api = get_system_api(api_type, &system_state, cycles_account_manager);
@@ -895,16 +889,8 @@ fn system_api_availability() {
                 .with_subnet_type(subnet_type)
                 .build();
 
-            // check ic0.mint_cycles, ic0.mint_cycles128 API availability for CMC
+            // check ic0.mint_cycles128 API availability for CMC
             let cmc_system_state = get_cmc_system_state();
-            assert_api_availability(
-                |mut api| api.ic0_mint_cycles(0),
-                api_type.clone(),
-                &cmc_system_state,
-                cycles_account_manager,
-                SystemApiCallId::MintCycles,
-                context,
-            );
             assert_api_availability(
                 |mut api| api.ic0_mint_cycles128(Cycles::zero(), 0, &mut [0u8; 16]),
                 api_type.clone(),
@@ -1228,7 +1214,6 @@ fn data_certificate_copy() {
             subnet_test_id(1),
             vec![],
             Some(vec![1, 2, 3, 4, 5, 6]),
-            NonReplicatedQueryKind::Pure,
         ),
         &system_state,
         cycles_account_manager,
@@ -2255,6 +2240,35 @@ fn get_system_api_for_best_effort_response(
         Rc::new(DefaultOutOfInstructionsHandler::default()),
         no_op_logger(),
     )
+}
+
+#[test]
+fn composite_queries_do_not_return_state_changes_on_trap() {
+    let cycles_amount = Cycles::from(1_000_000_000_000u128);
+    let max_num_instructions = NumInstructions::from(1 << 30);
+    let cycles_account_manager = CyclesAccountManagerBuilder::new()
+        .with_max_num_instructions(max_num_instructions)
+        .build();
+    let mut api = get_system_api(
+        ApiTypeBuilder::build_composite_query_api(),
+        &get_system_state_with_cycles(cycles_amount),
+        cycles_account_manager,
+    );
+
+    // Make a call that would add a request in the output queue.
+    api.ic0_call_new(0, 1, 0, 1, 0, 0, 0, 0, &[42; 128])
+        .unwrap();
+    api.ic0_call_perform().unwrap();
+
+    // Call trap explicitly to simulate an error in the execution.
+    let err = api.ic0_trap(0, 0, &[42; 128]).unwrap_err();
+    api.set_execution_error(err);
+
+    // No state changes should be returned.
+    assert_eq!(
+        api.take_system_state_modifications(),
+        SystemStateModifications::default()
+    );
 }
 
 #[test]
