@@ -93,10 +93,14 @@ impl CanisterHttp {
             auth: None,
             connector: http_connector.clone(),
         };
-        let proxied_https_connector = HttpsConnectorBuilder::new()
+        let proxied_builder = HttpsConnectorBuilder::new()
             .with_native_roots()
-            .expect("Failed to set native roots")
-            .https_only()
+            .expect("Failed to set native roots");
+        #[cfg(not(feature = "http"))]
+        let proxied_builder = proxied_builder.https_only();
+        #[cfg(feature = "http")]
+        let proxied_builder = proxied_builder.https_or_http();
+        let proxied_https_connector = proxied_builder
             .enable_all_versions()
             .wrap_connector(proxy_connector);
 
