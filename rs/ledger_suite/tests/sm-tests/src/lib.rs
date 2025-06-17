@@ -4887,6 +4887,26 @@ Charged for processing the approval.
         "Expected: {}, got: {}",
         expected_message, message
     );
+
+    // If memo is not specified it should not be included.
+    args.arg = Encode!(&ApproveArgs {
+        memo: None,
+        ..approve_args.clone()
+    })
+    .unwrap();
+
+    let message = extract_icrc21_message_string(
+        &icrc21_consent_message(env, canister_id, from_account.owner, args.clone())
+            .unwrap()
+            .consent_message,
+    );
+
+    let expected_message = expected_approve_message.replace("\n\n**Memo:**\n`test_bytes`", "");
+    assert_eq!(
+        message, expected_message,
+        "Expected: {}, got: {}",
+        expected_message, message
+    );
 }
 
 fn test_icrc21_transfer_from_message(
