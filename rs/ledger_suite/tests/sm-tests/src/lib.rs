@@ -4611,7 +4611,7 @@ You are approving a transfer of funds from your account.
 Charged for processing the transfer.
 
 **Memo:**
-test_bytes";
+`test_bytes`";
 
     let consent_info =
         icrc21_consent_message(env, canister_id, from_account.owner, args.clone()).unwrap();
@@ -4640,7 +4640,7 @@ test_bytes";
             .unwrap()
             .consent_message,
     );
-    let expected_message = expected_transfer_message.replace("\n\n**Memo:**\ntest_bytes", "");
+    let expected_message = expected_transfer_message.replace("\n\n**Memo:**\n`test_bytes`", "");
     assert_eq!(
         message, expected_message,
         "Expected: {}, got: {}",
@@ -4768,7 +4768,7 @@ Thu, 06 May 2021 20:17:10 +0000
 d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101
 
 **Memo:**
-test_bytes";
+`test_bytes`";
 
     let mut args = ConsentMessageRequest {
         method: "icrc2_approve".to_owned(),
@@ -4934,7 +4934,7 @@ djduj-3qcaa-aaaaa-aaaap-4ai-5r7aoqy.30303030303030303030303030303030303030303030
 0.0001 XTST
 
 **Memo:**
-test_bytes";
+`test_bytes`";
 
     let message = extract_icrc21_message_string(
         &icrc21_consent_message(env, canister_id, spender_account.owner, args.clone())

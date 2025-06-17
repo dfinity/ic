@@ -347,7 +347,7 @@ impl ConsentMessageBuilder {
 
         if let Some(memo) = self.memo {
             message.push_str(&format!(
-                "\n\n**Memo:**\n{}",
+                "\n\n**Memo:**\n`{}`",
                 // Check if the memo is a valid UTF-8 string and display it as such if it is.
                 &match std::str::from_utf8(memo.as_slice()) {
                     Ok(valid_str) => valid_str.to_string(),
