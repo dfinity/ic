@@ -258,6 +258,7 @@ system_test(
     tags = [
         "k8s",
         "manual",
+        "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],
     uses_guestos_recovery = True,
