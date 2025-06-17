@@ -279,10 +279,6 @@ idl_to_json(name = "idl2json")
 
 mainnet_icos_images()
 
-load("//bazel:spawn_proto_library.bzl", "spawn_proto_library")
-
-spawn_proto_library(name = "spawn_proto_library")
-
 # Use libsystemd from the host environment
 # Ideally this is pulled hermetically, but as this is only used by infogetty
 # within IC images, we have less compatibility to worry about, and packaging it
