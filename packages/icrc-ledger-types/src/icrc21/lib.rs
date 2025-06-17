@@ -189,7 +189,10 @@ impl ConsentMessageBuilder {
                 }
                 message.push_str(&format!("\n\n**Amount:** `{} {}`", amount, token_symbol));
                 message.push_str(&format!("\n\n**To:**\n`{}`", receiver_account));
-                message.push_str(&format!("\n\n**Fees:** `{} {}`\nCharged for processing the transfer.", fee, token_symbol));
+                message.push_str(&format!(
+                    "\n\n**Fees:** `{} {}`\nCharged for processing the transfer.",
+                    fee, token_symbol
+                ));
             }
             Icrc21Function::Approve => {
                 message.push_str("# Authorize another address to withdraw from your account");
