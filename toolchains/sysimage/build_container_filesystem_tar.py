@@ -109,7 +109,9 @@ def export_container_filesystem(container_cmd: str, image_tag: str, destination_
     invoke.run(f"{container_cmd} export -o {tar_file} {container_name}")
     invoke.run(f"tar xf {tar_file} -C {tar_dir}")
     invoke.run(f"rm {tar_file}")
-    invoke.run(f"tar cf {destination_tar_filename} --numeric-owner --sort=name --exclude='run' --mtime=\"UTC 1970-01-01 00:00:00\" -C {tar_dir} $(ls -A {tar_dir})")
+    invoke.run(
+        f"tar cf {destination_tar_filename} --numeric-owner --sort=name --exclude='run/*' --mtime=\"UTC 1970-01-01 00:00:00\" -C {tar_dir} $(ls -A {tar_dir})"
+    )
     invoke.run("sync")
     invoke.run(f"{container_cmd} container rm {container_name}")
 
