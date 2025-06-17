@@ -2186,7 +2186,7 @@ fn test_cli_data() {
                         0,
                     )
                     .await;
-                    let output = process::Command::new(rosetta_cli())
+                    let output = std::process::Command::new(rosetta_cli())
                         .args([
                             "check:data",
                             "--configuration-file",
