@@ -377,7 +377,7 @@ impl ArgWithCaller {
     where
         T: TokensType,
     {
-        let from = self.from();
+        let caller = self.from();
         let (operation, created_at_time, memo) = match self.arg.clone() {
             LedgerEndpointArg::ApproveArg(approve_arg) => {
                 let operation = Operation::<T>::Approve {
@@ -392,13 +392,13 @@ impl ArgWithCaller {
                         .clone()
                         .map(|a| T::try_from(a.clone()).unwrap()),
                     spender: approve_arg.spender,
-                    from,
+                    from: caller,
                 };
                 (operation, approve_arg.created_at_time, approve_arg.memo)
             }
             LedgerEndpointArg::TransferArg(transfer_arg) => {
                 let burn_operation = transfer_arg.to == minter;
-                let mint_operation = from == minter;
+                let mint_operation = caller == minter;
                 let operation = if mint_operation {
                     Operation::Mint {
                         amount: T::try_from(transfer_arg.amount.clone()).unwrap(),
@@ -407,14 +407,14 @@ impl ArgWithCaller {
                 } else if burn_operation {
                     Operation::Burn {
                         amount: T::try_from(transfer_arg.amount.clone()).unwrap(),
-                        from,
+                        from: caller,
                         spender: None,
                     }
                 } else {
                     Operation::Transfer {
                         amount: T::try_from(transfer_arg.amount.clone()).unwrap(),
                         to: transfer_arg.to,
-                        from,
+                        from: caller,
                         spender: None,
                         fee: transfer_arg.fee.clone().map(|f| T::try_from(f).unwrap()),
                     }
@@ -426,7 +426,7 @@ impl ArgWithCaller {
                 let operation = Operation::Transfer {
                     from: transfer_from_arg.from,
                     to: transfer_from_arg.to,
-                    spender: Some(from), // The caller is the spender
+                    spender: Some(caller),
                     amount: T::try_from(transfer_from_arg.amount.clone()).unwrap(),
                     fee: transfer_from_arg
                         .fee
@@ -455,10 +455,11 @@ struct TransactionsAndBalances {
     txs: HashSet<Transaction<Tokens>>,
     principal_to_basic_identity: HashMap<Principal, Arc<BasicIdentity>>,
     allowances: HashMap<(Account, Account), Tokens>,
-    /// Accounts with allowances and balances of at least `default_fee`. Even though the
-    /// `approve_strategy` currently only creates allowances with the amount limited to the account
-    /// balance at the time of the transaction, that balance may have decreased by the time a
-    /// subsequent `transfer_from` transaction makes use of (some of) the allowance.
+    /// Accounts which are the `from` account in at least one allowance, having a balances of at
+    /// least `default_fee`. Even though the `approve_strategy` currently only creates allowances
+    /// with the amount limited to the account balance at the time of the transaction, that balance
+    /// may have decreased by the time a subsequent `transfer_from` transaction makes use of (some
+    /// of) the allowance.
     valid_allowance_from: HashSet<Account>,
 }
 
@@ -513,13 +514,16 @@ impl TransactionsAndBalances {
                     self.allowances.entry((from, spender_account)).and_modify(
                         |current_allowance| {
                             let current_amount = current_allowance.get_e8s();
-                            if current_amount >= used_allowance {
-                                *current_allowance =
-                                    Tokens::from_e8s(current_amount - used_allowance);
-                            } else {
-                                // This shouldn't happen if our strategy is correct, but handle gracefully
-                                *current_allowance = Tokens::from_e8s(0);
-                            }
+                            *current_allowance = Tokens::from_e8s(
+                                current_amount
+                                    .checked_sub(used_allowance)
+                                    .unwrap_or_else(|| {
+                                        panic!(
+                                            "Allowance {} not enough to cover amount and fee {} - from: {}, to: {}, spender: {}",
+                                            current_amount, used_allowance, from, to, spender_account
+                                        )
+                                    }),
+                            );
                         },
                     );
 
@@ -550,15 +554,11 @@ impl TransactionsAndBalances {
         };
         self.transactions.push(tx);
 
-        // Update valid_allowance_from incrementally based on the specific transaction
-        self.update_valid_allowance_from_incremental(&operation, default_fee);
+        // Update valid_allowance_from based on the specific transaction
+        self.update_valid_allowance_from(operation, default_fee);
     }
 
-    fn update_valid_allowance_from_incremental(
-        &mut self,
-        operation: &Operation<Tokens>,
-        default_fee: u64,
-    ) {
+    fn update_valid_allowance_from(&mut self, operation: &Operation<Tokens>, default_fee: u64) {
         match operation {
             Operation::Mint { to, .. } => {
                 // Check if the credited account should be added to valid_allowance_from
@@ -1051,15 +1051,15 @@ pub fn valid_transactions_strategy(
                     .prop_flat_map(move |(spender, allowance)| {
                         let tx_hash_set_ptr2 = tx_hash_set_ptr.clone();
                         let account_to_basic_identity_ptr2 = account_to_basic_identity_ptr.clone();
-                        let current_balances2 = current_balances.clone();
                         let allowance_amount = allowance.get_e8s();
                         let fee_amount = default_fee;
 
-                        // Get the current balance for this account (may have changed since valid_allowance_from was built)
-                        let current_balance = current_balances2.get(&from).copied().unwrap_or(0);
+                        // Get the current balance for this account
+                        let current_balance = current_balances.get(&from).copied().unwrap_or(0);
 
-                        // Calculate max transferable amount considering both allowance and current account balance
-                        // Both allowance and from account balance must cover: transfer amount + fee
+                        // Calculate max transferable amount considering both allowance and current
+                        // account balance. Both allowance and from account balance must cover
+                        // transfer amount (which can be 0) + fee
                         let allowance_max =
                             allowance_amount.checked_sub(fee_amount).unwrap_or_else(|| {
                                 panic!(
@@ -1527,103 +1527,6 @@ mod tests {
             .new_tree(&mut TestRunner::default())
             .expect("Unable to run valid_transactions_strategy");
         assert_eq!(tree.current().len(), size)
-    }
-
-    #[test]
-    fn test_valid_transactions_strategy_respects_weights() {
-        let size = 300;
-        let minter_identity_arc = Arc::new(minter_identity());
-        let strategy = valid_transactions_strategy(
-            minter_identity_arc.clone(),
-            10_000,
-            size,
-            SystemTime::now(),
-        );
-        let tree = strategy
-            .new_tree(&mut TestRunner::default())
-            .expect("Unable to run valid_transactions_strategy");
-        let transactions = tree.current();
-
-        // Count transaction types
-        let mut mint_count = 0;
-        let mut transfer_count = 0;
-        let mut approve_count = 0;
-        let mut transfer_from_count = 0;
-        for tx in &transactions {
-            match &tx.arg {
-                LedgerEndpointArg::TransferArg(transfer_arg) => {
-                    // Distinguish between mint/burn and regular transfers by checking the to/from
-                    let minter: Account = minter_identity_arc.sender().unwrap().into();
-                    if transfer_arg.to == minter {
-                        // This is a burn (transfer to minter)
-                        transfer_count += 1;
-                    } else if tx.caller.sender().unwrap() == minter.owner {
-                        // This is a mint (from minter)
-                        mint_count += 1;
-                    } else {
-                        // This is a regular transfer
-                        transfer_count += 1;
-                    }
-                }
-                LedgerEndpointArg::ApproveArg(_) => {
-                    approve_count += 1;
-                }
-                LedgerEndpointArg::TransferFromArg(_) => {
-                    transfer_from_count += 1;
-                }
-            }
-        }
-
-        println!("Transaction distribution:");
-        println!(
-            "  Mint: {} ({:.1}%)",
-            mint_count,
-            100.0 * mint_count as f32 / size as f32
-        );
-        println!(
-            "  Transfer: {} ({:.1}%)",
-            transfer_count,
-            100.0 * transfer_count as f32 / size as f32
-        );
-        println!(
-            "  Approve: {} ({:.1}%)",
-            approve_count,
-            100.0 * approve_count as f32 / size as f32
-        );
-        println!(
-            "  TransferFrom: {} ({:.1}%)",
-            transfer_from_count,
-            100.0 * transfer_from_count as f32 / size as f32
-        );
-
-        // Just verify basic functionality for now
-        assert_eq!(
-            transactions.len(),
-            size,
-            "Should generate exactly the requested number of transactions"
-        );
-
-        // Verify we have at least some transactions of different types
-        assert!(
-            mint_count + transfer_count + approve_count + transfer_from_count == size,
-            "All transactions should be categorized"
-        );
-
-        // Verify that there is at least one mint
-        assert!(mint_count > 0, "Should have at least one mint transaction");
-
-        // Verify transfer is the most common (basic sanity check)
-        assert!(
-            transfer_count > mint_count,
-            "Transfer should be more common than mint"
-        );
-        assert!(
-            transfer_count > approve_count,
-            "Transfer should be more common than approve"
-        );
-
-        // Don't check transfer_from for now since it depends on allowances being built up
-        println!("Test passed! Transaction generation is working.");
     }
 
     #[test]

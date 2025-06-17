@@ -136,7 +136,7 @@ rust_test(
 )
 
 rust_test_suite_with_extra_srcs(
-    name = "rosetta-api-tests",
+    name = "rosetta-api-cli-tests",
     srcs = glob(["tests/rosetta_cli_tests.rs"]),
     aliases = ALIASES,
     data = glob([
