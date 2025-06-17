@@ -29,7 +29,7 @@ impl Partition for FatPartition {
         })
     }
 
-    async fn open_range(image: PathBuf, offset_bytes: u64, length_bytes: u64) -> Result<Self> {
+    async fn open_range(image: PathBuf, offset_bytes: u64, _length_bytes: u64) -> Result<Self> {
         Ok(Self {
             offset_bytes: Some(offset_bytes),
             original: image,

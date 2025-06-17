@@ -8,7 +8,7 @@ use std::process::{Output, Stdio};
 use tempfile::{tempdir, TempDir};
 use tokio::fs;
 use tokio::fs::File;
-use tokio::io::{self, AsyncReadExt, AsyncSeekExt, AsyncWriteExt, SeekFrom};
+use tokio::io::{self, AsyncSeekExt, AsyncWriteExt, SeekFrom};
 use tokio::process::Command;
 
 use crate::exes::{debugfs, faketime};
