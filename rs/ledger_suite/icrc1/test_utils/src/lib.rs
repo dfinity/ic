@@ -702,6 +702,14 @@ pub fn valid_transactions_strategy(
     length: usize,
     now: SystemTime,
 ) -> impl Strategy<Value = Vec<ArgWithCaller>> {
+    /// Generates a strategy for producing valid `mint` operations.
+    ///
+    /// The generated mint operations will:
+    /// - Always use the minter as the caller.
+    /// - Mint to a random account (not the minter).
+    /// - Set the `amount` to a random value.
+    /// - Optionally include `created_at_time` and `memo`.
+    /// - Avoid duplicate transactions and minting to the minter.
     fn mint_strategy(
         minter_identity: Arc<BasicIdentity>,
         now: SystemTime,
@@ -750,6 +758,15 @@ pub fn valid_transactions_strategy(
             )
     }
 
+    /// Generates a strategy for producing valid `burn` operations.
+    ///
+    /// The generated burn operations will:
+    /// - Use a random existing `from` account with sufficient balance to cover the minimum burn
+    ///   amount (which is equal to the `default_fee`).
+    /// - Set the `amount` to a random value within the allowed range for the account.
+    /// - Optionally include `created_at_time` and `memo`.
+    /// - Avoid duplicate transactions.
+    /// - Ensures the caller matches the `from` account.
     fn burn_strategy(
         account_balance: impl Strategy<Value = (Account, u64)>,
         minter_identity: Arc<BasicIdentity>,
@@ -804,6 +821,15 @@ pub fn valid_transactions_strategy(
         })
     }
 
+    /// Generates a strategy for producing valid `transfer` operations.
+    ///
+    /// The generated transfer operations will:
+    /// - Use a random existing `from` account (with sufficient balance to cover the transfer fee)
+    ///   and a random `to` account.
+    /// - Set the `amount` to a random value within the allowed range for the account.
+    /// - Optionally include a `fee`, `created_at_time`, and `memo`.
+    /// - Avoid self-transfers, transfers involving the minter, and duplicate transactions.
+    /// - Ensures the caller matches the `from` account.
     fn transfer_strategy(
         account_balance: impl Strategy<Value = (Account, u64)>,
         minter_identity: Arc<BasicIdentity>,
@@ -867,6 +893,14 @@ pub fn valid_transactions_strategy(
         })
     }
 
+    /// Generates a strategy for producing valid `approve` operations.
+    ///
+    /// The generated approve operations will:
+    /// - Use a random existing `from` account (with sufficient balance to at least cover the
+    ///   creation of the allowance, i.e., at least `default_fee`), and a random `spender` account.
+    /// - Set the `amount` to a random value within the allowed range.
+    /// - Optionally include a `fee`, `expected_allowance`, `expires_at`, and `memo`.
+    /// - Avoid duplicate or self-approve transactions, and ensure the minter is not involved as `from` or `spender`.
     fn approve_strategy(
         account_balance: impl Strategy<Value = (Account, u64)>,
         minter_identity: Arc<BasicIdentity>,
@@ -877,15 +911,13 @@ pub fn valid_transactions_strategy(
         allowance_map_pointer: Arc<HashMap<(Account, Account), Tokens>>,
     ) -> impl Strategy<Value = ArgWithCaller> {
         let minter: Account = minter_identity.sender().unwrap().into();
-        account_balance.prop_flat_map(move |(from, balance)| {
+        account_balance.prop_flat_map(move |(from, _balance)| {
             let tx_hash_set = tx_hash_set_pointer.clone();
             let account_to_basic_identity = account_to_basic_identity_pointer.clone();
             let allowance_map = allowance_map_pointer.clone();
             (
                 basic_identity_and_account_strategy(),
-                // TODO: Consider creating approvals with amounts that are not limited to the
-                //  account balance.
-                0..=(balance - default_fee),
+                amount_strategy(),
                 valid_created_at_time_strategy(now),
                 arb_memo(),
                 prop::option::of(Just(default_fee)),
@@ -954,6 +986,17 @@ pub fn valid_transactions_strategy(
         })
     }
 
+    /// Generates a strategy for producing valid `transfer_from` operations.
+    ///
+    /// The generated transfer_from operations will:
+    /// - Use a random existing `from` account, for which there exists an allowance, and which has
+    ///   a balance covering at least the `default_fee`.
+    /// - Use a random `spender` account (the caller) with an existing allowance from `from`.
+    /// - Set the `amount` to a value allowed by both the allowance and the current balance of the
+    ///   `from` account.
+    /// - Optionally include a `fee`, `created_at_time`, and `memo`.
+    /// - Avoid self-transfers, transfers involving the minter, and duplicate transactions.
+    /// - Ensures the caller matches the `spender` account.
     fn transfer_from_strategy(
         valid_allowance_from: HashSet<Account>,
         minter_identity: Arc<BasicIdentity>,
