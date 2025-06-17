@@ -52,8 +52,9 @@ jobs:
               fi
           done
 
-          if [[ "${is_protected_branch:-}" == "true" ]]; then
-              # if we are on a "protected" branch or targeting an rc branch we
+          if [[ "${is_protected_branch:-}" == "true" || '${{ github.event_name }}' == 'workflow_call' ]]; then
+              # if we are on a "protected" branch, targeting an rc branch or
+              # we're called from another workflow (i.e. release-testing) we
               # upload all artifacts and run a release build (with versioning)
               release_build="true"
               diff_only="false"
