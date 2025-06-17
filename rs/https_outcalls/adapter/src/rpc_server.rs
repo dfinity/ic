@@ -400,7 +400,7 @@ impl HttpsOutcallsService for CanisterHttp {
 
         // If we are allowed to use socks and condition described in `should_use_socks_proxy` hold,
         // we do the requests through the socks proxy. If not we use the default IPv6 route.
-        let http_resp = if req.socks_proxy_allowed {
+        let http_resp = if req.socks_proxy_allowed { // System subnet
             // Http request does not implement clone. So we have to manually construct a clone.
             let mut http_req = hyper::Request::new(Full::new(Bytes::from(req.body)));
             *http_req.headers_mut() = headers;
@@ -470,15 +470,29 @@ impl HttpsOutcallsService for CanisterHttp {
                 }
                 Ok(resp) => Ok(resp),
             }
-        } else {
+        } else { // Application subnet. 
             let mut http_req = hyper::Request::new(Full::new(Bytes::from(req.body)));
             *http_req.headers_mut() = headers;
             *http_req.method_mut() = method;
             *http_req.uri_mut() = uri.clone();
-            self.client
+            let http_req_clone = http_req.clone();
+            match self.client
                 .request(http_req)
-                .await
-                .map_err(|e| format!("Failed to directly connect (Please note that the canister HTTPS outcalls feature is an IPv6-only feature. For more information, please consult the Internet Computer developer documentation): {:?}", e))
+                .await {
+                Ok(http_resp) => Ok(http_resp),
+                Err(direct_err) => {
+                    self
+                        .socks_client
+                        .request(http_req_clone)
+                        .await
+                        .map_err(|socks_err| {
+                            format!(
+                                "Request failed direct connect {:?} and connect through socks {:?} (Please note that the canister HTTPS outcalls feature is an IPv6-only feature. For more information, please consult the Internet Computer developer documentation)",
+                                direct_err, socks_err
+                            )
+                        })
+                    }
+            }
         }
         .map_err(|err| {
             debug!(self.logger, "Failed to connect: {}", err);
