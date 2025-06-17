@@ -112,6 +112,13 @@ fn upgrade_downgrade_app_subnet(env: TestEnv) {
 
     rt.spawn(start_workload(app_subnet, requests, logger));
 
+    // create a snapshot of a canister in the base version
+    // (tests backwards compatibility of snapshot format)
+    rt.block_on(async {
+        let mgr = ManagementCanister::create(&app_agent);
+        mgr.take_canister_snapshot(&can_id, None).await.unwrap()
+    });
+
     let (faulty_node, can_id, msg) = upgrade(
         &env,
         &nns_node,
@@ -119,7 +126,9 @@ fn upgrade_downgrade_app_subnet(env: TestEnv) {
         SubnetType::Application,
         None,
     );
-    // create a snapshot of a canister
+
+    // create a snapshot of a canister in the future version
+    // (tests forwards compatibility of snapshot format)
     rt.block_on(async {
         let mgr = ManagementCanister::create(&app_agent);
         mgr.take_canister_snapshot(&can_id, None).await.unwrap()
