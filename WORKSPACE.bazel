@@ -304,3 +304,18 @@ cc_library(
 """,
     path = "/usr",
 )
+
+# Use libvirt from the host environment
+# Used for managing virtual machines programmatically.
+new_local_repository(
+    name = "libvirt",
+    build_file_content = """
+cc_import(
+    name = "libvirt",
+    hdrs = glob(["include/libvirt/*.h"]),
+    shared_library = "lib/x86_64-linux-gnu/libvirt.so",
+    visibility = ["//visibility:public"],
+)
+""",
+    path = "/usr",
+)

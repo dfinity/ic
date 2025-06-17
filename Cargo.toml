@@ -154,6 +154,7 @@ members = [
     "rs/ic_os/nss_icos",
     "rs/ic_os/dev_test_tools/setupos-image-config",
     "rs/ic_os/build_tools/partition_tools",
+    "rs/ic_os/config_types/compatibility_tests",
     "rs/ic_os/dev_test_tools/setupos-disable-checks",
     "rs/ic_os/os_tools/setupos_tool",
     "rs/ic_os/utils",
@@ -730,6 +731,7 @@ strum = { version = "0.26.3", features = ["derive"] }
 strum_macros = "0.26.4"
 subtle = "2.6.1"
 syn = { version = "1.0.109", features = ["fold", "full"] }
+systemd = "0.10"
 tar = "0.4.39"
 tempfile = "3.12.0"
 thiserror = "2.0.3"
@@ -773,6 +775,7 @@ url = { version = "2.5.3", features = ["serde"] }
 # This breaks `wasm32-unknown-unknown` compatibility.
 # Read https://github.com/uuid-rs/uuid/releases/tag/1.13.0
 uuid = { version = "=1.12.1", features = ["v4", "serde"] }
+virt = "0.4"
 walkdir = "2.3.3"
 walrus = "0.23.3"
 wasm-encoder = { version = "0.228.0", features = ["wasmparser"] }
