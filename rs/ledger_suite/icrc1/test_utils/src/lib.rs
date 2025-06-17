@@ -26,9 +26,10 @@ use rosetta_core::objects::Currency;
 use rosetta_core::objects::ObjectMap;
 use serde_bytes::ByteBuf;
 use serde_json::json;
-use std::collections::HashMap;
 use std::collections::HashSet;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt;
+use std::ops::Bound::Included;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -454,7 +455,7 @@ struct TransactionsAndBalances {
     balances: HashMap<Account, u64>,
     txs: HashSet<Transaction<Tokens>>,
     principal_to_basic_identity: HashMap<Principal, Arc<BasicIdentity>>,
-    allowances: HashMap<(Account, Account), Tokens>,
+    allowances: BTreeMap<(Account, Account), Tokens>,
     /// Accounts which are the `from` account in at least one allowance, having a balances of at
     /// least `default_fee`. Even though the `approve_strategy` currently only creates allowances
     /// with the amount limited to the account balance at the time of the transaction, that balance
@@ -583,9 +584,22 @@ impl TransactionsAndBalances {
 
     fn check_and_update_account_validity(&mut self, account: Account, default_fee: u64) {
         // Check if this account has any allowances and sufficient balance
+        const MIN_ACCOUNT: Account = Account {
+            owner: Principal::from_slice(&[0; 29]),
+            subaccount: None,
+        };
+        const MAX_ACCOUNT: Account = Account {
+            owner: Principal::from_slice(&[255; 29]),
+            subaccount: Some([255; 32]),
+        };
+        // Check if there are any valid allowances where the `from` is the provided account, and
+        // the `spender` is any account.
         let has_valid_allowances = self
             .allowances
-            .iter()
+            .range((
+                Included((account, MIN_ACCOUNT)),
+                Included((account, MAX_ACCOUNT)),
+            ))
             .any(|((from, _), allowance)| *from == account && allowance.get_e8s() >= default_fee);
 
         if has_valid_allowances {
@@ -908,7 +922,7 @@ pub fn valid_transactions_strategy(
         now: SystemTime,
         tx_hash_set_pointer: Arc<HashSet<Transaction<Tokens>>>,
         account_to_basic_identity_pointer: Arc<HashMap<Principal, Arc<BasicIdentity>>>,
-        allowance_map_pointer: Arc<HashMap<(Account, Account), Tokens>>,
+        allowance_map_pointer: Arc<BTreeMap<(Account, Account), Tokens>>,
     ) -> impl Strategy<Value = ArgWithCaller> {
         let minter: Account = minter_identity.sender().unwrap().into();
         account_balance.prop_flat_map(move |(from, _balance)| {
@@ -1004,7 +1018,7 @@ pub fn valid_transactions_strategy(
         now: SystemTime,
         tx_hash_set_pointer: Arc<HashSet<Transaction<Tokens>>>,
         account_to_basic_identity_pointer: Arc<HashMap<Principal, Arc<BasicIdentity>>>,
-        allowance_map_pointer: Arc<HashMap<(Account, Account), Tokens>>,
+        allowance_map_pointer: Arc<BTreeMap<(Account, Account), Tokens>>,
         current_balances_pointer: Arc<HashMap<Account, u64>>,
     ) -> impl Strategy<Value = ArgWithCaller> {
         let minter: Account = minter_identity.sender().unwrap().into();
@@ -1497,12 +1511,10 @@ impl KeyPairGenerator<Arc<BasicIdentity>> for Arc<BasicIdentity> {
 
 #[cfg(test)]
 mod tests {
-    use super::{KeyPairGenerator, LedgerEndpointArg};
+    use super::KeyPairGenerator;
     use crate::{minter_identity, valid_transactions_strategy};
     use ic_agent::identity::BasicIdentity;
-    use ic_agent::Identity;
     use ic_types::PrincipalId;
-    use icrc_ledger_types::icrc1::account::Account;
     use proptest::{
         strategy::{Strategy, ValueTree},
         test_runner::TestRunner,
