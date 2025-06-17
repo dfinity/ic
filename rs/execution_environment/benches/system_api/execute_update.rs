@@ -877,16 +877,6 @@ pub fn execute_update_bench(c: &mut Criterion) {
             517000006,
         ),
         common::Benchmark(
-            "wasm32/ic0_mint_cycles()".into(),
-            Module::Test.from_ic0("mint_cycles", Param1(1_i64), Result::I64, Wasm64::Disabled),
-            18000006,
-        ),
-        common::Benchmark(
-            "wasm64/ic0_mint_cycles()".into(),
-            Module::Test.from_ic0("mint_cycles", Param1(1_i64), Result::I64, Wasm64::Enabled),
-            18000006,
-        ),
-        common::Benchmark(
             "wasm32/ic0_mint_cycles128()".into(),
             Module::Test.from_ic0(
                 "mint_cycles128",

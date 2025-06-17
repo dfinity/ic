@@ -6,6 +6,7 @@ on:
       - completed
     branches:
       - master
+      - master-private
       - rc--*
     tags:
       - release-*
@@ -19,6 +20,7 @@ on:
       - Publish Release
       - Container IC Base Images
       - PocketIC Windows
+      - Sync IC private from IC public
 
 jobs:
   slack-workflow-run:

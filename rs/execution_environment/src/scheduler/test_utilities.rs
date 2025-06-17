@@ -1445,6 +1445,7 @@ impl TestWasmExecutorCore {
             ApiType::PreUpgrade { .. }
             | ApiType::ReplicatedQuery { .. }
             | ApiType::NonReplicatedQuery { .. }
+            | ApiType::CompositeQuery { .. }
             | ApiType::InspectMessage { .. }
             | ApiType::Start { .. }
             | ApiType::Cleanup { .. } => {

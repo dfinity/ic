@@ -281,7 +281,6 @@ impl StreamBuilderImpl {
         // Tests whether a stream is over the message count limit, byte limit or (if
         // directed at a system subnet) over `2 * SYSTEM_SUBNET_STREAM_MSG_LIMIT`.
         let is_at_limit = |stream: &btree_map::Entry<SubnetId, Stream>,
-                           is_local_message: bool,
                            destination_subnet_type: SubnetType|
          -> bool {
             let stream = match stream {
@@ -301,8 +300,7 @@ impl StreamBuilderImpl {
             // At limit if system subnet limit is hit. This is only enforced for non-local
             // streams to system subnets (i.e., excluding the loopback stream on system
             // subnets).
-            !is_local_message
-                && destination_subnet_type == SubnetType::System
+            destination_subnet_type == SubnetType::System
                 && stream_messages_len >= 2 * SYSTEM_SUBNET_STREAM_MSG_LIMIT
         };
 
@@ -348,13 +346,15 @@ impl StreamBuilderImpl {
                 // Destination subnet found.
                 Some(dst_subnet_id) => {
                     let dst_stream_entry = streams.entry(dst_subnet_id);
-                    if is_at_limit(
-                        &dst_stream_entry,
-                        self.subnet_id == dst_subnet_id,
-                        *subnet_types
-                            .get(&dst_subnet_id)
-                            .unwrap_or(&SubnetType::Application),
-                    ) {
+                    let is_loopback_stream = self.subnet_id == dst_subnet_id;
+                    if !is_loopback_stream
+                        && is_at_limit(
+                            &dst_stream_entry,
+                            *subnet_types
+                                .get(&dst_subnet_id)
+                                .unwrap_or(&SubnetType::Application),
+                        )
+                    {
                         // Stream full, skip all other messages to this destination.
                         output_iter.exclude_queue();
                         continue;

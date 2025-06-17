@@ -22,7 +22,7 @@ runs:
       shell: bash
       run: |
         if [ -e /cache ]; then
-          sudo find /cache \( -not -user 1001 -or -not -group 1001 \) -exec chown 1001:1001 {} +
+          sudo find /cache \( -not -user $(id -u) -or -not -group $(id -g) \) -exec chown $(id -u):$(id -g) {} +
         fi
 
     # Create a known tempdir where build events will be written
