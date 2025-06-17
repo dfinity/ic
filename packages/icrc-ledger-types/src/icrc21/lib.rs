@@ -197,7 +197,10 @@ impl ConsentMessageBuilder {
                 ));
             }
             Icrc21Function::Approve => {
-                message.push_str("# Authorize another address to withdraw from your account");
+                message.push_str("# Approve spending");
+                message.push_str(
+                    "\n\nYou are authorizing another address to withdraw funds from your account.",
+                );
                 let approver_account = self.approver.ok_or(Icrc21Error::GenericError {
                     error_code: Nat::from(500u64),
                     description: "Approver account has to be specified.".to_owned(),
@@ -256,37 +259,41 @@ impl ConsentMessageBuilder {
                     })
                     .unwrap_or("No expiration.".to_owned());
 
-                message.push_str(&format!(
-                    "\n\n**The following address is allowed to withdraw from your account:**\n{}",
-                    spender_account
-                ));
                 if approver_account.owner == Principal::anonymous() {
-                    message.push_str(&format!(
-                        "\n\n**Your subaccount:**\n{}",
-                        extract_subaccount(approver_account)?
-                    ));
+                    if approver_account.effective_subaccount() != DEFAULT_SUBACCOUNT {
+                        message.push_str(&format!(
+                            "\n\n**From subaccount:**\n`{}`",
+                            extract_subaccount(approver_account)?
+                        ));
+                    }
                 } else {
-                    message.push_str(&format!("\n\n**Your account:**\n{}", approver_account));
+                    message.push_str(&format!("\n\n**From:**\n`{}`", approver_account));
                 }
                 message.push_str(&format!(
-                    "\n\n**Requested withdrawal allowance:**\n{} {}",
+                    "\n\n**Approve to spender:**\n`{}`",
+                    spender_account
+                ));
+                message.push_str(&format!(
+                    "\n\n**Requested allowance:** `{} {}`\nThis is the withdrawal limit that will apply upon approval.",
                     amount, token_symbol
                 ));
-                message.push_str(&match self.expected_allowance{
-                    Some(expected_allowance) => format!("\n\n**Current withdrawal allowance:**\n{} {}", convert_tokens_to_string_representation(expected_allowance,self.decimals)?,token_symbol),
-                    None => format!("\n\u{26A0} The allowance will be set to {} {} independently of any previous allowance. Until this transaction has been executed the spender can still exercise the previous allowance (if any) to it's full amount.",amount,token_symbol)});
-                message.push_str(&format!("\n\n**Expiration date:**\n{}", expires_at));
-                message.push_str(&format!("\n\n**Approval fee:**\n{} {}", fee, token_symbol));
+                if let Some(expected_allowance) = self.expected_allowance {
+                    message.push_str(&format!("\n\n**Existing allowance:** `{} {}`\nUntil approval, this allowance remains in effect.", convert_tokens_to_string_representation(expected_allowance,self.decimals)?,token_symbol));
+                }
+                message.push_str(&format!("\n\n**Approval expiration:**\n{}", expires_at));
+                message.push_str(&format!(
+                    "\n\n**Approval fees:** `{} {}`\nCharged for processing the approval.",
+                    fee, token_symbol
+                ));
                 if approver_account.owner == Principal::anonymous() {
-                    message.push_str(&format!(
-                        "\n\n**Transaction fees to be paid by your subaccount:**\n{}",
-                        extract_subaccount(approver_account)?
-                    ));
+                    if approver_account.effective_subaccount() != DEFAULT_SUBACCOUNT {
+                        message.push_str(&format!(
+                            "\n\n**Fees paid by your subaccount:**\n`{}`",
+                            extract_subaccount(approver_account)?
+                        ));
+                    }
                 } else {
-                    message.push_str(&format!(
-                        "\n\n**Transaction fees to be paid by:**\n{}",
-                        approver_account
-                    ));
+                    message.push_str(&format!("\n\n**Fees paid by:**\n`{}`", approver_account));
                 }
             }
             Icrc21Function::TransferFrom => {

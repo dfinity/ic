@@ -4744,28 +4744,30 @@ fn test_icrc21_approve_message(
         memo: Some(Memo::from(b"test_bytes".to_vec())),
     };
     assert_eq!(spender_account.to_string(), "djduj-3qcaa-aaaaa-aaaap-4ai-5r7aoqy.303030303030303030303030303030303030303030303030303030303030303");
-    let expected_approve_message = "# Authorize another address to withdraw from your account
+    let expected_approve_message = "# Approve spending
 
-**The following address is allowed to withdraw from your account:**
-djduj-3qcaa-aaaaa-aaaap-4ai-5r7aoqy.303030303030303030303030303030303030303030303030303030303030303
+You are authorizing another address to withdraw funds from your account.
 
-**Your account:**
-d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101
+**From:**
+`d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101`
 
-**Requested withdrawal allowance:**
-0.01 XTST
+**Approve to spender:**
+`djduj-3qcaa-aaaaa-aaaap-4ai-5r7aoqy.303030303030303030303030303030303030303030303030303030303030303`
 
-**Current withdrawal allowance:**
-0.01 XTST
+**Requested allowance:** `0.01 XTST`
+This is the withdrawal limit that will apply upon approval.
 
-**Expiration date:**
+**Existing allowance:** `0.01 XTST`
+Until approval, this allowance remains in effect.
+
+**Approval expiration:**
 Thu, 06 May 2021 20:17:10 +0000
 
-**Approval fee:**
-0.0001 XTST
+**Approval fees:** `0.0001 XTST`
+Charged for processing the approval.
 
-**Transaction fees to be paid by:**
-d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101
+**Fees paid by:**
+`d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101`
 
 **Memo:**
 `test_bytes`";
@@ -4801,11 +4803,9 @@ d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.10101010101010101010101010101010101010101010
             .unwrap()
             .consent_message,
     );
-    // When the expected allowance is not set, a warning should be displayed.
-    let expected_message = expected_approve_message.replace(
-        "\n\n**Current withdrawal allowance:**\n0.01 XTST",
-        "\n\u{26A0} The allowance will be set to 0.01 XTST independently of any previous allowance. Until this transaction has been executed the spender can still exercise the previous allowance (if any) to it's full amount.",
-    );
+    // When the expected allowance is not set, it should be skipped.
+    let expected_message =
+        expected_approve_message.replace("\n\n**Existing allowance:** `0.01 XTST`\nUntil approval, this allowance remains in effect.", "");
     assert_eq!(
         message, expected_message,
         "Expected: {}, got: {}",
@@ -4839,8 +4839,8 @@ d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.10101010101010101010101010101010101010101010
             .consent_message,
     );
     let expected_message = expected_approve_message
-        .replace("\n\n**Transaction fees to be paid by:**\nd2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101","\n\n**Transaction fees to be paid by your subaccount:**\n101010101010101010101010101010101010101010101010101010101010101" )
-        .replace("\n\n**Your account:**\nd2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101","\n\n**Your subaccount:**\n101010101010101010101010101010101010101010101010101010101010101");
+        .replace("\n\n**Fees paid by:**\n`d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101`","\n\n**Fees paid by your subaccount:**\n`101010101010101010101010101010101010101010101010101010101010101`" )
+        .replace("\n\n**From:**\n`d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101`","\n\n**From subaccount:**\n`101010101010101010101010101010101010101010101010101010101010101`");
     assert_eq!(
         message, expected_message,
         "Expected: {}, got: {}",
@@ -4877,8 +4877,8 @@ d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.10101010101010101010101010101010101010101010
             .consent_message,
     );
 
-    let expected_message = expected_approve_message.replace("\n\n**Your account:**\nd2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101","\n\n**Your subaccount:**\n0000000000000000000000000000000000000000000000000000000000000000" )
-        .replace("\n\n**Transaction fees to be paid by:**\nd2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101","\n\n**Transaction fees to be paid by your subaccount:**\n0000000000000000000000000000000000000000000000000000000000000000" );
+    let expected_message = expected_approve_message.replace("\n\n**From:**\n`d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101`","" )
+        .replace("\n\n**Fees paid by:**\n`d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101`","" );
     assert_eq!(
         message, expected_message,
         "Expected: {}, got: {}",
