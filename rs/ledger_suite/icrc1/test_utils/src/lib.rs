@@ -584,7 +584,6 @@ impl TransactionsAndBalances {
     }
 
     fn check_and_update_account_validity(&mut self, account: Account, default_fee: u64) {
-        // Check if this account has any allowances and sufficient balance
         const MIN_ACCOUNT: Account = Account {
             owner: Principal::from_slice(&[0; 29]),
             subaccount: None,
@@ -603,21 +602,18 @@ impl TransactionsAndBalances {
             ))
             .any(|((from, _), allowance)| *from == account && allowance.get_e8s() >= default_fee);
 
-        if has_valid_allowances {
-            if let Some(&balance) = self.balances.get(&account) {
-                if balance >= default_fee {
-                    // Account has valid allowances and sufficient balance
-                    self.valid_allowance_from.insert(account);
-                } else {
-                    // Account doesn't have sufficient balance
-                    self.valid_allowance_from.remove(&account);
-                }
-            } else {
-                // Account has no balance
-                self.valid_allowance_from.remove(&account);
-            }
+        if has_valid_allowances
+            && self
+                .balances
+                .get(&account)
+                .map_or(false, |&balance| balance >= default_fee)
+        {
+            // There is at least one valid allowance for this account, and the account has a
+            // non-dust balance - make sure it exists in `valid_allowance_from`.
+            self.valid_allowance_from.insert(account);
         } else {
-            // Account has no valid allowances
+            // The account either has no valid allowances or a dust balance - remove it from
+            // `valid_allowance_from`.
             self.valid_allowance_from.remove(&account);
         }
     }
@@ -1282,14 +1278,12 @@ pub fn valid_transactions_strategy_with_excluded_transaction_types(
 
         (Just(state), arb_tx)
             .prop_flat_map(move |(mut state, tx)| {
-                let minter_identity = minter_identity.clone();
-                let additional_length = additional_length - 1;
                 state.apply(minter_identity.clone(), default_fee, tx);
                 generate_strategy(
                     state,
-                    minter_identity,
+                    minter_identity.clone(),
                     default_fee,
-                    additional_length,
+                    additional_length - 1,
                     now,
                     excluded_transaction_types.clone(),
                 )
