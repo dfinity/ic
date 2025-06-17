@@ -140,7 +140,7 @@ runs:
           zstd -f -d "$execlog_zst" -o "$execlog"
           execlog2csv \
             --input_execlog="$execlog" \
-            --exclude ${excludes[*]}
+            --exclude "${excludes[*]}"
         done > '${{ steps.metrics-tmpdir.outputs.dir }}/execlogs.csv'
 
     - name: Upload execution log
