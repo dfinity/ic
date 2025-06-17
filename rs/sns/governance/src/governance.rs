@@ -1,5 +1,6 @@
+use crate::extensions::{validate_extension_wasm, ValidatedChunkedCanisterWasm, ValidatedRegisterExtension};
 use crate::icrc_ledger_helper::ICRCLedgerHelper;
-use crate::pb::v1::Metrics;
+use crate::pb::v1::{Metrics, RegisterExtension};
 use crate::{
     canister_control::{
         get_canister_id, perform_execute_generic_nervous_system_function_call,
@@ -2117,10 +2118,10 @@ impl Governance {
                 self.perform_register_dapp_canisters(register_dapp_canisters)
                     .await
             }
-            Action::RegisterExtension(_) => Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "RegisterExtension proposals are not supported yet.",
-            )),
+            Action::RegisterExtension(register_extension) => {
+                self.perform_register_extension(register_extension)
+                    .await
+            }
             Action::DeregisterDappCanisters(deregister_dapp_canisters) => {
                 self.perform_deregister_dapp_canisters(deregister_dapp_canisters)
                     .await
@@ -2246,6 +2247,61 @@ impl Governance {
             },
         }
     }
+
+    async fn perform_register_extension(
+        &mut self,
+        register_extension: RegisterExtension,
+    ) -> Result<(), GovernanceError> {
+        // Step 0. Validate the RegisterExtension proposal.
+        let ValidatedRegisterExtension {
+            chunked_canister_wasm: ValidatedChunkedCanisterWasm {
+                wasm_module_hash,
+                store_canister_id,
+                chunk_hashes_list,
+            },
+            extension_init,
+        } = register_extension.try_into()
+            .map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    format!("Invalid RegisterExtension: {err:?}"),
+                )
+            })?;
+
+        let extension_spec = validate_extension_wasm(&wasm_module_hash)
+            .map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    format!("Invalid extension wasm: {err:?}"),
+                )
+            })?;
+
+        // Step 1. Register the extension as a dapp canister.
+        self.perform_register_dapp_canisters(RegisterDappCanisters {
+            canister_ids: vec![store_canister_id.get()],
+        }).await?;
+
+        let arg = vec![];
+
+        // Step 2. Perform pre-installation actions.
+        {
+            // TODO!
+        }
+
+        // Step 2. Install the code.
+        self.upgrade_non_root_canister(
+            store_canister_id,
+            Wasm::Chunked {
+                wasm_module_hash,
+                store_canister_id,
+                chunk_hashes_list,
+            },
+            arg,
+            CanisterInstallMode::Install,
+        ).await?;
+
+        Ok(())
+    }   
 
     /// Registers a list of Dapp canister ids in the root canister.
     async fn perform_register_dapp_canisters(
