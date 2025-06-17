@@ -182,6 +182,7 @@ pub struct CanisterStateBits {
     pub next_snapshot_id: u64,
     pub snapshots_memory_usage: NumBytes,
     pub task_queue: TaskQueue,
+    pub environment_variables: BTreeMap<String, String>,
 }
 
 /// This struct contains bits of the `CanisterSnapshot` that are not already
@@ -2704,6 +2705,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             next_snapshot_id: item.next_snapshot_id,
             snapshots_memory_usage: item.snapshots_memory_usage.get(),
             tasks: Some((&item.task_queue).into()),
+            environment_variables: item.environment_variables.into_iter().collect(),
         }
     }
 }
@@ -2845,6 +2847,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             next_snapshot_id: value.next_snapshot_id,
             snapshots_memory_usage: NumBytes::from(value.snapshots_memory_usage),
             task_queue,
+            environment_variables: value.environment_variables.into_iter().collect(),
         })
     }
 }
