@@ -455,7 +455,11 @@ struct TransactionsAndBalances {
     txs: HashSet<Transaction<Tokens>>,
     principal_to_basic_identity: HashMap<Principal, Arc<BasicIdentity>>,
     allowances: HashMap<(Account, Account), Tokens>,
-    valid_allowance_from: HashSet<Account>, // Accounts with allowances and sufficient balances
+    /// Accounts with allowances and balances of at least `default_fee`. Even though the
+    /// `approve_strategy` currently only creates allowances with the amount limited to the account
+    /// balance at the time of the transaction, that balance may have decreased by the time a
+    /// subsequent `transfer_from` transaction makes use of (some of) the allowance.
+    valid_allowance_from: HashSet<Account>,
 }
 
 impl TransactionsAndBalances {
@@ -564,18 +568,10 @@ impl TransactionsAndBalances {
                 // Check if the debited account should be removed from valid_allowance_from
                 self.check_and_update_account_validity(*from, default_fee);
             }
-            Operation::Transfer {
-                from, to, spender, ..
-            } => {
+            Operation::Transfer { from, to, .. } => {
                 // Check both accounts that had balance changes
-                if spender.is_some() {
-                    // This is a transfer_from - check the from account (balance reduced)
-                    self.check_and_update_account_validity(*from, default_fee);
-                } else {
-                    // Regular transfer - check both from and to accounts
-                    self.check_and_update_account_validity(*from, default_fee);
-                    self.check_and_update_account_validity(*to, default_fee);
-                }
+                self.check_and_update_account_validity(*from, default_fee);
+                self.check_and_update_account_validity(*to, default_fee);
             }
             Operation::Approve { from, .. } => {
                 // Check if the from account should be added/removed from valid_allowance_from
@@ -590,11 +586,11 @@ impl TransactionsAndBalances {
         let has_valid_allowances = self
             .allowances
             .iter()
-            .any(|((from, _), allowance)| *from == account && allowance.get_e8s() > default_fee);
+            .any(|((from, _), allowance)| *from == account && allowance.get_e8s() >= default_fee);
 
         if has_valid_allowances {
             if let Some(&balance) = self.balances.get(&account) {
-                if balance > default_fee {
+                if balance >= default_fee {
                     // Account has valid allowances and sufficient balance
                     self.valid_allowance_from.insert(account);
                 } else {
@@ -887,6 +883,8 @@ pub fn valid_transactions_strategy(
             let allowance_map = allowance_map_pointer.clone();
             (
                 basic_identity_and_account_strategy(),
+                // TODO: Consider creating approvals with amounts that are not limited to the
+                //  account balance.
                 0..=(balance - default_fee),
                 valid_created_at_time_strategy(now),
                 arb_memo(),
@@ -968,23 +966,13 @@ pub fn valid_transactions_strategy(
     ) -> impl Strategy<Value = ArgWithCaller> {
         let minter: Account = minter_identity.sender().unwrap().into();
 
-        if valid_allowance_from.is_empty() {
-            // Return a strategy that will never generate values but has the right type
-            return Just(ArgWithCaller {
-                caller: minter_identity.clone(),
-                arg: LedgerEndpointArg::TransferArg(TransferArg {
-                    from_subaccount: None,
-                    to: Account::from(minter_identity.sender().unwrap()),
-                    amount: 0u64.into(),
-                    created_at_time: None,
-                    fee: None,
-                    memo: None,
-                }),
-                principal_to_basic_identity: HashMap::new(),
-            })
-            .prop_filter("No valid transfer_from combinations available", |_| false)
-            .boxed();
-        }
+        // We shouldn't even be calling `transfer_from_strategy` if there are no valid allowances,
+        // i.e., allowances where the `from` account doesn't hold a balance of at least
+        // `default_fee`.
+        assert!(
+            !valid_allowance_from.is_empty(),
+            "valid_allowance_from must not be empty"
+        );
 
         // Select a from account that has valid allowances
         let valid_from_accounts: Vec<Account> = valid_allowance_from.into_iter().collect();
@@ -1007,6 +995,14 @@ pub fn valid_transactions_strategy(
                     })
                     .collect();
 
+                // Ensure there are valid allowances for the selected from account, which should
+                // always be true, since otherwise the `from` account would not exist in
+                // `valid_allowance_from`.
+                assert!(
+                    !allowances_for_from.is_empty(),
+                    "No valid allowances found for the selected from account"
+                );
+
                 // Select one of the allowances for this from account
                 select(allowances_for_from)
                     .prop_flat_map(move |(spender, allowance)| {
@@ -1021,29 +1017,21 @@ pub fn valid_transactions_strategy(
 
                         // Calculate max transferable amount considering both allowance and current account balance
                         // Both allowance and from account balance must cover: transfer amount + fee
-                        let allowance_max = if allowance_amount > fee_amount {
-                            allowance_amount - fee_amount
-                        } else {
-                            0 // Cannot transfer if allowance doesn't cover fee
-                        };
-                        let balance_max = if current_balance > fee_amount {
-                            current_balance - fee_amount
-                        } else {
-                            0 // Cannot transfer if balance doesn't cover fee
-                        };
+                        let allowance_max =
+                            allowance_amount.checked_sub(fee_amount).unwrap_or_else(|| {
+                                panic!(
+                                    "allowance ({}) must be greater than or equal to the fee ({})",
+                                    allowance_amount, fee_amount,
+                                )
+                            });
+                        let balance_max = current_balance.checked_sub(fee_amount).unwrap_or_else(|| {
+                            panic!(
+                                "current balance ({}) must be greater than or equal to the fee ({})",
+                                current_balance, fee_amount,
+                            )
+                        });
 
                         let max_amount = std::cmp::min(allowance_max, balance_max);
-
-                        // If there's no valid amount, return an always-failing strategy
-                        if max_amount == 0 {
-                            return Just(())
-                                .prop_filter(
-                                    "Insufficient balance or allowance for transfer_from",
-                                    |_| false,
-                                )
-                                .prop_map(|_| unreachable!())
-                                .boxed();
-                        }
 
                         // Select from valid amounts (0 to max_amount)
                         (0..=max_amount)
