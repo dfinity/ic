@@ -2566,7 +2566,6 @@ dependencies = [
  "config_types",
  "deterministic_ips",
  "goldenfile",
- "ic-metrics-tool",
  "ic-types",
  "macaddr",
  "network",
