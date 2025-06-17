@@ -103,6 +103,7 @@ fn test_add_and_remove_nodes_from_registry() {
             dc_id: "an1".into(),
             rewardable_nodes: BTreeMap::new(),
             ipv6: Some("0:0:0:0:0:0:0:0".into()),
+            max_rewardable_nodes: None,
         };
 
         submit_external_update_proposal(

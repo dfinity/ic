@@ -11,6 +11,29 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-06-06: Proposal 136890
+
+http://dashboard.internetcomputer.org/proposal/136890
+
+## Added
+
+* Support disbursing maturity to an account identifier, in addition to icrc1 account.
+
+
+# 2025-05-31: Proposal 136795
+
+http://dashboard.internetcomputer.org/proposal/136795
+
+## Added
+
+* Expose a new metric `voting_power_snapshots_latest_snapshot_is_spike`.
+* Enabling `DisburseMaturity` neuron management proposals.
+
+## Changed
+
+* `MAX_NEURON_CREATION_SPIKE` is increased from 120 to 300.
+
+
 # 2025-05-16: Proposal 136693
 
 http://dashboard.internetcomputer.org/proposal/136693

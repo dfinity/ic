@@ -149,7 +149,7 @@ fn test_dissolve_state_and_age_conversion() {
                 aging_since_timestamp_seconds: 200,
             },
             StoredDissolveStateAndAge {
-                dissolve_state: Some(NeuronDissolveState::DissolveDelaySeconds(100)),
+                dissolve_state: Some(DissolveState::DissolveDelaySeconds(100)),
                 aging_since_timestamp_seconds: 200,
             },
         ),
@@ -162,7 +162,7 @@ fn test_dissolve_state_and_age_conversion() {
                 aging_since_timestamp_seconds: u64::MAX,
             },
             StoredDissolveStateAndAge {
-                dissolve_state: Some(NeuronDissolveState::DissolveDelaySeconds(100)),
+                dissolve_state: Some(DissolveState::DissolveDelaySeconds(100)),
                 aging_since_timestamp_seconds: u64::MAX,
             },
         ),
@@ -171,7 +171,7 @@ fn test_dissolve_state_and_age_conversion() {
                 when_dissolved_timestamp_seconds: 300,
             },
             StoredDissolveStateAndAge {
-                dissolve_state: Some(NeuronDissolveState::WhenDissolvedTimestampSeconds(300)),
+                dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(300)),
                 aging_since_timestamp_seconds: u64::MAX,
             },
         ),
@@ -201,14 +201,14 @@ fn test_dissolve_state_and_age_conversion_failure() {
         ),
         (
             StoredDissolveStateAndAge {
-                dissolve_state: Some(NeuronDissolveState::WhenDissolvedTimestampSeconds(300)),
+                dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(300)),
                 aging_since_timestamp_seconds: 200,
             },
             "Aging since timestamp must be u64::MAX for dissolving or dissolved neurons",
         ),
         (
             StoredDissolveStateAndAge {
-                dissolve_state: Some(NeuronDissolveState::DissolveDelaySeconds(0)),
+                dissolve_state: Some(DissolveState::DissolveDelaySeconds(0)),
                 aging_since_timestamp_seconds: 200,
             },
             "Dissolve delay must be greater than 0",
@@ -571,8 +571,6 @@ fn test_visibility_when_converting_neuron_to_neuron_info_and_neuron_proto() {
             principal_id,
         );
         assert_eq!(neuron_info.visibility, Some(visibility as i32),);
-
-        assert_eq!(pb::Neuron::from(neuron).visibility, Some(visibility as i32),);
     }
 
     // Case 2: visibility is not set.
@@ -587,11 +585,6 @@ fn test_visibility_when_converting_neuron_to_neuron_info_and_neuron_proto() {
         principal_id,
     );
     assert_eq!(neuron_info.visibility, Some(Visibility::Private as i32),);
-
-    assert_eq!(
-        pb::Neuron::from(neuron).visibility,
-        Some(Visibility::Private as i32),
-    );
 
     // Case 3: Known neurons are always public.
     let neuron = builder
@@ -609,11 +602,6 @@ fn test_visibility_when_converting_neuron_to_neuron_info_and_neuron_proto() {
         principal_id,
     );
     assert_eq!(neuron_info.visibility, Some(Visibility::Public as i32),);
-
-    assert_eq!(
-        pb::Neuron::from(neuron.clone()).visibility,
-        Some(Visibility::Public as i32),
-    );
 }
 
 #[test]

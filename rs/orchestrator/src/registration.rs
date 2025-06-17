@@ -142,8 +142,9 @@ impl NodeRegistration {
         let add_node_payload = self.assemble_add_node_message().await;
 
         while !self.is_node_registered().await {
-            warn!(self.log, "Node registration failed. Trying again.");
-            UtilityCommand::notify_host("Node registration failed. Trying again.", 1);
+            let message = "Node registration not complete. Trying to register it".to_string();
+            warn!(self.log, "{}", message);
+            UtilityCommand::notify_host(&message, 1);
             match self.signer.get() {
                 Ok(signer) => {
                     let nns_url = self
@@ -161,15 +162,12 @@ impl NodeRegistration {
                         )
                         .await
                     {
-                        warn!(self.log, "Registration request failed: {}", e);
-                        UtilityCommand::notify_host(
-                            format!(
-                                "node-id {}: Registration request failed: {}",
-                                self.node_id, e
-                            )
-                            .as_str(),
-                            1,
+                        let message = format!(
+                            "Node {} registration request failed with error: {}\nUsed payload: {:?}",
+                            self.node_id, e, add_node_payload
                         );
+                        warn!(self.log, "{}", message);
+                        UtilityCommand::notify_host(&message, 1);
                     };
                 }
                 Err(e) => {
