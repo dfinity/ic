@@ -20,6 +20,9 @@ def image_deps(mode, malicious = False):
       A dict containing inputs to build this image.
     """
 
+    # Create a local copy of component_files for potential modification
+    local_component_files = dict(component_files)
+
     deps = {
         "base_dockerfile": "//ic-os/guestos/context:Dockerfile.base",
         "dockerfile": "//ic-os/guestos/context:Dockerfile",
@@ -61,7 +64,7 @@ def image_deps(mode, malicious = False):
 
         # Set various configuration values
         "container_context_files": Label("//ic-os/guestos/context:context-files"),
-        "component_files": component_files,
+        "component_files": local_component_files,
         "partition_table": Label("//ic-os/guestos:partitions.csv"),
         "expanded_size": "50G",
         "rootfs_size": "3G",
@@ -102,11 +105,13 @@ def image_deps(mode, malicious = False):
         deps["rootfs"].pop("//rs/ic_os/release:config", None)
         deps["rootfs"].update({"//rs/ic_os/release:config_dev": "/opt/ic/bin/config:0755"})
 
-    # Update recovery rootfs
+    # Update recovery component_files
     if "recovery" in mode:
-        deps["rootfs"].update({
-            "//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.sh": "/opt/ic/bin/guestos-recovery-engine.sh:0755",
-            "//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.service": "/etc/systemd/system/guestos-recovery-engine.service:0644",
+        local_component_files.update({
+            Label("//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.sh"): "/opt/ic/bin/guestos-recovery-engine.sh",
+            Label("//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.service"): "/etc/systemd/system/guestos-recovery-engine.service",
         })
+
+    deps["component_files"] = local_component_files
 
     return deps
