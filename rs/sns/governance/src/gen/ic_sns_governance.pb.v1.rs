@@ -704,7 +704,7 @@ pub struct PreciseArray {
     ::prost::Message,
 )]
 pub struct PreciseMap {
-    #[prost(btree_map = "string, message", tag = "7")]
+    #[prost(btree_map = "string, message", tag = "1")]
     pub map: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, PreciseValue>,
 }
 #[derive(

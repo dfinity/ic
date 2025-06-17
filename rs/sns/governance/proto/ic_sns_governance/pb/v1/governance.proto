@@ -460,7 +460,7 @@ message PreciseArray {
 }
 
 message PreciseMap {
-  map<string, PreciseValue> map = 7;
+  map<string, PreciseValue> map = 1;
 }
 
 message ExtensionInit {
