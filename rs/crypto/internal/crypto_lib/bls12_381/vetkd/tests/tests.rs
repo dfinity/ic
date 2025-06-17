@@ -292,7 +292,7 @@ fn remove_public_keys(
     for (index, (_pk, eks)) in node_info {
         ek.insert(*index, eks.clone());
     }
-    return ek;
+    ek
 }
 
 fn random_subset<R: rand::Rng, T: Clone>(
@@ -393,7 +393,7 @@ fn test_protocol_execution() {
         // Avoid using a duplicate index for this test
         let random_unused_idx = loop {
             let idx = (rng.gen::<usize>() % node_eks_wrong_input.len()) as u32;
-            if !shares.iter().map(|(i, _eks)| *i).any(|x| x == idx) {
+            if !shares.keys().map(|i| *i).any(|x| x == idx) {
                 break idx;
             }
         };
