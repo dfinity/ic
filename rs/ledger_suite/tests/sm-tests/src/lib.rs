@@ -4824,8 +4824,10 @@ Charged for processing the approval.
             .unwrap()
             .consent_message,
     );
-    let expected_message =
-        expected_approve_message.replace("Thu, 06 May 2021 20:17:10 +0000", "No expiration.");
+    let expected_message = expected_approve_message.replace(
+        "Thu, 06 May 2021 20:17:10 +0000",
+        "This approval does not have an expiration.",
+    );
     assert_eq!(
         message, expected_message,
         "Expected: {}, got: {}",

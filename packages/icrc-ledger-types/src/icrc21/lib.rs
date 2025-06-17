@@ -257,7 +257,7 @@ impl ConsentMessageBuilder {
                             Err(_) => format!("Invalid timestamp: {}", ts),
                         }
                     })
-                    .unwrap_or("No expiration.".to_owned());
+                    .unwrap_or("This approval does not have an expiration.".to_owned());
 
                 if approver_account.owner == Principal::anonymous() {
                     if approver_account.effective_subaccount() != DEFAULT_SUBACCOUNT {
