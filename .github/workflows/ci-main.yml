@@ -576,10 +576,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
+      # TODO: add artifact hash edit
       - name: Create temporary branch
         run: |
           TEMP_BRANCH="recovery-engine-test-$(date +%s)"
-          git checkout -b $TEMP_BRANCH
+          git checkout -b "$TEMP_BRANCH"
           echo "This is a dummy file for testing" > dummy_test_file.txt
       - name: Run tests
         id: bazel-test-all
@@ -592,4 +593,4 @@ jobs:
         if: always()
         run: |
           git checkout -
-          git branch -D $TEMP_BRANCH
+          git branch -D "$TEMP_BRANCH"
