@@ -22,11 +22,7 @@ use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_sns_swap::pb::v1::Lifecycle;
 use icp_ledger::{AccountIdentifier, Tokens, DEFAULT_TRANSFER_FEE};
 use icrc_ledger_types::icrc::generic_value::Value;
-use icrc_ledger_types::{
-    icrc1::{account::Account, transfer::TransferArg},
-    icrc2::approve::ApproveArgs,
-};
-use itertools::{Either, Itertools};
+use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
 use maplit::btreemap;
 use pocket_ic::nonblocking::PocketIc;
 use pocket_ic::PocketIcBuilder;
@@ -35,11 +31,9 @@ use sns_treasury_manager::Allowance;
 use sns_treasury_manager::Asset;
 use sns_treasury_manager::BalancesRequest;
 use sns_treasury_manager::DepositRequest;
-use sns_treasury_manager::TreasuryManagerResult;
 use sns_treasury_manager::WithdrawRequest;
 use sns_treasury_manager::{TreasuryManagerArg, TreasuryManagerInit};
 use std::str::FromStr;
-use std::time::Duration;
 
 const FEE: u64 = DEFAULT_TRANSFER_FEE.get_e8s();
 
@@ -121,7 +115,7 @@ async fn test_treasury_manager() {
     };
 
     // Install KongSwap
-    let kong_backend_canister_id = {
+    let _kong_backend_canister_id = {
         let wasm_path = std::env::var("KONG_BACKEND_CANISTER_WASM_PATH")
             .expect("KONG_BACKEND_CANISTER_WASM_PATH must be set.");
 
@@ -187,7 +181,7 @@ async fn test_treasury_manager() {
         println!(">>> Balances: {:#?}", response);
     }
 
-    let withdrawn_amounts = {
+    let _withdrawn_amounts = {
         let response = PocketIcAgent::new(&pocket_ic, sns.root.canister_id)
             .call(adaptor_canister_id, WithdrawRequest {})
             .await
