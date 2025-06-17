@@ -1565,19 +1565,36 @@ impl SystemApiImpl {
             }
             // Composite queries should persist any changes related to inter-canister
             // calls, like output queue requests and callbacks.
-            ApiType::CompositeQuery { .. } => SystemStateModifications {
-                new_certified_data: None,
-                callback_updates: system_state_modifications.callback_updates,
-                cycles_balance_change: CyclesBalanceChange::zero(),
-                reserved_cycles: Cycles::zero(),
-                consumed_cycles_by_use_case: BTreeMap::new(),
-                call_context_balance_taken: None,
-                request_slots_used: system_state_modifications.request_slots_used,
-                requests: system_state_modifications.requests,
-                new_global_timer: None,
-                canister_log: Default::default(),
-                on_low_wasm_memory_hook_condition_check_result: None,
-                should_bump_canister_version: false,
+            // In case of a trap, no changes are returned.
+            ApiType::CompositeQuery { .. } => match &self.execution_error {
+                Some(_) => SystemStateModifications {
+                    new_certified_data: None,
+                    callback_updates: vec![],
+                    cycles_balance_change: CyclesBalanceChange::zero(),
+                    reserved_cycles: Cycles::zero(),
+                    consumed_cycles_by_use_case: BTreeMap::new(),
+                    call_context_balance_taken: None,
+                    request_slots_used: BTreeMap::new(),
+                    requests: vec![],
+                    new_global_timer: None,
+                    canister_log: Default::default(),
+                    on_low_wasm_memory_hook_condition_check_result: None,
+                    should_bump_canister_version: false,
+                },
+                None => SystemStateModifications {
+                    new_certified_data: None,
+                    callback_updates: system_state_modifications.callback_updates,
+                    cycles_balance_change: CyclesBalanceChange::zero(),
+                    reserved_cycles: Cycles::zero(),
+                    consumed_cycles_by_use_case: BTreeMap::new(),
+                    call_context_balance_taken: None,
+                    request_slots_used: system_state_modifications.request_slots_used,
+                    requests: system_state_modifications.requests,
+                    new_global_timer: None,
+                    canister_log: Default::default(),
+                    on_low_wasm_memory_hook_condition_check_result: None,
+                    should_bump_canister_version: false,
+                },
             },
             // Replicated queries return changes to the logs and cycles balance,
             // as well as bumping the canister's version in case there was no trap.

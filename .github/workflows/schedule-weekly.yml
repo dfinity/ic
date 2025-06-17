@@ -13,7 +13,6 @@ jobs:
       image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
       options: >-
         -e NODE_NAME
-        -v /cache:/cache
     timeout-minutes: 60 # 1 hour
     steps:
       - name: Checkout
