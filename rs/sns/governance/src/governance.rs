@@ -1,4 +1,4 @@
-use crate::extensions::{validate_extension_wasm, Asset, ValidatedChunkedCanisterWasm, ValidatedRegisterExtension};
+use crate::extensions::{validate_extension_wasm, ValidatedChunkedCanisterWasm, ValidatedRegisterExtension};
 use crate::icrc_ledger_helper::ICRCLedgerHelper;
 use crate::pb::v1::{Metrics, RegisterExtension};
 use crate::{
@@ -120,6 +120,7 @@ use lazy_static::lazy_static;
 use maplit::{btreemap, hashset};
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
+use sns_treasury_manager::{Asset, TreasuryManagerArg, TreasuryManagerInit};
 use std::{
     cell::RefCell,
     cmp::Ordering,
@@ -2330,8 +2331,8 @@ impl Governance {
         // }
 
         // Step 2. Install the code.
-        let sns_token = Asset::new_token("SNS", self.ledger.canister_id().into()).unwrap();
-        let icp_token = Asset::new_token("ICP", self.nns_ledger.canister_id().into()).unwrap();
+        let sns_token = Asset::new_token("SNS", self.ledger.canister_id().get()).unwrap();
+        let icp_token = Asset::new_token("ICP", self.nns_ledger.canister_id().get()).unwrap();
         let arg = TreasuryManagerArg::Init(TreasuryManagerInit {
             assets: vec![sns_token, icp_token],
         });
