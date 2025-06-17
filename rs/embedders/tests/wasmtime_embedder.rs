@@ -24,13 +24,10 @@ use ic_types::{
     messages::RejectContext,
     methods::{FuncRef, WasmClosure, WasmMethod},
     time::UNIX_EPOCH,
-    Cycles, NumBytes, NumInstructions,
+    Cycles, NumBytes, NumInstructions, PrincipalId,
 };
 
 const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
-
-#[cfg(target_os = "linux")]
-use ic_types::PrincipalId;
 
 /// Ensures that attempts to execute messages on wasm modules that do not
 /// define memory fails.
