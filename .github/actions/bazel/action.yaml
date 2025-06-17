@@ -81,6 +81,47 @@ runs:
           ${{ steps.metrics-tmpdir.outputs.dir }}/bazel-bep-*.pb.gpg
           ${{ steps.metrics-tmpdir.outputs.dir }}/profile-*.json
 
+
+    # We use execlog2csv to process the proto-based execution logs and convert them
+    # to CSV for easier processing
+    - name: Install execlog2csv
+      shell: bash
+      if: (success() || failure()) && inputs.execlogs-artifact-name != ''
+      run: |
+        cd $(mktemp -d)
+
+        version="0.0.2" # execlog2csv version
+
+        # for more platforms see artifacts list:
+        # https://github.com/dfinity/execlog2csv/releases/latest
+        if [[ $(uname -m) == "x86_64" ]]; then
+          arch="amd64"
+        elif [[ $(uname -m) == "aarch64" ]]; then
+          arch="arm64"
+        else
+          echo "unexpected architecture: '$(uname -m)'"
+          exit 1
+        fi
+
+        if [[ $(uname) == "Linux" ]]; then
+          os="linux"
+        elif [[ $(uname) == "Darwin" ]]; then
+          os="darwin"
+        else
+          echo "unexpected os: '$(uname -m)'"
+          exit 1
+        fi
+
+        filename="execlog2csv_${version}_${os}_${arch}"
+        echo "filename: $filename"
+        dl_url="https://github.com/dfinity/execlog2csv/releases/download/v$version/$filename.zip"
+        echo "downloading '$dl_url'"
+        curl -SLO "$dl_url"
+        unzip "$filename.zip"
+        sudo mv "./execlog2csv_v$version" /usr/local/bin/execlog2csv
+        rm "$filename.zip"
+        execlog2csv --help
+
     - name: Convert execlogs to CSV
       shell: bash
       if: (success() || failure()) && inputs.execlogs-artifact-name != ''
@@ -97,8 +138,7 @@ runs:
         )
         for execlog_zst in $(find '${{ steps.metrics-tmpdir.outputs.dir }}' -name 'execlog-*.zst'); do
           zstd -f -d "$execlog_zst" -o "$execlog"
-          bazel run //bazel:execution_log_compact_to_csv \
-            $([[ "$(uname)" == "Linux" ]] && echo '--repository_cache=/cache/bazel') -- \
+          execlog2csv \
             --input_execlog="$execlog" \
             --exclude ${excludes[*]}
         done > '${{ steps.metrics-tmpdir.outputs.dir }}/execlogs.csv'
