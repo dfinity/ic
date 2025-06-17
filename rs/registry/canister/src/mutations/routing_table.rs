@@ -84,14 +84,15 @@ pub(crate) fn mutations_for_canister_ranges(
     let zero_id = CanisterId::from_u64(0);
     // If we don't have any routing table fragments in the new_shards, we need to create a default one to
     // hold all the ranges until a split occurs.
-    if new_shards.is_empty() {
-        new_shards.insert(zero_id, pb::RoutingTable { entries: vec![] });
-    }
+    new_shards
+        .entry(zero_id)
+        .or_insert_with(|| pb::RoutingTable { entries: vec![] });
 
     for (range, subnet) in new_rt.iter() {
         let range_start = range.start;
 
         // find the entry in the new_shards that is closest to the start of the range in the lower direction
+        // Because we always ensure there's a CanisterId(0) shard, this cannot fail.
         let key = *(new_shards
             .range(zero_id..=range_start)
             .next_back()
@@ -768,6 +769,29 @@ mod tests {
         let mutations = mutations_for_canister_ranges(&registry, &new);
 
         let expected = vec![];
+        compare_rt_mutations(expected, mutations);
+    }
+
+    #[test]
+    fn mutations_for_canister_ranges_can_create_a_0_canister_range_when_needed() {
+        let mut registry = invariant_compliant_registry(0);
+        let subnet = SubnetId::new(PrincipalId::new_user_test_id(3));
+        let subnet_b = SubnetId::new(PrincipalId::new_user_test_id(4));
+        let initial_shards = shards(vec![(1, vec![((1, 200), subnet)])]);
+        apply_shards_to_registry(&mut registry, &initial_shards);
+
+        let new_rt = rt_from_shards(&shards(vec![
+            (0, vec![((0, 0), subnet_b)]),
+            (1, vec![((1, 200), subnet)]),
+        ]));
+
+        // If we try to create a routing table without 0 canister range, it should panic.
+        let mutations = mutations_for_canister_ranges(&registry, &new_rt);
+
+        let expected = vec![upsert(
+            make_canister_ranges_key(CanisterId::from(0)),
+            shard_pb_rt(vec![((0, 0), subnet_b)]).encode_to_vec(),
+        )];
         compare_rt_mutations(expected, mutations);
     }
 

@@ -102,7 +102,6 @@ try_from_u8!(
         StableFill64 = 72,
         CanisterVersion = 73,
         TrapIfNeq = 74,
-        MintCycles = 75,
         OneWayCallNew = 76,
         IsController = 77,
         CyclesBurn128 = 78,

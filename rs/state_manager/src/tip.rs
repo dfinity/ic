@@ -686,6 +686,8 @@ fn flush_unflushed_checkpoint_ops(
             UnflushedCheckpointOp::RenameCanister(src, dst) => {
                 tip_handler.move_canister_directory(height, src, dst)?;
             }
+            UnflushedCheckpointOp::UploadSnapshotData(..)
+            | UnflushedCheckpointOp::UploadSnapshotMetadata(..) => {}
         }
     }
 
