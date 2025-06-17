@@ -4941,22 +4941,23 @@ fn test_icrc21_transfer_from_message(
         },
     };
 
-    let expected_transfer_from_message = "# Transfer from a withdrawal account
+    let expected_transfer_from_message = "# Spend XTST
 
-**Withdrawal account:**
-d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101
+You are approving a transfer of funds from a withdrawal account.
 
-**Account sending the transfer request:**
-djduj-3qcaa-aaaaa-aaaap-4ai-5r7aoqy.303030303030303030303030303030303030303030303030303030303030303
+**From:**
+`d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101`
 
-**Amount to withdraw:**
-0.01 XTST
+**Amount:** `0.01 XTST`
+
+**Spender:**
+`djduj-3qcaa-aaaaa-aaaap-4ai-5r7aoqy.303030303030303030303030303030303030303030303030303030303030303`
 
 **To:**
-6fyp7-3ibaa-aaaaa-aaaap-4ai-v57emui.202020202020202020202020202020202020202020202020202020202020202
+`6fyp7-3ibaa-aaaaa-aaaap-4ai-v57emui.202020202020202020202020202020202020202020202020202020202020202`
 
-**Fee paid by withdrawal account:**
-0.0001 XTST
+**Fees:** `0.0001 XTST`
+Charged for processing the transfer.
 
 **Memo:**
 `test_bytes`";
@@ -4980,8 +4981,8 @@ djduj-3qcaa-aaaaa-aaaap-4ai-5r7aoqy.30303030303030303030303030303030303030303030
             .consent_message,
     );
     let expected_message = expected_transfer_from_message.replace(
-        "\n\n**Account sending the transfer request:**\ndjduj-3qcaa-aaaaa-aaaap-4ai-5r7aoqy.303030303030303030303030303030303030303030303030303030303030303",
-        "\n\n**Subaccount sending the transfer request:**\n303030303030303030303030303030303030303030303030303030303030303",
+        "\n\n**Spender:**\n`djduj-3qcaa-aaaaa-aaaap-4ai-5r7aoqy.303030303030303030303030303030303030303030303030303030303030303`",
+        "\n\n**Spender subaccount:**\n`303030303030303030303030303030303030303030303030303030303030303`",
     );
     assert_eq!(
         message, expected_message,
@@ -5002,8 +5003,8 @@ djduj-3qcaa-aaaaa-aaaap-4ai-5r7aoqy.30303030303030303030303030303030303030303030
     );
 
     let expected_message = expected_transfer_from_message.replace(
-        "\n\n**Account sending the transfer request:**\ndjduj-3qcaa-aaaaa-aaaap-4ai-5r7aoqy.303030303030303030303030303030303030303030303030303030303030303",
-        "\n\n**Subaccount sending the transfer request:**\n0000000000000000000000000000000000000000000000000000000000000000" );
+        "\n\n**Spender:**\n`djduj-3qcaa-aaaaa-aaaap-4ai-5r7aoqy.303030303030303030303030303030303030303030303030303030303030303`",
+        "" );
     assert_eq!(
         message, expected_message,
         "Expected: {}, got: {}",

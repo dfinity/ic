@@ -297,7 +297,14 @@ impl ConsentMessageBuilder {
                 }
             }
             Icrc21Function::TransferFrom => {
-                message.push_str("# Transfer from a withdrawal account");
+                let token_symbol = self.token_symbol.ok_or(Icrc21Error::GenericError {
+                    error_code: Nat::from(500u64),
+                    description: "Token symbol must be specified.".to_owned(),
+                })?;
+                message.push_str(&format!("# Spend {}", token_symbol));
+                message.push_str(
+                    "\n\nYou are approving a transfer of funds from a withdrawal account.",
+                );
                 let from_account = self.from.ok_or(Icrc21Error::GenericError {
                     error_code: Nat::from(500u64),
                     description: "From account has to be specified.".to_owned(),
@@ -318,10 +325,6 @@ impl ConsentMessageBuilder {
                     self.decimals,
                 )?;
 
-                let token_symbol = self.token_symbol.ok_or(Icrc21Error::GenericError {
-                    error_code: Nat::from(500u64),
-                    description: "Token symbol must be specified.".to_owned(),
-                })?;
                 let amount = convert_tokens_to_string_representation(
                     self.amount.ok_or(Icrc21Error::GenericError {
                         error_code: Nat::from(500u64),
@@ -329,26 +332,21 @@ impl ConsentMessageBuilder {
                     })?,
                     self.decimals,
                 )?;
-
-                message.push_str(&format!("\n\n**Withdrawal account:**\n{}", from_account));
+                message.push_str(&format!("\n\n**From:**\n`{}`", from_account));
+                message.push_str(&format!("\n\n**Amount:** `{} {}`", amount, token_symbol));
                 if spender_account.owner == Principal::anonymous() {
-                    message.push_str(&format!(
-                        "\n\n**Subaccount sending the transfer request:**\n{}",
-                        extract_subaccount(spender_account)?
-                    ));
+                    if spender_account.effective_subaccount() != DEFAULT_SUBACCOUNT {
+                        message.push_str(&format!(
+                            "\n\n**Spender subaccount:**\n`{}`",
+                            extract_subaccount(spender_account)?
+                        ));
+                    }
                 } else {
-                    message.push_str(&format!(
-                        "\n\n**Account sending the transfer request:**\n{}",
-                        spender_account
-                    ));
+                    message.push_str(&format!("\n\n**Spender:**\n`{}`", spender_account));
                 }
+                message.push_str(&format!("\n\n**To:**\n`{}`", receiver_account));
                 message.push_str(&format!(
-                    "\n\n**Amount to withdraw:**\n{} {}",
-                    amount, token_symbol
-                ));
-                message.push_str(&format!("\n\n**To:**\n{}", receiver_account));
-                message.push_str(&format!(
-                    "\n\n**Fee paid by withdrawal account:**\n{} {}",
+                    "\n\n**Fees:** `{} {}`\nCharged for processing the transfer.",
                     fee, token_symbol
                 ));
             }
