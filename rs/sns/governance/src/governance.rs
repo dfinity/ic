@@ -1,4 +1,4 @@
-use crate::extensions::{validate_extension_wasm, ValidatedChunkedCanisterWasm, ValidatedRegisterExtension};
+use crate::extensions::{validate_extension_wasm, Asset, ValidatedChunkedCanisterWasm, ValidatedRegisterExtension};
 use crate::icrc_ledger_helper::ICRCLedgerHelper;
 use crate::pb::v1::{Metrics, RegisterExtension};
 use crate::{
@@ -2281,14 +2281,61 @@ impl Governance {
             canister_ids: vec![store_canister_id.get()],
         }).await?;
 
-        let arg = vec![];
-
         // Step 2. Perform pre-installation actions.
-        {
-            // TODO!
-        }
+        // {
+        //     let amount_icp_e8s = 
+
+        //     self
+        //         .nns_ledger
+        //         .transfer_funds(
+        //             transfer.amount_e8s,
+        //             NNS_DEFAULT_TRANSFER_FEE.get_e8s(),
+        //             None,
+        //             to,
+        //             transfer.memo.unwrap_or(0),
+        //         )
+        //         .await
+        //         .map(|_| ())
+        //         .map_err(|e| {
+        //             GovernanceError::new_with_message(
+        //                 ErrorType::External,
+        //                 format!("Error making ICP treasury transfer: {}", e),
+        //             )
+        //         })?;
+
+        //     {
+        //         let transaction_fee_e8s = self.transaction_fee_e8s_or_panic();
+        //         // See ic_sns_init::distributions::FractionalDeveloperVotingPower.insert_treasury_accounts
+        //         let treasury_subaccount = compute_distribution_subaccount_bytes(
+        //             self.env.canister_id().get(),
+        //             TREASURY_SUBACCOUNT_NONCE,
+        //         );
+        //         self.ledger
+        //             .transfer_funds(
+        //                 transfer.amount_e8s,
+        //                 transaction_fee_e8s,
+        //                 Some(treasury_subaccount),
+        //                 to,
+        //                 transfer.memo.unwrap_or(0),
+        //             )
+        //             .await
+        //             .map(|_| ())
+        //             .map_err(|e| {
+        //                 GovernanceError::new_with_message(
+        //                     ErrorType::External,
+        //                     format!("Error making SNS Token treasury transfer: {}", e),
+        //                 )
+        //             })
+        //     }
+        // }
 
         // Step 2. Install the code.
+        let sns_token = Asset::new_token("SNS", self.ledger.canister_id().into()).unwrap();
+        let icp_token = Asset::new_token("ICP", self.nns_ledger.canister_id().into()).unwrap();
+        let arg = TreasuryManagerArg::Init(TreasuryManagerInit {
+            assets: vec![sns_token, icp_token],
+        });
+        let arg = candid::encode_one(&arg).unwrap();
         self.upgrade_non_root_canister(
             store_canister_id,
             Wasm::Chunked {
