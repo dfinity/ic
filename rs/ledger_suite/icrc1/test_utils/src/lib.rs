@@ -33,6 +33,7 @@ use std::ops::Bound::Included;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use strum::EnumCount;
 
 pub const E8: u64 = 100_000_000;
 pub const DEFAULT_TRANSFER_FEE: u64 = 10_000;
@@ -703,6 +704,30 @@ fn basic_identity_and_account_strategy() -> impl Strategy<Value = SigningAccount
     })
 }
 
+#[derive(EnumCount, PartialEq, Clone)]
+pub enum TransactionTypes {
+    Mint,
+    Burn,
+    Transfer,
+    Approve,
+    TransferFrom,
+}
+
+pub fn valid_transactions_strategy(
+    minter_identity: Arc<BasicIdentity>,
+    default_fee: u64,
+    length: usize,
+    now: SystemTime,
+) -> impl Strategy<Value = Vec<ArgWithCaller>> {
+    valid_transactions_strategy_with_excluded_transaction_types(
+        minter_identity,
+        default_fee,
+        length,
+        now,
+        vec![],
+    )
+}
+
 /// Generates a list of valid transaction args with the caller, i.e.
 /// transaction args that the Ledger will accept and that have the
 /// Principal that should send them.
@@ -710,11 +735,12 @@ fn basic_identity_and_account_strategy() -> impl Strategy<Value = SigningAccount
 /// TODO: replace amount generation with something that makes sense,
 ///       e.g. exponential distribution
 /// TODO: allow to pass the account distribution
-pub fn valid_transactions_strategy(
+pub fn valid_transactions_strategy_with_excluded_transaction_types(
     minter_identity: Arc<BasicIdentity>,
     default_fee: u64,
     length: usize,
     now: SystemTime,
+    excluded_transaction_types: Vec<TransactionTypes>,
 ) -> impl Strategy<Value = Vec<ArgWithCaller>> {
     /// Generates a strategy for producing valid `mint` operations.
     ///
@@ -1171,6 +1197,7 @@ pub fn valid_transactions_strategy(
         default_fee: u64,
         additional_length: usize,
         now: SystemTime,
+        excluded_transaction_types: Vec<TransactionTypes>,
     ) -> BoxedStrategy<TransactionsAndBalances> {
         if additional_length == 0 {
             return Just(state).boxed();
@@ -1217,27 +1244,37 @@ pub fn valid_transactions_strategy(
                 account_to_basic_identity_pointer.clone(),
             )
             .boxed();
-            let mut options = vec![
-                (10, approve_strategy),
-                (1, burn_strategy),
-                (1, mint_strategy),
-                (1000, transfer_strategy),
-            ];
+            let mut options = vec![];
 
-            // Set transfer_from weight if valid allowances exist
-            if !state.valid_allowance_from.is_empty() {
-                let transfer_from_strategy = transfer_from_strategy(
-                    state.valid_allowance_from.clone(),
-                    minter_identity.clone(),
-                    default_fee,
-                    now,
-                    tx_hashes_pointer.clone(),
-                    account_to_basic_identity_pointer.clone(),
-                    allowance_map_pointer.clone(),
-                    Arc::new(state.balances.clone()),
-                )
-                .boxed();
-                options.push((100, transfer_from_strategy));
+            if !excluded_transaction_types.contains(&TransactionTypes::Approve) {
+                options.push((10, approve_strategy));
+            }
+            if !excluded_transaction_types.contains(&TransactionTypes::Burn) {
+                options.push((1, burn_strategy));
+            }
+            if !excluded_transaction_types.contains(&TransactionTypes::Mint) {
+                options.push((1, mint_strategy));
+            }
+            if !excluded_transaction_types.contains(&TransactionTypes::Transfer) {
+                options.push((1000, transfer_strategy));
+            }
+
+            if !excluded_transaction_types.contains(&TransactionTypes::TransferFrom) {
+                // Set transfer_from weight if valid allowances exist
+                if !state.valid_allowance_from.is_empty() {
+                    let transfer_from_strategy = transfer_from_strategy(
+                        state.valid_allowance_from.clone(),
+                        minter_identity.clone(),
+                        default_fee,
+                        now,
+                        tx_hashes_pointer.clone(),
+                        account_to_basic_identity_pointer.clone(),
+                        allowance_map_pointer.clone(),
+                        Arc::new(state.balances.clone()),
+                    )
+                    .boxed();
+                    options.push((100, transfer_from_strategy));
+                }
             }
 
             proptest::strategy::Union::new_weighted(options).boxed()
@@ -1248,10 +1285,23 @@ pub fn valid_transactions_strategy(
                 let minter_identity = minter_identity.clone();
                 let additional_length = additional_length - 1;
                 state.apply(minter_identity.clone(), default_fee, tx);
-                generate_strategy(state, minter_identity, default_fee, additional_length, now)
+                generate_strategy(
+                    state,
+                    minter_identity,
+                    default_fee,
+                    additional_length,
+                    now,
+                    excluded_transaction_types.clone(),
+                )
             })
             .boxed()
     }
+
+    assert_ne!(
+        excluded_transaction_types.len(),
+        TransactionTypes::COUNT,
+        "At least one transaction type must be included in the strategy"
+    );
 
     generate_strategy(
         TransactionsAndBalances::default(),
@@ -1259,6 +1309,7 @@ pub fn valid_transactions_strategy(
         default_fee,
         length,
         now,
+        excluded_transaction_types,
     )
     .prop_map(|res| res.transactions.clone())
 }
