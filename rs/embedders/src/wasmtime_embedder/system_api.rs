@@ -836,7 +836,7 @@ pub enum CostReturnCode {
 }
 /// A struct to gather the relevant fields that correspond to a canister's
 /// memory consumption.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct MemoryUsage {
     /// Upper limit on how much the memory the canister could use.
     limit: NumBytes,
@@ -3409,6 +3409,7 @@ impl SystemApi for SystemApiImpl {
         if resulting_size > MAX_STABLE_MEMORY_IN_BYTES / WASM_PAGE_SIZE_IN_BYTES as u64 {
             return Ok(StableGrowOutcome::Failure);
         }
+        let old_memory_usage = self.memory_usage.clone();
         let allocate_execution_memory_res = self.memory_usage.allocate_execution_memory(
             // From the checks above we know that converting `additional_pages`
             // to bytes will not overflow, so the `unwrap()` will succeed.
@@ -3419,11 +3420,26 @@ impl SystemApi for SystemApiImpl {
             &self.execution_parameters.subnet_memory_saturation,
             ExecutionMemoryType::StableMemory,
         );
-        info!(
-            self.log,
-            "allocate_execution_memory_res: {:?}", allocate_execution_memory_res,
+        eprintln!(
+            "allocate_execution_memory_res: {:?}",
+            allocate_execution_memory_res,
         );
-        info!(self.log, "memory_usage: {:?}", self.memory_usage,);
+        eprintln!("memory_usage: {:?}", self.memory_usage,);
+        let current_usage_delta = self.memory_usage.current_usage.get() as i64
+            - (old_memory_usage.current_usage.get() as i64);
+
+        let subnet_available_delta = self
+            .memory_usage
+            .subnet_available_memory
+            .get_execution_memory()
+            - old_memory_usage
+                .subnet_available_memory
+                .get_execution_memory();
+        eprintln!(
+            "current_usage_delta: {} GiB, subnet_available_delta: {} GiB",
+            current_usage_delta as f64 / ((1024 * 1024 * 1024) as f64),
+            subnet_available_delta as f64 / ((1024 * 1024 * 1024) as f64)
+        );
 
         match allocate_execution_memory_res {
             Ok(()) => Ok(StableGrowOutcome::Success),
