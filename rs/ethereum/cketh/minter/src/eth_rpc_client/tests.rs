@@ -36,11 +36,7 @@ mod multi_call_results {
 
         #[test]
         fn should_get_unanimous_fee_history() {
-            let results: MultiRpcResult<FeeHistory> = MultiRpcResult::Inconsistent(vec![
-                (BLOCK_PI, Ok(fee_history())),
-                (PUBLIC_NODE, Ok(fee_history())),
-                (LLAMA_NODES, Ok(fee_history())),
-            ]);
+            let results: MultiRpcResult<FeeHistory> = MultiRpcResult::Consistent(Ok(fee_history()));
 
             let reduced: Result<FeeHistory, _> =
                 ReduceWithStrategy::<StrictMajorityByKey>::reduce(results).result;
