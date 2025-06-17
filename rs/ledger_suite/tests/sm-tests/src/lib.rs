@@ -4673,7 +4673,7 @@ Charged for processing the transfer.
             .unwrap()
             .consent_message,
     );
-    let expected_message = expected_transfer_message.replace("\n\n**From:**\n`d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101`","\n\n**From subaccount:**\n101010101010101010101010101010101010101010101010101010101010101" );
+    let expected_message = expected_transfer_message.replace("\n\n**From:**\n`d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101`","\n\n**From subaccount:**\n`101010101010101010101010101010101010101010101010101010101010101`" );
     assert_eq!(
         message, expected_message,
         "Expected: {}, got: {}",
@@ -4692,7 +4692,7 @@ Charged for processing the transfer.
             .consent_message,
     );
 
-    let expected_message = expected_transfer_message.replace("\n\n**From:**\n`d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101`","\n\n**From subaccount:**\n0000000000000000000000000000000000000000000000000000000000000000" );
+    let expected_message = expected_transfer_message.replace("\n\n**From:**\n`d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101`","" );
     assert_eq!(
         message, expected_message,
         "Expected: {}, got: {}",

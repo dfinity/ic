@@ -2,7 +2,7 @@ use super::errors::ErrorInfo;
 use super::requests::ConsentMessageRequest;
 use super::responses::{ConsentInfo, ConsentMessage};
 use super::{requests::DisplayMessageType, responses::LineDisplayPage};
-use crate::icrc1::account::Account;
+use crate::icrc1::account::{Account, DEFAULT_SUBACCOUNT};
 use crate::icrc1::transfer::TransferArg;
 use crate::icrc2::approve::ApproveArgs;
 use crate::icrc2::transfer_from::TransferFromArgs;
@@ -180,10 +180,12 @@ impl ConsentMessageBuilder {
                 )?;
 
                 if from_account.owner == Principal::anonymous() {
-                    message.push_str(&format!(
-                        "\n\n**From subaccount:**\n{}",
-                        extract_subaccount(from_account)?
-                    ));
+                    if from_account.effective_subaccount() != DEFAULT_SUBACCOUNT {
+                        message.push_str(&format!(
+                            "\n\n**From subaccount:**\n`{}`",
+                            extract_subaccount(from_account)?
+                        ));
+                    }
                 } else {
                     message.push_str(&format!("\n\n**From:**\n`{}`", from_account));
                 }
