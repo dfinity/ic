@@ -78,6 +78,9 @@ runs:
 
             BAZEL_TARGETS='${{ inputs.BAZEL_TARGETS }}'
 
+
+            bazel build //... --nobuild
+
             bazel_targets=( )
             for tgt in $BAZEL_TARGETS; do
               bazel_targets+=( "$tgt" )
