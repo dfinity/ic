@@ -861,9 +861,9 @@ impl XNetPayloadBuilderImpl {
             // Takes from the pool a slice of the stream from `subnet_id` starting at
             // `begin`, of at most `msg_limit` messages and `byte_limit` bytes.
             //
-            // Returns `None` if no slice is available, or the slice is empty / invalid.
             // If the slice is valid, returns it, its message count and its byte size.
-            let take_slice = |subnet_id, begin, msg_limit, byte_limit| {
+            // If no slice is available or the slice is empty / invalid, returns `None`.
+            let take_valid_slice = |subnet_id, begin, msg_limit, byte_limit| {
                 let (slice, slice_bytes) = match self.slice_pool.take_slice(
                     subnet_id,
                     Some(&begin),
@@ -946,7 +946,7 @@ impl XNetPayloadBuilderImpl {
                     break;
                 }
                 if let Some((header_only_slice, _, size_bytes)) =
-                    take_slice(*subnet_id, begin.clone(), Some(0), bytes_left)
+                    take_valid_slice(*subnet_id, begin.clone(), Some(0), bytes_left)
                 {
                     header_sizes.insert(*subnet_id, size_bytes);
                     bytes_left = bytes_left.saturating_sub(size_bytes);
@@ -963,7 +963,7 @@ impl XNetPayloadBuilderImpl {
                 let header_bytes = header_sizes.get(&subnet_id).cloned().unwrap_or_default();
                 let msg_limit = get_msg_limit(subnet_id, &state);
                 if let Some((slice, message_count, slice_bytes)) =
-                    take_slice(subnet_id, begin, msg_limit, bytes_left + header_bytes)
+                    take_valid_slice(subnet_id, begin, msg_limit, bytes_left + header_bytes)
                 {
                     debug_assert!(slice_bytes >= header_bytes);
                     header_sizes.remove(&subnet_id);
