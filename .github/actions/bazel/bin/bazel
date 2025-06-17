@@ -49,13 +49,6 @@ bazel_args=( )
 # Setup zig-cache
 mkdir -p /tmp/zig-cache
 
-# Unless explicitly provided, we set a default --repository_cache to a volume mounted inside our runners
-# Only for Linux builds since there `/cache` is mounted to host local storage.
-if [[ ! " $@ " =~ [[:space:]]--repository_cache[[:space:]] ]] && [[ "$(uname)" == "Linux" ]]; then
-    log "setting default repository cache"
-    bazel_args+=(--repository_cache=/cache/bazel)
-fi
-
 # Add some options for build-like commands
 if [[ $bazel_command == "build" ]] || [[ $bazel_command == "test" ]]; then
     command_timestamp=$(date +%s)

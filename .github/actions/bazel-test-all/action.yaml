@@ -83,7 +83,7 @@ runs:
               bazel_targets+=( "$tgt" )
             done
 
-            if [[ $diff_only == "true" ]]; then
+            if false; then
                 target_pattern_file=$(mktemp)
                 trap "rm $target_pattern_file" INT TERM EXIT
 

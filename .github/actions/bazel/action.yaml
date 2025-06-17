@@ -16,14 +16,6 @@ inputs:
 runs:
   using: "composite"
   steps:
-    # Freshly deployed k8s machines require ownership correctly set
-    # Avoiding: 'Failed to fetch registry file ... /cache/bazel/content_addressable/sha256 (Permission denied)'
-    - name: Prepare worker cache
-      shell: bash
-      run: |
-        if [ -e /cache ]; then
-          sudo find /cache \( -not -user $(id -u) -or -not -group $(id -g) \) -exec chown $(id -u):$(id -g) {} +
-        fi
 
     # Create a known tempdir where build events will be written
     - id: metrics-tmpdir
@@ -97,8 +89,7 @@ runs:
         )
         for execlog_zst in $(find '${{ steps.metrics-tmpdir.outputs.dir }}' -name 'execlog-*.zst'); do
           zstd -f -d "$execlog_zst" -o "$execlog"
-          bazel run //bazel:execution_log_compact_to_csv \
-            $([[ "$(uname)" == "Linux" ]] && echo '--repository_cache=/cache/bazel') -- \
+          bazel run //bazel:execution_log_compact_to_csv -- \
             --input_execlog="$execlog" \
             --exclude ${excludes[*]}
         done > '${{ steps.metrics-tmpdir.outputs.dir }}/execlogs.csv'
