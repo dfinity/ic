@@ -4813,6 +4813,7 @@ Charged for processing the approval.
         expected_message, message
     );
 
+    // Test approval without an expiration.
     args.arg = Encode!(&ApproveArgs {
         expires_at: None,
         ..approve_args.clone()
@@ -4867,6 +4868,7 @@ Charged for processing the approval.
         expected_message, message
     );
 
+    // If from_subaccount is not specified, the from information should be skipped.
     args.arg = Encode!(&ApproveArgs {
         from_subaccount: None,
         ..approve_args.clone()
