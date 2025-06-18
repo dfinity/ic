@@ -767,7 +767,7 @@ impl TryFrom<pb_canister_state_bits::canister_change::ChangeDetails> for Caniste
                     .into_iter()
                     .map(TryInto::try_into)
                     .collect::<Result<Vec<PrincipalId>, _>>()?,
-                    canister_creation.environment_variables_hash.clone(),
+                canister_creation.environment_variables_hash.clone(),
             )),
             pb_canister_state_bits::canister_change::ChangeDetails::CanisterCodeUninstall(_) => {
                 Ok(CanisterChangeDetails::CanisterCodeUninstall)
