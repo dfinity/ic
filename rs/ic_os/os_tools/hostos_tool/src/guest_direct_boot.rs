@@ -109,8 +109,12 @@ pub async fn prepare_direct_boot(
     let kernel = NamedTempFile::new()?;
     let initrd = NamedTempFile::new()?;
 
-    tokio::fs::copy(boot_partition.mount_point().join("vmlinuz"), &kernel).await?;
-    tokio::fs::copy(boot_partition.mount_point().join("initrd.img"), &initrd).await?;
+    tokio::fs::copy(boot_partition.mount_point().join("vmlinuz"), &kernel)
+        .await
+        .context("Could not copy vmlinuz")?;
+    tokio::fs::copy(boot_partition.mount_point().join("initrd.img"), &initrd)
+        .await
+        .context("Could not copy initrd.img")?;
 
     // We defer writing out the updated grubenv until we can ensure that the direct boot preparation
     // was successful.
@@ -508,13 +512,11 @@ mod tests {
             .without_kernel_files()
             .build();
 
-        println!(
-            "{}",
-            setup
-                .prepare_direct_boot(false)
-                .await
-                .expect_err("prepare_direct_boot should fail")
-                .to_string()
-        );
+        assert!(setup
+            .prepare_direct_boot(false)
+            .await
+            .expect_err("prepare_direct_boot should fail")
+            .to_string()
+            .contains("vmlinuz"));
     }
 }
