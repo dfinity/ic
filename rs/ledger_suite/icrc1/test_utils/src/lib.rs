@@ -38,6 +38,15 @@ use strum::EnumCount;
 pub const E8: u64 = 100_000_000;
 pub const DEFAULT_TRANSFER_FEE: u64 = 10_000;
 
+const MIN_ACCOUNT: Account = Account {
+    owner: Principal::from_slice(&[0; 29]),
+    subaccount: None,
+};
+const MAX_ACCOUNT: Account = Account {
+    owner: Principal::from_slice(&[255; 29]),
+    subaccount: Some([255; 32]),
+};
+
 pub fn minter_identity() -> BasicIdentity {
     let keypair = Ed25519KeyPair::generate(reproducible_rng().next_u64());
     BasicIdentity::from_pem(keypair.to_pem().as_bytes()).unwrap()
@@ -584,14 +593,6 @@ impl TransactionsAndBalances {
     }
 
     fn check_and_update_account_validity(&mut self, account: Account, default_fee: u64) {
-        const MIN_ACCOUNT: Account = Account {
-            owner: Principal::from_slice(&[0; 29]),
-            subaccount: None,
-        };
-        const MAX_ACCOUNT: Account = Account {
-            owner: Principal::from_slice(&[255; 29]),
-            subaccount: Some([255; 32]),
-        };
         // Check if there are any valid allowances where the `from` is the provided account, and
         // the `spender` is any account.
         let has_valid_allowances = self
@@ -1064,13 +1065,14 @@ pub fn valid_transactions_strategy_with_excluded_transaction_types(
 
                 // Find all allowances for this from account
                 let allowances_for_from: Vec<(Account, Tokens)> = allowance_map
-                    .iter()
-                    .filter_map(|((f, spender), allowance)| {
-                        if *f == from {
-                            Some((*spender, *allowance))
-                        } else {
-                            None
-                        }
+                    .range((
+                        Included((from, MIN_ACCOUNT)),
+                        Included((from, MAX_ACCOUNT)),
+                    ))
+                    .map(|((allowance_from, spender), allowance)| {
+                        // Ensure the from account in the allowance matches the selected from account
+                        assert_eq!(&from, allowance_from);
+                        (*spender, *allowance)
                     })
                     .collect();
 
