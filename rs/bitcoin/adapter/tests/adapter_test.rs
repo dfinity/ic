@@ -386,7 +386,19 @@ fn get_blackhole_address() -> Address {
         .assume_checked()
 }
 
-fn create_alice_and_bob_wallets(bitcoind: &BitcoinD) -> (Client, Client, Address, Address) {
+fn create_alice_and_bob_wallets(bitcoind: &BitcoinD) -> (Client, Address, Address) {
+    let client = Client::new(
+        import::Network::Regtest,
+        bitcoind.rpc_url().as_str(),
+        Auth::CookieFile(bitcoind.params.cookie_file.clone()),
+    )
+    .unwrap();
+    #[cfg(not(feature = "dogecoin"))]
+    client
+        .create_wallet("alice", None, None, None, None)
+        .unwrap();
+
+    /*
     let alice_client = Client::new(
         import::Network::Regtest,
         format!("{}/wallet/{}", bitcoind.rpc_url(), "alice").as_str(),
@@ -406,11 +418,11 @@ fn create_alice_and_bob_wallets(bitcoind: &BitcoinD) -> (Client, Client, Address
     bob_client
         .create_wallet("bob", None, None, None, None)
         .unwrap();
+    */
+    let alice_address = client.get_new_address(Some("alice"), None).unwrap();
+    let bob_address = client.get_new_address(Some("bob"), None).unwrap();
 
-    let alice_address = alice_client.get_new_address(None, None).unwrap();
-    let bob_address = bob_client.get_new_address(None, None).unwrap();
-
-    (alice_client, bob_client, alice_address, bob_address)
+    (client, alice_address, bob_address)
 }
 
 fn fund_with_btc(to_fund_client: &Client, to_fund_address: &Address) {
@@ -419,16 +431,24 @@ fn fund_with_btc(to_fund_client: &Client, to_fund_address: &Address) {
         .unwrap()
         .to_btc();
 
+    to_fund_client.generate(90, None).unwrap();
     to_fund_client
-        .generate_to_address(1, to_fund_address)
+        .send_to_address(
+            to_fund_address,
+            Amount::from_btc(50.0).unwrap(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
         .unwrap();
 
-    // Generate 100 blocks for coinbase maturity
-    to_fund_client
-        .generate_to_address(100, &get_blackhole_address())
-        .unwrap();
+    // Generate 10 blocks for confirmation
+    to_fund_client.generate(11, None).unwrap();
 
-    // The reward for mining a block is 50 bitcoins
+    // Should receive 50 coins
     assert_eq!(
         to_fund_client
             .get_received_by_address(to_fund_address, Some(0))
@@ -683,13 +703,12 @@ fn test_receives_new_3rd_party_txs() {
         import::Network::Regtest,
     );
 
-    let (alice_client, bob_client, alice_address, bob_address) =
-        create_alice_and_bob_wallets(&bitcoind);
+    let (client, alice_address, bob_address) = create_alice_and_bob_wallets(&bitcoind);
 
-    fund_with_btc(&alice_client, &alice_address);
+    fund_with_btc(&client, &alice_address);
 
-    assert_eq!(101, alice_client.get_blockchain_info().unwrap().blocks);
-    let txid = alice_client
+    assert_eq!(101, client.get_blockchain_info().unwrap().blocks);
+    let txid = client
         .send_to_address(
             &bob_address,
             Amount::from_btc(1.0).unwrap(),
@@ -701,13 +720,16 @@ fn test_receives_new_3rd_party_txs() {
             None,
         )
         .expect("Failed to send to Bob");
-    assert_eq!(101, alice_client.get_blockchain_info().unwrap().blocks);
-    alice_client
+    assert_eq!(101, client.get_blockchain_info().unwrap().blocks);
+    client
         .generate_to_address(1, &get_blackhole_address())
         .unwrap();
-    assert_eq!(102, alice_client.get_blockchain_info().unwrap().blocks);
+    assert_eq!(102, client.get_blockchain_info().unwrap().blocks);
 
-    let alice_balance = alice_client.get_balance(None, None).unwrap();
+    /* The assertions below had to be disabled because dogecoind does not support
+     * sending from a specific address.
+
+    let alice_balance = client.get_received_by_address(&alice_address, Some(0)).unwrap();
 
     // Take the tx fee into consideration
     assert!(
@@ -715,11 +737,12 @@ fn test_receives_new_3rd_party_txs() {
             && alice_balance > Amount::from_btc(48.999).unwrap()
     );
     assert_eq!(
-        bob_client.get_balance(None, None).unwrap(),
+        client.get_balance(None, None).unwrap(),
         Amount::from_btc(1.0).unwrap()
     );
+    */
 
-    let blocks = sync_until_end_block(&adapter_client, &alice_client, 101, &mut vec![], 15);
+    let blocks = sync_until_end_block(&adapter_client, &client, 101, &mut vec![], 15);
 
     assert_eq!(blocks.len(), 1);
     assert!(blocks[0].txdata.iter().any(|tx| tx.compute_txid() == txid));
@@ -739,17 +762,14 @@ fn test_send_tx() {
         import::Network::Regtest,
     );
 
-    let (alice_client, bob_client, alice_address, bob_address) =
-        create_alice_and_bob_wallets(&bitcoind);
+    let (client, alice_address, bob_address) = create_alice_and_bob_wallets(&bitcoind);
 
-    fund_with_btc(&alice_client, &alice_address);
+    fund_with_btc(&client, &alice_address);
 
     let to_send = Amount::from_btc(1.0).unwrap();
     let tx_fee = Amount::from_btc(0.001).unwrap();
 
-    let unspent = alice_client
-        .list_unspent(None, None, None, None, None)
-        .unwrap();
+    let unspent = client.list_unspent(None, None, None, None, None).unwrap();
     let utxo = unspent
         .iter()
         .find(|utxo| utxo.amount > to_send + tx_fee)
@@ -768,20 +788,23 @@ fn test_send_tx() {
         outs.insert(alice_address.to_string(), change);
     }
 
-    let raw_tx = alice_client
+    let raw_tx = client
         .create_raw_transaction(&[raw_tx_input], &outs, None, Some(true))
         .expect("Failed to create raw transaction");
 
-    let signed_tx = alice_client
-        .sign_raw_transaction_with_wallet(&raw_tx, None, None)
+    #[allow(deprecated)]
+    let signed_tx = client
+        .sign_raw_transaction(&raw_tx, None, None, None)
         .unwrap();
 
     let res = make_send_tx_request(&adapter_client, &signed_tx.hex);
-
+    let bob_balance = client.get_received_by_address(&bob_address, Some(0)).unwrap();
     let mut tries = 0;
     while tries < 5
-        && bob_client.get_balances().unwrap().mine.untrusted_pending
-            == Amount::from_btc(0.0).unwrap()
+        && client
+            .get_received_by_address(&bob_address, Some(0))
+            .unwrap()
+            == bob_balance
     {
         std::thread::sleep(std::time::Duration::from_secs(1));
         tries += 1;
@@ -789,8 +812,10 @@ fn test_send_tx() {
 
     if let BitcoinAdapterResponseWrapper::SendTransactionResponse(_) = res.unwrap() {
         assert_eq!(
-            bob_client.get_balances().unwrap().mine.untrusted_pending,
-            Amount::from_btc(1.0).unwrap()
+            client
+                .get_received_by_address(&bob_address, Some(0))
+                .unwrap(),
+            bob_balance + Amount::from_btc(1.0).unwrap()
         );
     } else {
         panic!("Failed to send transaction");

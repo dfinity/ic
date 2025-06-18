@@ -38,7 +38,7 @@ tonic = { workspace = true }
 tower = { workspace = true, optional = true }
 
 [dev-dependencies]
-bitcoincore-rpc = { git = "https://github.com/dfinity/rust-bitcoincore-rpc", rev = "d3a60944ceb89e3b77cc3eee13673326a185daf5" }
+bitcoincore-rpc = { git = "https://github.com/dfinity/rust-bitcoincore-rpc", rev = "3604655f4ec220f80f09ca1d2ea5501b5dc2cdbd" }
 bitcoind = { git = "https://github.com/ninegua/bitcoind", rev = "60ed030114a826a51ec87688de017ddc82f27fad" }
 criterion = { workspace = true }
 ic-btc-adapter-client = { path = "../client" }

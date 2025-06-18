@@ -1423,9 +1423,9 @@ dependencies = [
 [[package]]
 name = "bitcoincore-rpc"
 version = "0.19.0"
-source = "git+https://github.com/dfinity/rust-bitcoincore-rpc?rev=d3a60944ceb89e3b77cc3eee13673326a185daf5#d3a60944ceb89e3b77cc3eee13673326a185daf5"
+source = "git+https://github.com/dfinity/rust-bitcoincore-rpc?rev=3604655f4ec220f80f09ca1d2ea5501b5dc2cdbd#3604655f4ec220f80f09ca1d2ea5501b5dc2cdbd"
 dependencies = [
- "bitcoincore-rpc-json 0.19.0 (git+https://github.com/dfinity/rust-bitcoincore-rpc?rev=d3a60944ceb89e3b77cc3eee13673326a185daf5)",
+ "bitcoincore-rpc-json 0.19.0 (git+https://github.com/dfinity/rust-bitcoincore-rpc?rev=3604655f4ec220f80f09ca1d2ea5501b5dc2cdbd)",
  "jsonrpc 0.18.0",
  "log",
  "serde",
@@ -1446,7 +1446,7 @@ dependencies = [
 [[package]]
 name = "bitcoincore-rpc-json"
 version = "0.19.0"
-source = "git+https://github.com/dfinity/rust-bitcoincore-rpc?rev=d3a60944ceb89e3b77cc3eee13673326a185daf5#d3a60944ceb89e3b77cc3eee13673326a185daf5"
+source = "git+https://github.com/dfinity/rust-bitcoincore-rpc?rev=3604655f4ec220f80f09ca1d2ea5501b5dc2cdbd#3604655f4ec220f80f09ca1d2ea5501b5dc2cdbd"
 dependencies = [
  "bitcoin 0.32.5-doge.0",
  "serde",
@@ -6400,7 +6400,7 @@ name = "ic-btc-adapter"
 version = "0.9.0"
 dependencies = [
  "bitcoin 0.32.5-doge.0",
- "bitcoincore-rpc 0.19.0 (git+https://github.com/dfinity/rust-bitcoincore-rpc?rev=d3a60944ceb89e3b77cc3eee13673326a185daf5)",
+ "bitcoincore-rpc 0.19.0 (git+https://github.com/dfinity/rust-bitcoincore-rpc?rev=3604655f4ec220f80f09ca1d2ea5501b5dc2cdbd)",
  "bitcoind",
  "clap 4.5.27",
  "criterion",

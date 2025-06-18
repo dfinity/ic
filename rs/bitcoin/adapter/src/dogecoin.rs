@@ -17,7 +17,7 @@ pub use bitcoin::p2p::{Address as NetworkAddress, Magic, ServiceFlags};
 pub use bitcoin::transaction::{Transaction, Txid};
 pub use bitcoin::{Amount, Target, TxMerkleNode, Work};
 
-pub use bitcoin::dogecoin::{genesis_block, Address, Block, Network};
+pub use bitcoin::dogecoin::{constants::genesis_block, Address, Block, Network};
 
 pub type RawNetworkMessage = bitcoin::p2p::message::RawNetworkMessage<Block>;
 pub type NetworkMessage = bitcoin::p2p::message::NetworkMessage<Block>;
