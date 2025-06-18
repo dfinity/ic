@@ -83,7 +83,7 @@ jobs:
           BAZEL_COMMAND: >-
             test
               --config=ci
-              --local_test_jobs=${{ env.JOBS }} --test_tag_filters=k8s,-manual,-colocated,-long_test,-system_test_hourly,-system_test_nightly --k8s
+              --local_test_jobs=${{ env.JOBS }} --test_tag_filters=k8s,-manual,-colocated,-long_test,-system_test_nightly --k8s
           BAZEL_TARGETS: ${{ env.TARGETS }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
@@ -128,8 +128,8 @@ jobs:
       - name: Get Bazel Target List
         shell: bash
         run: |
-          # Query Bazel for targets: system tests with k8s flag AND (long_test flag OR system_test_hourly flag)
-          T=$(bazel query 'attr(tags, "k8s", tests(attr(tags, "long_test|system_test_hourly", //...))) except attr(tags, "colocated|manual|system_test_nightly", //...)')
+          # Query Bazel for targets: system tests with k8s flag AND long_test flag
+          T=$(bazel query 'attr(tags, "k8s", tests(attr(tags, "long_test", //...))) except attr(tags, "colocated|manual|system_test_nightly", //...)')
 
           # Handle empty target list
           if [[ -z "$T" ]]; then
