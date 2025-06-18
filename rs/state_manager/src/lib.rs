@@ -758,7 +758,7 @@ impl StateSyncRefs {
 }
 
 /// SharedState is mutable state that can be accessed from multiple threads.
-struct SharedState {
+pub struct SharedState {
     /// Certifications metadata kept for all states
     certifications_metadata: CertificationsMetadata,
     /// Metadata for each checkpoint
@@ -3762,6 +3762,25 @@ impl PageAllocatorFileDescriptorImpl {
                     err
                 )
             }
+        }
+    }
+}
+
+pub mod testing {
+    use super::*;
+
+    pub trait StateManagerTesting {
+        /// Testing only: Purges the `manifest` at `height` in `states.states_metadata`.
+        fn purge_manifest(&mut self, height: Height) -> bool;
+    }
+
+    impl StateManagerTesting for StateManagerImpl {
+        fn purge_manifest(&mut self, height: Height) -> bool {
+            if let Some(metadata) = self.states.write().states_metadata.get_mut(&height) {
+                metadata.bundled_manifest = None;
+                return true;
+            }
+            false
         }
     }
 }

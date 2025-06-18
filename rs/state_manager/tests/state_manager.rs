@@ -1224,6 +1224,25 @@ fn missing_manifests_are_recomputed() {
 }
 
 #[test]
+fn missing_manifest_is_computed_incrementally() {
+    state_manager_restart_test_with_metrics(|_metrics, mut state_manager, restart_fn| {
+        use ic_state_manager::testing::StateManagerTesting;
+
+        let (_height, state) = state_manager.take_tip();
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
+        wait_for_checkpoint(&state_manager, height(1));
+
+        state_manager.purge_manifest(2.into());
+        let (_height, state) = state_manager.take_tip();
+        state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
+        wait_for_checkpoint(&state_manager, height(2));
+
+        let (metrics, _state_manager) = restart_fn(state_manager, Some(2.into()));
+        assert!(any_manifest_was_incremental(&metrics));
+    });
+}
+
+#[test]
 fn validate_replicated_state_is_called() {
     fn validate_was_called(metrics: &MetricsRegistry) -> bool {
         let request_duration = fetch_histogram_vec_stats(
