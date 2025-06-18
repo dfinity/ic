@@ -15152,7 +15152,6 @@ dependencies = [
  "candid",
  "crc32fast",
  "hex",
- "ic-cdk 0.17.2",
  "ic-stable-structures",
  "icrc-cbor",
  "itertools 0.12.1",
