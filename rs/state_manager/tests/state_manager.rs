@@ -1232,7 +1232,7 @@ fn missing_manifest_is_computed_incrementally() {
         state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
         wait_for_checkpoint(&state_manager, height(1));
 
-        state_manager.purge_manifest(2.into());
+        assert!(state_manager.purge_manifest(2.into()));
         let (_height, state) = state_manager.take_tip();
         state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
         wait_for_checkpoint(&state_manager, height(2));
