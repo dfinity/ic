@@ -557,10 +557,11 @@ impl ExecutionEnvironment {
 
                             info!(
                                 self.log,
-                                "Canister Http request with request size {}, payload size {}, and max response size {}",
+                                "Canister Http request with request size {}, payload size {}, max response size {} and subnet size {}",
                                 context.variable_parts_size().get(),
                                 response.payload_size_bytes().get(),
-                                max_response_size
+                                max_response_size,
+                                registry_settings.subnet_size
                             );
                         }
 
