@@ -19,6 +19,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
 use ic_test_utilities_embedders::{WasmtimeInstanceBuilder, DEFAULT_NUM_INSTRUCTIONS};
 use ic_test_utilities_types::ids::{call_context_test_id, user_test_id};
+use ic_types::PrincipalId;
 use ic_types::{
     ingress::WasmResult,
     messages::RejectContext,
@@ -26,7 +27,6 @@ use ic_types::{
     time::UNIX_EPOCH,
     Cycles, NumBytes, NumInstructions,
 };
-use ic_types::PrincipalId;
 
 const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
 
