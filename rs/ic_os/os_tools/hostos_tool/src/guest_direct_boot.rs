@@ -452,7 +452,6 @@ mod tests {
         let grubenv = setup.get_grubenv();
         assert_eq!(grubenv.boot_alternative.unwrap(), BootAlternative::A);
         assert_eq!(grubenv.boot_cycle.unwrap(), BootCycle::FirstBoot);
-        assert_eq!(grubenv.boot_alternative.unwrap(), BootAlternative::A);
     }
 
     #[tokio::test]
@@ -489,8 +488,6 @@ mod tests {
             .with_grubenv(BootAlternative::B, BootCycle::FailsafeCheck)
             .without_boot_args_files()
             .build();
-
-        let grubenv_before = setup.get_grubenv();
 
         let result = setup
             .prepare_direct_boot(true)

@@ -66,7 +66,7 @@ fn try_parse(line: &str, boot_args_var_name: &str) -> Option<String> {
     Some(process_escapes(raw_value))
 }
 
-/// Handle escape sequences: \n, \t, \", \', \\, etc.
+/// Replaces escape sequences: \n, \t, \", \', \\, etc. with their corresponding characters.
 fn process_escapes(s: &str) -> String {
     let mut result = String::new();
     let mut chars = s.chars();

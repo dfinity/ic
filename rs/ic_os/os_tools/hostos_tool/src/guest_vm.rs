@@ -205,7 +205,9 @@ impl GuestVmService {
         let config_media = NamedTempFile::new()?;
 
         let direct_boot = prepare_direct_boot(
-            true, // TODO: We should not refresh in Upgrade VMs once we add them
+            // TODO: We should not refresh in Upgrade VMs once we add them
+            /*should_refresh_grubenv=*/
+            true,
             self.partition_provider.as_ref(),
         )
         .await?;
