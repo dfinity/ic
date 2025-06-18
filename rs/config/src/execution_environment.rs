@@ -328,6 +328,9 @@ pub struct Config {
     /// Whether canister snapshot metadata and data can be uploaded
     /// by controllers.
     pub canister_snapshot_upload: FlagStatus,
+
+    /// Whether environment variables are supported.
+    pub environment_variables: FlagStatus,
 }
 
 impl Default for Config {
@@ -409,6 +412,7 @@ impl Default for Config {
             max_number_of_snapshots_per_canister: MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER,
             canister_snapshot_download: FlagStatus::Disabled,
             canister_snapshot_upload: FlagStatus::Disabled,
+            environment_variables: FlagStatus::Disabled,
         }
     }
 }
