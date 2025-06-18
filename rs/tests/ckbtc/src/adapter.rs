@@ -3,26 +3,42 @@ use candid::{Encode, Principal};
 use ic_agent::{Agent, AgentError};
 use ic_btc_interface::Network;
 use ic_config::execution_environment::BITCOIN_MAINNET_CANISTER_ID;
+use ic_management_canister_types::ProvisionalCreateCanisterWithCyclesArgs;
 use ic_management_canister_types_private::{
     BitcoinGetSuccessorsArgs, BitcoinGetSuccessorsRequestInitial, BitcoinGetSuccessorsResponse,
     Payload,
 };
-use ic_system_test_driver::util::MessageCanister;
+use ic_system_test_driver::util::{MessageCanister, MESSAGE_CANISTER_WASM};
 use ic_types::PrincipalId;
-use std::str::FromStr;
+use ic_utils::interfaces::ManagementCanister;
+use slog::{info, Logger};
+use std::{ops::Deref, str::FromStr};
 
 pub struct AdapterProxy<'a> {
     msg_can: MessageCanister<'a>,
+    log: Logger,
 }
 
 impl<'a> AdapterProxy<'a> {
-    pub async fn new(agent: &'a Agent) -> Self {
-        let msg_can = MessageCanister::new(
-            &agent,
-            PrincipalId::from_str(BITCOIN_MAINNET_CANISTER_ID).unwrap(),
-        )
-        .await;
-        Self { msg_can }
+    pub async fn new(agent: &'a Agent, log: Logger) -> Self {
+        let bitcoin_principal_id = PrincipalId::from_str(BITCOIN_MAINNET_CANISTER_ID).unwrap();
+        let bitcoin_principal = bitcoin_principal_id.into();
+
+        // Since we need to install the messaging canister at a specific PrincipalId,
+        // we need to install it manually here
+        let mgr = ManagementCanister::create(agent);
+        mgr.create_canister()
+            .as_provisional_create_with_specified_id(bitcoin_principal)
+            .call_and_wait()
+            .await
+            .expect("Failed to provision id");
+        mgr.install_code(&(bitcoin_principal.into()), MESSAGE_CANISTER_WASM)
+            .call_and_wait()
+            .await
+            .expect("Failed to install code");
+
+        let msg_can = MessageCanister::from_canister_id(agent, bitcoin_principal_id.into());
+        Self { msg_can, log }
     }
 
     pub async fn get_successors(
@@ -40,7 +56,7 @@ impl<'a> AdapterProxy<'a> {
         self.msg_can
             .forward_to(
                 &Principal::management_canister(),
-                "get_successors_response",
+                "bitcoin_get_successors",
                 Encode!(&get_successors_request).unwrap(),
             )
             .await

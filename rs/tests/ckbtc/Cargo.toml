@@ -36,6 +36,7 @@ ic-system-test-driver = { path = "../../tests/driver" }
 ic-types = { path = "../../types/types" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
 ic-universal-canister = { path = "../../universal_canister/lib" }
+ic-utils = { workspace = true }
 ic_consensus_threshold_sig_system_test_utils = { path = "../../tests/consensus/tecdsa/utils" }
 icp-ledger = { path = "../../ledger_suite/icp" }
 icrc-ledger-agent = { path = "../../../packages/icrc-ledger-agent" }

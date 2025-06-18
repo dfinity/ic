@@ -36,7 +36,7 @@ fn test_received_blocks(env: TestEnv) {
     let anchor = client.get_block_hash(0).unwrap()[..].to_vec();
     let blocks = block_on(async {
         let agent = assert_create_agent(sys_node.get_public_url().as_str()).await;
-        let adapter_proxy = AdapterProxy::new(&agent).await;
+        let adapter_proxy = AdapterProxy::new(&agent, log).await;
         adapter_proxy
             .sync_blocks(&mut vec![], anchor, 150, 15)
             .await
