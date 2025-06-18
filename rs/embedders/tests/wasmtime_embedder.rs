@@ -3428,6 +3428,7 @@ fn test_environment_variable_system_api() {
       (import "ic0" "env_var_name_copy" (func $env_var_name_copy (param i32 i32 i32 i32)))
       (import "ic0" "env_var_value_size" (func $env_var_value_size (param i32 i32) (result i32)))
       (import "ic0" "env_var_value_copy" (func $env_var_value_copy (param i32 i32 i32 i32 i32)))
+      (import "ic0" "trap" (func $trap (param i32 i32)))
 
       (func (export "canister_update go")
         (local $name_dst i32)
@@ -3439,7 +3440,15 @@ fn test_environment_variable_system_api() {
 
         (local.set $name_dst (i32.const 0))
         (local.set $output_dst (i32.const 1000)) ;; output buffer starting after enough slack for the name buffer
+
+        ;; Assert that the number of environment variables is 2:
+        ;; the call traps with an empty message if this is not the case
         (local.set $var_count (call $ic0_env_var_count))
+        (if (i32.ne (local.get $var_count) (i32.const 2))
+          (then
+            (call $trap (i32.const 0) (i32.const 0))
+          )
+        )
 
         ;; Copy first name to memory
         (local.set $index (i32.const 0))
