@@ -1,6 +1,6 @@
 //! This module is for updating existing config.json files.
 //! The deserialize-then-serialize-and-write operation ensures that if new
-//! fields with `#[serde(default)]` are added to the configuration structs, they
+//! fields with `#[serde(default)]` are added to the IC-OS Config, they
 //! are written to the config.json file on disk with their default values.
 
 use std::path::PathBuf;
