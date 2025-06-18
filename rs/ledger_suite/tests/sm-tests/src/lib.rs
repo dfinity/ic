@@ -4673,33 +4673,13 @@ Charged for processing the transfer.
         expected_message, message
     );
 
-    // If the from account is anonymous, the message should not include the from account but only the from subaccount.
+    // If the from account is anonymous, the message should not include the account information.
     args.arg = Encode!(&transfer_args.clone()).unwrap();
     let message = extract_icrc21_message_string(
         &icrc21_consent_message(env, canister_id, Principal::anonymous(), args.clone())
             .unwrap()
             .consent_message,
     );
-    let expected_message = expected_transfer_message.replace("\n\n**From:**\n`d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101`","\n\n**From subaccount:**\n`101010101010101010101010101010101010101010101010101010101010101`" );
-    assert_eq!(
-        message, expected_message,
-        "Expected: {}, got: {}",
-        expected_message, message
-    );
-
-    // If from_subaccount is not specified, no from information should be included.
-    args.arg = Encode!(&TransferArg {
-        from_subaccount: None,
-        ..transfer_args.clone()
-    })
-    .unwrap();
-
-    let message = extract_icrc21_message_string(
-        &icrc21_consent_message(env, canister_id, Principal::anonymous(), args.clone())
-            .unwrap()
-            .consent_message,
-    );
-
     let expected_message = expected_transfer_message.replace("\n\n**From:**\n`d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101`","" );
     assert_eq!(
         message, expected_message,
@@ -4842,7 +4822,7 @@ Charged for processing the approval.
         expected_message, message
     );
 
-    // If the approver is anonymous, the message should not include the approver account but only the approver subaccount.
+    // If the approver is anonymous, the message should not include the approver information.
     args.arg = Encode!(&approve_args.clone()).unwrap();
     let message = extract_icrc21_message_string(
         &icrc21_consent_message(env, canister_id, Principal::anonymous(), args.clone())
@@ -4850,8 +4830,8 @@ Charged for processing the approval.
             .consent_message,
     );
     let expected_message = expected_approve_message
-        .replace("\n\n**Fees paid by:**\n`d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101`","\n\n**Fees paid by your subaccount:**\n`101010101010101010101010101010101010101010101010101010101010101`" )
-        .replace("\n\n**From:**\n`d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101`","\n\n**From subaccount:**\n`101010101010101010101010101010101010101010101010101010101010101`");
+        .replace("\n\n**Fees paid by:**\n`d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101`","" )
+        .replace("\n\n**From:**\n`d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101`","");
     assert_eq!(
         message, expected_message,
         "Expected: {}, got: {}",
@@ -4874,28 +4854,7 @@ Charged for processing the approval.
         "Expected: {}, got: {}",
         expected_message, message
     );
-
-    // If from_subaccount is not specified, the from information should be skipped.
-    args.arg = Encode!(&ApproveArgs {
-        from_subaccount: None,
-        ..approve_args.clone()
-    })
-    .unwrap();
     args.user_preferences.metadata.utc_offset_minutes = None;
-
-    let message = extract_icrc21_message_string(
-        &icrc21_consent_message(env, canister_id, Principal::anonymous(), args.clone())
-            .unwrap()
-            .consent_message,
-    );
-
-    let expected_message = expected_approve_message.replace("\n\n**From:**\n`d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101`","" )
-        .replace("\n\n**Fees paid by:**\n`d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101`","" );
-    assert_eq!(
-        message, expected_message,
-        "Expected: {}, got: {}",
-        expected_message, message
-    );
 
     // If memo is not specified it should not be included.
     args.arg = Encode!(&ApproveArgs {
@@ -4980,7 +4939,7 @@ Charged for processing the transfer.
         expected_transfer_from_message, message
     );
 
-    // If the spender is anonymous, the message should not include the spender account but only the spender subaccount.
+    // If the spender is anonymous, the message should not include the spender account information.
     args.arg = Encode!(&transfer_from_args.clone()).unwrap();
     let message = extract_icrc21_message_string(
         &icrc21_consent_message(env, canister_id, Principal::anonymous(), args.clone())
@@ -4989,30 +4948,8 @@ Charged for processing the transfer.
     );
     let expected_message = expected_transfer_from_message.replace(
         "\n\n**Spender:**\n`djduj-3qcaa-aaaaa-aaaap-4ai-5r7aoqy.303030303030303030303030303030303030303030303030303030303030303`",
-        "\n\n**Spender subaccount:**\n`303030303030303030303030303030303030303030303030303030303030303`",
+        "",
     );
-    assert_eq!(
-        message, expected_message,
-        "Expected: {}, got: {}",
-        expected_message, message
-    );
-
-    // If the spender is anonymous and spender_subaccount is default, the spender information should be skipped.
-    args.arg = Encode!(&TransferFromArgs {
-        spender_subaccount: None,
-        ..transfer_from_args.clone()
-    })
-    .unwrap();
-
-    let message = extract_icrc21_message_string(
-        &icrc21_consent_message(env, canister_id, Principal::anonymous(), args.clone())
-            .unwrap()
-            .consent_message,
-    );
-
-    let expected_message = expected_transfer_from_message.replace(
-        "\n\n**Spender:**\n`djduj-3qcaa-aaaaa-aaaap-4ai-5r7aoqy.303030303030303030303030303030303030303030303030303030303030303`",
-        "" );
     assert_eq!(
         message, expected_message,
         "Expected: {}, got: {}",
@@ -5044,11 +4981,6 @@ Charged for processing the transfer.
 fn extract_icrc21_message_string(consent_message: &ConsentMessage) -> String {
     match consent_message {
         ConsentMessage::GenericDisplayMessage(message) => message.to_string(),
-        ConsentMessage::LineDisplayMessage { pages } => pages
-            .iter()
-            .map(|page| page.lines.join(""))
-            .collect::<Vec<String>>()
-            .join(""),
     }
 }
 
