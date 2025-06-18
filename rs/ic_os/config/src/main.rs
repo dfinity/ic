@@ -38,14 +38,11 @@ pub enum Commands {
     /// Creates a GuestOSConfig object directly from GenerateTestnetConfigClapArgs. Only used for testing purposes.
     GenerateTestnetConfig(GenerateTestnetConfigClapArgs),
     /// Creates a GuestOSConfig object from existing guestos configuration files
-    UpdateGuestosConfig,
+    UpdateGuestosConfig {
+        #[arg(long, default_value = config::DEFAULT_GUESTOS_CONFIG_OBJECT_PATH, value_name = "config.json")]
+        guestos_config_json_path: PathBuf,
+    },
     UpdateHostosConfig {
-        #[arg(long, default_value = config::DEFAULT_HOSTOS_CONFIG_INI_FILE_PATH, value_name = "config.ini")]
-        config_ini_path: PathBuf,
-
-        #[arg(long, default_value = config::DEFAULT_HOSTOS_DEPLOYMENT_JSON_PATH, value_name = "deployment.json")]
-        deployment_json_path: PathBuf,
-
         #[arg(long, default_value = config::DEFAULT_HOSTOS_CONFIG_OBJECT_PATH, value_name = "config.json")]
         hostos_config_json_path: PathBuf,
     },
@@ -329,16 +326,12 @@ pub fn main() -> Result<()> {
         // TODO(NODE-1518): delete UpdateGuestosConfig and UpdateHostosConfig after moved to new config format
         // Regenerate config.json on *every boot* in case the config structure changes between
         // when we roll out the update-config service and when we roll out the 'config integration'
-        Some(Commands::UpdateGuestosConfig) => update_guestos_config(),
+        Some(Commands::UpdateGuestosConfig {
+            guestos_config_json_path,
+        }) => update_guestos_config(&guestos_config_json_path),
         Some(Commands::UpdateHostosConfig {
-            config_ini_path,
-            deployment_json_path,
             hostos_config_json_path,
-        }) => update_hostos_config(
-            &config_ini_path,
-            &deployment_json_path,
-            &hostos_config_json_path,
-        ),
+        }) => update_hostos_config(&hostos_config_json_path),
         None => {
             println!("No command provided. Use --help for usage information.");
             Ok(())
