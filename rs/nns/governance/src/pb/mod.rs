@@ -1,10 +1,12 @@
 use crate::{
     governance::MAX_FOLLOWEES_PER_TOPIC,
+    neuron::Neuron,
     pb::v1::{
-        manage_neuron::{set_following::FolloweesForTopic, Follow, SetFollowing},
+        manage_neuron::{set_following::FolloweesForTopic, SetFollowing},
         ArchivedMonthlyNodeProviderRewards, Topic,
     },
 };
+use ic_base_types::PrincipalId;
 use ic_nns_governance_api::{governance_error::ErrorType, GovernanceError};
 use ic_stable_structures::{storable::Bound, Storable};
 use prost::Message;
@@ -34,9 +36,7 @@ impl Storable for ArchivedMonthlyNodeProviderRewards {
 }
 
 impl SetFollowing {
-    /// Returns Err if one or more requirement(s) are not met.
-    ///
-    /// Enforced properties:
+    /// Returns Err if some of the following requirements are not met:
     ///
     ///     1. Topics are unique. If we allowed duplicates, that would give
     ///        people an easy way to construct requests that take up lots of
@@ -52,11 +52,23 @@ impl SetFollowing {
     ///     3. The number of followees on each topic is at most
     ///        MAX_FOLLOWEES_PER_TOPIC.
     ///
-    /// NOT enforced here:
-    ///
-    ///     1. Followees actually exist. This requires "outside" information (to
-    ///        wit, the set of existing neurons, or at least, their IDs).
-    pub fn validate(&self) -> Result<(), GovernanceError> {
+    ///     4. caller is authorized to make (all) the changes. In general, this
+    ///        requires being a controller or hot key. However, in the special
+    ///        case of the NeuronManagement topic, only the controller is
+    ///        allowed.
+    pub fn validate(
+        &self,
+        caller: &PrincipalId,
+        neuron: &Neuron,
+    ) -> Result<(), GovernanceError> {
+        self.validate_intrinsically()?;
+        self.validate_authorized(caller, neuron)?;
+
+        Ok(())
+    }
+
+    /// Does the same thing as validate, except no authorization check.
+    pub fn validate_intrinsically(&self) -> Result<(), GovernanceError> {
         self.validate_topics_are_unique()?;
         self.validate_not_too_many_followees()?;
 
@@ -117,22 +129,37 @@ impl SetFollowing {
 
         Ok(())
     }
-}
 
-impl From<SetFollowing> for Vec<Follow> {
-    fn from(original: SetFollowing) -> Vec<Follow> {
-        let SetFollowing { topic_following } = original;
+    /// neuron is the one that is going to be operated on by self.
+    fn validate_authorized(
+        &self,
+        caller: &PrincipalId,
+        neuron: &Neuron,
+    ) -> Result<(), GovernanceError> {
+        let ok = {
+            let any_manage_neuron = self.topic_following
+                .iter()
+                .any(|followees_for_topic| {
+                    followees_for_topic.topic == Some(Topic::NeuronManagement as i32)
+                });
 
-        topic_following.into_iter().map(Follow::from).collect()
-    }
-}
+            if any_manage_neuron {
+                neuron.is_controlled_by(caller)
+            } else {
+                neuron.is_authorized_to_vote(caller)
+            }
+        };
 
-impl From<FolloweesForTopic> for Follow {
-    fn from(original: FolloweesForTopic) -> Follow {
-        let FolloweesForTopic { followees, topic } = original;
+        if !ok {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::NotAuthorized,
+                format!(
+                    "Caller ({}) is not authorized to make such changes to the following of neuron {}.",
+                    caller, neuron.id().id,
+                ),
+            ));
+        }
 
-        let topic = topic.unwrap_or_default();
-
-        Follow { topic, followees }
+        Ok(())
     }
 }

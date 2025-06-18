@@ -41,7 +41,8 @@ use crate::{
             manage_neuron::{
                 self,
                 claim_or_refresh::{By, MemoAndController},
-                ClaimOrRefresh, Command, Follow, NeuronIdOrSubaccount,
+                ClaimOrRefresh, Command, NeuronIdOrSubaccount,
+                SetFollowing, set_following::FolloweesForTopic,
             },
             maturity_disbursement::Destination,
             neurons_fund_snapshot::NeuronsFundNeuronPortion as NeuronsFundNeuronPortionPb,
@@ -3284,11 +3285,32 @@ impl Governance {
         caller: &PrincipalId,
         set_following: &manage_neuron::SetFollowing,
     ) -> Result<(), GovernanceError> {
-        set_following.validate()?;
+        // Start with original following of the neuron.
+        let mut new_followees = self.with_neuron(id, |neuron| -> Result<HashMap</* topic */ i32, Followees>, GovernanceError> {
+            set_following.validate(caller, neuron)?;
 
-        for request in Vec::<Follow>::from(set_following.clone()) {
-            self.follow(id, caller, &request)?;
+            Ok(neuron.followees.clone())
+        })??;
+
+        // Modify new_followees according to set_following.
+        let SetFollowing { topic_following } = set_following;
+        for FolloweesForTopic { topic, followees } in topic_following {
+            let topic = topic.unwrap_or_default();
+            let followees = followees.clone();
+
+            if followees.is_empty() {
+                new_followees.remove(&topic);
+            } else {
+                new_followees.insert(topic, Followees { followees });
+            }
         }
+
+        // Commit new_followees to the neuron.
+        let now_seconds = self.env.now();
+        self.with_neuron_mut(id, |neuron| {
+            neuron.followees = new_followees;
+            neuron.refresh_voting_power(now_seconds);
+        })?;
 
         Ok(())
     }
@@ -4766,7 +4788,7 @@ impl Governance {
                 }
             }
             Command::SetFollowing(set_following) => {
-                set_following.validate()?;
+                set_following.validate_intrinsically()?;
             }
             _ => {}
         };
