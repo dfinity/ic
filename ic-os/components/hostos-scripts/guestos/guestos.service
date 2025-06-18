@@ -4,8 +4,6 @@ Requires=libvirtd.service
 After=libvirtd.service
 Requires=guestos-recovery-upgrader.service
 After=guestos-recovery-upgrader.service
-
-# TODO: Remove update-config references in NODE-1518
 After=update-config.service
 Wants=update-config.service
 

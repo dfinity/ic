@@ -68,6 +68,8 @@ component_files = {
     Label("misc/guestos/hsm/pcscd"): "/etc/default/pcscd",
     Label("misc/log-config/log-config-guestos.service"): "/etc/systemd/system/log-config.service",
     Label("misc/log-config/log-config.sh"): "/opt/ic/bin/log-config.sh",
+    Label("misc/update-config/update-guestos-config.service"): "/etc/systemd/system/update-config.service",
+
 
     # monitoring
     Label("monitoring/filebeat/setup-filebeat-permissions.sh"): "/opt/ic/bin/setup-filebeat-permissions.sh",
@@ -164,7 +166,4 @@ component_files = {
 
     # fstrim
     Label("fstrim/sync_fstrim.sh"): "/opt/ic/bin/sync_fstrim.sh",
-
-    # TODO(NODE-1618):
-    Label("misc/update-config/update-guestos-config.service"): "/etc/systemd/system/update-config.service",
 }

@@ -417,7 +417,6 @@ fn create_config_disk_image(
         generate_ic_boundary_tls_cert: None,
     };
 
-    // TODO(NODE-1518): remove passing old config (only exists to pass *downgrade* CI tests)
     let mut bootstrap_options = BootstrapOptions {
         ic_registry_local_store: Some(
             test_env

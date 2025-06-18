@@ -323,9 +323,6 @@ pub fn main() -> Result<()> {
                 &generate_testnet_config(args)?,
             )
         }
-        // TODO(NODE-1618):
-        // Regenerate config.json on *every boot* in case the config structure changes between
-        // when we roll out the update-config service and when we roll out the 'config integration'
         Some(Commands::UpdateGuestosConfig {
             guestos_config_json_path,
         }) => update_guestos_config(&guestos_config_json_path),
