@@ -6616,15 +6616,18 @@ impl Governance {
         self.heap_data.spawning_neurons = Some(false);
     }
 
-    /// Create a reward event.
-    ///
-    /// This method:
-    /// * collects all proposals in state ReadyToSettle, that is, proposals that
-    ///   can no longer accept votes for the purpose of rewards and that have
-    ///   not yet been considered in a reward event.
-    /// * Associate those proposals to the new reward event
-    pub(crate) fn distribute_rewards(&mut self, supply: Tokens) {
-        println!("{}distribute_rewards. Supply: {:?}", LOG_PREFIX, supply);
+    /// Calculates the voting rewards to distribute and returns the rewards event and the
+    /// distribution per neuron. There are 3 cases for the return value:
+    /// 1. `None`. This is the case when the it's not the time to distribute rewards yet, and it can
+    ///    happen when the distribute_rewards is called several times at almost the same time.
+    /// 2. Some((reward_event, None)). This is the case where there are no proposals to settle, and
+    ///    the rewards will be rolled over.
+    /// 3. Some((reward_event, Some(distribution))). This is the case where there are proposals to
+    ///    settle, and the rewards will be distributed.
+    fn calculate_voting_rewards(
+        &self,
+        supply: Tokens,
+    ) -> Option<(RewardEvent, Option<RewardsDistribution>)> {
         let now = self.env.now();
 
         let latest_reward_event = self.latest_reward_event();
@@ -6641,7 +6644,7 @@ impl Governance {
             // This may happen, in case consider_distributing_rewards was called
             // several times at almost the same time. This is
             // harmless, just abandon.
-            return;
+            return None;
         }
 
         if new_rounds_count > 1 {
@@ -6731,13 +6734,14 @@ impl Governance {
         // are just adding and multiplying, and everything is just integers,
         // except for proposal weights, which are currently (as of Mar, 2023)
         // 20x, 1x, and 0.01x.
-        if total_voting_rights < 0.001 {
+        let reward_distribution = if total_voting_rights < 0.001 {
             println!(
                 "{}WARNING: total_voting_rights == {}, even though considered_proposals \
                  is nonempty (see earlier log). Therefore, we skip incrementing maturity \
                  to avoid dividing by zero (or super small number).",
                 LOG_PREFIX, total_voting_rights,
             );
+            None
         } else {
             let mut reward_distribution = RewardsDistribution::new();
             for (neuron_id, used_voting_rights) in voters_to_used_voting_right {
@@ -6762,13 +6766,70 @@ impl Governance {
                     );
                 }
             }
-            self.schedule_pending_rewards_distribution(day_after_genesis, reward_distribution);
+            Some(reward_distribution)
+        };
+
+        let reward_event = RewardEvent {
+            day_after_genesis,
+            actual_timestamp_seconds: now,
+            settled_proposals: considered_proposals,
+            distributed_e8s_equivalent: actually_distributed_e8s_equivalent,
+            total_available_e8s_equivalent: total_available_e8s_equivalent_float as u64,
+            rounds_since_last_distribution: Some(rounds_since_last_distribution),
+            latest_round_available_e8s_equivalent: Some(
+                latest_round_available_e8s_equivalent_float as u64,
+            ),
+        };
+
+        Some((reward_event, reward_distribution))
+    }
+
+    /// Distributes voting rewards to neurons.
+    ///
+    /// This method:
+    /// * collects all proposals in state ReadyToSettle, that is, proposals that
+    ///   can no longer accept votes for the purpose of rewards and that have
+    ///   not yet been considered in a reward event.
+    /// * calculates the voting rewards to distribute.
+    /// * schedules the rewards distribution.
+    /// * updates the reward event.
+    /// * updates the proposals from ReadyToSettle to Settled.
+    pub(crate) fn distribute_voting_rewards_to_neurons(&mut self, supply: Tokens) {
+        println!(
+            "{}distribute_voting_rewards_to_neurons. Supply: {:?}",
+            LOG_PREFIX, supply
+        );
+
+        let voting_rewards_calculation_result = self.calculate_voting_rewards(supply);
+        let Some((new_reward_event, reward_distribution)) = voting_rewards_calculation_result
+        else {
+            return;
+        };
+
+        // Now the mutations begin. Once any mutation has happened, we cannot exit early without the
+        // rest. Otherwise we could end up in an inconsistent state and break some properties we
+        // would like to hold.
+        //
+        // The properties we would like to hold are:
+        // * The rewards for a given day is only distributed once. This is made sure by updating the
+        //   reward event, in particular the `day_after_genesis` field every time
+        //   `schedule_pending_rewards_distribution` is called. This is also the main reason that
+        //   once mutations begin, we should not exit early before  `latest_reward_event` is
+        //   updated.
+        // * The proposals should only be settled once. This is made sure by updating the proposal
+        //   status from `ReadyToSettle` to `Settled`.
+
+        if let Some(reward_distribution) = reward_distribution {
+            self.schedule_pending_rewards_distribution(
+                new_reward_event.day_after_genesis,
+                reward_distribution,
+            );
         }
 
         // Mark the proposals that we just considered as "rewarded". More
         // formally, causes their reward_status to be Settled; whereas, before,
         // they were in the ReadyToSettle state.
-        for pid in considered_proposals.iter() {
+        for pid in new_reward_event.settled_proposals.iter() {
             // Before considering a proposal for reward, it must be fully processed --
             // because we're about to clear the ballots, so no further processing will be
             // possible.
@@ -6785,21 +6846,21 @@ impl Governance {
                           being open. This code line is expected not to be reachable. We need to \
                           clear the ballots here to avoid a risk of the memory getting too large. \
                           In doubt, reject the proposal", LOG_PREFIX, pid.id);
-                        p.decided_timestamp_seconds = now;
+                        p.decided_timestamp_seconds = new_reward_event.actual_timestamp_seconds;
                         p.latest_tally = Some(Tally {
-                            timestamp_seconds: now,
+                            timestamp_seconds: new_reward_event.actual_timestamp_seconds,
                             yes:0,
                             no:0,
                             total:0,
                        })
                     };
-                    p.reward_event_round = day_after_genesis;
+                    p.reward_event_round = new_reward_event.day_after_genesis;
                     p.ballots.clear();
                 }
             };
         }
 
-        if considered_proposals.is_empty() {
+        if new_reward_event.settled_proposals.is_empty() {
             println!(
                 "{}Voting rewards will roll over, because no there were proposals \
                  that needed rewards (i.e. have reward_status == ReadyToSettle)",
@@ -6807,17 +6868,7 @@ impl Governance {
             );
         };
 
-        self.heap_data.latest_reward_event = Some(RewardEvent {
-            day_after_genesis,
-            actual_timestamp_seconds: now,
-            settled_proposals: considered_proposals,
-            distributed_e8s_equivalent: actually_distributed_e8s_equivalent,
-            total_available_e8s_equivalent: total_available_e8s_equivalent_float as u64,
-            rounds_since_last_distribution: Some(rounds_since_last_distribution),
-            latest_round_available_e8s_equivalent: Some(
-                latest_round_available_e8s_equivalent_float as u64,
-            ),
-        })
+        self.heap_data.latest_reward_event = Some(new_reward_event);
     }
 
     /// Recompute cached metrics once per day
