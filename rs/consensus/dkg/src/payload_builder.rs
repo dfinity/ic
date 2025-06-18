@@ -1,12 +1,20 @@
 use crate::{
+    metrics::DkgPayloadBuilderMetrics,
+    payload_validator::validate_payload,
     utils::{self, tags_iter, vetkd_key_ids_for_subnet},
     MAX_REMOTE_DKGS_PER_INTERVAL, MAX_REMOTE_DKG_ATTEMPTS, REMOTE_DKG_REPEATED_FAILURE_ERROR,
 };
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
-use ic_interfaces::{crypto::ErrorReproducibility, dkg::DkgPool};
+use ic_interfaces::{
+    consensus_pool::ConsensusPool,
+    crypto::ErrorReproducibility,
+    dkg::{DkgPayloadBuilder, DkgPayloadValidationError, DkgPool},
+    validation::ValidationResult,
+};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
 use ic_logger::{error, warn, ReplicaLogger};
+use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::subnet::v1::{
     chain_key_initialization::Initialization, CatchUpPackageContents,
 };
@@ -18,7 +26,7 @@ use ic_types::{
     batch::ValidationContext,
     consensus::{
         dkg::{DkgDataPayload, DkgPayload, DkgPayloadCreationError, DkgSummary},
-        get_faults_tolerated, Block,
+        get_faults_tolerated, Block, BlockPayload,
     },
     crypto::threshold_sig::ni_dkg::{
         config::{errors::NiDkgConfigValidationError, NiDkgConfig, NiDkgConfigData},
@@ -33,6 +41,89 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     sync::{Arc, RwLock},
 };
+
+pub struct DkgPayloadBuilderImpl {
+    subnet_id: SubnetId,
+    registry_client: Arc<dyn RegistryClient>,
+    crypto: Arc<dyn ConsensusCrypto>,
+    dkg_pool: Arc<RwLock<dyn DkgPool>>,
+    state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+    metrics: DkgPayloadBuilderMetrics,
+    log: ReplicaLogger,
+}
+
+// TODO: Create an instance during initialization and pass to Block maker and Validator
+
+impl DkgPayloadBuilder for DkgPayloadBuilderImpl {
+    fn create_payload(
+        &self,
+        pool: &dyn ConsensusPool,
+        parent: &Block,
+        context: &ValidationContext,
+        max_dealings_per_block: usize,
+    ) -> Result<DkgPayload, DkgPayloadCreationError> {
+        let pool_reader = PoolReader::new(pool);
+
+        create_payload(
+            self.subnet_id,
+            &*self.registry_client,
+            &*self.crypto,
+            &pool_reader,
+            self.dkg_pool.clone(),
+            parent,
+            &*self.state_manager,
+            context,
+            self.log.clone(),
+            max_dealings_per_block,
+        )
+    }
+
+    fn validate_payload(
+        &self,
+        payload: &BlockPayload,
+        pool: &dyn ConsensusPool,
+        parent: &Block,
+        context: &ValidationContext,
+    ) -> ValidationResult<DkgPayloadValidationError> {
+        let pool_reader = PoolReader::new(pool);
+
+        validate_payload(
+            self.subnet_id,
+            &*self.registry_client,
+            &*self.crypto,
+            &pool_reader,
+            &*self.dkg_pool.read().unwrap(),
+            parent.clone(),
+            payload,
+            &*self.state_manager,
+            context,
+            &self.metrics.dkg_validator,
+            &self.log,
+        )
+    }
+}
+
+impl DkgPayloadBuilderImpl {
+    pub fn new(
+        subnet_id: SubnetId,
+        registry_client: Arc<dyn RegistryClient>,
+        crypto: Arc<dyn ConsensusCrypto>,
+        dkg_pool: Arc<RwLock<dyn DkgPool>>,
+        state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+        metrics_registry: &MetricsRegistry,
+        log: ReplicaLogger,
+    ) -> Self {
+        Self {
+            subnet_id,
+            registry_client,
+            crypto,
+            dkg_pool,
+            state_manager,
+            metrics: DkgPayloadBuilderMetrics::new(metrics_registry),
+            log,
+        }
+    }
+}
 
 /// Creates the DKG payload for a new block proposal with the given parent. If
 /// the new height corresponds to a new DKG start interval, creates a summary,
