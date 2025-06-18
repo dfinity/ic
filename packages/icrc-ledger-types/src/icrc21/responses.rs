@@ -6,8 +6,15 @@ use serde::Serialize;
 use serde_bytes::ByteBuf;
 
 #[derive(Debug, CandidType, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct FieldsDisplay {
+    pub intent: String,
+    pub fields: Vec<(String, String)>,
+}
+
+#[derive(Debug, CandidType, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ConsentMessage {
     GenericDisplayMessage(String),
+    FieldsDisplayMessage(FieldsDisplay),
 }
 
 #[derive(Debug, CandidType, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -34,8 +41,8 @@ impl ConsentMessage {
                 Intent::Approve => {
                     message.push_str("# Approve spending");
                     message.push_str(
-                    "\n\nYou are authorizing another address to withdraw funds from your account.",
-                );
+                            "\n\nYou are authorizing another address to withdraw funds from your account.",
+                        );
                 }
                 Intent::TransferFrom => {
                     message.push_str(&format!("# Spend {}", token_symbol));
@@ -44,14 +51,28 @@ impl ConsentMessage {
                     );
                 }
             },
+            ConsentMessage::FieldsDisplayMessage(fields_display) => match intent {
+                Intent::Transfer => {
+                    fields_display.intent = format!("Send {}", token_symbol);
+                }
+                Intent::Approve => {
+                    fields_display.intent = "Approve spending".to_string();
+                }
+                Intent::TransferFrom => {
+                    fields_display.intent = format!("Spend {}", token_symbol);
+                }
+            },
         }
     }
 
     pub fn add_account(&mut self, name: &str, account: &Account) {
         match self {
             ConsentMessage::GenericDisplayMessage(message) => {
-                message.push_str(&format!("\n\n**{}:**\n`{}`", name, account));
+                message.push_str(&format!("\n\n**{}:**\n`{}`", name, account))
             }
+            ConsentMessage::FieldsDisplayMessage(fields_display) => fields_display
+                .fields
+                .push((name.to_string(), account.to_string())),
         }
     }
 
@@ -60,6 +81,9 @@ impl ConsentMessage {
             ConsentMessage::GenericDisplayMessage(message) => {
                 message.push_str(&format!("\n\n**Amount:** `{} {}`", amount, token_symbol));
             }
+            ConsentMessage::FieldsDisplayMessage(fields_display) => fields_display
+                .fields
+                .push(("Amount".to_string(), format!("{} {}", amount, token_symbol))),
         }
     }
 
@@ -77,6 +101,17 @@ impl ConsentMessage {
                     )),
                 };
             }
+            ConsentMessage::FieldsDisplayMessage(fields_display) => {
+                match intent {
+                    Intent::Approve => fields_display.fields.push((
+                        "Approval fees".to_string(),
+                        format!("{} {}", fee, token_symbol),
+                    )),
+                    _ => fields_display
+                        .fields
+                        .push(("Fees".to_string(), format!("{} {}", fee, token_symbol))),
+                };
+            }
         }
     }
 
@@ -84,10 +119,14 @@ impl ConsentMessage {
         match self {
             ConsentMessage::GenericDisplayMessage(message) => {
                 message.push_str(&format!(
-                    "\n\n**Requested allowance:** `{} {}`\nThis is the withdrawal limit that will apply upon approval.",
-                    amount, token_symbol
-                ));
+                            "\n\n**Requested allowance:** `{} {}`\nThis is the withdrawal limit that will apply upon approval.",
+                            amount, token_symbol
+                        ));
             }
+            ConsentMessage::FieldsDisplayMessage(fields_display) => fields_display.fields.push((
+                "Requested allowance".to_string(),
+                format!("{} {}", amount, token_symbol),
+            )),
         }
     }
 
@@ -96,6 +135,10 @@ impl ConsentMessage {
             ConsentMessage::GenericDisplayMessage(message) => {
                 message.push_str(&format!("\n\n**Existing allowance:** `{} {}`\nUntil approval, this allowance remains in effect.", expected_allowance, token_symbol));
             }
+            ConsentMessage::FieldsDisplayMessage(fields_display) => fields_display.fields.push((
+                "Existing allowance".to_string(),
+                format!("{} {}", expected_allowance, token_symbol),
+            )),
         }
     }
 
@@ -104,20 +147,24 @@ impl ConsentMessage {
             ConsentMessage::GenericDisplayMessage(message) => {
                 message.push_str(&format!("\n\n**Approval expiration:**\n{}", expires_at));
             }
+            ConsentMessage::FieldsDisplayMessage(fields_display) => fields_display
+                .fields
+                .push(("Approval expiration".to_string(), expires_at.to_string())),
         }
     }
 
     pub fn add_memo(&mut self, memo: ByteBuf) {
+        // Check if the memo is a valid UTF-8 string and display it as such if it is.
+        let memo_str = match std::str::from_utf8(memo.as_slice()) {
+            Ok(valid_str) => valid_str.to_string(),
+            Err(_) => hex::encode(memo.as_slice()),
+        };
         match self {
             ConsentMessage::GenericDisplayMessage(message) => {
-                message.push_str(&format!(
-                    "\n\n**Memo:**\n`{}`",
-                    // Check if the memo is a valid UTF-8 string and display it as such if it is.
-                    &match std::str::from_utf8(memo.as_slice()) {
-                        Ok(valid_str) => valid_str.to_string(),
-                        Err(_) => hex::encode(memo.as_slice()),
-                    }
-                ));
+                message.push_str(&format!("\n\n**Memo:**\n`{}`", memo_str));
+            }
+            ConsentMessage::FieldsDisplayMessage(fields_display) => {
+                fields_display.fields.push(("Memo".to_string(), memo_str))
             }
         }
     }

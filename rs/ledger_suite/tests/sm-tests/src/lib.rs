@@ -4981,6 +4981,7 @@ Charged for processing the transfer.
 fn extract_icrc21_message_string(consent_message: &ConsentMessage) -> String {
     match consent_message {
         ConsentMessage::GenericDisplayMessage(message) => message.to_string(),
+        ConsentMessage::FieldsDisplayMessage(_) => panic!("cannot convert to string"),
     }
 }
 
