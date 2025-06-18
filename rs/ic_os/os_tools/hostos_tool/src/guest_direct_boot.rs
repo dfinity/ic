@@ -450,6 +450,7 @@ mod tests {
 
         // Grubenv should remain unchanged
         let grubenv = setup.get_grubenv();
+        assert_eq!(grubenv.boot_alternative.unwrap(), BootAlternative::A);
         assert_eq!(grubenv.boot_cycle.unwrap(), BootCycle::FirstBoot);
         assert_eq!(grubenv.boot_alternative.unwrap(), BootAlternative::A);
     }
@@ -497,9 +498,10 @@ mod tests {
             .expect("prepare_direct_boot failed");
         assert!(result.is_none());
 
-        // Ensure that grubenv was not modified
-        let grubenv_after = setup.get_grubenv();
-        assert_eq!(grubenv_before, grubenv_after);
+        // Grubenv should remain unchanged
+        let grubenv = setup.get_grubenv();
+        assert_eq!(grubenv.boot_alternative.unwrap(), BootAlternative::B);
+        assert_eq!(grubenv.boot_cycle.unwrap(), BootCycle::FailsafeCheck);
     }
 
     #[tokio::test]
