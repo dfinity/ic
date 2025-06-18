@@ -1397,16 +1397,22 @@ impl StateManagerImpl {
         metrics.max_resident_height.set(last_snapshot_height);
 
         // Find the largest height where both the `manifest` and the `checkpoint_layout` are available.
-        let manifest_delta_input = states_metadata.iter().rev().find_map(|(height, metadata)| {
-            Some((
-                *height,
-                metadata
-                    .bundled_manifest
-                    .as_ref()
-                    .map(|bundled_manifest| bundled_manifest.manifest.clone())?,
-                metadata.checkpoint_layout.clone()?,
-            ))
-        });
+        let manifest_delta_input =
+            states_metadata
+                .iter()
+                .rev()
+                .find_map(|(height, metadata)| match metadata {
+                    StateMetadata {
+                        checkpoint_layout: Some(checkpoint_layout),
+                        bundled_manifest: Some(bundled_manifest),
+                        ..
+                    } => Some((
+                        *height,
+                        bundled_manifest.manifest.clone(),
+                        checkpoint_layout.clone(),
+                    )),
+                    _ => None,
+                });
 
         let states = Arc::new(parking_lot::RwLock::new(SharedState {
             certifications_metadata,
