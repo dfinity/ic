@@ -716,8 +716,8 @@ pub fn write_overlays_and_verify(instructions: Vec<Instruction>) {
 #[doc(hidden)]
 #[cfg(feature = "fuzzing_code")]
 fn remove_tempdir(tdir: TempDir) {
-    let tmp_path = tdir.into_path();
-    std::fs::remove_dir_all(tmp_path).expect("Unable to delete temporary directoy");
+    let tmp_path = tdir.keep();
+    std::fs::remove_dir_all(tmp_path).expect("Unable to delete temporary directory");
 }
 
 #[test]
