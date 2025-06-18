@@ -6,7 +6,6 @@ use config::generate_testnet_config::{
     generate_testnet_config, GenerateTestnetConfigArgs, Ipv6ConfigType,
 };
 use config::serialize_and_write_config;
-use config::update_config::{update_guestos_config, update_hostos_config};
 use config_types::*;
 use macaddr::MacAddr6;
 use network::resolve_mgmt_mac;
@@ -37,15 +36,6 @@ pub enum Commands {
     },
     /// Creates a GuestOSConfig object directly from GenerateTestnetConfigClapArgs. Only used for testing purposes.
     GenerateTestnetConfig(GenerateTestnetConfigClapArgs),
-    /// Creates a GuestOSConfig object from existing guestos configuration files
-    UpdateGuestosConfig {
-        #[arg(long, default_value = config::DEFAULT_GUESTOS_CONFIG_OBJECT_PATH, value_name = "config.json")]
-        guestos_config_json_path: PathBuf,
-    },
-    UpdateHostosConfig {
-        #[arg(long, default_value = config::DEFAULT_HOSTOS_CONFIG_OBJECT_PATH, value_name = "config.json")]
-        hostos_config_json_path: PathBuf,
-    },
 }
 
 #[derive(Parser)]
@@ -323,12 +313,6 @@ pub fn main() -> Result<()> {
                 &generate_testnet_config(args)?,
             )
         }
-        Some(Commands::UpdateGuestosConfig {
-            guestos_config_json_path,
-        }) => update_guestos_config(&guestos_config_json_path),
-        Some(Commands::UpdateHostosConfig {
-            hostos_config_json_path,
-        }) => update_hostos_config(&hostos_config_json_path),
         None => {
             println!("No command provided. Use --help for usage information.");
             Ok(())

@@ -4,8 +4,6 @@ Requires=libvirtd.service
 After=libvirtd.service
 Requires=guestos-recovery-upgrader.service
 After=guestos-recovery-upgrader.service
-After=update-config.service
-Wants=update-config.service
 
 RequiresMountsFor=/var
 
