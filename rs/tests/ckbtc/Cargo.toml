@@ -72,3 +72,7 @@ path = "ckbtc_minter_checker.rs"
 [[bin]]
 name = "ic-systest-ckbtc-update-balance"
 path = "ckbtc_minter_update_balance.rs"
+
+[[bin]]
+name = "ic-systest-adapter-basics-test"
+path = "adapter_basics_test.rs"

@@ -198,6 +198,7 @@ pub fn ckbtc_setup(env: TestEnv) {
     // Use the ckbtc integration setup.
     ckbtc_config(env.clone());
     check_nodes_health(&env);
+    check_ecdsa_works(&env);
     install_nns_canisters_at_ids(&env);
 }
 
@@ -205,7 +206,7 @@ pub fn adapter_test_setup(env: TestEnv) {
     // Use the adapter test integration setup.
     adapter_test_config(env.clone());
     check_nodes_health(&env);
-    install_nns_canisters_at_ids(&env);
+    //install_nns_canisters_at_ids(&env);
 }
 
 pub fn install_nns_canisters_at_ids(env: &TestEnv) {
@@ -233,7 +234,9 @@ fn check_nodes_health(env: &TestEnv) {
             .for_each(|node| node.await_status_is_healthy().unwrap())
     });
     info!(&env.logger(), "All nodes are ready, IC setup succeeded.");
+}
 
+fn check_ecdsa_works(env: &TestEnv) {
     // Check that ECDSA signatures work
     let sys_node = subnet_sys(env)
         .nodes()
