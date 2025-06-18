@@ -517,6 +517,7 @@ impl CanisterChange {
         }
     }
 
+    /// Returns the number of bytes to represent a canister change in memory.
     /// The vector of controllers in `CanisterCreation`, `CanisterControllersChange`
     /// and `CanisterSettingsChange` is counted separately because
     /// the controllers are stored on heap and thus not accounted
