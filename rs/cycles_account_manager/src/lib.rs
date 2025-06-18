@@ -1186,6 +1186,28 @@ impl CyclesAccountManager {
             * (subnet_size as u64)
     }
 
+    pub fn http_request_fee_beta(
+        &self,
+        request_size: NumBytes,
+        response_size_limit: Option<NumBytes>,
+        subnet_size: usize,
+        payload_size: NumBytes,
+    ) -> Cycles {
+        let max_response_size = match response_size_limit {
+            Some(response_size) => response_size.get(),
+            // Defaults to maximum response size.
+            None => MAX_CANISTER_HTTP_RESPONSE_BYTES,
+        };
+
+        (Cycles::new(4_000_000)
+            + Cycles::new(50_000) * (subnet_size as u64)
+            + Cycles::new(50) * request_size.get()
+            + Cycles::new(50) * max_response_size
+            + Cycles::new(750) * payload_size.get()
+            + Cycles::new(30) * (subnet_size as u64) * payload_size.get())
+            * (subnet_size as u64)
+    }
+
     /// Returns the default value of the reserved balance limit for the case
     /// when the canister doesn't have it set in the settings.
     pub fn default_reserved_balance_limit(&self) -> Cycles {

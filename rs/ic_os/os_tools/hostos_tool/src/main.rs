@@ -1,15 +1,16 @@
-use std::path::Path;
-
 use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand};
-
 use config::{deserialize_config, DEFAULT_HOSTOS_CONFIG_OBJECT_PATH};
 use config_types::{HostOSConfig, Ipv6Config};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{calculate_deterministic_mac, IpVariant, MacAddr6Ext};
 use network::generate_network_config;
 use network::systemd::DEFAULT_SYSTEMD_NETWORK_DIR;
+use std::path::Path;
 use utils::to_cidr;
+
+mod guest_vm;
+mod systemd_notifier;
 
 #[derive(Subcommand)]
 pub enum Commands {
@@ -27,6 +28,7 @@ pub enum Commands {
         #[arg(short, long, default_value_t = NodeType::HostOS)]
         node_type: NodeType,
     },
+    RunGuestVm {},
 }
 
 #[derive(Parser)]
@@ -38,11 +40,12 @@ struct HostOSArgs {
     command: Option<Commands>,
 }
 
-pub fn main() -> Result<()> {
+#[tokio::main]
+pub async fn main() -> Result<()> {
     #[cfg(not(target_os = "linux"))]
     {
         eprintln!("ERROR: this only runs on Linux.");
-        std::process::exit(1);
+        std::process::exit(1)
     }
 
     let opts = HostOSArgs::parse();
@@ -116,6 +119,7 @@ pub fn main() -> Result<()> {
             println!("{}", generated_mac);
             Ok(())
         }
+        Some(Commands::RunGuestVm {}) => guest_vm::run_guest_vm().await,
         None => Err(anyhow!(
             "No subcommand specified. Run with '--help' for subcommands"
         )),

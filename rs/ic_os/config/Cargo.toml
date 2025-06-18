@@ -7,7 +7,6 @@ edition = "2021"
 anyhow = { workspace = true }
 askama = { workspace = true }
 ic-types = { path = "../../types/types" }
-ic-metrics-tool = { path = "../metrics_tool" }
 clap = { workspace = true }
 macaddr = { workspace = true }
 utils = { path = "../utils" }

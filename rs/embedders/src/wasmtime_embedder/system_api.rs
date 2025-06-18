@@ -63,6 +63,9 @@ const MAX_32_BIT_STABLE_MEMORY_IN_PAGES: u64 = 64 * 1024; // 4GiB
 /// best-effort responses represented in seconds.
 pub const MAX_CALL_TIMEOUT_SECONDS: u32 = 300;
 
+/// The maximum size of an environment variable name.
+pub const MAX_ENV_VAR_NAME_SIZE: usize = 100;
+
 // This macro is used in system calls for tracing.
 macro_rules! trace_syscall {
     ($self:ident, $name:ident, $result:expr $( , $args:expr )*) => {{
@@ -1565,19 +1568,36 @@ impl SystemApiImpl {
             }
             // Composite queries should persist any changes related to inter-canister
             // calls, like output queue requests and callbacks.
-            ApiType::CompositeQuery { .. } => SystemStateModifications {
-                new_certified_data: None,
-                callback_updates: system_state_modifications.callback_updates,
-                cycles_balance_change: CyclesBalanceChange::zero(),
-                reserved_cycles: Cycles::zero(),
-                consumed_cycles_by_use_case: BTreeMap::new(),
-                call_context_balance_taken: None,
-                request_slots_used: system_state_modifications.request_slots_used,
-                requests: system_state_modifications.requests,
-                new_global_timer: None,
-                canister_log: Default::default(),
-                on_low_wasm_memory_hook_condition_check_result: None,
-                should_bump_canister_version: false,
+            // In case of a trap, no changes are returned.
+            ApiType::CompositeQuery { .. } => match &self.execution_error {
+                Some(_) => SystemStateModifications {
+                    new_certified_data: None,
+                    callback_updates: vec![],
+                    cycles_balance_change: CyclesBalanceChange::zero(),
+                    reserved_cycles: Cycles::zero(),
+                    consumed_cycles_by_use_case: BTreeMap::new(),
+                    call_context_balance_taken: None,
+                    request_slots_used: BTreeMap::new(),
+                    requests: vec![],
+                    new_global_timer: None,
+                    canister_log: Default::default(),
+                    on_low_wasm_memory_hook_condition_check_result: None,
+                    should_bump_canister_version: false,
+                },
+                None => SystemStateModifications {
+                    new_certified_data: None,
+                    callback_updates: system_state_modifications.callback_updates,
+                    cycles_balance_change: CyclesBalanceChange::zero(),
+                    reserved_cycles: Cycles::zero(),
+                    consumed_cycles_by_use_case: BTreeMap::new(),
+                    call_context_balance_taken: None,
+                    request_slots_used: system_state_modifications.request_slots_used,
+                    requests: system_state_modifications.requests,
+                    new_global_timer: None,
+                    canister_log: Default::default(),
+                    on_low_wasm_memory_hook_condition_check_result: None,
+                    should_bump_canister_version: false,
+                },
             },
             // Replicated queries return changes to the logs and cycles balance,
             // as well as bumping the canister's version in case there was no trap.
@@ -1874,6 +1894,275 @@ impl SystemApi for SystemApiImpl {
 
     fn canister_id(&self) -> CanisterId {
         self.sandbox_safe_system_state.canister_id
+    }
+
+    fn ic0_env_var_count(&self) -> HypervisorResult<usize> {
+        let result = match &self.api_type {
+            ApiType::Start { .. } => Err(self.error_for("ic0_env_var_count")),
+            ApiType::Init { .. }
+            | ApiType::SystemTask { .. }
+            | ApiType::Update { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::CompositeQuery { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::RejectCallback { .. }
+            | ApiType::InspectMessage { .. } => {
+                Ok(self.sandbox_safe_system_state.environment_variables().len())
+            }
+        };
+
+        trace_syscall!(self, EnvVarCount, result);
+        result
+    }
+
+    fn ic0_env_var_name_size(&self, index: usize) -> HypervisorResult<usize> {
+        let result = match &self.api_type {
+            ApiType::Start { .. } => Err(self.error_for("ic0_env_var_name_size")),
+            ApiType::Init { .. }
+            | ApiType::SystemTask { .. }
+            | ApiType::Update { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::CompositeQuery { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::RejectCallback { .. }
+            | ApiType::InspectMessage { .. } => {
+                let keys = self
+                    .sandbox_safe_system_state
+                    .environment_variables()
+                    .keys()
+                    .collect::<Vec<_>>();
+                match keys.get(index) {
+                    Some(name) => Ok(name.len()),
+                    None => Err(EnvironmentVariableIndexOutOfBounds {
+                        index,
+                        length: keys.len(),
+                    }),
+                }
+            }
+        };
+
+        trace_syscall!(self, EnvVarNameSize, result);
+        result
+    }
+
+    fn ic0_env_var_name_copy(
+        &self,
+        index: usize,
+        dst: usize,
+        offset: usize,
+        size: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()> {
+        let result = match &self.api_type {
+            ApiType::Start { .. } => Err(self.error_for("ic0_env_var_name_copy")),
+            ApiType::Init { .. }
+            | ApiType::SystemTask { .. }
+            | ApiType::Update { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::CompositeQuery { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::RejectCallback { .. }
+            | ApiType::InspectMessage { .. } => {
+                let keys = self
+                    .sandbox_safe_system_state
+                    .environment_variables()
+                    .keys()
+                    .collect::<Vec<_>>();
+                match keys.get(index) {
+                    Some(name) => {
+                        // Validate destination buffer
+                        valid_subslice(
+                            "ic0.env_var_name_copy heap",
+                            InternalAddress::new(dst),
+                            InternalAddress::new(size),
+                            heap,
+                        )?;
+                        let slice = valid_subslice(
+                            "ic0.env_var_name_copy name",
+                            InternalAddress::new(offset),
+                            InternalAddress::new(size),
+                            name.as_bytes(),
+                        )?;
+                        deterministic_copy_from_slice(&mut heap[dst..dst + size], slice);
+                        Ok(())
+                    }
+                    None => Err(EnvironmentVariableIndexOutOfBounds {
+                        index,
+                        length: keys.len(),
+                    }),
+                }
+            }
+        };
+
+        trace_syscall!(
+            self,
+            EnvVarNameCopy,
+            result,
+            dst,
+            offset,
+            size,
+            summarize(heap, dst, size)
+        );
+        result
+    }
+
+    fn ic0_env_var_value_size(
+        &self,
+        name_src: usize,
+        name_size: usize,
+        heap: &[u8],
+    ) -> HypervisorResult<usize> {
+        let result = match &self.api_type {
+            ApiType::Start { .. } => Err(self.error_for("ic0_env_var_value_size")),
+            ApiType::Init { .. }
+            | ApiType::SystemTask { .. }
+            | ApiType::Update { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::CompositeQuery { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::RejectCallback { .. }
+            | ApiType::InspectMessage { .. } => {
+                if name_size > MAX_ENV_VAR_NAME_SIZE {
+                    return Err(HypervisorError::UserContractViolation {
+                        error: "ic0.env_var_value_size: Variable name is too large.".to_string(),
+                        suggestion: "".to_string(),
+                        doc_link: "".to_string(),
+                    });
+                }
+
+                let name_bytes = valid_subslice(
+                    "ic0.env_var_value_size heap",
+                    InternalAddress::new(name_src),
+                    InternalAddress::new(name_size),
+                    heap,
+                )?;
+
+                let name = std::str::from_utf8(name_bytes).map_err(|_| {
+                    HypervisorError::UserContractViolation {
+                        error: "ic0.env_var_value_size: Variable name is not a valid UTF-8 string."
+                            .to_string(),
+                        suggestion:
+                            "Provide a valid UTF-8 string for the environment variable name."
+                                .to_string(),
+                        doc_link: "".to_string(),
+                    }
+                })?;
+                match &self
+                    .sandbox_safe_system_state
+                    .environment_variables()
+                    .get(name)
+                {
+                    Some(value) => Ok(value.len()),
+                    None => Err(EnvironmentVariableNotFound {
+                        name: name.to_string(),
+                    }),
+                }
+            }
+        };
+
+        trace_syscall!(self, EnvVarValueSize, result);
+        result
+    }
+
+    fn ic0_env_var_value_copy(
+        &self,
+        name_src: usize,
+        name_size: usize,
+        dst: usize,
+        offset: usize,
+        size: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()> {
+        let result = match &self.api_type {
+            ApiType::Start { .. } => Err(self.error_for("ic0_env_var_value_copy")),
+            ApiType::Init { .. }
+            | ApiType::SystemTask { .. }
+            | ApiType::Update { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::CompositeQuery { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::RejectCallback { .. }
+            | ApiType::InspectMessage { .. } => {
+                if name_size > MAX_ENV_VAR_NAME_SIZE {
+                    return Err(HypervisorError::UserContractViolation {
+                        error: "ic0.env_var_value_copy: Variable name is too large.".to_string(),
+                        suggestion: "".to_string(),
+                        doc_link: "".to_string(),
+                    });
+                }
+
+                let name_bytes = valid_subslice(
+                    "ic0.env_var_value_copy name",
+                    InternalAddress::new(name_src),
+                    InternalAddress::new(name_size),
+                    heap,
+                )?;
+
+                let name = std::str::from_utf8(name_bytes).map_err(|_| {
+                    HypervisorError::UserContractViolation {
+                        error: "ic0.env_var_value_copy: Variable name is not a valid UTF-8 string."
+                            .to_string(),
+                        suggestion:
+                            "Provide a valid UTF-8 string for the environment variable name."
+                                .to_string(),
+                        doc_link: "".to_string(),
+                    }
+                })?;
+
+                match &self
+                    .sandbox_safe_system_state
+                    .environment_variables()
+                    .get(name)
+                {
+                    Some(value) => {
+                        // Validate destination buffer
+                        valid_subslice(
+                            "ic0.env_var_value_copy heap",
+                            InternalAddress::new(dst),
+                            InternalAddress::new(size),
+                            heap,
+                        )?;
+                        let slice = valid_subslice(
+                            "ic0.env_var_value_copy value",
+                            InternalAddress::new(offset),
+                            InternalAddress::new(size),
+                            value.as_bytes(),
+                        )?;
+                        deterministic_copy_from_slice(&mut heap[dst..dst + size], slice);
+                        Ok(())
+                    }
+                    None => Err(EnvironmentVariableNotFound {
+                        name: name.to_string(),
+                    }),
+                }
+            }
+        };
+
+        trace_syscall!(
+            self,
+            EnvVarValueCopy,
+            result,
+            dst,
+            offset,
+            size,
+            summarize(heap, dst, size)
+        );
+        result
     }
 
     fn ic0_msg_caller_size(&self) -> HypervisorResult<usize> {
