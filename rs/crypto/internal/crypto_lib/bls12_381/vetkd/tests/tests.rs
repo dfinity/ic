@@ -393,7 +393,7 @@ fn test_protocol_execution() {
         // Avoid using a duplicate index for this test
         let random_unused_idx = loop {
             let idx = (rng.gen::<usize>() % node_eks_wrong_input.len()) as u32;
-            if !shares.keys().map(|i| *i).any(|x| x == idx) {
+            if !shares.keys().any(|x| *x == idx) {
                 break idx;
             }
         };
