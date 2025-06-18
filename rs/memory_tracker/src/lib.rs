@@ -822,15 +822,6 @@ pub fn uffd_handler(
                 let prefetch_range =
                     dirty_bitmap.restrict_range_to_predicted(faulting_page, prefetch_range);
                 let page_start_addr = tracker.page_start_addr_from(prefetch_range.start);
-                unsafe {
-                    mprotect(
-                        page_start_addr,
-                        range_size_in_bytes(&prefetch_range),
-                        ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
-                    )
-                    .map_err(print_enomem_help)
-                    .unwrap()
-                };
                 tracker
                     .memory_instructions_stats
                     .mprotect_count
@@ -924,92 +915,101 @@ fn apply_memory_instructions(
     page_protection_flags: ProtFlags,
     memory_instructions: MemoryInstructions,
 ) {
-    println!(
-        "[memory tracker] Applying memory instructions: page_protection_flags:{:?}, memory_instructions:{:?}",
-        page_protection_flags, memory_instructions
-    );
     let MemoryInstructions {
         range: prefetch_range,
         instructions,
     } = memory_instructions;
-    // We want to do as few mprotect calls as possible. However, to do any copies, we need to make the range read/write.
-    // As long as we only have mmap instructions, we mmap them with protection flag PROT_NONE, such that the entire range
-    // remains uniformly PROT_NONE. Before the first time we copy, we mark the entire range read/write and maintain that
-    // for any later mmap calls.
-    // let current_prot_flags = ProtFlags::PROT_NONE;
-    for (range, mmap_or_data) in instructions {
-        debug_assert!(
-            range.start.get() >= prefetch_range.start.get()
-                && range.end.get() <= prefetch_range.end.get()
-        );
-        match mmap_or_data {
-            ic_replicated_state::page_map::MemoryMapOrData::MemoryMap(
-                FileDescriptor { fd },
-                offset,
-            ) => {
-                println!(
-                    "Mapping range: {:?} from fd: {}, offset: {}",
-                    range, fd, offset
-                );
-                tracker
-                    .memory_instructions_stats
-                    .mmap_count
-                    .fetch_add(1, Ordering::Relaxed);
-                unsafe {
-                    mmap(
-                        tracker.page_start_addr_from(range.start),
-                        range_size_in_bytes(&range),
-                        ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
-                        MapFlags::MAP_PRIVATE | MapFlags::MAP_FIXED,
-                        fd,
-                        offset as i64,
-                    )
-                    .map_err(print_enomem_help)
-                    .unwrap()
-                };
+    if instructions.is_empty() {
+        if let Some(uffd) = uffd {
+            unsafe {
+                uffd.zeropage(
+                    tracker.page_start_addr_from(prefetch_range.start),
+                    range_size_in_bytes(&prefetch_range),
+                    false,
+                )
+                .expect("uffd zeropage failed");
             }
-            ic_replicated_state::page_map::MemoryMapOrData::Data(data) => {
-                tracker.memory_instructions_stats.copy_page_count.fetch_add(
-                    (range.end.get() - range.start.get()) as usize,
-                    Ordering::Relaxed,
-                );
+        }
+    } else {
+        // We want to do as few mprotect calls as possible. However, to do any copies, we need to make the range read/write.
+        // As long as we only have mmap instructions, we mmap them with protection flag PROT_NONE, such that the entire range
+        // remains uniformly PROT_NONE. Before the first time we copy, we mark the entire range read/write and maintain that
+        // for any later mmap calls.
+        // let current_prot_flags = ProtFlags::PROT_NONE;
+        for (range, mmap_or_data) in instructions {
+            debug_assert!(
+                range.start.get() >= prefetch_range.start.get()
+                    && range.end.get() <= prefetch_range.end.get()
+            );
+            match mmap_or_data {
+                ic_replicated_state::page_map::MemoryMapOrData::MemoryMap(
+                    FileDescriptor { fd },
+                    offset,
+                ) => {
+                    println!(
+                        "Mapping range: {:?} from fd: {}, offset: {}",
+                        range, fd, offset
+                    );
+                    tracker
+                        .memory_instructions_stats
+                        .mmap_count
+                        .fetch_add(1, Ordering::Relaxed);
+                    unsafe {
+                        mmap(
+                            tracker.page_start_addr_from(range.start),
+                            range_size_in_bytes(&range),
+                            ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
+                            MapFlags::MAP_PRIVATE | MapFlags::MAP_FIXED,
+                            fd,
+                            offset as i64,
+                        )
+                        .map_err(print_enomem_help)
+                        .unwrap()
+                    };
+                }
+                ic_replicated_state::page_map::MemoryMapOrData::Data(data) => {
+                    tracker.memory_instructions_stats.copy_page_count.fetch_add(
+                        (range.end.get() - range.start.get()) as usize,
+                        Ordering::Relaxed,
+                    );
 
-                // if current_prot_flags != ProtFlags::PROT_READ | ProtFlags::PROT_WRITE {
-                //     current_prot_flags = ProtFlags::PROT_READ | ProtFlags::PROT_WRITE;
-                //     unsafe {
-                //         mprotect(
-                //             tracker.page_start_addr_from(prefetch_range.start),
-                //             range_size_in_bytes(&prefetch_range),
-                //             current_prot_flags,
-                //         )
-                //         .map_err(print_enomem_help)
-                //         .unwrap()
-                //     };
-                //     tracker
-                //         .memory_instructions_stats
-                //         .mprotect_count
-                //         .fetch_add(1, Ordering::Relaxed);
-                // }
-                unsafe {
-                    debug_assert_eq!(data.len(), range_size_in_bytes(&range));
-                    match uffd {
-                        Some(uffd) => {
-                            println!("Copying data to uffd: {:?}", range);
-                            uffd.copy(
-                                data.as_ptr() as *const libc::c_void,
-                                tracker.page_start_addr_from(range.start),
-                                range_size_in_bytes(&range),
-                                false,
-                            )
-                            .expect("uffd copy failed");
-                        }
-                        None => {
-                            println!("Copying data to memory: {:?}", range);
-                            std::ptr::copy_nonoverlapping(
-                                data.as_ptr() as *const libc::c_void,
-                                tracker.page_start_addr_from(range.start),
-                                range_size_in_bytes(&range),
-                            );
+                    // if current_prot_flags != ProtFlags::PROT_READ | ProtFlags::PROT_WRITE {
+                    //     current_prot_flags = ProtFlags::PROT_READ | ProtFlags::PROT_WRITE;
+                    //     unsafe {
+                    //         mprotect(
+                    //             tracker.page_start_addr_from(prefetch_range.start),
+                    //             range_size_in_bytes(&prefetch_range),
+                    //             current_prot_flags,
+                    //         )
+                    //         .map_err(print_enomem_help)
+                    //         .unwrap()
+                    //     };
+                    //     tracker
+                    //         .memory_instructions_stats
+                    //         .mprotect_count
+                    //         .fetch_add(1, Ordering::Relaxed);
+                    // }
+                    unsafe {
+                        debug_assert_eq!(data.len(), range_size_in_bytes(&range));
+                        match uffd {
+                            Some(uffd) => {
+                                println!("Copying data to uffd: {:?}", range);
+                                uffd.copy(
+                                    data.as_ptr() as *const libc::c_void,
+                                    tracker.page_start_addr_from(range.start),
+                                    range_size_in_bytes(&range),
+                                    false,
+                                )
+                                .expect("uffd copy failed");
+                            }
+                            None => {
+                                println!("Copying data to memory: {:?}", range);
+                                std::ptr::copy_nonoverlapping(
+                                    data.as_ptr() as *const libc::c_void,
+                                    tracker.page_start_addr_from(range.start),
+                                    range_size_in_bytes(&range),
+                                );
+                            }
                         }
                     }
                 }

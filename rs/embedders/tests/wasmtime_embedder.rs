@@ -3317,7 +3317,6 @@ fn large_wasm64_stable_read_write_test() {
         wasm_res,
         Ok(Some(WasmResult::Reply(vec![72, 101, 108, 108, 111])))
     );
-    assert_eq!(1, 2);
 }
 
 #[test]

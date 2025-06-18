@@ -799,7 +799,6 @@ fn sigsegv_memory_tracker<S>(
                         };
 
                     if !memory_tracker.area().is_within(addr) {
-                        println!("Uffd fault at address: {:p}", addr);
                         // The heap has expanded. Update tracked memory area.
                         if let Some(heap_size) =
                             check_if_expanded(&memory_tracker, addr, &current_memory_size_in_pages)
@@ -837,9 +836,10 @@ fn sigsegv_memory_tracker<S>(
                             let size = uffd_handler(&memory_tracker, &uffd, rw, addr);
 
                             if let Some(size) = size {
-                                println!("[handler] Wake up faulting thread for write access");
                                 uffd.wake(fault_addr, size).expect("wake failed");
                             }
+                            // break out of the loop, as we don't need to keep tracking a dirty page.
+                            break;
                         }
                         (FaultKind::WriteProtected, ReadWrite::Read) => {
                             unreachable!("Should not receive notification");
@@ -848,9 +848,15 @@ fn sigsegv_memory_tracker<S>(
                             println!(
                                 "[handler] Handling write-protect page fault for write access"
                             );
-                            // Page is already dirty, remove write protection.
-                            uffd.remove_write_protection(fault_addr, PAGE_SIZE, true)
-                                .expect("remove_write_protection failed");
+                            let size = uffd_handler(&memory_tracker, &uffd, rw, addr);
+
+                            if let Some(size) = size {
+                                // If the page is already dirty, we can remove write protection.
+                                uffd.remove_write_protection(fault_addr, size, true)
+                                    .expect("remove_write_protection failed");
+                            }
+                            // break out of the loop, as we don't need to keep tracking a dirty page.
+                            break;
                         }
                     }
                 }

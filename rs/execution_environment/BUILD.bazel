@@ -112,7 +112,7 @@ rust_library(
 
 rust_ic_test(
     name = "execution_environment_test",
-    timeout = "long",
+    timeout = "short",
     aliases = ALIASES,
     crate = ":execution_environment",
     data = DATA + [

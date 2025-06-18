@@ -626,6 +626,7 @@ pub fn process(
     let first_slice_instruction_limit = system_api.slice_instruction_limit();
     let message_instruction_limit = system_api.message_instruction_limit();
 
+    println!("Executing func ref {:?}", func_ref);
     let mut instance = match embedder.new_instance(
         canister_id,
         embedder_cache,
