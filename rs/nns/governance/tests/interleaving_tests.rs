@@ -14,13 +14,16 @@ use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_governance::{
     governance::{Environment, Governance},
     pb::v1::{
-        manage_neuron::Disburse, neuron::DissolveState,
-        neurons_fund_snapshot::NeuronsFundNeuronPortion, proposal::Action,
-        settle_neurons_fund_participation_request, CreateServiceNervousSystem,
-        IdealMatchedParticipationFunction, NetworkEconomics, NeuronsFundData,
-        NeuronsFundParticipation, NeuronsFundSnapshot, Proposal, ProposalData,
-        SettleNeuronsFundParticipationRequest, SwapParticipationLimits,
+        manage_neuron::Disburse, settle_neurons_fund_participation_request,
+        NeuronsFundParticipation as NeuronsFundParticipationPb,
+        SettleNeuronsFundParticipationRequest,
     },
+};
+use ic_nns_governance_api::{
+    neuron::DissolveState, neurons_fund_snapshot::NeuronsFundNeuronPortion, proposal::Action,
+    CreateServiceNervousSystem, IdealMatchedParticipationFunction, NetworkEconomics,
+    NeuronsFundData, NeuronsFundParticipation, NeuronsFundSnapshot, Proposal, ProposalData,
+    SwapParticipationLimits,
 };
 use ic_sns_swap::pb::v1::Lifecycle;
 use ic_sns_wasm::pb::v1::DeployedSns;
@@ -228,7 +231,10 @@ fn test_cant_interleave_calls_to_settle_neurons_fund() {
         allocated_neurons_fund_participation_icp_e8s: Some(max_direct_participation_icp_e8s),
     };
 
-    assert_matches!(initial_neurons_fund_participation.validate(), Ok(_));
+    assert_matches!(
+        NeuronsFundParticipationPb::from(initial_neurons_fund_participation.clone()).validate(),
+        Ok(_)
+    );
 
     let mut nns = NNSBuilder::new()
         // Add the proposal that will be used in `settle_neurons_fund_participation`.

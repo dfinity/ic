@@ -157,16 +157,16 @@ impl Registry {
             value: subnet_record.encode_to_vec(),
         };
 
-        let routing_table_mutation =
+        let mut routing_table_mutations =
             self.add_subnet_to_routing_table(self.latest_version(), subnet_id);
 
-        let mutations = vec![
+        let mut mutations = vec![
             subnet_list_mutation,
             new_subnet,
             new_subnet_dkg,
             new_subnet_threshold_signing_pubkey,
-            routing_table_mutation,
         ];
+        mutations.append(&mut routing_table_mutations);
 
         // Check invariants before applying mutations
         self.maybe_apply_mutation_internal(mutations);

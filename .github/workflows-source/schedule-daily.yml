@@ -14,15 +14,14 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:efe6edcd9a9e169843a02f91af98b29514c00cda858ad6612cda28b231b80896
+    image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
   dind-large-setup: &dind-large-setup
     runs-on:
-      group: zh1
       labels: dind-large
     container:
       <<: *image
       options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
+        -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 120
   checkout: &checkout
     name: Checkout
@@ -33,10 +32,6 @@ jobs:
   bazel-test-bare-metal:
     name: Bazel Test Bare Metal
     <<: *dind-large-setup
-    timeout-minutes: 120
-    runs-on:
-      group: zh1
-      labels: dind-large
     steps:
       - <<: *checkout
       - name: Run Bazel Launch Bare Metal
@@ -91,7 +86,7 @@ jobs:
   nns-tests-nightly:
     name: Bazel Test NNS Nightly
     <<: *dind-large-setup
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - <<: *checkout
       - name: Run NNS Tests Nightly

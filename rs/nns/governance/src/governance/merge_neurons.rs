@@ -625,7 +625,7 @@ mod tests {
     use super::*;
     use crate::{
         neuron::{DissolveStateAndAge, NeuronBuilder},
-        pb::v1::{neuron::Followees, proposal::Action, ManageNeuron, NeuronType, Proposal, Topic},
+        pb::v1::{proposal::Action, Followees, ManageNeuron, NeuronType, Proposal, Topic},
         storage::reset_stable_memory,
     };
     use assert_matches::assert_matches;

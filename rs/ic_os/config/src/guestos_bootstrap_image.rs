@@ -1,12 +1,8 @@
 use crate::serialize_and_write_config;
 use anyhow::{bail, Context, Result};
 use config_types::GuestOSConfig;
-#[cfg(feature = "dev")]
-use ic_types::malicious_behaviour::MaliciousBehaviour;
 use std::env;
-use std::fmt::Write as _;
 use std::fs::{self, File};
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -42,71 +38,6 @@ pub struct BootstrapOptions {
 
     /// Should point to a file containing a Node Provider private key PEM.
     pub node_operator_private_key: Option<PathBuf>,
-
-    /// The IPv6 address to assign. Must include netmask in bits (e.g.
-    /// dead:beef::1/64). Overrides all other generation for testing.
-    pub ipv6_address: Option<String>,
-
-    /// Default IPv6 gateway.
-    pub ipv6_gateway: Option<String>,
-
-    /// The IPv4 address to assign. Must include prefix length (e.g.
-    /// 18.208.190.35/28).
-    pub ipv4_address: Option<String>,
-
-    /// Default IPv4 gateway (e.g. 18.208.190.33).
-    pub ipv4_gateway: Option<String>,
-
-    /// The domain name to assign to the guest.
-    pub domain: Option<String>,
-
-    /// The node reward type determines node rewards
-    pub node_reward_type: Option<String>,
-
-    /// Name to assign to the host. Will be used in logging.
-    pub hostname: Option<String>,
-
-    /// Logging hosts to use.
-    pub elasticsearch_hosts: Vec<String>,
-
-    /// Tags to be used by Filebeat.
-    pub elasticsearch_tags: Vec<String>,
-
-    /// URL of NNS nodes for sign up or registry access. Can be multiple nodes
-    /// separated by commas.
-    pub nns_urls: Vec<String>,
-
-    /// How long the backed up consensus artifacts should stay on the spool
-    /// before they get purged.
-    pub backup_retention_time_sec: Option<u64>,
-
-    /// How often the backup purging should be executed.
-    pub backup_purging_interval_sec: Option<u64>,
-
-    /// A JSON-object that describes the malicious behavior activated on
-    /// the node. This is only used for testing.
-    #[cfg(feature = "dev")]
-    pub malicious_behavior: Option<MaliciousBehaviour>,
-
-    /// The length of the epoch in seconds. To be used in
-    /// systems tests only.
-    #[cfg(feature = "dev")]
-    pub query_stats_epoch_length: Option<u64>,
-
-    /// The IP address of a running bitcoind instance. To be used in
-    /// systems tests only.
-    #[cfg(feature = "dev")]
-    pub bitcoind_addr: Option<String>,
-
-    /// The IP address of a running Jaeger Collector instance. To be used in
-    /// systems tests only.
-    #[cfg(feature = "dev")]
-    pub jaeger_addr: Option<String>,
-
-    /// The URL of the socks proxy to use. To be used in
-    /// systems tests only.
-    #[cfg(feature = "dev")]
-    pub socks_proxy: Option<String>,
 }
 
 impl BootstrapOptions {
@@ -219,109 +150,6 @@ impl BootstrapOptions {
             .context("Failed to copy registry local store")?;
         }
 
-        fs::write(
-            bootstrap_dir.path().join("network.conf"),
-            self.generate_network_conf()?,
-        )
-        .context("Failed to write network.conf")?;
-
-        if let Some(node_reward_type) = &self.node_reward_type {
-            fs::write(
-                bootstrap_dir.path().join("reward.conf"),
-                format!("node_reward_type={node_reward_type}\n"),
-            )
-            .context("Failed to write reward.conf")?;
-        }
-
-        if !self.elasticsearch_hosts.is_empty() {
-            let space_separated_hosts = self.elasticsearch_hosts.join(" ");
-            let mut filebeat_config = File::create(bootstrap_dir.path().join("filebeat.conf"))
-                .context("Failed to create filebeat.conf")?;
-
-            writeln!(
-                filebeat_config,
-                "elasticsearch_hosts={space_separated_hosts}"
-            )?;
-            if !&self.elasticsearch_tags.is_empty() {
-                let space_separated_tags = self.elasticsearch_tags.join(" ");
-                writeln!(filebeat_config, "elasticsearch_tags={space_separated_tags}")?;
-            }
-        }
-
-        if !self.nns_urls.is_empty() {
-            let comma_separated_urls = self.nns_urls.join(",");
-            fs::write(
-                bootstrap_dir.path().join("nns.conf"),
-                format!("nns_url={comma_separated_urls}\n"),
-            )
-            .context("Failed to write nns.conf")?;
-        }
-
-        if let Some(backup_retention_time) = self.backup_retention_time_sec {
-            let mut backup_conf = File::create(bootstrap_dir.path().join("backup.conf"))
-                .context("Failed to create backup.conf")?;
-
-            writeln!(
-                backup_conf,
-                "backup_retention_time_secs={backup_retention_time}"
-            )?;
-
-            if let Some(backup_purging_interval) = self.backup_purging_interval_sec {
-                writeln!(
-                    backup_conf,
-                    "backup_puging_interval_secs={backup_purging_interval}"
-                )?;
-            }
-        }
-
-        #[cfg(feature = "dev")]
-        if let Some(malicious_behavior) = &self.malicious_behavior {
-            fs::write(
-                bootstrap_dir.path().join("malicious_behavior.conf"),
-                format!(
-                    "malicious_behavior={}\n",
-                    serde_json::to_string(malicious_behavior)?
-                ),
-            )
-            .context("Failed to write malicious_behavior.conf")?;
-        }
-
-        #[cfg(feature = "dev")]
-        if let Some(query_stats_epoch_length) = self.query_stats_epoch_length {
-            fs::write(
-                bootstrap_dir.path().join("query_stats.conf"),
-                format!("query_stats_epoch_length={query_stats_epoch_length}\n"),
-            )
-            .context("Failed to write query_stats.conf")?;
-        }
-
-        #[cfg(feature = "dev")]
-        if let Some(bitcoind_addr) = &self.bitcoind_addr {
-            fs::write(
-                bootstrap_dir.path().join("bitcoind_addr.conf"),
-                format!("bitcoind_addr={bitcoind_addr}\n"),
-            )
-            .context("Failed to write bitcoind_addr.conf")?;
-        }
-
-        #[cfg(feature = "dev")]
-        if let Some(jaeger_addr) = &self.jaeger_addr {
-            fs::write(
-                bootstrap_dir.path().join("jaeger_addr.conf"),
-                format!("jaeger_addr=http://{jaeger_addr}\n"),
-            )
-            .context("Failed to write jaeger_addr.conf")?;
-        }
-
-        #[cfg(feature = "dev")]
-        if let Some(socks_proxy) = &self.socks_proxy {
-            fs::write(
-                bootstrap_dir.path().join("socks_proxy.conf"),
-                format!("socks_proxy={socks_proxy}\n"),
-            )
-            .context("Failed to write socks_proxy.conf")?;
-        }
-
         if !Command::new("tar")
             .arg("cf")
             .arg(out_file)
@@ -337,62 +165,6 @@ impl BootstrapOptions {
             .success()
         {
             bail!("Failed to create tar file");
-        }
-
-        Ok(())
-    }
-
-    /// Generate network configuration content.
-    fn generate_network_conf(&self) -> Result<String> {
-        let mut network_conf = String::new();
-
-        if let Some(ipv6_address) = &self.ipv6_address {
-            writeln!(network_conf, "ipv6_address={ipv6_address}")?;
-        }
-
-        if let Some(ipv6_gateway) = &self.ipv6_gateway {
-            writeln!(network_conf, "ipv6_gateway={ipv6_gateway}")?;
-        }
-
-        let hostname = self.hostname.as_deref().unwrap_or_default();
-        Self::validate_hostname(hostname)?;
-        writeln!(network_conf, "hostname={hostname}",)?;
-
-        if let Some(ipv4_address) = &self.ipv4_address {
-            writeln!(network_conf, "ipv4_address={ipv4_address}")?;
-        }
-
-        if let Some(ipv4_gateway) = &self.ipv4_gateway {
-            writeln!(network_conf, "ipv4_gateway={ipv4_gateway}")?;
-        }
-
-        if let Some(domain) = &self.domain {
-            writeln!(network_conf, "domain={domain}")?;
-        }
-
-        Ok(network_conf)
-    }
-
-    fn validate_hostname(hostname_str: &str) -> Result<()> {
-        let hostname = hostname_str.as_bytes();
-        if hostname.is_empty() {
-            return Ok(());
-        }
-
-        if hostname.len() > 63 {
-            bail!("Hostname too long (must be max 63 bytes): '{hostname_str}'");
-        }
-
-        // The first and last character must be alphanumeric, middle characters can be alphanumeric
-        // or '-'.
-        let valid = hostname[0].is_ascii_alphanumeric()
-            && hostname.last().unwrap().is_ascii_alphanumeric()
-            && hostname
-                .iter()
-                .all(|c| c.is_ascii_alphanumeric() || *c == b'-');
-
-        if !valid {
-            bail!("Invalid hostname: '{hostname_str}'");
         }
 
         Ok(())
@@ -423,28 +195,6 @@ mod tests {
     use config_types::{DeploymentEnvironment, ICOSSettings, Ipv6Config, NetworkSettings};
 
     #[test]
-    fn test_is_valid_hostname() {
-        // Valid hostnames
-        assert!(BootstrapOptions::validate_hostname("").is_ok());
-        assert!(BootstrapOptions::validate_hostname("h").is_ok());
-        assert!(BootstrapOptions::validate_hostname("hostname").is_ok());
-        assert!(BootstrapOptions::validate_hostname("hostname123").is_ok());
-        assert!(BootstrapOptions::validate_hostname("hostname-part2").is_ok());
-        assert!(BootstrapOptions::validate_hostname("h-1-2-3").is_ok());
-        assert!(BootstrapOptions::validate_hostname("123hostname").is_ok());
-
-        // Invalid hostnames
-        assert!(BootstrapOptions::validate_hostname("hostname-").is_err());
-        assert!(BootstrapOptions::validate_hostname("-hostname").is_err());
-        assert!(BootstrapOptions::validate_hostname("hostname_invalid").is_err());
-        assert!(BootstrapOptions::validate_hostname("hostname with spaces").is_err());
-        assert!(BootstrapOptions::validate_hostname(
-            "longlonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglong"
-        )
-        .is_err());
-    }
-
-    #[test]
     fn test_build_bootstrap_config_image_succeeds_with_default_options() {
         let tmp_dir = tempfile::tempdir().unwrap();
         let out_file = tmp_dir.path().join("bootstrap.tar");
@@ -460,8 +210,6 @@ mod tests {
         let out_file = tmp_dir.path().join("bootstrap.img");
 
         BootstrapOptions {
-            hostname: Some("testhostname".to_string()),
-            ipv6_address: Some("2001:db8::1/64".to_string()),
             ..Default::default()
         }
         .build_bootstrap_config_image(&out_file)?;
@@ -527,7 +275,6 @@ mod tests {
 
         // Create full configuration
         let bootstrap_options = BootstrapOptions {
-            hostname: Some("fulltest".to_string()),
             guestos_config: Some(guestos_config.clone()),
             nns_public_key: Some(nns_key_path),
             node_operator_private_key: Some(node_key_path),
@@ -536,27 +283,6 @@ mod tests {
             ic_crypto: Some(crypto_dir),
             ic_state: Some(state_dir),
             ic_registry_local_store: Some(registry_dir),
-            ipv6_address: Some("2001:db8::1/64".to_string()),
-            ipv6_gateway: Some("2001:db8::ff".to_string()),
-            ipv4_address: Some("192.168.1.1/24".to_string()),
-            ipv4_gateway: Some("192.168.1.254".to_string()),
-            domain: Some("test.domain".to_string()),
-            node_reward_type: Some("test_reward".to_string()),
-            elasticsearch_hosts: vec!["host1".to_string(), "host2".to_string()],
-            elasticsearch_tags: vec!["tag1".to_string(), "tag2".to_string()],
-            nns_urls: vec!["url1".to_string(), "url2".to_string()],
-            backup_retention_time_sec: Some(3600),
-            backup_purging_interval_sec: Some(300),
-            #[cfg(feature = "dev")]
-            malicious_behavior: Some(MaliciousBehaviour::new(true)),
-            #[cfg(feature = "dev")]
-            query_stats_epoch_length: Some(60),
-            #[cfg(feature = "dev")]
-            bitcoind_addr: Some("127.0.0.1:8332".to_string()),
-            #[cfg(feature = "dev")]
-            jaeger_addr: Some("127.0.0.1:14250".to_string()),
-            #[cfg(feature = "dev")]
-            socks_proxy: Some("socks5://127.0.0.1:1080".to_string()),
         };
 
         // Build and extract tar
@@ -598,74 +324,6 @@ mod tests {
         assert_eq!(
             fs::read_to_string(extract_dir.join("ic_registry_local_store/test"))?,
             "registry_data"
-        );
-
-        let network_conf = fs::read_to_string(extract_dir.join("network.conf"))?;
-        assert_eq!(
-            network_conf,
-            "ipv6_address=2001:db8::1/64\n\
-             ipv6_gateway=2001:db8::ff\n\
-             hostname=fulltest\n\
-             ipv4_address=192.168.1.1/24\n\
-             ipv4_gateway=192.168.1.254\n\
-             domain=test.domain\n"
-        );
-
-        assert_eq!(
-            fs::read_to_string(extract_dir.join("reward.conf"))?,
-            "node_reward_type=test_reward\n"
-        );
-
-        assert_eq!(
-            fs::read_to_string(extract_dir.join("filebeat.conf"))?,
-            "elasticsearch_hosts=host1 host2\nelasticsearch_tags=tag1 tag2\n"
-        );
-
-        assert_eq!(
-            fs::read_to_string(extract_dir.join("nns.conf"))?,
-            "nns_url=url1,url2\n"
-        );
-
-        assert_eq!(
-            fs::read_to_string(extract_dir.join("backup.conf"))?,
-            "backup_retention_time_secs=3600\nbackup_puging_interval_secs=300\n"
-        );
-
-        assert_eq!(
-            fs::read_to_string(extract_dir.join("malicious_behavior.conf"))?,
-            "malicious_behavior={\"allow_malicious_behaviour\":true,\
-        \"maliciously_seg_fault\":false,\
-        \"malicious_flags\":{\"maliciously_propose_equivocating_blocks\":false,\
-        \"maliciously_propose_empty_blocks\":false,\"maliciously_finalize_all\":false,\
-        \"maliciously_notarize_all\":false,\"maliciously_tweak_dkg\":false,\
-        \"maliciously_certify_invalid_hash\":false,\
-        \"maliciously_malfunctioning_xnet_endpoint\":false,\
-        \"maliciously_disable_execution\":false,\"maliciously_corrupt_own_state_at_heights\":[],\
-        \"maliciously_disable_ingress_validation\":false,\
-        \"maliciously_corrupt_idkg_dealings\":false,\"maliciously_delay_execution\":null,\
-        \"maliciously_delay_state_sync\":null,\"maliciously_alter_certified_hash\":false,\
-        \"maliciously_alter_state_sync_chunk_sending_side\":false,\
-        \"maliciously_alter_state_sync_chunk_receiving_side\":null}}\n"
-        );
-
-        assert_eq!(
-            fs::read_to_string(extract_dir.join("query_stats.conf"))?,
-            "query_stats_epoch_length=60\n"
-        );
-
-        assert_eq!(
-            fs::read_to_string(extract_dir.join("bitcoind_addr.conf"))?,
-            "bitcoind_addr=127.0.0.1:8332\n"
-        );
-
-        assert_eq!(
-            fs::read_to_string(extract_dir.join("jaeger_addr.conf"))?,
-            "jaeger_addr=http://127.0.0.1:14250\n"
-        );
-
-        assert_eq!(
-            fs::read_to_string(extract_dir.join("socks_proxy.conf"))?,
-            "socks_proxy=socks5://127.0.0.1:1080\n"
         );
 
         Ok(())

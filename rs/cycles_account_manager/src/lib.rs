@@ -1035,7 +1035,7 @@ impl CyclesAccountManager {
     ) -> Result<Cycles, CyclesAccountManagerError> {
         if canister_id != CYCLES_MINTING_CANISTER_ID {
             let error_str = format!(
-                "ic0.mint_cycles cannot be executed on non Cycles Minting Canister: {} != {}",
+                "ic0.mint_cycles128 cannot be executed on non Cycles Minting Canister: {} != {}",
                 canister_id, CYCLES_MINTING_CANISTER_ID
             );
             Err(CyclesAccountManagerError::ContractViolation(error_str))
@@ -1183,6 +1183,28 @@ impl CyclesAccountManager {
             + self.config.http_request_quadratic_baseline_fee * (subnet_size as u64)
             + self.config.http_request_per_byte_fee * request_size.get()
             + self.config.http_response_per_byte_fee * response_size)
+            * (subnet_size as u64)
+    }
+
+    pub fn http_request_fee_beta(
+        &self,
+        request_size: NumBytes,
+        response_size_limit: Option<NumBytes>,
+        subnet_size: usize,
+        payload_size: NumBytes,
+    ) -> Cycles {
+        let max_response_size = match response_size_limit {
+            Some(response_size) => response_size.get(),
+            // Defaults to maximum response size.
+            None => MAX_CANISTER_HTTP_RESPONSE_BYTES,
+        };
+
+        (Cycles::new(4_000_000)
+            + Cycles::new(50_000) * (subnet_size as u64)
+            + Cycles::new(50) * request_size.get()
+            + Cycles::new(50) * max_response_size
+            + Cycles::new(750) * payload_size.get()
+            + Cycles::new(30) * (subnet_size as u64) * payload_size.get())
             * (subnet_size as u64)
     }
 

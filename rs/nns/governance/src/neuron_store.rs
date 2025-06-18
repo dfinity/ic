@@ -2,10 +2,7 @@ use crate::{
     governance::{TimeWarp, LOG_PREFIX},
     neuron::types::Neuron,
     neurons_fund::neurons_fund_neuron::pick_most_important_hotkeys,
-    pb::v1::{
-        governance_error::ErrorType, GovernanceError, Neuron as NeuronProto, Topic,
-        VotingPowerEconomics,
-    },
+    pb::v1::{governance_error::ErrorType, GovernanceError, Topic, VotingPowerEconomics},
     storage::{
         neuron_indexes::CorruptedNeuronIndexes, neurons::NeuronSections,
         with_stable_neuron_indexes, with_stable_neuron_indexes_mut, with_stable_neuron_store,
@@ -301,17 +298,6 @@ impl NeuronStore {
                 neuron_id,
             );
         }
-    }
-
-    /// Clones all the neurons. This is only used for testing.
-    /// TODO(NNS-2474) clean it up after NNSState stop using GovernanceProto.
-    pub fn __get_neurons_for_tests(&self) -> BTreeMap<u64, NeuronProto> {
-        with_stable_neuron_store(|stable_store| {
-            stable_store
-                .range_neurons(..)
-                .map(|neuron| (neuron.id().id, NeuronProto::from(neuron.clone())))
-                .collect::<BTreeMap<u64, NeuronProto>>()
-        })
     }
 
     /// Returns if store contains a Neuron by id
