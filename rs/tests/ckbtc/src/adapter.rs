@@ -1,3 +1,4 @@
+use bitcoin::{consensus::deserialize, Block};
 use candid::{Encode, Principal};
 use ic_agent::{Agent, AgentError};
 use ic_btc_interface::Network;
@@ -49,6 +50,50 @@ impl<'a> AdapterProxy<'a> {
             })
     }
 
-    // TODO: Send tx
-    // TODO: Sync blocks
+    // TODO: Send tx fn
+
+    pub async fn sync_blocks(
+        &self,
+        headers: &mut Vec<Vec<u8>>,
+        anchor: Vec<u8>,
+        max_num_blocks: usize,
+        max_tries: u64,
+    ) -> Result<Vec<Block>, AgentError> {
+        let mut blocks = vec![];
+        let mut tries = 0;
+
+        while blocks.len() < max_num_blocks && tries < max_tries {
+            match self.get_successors(anchor.clone(), headers.clone()).await? {
+                BitcoinGetSuccessorsResponse::Complete(response) => {
+                    let new_blocks = response
+                        .blocks
+                        .iter()
+                        .map(|block| {
+                            deserialize::<Block>(block)
+                                .expect("Failed to deserialize a bitcoin block")
+                        })
+                        .collect::<Vec<_>>();
+
+                    let new_headers = new_blocks
+                        .iter()
+                        .map(|block| block.block_hash()[..].to_vec())
+                        .collect::<Vec<_>>();
+
+                    headers.extend(new_headers);
+                    blocks.extend(new_blocks);
+                }
+                BitcoinGetSuccessorsResponse::Partial(_response) => {
+                    panic!("Partial responses are unimplemented")
+                }
+                BitcoinGetSuccessorsResponse::FollowUp(_items) => {
+                    panic!("Follow up responses are unimplemented")
+                }
+            }
+
+            tries += 1;
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        }
+
+        Ok(blocks)
+    }
 }
