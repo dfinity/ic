@@ -1400,7 +1400,10 @@ impl StateManagerImpl {
         let manifest_delta_input = states_metadata.iter().rev().find_map(|(height, metadata)| {
             Some((
                 *height,
-                metadata.bundled_manifest.clone()?.manifest,
+                metadata
+                    .bundled_manifest
+                    .as_ref()
+                    .map(|bundled_manifest| bundled_manifest.manifest.clone())?,
                 metadata.checkpoint_layout.clone()?,
             ))
         });
