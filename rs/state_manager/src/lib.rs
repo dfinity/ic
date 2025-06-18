@@ -758,7 +758,7 @@ impl StateSyncRefs {
 }
 
 /// SharedState is mutable state that can be accessed from multiple threads.
-pub struct SharedState {
+struct SharedState {
     /// Certifications metadata kept for all states
     certifications_metadata: CertificationsMetadata,
     /// Metadata for each checkpoint
