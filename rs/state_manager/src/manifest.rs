@@ -218,7 +218,6 @@ pub struct DiffScript {
 /// This data allows us to speed up manifest computation: we can map dirty page
 /// indices back to chunks and avoid re-computing chunks that haven't changed
 /// since the previous manifest computation.
-#[derive(Clone)]
 pub struct ManifestDelta {
     /// Manifest of the state at `base_height`.
     pub(crate) base_manifest: Manifest,
