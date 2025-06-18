@@ -3776,11 +3776,24 @@ pub mod testing {
 
     impl StateManagerTesting for StateManagerImpl {
         fn purge_manifest(&mut self, height: Height) -> bool {
-            if let Some(metadata) = self.states.write().states_metadata.get_mut(&height) {
-                metadata.bundled_manifest = None;
-                return true;
+            let mut guard = self.states.write();
+            let purged = match guard.states_metadata.get_mut(&height) {
+                Some(metadata) => {
+                    metadata.bundled_manifest = None;
+                    true
+                }
+                None => false,
+            };
+            if purged {
+                release_lock_and_persist_metadata(
+                    &self.log,
+                    &self.metrics,
+                    &self.state_layout,
+                    guard,
+                    &self.persist_metadata_guard,
+                );
             }
-            false
+            purged
         }
     }
 }

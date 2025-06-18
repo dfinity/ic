@@ -1228,16 +1228,21 @@ fn missing_manifest_is_computed_incrementally() {
     state_manager_restart_test_with_metrics(|_metrics, mut state_manager, restart_fn| {
         use ic_state_manager::testing::StateManagerTesting;
 
-        let (_height, state) = state_manager.take_tip();
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
-        wait_for_checkpoint(&state_manager, height(1));
+        // Write checkpoints at height 1 and 2 to the disk.
+        for h in [1, 2] {
+            let (_height, state) = state_manager.take_tip();
+            state_manager.commit_and_certify(state, height(h), CertificationScope::Full, None);
+            wait_for_checkpoint(&state_manager, height(h));
+        }
 
-        assert!(state_manager.purge_manifest(2.into()));
-        let (_height, state) = state_manager.take_tip();
-        state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
+        // The manifest at height 2 should now exist; purge it.
+        assert!(state_manager.purge_manifest(height(2)));
+
+        // There should now be a state with manifest at height 1 and one without manifest at
+        // height 2; restarting should result in an incremental manifest computation.
+        let (metrics, state_manager) = restart_fn(state_manager, Some(height(2)));
         wait_for_checkpoint(&state_manager, height(2));
 
-        let (metrics, _state_manager) = restart_fn(state_manager, Some(2.into()));
         assert!(any_manifest_was_incremental(&metrics));
     });
 }
