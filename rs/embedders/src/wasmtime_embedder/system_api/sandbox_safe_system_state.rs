@@ -1257,7 +1257,8 @@ impl SandboxSafeSystemState {
 
             ApiType::InspectMessage { .. }
             | ApiType::ReplicatedQuery { .. }
-            | ApiType::NonReplicatedQuery { .. } => {
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::CompositeQuery { .. } => {
                 // Queries do not check the freezing threshold because the state
                 // changes are disarded anyways.
                 false
@@ -1373,7 +1374,8 @@ impl SandboxSafeSystemState {
 
             ApiType::InspectMessage { .. }
             | ApiType::ReplicatedQuery { .. }
-            | ApiType::NonReplicatedQuery { .. } => {
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::CompositeQuery { .. } => {
                 // Queries do not reserve storage cycles because the state
                 // changes are discarded anyways.
                 false

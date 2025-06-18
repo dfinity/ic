@@ -32,7 +32,7 @@ Each image has its own build targets, which are variations of the image:
 
 * SetupOS: `prod`, `dev`
 * HostOS: `prod`, `dev`
-* GuestOS: `prod`, `dev`, `dev-malicious`
+* GuestOS: `prod`, `dev`, `dev-malicious`, `recovery`
 
 The difference between production and development images is that the console can be accessed on `dev` images, but not on `prod` images.
 

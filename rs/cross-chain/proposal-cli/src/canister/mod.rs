@@ -219,8 +219,8 @@ impl TargetCanister {
             }
             TargetCanister::EvmRpc
             | TargetCanister::CyclesLedger
-            | TargetCanister::ExchangeRateCanister
-            | TargetCanister::SolRpc => PathBuf::from(self.artifact_file_name()),
+            | TargetCanister::ExchangeRateCanister => PathBuf::from(self.artifact_file_name()),
+            TargetCanister::SolRpc => PathBuf::from("wasms").join(self.artifact_file_name()),
         }
     }
 

@@ -201,11 +201,8 @@ pub const DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS: u64 = 1725148800;
 // leave this here indefinitely, but it will just be clutter after a modest
 // amount of time.
 thread_local! {
-
     static DISABLE_NF_FUND_PROPOSALS: Cell<bool>
         = const { Cell::new(cfg!(not(any(feature = "canbench-rs", feature = "test")))) };
-
-    static USE_NODE_PROVIDER_REWARD_CANISTER: Cell<bool> = const { Cell::new(true) };
 }
 
 thread_local! {
@@ -229,20 +226,6 @@ pub fn temporarily_enable_nf_fund_proposals() -> Temporary {
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
 pub fn temporarily_disable_nf_fund_proposals() -> Temporary {
     Temporary::new(&DISABLE_NF_FUND_PROPOSALS, true)
-}
-
-pub fn use_node_provider_reward_canister() -> bool {
-    USE_NODE_PROVIDER_REWARD_CANISTER.get()
-}
-
-#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_enable_node_provider_reward_canister() -> Temporary {
-    Temporary::new(&USE_NODE_PROVIDER_REWARD_CANISTER, true)
-}
-
-#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_disable_node_provider_reward_canister() -> Temporary {
-    Temporary::new(&USE_NODE_PROVIDER_REWARD_CANISTER, false)
 }
 
 pub fn decoder_config() -> DecoderConfig {

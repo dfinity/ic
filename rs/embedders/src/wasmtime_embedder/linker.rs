@@ -1231,14 +1231,6 @@ pub fn syscalls<
         .unwrap();
 
     linker
-        .func_wrap("ic0", "mint_cycles", {
-            move |mut caller: Caller<'_, StoreData>, amount: u64| {
-                with_system_api(&mut caller, |s| s.ic0_mint_cycles(amount))
-            }
-        })
-        .unwrap();
-
-    linker
         .func_wrap("ic0", "mint_cycles128", {
             move |mut caller: Caller<'_, StoreData>, amount_high: u64, amount_low: u64, dst: I| {
                 with_memory_and_system_api(&mut caller, |s, memory| {

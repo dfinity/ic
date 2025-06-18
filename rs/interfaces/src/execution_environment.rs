@@ -196,8 +196,6 @@ pub enum SystemApiCallId {
     InReplicatedExecution,
     /// Tracker for `ic0.is_controller()`
     IsController,
-    /// Tracker for `ic0.mint_cycles()`
-    MintCycles,
     /// Tracker for `ic0.mint_cycles128()`
     MintCycles128,
     /// Tracker for `ic0.msg_arg_data_copy()`
@@ -1161,14 +1159,6 @@ pub trait SystemApi {
     /// Returns the current status of the canister.  `1` indicates
     /// running, `2` indicates stopping, and `3` indicates stopped.
     fn ic0_canister_status(&self) -> HypervisorResult<u32>;
-
-    /// Mints the `amount` cycles
-    /// Adds cycles to the canister's balance.
-    ///
-    /// Adds no more cycles than `amount`.
-    ///
-    /// Returns the amount of cycles added to the canister's balance.
-    fn ic0_mint_cycles(&mut self, amount: u64) -> HypervisorResult<u64>;
 
     /// Mints the `amount` cycles
     /// Adds cycles to the canister's balance.
