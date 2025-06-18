@@ -7,7 +7,7 @@ use ic_config::{
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_embedders::wasmtime_embedder::system_api::{
     sandbox_safe_system_state::SandboxSafeSystemState, ApiType, DefaultOutOfInstructionsHandler,
-    ExecutionParameters, InstructionLimits, NonReplicatedQueryKind, SystemApiImpl,
+    ExecutionParameters, InstructionLimits, SystemApiImpl,
 };
 use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
 use ic_logger::replica_logger::no_op_logger;
@@ -115,21 +115,17 @@ impl ApiTypeBuilder {
             subnet_test_id(1),
             vec![],
             Some(vec![1]),
-            NonReplicatedQueryKind::Pure,
         )
     }
 
     pub fn build_composite_query_api() -> ApiType {
-        ApiType::non_replicated_query(
+        ApiType::composite_query(
             UNIX_EPOCH,
             user_test_id(1).get(),
             subnet_test_id(1),
             vec![],
             Some(vec![1]),
-            NonReplicatedQueryKind::Stateful {
-                call_context_id: CallContextId::from(1),
-                outgoing_request: None,
-            },
+            CallContextId::from(1),
         )
     }
 
