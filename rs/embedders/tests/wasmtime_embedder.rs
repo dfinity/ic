@@ -3442,7 +3442,7 @@ fn test_environment_variable_system_api() {
         (local.set $output_dst (i32.const 1000)) ;; output buffer starting after enough slack for the name buffer
 
         ;; Assert that the number of environment variables is 2:
-        ;; the call traps with an empty message if this is not the case
+        ;; this update call traps with an empty error message if this is not the case
         (local.set $var_count (call $ic0_env_var_count))
         (if (i32.ne (local.get $var_count) (i32.const 2))
           (then
