@@ -2411,6 +2411,7 @@ impl CanisterManager {
         if let Some(execution_state) = canister.execution_state.as_mut() {
             execution_state.wasm_memory.sandbox_memory = SandboxMemory::new();
             execution_state.stable_memory.sandbox_memory = SandboxMemory::new();
+            execution_state.wasm_binary.clear_compilation_cache();
         }
 
         state

@@ -6680,6 +6680,41 @@ fn rename_canister() {
         )
         .unwrap();
 
+    let test_blob: Vec<u8> = vec![42, 41];
+
+    // Modify the memory of the canister
+    env2.submit_ingress_as(
+        user_id,
+        canister_id2,
+        "update",
+        wasm()
+            .stable64_grow(1)
+            .stable64_write(0, &test_blob)
+            .build(),
+    )
+    .unwrap();
+
+    let verify_stable_memory = |canister_id| {
+        let msg_id = env2
+            .submit_ingress_as(
+                user_id,
+                canister_id,
+                "update",
+                wasm()
+                    .stable64_read(0, test_blob.len() as u64)
+                    .reply_data_append()
+                    .reply()
+                    .build(),
+            )
+            .unwrap();
+
+        env2.execute_round();
+        let wasm_result = env2.await_ingress(msg_id, MAX_TICKS).unwrap();
+
+        assert_matches!(wasm_result, WasmResult::Reply(r) if r == test_blob);
+    };
+    verify_stable_memory(canister_id2);
+
     env2.stop_canister(canister_id2).unwrap();
 
     let new_canister_id = CanisterId::from_u64(3 * CANISTER_IDS_PER_SUBNET - 1);
@@ -6768,10 +6803,20 @@ fn rename_canister() {
         CanisterChangeDetails::CanisterRename(_)
     );
 
+    env2.start_canister(new_canister_id).unwrap();
+    verify_stable_memory(new_canister_id);
+
     // Check that we can rename it a second time.
+    env2.stop_canister(new_canister_id).unwrap();
     let third_canister_id = CanisterId::from_u64(4 * CANISTER_IDS_PER_SUBNET - 1);
     // Version and num_changes are lower than before. Version should just increment, but num_changes will go down.
-    let third_version = 15;
+    let version_before_rename = env2
+        .get_latest_state()
+        .canister_state(&new_canister_id)
+        .unwrap()
+        .system_state
+        .canister_version;
+    let third_version = version_before_rename - 10;
     let third_num_changes = 10;
     let arguments = RenameCanisterArgs {
         canister_id: new_canister_id.into(),
@@ -6827,7 +6872,7 @@ fn rename_canister() {
     assert!(!old_canister_exists);
     assert!(third_canister_exists);
     assert_eq!(
-        new_version + 2, // `third_version` is smaller, so it only got incremented
+        version_before_rename + 1, // `third_version` is smaller, so it only got incremented
         env2.get_latest_state()
             .canister_state(&third_canister_id)
             .unwrap()
@@ -6875,7 +6920,7 @@ fn rename_canister() {
     assert!(!old_canister_exists);
     assert!(third_canister_exists);
     assert_eq!(
-        new_version + 2,
+        version_before_rename + 1,
         env2.get_latest_state()
             .canister_state(&third_canister_id)
             .unwrap()
@@ -6904,6 +6949,9 @@ fn rename_canister() {
     for entry in history_entries {
         assert_matches!(entry.details(), CanisterChangeDetails::CanisterRename(_));
     }
+
+    env2.start_canister(third_canister_id).unwrap();
+    verify_stable_memory(third_canister_id);
 }
 
 #[test]
