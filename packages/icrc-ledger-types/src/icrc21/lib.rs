@@ -141,10 +141,6 @@ impl ConsentMessageBuilder {
         };
         match self.function {
             Icrc21Function::Transfer => {
-                let token_symbol = self.token_symbol.ok_or(Icrc21Error::GenericError {
-                    error_code: Nat::from(500u64),
-                    description: "Token Symbol must be specified.".to_owned(),
-                })?;
                 let from_account = self.from.ok_or(Icrc21Error::GenericError {
                     error_code: Nat::from(500u64),
                     description: "From account has to be specified.".to_owned(),
@@ -160,6 +156,10 @@ impl ConsentMessageBuilder {
                     })?,
                     self.decimals,
                 )?;
+                let token_symbol = self.token_symbol.ok_or(Icrc21Error::GenericError {
+                    error_code: Nat::from(500u64),
+                    description: "Token Symbol must be specified.".to_owned(),
+                })?;
                 let amount = convert_tokens_to_string_representation(
                     self.amount.ok_or(Icrc21Error::GenericError {
                         error_code: Nat::from(500u64),
@@ -254,10 +254,6 @@ impl ConsentMessageBuilder {
                 }
             }
             Icrc21Function::TransferFrom => {
-                let token_symbol = self.token_symbol.ok_or(Icrc21Error::GenericError {
-                    error_code: Nat::from(500u64),
-                    description: "Token symbol must be specified.".to_owned(),
-                })?;
                 let from_account = self.from.ok_or(Icrc21Error::GenericError {
                     error_code: Nat::from(500u64),
                     description: "From account has to be specified.".to_owned(),
@@ -278,6 +274,10 @@ impl ConsentMessageBuilder {
                     self.decimals,
                 )?;
 
+                let token_symbol = self.token_symbol.ok_or(Icrc21Error::GenericError {
+                    error_code: Nat::from(500u64),
+                    description: "Token symbol must be specified.".to_owned(),
+                })?;
                 let amount = convert_tokens_to_string_representation(
                     self.amount.ok_or(Icrc21Error::GenericError {
                         error_code: Nat::from(500u64),
