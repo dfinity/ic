@@ -1324,7 +1324,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "tempfile": crate.spec(
-                version = "3.12",
+                version = "3.20",
             ),
             "tester": crate.spec(
                 version = "^0.7.0",

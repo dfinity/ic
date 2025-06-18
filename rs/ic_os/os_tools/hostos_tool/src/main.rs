@@ -37,7 +37,7 @@ pub enum Commands {
 
 #[derive(Parser)]
 struct HostOSArgs {
-    #[arg(short, long, default_value_t = DEFAULT_HOSTOS_CONFIG_OBJECT_PATH.to_string(), value_name = "FILE")]
+    #[arg(long, default_value_t = DEFAULT_HOSTOS_CONFIG_OBJECT_PATH.to_string(), value_name = "FILE")]
     hostos_config_object_path: String,
 
     #[command(subcommand)]

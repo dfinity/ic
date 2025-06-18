@@ -18,6 +18,10 @@
     <topology sockets='2' cores='{{nr_of_vcpus / 4}}' threads='2'/>
     <feature policy='require' name='topoext'/>
   </cpu>
+  <commandline xmlns="http://libvirt.org/schemas/domain/qemu/1.0">
+    <arg value='-cpu'/>
+    <arg value='EPYC-v4,topoext=on,l3-cache=off'/>
+  </commandline>
   {% endif -%}
 
   {%- if enable_sev -%}
@@ -32,9 +36,8 @@
     <partition>/machine</partition>
   </resource>
   <os>
-    <type arch='x86_64' machine='pc-q35-5.0'>hvm</type>
-    <loader readonly='yes' type='pflash'>/usr/share/OVMF/OVMF_CODE_4M.fd</loader>
-    <nvram>/var/lib/libvirt/qemu/nvram/guestos_VARS.fd</nvram>
+    <type arch='x86_64' machine='pc-q35-6.2'>hvm</type>
+    <loader readonly='yes'>/usr/share/ovmf/OVMF.fd</loader>
     <boot dev='hd'/>
     {%- if let Some(direct_boot) = direct_boot %}
     <kernel>{{direct_boot.kernel}}</kernel>
@@ -42,6 +45,11 @@
     <cmdline>{{direct_boot.kernel_cmdline}}</cmdline>
     {%- endif %}
   </os>
+  <memoryBacking>
+    <source type="memfd"/>
+    <access mode="shared"/>
+    <allocation mode="ondemand"/>
+  </memoryBacking>
   <features>
     <acpi/>
     <apic/>
@@ -59,7 +67,7 @@
     <suspend-to-disk enabled='no'/>
   </pm>
   <devices>
-    <emulator>/usr/local/bin/qemu-system-x86_64</emulator>
+    <emulator>/usr/bin/qemu-system-x86_64</emulator>
     <disk type='block' device='disk'>
       <driver name='qemu' type='raw' cache='none' discard='unmap'/>
       <source dev='/dev/hostlvm/guestos' index='1'/>

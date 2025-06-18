@@ -221,6 +221,15 @@ impl GuestVmService {
         )
         .context("Failed to generate GuestOS VM config")?;
 
+        let _ignored = (|| {
+            let mut xml_log =
+                NamedTempFile::with_suffix(format!("-{GUESTOS_DOMAIN_NAME}-config.xml"))?;
+            xml_log.write_all(vm_config.as_bytes())?;
+            let path = xml_log.keep()?.1;
+            println!("Wrote VM XML config to {}", path.display());
+            Ok::<(), Error>(())
+        })();
+
         println!("Creating GuestOS virtual machine");
 
         let virtual_machine = VirtualMachine::new(
