@@ -1396,19 +1396,18 @@ impl StateManagerImpl {
         metrics.min_resident_height.set(last_snapshot_height);
         metrics.max_resident_height.set(last_snapshot_height);
 
-
-
-        let (base_height, base_manifest, base_checkpoint) = states_metadata
-            .last_key_value()
-            .map(|(base_height, metadata)| {
-                let base_manifest = metadata.bundled_manifest.clone().unwrap().manifest;
-                let base_checkpoint = metadata.checkpoint_layout.clone().unwrap();
-                (base_height, base_manifest, base_checkpoint)
-            })
-            .unwrap();
+        // The target height for which the manifest should be computed incrementally.
         let target_height: Height = latest_state_height.load(Ordering::Relaxed).into();
-
-
+        // Find the largest height where both the `manifest` and the `checkpoint_layout` are available;
+        // generate the corresponding `ManifestDelta`.
+        let manifest_delta = states_metadata.iter().rev().find_map(|(height, metadata)| {
+            Some(crate::manifest::ManifestDelta {
+                base_manifest: metadata.bundled_manifest.clone()?.manifest,
+                base_height: *height,
+                target_height,
+                base_checkpoint: metadata.checkpoint_layout.clone()?,
+            })
+        });
 
         let states = Arc::new(parking_lot::RwLock::new(SharedState {
             certifications_metadata,
@@ -1428,15 +1427,7 @@ impl StateManagerImpl {
             tip_channel
                 .send(TipRequest::ComputeManifest {
                     checkpoint_layout,
-                    manifest_delta: None,
-/*
-                    manifest_delta: Some(crate::manifest::ManifestDelta {
-                        base_manifest: states.metadata.get(&states.last_advertised).unwrap().bundled_manifest.unwrap().manifest.clone(), 
-                        base_height: states.last_advertised,
-                        target_height: latest_state_height.load(Ordering::Relaxed).into(),
-                        base_checkpoint: checkpoint_layout,
-                    }),
-*/
+                    manifest_delta: manifest_delta.clone(),
                     states: states.clone(),
                     persist_metadata_guard: persist_metadata_guard.clone(),
                 })
@@ -1464,7 +1455,7 @@ impl StateManagerImpl {
             latest_height_update_time: Arc::new(Mutex::new(Instant::now())),
         }
     }
-    
+
     /// Returns the Page Allocator file descriptor factory. This will then be
     /// used down the line in hypervisor and state to pass to the page allocators
     /// that are instantiated by the page maps
