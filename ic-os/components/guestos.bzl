@@ -70,7 +70,6 @@ component_files = {
     Label("misc/log-config/log-config.sh"): "/opt/ic/bin/log-config.sh",
     Label("misc/update-config/update-guestos-config.service"): "/etc/systemd/system/update-config.service",
 
-
     # monitoring
     Label("monitoring/filebeat/setup-filebeat-permissions.sh"): "/opt/ic/bin/setup-filebeat-permissions.sh",
     Label("monitoring/filebeat/generate-filebeat-config.sh"): "/opt/ic/bin/generate-filebeat-config.sh",
