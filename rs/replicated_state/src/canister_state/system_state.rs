@@ -2038,6 +2038,19 @@ impl SystemState {
         memory_usage: NumBytes,
         wasm_memory_usage: NumBytes,
     ) {
+        if self.is_low_wasm_memory_hook_condition_satisfied(memory_usage, wasm_memory_usage) {
+            self.task_queue.enqueue(ExecutionTask::OnLowWasmMemory);
+        } else {
+            self.task_queue.remove(ExecutionTask::OnLowWasmMemory);
+        }
+    }
+
+    /// Returns the `OnLowWasmMemory` hook status without updating the `task_queue`.
+    pub fn is_low_wasm_memory_hook_condition_satisfied(
+        &self,
+        memory_usage: NumBytes,
+        wasm_memory_usage: NumBytes,
+    ) -> bool {
         let memory_allocation = match self.memory_allocation {
             MemoryAllocation::Reserved(bytes) => Some(bytes),
             MemoryAllocation::BestEffort => None,
@@ -2046,17 +2059,13 @@ impl SystemState {
         let wasm_memory_limit = self.wasm_memory_limit;
         let wasm_memory_threshold = self.wasm_memory_threshold;
 
-        if is_low_wasm_memory_hook_condition_satisfied(
+        is_low_wasm_memory_hook_condition_satisfied(
             memory_usage,
             wasm_memory_usage,
             memory_allocation,
             wasm_memory_limit,
             wasm_memory_threshold,
-        ) {
-            self.task_queue.enqueue(ExecutionTask::OnLowWasmMemory);
-        } else {
-            self.task_queue.remove(ExecutionTask::OnLowWasmMemory);
-        }
+        )
     }
 }
 

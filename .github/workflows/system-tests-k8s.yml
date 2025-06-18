@@ -50,11 +50,10 @@ jobs:
       group: ln1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:e4862aca9dfa7e342f44cb4ba48923de4306099d26b067ee285f5e0ebe87162a
+      image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
       options: >-
         -e NODE_NAME -e KUBECONFIG
         --privileged --cgroupns host
-        -v /cache:/cache
     timeout-minutes: 120
     steps:
       - name: Checkout
@@ -106,9 +105,9 @@ jobs:
       group: ln1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:e4862aca9dfa7e342f44cb4ba48923de4306099d26b067ee285f5e0ebe87162a
+      image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
       options: >-
-        -e NODE_NAME -e KUBECONFIG --privileged --cgroupns host -v /cache:/cache
+        -e NODE_NAME -e KUBECONFIG --privileged --cgroupns host
     timeout-minutes: 150
     #if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
     # Disabling until we have data confirming stability of non-hourly system tests

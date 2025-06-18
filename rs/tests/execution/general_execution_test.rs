@@ -86,7 +86,6 @@ fn main() -> Result<()> {
                 .add_test(systest!(canister_only_accepts_ingress_with_payload))
                 .add_test(systest!(canister_rejects_ingress_only_from_one_caller))
                 .add_test(systest!(query_reply_sizes))
-                .add_test(systest!(mint_cycles_not_supported_on_application_subnet))
                 .add_test(systest!(mint_cycles128_not_supported_on_application_subnet))
                 .add_test(systest!(no_cycle_balance_limit_on_nns_subnet))
                 .add_test(systest!(app_canister_attempt_initiating_dkg_fails))
