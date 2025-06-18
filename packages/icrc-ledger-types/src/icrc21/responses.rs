@@ -23,7 +23,7 @@ pub enum Intent {
 }
 
 impl ConsentMessage {
-    pub fn add_intent(&mut self, intent: Intent, token_symbol: String) {
+    pub fn add_intent(&mut self, intent: Intent, token_symbol: &String) {
         match self {
             ConsentMessage::GenericDisplayMessage(message) => match intent {
                 Intent::Transfer => {
@@ -47,7 +47,7 @@ impl ConsentMessage {
         }
     }
 
-    pub fn add_account(&mut self, name: &str, account: Account) {
+    pub fn add_account(&mut self, name: &str, account: &Account) {
         match self {
             ConsentMessage::GenericDisplayMessage(message) => {
                 message.push_str(&format!("\n\n**{}:**\n`{}`", name, account));
@@ -55,7 +55,7 @@ impl ConsentMessage {
         }
     }
 
-    pub fn add_amount(&mut self, amount: String, token_symbol: String) {
+    pub fn add_amount(&mut self, amount: &String, token_symbol: &String) {
         match self {
             ConsentMessage::GenericDisplayMessage(message) => {
                 message.push_str(&format!("\n\n**Amount:** `{} {}`", amount, token_symbol));
@@ -63,7 +63,7 @@ impl ConsentMessage {
         }
     }
 
-    pub fn add_fee(&mut self, fee: String, token_symbol: String, intent: Intent) {
+    pub fn add_fee(&mut self, intent: Intent, fee: &String, token_symbol: &String) {
         match self {
             ConsentMessage::GenericDisplayMessage(message) => {
                 match intent {
@@ -80,7 +80,7 @@ impl ConsentMessage {
         }
     }
 
-    pub fn add_allowance(&mut self, amount: String, token_symbol: String) {
+    pub fn add_allowance(&mut self, amount: &String, token_symbol: &String) {
         match self {
             ConsentMessage::GenericDisplayMessage(message) => {
                 message.push_str(&format!(
@@ -91,7 +91,7 @@ impl ConsentMessage {
         }
     }
 
-    pub fn add_existing_allowance(&mut self, expected_allowance: String, token_symbol: String) {
+    pub fn add_existing_allowance(&mut self, expected_allowance: &String, token_symbol: &String) {
         match self {
             ConsentMessage::GenericDisplayMessage(message) => {
                 message.push_str(&format!("\n\n**Existing allowance:** `{} {}`\nUntil approval, this allowance remains in effect.", expected_allowance, token_symbol));
@@ -99,7 +99,7 @@ impl ConsentMessage {
         }
     }
 
-    pub fn add_expiration(&mut self, expires_at: String) {
+    pub fn add_expiration(&mut self, expires_at: &String) {
         match self {
             ConsentMessage::GenericDisplayMessage(message) => {
                 message.push_str(&format!("\n\n**Approval expiration:**\n{}", expires_at));

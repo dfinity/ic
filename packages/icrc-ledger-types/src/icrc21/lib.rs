@@ -168,13 +168,13 @@ impl ConsentMessageBuilder {
                     self.decimals,
                 )?;
 
-                message.add_intent(Intent::Transfer, token_symbol.clone());
+                message.add_intent(Intent::Transfer, &token_symbol);
                 if from_account.owner != Principal::anonymous() {
-                    message.add_account("From", from_account);
+                    message.add_account("From", &from_account);
                 }
-                message.add_amount(amount, token_symbol.clone());
-                message.add_account("To", receiver_account);
-                message.add_fee(fee, token_symbol.clone(), Intent::Transfer);
+                message.add_amount(&amount, &token_symbol);
+                message.add_account("To", &receiver_account);
+                message.add_fee(Intent::Transfer, &fee, &token_symbol);
             }
             Icrc21Function::Approve => {
                 let approver_account = self.approver.ok_or(Icrc21Error::GenericError {
@@ -235,22 +235,25 @@ impl ConsentMessageBuilder {
                     })
                     .unwrap_or("This approval does not have an expiration.".to_owned());
 
-                message.add_intent(Intent::Approve, "NONE".to_string());
+                message.add_intent(Intent::Approve, &token_symbol);
                 if approver_account.owner != Principal::anonymous() {
-                    message.add_account("From", approver_account);
+                    message.add_account("From", &approver_account);
                 }
-                message.add_account("Approve to spender", spender_account);
-                message.add_allowance(amount, token_symbol.clone());
+                message.add_account("Approve to spender", &spender_account);
+                message.add_allowance(&amount, &token_symbol);
                 if let Some(expected_allowance) = self.expected_allowance {
                     message.add_existing_allowance(
-                        convert_tokens_to_string_representation(expected_allowance, self.decimals)?,
-                        token_symbol.clone(),
+                        &convert_tokens_to_string_representation(
+                            expected_allowance,
+                            self.decimals,
+                        )?,
+                        &token_symbol,
                     );
                 }
-                message.add_expiration(expires_at);
-                message.add_fee(fee, token_symbol.clone(), Intent::Approve);
+                message.add_expiration(&expires_at);
+                message.add_fee(Intent::Approve, &fee, &token_symbol);
                 if approver_account.owner != Principal::anonymous() {
-                    message.add_account("Fees paid by", approver_account);
+                    message.add_account("Fees paid by", &approver_account);
                 }
             }
             Icrc21Function::TransferFrom => {
@@ -285,14 +288,14 @@ impl ConsentMessageBuilder {
                     })?,
                     self.decimals,
                 )?;
-                message.add_intent(Intent::TransferFrom, token_symbol.clone());
-                message.add_account("From", from_account);
-                message.add_amount(amount, token_symbol.clone());
+                message.add_intent(Intent::TransferFrom, &token_symbol);
+                message.add_account("From", &from_account);
+                message.add_amount(&amount, &token_symbol);
                 if spender_account.owner != Principal::anonymous() {
-                    message.add_account("Spender", spender_account);
+                    message.add_account("Spender", &spender_account);
                 }
-                message.add_account("To", receiver_account);
-                message.add_fee(fee, token_symbol.clone(), Intent::TransferFrom);
+                message.add_account("To", &receiver_account);
+                message.add_fee(Intent::TransferFrom, &fee, &token_symbol);
             }
         };
 
