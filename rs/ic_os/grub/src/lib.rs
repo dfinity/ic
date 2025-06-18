@@ -57,7 +57,7 @@ pub enum GrubEnvVariableError {
     Undefined,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct GrubEnv {
     /// - `Ok(value)` if the variable is present and has a valid value.
     /// - `Err(GrubEnvVariableError::Undefined)` if the variable is not present.
