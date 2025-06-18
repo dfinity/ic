@@ -39,8 +39,8 @@ DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:ic-agent",
     "@crate_index//:ic-btc-interface",
-    "@crate_index//:ic-utils",
     "@crate_index//:ic-management-canister-types",
+    "@crate_index//:ic-utils",
     "@crate_index//:k256",
     "@crate_index//:rand",
     "@crate_index//:rand_chacha",
@@ -235,12 +235,7 @@ system_test_nns(
 system_test_nns(
     name = "adapter_basics_test",
     env = {
-        # TODO: Clean up
-        #"BTC_WASM_PATH": "$(rootpath @btc_canister//file)",
-        #"IC_BTC_CHECKER_WASM_PATH": "$(rootpath //rs/bitcoin/checker:btc_checker_canister)",
         "CKBTC_UVM_CONFIG_PATH": "$(rootpath //rs/tests:ckbtc_uvm_config_image)",
-        #"IC_CKBTC_MINTER_WASM_PATH": "$(rootpath //rs/bitcoin/ckbtc/minter:ckbtc_minter_debug)",
-        #"LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
     },
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
@@ -252,12 +247,8 @@ system_test_nns(
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS + [
             # Keep sorted.
-            #"//rs/bitcoin/checker:btc_checker_canister",
-            #"//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
-            #"//rs/ledger_suite/icrc1/ledger:ledger_canister",
             "//rs/tests:ckbtc_uvm_config_image",
             "//rs/universal_canister/impl:universal_canister.wasm.gz",
-            #"@btc_canister//file",
         ],
     deps = DEPENDENCIES + [":ckbtc"],
 )
