@@ -3,7 +3,6 @@ use candid::{Encode, Principal};
 use ic_agent::{Agent, AgentError};
 use ic_btc_interface::Network;
 use ic_config::execution_environment::BITCOIN_MAINNET_CANISTER_ID;
-use ic_management_canister_types::ProvisionalCreateCanisterWithCyclesArgs;
 use ic_management_canister_types_private::{
     BitcoinGetSuccessorsArgs, BitcoinGetSuccessorsRequestInitial, BitcoinGetSuccessorsResponse,
     Payload,
@@ -12,7 +11,7 @@ use ic_system_test_driver::util::{MessageCanister, MESSAGE_CANISTER_WASM};
 use ic_types::PrincipalId;
 use ic_utils::interfaces::ManagementCanister;
 use slog::{info, Logger};
-use std::{ops::Deref, str::FromStr};
+use std::str::FromStr;
 
 pub struct AdapterProxy<'a> {
     msg_can: MessageCanister<'a>,
@@ -32,7 +31,7 @@ impl<'a> AdapterProxy<'a> {
             .call_and_wait()
             .await
             .expect("Failed to provision id");
-        mgr.install_code(&(bitcoin_principal.into()), MESSAGE_CANISTER_WASM)
+        mgr.install_code(&(bitcoin_principal), MESSAGE_CANISTER_WASM)
             .call_and_wait()
             .await
             .expect("Failed to install code");
@@ -64,6 +63,7 @@ impl<'a> AdapterProxy<'a> {
                 BitcoinGetSuccessorsResponse::decode(&result)
                     .expect("Failed to decode response of get_successors_response")
             })
+            .inspect(|_| info!(self.log, "Got get_successor_response"))
     }
 
     // TODO: Send tx fn
