@@ -5,7 +5,6 @@ use anyhow::Result;
 use config::guest_vm_config::DirectBootConfig;
 use grub::{BootAlternative, BootCycle, GrubEnv, WithDefault};
 use std::fs::File;
-use std::io::Write;
 use tempfile::NamedTempFile;
 use uuid::Uuid;
 
@@ -48,13 +47,13 @@ impl DirectBoot {
 ///
 /// # Arguments
 /// * `should_refresh_grubenv` - Whether the code should refresh the GRUB environment based on the
-///    boot state transition rules
+///   boot state transition rules
 /// * `guest_partition_provider` - Provider for accessing partitions of the Guest
 ///
 /// # Returns
 /// * `Ok(Some(DirectBoot))` - Success
 /// * `Ok(None)` - If direct boot is not supported because the necessary files are not available
-///                (old GuestOS)
+///   (old GuestOS)
 /// * `Err` - If any error occurs during preparation
 pub async fn prepare_direct_boot(
     should_refresh_grubenv: bool,
@@ -169,6 +168,7 @@ mod tests {
     use grub::GrubEnvVariableError;
     use std::collections::HashMap;
     use std::fs;
+    use std::io::Write;
     use std::sync::Arc;
     use tempfile::TempDir;
 
@@ -285,9 +285,11 @@ mod tests {
         let grub_dir = Arc::new(TempDir::new().expect("Failed to create temp dir"));
         let grubenv_path = grub_dir.path().join("grubenv");
 
-        let mut grubenv = GrubEnv::default();
-        grubenv.boot_alternative = boot_alternative.ok_or(GrubEnvVariableError::Undefined);
-        grubenv.boot_cycle = boot_cycle.ok_or(GrubEnvVariableError::Undefined);
+        let grubenv = GrubEnv {
+            boot_alternative: boot_alternative.ok_or(GrubEnvVariableError::Undefined),
+            boot_cycle: boot_cycle.ok_or(GrubEnvVariableError::Undefined),
+            ..GrubEnv::default()
+        };
         grubenv
             .write_to_file(&grubenv_path)
             .expect("Failed to write grubenv");
