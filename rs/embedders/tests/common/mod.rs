@@ -29,6 +29,7 @@ use ic_types::{
     ComputeAllocation, Cycles, MemoryAllocation, NumInstructions, PrincipalId, Time,
 };
 use maplit::btreemap;
+use std::collections::BTreeMap;
 
 pub const CANISTER_CURRENT_MEMORY_USAGE: NumBytes = NumBytes::new(0);
 pub const CANISTER_CURRENT_MESSAGE_MEMORY_USAGE: MessageMemoryUsage = MessageMemoryUsage::ZERO;
@@ -241,7 +242,12 @@ pub fn get_system_api(
 }
 
 pub fn get_system_state() -> SystemState {
-    let mut system_state = SystemStateBuilder::new().build();
+    let mut env_vars = BTreeMap::new();
+    env_vars.insert("TEST_VAR_1".to_string(), "Hello World".to_string());
+    env_vars.insert("PATH".to_string(), "/usr/local/bin:/usr/bin".to_string());
+    let mut system_state = SystemStateBuilder::new()
+        .environment_variables(env_vars)
+        .build();
     system_state
         .new_call_context(
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5), NO_DEADLINE),
