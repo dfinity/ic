@@ -1189,26 +1189,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bincode"
-version = "2.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "36eaf5d7b090263e8150820482d5d93cd964a81e4019913c972f4edcc6edb740"
-dependencies = [
- "bincode_derive",
- "serde",
- "unty",
-]
-
-[[package]]
-name = "bincode_derive"
-version = "2.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bf95709a440f45e986983918d0e8a1f30a9b1df04918fc828670606804ac3c09"
-dependencies = [
- "virtue",
-]
-
-[[package]]
 name = "bindgen"
 version = "0.59.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1699,7 +1679,7 @@ source = "git+https://github.com/dfinity-lab/build-info?rev=701a696844fba5c87df1
 dependencies = [
  "anyhow",
  "base64 0.13.1",
- "bincode 1.3.3",
+ "bincode",
  "build-info-common",
  "cargo_metadata",
  "glob",
@@ -1727,7 +1707,7 @@ source = "git+https://github.com/dfinity-lab/build-info?rev=701a696844fba5c87df1
 dependencies = [
  "anyhow",
  "base64 0.13.1",
- "bincode 1.3.3",
+ "bincode",
  "build-info-common",
  "num-bigint 0.4.6",
  "num-traits",
@@ -2229,7 +2209,7 @@ name = "certificate_orchestrator"
 version = "0.9.0"
 dependencies = [
  "anyhow",
- "bincode 1.3.3",
+ "bincode",
  "candid",
  "candid_parser",
  "certificate_orchestrator_interface",
@@ -5179,16 +5159,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "gptman"
-version = "2.0.0"
+name = "gpt"
+version = "4.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a325e29fe9027c78996860772f876bff79cf17a2b41a43cddff5c1b6bf68caff"
+checksum = "3696fafb1ecdcc2ae3ce337de73e9202806068594b77d22fdf2f3573c5ec2219"
 dependencies = [
- "bincode 2.0.1",
+ "bitflags 2.9.0",
  "crc",
- "nix 0.30.1",
- "serde",
- "thiserror 2.0.12",
+ "simple-bytes",
+ "uuid",
 ]
 
 [[package]]
@@ -5643,7 +5622,7 @@ dependencies = [
  "config",
  "config_types",
  "deterministic_ips",
- "gptman",
+ "gpt",
  "grub",
  "ic-metrics-tool",
  "network",
@@ -5656,6 +5635,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "utils",
+ "uuid",
  "virt",
 ]
 
@@ -6212,7 +6192,7 @@ dependencies = [
 name = "ic-artifact-pool"
 version = "0.9.0"
 dependencies = [
- "bincode 1.3.3",
+ "bincode",
  "byteorder",
  "clap 4.5.27",
  "criterion",
@@ -6821,7 +6801,7 @@ dependencies = [
 name = "ic-canister-sandbox-backend-lib"
 version = "0.9.0"
 dependencies = [
- "bincode 1.3.3",
+ "bincode",
  "bytes",
  "cc",
  "ic-base-types",
@@ -7666,7 +7646,7 @@ version = "0.9.0"
 dependencies = [
  "assert_matches",
  "async-trait",
- "bincode 1.3.3",
+ "bincode",
  "clap 4.5.27",
  "criterion",
  "hex",
@@ -7982,7 +7962,7 @@ version = "0.9.0"
 dependencies = [
  "assert_matches",
  "base64 0.13.1",
- "bincode 1.3.3",
+ "bincode",
  "bytes",
  "educe",
  "futures",
@@ -8968,7 +8948,7 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "assert_matches",
- "bincode 1.3.3",
+ "bincode",
  "candid",
  "canister-test",
  "clap 4.5.27",
@@ -11833,7 +11813,7 @@ dependencies = [
 name = "ic-protobuf"
 version = "0.9.0"
 dependencies = [
- "bincode 1.3.3",
+ "bincode",
  "candid",
  "erased-serde",
  "hex",
@@ -13808,7 +13788,7 @@ dependencies = [
  "async-trait",
  "backon",
  "base64 0.13.1",
- "bincode 1.3.3",
+ "bincode",
  "candid",
  "canister-test",
  "chrono",
@@ -14056,7 +14036,7 @@ version = "0.9.0"
 name = "ic-test-utilities-consensus"
 version = "0.9.0"
 dependencies = [
- "bincode 1.3.3",
+ "bincode",
  "ic-base-types",
  "ic-crypto-test-utils-ni-dkg",
  "ic-crypto-tree-hash",
@@ -14100,7 +14080,7 @@ dependencies = [
 name = "ic-test-utilities-execution-environment"
 version = "0.9.0"
 dependencies = [
- "bincode 1.3.3",
+ "bincode",
  "ic-base-types",
  "ic-config",
  "ic-cycles-account-manager",
@@ -14250,7 +14230,7 @@ dependencies = [
 name = "ic-test-utilities-types"
 version = "0.9.0"
 dependencies = [
- "bincode 1.3.3",
+ "bincode",
  "ic-canister-client-sender",
  "ic-ed25519",
  "ic-types",
@@ -14398,7 +14378,7 @@ version = "0.9.0"
 dependencies = [
  "assert_matches",
  "base64 0.13.1",
- "bincode 1.3.3",
+ "bincode",
  "candid",
  "chrono",
  "hex",
@@ -17325,18 +17305,6 @@ name = "nix"
 version = "0.29.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "71e2746dc3a24dd78b3cfcb7be93368c6de9963d30f43a6a73998a9cf4b17b46"
-dependencies = [
- "bitflags 2.9.0",
- "cfg-if 1.0.0",
- "cfg_aliases",
- "libc",
-]
-
-[[package]]
-name = "nix"
-version = "0.30.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "74523f3a35e05aba87a1d978330aef40f67b0304ac79c1c00b294c9830543db6"
 dependencies = [
  "bitflags 2.9.0",
  "cfg-if 1.0.0",
@@ -21734,6 +21702,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "simple-bytes"
+version = "0.2.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c11532d9d241904f095185f35dcdaf930b1427a94d5b01d7002d74ba19b44cc4"
+
+[[package]]
 name = "simple_asn1"
 version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -23079,7 +23053,7 @@ version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "911a61637386b789af998ee23f50aa30d5fd7edcec8d6d3dedae5e5815205466"
 dependencies = [
- "bincode 1.3.3",
+ "bincode",
  "bytes",
  "educe",
  "futures-core",
@@ -23804,12 +23778,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
 
 [[package]]
-name = "unty"
-version = "0.0.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6d49784317cd0d1ee7ec5c716dd598ec5b4483ea832a2dced265471cc0f690ae"
-
-[[package]]
 name = "uriparse"
 version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -23928,12 +23896,6 @@ dependencies = [
  "libc",
  "pkg-config",
 ]
-
-[[package]]
-name = "virtue"
-version = "0.0.18"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "051eb1abcf10076295e815102942cc58f9d5e3b4560e46e53c21e8ff6f3af7b1"
 
 [[package]]
 name = "vrl"
