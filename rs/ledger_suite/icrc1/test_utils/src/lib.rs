@@ -606,7 +606,7 @@ impl TransactionsAndBalances {
             && self
                 .balances
                 .get(&account)
-                .map_or(false, |&balance| balance >= default_fee)
+                .is_some_and(|&balance| balance >= default_fee)
         {
             // There is at least one valid allowance for this account, and the account has a
             // non-dust balance - make sure it exists in `valid_allowance_from`.
