@@ -530,6 +530,26 @@ impl ExecutionEnvironment {
                             state.time().saturating_duration_since(context.get_time());
                         let request = context.get_request();
 
+                        if let SubnetCallContext::CanisterHttpRequest(context) = &context {
+                            let old_price = self.cycles_account_manager.http_request_fee(
+                                context.variable_parts_size(),
+                                context.max_response_bytes,
+                                registry_settings.subnet_size,
+                            );
+
+                            let new_price = self.cycles_account_manager.http_request_fee_beta(
+                                context.variable_parts_size(),
+                                context.max_response_bytes,
+                                registry_settings.subnet_size,
+                                NumBytes::from(response.payload_size_bytes()),
+                            );
+
+                            self.metrics
+                                .observe_http_outcall_price_change(old_price, new_price);
+                            self.metrics
+                                .observe_http_outcall_request(context, &response);
+                        }
+
                         self.metrics.observe_subnet_message(
                             &request.method_name,
                             time_elapsed.as_secs_f64(),
