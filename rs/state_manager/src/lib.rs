@@ -1396,17 +1396,13 @@ impl StateManagerImpl {
         metrics.min_resident_height.set(last_snapshot_height);
         metrics.max_resident_height.set(last_snapshot_height);
 
-        // The target height for which the manifest should be computed incrementally.
-        let target_height: Height = latest_state_height.load(Ordering::Relaxed).into();
-        // Find the largest height where both the `manifest` and the `checkpoint_layout` are available;
-        // generate the corresponding `ManifestDelta`.
-        let manifest_delta = states_metadata.iter().rev().find_map(|(height, metadata)| {
-            Some(crate::manifest::ManifestDelta {
-                base_manifest: metadata.bundled_manifest.clone()?.manifest,
-                base_height: *height,
-                target_height,
-                base_checkpoint: metadata.checkpoint_layout.clone()?,
-            })
+        // Find the largest height where both the `manifest` and the `checkpoint_layout` are available.
+        let manifest_delta_input = states_metadata.iter().rev().find_map(|(height, metadata)| {
+            Some((
+                *height,
+                metadata.bundled_manifest.clone()?.manifest,
+                metadata.checkpoint_layout.clone()?,
+            ))
         });
 
         let states = Arc::new(parking_lot::RwLock::new(SharedState {
@@ -1424,10 +1420,20 @@ impl StateManagerImpl {
             DeallocatorThread::new("StateDeallocator", Duration::from_millis(1));
 
         for checkpoint_layout in checkpoint_layouts_to_compute_manifest {
+            let target_height = checkpoint_layout.height();
             tip_channel
                 .send(TipRequest::ComputeManifest {
                     checkpoint_layout,
-                    manifest_delta: manifest_delta.clone(),
+                    manifest_delta: manifest_delta_input.clone().map(
+                        |(base_height, base_manifest, base_checkpoint)| {
+                            crate::manifest::ManifestDelta {
+                                base_manifest,
+                                base_height,
+                                target_height,
+                                base_checkpoint,
+                            }
+                        },
+                    ),
                     states: states.clone(),
                     persist_metadata_guard: persist_metadata_guard.clone(),
                 })
