@@ -279,10 +279,6 @@ idl_to_json(name = "idl2json")
 
 mainnet_icos_images()
 
-load("//bazel:spawn_proto_library.bzl", "spawn_proto_library")
-
-spawn_proto_library(name = "spawn_proto_library")
-
 # Use libsystemd from the host environment
 # Ideally this is pulled hermetically, but as this is only used by infogetty
 # within IC images, we have less compatibility to worry about, and packaging it
@@ -303,6 +299,21 @@ cc_library(
     name = "libsystemd",
     includes = ["include"],
     deps = ["libsystemd-internal"],
+    visibility = ["//visibility:public"],
+)
+""",
+    path = "/usr",
+)
+
+# Use libvirt from the host environment
+# Used for managing virtual machines programmatically.
+new_local_repository(
+    name = "libvirt",
+    build_file_content = """
+cc_import(
+    name = "libvirt",
+    hdrs = glob(["include/libvirt/*.h"]),
+    shared_library = "lib/x86_64-linux-gnu/libvirt.so",
     visibility = ["//visibility:public"],
 )
 """,
