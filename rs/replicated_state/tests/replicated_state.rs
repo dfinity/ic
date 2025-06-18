@@ -572,8 +572,8 @@ fn memory_taken_by_canister_history() {
         CanisterChangeOrigin::from_user(user_test_id(42).get()),
         CanisterChangeDetails::canister_creation(vec![
             canister_test_id(777).get(),
-            user_test_id(42).get(),
-        ]),
+            user_test_id(42).get(),       
+        ], None),
     );
     canister_state.system_state.add_canister_change(
         Time::from_nanos_since_unix_epoch(16),

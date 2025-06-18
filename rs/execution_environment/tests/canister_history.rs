@@ -144,7 +144,7 @@ fn canister_history_tracks_create_install_reinstall() {
         now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
         0,
         CanisterChangeOrigin::from_user(user_id1),
-        CanisterChangeDetails::canister_creation(vec![user_id1, user_id2]),
+        CanisterChangeDetails::canister_creation(vec![user_id1, user_id2], None),
     )];
     let history = get_canister_history(&env, canister_id);
     assert_eq!(
@@ -265,7 +265,7 @@ fn canister_history_tracks_upgrade() {
         now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
         0,
         CanisterChangeOrigin::from_user(user_id1),
-        CanisterChangeDetails::canister_creation(vec![user_id1, user_id2]),
+        CanisterChangeDetails::canister_creation(vec![user_id1, user_id2], None),
     )];
 
     // install test_canister via ingress from user_id2
@@ -362,7 +362,7 @@ fn canister_history_tracks_uninstall() {
         now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
         0,
         CanisterChangeOrigin::from_user(user_id1),
-        CanisterChangeDetails::canister_creation(vec![user_id1, user_id2]),
+        CanisterChangeDetails::canister_creation(vec![user_id1, user_id2], None),
     )];
 
     // install test_canister via ingress from user_id2
@@ -454,7 +454,7 @@ fn canister_history_tracks_controllers_change() {
         now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
         0,
         CanisterChangeOrigin::from_user(user_id1),
-        CanisterChangeDetails::canister_creation(vec![user_id1, user_id2]),
+        CanisterChangeDetails::canister_creation(vec![user_id1, user_id2], None),
     )];
 
     for i in 1..MAX_CANISTER_HISTORY_CHANGES + 42 {
@@ -538,7 +538,7 @@ fn canister_history_cleared_if_canister_out_of_cycles() {
         now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
         0,
         CanisterChangeOrigin::from_user(user_id1),
-        CanisterChangeDetails::canister_creation(vec![user_id1, user_id2]),
+        CanisterChangeDetails::canister_creation(vec![user_id1, user_id2], None),
     )];
 
     // install test_canister via ingress from user_id2
@@ -654,7 +654,7 @@ fn canister_history_tracks_changes_from_canister() {
         now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 + 1, // the canister is created in the next round after the ingress message is received
         0,
         CanisterChangeOrigin::from_canister(ucan.into(), Some(2)),
-        CanisterChangeDetails::canister_creation(vec![ucan.into(), user_id1, user_id2]),
+        CanisterChangeDetails::canister_creation(vec![ucan.into(), user_id1, user_id2], None),
     )];
     let history = get_canister_history(&env, canister_id);
     assert_eq!(
@@ -754,7 +754,7 @@ fn canister_history_fails_with_incorrect_sender_version() {
         now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 + 2, // the universal canister is created in 1st round, installed in 2nd round, this canister is created in 3rd round
         0,
         CanisterChangeOrigin::from_user(user_id1),
-        CanisterChangeDetails::canister_creation(vec![ucan.into(), user_id1, user_id2]),
+        CanisterChangeDetails::canister_creation(vec![ucan.into(), user_id1, user_id2], None),
     )];
 
     // attach illegal sender_canister_version (call fails and canister history is not updated)
@@ -835,7 +835,7 @@ fn canister_info_retrieval() {
         now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
         0,
         CanisterChangeOrigin::from_user(user_id1),
-        CanisterChangeDetails::canister_creation(vec![user_id1, user_id2]),
+        CanisterChangeDetails::canister_creation(vec![user_id1, user_id2], None),
     )];
 
     // install test_canister via ingress from user_id2
@@ -1051,7 +1051,7 @@ fn canister_history_load_snapshot_fails_incorrect_sender_version() {
         now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 + 1, // the canister is created in the next round after the ingress message is received
         0,
         CanisterChangeOrigin::from_canister(ucan.into(), Some(2)),
-        CanisterChangeDetails::canister_creation(vec![ucan.into(), user_id1, user_id2]),
+        CanisterChangeDetails::canister_creation(vec![ucan.into(), user_id1, user_id2], None),
     )];
 
     now += Duration::from_secs(5);

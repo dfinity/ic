@@ -192,10 +192,7 @@ fn test_encode_decode_non_empty_history() {
         555,
         7,
         CanisterChangeOrigin::from_canister(canister_test_id(123).get(), None),
-        CanisterChangeDetails::environment_variables_change(vec![
-            ("KEY1".to_string(), "VALUE1".to_string()),
-            ("KEY2".to_string(), "VALUE2".to_string()),
-        ]),
+        CanisterChangeDetails::settings_change(None, Some(vec![1, 2, 3, 4, 5])),
     ));
 
     // A canister state with non-empty history.

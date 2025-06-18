@@ -530,7 +530,10 @@ impl CanisterChange {
                 std::mem::size_of_val(canister_controllers_change.controllers())
             }
             CanisterChangeDetails::CanisterSettingsChange(canister_settings_change) => {
-                std::mem::size_of_val(canister_settings_change.controllers().unwrap_or(&vec![]))
+                match canister_settings_change.controllers() {
+                    Some(controllers) => std::mem::size_of_val(controllers),
+                    None => 0,
+                }
             }
             CanisterChangeDetails::CanisterCodeDeployment(_)
             | CanisterChangeDetails::CanisterCodeUninstall
