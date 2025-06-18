@@ -342,7 +342,7 @@ impl RegistryReplicator {
                 // `RegistryCanister` abstraction, we are guaranteed that
                 // `poll()` returns after a maximal duration of `poll_delay`.
                 if let Err(msg) = internal_state.poll().await {
-                    warn!(logger, "Polling the NNS registry failed: {}", msg);
+                    debug!(logger, "Polling the NNS registry failed: {}", msg);
                     metrics.poll_count.with_label_values(&["error"]).inc();
                 } else {
                     debug!(logger, "Polling the NNS succeeded.");

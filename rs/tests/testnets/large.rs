@@ -47,19 +47,16 @@ use ic_system_test_driver::driver::ic::{
 };
 use ic_system_test_driver::driver::ic_gateway_vm::{HasIcGatewayVm, IcGatewayVm};
 use ic_system_test_driver::driver::{
+    farm::HostFeature,
     group::SystemTestGroup,
     prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
-    test_env_api::{HasTopologySnapshot, IcNodeContainer},
+    test_env_api::HasTopologySnapshot,
 };
-use ic_system_test_driver::sns_client::add_all_wasms_to_sns_wasm;
-use nns_dapp::{
-    install_ii_nns_dapp_and_subnet_rental, install_sns_aggregator, nns_dapp_customizations,
-    set_authorized_subnets, set_icp_xdr_exchange_rate, set_sns_subnet,
-};
+use nns_dapp::{nns_dapp_customizations, set_authorized_subnets, set_icp_xdr_exchange_rate};
 
-const NUM_FULL_CONSENSUS_APP_SUBNETS: u64 = 1;
-const NUM_SINGLE_NODE_APP_SUBNETS: u64 = 1;
+const NUM_FULL_CONSENSUS_APP_SUBNETS: u64 = 0;
+const NUM_SINGLE_NODE_APP_SUBNETS: u64 = 0;
 const NUM_IC_GATEWAYS: u64 = 1;
 
 fn main() -> Result<()> {
@@ -79,18 +76,29 @@ pub fn setup(env: TestEnv) {
     let vm_resources = VmResources {
         vcpus: Some(NrOfVCPUs::new(64)),
         memory_kibibytes: Some(AmountOfMemoryKiB::new(480 << 20)),
-        boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(2000)),
+        boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(2560)),
     };
     let mut ic = InternetComputer::new()
         .with_api_boundary_nodes(1)
         .with_default_vm_resources(vm_resources);
-    ic = ic.add_subnet(Subnet::new(SubnetType::System).add_nodes(4));
-    for _ in 0..NUM_FULL_CONSENSUS_APP_SUBNETS {
+    ic = ic.add_subnet(
+        Subnet::new(SubnetType::System).add_nodes_with_required_host_features(
+            1,
+            vec![HostFeature::Host(
+                "dm1-dll45.dm1.dfinity.network".to_string(),
+            )],
+        ),
+    );
+    let num_full_app = NUM_FULL_CONSENSUS_APP_SUBNETS;
+    for _ in 0..num_full_app {
         ic = ic.add_subnet(Subnet::new(SubnetType::Application).add_nodes(4));
     }
-    for _ in 0..NUM_SINGLE_NODE_APP_SUBNETS {
+
+    let num_single_app = NUM_SINGLE_NODE_APP_SUBNETS;
+    for _ in 0..num_single_app {
         ic = ic.add_subnet(Subnet::new(SubnetType::Application).add_nodes(1));
     }
+
     ic.setup_and_start(&env)
         .expect("Failed to setup IC under test");
 
@@ -117,24 +125,4 @@ pub fn setup(env: TestEnv) {
     let ic_gateway_url = ic_gateway.get_public_url();
     let ic_gateway_domain = ic_gateway_url.domain().unwrap();
     env.sync_with_prometheus_by_name("", Some(ic_gateway_domain.to_string()));
-
-    // pick an SNS subnet among the application subnets
-    let topology = env.topology_snapshot();
-    let mut app_subnets = topology
-        .subnets()
-        .filter(|s| s.subnet_type() == SubnetType::Application);
-    let sns_subnet = app_subnets.next().unwrap();
-
-    // install the SNS aggregator canister onto the SNS subnet
-    let sns_node = sns_subnet.nodes().next().unwrap();
-    let sns_aggregator_canister_id = install_sns_aggregator(&env, &ic_gateway_url, sns_node);
-
-    // register the SNS subnet with the NNS
-    set_sns_subnet(&env, sns_subnet.subnet_id);
-
-    // upload SNS canister WASMs to the SNS-W canister
-    add_all_wasms_to_sns_wasm(&env);
-
-    // install II, NNS dapp, and Subnet Rental Canister
-    install_ii_nns_dapp_and_subnet_rental(&env, &ic_gateway_url, Some(sns_aggregator_canister_id));
 }
