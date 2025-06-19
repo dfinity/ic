@@ -1,4 +1,5 @@
 use ic_base_types::{NumBytes, NumSeconds};
+use ic_crypto_sha2::Sha256;
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
@@ -12,6 +13,9 @@ use num_traits::{cast::ToPrimitive, SaturatingSub};
 use std::{collections::BTreeMap, convert::TryFrom};
 
 use crate::canister_manager::types::CanisterManagerError;
+
+#[cfg(test)]
+mod tests;
 
 /// These limit comes from the spec and is not expected to change,
 /// which is why it is not part of the replica config.
@@ -430,10 +434,27 @@ impl EnvironmentVariables {
         }
     }
 
-    #[allow(dead_code)]
     pub fn hash(&self) -> Vec<u8> {
-        // TODO(EXC-2067): Implement the hash function
-        todo!()
+        // Create a vector to store the hashes of key-value pairs
+        let mut hashes: Vec<Vec<u8>> = Vec::new();
+
+        // 1. For each key-value pair, hash the key and value, and concatenate the hashes.
+        for (key, value) in &self.environment_variables {
+            let mut key_hash = Sha256::hash(key.as_bytes()).to_vec();
+            let mut value_hash = Sha256::hash(value.as_bytes()).to_vec();
+            key_hash.append(&mut value_hash);
+            hashes.push(key_hash);
+        }
+        // 2. Sort the concatenated hashes.
+        hashes.sort();
+
+        // 3. Concatenate the sorted hashes, and hash the result.
+        let mut hasher = Sha256::new();
+        for hash in hashes {
+            hasher.write(&hash);
+        }
+
+        hasher.finish().to_vec()
     }
 
     pub fn get_environment_variables(&self) -> BTreeMap<String, String> {
