@@ -399,7 +399,6 @@ impl CanisterManager {
         }
 
         canister.system_state.canister_version += 1;
-
         if is_controllers_change {
             let new_controllers = canister.system_state.controllers.iter().copied().collect();
             canister.system_state.add_canister_change(
