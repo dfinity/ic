@@ -202,7 +202,7 @@ pub(super) fn heights_to_artifacts_metadata(
     Ok(results.into_iter().collect())
 }
 
-fn read_artifact_if_correct_height<T, PBT>(file: &PathBuf, height: Height) -> anyhow::Result<T>
+fn read_artifact_if_correct_height<T, PBT>(file: &Path, height: Height) -> anyhow::Result<T>
 where
     T: TryFrom<PBT> + HasHeight,
     PBT: prost::Message + std::default::Default,
