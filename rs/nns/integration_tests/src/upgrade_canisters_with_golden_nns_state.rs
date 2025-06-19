@@ -218,8 +218,8 @@ fn test_upgrade_canisters_with_golden_nns_state() {
         .unwrap_or_else(|| {
             panic!(
                 "This test requires that the NNS_CANISTER_UPGRADE_SEQUENCE environment\n\
-                 variable to be set to something like 'governance,registry'.\n\
-                 That is, it should be a comma separated list of canister names.\n\
+                 variable be set to something like 'governance,registry'.\n\
+                 That is, it should be a comma-separated list of canister names.\n\
                  Alternatively, 'all' is equivalent to\n\
                  '{}'\n\
                  (these are all the supported canister names, a large subset of\n\
