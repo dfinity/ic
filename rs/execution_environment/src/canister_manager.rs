@@ -2093,7 +2093,7 @@ impl CanisterManager {
         let replace_snapshot_size = match args.replace_snapshot() {
             Some(replace_snapshot_id) => {
                 let replace_snapshot_id =
-                    SnapshotId::try_from(&replace_snapshot_id.to_vec()).unwrap();
+                    SnapshotId::try_from(replace_snapshot_id.to_vec()).unwrap();
                 self.get_snapshot(canister_id, replace_snapshot_id, state)?
                     .size()
             }

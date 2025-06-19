@@ -191,6 +191,37 @@ impl SnapshotId {
     pub fn to_vec(&self) -> Vec<u8> {
         self.as_slice().to_vec()
     }
+
+    pub fn try_from(bytes: impl AsRef<[u8]>) -> Result<Self, SnapshotIdError> {
+        if bytes.as_ref().len() < Self::LOCAL_ID_LENGTH_IN_BYTES {
+            return Err(SnapshotIdError::InvalidLength(format!(
+                "Invalid snapshot ID length: provided {}, minumum length expected {}.",
+                bytes.as_ref().len(),
+                Self::MAX_LENGTH_IN_BYTES
+            )));
+        }
+        if bytes.as_ref().len() > Self::MAX_LENGTH_IN_BYTES {
+            return Err(SnapshotIdError::InvalidLength(format!(
+                "Invalid snapshot ID length: provided {}, maximum length expected {}.",
+                bytes.as_ref().len(),
+                Self::MAX_LENGTH_IN_BYTES
+            )));
+        }
+
+        let canister_id = CanisterId::try_from(&bytes.as_ref()[Self::LOCAL_ID_LENGTH_IN_BYTES..])
+            .map_err(|_| {
+            SnapshotIdError::InvalidFormat(
+                "Failed to create a Snapshot ID. Input could not be parsed into a Snapshot ID."
+                    .to_string(),
+            )
+        })?;
+
+        let mut slice = [0u8; 8];
+        slice.copy_from_slice(&bytes.as_ref()[..Self::LOCAL_ID_LENGTH_IN_BYTES]);
+        let local_id = u64::from_be_bytes(slice);
+
+        Ok(SnapshotId::from((canister_id, local_id)))
+    }
 }
 
 impl From<(CanisterId, u64)> for SnapshotId {
@@ -208,48 +239,6 @@ impl From<(CanisterId, u64)> for SnapshotId {
             .copy_from_slice(canister_id.get().as_slice());
 
         Self { bytes, len }
-    }
-}
-
-// TODO: EXC-2048
-impl TryFrom<Vec<u8>> for SnapshotId {
-    type Error = SnapshotIdError;
-    fn try_from(bytes: Vec<u8>) -> Result<Self, Self::Error> {
-        SnapshotId::try_from(&bytes)
-    }
-}
-
-impl TryFrom<&Vec<u8>> for SnapshotId {
-    type Error = SnapshotIdError;
-    fn try_from(bytes: &Vec<u8>) -> Result<Self, Self::Error> {
-        if bytes.len() < Self::LOCAL_ID_LENGTH_IN_BYTES {
-            return Err(SnapshotIdError::InvalidLength(format!(
-                "Invalid snapshot ID length: provided {}, minumum length expected {}.",
-                bytes.len(),
-                Self::MAX_LENGTH_IN_BYTES
-            )));
-        }
-        if bytes.len() > Self::MAX_LENGTH_IN_BYTES {
-            return Err(SnapshotIdError::InvalidLength(format!(
-                "Invalid snapshot ID length: provided {}, maximum length expected {}.",
-                bytes.len(),
-                Self::MAX_LENGTH_IN_BYTES
-            )));
-        }
-
-        let canister_id =
-            CanisterId::try_from(&bytes[Self::LOCAL_ID_LENGTH_IN_BYTES..]).map_err(|_| {
-                SnapshotIdError::InvalidFormat(
-                    "Failed to create a Snapshot ID. Input could not be parsed into a Snapshot ID."
-                        .to_string(),
-                )
-            })?;
-
-        let mut slice = [0u8; 8];
-        slice.copy_from_slice(&bytes[..Self::LOCAL_ID_LENGTH_IN_BYTES]);
-        let local_id = u64::from_be_bytes(slice);
-
-        Ok(SnapshotId::from((canister_id, local_id)))
     }
 }
 
@@ -273,7 +262,7 @@ impl TryFrom<pbSnapshot> for SnapshotId {
     type Error = ProxyDecodeError;
 
     fn try_from(pb_snapshot_id: pbSnapshot) -> Result<Self, Self::Error> {
-        SnapshotId::try_from(&pb_snapshot_id.content)
+        SnapshotId::try_from(pb_snapshot_id.content)
             .map_err(|_| ProxyDecodeError::Other("Invalid snapshot ID".to_string()))
     }
 }

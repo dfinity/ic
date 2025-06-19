@@ -3432,7 +3432,7 @@ impl TakeCanisterSnapshotArgs {
     pub fn replace_snapshot(&self) -> Option<SnapshotId> {
         self.replace_snapshot
             .as_ref()
-            .map(|bytes| SnapshotId::try_from(&bytes.clone().into_vec()).unwrap())
+            .map(|bytes| SnapshotId::try_from(bytes.clone().into_vec()).unwrap())
     }
 }
 
@@ -3442,7 +3442,7 @@ impl<'a> Payload<'a> for TakeCanisterSnapshotArgs {
 
         if let Some(replace_snapshot) = &args.replace_snapshot {
             // Verify that snapshot ID has the correct format.
-            if let Err(err) = SnapshotId::try_from(&replace_snapshot.clone().into_vec()) {
+            if let Err(err) = SnapshotId::try_from(replace_snapshot.clone().into_vec()) {
                 return Err(UserError::new(
                     ErrorCode::InvalidManagementPayload,
                     format!("Payload deserialization error: {err:?}"),
@@ -4083,7 +4083,7 @@ impl<'a> Payload<'a> for UploadCanisterSnapshotMetadataArgs {
         match args.replace_snapshot {
             None => {}
             Some(ref snapshot_id) => {
-                if let Err(err) = SnapshotId::try_from(&snapshot_id.to_vec()) {
+                if let Err(err) = SnapshotId::try_from(snapshot_id) {
                     return Err(UserError::new(
                         ErrorCode::InvalidManagementPayload,
                         format!("Payload deserialization error: {err:?}"),
@@ -4128,7 +4128,7 @@ impl UploadCanisterSnapshotMetadataArgs {
         self.replace_snapshot
             .as_ref()
             // TODO: EXC-1997.
-            .map(|bytes| SnapshotId::try_from(&bytes.clone().into_vec()).unwrap())
+            .map(|bytes| SnapshotId::try_from(bytes.clone().into_vec()).unwrap())
     }
 
     /// Returns the size of this snapshot, excluding the size of the wasm chunk store.
