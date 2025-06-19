@@ -32,7 +32,7 @@ jobs:
     name: Set Config
     runs-on: ubuntu-latest
     outputs:
-      stamp-build: ${{ steps.config.outputs.stamp-build }}
+      release-build: ${{ steps.config.outputs.release-build }}
       diff_only: ${{ steps.config.outputs.diff_only }}
       skip_long_tests: ${{ steps.config.outputs.skip_long_tests }}
       full_macos_build: ${{ steps.config.outputs.full_macos_build }}
@@ -56,29 +56,29 @@ jobs:
               # if we are on a "protected" branch, targeting an rc branch or
               # we're called from another workflow (i.e. release-testing) we
               # upload all artifacts and run a release build (with versioning)
-              stamp_build="true"
+              release_build="true"
               diff_only="false"
               skip_long_tests="false"
           elif [[ '${{ github.event_name }}' == "merge_group" ]]; then
               # on a merge group, we don't upload the artifacts (i.e. no release
               # build) but we ensure all targets are built (no diff)
-              stamp_build="false"
+              release_build="false"
               diff_only="false"
               skip_long_tests="true"
           elif [[ '${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}' == 'true' ]]; then
               # "CI_ALL_BAZEL_TARGETS" is set and act as if we're on a protected
               # branch
-              stamp_build="true"
+              release_build="true"
               diff_only="false"
               skip_long_tests="false"
           else
               # default behavior is to build targets specified in BAZEL_TARGETS and not upload to s3
-              stamp_build="false"
+              release_build="false"
               diff_only="true"
               skip_long_tests="true"
           fi
 
-          if [[ $stamp_build == 'true' ]] || [[ '${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'CI_MACOS_INTEL') }}' == 'true' ]]; then
+          if [[ $release_build == 'true' ]] || [[ '${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'CI_MACOS_INTEL') }}' == 'true' ]]; then
               full_macos_build="true"
           else
               full_macos_build="false"
@@ -88,9 +88,9 @@ jobs:
           echo "| config | value |" >> "$GITHUB_STEP_SUMMARY"
           echo "| --- | --- |" >> "$GITHUB_STEP_SUMMARY"
 
-          echo "stamp-build: $stamp_build"
-          echo "stamp-build=$stamp_build" >> "$GITHUB_OUTPUT"
-          echo "| \`stamp-build\` | \`$stamp_build\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "release-build: $release_build"
+          echo "release-build=$release_build" >> "$GITHUB_OUTPUT"
+          echo "| \`release-build\` | \`$release_build\` |" >> "$GITHUB_STEP_SUMMARY"
 
           echo "diff_only: $diff_only"
           echo "diff_only=$diff_only" >> "$GITHUB_OUTPUT"
@@ -167,8 +167,8 @@ jobs:
         with:
           execlogs-artifact-name: execlogs-bazel-test-all
           diff-only: ${{ needs.config.outputs.diff_only }}
-          stamp-build: ${{ needs.config.outputs.stamp-build }}
-          upload-artifacts: ${{ needs.config.outputs.stamp-build }}
+          stamp-build: ${{ needs.config.outputs.release-build }}
+          upload-artifacts: ${{ needs.config.outputs.release-build }}
           BAZEL_COMMAND: test --config=ci ${{ steps.bazel-extra-args.outputs.BAZEL_EXTRA_ARGS }}
           BAZEL_TARGETS: //...
           CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
@@ -435,7 +435,7 @@ jobs:
           MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           RUN_ON_DIFF_ONLY: ${{ needs.config.outputs.diff_only }}
-          RELEASE_BUILD: ${{ needs.config.outputs.stamp-build }}
+          RELEASE_BUILD: ${{ needs.config.outputs.release-build }}
   build-determinism:
     name: Build Determinism
     runs-on: ubuntu-latest
