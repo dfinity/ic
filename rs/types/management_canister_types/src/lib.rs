@@ -1855,7 +1855,7 @@ impl DataSize for PrincipalId {
 ///     value: text;
 /// })`
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
-pub struct EnvironmentVariableEntry {
+pub struct EnvironmentVariable {
     pub name: String,
     pub value: String,
 }
@@ -1870,7 +1870,7 @@ pub struct EnvironmentVariableEntry {
 ///     log_visibility : opt log_visibility;
 ///     wasm_memory_limit: opt nat;
 ///     wasm_memory_threshold: opt nat;
-///     environment_variables: opt environment_variables;
+///     environment_variables: opt vec environment_variable;
 /// })`
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
 pub struct CanisterSettingsArgs {
@@ -1882,7 +1882,7 @@ pub struct CanisterSettingsArgs {
     pub log_visibility: Option<LogVisibilityV2>,
     pub wasm_memory_limit: Option<candid::Nat>,
     pub wasm_memory_threshold: Option<candid::Nat>,
-    pub environment_variables: Option<Vec<EnvironmentVariableEntry>>,
+    pub environment_variables: Option<Vec<EnvironmentVariable>>,
 }
 
 impl Payload<'_> for CanisterSettingsArgs {}
@@ -1937,7 +1937,7 @@ impl CanisterSettingsArgsBuilder {
             environment_variables: self.environment_variables.map(|variables| {
                 variables
                     .iter()
-                    .map(|(name, value)| EnvironmentVariableEntry {
+                    .map(|(name, value)| EnvironmentVariable {
                         name: name.clone(),
                         value: value.clone(),
                     })
