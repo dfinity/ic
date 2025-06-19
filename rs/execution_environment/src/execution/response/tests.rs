@@ -1738,7 +1738,7 @@ fn cleanup_callback_cannot_accept_cycles() {
     // cannot accept cycles.
     assert!(err
         .description()
-        .contains("\"ic0_msg_cycles_accept128\" cannot be executed in replicated cleanup mode"));
+        .contains("\"ic0_msg_cycles_accept128\" cannot be executed in cleanup mode"));
 }
 
 #[test]
@@ -1765,7 +1765,7 @@ fn cleanup_callback_cannot_make_calls() {
     // cannot make calls and send cycles.
     assert!(err
         .description()
-        .contains("\"ic0_call_new\" cannot be executed in replicated cleanup mode"));
+        .contains("\"ic0_call_new\" cannot be executed in cleanup mode"));
 }
 
 #[test]

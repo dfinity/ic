@@ -760,13 +760,13 @@ impl ApiType {
             ApiType::ReplicatedQuery { .. } => "replicated query",
             ApiType::NonReplicatedQuery { .. } => "non replicated query",
             ApiType::CompositeQuery { .. } => "composite query",
-            ApiType::ReplyCallback { .. } => "replicated reply callback",
+            ApiType::ReplyCallback { .. } => "reply callback",
             ApiType::CompositeReplyCallback { .. } => "composite reply callback",
-            ApiType::RejectCallback { .. } => "replicated reject callback",
+            ApiType::RejectCallback { .. } => "reject callback",
             ApiType::CompositeRejectCallback { .. } => "composite reject callback",
             ApiType::PreUpgrade { .. } => "pre upgrade",
             ApiType::InspectMessage { .. } => "inspect message",
-            ApiType::Cleanup { .. } => "replicated cleanup",
+            ApiType::Cleanup { .. } => "cleanup",
             ApiType::CompositeCleanup { .. } => "composite cleanup",
         }
     }
