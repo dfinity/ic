@@ -7,7 +7,7 @@ pub const MAX_SYMBOL_BYTES: usize = 10;
 
 #[derive(CandidType, Clone, Debug, Deserialize)]
 pub struct TreasuryManagerInit {
-    pub assets: Vec<Asset>,
+    pub allowances: Vec<Allowance>,
 }
 
 #[derive(CandidType, Clone, Debug, Deserialize)]
