@@ -280,6 +280,7 @@ impl TryFrom<pbSnapshot> for SnapshotId {
 
 #[cfg(test)]
 mod tests {
+    use crate::NumBytes;
     pub use crate::{CanisterId, SnapshotId};
 
     #[test]
@@ -299,5 +300,64 @@ mod tests {
             canister_id.get().as_slice()
         );
         assert_eq!(snapshot_id.get_local_snapshot_id(), local_id);
+    }
+
+    #[test]
+    fn num_bytes_arithmetics_does_not_overflow() {
+        let max = NumBytes::from(u64::MAX);
+        let min = NumBytes::from(u64::MIN);
+        let one = NumBytes::from(1);
+        let two = NumBytes::from(2);
+        // Add
+        let res = max + one;
+        assert_eq!(max, res);
+        // AddAssign
+        let mut res = max;
+        res += one;
+        assert_eq!(max, res);
+        // Increment
+        let res = max.increment();
+        assert_eq!(max, res);
+        // IncAssign
+        let mut res = max;
+        res.inc_assign();
+        assert_eq!(max, res);
+        // Decrement
+        let res = min.decrement();
+        assert_eq!(min, res);
+        // DecAssign
+        let mut res = min;
+        res.dec_assign();
+        assert_eq!(min, res);
+        // SubAssign
+        let mut res = min;
+        res -= one;
+        assert_eq!(min, res);
+        // Sub
+        let res = min - one;
+        assert_eq!(min, res);
+        // MulAssign
+        let mut res = max;
+        res *= 2;
+        assert_eq!(max, res);
+        // Mul
+        let res = max * 2;
+        assert_eq!(max, res);
+        // Div
+        let res = min / two;
+        assert_eq!(min.get(), res);
+        // Div
+        let res = min / 2;
+        assert_eq!(min, res);
+        // DivAssign
+        let mut res = min;
+        res /= 2;
+        assert_eq!(min, res);
+        // Sum
+        let res = [max, one].into_iter().sum();
+        assert_eq!(max, res);
+        // Sum reference
+        let res = [max, one].iter().sum();
+        assert_eq!(max, res);
     }
 }
