@@ -533,7 +533,6 @@ impl ApiType {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn reply_callback(
         time: Time,
         caller: PrincipalId,
@@ -561,7 +560,6 @@ impl ApiType {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn composite_reply_callback(
         time: Time,
         caller: PrincipalId,
@@ -589,7 +587,6 @@ impl ApiType {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn reject_callback(
         time: Time,
         caller: PrincipalId,
@@ -617,7 +614,6 @@ impl ApiType {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn composite_reject_callback(
         time: Time,
         caller: PrincipalId,
