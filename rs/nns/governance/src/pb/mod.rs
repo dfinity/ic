@@ -76,29 +76,27 @@ impl SetFollowing {
     }
 
     fn validate_topics_are_unique(&self) -> Result<(), GovernanceError> {
-        let mut topics = HashSet::<Option<Topic>>::new();
+        let mut topics = HashSet::<Topic>::new();
         for followees_for_topic in &self.topic_following {
-            let topic = followees_for_topic.topic.map(Topic::try_from);
+            // Treat None the same as Some(0). This also occurs during execution.
+            let topic = followees_for_topic.topic.unwrap_or_default();
 
-            let topic = match topic {
-                Some(Err(err)) => {
-                    return Err(GovernanceError::new_with_message(
+            // Validate topic.
+            let topic = Topic::try_from(topic)
+                .map_err(|err| {
+                    GovernanceError::new_with_message(
                         ErrorType::InvalidCommand,
                         format!(
                             "The operation specified an invalid topic code ({:?}): {}",
                             topic, err,
                         ),
-                    ));
-                }
-
-                None => None,
-                Some(Ok(topic)) => Some(topic),
-            };
+                    )
+                })?;
 
             let is_new = topics.insert(topic);
 
             if !is_new {
-                // Violation detected.
+                // Violation of uniqueness.
                 return Err(GovernanceError::new_with_message(
                     ErrorType::InvalidCommand,
                     format!(
