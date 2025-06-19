@@ -8,7 +8,7 @@
     - name: Remove all service discovery scraping targets
       vars:
         ic: "{{ ic_deployment_name }}"
-      uri:
+      ansible.builtin.uri:
         url: "{{ multiservice_discovery_server }}/{{ ic }}"
         method: DELETE
         return_content: true
