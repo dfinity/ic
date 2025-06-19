@@ -2377,7 +2377,10 @@ impl StateManagerImpl {
         };
 
         let elapsed = start.elapsed();
-        info!(self.log, "Created checkpoint @{} in {:?}", height, elapsed);
+        info!(
+            self.log,
+            "Created unverified checkpoint @{} in {:?}", height, elapsed
+        );
         self.metrics
             .checkpoint_op_duration
             .with_label_values(&["create"])

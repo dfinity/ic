@@ -1,6 +1,6 @@
 [package]
 name = "icrc-ledger-types"
-version = "0.1.9"
+version = "0.1.10"
 description = "Types for interacting with DFINITY's implementation of the ICRC-1 fungible token standard."
 license = "Apache-2.0"
 readme = "README.md"
@@ -15,7 +15,6 @@ base32 = "0.4.0"
 candid = { workspace = true }
 crc32fast = "1.2.0"
 hex = { workspace = true }
-ic-cdk = { workspace = true }
 ic-stable-structures = { workspace = true }
 icrc-cbor = { path = "../icrc-cbor", version = "0.1.0" }
 itertools = { workspace = true }

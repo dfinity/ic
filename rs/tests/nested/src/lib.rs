@@ -38,7 +38,7 @@ pub fn config(env: TestEnv) {
     // Setup "testnet"
     InternetComputer::new()
         .add_fast_single_node_subnet(SubnetType::System)
-        // .with_mainnet_config() TODO: uncomment in NODE-1518
+        .with_mainnet_config()
         .with_api_boundary_nodes(1)
         .with_node_provider(principal)
         .with_node_operator(principal)
