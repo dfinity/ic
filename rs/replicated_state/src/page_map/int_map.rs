@@ -64,7 +64,7 @@ enum Tree<K: AsInt, V> {
 /// Creates a branch node having subtrees `t0` and `t1` as children.
 ///
 /// Precondition: `p0 ≠ p1`
-#[inline]
+#[inline(always)]
 fn join<K: AsInt, V>(
     p0: K::Repr,
     t0: Arc<Tree<K, V>>,
@@ -112,7 +112,7 @@ fn join<K: AsInt, V>(
 }
 
 /// Modifies the contents of an `Arc`, creating a copy if necessary.
-#[inline]
+#[inline(always)]
 fn with_arc<T: Clone + Default>(mut p: Arc<T>, f: impl FnOnce(T) -> T) -> Arc<T> {
     let dst = Arc::make_mut(&mut p);
     *dst = f(std::mem::take(dst));
@@ -121,7 +121,7 @@ fn with_arc<T: Clone + Default>(mut p: Arc<T>, f: impl FnOnce(T) -> T) -> Arc<T>
 
 /// Calls the given function on the mutable contents of an `Arc`, creating a
 /// copy if necessary.
-#[inline]
+#[inline(always)]
 fn with_arc2<T: Clone + Default, V>(mut p: Arc<T>, f: impl FnOnce(T) -> (T, V)) -> (Arc<T>, V) {
     let dst = Arc::make_mut(&mut p);
     let v;
@@ -130,7 +130,7 @@ fn with_arc2<T: Clone + Default, V>(mut p: Arc<T>, f: impl FnOnce(T) -> (T, V)) 
 }
 
 /// Extracts a value from an `Arc`, cloning its content if necessary.
-#[inline]
+#[inline(always)]
 fn take_arc<T: Clone>(p: Arc<T>) -> T {
     match Arc::try_unwrap(p) {
         Ok(x) => x,
@@ -179,7 +179,7 @@ pub trait IntKey:
     fn max_value() -> Self;
 
     /// The type's size in bits.
-    #[inline]
+    #[inline(always)]
     fn size_bits() -> u8 {
         size_of::<Self>() as u8 * 8
     }
@@ -189,44 +189,44 @@ pub trait IntKey:
 }
 
 impl IntKey for u64 {
-    #[inline]
+    #[inline(always)]
     fn zero() -> Self {
         0
     }
 
-    #[inline]
+    #[inline(always)]
     fn one() -> Self {
         1
     }
 
-    #[inline]
+    #[inline(always)]
     fn max_value() -> Self {
         Self::MAX
     }
 
-    #[inline]
+    #[inline(always)]
     fn leading_zeros(self) -> u32 {
         self.leading_zeros()
     }
 }
 
 impl IntKey for u128 {
-    #[inline]
+    #[inline(always)]
     fn zero() -> Self {
         0
     }
 
-    #[inline]
+    #[inline(always)]
     fn one() -> Self {
         1
     }
 
-    #[inline]
+    #[inline(always)]
     fn max_value() -> Self {
         Self::MAX
     }
 
-    #[inline]
+    #[inline(always)]
     fn leading_zeros(self) -> u32 {
         self.leading_zeros()
     }
@@ -245,7 +245,7 @@ pub trait AsInt: Copy + Ord {
 impl AsInt for u64 {
     type Repr = u64;
 
-    #[inline]
+    #[inline(always)]
     fn as_int(&self) -> u64 {
         *self
     }
@@ -254,7 +254,7 @@ impl AsInt for u64 {
 impl<Entity> AsInt for Id<Entity, u64> {
     type Repr = u64;
 
-    #[inline]
+    #[inline(always)]
     fn as_int(&self) -> u64 {
         self.get()
     }
@@ -704,6 +704,7 @@ where
 pub struct IntMap<K: AsInt, V>(Tree<K, V>);
 
 impl<K: AsInt, V> Default for IntMap<K, V> {
+    #[inline(always)]
     fn default() -> Self {
         Self(Tree::Empty)
     }
@@ -711,6 +712,7 @@ impl<K: AsInt, V> Default for IntMap<K, V> {
 
 impl<K: AsInt, V: Clone> IntMap<K, V> {
     /// Creates a new empty map.
+    #[inline(always)]
     pub fn new() -> Self {
         Self::default()
     }
@@ -718,6 +720,7 @@ impl<K: AsInt, V: Clone> IntMap<K, V> {
     /// Looks up a value by key.
     ///
     /// Complexity: `O(min(N, |key|))`.
+    #[inline(always)]
     pub fn get(&self, key: &K) -> Option<&V> {
         self.0.get(key.as_int())
     }
@@ -725,6 +728,7 @@ impl<K: AsInt, V: Clone> IntMap<K, V> {
     /// Returns `true` if the map contains the specified key.
     ///
     /// Complexity: `O(min(N, |key|))`.
+    #[inline(always)]
     pub fn contains_key(&self, key: &K) -> bool {
         self.0.get(key.as_int()).is_some()
     }
@@ -744,6 +748,7 @@ impl<K: AsInt, V: Clone> IntMap<K, V> {
     /// - `upper == Some((k, v))` implies `self.get(k) == v`,
     ///
     /// Complexity: `O(min(N, |key|))`.
+    #[inline(always)]
     pub fn bounds(&self, key: &K) -> Bounds<K, V> {
         self.0.bounds(key)
     }
@@ -752,6 +757,7 @@ impl<K: AsInt, V: Clone> IntMap<K, V> {
     /// value for the key, if any.
     ///
     /// Complexity: `O(min(N, |key|))`.
+    #[inline(always)]
     pub fn insert(self, key: K, value: V) -> (Self, Option<V>) {
         let (tree, res) = self.0.insert(key, value);
         (Self(tree), res)
@@ -761,6 +767,7 @@ impl<K: AsInt, V: Clone> IntMap<K, V> {
     /// and the removed value, if any.
     ///
     /// Complexity: `O(min(N, |key|))`.
+    #[inline(always)]
     pub fn remove(self, key: &K) -> (Self, Option<V>) {
         let (tree, res) = self.0.remove(key);
         (Self(tree), res)
@@ -769,6 +776,7 @@ impl<K: AsInt, V: Clone> IntMap<K, V> {
     /// Unions two maps, preferring entries from self in case of a collision.
     ///
     /// Complexity: `O(N + M)`
+    #[inline(always)]
     pub fn union(self, other: Self) -> Self {
         Self(self.0.union(other.0))
     }
@@ -777,6 +785,7 @@ impl<K: AsInt, V: Clone> IntMap<K, V> {
     /// The keys are guaranteed to be sorted.
     ///
     /// A full traversal requires `O(N)` operations.
+    #[inline(always)]
     pub fn iter(&self) -> IntMapIter<'_, K, V> {
         IntMapIter::new(&self.0)
     }
@@ -785,6 +794,7 @@ impl<K: AsInt, V: Clone> IntMap<K, V> {
     /// The keys are guaranteed to be sorted.
     ///
     /// A full traversal requires `O(N)` operations.
+    #[inline(always)]
     pub fn keys(&self) -> impl Iterator<Item = &K> {
         IntMapIter::new(&self.0).map(|(k, _v)| k)
     }
@@ -792,6 +802,7 @@ impl<K: AsInt, V: Clone> IntMap<K, V> {
     /// Returns the number of entries in this map.
     ///
     /// Complexity: `O(N)`
+    #[inline(always)]
     pub fn len(&self) -> usize {
         self.0.len()
     }
@@ -799,6 +810,7 @@ impl<K: AsInt, V: Clone> IntMap<K, V> {
     /// Returns true if this map is empty.
     ///
     /// Complexity: `O(1)`
+    #[inline(always)]
     pub fn is_empty(&self) -> bool {
         matches!(self.0, Tree::Empty)
     }
@@ -807,6 +819,7 @@ impl<K: AsInt, V: Clone> IntMap<K, V> {
     /// If the tree is empty, then it returns `None`.
     ///
     /// Complexity: `O(min(N, |key|))`.
+    #[inline(always)]
     pub fn max_key(&self) -> Option<&K> {
         self.0.max().map(|(k, _v)| k)
     }
@@ -837,6 +850,7 @@ where
     K: AsInt + PartialEq + std::fmt::Debug,
     V: ValidateEq + Clone,
 {
+    #[inline(always)]
     fn validate_eq(&self, rhs: &Self) -> Result<(), String> {
         self.0.validate_eq(&rhs.0)
     }
@@ -854,6 +868,7 @@ pub struct MutableIntMap<K: AsInt, V> {
 }
 
 impl<K: AsInt, V> Default for MutableIntMap<K, V> {
+    #[inline(always)]
     fn default() -> Self {
         Self {
             tree: Tree::Empty,
@@ -864,6 +879,7 @@ impl<K: AsInt, V> Default for MutableIntMap<K, V> {
 
 impl<K: AsInt, V: Clone> MutableIntMap<K, V> {
     /// Creates a new empty map.
+    #[inline(always)]
     pub fn new() -> Self {
         Self::default()
     }
@@ -871,6 +887,7 @@ impl<K: AsInt, V: Clone> MutableIntMap<K, V> {
     /// Looks up a value by integer key.
     ///
     /// Complexity: `O(min(N, |key|))`.
+    #[inline(always)]
     pub fn get(&self, key: &K) -> Option<&V> {
         self.tree.get(key.as_int())
     }
@@ -878,6 +895,7 @@ impl<K: AsInt, V: Clone> MutableIntMap<K, V> {
     /// Returns `true` if the map contains a value for the specified key.
     ///
     /// Complexity: `O(min(N, |key|))`.
+    #[inline(always)]
     pub fn contains_key(&self, key: &K) -> bool {
         self.tree.get(key.as_int()).is_some()
     }
@@ -897,6 +915,7 @@ impl<K: AsInt, V: Clone> MutableIntMap<K, V> {
     /// - `upper == Some((k, v))` implies `self.get(k) == v`,
     ///
     /// Complexity: `O(min(N, |key|))`.
+    #[inline(always)]
     pub fn bounds(&self, key: &K) -> Bounds<K, V> {
         self.tree.bounds(key)
     }
@@ -967,6 +986,7 @@ impl<K: AsInt, V: Clone> MutableIntMap<K, V> {
     /// The keys are guaranteed to be sorted.
     ///
     /// A full traversal requires O(N) operations.
+    #[inline(always)]
     pub fn iter(&self) -> IntMapIter<'_, K, V> {
         IntMapIter::new(&self.tree)
     }
@@ -975,6 +995,7 @@ impl<K: AsInt, V: Clone> MutableIntMap<K, V> {
     /// The keys are guaranteed to be sorted.
     ///
     /// A full traversal requires O(N) operations.
+    #[inline(always)]
     pub fn keys(&self) -> impl Iterator<Item = &K> {
         IntMapIter::new(&self.tree).map(|(k, _v)| k)
     }
@@ -982,6 +1003,7 @@ impl<K: AsInt, V: Clone> MutableIntMap<K, V> {
     /// Returns an iterator over the values, in order by key.
     ///
     /// A full traversal requires O(N) operations.
+    #[inline(always)]
     pub fn values(&self) -> impl Iterator<Item = &V> {
         IntMapIter::new(&self.tree).map(|(_k, v)| v)
     }
@@ -989,6 +1011,7 @@ impl<K: AsInt, V: Clone> MutableIntMap<K, V> {
     /// Returns the number of entries in this map.
     ///
     /// Complexity: `O(1)`
+    #[inline(always)]
     pub fn len(&self) -> usize {
         self.len
     }
@@ -996,6 +1019,7 @@ impl<K: AsInt, V: Clone> MutableIntMap<K, V> {
     /// Returns true if this map is empty.
     ///
     /// Complexity: `O(1)`
+    #[inline(always)]
     pub fn is_empty(&self) -> bool {
         matches!(self.tree, Tree::Empty)
     }
@@ -1004,6 +1028,7 @@ impl<K: AsInt, V: Clone> MutableIntMap<K, V> {
     /// If the tree is empty, then it returns `None`.
     ///
     /// Complexity: `O(min(N, |key|))`.
+    #[inline(always)]
     pub fn min_key(&self) -> Option<&K> {
         self.tree.min().map(|(k, _v)| k)
     }
@@ -1012,6 +1037,7 @@ impl<K: AsInt, V: Clone> MutableIntMap<K, V> {
     /// If the tree is empty, then it returns `None`.
     ///
     /// Complexity: `O(min(N, |key|))`.
+    #[inline(always)]
     pub fn max_key(&self) -> Option<&K> {
         self.tree.max().map(|(k, _v)| k)
     }
@@ -1058,6 +1084,7 @@ pub struct IntMapIter<'a, K: AsInt, V>(
 );
 
 impl<'a, K: AsInt, V> IntMapIter<'a, K, V> {
+    #[inline(always)]
     fn new(root: &'a Tree<K, V>) -> Self {
         Self(vec![root])
     }
@@ -1092,6 +1119,7 @@ pub struct IntMapIntoIter<K: AsInt, V>(
 );
 
 impl<K: AsInt, V> IntMapIntoIter<K, V> {
+    #[inline(always)]
     fn new(root: Tree<K, V>) -> Self {
         Self(vec![root])
     }
@@ -1120,13 +1148,14 @@ impl<K: AsInt, V: Clone> IntoIterator for MutableIntMap<K, V> {
     type Item = (K, V);
     type IntoIter = IntMapIntoIter<K, V>;
 
+    #[inline(always)]
     fn into_iter(self) -> Self::IntoIter {
         IntMapIntoIter::new(self.tree)
     }
 }
 
 /// Finds the most significant bit in which two bit patterns disagree.
-#[inline]
+#[inline(always)]
 fn branching_bit<I: IntKey>(p0: I, p1: I) -> u8 {
     debug_assert_ne!(p0, p1);
     let zs = (p0 ^ p1).leading_zeros() as u8;
@@ -1134,7 +1163,7 @@ fn branching_bit<I: IntKey>(p0: I, p1: I) -> u8 {
 }
 
 /// Clears all the key bits at or lower than the branching bit.
-#[inline]
+#[inline(always)]
 fn mask<I: IntKey>(key: I, branching_bit: u8) -> I {
     debug_assert!(branching_bit < I::size_bits());
 
@@ -1146,7 +1175,7 @@ fn mask<I: IntKey>(key: I, branching_bit: u8) -> I {
 }
 
 /// Checks if the key matches the branch prefix.
-#[inline]
+#[inline(always)]
 fn matches_prefix<I: IntKey>(key: I, branch_prefix: I, branching_bit: u8) -> bool {
     mask(key, branching_bit) == branch_prefix
 }

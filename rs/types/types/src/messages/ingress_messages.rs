@@ -46,32 +46,39 @@ pub struct SignedIngressContent {
 }
 
 impl SignedIngressContent {
+    #[inline(always)]
     pub fn sender(&self) -> UserId {
         self.sender
     }
 
+    #[inline(always)]
     pub fn canister_id(&self) -> CanisterId {
         self.canister_id
     }
 
+    #[inline(always)]
     pub fn method_name(&self) -> &str {
         self.method_name.as_str()
     }
 
+    #[inline(always)]
     pub fn arg(&self) -> &[u8] {
         &self.arg
     }
 
+    #[inline(always)]
     pub fn nonce(&self) -> Option<&Vec<u8>> {
         self.nonce.as_ref()
     }
 
     /// Checks whether the given ingress message is addressed to the subnet (rather than to a canister).
+    #[inline(always)]
     pub fn is_addressed_to_subnet(&self, own_subnet_id: SubnetId) -> bool {
         let canister_id = self.canister_id();
         is_subnet_id(canister_id, own_subnet_id)
     }
 
+    #[inline(always)]
     pub fn ingress_expiry(&self) -> Time {
         Time::from_nanos_since_unix_epoch(self.ingress_expiry)
     }
@@ -97,6 +104,7 @@ impl SignedIngressContent {
 }
 
 impl HasCanisterId for SignedIngressContent {
+    #[inline(always)]
     fn canister_id(&self) -> CanisterId {
         self.canister_id
     }
@@ -115,14 +123,17 @@ impl HttpRequestContent for SignedIngressContent {
         ))
     }
 
+    #[inline(always)]
     fn sender(&self) -> UserId {
         self.sender
     }
 
+    #[inline(always)]
     fn ingress_expiry(&self) -> u64 {
         self.ingress_expiry
     }
 
+    #[inline(always)]
     fn nonce(&self) -> Option<Vec<u8>> {
         self.nonce.clone()
     }
@@ -167,6 +178,8 @@ pub struct SignedIngress {
 impl IdentifiableArtifact for SignedIngress {
     const NAME: &'static str = "ingress";
     type Id = IngressMessageId;
+
+    #[inline(always)]
     fn id(&self) -> Self::Id {
         self.into()
     }
@@ -180,6 +193,7 @@ impl PbArtifact for SignedIngress {
 }
 
 impl PartialEq for SignedIngress {
+    #[inline(always)]
     fn eq(&self, other: &Self) -> bool {
         self.binary.eq(&other.binary)
     }
@@ -188,6 +202,7 @@ impl PartialEq for SignedIngress {
 impl Eq for SignedIngress {}
 
 impl std::hash::Hash for SignedIngress {
+    #[inline(always)]
     fn hash<Hasher: std::hash::Hasher>(&self, state: &mut Hasher) {
         self.binary.hash(state);
     }
@@ -275,46 +290,57 @@ impl From<&SignedIngress> for IngressMessageLogEntry {
 }
 
 impl SignedIngress {
+    #[inline(always)]
     pub fn binary(&self) -> &SignedRequestBytes {
         &self.binary
     }
 
+    #[inline(always)]
     pub fn content(&self) -> &SignedIngressContent {
         self.signed.content()
     }
 
+    #[inline(always)]
     pub fn authentication(&self) -> &Authentication {
         self.signed.authentication()
     }
 
+    #[inline(always)]
     pub fn canister_id(&self) -> CanisterId {
         self.content().canister_id
     }
 
+    #[inline(always)]
     pub fn method_name(&self) -> String {
         self.content().method_name.clone()
     }
 
+    #[inline(always)]
     pub fn method_arg(&self) -> &[u8] {
         &self.content().arg
     }
 
+    #[inline(always)]
     pub fn log_entry(&self) -> IngressMessageLogEntry {
         self.into()
     }
 
+    #[inline(always)]
     pub fn expiry_time(&self) -> Time {
         Time::from_nanos_since_unix_epoch(self.content().ingress_expiry)
     }
 
+    #[inline(always)]
     pub fn id(&self) -> MessageId {
         self.signed.id()
     }
 
+    #[inline(always)]
     pub fn sender(&self) -> UserId {
         self.signed.sender()
     }
 
+    #[inline(always)]
     pub fn nonce(&self) -> Option<Vec<u8>> {
         self.signed.nonce()
     }
@@ -343,6 +369,7 @@ impl TryFrom<HttpRequestEnvelope<HttpCallContent>> for SignedIngress {
 }
 
 impl CountBytes for SignedIngress {
+    #[inline(always)]
     fn count_bytes(&self) -> usize {
         // Since we not only add the message, but also the pointer to the message,
         // we need to account for that when building the length
@@ -369,6 +396,7 @@ pub struct Ingress {
 
 impl Ingress {
     /// Checks whether the given ingress message is addressed to the subnet (rather than to a canister).
+    #[inline(always)]
     pub fn is_addressed_to_subnet(&self, own_subnet_id: SubnetId) -> bool {
         let canister_id = self.receiver;
         is_subnet_id(canister_id, own_subnet_id)
@@ -443,6 +471,7 @@ impl TryFrom<pb_ingress::Ingress> for Ingress {
 }
 
 impl CountBytes for Ingress {
+    #[inline(always)]
     fn count_bytes(&self) -> usize {
         size_of::<Ingress>() + self.method_name.len() + self.method_payload.len()
     }
@@ -608,6 +637,7 @@ pub fn extract_effective_canister_id(
 }
 
 /// Checks whether the given canister ID refers to the subnet (directly or as `IC_00`).
+#[inline(always)]
 pub fn is_subnet_id(canister_id: CanisterId, own_subnet_id: SubnetId) -> bool {
     canister_id == IC_00 || canister_id.get_ref() == own_subnet_id.get_ref()
 }

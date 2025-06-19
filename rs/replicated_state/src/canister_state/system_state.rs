@@ -196,6 +196,7 @@ impl CanisterMetrics {
         }
     }
 
+    #[inline(always)]
     pub fn get_consumed_cycles_by_use_cases(&self) -> &BTreeMap<CyclesUseCase, NominalCycles> {
         &self.consumed_cycles_by_use_cases
     }
@@ -276,10 +277,12 @@ impl CanisterHistory {
         self.changes.range((num_all_changes - num_changes)..)
     }
 
+    #[inline(always)]
     pub fn get_total_num_changes(&self) -> u64 {
         self.total_num_changes
     }
 
+    #[inline(always)]
     pub fn get_memory_usage(&self) -> NumBytes {
         self.canister_history_memory_usage
     }
@@ -917,38 +920,45 @@ impl SystemState {
         )
     }
 
+    #[inline(always)]
     pub fn canister_id(&self) -> CanisterId {
         self.canister_id
     }
 
     /// Returns the amount of cycles that the balance holds.
+    #[inline(always)]
     pub fn balance(&self) -> Cycles {
         self.cycles_balance
     }
 
     /// Returns the balance after applying the pending 'ingress_induction_cycles_debit'.
     /// Returns 0 if the balance is smaller than the pending 'ingress_induction_cycles_debit'.
+    #[inline(always)]
     pub fn debited_balance(&self) -> Cycles {
         // We rely on saturating operations of `Cycles` here.
         self.cycles_balance - self.ingress_induction_cycles_debit
     }
 
     /// Returns the pending 'ingress_induction_cycles_debit'.
+    #[inline(always)]
     pub fn ingress_induction_cycles_debit(&self) -> Cycles {
         self.ingress_induction_cycles_debit
     }
 
     /// Returns resource reservation cycles.
+    #[inline(always)]
     pub fn reserved_balance(&self) -> Cycles {
         self.reserved_balance
     }
 
     /// Returns the user-specified upper limit on `reserved_balance`.
+    #[inline(always)]
     pub fn reserved_balance_limit(&self) -> Option<Cycles> {
         self.reserved_balance_limit
     }
 
     /// Sets the user-specified upper limit on `reserved_balance()`.
+    #[inline(always)]
     pub fn set_reserved_balance_limit(&mut self, limit: Cycles) {
         self.reserved_balance_limit = Some(limit);
     }
@@ -1249,6 +1259,7 @@ impl SystemState {
     }
 
     /// Returns true if there are messages in the input queues, false otherwise.
+    #[inline(always)]
     pub fn has_input(&self) -> bool {
         self.queues.has_input()
     }
@@ -1358,6 +1369,7 @@ impl SystemState {
     }
 
     /// Pushes an ingress message into the induction pool.
+    #[inline(always)]
     pub(crate) fn push_ingress(&mut self, msg: Ingress) {
         self.queues.push_ingress(msg)
     }
@@ -1368,6 +1380,7 @@ impl SystemState {
     /// All messages that `f` returned `Ok` for, are popped. Messages that `f`
     /// returned `Err` for and all those following them in the output queue are
     /// retained.
+    #[inline(always)]
     pub fn output_queues_for_each<F>(&mut self, f: F)
     where
         F: FnMut(&CanisterId, &RequestOrResponse) -> Result<(), ()>,
@@ -1378,11 +1391,13 @@ impl SystemState {
     /// Returns an iterator that loops over the canister's output queues,
     /// popping one message at a time from each in a round robin fashion. The
     /// iterator consumes all popped messages.
+    #[inline(always)]
     pub fn output_into_iter(&mut self) -> CanisterOutputQueuesIterator {
         self.queues.output_into_iter()
     }
 
     /// Returns an immutable reference to the canister queues.
+    #[inline(always)]
     pub fn queues(&self) -> &CanisterQueues {
         &self.queues
     }
@@ -1525,6 +1540,7 @@ impl SystemState {
     }
 
     /// Returns the canister status.
+    #[inline(always)]
     pub fn get_status(&self) -> &CanisterStatus {
         &self.status
     }
@@ -1570,6 +1586,7 @@ impl SystemState {
     }
 
     /// See `IngressQueue::filter_messages()` for documentation.
+    #[inline(always)]
     pub fn filter_ingress_messages<F>(&mut self, filter: F) -> Vec<Arc<Ingress>>
     where
         F: FnMut(&Arc<Ingress>) -> bool,
@@ -1579,6 +1596,7 @@ impl SystemState {
 
     /// Returns the memory currently used by or reserved for guaranteed response
     /// canister messages.
+    #[inline(always)]
     pub fn guaranteed_response_message_memory_usage(&self) -> NumBytes {
         (self.queues.guaranteed_response_memory_usage() as u64).into()
     }
@@ -1586,12 +1604,14 @@ impl SystemState {
     /// Returns the memory currently used by best-effort canister messages.
     ///
     /// This returns zero iff there are zero best-effort messages enqueued.
+    #[inline(always)]
     pub fn best_effort_message_memory_usage(&self) -> NumBytes {
         (self.queues.best_effort_message_memory_usage() as u64).into()
     }
 
     /// Returns the memory currently in use by the `SystemState`
     /// for canister history.
+    #[inline(always)]
     pub fn canister_history_memory_usage(&self) -> NumBytes {
         self.canister_history.get_memory_usage()
     }
@@ -1684,12 +1704,14 @@ impl SystemState {
     }
 
     /// Garbage collects empty input and output queue pairs.
+    #[inline(always)]
     pub fn garbage_collect_canister_queues(&mut self) {
         self.queues.garbage_collect();
     }
 
     /// Queries whether any of the `OutputQueues` in `self.queues` hold messages
     /// with expired deadlines in them.
+    #[inline(always)]
     pub fn has_expired_message_deadlines(&self, current_time: Time) -> bool {
         self.queues.has_expired_deadlines(current_time)
     }
@@ -1698,6 +1720,7 @@ impl SystemState {
     /// attached cycles that was lost.
     ///
     /// See [`CanisterQueues::time_out_messages`] for further details.
+    #[inline(always)]
     pub fn time_out_messages(
         &mut self,
         current_time: Time,
@@ -1789,6 +1812,7 @@ impl SystemState {
     /// cycles that were lost (if a reject response with a refund was not enqueued).
     ///
     /// Time complexity: `O(log(n))`.
+    #[inline(always)]
     pub fn shed_largest_message(
         &mut self,
         own_canister_id: &CanisterId,
@@ -1803,6 +1827,7 @@ impl SystemState {
     /// following a canister migration, based on the updated set of local canisters.
     ///
     /// See [`CanisterQueues::split_input_schedules`] for further details.
+    #[inline(always)]
     pub(crate) fn split_input_schedules(
         &mut self,
         own_canister_id: &CanisterId,
@@ -1930,6 +1955,7 @@ impl SystemState {
 
     /// Clears all canister changes and their memory usage,
     /// but keeps the total number of changes recorded.
+    #[inline(always)]
     pub fn clear_canister_history(&mut self) {
         self.canister_history.clear();
     }
@@ -1952,6 +1978,7 @@ impl SystemState {
         self.canister_history.add_canister_change(new_change);
     }
 
+    #[inline(always)]
     pub fn get_canister_history(&self) -> &CanisterHistory {
         &self.canister_history
     }

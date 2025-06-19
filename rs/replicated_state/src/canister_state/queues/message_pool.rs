@@ -123,37 +123,33 @@ impl Id {
     /// The minimum `Id` value, for use in e.g. `BTreeSet::split_off()` calls.
     const MIN: Self = Self(0);
 
+    #[inline(always)]
     fn kind(&self) -> Kind {
-        if self.0 & Kind::BIT == Kind::Request as u64 {
-            Kind::Request
-        } else {
-            Kind::Response
-        }
+        // SAFETY: `Kind` is an enum with two `u64` variants, `0` and `Kind::BIT`.
+        unsafe { std::mem::transmute(self.0 & Kind::BIT) }
     }
 
+    #[inline(always)]
     fn context(&self) -> Context {
-        if self.0 & Context::BIT == Context::Inbound as u64 {
-            Context::Inbound
-        } else {
-            Context::Outbound
-        }
+        // SAFETY: `Context` is an enum with two `u64` variants, `0` and `Context::BIT`.
+        unsafe { std::mem::transmute(self.0 & Context::BIT) }
     }
 
+    #[inline(always)]
     fn class(&self) -> Class {
-        if self.0 & Class::BIT == Class::GuaranteedResponse as u64 {
-            Class::GuaranteedResponse
-        } else {
-            Class::BestEffort
-        }
+        // SAFETY: `Class` is an enum with two `u64` variants, `0` and `Class::BIT`.
+        unsafe { std::mem::transmute(self.0 & Class::BIT) }
     }
 
     /// Tests whether this `Id` represents an inbound best-effort response.
+    #[inline(always)]
     fn is_inbound_best_effort_response(&self) -> bool {
         self.0 & (Context::BIT | Class::BIT | Kind::BIT)
             == (Context::Inbound as u64 | Class::BestEffort as u64 | Kind::Response as u64)
     }
 
     /// Tests whether this `Id` represents an outbound guaranteed-response request.
+    #[inline(always)]
     fn is_outbound_guaranteed_request(&self) -> bool {
         self.0 & (Context::BIT | Class::BIT | Kind::BIT)
             == (Context::Outbound as u64 | Class::GuaranteedResponse as u64 | Kind::Request as u64)
@@ -163,7 +159,7 @@ impl Id {
 impl AsInt for Id {
     type Repr = u64;
 
-    #[inline]
+    #[inline(always)]
     fn as_int(&self) -> u64 {
         self.0
     }
@@ -172,7 +168,7 @@ impl AsInt for Id {
 impl AsInt for (CoarseTime, Id) {
     type Repr = u128;
 
-    #[inline]
+    #[inline(always)]
     fn as_int(&self) -> u128 {
         ((self.0.as_secs_since_unix_epoch() as u128) << 64) | self.1 .0 as u128
     }
@@ -181,7 +177,7 @@ impl AsInt for (CoarseTime, Id) {
 impl AsInt for (usize, Id) {
     type Repr = u128;
 
-    #[inline]
+    #[inline(always)]
     fn as_int(&self) -> u128 {
         ((self.0 as u128) << 64) | self.1 .0 as u128
     }
@@ -197,6 +193,7 @@ where
     T: ToContext,
 {
     /// Constructs a new `Reference<T>` of the given `class` and `kind`.
+    #[inline(always)]
     fn new(class: Class, kind: Kind, generator: u64) -> Self {
         Self(
             T::context() as u64 | class as u64 | kind as u64 | (generator << Id::BITMASK_LEN),
@@ -206,27 +203,32 @@ where
 }
 
 impl<T> Reference<T> {
+    #[inline(always)]
     pub(super) fn kind(&self) -> Kind {
         Id::from(self).kind()
     }
 
     #[cfg(test)]
+    #[inline(always)]
     fn context(&self) -> Context {
         Id::from(self).context()
     }
 
     #[allow(dead_code)]
+    #[inline(always)]
     fn class(&self) -> Class {
         Id::from(self).class()
     }
 
     /// Tests whether this is a reference to an inbound best-effort response.
+    #[inline(always)]
     pub(super) fn is_inbound_best_effort_response(&self) -> bool {
         Id::from(self).is_inbound_best_effort_response()
     }
 }
 
 impl<T> Clone for Reference<T> {
+    #[inline(always)]
     fn clone(&self) -> Self {
         *self
     }
@@ -239,6 +241,7 @@ impl<T> Clone for Reference<T> {
 impl<T> Copy for Reference<T> {}
 
 impl<T> PartialEq for Reference<T> {
+    #[inline(always)]
     fn eq(&self, other: &Self) -> bool {
         self.0 == other.0
     }
@@ -247,24 +250,28 @@ impl<T> PartialEq for Reference<T> {
 impl<T> Eq for Reference<T> {}
 
 impl<T> PartialOrd for Reference<T> {
+    #[inline(always)]
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(self.cmp(other))
     }
 }
 
 impl<T> Ord for Reference<T> {
+    #[inline(always)]
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.0.cmp(&other.0)
     }
 }
 
 impl<T> From<&Reference<T>> for Id {
+    #[inline(always)]
     fn from(reference: &Reference<T>) -> Id {
         Id(reference.0)
     }
 }
 
 impl<T> From<Reference<T>> for Id {
+    #[inline(always)]
     fn from(reference: Reference<T>) -> Id {
         Id(reference.0)
     }
@@ -273,7 +280,7 @@ impl<T> From<Reference<T>> for Id {
 impl<T> AsInt for Reference<T> {
     type Repr = u64;
 
-    #[inline]
+    #[inline(always)]
     fn as_int(&self) -> u64 {
         self.0
     }
@@ -292,12 +299,14 @@ pub(super) trait ToContext {
 }
 
 impl ToContext for CanisterInput {
+    #[inline(always)]
     fn context() -> Context {
         Context::Inbound
     }
 }
 
 impl ToContext for RequestOrResponse {
+    #[inline(always)]
     fn context() -> Context {
         Context::Outbound
     }
@@ -318,14 +327,17 @@ impl SomeReference {
         }
     }
 
+    #[inline(always)]
     pub(super) fn kind(&self) -> Kind {
         self.id().kind()
     }
 
+    #[inline(always)]
     pub(super) fn context(&self) -> Context {
         self.id().context()
     }
 
+    #[inline(always)]
     pub(super) fn class(&self) -> Class {
         self.id().class()
     }
@@ -359,6 +371,7 @@ where
 }
 
 impl<T> From<&Reference<T>> for u64 {
+    #[inline(always)]
     fn from(item: &Reference<T>) -> Self {
         item.0
     }
@@ -469,6 +482,7 @@ impl MessagePool {
     /// best-effort callback.
     ///
     /// This is equivalent to inserting and then immediately removing the response.
+    #[inline(always)]
     pub(super) fn make_inbound_timeout_response_reference(&mut self) -> InboundReference {
         self.next_reference(Class::BestEffort, Kind::Response)
     }
@@ -586,6 +600,7 @@ impl MessagePool {
     }
 
     /// Retrieves the message with the given `Reference`.
+    #[inline(always)]
     pub(super) fn get<T>(&self, reference: Reference<T>) -> Option<&RequestOrResponse> {
         self.messages.get(&reference.into())
     }
@@ -735,11 +750,13 @@ impl MessagePool {
     }
 
     /// Returns the number of messages in the pool.
+    #[inline(always)]
     pub(super) fn len(&self) -> usize {
         self.messages.len()
     }
 
     /// Returns a reference to the pool's message stats.
+    #[inline(always)]
     pub(super) fn message_stats(&self) -> &MessageStats {
         &self.message_stats
     }
@@ -1010,6 +1027,7 @@ impl MessageStats {
     /// excluding memory reservations for guaranteed responses.
     ///
     /// Complexity: `O(1)`.
+    #[inline(always)]
     pub fn guaranteed_response_memory_usage(&self) -> usize {
         self.guaranteed_responses_size_bytes + self.oversized_guaranteed_requests_extra_bytes
     }

@@ -113,6 +113,7 @@ impl<T> CanisterQueue<T> {
     }
 
     /// Returns the number of slots available for requests.
+    #[inline(always)]
     pub(super) fn available_request_slots(&self) -> usize {
         debug_assert!(self.request_slots <= self.capacity);
         self.capacity - self.request_slots
@@ -143,6 +144,7 @@ impl<T> CanisterQueue<T> {
     }
 
     /// Returns the number of response slots available for reservation.
+    #[inline(always)]
     pub(super) fn available_response_slots(&self) -> usize {
         debug_assert!(self.response_slots <= self.capacity);
         self.capacity - self.response_slots
@@ -167,6 +169,7 @@ impl<T> CanisterQueue<T> {
     ///
     /// This is used when a request in the reverse queue is dropped before having
     /// had a chance to be popped.
+    #[inline(always)]
     pub(super) fn release_reserved_response_slot(&mut self) {
         debug_assert!(self.response_slots > 0);
 
@@ -174,6 +177,7 @@ impl<T> CanisterQueue<T> {
     }
 
     /// Returns the number of reserved response slots.
+    #[inline(always)]
     pub(super) fn reserved_slots(&self) -> usize {
         debug_assert!(self.request_slots + self.response_slots >= self.queue.len());
         self.request_slots + self.response_slots - self.queue.len()
@@ -218,6 +222,7 @@ impl<T> CanisterQueue<T> {
     }
 
     /// Returns the next reference in the queue; or `None` if the queue is empty.
+    #[inline(always)]
     pub(super) fn peek(&self) -> Option<Reference<T>> {
         self.queue.front().cloned()
     }
@@ -227,12 +232,14 @@ impl<T> CanisterQueue<T> {
     /// This is basically an `is_empty()` test, except it also looks at reserved
     /// slots, so it is named differently to make it clear it doesn't only check for
     /// enqueued references.
+    #[inline(always)]
     pub(super) fn has_used_slots(&self) -> bool {
         !self.queue.is_empty() || self.response_slots > 0
     }
 
     /// Returns the length of the queue (including stale references, but not
     /// including reserved slots).
+    #[inline(always)]
     pub(super) fn len(&self) -> usize {
         self.queue.len()
     }
@@ -287,6 +294,7 @@ impl<T> CanisterQueue<T> {
     }
 
     /// Returns an iterator over the underlying references.
+    #[inline(always)]
     pub(super) fn iter(&self) -> impl Iterator<Item = &Reference<T>> {
         self.queue.iter()
     }
@@ -435,17 +443,20 @@ impl IngressQueue {
     }
 
     /// Returns the number of Ingress messages in the queue.
+    #[inline(always)]
     pub(super) fn size(&self) -> usize {
         self.total_ingress_count
     }
 
     /// Returns the number of canisters with incoming ingress messages.
+    #[inline(always)]
     pub(super) fn ingress_schedule_size(&self) -> usize {
         self.schedule.len()
     }
 
     /// Return true if there are no Ingress messages in the queue,
     /// or false otherwise.
+    #[inline(always)]
     pub(super) fn is_empty(&self) -> bool {
         self.size() == 0
     }
@@ -489,6 +500,7 @@ impl IngressQueue {
     }
 
     /// Returns an estimate of the size of an ingress message in bytes.
+    #[inline(always)]
     fn ingress_size_bytes(msg: &Ingress) -> usize {
         size_of::<Arc<Ingress>>() + msg.count_bytes()
     }

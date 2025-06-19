@@ -450,6 +450,7 @@ impl SubnetMetrics {
             .or_insert_with(|| NominalCycles::from(0)) += cycles;
     }
 
+    #[inline(always)]
     pub fn get_consumed_cycles_by_use_case(&self) -> &BTreeMap<CyclesUseCase, NominalCycles> {
         &self.consumed_cycles_by_use_case
     }
@@ -803,11 +804,13 @@ impl SystemMetadata {
         }
     }
 
+    #[inline(always)]
     pub fn time(&self) -> Time {
         self.batch_time
     }
 
     /// Returns a reference to the streams.
+    #[inline(always)]
     pub fn streams(&self) -> &StreamMap {
         &self.streams
     }
@@ -1407,21 +1410,25 @@ impl Stream {
     }
 
     /// Returns a reference to the message queue.
+    #[inline(always)]
     pub fn messages(&self) -> &StreamIndexedQueue<RequestOrResponse> {
         &self.messages
     }
 
     /// Returns the stream's begin index.
+    #[inline(always)]
     pub fn messages_begin(&self) -> StreamIndex {
         self.messages.begin()
     }
 
     /// Returns the stream's end index.
+    #[inline(always)]
     pub fn messages_end(&self) -> StreamIndex {
         self.messages.end()
     }
 
     /// Returns the number of guaranteed responses in the stream for each responding canister.
+    #[inline(always)]
     pub fn guaranteed_response_counts(&self) -> &BTreeMap<CanisterId, usize> {
         &self.guaranteed_response_counts
     }
@@ -1530,17 +1537,20 @@ impl Stream {
     }
 
     /// Returns a reference to the reject signals.
+    #[inline(always)]
     pub fn reject_signals(&self) -> &VecDeque<RejectSignal> {
         &self.reject_signals
     }
 
     /// Returns the index just beyond the last sent signal.
+    #[inline(always)]
     pub fn signals_end(&self) -> StreamIndex {
         self.signals_end
     }
 
     /// Pushes an accept signal. Since these are not explicitly encoded, this
     /// just increments `signals_end`.
+    #[inline(always)]
     pub fn push_accept_signal(&mut self) {
         self.signals_end.inc_assign()
     }
@@ -1574,17 +1584,20 @@ impl Stream {
     }
 
     /// Returns a reference to the reverse stream flags.
+    #[inline(always)]
     pub fn reverse_stream_flags(&self) -> &StreamFlags {
         &self.reverse_stream_flags
     }
 
     /// Sets the reverse stream flags.
+    #[inline(always)]
     pub fn set_reverse_stream_flags(&mut self, flags: StreamFlags) {
         self.reverse_stream_flags = flags;
     }
 }
 
 impl CountBytes for Stream {
+    #[inline(always)]
     fn count_bytes(&self) -> usize {
         // Count one byte per reject signal, same as the payload builder.
         size_of::<Stream>() + self.messages_size_bytes + self.reject_signals.len()
@@ -1592,6 +1605,7 @@ impl CountBytes for Stream {
 }
 
 impl From<Stream> for StreamSlice {
+    #[inline(always)]
     fn from(val: Stream) -> Self {
         StreamSlice::new(val.header(), val.messages)
     }
@@ -1689,6 +1703,7 @@ impl TryFrom<pb_ingress::IngressHistoryState> for IngressHistoryState {
 }
 
 impl IngressHistoryState {
+    #[inline(always)]
     pub fn new() -> Self {
         Self::default()
     }
@@ -1752,6 +1767,7 @@ impl IngressHistoryState {
 
     /// Returns an iterator over pruning times statuses, sorted
     /// lexicographically by time.
+    #[inline(always)]
     pub fn pruning_times(&self) -> impl Iterator<Item = (&Time, &BTreeSet<MessageId>)> {
         self.pruning_times.iter()
     }
@@ -1762,11 +1778,13 @@ impl IngressHistoryState {
     }
 
     /// Returns the number of statuses kept in the ingress history.
+    #[inline(always)]
     pub fn len(&self) -> usize {
         self.statuses.len()
     }
 
     /// Returns true if the ingress history is empty.
+    #[inline(always)]
     pub fn is_empty(&self) -> bool {
         self.statuses.is_empty()
     }
@@ -1858,6 +1876,7 @@ impl IngressHistoryState {
     /// Returns the memory usage of the statuses in the ingress history. See the
     /// documentation of `IngressStatus` for how the byte size of an individual
     /// `IngressStatus` is computed.
+    #[inline(always)]
     pub fn memory_usage(&self) -> NumBytes {
         NumBytes::new(self.memory_usage as u64)
     }
@@ -1915,6 +1934,7 @@ const BLOCKMAKER_METRICS_TIME_SERIES_NUM_SNAPSHOTS: usize = 60;
 
 /// Converts `Time` to days since Unix epoch. This simply divides the timestamp by
 /// 24 hours.
+#[inline(always)]
 pub(crate) fn days_since_unix_epoch(time: Time) -> u64 {
     time.as_nanos_since_unix_epoch() / (24 * 3600 * 1_000_000_000)
 }
@@ -2057,6 +2077,7 @@ impl BlockmakerMetricsTimeSeries {
     }
 
     /// Returns a reference to the running stats (if any).
+    #[inline(always)]
     pub fn running_stats(&self) -> Option<(&Time, &BlockmakerStatsMap)> {
         self.0.last_key_value()
     }
@@ -2212,23 +2233,28 @@ pub struct UnflushedCheckpointOps {
 }
 
 impl UnflushedCheckpointOps {
+    #[inline(always)]
     pub fn take(&mut self) -> Vec<UnflushedCheckpointOp> {
         std::mem::take(&mut self.operations)
     }
 
+    #[inline(always)]
     pub fn is_empty(&self) -> bool {
         self.operations.is_empty()
     }
 
+    #[inline(always)]
     pub fn len(&self) -> usize {
         self.operations.len()
     }
 
+    #[inline(always)]
     pub fn delete_snapshot(&mut self, snapshot_id: SnapshotId) {
         self.operations
             .push(UnflushedCheckpointOp::DeleteSnapshot(snapshot_id));
     }
 
+    #[inline(always)]
     pub fn take_snapshot(&mut self, canister_id: CanisterId, snapshot_id: SnapshotId) {
         self.operations.push(UnflushedCheckpointOp::TakeSnapshot(
             canister_id,
@@ -2236,6 +2262,7 @@ impl UnflushedCheckpointOps {
         ));
     }
 
+    #[inline(always)]
     pub fn load_snapshot(&mut self, canister_id: CanisterId, snapshot_id: SnapshotId) {
         self.operations.push(UnflushedCheckpointOp::LoadSnapshot(
             canister_id,
@@ -2243,16 +2270,19 @@ impl UnflushedCheckpointOps {
         ));
     }
 
+    #[inline(always)]
     pub fn create_snapshot_from_metadata(&mut self, snapshot_id: SnapshotId) {
         self.operations
             .push(UnflushedCheckpointOp::UploadSnapshotMetadata(snapshot_id));
     }
 
+    #[inline(always)]
     pub fn upload_data(&mut self, snapshot_id: SnapshotId) {
         self.operations
             .push(UnflushedCheckpointOp::UploadSnapshotData(snapshot_id));
     }
 
+    #[inline(always)]
     pub fn rename_canister(&mut self, old_canister_id: CanisterId, new_canister_id: CanisterId) {
         self.operations.push(UnflushedCheckpointOp::RenameCanister(
             old_canister_id,

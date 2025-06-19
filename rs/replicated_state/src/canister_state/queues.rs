@@ -272,12 +272,14 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
     }
 
     /// Checks if the iterator has finished.
+    #[inline(always)]
     pub fn is_empty(&self) -> bool {
         debug_assert_eq!(self.queues.is_empty(), self.size == 0);
         self.queues.is_empty()
     }
 
     /// Returns the number of (potentially stale) messages left in the iterator.
+    #[inline(always)]
     pub fn size(&self) -> usize {
         debug_assert_eq!(self.queues.is_empty(), self.size == 0);
         self.size
@@ -295,6 +297,7 @@ impl Iterator for CanisterOutputQueuesIterator<'_> {
     type Item = RequestOrResponse;
 
     /// Alias for `pop`.
+    #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {
         self.pop()
     }
@@ -304,6 +307,7 @@ impl Iterator for CanisterOutputQueuesIterator<'_> {
     /// Since any message reference may or may not be stale (due to expiration /
     /// load shedding), there may be anywhere between 0 and `size` messages left in
     /// the iterator.
+    #[inline(always)]
     fn size_hint(&self) -> (usize, Option<usize>) {
         (0, Some(self.size))
     }
@@ -380,6 +384,7 @@ struct MessageStoreImpl {
 
 impl MessageStoreImpl {
     /// Inserts an inbound message into the pool.
+    #[inline(always)]
     fn insert_inbound(&mut self, msg: RequestOrResponse) -> InboundReference {
         self.pool.insert_inbound(msg)
     }
@@ -406,6 +411,7 @@ impl MessageStoreImpl {
     }
 
     /// Advances the queue to the next non-stale reference.
+    #[inline(always)]
     fn queue_advance<T: Clone>(&mut self, queue: &mut CanisterQueue<T>)
     where
         MessageStoreImpl: MessageStore<T>,
@@ -415,6 +421,7 @@ impl MessageStoreImpl {
 
     /// Returns `true` if `ingress_queue` or at least one of the canister input
     /// queues is not empty; `false` otherwise.
+    #[inline(always)]
     pub fn has_input(&self) -> bool {
         self.pool.message_stats().inbound_message_count > 0
             || !self.expired_callbacks.is_empty()
@@ -422,12 +429,14 @@ impl MessageStoreImpl {
     }
 
     /// Returns `true` if at least one output queue is not empty; false otherwise.
+    #[inline(always)]
     pub fn has_output(&self) -> bool {
         self.pool.message_stats().outbound_message_count > 0
     }
 
     /// Tests whether the message store contains neither pooled messages nor compact
     /// responses.
+    #[inline(always)]
     fn is_empty(&self) -> bool {
         self.pool.len() == 0 && self.expired_callbacks.is_empty() && self.shed_responses.is_empty()
     }
@@ -528,18 +537,21 @@ impl MessageStore<CanisterInput> for MessageStoreImpl {
 impl MessageStore<RequestOrResponse> for MessageStoreImpl {
     type TRef<'a> = &'a RequestOrResponse;
 
+    #[inline(always)]
     fn get(&self, reference: OutboundReference) -> &RequestOrResponse {
         self.pool
             .get(reference)
             .expect("stale reference at the front of output queue")
     }
 
+    #[inline(always)]
     fn take(&mut self, reference: OutboundReference) -> RequestOrResponse {
         self.pool
             .take(reference)
             .expect("stale reference at the front of output queue")
     }
 
+    #[inline(always)]
     fn is_stale(&self, reference: OutboundReference) -> bool {
         self.pool.get(reference).is_none()
     }
@@ -635,16 +647,19 @@ impl InboundMessageStore for MessageStoreImpl {
 
 impl CanisterQueues {
     /// Pushes an ingress message into the induction pool.
+    #[inline(always)]
     pub fn push_ingress(&mut self, msg: Ingress) {
         self.ingress_queue.push(msg)
     }
 
     /// Pops the next ingress message from `ingress_queue`.
+    #[inline(always)]
     fn pop_ingress(&mut self) -> Option<Arc<Ingress>> {
         self.ingress_queue.pop()
     }
 
     /// Peeks the next ingress message from `ingress_queue`.
+    #[inline(always)]
     fn peek_ingress(&self) -> Option<Arc<Ingress>> {
         self.ingress_queue.peek()
     }
@@ -694,11 +709,13 @@ impl CanisterQueues {
     /// Returns an iterator that loops over output queues, popping one message
     /// at a time from each in a round robin fashion. The iterator consumes all
     /// popped messages.
+    #[inline(always)]
     pub(crate) fn output_into_iter(&mut self) -> CanisterOutputQueuesIterator {
         CanisterOutputQueuesIterator::new(&mut self.canister_queues, &mut self.store)
     }
 
     /// See `IngressQueue::filter_messages()` for documentation.
+    #[inline(always)]
     pub fn filter_ingress_messages<F>(&mut self, filter: F) -> Vec<Arc<Ingress>>
     where
         F: FnMut(&Arc<Ingress>) -> bool,
@@ -1004,11 +1021,13 @@ impl CanisterQueues {
 
     /// Returns `true` if `ingress_queue` or at least one of the canister input
     /// queues is not empty; `false` otherwise.
+    #[inline(always)]
     pub fn has_input(&self) -> bool {
         !self.ingress_queue.is_empty() || self.store.has_input()
     }
 
     /// Returns `true` if at least one output queue is not empty; false otherwise.
+    #[inline(always)]
     pub fn has_output(&self) -> bool {
         self.store.has_output()
     }
@@ -1245,21 +1264,25 @@ impl CanisterQueues {
     }
 
     /// Returns a reference to the pool's message stats.
+    #[inline(always)]
     fn message_stats(&self) -> &message_pool::MessageStats {
         self.store.pool.message_stats()
     }
 
     /// Returns the number of enqueued ingress messages.
+    #[inline(always)]
     pub fn ingress_queue_message_count(&self) -> usize {
         self.ingress_queue.size()
     }
 
     /// Returns the total byte size of enqueued ingress messages.
+    #[inline(always)]
     pub fn ingress_queue_size_bytes(&self) -> usize {
         self.ingress_queue.count_bytes()
     }
 
     /// Returns the number of non-stale canister messages enqueued in input queues.
+    #[inline(always)]
     pub fn input_queues_message_count(&self) -> usize {
         self.message_stats().inbound_message_count
             + self.store.expired_callbacks.len()
@@ -1270,6 +1293,7 @@ impl CanisterQueues {
     ///
     /// Note that this is different from memory reservations for guaranteed
     /// responses.
+    #[inline(always)]
     pub fn input_queues_reserved_slots(&self) -> usize {
         self.queue_stats.input_queues_reserved_slots
     }
@@ -1279,17 +1303,20 @@ impl CanisterQueues {
     /// Does not account for callback references for expired callbacks or dropped
     /// responses, as these are constant size per callback and thus can be included
     /// in the cost of a callback.
+    #[inline(always)]
     pub fn input_queues_size_bytes(&self) -> usize {
         self.message_stats().inbound_size_bytes
             + self.canister_queues.len() * size_of::<InputQueue>()
     }
 
     /// Returns the number of non-stale requests enqueued in input queues.
+    #[inline(always)]
     pub fn input_queues_request_count(&self) -> usize {
         self.message_stats().inbound_message_count - self.message_stats().inbound_response_count
     }
 
     /// Returns the number of non-stale responses enqueued in input queues.
+    #[inline(always)]
     pub fn input_queues_response_count(&self) -> usize {
         self.message_stats().inbound_response_count
             + self.store.expired_callbacks.len()
@@ -1297,6 +1324,7 @@ impl CanisterQueues {
     }
 
     /// Returns the number of actual (non-stale) messages in output queues.
+    #[inline(always)]
     pub fn output_queues_message_count(&self) -> usize {
         self.message_stats().outbound_message_count
     }
@@ -1305,6 +1333,7 @@ impl CanisterQueues {
     ///
     /// Note that this is different from memory reservations for guaranteed
     /// responses.
+    #[inline(always)]
     pub fn output_queues_reserved_slots(&self) -> usize {
         self.queue_stats.output_queues_reserved_slots
     }
@@ -1315,11 +1344,13 @@ impl CanisterQueues {
     /// Does not account for callback references for expired callbacks or dropped
     /// responses, as these are constant size per callback and thus can be included
     /// in the cost of a callback.
+    #[inline(always)]
     pub fn best_effort_message_memory_usage(&self) -> usize {
         self.message_stats().best_effort_message_bytes
     }
 
     /// Returns the memory usage of all guaranteed response messages.
+    #[inline(always)]
     pub fn guaranteed_response_memory_usage(&self) -> usize {
         self.queue_stats.guaranteed_response_memory_usage()
             + self.message_stats().guaranteed_response_memory_usage()
@@ -1327,6 +1358,7 @@ impl CanisterQueues {
 
     /// Returns the total byte size of guaranteed responses across input and
     /// output queues.
+    #[inline(always)]
     pub fn guaranteed_responses_size_bytes(&self) -> usize {
         self.message_stats().guaranteed_responses_size_bytes
     }
@@ -1336,12 +1368,14 @@ impl CanisterQueues {
     ///
     /// Note that this is different from slots reserved for responses (whether
     /// best effort or guaranteed) which are used to implement backpressure.
+    #[inline(always)]
     pub fn guaranteed_response_memory_reservations(&self) -> usize {
         self.queue_stats.guaranteed_response_memory_reservations
     }
 
     /// Returns the sum total of bytes above `MAX_RESPONSE_COUNT_BYTES` per
     /// oversized guaranteed response call request.
+    #[inline(always)]
     pub fn oversized_guaranteed_requests_extra_bytes(&self) -> usize {
         self.message_stats()
             .oversized_guaranteed_requests_extra_bytes
@@ -1397,6 +1431,7 @@ impl CanisterQueues {
     /// Queries whether the deadline of any message in the pool has expired.
     ///
     /// Time complexity: `O(1)`.
+    #[inline(always)]
     pub fn has_expired_deadlines(&self, current_time: Time) -> bool {
         self.store.pool.has_expired_deadlines(current_time)
     }
@@ -1482,6 +1517,7 @@ impl CanisterQueues {
     ///
     /// Returns the amount of cycles attached to the dropped message, iff a reject
     /// response refunding the cycles was not enqueued; i.e. cycles lost.
+    #[inline(always)]
     fn on_message_dropped(
         &mut self,
         reference: SomeReference,
@@ -1741,6 +1777,7 @@ fn get_or_insert_queues<'a>(
 }
 
 /// Generates a timeout reject response from a request, refunding its payment.
+#[inline(always)]
 fn generate_timeout_response(request: &Request) -> Response {
     Response {
         originator: request.sender,
@@ -1760,6 +1797,7 @@ fn generate_timeout_response(request: &Request) -> Response {
 /// of a given sender, based on the set of all local canisters, plus
 /// `own_canister_id` (since Rust's ownership rules would prevent us from
 /// mutating a canister's queues if they were still under `local_canisters`).
+#[inline(always)]
 fn input_queue_type_fn<'a>(
     own_canister_id: &'a CanisterId,
     local_canisters: &'a BTreeMap<CanisterId, CanisterState>,
@@ -1956,12 +1994,14 @@ struct QueueStats {
 
 impl QueueStats {
     /// Returns the memory usage of reservations for guaranteed responses.
+    #[inline(always)]
     pub fn guaranteed_response_memory_usage(&self) -> usize {
         self.guaranteed_response_memory_reservations * MAX_RESPONSE_COUNT_BYTES
     }
 
     /// Updates the stats to reflect the enqueueing of the given message in the given
     /// context.
+    #[inline(always)]
     fn on_push(&mut self, msg: &RequestOrResponse, context: Context) {
         match msg {
             RequestOrResponse::Request(request) => self.on_push_request(request, context),
@@ -2010,6 +2050,7 @@ impl QueueStats {
 
     /// Updates the stats to reflect the enqueueing of a "deadline expired"
     /// reference into an input queue.
+    #[inline(always)]
     fn on_push_timeout_response(&mut self) {
         // Pushing a response into an input queue, consume an input queue slot.
         debug_assert!(self.input_queues_reserved_slots > 0);
@@ -2018,6 +2059,7 @@ impl QueueStats {
 
     /// Updates the stats to reflect the dropping of the given request from an input
     /// queue.
+    #[inline(always)]
     fn on_drop_input_request(&mut self, request: &Request) {
         // We should never be expiring or shedding a guaranteed response input request.
         debug_assert_ne!(NO_DEADLINE, request.deadline);

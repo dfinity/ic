@@ -46,6 +46,7 @@ pub struct CallbackIdTag;
 pub type CallbackId = Id<CallbackIdTag, u64>;
 
 impl CountBytes for CallbackId {
+    #[inline(always)]
     fn count_bytes(&self) -> usize {
         size_of::<CallbackId>()
     }
@@ -66,12 +67,14 @@ pub struct RequestMetadata {
 }
 
 impl Default for RequestMetadata {
+    #[inline(always)]
     fn default() -> Self {
         Self::new(0, UNIX_EPOCH)
     }
 }
 
 impl RequestMetadata {
+    #[inline(always)]
     pub fn new(call_tree_depth: u64, call_tree_start_time: Time) -> Self {
         Self {
             call_tree_depth,
@@ -80,20 +83,24 @@ impl RequestMetadata {
     }
 
     /// Creates `RequestMetadata` for a new call tree, i.e. with a given start time and depth 0.
+    #[inline(always)]
     pub fn for_new_call_tree(time: Time) -> Self {
         Self::new(0, time)
     }
 
     /// Creates `RequestMetadata` for a downstream call from another metadata, i.e. with depth
     /// increased by 1 and the same `call_tree_start_time`.
+    #[inline(always)]
     pub fn for_downstream_call(&self) -> Self {
         Self::new(self.call_tree_depth + 1, self.call_tree_start_time)
     }
 
+    #[inline(always)]
     pub fn call_tree_depth(&self) -> &u64 {
         &self.call_tree_depth
     }
 
+    #[inline(always)]
     pub fn call_tree_start_time(&self) -> &Time {
         &self.call_tree_start_time
     }
@@ -118,22 +125,26 @@ pub struct Request {
 
 impl Request {
     /// Returns the sender of this `Request`.
+    #[inline(always)]
     pub fn sender(&self) -> CanisterId {
         self.sender
     }
 
     /// Takes the payment out of this `Request`.
+    #[inline(always)]
     pub fn take_cycles(&mut self) -> Cycles {
         self.payment.take()
     }
 
     /// Returns this `Request`s payload.
+    #[inline(always)]
     pub fn method_payload(&self) -> &[u8] {
         &self.method_payload
     }
 
     /// Returns the size of the user-controlled part of this `Request`,
     /// in bytes.
+    #[inline(always)]
     pub fn payload_size_bytes(&self) -> NumBytes {
         let bytes = self.method_name.len() + self.method_payload.len();
         NumBytes::from(bytes as u64)
@@ -141,6 +152,7 @@ impl Request {
 
     /// Returns `true` if this is the request of a best-effort call
     /// (i.e. if it has a non-zero deadline).
+    #[inline(always)]
     pub fn is_best_effort(&self) -> bool {
         self.deadline != NO_DEADLINE
     }
@@ -348,10 +360,12 @@ impl RejectContext {
         }
     }
 
+    #[inline(always)]
     pub fn code(&self) -> RejectCode {
         self.code
     }
 
+    #[inline(always)]
     pub fn message(&self) -> &String {
         &self.message
     }
@@ -369,6 +383,7 @@ impl RejectContext {
     }
 
     /// Returns the size of this `RejectContext` in bytes.
+    #[inline(always)]
     fn size_bytes(&self) -> NumBytes {
         let size = std::mem::size_of::<RejectCode>() + self.message.len();
         NumBytes::from(size as u64)
@@ -493,12 +508,14 @@ pub struct Response {
 
 impl Response {
     /// Returns the size in bytes of this `Response`'s payload.
+    #[inline(always)]
     pub fn payload_size_bytes(&self) -> NumBytes {
         self.response_payload.size_bytes()
     }
 
     /// Returns `true` if this is the response of a best-effort call
     /// (i.e. if it has a non-zero deadline).
+    #[inline(always)]
     pub fn is_best_effort(&self) -> bool {
         self.deadline != NO_DEADLINE
     }
@@ -602,6 +619,7 @@ impl RequestOrResponse {
 
     /// Returns `true` if this is the request or response of a best-effort call
     /// (i.e. if it has a non-zero deadline).
+    #[inline(always)]
     pub fn is_best_effort(&self) -> bool {
         self.deadline() != NO_DEADLINE
     }
@@ -611,6 +629,7 @@ impl RequestOrResponse {
 /// `RequestOrResponse::Request(self).count_bytes()`, so we don't need to wrap
 /// `self` into a `RequestOrResponse` only to calculate its estimated byte size.
 impl CountBytes for Request {
+    #[inline(always)]
     fn count_bytes(&self) -> usize {
         size_of::<RequestOrResponse>()
             + size_of::<Request>()
@@ -622,6 +641,7 @@ impl CountBytes for Request {
 /// `RequestOrResponse::Response(self).count_bytes()`, so we don't need to wrap
 /// `self` into a `RequestOrResponse` only to calculate its estimated byte size.
 impl CountBytes for Response {
+    #[inline(always)]
     fn count_bytes(&self) -> usize {
         size_of::<RequestOrResponse>()
             + size_of::<Response>()
@@ -639,12 +659,14 @@ impl CountBytes for RequestOrResponse {
 }
 
 impl From<Request> for RequestOrResponse {
+    #[inline(always)]
     fn from(req: Request) -> Self {
         RequestOrResponse::Request(Arc::new(req))
     }
 }
 
 impl From<Response> for RequestOrResponse {
+    #[inline(always)]
     fn from(resp: Response) -> Self {
         RequestOrResponse::Response(Arc::new(resp))
     }
