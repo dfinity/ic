@@ -434,7 +434,6 @@ impl EnvironmentVariables {
         }
     }
 
-    #[allow(dead_code)]
     pub fn hash(&self) -> Vec<u8> {
         // Create a vector to store the hashes of key-value pairs
         let mut hashes: Vec<Vec<u8>> = Vec::new();
