@@ -67,8 +67,8 @@ pub(crate) fn rename_file(original_file: &Path) {
 /// All possible exits from the deserialization loop of the artifacts. All
 /// exits except for `Done` require for the upper layers to catch up.
 pub(crate) enum ExitPoint {
-    /// CUPHeightWasFinalized(h) indicates that we processed all artifacts
-    /// (except CUPs) up to  height h, which is the first height that finalizes
+    /// This indicates that we processed all artifacts
+    /// (except CUPs) up to height h, which is the first height that finalizes
     /// the last seen CUP. This means we are now ready to insert the CUP at
     /// height h.
     CUPHeightWasFinalized(Height),
@@ -77,10 +77,10 @@ pub(crate) enum ExitPoint {
     /// block with a validation context referencing a newer version than
     /// locally known.
     NewerRegistryVersion(RegistryVersion),
+    /// Registry version is not available locally.
     RegistryVersionUnavailable(RegistryVersion),
-    /// Can't proceed because artifact validation failed after the given height.
-    ValidationIncomplete(Height),
-    ///
+    /// Some of the artifacts are missing and we might not be able to succesfully replay the
+    /// blocks until the next checkpoint height.
     ArtifactsMissing,
 }
 

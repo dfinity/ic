@@ -996,6 +996,26 @@ impl Player {
                 &mut dkg_manager,
                 &mut invalid_artifacts,
             ) {
+                Ok(backup::ExitPoint::ArtifactsMissing) => {
+                    info!(
+                        self.log,
+                        "Some of the artifacts are missing. \
+                        We need to wait until the backup syncs more data from the replicas. \
+                        Last restored height {}",
+                        self.state_manager.latest_state_height()
+                    );
+
+                    return Ok(self.get_latest_state_params(None, invalid_artifacts));
+                }
+                Ok(backup::ExitPoint::RegistryVersionUnavailable(registry_version)) => {
+                    info!(self.log, "The registry version {registry_version} is not available locally. \
+                        We need to wait until the NNS subnet is replayed and the local registry store populated. \
+                        Last restored height {}",
+                        self.state_manager.latest_state_height()
+                    );
+
+                    return Ok(self.get_latest_state_params(None, invalid_artifacts));
+                }
                 Ok(result) => result,
                 Err(err) => {
                     error!(
@@ -1003,7 +1023,11 @@ impl Player {
                         "Failed to deserialize some of the consensus artifacts: {err:?}"
                     );
 
-                    todo!();
+                    return Err(ReplayError::ValidationIncomplete(
+                        // TODO: fix this
+                        Height::new(0),
+                        invalid_artifacts,
+                    ));
                 }
             };
 
@@ -1066,23 +1090,9 @@ impl Player {
                     );
                     println!("Updated the registry.");
                 }
-                backup::ExitPoint::ValidationIncomplete(last_validated_height) => {
-                    println!(
-                        "Validation of artifacts at height {:?} is not complete",
-                        last_validated_height
-                    );
-                    return Err(ReplayError::ValidationIncomplete(
-                        last_validated_height,
-                        invalid_artifacts,
-                    ));
-                }
                 backup::ExitPoint::RegistryVersionUnavailable(_)
                 | backup::ExitPoint::ArtifactsMissing => {
-                    println!(
-                        "Restored the state at the height {:?}",
-                        self.state_manager.latest_state_height()
-                    );
-                    return Ok(self.get_latest_state_params(None, invalid_artifacts));
+                    unreachable!();
                 }
             }
         }
