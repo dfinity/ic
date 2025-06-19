@@ -76,7 +76,6 @@ if [[ $bazel_command == "build" ]] || [[ $bazel_command == "test" ]]; then
         # This helps analysis tools like https://github.com/EngFlow/bazel_invocation_analyzer
         # break down bottlenecks.
         --experimental_profile_include_target_label
-        --noslim_profile
     )
 
     if [ -n "${BUILDBUDDY_LINKS:-}" ]; then
