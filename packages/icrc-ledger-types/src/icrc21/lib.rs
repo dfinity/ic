@@ -135,9 +135,11 @@ impl ConsentMessageBuilder {
     pub fn build(self) -> Result<ConsentMessage, Icrc21Error> {
         let mut message = match self.display_type {
             Some(DisplayMessageType::GenericDisplay) | None => {
-                ConsentMessage::GenericDisplayMessage("".to_string())
+                ConsentMessage::GenericDisplayMessage(Default::default())
             }
-            Some(DisplayMessageType::FieldsDisplay) => todo!(),
+            Some(DisplayMessageType::FieldsDisplay) => {
+                ConsentMessage::FieldsDisplayMessage(Default::default())
+            }
         };
         match self.function {
             Icrc21Function::Transfer => {

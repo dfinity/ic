@@ -5,7 +5,7 @@ use candid::{CandidType, Deserialize};
 use serde::Serialize;
 use serde_bytes::ByteBuf;
 
-#[derive(Debug, CandidType, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, CandidType, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct FieldsDisplay {
     pub intent: String,
     pub fields: Vec<(String, String)>,
