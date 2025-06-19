@@ -614,18 +614,35 @@ impl Player {
     // Blocks until the state at the given height is committed.
     fn wait_for_state(&self, height: Height) {
         info!(self.log, "Waiting for the state at height {height}.");
-        loop {
-            // We first check if `height` was executed. Otherwise the state manager
-            // would return a permanent error on a too big height.
-            if self.state_manager.latest_state_height() >= height {
-                if let Some(hash) = self.get_state_hash(height) {
-                    info!(self.log, "Latest checkpoint at height: {}", height);
-                    info!(self.log, "Latest state hash: {}", hex::encode(hash.get().0));
-                };
-                break;
-            }
+        while self.state_manager.latest_state_height() < height {
+            info!(
+                self.log,
+                "State at height {height} hasn't been yet executed. \
+                Retrying in {WAIT_DURATION:?}."
+            );
+
             std::thread::sleep(WAIT_DURATION);
         }
+
+        if let Some(consensus_pool) = self.consensus_pool.as_ref() {
+            let latest_summary_block_height = consensus_pool.get_cache().summary_block().height;
+            info!(
+                self.log,
+                "Waiting until the checkpoint at the latest summary height \
+                @{latest_summary_block_height} has been created and verified, \
+                and the manifest computed."
+            );
+
+            if let Some(hash) = self.get_state_hash(latest_summary_block_height) {
+                info!(
+                    self.log,
+                    "Latest checkpoint height: {latest_summary_block_height}, \
+                    state hash: {}.",
+                    hex::encode(hash.get().0)
+                );
+            };
+        }
+
         info!(
             self.log,
             "Latest state height is {}",
@@ -723,12 +740,14 @@ impl Player {
                 }
             }
         };
-        println!(
-            "latest_batch_height = {}, batches = {}",
-            last_batch_height,
-            last_batch_height - expected_batch_height.decrement()
+
+        info!(
+            self.log,
+            "Delivered {} batches up to the height {}.",
+            last_batch_height - expected_batch_height.decrement(),
+            last_batch_height
         );
-        println!("Delivered batches up to the height {}", last_batch_height);
+
         last_batch_height
     }
 
