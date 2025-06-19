@@ -56,11 +56,7 @@ impl SetFollowing {
     ///        requires being a controller or hot key. However, in the special
     ///        case of the NeuronManagement topic, only the controller is
     ///        allowed.
-    pub fn validate(
-        &self,
-        caller: &PrincipalId,
-        neuron: &Neuron,
-    ) -> Result<(), GovernanceError> {
+    pub fn validate(&self, caller: &PrincipalId, neuron: &Neuron) -> Result<(), GovernanceError> {
         self.validate_intrinsically()?;
         self.validate_authorized(caller, neuron)?;
 
@@ -82,16 +78,15 @@ impl SetFollowing {
             let topic = followees_for_topic.topic.unwrap_or_default();
 
             // Validate topic.
-            let topic = Topic::try_from(topic)
-                .map_err(|err| {
-                    GovernanceError::new_with_message(
-                        ErrorType::InvalidCommand,
-                        format!(
-                            "The operation specified an invalid topic code ({:?}): {}",
-                            topic, err,
-                        ),
-                    )
-                })?;
+            let topic = Topic::try_from(topic).map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::InvalidCommand,
+                    format!(
+                        "The operation specified an invalid topic code ({:?}): {}",
+                        topic, err,
+                    ),
+                )
+            })?;
 
             let is_new = topics.insert(topic);
 
@@ -135,11 +130,9 @@ impl SetFollowing {
         neuron: &Neuron,
     ) -> Result<(), GovernanceError> {
         let ok = {
-            let any_manage_neuron = self.topic_following
-                .iter()
-                .any(|followees_for_topic| {
-                    followees_for_topic.topic == Some(Topic::NeuronManagement as i32)
-                });
+            let any_manage_neuron = self.topic_following.iter().any(|followees_for_topic| {
+                followees_for_topic.topic == Some(Topic::NeuronManagement as i32)
+            });
 
             if any_manage_neuron {
                 neuron.is_controlled_by(caller)
