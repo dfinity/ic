@@ -1,5 +1,5 @@
 {
-  "checksum": "3841f6966cf5c5fcaeeb0a85cb7e9b7bd9fee5b078e19ac41171f6288de10214",
+  "checksum": "272ae7da0046954788cbd16b5ad1115d02ed1ca7ee5968378fa1f50e52541877",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -20762,7 +20762,7 @@
               "target": "lmdb_sys"
             },
             {
-              "id": "local-ip-address 0.5.6",
+              "id": "local-ip-address 0.6.5",
               "target": "local_ip_address"
             },
             {
@@ -21330,6 +21330,10 @@
             {
               "id": "tower-request-id 0.3.0",
               "target": "tower_request_id"
+            },
+            {
+              "id": "tower-service 0.3.3",
+              "target": "tower_service"
             },
             {
               "id": "tower-test 0.4.0",
@@ -43542,14 +43546,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "local-ip-address 0.5.6": {
+    "local-ip-address 0.6.5": {
       "name": "local-ip-address",
-      "version": "0.5.6",
-      "package_url": "https://github.com/EstebanBorai/local-ip-address",
+      "version": "0.6.5",
+      "package_url": "https://github.com/LeoBorai/local-ip-address",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/local-ip-address/0.5.6/download",
-          "sha256": "66357e687a569abca487dc399a9c9ac19beb3f13991ed49f00c144e02cbd42ab"
+          "url": "https://static.crates.io/crates/local-ip-address/0.6.5/download",
+          "sha256": "656b3b27f8893f7bbf9485148ff9a65f019e3f33bd5cdc87c83cab16b3fd9ec8"
         }
       },
       "targets": [
@@ -43574,7 +43578,7 @@
         "deps": {
           "common": [
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 2.0.12",
               "target": "thiserror"
             }
           ],
@@ -43593,14 +43597,14 @@
             ],
             "cfg(windows)": [
               {
-                "id": "windows-sys 0.48.0",
+                "id": "windows-sys 0.59.0",
                 "target": "windows_sys"
               }
             ]
           }
         },
         "edition": "2021",
-        "version": "0.5.6"
+        "version": "0.6.5"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -92696,7 +92700,7 @@
     "little-loadshedder 0.2.0",
     "lmdb-rkv 0.14.99",
     "lmdb-rkv-sys 0.11.99",
-    "local-ip-address 0.5.6",
+    "local-ip-address 0.6.5",
     "lru 0.7.8",
     "macaddr 1.0.1",
     "maplit 1.0.2",
@@ -92845,6 +92849,7 @@
     "tower 0.5.2",
     "tower-http 0.6.4",
     "tower-request-id 0.3.0",
+    "tower-service 0.3.3",
     "tower-test 0.4.0",
     "tower_governor 0.7.0",
     "tracing 0.1.41",

@@ -813,7 +813,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 default_features = False,
             ),
             "local-ip-address": crate.spec(
-                version = "^0.5.6",
+                version = "^0.6.5",
             ),
             "lru": crate.spec(
                 version = "^0.7.8",
@@ -1419,6 +1419,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "tower-request-id": crate.spec(
                 version = "^0.3.0",
+            ),
+            "tower-service": crate.spec(
+                version = "^0.3.3",
             ),
             "tower-test": crate.spec(
                 version = "^0.4.0",

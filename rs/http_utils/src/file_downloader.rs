@@ -1,3 +1,4 @@
+use crate::prefix_match_resolver::LongestPrefixMatchResolver;
 use flate2::read::GzDecoder;
 use http::Method;
 use ic_crypto_sha2::Sha256;
@@ -11,6 +12,7 @@ use std::io;
 use std::io::prelude::*;
 use std::io::{BufReader, SeekFrom};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::Duration;
 use tar::Archive;
 use zstd::stream::read::Decoder as ZstdDecoder;
@@ -38,7 +40,10 @@ impl FileDownloader {
     /// `overall_timeout` will be set to `chunk_timeout * OVERALL_TIMEOUT_MULTIPLIER`
     pub fn new_with_timeout(logger: Option<ReplicaLogger>, chunk_timeout: Duration) -> Self {
         Self {
-            client: Client::new(),
+            client: Client::builder()
+                .dns_resolver(Arc::new(LongestPrefixMatchResolver::new()))
+                .build()
+                .expect("Failed to create HTTP client"),
             logger,
             chunk_timeout,
             overall_timeout: chunk_timeout.mul_f32(OVERALL_TIMEOUT_MULTIPLIER),

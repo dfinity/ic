@@ -631,7 +631,7 @@ leb128 = "0.2.5"
 libc = "0.2.158"
 libflate = "2.1.0"
 libnss = "0.5.0"
-local-ip-address = "0.5.6"
+local-ip-address = "0.6.5"
 macaddr = "1.0"
 memmap2 = "0.9.5"
 minicbor = { version = "0.19.1", features = ["alloc", "derive"] }
@@ -761,6 +761,7 @@ tower-http = { version = "0.6.4", features = [
     "compression-full",
     "tracing",
 ] }
+tower-service = "0.3.3"
 tracing = "0.1.41"
 tracing-appender = "0.2.3"
 tracing-opentelemetry = "0.28.0"

@@ -3707,6 +3707,7 @@ dependencies = [
  "tower 0.5.2",
  "tower-http 0.6.4",
  "tower-request-id",
+ "tower-service",
  "tower-test",
  "tower_governor",
  "tracing",
@@ -7504,14 +7505,14 @@ dependencies = [
 
 [[package]]
 name = "local-ip-address"
-version = "0.5.6"
+version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "66357e687a569abca487dc399a9c9ac19beb3f13991ed49f00c144e02cbd42ab"
+checksum = "656b3b27f8893f7bbf9485148ff9a65f019e3f33bd5cdc87c83cab16b3fd9ec8"
 dependencies = [
  "libc",
  "neli",
- "thiserror 1.0.68",
- "windows-sys 0.48.0",
+ "thiserror 2.0.12",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]

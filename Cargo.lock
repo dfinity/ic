@@ -9411,15 +9411,18 @@ dependencies = [
  "flate2",
  "hex",
  "http 1.3.1",
+ "hyper-util",
  "ic-crypto-sha2",
  "ic-logger",
  "ic-test-utilities-in-memory-logger",
+ "local-ip-address",
  "mockito",
  "reqwest 0.12.15",
  "slog",
  "tar",
  "tempfile",
  "tokio",
+ "tower-service",
  "zstd",
 ]
 
@@ -16483,14 +16486,14 @@ dependencies = [
 
 [[package]]
 name = "local-ip-address"
-version = "0.5.7"
+version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "612ed4ea9ce5acfb5d26339302528a5e1e59dfed95e9e11af3c083236ff1d15d"
+checksum = "656b3b27f8893f7bbf9485148ff9a65f019e3f33bd5cdc87c83cab16b3fd9ec8"
 dependencies = [
  "libc",
  "neli",
- "thiserror 1.0.69",
- "windows-sys 0.48.0",
+ "thiserror 2.0.12",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
