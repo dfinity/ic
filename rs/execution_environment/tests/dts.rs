@@ -4,11 +4,12 @@ use assert_matches::assert_matches;
 use candid::Encode;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_config::{
-    embedders::{Config as EmbeddersConfig, MeteringType},
+    embedders::Config as EmbeddersConfig,
     execution_environment::Config as HypervisorConfig,
     flag_status::FlagStatus,
     subnet_config::{SchedulerConfig, SubnetConfig},
 };
+use ic_cycles_account_manager::IngressInductionCost;
 use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInfoRequest, CanisterInstallMode, CanisterInstallModeV2,
     CanisterSettingsArgsBuilder, CanisterSnapshotDataKind, CanisterSnapshotDataOffset,
@@ -30,34 +31,6 @@ use more_asserts::assert_ge;
 use strum::IntoEnumIterator;
 
 const INITIAL_CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
-
-const DTS_INSTALL_WAT: &str = r#"
-        (module
-            (import "ic0" "msg_reply" (func $msg_reply))
-            (import "ic0" "msg_reply_data_append"
-                (func $msg_reply_data_append (param i32 i32))
-            )
-            (func (export "canister_query read")
-                (call $msg_reply_data_append
-                    (i32.const 0) ;; the counter from heap[0]
-                    (i32.const 10)) ;; length
-                (call $msg_reply)
-            )
-            (func $start
-                (drop (memory.grow (i32.const 1)))
-                (memory.fill (i32.const 0) (i32.const 34) (i32.const 1000))
-                (memory.fill (i32.const 0) (i32.const 45) (i32.const 1000))
-            )
-            (func (export "canister_init")
-                (drop (memory.grow (i32.const 1)))
-                (memory.fill (i32.const 0) (i32.const 34) (i32.const 1000))
-                (memory.fill (i32.const 0) (i32.const 45) (i32.const 1000))
-                (memory.fill (i32.const 0) (i32.const 45) (i32.const 1000))
-                (memory.fill (i32.const 0) (i32.const 45) (i32.const 1000))
-            )
-            (start $start)
-            (memory 0 20)
-        )"#;
 
 const DTS_WAT: &str = r#"
         (module
@@ -178,38 +151,34 @@ fn dts_env(
 fn dts_install_code_env(
     message_instruction_limit: NumInstructions,
     slice_instruction_limit: NumInstructions,
-) -> (StateMachine, DtsEnvConfig) {
+) -> StateMachine {
     let subnet_config = SubnetConfig::new(SubnetType::Application);
-    let config = DtsEnvConfig::new(
-        SubnetConfig {
-            scheduler_config: SchedulerConfig {
-                max_instructions_per_install_code: message_instruction_limit,
-                max_instructions_per_install_code_slice: slice_instruction_limit,
-                max_instructions_per_round: message_instruction_limit + message_instruction_limit,
-                max_instructions_per_message: message_instruction_limit,
-                max_instructions_per_message_without_dts: slice_instruction_limit,
-                max_instructions_per_slice: message_instruction_limit,
-                instruction_overhead_per_execution: NumInstructions::from(0),
-                instruction_overhead_per_canister: NumInstructions::from(0),
-                ..subnet_config.scheduler_config
-            },
-            ..subnet_config
+    let subnet_config = SubnetConfig {
+        scheduler_config: SchedulerConfig {
+            max_instructions_per_install_code: message_instruction_limit,
+            max_instructions_per_install_code_slice: slice_instruction_limit,
+            max_instructions_per_round: message_instruction_limit + message_instruction_limit,
+            max_instructions_per_message: message_instruction_limit,
+            max_instructions_per_message_without_dts: slice_instruction_limit,
+            max_instructions_per_slice: message_instruction_limit,
+            instruction_overhead_per_execution: NumInstructions::from(0),
+            instruction_overhead_per_canister: NumInstructions::from(0),
+            install_code_rate_limit: message_instruction_limit,
+            ..subnet_config.scheduler_config
         },
-        HypervisorConfig {
-            deterministic_time_slicing: FlagStatus::Enabled,
-            ..Default::default()
-        },
-    );
-    (
-        ic_state_machine_tests::StateMachineBuilder::new()
-            .with_config(Some(StateMachineConfig::new(
-                config.subnet_config.clone(),
-                config.hypervisor_config.clone(),
-            )))
-            .with_subnet_type(SubnetType::Application)
-            .build(),
-        config,
-    )
+        ..subnet_config
+    };
+    let hypervisor_config = HypervisorConfig {
+        deterministic_time_slicing: FlagStatus::Enabled,
+        ..Default::default()
+    };
+    ic_state_machine_tests::StateMachineBuilder::new()
+        .with_config(Some(StateMachineConfig::new(
+            subnet_config,
+            hypervisor_config,
+        )))
+        .with_subnet_type(SubnetType::Application)
+        .build()
 }
 
 /// Extracts the ingress state from the ingress status.
@@ -232,43 +201,10 @@ fn ingress_time(ingress_status: IngressStatus) -> Option<SystemTime> {
     }
 }
 
-struct DtsEnvConfig {
-    subnet_config: SubnetConfig,
-    hypervisor_config: HypervisorConfig,
-}
-
-impl DtsEnvConfig {
-    pub fn new(subnet_config: SubnetConfig, hypervisor_config: HypervisorConfig) -> Self {
-        Self {
-            subnet_config,
-            hypervisor_config,
-        }
-    }
-
-    fn dirty_page_overhead_cycles(&self, num_pages: u64) -> Cycles {
-        match self.hypervisor_config.embedders_config.metering_type {
-            MeteringType::New => {
-                let dirty_page_overhead = self
-                    .subnet_config
-                    .scheduler_config
-                    .dirty_page_overhead
-                    .get();
-
-                self.subnet_config
-                    .cycles_account_manager_config
-                    .ten_update_instructions_execution_fee
-                    * (num_pages * dirty_page_overhead / 10)
-            }
-            MeteringType::None => Cycles::new(0),
-        }
-    }
-}
-
 struct DtsInstallCode {
     env: StateMachine,
     canister_id: CanisterId,
     install_code_ingress_id: MessageId,
-    config: DtsEnvConfig,
 }
 
 /// A helper that:
@@ -278,11 +214,11 @@ struct DtsInstallCode {
 ///    complete.
 fn setup_dts_install_code(
     initial_balance: Cycles,
-    freezing_threshold_in_seconds: usize,
+    freezing_threshold_in_seconds: u64,
 ) -> DtsInstallCode {
-    let (env, config) = dts_install_code_env(
-        NumInstructions::from(1_000_000),
-        NumInstructions::from(1000),
+    let env = dts_install_code_env(
+        NumInstructions::from(MAX_INSTRUCTIONS),
+        NumInstructions::from(MAX_SLICE_INSTRUCTIONS),
     );
 
     let canister_id = env.create_canister_with_cycles(
@@ -291,7 +227,7 @@ fn setup_dts_install_code(
         Some(
             CanisterSettingsArgsBuilder::new()
                 .with_compute_allocation(1)
-                .with_freezing_threshold(freezing_threshold_in_seconds as u64)
+                .with_freezing_threshold(freezing_threshold_in_seconds)
                 .build(),
         ),
     );
@@ -303,8 +239,10 @@ fn setup_dts_install_code(
         InstallCodeArgs::new(
             CanisterInstallMode::Install,
             canister_id,
-            wat::parse_str(DTS_INSTALL_WAT).unwrap(),
-            vec![],
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            wasm()
+                .instruction_counter_is_at_least(MAX_INSTRUCTIONS)
+                .build(),
         )
         .encode(),
     );
@@ -313,37 +251,126 @@ fn setup_dts_install_code(
         env,
         canister_id,
         install_code_ingress_id,
-        config,
     }
 }
 
+const MAX_INSTRUCTIONS: u64 = 10_000_000_000;
+const MAX_SLICE_INSTRUCTIONS: u64 = 100_000_000;
+
 // These numbers were obtained by running the test and printing the costs.
 // They need to be adjusted if we change fees or the Wasm source code.
-const INSTALL_CODE_INGRESS_COST: u128 = 1_920_000;
-const INSTALL_CODE_EXECUTION_COST: u128 = 5_986_224;
-const NORMAL_INGRESS_COST: u128 = 1_224_000;
-const MAX_EXECUTION_COST: u128 = 6_000_000;
-const ACTUAL_EXECUTION_COST: u128 = 5_985_224;
+const MAX_INSTALL_CODE_COST: u128 = 10_381_258_000;
+const MAX_REINSTALL_CODE_COST: u128 = 10_386_258_205;
+const INSTALL_CODE_COST: u128 = 2_335_697_384;
+const UPDATE_CALL_COST: u128 = 10_006_248_000;
+
+#[test]
+fn cycles_costs() {
+    let env = dts_install_code_env(
+        NumInstructions::from(MAX_INSTRUCTIONS),
+        NumInstructions::from(MAX_SLICE_INSTRUCTIONS),
+    );
+
+    let canister_id = env.create_canister_with_cycles(
+        None,
+        INITIAL_CYCLES_BALANCE,
+        Some(
+            CanisterSettingsArgsBuilder::new()
+                .with_compute_allocation(1)
+                .with_freezing_threshold(0)
+                .build(),
+        ),
+    );
+
+    let initial_balance = env.cycle_balance(canister_id);
+    let err = env
+        .execute_ingress_as(
+            PrincipalId::new_anonymous(),
+            IC_00,
+            Method::InstallCode,
+            InstallCodeArgs::new(
+                CanisterInstallMode::Install,
+                canister_id,
+                UNIVERSAL_CANISTER_WASM.to_vec(),
+                wasm()
+                    .instruction_counter_is_at_least(MAX_INSTRUCTIONS)
+                    .build(),
+            )
+            .encode(),
+        )
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterInstructionLimitExceeded);
+    let balance = env.cycle_balance(canister_id);
+    assert_eq!(MAX_INSTALL_CODE_COST, initial_balance - balance);
+
+    let initial_balance = env.cycle_balance(canister_id);
+    env.execute_ingress_as(
+        PrincipalId::new_anonymous(),
+        IC_00,
+        Method::InstallCode,
+        InstallCodeArgs::new(
+            CanisterInstallMode::Install,
+            canister_id,
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            wasm().build(),
+        )
+        .encode(),
+    )
+    .unwrap();
+    let balance = env.cycle_balance(canister_id);
+    assert_eq!(INSTALL_CODE_COST, initial_balance - balance);
+
+    let initial_balance = env.cycle_balance(canister_id);
+    let err = env
+        .execute_ingress_as(
+            PrincipalId::new_anonymous(),
+            IC_00,
+            Method::InstallCode,
+            InstallCodeArgs::new(
+                CanisterInstallMode::Reinstall,
+                canister_id,
+                UNIVERSAL_CANISTER_WASM.to_vec(),
+                wasm()
+                    .instruction_counter_is_at_least(MAX_INSTRUCTIONS)
+                    .build(),
+            )
+            .encode(),
+        )
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterInstructionLimitExceeded);
+    let balance = env.cycle_balance(canister_id);
+    assert_eq!(MAX_REINSTALL_CODE_COST, initial_balance - balance);
+
+    let initial_balance = env.cycle_balance(canister_id);
+    let err = env
+        .execute_ingress_as(
+            PrincipalId::new_anonymous(),
+            canister_id,
+            "update",
+            wasm()
+                .instruction_counter_is_at_least(MAX_INSTRUCTIONS)
+                .build(),
+        )
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterInstructionLimitExceeded);
+    let balance = env.cycle_balance(canister_id);
+    assert_eq!(UPDATE_CALL_COST, initial_balance - balance);
+}
 
 #[test]
 fn dts_install_code_with_concurrent_ingress_sufficient_cycles() {
-    let install_code_ingress_cost = Cycles::new(INSTALL_CODE_INGRESS_COST);
-    let install_code_execution_cost = Cycles::new(INSTALL_CODE_EXECUTION_COST);
-    let normal_ingress_cost = Cycles::new(NORMAL_INGRESS_COST);
-    let max_execution_cost = Cycles::new(MAX_EXECUTION_COST);
-    let actual_execution_cost = Cycles::new(ACTUAL_EXECUTION_COST);
+    let max_reinstall_code_cost = Cycles::new(MAX_REINSTALL_CODE_COST);
+    let install_code_cost = Cycles::new(INSTALL_CODE_COST);
+    let update_call_cost = Cycles::new(UPDATE_CALL_COST);
 
-    // The initial balance is sufficient to run `install_code` and to send an
-    // ingress message concurrently.
-    let initial_balance = install_code_ingress_cost
-        + install_code_execution_cost
-        + install_code_ingress_cost
-        + normal_ingress_cost
-        + max_execution_cost;
+    // The initial balance is sufficient to run `install_code` twice
+    // (to pay the reservation for the maximum install code cost and the actual cost for the first call)
+    // and to execute an ingress message concurrently.
+    let initial_balance = max_reinstall_code_cost + install_code_cost + update_call_cost;
 
-    let (env, config) = dts_install_code_env(
-        NumInstructions::from(1_000_000),
-        NumInstructions::from(1000),
+    let env = dts_install_code_env(
+        NumInstructions::from(MAX_INSTRUCTIONS),
+        NumInstructions::from(MAX_SLICE_INSTRUCTIONS),
     );
 
     let canister_id = env.create_canister_with_cycles(
@@ -364,8 +391,8 @@ fn dts_install_code_with_concurrent_ingress_sufficient_cycles() {
         InstallCodeArgs::new(
             CanisterInstallMode::Install,
             canister_id,
-            wat::parse_str(DTS_INSTALL_WAT).unwrap(),
-            vec![],
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            wasm().build(),
         )
         .encode(),
     )
@@ -382,8 +409,10 @@ fn dts_install_code_with_concurrent_ingress_sufficient_cycles() {
         InstallCodeArgs::new(
             CanisterInstallMode::Reinstall,
             canister_id,
-            wat::parse_str(DTS_INSTALL_WAT).unwrap(),
-            vec![],
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            wasm()
+                .instruction_counter_is_at_least(MAX_INSTRUCTIONS)
+                .build(),
         )
         .encode(),
     );
@@ -392,99 +421,66 @@ fn dts_install_code_with_concurrent_ingress_sufficient_cycles() {
     env.tick();
 
     // Send a normal ingress message while the execution is paused.
-    env.send_ingress(PrincipalId::new_anonymous(), canister_id, "read", vec![]);
-
-    let result = env.await_ingress(install_code_ingress_id, 100).unwrap();
-
-    assert_eq!(result, WasmResult::Reply(EmptyBlob.encode()));
-    assert_eq!(
-        env.cycle_balance(canister_id),
-        (initial_balance
-            - install_code_ingress_cost
-            - install_code_execution_cost
-            - install_code_ingress_cost
-            - normal_ingress_cost
-            - actual_execution_cost
-            - config.dirty_page_overhead_cycles(1))
-        .get()
+    let update_call_id = env.send_ingress(
+        PrincipalId::new_anonymous(),
+        canister_id,
+        "update",
+        wasm()
+            .instruction_counter_is_at_least(MAX_INSTRUCTIONS)
+            .build(),
     );
+
+    let err = env.await_ingress(install_code_ingress_id, 100).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterInstructionLimitExceeded);
+
+    let err = env.await_ingress(update_call_id, 100).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterInstructionLimitExceeded);
+
+    assert_eq!(env.cycle_balance(canister_id), 0,);
 }
 
 #[test]
 fn dts_install_code_with_concurrent_ingress_insufficient_cycles() {
-    let install_code_ingress_cost = Cycles::new(INSTALL_CODE_INGRESS_COST);
-    let normal_ingress_cost = Cycles::new(NORMAL_INGRESS_COST);
-    let max_execution_cost = Cycles::new(MAX_EXECUTION_COST);
-    let actual_execution_cost = Cycles::new(ACTUAL_EXECUTION_COST);
-
-    // The initial balance is not sufficient for both execution and concurrent ingress message.
-    let initial_balance = install_code_ingress_cost + normal_ingress_cost.max(max_execution_cost);
-
-    let DtsInstallCode {
-        env,
-        canister_id,
-        install_code_ingress_id,
-        config,
-    } = setup_dts_install_code(initial_balance, 0);
-
-    // Start execution of `install_code`.
-    env.tick();
-
-    // Send a normal ingress message while the execution is paused.
-    let err = env
-        .send_ingress_safe(PrincipalId::new_anonymous(), canister_id, "read", vec![])
-        .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::CanisterOutOfCycles);
-    assert_eq!(
-        err.description(),
-        format!(
-            "Canister {} is out of cycles: \
-             please top up the canister with at least {} additional cycles",
-            canister_id,
-            normal_ingress_cost
-                - (initial_balance - install_code_ingress_cost - max_execution_cost),
-        )
-    );
-
-    let result = env.await_ingress(install_code_ingress_id, 100).unwrap();
-
-    assert_eq!(result, WasmResult::Reply(EmptyBlob.encode()));
-    assert_eq!(
-        env.cycle_balance(canister_id),
-        (initial_balance
-            - install_code_ingress_cost
-            - actual_execution_cost
-            - config.dirty_page_overhead_cycles(1))
-        .get()
-    );
+    dts_install_code_with_concurrent_ingress_insufficient_cycles_and_freezing_threshold(0);
 }
 
 #[test]
-fn dts_install_code_with_concurrent_ingress_and_freezing_threshold_insufficient_cycles() {
-    let install_code_ingress_cost = Cycles::new(INSTALL_CODE_INGRESS_COST);
-    let normal_ingress_cost = Cycles::new(NORMAL_INGRESS_COST);
-    let max_execution_cost = Cycles::new(MAX_EXECUTION_COST);
-    let actual_execution_cost = Cycles::new(ACTUAL_EXECUTION_COST);
-    let freezing_threshold = Cycles::new(10000000);
+fn dts_install_code_with_concurrent_ingress_insufficient_cycles_and_nonzero_freezing_threshold() {
+    dts_install_code_with_concurrent_ingress_insufficient_cycles_and_freezing_threshold(1);
+}
 
-    // The initial balance is not sufficient for both execution and concurrent ingress message.
-    let initial_balance = freezing_threshold
-        + install_code_ingress_cost
-        + normal_ingress_cost.max(max_execution_cost);
+fn dts_install_code_with_concurrent_ingress_insufficient_cycles_and_freezing_threshold(
+    freezing_threshold: u64,
+) {
+    let max_install_code_cost = Cycles::new(MAX_INSTALL_CODE_COST);
+
+    let compute_allocation_cycles = Cycles::new((10_000_000 * freezing_threshold).into());
+
+    // The initial balance is sufficient to only run `install_code` and pay for compute allocation within the freezing threshold.
+    let initial_balance = max_install_code_cost + compute_allocation_cycles;
 
     let DtsInstallCode {
         env,
         canister_id,
         install_code_ingress_id,
-        config,
-    } = setup_dts_install_code(initial_balance, 1);
+    } = setup_dts_install_code(initial_balance, freezing_threshold);
 
     // Start execution of `install_code`.
     env.tick();
 
     // Send a normal ingress message while the execution is paused.
+    let sender = PrincipalId::new_anonymous();
+    let method = "update";
+    let payload = wasm()
+        .instruction_counter_is_at_least(MAX_INSTRUCTIONS)
+        .build();
+    let ingress_induction_cost =
+        match env.ingress_message_cost(sender, canister_id, method, payload.clone()) {
+            IngressInductionCost::Fee { payer: _, cost } => cost,
+            cost => panic!("Unexpected ingress induction cost: {:?}", cost),
+        };
     let err = env
-        .send_ingress_safe(PrincipalId::new_anonymous(), canister_id, "read", vec![])
+        .send_ingress_safe(sender, canister_id, method, payload)
         .unwrap_err();
     assert_eq!(err.code(), ErrorCode::CanisterOutOfCycles);
     assert_eq!(
@@ -492,22 +488,15 @@ fn dts_install_code_with_concurrent_ingress_and_freezing_threshold_insufficient_
         format!(
             "Canister {} is out of cycles: \
              please top up the canister with at least {} additional cycles",
-            canister_id,
-            (freezing_threshold + normal_ingress_cost)
-                - (initial_balance - install_code_ingress_cost - max_execution_cost),
+            canister_id, ingress_induction_cost,
         )
     );
 
-    let result = env.await_ingress(install_code_ingress_id, 100).unwrap();
-    assert_eq!(result, WasmResult::Reply(EmptyBlob.encode()));
-    assert_eq!(
-        env.cycle_balance(canister_id),
-        (initial_balance
-            - install_code_ingress_cost
-            - actual_execution_cost
-            - config.dirty_page_overhead_cycles(1))
-        .get()
-    );
+    let err = env.await_ingress(install_code_ingress_id, 100).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterInstructionLimitExceeded);
+
+    let unused_cycles = compute_allocation_cycles;
+    assert_eq!(env.cycle_balance(canister_id), unused_cycles.get());
 }
 
 #[test]
@@ -597,7 +586,7 @@ fn dts_pending_upgrade_with_heartbeat() {
 ///   for the canister on which the code install is running.
 #[test]
 fn dts_scheduling_of_install_code() {
-    let (env, _) = dts_install_code_env(
+    let env = dts_install_code_env(
         NumInstructions::from(5_000_000_000),
         NumInstructions::from(10_000),
     );
@@ -747,7 +736,7 @@ fn dts_scheduling_of_install_code() {
 /// long-running install code messages.
 #[test]
 fn dts_pending_install_code_does_not_block_subnet_messages_of_other_canisters() {
-    let (env, _) = dts_install_code_env(
+    let env = dts_install_code_env(
         NumInstructions::from(5_000_000_000),
         NumInstructions::from(10_000),
     );
