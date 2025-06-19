@@ -4615,11 +4615,13 @@ fn modify_field(
     field_name: String,
     new_value: String,
 ) -> FieldsDisplay {
-    let mut result: FieldsDisplay = Default::default();
-    result.intent = fields_message.intent.clone();
+    let mut result = FieldsDisplay {
+        intent: fields_message.intent.clone(),
+        ..Default::default()
+    };
     for (f_name, f_value) in &fields_message.fields {
         if *f_name == field_name {
-            if new_value == "".to_string() {
+            if new_value == *"" {
                 continue;
             }
             result.fields.push((f_name.to_string(), new_value.clone()));
