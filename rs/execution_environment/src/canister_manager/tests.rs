@@ -281,6 +281,7 @@ impl CanisterManagerBuilder {
             cycles_account_manager,
             ingress_history_writer,
             Arc::new(TestPageAllocatorFileDescriptorImpl),
+            FlagStatus::Disabled,
         )
     }
 }
@@ -6657,13 +6658,18 @@ fn memory_usage_updates_increment_subnet_available_memory() {
 
 #[test]
 fn test_environment_variables_are_changed_via_create_canister() {
-    let mut test = ExecutionTestBuilder::new().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_execution_config(Config {
+            environment_variables: FlagStatus::Enabled,
+            ..Default::default()
+        })
+        .build();
 
-    // Create environment variables.
     let mut env_vars = BTreeMap::new();
     env_vars.insert("KEY1".to_string(), "VALUE1".to_string());
     env_vars.insert("KEY2".to_string(), "VALUE2".to_string());
 
+    // Create canister with environment variables.
     let canister_id = test
         .create_canister_with_settings(
             Cycles::new(1_000_000_000_000_000),
@@ -6673,14 +6679,19 @@ fn test_environment_variables_are_changed_via_create_canister() {
         )
         .unwrap();
 
-    // Verify environment variables are set
+    // Verify environment variables are set.
     let canister = test.canister_state(canister_id);
     assert_eq!(canister.system_state.environment_variables, env_vars);
 }
 
 #[test]
 fn test_environment_variables_are_updated_on_update_settings() {
-    let mut test = ExecutionTestBuilder::new().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_execution_config(Config {
+            environment_variables: FlagStatus::Enabled,
+            ..Default::default()
+        })
+        .build();
     let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
 
     let mut env_vars = BTreeMap::new();
@@ -6701,4 +6712,61 @@ fn test_environment_variables_are_updated_on_update_settings() {
     // Verify environment variables are set.
     let canister = test.canister_state(canister_id);
     assert_eq!(canister.system_state.environment_variables, env_vars);
+
+    // Environment variables are unchanged when not specified.
+    let args = UpdateSettingsArgs {
+        canister_id: canister_id.get(),
+        settings: CanisterSettingsArgsBuilder::new().build(),
+        sender_canister_version: None,
+    };
+    test.subnet_message(Method::UpdateSettings, args.encode())
+        .unwrap();
+
+    // Verify environment variables are unchanged.
+    let canister = test.canister_state(canister_id);
+    assert_eq!(canister.system_state.environment_variables, env_vars);
+}
+
+#[test]
+fn test_environment_variables_are_not_set_when_disabled() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_execution_config(Config {
+            environment_variables: FlagStatus::Disabled,
+            ..Default::default()
+        })
+        .build();
+
+    // Create environment variables.
+    let mut env_vars = BTreeMap::new();
+    env_vars.insert("KEY1".to_string(), "VALUE1".to_string());
+    env_vars.insert("KEY2".to_string(), "VALUE2".to_string());
+
+    // Create canister with environment variables.
+    let canister_id = test
+        .create_canister_with_settings(
+            Cycles::new(1_000_000_000_000_000),
+            CanisterSettingsArgsBuilder::new()
+                .with_environment_variables(env_vars.clone())
+                .build(),
+        )
+        .unwrap();
+
+    // Verify environment variables are not set.
+    let canister = test.canister_state(canister_id);
+    assert_eq!(canister.system_state.environment_variables, BTreeMap::new());
+
+    // Set environment variables via `update_settings`.
+    let args = UpdateSettingsArgs {
+        canister_id: canister_id.get(),
+        settings: CanisterSettingsArgsBuilder::new()
+            .with_environment_variables(env_vars.clone())
+            .build(),
+        sender_canister_version: None,
+    };
+    test.subnet_message(Method::UpdateSettings, args.encode())
+        .unwrap();
+
+    // Verify environment variables are not set.
+    let canister = test.canister_state(canister_id);
+    assert_eq!(canister.system_state.environment_variables, BTreeMap::new());
 }
