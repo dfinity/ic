@@ -229,7 +229,7 @@ fn test_upgrade_canisters_with_golden_nns_state() {
         });
 
     if nns_canister_upgrade_sequence == "all" {
-        nns_canister_names = all_canisters;
+        nns_canister_upgrade_sequence = all_canisters;
     }
 
     let mut nns_canister_upgrade_sequence = nns_canister_upgrade_sequence
