@@ -9,7 +9,7 @@ use ic_types::{
     MemoryAllocation, PrincipalId,
 };
 use num_traits::{cast::ToPrimitive, SaturatingSub};
-use std::convert::TryFrom;
+use std::{collections::BTreeMap, convert::TryFrom};
 
 use crate::canister_manager::types::CanisterManagerError;
 
@@ -28,6 +28,7 @@ pub(crate) struct CanisterSettings {
     pub(crate) reserved_cycles_limit: Option<Cycles>,
     pub(crate) log_visibility: Option<LogVisibilityV2>,
     pub(crate) wasm_memory_limit: Option<NumBytes>,
+    pub(crate) environment_variables: Option<EnvironmentVariables>,
 }
 
 impl CanisterSettings {
@@ -40,6 +41,7 @@ impl CanisterSettings {
         reserved_cycles_limit: Option<Cycles>,
         log_visibility: Option<LogVisibilityV2>,
         wasm_memory_limit: Option<NumBytes>,
+        environment_variables: Option<EnvironmentVariables>,
     ) -> Self {
         Self {
             controllers,
@@ -50,6 +52,7 @@ impl CanisterSettings {
             reserved_cycles_limit,
             log_visibility,
             wasm_memory_limit,
+            environment_variables,
         }
     }
 
@@ -83,6 +86,10 @@ impl CanisterSettings {
 
     pub fn wasm_memory_limit(&self) -> Option<NumBytes> {
         self.wasm_memory_limit
+    }
+
+    pub fn environment_variables(&self) -> Option<&EnvironmentVariables> {
+        self.environment_variables.as_ref()
     }
 }
 
@@ -147,6 +154,10 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
             None => None,
         };
 
+        let environment_variables = input.environment_variables.map(|env_vars| {
+            EnvironmentVariables::new(env_vars.into_iter().map(|e| (e.name, e.value)).collect())
+        });
+
         Ok(CanisterSettings::new(
             input
                 .controllers
@@ -158,6 +169,7 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
             reserved_cycles_limit,
             input.log_visibility,
             wasm_memory_limit,
+            environment_variables,
         ))
     }
 }
@@ -182,6 +194,7 @@ pub(crate) struct CanisterSettingsBuilder {
     reserved_cycles_limit: Option<Cycles>,
     log_visibility: Option<LogVisibilityV2>,
     wasm_memory_limit: Option<NumBytes>,
+    environment_variables: Option<EnvironmentVariables>,
 }
 
 #[allow(dead_code)]
@@ -196,6 +209,7 @@ impl CanisterSettingsBuilder {
             reserved_cycles_limit: None,
             log_visibility: None,
             wasm_memory_limit: None,
+            environment_variables: None,
         }
     }
 
@@ -209,6 +223,7 @@ impl CanisterSettingsBuilder {
             reserved_cycles_limit: self.reserved_cycles_limit,
             log_visibility: self.log_visibility,
             wasm_memory_limit: self.wasm_memory_limit,
+            environment_variables: self.environment_variables,
         }
     }
 
@@ -264,6 +279,13 @@ impl CanisterSettingsBuilder {
     pub fn with_wasm_memory_limit(self, wasm_memory_limit: NumBytes) -> Self {
         Self {
             wasm_memory_limit: Some(wasm_memory_limit),
+            ..self
+        }
+    }
+
+    pub fn with_environment_variables(self, environment_variables: EnvironmentVariables) -> Self {
+        Self {
+            environment_variables: Some(environment_variables),
             ..self
         }
     }
@@ -351,6 +373,7 @@ pub(crate) struct ValidatedCanisterSettings {
     reservation_cycles: Cycles,
     log_visibility: Option<LogVisibilityV2>,
     wasm_memory_limit: Option<NumBytes>,
+    environment_variables: Option<EnvironmentVariables>,
 }
 
 impl ValidatedCanisterSettings {
@@ -388,6 +411,33 @@ impl ValidatedCanisterSettings {
 
     pub fn wasm_memory_limit(&self) -> Option<NumBytes> {
         self.wasm_memory_limit
+    }
+
+    pub fn environment_variables(&self) -> Option<&EnvironmentVariables> {
+        self.environment_variables.as_ref()
+    }
+}
+
+#[derive(Clone)]
+pub struct EnvironmentVariables {
+    environment_variables: BTreeMap<String, String>,
+}
+
+impl EnvironmentVariables {
+    pub fn new(environment_variables: BTreeMap<String, String>) -> Self {
+        Self {
+            environment_variables,
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn hash(&self) -> Vec<u8> {
+        // TODO(EXC-2067): Implement the hash function
+        todo!()
+    }
+
+    pub fn get_environment_variables(&self) -> BTreeMap<String, String> {
+        self.environment_variables.clone()
     }
 }
 
@@ -581,5 +631,6 @@ pub(crate) fn validate_canister_settings(
         reservation_cycles,
         log_visibility: settings.log_visibility().cloned(),
         wasm_memory_limit: settings.wasm_memory_limit(),
+        environment_variables: settings.environment_variables().cloned(),
     })
 }

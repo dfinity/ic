@@ -418,6 +418,7 @@ impl ExecutionEnvironment {
             Arc::clone(&cycles_account_manager),
             Arc::clone(&ingress_history_writer),
             fd_factory,
+            config.environment_variables,
         );
         // Deallocate `SystemStates` and `ExecutionStates` in the background. Sleep for
         // 0.1 ms between deallocations, to spread out the load on the memory allocator
