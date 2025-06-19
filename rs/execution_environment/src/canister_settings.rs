@@ -154,12 +154,9 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
             None => None,
         };
 
-        let environment_variables = match input.environment_variables {
-            Some(env_vars) => Some(EnvironmentVariables::new(
-                env_vars.into_iter().map(|e| (e.name, e.value)).collect(),
-            )),
-            None => None,
-        };
+        let environment_variables = input.environment_variables.map(|env_vars| {
+            EnvironmentVariables::new(env_vars.into_iter().map(|e| (e.name, e.value)).collect())
+        });
 
         Ok(CanisterSettings::new(
             input
