@@ -1231,7 +1231,7 @@ fn check_environment_variables_for_create_canister_history(
             )]
         }
     };
-    
+
     // Verify canister history is updated.
     let history = get_canister_history(&env, canister_id);
     assert_eq!(history.get_total_num_changes(), 1);
@@ -1246,10 +1246,7 @@ fn check_environment_variables_for_create_canister_history(
     let canister_state = state.canister_state(&canister_id).unwrap();
     match environment_variables_flag {
         FlagStatus::Enabled => {
-            assert_eq!(
-                &canister_state.system_state.environment_variables,
-                env_vars
-            );
+            assert_eq!(&canister_state.system_state.environment_variables, env_vars);
         }
         FlagStatus::Disabled => {
             assert_eq!(
