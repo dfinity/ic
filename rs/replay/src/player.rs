@@ -623,31 +623,11 @@ impl Player {
 
             std::thread::sleep(WAIT_DURATION);
         }
+        info!(self.log, "Executed the state at height {height}.");
 
-        if let Some(consensus_pool) = self.consensus_pool.as_ref() {
-            let latest_summary_block_height = consensus_pool.get_cache().summary_block().height;
-            info!(
-                self.log,
-                "Waiting until the checkpoint at the latest summary height \
-                @{latest_summary_block_height} has been created and verified, \
-                and the manifest computed."
-            );
+        // Wait until the checkpoint is created and verified.
+        self.state_manager.flush_tip_channel();
 
-            if let Some(hash) = self.get_state_hash(latest_summary_block_height) {
-                info!(
-                    self.log,
-                    "Latest checkpoint height: {latest_summary_block_height}, \
-                    state hash: {}.",
-                    hex::encode(hash.get().0)
-                );
-            };
-        }
-
-        info!(
-            self.log,
-            "Latest state height is {}",
-            self.state_manager.latest_state_height()
-        );
         assert_eq!(
             height,
             self.state_manager.latest_state_height(),
