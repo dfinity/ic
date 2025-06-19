@@ -129,8 +129,15 @@ async fn test_treasury_manager() {
     let sns_ledger_canister_id = CanisterId::try_from_principal_id(sns.ledger.canister_id).unwrap();
     let sns_root_canister_id = CanisterId::try_from_principal_id(sns.root.canister_id).unwrap();
 
-    let sns_token = Asset::new_token("SNS", sns_ledger_canister_id).unwrap();
-    let icp_token = Asset::new_token("ICP", LEDGER_CANISTER_ID).unwrap();
+    let sns_token = Asset::Token {
+        symbol: "SNS".to_string(),
+        ledger_canister_id: sns_ledger_canister_id.get().0,
+    };
+
+    let icp_token = Asset::Token {
+        symbol: "ICP".to_string(),
+        ledger_canister_id: LEDGER_CANISTER_ID.get().0,
+    };
 
     let adaptor_canister_id = {
         let (neuron_id, sender) = sns::governance::find_neuron_with_majority_voting_power(
@@ -455,8 +462,15 @@ async fn topup_liquidity(
     expected_icp_fees_e8s: u64,
     expected_sns_fees_e8s: u64,
 ) {
-    let sns_token = Asset::new_token("SNS", sns.ledger.canister_id).unwrap();
-    let icp_token = Asset::new_token("ICP", LEDGER_CANISTER_ID).unwrap();
+    let sns_token = Asset::Token {
+        symbol: "SNS".to_string(),
+        ledger_canister_id: sns.ledger.canister_id.0,
+    };
+
+    let icp_token = Asset::Token {
+        symbol: "ICP".to_string(),
+        ledger_canister_id: LEDGER_CANISTER_ID.get().0,
+    };
 
     let (icp_account, sns_account) = validate_balances(
         "topup_liquidity-0",
@@ -508,12 +522,12 @@ async fn topup_liquidity(
         allowances: vec![
             Allowance {
                 amount_decimals: Nat::from(sns_token_allowance_e8s),
-                asset: sns_token,
+                asset: sns_token.clone(),
                 expected_ledger_fee_decimals: Nat::from(FEE),
             },
             Allowance {
                 amount_decimals: Nat::from(icp_token_allowance_e8s),
-                asset: icp_token,
+                asset: icp_token.clone(),
                 expected_ledger_fee_decimals: Nat::from(FEE),
             },
         ],

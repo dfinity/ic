@@ -2293,23 +2293,15 @@ impl Governance {
         .await?;
 
         // Step 2. Install the code.
-        let sns_token = Asset::new_token("SNS", self.ledger.canister_id().get()).unwrap();
-        let icp_token = Asset::new_token("ICP", self.nns_ledger.canister_id().get()).unwrap();
-        let arg = TreasuryManagerArg::Init(TreasuryManagerInit {
-            assets: vec![sns_token, icp_token],
-        });
-        let arg = candid::encode_one(&arg).unwrap();
-        self.upgrade_non_root_canister(
-            store_canister_id,
-            Wasm::Chunked {
-                wasm_module_hash,
-                store_canister_id,
-                chunk_hashes_list,
-            },
-            arg,
-            CanisterInstallMode::Install,
-        )
-        .await?;
+        let sns_token = Asset::Token {
+            symbol: "SNS".to_string(),
+            ledger_canister_id: self.ledger.canister_id().get().0,
+        };
+
+        let icp_token = Asset::Token {
+            symbol: "ICP".to_string(),
+            ledger_canister_id: self.nns_ledger.canister_id().get().0,
+        };
 
         // Step 2. Perform pre-installation actions.
         let (sns_token_allowance_e8s, icp_token_allowance_e8s) = if let Some(ExtensionInit {
@@ -2416,7 +2408,7 @@ impl Governance {
             (0, 0)
         };
 
-        let request = DepositRequest {
+        let arg = TreasuryManagerArg::Init(TreasuryManagerInit {
             allowances: vec![
                 Allowance {
                     amount_decimals: Nat::from(sns_token_allowance_e8s),
@@ -2429,28 +2421,19 @@ impl Governance {
                     expected_ledger_fee_decimals: Nat::from(NNS_DEFAULT_TRANSFER_FEE.get_e8s()),
                 },
             ],
-        };
-
-        let arg = candid::encode_one(&request).map_err(|err| {
-            GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                format!("Could not encode DepositRequest: {err:?}"),
-            )
-        })?;
-
-        // self.env
-        //     .call_canister(
-        //         store_canister_id,
-        //         "deposit",
-        //         arg,
-        //     )
-        //     .await
-        //     .map_err(|err| {
-        //         GovernanceError::new_with_message(
-        //             ErrorType::External,
-        //             format!("TreasuryManager.deposit call failed: {err:?}"),
-        //         )
-        //     })?;
+        });
+        let arg = candid::encode_one(&arg).unwrap();
+        self.upgrade_non_root_canister(
+            store_canister_id,
+            Wasm::Chunked {
+                wasm_module_hash,
+                store_canister_id,
+                chunk_hashes_list,
+            },
+            arg,
+            CanisterInstallMode::Install,
+        )
+        .await?;
 
         Ok(())
     }
