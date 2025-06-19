@@ -9,6 +9,10 @@ on the process that this file is part of, see
 
 ## Added
 
+* Neurons can now perform SetFollowing to configure their following on multiple
+  topics at once. Whereas, before, they would have to perform multiple Follow
+  operations, one for each topic. This brings NNS into alignment with SNS.
+
 ## Changed
 
 ## Deprecated
