@@ -986,7 +986,7 @@ impl Player {
         // We start with the specified height and restore heights until we run out of
         // heights on the backup spool or bump into a newer replica version.
         loop {
-            let result = backup::deserialize_consensus_artifacts(
+            let result = match backup::deserialize_consensus_artifacts(
                 self.registry.clone(),
                 self.crypto.clone(),
                 self.consensus_pool.as_mut().unwrap(),
@@ -995,11 +995,21 @@ impl Player {
                 self.validator.as_ref().unwrap(),
                 &mut dkg_manager,
                 &mut invalid_artifacts,
-            );
+            ) {
+                Ok(result) => result,
+                Err(err) => {
+                    error!(
+                        self.log,
+                        "Failed to deserialize some of the consensus artifacts: {err:?}"
+                    );
+
+                    todo!();
+                }
+            };
 
             // We don't want to replay heights strictly above the next CUP.
             let replay_target_height = match result {
-                Err(backup::ExitPoint::CUPHeightWasFinalized(cup_height)) => {
+                backup::ExitPoint::CUPHeightWasFinalized(cup_height) => {
                     Some(target_height.unwrap_or(cup_height).min(cup_height))
                 }
                 _ => target_height,
@@ -1022,7 +1032,7 @@ impl Player {
             match result {
                 // Since the pool cache assumes we always have at most one CUP inside the pool,
                 // we should deliver all batches before inserting a new CUP into the pool.
-                Err(backup::ExitPoint::CUPHeightWasFinalized(cup_height)) => {
+                backup::ExitPoint::CUPHeightWasFinalized(cup_height) => {
                     info!(
                         self.log,
                         "Loading the CUP at height {cup_height} from the disk, \
@@ -1044,7 +1054,7 @@ impl Player {
                 }
                 // When we run into an NNS block referencing a newer registry version, we need to dump
                 // all changes from the registry canister into the local store and apply them.
-                Err(backup::ExitPoint::NewerRegistryVersion(new_version)) => {
+                backup::ExitPoint::NewerRegistryVersion(new_version) => {
                     self.update_registry_local_store();
                     self.registry
                         .poll_once()
@@ -1056,7 +1066,7 @@ impl Player {
                     );
                     println!("Updated the registry.");
                 }
-                Err(backup::ExitPoint::ValidationIncomplete(last_validated_height)) => {
+                backup::ExitPoint::ValidationIncomplete(last_validated_height) => {
                     println!(
                         "Validation of artifacts at height {:?} is not complete",
                         last_validated_height
@@ -1066,7 +1076,8 @@ impl Player {
                         invalid_artifacts,
                     ));
                 }
-                Ok(_) => {
+                backup::ExitPoint::RegistryVersionUnavailable(_)
+                | backup::ExitPoint::ArtifactsMissing => {
                     println!(
                         "Restored the state at the height {:?}",
                         self.state_manager.latest_state_height()

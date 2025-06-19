@@ -2,6 +2,7 @@ use crate::{
     player::ReplayError,
     validator::{InvalidArtifact, ReplayValidator},
 };
+use anyhow::{anyhow, Context};
 use ic_artifact_pool::consensus_pool::ConsensusPoolImpl;
 use ic_config::artifact_pool::BACKUP_GROUP_SIZE;
 use ic_consensus_dkg::DkgKeyManager;
@@ -76,8 +77,11 @@ pub(crate) enum ExitPoint {
     /// block with a validation context referencing a newer version than
     /// locally known.
     NewerRegistryVersion(RegistryVersion),
+    RegistryVersionUnavailable(RegistryVersion),
     /// Can't proceed because artifact validation failed after the given height.
     ValidationIncomplete(Height),
+    ///
+    ArtifactsMissing,
 }
 
 /// Deserialize the CUP at the given height and inserts it into the pool.
@@ -198,35 +202,25 @@ pub(super) fn heights_to_artifacts_metadata(
     Ok(results.into_iter().collect())
 }
 
-fn read_artifact_if_correct_height<T, PBT>(
-    file: &PathBuf,
-    artifact_type: &str,
-    height: Height,
-) -> Result<T, ExitPoint>
+fn read_artifact_if_correct_height<T, PBT>(file: &PathBuf, height: Height) -> anyhow::Result<T>
 where
     T: TryFrom<PBT> + HasHeight,
     PBT: prost::Message + std::default::Default,
+    <T as TryFrom<PBT>>::Error: std::fmt::Display,
 {
     let buffer = read_file(file);
-    let Ok(fn_pb) = PBT::decode(buffer.as_slice()) else {
-        println!("Error: Protobuf decoding of {artifact_type} failed: {file:?}");
-        rename_file(file);
-        return Err(ExitPoint::ValidationIncomplete(height));
-    };
+    let fn_pb = PBT::decode(buffer.as_slice()).context("Protobof decoding failed")?;
+    let artifact = T::try_from(fn_pb).map_err(|err| anyhow!("Deserialization failed: {err}"))?;
 
-    let Ok(artifact) = T::try_from(fn_pb) else {
-        println!("Error: Deserialization of the {artifact_type}: failed: {file:?}",);
-        rename_file(file);
-        return Err(ExitPoint::ValidationIncomplete(height));
-    };
-
-    if height == artifact.height() {
-        Ok(artifact)
-    } else {
-        println!("Error: A {artifact_type} with an unexpected height detected: {file:?}");
-        rename_file(file);
-        Err(ExitPoint::ValidationIncomplete(height))
+    if height != artifact.height() {
+        return Err(anyhow!(
+            "Unexpected height detected: {} != {}",
+            height,
+            artifact.height()
+        ));
     }
+
+    Ok(artifact)
 }
 
 /// Deserializes consensus artifacts, reading them from the backup spool height
@@ -243,19 +237,16 @@ pub(crate) fn deserialize_consensus_artifacts(
     validator: &ReplayValidator,
     dkg_manager: &mut DkgKeyManager,
     invalid_artifacts: &mut Vec<InvalidArtifact>,
-) -> Result<(), ExitPoint> {
+) -> anyhow::Result<ExitPoint> {
     let time_source = validator.get_timesource();
     let mut last_cup_height: Option<Height> = None;
 
     loop {
-        let height = match height_to_batches.iter().next() {
-            Some((height, _)) => *height,
+        let Some((height, height_artifacts)) = height_to_batches.pop_first() else {
+            println!("Stopping deserialization as there are no more heights to consider",);
             // No heights in the queue, we are done.
-            None => return Ok(()),
+            return Ok(ExitPoint::ArtifactsMissing);
         };
-        let height_artifacts = height_to_batches
-            .remove(&height)
-            .expect("Couldn't read value for the next key");
 
         let path = &height_artifacts.path;
 
@@ -267,10 +258,14 @@ pub(crate) fn deserialize_consensus_artifacts(
             last_cup_height = Some(height);
             let file = &path.join("catch_up_package.bin");
             if let Some(cup) = read_cup_file(file) {
+                println!("CUP found at height {height}");
                 if cup.height() != height {
-                    println!("A CUP with an unexpected height detected: {:?}", file);
                     rename_file(file);
-                    return Ok(());
+                    return Err(anyhow!(
+                        "A CUP with an unexpected height {} detected: {}",
+                        cup.height(),
+                        file.display()
+                    ));
                 }
             }
         }
@@ -280,10 +275,9 @@ pub(crate) fn deserialize_consensus_artifacts(
 
         if height_artifacts.proposals.is_empty() {
             println!(
-                "Stopping deserialization at height {:?} as this height contains no proposals.",
-                height,
+                "Stopping deserialization at height {height} as this height contains no proposals."
             );
-            return Ok(());
+            return Ok(ExitPoint::ArtifactsMissing);
         }
 
         let pool_reader = PoolReader::new(pool);
@@ -299,11 +293,12 @@ pub(crate) fn deserialize_consensus_artifacts(
             // Save the hash of the finalized block proposal.
             finalized_block_hash = file_name.split('_').nth(1);
             let file = path.join(file_name);
-            let finalization = read_artifact_if_correct_height::<Finalization, pb::Finalization>(
-                &file,
-                "finalization",
-                height,
-            )?;
+            let finalization =
+                read_artifact_if_correct_height::<Finalization, pb::Finalization>(&file, height)
+                    .with_context(|| {
+                        format!("Failed to read the Finalization at height {height}")
+                    })?;
+
             let unique_signers: BTreeSet<_> =
                 finalization.signature.signers.clone().into_iter().collect();
             if unique_signers.len() != finalization.signature.signers.len() {
@@ -327,11 +322,11 @@ pub(crate) fn deserialize_consensus_artifacts(
         // Insert the finalized block proposal.
         if let Some(file_name) = height_artifacts.proposals.first() {
             let file = path.join(file_name);
-            let proposal = read_artifact_if_correct_height::<BlockProposal, pb::BlockProposal>(
-                &file,
-                "block proposal",
-                height,
-            )?;
+            let proposal =
+                read_artifact_if_correct_height::<BlockProposal, pb::BlockProposal>(&file, height)
+                    .with_context(|| {
+                        format!("Failed to read the Block Proposal at height {height}")
+                    })?;
             let validation_context = &proposal.content.as_ref().context;
             let block_registry_version = validation_context.registry_version;
             if block_registry_version > registry_client.get_latest_version() {
@@ -349,9 +344,11 @@ pub(crate) fn deserialize_consensus_artifacts(
                     .unwrap();
                 if subnet_id == root_subnet_id {
                     height_to_batches.insert(height, height_artifacts);
-                    return Err(ExitPoint::NewerRegistryVersion(block_registry_version));
+                    return Ok(ExitPoint::NewerRegistryVersion(block_registry_version));
                 } else {
-                    return Ok(());
+                    return Ok(ExitPoint::RegistryVersionUnavailable(
+                        block_registry_version,
+                    ));
                 }
             }
 
@@ -367,13 +364,11 @@ pub(crate) fn deserialize_consensus_artifacts(
                 "Stopping deserialization at height {:?} as this height contains no random beacon.",
                 height,
             );
-            return Ok(());
+            return Ok(ExitPoint::ArtifactsMissing);
         }
-        let rb = read_artifact_if_correct_height::<RandomBeacon, pb::RandomBeacon>(
-            &rb_path,
-            "random beacon",
-            height,
-        )?;
+        let rb =
+            read_artifact_if_correct_height::<RandomBeacon, pb::RandomBeacon>(&rb_path, height)
+                .with_context(|| format!("Failed to read the Random Beacon at height {height}"))?;
         artifacts.push(rb.into_message());
 
         let rt_path = path.join("random_tape.bin");
@@ -382,23 +377,20 @@ pub(crate) fn deserialize_consensus_artifacts(
                 "Stopping deserialization at height {:?} as this height contains no random tape.",
                 height,
             );
-            return Ok(());
+            return Ok(ExitPoint::ArtifactsMissing);
         }
-        let rt = read_artifact_if_correct_height::<RandomTape, pb::RandomTape>(
-            &rt_path,
-            "random tape",
-            height,
-        )?;
+        let rt = read_artifact_if_correct_height::<RandomTape, pb::RandomTape>(&rt_path, height)
+            .with_context(|| format!("Failed to read the Random Tape at height {height}"))?;
         artifacts.push(rt.into_message());
 
         // Insert the finalized notarization.
         if let Some(file_name) = height_artifacts.notarizations.first() {
             let file = path.join(file_name);
-            let not = read_artifact_if_correct_height::<Notarization, pb::Notarization>(
-                &file,
-                "notarization",
-                height,
-            )?;
+            let not =
+                read_artifact_if_correct_height::<Notarization, pb::Notarization>(&file, height)
+                    .with_context(|| {
+                        format!("Failed to read the Notarization at height {height}")
+                    })?;
             let message = not.into_message();
             expected.insert(message.get_cm_hash(), file);
             artifacts.push(message);
@@ -437,9 +429,11 @@ pub(crate) fn deserialize_consensus_artifacts(
                         artifact_path.exists(),
                         "Path to invalid artifact doesn't exist."
                     );
-                    println!("Invalid artifact detected: {:?}", &artifact_path);
                     rename_file(&artifact_path);
-                    return Err(ExitPoint::ValidationIncomplete(height));
+                    return Err(anyhow!(
+                        "Invalid artifact detected: {}",
+                        artifact_path.display()
+                    ));
                 }
                 None => println!("Failed to get path for invalid artifact: {:?}", i),
             }
@@ -454,7 +448,9 @@ pub(crate) fn deserialize_consensus_artifacts(
         }
 
         if let Some(height) = failure_after_height {
-            return Err(ExitPoint::ValidationIncomplete(height));
+            return Err(anyhow!(
+                "Validation of the artifacts failed at height {height}"
+            ));
         }
 
         // If we just inserted a height_artifacts, which finalizes the last seen CUP
@@ -465,7 +461,7 @@ pub(crate) fn deserialize_consensus_artifacts(
                     "Found a CUP at height {:?}, finalized at height {:?}",
                     cup_height, height
                 );
-                return Err(ExitPoint::CUPHeightWasFinalized(cup_height));
+                return Ok(ExitPoint::CUPHeightWasFinalized(cup_height));
             }
         }
     }

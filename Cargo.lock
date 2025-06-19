@@ -12286,6 +12286,7 @@ dependencies = [
 name = "ic-replay"
 version = "0.9.0"
 dependencies = [
+ "anyhow",
  "async-trait",
  "candid",
  "clap 4.5.27",

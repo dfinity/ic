@@ -37,6 +37,7 @@ DEPENDENCIES = [
     "//rs/replicated_state",
     "//rs/state_manager",
     "//rs/types/types",
+    "@crate_index//:anyhow",
     "@crate_index//:candid",
     "@crate_index//:clap",
     "@crate_index//:hex",
