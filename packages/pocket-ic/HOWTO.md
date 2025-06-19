@@ -754,10 +754,10 @@ the `PocketIcBuilder::with_nonmainnet_features` pattern should be used when crea
 
 To use a new management canister endpoint that is not yet supported by a dedicated (Rust) PocketIC library function,
 the generic PocketIC library API, e.g., `PocketIc::update_call_with_effective_principal` should be used:
-the `canister_id` argument should be the management canister principal (`aaaaa-aa`),
-the `effective_principal` argument should be the actual canister or subnet to which the call is targetted
-(e.g., `RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec())` for a `canister_id` of type `Principal`;
-in particular, `RawEffectivePrincipal::None` must not be used),
-and the `payload` argument should be the Candid-encoded binary input to the new management canister endpoint
-(the type of the `payload` argument can either be obtained from a corresponding branch of the public `ic-management-canister-types` crate
-or be defined manually).
+- the `canister_id` argument should be the management canister principal (`aaaaa-aa`),
+- the `effective_principal` argument should be the actual canister or subnet to which the call is targetted
+  (e.g., `RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec())` for a `canister_id` of type `Principal`;
+  in particular, `RawEffectivePrincipal::None` must not be used),
+- and the `payload` argument should be the Candid-encoded binary input to the new management canister endpoint
+  (the type of the `payload` argument can either be obtained from a corresponding branch of the public `ic-management-canister-types` crate
+  or be defined manually).
