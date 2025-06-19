@@ -351,6 +351,7 @@ impl HttpsOutcallsService for CanisterHttp {
             let http_req_clone = http_req.clone();
 
             match self.client.request(http_req).await {
+                Ok(resp) => Ok(resp),
                 // If we fail we try with the socks proxy. For destinations that are ipv4 only this should
                 // fail fast because our interface does not have an ipv4 assigned.
                 Err(direct_err) => {
@@ -365,7 +366,6 @@ impl HttpsOutcallsService for CanisterHttp {
                             )
                         })
                 }
-                Ok(resp) => Ok(resp),
             }
         } else { // Application subnet. 
             // TODO: as technically socks proxies are now tried all the time, instead of using
@@ -377,10 +377,11 @@ impl HttpsOutcallsService for CanisterHttp {
             *http_req.method_mut() = method;
             *http_req.uri_mut() = uri.clone();
             let http_req_clone = http_req.clone();
-            match self.client
-                .request(http_req)
-                .await {
-                Ok(http_resp) => Ok(http_resp),
+
+            match self.client.request(http_req).await {
+                Ok(resp) => Ok(resp),
+                // If we fail we try with the socks proxy. For destinations that are ipv4 only this should
+                // fail fast because our interface does not have an ipv4 assigned.
                 Err(direct_err) => {
                     self.metrics.requests_socks.inc();
                     self
