@@ -102,7 +102,7 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
             let question = format!("The checkpoint created at height {} ", h)
                 + "cannot be used for deterministic state computation if it is not a CUP height.\n"
                 + "Continue?";
-            if !consent_given(&question) {
+            if !args.skip_prompts && !consent_given(&question) {
                 return;
             }
         }
@@ -126,16 +126,7 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
 
         {
             let _enter_guard = rt.enter();
-            let player = match (subcmd.as_ref(), target_height) {
-                (Some(_), Some(_)) => {
-                    panic!(
-                    "Target height cannot be used with any sub-command in subnet-recovery mode."
-                );
-                }
-                (_, target_height) => {
-                    Player::new(cfg, subnet_id).with_replay_target_height(target_height)
-                }
-            };
+            let player = Player::new(cfg, subnet_id).with_replay_target_height(target_height);
 
             if let Some(SubCommand::GetRecoveryCup(cmd)) = subcmd {
                 cmd_get_recovery_cup(&player, cmd).unwrap();
