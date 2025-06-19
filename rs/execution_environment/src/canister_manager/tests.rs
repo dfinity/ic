@@ -6789,9 +6789,19 @@ fn can_rename_canister() {
 
     env2.stop_canister(canister_id2).unwrap();
 
+    let get_num_changes = |canister_id| {
+        env2.get_latest_state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .system_state
+            .get_canister_history()
+            .get_total_num_changes()
+    };
+
     let new_canister_id = CanisterId::from_u64(3 * CANISTER_IDS_PER_SUBNET - 1);
     let new_version = 42;
     let new_num_changes = 50;
+    let old_num_changes = get_num_changes(canister_id2);
 
     let wasm_result = rename_canister(
         &env1,
@@ -6811,7 +6821,8 @@ fn can_rename_canister() {
                                   new_canister_id,
                                   rename_at_version,
                                   current_version,
-                                  expected_num_changes| {
+                                  expected_num_changes,
+                                  expected_history_entry| {
         let new_canister_exists = env2
             .get_latest_state()
             .canister_state(&new_canister_id)
@@ -6853,25 +6864,32 @@ fn can_rename_canister() {
             .clone();
 
         assert_eq!(history_entry.canister_version(), rename_at_version);
-        assert_matches!(
-            history_entry.details(),
-            CanisterChangeDetails::CanisterRename(_)
-        );
+        assert_eq!(history_entry.details(), &expected_history_entry);
 
         env2.start_canister(new_canister_id).unwrap();
         verify_stable_memory(new_canister_id);
     };
+
+    let expected_history_entry = CanisterChangeDetails::rename_canister(
+        canister_id2.into(),
+        old_num_changes,
+        new_canister_id.into(),
+        new_version,
+        new_num_changes,
+    );
     verify_rename_happened(
         canister_id2,
         new_canister_id,
         new_version + 1,
         new_version + 1,
         new_num_changes + 1,
+        expected_history_entry,
     );
 
     // Check that we can rename it a second time.
     env2.stop_canister(new_canister_id).unwrap();
     let third_canister_id = CanisterId::from_u64(4 * CANISTER_IDS_PER_SUBNET - 1);
+    let old_num_changes = get_num_changes(new_canister_id);
     // Version and num_changes are lower than before. Version should just increment, but num_changes will go down.
     let version_before_rename = env2
         .get_latest_state()
@@ -6895,12 +6913,20 @@ fn can_rename_canister() {
     );
     assert_matches!(wasm_result, WasmResult::Reply(r) if r == EmptyBlob.encode());
 
+    let expected_history_entry = CanisterChangeDetails::rename_canister(
+        new_canister_id.into(),
+        old_num_changes,
+        third_canister_id.into(),
+        third_version,
+        third_num_changes,
+    );
     verify_rename_happened(
         new_canister_id,
         third_canister_id,
         version_before_rename + 1,
         version_before_rename + 1,
         third_num_changes + 1,
+        expected_history_entry.clone(),
     );
 
     // Check that everything is the same after a checkpoint.
@@ -6912,6 +6938,7 @@ fn can_rename_canister() {
         version_before_rename + 1,
         version_before_rename + 5,
         third_num_changes + 1,
+        expected_history_entry,
     );
 }
 

@@ -4317,7 +4317,7 @@ pub enum CanisterSnapshotDataOffset {
 ///   sender_canister_version : nat64;
 /// };)
 
-#[derive(Clone, Debug, Deserialize, CandidType, Serialize)]
+#[derive(Clone, Debug, Deserialize, CandidType, Serialize, PartialEq)]
 pub struct RenameCanisterArgs {
     pub canister_id: PrincipalId,
     pub rename_to: RenameToArgs,
@@ -4336,7 +4336,7 @@ impl RenameCanisterArgs {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, CandidType, Serialize)]
+#[derive(Clone, Debug, Deserialize, CandidType, Serialize, PartialEq)]
 pub struct RenameToArgs {
     pub canister_id: PrincipalId,
     pub version: u64,
