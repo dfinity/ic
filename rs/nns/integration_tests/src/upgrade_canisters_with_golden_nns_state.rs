@@ -215,7 +215,7 @@ fn test_upgrade_canisters_with_golden_nns_state() {
     .join(",");
 
     let mut nns_canister_upgrade_sequence = env::var("NNS_CANISTER_UPGRADE_SEQUENCE")
-        .unwrap_or_else(|| {
+        .unwrap_or_else(|_err| {
             panic!(
                 "This test requires that the NNS_CANISTER_UPGRADE_SEQUENCE environment\n\
                  variable be set to something like 'governance,registry'.\n\
