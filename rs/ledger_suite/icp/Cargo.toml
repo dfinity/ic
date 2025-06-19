@@ -35,7 +35,8 @@ strum_macros = { workspace = true }
 candid_parser = { workspace = true }
 canister-test = { path = "../../rust_canisters/canister_test" }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
-ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
+ic-http-types = { path = "../../../packages/ic-http-types" }
+ic-icp-archive = { path = "archive" }
 ic-icp-index = { path = "index" }
 ic-ledger-suite-state-machine-tests = { path = "../tests/sm-tests" }
 ic-ledger-test-utils = { path = "test_utils" }

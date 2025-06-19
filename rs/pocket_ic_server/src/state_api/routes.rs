@@ -7,10 +7,10 @@
 ///
 use super::state::{ApiState, OpOut, PocketIcError, StateLabel, UpdateReply};
 use crate::pocket_ic::{
-    AddCycles, AwaitIngressMessage, CallRequest, CallRequestVersion, CanisterReadStateRequest,
-    DashboardRequest, GetCanisterHttp, GetControllers, GetCyclesBalance, GetStableMemory,
-    GetSubnet, GetTime, GetTopology, IngressMessageStatus, MockCanisterHttp, PubKey, Query,
-    QueryRequest, SetCertifiedTime, SetStableMemory, SetTime, StatusRequest, SubmitIngressMessage,
+    AddCycles, CallRequest, CallRequestVersion, CanisterReadStateRequest, DashboardRequest,
+    GetCanisterHttp, GetControllers, GetCyclesBalance, GetStableMemory, GetSubnet, GetTime,
+    GetTopology, IngressMessageStatus, MockCanisterHttp, PubKey, Query, QueryRequest,
+    SetCertifiedTime, SetStableMemory, SetTime, StatusRequest, SubmitIngressMessage,
     SubnetReadStateRequest, Tick,
 };
 use crate::{async_trait, pocket_ic::PocketIc, BlobStore, InstanceId, OpId, Operation};
@@ -46,7 +46,7 @@ use pocket_ic::RejectResponse;
 use serde::Serialize;
 use slog::Level;
 use std::str::FromStr;
-use std::{collections::BTreeMap, fs::File, sync::Arc, time::Duration};
+use std::{collections::BTreeMap, fs::File, sync::atomic::AtomicU64, sync::Arc, time::Duration};
 use tokio::{runtime::Runtime, sync::RwLock, time::Instant};
 use tower_http::limit::RequestBodyLimitLayer;
 use tracing::trace;
@@ -61,6 +61,7 @@ const RETRY_TIMEOUT_S: u64 = 300;
 #[derive(Clone)]
 pub struct AppState {
     pub api_state: Arc<ApiState>,
+    pub pending_requests: Arc<AtomicU64>,
     pub min_alive_until: Arc<RwLock<Instant>>,
     pub runtime: Arc<Runtime>,
     pub blob_store: Arc<dyn BlobStore>,
@@ -93,10 +94,6 @@ where
         .directory_route(
             "/submit_ingress_message",
             post(handler_submit_ingress_message),
-        )
-        .directory_route(
-            "/await_ingress_message",
-            post(handler_await_ingress_message),
         )
         .directory_route("/set_time", post(handler_set_time))
         .directory_route("/set_certified_time", post(handler_set_certified_time))
@@ -199,6 +196,8 @@ where
         // i.e., periodically update the time of the IC instance
         // to the real time and execute rounds on the subnets.
         .api_route("/{id}/auto_progress", post(auto_progress))
+        // Returns whether automatic progress is enabled for an IC instance.
+        .api_route("/{id}/auto_progress", get(get_auto_progress))
         //
         // Stop automatic progress (see endpoint `auto_progress`)
         // on an IC instance.
@@ -973,28 +972,6 @@ pub async fn handler_submit_ingress_message(
     }
 }
 
-pub async fn handler_await_ingress_message(
-    State(AppState { api_state, .. }): State<AppState>,
-    Path(instance_id): Path<InstanceId>,
-    headers: HeaderMap,
-    extract::Json(raw_message_id): extract::Json<RawMessageId>,
-) -> (StatusCode, Json<ApiResponse<RawCanisterResult>>) {
-    let timeout = timeout_or_default(headers);
-    match crate::pocket_ic::MessageId::try_from(raw_message_id) {
-        Ok(message_id) => {
-            let ingress_op = AwaitIngressMessage(message_id);
-            let (code, response) = run_operation(api_state, instance_id, timeout, ingress_op).await;
-            (code, Json(response))
-        }
-        Err(e) => (
-            StatusCode::BAD_REQUEST,
-            Json(ApiResponse::Error {
-                message: format!("{:?}", e),
-            }),
-        ),
-    }
-}
-
 pub async fn handler_ingress_status(
     State(AppState { api_state, .. }): State<AppState>,
     Path(instance_id): Path<InstanceId>,
@@ -1074,9 +1051,8 @@ pub async fn handler_add_cycles(
 pub async fn handler_set_stable_memory(
     State(AppState {
         api_state,
-        min_alive_until: _,
-        runtime: _,
         blob_store,
+        ..
     }): State<AppState>,
     Path(instance_id): Path<InstanceId>,
     headers: HeaderMap,
@@ -1140,10 +1116,7 @@ fn contains_unimplemented(config: ExtendedSubnetConfigSet) -> bool {
 /// The new InstanceId will be returned.
 pub async fn create_instance(
     State(AppState {
-        api_state,
-        min_alive_until: _,
-        runtime,
-        blob_store: _,
+        api_state, runtime, ..
     }): State<AppState>,
     extract::Json(instance_config): extract::Json<InstanceConfig>,
 ) -> (StatusCode, Json<rest::CreateInstanceResponse>) {
@@ -1190,9 +1163,9 @@ pub async fn create_instance(
         None
     };
 
-    let (instance_id, topology) = api_state
+    match api_state
         .add_instance(move |seed| {
-            PocketIc::new(
+            PocketIc::try_new(
                 runtime,
                 seed,
                 subnet_configs,
@@ -1202,14 +1175,20 @@ pub async fn create_instance(
                 instance_config.bitcoind_addr,
             )
         })
-        .await;
-    (
-        StatusCode::CREATED,
-        Json(rest::CreateInstanceResponse::Created {
-            instance_id,
-            topology,
-        }),
-    )
+        .await
+    {
+        Ok((instance_id, topology)) => (
+            StatusCode::CREATED,
+            Json(rest::CreateInstanceResponse::Created {
+                instance_id,
+                topology,
+            }),
+        ),
+        Err(err) => (
+            StatusCode::BAD_REQUEST,
+            Json(rest::CreateInstanceResponse::Error { message: err }),
+        ),
+    }
 }
 
 pub async fn list_instances(
@@ -1277,6 +1256,14 @@ pub async fn auto_progress(
     } else {
         (StatusCode::OK, Json(ApiResponse::Success(())))
     }
+}
+
+pub async fn get_auto_progress(
+    State(AppState { api_state, .. }): State<AppState>,
+    Path(id): Path<InstanceId>,
+) -> (StatusCode, Json<ApiResponse<bool>>) {
+    let auto_progress = api_state.get_auto_progress(id).await;
+    (StatusCode::OK, Json(ApiResponse::Success(auto_progress)))
 }
 
 pub async fn stop_progress(

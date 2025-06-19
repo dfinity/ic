@@ -14,6 +14,7 @@ BASE_DEPENDENCIES = [
     "//rs/ledger_suite/icp/ledger",
     "//rs/ledger_suite/icrc1",
     "//rs/ledger_suite/icrc1/ledger",
+    "//rs/nervous_system/canisters",
     "//rs/nervous_system/common",
     "//rs/nervous_system/common/test_keys",
     "//rs/nns/cmc",
@@ -25,6 +26,7 @@ BASE_DEPENDENCIES = [
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
     "//rs/sns/governance:governance",
+    "//rs/sns/governance/api",
     "//rs/sns/root",
     "//rs/sns/swap",
     "//rs/state_machine_tests",
@@ -60,6 +62,7 @@ MACRO_DEPENDENCIES = [
 
 BASE_DEV_DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-http-types",
     "//rs/canister_client/sender",
     "//rs/crypto",
     "//rs/ledger_suite/icp:icp_ledger",
@@ -68,7 +71,6 @@ BASE_DEV_DEPENDENCIES = [
     "//rs/nervous_system/root",
     "//rs/nns/common",
     "//rs/protobuf",
-    "//rs/rust_canisters/http_types",
     "//rs/rust_canisters/on_wire",
     "//rs/sns/governance:build_script",
     "//rs/sns/init",
@@ -152,11 +154,14 @@ DATA_DEPS = [
     "//rs/nns/handlers/root/impl:root-canister",
     "//rs/nns/integration_tests:unstoppable-canister",
     "//rs/nns/sns-wasm:sns-wasm-canister",
+    "//rs/node_rewards/canister:node-rewards-canister",
     "//rs/registry/canister:registry-canister",
+    "//rs/registry/canister:registry-canister-test",
     "//rs/sns/governance:sns-governance-canister-test.wasm.gz",
     "//rs/sns/root:sns-root-canister",
     "//rs/sns/swap:sns-swap-canister",
     "//rs/universal_canister/impl:universal_canister.wasm.gz",
+    "@mainnet_ic-icrc1-ledger//file",
 ]
 
 ENV = {
@@ -170,7 +175,9 @@ ENV = {
     "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm)",
     "IC_NERVOUS_SYSTEM_COMMON_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/nervous_system/common/test_canister:test_canister)",
     "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method)",
+    "NODE_REWARDS_CANISTER_WASM_PATH": "$(rootpath //rs/node_rewards/canister:node-rewards-canister)",
     "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
+    "REGISTRY_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister-test)",
     "ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root/impl:root-canister)",
     "SNS_GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/sns/governance:sns-governance-canister-test.wasm.gz)",
     "SNS_GOVERNANCE_MEM_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/sns/integration_tests:sns-governance-mem-test-canister)",
@@ -180,6 +187,7 @@ ENV = {
     "SNS_WASM_CANISTER_WASM_PATH": "$(rootpath //rs/nns/sns-wasm:sns-wasm-canister)",
     "UNSTOPPABLE_CANISTER_WASM_PATH": "$(rootpath //rs/nns/integration_tests:unstoppable-canister)",
     "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
+    "MAINNET_IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath @mainnet_ic-icrc1-ledger//file)",
 }
 
 rust_ic_test_suite_with_extra_srcs(
@@ -201,7 +209,7 @@ rust_ic_test_suite_with_extra_srcs(
     data = DATA_DEPS,
     env = ENV,
     extra_srcs = [],
-    flaky = True,
+    flaky = True,  # flakiness rate of over 1% for the "proposals" and "upgrade_canister" tests over the month from 2025-02-11 till 2025-03-11.
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = ["cpu:8"],
     deps = DEPENDENCIES_WITH_TEST_FEATURES + TEST_DEV_DEPENDENCIES,

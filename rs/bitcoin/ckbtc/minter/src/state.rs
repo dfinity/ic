@@ -20,10 +20,9 @@ use crate::lifecycle::upgrade::UpgradeArgs;
 use crate::logs::P0;
 use crate::state::invariants::{CheckInvariants, CheckInvariantsImpl};
 use crate::updates::update_balance::SuspendedUtxo;
-use crate::{address::BitcoinAddress, ECDSAPublicKey, Timestamp};
+use crate::{address::BitcoinAddress, ECDSAPublicKey, GetUtxosCache, Network, Timestamp};
 use candid::{CandidType, Deserialize, Principal};
 use ic_base_types::CanisterId;
-pub use ic_btc_interface::Network;
 use ic_btc_interface::{OutPoint, Txid, Utxo};
 use ic_canister_log::log;
 use ic_utils_ensure::ensure_eq;
@@ -32,6 +31,7 @@ use serde::Serialize;
 use std::collections::btree_map::Entry;
 use std::collections::btree_set;
 use std::iter::Chain;
+use std::time::Duration;
 
 /// The maximum number of finalized BTC retrieval requests that we keep in the
 /// history.
@@ -391,6 +391,9 @@ pub struct CkBtcMinterState {
 
     /// Map from burn block index to the the reimbursed request.
     pub reimbursed_transactions: BTreeMap<u64, ReimbursedDeposit>,
+
+    /// Cache of get_utxos call results
+    pub get_utxos_cache: GetUtxosCache,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Serialize, serde::Deserialize)]
@@ -433,9 +436,10 @@ impl CkBtcMinterState {
             btc_checker_principal,
             kyt_principal: _,
             kyt_fee,
+            get_utxos_cache_expiration_seconds,
         }: InitArgs,
     ) {
-        self.btc_network = btc_network.into();
+        self.btc_network = btc_network;
         self.ecdsa_key_name = ecdsa_key_name;
         self.retrieve_btc_min_amount = retrieve_btc_min_amount;
         self.fee_based_retrieve_btc_min_amount = retrieve_btc_min_amount;
@@ -451,6 +455,10 @@ impl CkBtcMinterState {
         if let Some(min_confirmations) = min_confirmations {
             self.min_confirmations = min_confirmations;
         }
+        if let Some(expiration) = get_utxos_cache_expiration_seconds {
+            self.get_utxos_cache
+                .set_expiration(Duration::from_secs(expiration));
+        }
     }
 
     #[allow(deprecated)]
@@ -465,6 +473,7 @@ impl CkBtcMinterState {
             btc_checker_principal,
             kyt_principal: _,
             kyt_fee,
+            get_utxos_cache_expiration_seconds,
         }: UpgradeArgs,
     ) {
         if let Some(retrieve_btc_min_amount) = retrieve_btc_min_amount {
@@ -496,6 +505,10 @@ impl CkBtcMinterState {
             self.check_fee = check_fee;
         } else if let Some(kyt_fee) = kyt_fee {
             self.check_fee = kyt_fee;
+        }
+        if let Some(expiration) = get_utxos_cache_expiration_seconds {
+            self.get_utxos_cache
+                .set_expiration(Duration::from_secs(expiration));
         }
     }
 
@@ -1460,7 +1473,7 @@ impl From<InitArgs> for CkBtcMinterState {
     #[allow(deprecated)]
     fn from(args: InitArgs) -> Self {
         Self {
-            btc_network: args.btc_network.into(),
+            btc_network: args.btc_network,
             ecdsa_key_name: args.ecdsa_key_name,
             ecdsa_public_key: None,
             min_confirmations: args
@@ -1501,6 +1514,9 @@ impl From<InitArgs> for CkBtcMinterState {
             suspended_utxos: Default::default(),
             pending_reimbursements: Default::default(),
             reimbursed_transactions: Default::default(),
+            get_utxos_cache: GetUtxosCache::new(Duration::from_secs(
+                args.get_utxos_cache_expiration_seconds.unwrap_or_default(),
+            )),
         }
     }
 }

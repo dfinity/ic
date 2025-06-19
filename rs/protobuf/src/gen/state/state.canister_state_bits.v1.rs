@@ -232,8 +232,8 @@ pub struct ExecutionStateBits {
     pub last_executed_round: u64,
     #[prost(message, optional, tag = "5")]
     pub metadata: ::core::option::Option<WasmMetadata>,
-    #[prost(bytes = "vec", optional, tag = "6")]
-    pub binary_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    #[prost(bytes = "vec", tag = "6")]
+    pub binary_hash: ::prost::alloc::vec::Vec<u8>,
     #[prost(enumeration = "NextScheduledMethod", optional, tag = "7")]
     pub next_scheduled_method: ::core::option::Option<i32>,
     #[prost(bool, tag = "8")]
@@ -546,6 +546,19 @@ pub struct SnapshotId {
     pub content: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct TaskQueue {
+    /// Keeps `PausedExecution`, or `PausedInstallCode`, or `AbortedExecution`,
+    /// or `AbortedInstallCode` task if there is one.
+    #[prost(message, optional, tag = "1")]
+    pub paused_or_aborted_task: ::core::option::Option<ExecutionTask>,
+    /// Status of on_low_wasm_memory hook execution.
+    #[prost(enumeration = "OnLowWasmMemoryHookStatus", tag = "2")]
+    pub on_low_wasm_memory_hook_status: i32,
+    /// Queue of `Heartbeat` and `GlobalTimer` tasks.
+    #[prost(message, repeated, tag = "3")]
+    pub queue: ::prost::alloc::vec::Vec<ExecutionTask>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterStateBits {
     #[prost(uint64, tag = "2")]
     pub last_full_execution_round: u64,
@@ -589,10 +602,6 @@ pub struct CanisterStateBits {
     /// tracked for the purposes of rate limiting the install_code messages.
     #[prost(uint64, tag = "29")]
     pub install_code_debit: u64,
-    /// Contains tasks that need to be executed before processing any input of the
-    /// canister.
-    #[prost(message, repeated, tag = "30")]
-    pub task_queue: ::prost::alloc::vec::Vec<ExecutionTask>,
     /// Time of last charge for resource allocations.
     #[prost(message, optional, tag = "31")]
     pub time_of_last_allocation_charge_nanos: ::core::option::Option<u64>,
@@ -648,8 +657,10 @@ pub struct CanisterStateBits {
     pub long_execution_mode: i32,
     #[prost(uint64, optional, tag = "50")]
     pub wasm_memory_threshold: ::core::option::Option<u64>,
-    #[prost(enumeration = "OnLowWasmMemoryHookStatus", optional, tag = "53")]
-    pub on_low_wasm_memory_hook_status: ::core::option::Option<i32>,
+    /// Contains tasks that need to be executed before processing any input of the
+    /// canister.
+    #[prost(message, optional, tag = "54")]
+    pub tasks: ::core::option::Option<TaskQueue>,
     #[prost(oneof = "canister_state_bits::CanisterStatus", tags = "11, 12, 13")]
     pub canister_status: ::core::option::Option<canister_state_bits::CanisterStatus>,
 }

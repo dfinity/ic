@@ -1,6 +1,14 @@
-///
-/// Benchmark System API performance in `execute_update()`.
-///
+//! Benchmark System API performance in `execute_update()`.
+//!
+//! This benchmark runs nightly in CI, and the results are available in Grafana.
+//! See: `schedule-rust-bench.yml`
+//!
+//! To run the benchmark locally:
+//!
+//! ```shell
+//! bazel run //rs/execution_environment:execute_update_bench
+//! ```
+
 use criterion::{criterion_group, criterion_main, Criterion};
 use execution_environment_bench::{common, wat::*};
 use ic_error_types::ErrorCode;
@@ -869,16 +877,6 @@ pub fn execute_update_bench(c: &mut Criterion) {
             517000006,
         ),
         common::Benchmark(
-            "wasm32/ic0_mint_cycles()".into(),
-            Module::Test.from_ic0("mint_cycles", Param1(1_i64), Result::I64, Wasm64::Disabled),
-            18000006,
-        ),
-        common::Benchmark(
-            "wasm64/ic0_mint_cycles()".into(),
-            Module::Test.from_ic0("mint_cycles", Param1(1_i64), Result::I64, Wasm64::Enabled),
-            18000006,
-        ),
-        common::Benchmark(
             "wasm32/ic0_mint_cycles128()".into(),
             Module::Test.from_ic0(
                 "mint_cycles128",
@@ -1069,9 +1067,9 @@ pub fn execute_update_bench(c: &mut Criterion) {
             523000006,
         ),
         common::Benchmark(
-            "wasm32/ic0_cost_vetkd_derive_encrypted_key()".into(),
+            "wasm32/ic0_cost_vetkd_derive_key()".into(),
             Module::Test.from_ic0(
-                "cost_vetkd_derive_encrypted_key",
+                "cost_vetkd_derive_key",
                 Params4(1_i32, 2_i32, 3_i32, 3_i32),
                 Result::I32,
                 Wasm64::Disabled,
@@ -1079,9 +1077,9 @@ pub fn execute_update_bench(c: &mut Criterion) {
             523000006,
         ),
         common::Benchmark(
-            "wasm64/ic0_cost_vetkd_derive_encrypted_key()".into(),
+            "wasm64/ic0_cost_vetkd_derive_key()".into(),
             Module::Test.from_ic0(
-                "cost_vetkd_derive_encrypted_key",
+                "cost_vetkd_derive_key",
                 Params4(1_i64, 2_i64, 3_i32, 3_i64),
                 Result::I32,
                 Wasm64::Enabled,
@@ -1092,7 +1090,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
 
     common::run_benchmarks(
         c,
-        "update",
+        "execution_environment:update",
         &benchmarks,
         |id: &str,
          exec_env: &ExecutionEnvironment,
@@ -1152,5 +1150,9 @@ pub fn execute_update_bench(c: &mut Criterion) {
     );
 }
 
-criterion_group!(benchmarks, execute_update_bench);
+criterion_group! {
+    name = benchmarks;
+    config = Criterion::default().sample_size(10);
+    targets = execute_update_bench
+}
 criterion_main!(benchmarks);

@@ -18,7 +18,7 @@ use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
 use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID, GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET, ROOT_CANISTER_ID,
 };
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     manage_neuron::{configure, Command, Configure, NeuronIdOrSubaccount, RemoveHotKey},
     ManageNeuron, ManageNeuronResponse,
 };
@@ -27,8 +27,9 @@ use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     itest_helpers::{install_governance_canister, state_machine_test_on_nns_subnet},
     state_test_helpers::{
-        create_canister_id_at_position, setup_nns_root_with_correct_canister_id,
-        state_machine_builder_for_nns_tests, update_with_sender,
+        ensure_canister_id_exists_at_position_with_settings,
+        setup_nns_root_with_correct_canister_id, state_machine_builder_for_nns_tests,
+        update_with_sender,
     },
 };
 use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
@@ -52,10 +53,9 @@ fn test_upgrade_after_state_shrink() {
             .hot_keys
             .push(hot_key);
 
-        let mut canister = runtime
-            .create_canister_at_id_max_cycles_with_retries(GOVERNANCE_CANISTER_ID.get())
-            .await
-            .unwrap();
+        let _registry_canister = runtime.create_canister(None).await.unwrap();
+        let mut canister = runtime.create_canister(None).await.unwrap();
+        assert_eq!(canister.canister_id(), GOVERNANCE_CANISTER_ID);
         install_governance_canister(&mut canister, governance_proto).await;
 
         // First let's do a self-upgrade
@@ -96,7 +96,7 @@ fn test_upgrade_after_state_shrink() {
 #[test]
 fn test_root_restarts_canister_during_upgrade_canister_with_stop_canister_timeout() {
     let state_machine = state_machine_builder_for_nns_tests().build();
-    let governance_id = create_canister_id_at_position(
+    let governance_id = ensure_canister_id_exists_at_position_with_settings(
         &state_machine,
         GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET,
         Some(
@@ -128,8 +128,6 @@ fn test_root_restarts_canister_during_upgrade_canister_with_stop_canister_timeou
         canister_id: GOVERNANCE_CANISTER_ID,
         wasm_module,
         arg: vec![],
-        compute_allocation: None,
-        memory_allocation: None,
         chunked_canister_wasm: None,
     };
 

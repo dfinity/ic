@@ -51,19 +51,28 @@ SYSTEM_API_FUZZ_DEPENDENCIES = [
     # Keep sorted.
     "//rs/config",
     "//rs/embedders/fuzz:wasm_fuzzers",
-    "//rs/registry/subnet_type",
-    "//rs/state_machine_tests",
+    "//rs/test_utilities/execution_environment",
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "@crate_index//:libfuzzer-sys",
-    "@crate_index//:wat",
 ]
 
 rust_fuzz_test_binary(
-    name = "execute_with_wasm_executor_system_api_call",
+    name = "execute_with_wasm_executor_ic_wasm",
     testonly = True,
     srcs = [
-        "fuzz_targets/execute_system_api_call.rs",
+        "fuzz_targets/execute_ic_wasm.rs",
+    ],
+    allow_main = True,  # To allow the fuzzer to export it's own main fn
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = SYSTEM_API_FUZZ_DEPENDENCIES + [":fuzzer_sandbox"],
+)
+
+rust_fuzz_test_binary(
+    name = "execute_with_wasm_executor_system_api",
+    testonly = True,
+    srcs = [
+        "fuzz_targets/execute_system_api.rs",
     ],
     allow_main = True,  # To allow the fuzzer to export it's own main fn
     proc_macro_deps = MACRO_DEPENDENCIES,

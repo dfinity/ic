@@ -1,0 +1,22 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:candid",
+    "@crate_index//:serde",
+    "@crate_index//:serde_bytes",
+]
+
+rust_library(
+    name = "ic-http-types",
+    srcs = glob(["src/**"]),
+    version = "0.1.0",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "ic-http-types-tests",
+    crate = ":ic-http-types",
+)

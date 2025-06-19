@@ -68,7 +68,6 @@ rust_test_suite_with_extra_srcs(
     data = DEV_DATA,
     env = DEV_ENV,
     extra_srcs = [],
-    flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [],
     deps = [":rate_limit_canister_integration_tests"] + DEPENDENCIES + DEV_DEPENDENCIES,

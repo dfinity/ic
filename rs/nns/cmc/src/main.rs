@@ -1,20 +1,20 @@
-use candid::{candid_method, CandidType, Encode};
+use candid::{CandidType, Encode};
 use core::cmp::Ordering;
 use cycles_minting_canister::*;
-use dfn_candid::{candid_one, CandidOne};
-use dfn_core::{
-    api::{call_with_cleanup, caller},
-    over, over_async, over_init, over_may_reject, stable,
-};
-use dfn_protobuf::protobuf;
+use dfn_protobuf::ProtoBuf;
 use environment::Environment;
 use exchange_rate_canister::{
     RealExchangeRateCanisterClient, UpdateExchangeRateError, UpdateExchangeRateState,
+};
+use ic_cdk::{
+    api::call::{arg_data_raw, reply_raw, CallResult, ManualReply},
+    heartbeat, init, post_upgrade, pre_upgrade, println, query, spawn, update,
 };
 use ic_crypto_tree_hash::{
     flatmap, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree, WitnessGenerator,
     WitnessGeneratorImpl,
 };
+use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_ledger_core::{block::BlockType, tokens::CheckedSub};
 // TODO(EXC-1687): remove temporary aliases `Ic00CanisterSettingsArgs` and `Ic00CanisterSettingsArgsBuilder`.
 use ic_management_canister_types_private::{
@@ -22,10 +22,11 @@ use ic_management_canister_types_private::{
     CanisterSettingsArgsBuilder as Ic00CanisterSettingsArgsBuilder, CreateCanisterArgs, Method,
     IC_00,
 };
-use ic_nervous_system_common::NNS_DAPP_BACKEND_CANISTER_ID;
+use ic_nervous_system_common::{serve_metrics, NNS_DAPP_BACKEND_CANISTER_ID};
 use ic_nervous_system_governance::maturity_modulation::{
     MAX_MATURITY_MODULATION_PERMYRIAD, MIN_MATURITY_MODULATION_PERMYRIAD,
 };
+use ic_nervous_system_time_helpers::now_seconds;
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID, ICP_LEDGER_ARCHIVE_1_CANISTER_ID, REGISTRY_CANISTER_ID,
@@ -45,12 +46,13 @@ use std::{
     collections::{btree_map::Entry, BTreeMap, BTreeSet},
     convert::TryInto,
     thread::LocalKey,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::Duration,
 };
 
 mod environment;
 mod exchange_rate_canister;
 mod limiter;
+mod stable_utils;
 
 /// The past 30 days are used for the average ICP/XDR rate.
 const NUM_DAYS_FOR_ICP_XDR_AVERAGE: usize = 30;
@@ -118,14 +120,11 @@ pub struct CanisterEnvironment;
 
 impl Environment for CanisterEnvironment {
     fn now_timestamp_seconds(&self) -> u64 {
-        dfn_core::api::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .expect("Could not get the duration.")
-            .as_secs()
+        now_seconds()
     }
 
     fn set_certified_data(&self, data: &[u8]) {
-        dfn_core::api::set_certified_data(data)
+        ic_cdk::api::set_certified_data(data)
     }
 }
 
@@ -380,15 +379,16 @@ fn print<S: std::convert::AsRef<str>>(s: S)
 where
     yansi::Paint<S>: std::string::ToString,
 {
-    dfn_core::api::print(yansi::Paint::yellow(s).to_string());
+    #[cfg(target_arch = "wasm32")]
+    ic_cdk::api::print(yansi::Paint::yellow(s).to_string());
+
+    #[cfg(not(target_arch = "wasm32"))]
+    println!("{}", yansi::Paint::yellow(s).to_string());
 }
 
-#[export_name = "canister_init"]
-fn main() {
-    over_init(|CandidOne(args)| init(args))
-}
+fn main() {}
 
-#[candid_method(init)]
+#[init]
 fn init(maybe_args: Option<CyclesCanisterInitPayload>) {
     let args =
         maybe_args.expect("Payload is expected to initialization the cycles minting canister.");
@@ -431,22 +431,14 @@ fn init(maybe_args: Option<CyclesCanisterInitPayload>) {
     });
 }
 
-ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method! {}
-
-#[export_name = "canister_update set_authorized_subnetwork_list"]
-fn set_authorized_subnetwork_list_() {
-    over(
-        candid_one,
-        |SetAuthorizedSubnetworkListArgs { who, subnets }| {
-            set_authorized_subnetwork_list(who, subnets)
-        },
-    )
-}
+ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method_cdk! {}
 
 /// Set the list of subnets in which a principal is allowed to create
 /// canisters. If `subnets` is empty, remove the mapping for a
 /// principal. If `who` is None, set the default list of subnets.
-fn set_authorized_subnetwork_list(who: Option<PrincipalId>, subnets: Vec<SubnetId>) {
+#[update(hidden = true)]
+fn set_authorized_subnetwork_list(arg: SetAuthorizedSubnetworkListArgs) {
+    let SetAuthorizedSubnetworkListArgs { who, subnets } = arg;
     with_state_mut(|state| {
         let governance_canister_id = state.governance_canister_id;
 
@@ -489,11 +481,12 @@ fn set_authorized_subnetwork_list(who: Option<PrincipalId>, subnets: Vec<SubnetI
     });
 }
 
-#[export_name = "canister_update update_subnet_type"]
-fn update_subnet_type_() {
-    over_may_reject(candid_one, |args: UpdateSubnetTypeArgs| {
-        update_subnet_type(args).map_err(|err| err.to_string())
-    })
+#[update(hidden = true, manual_reply = true)]
+fn update_subnet_type(args: UpdateSubnetTypeArgs) {
+    match do_update_subnet_type(args) {
+        Ok(response) => ManualReply::<()>::one(response),
+        Err(err) => ManualReply::reject(err.to_string()),
+    };
 }
 
 /// Updates the set of available subnet types.
@@ -502,7 +495,7 @@ fn update_subnet_type_() {
 //   * Only the governance canister can call this method
 //   * Add: type does not already exist
 //   * Remove: type exists and no assigned subnets to this type exist
-fn update_subnet_type(args: UpdateSubnetTypeArgs) -> UpdateSubnetTypeResult {
+fn do_update_subnet_type(args: UpdateSubnetTypeArgs) -> UpdateSubnetTypeResult {
     let governance_canister_id = with_state(|state| state.governance_canister_id);
 
     if CanisterId::unchecked_from_principal(caller()) != governance_canister_id {
@@ -559,11 +552,12 @@ fn remove_subnet_type(subnet_type: String) -> UpdateSubnetTypeResult {
     })
 }
 
-#[export_name = "canister_update change_subnet_type_assignment"]
-fn change_subnet_type_assignment_() {
-    over_may_reject(candid_one, |args: ChangeSubnetTypeAssignmentArgs| {
-        change_subnet_type_assignment(args).map_err(|err| err.to_string())
-    })
+#[update(hidden = true, manual_reply = true)]
+fn change_subnet_type_assignment(args: ChangeSubnetTypeAssignmentArgs) {
+    match do_change_subnet_type_assignment(args) {
+        Ok(response) => ManualReply::<()>::one(response),
+        Err(err) => ManualReply::reject(err.to_string()),
+    };
 }
 
 /// Changes the assignment of provided subnets to subnet types.
@@ -572,7 +566,7 @@ fn change_subnet_type_assignment_() {
 ///  * Only the governance canister can call this method
 ///  * Add: type exists and all subnet ids should be currently unassigned and not part of the authorized subnets
 ///  * Remove: type exists and all subnet ids are currently assigned to this type
-fn change_subnet_type_assignment(
+fn do_change_subnet_type_assignment(
     args: ChangeSubnetTypeAssignmentArgs,
 ) -> ChangeSubnetTypeAssignmentResult {
     let governance_canister_id = with_state(|state| state.governance_canister_id);
@@ -714,7 +708,8 @@ fn remove_subnets_from_type(
     })
 }
 
-#[candid_method(query, rename = "get_subnet_types_to_subnets")]
+/// Retrieves the current mapping of subnet types to subnets.
+#[query]
 fn get_subnet_types_to_subnets() -> SubnetTypesToSubnetsResponse {
     with_state(|state: &State| {
         let data: Vec<(String, Vec<SubnetId>)> = state
@@ -728,16 +723,8 @@ fn get_subnet_types_to_subnets() -> SubnetTypesToSubnetsResponse {
     })
 }
 
-/// Retrieves the current mapping of subnet types to subnets.
-#[export_name = "canister_query get_subnet_types_to_subnets"]
-fn get_subnet_types_to_subnets_() {
-    over(candid_one, |_: ()| get_subnet_types_to_subnets())
-}
-
-#[candid_method(
-    query,
-    rename = "get_principals_authorized_to_create_canisters_to_subnets"
-)]
+/// Returns the current mapping of authorized principals to subnets.
+#[query]
 fn get_principals_authorized_to_create_canisters_to_subnets() -> AuthorizedSubnetsResponse {
     with_state(|state| {
         let data = state
@@ -749,15 +736,8 @@ fn get_principals_authorized_to_create_canisters_to_subnets() -> AuthorizedSubne
     })
 }
 
-/// Returns the current mapping of authorized principals to subnets.
-#[export_name = "canister_query get_principals_authorized_to_create_canisters_to_subnets"]
-fn get_principals_authorized_to_create_canisters_to_subnets_() {
-    over(candid_one, |_: ()| {
-        get_principals_authorized_to_create_canisters_to_subnets()
-    })
-}
-
-#[candid_method(query, rename = "get_default_subnets")]
+/// Returns the list of default subnets to which anyone can deploy canisters to.
+#[query]
 fn get_default_subnets() -> Vec<PrincipalId> {
     with_state(|state| {
         state
@@ -767,12 +747,6 @@ fn get_default_subnets() -> Vec<PrincipalId> {
             .map(|s| s.get())
             .collect()
     })
-}
-
-/// Returns the list of default subnets to which anyone can deploy canisters to.
-#[export_name = "canister_query get_default_subnets"]
-fn get_default_subnets_() {
-    over(candid_one, |_: ()| get_default_subnets())
 }
 
 /// Constructs a hash tree that can be used to certify requests for the
@@ -832,14 +806,13 @@ fn convert_conversion_rate_to_payload(
     serializer.self_describe().unwrap();
     mixed_hash_tree
         .serialize(&mut serializer)
-        .unwrap_or_else(|e| {
-            dfn_core::api::trap_with(&format!("failed to serialize a hash tree: {}", e))
-        });
+        .unwrap_or_else(|e| ic_cdk::trap(&format!("failed to serialize a hash tree: {}", e)));
 
     serializer.into_inner()
 }
 
-#[candid_method(query, rename = "get_icp_xdr_conversion_rate")]
+/// Retrieves the current `xdr_permyriad_per_icp` as a certified response.
+#[query]
 fn get_icp_xdr_conversion_rate() -> IcpXdrConversionRateCertifiedResponse {
     with_state(|state| {
         let witness_generator = convert_data_to_mixed_hash_tree(state);
@@ -857,19 +830,13 @@ fn get_icp_xdr_conversion_rate() -> IcpXdrConversionRateCertifiedResponse {
         IcpXdrConversionRateCertifiedResponse {
             data: icp_xdr_conversion_rate.clone(),
             hash_tree: payload,
-            certificate: dfn_core::api::data_certificate().unwrap_or_default(),
+            certificate: ic_cdk::api::data_certificate().unwrap_or_default(),
         }
     })
 }
 
-/// Retrieves the current `xdr_permyriad_per_icp` as a certified response.
-#[export_name = "canister_query get_icp_xdr_conversion_rate"]
-fn get_icp_xdr_conversion_rate_() {
-    over(candid_one, |_: ()| get_icp_xdr_conversion_rate())
-}
-
-#[export_name = "canister_query get_average_icp_xdr_conversion_rate"]
-fn get_average_icp_xdr_conversion_rate_() {
+#[query(hidden = true)]
+fn get_average_icp_xdr_conversion_rate(_: ()) -> IcpXdrConversionRateCertifiedResponse {
     with_state(|state| {
         let witness_generator = convert_data_to_mixed_hash_tree(state);
         let average_icp_xdr_conversion_rate = state
@@ -883,16 +850,11 @@ fn get_average_icp_xdr_conversion_rate_() {
             witness_generator,
         );
 
-        over(
-            candid_one,
-            |_: ()| -> IcpXdrConversionRateCertifiedResponse {
-                IcpXdrConversionRateCertifiedResponse {
-                    data: average_icp_xdr_conversion_rate.clone(),
-                    hash_tree: payload,
-                    certificate: dfn_core::api::data_certificate().unwrap_or_default(),
-                }
-            },
-        )
+        IcpXdrConversionRateCertifiedResponse {
+            data: average_icp_xdr_conversion_rate.clone(),
+            hash_tree: payload,
+            certificate: ic_cdk::api::data_certificate().unwrap_or_default(),
+        }
     })
 }
 
@@ -920,12 +882,10 @@ fn update_recent_icp_xdr_rates(state: &mut State, new_rate: &IcpXdrConversionRat
     {
         recent_rates[index] = new_rate.clone();
         // Update the average ICP/XDR rate and the maturity modulation.
-        if let Ok(time) = dfn_core::api::now().duration_since(UNIX_EPOCH) {
-            state.average_icp_xdr_conversion_rate =
-                compute_average_icp_xdr_rate_at_time(recent_rates, time.as_secs());
-            state.maturity_modulation_permyriad =
-                Some(compute_maturity_modulation(recent_rates, time.as_secs()));
-        }
+        let time = now_seconds();
+        state.average_icp_xdr_conversion_rate =
+            compute_average_icp_xdr_rate_at_time(recent_rates, time);
+        state.maturity_modulation_permyriad = Some(compute_maturity_modulation(recent_rates, time));
     }
 }
 
@@ -963,8 +923,10 @@ fn compute_average_icp_xdr_rate_at_time(
     }
 }
 
-#[export_name = "canister_update set_icp_xdr_conversion_rate"]
-fn set_icp_xdr_conversion_rate_() {
+#[update(hidden = true)]
+fn set_icp_xdr_conversion_rate(
+    proposed_conversion_rate: UpdateIcpXdrConversionRatePayload,
+) -> Result<(), String> {
     let caller = caller();
 
     assert_eq!(
@@ -975,29 +937,24 @@ fn set_icp_xdr_conversion_rate_() {
         "set_icp_xdr_conversion_rate"
     );
 
-    over(
-        candid_one,
-        |proposed_conversion_rate: UpdateIcpXdrConversionRatePayload| -> Result<(), String> {
-            let env = CanisterEnvironment;
-            let rate = IcpXdrConversionRate::from(&proposed_conversion_rate);
-            let rate_timestamp_seconds = rate.timestamp_seconds;
-            let result = set_icp_xdr_conversion_rate(&STATE, &env, rate);
-            if result.is_ok() && with_state(|state| state.exchange_rate_canister_id.is_some()) {
-                exchange_rate_canister::set_update_exchange_rate_state(
-                    &STATE,
-                    &proposed_conversion_rate.reason,
-                    rate_timestamp_seconds,
-                );
-            }
+    let env = CanisterEnvironment;
+    let rate = IcpXdrConversionRate::from(&proposed_conversion_rate);
+    let rate_timestamp_seconds = rate.timestamp_seconds;
+    let result = do_set_icp_xdr_conversion_rate(&STATE, &env, rate);
+    if result.is_ok() && with_state(|state| state.exchange_rate_canister_id.is_some()) {
+        exchange_rate_canister::set_update_exchange_rate_state(
+            &STATE,
+            &proposed_conversion_rate.reason,
+            rate_timestamp_seconds,
+        );
+    }
 
-            result
-        },
-    );
+    result
 }
 
 /// Validates the proposed conversion rate, sets it in state, and sets the
 /// canister's certified data
-fn set_icp_xdr_conversion_rate(
+fn do_set_icp_xdr_conversion_rate(
     safe_state: &'static LocalKey<RefCell<Option<State>>>,
     env: &impl Environment,
     proposed_conversion_rate: IcpXdrConversionRate,
@@ -1033,12 +990,8 @@ fn set_icp_xdr_conversion_rate(
     })
 }
 
-#[export_name = "canister_query neuron_maturity_modulation"]
-fn neuron_maturity_modulation_() {
-    over(candid_one, |_: ()| neuron_maturity_modulation())
-}
-
 /// The function returns the current maturity modulation in basis points.
+#[query(hidden = true)]
 fn neuron_maturity_modulation() -> Result<i32, String> {
     Ok(with_state(|state| {
         state.maturity_modulation_permyriad.unwrap_or(0)
@@ -1098,8 +1051,11 @@ fn compute_capped_maturity_modulation(
     }
 }
 
-#[export_name = "canister_update remove_subnet_from_authorized_subnet_list"]
-fn remove_subnet_from_authorized_subnet_list_() {
+#[update(hidden = true)]
+fn remove_subnet_from_authorized_subnet_list(arg: RemoveSubnetFromAuthorizedSubnetListArgs) {
+    let RemoveSubnetFromAuthorizedSubnetListArgs {
+        subnet: subnet_to_remove,
+    } = arg;
     let caller = caller();
     assert_eq!(
         caller,
@@ -1108,15 +1064,7 @@ fn remove_subnet_from_authorized_subnet_list_() {
         caller,
         "remove_subnet_from_authorized_subnet_list"
     );
-    over(
-        candid_one,
-        |RemoveSubnetFromAuthorizedSubnetListArgs { subnet }| {
-            remove_subnet_from_authorized_subnet_list(subnet)
-        },
-    )
-}
 
-fn remove_subnet_from_authorized_subnet_list(subnet_to_remove: SubnetId) {
     with_state_mut(|state| {
         state
             .authorized_subnets
@@ -1125,47 +1073,31 @@ fn remove_subnet_from_authorized_subnet_list(subnet_to_remove: SubnetId) {
     });
 }
 
-/// Wrapper around over_async_may_reject that requires the future to
-/// be Send. Prevents us from holding a lock across .awaits.
-pub fn over_async_may_reject<In, Out, F, Witness, Fut>(w: Witness, f: F)
-where
-    In: FromWire + NewType,
-    Out: IntoWire + NewType,
-    F: FnOnce(In::Inner) -> Fut + 'static,
-    Fut: core::future::Future<Output = Result<Out::Inner, String>> + Send + 'static,
-    Witness: FnOnce(Out, In::Inner) -> (Out::Inner, In),
-{
-    dfn_core::over_async_may_reject(w, f)
-}
-
 #[export_name = "canister_update transaction_notification_pb"]
-fn transaction_notification_pb_() {
-    over_async_may_reject(protobuf, transaction_notification)
+fn transaction_notification_pb() {
+    let input = arg_data_raw();
+    spawn(async move {
+        ic_cdk::setup();
+        let request = ProtoBuf::<TransactionNotification>::from_bytes(input)
+            .expect("Could not decode TransactionNotification")
+            .into_inner();
+
+        match do_transaction_notification(request).await {
+            Ok(response) => match ProtoBuf::new(response).into_bytes() {
+                Ok(buf) => reply_raw(&buf),
+                Err(e) => ic_cdk::api::call::reject(&format!("Error: {:?}", e)),
+            },
+            Err(e) => ic_cdk::api::call::reject(&format!("Error: {:?}", e)),
+        }
+    })
 }
 
-#[export_name = "canister_update transaction_notification"]
-fn transaction_notification_() {
-    over_async_may_reject(candid_one, transaction_notification)
-}
-
-#[export_name = "canister_update notify_top_up"]
-fn notify_top_up_() {
-    over_async(candid_one, notify_top_up)
-}
-
-#[export_name = "canister_update notify_create_canister"]
-fn notify_create_canister_() {
-    over_async(candid_one, notify_create_canister)
-}
-
-#[export_name = "canister_update create_canister"]
-fn create_canister_() {
-    over_async(candid_one, create_canister)
-}
-
-#[export_name = "canister_update notify_mint_cycles"]
-fn notify_mint_cycles_() {
-    over_async(candid_one, notify_mint_cycles)
+#[update(manual_reply = true, hidden = true)]
+async fn transaction_notification(tn: TransactionNotification) {
+    match do_transaction_notification(tn).await {
+        Ok(response) => ManualReply::<CyclesResponse>::one(response),
+        Err(e) => ManualReply::reject(format!("Error: {:?}", e)),
+    };
 }
 
 fn is_transient_error<T>(result: &Result<T, NotifyError>) -> bool {
@@ -1182,7 +1114,7 @@ fn is_transient_error<T>(result: &Result<T, NotifyError>) -> bool {
 /// * `block_height` -  The height of the block you would like to send a
 ///   notification about.
 /// * `canister_id` - Canister to be topped up.
-#[candid_method(update, rename = "notify_top_up")]
+#[update]
 async fn notify_top_up(
     NotifyTopUp {
         block_index,
@@ -1270,7 +1202,7 @@ async fn notify_top_up(
 /// * `block_height` -  The height of the block you would like to send a
 ///   notification about.
 /// * `to_subaccount` - Cycles ledger subaccount to which the cycles are minted to.
-#[candid_method(update, rename = "notify_mint_cycles")]
+#[update]
 async fn notify_mint_cycles(
     NotifyMintCyclesArg {
         block_index,
@@ -1378,7 +1310,7 @@ async fn notify_mint_cycles(
 ///   `controller`.
 /// * `subnet_selection` - Where to create the canister.
 /// * `subnet_type` - Deprecated. Use subnet_selection instead.
-#[candid_method(update, rename = "notify_create_canister")]
+#[update]
 #[allow(deprecated)]
 async fn notify_create_canister(
     NotifyCreateCanister {
@@ -1511,7 +1443,7 @@ fn authorize_caller_to_call_notify_create_canister_on_behalf_of_creator(
     Err(err)
 }
 
-#[candid_method(update, rename = "create_canister")]
+#[update]
 #[allow(deprecated)]
 async fn create_canister(
     CreateCanister {
@@ -1520,7 +1452,7 @@ async fn create_canister(
         subnet_type,
     }: CreateCanister,
 ) -> Result<CanisterId, CreateCanisterError> {
-    let cycles = dfn_core::api::msg_cycles_available();
+    let cycles = ic_cdk::api::call::msg_cycles_available();
 
     if cycles < CREATE_CANISTER_MIN_CYCLES {
         return Err(CreateCanisterError::Refunded {
@@ -1538,12 +1470,12 @@ async fn create_canister(
 
     match do_create_canister(caller(), cycles.into(), subnet_selection, settings).await {
         Ok(canister_id) => {
-            dfn_core::api::msg_cycles_accept(cycles);
+            ic_cdk::api::call::msg_cycles_accept(cycles);
             Ok(canister_id)
         }
         Err(create_error) => {
-            dfn_core::api::msg_cycles_accept(BAD_REQUEST_CYCLES_PENALTY as u64);
-            let refund_amount = dfn_core::api::msg_cycles_available();
+            ic_cdk::api::call::msg_cycles_accept(BAD_REQUEST_CYCLES_PENALTY as u64);
+            let refund_amount = ic_cdk::api::call::msg_cycles_available();
             Err(CreateCanisterError::Refunded {
                 refund_amount: refund_amount.into(),
                 create_error,
@@ -1559,7 +1491,7 @@ async fn query_block(block_index: BlockIndex, ledger_id: CanisterId) -> Result<B
             error_message,
         }
     }
-    let BlockRes(b) = call_with_cleanup(ledger_id, "block_pb", protobuf, block_index)
+    let BlockRes(b) = call_protobuf(ledger_id, "block_pb", block_index)
         .await
         .map_err(|e| failed_to_fetch_block(format!("Failed to fetch block: {}", e.1)))?;
 
@@ -1572,7 +1504,7 @@ async fn query_block(block_index: BlockIndex, ledger_id: CanisterId) -> Result<B
         }
         Some(Ok(block)) => block,
         Some(Err(canister_id)) => {
-            let BlockRes(b) = call_with_cleanup(canister_id, "get_block_pb", protobuf, block_index)
+            let BlockRes(b) = call_protobuf(canister_id, "get_block_pb", block_index)
                 .await
                 .map_err(|e| {
                     failed_to_fetch_block(format!(
@@ -1654,8 +1586,10 @@ async fn fetch_transaction(
         }
     };
 
-    let expected_to =
-        AccountIdentifier::new(dfn_core::api::id().get(), Some(expected_to_subaccount));
+    let expected_to = AccountIdentifier::new(
+        PrincipalId::from(ic_cdk::api::id()),
+        Some(expected_to_subaccount),
+    );
     if to != expected_to {
         return Err(NotifyError::InvalidTransaction(format!(
             "Destination account in the block ({}) different than in the notification ({})",
@@ -1821,8 +1755,10 @@ async fn issue_automatic_refund_if_memo_not_offerred(
             fee: _,
             spender: _,
         } => {
-            let incoming_to_account_identifier =
-                AccountIdentifier::new(dfn_core::api::id().get(), Some(incoming_to_subaccount));
+            let incoming_to_account_identifier = AccountIdentifier::new(
+                PrincipalId::from(ic_cdk::api::id()),
+                Some(incoming_to_subaccount),
+            );
             if to != &incoming_to_account_identifier {
                 // As long as callers always pass us Transfers where the
                 // destination matches incoming_to_subaccount, this code will
@@ -1935,7 +1871,9 @@ async fn issue_automatic_refund_if_memo_not_offerred(
 }
 
 /// Processes a legacy notification from the Ledger canister.
-async fn transaction_notification(tn: TransactionNotification) -> Result<CyclesResponse, String> {
+async fn do_transaction_notification(
+    tn: TransactionNotification,
+) -> Result<CyclesResponse, String> {
     let caller = caller();
 
     print(format!(
@@ -2238,13 +2176,12 @@ async fn burn_and_log(from_subaccount: Subaccount, amount: Tokens) {
         to: minting_account_id,
         created_at_time: None,
     };
-    let res: Result<BlockIndex, (Option<i32>, String)> =
-        call_with_cleanup(ledger_canister_id, "send_pb", protobuf, send_args).await;
+    let res: CallResult<BlockIndex> = call_protobuf(ledger_canister_id, "send_pb", send_args).await;
 
     match res {
         Ok(block) => print(format!("{} done in block {}.", msg, block)),
         Err((code, err)) => {
-            let code = code.unwrap_or_default();
+            let code = code as i32;
             print(format!("{} failed with code {}: {:?}", msg, code, err))
         }
     }
@@ -2288,10 +2225,10 @@ async fn refund_icp(
             to,
             created_at_time: None,
         };
-        let send_res: Result<BlockIndex, (Option<i32>, String)> =
-            call_with_cleanup(ledger_canister_id, "send_pb", protobuf, send_args).await;
+        let send_res: CallResult<BlockIndex> =
+            call_protobuf(ledger_canister_id, "send_pb", send_args).await;
         let block = send_res.map_err(|(code, err)| {
-            let code = code.unwrap_or_default();
+            let code = code as i32;
             NotifyError::Other {
                 error_code: NotifyErrorCode::RefundFailed as u64,
                 error_message: format!("Refund to {} failed with code {}: {}", to, code, err),
@@ -2319,20 +2256,18 @@ async fn deposit_cycles(
         ensure_balance(cycles)?;
     }
 
-    let res: Result<(), (Option<i32>, String)> = dfn_core::api::call_with_funds_and_cleanup(
-        IC_00,
+    let res: CallResult<()> = ic_cdk::api::call::call_with_payment128(
+        IC_00.get().0,
         &Method::DepositCycles.to_string(),
-        dfn_candid::candid_multi_arity,
         (CanisterIdRecord::from(canister_id),),
-        dfn_core::api::Funds::new(u128::from(cycles) as u64),
+        u128::from(cycles),
     )
     .await;
 
     res.map_err(|(code, msg)| {
         format!(
             "Depositing cycles failed with code {}: {:?}",
-            code.unwrap_or_default(),
-            msg
+            code as i32, msg
         )
     })?;
 
@@ -2355,21 +2290,19 @@ async fn do_mint_cycles(
         to: account,
         memo: deposit_memo,
     };
-    let result: Result<(CyclesLedgerDepositResult,), (Option<i32>, String)> =
-        dfn_core::api::call_with_funds_and_cleanup(
-            cycles_ledger_canister_id,
-            "deposit",
-            dfn_candid::candid_multi_arity,
-            (arg,),
-            dfn_core::api::Funds::new(u128::from(cycles) as u64),
-        )
-        .await;
+
+    let result: CallResult<(CyclesLedgerDepositResult,)> = ic_cdk::api::call::call_with_payment128(
+        cycles_ledger_canister_id.get().0,
+        "deposit",
+        (arg,),
+        u128::from(cycles),
+    )
+    .await;
 
     result.map(|r| r.0).map_err(|(code, msg)| {
         format!(
             "Cycles ledger rejected deposit call with code {}: {:?}",
-            code.unwrap_or_default(),
-            msg
+            code as i32, msg
         )
     })
 }
@@ -2465,26 +2398,23 @@ async fn do_create_canister(
         });
 
     for subnet_id in subnets {
-        let result: Result<CanisterIdRecord, _> = dfn_core::api::call_with_funds_and_cleanup(
-            subnet_id.into(),
+        let result: CallResult<(CanisterIdRecord,)> = ic_cdk::api::call::call_with_payment128(
+            subnet_id.get().0,
             &Method::CreateCanister.to_string(),
-            dfn_candid::candid_one,
-            CreateCanisterArgs {
+            (CreateCanisterArgs {
                 settings: Some(Ic00CanisterSettingsArgs::from(canister_settings.clone())),
-                sender_canister_version: Some(dfn_core::api::canister_version()),
-            },
-            dfn_core::api::Funds::new(cycles.get().try_into().unwrap()),
+                sender_canister_version: Some(ic_cdk::api::canister_version()),
+            },),
+            u128::from(cycles),
         )
         .await;
 
         let canister_id = match result {
-            Ok(canister_id) => canister_id.get_canister_id(),
+            Ok(canister_id) => canister_id.0.get_canister_id(),
             Err((code, msg)) => {
                 let err = format!(
                     "Creating canister in subnet {} failed with code {}: {}",
-                    subnet_id,
-                    code.unwrap_or_default(),
-                    msg
+                    subnet_id, code as i32, msg
                 );
                 print(format!("[cycles] {}", err));
                 last_err = Some(err);
@@ -2504,9 +2434,9 @@ async fn do_create_canister(
 }
 
 fn ensure_balance(cycles: Cycles) -> Result<(), String> {
-    let now = dfn_core::api::now();
+    let now = now_system_time();
 
-    let current_balance = Cycles::from(dfn_core::api::canister_cycle_balance());
+    let current_balance = Cycles::from(ic_cdk::api::canister_balance128());
     let cycles_to_mint = cycles - current_balance;
 
     with_state_mut(|state| {
@@ -2530,21 +2460,17 @@ fn ensure_balance(cycles: Cycles) -> Result<(), String> {
         Ok(())
     })?;
 
-    dfn_core::api::mint_cycles(
-        cycles_to_mint
-            .get()
-            .try_into()
-            .map_err(|_| "Cycles u64 overflow".to_owned())?,
-    );
-    assert!(u128::from(dfn_core::api::canister_cycle_balance()) >= cycles.get());
+    // unused because of check above
+    let _minted_cycles = ic0_mint_cycles128(cycles_to_mint);
+    assert!(ic_cdk::api::canister_balance128() >= cycles.get());
     Ok(())
 }
 
 #[export_name = "canister_query total_cycles_minted"]
-fn total_supply_() {
-    over(protobuf, |_: ()| -> u64 {
-        with_state(|state| state.total_cycles_minted.get().try_into().unwrap())
-    })
+fn total_cycles_minted() {
+    let value: u64 = with_state(|state| state.total_cycles_minted.get().try_into().unwrap());
+    let response = ProtoBuf::new(value).into_bytes().unwrap();
+    reply_raw(&response);
 }
 
 /// Return the list of subnets in which this controller is allowed to create
@@ -2560,42 +2486,34 @@ fn get_subnets_for(controller_id: &PrincipalId) -> Vec<SubnetId> {
 }
 
 async fn get_rng() -> Result<StdRng, String> {
-    let res: Result<Vec<u8>, (Option<i32>, String)> = dfn_core::api::call_with_cleanup(
-        IC_00,
-        &Method::RawRand.to_string(),
-        dfn_candid::candid_one,
-        (),
-    )
-    .await;
+    let res: CallResult<(Vec<u8>,)> =
+        ic_cdk::call(IC_00.get().0, &Method::RawRand.to_string(), ()).await;
 
-    let bytes = res.map_err(|(code, msg)| {
-        format!(
-            "Getting random bytes failed with code {}: {:?}",
-            code.unwrap_or_default(),
-            msg
-        )
-    })?;
+    let bytes = res
+        .map_err(|(code, msg)| {
+            format!(
+                "Getting random bytes failed with code {}: {:?}",
+                code as i32, msg
+            )
+        })?
+        .0;
 
     Ok(StdRng::from_seed(bytes[0..32].try_into().unwrap()))
 }
 
-#[export_name = "canister_pre_upgrade"]
+#[pre_upgrade]
 fn pre_upgrade() {
     let bytes = with_state(|state| state.encode());
     print(format!(
         "[cycles] serialized state prior to upgrade ({} bytes)",
         bytes.len(),
     ));
-    stable::set(&bytes);
+    stable_utils::stable_set(&bytes).expect("Could not write data to stable memory");
 }
 
-#[export_name = "canister_post_upgrade"]
-fn post_upgrade_() {
-    over_init(|CandidOne(args)| post_upgrade(args))
-}
-
+#[post_upgrade]
 fn post_upgrade(maybe_args: Option<CyclesCanisterInitPayload>) {
-    let bytes = stable::get();
+    let bytes = stable_utils::stable_get().expect("Could not read data from stable memory");
     print(format!(
         "[cycles] deserializing state after upgrade ({} bytes)",
         bytes.len(),
@@ -2619,11 +2537,10 @@ fn post_upgrade(maybe_args: Option<CyclesCanisterInitPayload>) {
     STATE.with(|state| state.replace(Some(new_state)));
 }
 
-#[export_name = "canister_heartbeat"]
-fn canister_heartbeat() {
+#[heartbeat]
+async fn canister_heartbeat() {
     if with_state(|state| state.exchange_rate_canister_id.is_some()) {
-        let future = update_exchange_rate();
-        dfn_core::api::futures::spawn(future);
+        update_exchange_rate().await
     }
 }
 
@@ -2654,9 +2571,12 @@ async fn update_exchange_rate() {
     }
 }
 
-#[export_name = "canister_query http_request"]
-fn http_request() {
-    dfn_http_metrics::serve_metrics(encode_metrics);
+#[query(hidden = true, decoding_quota = 10000)]
+fn http_request(request: HttpRequest) -> HttpResponse {
+    match request.path() {
+        "/metrics" => serve_metrics(encode_metrics),
+        _ => HttpResponseBuilder::not_found().build(),
+    }
 }
 
 fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {

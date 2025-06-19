@@ -119,7 +119,7 @@ pub fn migrate_old_events_if_not_empty() -> Option<u64> {
     let mut num_events_removed = None;
     V0_EVENTS.with(|old_events| {
         let mut old = old_events.borrow_mut();
-        if old.len() > 0 {
+        if !old.is_empty() {
             V1_EVENTS.with(|new| {
                 num_events_removed = Some(migrate_events(&old, &new.borrow()));
             });
@@ -193,4 +193,39 @@ pub fn record_event_v0<R: CanisterRuntime>(payload: EventType, runtime: &R) {
             .append(&bytes)
             .expect("failed to append an entry to the event log");
     })
+}
+
+#[cfg(feature = "canbench-rs")]
+mod benches {
+    use super::*;
+    use canbench_rs::bench;
+
+    #[bench(raw)]
+    fn migrate_events_bench() -> canbench_rs::BenchResult {
+        // These thread local state must be re-initialized after
+        // canbench loads the stable memory from a file.
+        MEMORY_MANAGER
+            .with(|x| *x.borrow_mut() = MemoryManager::init(DefaultMemoryImpl::default()));
+        V0_EVENTS.with(|x| {
+            *x.borrow_mut() = MEMORY_MANAGER.with(|m| {
+                StableLog::init(
+                    m.borrow().get(V0_LOG_INDEX_MEMORY_ID),
+                    m.borrow().get(V0_LOG_DATA_MEMORY_ID),
+                )
+                .expect("failed to initialize stable log")
+            })
+        });
+        // V1_EVENTS is created as empty (by using `new` than `init`) because
+        // it might already have an existing init event before running this benchmark.
+        V1_EVENTS.with(|x| {
+            *x.borrow_mut() = MEMORY_MANAGER.with(|m| {
+                StableLog::new(
+                    m.borrow().get(V1_LOG_INDEX_MEMORY_ID),
+                    m.borrow().get(V1_LOG_DATA_MEMORY_ID),
+                )
+            })
+        });
+
+        canbench_rs::bench_fn(migrate_old_events_if_not_empty)
+    }
 }

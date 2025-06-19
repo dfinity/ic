@@ -1,5 +1,5 @@
 use ic_base_types::{NumBytes, NumSeconds, PrincipalId, SubnetId};
-use ic_config::embedders::{BestEffortResponsesFeature, MeteringType, StableMemoryPageLimit};
+use ic_config::embedders::{MeteringType, StableMemoryPageLimit};
 use ic_config::subnet_config::CyclesAccountManagerConfig;
 use ic_config::{
     embedders::{Config as EmbeddersConfig, WASM_MAX_SIZE},
@@ -11,6 +11,7 @@ use ic_config::{
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::{
     wasm_utils::{compile, decoding::decode_wasm},
+    wasmtime_embedder::system_api::InstructionLimits,
     WasmtimeEmbedder,
 };
 use ic_error_types::{ErrorCode, RejectCode, UserError};
@@ -52,7 +53,6 @@ use ic_replicated_state::{
     CallContext, CanisterState, ExecutionState, ExecutionTask, InputQueueType, NetworkTopology,
     PageIndex, ReplicatedState, SubnetTopology,
 };
-use ic_system_api::InstructionLimits;
 use ic_test_utilities::{crypto::mock_random_number_generator, state_manager::FakeStateManager};
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder};
 use ic_types::crypto::threshold_sig::ni_dkg::{
@@ -93,6 +93,8 @@ const INITIAL_CANISTER_CYCLES: Cycles = Cycles::new(1_000_000_000_000);
 /// A helper to create subnets.
 pub fn generate_subnets(
     subnet_ids: Vec<SubnetId>,
+    nns_subnet_id: SubnetId,
+    root_key: Option<Vec<u8>>,
     own_subnet_id: SubnetId,
     own_subnet_type: SubnetType,
     own_subnet_size: usize,
@@ -108,10 +110,15 @@ pub fn generate_subnets(
                 nodes.insert(node_test_id(i as u64));
             }
         }
+        let public_key = if subnet_id == nns_subnet_id {
+            root_key.clone().unwrap_or(vec![1, 2, 3, 4])
+        } else {
+            vec![1, 2, 3, 4]
+        };
         result.insert(
             subnet_id,
             SubnetTopology {
-                public_key: vec![1, 2, 3, 4],
+                public_key,
                 nodes,
                 subnet_type,
                 subnet_features: SubnetFeatures::default(),
@@ -132,7 +139,7 @@ pub fn generate_network_topology(
 ) -> NetworkTopology {
     NetworkTopology {
         nns_subnet_id,
-        subnets: generate_subnets(subnets, own_subnet_id, own_subnet_type, subnet_size),
+        subnets: generate_subnets(subnets, nns_subnet_id, None, own_subnet_id, own_subnet_type, subnet_size),
         routing_table: match routing_table {
             Some(routing_table) => Arc::new(routing_table),
             None => {
@@ -798,8 +805,6 @@ impl ExecutionTest {
             canister_id,
             wasm_binary,
             vec![],
-            None,
-            None,
         );
         let result = self.install_code(args)?;
         assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
@@ -817,30 +822,8 @@ impl ExecutionTest {
             canister_id,
             wasm_binary,
             vec![],
-            None,
-            None,
         );
         let result = self.install_code_v2(args)?;
-        assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
-        Ok(())
-    }
-
-    pub fn install_canister_with_allocation(
-        &mut self,
-        canister_id: CanisterId,
-        wasm_binary: Vec<u8>,
-        compute_allocation: Option<u64>,
-        memory_allocation: Option<u64>,
-    ) -> Result<(), UserError> {
-        let args = InstallCodeArgs::new(
-            CanisterInstallMode::Install,
-            canister_id,
-            wasm_binary,
-            vec![],
-            compute_allocation,
-            memory_allocation,
-        );
-        let result = self.install_code(args)?;
         assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
         Ok(())
     }
@@ -856,8 +839,6 @@ impl ExecutionTest {
             canister_id,
             wasm_binary,
             vec![],
-            None,
-            None,
         );
         let result = self.install_code(args)?;
         assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
@@ -874,8 +855,6 @@ impl ExecutionTest {
             canister_id,
             wasm_binary,
             vec![],
-            None,
-            None,
         );
         let result = self.install_code_v2(args)?;
         assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
@@ -893,8 +872,6 @@ impl ExecutionTest {
             canister_id,
             wasm_binary,
             vec![],
-            None,
-            None,
         );
         let result = self.install_code(args)?;
         assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
@@ -914,8 +891,6 @@ impl ExecutionTest {
             canister_id,
             wasm_binary,
             vec![],
-            None,
-            None,
         );
         let result = self.install_code_v2(args)?;
         assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
@@ -933,8 +908,6 @@ impl ExecutionTest {
             canister_id,
             wasm_binary,
             vec![],
-            None,
-            None,
         );
         self.dts_install_code(args)
     }
@@ -943,16 +916,12 @@ impl ExecutionTest {
         &mut self,
         canister_id: CanisterId,
         wasm_binary: Vec<u8>,
-        compute_allocation: Option<u64>,
-        memory_allocation: Option<u64>,
     ) -> Result<(), UserError> {
         let args = InstallCodeArgs::new(
             CanisterInstallMode::Upgrade,
             canister_id,
             wasm_binary,
             vec![],
-            compute_allocation,
-            memory_allocation,
         );
         let result = self.install_code(args)?;
         assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
@@ -1124,8 +1093,8 @@ impl ExecutionTest {
         );
     }
 
-    /// Executes an anonymous query in the given canister.
-    pub fn anonymous_query<S: ToString>(
+    /// Executes a query sent by the system in the given canister.
+    pub fn system_query<S: ToString>(
         &mut self,
         canister_id: CanisterId,
         method_name: S,
@@ -1135,7 +1104,7 @@ impl ExecutionTest {
         let state = Arc::new(self.state.take().unwrap());
 
         let query = Query {
-            source: QuerySource::Anonymous,
+            source: QuerySource::System,
             receiver: canister_id,
             method_name: method_name.to_string(),
             method_payload,
@@ -1730,6 +1699,7 @@ impl ExecutionTest {
 pub struct ExecutionTestBuilder {
     execution_config: Config,
     nns_subnet_id: SubnetId,
+    root_key: Option<Vec<u8>>,
     own_subnet_id: SubnetId,
     caller_subnet_id: Option<SubnetId>,
     subnet_type: SubnetType,
@@ -1754,6 +1724,7 @@ pub struct ExecutionTestBuilder {
     heap_delta_rate_limit: NumBytes,
     upload_wasm_chunk_instructions: NumInstructions,
     canister_snapshot_baseline_instructions: NumInstructions,
+    canister_snapshot_data_baseline_instructions: NumInstructions,
     replica_version: ReplicaVersion,
     precompiled_universal_canister: bool,
     cycles_account_manager_config: Option<CyclesAccountManagerConfig>,
@@ -1767,11 +1738,12 @@ impl Default for ExecutionTestBuilder {
             execution_config: Config {
                 rate_limiting_of_instructions: FlagStatus::Disabled,
                 canister_sandboxing_flag: FlagStatus::Enabled,
-                composite_queries: FlagStatus::Disabled,
+                composite_queries: FlagStatus::Enabled,
                 allocatable_compute_capacity_in_percent: 100,
                 ..Config::default()
             },
             nns_subnet_id: subnet_test_id(2),
+            root_key: None,
             own_subnet_id: subnet_test_id(1),
             caller_subnet_id: None,
             subnet_type,
@@ -1799,6 +1771,8 @@ impl Default for ExecutionTestBuilder {
             upload_wasm_chunk_instructions: scheduler_config.upload_wasm_chunk_instructions,
             canister_snapshot_baseline_instructions: scheduler_config
                 .canister_snapshot_baseline_instructions,
+            canister_snapshot_data_baseline_instructions: scheduler_config
+                .canister_snapshot_data_baseline_instructions,
             replica_version: ReplicaVersion::default(),
             precompiled_universal_canister: true,
             cycles_account_manager_config: None,
@@ -1811,6 +1785,13 @@ impl ExecutionTestBuilder {
         Self::default()
     }
 
+    pub fn with_execution_config(self, execution_config: Config) -> Self {
+        Self {
+            execution_config,
+            ..self
+        }
+    }
+
     pub fn with_nns_subnet_id(self, nns_subnet_id: SubnetId) -> Self {
         Self {
             nns_subnet_id,
@@ -1818,6 +1799,12 @@ impl ExecutionTestBuilder {
         }
     }
 
+    pub fn with_root_key(self, root_key: Vec<u8>) -> Self {
+        Self {
+            root_key: Some(root_key),
+            ..self
+        }
+    }
     pub fn with_own_subnet_id(self, own_subnet_id: SubnetId) -> Self {
         Self {
             own_subnet_id,
@@ -2009,8 +1996,8 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_composite_queries(mut self) -> Self {
-        self.execution_config.composite_queries = FlagStatus::Enabled;
+    pub fn without_composite_queries(mut self) -> Self {
+        self.execution_config.composite_queries = FlagStatus::Disabled;
         self
     }
 
@@ -2148,22 +2135,6 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_non_native_stable(mut self) -> Self {
-        self.execution_config
-            .embedders_config
-            .feature_flags
-            .wasm_native_stable_memory = FlagStatus::Disabled;
-        self
-    }
-
-    pub fn with_best_effort_responses(mut self, stage: BestEffortResponsesFeature) -> Self {
-        self.execution_config
-            .embedders_config
-            .feature_flags
-            .best_effort_responses = stage;
-        self
-    }
-
     pub fn with_time(mut self, time: Time) -> Self {
         self.time = time;
         self
@@ -2204,6 +2175,16 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_snapshot_metadata_download(mut self) -> Self {
+        self.execution_config.canister_snapshot_download = FlagStatus::Enabled;
+        self
+    }
+
+    pub fn with_snapshot_metadata_upload(mut self) -> Self {
+        self.execution_config.canister_snapshot_upload = FlagStatus::Enabled;
+        self
+    }
+
     pub fn build(self) -> ExecutionTest {
         let own_range = CanisterIdRange {
             start: CanisterId::from(CANISTER_IDS_PER_SUBNET),
@@ -2230,6 +2211,8 @@ impl ExecutionTestBuilder {
         subnets.extend(self.caller_subnet_id.iter().copied());
         state.metadata.network_topology.subnets = generate_subnets(
             subnets,
+            self.nns_subnet_id,
+            self.root_key,
             self.own_subnet_id,
             self.subnet_type,
             self.registry_settings.subnet_size,
@@ -2406,6 +2389,7 @@ impl ExecutionTestBuilder {
             self.heap_delta_rate_limit,
             self.upload_wasm_chunk_instructions,
             self.canister_snapshot_baseline_instructions,
+            self.canister_snapshot_data_baseline_instructions,
         );
         let (query_stats_collector, _) =
             ic_query_stats::init_query_stats(self.log.clone(), &config, &metrics_registry);
@@ -2413,7 +2397,6 @@ impl ExecutionTestBuilder {
         let query_handler = InternalHttpQueryHandler::new(
             self.log.clone(),
             hypervisor,
-            self.own_subnet_id,
             self.subnet_type,
             config.clone(),
             &metrics_registry,

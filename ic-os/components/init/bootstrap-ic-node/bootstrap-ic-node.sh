@@ -3,8 +3,6 @@
 # Provision a node based on an injected "ic-bootstrap.tar" file. This script
 # is meant to be run as a prerequisite before launching orchestrator/replica.
 #
-# The configuration format is described in guestos/docs/ConfigStore.adoc
-#
 # The tar file can be supplied using one of two methods:
 # - as "ic-bootstrap.tar" stored on a (virtual) removable media attached
 #   on first boot
@@ -71,8 +69,8 @@ function find_config_devices() {
 }
 
 # Process the bootstrap package given as first argument to populate
-# both config space and
-# parts of /var/lib/ic/data and /var/lib/ic/crypto
+# both config space and parts of /var/lib/ic/data and /var/lib/ic/crypto
+# note: keep this list in sync with configurations supported in `config::guestos_bootstrap_image`.
 #
 # Arguments:
 # - $1: path to the bootstrap package (typically /mnt/ic-bootstrap.tar)
@@ -101,16 +99,8 @@ function process_bootstrap() {
             cp -rL -T "${TMPDIR}/${ITEM}" "${STATE_ROOT}/data/${ITEM}"
         fi
     done
-    if [ -e "${TMPDIR}/ic-boundary-tls.key" ]; then
-        echo "Setting up self-signed certificate of ic-boundary"
-        cp -L "${TMPDIR}/ic-boundary-tls.key" "${STATE_ROOT}/data/ic-boundary-tls.key"
-        cp -L "${TMPDIR}/ic-boundary-tls.crt" "${STATE_ROOT}/data/ic-boundary-tls.crt"
-        sudo chmod +r ${STATE_ROOT}/data/ic-boundary-tls.key
-    fi
 
-    # stash the following configuration files to config store
-    # note: keep this list in sync with configurations supported in build-bootstrap-config-image.sh
-    for FILE in filebeat.conf network.conf reward.conf nns.conf backup.conf malicious_behavior.conf query_stats.conf bitcoind_addr.conf jaeger_addr.conf socks_proxy.conf; do
+    for FILE in config.json; do
         if [ -e "${TMPDIR}/${FILE}" ]; then
             echo "Setting up ${FILE}"
             cp "${TMPDIR}/${FILE}" "${CONFIG_ROOT}/${FILE}"

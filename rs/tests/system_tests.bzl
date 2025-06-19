@@ -4,11 +4,12 @@ Rules for system-tests.
 
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
-load("@kubeconfig//:defs.bzl", "k8s_tags")
+load("@mainnet_icos_versions//:defs.bzl", "mainnet_icos_versions")
 load("@rules_oci//oci:defs.bzl", "oci_load")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("//bazel:defs.bzl", "mcopy", "zstd_compress")
-load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "GUESTOS_DEV_VERSION", "MAINNET_NNS_CANISTER_ENV", "MAINNET_NNS_CANISTER_RUNTIME_DEPS", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//bazel:mainnet-icos-images.bzl", "base_download_url")
+load("//rs/tests:common.bzl", "GUESTOS_DEV_VERSION", "MAINNET_NNS_CANISTER_ENV", "MAINNET_NNS_CANISTER_RUNTIME_DEPS", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 
 def _run_system_test(ctx):
     run_test_script_file = ctx.actions.declare_file(ctx.label.name + "/run-test.sh")
@@ -26,10 +27,9 @@ def _run_system_test(ctx):
 
             # RUN_SCRIPT_ICOS_IMAGES:
             # For every ic-os image specified, first ensure it's in remote
-            # storage, then export its download URL and HASH as environment
-            # variables.
+            # storage, then export its download URL and HASH as environment variables.
             if [ -n "$RUN_SCRIPT_ICOS_IMAGES" ]; then
-              # split the ";"-delimited list of "env_prefixr:filepath;env_prefix2:filepath2;..."
+              # split the ";"-delimited list of "env_prefix:filepath;env_prefix2:filepath2;..."
               # into an array
               IFS=';' read -ra icos_images <<<"$RUN_SCRIPT_ICOS_IMAGES"
               for image in "${{icos_images[@]}}"; do
@@ -48,7 +48,15 @@ def _run_system_test(ctx):
                   export "${{image_var_prefix}}_HASH=$image_download_hash"
               done
             fi
-            unset RUN_SCRIPT_ICOS_IMAGES RUN_SCRIPT_UPLOAD_SYSTEST_DEP # clean up the env for the test
+
+            if [ "${{RUN_SCRIPT_HOSTOS_UPDATE_IMG_TEST}}" = "true" ]; then
+                export ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION="$(cat ${{ENV_DEPS__IC_VERSION_FILE}})-test"
+                export ENV_DEPS__HOSTOS_UPDATE_IMG_URL="${{ENV_DEPS__HOSTOS_UPDATE_IMG_TEST_URL:-}}"
+                export ENV_DEPS__HOSTOS_UPDATE_IMG_SHA="${{ENV_DEPS__HOSTOS_UPDATE_IMG_TEST_HASH:-}}"
+            fi
+
+            # clean up the env for the test
+            unset RUN_SCRIPT_ICOS_IMAGES RUN_SCRIPT_UPLOAD_SYSTEST_DEP RUN_SCRIPT_HOSTOS_UPDATE_IMG_TEST
 
             # We export RUNFILES such that the from_location_specified_by_env_var() function in
             # rs/rust_canisters/canister_test/src/canister.rs can find canisters
@@ -172,8 +180,10 @@ def system_test(
         uses_guestos_dev = False,
         uses_guestos_dev_test = False,
         uses_setupos_dev = False,
+        uses_setupos_mainnet = False,
         uses_hostos_dev_test = False,
-        uses_boundary_guestos = False,
+        uses_hostos_mainnet_update_img = False,
+        use_empty_image = False,
         env = {},
         env_inherit = [],
         additional_colocate_tags = [],
@@ -205,7 +215,9 @@ def system_test(
       uses_guestos_dev_test: the test uses //ic-os/guestos/envs/dev:update-img-test (will be also automatically added as dependency).
       uses_setupos_dev: the test uses ic-os/setupos/envs/dev (will be also automatically added as dependency).
       uses_hostos_dev_test: the test uses ic-os/hostos/envs/dev:update-img-test (will be also automatically added as dependency).
-      uses_boundary_guestos: the test uses ic-os/boundary-guestos/envs/dev:disk-img (will be also automatically added as dependency).
+      uses_hostos_mainnet_update_img: the test uses mainnet HostOS update image version marked in mainnet-icos-revisions.json.
+      uses_setupos_mainnet: the test uses mainnet SetupOS image version marked in mainnet-icos-revisions.json.
+      use_empty_image: the test uses the empty disk image: //rs/tests/nested:empty_disk_image.tar.zst (will be also automatically added as dependency)
       env: environment variables to set in the test (subject to Make variable expansion)
       env_inherit: specifies additional environment variables to inherit from
       the external environment when the test is executed by bazel test.
@@ -220,6 +232,9 @@ def system_test(
       It returns a struct specifying test_driver_target which is the name of the test driver target ("<name>_bin") such that it can be used by other system-tests.
     """
 
+    # Convert env to a mutable dictionary
+    env = dict(env)
+
     if test_driver_target == None:
         bin_name = name + "_bin"
         original_srcs = kwargs.pop("srcs", [])
@@ -231,12 +246,11 @@ def system_test(
         )
         test_driver_target = bin_name
 
-    # Automatically detect system tests that use guestos dev & boundary node guestos for back compatibility.
+    # Automatically detect system tests that use guestos dev
     for _d in runtime_deps:
         if _d == GUESTOS_DEV_VERSION:
             uses_guestos_dev = True
             break
-    uses_boundary_guestos = uses_boundary_guestos or all([dep in runtime_deps for dep in BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS])
 
     # Environment variable names to targets (targets are resolved)
     _env_deps = {}
@@ -256,12 +270,24 @@ def system_test(
     if uses_hostos_dev_test:
         icos_images["ENV_DEPS__HOSTOS_UPDATE_IMG_TEST"] = "//ic-os/hostos/envs/dev:update-img-test.tar.zst"
 
-    if uses_setupos_dev:
-        # Note: SetupOS is still passed directly by path, as it needs some local processing.
-        _env_deps["ENV_DEPS__SETUPOS_IMG_PATH"] = "//ic-os/setupos/envs/dev:disk-img.tar.zst"
+    if uses_hostos_mainnet_update_img:
+        mainnet_hostos_version = mainnet_icos_versions["hostos"]["latest_release"]["version"]
+        env["ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION"] = mainnet_hostos_version
+        env["ENV_DEPS__HOSTOS_UPDATE_IMG_URL"] = base_download_url(mainnet_hostos_version, "host-os", True, False) + "update-img.tar.zst"
+        env["ENV_DEPS__HOSTOS_UPDATE_IMG_SHA"] = mainnet_icos_versions["hostos"]["latest_release"]["update_img_hash"]
+        env["RUN_SCRIPT_HOSTOS_UPDATE_IMG_TEST"] = "false"
+    else:
+        env["RUN_SCRIPT_HOSTOS_UPDATE_IMG_TEST"] = "true"
 
-        _env_deps["ENV_DEPS__SETUPOS_DISABLE_CHECKS"] = "//rs/ic_os/dev_test_tools/setupos-disable-checks"
-        _env_deps["ENV_DEPS__SETUPOS_INJECT_CONFIGS"] = "//rs/ic_os/dev_test_tools/setupos-inject-configuration"
+    if uses_setupos_mainnet:
+        icos_images["ENV_DEPS__SETUPOS_DISK_IMG"] = "//ic-os/setupos:mainnet-test-img.tar.zst"
+        _env_deps["ENV_DEPS__SETUPOS_BUILD_CONFIG"] = "//ic-os:dev-tools/build-setupos-config-image.sh"
+        _env_deps["ENV_DEPS__SETUPOS_CREATE_CONFIG"] = "//rs/ic_os/dev_test_tools/setupos-image-config:setupos-create-config"
+
+    if uses_setupos_dev:
+        icos_images["ENV_DEPS__SETUPOS_DISK_IMG"] = "//ic-os/setupos:test-img.tar.zst"
+        _env_deps["ENV_DEPS__SETUPOS_BUILD_CONFIG"] = "//ic-os:dev-tools/build-setupos-config-image.sh"
+        _env_deps["ENV_DEPS__SETUPOS_CREATE_CONFIG"] = "//rs/ic_os/dev_test_tools/setupos-image-config:setupos-create-config"
 
     if uses_guestos_dev_test:
         icos_images["ENV_DEPS__GUESTOS_UPDATE_IMG_TEST"] = _guestos + "update-img-test.tar.zst"
@@ -272,8 +298,8 @@ def system_test(
         icos_images["ENV_DEPS__GUESTOS_MALICIOUS_DISK_IMG"] = _guestos_malicous + "disk-img.tar.zst"
         icos_images["ENV_DEPS__GUESTOS_MALICIOUS_UPDATE_IMG"] = _guestos_malicous + "update-img.tar.zst"
 
-    if uses_boundary_guestos:
-        icos_images["ENV_DEPS__BOUNDARY_GUESTOS_DISK_IMG"] = "//ic-os/boundary-guestos/envs/dev:disk-img.tar.zst"
+    if use_empty_image:
+        icos_images["ENV_DEPS__EMPTY_DISK_IMG"] = "//rs/tests/nested:empty-disk-img.tar.zst"
 
     run_system_test(
         name = name,
@@ -284,7 +310,6 @@ def system_test(
         icos_images = icos_images,
         env_inherit = env_inherit,
         tags = tags + ["requires-network", "system_test"] +
-               k8s_tags +
                (["manual"] if "experimental_system_test_colocation" in tags else []),
         target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,

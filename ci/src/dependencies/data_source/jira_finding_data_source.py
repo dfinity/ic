@@ -69,6 +69,9 @@ JIRA_OWNER_GROUP_BY_TEAM = {
     Team.NNS_TEAM: {"name": "dept-NNS"},
     Team.CRYPTO_TEAM: {"name": "dept-Crypto Library"},
     Team.IDENTITY_TEAM: {"name": "dept-Identity"},
+    Team.INTEGRATIONS_TEAM: {"name": "dept-Integrations"},
+    Team.PRODUCT_ENABLEMENT_TEAM: {"name": "dept-Product Enablement"},
+    Team.UTOPIA_RND_TEAM: {"name": "div-Utopia R&D"},
 }
 JIRA_LABEL_PATCH_VULNDEP_PUBLISHED = "patch_published_vulndep"
 JIRA_LABEL_PATCH_ALLDEP_PUBLISHED = "patch_published_alldep"

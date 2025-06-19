@@ -3,6 +3,8 @@ use std::convert::TryInto;
 
 mod cached_upgrade_steps;
 pub mod canister_control;
+pub(crate) mod follower_index;
+pub mod following;
 pub mod governance;
 pub mod init;
 pub mod logs;
@@ -15,6 +17,8 @@ pub mod topics;
 mod treasury;
 pub mod types;
 pub mod upgrade_journal;
+
+pub mod icrc_ledger_helper;
 
 trait Len {
     fn len(&self) -> usize;

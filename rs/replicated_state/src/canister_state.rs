@@ -7,7 +7,7 @@ mod tests;
 use crate::canister_state::queues::CanisterOutputQueuesIterator;
 use crate::canister_state::system_state::{ExecutionTask, SystemState};
 use crate::{InputQueueType, MessageMemoryUsage, StateError};
-pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions, Global};
+pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions};
 use ic_management_canister_types_private::{CanisterStatusType, LogVisibilityV2};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::batch::TotalQueryStats;
@@ -449,8 +449,8 @@ impl CanisterState {
         let execution_usage = self
             .execution_state
             .as_ref()
-            .map_or(NumBytes::new(0), |execution_snapshot| {
-                execution_snapshot.memory_usage()
+            .map_or(NumBytes::new(0), |execution_state| {
+                execution_state.memory_usage_in_snapshot()
             });
 
         execution_usage
@@ -594,6 +594,15 @@ impl CanisterState {
     pub fn update_on_low_wasm_memory_hook_condition(&mut self) {
         self.system_state
             .update_on_low_wasm_memory_hook_status(self.memory_usage(), self.wasm_memory_usage());
+    }
+
+    /// Returns the `OnLowWasmMemory` hook status without updating the `task_queue`.
+    pub fn is_low_wasm_memory_hook_condition_satisfied(&self) -> bool {
+        self.system_state
+            .is_low_wasm_memory_hook_condition_satisfied(
+                self.memory_usage(),
+                self.wasm_memory_usage(),
+            )
     }
 }
 

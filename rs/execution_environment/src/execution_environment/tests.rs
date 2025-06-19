@@ -1,22 +1,21 @@
 use candid::{Decode, Encode};
 use ic_base_types::{NumBytes, NumSeconds};
-use ic_config::embedders::BestEffortResponsesFeature;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_management_canister_types_private::{
     self as ic00, BitcoinGetUtxosArgs, BitcoinNetwork, BoundedHttpHeaders, CanisterChange,
     CanisterHttpRequestArgs, CanisterIdRecord, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
     CanisterStatusType, ClearChunkStoreArgs, DerivationPath, EcdsaKeyId, EmptyBlob,
     FetchCanisterLogsRequest, HttpMethod, LogVisibilityV2, MasterPublicKeyId, Method,
-    Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
-    SchnorrAlgorithm, SchnorrKeyId, TakeCanisterSnapshotArgs, TransformContext, TransformFunc,
-    UpdateSettingsArgs, UploadChunkArgs, VetKdCurve, VetKdKeyId, IC_00,
+    OnLowWasmMemoryHookStatus, Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs,
+    ProvisionalTopUpCanisterArgs, SchnorrAlgorithm, SchnorrKeyId, TakeCanisterSnapshotArgs,
+    TransformContext, TransformFunc, UpdateSettingsArgs, UploadChunkArgs, VetKdCurve, VetKdKeyId,
+    IC_00,
 };
 use ic_registry_routing_table::{canister_id_into_u64, CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::{
-        system_state::{CyclesUseCase, OnLowWasmMemoryHookStatus},
-        DEFAULT_QUEUE_CAPACITY, WASM_PAGE_SIZE_IN_BYTES,
+        system_state::CyclesUseCase, DEFAULT_QUEUE_CAPACITY, WASM_PAGE_SIZE_IN_BYTES,
     },
     testing::{CanisterQueuesTesting, SystemStateTesting},
     CanisterStatus, ReplicatedState, SystemState,
@@ -25,7 +24,7 @@ use ic_test_utilities::assert_utils::assert_balance_equals;
 use ic_test_utilities_execution_environment::{
     assert_empty_reply, check_ingress_status, get_reply, ExecutionTest, ExecutionTestBuilder,
 };
-use ic_test_utilities_metrics::{fetch_histogram_vec_count, fetch_int_counter, metric_vec};
+use ic_test_utilities_metrics::{fetch_histogram_vec_count, metric_vec};
 use ic_types::{
     canister_http::{CanisterHttpMethod, Transform},
     ingress::{IngressState, IngressStatus, WasmResult},
@@ -210,15 +209,15 @@ fn sign_with_threshold_key_payload(method: Method, key_id: MasterPublicKeyId) ->
             aux: None,
         }
         .encode(),
-        Method::VetKdDeriveEncryptedKey => ic00::VetKdDeriveEncryptedKeyArgs {
-            derivation_id: vec![],
-            encryption_public_key: [
+        Method::VetKdDeriveKey => ic00::VetKdDeriveKeyArgs {
+            input: vec![],
+            transport_public_key: [
                 // Generated via TransportSecretKey::from_seed(vec![0; 32]).unwrap().public_key()
                 178, 211, 206, 216, 102, 5, 127, 108, 175, 41, 31, 129, 99, 3, 1, 87, 24, 22, 102,
                 58, 81, 137, 170, 178, 61, 6, 208, 161, 20, 14, 134, 241, 34, 50, 176, 194, 32, 5,
                 19, 249, 66, 219, 9, 120, 165, 15, 9, 211,
             ],
-            derivation_domain: vec![],
+            context: vec![],
             key_id: into_inner_vetkd(key_id),
         }
         .encode(),
@@ -292,21 +291,19 @@ fn output_requests_on_system_subnet_ignore_memory_limits() {
         .with_manual_execution()
         .build();
 
-    let canister_id = test.create_canister(Cycles::new(1_000_000_000));
-    test.install_canister_with_allocation(
-        canister_id,
-        wat::parse_str(CALL_SIMPLE_WAT).unwrap(),
-        None,
-        Some(canister_memory as u64),
-    )
-    .unwrap();
+    let canister_id = test
+        .create_canister_with_allocation(
+            Cycles::new(1_000_000_000),
+            None,
+            Some(canister_memory as u64),
+        )
+        .unwrap();
+    test.install_canister(canister_id, wat::parse_str(CALL_SIMPLE_WAT).unwrap())
+        .unwrap();
     test.ingress_raw(canister_id, "test", vec![]);
     test.execute_message(canister_id);
 
-    assert_eq!(
-        test.subnet_available_memory().get_execution_memory(),
-        (size_of::<CanisterChange>() + size_of::<PrincipalId>()) as i64
-    );
+    assert_eq!(test.subnet_available_memory().get_execution_memory(), 0);
     assert_eq!(
         test.subnet_available_memory()
             .get_guaranteed_response_message_memory(),
@@ -400,7 +397,6 @@ fn output_best_effort_requests_on_application_subnets_update_subnet_available_me
         .with_subnet_execution_memory(ONE_GIB)
         .with_subnet_memory_reservation(0)
         .with_subnet_guaranteed_response_message_memory(ONE_GIB)
-        .with_best_effort_responses(BestEffortResponsesFeature::Enabled)
         .with_manual_execution()
         .build();
     let canister_id = test.canister_from_wat(CALL_BEST_EFFORT_WAT).unwrap();
@@ -799,10 +795,15 @@ fn get_canister_status_from_another_canister_when_memory_low() {
     let mut test = ExecutionTestBuilder::new().build();
     let controller = test.universal_canister().unwrap();
     let binary = wat::parse_str("(module)").unwrap();
-    let canister = test.create_canister(Cycles::new(1_000_000_000_000));
     let memory_allocation = NumBytes::from(450);
-    test.install_canister_with_allocation(canister, binary, None, Some(memory_allocation.get()))
+    let canister = test
+        .create_canister_with_allocation(
+            Cycles::new(1_000_000_000_000),
+            None,
+            Some(memory_allocation.get()),
+        )
         .unwrap();
+    test.install_canister(canister, binary).unwrap();
     let canister_status_args = Encode!(&CanisterIdRecord::from(canister)).unwrap();
     let get_canister_status = wasm()
         .call_simple(
@@ -2098,40 +2099,6 @@ fn metrics_are_observed_for_subnet_messages() {
 }
 
 #[test]
-fn metrics_are_observed_for_using_deprecated_fields() {
-    let mut test = ExecutionTestBuilder::new().build();
-
-    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
-
-    let payload = ic00::InstallCodeArgsV2::new(
-        ic00::CanisterInstallModeV2::Install,
-        canister_id,
-        UNIVERSAL_CANISTER_WASM.to_vec(),
-        vec![],
-        Some(1),
-        Some(100 * 1024 * 1024),
-    );
-
-    test.subnet_message(Method::InstallCode, payload.encode())
-        .unwrap();
-
-    assert_eq!(
-        fetch_int_counter(
-            test.metrics_registry(),
-            "execution_compute_allocation_in_install_code_total"
-        ),
-        Some(1),
-    );
-    assert_eq!(
-        fetch_int_counter(
-            test.metrics_registry(),
-            "execution_memory_allocation_in_install_code_total"
-        ),
-        Some(1),
-    );
-}
-
-#[test]
 fn ingress_deducts_execution_cost_from_canister_balance() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister = test.universal_canister().unwrap();
@@ -2823,6 +2790,20 @@ fn can_create_canister_with_specified_id() {
         create_canister_with_specified_id(&mut test, &canister, Some(specified_id.get()));
 
     assert_eq!(specified_id, new_canister.get_canister_id());
+
+    // creating a canister with the same `specified_id` again is an error
+    let args = Encode!(&ProvisionalCreateCanisterWithCyclesArgs::new(
+        None,
+        Some(specified_id.into()),
+    ))
+    .unwrap();
+    let err = test
+        .subnet_message("provisional_create_canister_with_cycles", args)
+        .unwrap_err();
+    assert_eq!(ErrorCode::CanisterAlreadyInstalled, err.code());
+    assert!(err
+        .description()
+        .contains(&format!("Canister {} is already installed.", specified_id)));
 }
 
 // Returns CanisterId by formula 'range_start + (range_end - range_start) * percentile'
@@ -2879,6 +2860,58 @@ fn create_multiple_canisters_with_specified_id() {
         inc(first_canister_without_specified_id.get_canister_id()),
         second_canister_without_specified_id.get_canister_id()
     );
+}
+
+#[test]
+fn create_canister_with_invalid_specified_id() {
+    // First determine an invalid `specified_id` by creating a canister on a test instance
+    // whose canister ID belongs to the canister allocation ranges of the test instance.
+    let mut test = ExecutionTestBuilder::new()
+        .with_provisional_whitelist_all()
+        .build_with_routing_table_for_specified_ids();
+    let _proxy_canister_id = test.universal_canister().unwrap();
+    let specified_id = test.universal_canister().unwrap();
+    drop(test);
+
+    // Now create a fresh test instance with the same topology.
+    let mut test = ExecutionTestBuilder::new()
+        .with_provisional_whitelist_all()
+        .build_with_routing_table_for_specified_ids();
+
+    // Using the invalid `specified_id` should result in an error.
+    let args = Encode!(&ProvisionalCreateCanisterWithCyclesArgs::new(
+        None,
+        Some(specified_id.into()),
+    ))
+    .unwrap();
+    let expected_err = format!("The `specified_id` {} is invalid because it belongs to the canister allocation ranges of the test environment.\nUse a `specified_id` that matches a canister ID on the ICP mainnet and a test environment that supports canister creation with `specified_id` (e.g., PocketIC).", specified_id);
+
+    // Both in an ingress message to create a canister
+    let err = test
+        .subnet_message("provisional_create_canister_with_cycles", args.clone())
+        .unwrap_err();
+    assert_eq!(ErrorCode::InvalidManagementPayload, err.code());
+    assert_eq!(err.description(), expected_err,);
+
+    // as well as in an inter-canister call to create a canister.
+    let create_canister = wasm()
+        .call_simple(
+            ic00::IC_00,
+            Method::ProvisionalCreateCanisterWithCycles,
+            call_args()
+                .other_side(args)
+                .on_reject(wasm().reject_message().reject()),
+        )
+        .build();
+
+    let proxy_canister_id = test.universal_canister().unwrap();
+    let result = test
+        .ingress(proxy_canister_id, "update", create_canister)
+        .unwrap();
+    match result {
+        WasmResult::Reply(bytes) => panic!("Unexpected reply: {:?}", bytes),
+        WasmResult::Reject(err) => assert_eq!(err, expected_err),
+    };
 }
 
 #[test]
@@ -3628,7 +3661,7 @@ fn test_vetkd_public_key_api_is_enabled() {
         Method::VetKdPublicKey,
         ic00::VetKdPublicKeyArgs {
             canister_id: None,
-            derivation_domain: vec![],
+            context: vec![],
             key_id: nonexistent_key_id.clone(),
         }
         .encode(),
@@ -3638,7 +3671,7 @@ fn test_vetkd_public_key_api_is_enabled() {
         Method::VetKdPublicKey,
         ic00::VetKdPublicKeyArgs {
             canister_id: None,
-            derivation_domain: vec![],
+            context: vec![],
             key_id: into_inner_vetkd(key_id),
         }
         .encode(),
@@ -3663,12 +3696,12 @@ fn test_vetkd_public_key_api_is_enabled() {
     let response = test.xnet_messages()[1].clone();
     assert_eq!(
         get_reject_message(response),
-        "failed to retrieve VetKD public key: InvalidPublicKey",
+        "Invalid VetKD subnet key: InvalidPublicKey",
     )
 }
 
 #[test]
-fn test_vetkd_derive_encrypted_key_api_is_disabled_without_key() {
+fn test_vetkd_derive_key_api_is_disabled_without_key() {
     let own_subnet = subnet_test_id(1);
     let nns_subnet = subnet_test_id(2);
     let nns_canister = canister_test_id(0x10);
@@ -3677,7 +3710,7 @@ fn test_vetkd_derive_encrypted_key_api_is_disabled_without_key() {
         .with_nns_subnet_id(nns_subnet)
         .with_caller(nns_subnet, nns_canister)
         .build();
-    let method = Method::VetKdDeriveEncryptedKey;
+    let method = Method::VetKdDeriveKey;
     test.inject_call_to_ic00(
         method,
         sign_with_threshold_key_payload(method, make_vetkd_key("some_key")),
@@ -3692,7 +3725,7 @@ fn test_vetkd_derive_encrypted_key_api_is_disabled_without_key() {
 }
 
 #[test]
-fn test_vetkd_derive_encrypted_key_rejects_invalid_transport_keys() {
+fn test_vetkd_derive_key_rejects_invalid_transport_keys() {
     let key_id = make_vetkd_key("some_key");
     let own_subnet = subnet_test_id(1);
     let nns_subnet = subnet_test_id(2);
@@ -3703,12 +3736,12 @@ fn test_vetkd_derive_encrypted_key_rejects_invalid_transport_keys() {
         .with_caller(nns_subnet, nns_canister)
         .with_chain_key(key_id.clone())
         .build();
-    let method = Method::VetKdDeriveEncryptedKey;
-    let args = ic00::VetKdDeriveEncryptedKeyArgs {
-        derivation_id: vec![],
+    let method = Method::VetKdDeriveKey;
+    let args = ic00::VetKdDeriveKeyArgs {
+        input: vec![],
         // invalid transport key
-        encryption_public_key: [1; 48],
-        derivation_domain: vec![],
+        transport_public_key: [1; 48],
+        context: vec![],
         key_id: into_inner_vetkd(key_id),
     };
     test.inject_call_to_ic00(method, args.encode(), Cycles::new(0));
@@ -3721,7 +3754,7 @@ fn test_vetkd_derive_encrypted_key_rejects_invalid_transport_keys() {
 }
 
 #[test]
-fn test_vetkd_derive_encrypted_key_api_is_enabled() {
+fn test_vetkd_derive_key_api_is_enabled() {
     // Arrange.
     let key_id = make_vetkd_key("some_key");
     let own_subnet = subnet_test_id(1);
@@ -3744,7 +3777,7 @@ fn test_vetkd_derive_encrypted_key_api_is_enabled() {
     );
 
     // Act.
-    let method = Method::VetKdDeriveEncryptedKey;
+    let method = Method::VetKdDeriveKey;
     let run = wasm()
         .call_with_cycles(
             ic00::IC_00,
@@ -3791,22 +3824,17 @@ fn reshare_chain_key_api_is_disabled() {
         .with_caller(nns_subnet, nns_canister)
         .build();
     let method = Method::ReshareChainKey;
+    let key = make_vetkd_key("some_key");
     test.inject_call_to_ic00(
         method,
-        ic00::ReshareChainKeyArgs::new(
-            make_vetkd_key("some_key"),
-            nns_subnet,
-            nodes,
-            registry_version,
-        )
-        .encode(),
+        ic00::ReshareChainKeyArgs::new(key.clone(), nns_subnet, nodes, registry_version).encode(),
         Cycles::new(0),
     );
     test.execute_all();
     let response = test.xnet_messages()[0].clone();
     assert_eq!(
         get_reject_message(response),
-        "reshare_chain_key API is not yet implemented.",
+        format!("Subnet {} does not hold threshold key {}.", own_subnet, key),
     )
 }
 

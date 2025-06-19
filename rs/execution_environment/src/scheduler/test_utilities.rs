@@ -16,6 +16,10 @@ use ic_embedders::{
         CanisterStateChanges, ExecutionStateChanges, PausedWasmExecution, SliceExecutionOutput,
         WasmExecutionResult, WasmExecutor,
     },
+    wasmtime_embedder::system_api::{
+        sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateModifications},
+        ApiType, ExecutionParameters,
+    },
     CompilationCache, CompilationResult, WasmExecutionInput,
 };
 use ic_error_types::UserError;
@@ -38,10 +42,6 @@ use ic_replicated_state::{
     testing::{CanisterQueuesTesting, ReplicatedStateTesting},
     CanisterState, ExecutionState, ExportedFunctions, InputQueueType, Memory, MessageMemoryUsage,
     ReplicatedState,
-};
-use ic_system_api::{
-    sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateModifications},
-    ApiType, ExecutionParameters,
 };
 use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_execution_environment::{generate_subnets, test_registry_settings};
@@ -441,8 +441,6 @@ impl SchedulerTest {
             canister_id: target.get(),
             wasm_module,
             arg: encode_message_id_as_payload(message_id),
-            compute_allocation: None,
-            memory_allocation: None,
             sender_canister_version: None,
         };
 
@@ -820,6 +818,8 @@ impl SchedulerTestBuilder {
 
         state.metadata.network_topology.subnets = generate_subnets(
             vec![self.own_subnet_id, self.nns_subnet_id],
+            self.nns_subnet_id,
+            None,
             self.own_subnet_id,
             self.subnet_type,
             registry_settings.subnet_size,
@@ -944,6 +944,8 @@ impl SchedulerTestBuilder {
             self.scheduler_config.upload_wasm_chunk_instructions,
             self.scheduler_config
                 .canister_snapshot_baseline_instructions,
+            self.scheduler_config
+                .canister_snapshot_data_baseline_instructions,
         );
         let scheduler = SchedulerImpl::new(
             self.scheduler_config,
@@ -986,11 +988,11 @@ impl SchedulerTestBuilder {
 /// A test message can be constructed using the helper functions defined below:
 /// - `ingress(5)`: a message that uses 5 instructions.
 /// - `ingress(5).dirty_pages(1): a message that uses 5 instructions and
-///    modifies one page.
+///   modifies one page.
 /// - `ingress(5).call(other_side(callee, 3), on_response(8))`: a message
-///    that uses 5 instructions and calls a canister with id `callee`.
-///    The called message uses 3 instructions. The response handler  uses
-///    8 instructions.
+///   that uses 5 instructions and calls a canister with id `callee`.
+///   The called message uses 3 instructions. The response handler  uses
+///   8 instructions.
 #[derive(Clone, Debug)]
 pub(crate) struct TestMessage {
     // The canister id is optional and is inferred from the context if not
@@ -1443,6 +1445,7 @@ impl TestWasmExecutorCore {
             ApiType::PreUpgrade { .. }
             | ApiType::ReplicatedQuery { .. }
             | ApiType::NonReplicatedQuery { .. }
+            | ApiType::CompositeQuery { .. }
             | ApiType::InspectMessage { .. }
             | ApiType::Start { .. }
             | ApiType::Cleanup { .. } => {

@@ -10,14 +10,14 @@ documentation.workspace = true
 assert_matches = { workspace = true }
 candid = { workspace = true }
 ethers-core = "2.0.8"
-evm_rpc_types = "1.3.0"
+evm_rpc_types = "1.4.0"
 hex = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
-ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
 ic-cdk = { workspace = true }
 ic-cketh-minter = { path = "../minter" }
 ic-error-types = { path = "../../../../packages/ic-error-types" }
 ic-ethereum-types = { path = "../../../../packages/ic-ethereum-types" }
+ic-http-types = { path = "../../../../packages/ic-http-types" }
 ic-icrc1-ledger = { path = "../../../ledger_suite/icrc1/ledger" }
 ic-ledger-suite-orchestrator = { path = "../../ledger-suite-orchestrator" }
 ic-ledger-suite-orchestrator-test-utils = { path = "../../ledger-suite-orchestrator/test_utils" }
@@ -35,4 +35,3 @@ strum_macros = { workspace = true }
 
 [features]
 default = []
-evm-rpc = []

@@ -1,5 +1,11 @@
 use std::{
-    collections::HashSet, fmt, iter::once, sync::atomic::Ordering, sync::Arc, time::Duration,
+    collections::HashSet,
+    fmt,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    time::Duration,
 };
 
 use anyhow::{anyhow, Context};
@@ -7,7 +13,6 @@ use async_trait::async_trait;
 use candid::{Decode, Encode, Principal};
 use certificate_orchestrator_interface as ifc;
 use ic_agent::Agent;
-use opentelemetry::{baggage::BaggageExt, trace::FutureExt, KeyValue};
 use serde::Serialize;
 use trust_dns_resolver::{error::ResolveErrorKind, proto::rr::RecordType};
 
@@ -20,6 +25,10 @@ use crate::{
     registration::{Id, Registration, State},
     TASK_DELAY_SEC, TASK_ERROR_DELAY_SEC,
 };
+
+fn truncated(s: &str, n: usize) -> String {
+    s.chars().take(n).collect()
+}
 
 #[derive(Clone, Debug, Serialize)]
 pub enum Action {
@@ -99,8 +108,8 @@ pub enum ProcessError {
     #[error("awaiting propagation of challenge response dns txt record")]
     AwaitingDnsPropagation,
 
-    #[error("awaiting acme approval for certificate order")]
-    AwaitingAcmeOrderReady,
+    #[error("awaiting acme approval for certificate order: {0}")]
+    AwaitingAcmeOrderReady(String),
 
     #[error("user configured configuration")]
     FailedUserConfigurationCheck,
@@ -118,7 +127,7 @@ impl From<&ProcessError> for Duration {
             ProcessError::AwaitingDnsPropagation => {
                 Duration::from_secs(TASK_DELAY_SEC.load(Ordering::SeqCst))
             }
-            ProcessError::AwaitingAcmeOrderReady => {
+            ProcessError::AwaitingAcmeOrderReady(_) => {
                 Duration::from_secs(TASK_DELAY_SEC.load(Ordering::SeqCst))
             }
             ProcessError::FailedUserConfigurationCheck => {
@@ -134,6 +143,10 @@ impl From<&ProcessError> for Duration {
 #[async_trait]
 pub trait Process: Sync + Send {
     async fn process(&self, id: &Id, task: &Task) -> Result<(), ProcessError>;
+    async fn set_importance(&self, value: bool);
+    async fn set_renewal(&self, value: bool);
+    async fn get_importance(&self) -> bool;
+    async fn get_renewal(&self) -> bool;
 }
 
 pub struct CanisterQueuer(pub Arc<Agent>, pub Principal);
@@ -278,6 +291,8 @@ pub struct Processor {
     dns_creator: Box<dyn dns::Create>,
     dns_deleter: Box<dyn dns::Delete>,
     certificate_uploader: Box<dyn certificate::Upload>,
+    is_important: AtomicBool,
+    is_renewal: AtomicBool,
 }
 
 impl Processor {
@@ -302,12 +317,30 @@ impl Processor {
             dns_creator,
             dns_deleter,
             certificate_uploader,
+            is_important: AtomicBool::new(false),
+            is_renewal: AtomicBool::new(false),
         }
     }
 }
 
 #[async_trait]
 impl Process for Processor {
+    async fn set_importance(&self, value: bool) {
+        self.is_important.store(value, Ordering::SeqCst);
+    }
+
+    async fn set_renewal(&self, value: bool) {
+        self.is_renewal.store(value, Ordering::SeqCst);
+    }
+
+    async fn get_importance(&self) -> bool {
+        self.is_important.load(Ordering::SeqCst)
+    }
+
+    async fn get_renewal(&self) -> bool {
+        self.is_renewal.load(Ordering::SeqCst)
+    }
+
     async fn process(&self, id: &Id, task: &Task) -> Result<(), ProcessError> {
         match task.action {
             Action::Order => {
@@ -351,7 +384,7 @@ impl Process for Processor {
                     .await
                     .context("failed to mark acme order as ready")?;
 
-                Err(ProcessError::AwaitingAcmeOrderReady)
+                Err(ProcessError::AwaitingAcmeOrderReady("ready".to_string()))
             }
 
             Action::Certificate => {
@@ -361,7 +394,9 @@ impl Process for Processor {
                     .finalize(&task.name)
                     .await
                     .map_err(|err| match err {
-                        FinalizeError::OrderNotReady(_) => ProcessError::AwaitingAcmeOrderReady,
+                        FinalizeError::OrderNotReady(err) => {
+                            ProcessError::AwaitingAcmeOrderReady(truncated(&err, 256))
+                        }
                         FinalizeError::UnexpectedError(err) => err.into(),
                     })?;
 
@@ -417,17 +452,30 @@ impl<T: Process> WithDetectRenewal<T> {
 
 #[async_trait]
 impl<T: Process> Process for WithDetectRenewal<T> {
+    async fn set_importance(&self, is_important: bool) {
+        self.processor.set_importance(is_important).await;
+    }
+
+    async fn set_renewal(&self, is_renewal: bool) {
+        self.processor.set_renewal(is_renewal).await;
+    }
+
+    async fn get_importance(&self) -> bool {
+        self.processor.get_importance().await
+    }
+
+    async fn get_renewal(&self) -> bool {
+        self.processor.get_renewal().await
+    }
+
     async fn process(&self, id: &Id, task: &Task) -> Result<(), ProcessError> {
         let is_renewal = match self.renewal_detector.get_cert(id).await {
-            Ok(_) => String::from("1"),
-            Err(GetCertError::NotFound) => String::from("0"),
+            Ok(_) => true,
+            Err(GetCertError::NotFound) => false,
             Err(err) => return Err(ProcessError::UnexpectedError(anyhow!(err))),
         };
-        let ctx = opentelemetry::Context::current_with_baggage(once(KeyValue::new(
-            "is_renewal",
-            is_renewal,
-        )));
-        self.processor.process(id, task).with_context(ctx).await
+        self.processor.set_renewal(is_renewal).await;
+        self.processor.process(id, task).await
     }
 }
 
@@ -454,20 +502,30 @@ pub fn extract_domain(name: &str) -> &str {
 
 #[async_trait]
 impl<T: Process> Process for WithDetectImportance<T> {
+    async fn set_importance(&self, is_important: bool) {
+        self.processor.set_importance(is_important).await;
+    }
+
+    async fn set_renewal(&self, is_renewal: bool) {
+        self.processor.set_renewal(is_renewal).await;
+    }
+
+    async fn get_importance(&self) -> bool {
+        self.processor.get_importance().await
+    }
+
+    async fn get_renewal(&self) -> bool {
+        self.processor.get_renewal().await
+    }
+
     async fn process(&self, id: &Id, task: &Task) -> Result<(), ProcessError> {
         let domain = extract_domain(&task.name);
 
-        let is_important = match self.domains.contains(domain) {
-            false => "0",
-            true => "1",
-        };
+        let is_important = self.domains.contains(domain);
 
-        let ctx = opentelemetry::Context::current_with_baggage(once(KeyValue::new(
-            "is_important",
-            is_important,
-        )));
+        self.processor.set_importance(is_important).await;
 
-        self.processor.process(id, task).with_context(ctx).await
+        self.processor.process(id, task).await
     }
 }
 
@@ -623,7 +681,7 @@ mod tests {
         );
 
         match processor.process(&id, &task).await {
-            Err(ProcessError::AwaitingAcmeOrderReady) => Ok(()),
+            Err(ProcessError::AwaitingAcmeOrderReady(err)) if err == "ready" => Ok(()),
             other => Err(anyhow!(
                 "expected AwaitingAcmeOrderReady but got {:?}",
                 other

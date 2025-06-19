@@ -15,7 +15,7 @@ use ic_icrc1::blocks::encoded_block_to_generic_block;
 use ic_icrc1::{Block, LedgerAllowances, LedgerBalances, Transaction};
 pub use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_canister_core::runtime::{CdkRuntime, Runtime};
-use ic_ledger_canister_core::{archive::Archive, blockchain::BlockData};
+use ic_ledger_canister_core::{archive::Archive, blockchain::BlockDataContainer};
 use ic_ledger_canister_core::{
     archive::ArchiveCanisterWasm,
     blockchain::Blockchain,
@@ -33,8 +33,6 @@ use ic_ledger_hash_of::HashOf;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{storable::Bound, Storable};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
-use icrc_ledger_types::icrc3::transactions::Transaction as Tx;
-use icrc_ledger_types::icrc3::{blocks::GetBlocksResponse, transactions::GetTransactionsResponse};
 use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value,
     icrc3::archive::{ArchivedRange, QueryBlockArchiveFn, QueryTxArchiveFn},
@@ -47,13 +45,20 @@ use icrc_ledger_types::{
         blocks::{ArchivedBlocks, GetBlocksRequest, GetBlocksResult},
     },
 };
+use icrc_ledger_types::{
+    icrc103::get_allowances::Allowance as Allowance103,
+    icrc3::{blocks::GetBlocksResponse, transactions::GetTransactionsResponse},
+};
+use icrc_ledger_types::{
+    icrc103::get_allowances::Allowances, icrc3::transactions::Transaction as Tx,
+};
 use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, VecDeque};
-use std::ops::{DerefMut, Range};
+use std::ops::DerefMut;
 use std::time::Duration;
 
 const TRANSACTION_WINDOW: Duration = Duration::from_secs(24 * 60 * 60);
@@ -70,6 +75,9 @@ const METADATA_NAME: &str = "icrc1:name";
 const METADATA_SYMBOL: &str = "icrc1:symbol";
 const METADATA_FEE: &str = "icrc1:fee";
 const METADATA_MAX_MEMO_LENGTH: &str = "icrc1:max_memo_length";
+const METADATA_PUBLIC_ALLOWANCES: &str = "icrc103:public_allowances";
+const METADATA_MAX_TAKE_ALLOWANCES: &str = "icrc103:max_take_value";
+const MAX_TAKE_ALLOWANCES: u64 = 500;
 
 #[cfg(not(feature = "u256-tokens"))]
 pub type Tokens = ic_icrc1_tokens_u64::U64;
@@ -182,6 +190,7 @@ impl InitArgsBuilder {
             },
             max_memo_length: None,
             feature_flags: None,
+            index_principal: None,
         })
     }
 
@@ -241,6 +250,11 @@ impl InitArgsBuilder {
         self
     }
 
+    pub fn with_index_principal(mut self, index_principal: Principal) -> Self {
+        self.0.index_principal = Some(index_principal);
+        self
+    }
+
     pub fn with_feature_flags(mut self, flags: FeatureFlags) -> Self {
         self.0.feature_flags = Some(flags);
         self
@@ -264,6 +278,7 @@ pub struct InitArgs {
     pub archive_options: ArchiveOptions,
     pub max_memo_length: Option<u16>,
     pub feature_flags: Option<FeatureFlags>,
+    pub index_principal: Option<Principal>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
@@ -340,6 +355,8 @@ pub struct UpgradeArgs {
     pub feature_flags: Option<FeatureFlags>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub change_archive_options: Option<ChangeArchiveOptions>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub index_principal: Option<Principal>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Encode, Decode)]
@@ -561,7 +578,7 @@ pub struct Ledger {
     approvals: LedgerAllowances<Tokens>,
     #[serde(default)]
     stable_approvals: AllowanceTable<StableAllowancesData>,
-    blockchain: Blockchain<CdkRuntime, Icrc1ArchiveWasm, StableBlockData>,
+    blockchain: Blockchain<CdkRuntime, Icrc1ArchiveWasm, StableBlockDataContainer>,
 
     minting_account: Account,
     fee_collector: Option<FeeCollector<Account>>,
@@ -591,6 +608,9 @@ pub struct Ledger {
 
     #[serde(default)]
     pub ledger_version: u64,
+
+    #[serde(default)]
+    index_principal: Option<Principal>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
@@ -619,12 +639,14 @@ fn default_decimals() -> u8 {
 }
 
 fn map_metadata_or_trap(arg_metadata: Vec<(String, Value)>) -> Vec<(String, StoredValue)> {
-    const DISALLOWED_METADATA_FIELDS: [&str; 5] = [
+    const DISALLOWED_METADATA_FIELDS: [&str; 7] = [
         METADATA_DECIMALS,
         METADATA_NAME,
         METADATA_SYMBOL,
         METADATA_FEE,
         METADATA_MAX_MEMO_LENGTH,
+        METADATA_PUBLIC_ALLOWANCES,
+        METADATA_MAX_TAKE_ALLOWANCES,
     ];
     arg_metadata
         .into_iter()
@@ -655,6 +677,7 @@ impl Ledger {
             fee_collector_account,
             max_memo_length,
             feature_flags,
+            index_principal,
         }: InitArgs,
         now: TimeStamp,
     ) -> Self {
@@ -689,7 +712,13 @@ impl Ledger {
             maximum_number_of_accounts: 0,
             accounts_overflow_trim_quantity: 0,
             ledger_version: LEDGER_VERSION,
+            index_principal,
         };
+
+        if ledger.fee_collector.as_ref().map(|fc| fc.fee_collector) == Some(ledger.minting_account)
+        {
+            ic_cdk::trap("The fee collector account cannot be the same as the minting account");
+        }
 
         for (account, balance) in initial_balances.into_iter() {
             let amount = Tokens::try_from(balance.clone()).unwrap_or_else(|e| {
@@ -755,6 +784,10 @@ impl Ledger {
     pub fn copy_token_pool(&mut self) {
         self.stable_balances.token_pool = self.balances.token_pool;
     }
+
+    pub fn set_index_principal(&mut self, index_principal: Principal) {
+        self.index_principal = Some(index_principal);
+    }
 }
 
 impl LedgerContext for Ledger {
@@ -793,7 +826,7 @@ impl LedgerData for Ledger {
     type ArchiveWasm = Icrc1ArchiveWasm;
     type Transaction = Transaction<Tokens>;
     type Block = Block<Tokens>;
-    type BlockData = StableBlockData;
+    type BlockDataContainer = StableBlockDataContainer;
 
     fn transaction_window(&self) -> Duration {
         TRANSACTION_WINDOW
@@ -815,13 +848,15 @@ impl LedgerData for Ledger {
         &self.token_symbol
     }
 
-    fn blockchain(&self) -> &Blockchain<Self::Runtime, Self::ArchiveWasm, Self::BlockData> {
+    fn blockchain(
+        &self,
+    ) -> &Blockchain<Self::Runtime, Self::ArchiveWasm, Self::BlockDataContainer> {
         &self.blockchain
     }
 
     fn blockchain_mut(
         &mut self,
-    ) -> &mut Blockchain<Self::Runtime, Self::ArchiveWasm, Self::BlockData> {
+    ) -> &mut Blockchain<Self::Runtime, Self::ArchiveWasm, Self::BlockDataContainer> {
         &mut self.blockchain
     }
 
@@ -865,6 +900,14 @@ impl Ledger {
         self.decimals
     }
 
+    pub fn index_principal(&self) -> Option<Principal> {
+        self.index_principal
+    }
+
+    pub fn max_take_allowances(&self) -> u64 {
+        MAX_TAKE_ALLOWANCES
+    }
+
     pub fn metadata(&self) -> Vec<(String, Value)> {
         let mut records: Vec<(String, Value)> = self
             .metadata
@@ -880,6 +923,21 @@ impl Ledger {
             METADATA_MAX_MEMO_LENGTH,
             self.max_memo_length() as u64,
         ));
+        records.push(Value::entry(METADATA_PUBLIC_ALLOWANCES, "true"));
+        records.push(Value::entry(
+            METADATA_MAX_TAKE_ALLOWANCES,
+            Nat::from(self.max_take_allowances()),
+        ));
+        // When adding new entries that cannot be set by the user
+        // (e.g. because they are fixed or computed dynamically)
+        // please also add them to `map_metadata_or_trap` to prevent
+        // the entry being set using init or upgrade arguments.
+        if let Some(index_principal) = self.index_principal() {
+            records.push(Value::entry(
+                "icrc106:index_principal",
+                index_principal.to_text(),
+            ));
+        }
         records
     }
 
@@ -942,6 +1000,9 @@ impl Ledger {
                 change_archive_options.apply(archive);
             }
         }
+        if let Some(index_principal) = args.index_principal {
+            self.index_principal = Some(index_principal);
+        }
     }
 
     /// Returns the root hash of the certified ledger state.
@@ -957,29 +1018,17 @@ impl Ledger {
                 let last_block_index = self.blockchain().chain_length().checked_sub(1).unwrap();
                 let last_block_index_label = Label::from("last_block_index");
 
-                #[cfg(feature = "icrc3-compatible-data-certificate")]
-                {
-                    let last_block_hash_label = Label::from("last_block_hash");
-                    let mut last_block_index_encoded = Vec::with_capacity(MAX_U64_ENCODING_BYTES);
-                    leb128::write::unsigned(&mut last_block_index_encoded, last_block_index)
-                        .expect("Failed to write LEB128");
-                    fork(
-                        label(
-                            last_block_hash_label,
-                            leaf(last_block_hash.as_slice().to_vec()),
-                        ),
-                        label(last_block_index_label, leaf(last_block_index_encoded)),
-                    )
-                }
-                #[cfg(not(feature = "icrc3-compatible-data-certificate"))]
-                {
-                    let tip_hash_label = Label::from("tip_hash");
-                    let last_block_index_encoded = last_block_index.to_be_bytes().to_vec();
-                    fork(
-                        label(last_block_index_label, leaf(last_block_index_encoded)),
-                        label(tip_hash_label, leaf(last_block_hash.as_slice().to_vec())),
-                    )
-                }
+                let last_block_hash_label = Label::from("last_block_hash");
+                let mut last_block_index_encoded = Vec::with_capacity(MAX_U64_ENCODING_BYTES);
+                leb128::write::unsigned(&mut last_block_index_encoded, last_block_index)
+                    .expect("Failed to write LEB128");
+                fork(
+                    label(
+                        last_block_hash_label,
+                        leaf(last_block_hash.as_slice().to_vec()),
+                    ),
+                    label(last_block_index_label, leaf(last_block_index_encoded)),
+                )
             }
             None => empty(),
         }
@@ -1186,6 +1235,57 @@ pub fn balances_len() -> u64 {
     BALANCES_MEMORY.with_borrow(|balances| balances.len())
 }
 
+pub fn get_allowances(
+    from: Account,
+    spender: Option<Account>,
+    max_results: u64,
+    now: u64,
+) -> Allowances {
+    let mut result = vec![];
+    let start_account_spender = match spender {
+        Some(spender) => AccountSpender {
+            account: from,
+            spender,
+        },
+        None => AccountSpender {
+            account: from,
+            spender: Account {
+                owner: Principal::from_slice(&[0u8; 0]),
+                subaccount: None,
+            },
+        },
+    };
+    ALLOWANCES_MEMORY.with_borrow(|allowances| {
+        for (account_spender, storable_allowance) in
+            allowances.range(start_account_spender.clone()..)
+        {
+            if spender.is_some() && account_spender == start_account_spender {
+                continue;
+            }
+            if result.len() >= max_results as usize {
+                break;
+            }
+            if account_spender.account.owner != from.owner {
+                break;
+            }
+            if let Some(expires_at) = storable_allowance.expires_at {
+                if expires_at.as_nanos_since_unix_epoch() <= now {
+                    continue;
+                }
+            }
+            result.push(Allowance103 {
+                from_account: account_spender.account,
+                to_spender: account_spender.spender,
+                allowance: Nat::from(storable_allowance.amount),
+                expires_at: storable_allowance
+                    .expires_at
+                    .map(|t| t.as_nanos_since_unix_epoch()),
+            });
+        }
+    });
+    result
+}
+
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct StableAllowancesData {}
 
@@ -1323,71 +1423,18 @@ impl BalancesStore for StableBalances {
 }
 
 #[derive(Debug, Deserialize, Serialize, Default)]
-#[serde(transparent)]
-pub struct StableBlockData {
-    blocks: Vec<EncodedBlock>,
-}
+pub struct StableBlockDataContainer {}
 
-impl BlockData for StableBlockData {
-    fn add_block(&mut self, index: u64, block: EncodedBlock) {
-        BLOCKS_MEMORY.with_borrow_mut(|blocks| {
-            assert!(blocks.insert(index, block.into_vec()).is_none());
-        });
+impl BlockDataContainer for StableBlockDataContainer {
+    fn with_blocks<R>(
+        f: impl FnOnce(&StableBTreeMap<u64, Vec<u8>, VirtualMemory<DefaultMemoryImpl>>) -> R,
+    ) -> R {
+        BLOCKS_MEMORY.with(|cell| f(&cell.borrow()))
     }
 
-    fn get_blocks(&self, range: Range<u64>) -> Vec<EncodedBlock> {
-        BLOCKS_MEMORY.with_borrow(|blocks| match blocks.first_key_value() {
-            Some((first_index, _)) => {
-                let mut result = vec![];
-                let start = range.start + first_index;
-                let end = range.end + first_index;
-                for block in blocks.range(start..end) {
-                    result.push(EncodedBlock::from_vec(block.1));
-                }
-                result
-            }
-            None => vec![],
-        })
-    }
-
-    fn get_block(&self, index: u64) -> Option<EncodedBlock> {
-        BLOCKS_MEMORY.with_borrow(|blocks| match blocks.first_key_value() {
-            Some((first_index, _)) => blocks
-                .get(&(index + first_index))
-                .map(EncodedBlock::from_vec),
-            None => None,
-        })
-    }
-
-    fn remove_oldest_blocks(&mut self, num_blocks: u64) {
-        BLOCKS_MEMORY.with_borrow_mut(|blocks| {
-            let mut removed = 0;
-            while !blocks.is_empty() && removed < num_blocks {
-                blocks.pop_first();
-                removed += 1;
-            }
-        });
-    }
-
-    fn len(&self) -> u64 {
-        BLOCKS_MEMORY.with_borrow(|blocks| blocks.len())
-    }
-
-    fn is_empty(&self) -> bool {
-        BLOCKS_MEMORY.with_borrow(|blocks| blocks.is_empty())
-    }
-
-    fn migrate_one_block(&mut self, num_archived_blocks: u64) -> bool {
-        let num_migrated = self.len();
-        if num_migrated < self.blocks.len() as u64 {
-            self.add_block(
-                num_archived_blocks + num_migrated,
-                self.blocks[num_migrated as usize].clone(),
-            );
-            true
-        } else {
-            self.blocks.clear();
-            false
-        }
+    fn with_blocks_mut<R>(
+        f: impl FnOnce(&mut StableBTreeMap<u64, Vec<u8>, VirtualMemory<DefaultMemoryImpl>>) -> R,
+    ) -> R {
+        BLOCKS_MEMORY.with(|cell| f(&mut cell.borrow_mut()))
     }
 }

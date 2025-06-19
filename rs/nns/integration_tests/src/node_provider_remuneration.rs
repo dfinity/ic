@@ -9,7 +9,7 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_nns_common::{pb::v1::NeuronId as ProtoNeuronId, types::UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     add_or_remove_node_provider::Change,
     manage_neuron_response::Command as CommandResponse,
     reward_node_provider::{RewardMode, RewardToAccount},
@@ -17,6 +17,7 @@ use ic_nns_governance_api::pb::v1::{
     ListNodeProviderRewardsRequest, MakeProposalRequest, NetworkEconomics, NnsFunction,
     NodeProvider, ProposalActionRequest, RewardNodeProvider, RewardNodeProviders,
 };
+use ic_nns_test_utils::state_test_helpers::setup_nns_canisters_with_features;
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     state_test_helpers::{
@@ -24,7 +25,7 @@ use ic_nns_test_utils::{
         nns_get_most_recent_monthly_node_provider_rewards, nns_get_network_economics_parameters,
         nns_governance_get_proposal_info, nns_governance_make_proposal,
         nns_list_node_provider_rewards, nns_wait_for_proposal_execution, query,
-        setup_nns_canisters, state_machine_builder_for_nns_tests, update_with_sender,
+        state_machine_builder_for_nns_tests, update_with_sender,
     },
 };
 use ic_protobuf::registry::{
@@ -75,7 +76,7 @@ fn test_list_node_provider_rewards() {
         .with_initial_invariant_compliant_mutations()
         .with_test_neurons()
         .build();
-    setup_nns_canisters(&state_machine, nns_init_payload);
+    setup_nns_canisters_with_features(&state_machine, nns_init_payload, &[]);
 
     add_data_centers(&state_machine);
     add_node_rewards_table(&state_machine);
@@ -279,6 +280,7 @@ fn test_list_node_provider_rewards() {
             .collect::<Vec<_>>()
     );
 }
+
 #[test]
 fn test_automated_node_provider_remuneration() {
     let state_machine = state_machine_builder_for_nns_tests().build();
@@ -287,7 +289,7 @@ fn test_automated_node_provider_remuneration() {
         .with_initial_invariant_compliant_mutations()
         .with_test_neurons()
         .build();
-    setup_nns_canisters(&state_machine, nns_init_payload);
+    setup_nns_canisters_with_features(&state_machine, nns_init_payload, &[]);
 
     add_data_centers(&state_machine);
     add_node_rewards_table(&state_machine);
@@ -911,6 +913,7 @@ fn add_node_operator(
         dc_id: dc_id.into(),
         rewardable_nodes,
         ipv6: Some(ipv6.into()),
+        max_rewardable_nodes: None,
     };
 
     submit_nns_proposal(

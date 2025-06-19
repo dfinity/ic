@@ -23,9 +23,10 @@ use ic_types::{
     SnapshotId, SubnetId,
 };
 use ic_wasm_types::{doc_ref, AsErrorHelp, CanisterModule, ErrorHelp, WasmHash};
-use num_traits::cast::ToPrimitive;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
+
+use super::MAX_SLICE_SIZE_BYTES;
 
 #[derive(Eq, PartialEq, Debug)]
 pub(crate) struct InstallCodeResult {
@@ -90,6 +91,7 @@ pub(crate) struct CanisterMgrConfig {
     pub(crate) upload_wasm_chunk_instructions: NumInstructions,
     pub(crate) wasm_chunk_store_max_size: NumBytes,
     pub(crate) canister_snapshot_baseline_instructions: NumInstructions,
+    pub(crate) canister_snapshot_data_baseline_instructions: NumInstructions,
     pub(crate) default_wasm_memory_limit: NumBytes,
     pub(crate) max_number_of_snapshots_per_canister: usize,
 }
@@ -113,6 +115,7 @@ impl CanisterMgrConfig {
         upload_wasm_chunk_instructions: NumInstructions,
         wasm_chunk_store_max_size: NumBytes,
         canister_snapshot_baseline_instructions: NumInstructions,
+        canister_snapshot_data_baseline_instructions: NumInstructions,
         default_wasm_memory_limit: NumBytes,
         max_number_of_snapshots_per_canister: usize,
     ) -> Self {
@@ -133,6 +136,7 @@ impl CanisterMgrConfig {
             upload_wasm_chunk_instructions,
             wasm_chunk_store_max_size,
             canister_snapshot_baseline_instructions,
+            canister_snapshot_data_baseline_instructions,
             default_wasm_memory_limit,
             max_number_of_snapshots_per_canister,
         }
@@ -240,8 +244,6 @@ pub struct InstallCodeContext {
     pub canister_id: CanisterId,
     pub wasm_source: WasmSource,
     pub arg: Vec<u8>,
-    pub compute_allocation: Option<ComputeAllocation>,
-    pub memory_allocation: Option<MemoryAllocation>,
 }
 
 impl InstallCodeContext {
@@ -321,8 +323,6 @@ impl InstallCodeContext {
                 wasm_module_hash,
             },
             arg: args.arg,
-            compute_allocation: None,
-            memory_allocation: None,
         })
     }
 }
@@ -333,24 +333,6 @@ impl TryFrom<(CanisterChangeOrigin, InstallCodeArgsV2)> for InstallCodeContext {
     fn try_from(input: (CanisterChangeOrigin, InstallCodeArgsV2)) -> Result<Self, Self::Error> {
         let (origin, args) = input;
         let canister_id = CanisterId::unchecked_from_principal(args.canister_id);
-        let compute_allocation = match args.compute_allocation {
-            Some(ca) => Some(ComputeAllocation::try_from(ca.0.to_u64().ok_or_else(
-                || {
-                    InstallCodeContextError::ComputeAllocation(InvalidComputeAllocationError::new(
-                        ca,
-                    ))
-                },
-            )?)?),
-            None => None,
-        };
-        let memory_allocation = match args.memory_allocation {
-            Some(ma) => Some(MemoryAllocation::try_from(NumBytes::from(
-                ma.0.to_u64().ok_or_else(|| {
-                    InstallCodeContextError::MemoryAllocation(InvalidMemoryAllocationError::new(ma))
-                })?,
-            ))?),
-            None => None,
-        };
 
         Ok(InstallCodeContext {
             origin,
@@ -358,8 +340,6 @@ impl TryFrom<(CanisterChangeOrigin, InstallCodeArgsV2)> for InstallCodeContext {
             canister_id,
             wasm_source: WasmSource::CanisterModule(CanisterModule::new(args.wasm_module)),
             arg: args.arg,
-            compute_allocation,
-            memory_allocation,
         })
     }
 }
@@ -478,6 +458,10 @@ pub(crate) enum CanisterManagerError {
         limit: usize,
     },
     CanisterSnapshotNotEnoughCycles(CanisterOutOfCyclesError),
+    CanisterSnapshotImmutable,
+    CanisterSnapshotInconsistent {
+        message: String,
+    },
     LongExecutionAlreadyInProgress {
         canister_id: CanisterId,
     },
@@ -486,6 +470,17 @@ pub(crate) enum CanisterManagerError {
     },
     InvalidUpgradeOptionError {
         message: String,
+    },
+    InvalidSlice {
+        offset: u64,
+        size: u64,
+    },
+    SliceTooLarge {
+        requested: u64,
+        allowed: u64,
+    },
+    InvalidSpecifiedId {
+        specified_id: CanisterId,
     },
 }
 
@@ -609,8 +604,8 @@ impl AsErrorHelp for CanisterManagerError {
                 }
             }
             CanisterManagerError::ReservedCyclesLimitIsTooLow { .. } => ErrorHelp::UserError {
-                suggestion: "".to_string(),
-                doc_link: "".to_string(),
+                suggestion: "Set the reserved cycles limit in the canister settings to a value that is at least the current reserved cycles balance.".to_string(),
+                doc_link: "reserved-cycles-limit-is-too-low".to_string(),
             },
             CanisterManagerError::WasmChunkStoreError { .. } => ErrorHelp::UserError {
                 suggestion: "Use the `stored_chunks` API to check which hashes are present \
@@ -641,11 +636,15 @@ impl AsErrorHelp for CanisterManagerError {
                 }
             }
             CanisterManagerError::CanisterSnapshotLimitExceeded { .. } => ErrorHelp::UserError {
-                suggestion: "".to_string(),
-                doc_link: "".to_string(),
+                suggestion: "Consider deleting an unnecessary snapshot of the specified canister before creating a new one.".to_string(),
+                doc_link: "canister-snapshot-limit-exceeded".to_string(),
             },
             CanisterManagerError::CanisterSnapshotNotEnoughCycles { .. } => ErrorHelp::UserError {
-                suggestion: "".to_string(),
+                suggestion: "Try sending more cycles with the request.".to_string(),
+                doc_link: "canister-snapshot-not-enough-cycles".to_string(),
+            },
+            CanisterManagerError::CanisterSnapshotImmutable => ErrorHelp::UserError {
+                suggestion: "Only canister snapshots created by metadata upload can be mutated.".to_string(),
                 doc_link: "".to_string(),
             },
             CanisterManagerError::LongExecutionAlreadyInProgress { .. } => ErrorHelp::UserError {
@@ -663,6 +662,24 @@ impl AsErrorHelp for CanisterManagerError {
                         .to_string(),
                 doc_link: doc_ref("invalid-upgrade-option"),
             },
+            CanisterManagerError::InvalidSlice { .. } => ErrorHelp::UserError {
+                suggestion:
+                    "Use the snapshot metadata API to learn the size of the wasm module / main memory / stable memory."
+                        .to_string(),
+                doc_link: "".to_string(),
+            },
+            CanisterManagerError::SliceTooLarge { .. } => ErrorHelp::UserError {
+                suggestion: format!("Use a slice size at most {}", MAX_SLICE_SIZE_BYTES),
+                doc_link: "".to_string(),
+            },
+            CanisterManagerError::InvalidSpecifiedId { .. } => ErrorHelp::UserError {
+                suggestion: "Use a `specified_id` that matches a canister ID on the ICP mainnet and a test environment that supports canister creation with `specified_id` (e.g., PocketIC).".to_string(),
+                doc_link: "".to_string(),
+            },
+            CanisterManagerError::CanisterSnapshotInconsistent { .. } => ErrorHelp::UserError {
+                suggestion: "Make sure to upload a complete and valid snapshot. Compare with snapshot metadata from the endpoint `read_canister_snapshot_metadata`".to_string(),
+                doc_link: "".to_string(),
+            }
         }
     }
 }
@@ -959,7 +976,13 @@ impl From<CanisterManagerError> for UserError {
             CanisterSnapshotNotEnoughCycles(err) => {
                 Self::new(
                 ErrorCode::CanisterOutOfCycles,
-                    format!("Canister snapshotting failed with `{}`{additional_help}", err),
+                    format!("Canister snapshotting failed with: `{}`{additional_help}", err),
+                )
+            }
+            CanisterSnapshotImmutable => {
+                Self::new(
+                ErrorCode::CanisterSnapshotImmutable,
+                    "Only canister snapshots created by metadata upload can be mutated.".to_string(),
                 )
             }
             LongExecutionAlreadyInProgress { canister_id } => {
@@ -986,6 +1009,30 @@ impl From<CanisterManagerError> for UserError {
                     )
                 )
             }
+            InvalidSlice { offset, size } => {
+                Self::new(
+                    ErrorCode::InvalidManagementPayload,
+                    format!("Invalid subslice into wasm module / main memory / stable memory: offset: {}, size: {}", offset, size)
+                )
+            }
+            CanisterManagerError::SliceTooLarge { requested, allowed } => {
+                Self::new(
+                    ErrorCode::InvalidManagementPayload,
+                    format!("Requested slice too large: {} > {}", requested, allowed),
+                )
+            }
+            InvalidSpecifiedId { specified_id } => {
+                Self::new(
+                    ErrorCode::InvalidManagementPayload,
+                    format!("The `specified_id` {specified_id} is invalid because it belongs to the canister allocation ranges of the test environment.{additional_help}")
+                )
+            }
+            CanisterSnapshotInconsistent { message} => {
+                Self::new(
+                    ErrorCode::InvalidManagementPayload,
+                    message,
+                )
+            }
         }
     }
 }
@@ -995,6 +1042,12 @@ impl From<CanisterSnapshotError> for CanisterManagerError {
         match err {
             CanisterSnapshotError::EmptyExecutionState(canister_id) => {
                 CanisterManagerError::CanisterSnapshotExecutionStateNotFound { canister_id }
+            }
+            CanisterSnapshotError::InvalidSubslice { offset, size } => {
+                CanisterManagerError::InvalidSlice { offset, size }
+            }
+            CanisterSnapshotError::InvalidMetadata { reason } => {
+                CanisterManagerError::InvalidSettings { message: reason }
             }
         }
     }

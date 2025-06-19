@@ -1,30 +1,30 @@
 [package]
-name = "ic-canister-sandbox-backend-lib"
-version.workspace = true
 authors.workspace = true
-edition.workspace = true
 description.workspace = true
 documentation.workspace = true
+edition.workspace = true
+name = "ic-canister-sandbox-backend-lib"
+version.workspace = true
 
 [build-dependencies]
 cc = "1.0"
 
 [dependencies]
-ic-interfaces = { path = "../interfaces" }
 bincode = { workspace = true }
 bytes = { workspace = true }
 ic-base-types = { path = "../types/base_types" }
 ic-config = { path = "../config" }
-ic-limits = { path = "../limits" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-embedders = { path = "../embedders" }
+ic-interfaces = { path = "../interfaces" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
+ic-limits = { path = "../limits" }
 ic-logger = { path = "../monitoring/logger" }
+ic-management-canister-types-private = { path = "../types/management_canister_types" }
 ic-metrics = { path = "../monitoring/metrics" }
-ic-replicated-state = { path = "../replicated_state" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
+ic-replicated-state = { path = "../replicated_state" }
 ic-sys = { path = "../sys" }
-ic-system-api = { path = "../system_api" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 ic-wasm-types = { path = "../types/wasm_types" }
@@ -42,13 +42,16 @@ serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }
+tempfile = { workspace = true }
 threadpool = { workspace = true }
 which = "4.2.2"
 
 [dev-dependencies]
-ic-management-canister-types-private = { path = "../types/management_canister_types" }
+ic-error-types = { path = "../../packages/ic-error-types" }
 ic-registry-routing-table = { path = "../registry/routing_table" }
 ic-test-utilities = { path = "../test_utilities" }
+ic-test-utilities-execution-environment = { path = "../test_utilities/execution_environment" }
+ic-test-utilities-metrics = { path = "../test_utilities/metrics" }
 # This makes the dependencies of the binary more consistent
 # with the dependencies of execution environment tests and
 # allows the binary to reuse most of the build artifacts
@@ -56,9 +59,9 @@ ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
 mockall = { workspace = true }
 rand = { workspace = true }
+rstest = { workspace = true }
 slog-async = { workspace = true }
 slog-term = { workspace = true }
-tempfile = { workspace = true }
 wat = { workspace = true }
 
 [features]

@@ -2,7 +2,7 @@
 name = "ic-icrc-rosetta"
 description = "Build Once. Integrate Your Blockchain Everywhere. "
 default-run = "ic-icrc-rosetta"
-version = "1.1.2"
+version = "1.2.3"
 authors.workspace = true
 edition.workspace = true
 documentation.workspace = true
@@ -17,6 +17,7 @@ axum = { workspace = true }
 candid = { workspace = true }
 ciborium = { workspace = true }
 clap = { workspace = true }
+futures = { workspace = true }
 hex = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
@@ -81,3 +82,7 @@ path = "tests/integration_tests.rs"
 [[test]]
 name = "system_tests"
 path = "tests/system_tests.rs"
+
+[[test]]
+name = "multitoken_system_tests"
+path = "tests/multitoken_system_tests.rs"

@@ -448,6 +448,9 @@ pub(crate) async fn validate_and_render_action(
                 &disallowed_target_canister_ids,
             )
         }
+        proposal::Action::RegisterExtension(_) => {
+            Err("RegisterExtension proposals are not supported yet.".to_string())
+        }
         proposal::Action::DeregisterDappCanisters(deregister_dapp_canisters) => {
             validate_and_render_deregister_dapp_canisters(
                 deregister_dapp_canisters,
@@ -1815,19 +1818,6 @@ fn validate_and_render_advance_sns_target_version_proposal(
     ))
 }
 
-fn topic_to_str(topic: &Topic) -> &'static str {
-    match topic {
-        Topic::Unspecified => "Unspecified",
-        Topic::DaoCommunitySettings => "DaoCommunitySettings",
-        Topic::SnsFrameworkManagement => "SnsFrameworkManagement",
-        Topic::DappCanisterManagement => "DappCanisterManagement",
-        Topic::ApplicationBusinessLogic => "ApplicationBusinessLogic",
-        Topic::Governance => "Governance",
-        Topic::TreasuryAssetManagement => "TreasuryAssetManagement",
-        Topic::CriticalDappOperations => "CriticalDappOperations",
-    }
-}
-
 pub(crate) fn validate_and_render_set_topics_for_custom_proposals(
     set_topics_for_custom_proposals: &SetTopicsForCustomProposals,
     existing_custom_functions: &BTreeMap<u64, (String, Option<Topic>)>,
@@ -1868,20 +1858,16 @@ pub(crate) fn validate_and_render_set_topics_for_custom_proposals(
             continue;
         };
 
-        let proposed_topic_str = topic_to_str(&proposed_topic);
-
         let topic_change_str = if let Some(current_topic) = current_topic {
             // Is this proposal trying to modify a previously set topic?
 
             if proposed_topic == *current_topic {
-                format!("{proposed_topic_str} (keeping unchanged)")
+                format!("{proposed_topic} (keeping unchanged)")
             } else {
-                let existing_topic_str = topic_to_str(current_topic);
-
-                format!("{proposed_topic_str} (changing from {existing_topic_str})")
+                format!("{proposed_topic} (changing from {current_topic})")
             }
         } else {
-            format!("{proposed_topic_str} (topic not currently set)")
+            format!("{proposed_topic} (topic not currently set)")
         };
 
         table.push(format!("{function_name} under topic {topic_change_str}"));
@@ -2040,7 +2026,7 @@ impl ProposalData {
         // no only needs a tie.
         let current_deadline = wait_for_quiet_state.current_deadline_timestamp_seconds;
         let deciding_amount_yes = new_tally.total / 2 + 1;
-        let deciding_amount_no = (new_tally.total + 1) / 2;
+        let deciding_amount_no = new_tally.total.div_ceil(2);
         if new_tally.yes >= deciding_amount_yes
             || new_tally.no >= deciding_amount_no
             || now_seconds > current_deadline

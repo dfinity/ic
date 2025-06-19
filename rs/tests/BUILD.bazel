@@ -33,6 +33,7 @@ PACKAGES = [
     "@focal//rsync/amd64",
     "@focal//gzip/amd64",
     "@focal//zstd/amd64",
+    "@focal//xz-utils/amd64",
 ]
 
 tar(
@@ -351,6 +352,12 @@ oci_tar(
 )
 
 oci_tar(
+    name = "ic_gatewayd.tar",
+    image = "@ic_gatewayd",
+    repo_tags = ["ic_gatewayd:image"],
+)
+
+oci_tar(
     name = "nginx-proxy.tar",
     image = "@nginx-proxy",
     repo_tags = ["nginx-proxy:image"],
@@ -370,5 +377,13 @@ uvm_config_image(
         "canister_http_test_ca.cert": "cert.pem",
         "canister_http_test_ca.key": "key.pem",
     },
+    tags = ["manual"],  # this target will be built if required as a dependency of another target
+)
+
+uvm_config_image(
+    name = "ic_gateway_uvm_config_image",
+    srcs = [
+        ":ic_gatewayd.tar",
+    ],
     tags = ["manual"],  # this target will be built if required as a dependency of another target
 )

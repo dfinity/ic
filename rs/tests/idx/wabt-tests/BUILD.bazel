@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
@@ -12,11 +12,23 @@ MACRO_DEPENDENCIES = []
 
 ALIASES = {}
 
+rust_library(
+    name = "wabt-tests",
+    srcs = glob(["src/**/*.rs"]),
+    aliases = ALIASES,
+    crate_name = "wabt_tests",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = DEPENDENCIES,
+)
+
 rust_binary(
     name = "generator",
     srcs = ["src/main.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],
-    deps = DEPENDENCIES,
+    deps = DEPENDENCIES + [
+        ":wabt-tests",
+    ],
 )

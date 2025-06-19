@@ -3,7 +3,8 @@ use candid::Encode;
 use dfn_candid::candid;
 use ic_base_types::{subnet_id_try_from_protobuf, PrincipalId, SubnetId};
 use ic_management_canister_types_private::{
-    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
+    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
+    VetKdKeyId,
 };
 use ic_nns_test_utils::registry::TEST_ID;
 use ic_nns_test_utils::{
@@ -13,9 +14,9 @@ use ic_nns_test_utils::{
     },
     registry::{get_value_or_panic, invariant_compliant_mutation_as_atomic_req},
 };
-use ic_protobuf::registry::crypto::v1::ChainKeySigningSubnetList;
+use ic_protobuf::registry::crypto::v1::ChainKeyEnabledSubnetList;
 use ic_protobuf::registry::subnet::v1::{ChainKeyConfig as ChainKeyConfigPb, SubnetRecord};
-use ic_registry_keys::{make_chain_key_signing_subnet_list_key, make_subnet_record_key};
+use ic_registry_keys::{make_chain_key_enabled_subnet_list_key, make_subnet_record_key};
 use ic_registry_subnet_features::{
     ChainKeyConfig as ChainKeyConfigInternal, DEFAULT_ECDSA_MAX_QUEUE_SIZE,
 };
@@ -386,6 +387,15 @@ fn test_subnets_configuration_schnorr_fields_are_updated_correctly() {
     test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id);
 }
 
+#[test]
+fn test_subnets_configuration_vetkd_fields_are_updated_correctly() {
+    let key_id = MasterPublicKeyId::VetKd(VetKdKeyId {
+        curve: VetKdCurve::Bls12_381_G2,
+        name: "key_id_1".to_string(),
+    });
+    test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id);
+}
+
 fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: MasterPublicKeyId) {
     let enable_before_adding_reject_msg = format!(
         "Canister rejected with \
@@ -471,7 +481,11 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
         let chain_key_config = ChainKeyConfig {
             key_configs: vec![KeyConfig {
                 key_id: Some(key_id.clone()),
-                pre_signatures_to_create_in_advance: Some(10),
+                pre_signatures_to_create_in_advance: Some(if key_id.requires_pre_signatures() {
+                    10
+                } else {
+                    0
+                }),
                 max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
             }],
             signature_request_timeout_ns,
@@ -609,9 +623,9 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
             // Inspect the signing subnet list
             {
                 let new_signing_subnet_list: Vec<_> =
-                    get_value_or_panic::<ChainKeySigningSubnetList>(
+                    get_value_or_panic::<ChainKeyEnabledSubnetList>(
                         &registry,
-                        make_chain_key_signing_subnet_list_key(&key_id).as_bytes(),
+                        make_chain_key_enabled_subnet_list_key(&key_id).as_bytes(),
                     )
                     .await
                     .subnets

@@ -1,6 +1,8 @@
 [workspace]
 
 members = [
+    "packages/canlog",
+    "packages/canlog_derive",
     "packages/icrc-cbor",
     "packages/icrc-ledger-agent",
     "packages/icrc-ledger-client",
@@ -11,14 +13,15 @@ members = [
     "packages/ic-ethereum-types",
     "packages/ic-error-types",
     "packages/ic-hpke",
+    "packages/ic-http-types",
     "packages/ic-metrics-assert",
     "packages/ic-secp256k1",
+    "packages/ic-secp256r1",
     "packages/ic-sha3",
     "packages/ic-ledger-hash-of",
     "packages/ic-signature-verification",
     "packages/pocket-ic",
     "packages/pocket-ic/test_canister",
-    "packages/ic-vetkd-utils",
     "rs/artifact_pool",
     "rs/http_endpoints/async_utils",
     "rs/backup",
@@ -27,7 +30,6 @@ members = [
     "rs/bitcoin/service",
     "rs/bitcoin/ckbtc/agent",
     "rs/bitcoin/ckbtc/minter",
-    "rs/bitcoin/ckbtc/kyt",
     "rs/bitcoin/consensus",
     "rs/bitcoin/checker",
     "rs/bitcoin/mock",
@@ -65,11 +67,13 @@ members = [
     "rs/certification/test-utils",
     "rs/config",
     "rs/consensus",
+    "rs/consensus/certification",
+    "rs/consensus/dkg",
+    "rs/consensus/idkg",
     "rs/consensus/mocks",
     "rs/consensus/utils",
     "rs/criterion_time",
     "rs/crypto",
-    "rs/crypto/ecdsa_secp256r1",
     "rs/crypto/for_verification_only",
     "rs/crypto/iccsa",
     "rs/crypto/internal/crypto_lib/basic_sig/der_utils",
@@ -109,6 +113,7 @@ members = [
     "rs/crypto/test_utils/metrics",
     "rs/crypto/test_utils/ni-dkg",
     "rs/crypto/test_utils/tls",
+    "rs/crypto/test_utils/vetkd",
     "rs/crypto/tls_interfaces",
     "rs/crypto/tls_interfaces/mocks",
     "rs/crypto/tree_hash",
@@ -130,6 +135,7 @@ members = [
     "rs/execution_environment/tools",
     "rs/http_endpoints/metrics",
     "rs/http_endpoints/public",
+    "rs/http_endpoints/test_agent",
     "rs/http_endpoints/xnet",
     "rs/http_utils",
     "rs/ic_os/deterministic_ips",
@@ -138,6 +144,7 @@ members = [
     "rs/ic_os/config",
     "rs/ic_os/config_types",
     "rs/ic_os/fstrim_tool",
+    "rs/ic_os/grub",
     "rs/ic_os/metrics_tool",
     "rs/ic_os/os_tools/guestos_tool",
     "rs/ic_os/os_tools/hostos_tool",
@@ -146,8 +153,9 @@ members = [
     "rs/ic_os/network",
     "rs/ic_os/nft_exporter",
     "rs/ic_os/nss_icos",
-    "rs/ic_os/dev_test_tools/setupos-inject-configuration",
+    "rs/ic_os/dev_test_tools/setupos-image-config",
     "rs/ic_os/build_tools/partition_tools",
+    "rs/ic_os/config_types/compatibility_tests",
     "rs/ic_os/dev_test_tools/setupos-disable-checks",
     "rs/ic_os/os_tools/setupos_tool",
     "rs/ic_os/utils",
@@ -178,6 +186,7 @@ members = [
     "rs/monitoring/tracing/logging_layer",
     "rs/nervous_system/agent",
     "rs/nervous_system/candid_utils",
+    "rs/nervous_system/chunks",
     "rs/nervous_system/clients",
     "rs/nervous_system/collections/union_multi_map",
     "rs/nervous_system/common",
@@ -234,6 +243,7 @@ members = [
     "rs/nns/sns-wasm/protobuf_generator",
     "rs/node_rewards/canister",
     "rs/node_rewards/canister/api",
+    "rs/node_rewards/rewards_calculation",
     "rs/determinism_test",
     "rs/orchestrator",
     "rs/orchestrator/dashboard",
@@ -256,11 +266,12 @@ members = [
     "rs/registry/admin-derive",
     "rs/registry/canister",
     "rs/registry/canister/api",
+    "rs/registry/canister/chunkify",
     "rs/registry/canister/protobuf_generator",
-    "rs/registry/canister_data_provider",
     "rs/registry/client",
     "rs/registry/canister-client",
     "rs/registry/fake",
+    "rs/registry/fetch_large_record_test_canister",
     "rs/registry/helpers",
     "rs/registry/local_registry",
     "rs/registry/local_store",
@@ -325,7 +336,6 @@ members = [
     "rs/rust_canisters/dfn_protobuf",
     "rs/rust_canisters/downstream_calls_test",
     "rs/rust_canisters/ecdsa",
-    "rs/rust_canisters/http_types",
     "rs/rust_canisters/load_simulator",
     "rs/rust_canisters/memory_test",
     "rs/rust_canisters/on_wire",
@@ -339,6 +349,8 @@ members = [
     "rs/sns/audit",
     "rs/sns/cli",
     "rs/sns/governance",
+    "rs/sns/governance/api",
+    "rs/sns/governance/api_helpers",
     "rs/sns/governance/proposal_criticality",
     "rs/sns/governance/protobuf_generator",
     "rs/sns/governance/token_valuation",
@@ -358,7 +370,6 @@ members = [
     "rs/state_layout",
     "rs/state_tool",
     "rs/sys",
-    "rs/system_api",
     "rs/test_utilities",
     "rs/test_utilities/artifact_pool",
     "rs/test_utilities/consensus",
@@ -373,7 +384,6 @@ members = [
     "rs/test_utilities/types",
     "rs/test_utilities/tmpdir",
     "rs/tests/boundary_nodes",
-    "rs/tests/boundary_nodes/custom_domains",
     "rs/tests/boundary_nodes/integration_test_common",
     "rs/tests/boundary_nodes/performance_test_common",
     "rs/tests/boundary_nodes/utils",
@@ -407,7 +417,6 @@ members = [
     "rs/tests/nns",
     "rs/tests/nns/sns",
     "rs/tests/nns/sns/lib",
-    "rs/tests/nns/ic_mainnet_nns_recovery",
     "rs/tests/nns/cycles_minting",
     "rs/tests/nns/nns_dapp",
     "rs/tests/node",
@@ -495,7 +504,9 @@ opt-level = 3
 
 [workspace.dependencies]
 actix-web = "4.9.0"
+actix-web-prom = "0.9.0"
 actix-rt = "2.10.0"
+aide = { version = "^0.14.2", features = ["axum", "axum-json"] }
 anyhow = "1.0.93"
 arbitrary = { version = "1.3.2", features = ["derive"] }
 arrayvec = "0.7.4"
@@ -505,9 +516,9 @@ assert_matches = "1.5.0"
 async-recursion = "1.0.5"
 async-stream = "0.3.6"
 async-trait = "0.1.83"
-axum = "0.8.1"
-axum-extra = { version = "0.10.0", features = ["typed-header"] }
-axum-server = { version = "0.7.1", features = ["tls-rustls-no-provider"] }
+axum = { version = "0.8.4", features = ["ws"] }
+axum-extra = { version = "0.10.1", features = ["typed-header"] }
+axum-server = { version = "0.7.2", features = ["tls-rustls-no-provider"] }
 backoff = "0.4"
 base64 = { version = "0.13.1" }
 bincode = "1.3.3"
@@ -530,14 +541,15 @@ clap = { version = "4.5.20", features = ["derive", "string"] }
 # see:
 # - https://github.com/cloudflare/cloudflare-rs/issues/222
 # - https://github.com/cloudflare/cloudflare-rs/issues/236
-cloudflare = { git = "https://github.com/dfinity/cloudflare-rs.git", rev = "a6538a036926bd756986c9c0a5de356daef48881", default-features = false }
+cloudflare = { git = "https://github.com/dfinity/cloudflare-rs.git", rev = "8b011d170d9d61eaad77bb9645371f6219285104", default-features = false }
 criterion = { version = "0.5.1", features = ["html_reports", "async_tokio"] }
-crossbeam-channel = "0.5.13"
+crossbeam-channel = "0.5.15"
 curve25519-dalek = { version = "4.1.3", features = [
     "group",
     "precomputed-tables",
 ] }
-dfx-core = { version = "0.1.3" }
+derive-new = "0.7.0"
+dfx-core = { version = "0.1.4" }
 ed25519-dalek = { version = "2.1.1", features = [
     "std",
     "zeroize",
@@ -551,13 +563,16 @@ ethnum = { version = "1.3.2", features = ["serde"] }
 flate2 = "1.0.31"
 futures = "0.3.31"
 futures-util = "0.3.31"
+getrandom = { version = "0.2", features = ["custom"] }
+goldenfile = "1.8.0"
 hex = { version = "0.4.3", features = ["serde"] }
-http = "1.2.0"
+http = "1.3.1"
 http-body = "1.0.1"
-http-body-util = "0.1.2"
+http-body-util = "0.1.3"
+humantime = "2.2"
 humantime-serde = "1.1.1"
-hyper = { version = "1.5.1", features = ["full"] }
-hyper-rustls = { version = "0.27.3", default-features = false, features = [
+hyper = { version = "1.6.0", features = ["full"] }
+hyper-rustls = { version = "0.27.5", default-features = false, features = [
     "http1",
     "http2",
     "native-tokio",
@@ -565,27 +580,29 @@ hyper-rustls = { version = "0.27.3", default-features = false, features = [
     "tls12",
 ] }
 hyper-socks2 = { version = "0.9.1", default-features = false }
-hyper-util = { version = "0.1.10", features = ["full"] }
-ic-agent = { version = "0.39.2", features = ["pem", "ring"] }
-ic-bn-lib = { git = "https://github.com/dfinity/ic-bn-lib", rev = "686cff6ccd422716d48767a299ab33044a27d4ad" }
+hyper-util = { version = "0.1.12", features = ["full"] }
+ic-agent = { version = "0.40.1", features = ["pem", "ring"] }
+ic-bn-lib = { git = "https://github.com/dfinity/ic-bn-lib", rev = "620fb49a238b3d8a2caa436b5742ed7ca7012098", features = [
+    "acme_alpn",
+] }
 ic-btc-interface = "0.2.2"
 ic-canister-sig-creation = { git = "https://github.com/dfinity/ic-canister-sig-creation", rev = "7f9e931954637526295269155881207f6c832d6d" }
 ic-cbor = "3"
-ic-cdk = "0.17.1"
-ic-cdk-macros = "0.17.0"
+ic-cdk = "0.17.2"
 ic-cdk-timers = "0.11.0"
 ic-certificate-verification = "3"
 ic-certification = "3"
-ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "a6cdd78692aa0715c38979aaa8447e70c4456b0b" }
+ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "b78562340bd00f05f9c055dcba3ec0f74758c927", default-features = false }
 ic-http-certification = "3.0.3"
-ic-http-gateway = "0.2.0"
-ic-management-canister-types = "0.2.1"
+ic-http-gateway = "0.3.0"
+ic-management-canister-types = "0.3.0"
 ic-response-verification = "3"
 ic-sha3 = "1.0.0"
-ic-stable-structures = "0.6.5"
-ic-transport-types = { version = "0.39.2" }
-ic-utils = { version = "0.39", features = ["raw"] }
-ic_bls12_381 = { version = "0.10.0", default-features = false, features = [
+ic-stable-structures = "0.6.8"
+ic-transport-types = { version = "0.40.1" }
+ic-utils = { version = "0.40.1", features = ["raw"] }
+ic-vetkeys = { git = "https://github.com/dfinity/vetkeys", rev = "5885675b6ccb5269cfac9740dc3da6f14f75347f" }
+ic_bls12_381 = { version = "0.10.1", default-features = false, features = [
     "groups",
     "pairings",
     "alloc",
@@ -620,7 +637,7 @@ memmap2 = "0.9.5"
 minicbor = { version = "0.19.1", features = ["alloc", "derive"] }
 minicbor-derive = "0.13.0"
 mockall = "0.13.0"
-mockito = "1.2.0"
+mockito = "1.6.1"
 nftables = "0.4"
 nix = { version = "0.24.3", features = ["ptrace"] }
 num_cpus = "1.16.0"
@@ -668,7 +685,7 @@ rand_chacha = "0.3.1"
 rayon = "1.10.0"
 rcgen = { version = "0.13.1", features = ["zeroize"] }
 regex = "1.11.0"
-reqwest = { version = "0.12.12", default-features = false, features = [
+reqwest = { version = "0.12.15", default-features = false, features = [
     "blocking",
     "http2",
     "json",
@@ -688,13 +705,14 @@ rustls = { version = "0.23.18", default-features = false, features = [
     "brotli",
 ] }
 schemars = { version = "0.8.21", features = ["derive"] }
+scopeguard = "1.2.0"
 serde = { version = "1.0.203", features = ["derive"] }
 serde_bytes = "0.11.15"
 serde_cbor = "0.11.2"
 serde_json = { version = "^1.0.107" }
 serde_with = "1.14.0"
 serde_yaml = "0.9.33"
-sha2 = "0.10.8"
+sha2 = "0.10.9"
 sha3 = "0.10.8"
 signature = "2.2.0"
 simple_asn1 = "0.6.2"
@@ -714,8 +732,9 @@ strum = { version = "0.26.3", features = ["derive"] }
 strum_macros = "0.26.4"
 subtle = "2.6.1"
 syn = { version = "1.0.109", features = ["fold", "full"] }
+systemd = "0.10"
 tar = "0.4.39"
-tempfile = "3.12.0"
+tempfile = "3.20"
 thiserror = "2.0.3"
 threadpool = "1.8.1"
 tikv-jemalloc-ctl = { version = "0.6", features = ["stats"] }
@@ -732,8 +751,8 @@ tokio-test = "0.4.4"
 tokio-util = { version = "0.7.13", features = ["full"] }
 tonic = "0.12.3"
 tonic-build = "0.12.3"
-tower = { version = "0.5.1", features = ["full"] }
-tower-http = { version = "0.6.2", features = [
+tower = { version = "0.5.2", features = ["full"] }
+tower-http = { version = "0.6.4", features = [
     "cors",
     "limit",
     "trace",
@@ -753,14 +772,18 @@ tracing-subscriber = { version = "0.3.19", features = [
 ] }
 turmoil = "0.6.4"
 url = { version = "2.5.3", features = ["serde"] }
-uuid = { version = "1.11.0", features = ["v4", "serde"] }
+# DO NOT upgrade to >=1.13 unless you are ready to deal with problems.
+# This breaks `wasm32-unknown-unknown` compatibility.
+# Read https://github.com/uuid-rs/uuid/releases/tag/1.13.0
+uuid = { version = "=1.12.1", features = ["v4", "serde"] }
+virt = "0.4"
 walkdir = "2.3.3"
-walrus = "0.23.2"
-wasm-encoder = { version = "0.224.0", features = ["wasmparser"] }
-wasmparser = "0.224.0"
-wasmprinter = "0.224.0"
-wast = "224.0.0"
-wat = "1.224.0"
+walrus = "0.23.3"
+wasm-encoder = { version = "0.228.0", features = ["wasmparser"] }
+wasmparser = "0.228.0"
+wasmprinter = "0.228.0"
+wast = "228.0.0"
+wat = "1.228.0"
 which = "6.0.3"
 x509-cert = { version = "0.2.5", features = ["builder", "hazmat"] }
 x509-parser = { version = "0.16.0" }

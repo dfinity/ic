@@ -14,15 +14,17 @@ use ic_protobuf::registry::{
     node_rewards::v2::UpdateNodeRewardsTableProposalPayload,
 };
 use ic_registry_canister_api::{
-    AddNodePayload, UpdateNodeDirectlyPayload, UpdateNodeIPv4ConfigDirectlyPayload,
+    AddNodePayload, Chunk, GetChunkRequest, GetNodeProvidersMonthlyXdrRewardsRequest,
+    UpdateNodeDirectlyPayload, UpdateNodeIPv4ConfigDirectlyPayload,
 };
 use ic_registry_transport::{
     deserialize_atomic_mutate_request, deserialize_get_changes_since_request,
     deserialize_get_value_request,
     pb::v1::{
-        registry_error::Code, CertifiedResponse, RegistryAtomicMutateResponse, RegistryError,
-        RegistryGetChangesSinceRequest, RegistryGetChangesSinceResponse,
-        RegistryGetLatestVersionResponse, RegistryGetValueResponse,
+        high_capacity_registry_get_value_response, registry_error::Code, CertifiedResponse,
+        HighCapacityRegistryGetChangesSinceResponse, HighCapacityRegistryGetValueResponse,
+        HighCapacityRegistryValue, RegistryAtomicMutateResponse, RegistryError,
+        RegistryGetChangesSinceRequest, RegistryGetLatestVersionResponse,
     },
     serialize_atomic_mutate_response, serialize_get_changes_since_response,
     serialize_get_value_response,
@@ -86,6 +88,9 @@ use std::ptr::addr_of_mut;
 use dfn_core::println;
 use dfn_core::stable::stable64_read;
 use ic_nervous_system_common::memory_manager_upgrade_storage::{load_protobuf, store_protobuf};
+use registry_canister::mutations::do_migrate_canisters::{
+    MigrateCanistersPayload, MigrateCanistersResponse,
+};
 use registry_canister::storage::with_upgrades_memory;
 
 static mut REGISTRY: Option<Registry> = None;
@@ -110,6 +115,20 @@ fn registry_mut() -> &'static mut Registry {
 fn check_caller_is_governance_and_log(method_name: &str) {
     let caller = dfn_core::api::caller();
     println!("{}call: {} from: {}", LOG_PREFIX, method_name, caller);
+    assert_eq!(
+        caller,
+        GOVERNANCE_CANISTER_ID.into(),
+        "{}Principal: {} is not authorized to call this method: {}",
+        LOG_PREFIX,
+        caller,
+        method_name
+    );
+}
+
+fn check_caller_is_canister_migration_orchestrator_and_log(method_name: &str) {
+    let caller = dfn_core::api::caller();
+    println!("{}call: {} from: {}", LOG_PREFIX, method_name, caller);
+    // TODO - change GOVERNANCE_CANISTER to the new canister when the constant is available.
     assert_eq!(
         caller,
         GOVERNANCE_CANISTER_ID.into(),
@@ -203,7 +222,7 @@ ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method
 
 #[export_name = "canister_query get_changes_since"]
 fn get_changes_since() {
-    fn main() -> Result<RegistryGetChangesSinceResponse, (Code, String)> {
+    fn main() -> Result<HighCapacityRegistryGetChangesSinceResponse, (Code, String)> {
         // Parse request.
         let request = deserialize_get_changes_since_request(arg_data())
             .map_err(|err| (Code::MalformedMessage, err.to_string()))?;
@@ -217,7 +236,7 @@ fn get_changes_since() {
             .count_fitting_deltas(version, MAX_REGISTRY_DELTAS_SIZE)
             .min(MAX_VERSIONS_PER_QUERY);
 
-        Ok(RegistryGetChangesSinceResponse {
+        Ok(HighCapacityRegistryGetChangesSinceResponse {
             error: None,
             version: registry.latest_version(),
             deltas: registry.get_changes_since(version, Some(max_versions)),
@@ -225,11 +244,11 @@ fn get_changes_since() {
     }
 
     let response = main().unwrap_or_else(
-        // Convert Err to RegistryGetChangesSinceResponse
+        // Convert Err to HighCapacityRegistryGetChangesSinceResponse
         |(code, reason)| {
             let code = code as i32;
 
-            RegistryGetChangesSinceResponse {
+            HighCapacityRegistryGetChangesSinceResponse {
                 error: Some(RegistryError {
                     code,
                     reason,
@@ -284,14 +303,38 @@ fn get_value() {
         Ok((key, version_opt)) => {
             let registry = registry();
             let version = version_opt.unwrap_or_else(|| registry.latest_version());
-            let result = registry.get(&key, version);
+            let result: Option<HighCapacityRegistryValue> =
+                registry.get_high_capacity(&key, version).cloned();
+
             match result {
-                Some(value) => RegistryGetValueResponse {
-                    error: None,
-                    version: value.version,
-                    value: value.value.clone(),
-                },
-                None => RegistryGetValueResponse {
+                Some(result) => {
+                    let HighCapacityRegistryValue {
+                        version,
+                        content,
+                        timestamp_nanoseconds,
+                    } = result;
+
+                    let content = content.map(|content| {
+                        high_capacity_registry_get_value_response::Content::try_from(content)
+                            // Since get_high_capacity is supposed to NOT return a
+                            // value whose content is deletion_marker, and since
+                            // that is the only case where try_from fails, we deduce
+                            // that this panic cannot occur.
+                            .unwrap_or_else(|err| {
+                                panic!("Unable to convert value to response type, because {}", err,)
+                            })
+                    });
+
+                    HighCapacityRegistryGetValueResponse {
+                        version,
+                        content,
+                        timestamp_nanoseconds,
+
+                        error: None,
+                    }
+                }
+
+                None => HighCapacityRegistryGetValueResponse {
                     error: Some(RegistryError {
                         code: Code::KeyNotPresent as i32,
                         key: key.clone(),
@@ -304,18 +347,20 @@ fn get_value() {
                     // or use it as a precondition, we can only ask that nothing has changed
                     // since the moment we did this read.
                     version,
-                    value: Vec::<u8>::default(),
+                    content: None,
+                    timestamp_nanoseconds: 0,
                 },
             }
         }
-        Err(error) => RegistryGetValueResponse {
+        Err(error) => HighCapacityRegistryGetValueResponse {
             error: Some(RegistryError {
                 code: Code::MalformedMessage as i32,
                 key: Vec::<u8>::default(),
                 reason: error.to_string(),
             }),
             version: 0,
-            value: Vec::<u8>::default(),
+            content: None,
+            timestamp_nanoseconds: 0,
         },
     };
     let bytes = serialize_get_value_response(response_pb).expect("Error serializing response");
@@ -385,6 +430,46 @@ fn atomic_mutate() {
 
     let bytes = serialize_atomic_mutate_response(response_pb).expect("Error serializing response");
     reply(&bytes)
+}
+
+#[export_name = "canister_query get_chunk"]
+fn get_chunk() {
+    over(candid_one, get_chunk_);
+}
+
+#[candid_method(query, rename = "get_chunk")]
+fn get_chunk_(request: GetChunkRequest) -> Result<Chunk, String> {
+    registry().get_chunk(request)
+}
+
+/// Modifies records with keys of the form "daniel_wong_{}".
+///
+/// Returns new version number.
+///
+/// Caller must be GOVERNANCE_CANISTER_ID.
+///
+/// Used in integration test(s) for large records.
+///
+/// This is not in release builds.
+///
+/// There are a couple of pieces of functionality here that cannot otherwise
+/// easily be accomplished:
+///
+///     1. Produce large record(s).
+///     2. Chunking is ALWAYS enabled.
+#[cfg(feature = "test")]
+#[export_name = "canister_update mutate_test_high_capacity_records"]
+fn mutate_test_high_capacity_records() {
+    // Since these should only be used in tests, we do not put these at the top of the file.
+    use ic_registry_canister_api::mutate_test_high_capacity_records::Request;
+
+    over(candid_one, |request: Request| -> /* version */ u64 {
+        check_caller_is_governance_and_log("mutate_test_high_capacity_records");
+        let registry = registry_mut();
+        registry.maybe_apply_mutation_internal(vec![request.into_mutation()]);
+        recertify_registry();
+        registry.latest_version()
+    });
 }
 
 #[export_name = "canister_update revise_elected_guestos_versions"]
@@ -896,20 +981,33 @@ fn complete_canister_migration_(payload: CompleteCanisterMigrationPayload) {
     recertify_registry();
 }
 
+#[export_name = "canister_update migrate_canisters"]
+fn migrate_canisters() {
+    check_caller_is_canister_migration_orchestrator_and_log("migrate_canisters");
+    over(candid_one, migrate_canisters_);
+}
+
+#[candid_method(update, rename = "migrate_canisters")]
+fn migrate_canisters_(payload: MigrateCanistersPayload) -> MigrateCanistersResponse {
+    registry_mut().do_migrate_canisters(payload)
+}
+
 #[export_name = "canister_query get_node_providers_monthly_xdr_rewards"]
 fn get_node_providers_monthly_xdr_rewards() {
     check_caller_is_governance_and_log("get_node_providers_monthly_xdr_rewards");
     over(
         candid_one,
-        |()| -> Result<NodeProvidersMonthlyXdrRewards, String> {
-            get_node_providers_monthly_xdr_rewards_()
+        |request: Option<GetNodeProvidersMonthlyXdrRewardsRequest>| -> Result<NodeProvidersMonthlyXdrRewards, String> {
+            get_node_providers_monthly_xdr_rewards_(request)
         },
     )
 }
 
 #[candid_method(query, rename = "get_node_providers_monthly_xdr_rewards")]
-fn get_node_providers_monthly_xdr_rewards_() -> Result<NodeProvidersMonthlyXdrRewards, String> {
-    registry().get_node_providers_monthly_xdr_rewards()
+fn get_node_providers_monthly_xdr_rewards_(
+    arg: Option<GetNodeProvidersMonthlyXdrRewardsRequest>,
+) -> Result<NodeProvidersMonthlyXdrRewards, String> {
+    registry().get_node_providers_monthly_xdr_rewards(arg.unwrap_or_default())
 }
 
 #[export_name = "canister_query get_api_boundary_node_ids"]

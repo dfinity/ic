@@ -9,15 +9,15 @@ on the process that this file is part of, see
 
 ## Added
 
-* Added `NetworkEconomics.voting_power_economics.neuron_minimum_dissolve_delay_to_vote_seconds`.
+* Neurons can now perform SetFollowing to configure their following on multiple
+  topics at once. Whereas, before, they would have to perform multiple Follow
+  operations, one for each topic. This brings NNS into alignment with SNS.
 
 ## Changed
 
 ## Deprecated
 
 ## Removed
-
-* Removed a migration mechanism previously used for data migrations through heartbeat.
 
 ## Fixed
 

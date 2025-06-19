@@ -1,6 +1,4 @@
 use crate::eth_logs::LedgerSubaccount;
-use crate::eth_rpc::SendRawTransactionResult;
-use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::eth_rpc_client::EthRpcClient;
 use crate::eth_rpc_client::MultiCallError;
 use crate::guard::TimerGuard;
@@ -14,6 +12,7 @@ use crate::state::transactions::{
 use crate::state::{mutate_state, read_state, State, TaskType};
 use crate::tx::{lazy_refresh_gas_fee_estimate, GasFeeEstimate};
 use candid::Nat;
+use evm_rpc_client::{SendRawTransactionStatus, TransactionReceipt as EvmTransactionReceipt};
 use futures::future::join_all;
 use ic_canister_log::log;
 use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};
@@ -344,13 +343,13 @@ async fn send_transactions_batch(latest_transaction_count: Option<TransactionCou
     for (signed_tx, result) in zip(transactions_to_send, results) {
         log!(DEBUG, "Sent transaction {signed_tx:?}: {result:?}");
         match result {
-            Ok(SendRawTransactionResult::Ok) | Ok(SendRawTransactionResult::NonceTooLow) => {
-                // In case of resubmission we may hit the case of SendRawTransactionResult::NonceTooLow
+            Ok(SendRawTransactionStatus::Ok(_)) | Ok(SendRawTransactionStatus::NonceTooLow) => {
+                // In case of resubmission we may hit the case of SendRawTransactionStatus::NonceTooLow
                 // if the stuck transaction was mined in the meantime.
                 // It will be cleaned-up once the transaction is finalized.
             }
-            Ok(SendRawTransactionResult::InsufficientFunds)
-            | Ok(SendRawTransactionResult::NonceTooHigh) => log!(
+            Ok(SendRawTransactionStatus::InsufficientFunds)
+            | Ok(SendRawTransactionStatus::NonceTooHigh) => log!(
                 INFO,
                 "Failed to send transaction {signed_tx:?}: {result:?}. Will retry later.",
             ),
@@ -384,7 +383,7 @@ async fn finalize_transactions_batch() {
                     .map(|hash| rpc_client.eth_get_transaction_receipt(*hash)),
             )
             .await;
-            let mut receipts: BTreeMap<LedgerBurnIndex, TransactionReceipt> = BTreeMap::new();
+            let mut receipts: BTreeMap<LedgerBurnIndex, EvmTransactionReceipt> = BTreeMap::new();
             for ((hash, withdrawal_id), result) in zip(txs_to_finalize, results) {
                 match result {
                     Ok(Some(receipt)) => {
@@ -426,7 +425,7 @@ async fn finalize_transactions_batch() {
                         s,
                         EventType::FinalizedTransaction {
                             withdrawal_id,
-                            transaction_receipt,
+                            transaction_receipt: transaction_receipt.into(),
                         },
                     );
                 });

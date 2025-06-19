@@ -2,9 +2,9 @@ use crate::common::{get_deployed_sns_by_proposal_id, get_deployed_sns_by_proposa
 use common::set_up_state_machine_with_nns;
 use ic_nervous_system_common::ONE_TRILLION;
 use ic_nns_constants::{
-    GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID, SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET,
+    GOVERNANCE_CANISTER_ID, NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET, SNS_WASM_CANISTER_ID,
 };
-use ic_nns_test_utils::{sns_wasm, state_test_helpers};
+use ic_nns_test_utils::sns_wasm;
 use ic_sns_init::pb::v1::{DappCanisters, SnsInitPayload};
 use ic_sns_wasm::pb::v1::{
     get_deployed_sns_by_proposal_id_response::GetDeployedSnsByProposalIdResult,
@@ -18,7 +18,6 @@ pub mod common;
 #[test]
 fn test_get_deployed_sns_by_proposal_id() {
     // Setup the state machine
-    state_test_helpers::reduce_state_machine_logging_unless_env_set();
     let machine = set_up_state_machine_with_nns();
 
     // Add cycles to the SNS-W canister to deploy the SNS
@@ -42,12 +41,13 @@ fn test_get_deployed_sns_by_proposal_id() {
         sns_init_payload,
     );
 
-    // SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 1 is the ID of the wallet canister
-    let root_canister_id = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 1);
-    let governance_canister_id = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 2);
-    let ledger_canister_id = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 3);
-    let swap_canister_id = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 4);
-    let index_canister_id = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 5);
+    let highest_nns_created_canister_index = NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET;
+
+    let root_canister_id = canister_test_id(highest_nns_created_canister_index + 1);
+    let governance_canister_id = canister_test_id(highest_nns_created_canister_index + 2);
+    let ledger_canister_id = canister_test_id(highest_nns_created_canister_index + 3);
+    let swap_canister_id = canister_test_id(highest_nns_created_canister_index + 4);
+    let index_canister_id = canister_test_id(highest_nns_created_canister_index + 5);
 
     assert_eq!(
         response,

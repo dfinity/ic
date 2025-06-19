@@ -11,6 +11,183 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-06-13: Proposal 136987
+
+http://dashboard.internetcomputer.org/proposal/136987
+
+## Changed
+
+* Task execution metrics are added for `neuron_data_validation` and
+  `unstake_maturity_of_dissolved_neurons` timer tasks.
+
+## Fixed
+
+* The `account_identifier_to_disburse_to` in the maturity disbursement now contains a 32-byte
+  address rather than the 28-byte one without checksum.
+
+
+# 2025-06-06: Proposal 136890
+
+http://dashboard.internetcomputer.org/proposal/136890
+
+## Added
+
+* Support disbursing maturity to an account identifier, in addition to icrc1 account.
+
+
+# 2025-05-31: Proposal 136795
+
+http://dashboard.internetcomputer.org/proposal/136795
+
+## Added
+
+* Expose a new metric `voting_power_snapshots_latest_snapshot_is_spike`.
+* Enabling `DisburseMaturity` neuron management proposals.
+
+## Changed
+
+* `MAX_NEURON_CREATION_SPIKE` is increased from 120 to 300.
+
+
+# 2025-05-16: Proposal 136693
+
+http://dashboard.internetcomputer.org/proposal/136693
+
+## Added
+
+* The `DisburseMaturity` neuron command is enabled. See https://forum.dfinity.org/t/disburse-maturity-in-nns/43228 for more details.
+
+## Changed
+
+* Proposal topics are persisted throughout its lifecycle instead of being recomputed every time.
+
+## Removed
+
+* The `IcpXdrConversionRate` proposal is now obsolete and cannot be submitted.
+
+## Security
+Enforce a lower bound for `min_participant_icp_e8s` of `1_000_000`.
+
+
+# 2025-05-10: Proposal 136580
+
+http://dashboard.internetcomputer.org/proposal/136580
+
+## Removed
+
+* The `governance_heap_neuron_count` metric is removed as there are no neurons in the heap anymore.
+
+
+# 2025-05-02: Proposal 136427
+
+http://dashboard.internetcomputer.org/proposal/136427
+
+## Changed
+
+* The Governance canister will fetch rewards from the new Node Rewards Canister instead of from Registry.
+
+## Removed
+
+* All the `_pb` methods are removed as they already always panic, as well as decoding the init arg
+  as protobuf.
+
+
+# 2025-04-25: Proposal 136370
+
+http://dashboard.internetcomputer.org/proposal/136370
+
+## Fixed
+
+* Use `StableBTreeMap::init` instead of `::new` for voting power snapshots.
+
+
+# 2025-04-15: Proposal 136285
+
+http://dashboard.internetcomputer.org/proposal/136285
+
+## Added
+
+* A timer task is added to take daily snapshots of voting power for standard proposals.
+
+## Fixed
+
+* Turned off `DisburseMaturity` that was incorrectly turned on before.
+
+
+# 2025-04-11: Proposal 136224
+
+http://dashboard.internetcomputer.org/proposal/136224
+
+## Added
+
+* Governance now gets node provider rewards from the Node Reward Canister in test builds.
+
+## Changed
+
+* The `_pb` methods now always panic.
+
+
+# 2025-04-05: Proposal 136071
+
+http://dashboard.internetcomputer.org/proposal/136071
+
+## Changed
+
+* Disable Neuron's Funds for ongoing SNSs, as approved in
+  proposal [135970](https://dashboard.internetcomputer.org/proposal/135970).
+
+## Removed
+
+* The `topic_followee_index` in the heap is removed, along with the flag
+  `USE_STABLE_MEMORY_FOLLOWING_INDEX` that was set to true in the proposal 135063.
+
+# 2025-03-28: Proposal 136006
+
+http://dashboard.internetcomputer.org/proposal/136006
+
+## Added
+
+* The `init` method now supports candid decoding in addition to protobuf. Protobuf decoding will be
+  removed in the future, giving clients time to migrate.
+
+## Changed
+
+* Increased the probability of failure from 70% to 90% for the deprecated _pb methods.
+* Increase the neurons limit to 500K now that neurons are stored in stable memory.
+
+# 2025-03-25: Proposal 135955
+
+https://dashboard.internetcomputer.org/proposal/135955
+
+## Security
+
+* Prevent large manage neuron proposals by making sure their proposal payloads are bounded, and
+  lower the maximum number of open manage neuron proposals. More details can be seen here:
+  https://forum.dfinity.org/t/nns-updates-2025-03-25-nns-governance-security-hotfix/42978.
+
+# 2025-03-21: Proposal 135933
+
+http://dashboard.internetcomputer.org/proposal/135933
+
+## Changed
+
+* Refactor `prune_following` task to use the `timer_task` library, and therefore enables metrics to
+  be collected about its execution.
+
+
+# 2025-03-17: Proposal 135847
+
+https://dashboard.internetcomputer.org/proposal/135847
+
+## Added
+
+* Added `NetworkEconomics.voting_power_economics.neuron_minimum_dissolve_delay_to_vote_seconds`.
+
+## Removed
+
+* Removed a migration mechanism previously used for data migrations through heartbeat.
+
+
 # 2025-03-08: Proposal 135702
 
 http://dashboard.internetcomputer.org/proposal/135702

@@ -99,6 +99,7 @@ async fn validate_signals() {
                 &Default::default(),
                 StreamIndex::new(expected),
                 state,
+                slog::Level::Warning,
             )
         };
 
@@ -160,6 +161,7 @@ async fn validate_signals_expected_before_messages_begin() {
             &Default::default(),
             expected,
             &state,
+            slog::Level::Warning,
         );
     });
 }
@@ -183,6 +185,7 @@ async fn validate_signals_expected_after_messages_begin() {
             &Default::default(),
             expected,
             &state,
+            slog::Level::Warning,
         );
     });
 }
@@ -220,6 +223,7 @@ async fn validate_signals_invalid_reject_signals() {
                 .into(),
                 5.into(), // Expected signal index.
                 &state,
+                slog::Level::Warning
             )
         );
         // Signals larger than or equal to `signals_end` are invalid.
@@ -237,6 +241,7 @@ async fn validate_signals_invalid_reject_signals() {
                 .into(),
                 5.into(), // Expected signal index.
                 &state,
+                slog::Level::Warning
             )
         );
         assert_eq!(
@@ -253,6 +258,7 @@ async fn validate_signals_invalid_reject_signals() {
                 .into(),
                 5.into(), // Expected signal index.
                 &state,
+                slog::Level::Warning
             )
         );
 
@@ -272,6 +278,7 @@ async fn validate_signals_invalid_reject_signals() {
                 .into(),
                 5.into(), // Expected signal index.
                 &state,
+                slog::Level::Warning
             )
         );
     });
@@ -322,6 +329,7 @@ async fn validate_slice() {
                 &EXPECTED,
                 &validation_context,
                 &state,
+                slog::Level::Warning,
             )
         };
 
@@ -338,7 +346,8 @@ async fn validate_slice() {
             SliceValidationResult::Valid {
                 messages_end: EXPECTED.message_index.increment(),
                 signals_end: EXPECTED.signal_index,
-                byte_size: 1
+                message_count: 1,
+                byte_size: 1,
             },
             validate_slice_with_messages(expected_message, expected_message + 1)
         );
@@ -370,6 +379,7 @@ async fn validate_slice() {
                 &EXPECTED,
                 &validation_context,
                 &state,
+                slog::Level::Warning
             ),
             SliceValidationResult::Invalid(_)
         );
@@ -434,6 +444,7 @@ async fn validate_slice_invalid_signature() {
                 &expected,
                 &validation_context,
                 &state,
+                slog::Level::Warning
             ),
             SliceValidationResult::Invalid(_)
         );
@@ -487,6 +498,7 @@ async fn validate_slice_above_msg_limit() {
                 &EXPECTED,
                 &validation_context,
                 state,
+                slog::Level::Warning,
             )
         };
 
@@ -503,7 +515,8 @@ async fn validate_slice_above_msg_limit() {
             SliceValidationResult::Valid {
                 messages_end: expected_message.into(),
                 signals_end: (signal_index + 1).into(),
-                byte_size: 1
+                message_count: 0,
+                byte_size: 1,
             },
             validate_slice(expected_message, expected_message, signal_index + 1, &state),
         );
@@ -521,7 +534,8 @@ async fn validate_slice_above_msg_limit() {
             SliceValidationResult::Valid {
                 messages_end: (expected_message + 1).into(),
                 signals_end: signal_index.into(),
-                byte_size: 1
+                message_count: 1,
+                byte_size: 1,
             },
             validate_slice(expected_message, expected_message + 1, signal_index, &state),
         );
@@ -580,6 +594,7 @@ async fn validate_slice_above_signal_limit() {
                 },
                 &validation_context,
                 state,
+                slog::Level::Warning,
             )
         };
 
@@ -591,6 +606,7 @@ async fn validate_slice_above_signal_limit() {
             SliceValidationResult::Valid {
                 messages_end: slice_end.into(),
                 signals_end: SIGNALS_END.into(),
+                message_count: MAX_STREAM_MESSAGES / 2,
                 byte_size: 1,
             }
         );
@@ -604,6 +620,7 @@ async fn validate_slice_above_signal_limit() {
             SliceValidationResult::Valid {
                 messages_end: slice_end.into(),
                 signals_end: SIGNALS_END.into(),
+                message_count: 20,
                 byte_size: 1,
             }
         );
@@ -665,6 +682,7 @@ async fn validate_slice_loopback_stream() {
                 &EXPECTED,
                 &validation_context,
                 &state,
+                slog::Level::Warning,
             )
         };
 
@@ -711,6 +729,7 @@ async fn validate_slice_loopback_stream() {
                 &EXPECTED,
                 &validation_context,
                 &state,
+                slog::Level::Warning
             ),
         );
     });

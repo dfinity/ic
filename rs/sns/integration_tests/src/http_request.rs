@@ -1,6 +1,6 @@
 use canister_test::Canister;
 use dfn_candid::candid_one;
-use ic_canisters_http_types::{HttpRequest, HttpResponse};
+use ic_http_types::{HttpRequest, HttpResponse};
 use ic_sns_governance::pb::v1::{
     NervousSystemParameters, NeuronPermissionList, NeuronPermissionType,
 };

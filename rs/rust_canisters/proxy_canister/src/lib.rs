@@ -5,7 +5,10 @@
 //! as a canister message to client if the call was successful and agreed by majority nodes,
 //! otherwise errors out.
 //!
+use std::time::Duration;
+
 use candid::{CandidType, Deserialize};
+use ic_cdk::api::call::RejectionCode;
 use ic_management_canister_types_private::{
     BoundedHttpHeaders, HttpHeader, HttpMethod, Payload, TransformContext,
 };
@@ -14,6 +17,13 @@ use ic_management_canister_types_private::{
 pub struct RemoteHttpRequest {
     pub request: UnvalidatedCanisterHttpRequestArgs,
     pub cycles: u64,
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct RemoteHttpStressRequest {
+    pub request: RemoteHttpRequest,
+    /// Number of requests to send concurrently.
+    pub count: u64,
 }
 
 /// We create a custom type instead of reusing [`ic_management_canister_types_private::CanisterHttpRequestArgs`]
@@ -50,6 +60,18 @@ pub struct RemoteHttpResponse {
     pub status: u128,
     pub headers: Vec<(String, String)>,
     pub body: String,
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct ResponseWithRefundedCycles {
+    pub result: Result<RemoteHttpResponse, (RejectionCode, String)>,
+    pub refunded_cycles: u64,
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct RemoteHttpStressResponse {
+    pub response: RemoteHttpResponse,
+    pub duration: Duration,
 }
 
 impl RemoteHttpResponse {

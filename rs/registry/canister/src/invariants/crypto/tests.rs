@@ -597,12 +597,12 @@ fn run_test_orphaned_crypto_keys(
     );
 }
 
-mod ecdsa_signing_subnet_lists {
+mod chain_key_enabled_subnet_lists {
     use super::*;
     use crate::common::test_helpers::invariant_compliant_registry;
     use ic_base_types::{subnet_id_into_protobuf, SubnetId};
     use ic_management_canister_types_private::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId};
-    use ic_protobuf::registry::crypto::v1::ChainKeySigningSubnetList;
+    use ic_protobuf::registry::crypto::v1::ChainKeyEnabledSubnetList;
     use ic_protobuf::registry::subnet::v1::{
         ChainKeyConfig as ChainKeyConfigPb, KeyConfig as KeyConfigPb,
         SubnetRecord as SubnetRecordPb,
@@ -610,7 +610,7 @@ mod ecdsa_signing_subnet_lists {
     use ic_protobuf::types::v1::{
         self as pb, master_public_key_id, MasterPublicKeyId as MasterPublicKeyIdPb,
     };
-    use ic_registry_keys::CHAIN_KEY_SIGNING_SUBNET_LIST_KEY_PREFIX;
+    use ic_registry_keys::CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX;
     use ic_registry_subnet_features::KeyConfig;
     use ic_registry_transport::pb::v1::RegistryMutation;
     use ic_registry_transport::upsert;
@@ -640,6 +640,16 @@ mod ecdsa_signing_subnet_lists {
                         })),
                     }),
                     pre_signatures_to_create_in_advance: Some(456),
+                    max_queue_size: Some(100),
+                },
+                KeyConfigPb {
+                    key_id: Some(MasterPublicKeyIdPb {
+                        key_id: Some(master_public_key_id::KeyId::Vetkd(pb::VetKdKeyId {
+                            curve: 1,
+                            name: "vetkd_key".to_string(),
+                        })),
+                    }),
+                    pre_signatures_to_create_in_advance: Some(0),
                     max_queue_size: Some(100),
                 },
             ],
@@ -680,7 +690,7 @@ mod ecdsa_signing_subnet_lists {
 
     #[test]
     #[should_panic(
-        expected = "`pre_signatures_to_create_in_advance` of subnet ya35z-hhham-aaaaa-aaaap-yai cannot be zero."
+        expected = "`pre_signatures_to_create_in_advance` for key ecdsa:Secp256k1:ecdsa_key of subnet ya35z-hhham-aaaaa-aaaap-yai cannot be zero."
     )]
     fn should_fail_if_pre_signatures_is_zero() {
         let mut config = invariant_compliant_chain_key_config();
@@ -731,6 +741,19 @@ mod ecdsa_signing_subnet_lists {
     }
 
     #[test]
+    #[should_panic(expected = "Unable to convert 2 to a VetKdCurve")]
+    fn should_fail_if_unkown_vetkd_curve() {
+        let mut config = invariant_compliant_chain_key_config();
+        config.key_configs[1].key_id = Some(MasterPublicKeyIdPb {
+            key_id: Some(master_public_key_id::KeyId::Vetkd(pb::VetKdKeyId {
+                curve: 2,
+                name: "vetkd_key".to_string(),
+            })),
+        });
+        check_chain_key_config_invariant(config);
+    }
+
+    #[test]
     #[should_panic(expected = "Unable to convert Unspecified to an EcdsaCurve")]
     fn should_fail_if_unspecified_ecdsa_curve() {
         let mut config = invariant_compliant_chain_key_config();
@@ -751,6 +774,19 @@ mod ecdsa_signing_subnet_lists {
             key_id: Some(master_public_key_id::KeyId::Schnorr(pb::SchnorrKeyId {
                 algorithm: 0,
                 name: "schnorr_key".to_string(),
+            })),
+        });
+        check_chain_key_config_invariant(config);
+    }
+
+    #[test]
+    #[should_panic(expected = "Unable to convert Unspecified to a VetKdCurve")]
+    fn should_fail_if_unspecified_vetkd_curve() {
+        let mut config = invariant_compliant_chain_key_config();
+        config.key_configs[1].key_id = Some(MasterPublicKeyIdPb {
+            key_id: Some(master_public_key_id::KeyId::Vetkd(pb::VetKdKeyId {
+                curve: 0,
+                name: "vetkd_key".to_string(),
             })),
         });
         check_chain_key_config_invariant(config);
@@ -798,7 +834,7 @@ mod ecdsa_signing_subnet_lists {
                 Err(InvariantCheckError{msg: error_message, source: _})
                 if error_message.contains(format!(
                     "A non-existent subnet {} was set as the holder of a key_id {}{}",
-                    setup.subnet_id, CHAIN_KEY_SIGNING_SUBNET_LIST_KEY_PREFIX, ecdsa_key_id
+                    setup.subnet_id, CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX, ecdsa_key_id
                 ).as_str())
             );
         }
@@ -869,7 +905,7 @@ mod ecdsa_signing_subnet_lists {
             if error_message.contains(format!(
                 "A non-existent subnet {} was set as the holder of a key_id {}{}",
                 setup.subnet_id,
-                ic_registry_keys::CHAIN_KEY_SIGNING_SUBNET_LIST_KEY_PREFIX,
+                ic_registry_keys::CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX,
                 setup.key_id.expect("a valid MasterPublicKey should be set")
             ).as_str())
         );
@@ -908,7 +944,7 @@ mod ecdsa_signing_subnet_lists {
             if error_message.contains(format!(
                 "The subnet {} does not have the key with {}{} in its chain key configurations",
                 setup.subnet_id,
-                ic_registry_keys::CHAIN_KEY_SIGNING_SUBNET_LIST_KEY_PREFIX,
+                ic_registry_keys::CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX,
                 setup.key_id.expect("a valid MasterPublicKeyId should be set")
             ).as_str())
         );
@@ -993,8 +1029,8 @@ mod ecdsa_signing_subnet_lists {
                     );
                 }
             };
-            let ecdsa_signing_subnet_list_key =
-                format!("{}{}", CHAIN_KEY_SIGNING_SUBNET_LIST_KEY_PREFIX, key_id);
+            let chain_key_enabled_subnet_list_key =
+                format!("{}{}", CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX, key_id);
 
             let subnet_id = subnet_test_id(1);
             let mut subnets = vec![subnet_id_into_protobuf(subnet_id)];
@@ -1002,9 +1038,9 @@ mod ecdsa_signing_subnet_lists {
                 subnets.push(subnet_id_into_protobuf(another_subnet_id));
             }
             let mut mutations: Vec<RegistryMutation> = vec![];
-            let subnets_value = ChainKeySigningSubnetList { subnets };
+            let subnets_value = ChainKeyEnabledSubnetList { subnets };
             mutations.push(ic_registry_transport::insert(
-                ecdsa_signing_subnet_list_key,
+                chain_key_enabled_subnet_list_key,
                 subnets_value.encode_to_vec(),
             ));
             let node_id = node_test_id(1);

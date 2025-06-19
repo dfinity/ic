@@ -281,8 +281,7 @@ fn parse_install(
         .canister_id(ic00::IC_00)
         .method_name(ic00::Method::InstallCode)
         .method_payload(
-            ic00::InstallCodeArgsV2::new(install_mode, canister_id, wasm_data, payload, None, None)
-                .encode(),
+            ic00::InstallCodeArgsV2::new(install_mode, canister_id, wasm_data, payload).encode(),
         )
         .nonce(nonce)
         .build();
@@ -457,7 +456,7 @@ mod tests {
         let ingress_expiry = match &parsed_message {
             Message::Query(query) => match query.source {
                 QuerySource::User { ingress_expiry, .. } => ingress_expiry,
-                QuerySource::Anonymous => panic!("Expected a user query but got an anonymous one"),
+                QuerySource::System => panic!("Expected a user query but got a system one"),
             },
             _ => panic!(
                 "parse_message() returned an unexpected message type: {:?}",

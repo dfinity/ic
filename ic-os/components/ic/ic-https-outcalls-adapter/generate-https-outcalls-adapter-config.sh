@@ -1,5 +1,7 @@
 #!/bin/bash
 
+source /opt/ic/bin/config.sh
+
 function usage() {
     cat <<EOF
 Usage:
@@ -11,26 +13,14 @@ Usage:
 EOF
 }
 
-# Reads the socks proxy config file. The file must be of the form "key=value".
-# The file should only contain the key `socks_proxy`. All other keys are ignored.
-#
-# Arguments:
-# - $1: Name of the file to be read.
-function read_socks_proxy() {
-    while IFS="=" read -r key value; do
-        case "$key" in
-            "socks_proxy") SOCKS_PROXY="${value}" ;;
-        esac
-    done <"$1"
+function read_config_variables() {
+    config_socks_proxy=$(get_config_value '.guestos_settings.guestos_dev_settings.socks_proxy')
 }
 
-while getopts "o:s:" OPT; do
+while getopts "o:" OPT; do
     case "${OPT}" in
         o)
             OUT_FILE="${OPTARG}"
-            ;;
-        s)
-            SOCKS_FILE="${OPTARG}"
             ;;
         *)
             usage
@@ -39,11 +29,13 @@ while getopts "o:s:" OPT; do
     esac
 done
 
+read_config_variables
+
 # Production socks5 proxy url needs to include schema, host and port to be accepted by the adapters.
-# Testnets deploy with a 'socks_proxy.conf' file to overwrite the production socks proxy with the testnet proxy.
-SOCKS_PROXY="socks5://socks5.ic0.app:1080"
-if [ "${SOCKS_FILE}" != "" -a -e "${SOCKS_FILE}" ]; then
-    read_socks_proxy "${SOCKS_FILE}"
+# Testnets deploy with a development socks_proxy config value to overwrite the production socks proxy with the testnet proxy.
+SOCKS_PROXY="socks5h://socks5.ic0.app:1080"
+if [ "${config_socks_proxy}" != "" ] && [ "${config_socks_proxy}" != "null" ]; then
+    SOCKS_PROXY="${config_socks_proxy}"
 fi
 
 if [ "${OUT_FILE}" == "" ]; then

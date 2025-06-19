@@ -22,6 +22,7 @@ rust_library(
         "//rs/canister_client/sender",
         "//rs/config",
         "//rs/consensus",
+        "//rs/consensus/dkg",
         "//rs/crypto",
         "//rs/crypto/node_key_generation",
         "//rs/crypto/tls_interfaces",
@@ -75,12 +76,13 @@ rust_library(
 rust_binary(
     name = "orchestrator",
     srcs = ["src/main.rs"],
-    crate_name = "ic_state_tool",
     deps = [
         # Keep sorted.
         ":lib",
         "//rs/http_endpoints/async_utils",
+        "//rs/monitoring/logger",
         "@crate_index//:clap",
+        "@crate_index//:slog",
         "@crate_index//:tokio",
     ],
 )
@@ -97,6 +99,7 @@ rust_test(
         # Keep sorted.
         "//rs/crypto/temp_crypto",
         "//rs/crypto/test_utils/canister_threshold_sigs",
+        "//rs/crypto/test_utils/ni-dkg",
         "//rs/crypto/test_utils/reproducible_rng",
         "//rs/crypto/test_utils/tls",
         "//rs/registry/fake",

@@ -1,171 +1,121 @@
 //! An implementation of RegistryClient intended to be used in canister
 //! where polling in the background is not required because handed over to a timer.
 //! The code is entirely copied from `ic-registry-client-fake` and more tests added.
+use async_trait::async_trait;
+use ic_interfaces_registry::{RegistryClientResult, RegistryClientVersionedResult};
+use ic_types::registry::RegistryClientError;
+use ic_types::registry::RegistryClientError::DecodeError;
+use ic_types::RegistryVersion;
 
-use ic_interfaces_registry::{
-    empty_zero_registry_record, RegistryClient, RegistryClientVersionedResult,
-    RegistryDataProvider, RegistryTransportRecord, ZERO_REGISTRY_VERSION,
-};
-use ic_types::{
-    registry::RegistryClientError, time::current_time as system_current_time, RegistryVersion, Time,
-};
-use std::collections::BTreeMap;
-use std::sync::{Arc, RwLock, RwLockReadGuard};
+mod stable_canister_client;
+mod stable_memory;
 
-type CacheState = (
-    RegistryVersion,
-    BTreeMap<RegistryVersion, Time>,
-    Vec<RegistryTransportRecord>,
-);
+pub use stable_canister_client::StableCanisterRegistryClient;
+pub use stable_memory::{RegistryDataStableMemory, StorableRegistryKey, StorableRegistryValue};
 
-pub struct CanisterRegistryClient {
-    data_provider: Arc<dyn RegistryDataProvider>,
-    cache: Arc<RwLock<CacheState>>,
-}
-
-#[cfg(target_arch = "wasm32")]
-pub fn current_time() -> Time {
-    let current_time = ic_cdk::api::time();
-    Time::from_nanos_since_unix_epoch(current_time)
-}
-
-#[cfg(not(any(target_arch = "wasm32")))]
-pub fn current_time() -> Time {
-    system_current_time()
-}
-
-impl CanisterRegistryClient {
-    pub fn new(data_provider: Arc<dyn RegistryDataProvider>) -> Self {
-        Self {
-            data_provider,
-            cache: Arc::new(RwLock::new(Default::default())),
-        }
-    }
-
-    pub fn update_to_latest_version(&self) {
-        let mut cache = self.cache.write().unwrap();
-        let latest_version = cache.0;
-
-        let new_records = match self.data_provider.get_updates_since(latest_version) {
-            Ok(records) if !records.is_empty() => records,
-            Ok(_) => return,
-            Err(e) => panic!("Failed to query data provider: {}", e),
-        };
-
-        assert!(!new_records.is_empty());
-        let mut timestamps = cache.1.clone();
-        let mut new_version = ZERO_REGISTRY_VERSION;
-        for record in new_records {
-            assert!(record.version > latest_version);
-            timestamps.insert(new_version, current_time());
-            new_version = new_version.max(record.version);
-            let search_key = (&record.key, &record.version);
-            match cache
-                .2
-                .binary_search_by_key(&search_key, |r| (&r.key, &r.version))
-            {
-                Ok(_) => (),
-                Err(i) => {
-                    cache.2.insert(i, record);
-                }
-            };
-        }
-        *cache = (new_version, timestamps, cache.2.clone())
-    }
-
-    pub fn reload(&self) {
-        let mut cache = self.cache.write().unwrap();
-        cache.0 = ZERO_REGISTRY_VERSION;
-        cache.1.clear();
-        drop(cache);
-        self.update_to_latest_version();
-    }
-
-    fn check_version(
-        &self,
-        version: RegistryVersion,
-    ) -> Result<RwLockReadGuard<CacheState>, RegistryClientError> {
-        let cache_state = self.cache.read().unwrap();
-        let (latest_version, _, _) = &*cache_state;
-        if &version > latest_version {
-            return Err(RegistryClientError::VersionNotAvailable { version });
-        }
-        Ok(cache_state)
-    }
-}
-
-impl RegistryClient for CanisterRegistryClient {
+/// The CanisterRegistryClient provides methods to maintain and read a local cache of Registry data
+/// This is similar to the RegistryClient interface use in the protocol, but without the
+/// method to retrieve the "timestamp" that a version was first added to the local
+/// canister.
+#[async_trait]
+pub trait CanisterRegistryClient: Send + Sync {
+    /// The following holds:
+    ///
+    /// (1) ∀ k: get_value(k, get_latest_version()).is_ok()
+    ///
+    ///   (A reported version is fully available)
+    ///
+    /// (2) ∀ k: v = get_value(k, ZERO_REGISTRY_VERSION) =>
+    ///     (v.is_ok() && v.unwrap().is_none())
+    ///
+    ///   (The registry at version zero has a known state.)
+    ///
+    /// (3) ∀ k, t: (v0 = get_value(k, t); v1 = get_value(k, t))
+    ///              && v0.is_ok() && v1.is_ok() => v0 == v1
+    ///
+    ///   (Any two method invocations with the same arguments
+    ///    will always result in equal return values if both
+    ///    calls do not return an error.)
+    ///
+    /// NOTE: The current implementation employs full replication
+    /// and the cache only grows. Thus, it holds that
+    ///
+    ///    ∀ k, t <= get_latest_version(): get_value(k, t).is_ok().
+    ///
+    /// However, this might change in the future.
+    ///
+    /// The return value of the function is a serialized protobuf message
+    /// belonging to the key. The type is opaque and the API does not provide
+    /// any runtime type information. We might switch to a type such as
+    /// google.protobuf.Any at some point in the future to provide general
+    /// runtime type information.
     fn get_versioned_value(
         &self,
         key: &str,
         version: RegistryVersion,
-    ) -> RegistryClientVersionedResult<Vec<u8>> {
-        if version == ZERO_REGISTRY_VERSION {
-            return Ok(empty_zero_registry_record(key));
-        }
-        let cache_state = self.check_version(version)?;
-        let (_, _, records) = &*cache_state;
+    ) -> RegistryClientVersionedResult<Vec<u8>>;
 
-        let search_key = &(key, &version);
-        let record = match records.binary_search_by_key(search_key, |r| (&r.key, &r.version)) {
-            Ok(idx) => records[idx].clone(),
-            Err(idx) if idx > 0 && records[idx - 1].key == key => records[idx - 1].clone(),
-            _ => empty_zero_registry_record(key),
-        };
-
-        Ok(record)
-    }
-
+    /// Returns all keys that start with `key_prefix` and are present at version
+    /// `version`.
+    ///
+    /// Given the definition of get_value above, let K* be the set of all
+    /// possible keys that start with `key_prefix`, then the following
+    /// holds:
+    ///
+    /// (1) ∀ k ∈ K*: get_value(k, version).is_err()
+    ///      <=> get_versioned_key_family(key_prefix, version).is_err()
+    ///
+    ///   (For a given version, all keys of a key family must be well-defined.)
+    ///
+    /// (2) ∀ k ∈ K*: get_value(k, version).is_ok().is_some() <=>
+    ///     get_key_family(key_prefix, version).is_ok().contains(k)
+    ///
+    ///   (get_key_family is consistent with get_value)
+    ///
+    /// The returned list does not contain any duplicates. There are no
+    /// guarantees wrt. the order of the contained elements.
     fn get_key_family(
         &self,
         key_prefix: &str,
         version: RegistryVersion,
-    ) -> Result<Vec<String>, RegistryClientError> {
-        if version == ZERO_REGISTRY_VERSION {
-            return Ok(vec![]);
-        }
-        let cache_state = self.check_version(version)?;
-        let (_, _, records) = &*cache_state;
+    ) -> Result<Vec<String>, RegistryClientError>;
 
-        let first_registry_version = RegistryVersion::from(1);
-        let search_key = &(key_prefix, &first_registry_version);
+    fn get_key_family_with_values(
+        &self,
+        key_prefix: &str,
+        version: RegistryVersion,
+    ) -> Result<Vec<(String, Vec<u8>)>, RegistryClientError>;
 
-        let first_match_index =
-            match records.binary_search_by_key(search_key, |r| (&r.key, &r.version)) {
-                Ok(idx) => idx,
-                Err(idx) => {
-                    if !records[idx].key.starts_with(key_prefix) {
-                        return Ok(vec![]);
-                    }
-                    idx
-                }
-            };
-
-        let records = records
-            .iter()
-            .skip(first_match_index) // (1)
-            .filter(|r| r.version <= version) // (2)
-            .take_while(|r| r.key.starts_with(key_prefix)); // (3)
-
-        let mut effective_records = BTreeMap::new();
-        for record in records {
-            effective_records.insert(record.key.clone(), &record.value);
-        }
-        let result = effective_records
-            .into_iter()
-            .filter_map(|(key, value)| value.is_some().then_some(key))
-            .collect();
-        Ok(result)
+    /// Returns a particular value for a key at a given version.
+    fn get_value(&self, key: &str, version: RegistryVersion) -> RegistryClientResult<Vec<u8>> {
+        self.get_versioned_value(key, version).map(|vr| vr.value)
     }
 
-    fn get_latest_version(&self) -> RegistryVersion {
-        self.cache.read().unwrap().0
-    }
+    /// Returns the latest version known to this canister. If the current version
+    /// of the registry is `t`, then this method should eventually return a
+    /// value no less than `t`.
+    fn get_latest_version(&self) -> RegistryVersion;
 
-    fn get_version_timestamp(&self, registry_version: RegistryVersion) -> Option<Time> {
-        self.cache.read().unwrap().1.get(&registry_version).cloned()
-    }
+    /// Updates the local version to the latest from the Registry. This may execute
+    /// over multiple messages.  It should generally be scheduled in a timer, but if it's never called
+    /// the local registry data will not be in sync with the data in the Registry canister.
+    async fn sync_registry_stored(&self) -> Result<RegistryVersion, String>;
 }
 
-#[cfg(test)]
-mod tests;
+// Helpers
+
+/// Get the decoded value of a key from the registry.
+pub fn get_decoded_value<T: prost::Message + Default>(
+    registry_client: &dyn CanisterRegistryClient,
+    key: &str,
+    version: RegistryVersion,
+) -> RegistryClientResult<T> {
+    registry_client
+        .get_value(key, version)?
+        .map(|bytes| {
+            T::decode(bytes.as_slice()).map_err(|e| DecodeError {
+                error: format!("{:?}", e),
+            })
+        })
+        .transpose()
+}

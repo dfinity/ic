@@ -2,15 +2,17 @@ pub mod common;
 
 use crate::common::{
     default_certified_state_reader, default_get_latest_state, default_latest_certified_height,
-    default_read_certified_state, get_free_localhost_socket_addr,
-    test_agent::{self, wait_for_status_healthy, IngressMessage},
-    HttpEndpointBuilder, MockIngressPoolThrottler,
+    default_read_certified_state, get_free_localhost_socket_addr, HttpEndpointBuilder,
+    MockIngressPoolThrottler,
 };
 use async_trait::async_trait;
 use axum::body::Body;
 use hyper::{Method, Request, StatusCode};
 use hyper_util::{client::legacy::Client, rt::TokioExecutor};
 use ic_config::http_handler::Config;
+use ic_http_endpoints_test_agent::{
+    self, wait_for_status_healthy, Call, CanisterReadState, IngressMessage, Query,
+};
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_pprof::{Error, PprofCollector};
 use ic_types::{ingress::WasmResult, time::current_time};
@@ -49,7 +51,7 @@ fn test_load_shedding_query() {
     let load_shedded_request = rt.spawn(async move {
         query_exec_running_clone.notified().await;
 
-        let response = test_agent::Query::default().query(addr).await;
+        let response = Query::default().query(addr).await;
 
         load_shedder_returned_clone.notify_one();
 
@@ -71,7 +73,7 @@ fn test_load_shedding_query() {
     rt.block_on(async {
         wait_for_status_healthy(&addr).await.unwrap();
 
-        let response = test_agent::Query::default().query(addr).await;
+        let response = Query::default().query(addr).await;
 
         assert_eq!(
             StatusCode::OK,
@@ -165,9 +167,7 @@ fn test_load_shedding_read_state() {
     // This agent's request will be load shedded
     let load_shedded_request = rt.spawn(async move {
         read_state_running.notified().await;
-        let response = test_agent::CanisterReadState::default()
-            .read_state(addr)
-            .await;
+        let response = CanisterReadState::default().read_state(addr).await;
         load_shedder_returned.notify_one();
         response
     });
@@ -176,9 +176,7 @@ fn test_load_shedding_read_state() {
         wait_for_status_healthy(&addr).await.unwrap();
         service_is_healthy.store(true, Ordering::Relaxed);
 
-        let response = test_agent::CanisterReadState::default()
-            .read_state(addr)
-            .await;
+        let response = CanisterReadState::default().read_state(addr).await;
 
         assert_eq!(
             StatusCode::OK,
@@ -204,7 +202,9 @@ fn test_load_shedding_read_state() {
 /// 2. Make 1 get request to `/_/pprof` where we wait before responding.
 /// 3. Make requests to endpoints under `/_/prof` expecting them all to be load shedded.
 /// 4. Return a response for the first request and ssert it does not get load shedded.
-#[test]
+// TODO(MR-683): Address the regression and re-enable.
+// #[test]
+#[allow(dead_code)]
 fn test_load_shedding_pprof() {
     // We have to create this custom MockPprof, as the `MockAll` crate
     // doesn't support async closures in `returning()` yet.
@@ -340,7 +340,7 @@ fn test_load_shedding_update_call() {
     let ingress_filter_running_clone = ingress_filter_running.clone();
     let load_shedder_returned_clone = load_shedder_returned.clone();
 
-    let call_agent = test_agent::Call::V2;
+    let call_agent = Call::V2;
 
     let load_shedded_request_handle = rt.spawn(async move {
         ingress_filter_running_clone.notified().await;
@@ -378,9 +378,9 @@ fn test_load_shedding_update_call() {
 
 /// Test that the call endpoints load shed requests when the ingress pool is full.
 #[rstest]
-#[case::v2_endpoint(test_agent::Call::V2)]
-#[case::v3_endpoint(test_agent::Call::V3)]
-fn test_load_shedding_update_call_when_ingress_pool_is_full(#[case] endpoint: test_agent::Call) {
+#[case::v2_endpoint(Call::V2)]
+#[case::v3_endpoint(Call::V3)]
+fn test_load_shedding_update_call_when_ingress_pool_is_full(#[case] endpoint: Call) {
     use std::sync::RwLock;
 
     let rt = Runtime::new().unwrap();

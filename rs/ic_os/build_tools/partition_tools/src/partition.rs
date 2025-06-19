@@ -1,3 +1,4 @@
+use std::format;
 use std::path::{Path, PathBuf};
 
 use crate::exes::fdisk;
@@ -7,8 +8,12 @@ use tokio::process::Command;
 
 #[async_trait]
 pub trait Partition: Sized {
-    /// Open a partition for writing
+    /// Open a partition for writing. If `index` is Some, the `index`th partition (1-based) in the
+    /// disk image is opened.
     async fn open(image: PathBuf, index: Option<usize>) -> Result<Self>;
+
+    /// Open a partition for writing using explicit offset and length
+    async fn open_range(image: PathBuf, offset_bytes: u64, length_bytes: u64) -> Result<Self>;
 
     /// Close a partition, and write back to the input disk
     async fn close(self) -> Result<()>;
@@ -18,6 +23,10 @@ pub trait Partition: Sized {
 
     /// Read a file from a given partition
     async fn read_file(&mut self, input: &Path) -> Result<String>;
+
+    /// Copy all files from a partition to the output directory. `output` must point to an existing
+    /// directory.
+    async fn copy_files_to(&mut self, output: &Path) -> Result<()>;
 }
 
 /// Use fdisk to check the byte offset of a given partition
@@ -60,11 +69,11 @@ pub async fn check_offset(disk_image: &Path, index: usize) -> Result<u64> {
     let line = std::str::from_utf8(&out.stdout)?
         .lines()
         .find(|v| v.starts_with(&format!("{}{}", prefix, index)))
-        .expect("Partition index '{index}' not found in image");
+        .with_context(|| format!("Partition index '{index}' not found in image"))?;
     let offset = line
         .split_ascii_whitespace()
         .nth(1)
-        .expect("Unable to parse fdisk output");
+        .context("Unable to parse fdisk output")?;
 
     // Assume 512 byte sectors
     Ok(offset.parse::<u64>()? * 512)

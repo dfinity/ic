@@ -60,38 +60,6 @@ pub async fn create_canister(
     Ok::<_, String>(canister_id)
 }
 
-#[derive(Copy, Clone)]
-pub enum BoundaryNodeHttpsConfig {
-    /// Acquire a playnet certificate (or fail if all have been acquired already)
-    /// for the domain `ic{ix}.farm.dfinity.systems`
-    /// where `ix` is the index of the acquired playnet.
-    ///
-    /// Then create an AAAA record pointing
-    /// `ic{ix}.farm.dfinity.systems` to the IPv6 address of the BN.
-    ///
-    /// Also add CNAME records for
-    /// `*.ic{ix}.farm.dfinity.systems` and
-    /// `*.raw.ic{ix}.farm.dfinity.systems`
-    /// pointing to `ic{ix}.farm.dfinity.systems`.
-    ///
-    /// If IPv4 has been enabled for the BN (`has_ipv4`),
-    /// also add a corresponding A record pointing to the IPv4 address of the BN.
-    ///
-    /// Finally configure the BN with the playnet certificate.
-    ///
-    /// Note that if multiple BNs are created within the same
-    /// farm-group, they will share the same certificate and
-    /// domain name.
-    /// Also all their IPv6 addresses will be added to the AAAA record
-    /// and all their IPv4 addresses will be added to the A record.
-    UseRealCertsAndDns,
-
-    /// Don't create real certificates and DNS records,
-    /// instead dangerously accept self-signed certificates and
-    /// resolve domains on the client-side without querying DNS.
-    AcceptInvalidCertsAndResolveClientSide,
-}
-
 pub async fn install_canisters(
     topology: TopologySnapshot,
     canister_bytes: &[u8],

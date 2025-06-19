@@ -95,7 +95,7 @@ impl CallTreeTestFixture {
 
             assert_eq!(
                 metric_vec(&[(
-                    &[("class", "guaranteed_response")],
+                    &[("class", "guaranteed response")],
                     HistogramStats {
                         count: state.call_count,
                         sum: state.depth_total as f64

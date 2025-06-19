@@ -1,9 +1,9 @@
-use ic_interfaces_registry::{RegistryDataProvider, RegistryTransportRecord};
+use ic_interfaces_registry::{RegistryDataProvider, RegistryRecord};
 use ic_registry_common_proto::pb::local_store::v1::{
     ChangelogEntry as PbChangelogEntry, Delta as PbDelta, KeyMutation as PbKeyMutation,
     MutationType,
 };
-use ic_sys::fs::write_protobuf_using_tmp_file;
+use ic_sys::fs::{sync_path, write_protobuf_simple, write_protobuf_using_tmp_file};
 use ic_types::registry::RegistryDataProviderError;
 use ic_types::RegistryVersion;
 use prost::Message;
@@ -66,6 +66,50 @@ impl LocalStoreImpl {
         Self {
             path: PathBuf::from(path.as_ref()),
         }
+    }
+
+    /// Efficiently creates a `LocalStore` from a `Changelog`.
+    pub fn from_changelog<P: AsRef<Path>>(changelog: Changelog, path: P) -> io::Result<Self> {
+        let store = Self {
+            path: PathBuf::from(path.as_ref()),
+        };
+
+        let mut last_parent_dir = None;
+        for (v, changelog_entry) in changelog.into_iter().enumerate() {
+            let version = (v + 1) as u64;
+            let path = store.get_path(version);
+
+            // Create the parent directories if we haven't already.
+            let parent_dir = path.parent().expect(
+                "get_path returns a non-empty path whose parent isn't the root or prefix, see the definition of v_path in get_path."
+            );
+            match last_parent_dir.as_ref() {
+                // First parent dir: create and remember it.
+                None => {
+                    std::fs::create_dir_all(parent_dir)?;
+                    last_parent_dir = Some(parent_dir.to_path_buf());
+                }
+
+                // New parent dir: sync the last parent dir, create the new one and remember it.
+                Some(last_parent_dir_) if last_parent_dir_ != parent_dir => {
+                    sync_path(last_parent_dir_)?;
+                    std::fs::create_dir_all(parent_dir)?;
+                    last_parent_dir = Some(parent_dir.to_path_buf());
+                }
+
+                // Same parent dir as last file: do nothing.
+                _ => {}
+            }
+
+            let changelog_entry = changelog_entry_to_protobuf(changelog_entry);
+            write_protobuf_simple(&path, &changelog_entry).unwrap();
+        }
+        // Also sync the last parent dir.
+        if let Some(last_parent_dir) = last_parent_dir {
+            sync_path(&last_parent_dir)?;
+        }
+
+        Ok(store)
     }
 
     // precondition: version > 0
@@ -161,7 +205,7 @@ impl RegistryDataProvider for LocalStoreImpl {
     fn get_updates_since(
         &self,
         version: RegistryVersion,
-    ) -> Result<Vec<RegistryTransportRecord>, RegistryDataProviderError> {
+    ) -> Result<Vec<RegistryRecord>, RegistryDataProviderError> {
         let changelog = self.get_changelog_since_version(version).map_err(|e| {
             RegistryDataProviderError::Transfer {
                 source: format!("Error when reading changelog from local storage: {:?}", e),
@@ -171,7 +215,7 @@ impl RegistryDataProvider for LocalStoreImpl {
             .iter()
             .enumerate()
             .flat_map(|(i, cle)| cle.iter().map(move |km| (i, km)))
-            .map(|(i, km)| RegistryTransportRecord {
+            .map(|(i, km)| RegistryRecord {
                 version: version + RegistryVersion::from((i as u64) + 1),
                 key: km.key.clone(),
                 value: km.value.clone(),

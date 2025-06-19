@@ -2,7 +2,7 @@ use crate::eth_logs::{
     report_transaction_error, LogParser, LogScraping, ReceivedErc20LogScraping,
     ReceivedEthLogScraping, ReceivedEthOrErc20LogScraping, ReceivedEvent, ReceivedEventError,
 };
-use crate::eth_rpc::{BlockSpec, GetLogsParam, HttpOutcallError, LogEntry, Topic};
+use crate::eth_rpc::{is_response_too_large, Topic};
 use crate::eth_rpc_client::{EthRpcClient, MultiCallError};
 use crate::guard::TimerGuard;
 use crate::logs::{DEBUG, INFO};
@@ -11,6 +11,7 @@ use crate::state::eth_logs_scraping::LogScrapingId;
 use crate::state::{
     audit::process_event, event::EventType, mutate_state, read_state, State, TaskType,
 };
+use evm_rpc_client::{BlockTag, GetLogsArgs, Hex20, Hex32, LogEntry, Nat256};
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
 use num_traits::ToPrimitive;
@@ -154,18 +155,18 @@ pub async fn scrape_logs() {
 pub async fn update_last_observed_block_number() -> Option<BlockNumber> {
     let block_height = read_state(State::ethereum_block_height);
     match read_state(EthRpcClient::from_state)
-        .eth_get_block_by_number(BlockSpec::Tag(block_height))
+        .eth_get_block_by_number(BlockTag::from(block_height.clone()))
         .await
     {
         Ok(latest_block) => {
-            let block_number = Some(latest_block.number);
+            let block_number = Some(BlockNumber::from(latest_block.number));
             mutate_state(|s| s.last_observed_block_number = block_number);
             block_number
         }
         Err(e) => {
             log!(
                 INFO,
-                "Failed to get the latest {block_height} block number: {e:?}"
+                "Failed to get the latest {block_height:?} block number: {e:?}"
             );
             read_state(|s| s.last_observed_block_number)
         }
@@ -238,11 +239,11 @@ where
         let range = subranges.pop_front().unwrap();
         let (from_block, to_block) = range.clone().into_inner();
 
-        let request = GetLogsParam {
-            from_block: BlockSpec::from(from_block),
-            to_block: BlockSpec::from(to_block),
-            address: vec![contract_address],
-            topics: topics.clone(),
+        let request = GetLogsArgs {
+            from_block: Some(BlockTag::Number(Nat256::from(from_block))),
+            to_block: Some(BlockTag::Number(Nat256::from(to_block))),
+            addresses: vec![Hex20::from(contract_address.into_bytes())],
+            topics: Some(into_evm_topic(topics.clone())),
         };
 
         let result = rpc_client
@@ -257,7 +258,7 @@ where
             }
             Err(e) => {
                 log!(INFO, "Failed to get {} logs in range {range}: {e:?}", S::ID);
-                if e.has_http_outcall_error_matching(HttpOutcallError::is_response_too_large) {
+                if e.has_http_outcall_error_matching(is_response_too_large) {
                     if from_block == to_block {
                         mutate_state(|s| {
                             process_event(
@@ -345,4 +346,15 @@ pub fn register_deposit_events(
         }
         report_transaction_error(error);
     }
+}
+
+fn into_evm_topic(topics: Vec<Topic>) -> Vec<Vec<Hex32>> {
+    let mut result = Vec::with_capacity(topics.len());
+    for topic in topics {
+        result.push(match topic {
+            Topic::Single(single_topic) => vec![single_topic],
+            Topic::Multiple(multiple_topic) => multiple_topic.into_iter().collect(),
+        });
+    }
+    result
 }

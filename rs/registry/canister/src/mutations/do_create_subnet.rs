@@ -80,7 +80,7 @@ impl Registry {
             LOG_PREFIX, payload, subnet_id
         );
 
-        // 2b. Invoke compute_initial_i_dkg_dealings on ic_00
+        // 2b. Invoke reshare_chain_key on ic_00
 
         let initial_chain_key_config =
             payload
@@ -93,7 +93,7 @@ impl Registry {
 
         let receiver_nodes = payload.node_ids.clone();
         let chain_key_initializations = self
-            .get_all_initial_i_dkg_dealings_from_ic00(&initial_chain_key_config, receiver_nodes)
+            .get_all_chain_key_reshares_from_ic00(&initial_chain_key_config, receiver_nodes)
             .await;
 
         let payload = CreateSubnetPayload {
@@ -157,16 +157,16 @@ impl Registry {
             value: subnet_record.encode_to_vec(),
         };
 
-        let routing_table_mutation =
+        let mut routing_table_mutations =
             self.add_subnet_to_routing_table(self.latest_version(), subnet_id);
 
-        let mutations = vec![
+        let mut mutations = vec![
             subnet_list_mutation,
             new_subnet,
             new_subnet_dkg,
             new_subnet_threshold_signing_pubkey,
-            routing_table_mutation,
         ];
+        mutations.append(&mut routing_table_mutations);
 
         // Check invariants before applying mutations
         self.maybe_apply_mutation_internal(mutations);
