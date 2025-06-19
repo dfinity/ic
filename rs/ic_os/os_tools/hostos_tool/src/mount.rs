@@ -3,6 +3,7 @@ use async_trait::async_trait;
 use gpt::GptDisk;
 use std::fs::File;
 use std::path::{Path, PathBuf};
+use sys_mount::FilesystemType;
 #[cfg(target_os = "linux")]
 use sys_mount::{Mount, MountFlags, UnmountDrop, UnmountFlags};
 use tempfile::TempDir;
@@ -64,9 +65,27 @@ pub trait Mounter: Send + Sync {
 }
 
 #[derive(Copy, Clone)]
+pub enum FileSystem {
+    Vfat,
+    Ext4,
+}
+
+impl FileSystem {
+    /// Returns the filesystem name as a string accepted by the mount syscall
+    fn as_str(&self) -> &'static str {
+        match self {
+            FileSystem::Vfat => "vfat",
+            FileSystem::Ext4 => "ext4",
+        }
+    }
+}
+
+#[derive(Copy, Clone)]
 pub struct MountOptions {
     /// Whether to mount the partition read-only
     pub readonly: bool,
+
+    pub file_system: FileSystem,
 }
 
 /// Represents a mounted partition with access to its filesystem.
@@ -160,6 +179,7 @@ impl Mounter for LoopDeviceMounter {
             let target = tempdir.path();
             Ok::<LoopDeviceMount, Error>(LoopDeviceMount {
                 mount: Mount::builder()
+                    .fstype(FilesystemType::Manual(options.file_system.as_str()))
                     .loopback_offset(offset_bytes)
                     .flags(if options.readonly {
                         MountFlags::RDONLY
@@ -179,7 +199,7 @@ impl Mounter for LoopDeviceMounter {
 #[cfg(test)]
 pub mod testing {
     use super::*;
-    use anyhow::{bail, ensure, Context};
+    use anyhow::{ensure, Context};
     use partition_tools::ext::ExtPartition;
     use partition_tools::fat::FatPartition;
     use partition_tools::Partition;
@@ -271,29 +291,26 @@ pub mod testing {
 
             let extraction_dir = TempDir::new().context("Could not create tempdir")?;
 
-            // Try to extract as FAT first, then EXT
-            if let Err(fat_err) = extract_partition::<FatPartition>(
-                &device,
-                offset_bytes,
-                len_bytes,
-                extraction_dir.path(),
-            )
-            .await
-            {
-                if let Err(ext_err) = extract_partition::<ExtPartition>(
-                    &device,
-                    offset_bytes,
-                    len_bytes,
-                    extraction_dir.path(),
-                )
-                .await
-                {
-                    bail!(
-                        "Could not open device as either FAT or EXT partition. \
-                         FAT error: {fat_err}, EXT error: {ext_err}"
+            match options.file_system {
+                FileSystem::Vfat => {
+                    extract_partition::<FatPartition>(
+                        &device,
+                        offset_bytes,
+                        len_bytes,
+                        extraction_dir.path(),
                     )
+                    .await?
                 }
-            }
+                FileSystem::Ext4 => {
+                    extract_partition::<ExtPartition>(
+                        &device,
+                        offset_bytes,
+                        len_bytes,
+                        extraction_dir.path(),
+                    )
+                    .await?
+                }
+            };
 
             if options.readonly {
                 ensure!(

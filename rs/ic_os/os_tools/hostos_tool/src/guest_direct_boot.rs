@@ -1,5 +1,5 @@
 use crate::boot_args::read_boot_args;
-use crate::mount::{MountOptions, PartitionProvider};
+use crate::mount::{FileSystem, MountOptions, PartitionProvider};
 use anyhow::Context;
 use anyhow::Result;
 use config::guest_vm_config::DirectBootConfig;
@@ -21,6 +21,9 @@ const A_BOOT_PARTITION_UUID: Uuid =
     const_unwrap(Uuid::try_parse("DDF618FE-7244-B446-A175-3296E6B9D02E"));
 const B_BOOT_PARTITION_UUID: Uuid =
     const_unwrap(Uuid::try_parse("D5214E4F-F7B0-B945-9A9B-52B9188DF4C5"));
+
+const GRUB_PARTITION_FS: FileSystem = FileSystem::Vfat;
+const BOOT_PARTITION_FS: FileSystem = FileSystem::Ext4;
 
 /// Direct boot configuration extracted from the GuestOS
 #[derive(Debug)]
@@ -64,6 +67,7 @@ pub async fn prepare_direct_boot(
             GRUB_PARTITION_UUID,
             MountOptions {
                 readonly: !should_refresh_grubenv,
+                file_system: GRUB_PARTITION_FS,
             },
         )
         .await?;
@@ -88,7 +92,13 @@ pub async fn prepare_direct_boot(
     };
 
     let boot_partition = guest_partition_provider
-        .mount_partition(boot_partition_uuid, MountOptions { readonly: true })
+        .mount_partition(
+            boot_partition_uuid,
+            MountOptions {
+                readonly: true,
+                file_system: BOOT_PARTITION_FS,
+            },
+        )
         .await?;
 
     let boot_args_path = boot_partition.mount_point().join("boot_args");
