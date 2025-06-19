@@ -1,5 +1,5 @@
 {
-  "checksum": "05d485921c31888d77218f9167a7b2740c9d733ae271a9db5c20c29fdc9a5672",
+  "checksum": "5e6446d7191f132a8a03f7eaa7686c487aa0bf067d0c82cc1f69d0f93e61dccd",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -8792,7 +8792,7 @@
               "target": "log"
             },
             {
-              "id": "tempfile 3.12.0",
+              "id": "tempfile 3.20.0",
               "target": "tempfile"
             },
             {
@@ -11583,7 +11583,7 @@
               "target": "sha256"
             },
             {
-              "id": "tempfile 3.12.0",
+              "id": "tempfile 3.20.0",
               "target": "tempfile"
             },
             {
@@ -19601,7 +19601,7 @@
               "target": "tar"
             },
             {
-              "id": "tempfile 3.12.0",
+              "id": "tempfile 3.20.0",
               "target": "tempfile"
             },
             {
@@ -19682,7 +19682,7 @@
               "target": "shell_words"
             },
             {
-              "id": "tempfile 3.12.0",
+              "id": "tempfile 3.20.0",
               "target": "tempfile"
             },
             {
@@ -21054,7 +21054,7 @@
               "target": "tarpc"
             },
             {
-              "id": "tempfile 3.12.0",
+              "id": "tempfile 3.20.0",
               "target": "tempfile"
             },
             {
@@ -24413,7 +24413,7 @@
           "selects": {
             "cfg(not(target_arch = \"wasm32\"))": [
               {
-                "id": "tempfile 3.12.0",
+                "id": "tempfile 3.20.0",
                 "target": "tempfile"
               }
             ]
@@ -25233,14 +25233,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "fastrand 2.1.0": {
+    "fastrand 2.3.0": {
       "name": "fastrand",
-      "version": "2.1.0",
+      "version": "2.3.0",
       "package_url": "https://github.com/smol-rs/fastrand",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/fastrand/2.1.0/download",
-          "sha256": "9fc0510504f03c51ada170672ac806f1f105a88aa97a5281117e1ddc3368e51a"
+          "url": "https://static.crates.io/crates/fastrand/2.3.0/download",
+          "sha256": "37909eebbb50d72f9059c3b6d82c0463f2ff062c9e95845c43a6c9c0355411be"
         }
       },
       "targets": [
@@ -25271,7 +25271,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "2.1.0"
+        "version": "2.3.0"
       },
       "license": "Apache-2.0 OR MIT",
       "license_ids": [
@@ -27084,7 +27084,7 @@
         "deps": {
           "common": [
             {
-              "id": "fastrand 2.1.0",
+              "id": "fastrand 2.3.0",
               "target": "fastrand"
             },
             {
@@ -28384,7 +28384,7 @@
               "target": "similar_asserts"
             },
             {
-              "id": "tempfile 3.12.0",
+              "id": "tempfile 3.20.0",
               "target": "tempfile"
             },
             {
@@ -54100,7 +54100,7 @@
               "target": "atomic_waker"
             },
             {
-              "id": "fastrand 2.1.0",
+              "id": "fastrand 2.3.0",
               "target": "fastrand"
             },
             {
@@ -54655,7 +54655,7 @@
               "target": "strum"
             },
             {
-              "id": "tempfile 3.12.0",
+              "id": "tempfile 3.20.0",
               "target": "tempfile"
             },
             {
@@ -55260,7 +55260,7 @@
               "target": "symbolic_demangle"
             },
             {
-              "id": "tempfile 3.12.0",
+              "id": "tempfile 3.20.0",
               "target": "tempfile"
             },
             {
@@ -57145,7 +57145,7 @@
               "target": "rusty_fork"
             },
             {
-              "id": "tempfile 3.12.0",
+              "id": "tempfile 3.20.0",
               "target": "tempfile"
             },
             {
@@ -57439,7 +57439,7 @@
               "target": "syn"
             },
             {
-              "id": "tempfile 3.12.0",
+              "id": "tempfile 3.20.0",
               "target": "tempfile"
             },
             {
@@ -57545,7 +57545,7 @@
               "target": "syn"
             },
             {
-              "id": "tempfile 3.12.0",
+              "id": "tempfile 3.20.0",
               "target": "tempfile"
             }
           ],
@@ -64672,6 +64672,7 @@
           "common": [
             "alloc",
             "default",
+            "fs",
             "mm",
             "std"
           ],
@@ -66095,7 +66096,7 @@
               "target": "quick_error"
             },
             {
-              "id": "tempfile 3.12.0",
+              "id": "tempfile 3.20.0",
               "target": "tempfile"
             },
             {
@@ -74930,14 +74931,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "tempfile 3.12.0": {
+    "tempfile 3.20.0": {
       "name": "tempfile",
-      "version": "3.12.0",
+      "version": "3.20.0",
       "package_url": "https://github.com/Stebalien/tempfile",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/tempfile/3.12.0/download",
-          "sha256": "04cbcdd0c794ebb0d4cf35e88edd2f7d2c4c3e9a5a6dab322839b321c6a87a64"
+          "url": "https://static.crates.io/crates/tempfile/3.20.0/download",
+          "sha256": "e8a64e3985349f2441a1a9ef0b853f869006c3855f2cda6862a94d26ebb9d6a1"
         }
       },
       "targets": [
@@ -74959,14 +74960,17 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": {
+          "common": [
+            "default",
+            "getrandom"
+          ],
+          "selects": {}
+        },
         "deps": {
           "common": [
             {
-              "id": "cfg-if 1.0.0",
-              "target": "cfg_if"
-            },
-            {
-              "id": "fastrand 2.1.0",
+              "id": "fastrand 2.3.0",
               "target": "fastrand"
             },
             {
@@ -74975,9 +74979,21 @@
             }
           ],
           "selects": {
+            "aarch64-apple-darwin": [
+              {
+                "id": "getrandom 0.3.1",
+                "target": "getrandom"
+              }
+            ],
+            "aarch64-unknown-linux-gnu": [
+              {
+                "id": "getrandom 0.3.1",
+                "target": "getrandom"
+              }
+            ],
             "cfg(any(unix, target_os = \"wasi\"))": [
               {
-                "id": "rustix 0.38.44",
+                "id": "rustix 1.0.5",
                 "target": "rustix"
               }
             ],
@@ -74986,11 +75002,23 @@
                 "id": "windows-sys 0.59.0",
                 "target": "windows_sys"
               }
+            ],
+            "x86_64-apple-darwin": [
+              {
+                "id": "getrandom 0.3.1",
+                "target": "getrandom"
+              }
+            ],
+            "x86_64-unknown-linux-gnu": [
+              {
+                "id": "getrandom 0.3.1",
+                "target": "getrandom"
+              }
             ]
           }
         },
         "edition": "2021",
-        "version": "3.12.0"
+        "version": "3.20.0"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -92785,7 +92813,7 @@
     "systemd 0.10.0",
     "tar 0.4.39",
     "tarpc 0.34.0",
-    "tempfile 3.12.0",
+    "tempfile 3.20.0",
     "test-strategy 0.3.1",
     "tester 0.7.0",
     "textplots 0.8.4",
