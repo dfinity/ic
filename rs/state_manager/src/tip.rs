@@ -423,6 +423,7 @@ pub(crate) fn spawn_tip_thread(
                             fd_factory,
                         } => {
                             let _timer = request_timer(&metrics, "validate_replicated_state");
+                            let start = Instant::now();
                             debug_assert_eq!(
                                 tip_state.latest_checkpoint_state.page_maps_height,
                                 checkpoint_layout.height()
@@ -450,6 +451,12 @@ pub(crate) fn spawn_tip_thread(
                                     err
                                 )
                             }
+                            info!(
+                                log,
+                                "Validated checkpoint @{} in {:?}",
+                                checkpoint_layout.height(),
+                                start.elapsed()
+                            );
                         }
                     }
                 }
