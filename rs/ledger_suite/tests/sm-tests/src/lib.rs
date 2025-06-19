@@ -4580,7 +4580,11 @@ fn convert_to_fields_args(args: &ConsentMessageRequest) -> ConsentMessageRequest
     fields_args
 }
 
-fn modify_field(fields_message: &FieldsDisplay, field_name: String, new_value: String) -> FieldsDisplay {
+fn modify_field(
+    fields_message: &FieldsDisplay,
+    field_name: String,
+    new_value: String,
+) -> FieldsDisplay {
     let mut result: FieldsDisplay = Default::default();
     result.intent = fields_message.intent.clone();
     for (f_name, f_value) in &fields_message.fields {
@@ -4590,7 +4594,9 @@ fn modify_field(fields_message: &FieldsDisplay, field_name: String, new_value: S
             }
             result.fields.push((f_name.to_string(), new_value.clone()));
         } else {
-            result.fields.push((f_name.to_string(), f_value.to_string()));
+            result
+                .fields
+                .push((f_name.to_string(), f_value.to_string()));
         }
     }
     result
@@ -4642,7 +4648,7 @@ Charged for processing the transfer.
 **Memo:**
 `test_bytes`";
 
-    let expected_fields_message = FieldsDisplay { 
+    let expected_fields_message = FieldsDisplay {
         intent: "Send XTST".to_string(), 
         fields: vec![
             ("From".to_string(), "d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101".to_string()), 
@@ -4664,8 +4670,13 @@ Charged for processing the transfer.
         "Expected: {}, got: {}",
         expected_transfer_message, message
     );
-    let fields_consent_info =
-        icrc21_consent_message(env, canister_id, from_account.owner, convert_to_fields_args(&args)).unwrap();
+    let fields_consent_info = icrc21_consent_message(
+        env,
+        canister_id,
+        from_account.owner,
+        convert_to_fields_args(&args),
+    )
+    .unwrap();
     let fields_message = extract_icrc21_fields_message(&fields_consent_info.consent_message);
     assert_eq!(
         fields_message, expected_fields_message,
@@ -4693,8 +4704,13 @@ Charged for processing the transfer.
         "Expected: {}, got: {}",
         expected_message, message
     );
-    let fields_consent_info =
-        icrc21_consent_message(env, canister_id, from_account.owner, convert_to_fields_args(&args)).unwrap();
+    let fields_consent_info = icrc21_consent_message(
+        env,
+        canister_id,
+        from_account.owner,
+        convert_to_fields_args(&args),
+    )
+    .unwrap();
     let fields_message = extract_icrc21_fields_message(&fields_consent_info.consent_message);
     let new_exp_fields_message = modify_field(&fields_message, "Memo".to_string(), "".to_string());
     assert_eq!(
@@ -4721,10 +4737,19 @@ Charged for processing the transfer.
         "Expected: {}, got: {}",
         expected_message, message
     );
-    let fields_consent_info =
-        icrc21_consent_message(env, canister_id, from_account.owner, convert_to_fields_args(&args)).unwrap();
+    let fields_consent_info = icrc21_consent_message(
+        env,
+        canister_id,
+        from_account.owner,
+        convert_to_fields_args(&args),
+    )
+    .unwrap();
     let fields_message = extract_icrc21_fields_message(&fields_consent_info.consent_message);
-    let new_exp_fields_message = modify_field(&fields_message, "Memo".to_string(),hex::encode(vec![0, 159, 146, 150]));
+    let new_exp_fields_message = modify_field(
+        &fields_message,
+        "Memo".to_string(),
+        hex::encode(vec![0, 159, 146, 150]),
+    );
     assert_eq!(
         fields_message, new_exp_fields_message,
         "Expected: {:?}, got: {:?}",
@@ -4744,10 +4769,15 @@ Charged for processing the transfer.
         "Expected: {}, got: {}",
         expected_message, message
     );
-    let fields_consent_info =
-        icrc21_consent_message(env, canister_id, Principal::anonymous(), convert_to_fields_args(&args)).unwrap();
+    let fields_consent_info = icrc21_consent_message(
+        env,
+        canister_id,
+        Principal::anonymous(),
+        convert_to_fields_args(&args),
+    )
+    .unwrap();
     let fields_message = extract_icrc21_fields_message(&fields_consent_info.consent_message);
-    let new_exp_fields_message = modify_field(&fields_message, "From".to_string(),"".to_string());
+    let new_exp_fields_message = modify_field(&fields_message, "From".to_string(), "".to_string());
     assert_eq!(
         fields_message, new_exp_fields_message,
         "Expected: {:?}, got: {:?}",
@@ -4827,7 +4857,7 @@ Charged for processing the approval.
 **Memo:**
 `test_bytes`";
 
-    let expected_fields_message = FieldsDisplay { 
+    let expected_fields_message = FieldsDisplay {
         intent: "Approve spending".to_string(), 
         fields: vec![
             ("From".to_string(), "d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101".to_string()), 
@@ -4860,8 +4890,13 @@ Charged for processing the approval.
         "Expected: {}, got: {}",
         expected_approve_message, message
     );
-    let fields_consent_info =
-        icrc21_consent_message(env, canister_id, from_account.owner, convert_to_fields_args(&args)).unwrap();
+    let fields_consent_info = icrc21_consent_message(
+        env,
+        canister_id,
+        from_account.owner,
+        convert_to_fields_args(&args),
+    )
+    .unwrap();
     let fields_message = extract_icrc21_fields_message(&fields_consent_info.consent_message);
     assert_eq!(
         fields_message, expected_fields_message,
@@ -4887,10 +4922,19 @@ Charged for processing the approval.
         "Expected: {}, got: {}",
         expected_message, message
     );
-    let fields_consent_info =
-        icrc21_consent_message(env, canister_id, from_account.owner, convert_to_fields_args(&args)).unwrap();
+    let fields_consent_info = icrc21_consent_message(
+        env,
+        canister_id,
+        from_account.owner,
+        convert_to_fields_args(&args),
+    )
+    .unwrap();
     let fields_message = extract_icrc21_fields_message(&fields_consent_info.consent_message);
-    let new_exp_fields_message = modify_field(&fields_message, "Existing allowance".to_string(), "".to_string());
+    let new_exp_fields_message = modify_field(
+        &fields_message,
+        "Existing allowance".to_string(),
+        "".to_string(),
+    );
     assert_eq!(
         fields_message, new_exp_fields_message,
         "Expected: {:?}, got: {:?}",
@@ -4918,10 +4962,19 @@ Charged for processing the approval.
         "Expected: {}, got: {}",
         expected_message, message
     );
-    let fields_consent_info =
-        icrc21_consent_message(env, canister_id, from_account.owner, convert_to_fields_args(&args)).unwrap();
+    let fields_consent_info = icrc21_consent_message(
+        env,
+        canister_id,
+        from_account.owner,
+        convert_to_fields_args(&args),
+    )
+    .unwrap();
     let fields_message = extract_icrc21_fields_message(&fields_consent_info.consent_message);
-    let new_exp_fields_message = modify_field(&fields_message, "Approval expiration".to_string(), "This approval does not have an expiration.".to_string());
+    let new_exp_fields_message = modify_field(
+        &fields_message,
+        "Approval expiration".to_string(),
+        "This approval does not have an expiration.".to_string(),
+    );
     assert_eq!(
         fields_message, new_exp_fields_message,
         "Expected: {:?}, got: {:?}",
@@ -4943,10 +4996,15 @@ Charged for processing the approval.
         "Expected: {}, got: {}",
         expected_message, message
     );
-    let fields_consent_info =
-        icrc21_consent_message(env, canister_id, Principal::anonymous(), convert_to_fields_args(&args)).unwrap();
+    let fields_consent_info = icrc21_consent_message(
+        env,
+        canister_id,
+        Principal::anonymous(),
+        convert_to_fields_args(&args),
+    )
+    .unwrap();
     let fields_message = extract_icrc21_fields_message(&fields_consent_info.consent_message);
-    let new_exp_fields_message = modify_field(&fields_message, "From".to_string(),"".to_string());
+    let new_exp_fields_message = modify_field(&fields_message, "From".to_string(), "".to_string());
     assert_eq!(
         fields_message, new_exp_fields_message,
         "Expected: {:?}, got: {:?}",
@@ -4969,10 +5027,19 @@ Charged for processing the approval.
         "Expected: {}, got: {}",
         expected_message, message
     );
-    let fields_consent_info =
-        icrc21_consent_message(env, canister_id, from_account.owner, convert_to_fields_args(&args)).unwrap();
+    let fields_consent_info = icrc21_consent_message(
+        env,
+        canister_id,
+        from_account.owner,
+        convert_to_fields_args(&args),
+    )
+    .unwrap();
     let fields_message = extract_icrc21_fields_message(&fields_consent_info.consent_message);
-    let new_exp_fields_message = modify_field(&fields_message, "Approval expiration".to_string(), "Thu, 06 May 2021 21:17:10 +0100".to_string());
+    let new_exp_fields_message = modify_field(
+        &fields_message,
+        "Approval expiration".to_string(),
+        "Thu, 06 May 2021 21:17:10 +0100".to_string(),
+    );
     assert_eq!(
         fields_message, new_exp_fields_message,
         "Expected: {:?}, got: {:?}",
@@ -4999,8 +5066,13 @@ Charged for processing the approval.
         "Expected: {}, got: {}",
         expected_message, message
     );
-    let fields_consent_info =
-        icrc21_consent_message(env, canister_id, from_account.owner, convert_to_fields_args(&args)).unwrap();
+    let fields_consent_info = icrc21_consent_message(
+        env,
+        canister_id,
+        from_account.owner,
+        convert_to_fields_args(&args),
+    )
+    .unwrap();
     let fields_message = extract_icrc21_fields_message(&fields_consent_info.consent_message);
     let new_exp_fields_message = modify_field(&fields_message, "Memo".to_string(), "".to_string());
     assert_eq!(
@@ -5061,7 +5133,7 @@ Charged for processing the transfer.
 **Memo:**
 `test_bytes`";
 
-    let expected_fields_message = FieldsDisplay { 
+    let expected_fields_message = FieldsDisplay {
         intent: "Spend XTST".to_string(), 
         fields: vec![
             ("From".to_string(), "d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101".to_string()), 
@@ -5081,8 +5153,13 @@ Charged for processing the transfer.
         "Expected: {}, got: {}",
         expected_transfer_from_message, message
     );
-    let fields_consent_info =
-        icrc21_consent_message(env, canister_id, spender_account.owner, convert_to_fields_args(&args)).unwrap();
+    let fields_consent_info = icrc21_consent_message(
+        env,
+        canister_id,
+        spender_account.owner,
+        convert_to_fields_args(&args),
+    )
+    .unwrap();
     let fields_message = extract_icrc21_fields_message(&fields_consent_info.consent_message);
     assert_eq!(
         fields_message, expected_fields_message,
@@ -5106,10 +5183,16 @@ Charged for processing the transfer.
         "Expected: {}, got: {}",
         expected_message, message
     );
-    let fields_consent_info =
-        icrc21_consent_message(env, canister_id, Principal::anonymous(), convert_to_fields_args(&args)).unwrap();
+    let fields_consent_info = icrc21_consent_message(
+        env,
+        canister_id,
+        Principal::anonymous(),
+        convert_to_fields_args(&args),
+    )
+    .unwrap();
     let fields_message = extract_icrc21_fields_message(&fields_consent_info.consent_message);
-    let new_exp_fields_message = modify_field(&fields_message, "Spender".to_string(), "".to_string());
+    let new_exp_fields_message =
+        modify_field(&fields_message, "Spender".to_string(), "".to_string());
     assert_eq!(
         fields_message, new_exp_fields_message,
         "Expected: {:?}, got: {:?}",
@@ -5136,8 +5219,13 @@ Charged for processing the transfer.
         "Expected: {}, got: {}",
         expected_message, message
     );
-    let fields_consent_info =
-        icrc21_consent_message(env, canister_id, spender_account.owner, convert_to_fields_args(&args)).unwrap();
+    let fields_consent_info = icrc21_consent_message(
+        env,
+        canister_id,
+        spender_account.owner,
+        convert_to_fields_args(&args),
+    )
+    .unwrap();
     let fields_message = extract_icrc21_fields_message(&fields_consent_info.consent_message);
     let new_exp_fields_message = modify_field(&fields_message, "Memo".to_string(), "".to_string());
     assert_eq!(
