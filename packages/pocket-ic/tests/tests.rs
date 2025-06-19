@@ -2593,7 +2593,7 @@ fn state_handle() {
     assert!(pic.canister_exists(canister_id));
     let state = pic.drop_and_take_state().unwrap();
 
-    let path = state.keep();
+    let path = state.into_path();
     let state = PocketIcState::new_from_path(path);
 
     let pic1 = PocketIcBuilder::new().with_read_only_state(&state).build();
@@ -2619,7 +2619,7 @@ async fn state_handle_async() {
     assert!(pic.canister_exists(canister_id).await);
     let state = pic.drop_and_take_state().await.unwrap();
 
-    let path = state.keep();
+    let path = state.into_path();
     let state = PocketIcState::new_from_path(path);
 
     let pic1 = PocketIcBuilder::new()
