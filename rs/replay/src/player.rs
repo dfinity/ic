@@ -623,10 +623,18 @@ impl Player {
 
             std::thread::sleep(WAIT_DURATION);
         }
-        info!(self.log, "Executed the state at height {height}.");
+        info!(self.log, "The state at height {height} has been executed.");
 
-        // Wait until the checkpoint is created and verified.
+        info!(
+            self.log,
+            "Waiting until the latest checkpoint is created and verified."
+        );
         self.state_manager.flush_tip_channel();
+        info!(
+            self.log,
+            "The latest checkpoint at height {:?} has been created and verified.",
+            self.state_manager.checkpoint_heights().iter().max()
+        );
 
         assert_eq!(
             height,
