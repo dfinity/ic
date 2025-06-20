@@ -41,7 +41,8 @@ use crate::{
             manage_neuron::{
                 self,
                 claim_or_refresh::{By, MemoAndController},
-                ClaimOrRefresh, Command, NeuronIdOrSubaccount,
+                set_following::FolloweesForTopic,
+                ClaimOrRefresh, Command, NeuronIdOrSubaccount, SetFollowing,
             },
             maturity_disbursement::Destination,
             neurons_fund_snapshot::NeuronsFundNeuronPortion as NeuronsFundNeuronPortionPb,
@@ -3278,6 +3279,45 @@ impl Governance {
         .map_err(GovernanceError::from)
     }
 
+    fn set_following(
+        &mut self,
+        id: &NeuronId,
+        caller: &PrincipalId,
+        set_following: &manage_neuron::SetFollowing,
+    ) -> Result<(), GovernanceError> {
+        // Start with original following of the neuron.
+        let mut new_followees = self.with_neuron(
+            id,
+            |neuron| -> Result<HashMap</* topic */ i32, Followees>, GovernanceError> {
+                set_following.validate(caller, neuron)?;
+
+                Ok(neuron.followees.clone())
+            },
+        )??;
+
+        // Modify new_followees according to set_following.
+        let SetFollowing { topic_following } = set_following;
+        for FolloweesForTopic { topic, followees } in topic_following {
+            let topic = topic.unwrap_or_default();
+            let followees = followees.clone();
+
+            if followees.is_empty() {
+                new_followees.remove(&topic);
+            } else {
+                new_followees.insert(topic, Followees { followees });
+            }
+        }
+
+        // Commit new_followees to the neuron.
+        let now_seconds = self.env.now();
+        self.with_neuron_mut(id, |neuron| {
+            neuron.followees = new_followees;
+            neuron.refresh_voting_power(now_seconds);
+        })?;
+
+        Ok(())
+    }
+
     /// Set the status of a proposal that is 'being executed' to
     /// 'executed' or 'failed' depending on the value of 'success'.
     ///
@@ -4750,6 +4790,9 @@ impl Governance {
                     ));
                 }
             }
+            Command::SetFollowing(set_following) => {
+                set_following.validate_intrinsically()?;
+            }
             _ => {}
         };
 
@@ -6211,6 +6254,9 @@ impl Governance {
             Some(Command::DisburseMaturity(disburse_maturity)) => self
                 .disburse_maturity(&id, caller, disburse_maturity)
                 .map(ManageNeuronResponse::disburse_maturity_response),
+            Some(Command::SetFollowing(set_following)) => self
+                .set_following(&id, caller, set_following)
+                .map(ManageNeuronResponse::set_following_response),
             None => panic!(),
         }
     }
