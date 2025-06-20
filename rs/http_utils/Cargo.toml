@@ -10,12 +10,15 @@ documentation.workspace = true
 flate2 = { workspace = true }
 hex = { workspace = true }
 http = { workspace = true }
+hyper-util = { workspace = true }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-logger = { path = "../monitoring/logger" }
+local-ip-address = { workspace = true }
 reqwest = { workspace = true }
 slog = { workspace = true }
 tar = { workspace = true }
 tokio = { workspace = true }
+tower-service = { workspace = true }
 zstd = { workspace = true }
 
 [dev-dependencies]
