@@ -9,7 +9,11 @@ use network::systemd::DEFAULT_SYSTEMD_NETWORK_DIR;
 use std::path::Path;
 use utils::to_cidr;
 
+mod boot_args;
+mod guest_direct_boot;
+#[cfg(target_os = "linux")]
 mod guest_vm;
+mod mount;
 mod systemd_notifier;
 
 #[derive(Subcommand)]
@@ -40,14 +44,15 @@ struct HostOSArgs {
     command: Option<Commands>,
 }
 
-#[tokio::main]
-pub async fn main() -> Result<()> {
-    #[cfg(not(target_os = "linux"))]
-    {
-        eprintln!("ERROR: this only runs on Linux.");
-        std::process::exit(1)
-    }
+#[cfg(not(target_os = "linux"))]
+pub fn main() -> Result<()> {
+    eprintln!("ERROR: this only runs on Linux.");
+    std::process::exit(1)
+}
 
+#[tokio::main]
+#[cfg(target_os = "linux")]
+pub async fn main() -> Result<()> {
     let opts = HostOSArgs::parse();
 
     match opts.command {
