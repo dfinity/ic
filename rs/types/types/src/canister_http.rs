@@ -121,6 +121,7 @@ pub struct CanisterHttpRequestContext {
     pub http_method: CanisterHttpMethod,
     pub transform: Option<Transform>,
     pub time: Time,
+    //is_one_of could be removed as it's equivalent to delegated_node_id != None.
     pub is_one_of: bool,
     pub delegated_node_id: Option<NodeId>,
 }

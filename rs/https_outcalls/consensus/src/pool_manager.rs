@@ -326,6 +326,7 @@ impl CanisterHttpPoolManagerImpl {
                     };
                     self.requested_id_cache.borrow_mut().remove(&response.id);
                     self.metrics.shares_signed.inc();
+                    //TODO(Mihai): don't broadcast if this is a oneof request.
                     change_set.push(CanisterHttpChangeAction::AddToValidated(share, response));
                 }
             }
