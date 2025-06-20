@@ -18,6 +18,7 @@ ic-registry-client = { path = "../registry/client" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-local-store = { path = "../registry/local_store" }
 ic-registry-replicator = { path = "../orchestrator/registry_replicator" }
+ic-state-layout = { path = "../state_layout" }
 ic-types = { path = "../types/types" }
 rand = { workspace = true }
 reqwest = { workspace = true }
