@@ -1,5 +1,5 @@
 use hyper_util::client::legacy::connect::dns::GaiResolver;
-use reqwest::dns::{Name, Resolve, Resolving};
+use reqwest::dns::{Addrs, Name, Resolve, Resolving};
 use std::{
     cmp,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
@@ -23,22 +23,28 @@ impl Resolve for LongestPrefixMatchResolver {
 
         Box::pin(async move {
             // Resolve with `GaiResolver`, which is the default resolver in reqwest.
-            let resolved_addrs = this
-                .call(name.as_str().parse()?)
-                .await?
-                .map(|saddr| saddr.ip())
-                .collect::<Vec<_>>();
+            let resolved_addrs = this.call(name.as_str().parse()?).await?;
 
-            let local_addrs = local_ip_address::list_afinet_netifas()?
+            let local_addrs = if let Ok(addrs) = local_ip_address::list_afinet_netifas() {
+                addrs
+            } else {
+                // If we cannot get the local addresses, we return the resolved addresses as is.
+                return Ok(Box::new(resolved_addrs) as Addrs);
+            };
+
+            // Extract the IP addresses from the resolved addresses and local addresses.
+            let resolved_addrs = resolved_addrs.map(|saddr| saddr.ip()).collect::<Vec<_>>();
+            let local_addrs = local_addrs
                 .into_iter()
                 .map(|(_, ip)| ip)
                 .collect::<Vec<_>>();
+
             // Sort the resolved addresses by longest prefix match, putting IPv6 addresses first
             let sorted_sock_addrs = sort_by_longest_prefix_match(resolved_addrs, local_addrs)
                 .into_iter()
                 .map(|addr| SocketAddr::new(addr, 0));
 
-            Ok(Box::new(sorted_sock_addrs) as Box<dyn Iterator<Item = SocketAddr> + Send>)
+            Ok(Box::new(sorted_sock_addrs) as Addrs)
         })
     }
 }
