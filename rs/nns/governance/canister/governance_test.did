@@ -372,6 +372,7 @@ type GovernanceCachedMetrics = record {
   not_dissolving_neurons_e8s_buckets_seed : vec record { nat64; float64 };
   timestamp_seconds : nat64;
   seed_neuron_count : nat64;
+  spawning_neurons_count : nat64;
 
   non_self_authenticating_controller_neuron_subset_metrics : opt NeuronSubsetMetrics;
   public_neuron_subset_metrics : opt NeuronSubsetMetrics;
