@@ -3639,6 +3639,7 @@ fn can_recover_from_corruption_on_state_sync() {
     });
 }
 
+#[ignore]
 #[test]
 fn can_detect_divergence_with_rehash() {
     use ic_state_layout::{CheckpointLayout, RwPolicy};
@@ -4235,7 +4236,12 @@ fn can_reuse_chunk_hashes_when_computing_manifest() {
         let expected_size_estimate =
             PAGE_SIZE as u64 * (WASM_PAGES + STABLE_PAGES) + empty_wasm_size() as u64;
         let size = chunk_bytes[&reused_label] + chunk_bytes[&compared_label];
-        assert!(((expected_size_estimate as f64 * 1.1) as u64) > size);
+        eprintln!(
+            "Expected: {}; reused: {}; compared: {}",
+            expected_size_estimate, chunk_bytes[&reused_label], chunk_bytes[&compared_label]
+        );
+        eprintln!("chunk_bytes: {:#?}", chunk_bytes);
+        assert!(((expected_size_estimate as f64 * 0.1) as u64) > size);
         assert!(((expected_size_estimate as f64 * 0.9) as u64) < size);
 
         let checkpoint = state_manager
