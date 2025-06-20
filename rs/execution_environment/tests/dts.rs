@@ -27,7 +27,9 @@ use ic_state_machine_tests::{ErrorCode, StateMachine, StateMachineConfig};
 use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
 use ic_types::messages::MessageId;
 use ic_types::{CryptoHashOfState, Cycles, NumInstructions};
-use ic_universal_canister::{call_args, wasm, CallArgs, UNIVERSAL_CANISTER_WASM};
+use ic_universal_canister::{
+    call_args, wasm, CallArgs, UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM, UNIVERSAL_CANISTER_WASM,
+};
 use more_asserts::assert_ge;
 use std::sync::OnceLock;
 use strum::IntoEnumIterator;
@@ -231,7 +233,7 @@ fn create_canister(env: &StateMachine) -> CanisterId {
     )
 }
 
-// Installs the universal canister executing at least the given number of instructions.
+// Installs the universal canister (without heartbeat to avoid unexpected cycles consumption) executing at least the given number of instructions.
 fn install_code(
     env: &StateMachine,
     canister_id: CanisterId,
@@ -245,7 +247,7 @@ fn install_code(
         InstallCodeArgs::new(
             mode,
             canister_id,
-            UNIVERSAL_CANISTER_WASM.to_vec(),
+            UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM.to_vec(),
             wasm().instruction_counter_is_at_least(instructions).build(),
         )
         .encode(),
@@ -416,10 +418,6 @@ fn dts_install_code_with_concurrent_ingress_sufficient_cycles() {
     )
     .unwrap();
 
-    // Trigger a checkpoint so that the full execution cost is
-    // applied to the subsequent call to `install_code`.
-    env.checkpointed_tick();
-
     let install_code_ingress_id = env.send_ingress(
         PrincipalId::new_anonymous(),
         IC_00,
@@ -427,7 +425,7 @@ fn dts_install_code_with_concurrent_ingress_sufficient_cycles() {
         InstallCodeArgs::new(
             CanisterInstallMode::Reinstall,
             canister_id,
-            UNIVERSAL_CANISTER_WASM.to_vec(),
+            UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM.to_vec(),
             wasm()
                 .instruction_counter_is_at_least(MAX_INSTRUCTIONS)
                 .build(),
@@ -438,7 +436,7 @@ fn dts_install_code_with_concurrent_ingress_sufficient_cycles() {
     // Start execution of `install_code`.
     env.tick();
 
-    // Send a normal ingress message while the execution is paused.
+    // Send a normal ingress message while the canister is being reinstalled.
     let update_call_id = update_call(&env, canister_id, MAX_INSTRUCTIONS).unwrap();
 
     // We are awaiting the ingress message for up to 100 rounds (arbitrary value high enough for the message to complete).
@@ -503,7 +501,7 @@ fn dts_install_code_with_concurrent_ingress_insufficient_cycles_and_freezing_thr
         InstallCodeArgs::new(
             CanisterInstallMode::Install,
             canister_id,
-            UNIVERSAL_CANISTER_WASM.to_vec(),
+            UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM.to_vec(),
             wasm()
                 .instruction_counter_is_at_least(MAX_INSTRUCTIONS)
                 .build(),
@@ -514,7 +512,7 @@ fn dts_install_code_with_concurrent_ingress_insufficient_cycles_and_freezing_thr
     // Start execution of `install_code`.
     env.tick();
 
-    // Send a normal ingress message while the execution is paused:
+    // Send a normal ingress message while the canister is being installed:
     // this fails because the canister has no more liquid cycles left at this point,
     // i.e., consuming any cycles would make the canister frozen.
     assert_eq!(

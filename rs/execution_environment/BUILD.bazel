@@ -175,9 +175,11 @@ rust_ic_test(
     srcs = ["tests/dts.rs"],
     data = DATA + [
         "//rs/universal_canister/impl:universal_canister.wasm.gz",
+        "//rs/universal_canister/impl:universal_canister_no_heartbeat.wasm.gz",
     ],
     env = ENV | {
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
+        "UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister_no_heartbeat.wasm.gz)",
         "RUST_TEST_THREADS": "4",
     },
     tags = [
