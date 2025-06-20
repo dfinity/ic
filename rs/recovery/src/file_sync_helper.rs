@@ -92,10 +92,8 @@ pub fn rsync_with_retries(
                     // before re-trying rsync.
                     info!(logger, "Retrying in 10 seconds...");
                     std::thread::sleep(Duration::from_secs(10));
-                } else if !consent_given(
-                    logger,
-                    "Do you want to retry the  download for this node?",
-                ) {
+                } else if !consent_given(logger, "Do you want to retry the download for this node?")
+                {
                     return Err(RecoveryError::RsyncFailed);
                 }
             }

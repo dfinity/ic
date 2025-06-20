@@ -60,6 +60,7 @@ mod validator;
 ///             .to_string(),
 ///         start_height: 0,
 ///     })),
+///     skip_prompts: true,
 /// };
 /// // Once the arguments are set well, the local store and spool directories are populated;
 /// // replay function could be called as follows:
