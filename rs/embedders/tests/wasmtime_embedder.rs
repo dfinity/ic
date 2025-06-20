@@ -12,7 +12,7 @@ use ic_embedders::{
     },
 };
 use ic_interfaces::execution_environment::{
-    CanisterBacktrace, ExecutionMode, HypervisorError, SystemApi, TrapCode,
+    CanisterBacktrace, HypervisorError, SystemApi, TrapCode,
 };
 use ic_management_canister_types_private::Global;
 use ic_registry_subnet_type::SubnetType;
@@ -2570,7 +2570,6 @@ fn wasm64_reject_msg_copy() {
         Cycles::zero(),
         call_context_test_id(13),
         false,
-        ExecutionMode::Replicated,
         NumInstructions::new(700),
     );
 
@@ -3093,7 +3092,6 @@ fn wasm64_msg_cycles_refunded128() {
         Cycles::new(777),
         call_context_test_id(13),
         false,
-        ExecutionMode::Replicated,
         NumInstructions::new(700),
     );
 
