@@ -3413,7 +3413,7 @@ impl Payload<'_> for StoredChunksReply {}
 ///     canister_id: principal;
 ///     replace_snapshot: opt blob;
 /// })`
-#[derive(Clone, Eq, PartialEq, Default, Debug, CandidType, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
 pub struct TakeCanisterSnapshotArgs {
     pub canister_id: PrincipalId,
     pub replace_snapshot: Option<SnapshotId>,
