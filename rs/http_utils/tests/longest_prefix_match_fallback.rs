@@ -50,15 +50,15 @@ impl Resolve for TestResolver {
 #[tokio::test]
 async fn test_unreachable_addr_falls_back_to_next_reachable() {
     // Number of unreachable addresses to simulate
-    let nb_unreachable = 3 as u64;
+    let nb_unreachable = 3_u64;
 
     // Unreachable addresses should take 134 +- 5 seconds before giving up. Reachable addresses
     // should take 0-2 seconds to respond.
     // These values were found by trial and error. Feel free to adjust them if the test is flaky,
     // for example by increasing the grace period.
-    let expected_unreachable = 134 as u64;
-    let grace_unreachable = 5 as u64;
-    let max_reachable = 2 as u64;
+    let expected_unreachable = 134_u64;
+    let grace_unreachable = 5_u64;
+    let max_reachable = 2_u64;
 
     let client = Client::builder()
         .dns_resolver(Arc::new(TestResolver {
