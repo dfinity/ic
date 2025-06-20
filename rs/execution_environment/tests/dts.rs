@@ -231,7 +231,7 @@ fn create_canister(env: &StateMachine) -> CanisterId {
     )
 }
 
-// Installs the universal canister spending at least the given number of instructions.
+// Installs the universal canister executing at least the given number of instructions.
 fn install_code(
     env: &StateMachine,
     canister_id: CanisterId,
@@ -252,7 +252,7 @@ fn install_code(
     )
 }
 
-// Executes an update call on the universal canister spending at least the given number of instructions.
+// Executes an update call on the universal canister executing at least the given number of instructions.
 fn update_call(
     env: &StateMachine,
     canister_id: CanisterId,
