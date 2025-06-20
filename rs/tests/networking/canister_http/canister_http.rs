@@ -29,7 +29,7 @@ pub const EXPIRATION: Duration = Duration::from_secs(120);
 pub const BACKOFF_DELAY: Duration = Duration::from_secs(5);
 
 const APP_SUBNET_SIZES: [usize; 3] = [13, 28, 40];
-pub const CONCURRENCY_LEVELS: [u64; 3] = [200, 500, 1000];
+pub const CONCURRENCY_LEVELS: [u64; 1] = [1];
 const PROXY_CANISTER_ID_PATH: &str = "proxy_canister_id";
 
 pub enum PemType {

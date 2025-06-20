@@ -338,6 +338,8 @@ fn timeout_priority() {
                     transform: None,
                     // this is the important one
                     time: UNIX_EPOCH,
+                    is_one_of: false,
+                    delegated_node_id: None,
                 };
                 init_state
                     .metadata

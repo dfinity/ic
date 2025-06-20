@@ -70,6 +70,7 @@ pub enum RandomnessPurpose {
     BlockmakerRanking,
     DkgCommitteeSampling,
     ExecutionThread(u32),
+    //TODO(urgent): there should be a purpose here (http request replica)
 }
 
 const COMMITTEE_SAMPLING_SEPARATOR_BYTE: u8 = 1;

@@ -491,6 +491,8 @@ mod tests {
                     context: vec![],
                 }),
                 time: UNIX_EPOCH,
+                is_one_of: false,
+                delegated_node_id: None,
             },
             socks_proxy_addrs: vec![],
         }

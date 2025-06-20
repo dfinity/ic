@@ -239,6 +239,20 @@ impl CanisterHttpPoolManagerImpl {
         };
 
         for (id, context) in http_requests {
+            if context.is_one_of {
+                if context.delegated_node_id.is_none() {
+                    warn!(
+                        self.log,
+                        "Delegated node ID is required for 'one of' requests, but not provided"
+                    );
+                    continue;
+                }
+                if context.delegated_node_id.unwrap() != self.replica_config.node_id {
+                    // This request is delegated to another node, so we skip it.
+                    continue;
+                }
+            }
+
             if !request_ids_already_made.contains(&id) {
                 let timeout = context.time + Duration::from_secs(5 * 60);
                 if let Err(err) = self
@@ -584,6 +598,8 @@ pub mod test {
                     http_method: CanisterHttpMethod::GET,
                     transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
+                    is_one_of: false,
+                    delegated_node_id: None,
                 };
 
                 state_manager
@@ -681,6 +697,8 @@ pub mod test {
                     http_method: CanisterHttpMethod::GET,
                     transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
+                    is_one_of: false,
+                    delegated_node_id: None,
                 };
 
                 state_manager
@@ -805,6 +823,8 @@ pub mod test {
                     http_method: CanisterHttpMethod::GET,
                     transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
+                    is_one_of: false,
+                    delegated_node_id: None,
                 };
 
                 state_manager
@@ -949,6 +969,8 @@ pub mod test {
                     http_method: CanisterHttpMethod::GET,
                     transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
+                    is_one_of: false,
+                    delegated_node_id: None,
                 };
 
                 // Expect times to be called exactly once to check that already

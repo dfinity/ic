@@ -133,6 +133,8 @@ message CanisterHttpRequestContext {
   repeated HttpHeader headers = 7;
   optional uint64 max_response_bytes = 9;
   google.protobuf.BytesValue transform_context = 10;
+  optional bool is_one_of = 11;
+  optional types.v1.NodeId delegated_node_id = 12;
   reserved 5;
 }
 
