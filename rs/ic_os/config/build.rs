@@ -22,12 +22,6 @@ fn main() {
     f.write_all(
         format!(
             r#"
-pub struct DirectBootProps {{
-    kernel: String,
-    initrd: String,
-    kernel_cmdline: String
-}}
-
 #[derive(Template)]
 #[template(escape = "xml", source = {:?}, ext = "xml")]
 pub struct GuestOSTemplateProps {{
@@ -37,7 +31,7 @@ pub struct GuestOSTemplateProps {{
     pub mac_address: macaddr::MacAddr6,
     pub config_media: String,
     pub enable_sev: bool,
-    pub direct_boot: Option<DirectBootProps>
+    pub direct_boot: Option<DirectBootConfig>
 }}
     "#,
             std::fs::read_to_string("templates/guestos_vm_template.xml").unwrap()

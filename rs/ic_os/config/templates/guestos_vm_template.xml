@@ -37,8 +37,8 @@
     <nvram>/var/lib/libvirt/qemu/nvram/guestos_VARS.fd</nvram>
     <boot dev='hd'/>
     {%- if let Some(direct_boot) = direct_boot %}
-    <kernel>{{direct_boot.kernel}}</kernel>
-    <initrd>{{direct_boot.initrd}}</initrd>
+    <kernel>{{direct_boot.kernel.display()}}</kernel>
+    <initrd>{{direct_boot.initrd.display()}}</initrd>
     <cmdline>{{direct_boot.kernel_cmdline}}</cmdline>
     {%- endif %}
   </os>

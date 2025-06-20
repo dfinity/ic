@@ -217,7 +217,7 @@ impl GuestVmService {
         let vm_config = generate_vm_config(
             &self.hostos_config,
             config_media.path(),
-            &direct_boot.as_ref().map(DirectBoot::to_config),
+            direct_boot.as_ref().map(DirectBoot::to_config),
         )
         .context("Failed to generate GuestOS VM config")?;
 

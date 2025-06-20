@@ -67,7 +67,7 @@ fn make_bootstrap_options(
 pub fn generate_vm_config(
     config: &HostOSConfig,
     media_path: &Path,
-    direct_boot: &Option<DirectBootConfig>,
+    direct_boot: Option<DirectBootConfig>,
 ) -> Result<String> {
     let mac_address = calculate_deterministic_mac(
         &config.icos_settings.mgmt_mac,
@@ -82,30 +82,13 @@ pub fn generate_vm_config(
         "kvm"
     };
 
-    let mut direct_boot_props = None;
-    if let Some(direct_boot) = direct_boot {
-        direct_boot_props = Some(DirectBootProps {
-            kernel: direct_boot
-                .kernel
-                .to_str()
-                .context("Kernel path is not UTF-8")?
-                .to_string(),
-            initrd: direct_boot
-                .initrd
-                .to_str()
-                .context("Initrd path is not UTF-8")?
-                .to_string(),
-            kernel_cmdline: direct_boot.kernel_cmdline.clone(),
-        })
-    }
-
     GuestOSTemplateProps {
         cpu_domain: cpu_domain.to_string(),
         vm_memory: config.hostos_settings.vm_memory,
         nr_of_vcpus: config.hostos_settings.vm_nr_of_vcpus,
         mac_address,
         config_media: media_path.display().to_string(),
-        direct_boot: direct_boot_props,
+        direct_boot,
         enable_sev: config.icos_settings.enable_trusted_execution_environment,
     }
     .render()
@@ -223,7 +206,7 @@ mod tests {
         };
 
         let vm_config =
-            generate_vm_config(&config, Path::new("/tmp/config.img"), &direct_boot).unwrap();
+            generate_vm_config(&config, Path::new("/tmp/config.img"), direct_boot).unwrap();
         std::fs::write(mint.new_goldenpath(filename).unwrap(), vm_config).unwrap();
     }
 
