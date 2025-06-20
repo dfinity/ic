@@ -116,7 +116,6 @@ fn init(
 ) {
     let layout = StateLayout::try_new(log.clone(), root.clone(), &MetricsRegistry::new()).unwrap();
     let tip_handler = layout.capture_tip_handler();
-    let (diverged_heights_sender, _diverged_heights_receiver) = crossbeam_channel::unbounded();
     let state_manager_metrics = state_manager_metrics(&log);
     let (h, s) = spawn_tip_thread(
         log.clone(),
@@ -124,7 +123,6 @@ fn init(
         layout.clone(),
         lsmt_config_default(),
         state_manager_metrics.clone(),
-        diverged_heights_sender,
         MaliciousFlags::default(),
     );
     (h, s, layout, state_manager_metrics)

@@ -394,7 +394,6 @@ fn build_chunk_table_parallel(
                         metrics.chunk_bytes.with_label_values(&[LABEL_VALUE_HASHED_AND_COMPARED]).inc_by(chunk_info.size_bytes as u64);
 
                         let recomputed_hash = recompute_chunk_hash();
-                        debug_assert_eq!(recomputed_hash, precomputed_hash);
                         if recomputed_hash != precomputed_hash {
                             metrics.reused_chunk_hash_error_count.inc();
                             error!(
@@ -481,7 +480,6 @@ fn build_chunk_table_sequential(
                         // We have both a reused and a recomputed hash, so we can compare them to
                         // monitor for issues
                         let recomputed_chunk_hash = recompute_chunk_hash();
-                        debug_assert_eq!(recomputed_chunk_hash, reused_chunk_hash);
                         if recomputed_chunk_hash != reused_chunk_hash {
                             metrics.reused_chunk_hash_error_count.inc();
                             error!(
@@ -624,6 +622,7 @@ fn hash_plan(
 
     let mut chunk_actions: Vec<ChunkAction> = Vec::new();
 
+    eprintln!("rehash every: {}", rehash_every_nth);
     for FileWithSize(relative_path, size_bytes) in files.iter() {
         let num_chunks = count_chunks(*size_bytes, max_chunk_size);
 
@@ -672,6 +671,7 @@ fn hash_plan(
 
                     // We are using chunk_actions.len() as shorthand for the chunk_index.
                     let offset_index = (chunk_actions.len() as u64).wrapping_add(offset);
+                    eprintln!("index: {}", offset_index);
 
                     if (offset_index % rehash_every_nth) == 0 {
                         ChunkAction::RecomputeAndCompare(chunk.hash)

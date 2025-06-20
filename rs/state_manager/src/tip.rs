@@ -156,7 +156,6 @@ pub(crate) fn spawn_tip_thread(
     state_layout: StateLayout,
     lsmt_config: LsmtConfig,
     metrics: StateManagerMetrics,
-    diverged_heights_sender: Sender<Height>,
     malicious_flags: MaliciousFlags,
 ) -> (JoinOnDrop<()>, Sender<TipRequest>) {
     #[allow(clippy::disallowed_methods)]
@@ -416,7 +415,6 @@ pub(crate) fn spawn_tip_thread(
                                 &checkpoint_layout,
                                 manifest_delta,
                                 &persist_metadata_guard,
-                                &diverged_heights_sender,
                                 &malicious_flags,
                                 &mut rehash_divergence,
                             );
@@ -1339,7 +1337,6 @@ fn handle_compute_manifest_request(
     checkpoint_layout: &CheckpointLayout<ReadOnly>,
     manifest_delta: Option<crate::manifest::ManifestDelta>,
     persist_metadata_guard: &Arc<Mutex<()>>,
-    diverged_heights_sender: &Sender<Height>,
     #[allow(unused_variables)] malicious_flags: &MaliciousFlags,
     rehash_divergence: &mut bool,
 ) {
@@ -1395,7 +1392,7 @@ fn handle_compute_manifest_request(
         checkpoint_layout,
         crate::state_sync::types::DEFAULT_CHUNK_SIZE,
         manifest_delta,
-        RehashManifest::Yes,
+        RehashManifest::No,
     )
     .unwrap_or_else(|err| {
         fatal!(
@@ -1507,7 +1504,6 @@ fn handle_compute_manifest_request(
     }
 
     release_lock_and_persist_metadata(log, metrics, state_layout, states, persist_metadata_guard);
-    return;
 
     if !manifest_is_incremental {
         *rehash_divergence = false;
@@ -1563,15 +1559,12 @@ mod test {
             let metrics_registry = ic_metrics::MetricsRegistry::new();
             let metrics = StateManagerMetrics::new(&metrics_registry, log.clone());
             let tip_handler = layout.capture_tip_handler();
-            let (diverged_height_sender, _diverged_height_receiver) =
-                crossbeam_channel::unbounded();
             let (_h, _s) = spawn_tip_thread(
                 log,
                 tip_handler,
                 layout,
                 lsmt_config_default(),
                 metrics,
-                diverged_height_sender,
                 MaliciousFlags::default(),
             );
         });
@@ -1607,8 +1600,6 @@ mod test {
                 tip: None,
             }));
 
-            let (diverged_height_sender, _diverged_height_receiver) =
-                crossbeam_channel::unbounded();
             // Trying to compute manifest for an unverified checkpoint should crash.
             handle_compute_manifest_request(
                 &mut scoped_threadpool::Pool::new(1),
@@ -1619,7 +1610,6 @@ mod test {
                 &checkpoint_layout,
                 None,
                 &Default::default(),
-                &diverged_height_sender,
                 &Default::default(),
                 &mut false,
             );

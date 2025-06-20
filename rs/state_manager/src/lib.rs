@@ -19,7 +19,7 @@ use crate::{
     },
     tip::{flush_tip_channel, spawn_tip_thread, PageMapToFlush, TipRequest},
 };
-use crossbeam_channel::{Receiver, Sender, TryRecvError};
+use crossbeam_channel::Sender;
 use ic_canonical_state::lazy_tree_conversion::replicated_state_as_lazy_tree;
 use ic_canonical_state_tree_hash::{
     hash_tree::{hash_lazy_tree, HashTree, HashTreeError},
@@ -813,7 +813,6 @@ pub struct StateManagerImpl {
     persist_metadata_guard: Arc<Mutex<()>>,
     tip_channel: Sender<TipRequest>,
     _tip_thread_handle: JoinOnDrop<()>,
-    diverged_heights: Receiver<Height>,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     malicious_flags: MaliciousFlags,
     latest_height_update_time: Arc<Mutex<Instant>>,
@@ -1198,14 +1197,12 @@ impl StateManagerImpl {
                 file_backed_memory_allocator: config.file_backed_memory_allocator,
             });
 
-        let (diverged_heights_sender, diverged_heights_receiver) = crossbeam_channel::unbounded();
         let (_tip_thread_handle, tip_channel) = spawn_tip_thread(
             log.clone(),
             state_layout.capture_tip_handler(),
             state_layout.clone(),
             config.lsmt_config.clone(),
             metrics.clone(),
-            diverged_heights_sender,
             malicious_flags.clone(),
         );
 
@@ -1440,7 +1437,6 @@ impl StateManagerImpl {
             persist_metadata_guard,
             tip_channel,
             _tip_thread_handle,
-            diverged_heights: diverged_heights_receiver,
             fd_factory,
             malicious_flags,
             latest_height_update_time: Arc::new(Mutex::new(Instant::now())),
@@ -2961,13 +2957,6 @@ impl StateManager for StateManagerImpl {
             .with_label_values(&["commit_and_certify"])
             .start_timer();
 
-        match self.diverged_heights.try_recv() {
-            Err(TryRecvError::Empty) => (),
-            Err(_) => panic!("Failed to check for diverged heights"),
-            Ok(height) => {
-                self.report_diverged_checkpoint(height);
-            }
-        }
         self.metrics
             .tip_handler_queue_length
             .set(self.tip_channel.len() as i64);

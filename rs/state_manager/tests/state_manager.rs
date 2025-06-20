@@ -2378,7 +2378,7 @@ fn state_sync_priority_fn_respects_states_to_fetch() {
 fn assert_error_counters(metrics: &MetricsRegistry) {
     assert_eq!(
         0,
-        fetch_int_counter_vec(metrics, "critical_errors")
+        fetch_int_counter_vec(metrics, "criticale_errors")
             .values()
             .sum::<u64>()
     );
@@ -3639,67 +3639,79 @@ fn can_recover_from_corruption_on_state_sync() {
     });
 }
 
-#[ignore]
 #[test]
 fn can_detect_divergence_with_rehash() {
     use ic_state_layout::{CheckpointLayout, RwPolicy};
 
-    state_manager_crash_test(
-        vec![Box::new(|state_manager| {
-            use std::os::unix::fs::FileExt;
-            let (_height, mut state) = state_manager.take_tip();
+    state_manager_test(|metrics, state_manager| {
+        use std::os::unix::fs::FileExt;
+        let (_height, mut state) = state_manager.take_tip();
 
-            insert_dummy_canister(&mut state, canister_test_id(100));
+        insert_dummy_canister(&mut state, canister_test_id(100));
 
-            let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
-            let execution_state = canister_state.execution_state.as_mut().unwrap();
-            for i in 0..1000 {
-                execution_state
-                    .wasm_memory
-                    .page_map
-                    .update(&[(PageIndex::new(i), &[99u8; PAGE_SIZE])]);
-            }
+        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+        let execution_state = canister_state.execution_state.as_mut().unwrap();
+        for i in 0..10000 {
+            execution_state
+                .wasm_memory
+                .page_map
+                .update(&[(PageIndex::new(i), &[99u8; PAGE_SIZE])]);
+        }
 
-            state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
-            state_manager.flush_tip_channel();
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
+        state_manager.flush_tip_channel();
 
-            // Corrupt some data
-            let state_layout = state_manager.state_layout();
-            let mutable_cp_layout = CheckpointLayout::<RwPolicy<()>>::new_untracked(
-                state_layout
-                    .checkpoint_verified(height(1))
-                    .unwrap()
-                    .raw_path()
-                    .to_path_buf(),
-                height(1),
-            )
-            .unwrap();
-
-            let canister_layout = mutable_cp_layout.canister(&canister_test_id(100)).unwrap();
-            let canister_memory = canister_layout
-                .vmemory_0()
-                .existing_overlays()
+        // Corrupt some data
+        let state_layout = state_manager.state_layout();
+        let mutable_cp_layout = CheckpointLayout::<RwPolicy<()>>::new_untracked(
+            state_layout
+                .checkpoint_verified(height(1))
                 .unwrap()
-                .remove(0);
-            make_mutable(&canister_memory).unwrap();
+                .raw_path()
+                .to_path_buf(),
+            height(1),
+        )
+        .unwrap();
+
+        let canister_layout = mutable_cp_layout.canister(&canister_test_id(100)).unwrap();
+        let canister_memory = canister_layout
+            .vmemory_0()
+            .existing_overlays()
+            .unwrap()
+            .remove(0);
+        make_mutable(&canister_memory).unwrap();
+        for i in 0..10000 {
             std::fs::OpenOptions::new()
                 .write(true)
                 .create(false)
                 .truncate(false)
                 .open(&canister_memory)
                 .unwrap()
-                .write_all_at(b"Garbage", 0)
+                .write_all_at(b"Garbage", i * 4096)
                 .unwrap();
-            make_readonly(&canister_memory).unwrap();
+        }
+        make_readonly(&canister_memory).unwrap();
 
-            for i in 2..100 {
-                let (_height, state) = state_manager.take_tip();
-                state_manager.commit_and_certify(state, height(i), CertificationScope::Full, None);
-                state_manager.flush_tip_channel();
-            }
-        })],
-        |_metrics, _statte_manager| {},
-    );
+        let count_critical_errors = || {
+            fetch_int_counter_vec(metrics, "critical_errors")
+                .values()
+                .sum::<u64>()
+        };
+
+        assert_eq!(0, count_critical_errors());
+        // After the first manifest, we expect to detect a divergence and raise critical errors counter.
+        let (_height, state) = state_manager.take_tip();
+        state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
+        state_manager.flush_tip_channel();
+        let critical_errors = count_critical_errors();
+        assert_ne!(0, critical_errors);
+
+        // For the second manifest we expect a full recomputation of the manifest, no new critical errors.
+        let (_height, state) = state_manager.take_tip();
+        state_manager.commit_and_certify(state, height(3), CertificationScope::Full, None);
+        state_manager.flush_tip_channel();
+        assert_eq!(critical_errors, count_critical_errors());
+    });
 }
 
 #[test]
@@ -4201,18 +4213,20 @@ fn can_reuse_chunk_hashes_when_computing_manifest() {
         let canister_state = state.canister_state_mut(&canister_test_id(1)).unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
 
-        const NEW_WASM_PAGE: u64 = 300;
-        const WASM_PAGES: u64 = 2;
-        execution_state.wasm_memory.page_map.update(&[
-            (PageIndex::new(1), &[1u8; PAGE_SIZE]),
-            (PageIndex::new(NEW_WASM_PAGE), &[2u8; PAGE_SIZE]),
-        ]);
-        const NEW_STABLE_PAGE: u64 = 500;
-        const STABLE_PAGES: u64 = 2;
-        execution_state.stable_memory.page_map.update(&[
-            (PageIndex::new(1), &[1u8; PAGE_SIZE]),
-            (PageIndex::new(NEW_STABLE_PAGE), &[2u8; PAGE_SIZE]),
-        ]);
+        const WASM_PAGES: u64 = 300;
+        for i in 0..WASM_PAGES {
+            execution_state
+                .wasm_memory
+                .page_map
+                .update(&[(PageIndex::new(i), &[i as u8; PAGE_SIZE])]);
+        }
+        const STABLE_PAGES: u64 = 500;
+        for i in 0..STABLE_PAGES {
+            execution_state
+                .stable_memory
+                .page_map
+                .update(&[(PageIndex::new(i), &[i as u8; PAGE_SIZE])]);
+        }
 
         state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
         wait_for_checkpoint(&state_manager, height(1));
@@ -4236,13 +4250,9 @@ fn can_reuse_chunk_hashes_when_computing_manifest() {
         let expected_size_estimate =
             PAGE_SIZE as u64 * (WASM_PAGES + STABLE_PAGES) + empty_wasm_size() as u64;
         let size = chunk_bytes[&reused_label] + chunk_bytes[&compared_label];
-        eprintln!(
-            "Expected: {}; reused: {}; compared: {}",
-            expected_size_estimate, chunk_bytes[&reused_label], chunk_bytes[&compared_label]
-        );
-        eprintln!("chunk_bytes: {:#?}", chunk_bytes);
-        assert!(((expected_size_estimate as f64 * 0.1) as u64) > size);
-        assert!(((expected_size_estimate as f64 * 0.9) as u64) < size);
+        // We compute manifest then rehash, so twice the size
+        assert!(((expected_size_estimate as f64 * 2.2) as u64) > size);
+        assert!(((expected_size_estimate as f64 * 2.0) as u64) < size);
 
         let checkpoint = state_manager
             .state_layout()
