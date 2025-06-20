@@ -215,7 +215,7 @@ const MAX_SLICE_INSTRUCTIONS: u64 = 100_000_000;
 // The following constant was chosen arbitrarily between `MAX_SLICE_INSTRUCTIONS` and `MAX_INSTRUCTIONS`
 // so that executing that many instructions results in multiple slices
 // and stays within the limit of `MAX_INSTRUCTIONS`.
-const TEST_INSTALL_CODE_INSTRUCTIONS: u64 = 2 * MAX_SLICE_INSTRUCTIONS;
+const TEST_INSTALL_CODE_INSTRUCTIONS: u64 = 10 * MAX_SLICE_INSTRUCTIONS;
 
 // Creates an empty canister with high cycles balance, a compute allocation of 1%, and no freezing threshold.
 fn create_canister(env: &StateMachine) -> CanisterId {
