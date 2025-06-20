@@ -754,10 +754,7 @@ impl Player {
                         .unwrap_or_else(|| finalized_height),
                 );
                 let last_block = pool.get_finalized_block(target_height).unwrap_or_else(|| {
-                    panic!(
-                        "Finalized block is not found at height {}",
-                        finalized_height
-                    )
+                    panic!("Finalized block is not found at height {}", target_height)
                 });
 
                 (
