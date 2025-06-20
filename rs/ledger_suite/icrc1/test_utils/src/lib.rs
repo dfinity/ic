@@ -601,7 +601,7 @@ impl TransactionsAndBalances {
                 Included((account, MIN_ACCOUNT)),
                 Included((account, MAX_ACCOUNT)),
             ))
-            .any(|((from, _), allowance)| *from == account && allowance.get_e8s() >= default_fee);
+            .any(|((_from, _spender), allowance)| allowance.get_e8s() >= default_fee);
 
         if has_valid_allowances
             && self
