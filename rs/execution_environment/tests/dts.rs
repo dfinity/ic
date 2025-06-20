@@ -150,7 +150,7 @@ fn dts_env(
 fn dts_install_code_env(
     message_instruction_limit: NumInstructions,
     slice_instruction_limit: NumInstructions,
-) -> StateMachine {
+) -> (StateMachine, SubnetConfig) {
     let default_app_subnet_config = SubnetConfig::new(SubnetType::Application);
     let subnet_config = SubnetConfig {
         scheduler_config: SchedulerConfig {
@@ -171,13 +171,14 @@ fn dts_install_code_env(
         deterministic_time_slicing: FlagStatus::Enabled,
         ..Default::default()
     };
-    ic_state_machine_tests::StateMachineBuilder::new()
+    let state_machine = ic_state_machine_tests::StateMachineBuilder::new()
         .with_config(Some(StateMachineConfig::new(
-            subnet_config,
+            subnet_config.clone(),
             hypervisor_config,
         )))
         .with_subnet_type(SubnetType::Application)
-        .build()
+        .build();
+    (state_machine, subnet_config)
 }
 
 /// Extracts the ingress state from the ingress status.
@@ -226,7 +227,7 @@ const MAX_UPDATE_CALL_COST: u128 = 10_006_248_000;
 
 #[test]
 fn hardcoded_cycles_costs() {
-    let env = dts_install_code_env(
+    let (env, _) = dts_install_code_env(
         NumInstructions::from(MAX_INSTRUCTIONS),
         NumInstructions::from(MAX_SLICE_INSTRUCTIONS),
     );
@@ -336,7 +337,7 @@ fn dts_install_code_with_concurrent_ingress_sufficient_cycles() {
     // and to execute an ingress message concurrently.
     let initial_balance = install_code_cost + max_reinstall_code_cost + max_update_call_cost;
 
-    let env = dts_install_code_env(
+    let (env, _) = dts_install_code_env(
         NumInstructions::from(MAX_INSTRUCTIONS),
         NumInstructions::from(MAX_SLICE_INSTRUCTIONS),
     );
@@ -432,16 +433,19 @@ fn dts_install_code_with_concurrent_ingress_insufficient_cycles_and_freezing_thr
 ) {
     let max_install_code_cost = Cycles::new(MAX_INSTALL_CODE_COST);
 
-    let compute_allocation_cycles = Cycles::new((10_000_000 * freezing_threshold).into());
+    let (env, config) = dts_install_code_env(
+        NumInstructions::from(MAX_INSTRUCTIONS),
+        NumInstructions::from(MAX_SLICE_INSTRUCTIONS),
+    );
+
+    let compute_allocation_cycles = config
+        .cycles_account_manager_config
+        .compute_percent_allocated_per_second_fee
+        * freezing_threshold;
 
     // The initial balance is sufficient to only pay the reservation for installing code
     // and the compute allocation during the freezing threshold.
     let initial_balance = max_install_code_cost + compute_allocation_cycles;
-
-    let env = dts_install_code_env(
-        NumInstructions::from(MAX_INSTRUCTIONS),
-        NumInstructions::from(MAX_SLICE_INSTRUCTIONS),
-    );
 
     let canister_id = env.create_canister_with_cycles(
         None,
@@ -599,7 +603,7 @@ fn dts_pending_upgrade_with_heartbeat() {
 ///   for the canister on which the code install is running.
 #[test]
 fn dts_scheduling_of_install_code() {
-    let env = dts_install_code_env(
+    let (env, _) = dts_install_code_env(
         NumInstructions::from(5_000_000_000),
         NumInstructions::from(10_000),
     );
@@ -749,7 +753,7 @@ fn dts_scheduling_of_install_code() {
 /// long-running install code messages.
 #[test]
 fn dts_pending_install_code_does_not_block_subnet_messages_of_other_canisters() {
-    let env = dts_install_code_env(
+    let (env, _) = dts_install_code_env(
         NumInstructions::from(5_000_000_000),
         NumInstructions::from(10_000),
     );
