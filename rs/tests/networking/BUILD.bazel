@@ -361,7 +361,7 @@ system_test_nns(
     tags = [
         "experimental_system_test_colocation",
         "k8s",
-        "system_test_hourly",
+        "long_test",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "long",
@@ -376,7 +376,7 @@ system_test_nns(
     flaky = True,  # flakiness rate of 1.83% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "experimental_system_test_colocation",
-        "system_test_hourly",
+        "long_test",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "long",
