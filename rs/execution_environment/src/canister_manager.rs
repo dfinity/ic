@@ -2389,8 +2389,8 @@ impl CanisterManager {
             .system_state
             .get_canister_history()
             .get_total_num_changes();
-        // Renaming canisters overwrites the total length of the canister history and the canister version
-        // to the original canister's value.
+        // Renaming canisters overwrites the total length of the canister history to the original canister's value.
+        // The canister version is bumped to be monotone w.r.t. both the original and new values.
         canister
             .system_state
             .set_canister_history_total_num_changes(to_total_num_changes);
