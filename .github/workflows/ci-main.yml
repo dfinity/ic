@@ -347,11 +347,12 @@ jobs:
         with:
           fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
       - name: Run Bazel Build Fuzzers
-        id: bazel-build-fuzzers
-        uses: ./.github/actions/bazel-test-all/
+        uses: ./.github/actions/bazel
         with:
-          BAZEL_COMMAND: build --config=ci --keep_going --config=fuzzing --build_tag_filters=libfuzzer
-          BAZEL_TARGETS: //rs/...
+          run: |
+            bazel build //rs/... \
+              --config=ci --config=stamped --config=fuzzing --build_tag_filters=libfuzzer \
+              --keep_going
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
   bazel-build-fuzzers-afl:
     name: Bazel Build Fuzzers AFL
@@ -368,11 +369,12 @@ jobs:
         with:
           fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
       - name: Run Bazel Build Fuzzers AFL
-        id: bazel-build-fuzzers-afl
-        uses: ./.github/actions/bazel-test-all/
+        uses: ./.github/actions/bazel
         with:
-          BAZEL_COMMAND: build --config=ci --keep_going --config=afl
-          BAZEL_TARGETS: //rs/...
+          run: |
+            bazel build //rs/... \
+              --config=ci --config=stamped --config=afl \
+              --keep_going
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
   python-ci-tests:
     name: Python CI Tests
