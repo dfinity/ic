@@ -5,7 +5,7 @@ use ic_btc_interface::Network;
 use ic_config::execution_environment::BITCOIN_MAINNET_CANISTER_ID;
 use ic_management_canister_types_private::{
     BitcoinGetSuccessorsArgs, BitcoinGetSuccessorsRequestInitial, BitcoinGetSuccessorsResponse,
-    Payload,
+    BitcoinSendTransactionInternalArgs, Payload,
 };
 use ic_system_test_driver::util::{MessageCanister, MESSAGE_CANISTER_WASM};
 use ic_types::PrincipalId;
@@ -13,6 +13,14 @@ use ic_utils::interfaces::ManagementCanister;
 use slog::{info, Logger};
 use std::str::FromStr;
 
+/// A proxy to make requests to the bitcoin adapter
+///
+/// Under the hood, this is a messaging canister that has privileged access to make
+/// bitcoin calls to the management canister and simply proxies the calls from the
+/// agent.
+/// This allows to make arbitrary calls to the adapter, but they will go through the
+/// entire replica code path.
+#[derive(Clone)]
 pub struct AdapterProxy<'a> {
     msg_can: MessageCanister<'a>,
     log: Logger,
@@ -40,6 +48,7 @@ impl<'a> AdapterProxy<'a> {
         Self { msg_can, log }
     }
 
+    /// Make a `bitcoin_get_succesors` call
     pub async fn get_successors(
         &self,
         anchor: Vec<u8>,
@@ -64,9 +73,26 @@ impl<'a> AdapterProxy<'a> {
                     .expect("Failed to decode response of get_successors_response")
             })
             .inspect(|_| info!(self.log, "Got get_successor_response"))
+
+        // TODO: Implement follow_up calls on partial blocks
     }
 
-    // TODO: Send tx fn
+    /// Make a `bitcoin_send_tx` call
+    pub async fn send_tx(&self, transaction: Vec<u8>) -> Result<(), AgentError> {
+        let send_tx_request = BitcoinSendTransactionInternalArgs {
+            network: Network::Mainnet,
+            transaction,
+        };
+
+        self.msg_can
+            .forward_to(
+                &Principal::management_canister(),
+                "bitcoin_send_transaction_internal",
+                Encode!(&get_successors_request).unwrap(),
+            )
+            .await
+            .inspect(|_| info!(self.log, "Sent transaction"));
+    }
 
     pub async fn sync_blocks(
         &self,
