@@ -179,7 +179,7 @@ async fn test_treasury_manager() {
 
         let proposal_id = proposal_id.unwrap();
 
-        let proposal_data = sns::governance::wait_for_proposal_execution(
+        let _proposal_data = sns::governance::wait_for_proposal_execution(
             &pocket_ic,
             sns.governance.canister_id,
             proposal_id,
@@ -187,42 +187,13 @@ async fn test_treasury_manager() {
         .await
         .unwrap();
 
-        println!(
-            " >>> payload_text_rendering = {}",
-            proposal_data.payload_text_rendering.unwrap()
-        );
-
         extension_canister_id.get()
     };
 
     for _ in 0..100 {
         pocket_ic.tick().await;
-        pocket_ic.advance_time(Duration::from_secs(1)).await;
+        pocket_ic.advance_time(Duration::from_secs(100)).await;
     }
-
-    // let adaptor_canister_id = deploy_kong_adaptor(&pocket_ic, &sns).await;
-
-    // topup_liquidity(
-    //     &pocket_ic,
-    //     &sns,
-    //     adaptor_canister_id,
-    //     100 * E8 + 2 * FEE,
-    //     350 * E8 + 2 * FEE,
-    //     2 * FEE,
-    //     2 * FEE,
-    // )
-    // .await;
-
-    // topup_liquidity(
-    //     &pocket_ic,
-    //     &sns,
-    //     adaptor_canister_id,
-    //     50 * E8 + 2 * FEE,
-    //     175 * E8 + 2 * FEE,
-    //     2 * FEE,
-    //     2 * FEE,
-    // )
-    // .await;
 
     {
         let request = BalancesRequest {};
@@ -250,7 +221,7 @@ async fn test_treasury_manager() {
             .unwrap();
 
         assert_eq!(
-            response,
+            response.balances,
             btreemap! {
                 icp_token => Nat::from(150 * E8),
                 sns_token => Nat::from(350 * E8),
@@ -410,151 +381,4 @@ async fn validate_balances(
     };
 
     Ok((icp_account, sns_account))
-}
-
-// async fn deploy_kong_adaptor(pocket_ic: &PocketIc, sns: &Sns) -> PrincipalId {
-//     // First, the SNS creates the Adaptor canister without installing the Wasm yet.
-//     let topology = pocket_ic.topology().await;
-//     let fiduciary_subnet_id = topology.get_fiduciary().unwrap();
-
-//     let adaptor_canister_id = install_canister_on_subnet(
-//         &pocket_ic,
-//         fiduciary_subnet_id,
-//         vec![],
-//         None,
-//         vec![sns.root.canister_id],
-//     )
-//     .await
-//     .get();
-
-//     // Second, the SNS installs the Treasury Manager Wasm, specifying the initial allowances.
-//     let wasm_path = std::env::var("KONGSWAP_ADAPTOR_CANISTER_WASM_PATH")
-//         .expect("KONGSWAP_ADAPTOR_CANISTER_WASM_PATH must be set.");
-
-//     let wasm = Wasm::from_file(wasm_path);
-
-//     let sns_token = Asset::new_token("SNS", sns.ledger.canister_id).unwrap();
-//     let icp_token = Asset::new_token("ICP", LEDGER_CANISTER_ID).unwrap();
-
-//     let arg = TreasuryManagerArg::Init(TreasuryManagerInit {
-//         assets: vec![sns_token, icp_token],
-//     });
-//     let arg = candid::encode_one(&arg).unwrap();
-
-//     pocket_ic
-//         .install_canister(
-//             adaptor_canister_id.0,
-//             wasm.bytes(),
-//             arg,
-//             Some(sns.root.canister_id.0),
-//         )
-//         .await;
-
-//     adaptor_canister_id
-// }
-
-async fn topup_liquidity(
-    pocket_ic: &PocketIc,
-    sns: &Sns,
-    adaptor_canister_id: PrincipalId,
-    icp_token_allowance_e8s: u64,
-    sns_token_allowance_e8s: u64,
-    expected_icp_fees_e8s: u64,
-    expected_sns_fees_e8s: u64,
-) {
-    let sns_token = Asset::Token {
-        symbol: "SNS".to_string(),
-        ledger_canister_id: sns.ledger.canister_id.0,
-    };
-
-    let icp_token = Asset::Token {
-        symbol: "ICP".to_string(),
-        ledger_canister_id: LEDGER_CANISTER_ID.get().0,
-    };
-
-    let (icp_account, sns_account) = validate_balances(
-        "topup_liquidity-0",
-        sns,
-        pocket_ic,
-        adaptor_canister_id,
-        0,
-        0,
-    )
-    .await
-    .unwrap();
-
-    nns::ledger::mint_icp(
-        &pocket_ic,
-        icp_account,
-        Tokens::from_e8s(icp_token_allowance_e8s),
-        None,
-    )
-    .await;
-
-    sns::ledger::icrc1_transfer(
-        &pocket_ic,
-        sns.ledger.canister_id,
-        sns.root.canister_id,
-        TransferArg {
-            from_subaccount: None,
-            to: sns_account,
-            fee: None,
-            created_at_time: None,
-            memo: None,
-            amount: Nat::from(sns_token_allowance_e8s),
-        },
-    )
-    .await
-    .unwrap();
-
-    validate_balances(
-        "topup_liquidity-1",
-        sns,
-        pocket_ic,
-        adaptor_canister_id,
-        icp_token_allowance_e8s,
-        sns_token_allowance_e8s,
-    )
-    .await
-    .unwrap();
-
-    let request = DepositRequest {
-        allowances: vec![
-            Allowance {
-                amount_decimals: Nat::from(sns_token_allowance_e8s),
-                asset: sns_token.clone(),
-                expected_ledger_fee_decimals: Nat::from(FEE),
-            },
-            Allowance {
-                amount_decimals: Nat::from(icp_token_allowance_e8s),
-                asset: icp_token.clone(),
-                expected_ledger_fee_decimals: Nat::from(FEE),
-            },
-        ],
-    };
-
-    let response = PocketIcAgent::new(&pocket_ic, sns.root.canister_id)
-        .call(adaptor_canister_id, request)
-        .await
-        .unwrap()
-        .unwrap();
-
-    assert_eq!(
-        response,
-        btreemap! {
-            sns_token => Nat::from(sns_token_allowance_e8s) - expected_sns_fees_e8s,
-            icp_token => Nat::from(icp_token_allowance_e8s) - expected_icp_fees_e8s,
-        }
-    );
-
-    validate_balances(
-        "topup_liquidity-2",
-        sns,
-        pocket_ic,
-        adaptor_canister_id,
-        0,
-        0,
-    )
-    .await
-    .unwrap();
 }

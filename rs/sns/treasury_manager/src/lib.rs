@@ -16,7 +16,13 @@ pub enum TreasuryManagerArg {
     Upgrade(TreasuryManagerUpgrade),
 }
 
-pub type TreasuryManagerResult = Result<BTreeMap<Asset, Nat>, TransactionError>;
+#[derive(CandidType, Clone, Debug, Deserialize)]
+pub struct Balances {
+    pub balances: BTreeMap<Asset, Nat>,
+    pub timestamp_ns: u64,
+}
+
+pub type TreasuryManagerResult = Result<Balances, TransactionError>;
 
 pub trait TreasuryManager {
     fn deposit(
@@ -52,6 +58,7 @@ pub struct AuditTrailRequest {}
 pub enum TreasuryManagerOperation {
     Deposit,
     Balances,
+    Metadata,
     IssueReward,
     Withdraw,
 }
