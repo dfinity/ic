@@ -23,10 +23,9 @@
   <resource>
     <partition>/machine</partition>
   </resource>
-  <os>
-    <type arch='x86_64' machine='pc-q35-5.0'>hvm</type>
-    <loader readonly='yes' type='pflash'>/usr/share/OVMF/OVMF_CODE_4M.fd</loader>
-    <nvram>/var/lib/libvirt/qemu/nvram/guestos_VARS.fd</nvram>
+  <os type='efi'>
+    <type arch='x86_64' machine='pc-q35-9.2'>hvm</type>
+    <loader readonly='yes'>/usr/share/ovmf/OVMF.fd</loader>
     <boot dev='hd'/>
   </os>
   <features>
