@@ -80,7 +80,7 @@ use ic_types::{
     nominal_cycles::NominalCycles,
     time::UNIX_EPOCH,
     CanisterId, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
-    NumInstructions, SnapshotId, SubnetId, UserId,
+    NumInstructions, SubnetId, UserId,
 };
 use ic_wasm_types::CanisterModule;
 use lazy_static::lazy_static;
@@ -6639,11 +6639,7 @@ fn memory_usage_updates_increment_subnet_available_memory() {
     );
 
     // load canister snapshot
-    let load_snapshot_args = LoadCanisterSnapshotArgs::new(
-        canister_id,
-        SnapshotId::try_from(snapshot_id).unwrap(),
-        None,
-    );
+    let load_snapshot_args = LoadCanisterSnapshotArgs::new(canister_id, snapshot_id, None);
     test.subnet_message("load_canister_snapshot", load_snapshot_args.encode())
         .unwrap();
 
