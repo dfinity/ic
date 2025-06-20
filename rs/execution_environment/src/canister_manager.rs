@@ -1088,7 +1088,7 @@ impl CanisterManager {
         new_canister.system_state.add_canister_change(
             state.time(),
             origin,
-            CanisterChangeDetails::canister_creation(controllers),
+            CanisterChangeDetails::canister_creation(controllers, None),
         );
 
         // Add new canister to the replicated state.
