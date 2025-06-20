@@ -618,7 +618,9 @@ impl Player {
             info!(
                 self.log,
                 "State at height {height} hasn't been yet executed. \
-                Retrying in {WAIT_DURATION:?}."
+                Current state height = {}. \
+                Retrying in {WAIT_DURATION:?}.",
+                self.state_manager.latest_state_height()
             );
 
             std::thread::sleep(WAIT_DURATION);
