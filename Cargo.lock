@@ -14123,6 +14123,7 @@ dependencies = [
  "candid",
  "canister-test",
  "dfn_candid",
+ "futures",
  "ic-agent",
  "ic-base-types",
  "ic-btc-checker",
