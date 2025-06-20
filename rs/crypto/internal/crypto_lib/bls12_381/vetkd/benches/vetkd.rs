@@ -55,7 +55,7 @@ fn vetkd_bench(c: &mut Criterion) {
             });
         }
 
-        let mut node_info = Vec::with_capacity(nodes);
+        let mut node_info = std::collections::BTreeMap::new();
 
         for node in 0..nodes {
             let node_sk = poly.evaluate_at(&Scalar::from_node_index(node as u32));
@@ -63,7 +63,7 @@ fn vetkd_bench(c: &mut Criterion) {
 
             let eks = EncryptedKeyShare::create(rng, &master_pk, &node_sk, &tpk, &context, &input);
 
-            node_info.push((node as u32, node_pk, eks));
+            node_info.insert(node as u32, (node_pk, eks));
         }
 
         group.bench_function(
