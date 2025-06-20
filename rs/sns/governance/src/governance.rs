@@ -122,9 +122,7 @@ use lazy_static::lazy_static;
 use maplit::{btreemap, hashset};
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
-use sns_treasury_manager::{
-    Allowance, Asset, DepositRequest, TreasuryManagerArg, TreasuryManagerInit,
-};
+use sns_treasury_manager::{Allowance, Asset, TreasuryManagerArg, TreasuryManagerInit};
 use std::{
     cell::RefCell,
     cmp::Ordering,
@@ -2294,7 +2292,7 @@ impl Governance {
 
         // Step 2. Install the code.
         let sns_token = Asset::Token {
-            symbol: "SNS".to_string(),
+            symbol: "Kanye".to_string(),
             ledger_canister_id: self.ledger.canister_id().get().0,
         };
 

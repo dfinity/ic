@@ -42,7 +42,6 @@ use ic_nervous_system_common::{
 };
 use ic_nervous_system_proto::pb::v1::Percentage;
 use ic_nervous_system_timestamp::format_timestamp_for_humans;
-use ic_protobuf::types::v1::dkg_payload::Val;
 use ic_protobuf::types::v1::CanisterInstallMode;
 use ic_sns_governance_api::format_full_hash;
 use ic_sns_governance_api::pb::v1 as pb_api;

@@ -2,8 +2,6 @@ use candid::Nat;
 use canister_test::Wasm;
 use ic_base_types::CanisterId;
 use ic_base_types::PrincipalId;
-use ic_base_types::SubnetId;
-use ic_nervous_system_agent::helpers::await_with_timeout;
 use ic_nervous_system_agent::pocketic_impl::PocketIcAgent;
 use ic_nervous_system_agent::sns::Sns;
 use ic_nervous_system_agent::CallCanisters;
@@ -26,7 +24,7 @@ use ic_sns_init::pb::v1::sns_init_payload::InitialTokenDistribution;
 use ic_sns_swap::pb::v1::Lifecycle;
 use icp_ledger::{AccountIdentifier, Tokens, DEFAULT_TRANSFER_FEE};
 use icrc_ledger_types::icrc::generic_value::Value;
-use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
+use icrc_ledger_types::icrc1::account::Account;
 use maplit::btreemap;
 use pocket_ic::nonblocking::PocketIc;
 use pocket_ic::PocketIcBuilder;
@@ -51,7 +49,8 @@ mod src {
     pub use ic_nns_governance_api::create_service_nervous_system::InitialTokenDistribution;
 } // end mod src
 
-const FEE: u64 = DEFAULT_TRANSFER_FEE.get_e8s();
+const ICP_FEE: u64 = DEFAULT_TRANSFER_FEE.get_e8s();
+const SNS_FEE: u64 = 11143;
 
 #[tokio::test]
 async fn test() {
@@ -130,7 +129,7 @@ async fn test_treasury_manager() {
     let sns_root_canister_id = CanisterId::try_from_principal_id(sns.root.canister_id).unwrap();
 
     let sns_token = Asset::Token {
-        symbol: "SNS".to_string(),
+        symbol: "Kanye".to_string(),
         ledger_canister_id: sns_ledger_canister_id.get().0,
     };
 
@@ -169,8 +168,8 @@ async fn test_treasury_manager() {
                 wasm_path,
                 proposal_url: Url::try_from("https://example.com").unwrap(),
                 summary: "Register KongSwap Adaptor".to_string(),
-                treasury_allocation_icp_e8s: Some(100 * E8 + 2 * FEE),
-                treasury_allocation_sns_e8s: Some(350 * E8 + 2 * FEE),
+                treasury_allocation_icp_e8s: Some(150 * E8 + 2 * ICP_FEE),
+                treasury_allocation_sns_e8s: Some(350 * E8 + 2 * SNS_FEE),
             },
             &agent,
         )
@@ -210,7 +209,7 @@ async fn test_treasury_manager() {
         let request = AuditTrailRequest {};
         let response = pocket_ic.call(adaptor_canister_id, request).await.unwrap();
 
-        println!(">>> AuditTrail: {:#?}", response);
+        // println!(">>> AuditTrail: {:#?}", response);
     }
 
     let _withdrawn_amounts = {
