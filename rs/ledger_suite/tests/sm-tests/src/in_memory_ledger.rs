@@ -666,6 +666,22 @@ where
                     )
                 }
             }
+            LedgerEndpointArg::TransferFromArg(transfer_from_arg) => {
+                let owner = arg.caller.sender().unwrap();
+                let spender = AccountId::from(Account {
+                    owner,
+                    subaccount: transfer_from_arg.spender_subaccount,
+                });
+                let from = &AccountId::from(transfer_from_arg.from);
+                let to = &AccountId::from(transfer_from_arg.to);
+                self.process_transfer(
+                    from,
+                    to,
+                    &Some(spender),
+                    &Tokens::try_from(transfer_from_arg.amount.clone()).unwrap(),
+                    &fee,
+                )
+            }
         }
         self.validate_invariants();
     }

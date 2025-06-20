@@ -13,6 +13,7 @@ use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg};
 use icrc_ledger_types::icrc2::approve::ApproveArgs;
+use icrc_ledger_types::icrc2::transfer_from::TransferFromArgs;
 use num_traits::cast::ToPrimitive;
 use proptest::prelude::*;
 use proptest::sample::select;
@@ -25,15 +26,26 @@ use rosetta_core::objects::Currency;
 use rosetta_core::objects::ObjectMap;
 use serde_bytes::ByteBuf;
 use serde_json::json;
-use std::collections::HashMap;
 use std::collections::HashSet;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt;
+use std::ops::Bound::Included;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use strum::EnumCount;
 
 pub const E8: u64 = 100_000_000;
 pub const DEFAULT_TRANSFER_FEE: u64 = 10_000;
+
+const MIN_ACCOUNT: Account = Account {
+    owner: Principal::from_slice(&[0; 29]),
+    subaccount: None,
+};
+const MAX_ACCOUNT: Account = Account {
+    owner: Principal::from_slice(&[255; 29]),
+    subaccount: Some([255; 32]),
+};
 
 pub fn minter_identity() -> BasicIdentity {
     let keypair = Ed25519KeyPair::generate(reproducible_rng().next_u64());
@@ -306,6 +318,7 @@ pub fn transfer_args_with_sender(
 pub enum LedgerEndpointArg {
     ApproveArg(ApproveArgs),
     TransferArg(TransferArg),
+    TransferFromArg(TransferFromArgs),
 }
 
 impl LedgerEndpointArg {
@@ -313,6 +326,7 @@ impl LedgerEndpointArg {
         match self {
             Self::ApproveArg(arg) => arg.from_subaccount,
             Self::TransferArg(arg) => arg.from_subaccount,
+            Self::TransferFromArg(arg) => arg.spender_subaccount,
         }
     }
 }
@@ -347,8 +361,17 @@ impl ArgWithCaller {
 
     pub fn accounts(&self) -> Vec<Account> {
         let mut res = vec![self.from()];
-        if let LedgerEndpointArg::TransferArg(arg) = &self.arg {
-            res.push(arg.to)
+        match &self.arg {
+            LedgerEndpointArg::TransferArg(arg) => {
+                res.push(arg.to);
+            }
+            LedgerEndpointArg::TransferFromArg(arg) => {
+                res.push(arg.from);
+                res.push(arg.to);
+            }
+            LedgerEndpointArg::ApproveArg(_) => {
+                // Approve doesn't add additional accounts beyond the caller
+            }
         }
         res
     }
@@ -357,6 +380,7 @@ impl ArgWithCaller {
         let fee = match &self.arg {
             LedgerEndpointArg::ApproveArg(arg) => arg.fee.as_ref(),
             LedgerEndpointArg::TransferArg(arg) => arg.fee.as_ref(),
+            LedgerEndpointArg::TransferFromArg(arg) => arg.fee.as_ref(),
         };
         fee.as_ref().map(|fee| fee.0.to_u64().unwrap())
     }
@@ -364,7 +388,7 @@ impl ArgWithCaller {
     where
         T: TokensType,
     {
-        let from = self.from();
+        let caller = self.from();
         let (operation, created_at_time, memo) = match self.arg.clone() {
             LedgerEndpointArg::ApproveArg(approve_arg) => {
                 let operation = Operation::<T>::Approve {
@@ -379,13 +403,13 @@ impl ArgWithCaller {
                         .clone()
                         .map(|a| T::try_from(a.clone()).unwrap()),
                     spender: approve_arg.spender,
-                    from,
+                    from: caller,
                 };
                 (operation, approve_arg.created_at_time, approve_arg.memo)
             }
             LedgerEndpointArg::TransferArg(transfer_arg) => {
                 let burn_operation = transfer_arg.to == minter;
-                let mint_operation = from == minter;
+                let mint_operation = caller == minter;
                 let operation = if mint_operation {
                     Operation::Mint {
                         amount: T::try_from(transfer_arg.amount.clone()).unwrap(),
@@ -394,20 +418,37 @@ impl ArgWithCaller {
                 } else if burn_operation {
                     Operation::Burn {
                         amount: T::try_from(transfer_arg.amount.clone()).unwrap(),
-                        from,
+                        from: caller,
                         spender: None,
                     }
                 } else {
                     Operation::Transfer {
                         amount: T::try_from(transfer_arg.amount.clone()).unwrap(),
                         to: transfer_arg.to,
-                        from,
+                        from: caller,
                         spender: None,
                         fee: transfer_arg.fee.clone().map(|f| T::try_from(f).unwrap()),
                     }
                 };
 
                 (operation, transfer_arg.created_at_time, transfer_arg.memo)
+            }
+            LedgerEndpointArg::TransferFromArg(transfer_from_arg) => {
+                let operation = Operation::Transfer {
+                    from: transfer_from_arg.from,
+                    to: transfer_from_arg.to,
+                    spender: Some(caller),
+                    amount: T::try_from(transfer_from_arg.amount.clone()).unwrap(),
+                    fee: transfer_from_arg
+                        .fee
+                        .clone()
+                        .map(|f| T::try_from(f).unwrap()),
+                };
+                (
+                    operation,
+                    transfer_from_arg.created_at_time,
+                    transfer_from_arg.memo,
+                )
             }
         };
         Transaction::<T> {
@@ -424,7 +465,13 @@ struct TransactionsAndBalances {
     balances: HashMap<Account, u64>,
     txs: HashSet<Transaction<Tokens>>,
     principal_to_basic_identity: HashMap<Principal, Arc<BasicIdentity>>,
-    allowances: HashMap<(Account, Account), Tokens>,
+    allowances: BTreeMap<(Account, Account), Tokens>,
+    /// Accounts which are the `from` account in at least one allowance, having a balances of at
+    /// least `default_fee`. Even though the `approve_strategy` currently only creates allowances
+    /// with the amount limited to the account balance at the time of the transaction, that balance
+    /// may have decreased by the time a subsequent `transfer_from` transaction makes use of (some
+    /// of) the allowance.
+    valid_allowance_from: HashSet<Account>,
 }
 
 impl TransactionsAndBalances {
@@ -449,6 +496,9 @@ impl TransactionsAndBalances {
         ) {
             return;
         };
+
+        // Store operation reference for incremental update
+        let operation = &transaction.operation;
         match transaction.operation {
             Operation::Mint { to, amount, .. } => {
                 self.credit(to, amount.get_e8s());
@@ -458,11 +508,43 @@ impl TransactionsAndBalances {
                 self.debit(from, amount.get_e8s());
             }
             Operation::Transfer {
-                from, to, amount, ..
+                from,
+                to,
+                amount,
+                spender,
+                ..
             } => {
                 self.credit(to, amount.get_e8s());
-                assert_eq!(tx.from(), from);
+                let caller = spender.unwrap_or(from);
+                assert_eq!(tx.from(), caller);
                 self.debit(from, amount.get_e8s() + fee);
+
+                // If spender is Some, this is a transfer_from operation - update allowances
+                if let Some(spender_account) = spender {
+                    let used_allowance = amount.get_e8s() + fee;
+                    self.allowances.entry((from, spender_account)).and_modify(
+                        |current_allowance| {
+                            let current_amount = current_allowance.get_e8s();
+                            *current_allowance = Tokens::from_e8s(
+                                current_amount
+                                    .checked_sub(used_allowance)
+                                    .unwrap_or_else(|| {
+                                        panic!(
+                                            "Allowance {} not enough to cover amount and fee {} - from: {}, to: {}, spender: {}",
+                                            current_amount, used_allowance, from, to, spender_account
+                                        )
+                                    }),
+                            );
+                        },
+                    );
+
+                    // Remove allowance entry if it's now zero
+                    if let Some(allowance) = self.allowances.get(&(from, spender_account)) {
+                        if allowance.get_e8s() == 0 {
+                            self.allowances.remove(&(from, spender_account));
+                        }
+                    }
+                }
             }
             Operation::Approve {
                 from,
@@ -482,6 +564,59 @@ impl TransactionsAndBalances {
             }
         };
         self.transactions.push(tx);
+
+        // Update valid_allowance_from based on the specific transaction
+        self.update_valid_allowance_from(operation, default_fee);
+    }
+
+    fn update_valid_allowance_from(&mut self, operation: &Operation<Tokens>, default_fee: u64) {
+        match operation {
+            Operation::Mint { to, .. } => {
+                // Check if the credited account should be added to valid_allowance_from
+                self.check_and_update_account_validity(*to, default_fee);
+            }
+            Operation::Burn { from, .. } => {
+                // Check if the debited account should be removed from valid_allowance_from
+                self.check_and_update_account_validity(*from, default_fee);
+            }
+            Operation::Transfer { from, to, .. } => {
+                // Check both accounts that had balance changes
+                self.check_and_update_account_validity(*from, default_fee);
+                self.check_and_update_account_validity(*to, default_fee);
+            }
+            Operation::Approve { from, .. } => {
+                // Check if the from account should be added/removed from valid_allowance_from
+                // (allowance was added/modified for this account)
+                self.check_and_update_account_validity(*from, default_fee);
+            }
+        }
+    }
+
+    fn check_and_update_account_validity(&mut self, account: Account, default_fee: u64) {
+        // Check if there are any valid allowances where the `from` is the provided account, and
+        // the `spender` is any account.
+        let has_valid_allowances = self
+            .allowances
+            .range((
+                Included((account, MIN_ACCOUNT)),
+                Included((account, MAX_ACCOUNT)),
+            ))
+            .any(|((_from, _spender), allowance)| allowance.get_e8s() >= default_fee);
+
+        if has_valid_allowances
+            && self
+                .balances
+                .get(&account)
+                .is_some_and(|&balance| balance >= default_fee)
+        {
+            // There is at least one valid allowance for this account, and the account has a
+            // non-dust balance - make sure it exists in `valid_allowance_from`.
+            self.valid_allowance_from.insert(account);
+        } else {
+            // The account either has no valid allowances or a dust balance - remove it from
+            // `valid_allowance_from`.
+            self.valid_allowance_from.remove(&account);
+        }
     }
 
     fn credit(&mut self, account: Account, amount: u64) {
@@ -566,6 +701,30 @@ fn basic_identity_and_account_strategy() -> impl Strategy<Value = SigningAccount
     })
 }
 
+#[derive(EnumCount, PartialEq, Clone)]
+pub enum TransactionTypes {
+    Mint,
+    Burn,
+    Transfer,
+    Approve,
+    TransferFrom,
+}
+
+pub fn valid_transactions_strategy(
+    minter_identity: Arc<BasicIdentity>,
+    default_fee: u64,
+    length: usize,
+    now: SystemTime,
+) -> impl Strategy<Value = Vec<ArgWithCaller>> {
+    valid_transactions_strategy_with_excluded_transaction_types(
+        minter_identity,
+        default_fee,
+        length,
+        now,
+        vec![],
+    )
+}
+
 /// Generates a list of valid transaction args with the caller, i.e.
 /// transaction args that the Ledger will accept and that have the
 /// Principal that should send them.
@@ -573,12 +732,21 @@ fn basic_identity_and_account_strategy() -> impl Strategy<Value = SigningAccount
 /// TODO: replace amount generation with something that makes sense,
 ///       e.g. exponential distribution
 /// TODO: allow to pass the account distribution
-pub fn valid_transactions_strategy(
+pub fn valid_transactions_strategy_with_excluded_transaction_types(
     minter_identity: Arc<BasicIdentity>,
     default_fee: u64,
     length: usize,
     now: SystemTime,
+    excluded_transaction_types: Vec<TransactionTypes>,
 ) -> impl Strategy<Value = Vec<ArgWithCaller>> {
+    /// Generates a strategy for producing valid `mint` operations.
+    ///
+    /// The generated mint operations will:
+    /// - Always use the minter as the caller.
+    /// - Mint to a random account (not the minter).
+    /// - Set the `amount` to a random value.
+    /// - Optionally include `created_at_time` and `memo`.
+    /// - Avoid duplicate transactions and minting to the minter.
     fn mint_strategy(
         minter_identity: Arc<BasicIdentity>,
         now: SystemTime,
@@ -627,6 +795,15 @@ pub fn valid_transactions_strategy(
             )
     }
 
+    /// Generates a strategy for producing valid `burn` operations.
+    ///
+    /// The generated burn operations will:
+    /// - Use a random existing `from` account with sufficient balance to cover the minimum burn
+    ///   amount (which is equal to the `default_fee`).
+    /// - Set the `amount` to a random value within the allowed range for the account.
+    /// - Optionally include `created_at_time` and `memo`.
+    /// - Avoid duplicate transactions.
+    /// - Ensures the caller matches the `from` account.
     fn burn_strategy(
         account_balance: impl Strategy<Value = (Account, u64)>,
         minter_identity: Arc<BasicIdentity>,
@@ -681,6 +858,15 @@ pub fn valid_transactions_strategy(
         })
     }
 
+    /// Generates a strategy for producing valid `transfer` operations.
+    ///
+    /// The generated transfer operations will:
+    /// - Use a random existing `from` account (with sufficient balance to cover the transfer fee)
+    ///   and a random `to` account.
+    /// - Set the `amount` to a random value within the allowed range for the account.
+    /// - Optionally include a `fee`, `created_at_time`, and `memo`.
+    /// - Avoid self-transfers, transfers involving the minter, and duplicate transactions.
+    /// - Ensures the caller matches the `from` account.
     fn transfer_strategy(
         account_balance: impl Strategy<Value = (Account, u64)>,
         minter_identity: Arc<BasicIdentity>,
@@ -744,6 +930,14 @@ pub fn valid_transactions_strategy(
         })
     }
 
+    /// Generates a strategy for producing valid `approve` operations.
+    ///
+    /// The generated approve operations will:
+    /// - Use a random existing `from` account (with sufficient balance to at least cover the
+    ///   creation of the allowance, i.e., at least `default_fee`), and a random `spender` account.
+    /// - Set the `amount` to a random value within the allowed range.
+    /// - Optionally include a `fee`, `expected_allowance`, `expires_at`, and `memo`.
+    /// - Avoid duplicate or self-approve transactions, and ensure the minter is not involved as `from` or `spender`.
     fn approve_strategy(
         account_balance: impl Strategy<Value = (Account, u64)>,
         minter_identity: Arc<BasicIdentity>,
@@ -751,16 +945,16 @@ pub fn valid_transactions_strategy(
         now: SystemTime,
         tx_hash_set_pointer: Arc<HashSet<Transaction<Tokens>>>,
         account_to_basic_identity_pointer: Arc<HashMap<Principal, Arc<BasicIdentity>>>,
-        allowance_map_pointer: Arc<HashMap<(Account, Account), Tokens>>,
+        allowance_map_pointer: Arc<BTreeMap<(Account, Account), Tokens>>,
     ) -> impl Strategy<Value = ArgWithCaller> {
         let minter: Account = minter_identity.sender().unwrap().into();
-        account_balance.prop_flat_map(move |(from, balance)| {
+        account_balance.prop_flat_map(move |(from, _balance)| {
             let tx_hash_set = tx_hash_set_pointer.clone();
             let account_to_basic_identity = account_to_basic_identity_pointer.clone();
             let allowance_map = allowance_map_pointer.clone();
             (
                 basic_identity_and_account_strategy(),
-                0..=(balance - default_fee),
+                amount_strategy(),
                 valid_created_at_time_strategy(now),
                 arb_memo(),
                 prop::option::of(Just(default_fee)),
@@ -829,12 +1023,179 @@ pub fn valid_transactions_strategy(
         })
     }
 
+    /// Generates a strategy for producing valid `transfer_from` operations.
+    ///
+    /// The generated transfer_from operations will:
+    /// - Use a random existing `from` account, for which there exists an allowance, and which has
+    ///   a balance covering at least the `default_fee`.
+    /// - Use a random `spender` account (the caller) with an existing allowance from `from`.
+    /// - Set the `amount` to a value allowed by both the allowance and the current balance of the
+    ///   `from` account.
+    /// - Optionally include a `fee`, `created_at_time`, and `memo`.
+    /// - Avoid self-transfers, transfers involving the minter, and duplicate transactions.
+    /// - Ensures the caller matches the `spender` account.
+    fn transfer_from_strategy(
+        valid_allowance_from: HashSet<Account>,
+        minter_identity: Arc<BasicIdentity>,
+        default_fee: u64,
+        now: SystemTime,
+        tx_hash_set_pointer: Arc<HashSet<Transaction<Tokens>>>,
+        account_to_basic_identity_pointer: Arc<HashMap<Principal, Arc<BasicIdentity>>>,
+        allowance_map_pointer: Arc<BTreeMap<(Account, Account), Tokens>>,
+        current_balances_pointer: Arc<HashMap<Account, u64>>,
+    ) -> impl Strategy<Value = ArgWithCaller> {
+        let minter: Account = minter_identity.sender().unwrap().into();
+
+        // We shouldn't even be calling `transfer_from_strategy` if there are no valid allowances,
+        // i.e., allowances where the `from` account doesn't hold a balance of at least
+        // `default_fee`.
+        assert!(
+            !valid_allowance_from.is_empty(),
+            "valid_allowance_from must not be empty"
+        );
+
+        // Select a from account that has valid allowances
+        let valid_from_accounts: Vec<Account> = valid_allowance_from.into_iter().collect();
+        select(valid_from_accounts)
+            .prop_flat_map(move |from| {
+                let current_balances = current_balances_pointer.clone();
+                let allowance_map = allowance_map_pointer.clone();
+                let tx_hash_set_ptr = tx_hash_set_pointer.clone();
+                let account_to_basic_identity_ptr = account_to_basic_identity_pointer.clone();
+
+                // Find all allowances for this from account
+                let allowances_for_from: Vec<(Account, Tokens)> = allowance_map
+                    .range((
+                        Included((from, MIN_ACCOUNT)),
+                        Included((from, MAX_ACCOUNT)),
+                    ))
+                    .map(|((allowance_from, spender), allowance)| {
+                        // Ensure the from account in the allowance matches the selected from account
+                        assert_eq!(&from, allowance_from);
+                        (*spender, *allowance)
+                    })
+                    .collect();
+
+                // Ensure there are valid allowances for the selected from account, which should
+                // always be true, since otherwise the `from` account would not exist in
+                // `valid_allowance_from`.
+                assert!(
+                    !allowances_for_from.is_empty(),
+                    "No valid allowances found for the selected from account"
+                );
+
+                // Select one of the allowances for this from account
+                select(allowances_for_from)
+                    .prop_flat_map(move |(spender, allowance)| {
+                        let tx_hash_set_ptr2 = tx_hash_set_ptr.clone();
+                        let account_to_basic_identity_ptr2 = account_to_basic_identity_ptr.clone();
+                        let allowance_amount = allowance.get_e8s();
+                        let fee_amount = default_fee;
+
+                        // Get the current balance for this account
+                        let current_balance = current_balances.get(&from).copied().unwrap_or(0);
+
+                        // Calculate max transferable amount considering both allowance and current
+                        // account balance. Both allowance and from account balance must cover
+                        // transfer amount (which can be 0) + fee
+                        let allowance_max =
+                            allowance_amount.checked_sub(fee_amount).unwrap_or_else(|| {
+                                panic!(
+                                    "allowance ({}) must be greater than or equal to the fee ({})",
+                                    allowance_amount, fee_amount,
+                                )
+                            });
+                        let balance_max = current_balance.checked_sub(fee_amount).unwrap_or_else(|| {
+                            panic!(
+                                "current balance ({}) must be greater than or equal to the fee ({})",
+                                current_balance, fee_amount,
+                            )
+                        });
+
+                        let max_amount = std::cmp::min(allowance_max, balance_max);
+
+                        // Select from valid amounts (0 to max_amount)
+                        (0..=max_amount)
+                            .prop_flat_map(move |amount| {
+                                let tx_hash_set = tx_hash_set_ptr2.clone();
+                                let account_to_basic_identity =
+                                    account_to_basic_identity_ptr2.clone();
+                                let fee_amount = default_fee;
+
+                                (
+                                    basic_identity_and_account_strategy(), // to account
+                                    valid_created_at_time_strategy(now),
+                                    arb_memo(),
+                                    prop::option::of(Just(fee_amount)),
+                                )
+                                    .prop_filter_map(
+                                        "Invalid transfer_from transaction",
+                                        move |(to_signer, created_at_time, memo, fee)| {
+                                            let to = to_signer.account();
+
+                                            let tx = Transaction {
+                                                operation: Operation::Transfer::<Tokens> {
+                                                    from,
+                                                    to,
+                                                    spender: Some(spender),
+                                                    amount: Tokens::from_e8s(amount),
+                                                    fee: fee.map(Tokens::from_e8s),
+                                                },
+                                                created_at_time,
+                                                memo: memo.clone(),
+                                            };
+
+                                            if from == to
+                                                || from == minter
+                                                || to == minter
+                                                || spender == from
+                                                || spender == to
+                                                || tx_hash_set.contains(&tx)
+                                            {
+                                                None
+                                            } else {
+                                                let caller = account_to_basic_identity
+                                                    .get(&spender.owner)
+                                                    .unwrap()
+                                                    .clone();
+                                                assert_eq!(caller.sender().unwrap(), spender.owner);
+                                                Some(ArgWithCaller {
+                                                    caller,
+                                                    arg: LedgerEndpointArg::TransferFromArg(
+                                                        TransferFromArgs {
+                                                            spender_subaccount: spender.subaccount,
+                                                            from,
+                                                            to,
+                                                            amount: amount.into(),
+                                                            fee: fee.map(Nat::from),
+                                                            memo,
+                                                            created_at_time,
+                                                        },
+                                                    ),
+                                                    principal_to_basic_identity: HashMap::from([(
+                                                        to.owner,
+                                                        Arc::new(to_signer.identity),
+                                                    )]),
+                                                })
+                                            }
+                                        },
+                                    )
+                                    .boxed()
+                            })
+                            .boxed()
+                    })
+                    .boxed()
+            })
+            .boxed()
+    }
+
     fn generate_strategy(
         state: TransactionsAndBalances,
         minter_identity: Arc<BasicIdentity>,
         default_fee: u64,
         additional_length: usize,
         now: SystemTime,
+        excluded_transaction_types: Vec<TransactionTypes>,
     ) -> BoxedStrategy<TransactionsAndBalances> {
         if additional_length == 0 {
             return Just(state).boxed();
@@ -852,7 +1213,7 @@ pub fn valid_transactions_strategy(
         let arb_tx = if balances.is_empty() {
             mint_strategy
         } else {
-            let account_balance = Rc::new(select(balances));
+            let account_balance = Rc::new(select(balances.clone()));
             let approve_strategy = approve_strategy(
                 account_balance.clone(),
                 minter_identity.clone(),
@@ -873,7 +1234,7 @@ pub fn valid_transactions_strategy(
             )
             .boxed();
             let transfer_strategy = transfer_strategy(
-                account_balance,
+                account_balance.clone(),
                 minter_identity.clone(),
                 default_fee,
                 now,
@@ -881,13 +1242,40 @@ pub fn valid_transactions_strategy(
                 account_to_basic_identity_pointer.clone(),
             )
             .boxed();
-            proptest::strategy::Union::new_weighted(vec![
-                (10, approve_strategy),
-                (1, burn_strategy),
-                (1, mint_strategy),
-                (1000, transfer_strategy),
-            ])
-            .boxed()
+            let mut options = vec![];
+
+            if !excluded_transaction_types.contains(&TransactionTypes::Approve) {
+                options.push((10, approve_strategy));
+            }
+            if !excluded_transaction_types.contains(&TransactionTypes::Burn) {
+                options.push((1, burn_strategy));
+            }
+            if !excluded_transaction_types.contains(&TransactionTypes::Mint) {
+                options.push((1, mint_strategy));
+            }
+            if !excluded_transaction_types.contains(&TransactionTypes::Transfer) {
+                options.push((1000, transfer_strategy));
+            }
+
+            if !excluded_transaction_types.contains(&TransactionTypes::TransferFrom) {
+                // Set transfer_from weight if valid allowances exist
+                if !state.valid_allowance_from.is_empty() {
+                    let transfer_from_strategy = transfer_from_strategy(
+                        state.valid_allowance_from.clone(),
+                        minter_identity.clone(),
+                        default_fee,
+                        now,
+                        tx_hashes_pointer.clone(),
+                        account_to_basic_identity_pointer.clone(),
+                        allowance_map_pointer.clone(),
+                        Arc::new(state.balances.clone()),
+                    )
+                    .boxed();
+                    options.push((100, transfer_from_strategy));
+                }
+            }
+
+            proptest::strategy::Union::new_weighted(options).boxed()
         };
 
         (Just(state), arb_tx)
@@ -899,10 +1287,17 @@ pub fn valid_transactions_strategy(
                     default_fee,
                     additional_length - 1,
                     now,
+                    excluded_transaction_types.clone(),
                 )
             })
             .boxed()
     }
+
+    assert_ne!(
+        excluded_transaction_types.len(),
+        TransactionTypes::COUNT,
+        "At least one transaction type must be included in the strategy"
+    );
 
     generate_strategy(
         TransactionsAndBalances::default(),
@@ -910,6 +1305,7 @@ pub fn valid_transactions_strategy(
         default_fee,
         length,
         now,
+        excluded_transaction_types,
     )
     .prop_map(|res| res.transactions.clone())
 }
