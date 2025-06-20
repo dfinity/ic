@@ -1,10 +1,14 @@
 //! A crate containing various basic types that are especially useful when
 //! writing Rust canisters.
 
+use candid::CandidType;
 use ic_protobuf::proxy::try_from_option_field;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::types::v1 as pb;
 use phantom_newtype::{AmountOf, DisplayerOf, Id};
+use serde::Deserialize;
+use serde::Serialize;
+use serde_bytes::ByteBuf;
 use std::{convert::TryFrom, fmt};
 
 mod canister_id;
@@ -242,6 +246,40 @@ impl From<(CanisterId, u64)> for SnapshotId {
     }
 }
 
+impl Serialize for SnapshotId {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let bytes = self.to_vec();
+        ByteBuf::serialize(&ByteBuf::from(bytes), serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for SnapshotId {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+        D::Error: serde::de::Error,
+    {
+        let bytes = ByteBuf::deserialize(deserializer)?.to_vec();
+        SnapshotId::try_from(bytes).map_err(serde::de::Error::custom)
+    }
+}
+
+impl CandidType for SnapshotId {
+    fn _ty() -> candid::types::Type {
+        ByteBuf::_ty()
+    }
+
+    fn idl_serialize<S>(&self, serializer: S) -> Result<(), S::Error>
+    where
+        S: candid::types::Serializer,
+    {
+        ByteBuf::from(self.to_vec()).idl_serialize(serializer)
+    }
+}
+
 impl std::fmt::Display for SnapshotId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let local_id = self.get_local_snapshot_id();
@@ -269,7 +307,29 @@ impl TryFrom<pbSnapshot> for SnapshotId {
 
 #[cfg(test)]
 mod tests {
+    use candid::{Decode, Encode};
+
     pub use crate::{CanisterId, SnapshotId};
+
+    #[test]
+    fn invalid_snapshot_id_fails() {
+        SnapshotId::try_from(vec![4, 5, 6, 6]).unwrap_err();
+    }
+
+    #[test]
+    fn invalid_blob_fails() {
+        Decode!(&[4, 5, 6, 6], SnapshotId).unwrap_err();
+    }
+
+    #[test]
+    fn snapshot_id_roundtrip() {
+        let canister_id = CanisterId::from_u64(243425);
+        let local_id: u64 = 4;
+        let snapshot_id = SnapshotId::from((canister_id, local_id));
+        let bytes = Encode!(&snapshot_id).unwrap();
+        let snapshot_id_decoded = Decode!(&bytes, SnapshotId).unwrap();
+        assert_eq!(snapshot_id, snapshot_id_decoded);
+    }
 
     #[test]
     fn test_snapshot_id_creation() {

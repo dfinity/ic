@@ -3410,18 +3410,17 @@ impl Payload<'_> for StoredChunksReply {}
 ///     canister_id: principal;
 ///     replace_snapshot: opt blob;
 /// })`
-#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Default, Debug, CandidType, Deserialize)]
 pub struct TakeCanisterSnapshotArgs {
     pub canister_id: PrincipalId,
-    pub replace_snapshot: Option<serde_bytes::ByteBuf>,
+    pub replace_snapshot: Option<SnapshotId>,
 }
 
 impl TakeCanisterSnapshotArgs {
     pub fn new(canister_id: CanisterId, replace_snapshot: Option<SnapshotId>) -> Self {
         Self {
             canister_id: canister_id.get(),
-            replace_snapshot: replace_snapshot
-                .map(|snapshot_id| ByteBuf::from(snapshot_id.to_vec())),
+            replace_snapshot,
         }
     }
 
@@ -3431,27 +3430,9 @@ impl TakeCanisterSnapshotArgs {
 
     pub fn replace_snapshot(&self) -> Option<SnapshotId> {
         self.replace_snapshot
-            .as_ref()
-            .map(|bytes| SnapshotId::try_from(bytes.clone().into_vec()).unwrap())
     }
 }
-
-impl<'a> Payload<'a> for TakeCanisterSnapshotArgs {
-    fn decode(blob: &'a [u8]) -> Result<Self, UserError> {
-        let args = Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error)?;
-
-        if let Some(replace_snapshot) = &args.replace_snapshot {
-            // Verify that snapshot ID has the correct format.
-            if let Err(err) = SnapshotId::try_from(replace_snapshot.clone().into_vec()) {
-                return Err(UserError::new(
-                    ErrorCode::InvalidManagementPayload,
-                    format!("Payload deserialization error: {err:?}"),
-                ));
-            }
-        }
-        Ok(args)
-    }
-}
+impl Payload<'_> for TakeCanisterSnapshotArgs {}
 
 /// Struct used for encoding/decoding
 /// `(record {
