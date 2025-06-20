@@ -1,4 +1,4 @@
-use bitcoin::{consensus::deserialize, Block};
+use bitcoin::{block::Header, consensus::deserialize, Block};
 use candid::{Encode, Principal};
 use ic_agent::{Agent, AgentError};
 use ic_btc_interface::Network;
@@ -53,7 +53,7 @@ impl<'a> AdapterProxy<'a> {
         &self,
         anchor: Vec<u8>,
         headers: Vec<Vec<u8>>,
-    ) -> Result<BitcoinGetSuccessorsResponse, AgentError> {
+    ) -> Result<(Vec<Block>, Vec<Header>), AgentError> {
         let get_successors_request =
             BitcoinGetSuccessorsArgs::Initial(BitcoinGetSuccessorsRequestInitial {
                 network: Network::Mainnet,
@@ -61,20 +61,41 @@ impl<'a> AdapterProxy<'a> {
                 processed_block_hashes: headers,
             });
 
-        self.msg_can
+        let result = self
+            .msg_can
             .forward_to(
                 &Principal::management_canister(),
                 "bitcoin_get_successors",
                 Encode!(&get_successors_request).unwrap(),
             )
-            .await
-            .map(|result| {
-                BitcoinGetSuccessorsResponse::decode(&result)
-                    .expect("Failed to decode response of get_successors_response")
-            })
-            .inspect(|_| info!(self.log, "Got get_successor_response"))
+            .await?;
 
-        // TODO: Implement follow_up calls on partial blocks
+        let result = BitcoinGetSuccessorsResponse::decode(&result)
+            .expect("Failed to decode response of get_successors_response");
+
+        info!(self.log, "Got get_successor_response");
+
+        let (blocks, next) = match result {
+            BitcoinGetSuccessorsResponse::Complete(response) => (response.blocks, response.next),
+            BitcoinGetSuccessorsResponse::Partial(response) => todo!(),
+            BitcoinGetSuccessorsResponse::FollowUp(_) => panic!("Received an unexpected follow up"),
+        };
+
+        let blocks = blocks
+            .iter()
+            .map(|block| {
+                deserialize::<Block>(block).expect("Failed to deserialize a bitcoin block")
+            })
+            .collect();
+        let next = next
+            .iter()
+            .map(|next| {
+                deserialize::<Header>(next).expect("Failed to deserialize a bitcoin header")
+            })
+            .collect();
+
+        info!(self.log, "Parsed get_successors response");
+        Ok((blocks, next))
     }
 
     /// Make a `bitcoin_send_tx` call
@@ -88,10 +109,12 @@ impl<'a> AdapterProxy<'a> {
             .forward_to(
                 &Principal::management_canister(),
                 "bitcoin_send_transaction_internal",
-                Encode!(&get_successors_request).unwrap(),
+                Encode!(&send_tx_request).unwrap(),
             )
-            .await
-            .inspect(|_| info!(self.log, "Sent transaction"));
+            .await?;
+
+        info!(self.log, "Sent transaction");
+        Ok(())
     }
 
     pub async fn sync_blocks(
@@ -105,32 +128,41 @@ impl<'a> AdapterProxy<'a> {
         let mut tries = 0;
 
         while blocks.len() < max_num_blocks && tries < max_tries {
-            match self.get_successors(anchor.clone(), headers.clone()).await? {
-                BitcoinGetSuccessorsResponse::Complete(response) => {
-                    let new_blocks = response
-                        .blocks
-                        .iter()
-                        .map(|block| {
-                            deserialize::<Block>(block)
-                                .expect("Failed to deserialize a bitcoin block")
-                        })
-                        .collect::<Vec<_>>();
+            // match self.get_successors(anchor.clone(), headers.clone()).await? {
+            //     BitcoinGetSuccessorsResponse::Complete(response) => {
+            //         let new_blocks = response
+            //             .blocks
+            //             .iter()
+            //             .map(|block| {
+            //                 deserialize::<Block>(block)
+            //                     .expect("Failed to deserialize a bitcoin block")
+            //             })
+            //             .collect::<Vec<_>>();
 
-                    let new_headers = new_blocks
-                        .iter()
-                        .map(|block| block.block_hash()[..].to_vec())
-                        .collect::<Vec<_>>();
+            //         let new_headers = new_blocks
+            //             .iter()
+            //             .map(|block| block.block_hash()[..].to_vec())
+            //             .collect::<Vec<_>>();
 
-                    headers.extend(new_headers);
-                    blocks.extend(new_blocks);
-                }
-                BitcoinGetSuccessorsResponse::Partial(_response) => {
-                    panic!("Partial responses are unimplemented")
-                }
-                BitcoinGetSuccessorsResponse::FollowUp(_items) => {
-                    panic!("Follow up responses are unimplemented")
-                }
-            }
+            //         headers.extend(new_headers);
+            //         blocks.extend(new_blocks);
+            //     }
+            //     BitcoinGetSuccessorsResponse::Partial(_response) => {
+            //         panic!("Partial responses are unimplemented")
+            //     }
+            //     BitcoinGetSuccessorsResponse::FollowUp(_items) => {
+            //         panic!("Follow up responses are unimplemented")
+            //     }
+            // }
+
+            let (new_blocks, _) = self.get_successors(anchor.clone(), headers.clone()).await?;
+            let new_headers = new_blocks
+                .iter()
+                .map(|block| block.block_hash()[..].to_vec())
+                .collect::<Vec<_>>();
+
+            headers.extend(new_headers);
+            blocks.extend(new_blocks);
 
             tries += 1;
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
