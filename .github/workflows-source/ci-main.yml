@@ -372,7 +372,6 @@ jobs:
     steps:
       - <<: *checkout
       - name: Run Bazel Build Fuzzers
-        id: bazel-build-fuzzers
         uses: ./.github/actions/bazel
         with:
           run: |
@@ -387,11 +386,12 @@ jobs:
     steps:
       - <<: *checkout
       - name: Run Bazel Build Fuzzers AFL
-        id: bazel-build-fuzzers-afl
-        uses:  ./.github/actions/bazel-test-all/
+        uses: ./.github/actions/bazel
         with:
-          BAZEL_COMMAND: build --config=ci --keep_going --config=afl
-          BAZEL_TARGETS: //rs/...
+          run: |
+            bazel build //rs/... \
+              --config=ci --config=stamped --config=afl \
+              --keep_going
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
   python-ci-tests:
