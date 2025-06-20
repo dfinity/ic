@@ -166,9 +166,7 @@ impl<'a> AdapterProxy<'a> {
         let results = futures::future::join_all(follow_ups).await;
 
         // Return if any of them was an error
-        let results = results
-            .into_iter()
-            .collect::<Result<Vec<_>>, AgentError>()?;
+        let results = results.into_iter().collect::<Result<Vec<_>, _>>()?;
 
         // Flatten the partial block into a single Vec
         let reconstructed_block = std::iter::once(partial_block)
@@ -176,6 +174,6 @@ impl<'a> AdapterProxy<'a> {
             .flatten()
             .collect::<Vec<_>>();
 
-        Ok((reconstructed_block, next))
+        Ok((vec![reconstructed_block], next))
     }
 }
