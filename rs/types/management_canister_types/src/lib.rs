@@ -320,8 +320,7 @@ impl CanisterControllersChangeRecord {
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct CanisterLoadSnapshotRecord {
     canister_version: u64,
-    #[serde(with = "serde_bytes")]
-    snapshot_id: Vec<u8>,
+    snapshot_id: SnapshotId,
     taken_at_timestamp: u64,
 }
 
@@ -329,7 +328,7 @@ impl CanisterLoadSnapshotRecord {
     pub fn new(canister_version: u64, snapshot_id: SnapshotId, taken_at_timestamp: u64) -> Self {
         Self {
             canister_version,
-            snapshot_id: snapshot_id.to_vec(),
+            snapshot_id,
             taken_at_timestamp,
         }
     }
@@ -343,9 +342,7 @@ impl CanisterLoadSnapshotRecord {
     }
 
     pub fn snapshot_id(&self) -> SnapshotId {
-        // Safe to unwrap:
-        // `CanisterLoadSnapshotRecord` contains only valid snapshot IDs.
-        SnapshotId::try_from(&self.snapshot_id).unwrap()
+        self.snapshot_id
     }
 }
 
@@ -407,7 +404,7 @@ impl CanisterChangeDetails {
 
     pub fn load_snapshot(
         canister_version: u64,
-        snapshot_id: Vec<u8>,
+        snapshot_id: SnapshotId,
         taken_at_timestamp: u64,
     ) -> CanisterChangeDetails {
         CanisterChangeDetails::CanisterLoadSnapshot(CanisterLoadSnapshotRecord {
@@ -664,7 +661,7 @@ impl From<&CanisterChangeDetails> for pb_canister_state_bits::canister_change::C
                 pb_canister_state_bits::canister_change::ChangeDetails::CanisterLoadSnapshot(
                     pb_canister_state_bits::CanisterLoadSnapshot {
                         canister_version: canister_load_snapshot.canister_version,
-                        snapshot_id: canister_load_snapshot.snapshot_id.clone(),
+                        snapshot_id: canister_load_snapshot.snapshot_id.to_vec(),
                         taken_at_timestamp: canister_load_snapshot.taken_at_timestamp,
                     },
                 )
@@ -728,11 +725,17 @@ impl TryFrom<pb_canister_state_bits::canister_change::ChangeDetails> for Caniste
             )),
             pb_canister_state_bits::canister_change::ChangeDetails::CanisterLoadSnapshot(
                 canister_load_snapshot,
-            ) => Ok(CanisterChangeDetails::load_snapshot(
-                canister_load_snapshot.canister_version,
-                canister_load_snapshot.snapshot_id,
-                canister_load_snapshot.taken_at_timestamp,
-            )),
+            ) => {
+                let snapshot_id = SnapshotId::try_from(canister_load_snapshot.snapshot_id)
+                    .map_err(|e| {
+                        ProxyDecodeError::Other(format!("Failed to decode snapshot_id: {:?}", e))
+                    })?;
+                Ok(CanisterChangeDetails::load_snapshot(
+                    canister_load_snapshot.canister_version,
+                    snapshot_id,
+                    canister_load_snapshot.taken_at_timestamp,
+                ))
+            }
         }
     }
 }

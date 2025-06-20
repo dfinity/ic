@@ -1667,7 +1667,7 @@ fn load_canister_snapshot_succeeds() {
         *last_canister_change.details(),
         CanisterChangeDetails::load_snapshot(
             canister_version_before,
-            snapshot_id.to_vec(),
+            snapshot_id,
             snapshot_taken_at_timestamp
         )
     );
