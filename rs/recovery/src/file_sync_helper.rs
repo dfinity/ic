@@ -1,11 +1,10 @@
 use crate::{
-    cli::wait_for_confirmation,
+    cli::{consent_given, wait_for_confirmation},
     command_helper::exec_cmd,
     error::{RecoveryError, RecoveryResult},
     ssh_helper,
 };
 use ic_http_utils::file_downloader::FileDownloader;
-use ic_replay::consent_given;
 use ic_types::ReplicaVersion;
 use slog::{info, warn, Logger};
 use std::{
@@ -93,7 +92,8 @@ pub fn rsync_with_retries(
                     // before re-trying rsync.
                     info!(logger, "Retrying in 10 seconds...");
                     std::thread::sleep(Duration::from_secs(10));
-                } else if !consent_given("Do you want to retry the  download for this node?") {
+                } else if !consent_given(logger, "Do you want to retry the download for this node?")
+                {
                     return Err(RecoveryError::RsyncFailed);
                 }
             }

@@ -748,14 +748,14 @@ impl Player {
             Some(pool) => {
                 let pool = PoolReader::new(pool);
                 let finalized_height = pool.get_finalized_height();
-                let last_block = pool
-                    .get_finalized_block(finalized_height)
-                    .unwrap_or_else(|| {
-                        panic!(
-                            "Finalized block is not found at height {}",
-                            finalized_height
-                        )
-                    });
+                let target_height = finalized_height.min(
+                    self.replay_target_height
+                        .map(Height::from)
+                        .unwrap_or_else(|| finalized_height),
+                );
+                let last_block = pool.get_finalized_block(target_height).unwrap_or_else(|| {
+                    panic!("Finalized block is not found at height {}", target_height)
+                });
 
                 (
                     last_block.context.registry_version,
