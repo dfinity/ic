@@ -622,7 +622,6 @@ fn hash_plan(
 
     let mut chunk_actions: Vec<ChunkAction> = Vec::new();
 
-    eprintln!("rehash every: {}", rehash_every_nth);
     for FileWithSize(relative_path, size_bytes) in files.iter() {
         let num_chunks = count_chunks(*size_bytes, max_chunk_size);
 
@@ -671,7 +670,6 @@ fn hash_plan(
 
                     // We are using chunk_actions.len() as shorthand for the chunk_index.
                     let offset_index = (chunk_actions.len() as u64).wrapping_add(offset);
-                    eprintln!("index: {}", offset_index);
 
                     if (offset_index % rehash_every_nth) == 0 {
                         ChunkAction::RecomputeAndCompare(chunk.hash)
