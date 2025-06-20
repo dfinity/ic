@@ -1119,10 +1119,13 @@ mod tests {
     fn archives_state_test() {
         let dir = tmpdir("test_dir");
 
-        let backup_helper = fake_backup_helper(
+        let slack_messages_queue = Arc::new(Mutex::default());
+
+        let backup_helper = fake_backup_helper_with_slack_messages(
             dir.as_ref(),
             /*versions_hot=*/ 2,
             /*daily_replays=*/ 2,
+            slack_messages_queue.clone(),
         );
 
         let verified_checkpoint_height = 500;
@@ -1166,7 +1169,13 @@ mod tests {
                 .exists(),
             "The oldest checkpoint should have been deleted"
         );
-        let notification_client: FakeNotificationClient = backup_helper.notification_client;
+
+        assert_eq!(
+            *slack_messages_queue.lock().unwrap(),
+            vec![format!(
+                "The checkpoint {unverified_checkpoint_height} is NOT verified!"
+            )]
+        );
     }
 
     #[test]
@@ -1396,11 +1405,24 @@ mod tests {
             .unwrap();
         }
     }
-
     fn fake_backup_helper(
         temp_dir: &Path,
         versions_hot: usize,
         daily_replays: usize,
+    ) -> BackupHelper {
+        fake_backup_helper_with_slack_messages(
+            temp_dir,
+            versions_hot,
+            daily_replays,
+            Arc::new(Mutex::default()),
+        )
+    }
+
+    fn fake_backup_helper_with_slack_messages(
+        temp_dir: &Path,
+        versions_hot: usize,
+        daily_replays: usize,
+        slack_messages_queue: Arc<Mutex<Vec<String>>>,
     ) -> BackupHelper {
         let data_provider = Arc::new(LocalStoreImpl::new(
             temp_dir.join("ic_registry_local_store"),
@@ -1410,7 +1432,9 @@ mod tests {
             /*metrics_registry=*/ None,
         ));
 
-        let notification_client = FakeNotificationClient::default();
+        let notification_client = FakeNotificationClient {
+            slack_messages: slack_messages_queue,
+        };
 
         BackupHelper {
             subnet_id: PrincipalId::from_str(FAKE_SUBNET_ID)
@@ -1455,24 +1479,21 @@ mod tests {
         dirs
     }
 
-    #[derive(Default)]
     struct FakeNotificationClient {
-        failures: Mutex<Vec<String>>,
-        warnings: Mutex<Vec<String>>,
-        infos: Mutex<Vec<String>>,
+        slack_messages: Arc<Mutex<Vec<String>>>,
     }
 
     impl NotificationClient for FakeNotificationClient {
         fn report_failure_slack(&self, message: String) {
-            self.failures.lock().unwrap().push(message);
+            self.slack_messages.lock().unwrap().push(message);
         }
 
         fn report_warning_slack(&self, message: String) {
-            self.warnings.lock().unwrap().push(message);
+            self.slack_messages.lock().unwrap().push(message);
         }
 
         fn report_info_slack(&self, message: String) {
-            self.infos.lock().unwrap().push(message)
+            self.slack_messages.lock().unwrap().push(message)
         }
 
         fn push_metrics_restored_height(&self, _height: u64) {}
