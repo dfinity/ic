@@ -4,7 +4,6 @@ package(default_visibility = ["//rs:ic-os-pkg"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/ic_os/config:config_lib",
     "//rs/ic_os/config_types",
     "//rs/ic_os/deterministic_ips",
     "//rs/ic_os/metrics_tool",
@@ -39,7 +38,20 @@ rust_binary(
     target_compatible_with = [
         "@platforms//os:linux",
     ],
-    deps = DEPENDENCIES,
+    deps = DEPENDENCIES + ["//rs/ic_os/config:config_lib"],
+)
+
+rust_binary(
+    name = "hostos_tool_dev",
+    srcs = glob(["src/**/*.rs"]),
+    aliases = ALIASES,
+    crate_name = "hostos_tool",
+    features = ["dev"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
+    deps = DEPENDENCIES + ["//rs/ic_os/config:config_lib_dev"],
 )
 
 rust_test(

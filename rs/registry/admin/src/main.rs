@@ -3905,7 +3905,7 @@ async fn main() {
             let mut success = true;
 
             eprintln!("Download IC-OS .. ");
-            let tmp_dir = tempfile::tempdir().unwrap().into_path();
+            let tmp_dir = tempfile::tempdir().unwrap().keep();
             let mut tmp_file = tmp_dir.clone();
             tmp_file.push("temp-image");
 
@@ -5637,7 +5637,7 @@ async fn download_wasm_module(url: &Url) -> PathBuf {
         panic!("Wasm module urls must use https");
     }
 
-    let tmp_dir = tempfile::tempdir().unwrap().into_path();
+    let tmp_dir = tempfile::tempdir().unwrap().keep();
     let mut tmp_file = tmp_dir.clone();
     tmp_file.push("wasm_module.tar.gz");
 
