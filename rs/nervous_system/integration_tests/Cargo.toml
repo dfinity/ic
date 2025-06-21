@@ -22,6 +22,7 @@ ic-nervous-system-common = { path = "../common" }
 ic-nervous-system-proto = { path = "../proto" }
 ic-nervous-system-root = { path = "../root" }
 ic-nervous-system-runtime = { path = "../runtime" }
+sns-treasury-manager = { path = "../../sns/treasury_manager" }
 ic-nns-common = { path = "../../nns/common" }
 ic-nns-governance = { path = "../../nns/governance" }
 ic-nns-governance-api = { path = "../../nns/governance/api" }
@@ -53,6 +54,7 @@ ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-error-types = { path = "../../../packages/ic-error-types" }
 ic-icrc1 = { path = "../../ledger_suite/icrc1/" }
 ic-icrc1-index-ng = { path = "../../ledger_suite/icrc1/index-ng" }
+ic-icrc1-ledger = { path = "../../ledger_suite/icrc1/ledger" }
 ic-icrc1-tokens-u64 = { path = "../../ledger_suite/icrc1/tokens_u64" }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-nervous-system-common-test-keys = { path = "../common/test_keys" }

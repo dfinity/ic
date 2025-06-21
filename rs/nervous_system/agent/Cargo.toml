@@ -23,6 +23,7 @@ ic-nns-constants = { path = "../../nns/constants" }
 ic-registry-canister-api = { path = "../../registry/canister/api" }
 ic-sns-wasm = { path = "../../nns/sns-wasm" }
 ic-sns-governance-api = { path = "../../sns/governance/api" }
+sns-treasury-manager = { path = "../../sns/treasury_manager" }
 pocket-ic = { path = "../../../packages/pocket-ic" }
 pretty_assertions = { workspace = true }
 registry-canister = { path = "../../registry/canister" }
