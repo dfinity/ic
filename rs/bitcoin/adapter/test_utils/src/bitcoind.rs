@@ -5,20 +5,11 @@ use std::{
     sync::Arc,
 };
 
-use bitcoin::p2p::{Magic, ServiceFlags};
-
-use bitcoin::{
-    block::Header as BlockHeader,
-    consensus::{deserialize_partial, encode, serialize},
-    p2p::{
-        message::{NetworkMessage, RawNetworkMessage},
-        message_blockdata::{GetHeadersMessage, Inventory},
-        message_network::VersionMessage,
-    },
-    Block, BlockHash,
+use ic_btc_adapter::import::{
+    bitcoin_io, deserialize_partial, encode, serialize, Block, BlockHash, BlockHeader,
+    GetHeadersMessage, Inventory, Magic, NetworkMessage, RawNetworkMessage, ServiceFlags,
+    VersionMessage,
 };
-
-use bitcoin::io as bitcoin_io;
 
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -83,7 +74,7 @@ async fn handle_version(
 }
 
 async fn handle_getaddr(socket: &mut TcpStream, magic: Magic) -> io::Result<()> {
-    write_network_message(socket, magic, NetworkMessage::Addr(vec![])).await
+    write_network_message(socket, magic, NetworkMessage::Addr(Default::default())).await
 }
 
 async fn handle_getheaders(
@@ -98,7 +89,7 @@ async fn handle_getheaders(
     let locator = {
         let mut found = None;
 
-        for locator in &msg.locator_hashes {
+        for locator in msg.locator_hashes.iter() {
             if cached_headers.contains_key(locator) {
                 found = Some(*locator);
                 break;
@@ -204,7 +195,7 @@ impl FakeBitcoind {
                                         handle_getheaders(&mut socket, msg, *raw.magic(), cached_headers.clone(), children.clone()).await
                                     }
                                     NetworkMessage::GetData(msg) => {
-                                        handle_getdata(&mut socket, msg, *raw.magic(), blocks.clone()).await
+                                        handle_getdata(&mut socket, msg.as_ref(), *raw.magic(), blocks.clone()).await
                                     }
                                     NetworkMessage::Ping(val) => {
                                         handle_ping(&mut socket, *val, *raw.magic()).await

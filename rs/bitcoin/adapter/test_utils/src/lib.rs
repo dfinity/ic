@@ -1,12 +1,8 @@
 use std::collections::HashSet;
 
-use bitcoin::{
-    block::{Header as BlockHeader, Version},
-    consensus::deserialize,
-    hashes::Hash,
-    Block, BlockHash, Target, Transaction, TxMerkleNode,
-};
 use hex::FromHex;
+use ic_btc_adapter::import;
+use import::{deserialize, Block, BlockHash, BlockHeader, Hash, Target, Transaction, TxMerkleNode};
 use rand::{prelude::StdRng, Rng, SeedableRng};
 
 pub mod bitcoind;
@@ -46,7 +42,7 @@ pub fn headers_to_hashes(headers: &[BlockHeader]) -> Vec<BlockHash> {
 fn large_block(prev_blockhash: &BlockHash, prev_time: u32, tx: Transaction) -> Block {
     let mut block = Block {
         header: BlockHeader {
-            version: Version::ONE,
+            version: import::Version::ONE,
             prev_blockhash: *prev_blockhash,
             merkle_root: TxMerkleNode::all_zeros(),
             time: prev_time + gen_time_delta(),
@@ -54,8 +50,9 @@ fn large_block(prev_blockhash: &BlockHash, prev_time: u32, tx: Transaction) -> B
             nonce: 0,
         },
         txdata: vec![],
+        #[cfg(feature = "dogecoin")]
+        auxpow: None,
     };
-
     for _ in 0..25_000 {
         // 25_000 transactions will generate just a bit over a 2 MiB block
         block.txdata.push(tx.clone());
@@ -123,7 +120,7 @@ pub fn generate_headers(
 /// This helper generates a single header with a given previous blockhash.
 pub fn generate_header(prev_blockhash: BlockHash, prev_time: u32, nonce: u32) -> BlockHeader {
     let mut header = BlockHeader {
-        version: Version::ONE,
+        version: import::Version::ONE,
         prev_blockhash,
         merkle_root: TxMerkleNode::all_zeros(),
         time: prev_time + gen_time_delta(),

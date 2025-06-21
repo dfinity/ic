@@ -7,9 +7,13 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-bitcoin = { workspace = true }
 flate2 = { workspace = true }
 hex = { workspace = true }
 rand = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
+ic-btc-adapter = { path = ".." }
+
+[features]
+default = []
+dogecoin = []

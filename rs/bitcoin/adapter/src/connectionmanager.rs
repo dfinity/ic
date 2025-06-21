@@ -4,12 +4,9 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use bitcoin::p2p::ServiceFlags;
-
-use bitcoin::p2p::{
-    message::{CommandString, NetworkMessage},
-    message_network::VersionMessage,
-    Address, Magic,
+use crate::import::{
+    CommandString, Magic, NetworkAddress as Address, NetworkMessage, ServiceFlags, VersionMessage,
+    new_version_message,
 };
 use ic_logger::{error, info, trace, warn, ReplicaLogger};
 use rand::prelude::*;
@@ -350,7 +347,7 @@ impl ConnectionManager {
         let receiver = Address::new(addr, ServiceFlags::NETWORK | ServiceFlags::NETWORK_LIMITED);
         let nonce: u64 = self.rng.gen();
         let user_agent = String::from(USER_AGENT);
-        let message = NetworkMessage::Version(VersionMessage::new(
+        let message = NetworkMessage::Version(new_version_message(
             services,
             timestamp as i64,
             receiver,
@@ -630,6 +627,7 @@ impl ProcessEvent for ConnectionManager {
         match &event.kind {
             StreamEventKind::Connected => {
                 let result = self.send_version(&event.address);
+                            eprintln!("send_version result {:?}", result);
                 if let Ok(conn) = self.get_connection(&event.address) {
                     match result {
                         Ok(_) => {
@@ -637,6 +635,7 @@ impl ProcessEvent for ConnectionManager {
                             trace!(self.logger, "Connected to {}", event.address);
                         }
                         Err(err) => {
+                            eprintln!("Disconnected Error {}", err);
                             conn.disconnect();
                             trace!(self.logger, "{}", err);
                         }
@@ -669,7 +668,7 @@ impl ProcessBitcoinNetworkMessage for ConnectionManager {
                 self.process_version_message(&address, version_message)
             }
             NetworkMessage::Verack => self.process_verack_message(&address),
-            NetworkMessage::Addr(addresses) => self.process_addr_message(&address, addresses),
+            NetworkMessage::Addr(addresses) => self.process_addr_message(&address, addresses.as_ref()),
             NetworkMessage::Ping(nonce) => self.process_ping_message(&address, *nonce),
             NetworkMessage::Pong(nonce) => self.process_pong_message(&address, *nonce),
             NetworkMessage::Unknown { command, payload } => {
@@ -690,12 +689,12 @@ fn connection_limits(address_book: &AddressBook) -> (usize, usize) {
     }
 }
 
+#[cfg(not(feature = "dogecoin"))]
 #[cfg(test)]
 mod test {
     use super::*;
     use crate::config::test::ConfigBuilder;
-    use bitcoin::p2p::ServiceFlags;
-    use bitcoin::Network;
+    use crate::import::{Network, ServiceFlags};
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use std::str::FromStr;
@@ -712,7 +711,7 @@ mod test {
         let config = ConfigBuilder::new()
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
-        let mut version_message = VersionMessage::new(
+        let mut version_message = new_version_message(
             services,
             0,
             receiver,
@@ -741,7 +740,7 @@ mod test {
         let services = ServiceFlags::NETWORK | ServiceFlags::NETWORK_LIMITED;
         let receiver = Address::new(&socket_1, services);
         let sender = Address::new(&socket_2, ServiceFlags::NONE);
-        let version_message = VersionMessage::new(
+        let version_message = new_version_message(
             services,
             0,
             receiver,
@@ -775,7 +774,7 @@ mod test {
         let services = ServiceFlags::WITNESS;
         let receiver = Address::new(&socket_1, ServiceFlags::NONE);
         let sender = Address::new(&socket_2, ServiceFlags::NONE);
-        let version_message = VersionMessage::new(
+        let version_message = new_version_message(
             services,
             0,
             receiver,
@@ -848,7 +847,7 @@ mod test {
                         network_message_sender
                             .send((
                                 address,
-                                NetworkMessage::Version(VersionMessage::new(
+                                NetworkMessage::Version(new_version_message(
                                     services,
                                     since_epoch as i64,
                                     Address::new(&adapter_address, services),
@@ -1105,7 +1104,7 @@ mod test {
         let services = ServiceFlags::WITNESS;
         let receiver = Address::new(&socket_1, services);
         let sender = Address::new(&socket_2, ServiceFlags::NONE);
-        let version_message = VersionMessage::new(
+        let version_message = new_version_message(
             services,
             0,
             receiver,
@@ -1152,7 +1151,7 @@ mod test {
         let services = ServiceFlags::WITNESS;
         let receiver = Address::new(&socket_1, services);
         let sender = Address::new(&socket_2, ServiceFlags::NONE);
-        let version_message = VersionMessage::new(
+        let version_message = new_version_message(
             services,
             0,
             receiver,

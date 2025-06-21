@@ -1,4 +1,4 @@
-use bitcoin::Network;
+use crate::import::Network;
 use ic_config::logger::Config as LoggerConfig;
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
@@ -58,6 +58,7 @@ fn default_idle_seconds() -> u64 {
 /// This function is used to get the address limits for the `AddressBook`
 /// based on the provided `Network`.
 pub fn address_limits(network: Network) -> (usize, usize) {
+    #[cfg(not(feature = "dogecoin"))]
     match network {
         Network::Bitcoin => (500, 2000),
         Network::Testnet => (100, 1000),
@@ -67,15 +68,28 @@ pub fn address_limits(network: Network) -> (usize, usize) {
         Network::Regtest => (1, 1),
         _ => (1, 1),
     }
+    #[cfg(feature = "dogecoin")]
+    match network {
+        Network::Dogecoin => (500, 2000),
+        Network::Testnet => (100, 1000),
+        _ => (1, 1),
+    }
 }
 
 impl Config {
     /// This function returns the port to use based on the Bitcoin network provided.
     pub fn network_port(&self) -> u16 {
+        #[cfg(not(feature = "dogecoin"))]
         match self.network {
             Network::Bitcoin => 8333,
             Network::Testnet => 18333,
             Network::Testnet4 => 48333,
+            _ => 8333,
+        }
+        #[cfg(feature = "dogecoin")]
+        match self.network {
+            Network::Dogecoin => 8333,
+            Network::Testnet => 18333,
             _ => 8333,
         }
     }
@@ -83,16 +97,21 @@ impl Config {
 
 impl Default for Config {
     fn default() -> Self {
+        #[cfg(not(feature = "dogecoin"))]
+        let network = Network::Bitcoin;
+        #[cfg(feature = "dogecoin")]
+        let network = Network::Dogecoin;
+
         Self {
             dns_seeds: Default::default(),
-            network: Network::Bitcoin,
+            network,
             socks_proxy: Default::default(),
             nodes: vec![],
             idle_seconds: default_idle_seconds(),
             ipv6_only: false,
             logger: LoggerConfig::default(),
             incoming_source: Default::default(),
-            address_limits: address_limits(Network::Bitcoin), // Address limits used for Bitcoin mainnet
+            address_limits: address_limits(network), // Address limits used for Bitcoin mainnet
         }
     }
 }

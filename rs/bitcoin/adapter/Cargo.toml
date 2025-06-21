@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-bitcoin = { workspace = true }
+bitcoin = { git = "https://github.com/dfinity/rust-dogecoin", rev = "2f89de4f1104c45a5fce82db95d8e3406320a3f3", features = [ "serde" ]}
 clap = { workspace = true }
 futures = { workspace = true }
 hashlink = "0.8.0"
@@ -38,8 +38,8 @@ tonic = { workspace = true }
 tower = { workspace = true, optional = true }
 
 [dev-dependencies]
-bitcoincore-rpc = { workspace = true }
-bitcoind = "0.32.0"
+bitcoincore-rpc = { git = "https://github.com/dfinity/rust-bitcoincore-rpc", rev = "3604655f4ec220f80f09ca1d2ea5501b5dc2cdbd" }
+bitcoind = { git = "https://github.com/ninegua/bitcoind", rev = "60ed030114a826a51ec87688de017ddc82f27fad" }
 criterion = { workspace = true }
 ic-btc-adapter-client = { path = "../client" }
 ic-btc-adapter-test-utils = { path = "./test_utils" }
@@ -57,3 +57,7 @@ harness = false
 name = "adapter-stress-test"
 path = "src/stress_test.rs"
 required-features = ["tower"]
+
+[features]
+default = []
+dogecoin = [ "bitcoincore-rpc/dogecoin", "ic-btc-adapter-test-utils/dogecoin" ]

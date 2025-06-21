@@ -1,10 +1,4 @@
-use bitcoin::io as bitcoin_io;
-use bitcoin::{
-    consensus::serialize,
-    p2p::message::RawNetworkMessage,
-    p2p::Magic,
-    {consensus::encode, p2p::message::NetworkMessage},
-};
+use crate::import::{encode, serialize, Magic, NetworkMessage, RawNetworkMessage};
 use futures::TryFutureExt;
 use http::Uri;
 use ic_logger::{debug, error, info, ReplicaLogger};
@@ -231,7 +225,7 @@ impl Stream {
                 // unparsed buffer to attempt another deserialize call. If no bytes found,
                 // return the unexpected end-of-file error.
                 Err(encode::Error::Io(ref err))
-                    if err.kind() == bitcoin_io::ErrorKind::UnexpectedEof =>
+                    if err.kind() == bitcoin::io::ErrorKind::UnexpectedEof =>
                 {
                     let count = self
                         .read_half
@@ -288,7 +282,8 @@ impl Stream {
             self.write_message(network_message).await?;
         }
 
-        let raw_message = self.read_message()?;
+        let raw_message = self.read_message();
+        let raw_message = raw_message?;
         let result = self
             .network_message_sender
             .send((self.address, raw_message.payload().clone()))
@@ -367,6 +362,7 @@ pub fn handle_stream(config: StreamConfig) -> tokio::task::JoinHandle<()> {
     })
 }
 
+#[cfg(not(feature = "dogecoin"))]
 #[cfg(test)]
 pub mod test {
 
@@ -375,7 +371,7 @@ pub mod test {
     use crate::common::DEFAULT_CHANNEL_BUFFER_SIZE;
 
     use super::*;
-    use bitcoin::{consensus::Encodable, Network};
+    use crate::import::{Encodable, Network};
     use ic_logger::replica_logger::no_op_logger;
 
     /// Test that large messages get rejected and we disconnect as a consequence.
