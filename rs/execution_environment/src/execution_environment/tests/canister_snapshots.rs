@@ -39,7 +39,6 @@ use ic_types::{
 use ic_types_test_utils::ids::user_test_id;
 use ic_universal_canister::{wasm, UNIVERSAL_CANISTER_WASM};
 use more_asserts::assert_gt;
-use serde_bytes::ByteBuf;
 use std::borrow::Borrow;
 
 const WASM_EXECUTION_MODE: WasmExecutionMode = WasmExecutionMode::Wasm32;
@@ -65,18 +64,6 @@ fn take_canister_snapshot_decode_round_trip() {
         response,
         CanisterSnapshotResponse::decode(encoded_response.as_slice()).unwrap()
     );
-}
-
-#[test]
-fn take_canister_snapshot_decode_fails() {
-    let canister_id = canister_test_id(4);
-    let args = ic00::TakeCanisterSnapshotArgs {
-        canister_id: canister_id.get(),
-        replace_snapshot: Some(ByteBuf::from(vec![4, 5, 6, 6])), // Invalid snapshot ID.
-    };
-    let encoded_args = args.encode();
-    let err = TakeCanisterSnapshotArgs::decode(encoded_args.as_slice()).unwrap_err();
-    assert_eq!(err.code(), ErrorCode::InvalidManagementPayload,);
 }
 
 #[test]
@@ -1680,7 +1667,7 @@ fn load_canister_snapshot_succeeds() {
         *last_canister_change.details(),
         CanisterChangeDetails::load_snapshot(
             canister_version_before,
-            snapshot_id.to_vec(),
+            snapshot_id,
             snapshot_taken_at_timestamp
         )
     );

@@ -6,7 +6,7 @@ use ic_management_canister_types_private::{
     UploadCanisterSnapshotMetadataArgs, UploadChunkArgs,
 };
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
-use ic_types::{CanisterId, SnapshotId};
+use ic_types::CanisterId;
 
 #[test]
 fn upload_snapshot_module_with_checkpoint() {
@@ -40,7 +40,7 @@ fn upload_snapshot_module_with_checkpoint() {
         let slice = [i as u8; SLICE_SIZE as usize];
         env.upload_canister_snapshot_data(&UploadCanisterSnapshotDataArgs::new(
             canister_id,
-            SnapshotId::try_from(snapshot_id.clone()).unwrap(),
+            snapshot_id,
             CanisterSnapshotDataOffset::WasmModule {
                 offset: i * SLICE_SIZE,
             },
@@ -53,10 +53,7 @@ fn upload_snapshot_module_with_checkpoint() {
         }
     }
     // check if the module is as written
-    let md_args = ReadCanisterSnapshotMetadataArgs::new(
-        canister_id,
-        SnapshotId::try_from(snapshot_id.clone()).unwrap(),
-    );
+    let md_args = ReadCanisterSnapshotMetadataArgs::new(canister_id, snapshot_id);
     let module_dl = env.get_snapshot_module(&md_args).unwrap();
     assert_eq!(original_module, module_dl);
 }
@@ -122,51 +119,35 @@ fn upload_snapshot_with_checkpoint() {
         .upload_canister_snapshot_metadata(&args)
         .unwrap()
         .snapshot_id;
-    env.upload_snapshot_module(canister_id, snapshot_id.clone(), module_dl, None, None)
+    env.upload_snapshot_module(canister_id, snapshot_id, module_dl, None, None)
         .unwrap();
-    env.upload_snapshot_heap(canister_id, snapshot_id.clone(), heap_dl, None, None)
+    env.upload_snapshot_heap(canister_id, snapshot_id, heap_dl, None, None)
         .unwrap();
     // upload first chunk before checkpoint
     env.upload_canister_snapshot_data(&UploadCanisterSnapshotDataArgs::new(
         canister_id,
-        SnapshotId::try_from(snapshot_id.clone()).unwrap(),
+        snapshot_id,
         CanisterSnapshotDataOffset::WasmChunk,
         chunk_1.clone(),
     ))
     .unwrap();
     // spread stable memory upload over a checkpoint event
-    env.upload_snapshot_stable_memory(
-        canister_id,
-        snapshot_id.clone(),
-        &stable_memory_dl,
-        None,
-        Some(1),
-    )
-    .unwrap();
+    env.upload_snapshot_stable_memory(canister_id, snapshot_id, &stable_memory_dl, None, Some(1))
+        .unwrap();
     env.checkpointed_tick();
-    env.upload_snapshot_stable_memory(
-        canister_id,
-        snapshot_id.clone(),
-        &stable_memory_dl,
-        Some(1),
-        None,
-    )
-    .unwrap();
+    env.upload_snapshot_stable_memory(canister_id, snapshot_id, &stable_memory_dl, Some(1), None)
+        .unwrap();
     // upload second chunk after checkpoint
     env.upload_canister_snapshot_data(&UploadCanisterSnapshotDataArgs::new(
         canister_id,
-        SnapshotId::try_from(snapshot_id.clone()).unwrap(),
+        snapshot_id,
         CanisterSnapshotDataOffset::WasmChunk,
         chunk_2.clone(),
     ))
     .unwrap();
     // change state to be overwritten:
     let res_1 = env.execute_ingress(canister_id, "inc", vec![]).unwrap();
-    let load_args = LoadCanisterSnapshotArgs::new(
-        canister_id,
-        SnapshotId::try_from(snapshot_id).unwrap(),
-        None,
-    );
+    let load_args = LoadCanisterSnapshotArgs::new(canister_id, snapshot_id, None);
     env.load_canister_snapshot(load_args).unwrap();
     // compare metadata
     let snapshot_id_2 = env
@@ -286,24 +267,14 @@ fn load_faulty_snapshot(
         .upload_canister_snapshot_metadata(&args)
         .unwrap()
         .snapshot_id;
-    env.upload_snapshot_module(canister_id, snapshot_id.clone(), module_dl, None, None)
+    env.upload_snapshot_module(canister_id, snapshot_id, module_dl, None, None)
         .unwrap();
-    env.upload_snapshot_heap(canister_id, snapshot_id.clone(), heap_dl, None, None)
+    env.upload_snapshot_heap(canister_id, snapshot_id, heap_dl, None, None)
         .unwrap();
-    env.upload_snapshot_stable_memory(
-        canister_id,
-        snapshot_id.clone(),
-        stable_memory_dl,
-        None,
-        None,
-    )
-    .unwrap();
+    env.upload_snapshot_stable_memory(canister_id, snapshot_id, stable_memory_dl, None, None)
+        .unwrap();
     let _ = env.execute_ingress(canister_id, "inc", vec![]).unwrap();
-    let load_args = LoadCanisterSnapshotArgs::new(
-        canister_id,
-        SnapshotId::try_from(snapshot_id).unwrap(),
-        None,
-    );
+    let load_args = LoadCanisterSnapshotArgs::new(canister_id, snapshot_id, None);
     let err = env.load_canister_snapshot(load_args).unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidManagementPayload);
     assert!(err.description().contains(expect_str));

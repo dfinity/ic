@@ -150,7 +150,7 @@ use ic_types::{
     time::GENESIS,
     xnet::{CertifiedStreamSlice, StreamIndex},
     CanisterLog, CountBytes, CryptoHashOfPartialState, Height, NodeId, Randomness, RegistryVersion,
-    ReplicaVersion,
+    ReplicaVersion, SnapshotId,
 };
 use ic_types::{
     canister_http::{
@@ -3368,7 +3368,7 @@ impl StateMachine {
             let ReadCanisterSnapshotDataResponse { chunk } =
                 self.read_canister_snapshot_data(&ReadCanisterSnapshotDataArgs {
                     canister_id: args.canister_id,
-                    snapshot_id: args.snapshot_id.clone(),
+                    snapshot_id: args.snapshot_id,
                     kind: CanisterSnapshotDataKind::WasmChunk {
                         hash: hash.hash.clone(),
                     },
@@ -3431,7 +3431,7 @@ impl StateMachine {
             let size = u64::min(SNAPSHOT_DATA_CHUNK_SIZE, module_size - start);
             let args = ReadCanisterSnapshotDataArgs {
                 canister_id: args.canister_id,
-                snapshot_id: args.snapshot_id.clone(),
+                snapshot_id: args.snapshot_id,
                 kind: kind_gen(start, size),
             };
             start += size;
@@ -3490,7 +3490,7 @@ impl StateMachine {
     pub fn upload_snapshot_module(
         &self,
         canister_id: CanisterId,
-        snapshot_id: Vec<u8>,
+        snapshot_id: SnapshotId,
         data: impl AsRef<[u8]>,
         start_chunk: Option<usize>,
         end_chunk: Option<usize>,
@@ -3513,7 +3513,7 @@ impl StateMachine {
     pub fn upload_snapshot_heap(
         &self,
         canister_id: CanisterId,
-        snapshot_id: Vec<u8>,
+        snapshot_id: SnapshotId,
         data: impl AsRef<[u8]>,
         start_chunk: Option<usize>,
         end_chunk: Option<usize>,
@@ -3536,7 +3536,7 @@ impl StateMachine {
     pub fn upload_snapshot_stable_memory(
         &self,
         canister_id: CanisterId,
-        snapshot_id: Vec<u8>,
+        snapshot_id: SnapshotId,
         data: impl AsRef<[u8]>,
         start_chunk: Option<usize>,
         end_chunk: Option<usize>,
@@ -3561,7 +3561,7 @@ impl StateMachine {
     fn upload_snapshot_blob(
         &self,
         canister_id: CanisterId,
-        snapshot_id: Vec<u8>,
+        snapshot_id: SnapshotId,
         data: impl AsRef<[u8]>,
         start_chunk: Option<usize>,
         end_chunk: Option<usize>,
@@ -3583,7 +3583,7 @@ impl StateMachine {
             let chunk = data.as_ref()[start as usize..(start + size) as usize].to_vec();
             let args = UploadCanisterSnapshotDataArgs {
                 canister_id: canister_id.into(),
-                snapshot_id: snapshot_id.clone(),
+                snapshot_id,
                 kind,
                 chunk,
             };

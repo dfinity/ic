@@ -1,10 +1,14 @@
 //! A crate containing various basic types that are especially useful when
 //! writing Rust canisters.
 
+use candid::CandidType;
 use ic_protobuf::proxy::try_from_option_field;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::types::v1 as pb;
 use phantom_newtype::{AmountOf, DisplayerOf, Id};
+use serde::Deserialize;
+use serde::Serialize;
+use serde_bytes::ByteBuf;
 use std::{convert::TryFrom, fmt};
 
 mod canister_id;
@@ -191,6 +195,37 @@ impl SnapshotId {
     pub fn to_vec(&self) -> Vec<u8> {
         self.as_slice().to_vec()
     }
+
+    pub fn try_from(bytes: impl AsRef<[u8]>) -> Result<Self, SnapshotIdError> {
+        if bytes.as_ref().len() < Self::LOCAL_ID_LENGTH_IN_BYTES {
+            return Err(SnapshotIdError::InvalidLength(format!(
+                "Invalid snapshot ID length: provided {}, minumum length expected {}.",
+                bytes.as_ref().len(),
+                Self::MAX_LENGTH_IN_BYTES
+            )));
+        }
+        if bytes.as_ref().len() > Self::MAX_LENGTH_IN_BYTES {
+            return Err(SnapshotIdError::InvalidLength(format!(
+                "Invalid snapshot ID length: provided {}, maximum length expected {}.",
+                bytes.as_ref().len(),
+                Self::MAX_LENGTH_IN_BYTES
+            )));
+        }
+
+        let canister_id = CanisterId::try_from(&bytes.as_ref()[Self::LOCAL_ID_LENGTH_IN_BYTES..])
+            .map_err(|_| {
+            SnapshotIdError::InvalidFormat(
+                "Failed to create a Snapshot ID. Input could not be parsed into a Snapshot ID."
+                    .to_string(),
+            )
+        })?;
+
+        let mut slice = [0u8; 8];
+        slice.copy_from_slice(&bytes.as_ref()[..Self::LOCAL_ID_LENGTH_IN_BYTES]);
+        let local_id = u64::from_be_bytes(slice);
+
+        Ok(SnapshotId::from((canister_id, local_id)))
+    }
 }
 
 impl From<(CanisterId, u64)> for SnapshotId {
@@ -211,45 +246,37 @@ impl From<(CanisterId, u64)> for SnapshotId {
     }
 }
 
-// TODO: EXC-2048
-impl TryFrom<Vec<u8>> for SnapshotId {
-    type Error = SnapshotIdError;
-    fn try_from(bytes: Vec<u8>) -> Result<Self, Self::Error> {
-        SnapshotId::try_from(&bytes)
+impl Serialize for SnapshotId {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let bytes = self.to_vec();
+        ByteBuf::serialize(&ByteBuf::from(bytes), serializer)
     }
 }
 
-impl TryFrom<&Vec<u8>> for SnapshotId {
-    type Error = SnapshotIdError;
-    fn try_from(bytes: &Vec<u8>) -> Result<Self, Self::Error> {
-        if bytes.len() < Self::LOCAL_ID_LENGTH_IN_BYTES {
-            return Err(SnapshotIdError::InvalidLength(format!(
-                "Invalid snapshot ID length: provided {}, minumum length expected {}.",
-                bytes.len(),
-                Self::MAX_LENGTH_IN_BYTES
-            )));
-        }
-        if bytes.len() > Self::MAX_LENGTH_IN_BYTES {
-            return Err(SnapshotIdError::InvalidLength(format!(
-                "Invalid snapshot ID length: provided {}, maximum length expected {}.",
-                bytes.len(),
-                Self::MAX_LENGTH_IN_BYTES
-            )));
-        }
+impl<'de> Deserialize<'de> for SnapshotId {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+        D::Error: serde::de::Error,
+    {
+        let bytes = ByteBuf::deserialize(deserializer)?.to_vec();
+        SnapshotId::try_from(bytes).map_err(serde::de::Error::custom)
+    }
+}
 
-        let canister_id =
-            CanisterId::try_from(&bytes[Self::LOCAL_ID_LENGTH_IN_BYTES..]).map_err(|_| {
-                SnapshotIdError::InvalidFormat(
-                    "Failed to create a Snapshot ID. Input could not be parsed into a Snapshot ID."
-                        .to_string(),
-                )
-            })?;
+impl CandidType for SnapshotId {
+    fn _ty() -> candid::types::Type {
+        ByteBuf::_ty()
+    }
 
-        let mut slice = [0u8; 8];
-        slice.copy_from_slice(&bytes[..Self::LOCAL_ID_LENGTH_IN_BYTES]);
-        let local_id = u64::from_be_bytes(slice);
-
-        Ok(SnapshotId::from((canister_id, local_id)))
+    fn idl_serialize<S>(&self, serializer: S) -> Result<(), S::Error>
+    where
+        S: candid::types::Serializer,
+    {
+        ByteBuf::from(self.to_vec()).idl_serialize(serializer)
     }
 }
 
@@ -273,14 +300,36 @@ impl TryFrom<pbSnapshot> for SnapshotId {
     type Error = ProxyDecodeError;
 
     fn try_from(pb_snapshot_id: pbSnapshot) -> Result<Self, Self::Error> {
-        SnapshotId::try_from(&pb_snapshot_id.content)
+        SnapshotId::try_from(pb_snapshot_id.content)
             .map_err(|_| ProxyDecodeError::Other("Invalid snapshot ID".to_string()))
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use candid::{Decode, Encode};
+
     pub use crate::{CanisterId, SnapshotId};
+
+    #[test]
+    fn invalid_snapshot_id_fails() {
+        SnapshotId::try_from(vec![4, 5, 6, 6]).unwrap_err();
+    }
+
+    #[test]
+    fn invalid_blob_fails() {
+        Decode!(&[4, 5, 6, 6], SnapshotId).unwrap_err();
+    }
+
+    #[test]
+    fn snapshot_id_roundtrip() {
+        let canister_id = CanisterId::from_u64(243425);
+        let local_id: u64 = 4;
+        let snapshot_id = SnapshotId::from((canister_id, local_id));
+        let bytes = Encode!(&snapshot_id).unwrap();
+        let snapshot_id_decoded = Decode!(&bytes, SnapshotId).unwrap();
+        assert_eq!(snapshot_id, snapshot_id_decoded);
+    }
 
     #[test]
     fn test_snapshot_id_creation() {
