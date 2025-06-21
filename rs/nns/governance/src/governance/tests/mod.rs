@@ -1637,7 +1637,7 @@ fn test_compute_ballots_for_new_proposal() {
         neuron_id_or_subaccount: None,
         command: None,
     }));
-    let (ballots, tot_potential_voting_power) = governance
+    let (ballots, tot_potential_voting_power, _previous_ballots_timestamp_seconds) = governance
         .compute_ballots_for_new_proposal(&manage_neuron_action, &NeuronId { id: 10 }, now_seconds)
         .expect("Failed computing ballots for new proposal");
 
@@ -1657,7 +1657,7 @@ fn test_compute_ballots_for_new_proposal() {
     );
 
     let motion_action = Action::Motion(Default::default());
-    let (ballots, tot_potential_voting_power) = governance
+    let (ballots, tot_potential_voting_power, _previous_ballots_timestamp_seconds) = governance
         .compute_ballots_for_new_proposal(&motion_action, &NeuronId { id: 10 }, now_seconds)
         .expect("Failed computing ballots for new proposal");
     // Similar to previous; this time though, Action::ManageNeuron, the weird
@@ -1688,7 +1688,7 @@ fn test_compute_ballots_for_new_proposal() {
     // Not affected by refresh.
     let now_seconds = CREATED_TIMESTAMP_SECONDS + 20 * ONE_YEAR_SECONDS;
 
-    let (ballots, tot_potential_voting_power) = governance
+    let (ballots, tot_potential_voting_power, _previous_ballots_timestamp_seconds) = governance
         .compute_ballots_for_new_proposal(&motion_action, &NeuronId { id: 10 }, now_seconds)
         .expect("Failed computing ballots for new proposal");
     let expected: u64 = governance.neuron_store.with_active_neurons_iter(|iter| {

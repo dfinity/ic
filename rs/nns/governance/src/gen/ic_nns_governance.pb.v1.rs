@@ -1445,6 +1445,12 @@ pub struct ProposalData {
     /// The topic of the proposal.
     #[prost(enumeration = "Topic", optional, tag = "23")]
     pub topic: ::core::option::Option<i32>,
+    /// When a voting power spike is detected, ballots are created using a previous snapshot of the
+    /// voting power, and this field indicates the timestamp at which the snapshot was taken. This
+    /// field should not be set in normal circumstances, and if it is set, it is an indicator that a
+    /// bug might have caused the voting power spike.
+    #[prost(uint64, optional, tag = "24")]
+    pub previous_ballots_timestamp_seconds: ::core::option::Option<u64>,
 }
 /// This structure contains data for settling the Neurons' Fund participation in an SNS token swap.
 #[derive(

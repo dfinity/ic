@@ -1432,6 +1432,8 @@ impl From<pb_api::ProposalData> for pb::ProposalData {
             neurons_fund_data: item.neurons_fund_data.map(|x| x.into()),
             total_potential_voting_power: item.total_potential_voting_power,
             topic: item.topic,
+            // This is not intended to be initialized from outside of canister.
+            previous_ballots_timestamp_seconds: None,
         }
     }
 }
