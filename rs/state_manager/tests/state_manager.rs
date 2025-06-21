@@ -1224,6 +1224,30 @@ fn missing_manifests_are_recomputed() {
 }
 
 #[test]
+fn missing_manifest_is_computed_incrementally() {
+    state_manager_restart_test_with_metrics(|_metrics, mut state_manager, restart_fn| {
+        use ic_state_manager::testing::StateManagerTesting;
+
+        // Write checkpoints at height 1 and 2 to the disk.
+        for h in [1, 2] {
+            let (_height, state) = state_manager.take_tip();
+            state_manager.commit_and_certify(state, height(h), CertificationScope::Full, None);
+            wait_for_checkpoint(&state_manager, height(h));
+        }
+
+        // The manifest at height 2 should now exist; purge it.
+        assert!(state_manager.purge_manifest(height(2)));
+
+        // There should now be a state with manifest at height 1 and one without manifest at
+        // height 2; restarting should result in an incremental manifest computation.
+        let (metrics, state_manager) = restart_fn(state_manager, Some(height(2)));
+        wait_for_checkpoint(&state_manager, height(2));
+
+        assert!(any_manifest_was_incremental(&metrics));
+    });
+}
+
+#[test]
 fn validate_replicated_state_is_called() {
     fn validate_was_called(metrics: &MetricsRegistry) -> bool {
         let request_duration = fetch_histogram_vec_stats(

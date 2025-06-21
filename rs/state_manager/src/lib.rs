@@ -1049,7 +1049,7 @@ fn report_last_diverged_state(
     )
 }
 
-/// Type for the return value of populate_metadata
+/// Type for the return value of `populate_metadata`
 #[derive(Default)]
 struct PopulatedMetadata {
     certifications_metadata: CertificationsMetadata,
@@ -1396,6 +1396,24 @@ impl StateManagerImpl {
         metrics.min_resident_height.set(last_snapshot_height);
         metrics.max_resident_height.set(last_snapshot_height);
 
+        // Find the largest height where both the `manifest` and the `checkpoint_layout` are available.
+        let manifest_delta_input =
+            states_metadata
+                .iter()
+                .rev()
+                .find_map(|(height, metadata)| match metadata {
+                    StateMetadata {
+                        checkpoint_layout: Some(checkpoint_layout),
+                        bundled_manifest: Some(bundled_manifest),
+                        ..
+                    } => Some((
+                        *height,
+                        bundled_manifest.manifest.clone(),
+                        checkpoint_layout.clone(),
+                    )),
+                    _ => None,
+                });
+
         let states = Arc::new(parking_lot::RwLock::new(SharedState {
             certifications_metadata,
             states_metadata,
@@ -1411,10 +1429,20 @@ impl StateManagerImpl {
             DeallocatorThread::new("StateDeallocator", Duration::from_millis(1));
 
         for checkpoint_layout in checkpoint_layouts_to_compute_manifest {
+            let target_height = checkpoint_layout.height();
             tip_channel
                 .send(TipRequest::ComputeManifest {
                     checkpoint_layout,
-                    manifest_delta: None,
+                    manifest_delta: manifest_delta_input.clone().map(
+                        |(base_height, base_manifest, base_checkpoint)| {
+                            crate::manifest::ManifestDelta {
+                                base_manifest,
+                                base_height,
+                                target_height,
+                                base_checkpoint,
+                            }
+                        },
+                    ),
                     states: states.clone(),
                     persist_metadata_guard: persist_metadata_guard.clone(),
                 })
@@ -1442,6 +1470,7 @@ impl StateManagerImpl {
             latest_height_update_time: Arc::new(Mutex::new(Instant::now())),
         }
     }
+
     /// Returns the Page Allocator file descriptor factory. This will then be
     /// used down the line in hypervisor and state to pass to the page allocators
     /// that are instantiated by the page maps
@@ -3736,6 +3765,38 @@ impl PageAllocatorFileDescriptorImpl {
                     err
                 )
             }
+        }
+    }
+}
+
+pub mod testing {
+    use super::*;
+
+    pub trait StateManagerTesting {
+        /// Testing only: Purges the `manifest` at `height` in `states.states_metadata`.
+        fn purge_manifest(&mut self, height: Height) -> bool;
+    }
+
+    impl StateManagerTesting for StateManagerImpl {
+        fn purge_manifest(&mut self, height: Height) -> bool {
+            let mut guard = self.states.write();
+            let purged = match guard.states_metadata.get_mut(&height) {
+                Some(metadata) => {
+                    metadata.bundled_manifest = None;
+                    true
+                }
+                None => false,
+            };
+            if purged {
+                release_lock_and_persist_metadata(
+                    &self.log,
+                    &self.metrics,
+                    &self.state_layout,
+                    guard,
+                    &self.persist_metadata_guard,
+                );
+            }
+            purged
         }
     }
 }
