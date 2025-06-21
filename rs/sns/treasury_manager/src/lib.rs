@@ -58,7 +58,6 @@ pub struct AuditTrailRequest {}
 pub enum TreasuryManagerOperation {
     Deposit,
     Balances,
-    Metadata,
     IssueReward,
     Withdraw,
 }

@@ -2292,7 +2292,7 @@ impl Governance {
 
         // Step 2. Install the code.
         let sns_token = Asset::Token {
-            symbol: "Kanye".to_string(),
+            symbol: "SNS".to_string(),
             ledger_canister_id: self.ledger.canister_id().get().0,
         };
 
