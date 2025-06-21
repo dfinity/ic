@@ -2,6 +2,7 @@ use crate::{
     deploy::DirectSnsDeployerForTests, health::HealthArgs, init_config_file::InitConfigFileArgs,
     neuron_id_to_candid_subaccount::NeuronIdToCandidSubaccountArgs,
     prepare_canisters::PrepareCanistersArgs, propose::ProposeArgs,
+    register_extension::RegisterExtensionArgs,
     upgrade_sns_controlled_canister::UpgradeSnsControlledCanisterArgs,
 };
 use anyhow::{anyhow, bail, Context, Result};
@@ -36,6 +37,7 @@ pub mod list;
 pub mod neuron_id_to_candid_subaccount;
 pub mod prepare_canisters;
 pub mod propose;
+pub mod register_extension;
 mod table;
 pub mod unit_helpers;
 pub mod upgrade_sns_controlled_canister;
@@ -130,6 +132,7 @@ pub enum SubCommand {
     UpgradeSnsControlledCanister(UpgradeSnsControlledCanisterArgs),
     /// Attempts to refund the unused cycles after an SNS-controlled canister has been upgraded.
     RefundAfterSnsControlledCanisterUpgrade(RefundAfterSnsControlledCanisterUpgradeArgs),
+    RegisterExtension(RegisterExtensionArgs),
 }
 
 impl CliArgs {
