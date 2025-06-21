@@ -2983,6 +2983,7 @@ pub use ic_btc_replica_types::{
     GetSuccessorsRequestInitial as BitcoinGetSuccessorsRequestInitial,
     GetSuccessorsResponse as BitcoinGetSuccessorsResponse,
     GetSuccessorsResponseComplete as BitcoinGetSuccessorsResponseComplete,
+    GetSuccessorsResponsePartial as BitcoinGetSuccessorsResponsePartial,
     SendTransactionRequest as BitcoinSendTransactionInternalArgs,
 };
 
