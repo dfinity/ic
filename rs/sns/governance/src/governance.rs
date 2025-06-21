@@ -122,7 +122,7 @@ use lazy_static::lazy_static;
 use maplit::{btreemap, hashset};
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
-use sns_treasury_manager::{Allowance, Asset, TreasuryManagerArg, TreasuryManagerInit};
+use sns_treasury_manager::{self, Allowance, Asset, TreasuryManagerArg, TreasuryManagerInit};
 use std::{
     cell::RefCell,
     cmp::Ordering,
@@ -2294,14 +2294,23 @@ impl Governance {
         let sns_token = Asset::Token {
             symbol: "SNS".to_string(),
             ledger_canister_id: self.ledger.canister_id().get().0,
+            ledger_fee_decimals: Nat::from(self.transaction_fee_e8s_or_panic()),
         };
 
         let icp_token = Asset::Token {
             symbol: "ICP".to_string(),
             ledger_canister_id: self.nns_ledger.canister_id().get().0,
+            ledger_fee_decimals: Nat::from(NNS_DEFAULT_TRANSFER_FEE.get_e8s()),
         };
 
         // Step 2. Perform pre-installation actions.
+
+        let (treasury_icp_subaccount, treasury_sns_subaccount) = (None, Some(compute_distribution_subaccount_bytes(
+            self.env.canister_id().get(),
+            TREASURY_SUBACCOUNT_NONCE,
+        )));
+
+        // See ic_sns_init::distributions::FractionalDeveloperVotingPower.insert_treasury_accounts
         let (sns_token_allowance_e8s, icp_token_allowance_e8s) = if let Some(ExtensionInit {
             value:
                 Some(PreciseValue {
@@ -2363,9 +2372,9 @@ impl Governance {
                 .transfer_funds(
                     icp_amount_e8s,
                     NNS_DEFAULT_TRANSFER_FEE.get_e8s(),
-                    None,
+                    treasury_icp_subaccount,
                     to,
-                    1234, // TODO
+                    0,
                 )
                 .await
                 .map(|_| ())
@@ -2376,30 +2385,22 @@ impl Governance {
                     )
                 })?;
 
-            {
-                let transaction_fee_e8s = self.transaction_fee_e8s_or_panic();
-                // See ic_sns_init::distributions::FractionalDeveloperVotingPower.insert_treasury_accounts
-                let treasury_subaccount = compute_distribution_subaccount_bytes(
-                    self.env.canister_id().get(),
-                    TREASURY_SUBACCOUNT_NONCE,
-                );
-                self.ledger
-                    .transfer_funds(
-                        sns_amount_e8s,
-                        transaction_fee_e8s,
-                        Some(treasury_subaccount),
-                        to,
-                        1234, // TODO
+            self.ledger
+                .transfer_funds(
+                    sns_amount_e8s,
+                    self.transaction_fee_e8s_or_panic(),
+                    treasury_sns_subaccount,
+                    to,
+                    0,
+                )
+                .await
+                .map(|_| ())
+                .map_err(|e| {
+                    GovernanceError::new_with_message(
+                        ErrorType::External,
+                        format!("Error making SNS Token treasury transfer: {}", e),
                     )
-                    .await
-                    .map(|_| ())
-                    .map_err(|e| {
-                        GovernanceError::new_with_message(
-                            ErrorType::External,
-                            format!("Error making SNS Token treasury transfer: {}", e),
-                        )
-                    })?;
-            }
+                })?;
 
             (sns_amount_e8s, icp_amount_e8s)
         } else {
@@ -2411,12 +2412,18 @@ impl Governance {
                 Allowance {
                     amount_decimals: Nat::from(sns_token_allowance_e8s),
                     asset: sns_token,
-                    expected_ledger_fee_decimals: Nat::from(self.transaction_fee_e8s_or_panic()),
+                    owner_account: sns_treasury_manager::Account {
+                        owner: store_canister_id.get().0,
+                        subaccount: treasury_icp_subaccount,
+                    },
                 },
                 Allowance {
                     amount_decimals: Nat::from(icp_token_allowance_e8s),
                     asset: icp_token,
-                    expected_ledger_fee_decimals: Nat::from(NNS_DEFAULT_TRANSFER_FEE.get_e8s()),
+                    owner_account: sns_treasury_manager::Account {
+                        owner: store_canister_id.get().0,
+                        subaccount: treasury_sns_subaccount,
+                    }
                 },
             ],
         });

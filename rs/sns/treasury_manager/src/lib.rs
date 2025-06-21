@@ -22,7 +22,7 @@ pub struct Balances {
     pub timestamp_ns: u64,
 }
 
-pub type TreasuryManagerResult = Result<Balances, TransactionError>;
+pub type TreasuryManagerResult = Result<Balances, Vec<TransactionError>>;
 
 pub trait TreasuryManager {
     fn deposit(
@@ -48,8 +48,19 @@ pub struct DepositRequest {
 #[derive(CandidType, Clone, Debug, Deserialize, PartialEq)]
 pub struct BalancesRequest {}
 
+pub type Subaccount = [u8; 32];
+
+#[derive(CandidType, Clone, Debug, PartialEq, Eq, Hash, Deserialize)]
+pub struct Account {
+    pub owner: Principal,
+    pub subaccount: Option<Subaccount>,
+}
+
 #[derive(CandidType, Clone, Debug, Deserialize, PartialEq)]
-pub struct WithdrawRequest {}
+pub struct WithdrawRequest {
+    /// Maps ledger canister ID to the account to withdraw from.
+    pub withdraw_accounts: BTreeMap<Principal, Account>,
+}
 
 #[derive(CandidType, Clone, Debug, Deserialize, PartialEq)]
 pub struct AuditTrailRequest {}
@@ -60,6 +71,22 @@ pub enum TreasuryManagerOperation {
     Balances,
     IssueReward,
     Withdraw,
+}
+
+/// To be used for ledger transaction memos.
+impl From<TreasuryManagerOperation> for Vec<u8> {
+    fn from(op: TreasuryManagerOperation) -> Self {
+        const PREFIX: &str = "TreasuryManager";
+
+        let suffix = match op {
+            TreasuryManagerOperation::Deposit     => "deposit",
+            TreasuryManagerOperation::Balances    => "balances",
+            TreasuryManagerOperation::IssueReward => "reward",
+            TreasuryManagerOperation::Withdraw    => "withdraw",
+        };
+
+        format!("{}.{}", PREFIX, suffix).as_bytes().to_vec()
+    }
 }
 
 #[derive(CandidType, Clone, Debug, Deserialize, PartialEq)]
@@ -117,6 +144,7 @@ pub enum Asset {
     Token {
         symbol: String,
         ledger_canister_id: Principal,
+        ledger_fee_decimals: Nat,
     },
 }
 
@@ -124,12 +152,11 @@ pub enum Asset {
 pub struct Allowance {
     pub asset: Asset,
 
-    // Total amount that may be consumed, including the fees.
+    /// Total amount that may be consumed, including the fees.
     pub amount_decimals: Nat,
 
-    // Sets the expected fee per ledger transaction; transactions should fail if the actual
-    // ledger fee is unexpected.
-    pub expected_ledger_fee_decimals: Nat,
+    /// The owner account is used to return the leftover assets and issue rewards.
+    pub owner_account: Account,
 }
 
 #[derive(CandidType, Clone, Debug, Deserialize)]

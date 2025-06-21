@@ -5,6 +5,7 @@ use ic_base_types::PrincipalId;
 use ic_nervous_system_agent::pocketic_impl::PocketIcAgent;
 use ic_nervous_system_agent::sns::Sns;
 use ic_nervous_system_agent::CallCanisters;
+use ic_nervous_system_common::ledger::compute_distribution_subaccount_bytes;
 use ic_nervous_system_common::E8;
 use ic_nervous_system_common::ONE_MONTH_SECONDS;
 use ic_nervous_system_integration_tests::create_service_nervous_system_builder::CreateServiceNervousSystemBuilder;
@@ -20,6 +21,7 @@ use ic_sns_cli::neuron_id_to_candid_subaccount::ParsedSnsNeuron;
 use ic_sns_cli::register_extension;
 use ic_sns_cli::register_extension::RegisterExtensionArgs;
 use ic_sns_cli::register_extension::RegisterExtensionInfo;
+use ic_sns_governance::governance::TREASURY_SUBACCOUNT_NONCE;
 use ic_sns_init::pb::v1::sns_init_payload::InitialTokenDistribution;
 use ic_sns_swap::pb::v1::Lifecycle;
 use icp_ledger::{AccountIdentifier, Tokens, DEFAULT_TRANSFER_FEE};
@@ -29,6 +31,7 @@ use maplit::btreemap;
 use pocket_ic::nonblocking::PocketIc;
 use pocket_ic::PocketIcBuilder;
 use pretty_assertions::assert_eq;
+use sns_treasury_manager;
 use sns_treasury_manager::Allowance;
 use sns_treasury_manager::Asset;
 use sns_treasury_manager::AuditTrailRequest;
@@ -131,12 +134,25 @@ async fn test_treasury_manager() {
     let sns_token = Asset::Token {
         symbol: "Kanye".to_string(),
         ledger_canister_id: sns_ledger_canister_id.get().0,
+        ledger_fee_decimals: Nat::from(SNS_FEE),
     };
 
     let icp_token = Asset::Token {
         symbol: "ICP".to_string(),
         ledger_canister_id: LEDGER_CANISTER_ID.get().0,
+        ledger_fee_decimals: Nat::from(ICP_FEE),
     };
+
+    let initial_icp_balance_e8s = 64_999_999_990_000;
+    let initial_sns_balance_e8s = 40_000_000_000;
+
+    validate_treasury_balances(
+        "Before registering KongSwapAdaptor",
+        &sns,
+        &pocket_ic,
+        initial_icp_balance_e8s,
+        initial_sns_balance_e8s,
+    ).await.unwrap();
 
     let adaptor_canister_id = {
         let (neuron_id, sender) = sns::governance::find_neuron_with_majority_voting_power(
@@ -194,6 +210,14 @@ async fn test_treasury_manager() {
         pocket_ic.advance_time(Duration::from_secs(100)).await;
     }
 
+    validate_treasury_balances(
+        "After registering KongSwapAdaptor",
+        &sns,
+        &pocket_ic,
+        initial_icp_balance_e8s - 150 * E8 - 3 * ICP_FEE,
+        initial_sns_balance_e8s - 350 * E8 - 3 * SNS_FEE,
+    ).await.unwrap();
+
     {
         let request = BalancesRequest {};
         let response = pocket_ic
@@ -213,8 +237,21 @@ async fn test_treasury_manager() {
     }
 
     let _withdrawn_amounts = {
+        let withdraw_accounts = btreemap! {
+            sns.ledger.canister_id.0 => sns_treasury_manager::Account {
+                owner: sns.governance.canister_id.0,
+                subaccount: Some(compute_distribution_subaccount_bytes(
+                    sns.governance.canister_id,
+                    TREASURY_SUBACCOUNT_NONCE,
+                )),
+            },
+            LEDGER_CANISTER_ID.get().0 => sns_treasury_manager::Account {
+                owner: sns.governance.canister_id.0,
+                subaccount: None,
+            },
+        };
         let response = PocketIcAgent::new(&pocket_ic, sns.root.canister_id)
-            .call(adaptor_canister_id, WithdrawRequest {})
+            .call(adaptor_canister_id, WithdrawRequest { withdraw_accounts })
             .await
             .unwrap()
             .unwrap();
@@ -222,11 +259,19 @@ async fn test_treasury_manager() {
         assert_eq!(
             response.balances,
             btreemap! {
-                icp_token => Nat::from(150 * E8),
-                sns_token => Nat::from(350 * E8),
+                icp_token => Nat::from(150 * E8 - 2 * ICP_FEE),
+                sns_token => Nat::from(350 * E8 - 2 * SNS_FEE),
             },
         );
     };
+
+    validate_treasury_balances(
+        "After withdrawing.",
+        &sns,
+        &pocket_ic,
+        initial_icp_balance_e8s - 5 * ICP_FEE,
+        initial_sns_balance_e8s - 5 * SNS_FEE,
+    ).await.unwrap();
 
     // let audit_trail = adaptor_canister_id.audit_trail();
 
@@ -333,51 +378,39 @@ async fn deploy_sns(pocket_ic: &PocketIc, with_mainnet_sns_canisters: bool) -> S
     sns
 }
 
-async fn validate_balances(
+async fn validate_treasury_balances(
     lebel: &str,
     sns: &Sns,
     pocket_ic: &PocketIc,
-    owner: PrincipalId,
     icp_balance_e8s: u64,
     sns_balance_e8s: u64,
-) -> Result<(AccountIdentifier, Account), String> {
-    let icp_account = {
-        let icp_account = AccountIdentifier::new(owner, None);
+) -> Result<(), String> {
 
-        let observed_icp_tokens = nns::ledger::account_balance(pocket_ic, &icp_account).await;
+    let sns_treasury_subaccount = compute_distribution_subaccount_bytes(
+        sns.governance.canister_id,
+        TREASURY_SUBACCOUNT_NONCE,
+    );
 
-        let expected_icp_tokens = Tokens::from_e8s(icp_balance_e8s);
+    let owner = sns.governance.canister_id.0;
 
-        if observed_icp_tokens != expected_icp_tokens {
+    for (token_name, ledger_canister_id, subaccount, expected_balance_e8s) in [
+        ("ICP", LEDGER_CANISTER_ID.get(), None, icp_balance_e8s),
+        ("SNS", sns.ledger.canister_id, Some(sns_treasury_subaccount), sns_balance_e8s),
+    ] {
+        let account = Account { owner, subaccount };
+
+        let observed_balance_e8s =
+            sns::ledger::icrc1_balance_of(pocket_ic, ledger_canister_id, account).await;
+
+        let expected_balance_e8s = Nat::from(expected_balance_e8s);
+
+        if observed_balance_e8s != expected_balance_e8s {
             return Err(format!(
-                "[{}] Expected ICP balance of {} = {}, got {}.",
-                lebel, owner, expected_icp_tokens, observed_icp_tokens
+                "[{}] Expected treasury {} balance of {}, got {}.",
+                lebel, token_name, expected_balance_e8s, observed_balance_e8s
             ));
         }
-
-        icp_account
     };
 
-    let sns_account = {
-        let sns_account = Account {
-            owner: owner.0,
-            subaccount: None,
-        };
-
-        let observed_sns_tokens =
-            sns::ledger::icrc1_balance_of(pocket_ic, sns.ledger.canister_id, sns_account).await;
-
-        let expected_sns_tokens = Nat::from(sns_balance_e8s);
-
-        if observed_sns_tokens != expected_sns_tokens {
-            return Err(format!(
-                "[{}] Expected SNS balance of {} = {}, got {}.",
-                lebel, owner, expected_sns_tokens, observed_sns_tokens
-            ));
-        }
-
-        sns_account
-    };
-
-    Ok((icp_account, sns_account))
+    Ok(())
 }
