@@ -1194,6 +1194,15 @@ pub fn get_malicious_ic_os_img_sha256() -> Result<String> {
     Ok(std::env::var("ENV_DEPS__GUESTOS_MALICIOUS_DISK_IMG_HASH")?)
 }
 
+pub fn get_recovery_ic_os_img_url() -> Result<Url> {
+    let url = std::env::var("ENV_DEPS__GUESTOS_RECOVERY_DISK_IMG_URL")?;
+    Ok(Url::parse(&url)?)
+}
+
+pub fn get_recovery_ic_os_img_sha256() -> Result<String> {
+    Ok(std::env::var("ENV_DEPS__GUESTOS_RECOVERY_DISK_IMG_HASH")?)
+}
+
 pub fn get_ic_os_update_img_url() -> Result<Url> {
     let url = std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_URL")?;
     Ok(Url::parse(&url)?)
