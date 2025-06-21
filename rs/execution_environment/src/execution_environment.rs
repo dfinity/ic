@@ -91,14 +91,9 @@ use ic_utils_thread::deallocator_thread::{DeallocationSender, DeallocatorThread}
 use ic_wasm_types::WasmHash;
 use phantom_newtype::AmountOf;
 use prometheus::IntCounter;
-use rand::RngCore;
+use rand::{seq::SliceRandom, RngCore};
 use std::{
-    collections::{BTreeMap, HashMap},
-    convert::{Into, TryFrom},
-    fmt,
-    str::FromStr,
-    sync::{Arc, Mutex},
-    time::{Duration, Instant},
+    collections::{BTreeMap, HashMap}, convert::{Into, TryFrom}, fmt, io::Read, str::FromStr, sync::{Arc, Mutex}, time::{Duration, Instant}
 };
 use strum::ParseError;
 
@@ -984,6 +979,15 @@ impl ExecutionEnvironment {
                                     refund: msg.take_cycles(),
                                 },
                                 Ok(mut canister_http_request_context) => {
+ 
+
+                                    //TODO(Mihai): this is deterministic right
+                                    let mut node_ids = registry_settings.node_ids.iter().collect::<Vec<_>>();
+                                    node_ids.shuffle(rng);
+                                    //TODO(Mihai): do something smarter here, also error handling. 
+
+                                    canister_http_request_context.delegated_node_id = Some(*node_ids[0]);
+
                                     let http_request_fee =
                                         self.cycles_account_manager.http_request_fee(
                                             canister_http_request_context.variable_parts_size(),

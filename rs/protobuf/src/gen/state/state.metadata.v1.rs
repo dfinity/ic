@@ -184,6 +184,10 @@ pub struct CanisterHttpRequestContext {
     pub max_response_bytes: ::core::option::Option<u64>,
     #[prost(message, optional, tag = "10")]
     pub transform_context: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    #[prost(bool, optional, tag = "11")]
+    pub is_one_of: ::core::option::Option<bool>,
+    #[prost(message, optional, tag = "12")]
+    pub delegated_node_id: ::core::option::Option<super::super::super::types::v1::NodeId>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpRequestContextTree {
