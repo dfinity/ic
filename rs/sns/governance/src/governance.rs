@@ -2305,10 +2305,13 @@ impl Governance {
 
         // Step 2. Perform pre-installation actions.
 
-        let (treasury_icp_subaccount, treasury_sns_subaccount) = (None, Some(compute_distribution_subaccount_bytes(
-            self.env.canister_id().get(),
-            TREASURY_SUBACCOUNT_NONCE,
-        )));
+        let (treasury_icp_subaccount, treasury_sns_subaccount) = (
+            None,
+            Some(compute_distribution_subaccount_bytes(
+                self.env.canister_id().get(),
+                TREASURY_SUBACCOUNT_NONCE,
+            )),
+        );
 
         // See ic_sns_init::distributions::FractionalDeveloperVotingPower.insert_treasury_accounts
         let (sns_token_allowance_e8s, icp_token_allowance_e8s) = if let Some(ExtensionInit {
@@ -2423,7 +2426,7 @@ impl Governance {
                     owner_account: sns_treasury_manager::Account {
                         owner: store_canister_id.get().0,
                         subaccount: treasury_sns_subaccount,
-                    }
+                    },
                 },
             ],
         });

@@ -152,7 +152,9 @@ async fn test_treasury_manager() {
         &pocket_ic,
         initial_icp_balance_e8s,
         initial_sns_balance_e8s,
-    ).await.unwrap();
+    )
+    .await
+    .unwrap();
 
     let adaptor_canister_id = {
         let (neuron_id, sender) = sns::governance::find_neuron_with_majority_voting_power(
@@ -216,7 +218,9 @@ async fn test_treasury_manager() {
         &pocket_ic,
         initial_icp_balance_e8s - 150 * E8 - 3 * ICP_FEE,
         initial_sns_balance_e8s - 350 * E8 - 3 * SNS_FEE,
-    ).await.unwrap();
+    )
+    .await
+    .unwrap();
 
     {
         let request = BalancesRequest {};
@@ -271,7 +275,9 @@ async fn test_treasury_manager() {
         &pocket_ic,
         initial_icp_balance_e8s - 5 * ICP_FEE,
         initial_sns_balance_e8s - 5 * SNS_FEE,
-    ).await.unwrap();
+    )
+    .await
+    .unwrap();
 
     // let audit_trail = adaptor_canister_id.audit_trail();
 
@@ -385,7 +391,6 @@ async fn validate_treasury_balances(
     icp_balance_e8s: u64,
     sns_balance_e8s: u64,
 ) -> Result<(), String> {
-
     let sns_treasury_subaccount = compute_distribution_subaccount_bytes(
         sns.governance.canister_id,
         TREASURY_SUBACCOUNT_NONCE,
@@ -395,7 +400,12 @@ async fn validate_treasury_balances(
 
     for (token_name, ledger_canister_id, subaccount, expected_balance_e8s) in [
         ("ICP", LEDGER_CANISTER_ID.get(), None, icp_balance_e8s),
-        ("SNS", sns.ledger.canister_id, Some(sns_treasury_subaccount), sns_balance_e8s),
+        (
+            "SNS",
+            sns.ledger.canister_id,
+            Some(sns_treasury_subaccount),
+            sns_balance_e8s,
+        ),
     ] {
         let account = Account { owner, subaccount };
 
@@ -410,7 +420,7 @@ async fn validate_treasury_balances(
                 lebel, token_name, expected_balance_e8s, observed_balance_e8s
             ));
         }
-    };
+    }
 
     Ok(())
 }
