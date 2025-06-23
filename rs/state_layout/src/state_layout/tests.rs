@@ -60,6 +60,7 @@ fn default_canister_state_bits() -> CanisterStateBits {
         wasm_memory_limit: None,
         next_snapshot_id: 0,
         snapshots_memory_usage: NumBytes::from(0),
+        environment_variables: BTreeMap::new(),
     }
 }
 
@@ -143,10 +144,10 @@ fn test_encode_decode_non_empty_history() {
         42,
         0,
         CanisterChangeOrigin::from_user(user_test_id(42).get()),
-        CanisterChangeDetails::canister_creation(vec![
-            canister_test_id(777).get(),
-            user_test_id(42).get(),
-        ]),
+        CanisterChangeDetails::canister_creation(
+            vec![canister_test_id(777).get(), user_test_id(42).get()],
+            Some(vec![4; 32]),
+        ),
     ));
     canister_history.add_canister_change(CanisterChange::new(
         123,
@@ -187,6 +188,33 @@ fn test_encode_decode_non_empty_history() {
         CanisterChangeOrigin::from_canister(canister_test_id(123).get(), None),
         CanisterChangeDetails::controllers_change(vec![]),
     ));
+    canister_history.add_canister_change(CanisterChange::new(
+        555,
+        7,
+        CanisterChangeOrigin::from_canister(canister_test_id(123).get(), None),
+        CanisterChangeDetails::settings_change(None, Some(vec![1, 2, 3, 4, 5])),
+    ));
+    canister_history.add_canister_change(CanisterChange::new(
+        555,
+        7,
+        CanisterChangeOrigin::from_canister(canister_test_id(123).get(), None),
+        CanisterChangeDetails::settings_change(Some(vec![]), Some(vec![1, 2, 3, 4, 5])),
+    ));
+    canister_history.add_canister_change(CanisterChange::new(
+        555,
+        7,
+        CanisterChangeOrigin::from_canister(canister_test_id(123).get(), None),
+        CanisterChangeDetails::settings_change(
+            Some(vec![canister_test_id(123).into()]),
+            Some(vec![1, 2, 3, 4, 5]),
+        ),
+    ));
+    canister_history.add_canister_change(CanisterChange::new(
+        555,
+        7,
+        CanisterChangeOrigin::from_canister(canister_test_id(123).get(), None),
+        CanisterChangeDetails::settings_change(Some(vec![canister_test_id(123).into()]), None),
+    ));
 
     // A canister state with non-empty history.
     let canister_state_bits = CanisterStateBits {
@@ -225,6 +253,41 @@ fn test_canister_snapshots_decode() {
     let new_canister_snapshot_bits = CanisterSnapshotBits::try_from(pb_bits).unwrap();
 
     assert_eq!(canister_snapshot_bits, new_canister_snapshot_bits);
+}
+
+#[test]
+fn test_encode_decode_empty_environment_variables() {
+    // A canister state with empty environment variables.
+    let canister_state_bits = CanisterStateBits {
+        environment_variables: BTreeMap::new(),
+        ..default_canister_state_bits()
+    };
+    let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
+
+    let decoded_canister_state_bits = CanisterStateBits::try_from(pb_bits).unwrap();
+    assert_eq!(
+        decoded_canister_state_bits.environment_variables,
+        BTreeMap::new()
+    );
+}
+
+#[test]
+fn test_encode_decode_non_empty_environment_variables() {
+    let mut environment_variables = BTreeMap::new();
+    environment_variables.insert("KEY1".to_string(), "VALUE1".to_string());
+    environment_variables.insert("KEY2".to_string(), "VALUE2".to_string());
+
+    // A canister state with non-empty environment variables.
+    let canister_state_bits = CanisterStateBits {
+        environment_variables: environment_variables.clone(),
+        ..default_canister_state_bits()
+    };
+    let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
+    let decoded_canister_state_bits = CanisterStateBits::try_from(pb_bits).unwrap();
+    assert_eq!(
+        decoded_canister_state_bits.environment_variables,
+        environment_variables
+    );
 }
 
 #[test]

@@ -2672,7 +2672,7 @@ fn can_state_sync_from_cache() {
         canister_state.system_state.add_canister_change(
             Time::from_nanos_since_unix_epoch(42),
             CanisterChangeOrigin::from_user(user_test_id(42).get()),
-            CanisterChangeDetails::canister_creation(vec![user_test_id(42).get()]),
+            CanisterChangeDetails::canister_creation(vec![user_test_id(42).get()], None),
         );
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         execution_state
