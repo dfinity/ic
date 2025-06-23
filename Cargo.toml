@@ -531,7 +531,6 @@ candid = { version = "0.10.6" }
 candid_parser = { version = "0.1.2" }
 chrono = { version = "0.4.38", default-features = false, features = [
     "alloc",
-    "clock",
     "serde",
 ] }
 ciborium = "0.2.1"
