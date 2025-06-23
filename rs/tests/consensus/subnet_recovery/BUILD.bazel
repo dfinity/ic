@@ -243,6 +243,7 @@ system_test_nns(
     flaky = True,  # flakiness rate of over 2.21% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "experimental_system_test_colocation",
+        "manual",  # disable until it is more stable
         "subnet_recovery",
         "system_test_hourly",
     ],
