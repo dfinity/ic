@@ -30,11 +30,12 @@ pub enum Intent {
 }
 
 impl ConsentMessage {
-    pub fn add_intent(&mut self, intent: Intent, token_symbol: &String) {
+    pub fn add_intent(&mut self, intent: Intent, token_name: Option<String>) {
         match self {
             ConsentMessage::GenericDisplayMessage(message) => match intent {
                 Intent::Transfer => {
-                    message.push_str(&format!("# Send {}", token_symbol));
+                    assert!(token_name.is_some());
+                    message.push_str(&format!("# Send {}", token_name.unwrap()));
                     message
                         .push_str("\n\nYou are approving a transfer of funds from your account.");
                 }
@@ -45,7 +46,8 @@ impl ConsentMessage {
                         );
                 }
                 Intent::TransferFrom => {
-                    message.push_str(&format!("# Spend {}", token_symbol));
+                    assert!(token_name.is_some());
+                    message.push_str(&format!("# Spend {}", token_name.unwrap()));
                     message.push_str(
                         "\n\nYou are approving a transfer of funds from a withdrawal account.",
                     );
@@ -53,13 +55,15 @@ impl ConsentMessage {
             },
             ConsentMessage::FieldsDisplayMessage(fields_display) => match intent {
                 Intent::Transfer => {
-                    fields_display.intent = format!("Send {}", token_symbol);
+                    assert!(token_name.is_some());
+                    fields_display.intent = format!("Send {}", token_name.unwrap());
                 }
                 Intent::Approve => {
                     fields_display.intent = "Approve spending".to_string();
                 }
                 Intent::TransferFrom => {
-                    fields_display.intent = format!("Spend {}", token_symbol);
+                    assert!(token_name.is_some());
+                    fields_display.intent = format!("Spend {}", token_name.unwrap());
                 }
             },
         }

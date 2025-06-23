@@ -4662,7 +4662,7 @@ fn test_icrc21_transfer_message(
         },
     };
 
-    let expected_transfer_message = "# Send XTST
+    let expected_transfer_message = "# Send Test Token
 
 You are approving a transfer of funds from your account.
 
@@ -4681,7 +4681,7 @@ Charged for processing the transfer.
 `test_bytes`";
 
     let expected_fields_message = FieldsDisplay {
-        intent: "Send XTST".to_string(), 
+        intent: "Send Test Token".to_string(), 
         fields: vec![
             ("From".to_string(), "d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101".to_string()), 
             ("Amount".to_string(), "0.01 XTST".to_string()),
@@ -5144,7 +5144,7 @@ fn test_icrc21_transfer_from_message(
         },
     };
 
-    let expected_transfer_from_message = "# Spend XTST
+    let expected_transfer_from_message = "# Spend Test Token
 
 You are approving a transfer of funds from a withdrawal account.
 
@@ -5166,7 +5166,7 @@ Charged for processing the transfer.
 `test_bytes`";
 
     let expected_fields_message = FieldsDisplay {
-        intent: "Spend XTST".to_string(), 
+        intent: "Spend Test Token".to_string(), 
         fields: vec![
             ("From".to_string(), "d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101".to_string()), 
             ("Amount".to_string(), "0.01 XTST".to_string()),

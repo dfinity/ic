@@ -38,6 +38,7 @@ pub struct ConsentMessageBuilder {
     receiver: Option<Account>,
     amount: Option<Nat>,
     token_symbol: Option<String>,
+    token_name: Option<String>,
     ledger_fee: Option<Nat>,
     memo: Option<ByteBuf>,
     expected_allowance: Option<Nat>,
@@ -63,6 +64,7 @@ impl ConsentMessageBuilder {
             receiver: None,
             amount: None,
             token_symbol: None,
+            token_name: None,
             ledger_fee: None,
             utc_offset_minutes: None,
             memo: None,
@@ -99,6 +101,11 @@ impl ConsentMessageBuilder {
 
     pub fn with_token_symbol(mut self, token_symbol: String) -> Self {
         self.token_symbol = Some(token_symbol);
+        self
+    }
+
+    pub fn with_token_name(mut self, token_name: String) -> Self {
+        self.token_name = Some(token_name);
         self
     }
 
@@ -162,6 +169,10 @@ impl ConsentMessageBuilder {
                     error_code: Nat::from(500u64),
                     description: "Token Symbol must be specified.".to_owned(),
                 })?;
+                let token_name = self.token_name.ok_or(Icrc21Error::GenericError {
+                    error_code: Nat::from(500u64),
+                    description: "Token Name must be specified.".to_owned(),
+                })?;
                 let amount = convert_tokens_to_string_representation(
                     self.amount.ok_or(Icrc21Error::GenericError {
                         error_code: Nat::from(500u64),
@@ -170,7 +181,7 @@ impl ConsentMessageBuilder {
                     self.decimals,
                 )?;
 
-                message.add_intent(Intent::Transfer, &token_symbol);
+                message.add_intent(Intent::Transfer, Some(token_name));
                 if from_account.owner != Principal::anonymous() {
                     message.add_account("From", &from_account);
                 }
@@ -237,7 +248,7 @@ impl ConsentMessageBuilder {
                     })
                     .unwrap_or("This approval does not have an expiration.".to_owned());
 
-                message.add_intent(Intent::Approve, &token_symbol);
+                message.add_intent(Intent::Approve, None);
                 if approver_account.owner != Principal::anonymous() {
                     message.add_account("From", &approver_account);
                 }
@@ -283,6 +294,10 @@ impl ConsentMessageBuilder {
                     error_code: Nat::from(500u64),
                     description: "Token symbol must be specified.".to_owned(),
                 })?;
+                let token_name = self.token_name.ok_or(Icrc21Error::GenericError {
+                    error_code: Nat::from(500u64),
+                    description: "Token Name must be specified.".to_owned(),
+                })?;
                 let amount = convert_tokens_to_string_representation(
                     self.amount.ok_or(Icrc21Error::GenericError {
                         error_code: Nat::from(500u64),
@@ -290,7 +305,7 @@ impl ConsentMessageBuilder {
                     })?,
                     self.decimals,
                 )?;
-                message.add_intent(Intent::TransferFrom, &token_symbol);
+                message.add_intent(Intent::TransferFrom, Some(token_name));
                 message.add_account("From", &from_account);
                 message.add_amount(&amount, &token_symbol);
                 if spender_account.owner != Principal::anonymous() {
@@ -314,6 +329,7 @@ pub fn build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
     caller_principal: Principal,
     ledger_fee: Nat,
     token_symbol: String,
+    token_name: String,
     decimals: u8,
 ) -> Result<ConsentInfo, Icrc21Error> {
     if consent_msg_request.arg.len() > MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES as usize {
@@ -337,7 +353,8 @@ pub fn build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
     let mut display_message_builder =
         ConsentMessageBuilder::new(&consent_msg_request.method, decimals)?
             .with_ledger_fee(ledger_fee)
-            .with_token_symbol(token_symbol);
+            .with_token_symbol(token_symbol)
+            .with_token_name(token_name);
 
     if let Some(offset) = consent_msg_request
         .user_preferences
