@@ -24,3 +24,4 @@ rand_chacha = { workspace = true }
 rosetta-core = { path = "../../../rosetta-api/common/rosetta_core" }
 serde_bytes = { workspace = true }
 serde_json = { workspace = true }
+strum = "0.26.3"
