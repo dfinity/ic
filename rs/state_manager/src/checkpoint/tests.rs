@@ -106,7 +106,7 @@ fn make_checkpoint_and_get_state(
 }
 
 fn init(
-    root: &PathBuf,
+    root: &Path,
     log: &ReplicaLogger,
 ) -> (
     JoinOnDrop<()>,
@@ -114,9 +114,10 @@ fn init(
     StateLayout,
     StateManagerMetrics,
 ) {
-    let layout = StateLayout::try_new(log.clone(), root.clone(), &MetricsRegistry::new()).unwrap();
+    let layout =
+        StateLayout::try_new(log.clone(), root.to_path_buf(), &MetricsRegistry::new()).unwrap();
     let tip_handler = layout.capture_tip_handler();
-    let state_manager_metrics = state_manager_metrics(&log);
+    let state_manager_metrics = state_manager_metrics(log);
     let (h, s) = spawn_tip_thread(
         log.clone(),
         tip_handler,
