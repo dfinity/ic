@@ -23,6 +23,7 @@ DEPENDENCIES = [
     "//rs/types/base_types",
     "//rs/types/management_canister_types",
     "@crate_index//:anyhow",
+    "@crate_index//:maplit",
     "@crate_index//:base64",
     "@crate_index//:candid",
     "@crate_index//:clap",

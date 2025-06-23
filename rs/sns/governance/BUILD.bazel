@@ -41,6 +41,7 @@ DEPENDENCIES = [
     "//rs/sns/governance/proposal_criticality",
     "//rs/sns/governance/proposals_amount_total_limit",
     "//rs/sns/governance/token_valuation",
+    "//rs/sns/treasury_manager",
     "//rs/types/base_types",
     "//rs/types/management_canister_types",
     "//rs/utils",
