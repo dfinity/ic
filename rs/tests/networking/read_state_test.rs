@@ -26,6 +26,11 @@ Success::
     . module_hash is absent for empty canisters;
     . module_hash is a blob for non-empty canisters;
     . controllers are always present for existing canisters and consist of a list of principals
+. Read state requests for the full paths /request_status/R/status and /request_status/R/reply succeed
+. Read state requests for the path /request_status/R are rejected with 403 if signed by a different 
+  principal than who made the original request with request ID R;
+. Read state requests for two paths /request_status/R and /request_status/S with two different request 
+  IDs R and S are rejected with 400 (while requesting each of the two paths in isolation would succeed);
 
 end::catalog[] */
 
@@ -499,6 +504,7 @@ fn test_request_path(env: TestEnv) {
 
     let (request_id, result) = make_update_call(&agent, &canister_id);
 
+    // Status should be "replied"
     let status_path = vec![
         "request_status".into(),
         (*request_id).into(),
