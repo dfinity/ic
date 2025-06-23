@@ -474,6 +474,7 @@ pub struct ReplayStep {
     pub canister_caller_id: Option<CanisterId>,
     pub replay_until_height: Option<u64>,
     pub result: PathBuf,
+    pub skip_prompts: bool,
 }
 
 impl Step for ReplayStep {
@@ -508,6 +509,7 @@ impl Step for ReplayStep {
             self.subcmd.as_ref().map(|c| c.cmd.clone()),
             self.replay_until_height,
             self.result.clone(),
+            self.skip_prompts,
         ))?;
 
         let latest_height = state_params.height;
@@ -575,12 +577,6 @@ impl Step for ValidateReplayStep {
         if latest_height.get() - self.extra_batches < cert_height.get() {
             return Err(RecoveryError::invalid_output_error(
                 "Replay height smaller than certification height.",
-            ));
-        }
-
-        if latest_height.get() - self.extra_batches < finalization_height.get() {
-            return Err(RecoveryError::invalid_output_error(
-                "There exists a node with finalization height greater than the replay height.",
             ));
         }
 
@@ -836,6 +832,7 @@ impl Step for StopReplicaStep {
 pub struct UpdateLocalStoreStep {
     pub subnet_id: SubnetId,
     pub work_dir: PathBuf,
+    pub skip_prompts: bool,
 }
 
 impl Step for UpdateLocalStoreStep {
@@ -854,6 +851,7 @@ impl Step for UpdateLocalStoreStep {
             Some(SubCommand::UpdateRegistryLocalStore),
             None,
             self.work_dir.join("update_local_store.txt"),
+            self.skip_prompts,
         ))?;
         Ok(())
     }
@@ -866,6 +864,7 @@ pub struct GetRecoveryCUPStep {
     pub recovery_height: Height,
     pub result: PathBuf,
     pub work_dir: PathBuf,
+    pub skip_prompts: bool,
 }
 
 impl Step for GetRecoveryCUPStep {
@@ -895,6 +894,7 @@ impl Step for GetRecoveryCUPStep {
             })),
             None,
             self.result.clone(),
+            self.skip_prompts,
         ))?;
         Ok(())
     }

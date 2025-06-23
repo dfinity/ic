@@ -81,6 +81,11 @@ pub mod overhead {
     pub const STABLE64_READ: NumInstructions = NumInstructions::new(20);
     pub const STABLE64_SIZE: NumInstructions = NumInstructions::new(20);
     pub const STABLE64_WRITE: NumInstructions = NumInstructions::new(20);
+    pub const ENV_VAR_COUNT: NumInstructions = NumInstructions::new(500);
+    pub const ENV_VAR_NAME_SIZE: NumInstructions = NumInstructions::new(500);
+    pub const ENV_VAR_NAME_COPY: NumInstructions = NumInstructions::new(500);
+    pub const ENV_VAR_VALUE_SIZE: NumInstructions = NumInstructions::new(500);
+    pub const ENV_VAR_VALUE_COPY: NumInstructions = NumInstructions::new(500);
     pub const TIME: NumInstructions = NumInstructions::new(500);
     pub const TRAP: NumInstructions = NumInstructions::new(500);
 }

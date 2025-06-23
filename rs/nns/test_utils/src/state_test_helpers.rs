@@ -43,9 +43,9 @@ use ic_nns_governance_api::{
         self,
         claim_or_refresh::{self, MemoAndController},
         configure::Operation,
-        AddHotKey, ClaimOrRefresh, Configure, Disburse, DisburseMaturity, Follow,
-        IncreaseDissolveDelay, JoinCommunityFund, LeaveCommunityFund, RegisterVote, RemoveHotKey,
-        Split, StakeMaturity,
+        AddHotKey, ChangeAutoStakeMaturity, ClaimOrRefresh, Configure, Disburse, DisburseMaturity,
+        Follow, IncreaseDissolveDelay, JoinCommunityFund, LeaveCommunityFund, RegisterVote,
+        RemoveHotKey, Split, StakeMaturity,
     },
     manage_neuron_response::{self, ClaimOrRefreshResponse},
     Empty, ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
@@ -91,6 +91,13 @@ use prost::Message;
 use registry_canister::init::RegistryCanisterInitPayload;
 use serde::Serialize;
 use std::{convert::TryInto, time::Duration};
+
+/// This canister ID can be used as `specified_id` in tests on `state_machine_builder_for_nns_tests`.
+/// Canisters created in those tests without any `specified_id` are assigned to the default range
+/// from `CanisterId::from_u64(0x0000000)` to `CanisterId::from_u64(0x00FFFFF)` and thus
+/// canisters created with `specified_id` can only be assigned to the extra range
+/// from `CanisterId::from_u64(0x2100000)` to `CanisterId::from_u64(0x21FFFFE)`.
+pub const SPECIFIED_CANISTER_ID: CanisterId = CanisterId::from_u64(0x2100000);
 
 /// A `StateMachine` builder setting the IC time to the current time
 /// and using the canister ranges of both the NNS and II subnets.
@@ -1478,6 +1485,23 @@ pub fn nns_stake_maturity(
 ) -> ManageNeuronResponse {
     let command = ManageNeuronCommandRequest::StakeMaturity(StakeMaturity {
         percentage_to_stake,
+    });
+
+    manage_neuron_or_panic(state_machine, sender, neuron_id, command)
+}
+
+pub fn nns_set_auto_stake_maturity(
+    state_machine: &StateMachine,
+    sender: PrincipalId,
+    neuron_id: NeuronId,
+    auto_stake: bool,
+) -> ManageNeuronResponse {
+    let command = ManageNeuronCommandRequest::Configure(Configure {
+        operation: Some(Operation::ChangeAutoStakeMaturity(
+            ChangeAutoStakeMaturity {
+                requested_setting_for_auto_stake_maturity: auto_stake,
+            },
+        )),
     });
 
     manage_neuron_or_panic(state_machine, sender, neuron_id, command)
