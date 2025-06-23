@@ -32,7 +32,7 @@ use ic_types::{
 };
 use ic_utils_thread::JoinOnDrop;
 use ic_wasm_types::CanisterModule;
-use std::{collections::BTreeSet, fs::OpenOptions, path::PathBuf};
+use std::{collections::BTreeSet, fs::OpenOptions, path::Path};
 
 const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
 
