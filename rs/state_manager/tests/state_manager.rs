@@ -1239,7 +1239,7 @@ fn missing_manifest_is_computed_incrementally() {
         // The manifest at height 2 should now exist; purge it.
         assert!(state_manager.purge_manifest(height(2)));
 
-        // There should now be a state with manifest at height 1 and one without manifest at
+        // There should be a state with manifest at height 1 and one without manifest at
         // height 2; restarting should result in an incremental manifest computation.
         let (metrics, state_manager) = restart_fn(state_manager, Some(height(2)));
         wait_for_checkpoint(&state_manager, height(2));
