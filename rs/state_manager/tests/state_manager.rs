@@ -1231,7 +1231,7 @@ fn missing_manifests_are_recomputed() {
 /// - Compute the manifests at height 2 and 3 using the deltas from the manifest at height 1.
 ///
 /// The third step consists of the first step + a new manifest computation that is expected to
-/// require more hashing than the second step since its done from height 1.
+/// require more hashing than the second step since it's done from height 1.
 ///
 /// Asserting that more hashing is required in step 3 ensures two things:
 /// - The computation in the second step was actually done from height 2 since it required less
@@ -1260,7 +1260,7 @@ fn missing_manifest_is_computed_incrementally() {
         let purge_manifests_and_restart = |mut state_manager: StateManagerImpl,
                                            purge_manifest_heights: &[Height],
                                            restart_height: Height|
-         -> (StateManagerImpl, u64) {
+         -> (StateManagerImpl, u64, u64) {
             for h in purge_manifest_heights {
                 assert!(state_manager.purge_manifest(*h));
             }
@@ -1271,11 +1271,14 @@ fn missing_manifest_is_computed_incrementally() {
             let reused_key = maplit::btreemap! {"type".to_string() => "reused".to_string()};
 
             let chunk_bytes = fetch_int_counter_vec(&metrics, "state_manager_manifest_chunk_bytes");
-            // For an incremental manifest computation, something must have been reused.
-            assert_ne!(0, chunk_bytes[&reused_key]);
 
-            // Return the state manager along with the number of bytes hashed.
-            (state_manager, chunk_bytes[&hashed_key])
+            // Return the state manager along with the number of reused bytes and the
+            // number of bytes hashed.
+            (
+                state_manager,
+                chunk_bytes[&reused_key],
+                chunk_bytes[&hashed_key],
+            )
         };
 
         // Write a checkpoint at height 1; insert a canister.
@@ -1290,11 +1293,13 @@ fn missing_manifest_is_computed_incrementally() {
         state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
         wait_for_checkpoint(&state_manager, height(2));
 
-        let (state_manager, hashed_at_2_from_1) = purge_manifests_and_restart(
+        let (state_manager, reused_at_2_from_1, hashed_at_2_from_1) = purge_manifests_and_restart(
             state_manager,
             &[height(2)], // Purge manifest at height 2.
             height(2),    // Restart the state manager at height 2.
         );
+        // For an incremental manifest computation, something must have been reused.
+        assert_ne!(0, reused_at_2_from_1);
 
         // Write a checkpoint at height 3; write stable memory.
         let (_height, mut state) = state_manager.take_tip();
@@ -1302,17 +1307,21 @@ fn missing_manifest_is_computed_incrementally() {
         state_manager.commit_and_certify(state, height(3), CertificationScope::Full, None);
         wait_for_checkpoint(&state_manager, height(3));
 
-        let (state_manager, hashed_at_3_from_2) = purge_manifests_and_restart(
+        let (state_manager, reused_at_3_from_2, hashed_at_3_from_2) = purge_manifests_and_restart(
             state_manager,
             &[height(3)], // Purge manifest at height 3.
             height(3),    // Restart the state manager at height 3.
         );
+        // For an incremental manifest computation, something must have been reused.
+        assert_ne!(0, reused_at_3_from_2);
 
-        let (_, hashed_at_2_and_3_from_1) = purge_manifests_and_restart(
+        let (_, reused_at_2_and_3_from_1, hashed_at_2_and_3_from_1) = purge_manifests_and_restart(
             state_manager,
             &[height(2), height(3)], // Purge manifest at height 2 and 3.
             height(3),               // Restart the state manager at height 3.
         );
+        // For an incremental manifest computation, something must have been reused.
+        assert_ne!(0, reused_at_2_and_3_from_1);
 
         let hashed_at_3_from_1 = hashed_at_2_and_3_from_1 - hashed_at_2_from_1;
         assert!(hashed_at_3_from_1 > hashed_at_3_from_2);
