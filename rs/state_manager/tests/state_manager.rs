@@ -1320,8 +1320,10 @@ fn missing_manifest_is_computed_incrementally() {
             &[height(2), height(3)], // Purge manifest at height 2 and 3.
             height(3),               // Restart the state manager at height 3.
         );
-        // For an incremental manifest computation, something must have been reused.
-        assert_ne!(0, reused_at_2_and_3_from_1);
+        // For an incremental manifest computation, something must have been reused;
+        // since the both manifest computations are expected to be incremental, it
+        // must be larger than the one in step 1.
+        assert!(reused_at_2_and_3_from_1 > reused_at_2_from_1);
 
         let hashed_at_3_from_1 = hashed_at_2_and_3_from_1 - hashed_at_2_from_1;
         assert!(hashed_at_3_from_1 > hashed_at_3_from_2);
