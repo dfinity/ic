@@ -21,6 +21,7 @@ DEPENDENCIES = [
     "@crate_index//:hex",
     "@crate_index//:prost",
     "@crate_index//:serde",
+    "@crate_index//:serde_bytes",
     "@crate_index//:strum",
 ] + select({
     "//bazel:fuzzing_code_enabled": ["@crate_index//:arbitrary"],
