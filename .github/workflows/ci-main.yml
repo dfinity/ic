@@ -196,9 +196,9 @@ jobs:
         id: cfg
         run: |
           if [[ '${{ needs.config.outputs.full_macos_build }}' == 'true' ]]; then
-            echo build-command='test --config=macos_ci --test_tag_filters=test_macos' >> "$GITHUB_OUTPUT"
+            echo build-command='test --test_tag_filters=test_macos' >> "$GITHUB_OUTPUT"
           else
-            echo build-command='build --config=macos_ci --test_tag_filters=test_macos --nobuild' >> "$GITHUB_OUTPUT"
+            echo build-command='build --test_tag_filters=test_macos --nobuild' >> "$GITHUB_OUTPUT"
           fi
       - name: Run Bazel Checks on Darwin x86-64
         id: bazel-test-darwin-x86-64
@@ -267,7 +267,6 @@ jobs:
             --noworkspace_rc \
             --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc \
             test \
-            --config=macos_ci \
             --test_tag_filters="test_macos,test_macos_slow" \
             //packages/pocket-ic/... //rs/... //publish/binaries/...
 
