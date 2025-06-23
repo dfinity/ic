@@ -2,10 +2,11 @@
 use candid::candid_method;
 use ic_management_canister_types_private::*;
 
+// The following types have different names in `ic-management-canister-types` and `ic-management-canister-types-private`:
 type CreateCanisterResult = CanisterIdRecord;
 type UploadChunkResult = UploadChunkReply;
 type StoredChunksResult = StoredChunksReply;
-//type InstallCodeArgs = InstallCodeArgsV2;
+//type InstallCodeArgs = InstallCodeArgsV2; // inlined due to clash with `ic_management_canister_types_private::InstallCodeArgs`
 type StartCanisterArgs = CanisterIdRecord;
 type StopCanisterArgs = CanisterIdRecord;
 type CanisterStatusArgs = CanisterIdRecord;
