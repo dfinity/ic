@@ -99,7 +99,7 @@ impl ConsentMessage {
                         "\n\n**Approval fees:** `{} {}`\nCharged for processing the approval.",
                         fee, token_symbol
                     )),
-                    _ => message.push_str(&format!(
+                    Intent::Transfer | Intent::TransferFrom => message.push_str(&format!(
                         "\n\n**Fees:** `{} {}`\nCharged for processing the transfer.",
                         fee, token_symbol
                     )),
@@ -111,7 +111,7 @@ impl ConsentMessage {
                         "Approval fees".to_string(),
                         format!("{} {}", fee, token_symbol),
                     )),
-                    _ => fields_display
+                    Intent::Transfer | Intent::TransferFrom => fields_display
                         .fields
                         .push(("Fees".to_string(), format!("{} {}", fee, token_symbol))),
                 };
