@@ -448,7 +448,7 @@ fn set_authorized_subnetwork_list(arg: SetAuthorizedSubnetworkListArgs) {
             PrincipalId::from_str("qvhpv-4qaaa-aaaaa-aaagq-cai").unwrap(),
         );
 
-        if caller_id != governance_canister_id || caller_id != subnet_rental_canister_id {
+        if !(caller_id == governance_canister_id || caller_id == subnet_rental_canister_id) {
             panic!(
                 "Only the governance canister and subnet rental canister can set authorized subnetwork lists."
             );
