@@ -140,11 +140,14 @@ pub enum Replication {
 
 impl From<&CanisterHttpRequestContext> for pb_metadata::CanisterHttpRequestContext {
     fn from(context: &CanisterHttpRequestContext) -> Self {
-
         let replication_type = match context.replication {
-            Replication::FullyReplicated => pb_metadata::replication::ReplicationType::FullyReplicated(()),
+            Replication::FullyReplicated => {
+                pb_metadata::replication::ReplicationType::FullyReplicated(())
+            }
             Replication::NonReplicated(node_id) => {
-                pb_metadata::replication::ReplicationType::NonReplicated(node_id_into_protobuf(node_id))
+                pb_metadata::replication::ReplicationType::NonReplicated(node_id_into_protobuf(
+                    node_id,
+                ))
             }
         };
 
