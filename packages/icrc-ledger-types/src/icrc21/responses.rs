@@ -1,4 +1,4 @@
-use crate::icrc1::account::Account;
+use crate::{icrc1::account::Account, icrc21::lib::Icrc21Function};
 
 use super::requests::ConsentMessageMetadata;
 use candid::{CandidType, Deserialize};
@@ -23,29 +23,23 @@ pub struct ConsentInfo {
     pub metadata: ConsentMessageMetadata,
 }
 
-pub enum Intent {
-    Transfer,
-    Approve,
-    TransferFrom,
-}
-
 impl ConsentMessage {
-    pub fn add_intent(&mut self, intent: Intent, token_name: Option<String>) {
+    pub fn add_intent(&mut self, intent: Icrc21Function, token_name: Option<String>) {
         match self {
             ConsentMessage::GenericDisplayMessage(message) => match intent {
-                Intent::Transfer => {
+                Icrc21Function::Transfer => {
                     assert!(token_name.is_some());
                     message.push_str(&format!("# Send {}", token_name.unwrap()));
                     message
                         .push_str("\n\nYou are approving a transfer of funds from your account.");
                 }
-                Intent::Approve => {
+                Icrc21Function::Approve => {
                     message.push_str("# Approve spending");
                     message.push_str(
                             "\n\nYou are authorizing another address to withdraw funds from your account.",
                         );
                 }
-                Intent::TransferFrom => {
+                Icrc21Function::TransferFrom => {
                     assert!(token_name.is_some());
                     message.push_str(&format!("# Spend {}", token_name.unwrap()));
                     message.push_str(
@@ -54,14 +48,14 @@ impl ConsentMessage {
                 }
             },
             ConsentMessage::FieldsDisplayMessage(fields_display) => match intent {
-                Intent::Transfer => {
+                Icrc21Function::Transfer => {
                     assert!(token_name.is_some());
                     fields_display.intent = format!("Send {}", token_name.unwrap());
                 }
-                Intent::Approve => {
+                Icrc21Function::Approve => {
                     fields_display.intent = "Approve spending".to_string();
                 }
-                Intent::TransferFrom => {
+                Icrc21Function::TransferFrom => {
                     assert!(token_name.is_some());
                     fields_display.intent = format!("Spend {}", token_name.unwrap());
                 }
@@ -91,15 +85,15 @@ impl ConsentMessage {
         }
     }
 
-    pub fn add_fee(&mut self, intent: Intent, fee: &String, token_symbol: &String) {
+    pub fn add_fee(&mut self, intent: Icrc21Function, fee: &String, token_symbol: &String) {
         match self {
             ConsentMessage::GenericDisplayMessage(message) => {
                 match intent {
-                    Intent::Approve => message.push_str(&format!(
+                    Icrc21Function::Approve => message.push_str(&format!(
                         "\n\n**Approval fees:** `{} {}`\nCharged for processing the approval.",
                         fee, token_symbol
                     )),
-                    Intent::Transfer | Intent::TransferFrom => message.push_str(&format!(
+                    Icrc21Function::Transfer | Icrc21Function::TransferFrom => message.push_str(&format!(
                         "\n\n**Fees:** `{} {}`\nCharged for processing the transfer.",
                         fee, token_symbol
                     )),
@@ -107,11 +101,11 @@ impl ConsentMessage {
             }
             ConsentMessage::FieldsDisplayMessage(fields_display) => {
                 match intent {
-                    Intent::Approve => fields_display.fields.push((
+                    Icrc21Function::Approve => fields_display.fields.push((
                         "Approval fees".to_string(),
                         format!("{} {}", fee, token_symbol),
                     )),
-                    Intent::Transfer | Intent::TransferFrom => fields_display
+                    Icrc21Function::Transfer | Icrc21Function::TransferFrom => fields_display
                         .fields
                         .push(("Fees".to_string(), format!("{} {}", fee, token_symbol))),
                 };
