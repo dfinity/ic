@@ -5,6 +5,7 @@ use config::hostos::guestos_config::generate_guestos_config;
 use config_types::{GuestOSConfig, HostOSConfig};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{calculate_deterministic_mac, IpVariant};
+use ic_sev::HostSevCertificateProvider;
 use std::path::{Path, PathBuf};
 
 // See build.rs
@@ -20,9 +21,13 @@ pub struct DirectBootConfig {
     pub kernel_cmdline: String,
 }
 
-pub fn assemble_config_media(hostos_config: &HostOSConfig, media_path: &Path) -> Result<()> {
-    let guestos_config =
-        generate_guestos_config(hostos_config).context("Failed to generate GuestOS config")?;
+pub fn assemble_config_media(
+    hostos_config: &HostOSConfig,
+    sev_certificate_provider: &mut HostSevCertificateProvider,
+    media_path: &Path,
+) -> Result<()> {
+    let guestos_config = generate_guestos_config(hostos_config, sev_certificate_provider)
+        .context("Failed to generate GuestOS config")?;
 
     let bootstrap_options = make_bootstrap_options(hostos_config, guestos_config)?;
 
@@ -155,7 +160,9 @@ mod tests {
         config.icos_settings.use_ssh_authorized_keys = true;
         config.icos_settings.use_node_operator_private_key = true;
 
-        let guestos_config = generate_guestos_config(&config).unwrap();
+        let guestos_config =
+            generate_guestos_config(&config, &mut HostSevCertificateProvider::new_disabled())
+                .unwrap();
 
         let options = make_bootstrap_options(&config, guestos_config.clone()).unwrap();
 
@@ -261,7 +268,11 @@ mod tests {
         let media_path = temp_dir.path().join("config.img");
         let config = create_test_hostos_config();
 
-        let result = assemble_config_media(&config, &media_path);
+        let result = assemble_config_media(
+            &config,
+            &mut HostSevCertificateProvider::new_disabled(),
+            &media_path,
+        );
 
         assert!(
             result.is_ok(),

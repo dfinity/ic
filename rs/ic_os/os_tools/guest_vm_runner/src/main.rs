@@ -7,8 +7,9 @@ use config_types::{HostOSConfig, Ipv6Config};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{calculate_deterministic_mac, IpVariant, MacAddr6Ext};
 use ic_metrics_tool::{Metric, MetricsWriter};
+use ic_sev::HostSevCertificateProvider;
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 use tempfile::NamedTempFile;
@@ -33,6 +34,7 @@ const METRICS_FILE_PATH: &str = "/run/node_exporter/collector_textfile/hostos_gu
 const CONSOLE_TTY_PATH: &str = "/dev/tty1";
 const GUESTOS_SERVICE_NAME: &str = "guestos.service";
 const DEFAULT_GUESTOS_DEVICE: &str = "/dev/hostlvm/guestos";
+const SEV_CERTIFICATE_CACHE_DIR: &str = "/var/ic/sev/certificates";
 
 #[tokio::main]
 pub async fn main() -> Result<()> {
@@ -168,6 +170,7 @@ pub struct GuestVmService {
     systemd_notifier: Arc<dyn SystemdNotifier>,
     console_tty: Box<dyn Write + Send + Sync>,
     partition_provider: Box<dyn PartitionProvider>,
+    sev_certificate_provider: HostSevCertificateProvider,
 }
 
 impl GuestVmService {
@@ -188,6 +191,14 @@ impl GuestVmService {
             .open(CONSOLE_TTY_PATH)
             .context("Failed to open console")?;
 
+        let sev_certificate_provider = HostSevCertificateProvider::new(
+            PathBuf::from(SEV_CERTIFICATE_CACHE_DIR),
+            hostos_config
+                .icos_settings
+                .enable_trusted_execution_environment,
+        )
+        .context("Could not initialize SEV certificate provider")?;
+
         Ok(Self {
             metrics_writer,
             libvirt_connection,
@@ -197,6 +208,7 @@ impl GuestVmService {
             partition_provider: Box::new(crate::mount::GptPartitionProvider::new(
                 DEFAULT_GUESTOS_DEVICE.into(),
             )?),
+            sev_certificate_provider,
         })
     }
 
@@ -241,8 +253,12 @@ impl GuestVmService {
         .await
         .context("Failed to prepare direct boot")?;
 
-        assemble_config_media(&self.hostos_config, config_media.path())
-            .context("Failed to assemble config media")?;
+        assemble_config_media(
+            &self.hostos_config,
+            &mut self.sev_certificate_provider,
+            config_media.path(),
+        )
+        .context("Failed to assemble config media")?;
 
         let vm_config = generate_vm_config(
             &self.hostos_config,
@@ -446,6 +462,9 @@ mod tests {
         DeploymentEnvironment, DeterministicIpv6Config, HostOSSettings, ICOSSettings,
         NetworkSettings,
     };
+    use ic_sev::testing::{
+        mock_cert_cache_dir, mock_host_sev_certificate_provider, mock_sev_host_firmware,
+    };
     use nix::sys::signal::SIGTERM;
     use regex::Regex;
     use std::fs::File;
@@ -462,6 +481,7 @@ mod tests {
         metrics_file: NamedTempFile,
         systemd_notifier: Arc<MockSystemdNotifier>,
         termination_token: CancellationToken,
+        _sev_certificate_cache_dir: TempDir,
     }
 
     impl TestServiceInstance {
@@ -609,6 +629,9 @@ mod tests {
             let metrics_file = NamedTempFile::new().expect("Failed to create metrics file");
             let systemd_notifier = Arc::new(MockSystemdNotifier::new());
             let termination_token = CancellationToken::new();
+            let (sev_certificate_provider, sev_certificate_cache_dir) =
+                mock_host_sev_certificate_provider()
+                    .expect("Failed to create mock SEV cert provider");
             let mut service = GuestVmService {
                 metrics_writer: MetricsWriter::new(metrics_file.path().to_path_buf()),
                 libvirt_connection: self.libvirt_connection.clone(),
@@ -622,6 +645,7 @@ mod tests {
                     )
                     .unwrap(),
                 ),
+                sev_certificate_provider,
             };
 
             // Start the service in the background
@@ -635,6 +659,7 @@ mod tests {
                 systemd_notifier,
                 termination_token,
                 libvirt_connection: self.libvirt_connection.clone(),
+                _sev_certificate_cache_dir: sev_certificate_cache_dir,
             }
         }
     }

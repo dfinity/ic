@@ -1,0 +1,45 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//rs:ic-os-pkg"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:anyhow",
+    "@crate_index//:der",
+    "@crate_index//:mockall",
+    "@crate_index//:pem",
+    "@crate_index//:reqwest",
+    "@crate_index//:sev",
+    "@crate_index//:tempfile",
+]
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:rcgen",
+]
+
+MACRO_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_library(
+    name = "sev",
+    srcs = glob(
+        ["src/**/*.rs"],
+    ),
+    aliases = ALIASES,
+    compile_data = ["fixtures/mock_amd_key_server_response.crt"],
+    crate_name = "ic_sev",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "sev_test",
+    crate = ":sev",
+    tags = ["requires-network"],
+    deps = DEV_DEPENDENCIES,
+)
