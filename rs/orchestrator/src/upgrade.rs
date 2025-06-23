@@ -351,7 +351,7 @@ impl Upgrade {
                 let downloader = FileDownloader::new(Some(self.logger.clone()));
                 let local_store_location = tempfile::tempdir()
                     .expect("temporary location for local store download could not be created")
-                    .into_path();
+                    .keep();
                 downloader
                     .download_and_extract_tar(
                         &registry_store_uri.uri,

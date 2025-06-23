@@ -25,13 +25,10 @@ jobs:
       - name: Run Bazel Build All No Cache
         uses: ./.github/actions/bazel-test-all/
         with:
-          BAZEL_COMMAND: build --config=ci --repository_cache= --disk_cache= --noremote_accept_cached --remote_instance_name=${CI_COMMIT_SHA}
+          BAZEL_COMMAND: build --repository_cache= --disk_cache= --noremote_accept_cached --remote_instance_name=${CI_COMMIT_SHA}
           BAZEL_TARGETS: //...
           CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-          # 'upload-artifacts' is required for the BNs as they rely for both dev and prod deployment
-          # on images being uploaded to the S3 bucket
-          upload-artifacts: true
   bazel-run-fuzzers-hourly:
     name: Bazel Run Fuzzers Hourly
     runs-on:

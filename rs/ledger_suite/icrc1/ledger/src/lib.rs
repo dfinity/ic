@@ -784,6 +784,10 @@ impl Ledger {
     pub fn copy_token_pool(&mut self) {
         self.stable_balances.token_pool = self.balances.token_pool;
     }
+
+    pub fn set_index_principal(&mut self, index_principal: Principal) {
+        self.index_principal = Some(index_principal);
+    }
 }
 
 impl LedgerContext for Ledger {
