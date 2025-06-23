@@ -285,6 +285,10 @@ impl TryFrom<(Time, &Request, CanisterHttpRequestArgs)> for CanisterHttpRequestC
             }
         };
 
+        if let Some(false) = args.is_replicated {
+            return Err(CanisterHttpRequestContextError::NonReplicatedNotSupported)
+        }
+
         let max_response_bytes = match args.max_response_bytes {
             Some(max_response_bytes) => {
                 if max_response_bytes > MAX_CANISTER_HTTP_RESPONSE_BYTES {
@@ -385,6 +389,7 @@ pub enum CanisterHttpRequestContextError {
     TooLongHeaderValue(usize),
     TooLargeHeaders(usize),
     TooLargeRequest(usize),
+    NonReplicatedNotSupported,
 }
 
 impl From<CanisterHttpRequestContextError> for UserError {
@@ -443,6 +448,12 @@ impl From<CanisterHttpRequestContextError> for UserError {
                     total_request_size, MAX_CANISTER_HTTP_REQUEST_BYTES
                 ),
             ),
+            CanisterHttpRequestContextError::NonReplicatedNotSupported => {
+                UserError::new(
+                    ErrorCode::CanisterRejectedMessage,
+                    "Canister HTTP requests with is_replicated=false are not supported".to_string(),
+                )
+            }
         }
     }
 }
