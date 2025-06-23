@@ -136,7 +136,7 @@ pub struct Transaction {
     // TODO: add low-level traces stores as JSON.
     pub result: Result<TransactionWitness, TransactionError>,
     pub human_readable: String,
-    pub treasury_operation_operation: TreasuryManagerOperation,
+    pub treasury_manager_operation: TreasuryManagerOperation,
 }
 
 #[derive(CandidType, Clone, Debug, Deserialize)]
