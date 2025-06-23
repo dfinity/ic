@@ -2174,7 +2174,7 @@ impl SystemApi for SystemApiImpl {
         name_src: usize,
         name_size: usize,
         heap: &[u8],
-    ) -> HypervisorResult<usize> {
+    ) -> HypervisorResult<i32> {
         let result = match &self.api_type {
             ApiType::Start { .. } => Err(self.error_for("ic0_env_var_name_exists")),
             ApiType::Init { .. }
@@ -2220,7 +2220,7 @@ impl SystemApi for SystemApiImpl {
                 Ok(self
                     .sandbox_safe_system_state
                     .environment_variables()
-                    .contains_key(name) as usize)
+                    .contains_key(name) as i32)
             }
         };
 

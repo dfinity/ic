@@ -639,11 +639,6 @@ pub fn syscalls<
                     with_memory_and_system_api(&mut caller, |system_api, memory| {
                         system_api.ic0_env_var_name_exists(name_src, name_size, memory)
                     })
-                    .and_then(|s| {
-                        I::try_from(s).map_err(|e| {
-                            anyhow::Error::msg(format!("ic0::env_var_name_exists failed: {}", e))
-                        })
-                    })
                 }
             })
             .unwrap();

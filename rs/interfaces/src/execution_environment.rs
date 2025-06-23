@@ -697,7 +697,7 @@ pub trait SystemApi {
         name_src: usize,
         name_size: usize,
         heap: &[u8],
-    ) -> HypervisorResult<usize>;
+    ) -> HypervisorResult<i32>;
 
     /// Returns the size of the value for the environment variable with the given name.
     ///
