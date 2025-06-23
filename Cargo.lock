@@ -9895,6 +9895,7 @@ dependencies = [
  "rosetta-core",
  "serde_bytes",
  "serde_json",
+ "strum 0.26.3",
 ]
 
 [[package]]

@@ -200,29 +200,36 @@ fn test_upgrade_canisters_with_golden_nns_state() {
     // Step 0: Read configuration. To wit, what canisters does the user want to upgrade in this
     // test? To do this, they set the NNS_CANISTER_UPGRADE_SEQUENCE environment variable.
 
-    let mut nns_canister_upgrade_sequence = env::var("NNS_CANISTER_UPGRADE_SEQUENCE").expect(
-        "This test requires that the NNS_CANISTER_UPGRADE_SEQUENCE environment\n\
-             variable to be set to something like 'governance,registry'.\n\
-             That is, it should be a comma separated list of canister names.\n\
-             Alternatively, 'all' is equivalent to\n\
-             'cycles-minting,genesis-token,governance,ledger,lifeline,registry,root,sns-wasm'\n\
-             (these are all the supported canister names, a large subset of\n\
-             those listed in rs/nns/canister_ids.json).",
-    );
+    let all_canisters = [
+        // Keep sorted.
+        "cycles-minting",
+        "genesis-token",
+        "governance",
+        "ledger",
+        "lifeline",
+        "node-rewards",
+        "registry",
+        "root",
+        "sns-wasm",
+    ]
+    .join(",");
+
+    let mut nns_canister_upgrade_sequence = env::var("NNS_CANISTER_UPGRADE_SEQUENCE")
+        .unwrap_or_else(|_err| {
+            panic!(
+                "This test requires that the NNS_CANISTER_UPGRADE_SEQUENCE environment\n\
+                 variable be set to something like 'governance,registry'.\n\
+                 That is, it should be a comma-separated list of canister names.\n\
+                 Alternatively, 'all' is equivalent to\n\
+                 '{}'\n\
+                 (these are all the supported canister names, a large subset of\n\
+                 those listed in rs/nns/canister_ids.json).",
+                all_canisters,
+            );
+        });
 
     if nns_canister_upgrade_sequence == "all" {
-        nns_canister_upgrade_sequence = [
-            "cycles-minting",
-            "genesis-token",
-            "governance",
-            "ledger",
-            "lifeline",
-            "registry",
-            "root",
-            "sns-wasm",
-            "node-rewards",
-        ]
-        .join(",");
+        nns_canister_upgrade_sequence = all_canisters;
     }
 
     let mut nns_canister_upgrade_sequence = nns_canister_upgrade_sequence
