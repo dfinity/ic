@@ -3668,10 +3668,15 @@ impl Payload<'_> for ListCanisterSnapshotArgs {}
 /// An enum representing the possible values of a global variable.
 #[derive(Copy, Clone, Debug, Deserialize, Serialize, EnumIter, CandidType)]
 pub enum Global {
+    #[serde(rename = "i32")]
     I32(i32),
+    #[serde(rename = "i64")]
     I64(i64),
+    #[serde(rename = "f32")]
     F32(f32),
+    #[serde(rename = "f64")]
     F64(f64),
+    #[serde(rename = "v128")]
     V128(u128),
 }
 
@@ -3787,7 +3792,9 @@ impl Payload<'_> for ReadCanisterSnapshotMetadataArgs {}
 #[derive(Clone, Copy, Eq, PartialEq, Debug, CandidType, Default, Deserialize, EnumIter)]
 pub enum SnapshotSource {
     #[default]
+    #[serde(rename = "taken_from_canister")]
     TakenFromCanister,
+    #[serde(rename = "metadata_upload")]
     MetadataUpload,
 }
 
@@ -3881,7 +3888,9 @@ impl Payload<'_> for ReadCanisterSnapshotMetadataResponse {}
 /// Corresponds to the internal `CanisterTimer`, but is candid de/encodable.  
 #[derive(Copy, Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub enum GlobalTimer {
+    #[serde(rename = "inactive")]
     Inactive,
+    #[serde(rename = "active")]
     Active(u64),
 }
 
@@ -3891,8 +3900,11 @@ pub enum GlobalTimer {
 )]
 pub enum OnLowWasmMemoryHookStatus {
     #[default]
+    #[serde(rename = "condition_not_satisfied")]
     ConditionNotSatisfied,
+    #[serde(rename = "ready")]
     Ready,
+    #[serde(rename = "executed")]
     Executed,
 }
 
@@ -4022,18 +4034,13 @@ impl ReadCanisterSnapshotDataArgs {
 
 #[derive(Clone, Debug, Deserialize, CandidType, Serialize)]
 pub enum CanisterSnapshotDataKind {
-    WasmModule {
-        offset: u64,
-        size: u64,
-    },
-    MainMemory {
-        offset: u64,
-        size: u64,
-    },
-    StableMemory {
-        offset: u64,
-        size: u64,
-    },
+    #[serde(rename = "wasm_module")]
+    WasmModule { offset: u64, size: u64 },
+    #[serde(rename = "main_memory")]
+    MainMemory { offset: u64, size: u64 },
+    #[serde(rename = "stable_memory")]
+    StableMemory { offset: u64, size: u64 },
+    #[serde(rename = "wasm_chunk")]
     WasmChunk {
         #[serde(with = "serde_bytes")]
         hash: Vec<u8>,
@@ -4217,9 +4224,13 @@ impl UploadCanisterSnapshotDataArgs {
 
 #[derive(Clone, Debug, Deserialize, CandidType, Serialize)]
 pub enum CanisterSnapshotDataOffset {
+    #[serde(rename = "wasm_module")]
     WasmModule { offset: u64 },
+    #[serde(rename = "main_memory")]
     MainMemory { offset: u64 },
+    #[serde(rename = "stable_memory")]
     StableMemory { offset: u64 },
+    #[serde(rename = "wasm_chunk")]
     WasmChunk,
 }
 
