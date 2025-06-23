@@ -1153,6 +1153,7 @@ struct CreateCheckpointResult {
 }
 
 impl StateManagerImpl {
+    /// Finish all asynchronous checkpointing operations, including checkpoint verification and manifest computation.
     pub fn flush_tip_channel(&self) {
         flush_tip_channel(&self.tip_channel)
     }
