@@ -80,9 +80,11 @@ const NNS_NODES: usize = 4;
 const APP_NODES: usize = 4;
 const UNASSIGNED_NODES: usize = 4;
 
-const DKG_INTERVAL_LARGE: u64 = 99;
 const NNS_NODES_LARGE: usize = 40;
 const APP_NODES_LARGE: usize = 37;
+/// 40 dealings * 3 transcripts being reshared (high/local, high/remote, low/remote)
+/// plus 4 to make checkpoint heights more predictable
+const DKG_INTERVAL_LARGE: u64 = 124;
 
 pub const CHAIN_KEY_SUBNET_RECOVERY_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 
