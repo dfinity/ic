@@ -93,10 +93,12 @@ impl ConsentMessage {
                         "\n\n**Approval fees:** `{} {}`\nCharged for processing the approval.",
                         fee, token_symbol
                     )),
-                    Icrc21Function::Transfer | Icrc21Function::TransferFrom => message.push_str(&format!(
-                        "\n\n**Fees:** `{} {}`\nCharged for processing the transfer.",
-                        fee, token_symbol
-                    )),
+                    Icrc21Function::Transfer | Icrc21Function::TransferFrom => {
+                        message.push_str(&format!(
+                            "\n\n**Fees:** `{} {}`\nCharged for processing the transfer.",
+                            fee, token_symbol
+                        ))
+                    }
                 };
             }
             ConsentMessage::FieldsDisplayMessage(fields_display) => {
