@@ -17142,6 +17142,7 @@ dependencies = [
  "ic-http-endpoints-test-agent",
  "ic-limits",
  "ic-management-canister-types-private",
+ "ic-message",
  "ic-networking-subnet-update-workload",
  "ic-nns-governance-api",
  "ic-prep",
