@@ -129,8 +129,6 @@ pub struct CanisterHttpRequestContext {
 pub enum Replication {
     /// The request is fully replicated, i.e. all nodes will attempt the http request.
 	FullyReplicated,
-    /// The request is not replicated, however the delegated node is not currently known.
-    NonReplicatedProvisional,
     /// The request is not replicated, i.e. only the node with the given `NodeId` will attempt the http request.
 	NonReplicated(NodeId)
 }
@@ -151,12 +149,6 @@ impl From<&CanisterHttpRequestContext> for pb_metadata::CanisterHttpRequestConte
                 );
                 pb_metadata::Replication {
                     replication_type: Some(replication_type),
-                }
-            }
-            Replication::NonReplicatedProvisional => {
-                // This should not be possible. 
-                pb_metadata::Replication {
-                    replication_type: None,
                 }
             }
         };
