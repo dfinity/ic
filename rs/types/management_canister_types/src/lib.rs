@@ -733,16 +733,14 @@ impl From<&CanisterChangeDetails> for pb_canister_state_bits::canister_change::C
             CanisterChangeDetails::CanisterSettingsChange(canister_settings_change) => {
                 pb_canister_state_bits::canister_change::ChangeDetails::CanisterSettingsChange(
                     pb_canister_state_bits::CanisterSettingsChange {
-                        controllers: canister_settings_change
-                            .controllers
-                            .as_ref()
-                            .map(|controllers| {
-                                controllers
+                        controllers: canister_settings_change.controllers.as_ref().map(
+                            |controllers| pb_canister_state_bits::CanisterControllers {
+                                controllers: controllers
                                     .iter()
                                     .map(|c| (*c).into())
-                                    .collect::<Vec<ic_protobuf::types::v1::PrincipalId>>()
-                            })
-                            .unwrap_or_default(),
+                                    .collect::<Vec<ic_protobuf::types::v1::PrincipalId>>(),
+                            },
+                        ),
                         environment_variables_hash: canister_settings_change
                             .environment_variables_hash
                             .clone(),
@@ -817,10 +815,10 @@ impl TryFrom<pb_canister_state_bits::canister_change::ChangeDetails> for Caniste
             pb_canister_state_bits::canister_change::ChangeDetails::CanisterSettingsChange(
                 canister_settings_change,
             ) => {
-                let controllers = match canister_settings_change.controllers.is_empty() {
-                    true => None,
-                    false => Some(
-                        canister_settings_change
+                let controllers = match canister_settings_change.controllers {
+                    None => None,
+                    Some(canister_controllers) => Some(
+                        canister_controllers
                             .controllers
                             .into_iter()
                             .map(TryInto::try_into)
