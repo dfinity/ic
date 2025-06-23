@@ -71,7 +71,9 @@ jobs:
           # The following adds the SSH private key to the ssh-agent such that CI can SSH into the backup pod.
           if [ -z "${SSH_AUTH_SOCK:-}" ]; then
             eval "$(ssh-agent -s)"
-            ssh-add - <<< '${{ secrets.SSH_PRIVATE_KEY_BACKUP_POD }}'
+            ssh-add - <<'EOF'
+          ${{ secrets.SSH_PRIVATE_KEY_BACKUP_POD }}
+          EOF
             echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
           fi
 
@@ -103,7 +105,9 @@ jobs:
           # The following adds the SSH private key to the ssh-agent such that CI can SSH into the backup pod.
           if [ -z "${SSH_AUTH_SOCK:-}" ]; then
             eval "$(ssh-agent -s)"
-            ssh-add - <<< '${{ secrets.SSH_PRIVATE_KEY_BACKUP_POD }}'
+            ssh-add - <<'EOF'
+          ${{ secrets.SSH_PRIVATE_KEY_BACKUP_POD }}
+          EOF
             echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
           fi
 
