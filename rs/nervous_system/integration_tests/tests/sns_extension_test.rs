@@ -15,16 +15,15 @@ use ic_nervous_system_integration_tests::pocket_ic_helpers::install_canister_wit
 use ic_nervous_system_integration_tests::pocket_ic_helpers::load_registry_mutations;
 use ic_nervous_system_integration_tests::pocket_ic_helpers::nns;
 use ic_nervous_system_integration_tests::pocket_ic_helpers::NnsInstaller;
-use ic_nervous_system_integration_tests::pocket_ic_helpers::{install_canister_on_subnet, sns};
+use ic_nervous_system_integration_tests::pocket_ic_helpers::sns;
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_sns_cli::neuron_id_to_candid_subaccount::ParsedSnsNeuron;
 use ic_sns_cli::register_extension;
 use ic_sns_cli::register_extension::RegisterExtensionArgs;
 use ic_sns_cli::register_extension::RegisterExtensionInfo;
 use ic_sns_governance::governance::TREASURY_SUBACCOUNT_NONCE;
-use ic_sns_init::pb::v1::sns_init_payload::InitialTokenDistribution;
 use ic_sns_swap::pb::v1::Lifecycle;
-use icp_ledger::{AccountIdentifier, Tokens, DEFAULT_TRANSFER_FEE};
+use icp_ledger::{Tokens, DEFAULT_TRANSFER_FEE};
 use icrc_ledger_types::icrc::generic_value::Value;
 use icrc_ledger_types::icrc1::account::Account;
 use maplit::btreemap;
@@ -32,12 +31,10 @@ use pocket_ic::nonblocking::PocketIc;
 use pocket_ic::PocketIcBuilder;
 use pretty_assertions::assert_eq;
 use sns_treasury_manager;
-use sns_treasury_manager::Allowance;
 use sns_treasury_manager::Asset;
 use sns_treasury_manager::AuditTrailRequest;
 use sns_treasury_manager::BalancesRequest;
-use sns_treasury_manager::DepositRequest;
-use sns_treasury_manager::WithdrawRequest;
+use sns_treasury_manager::{Balance, WithdrawRequest, Accounts};
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::Duration;
@@ -240,22 +237,33 @@ async fn test_treasury_manager() {
         // println!(">>> AuditTrail: {:#?}", response);
     }
 
+    let treasury_sns_account = sns_treasury_manager::Account {
+        owner: sns.governance.canister_id.0,
+        subaccount: Some(compute_distribution_subaccount_bytes(
+            sns.governance.canister_id,
+            TREASURY_SUBACCOUNT_NONCE,
+        )),
+    };
+
+    let treasury_icp_account = sns_treasury_manager::Account {
+        owner: sns.governance.canister_id.0,
+        subaccount: None,
+    };
+
     let _withdrawn_amounts = {
-        let withdraw_accounts = btreemap! {
-            sns.ledger.canister_id.0 => sns_treasury_manager::Account {
-                owner: sns.governance.canister_id.0,
-                subaccount: Some(compute_distribution_subaccount_bytes(
-                    sns.governance.canister_id,
-                    TREASURY_SUBACCOUNT_NONCE,
-                )),
-            },
-            LEDGER_CANISTER_ID.get().0 => sns_treasury_manager::Account {
-                owner: sns.governance.canister_id.0,
-                subaccount: None,
-            },
+        let ledger_id_to_account = btreemap! {
+            sns.ledger.canister_id.0 => treasury_sns_account,
+            LEDGER_CANISTER_ID.get().0 => treasury_icp_account,
         };
+
+        let request = WithdrawRequest {
+            withdraw_accounts: Some(Accounts {
+                ledger_id_to_account,
+            }),
+        };
+
         let response = PocketIcAgent::new(&pocket_ic, sns.root.canister_id)
-            .call(adaptor_canister_id, WithdrawRequest { withdraw_accounts })
+            .call(adaptor_canister_id, request)
             .await
             .unwrap()
             .unwrap();
@@ -263,8 +271,14 @@ async fn test_treasury_manager() {
         assert_eq!(
             response.balances,
             btreemap! {
-                icp_token => Nat::from(150 * E8 - 2 * ICP_FEE),
-                sns_token => Nat::from(350 * E8 - 2 * SNS_FEE),
+                sns_token => Balance {
+                    amount_decimals: Nat::from(350 * E8 - 2 * SNS_FEE),
+                    owner_account: treasury_sns_account,
+                },
+                icp_token => Balance {
+                    amount_decimals: Nat::from(150 * E8 - 2 * ICP_FEE),
+                    owner_account: treasury_icp_account,
+                },
             },
         );
     };

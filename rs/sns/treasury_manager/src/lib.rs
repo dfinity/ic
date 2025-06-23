@@ -16,9 +16,15 @@ pub enum TreasuryManagerArg {
     Upgrade(TreasuryManagerUpgrade),
 }
 
-#[derive(CandidType, Clone, Debug, Deserialize)]
+#[derive(CandidType, Clone, Debug, Deserialize, PartialEq)]
+pub struct Balance {
+    pub amount_decimals: Nat,
+    pub owner_account: Account,
+}
+
+#[derive(CandidType, Clone, Debug, Deserialize, PartialEq)]
 pub struct Balances {
-    pub balances: BTreeMap<Asset, Nat>,
+    pub balances: BTreeMap<Asset, Balance>,
     pub timestamp_ns: u64,
 }
 
@@ -46,6 +52,9 @@ pub trait TreasuryManager {
 
     /// Should not be exposed as an API function, but rather called periodically by the canister.
     fn refresh_balances(&mut self) -> impl std::future::Future<Output = ()> + Send;
+
+    /// Should not be exposed as an API function, but rather called periodically by the canister.
+    fn issue_rewards(&mut self) -> impl std::future::Future<Output = ()> + Send;
 }
 
 #[derive(CandidType, Clone, Debug, Deserialize, PartialEq)]
@@ -58,16 +67,21 @@ pub struct BalancesRequest {}
 
 pub type Subaccount = [u8; 32];
 
-#[derive(CandidType, Clone, Debug, PartialEq, Eq, Hash, Deserialize)]
+#[derive(CandidType, Clone, Copy, Debug, PartialEq, Eq, Hash, Deserialize)]
 pub struct Account {
     pub owner: Principal,
     pub subaccount: Option<Subaccount>,
 }
 
 #[derive(CandidType, Clone, Debug, Deserialize, PartialEq)]
+pub struct Accounts {
+    pub ledger_id_to_account: BTreeMap<Principal, Account>,
+}
+
+#[derive(CandidType, Clone, Debug, Deserialize, PartialEq)]
 pub struct WithdrawRequest {
-    /// Maps ledger canister ID to the account to withdraw from.
-    pub withdraw_accounts: BTreeMap<Principal, Account>,
+    /// If not set, accounts specified at the time of deposit will be used for the withdrawal.
+    pub withdraw_accounts: Option<Accounts>,
 }
 
 #[derive(CandidType, Clone, Debug, Deserialize, PartialEq)]
