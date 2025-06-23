@@ -1685,25 +1685,28 @@ fn memory64_barrier_instructions<'a>(
     }
 
     if let AccessKind::NativeLoad { offset, .. } | AccessKind::NativeStore { offset, .. } = kind {
-        match mem_type {
-            WasmMemoryType::Wasm32 => {
-                instructions.append(&mut vec![
-                    I32Const {
-                        value: offset as i32,
-                    },
-                    I32Add,
-                ]);
-            }
-            WasmMemoryType::Wasm64 => {
-                instructions.append(&mut vec![
-                    I64Const {
-                        value: offset as i64,
-                    },
-                    I64Add,
-                ]);
-            }
-        };
+        if offset > 0 {
+            match mem_type {
+                WasmMemoryType::Wasm32 => {
+                    instructions.append(&mut vec![
+                        I32Const {
+                            value: offset as i32,
+                        },
+                        I32Add,
+                    ]);
+                }
+                WasmMemoryType::Wasm64 => {
+                    instructions.append(&mut vec![
+                        I64Const {
+                            value: offset as i64,
+                        },
+                        I64Add,
+                    ]);
+                }
+            };
+        }
     }
+
     // let static_byte_map_offset = match kind {
     //     AccessKind::NativeLoad { offset, .. } | AccessKind::NativeStore { offset, .. } => {
     //         // Analogous optimization for the offset as in `write_barrier_instructions`.
@@ -1833,111 +1836,111 @@ fn memory64_barrier_instructions<'a>(
         End,
     ]);
 
-    let check_cross_page_access = match kind {
-        AccessKind::NativeLoad { length, .. } | AccessKind::NativeStore { length, .. } => {
-            length > 1
-        }
-        AccessKind::ShortBulkLoad { .. } | AccessKind::ShortBulkStore { .. } => true,
-    };
+    // let check_cross_page_access = match kind {
+    //     AccessKind::NativeLoad { length, .. } | AccessKind::NativeStore { length, .. } => {
+    //         length > 1
+    //     }
+    //     AccessKind::ShortBulkLoad { .. } | AccessKind::ShortBulkStore { .. } => true,
+    // };
 
-    if check_cross_page_access {
-        // Handle potential cross-page accesses, e.g. by unaligned native load or store accesses, or bulk accesses.
+    // if check_cross_page_access {
+    //     // Handle potential cross-page accesses, e.g. by unaligned native load or store accesses, or bulk accesses.
 
-        // Compute the last accessed byte.
-        instructions.push(LocalGet {
-            local_index: address_argument_index,
-        });
+    //     // Compute the last accessed byte.
+    //     instructions.push(LocalGet {
+    //         local_index: address_argument_index,
+    //     });
 
-        match kind {
-            AccessKind::NativeLoad { offset, length, .. }
-            | AccessKind::NativeStore { offset, length, .. } => {
-                assert!(length as u64 <= PAGE_SIZE as u64);
-                match mem_type {
-                    WasmMemoryType::Wasm32 => {
-                        instructions.append(&mut vec![I32Const {
-                            value: (offset + length - 1) as i32,
-                        }]);
-                    }
-                    WasmMemoryType::Wasm64 => {
-                        instructions.append(&mut vec![I64Const {
-                            value: (offset + length - 1) as i64,
-                        }]);
-                    }
-                };
-            }
-            AccessKind::ShortBulkLoad {
-                length_argument_index,
-            }
-            | AccessKind::ShortBulkStore {
-                length_argument_index,
-            } => {
-                instructions.push(LocalGet {
-                    local_index: length_argument_index,
-                });
-                match mem_type {
-                    WasmMemoryType::Wasm32 => {
-                        instructions.append(&mut vec![
-                            // Using the requirement that `length > 0`, see above, to avoid underflow.
-                            I32Const { value: 1 },
-                            I32Sub,
-                        ])
-                    }
-                    WasmMemoryType::Wasm64 => {
-                        instructions.append(&mut vec![
-                            // Using the requirement that `length > 0`, see above, to avoid underflow.
-                            I64Const { value: 1 },
-                            I64Sub,
-                        ])
-                    }
-                }
-            }
-        }
+    //     match kind {
+    //         AccessKind::NativeLoad { offset, length, .. }
+    //         | AccessKind::NativeStore { offset, length, .. } => {
+    //             assert!(length as u64 <= PAGE_SIZE as u64);
+    //             match mem_type {
+    //                 WasmMemoryType::Wasm32 => {
+    //                     instructions.append(&mut vec![I32Const {
+    //                         value: (offset + length - 1) as i32,
+    //                     }]);
+    //                 }
+    //                 WasmMemoryType::Wasm64 => {
+    //                     instructions.append(&mut vec![I64Const {
+    //                         value: (offset + length - 1) as i64,
+    //                     }]);
+    //                 }
+    //             };
+    //         }
+    //         AccessKind::ShortBulkLoad {
+    //             length_argument_index,
+    //         }
+    //         | AccessKind::ShortBulkStore {
+    //             length_argument_index,
+    //         } => {
+    //             instructions.push(LocalGet {
+    //                 local_index: length_argument_index,
+    //             });
+    //             match mem_type {
+    //                 WasmMemoryType::Wasm32 => {
+    //                     instructions.append(&mut vec![
+    //                         // Using the requirement that `length > 0`, see above, to avoid underflow.
+    //                         I32Const { value: 1 },
+    //                         I32Sub,
+    //                     ])
+    //                 }
+    //                 WasmMemoryType::Wasm64 => {
+    //                     instructions.append(&mut vec![
+    //                         // Using the requirement that `length > 0`, see above, to avoid underflow.
+    //                         I64Const { value: 1 },
+    //                         I64Sub,
+    //                     ])
+    //                 }
+    //             }
+    //         }
+    //     }
 
-        match mem_type {
-            WasmMemoryType::Wasm32 => instructions.append(&mut vec![
-                I32Add,
-                I32Const {
-                    value: page_size_shift as i32,
-                },
-                I32ShrU,
-            ]),
-            WasmMemoryType::Wasm64 => instructions.append(&mut vec![
-                I64Add,
-                I64Const {
-                    value: page_size_shift as i64,
-                },
-                I64ShrU,
-                // See assertion above: Assumes that the maximum main memory can be mapped to a 32-bit byte map.
-                I32WrapI64,
-            ]),
-        };
+    //     match mem_type {
+    //         WasmMemoryType::Wasm32 => instructions.append(&mut vec![
+    //             I32Add,
+    //             I32Const {
+    //                 value: page_size_shift as i32,
+    //             },
+    //             I32ShrU,
+    //         ]),
+    //         WasmMemoryType::Wasm64 => instructions.append(&mut vec![
+    //             I64Add,
+    //             I64Const {
+    //                 value: page_size_shift as i64,
+    //             },
+    //             I64ShrU,
+    //             // See assertion above: Assumes that the maximum main memory can be mapped to a 32-bit byte map.
+    //             I32WrapI64,
+    //         ]),
+    //     };
 
-        instructions.append(&mut vec![
-            // Compare against the first accessed byte.
-            LocalGet {
-                local_index: byte_map_index,
-            },
-            I32Ne,
-            If {
-                blockty: BlockType::Empty,
-            },
-        ]);
+    //     instructions.append(&mut vec![
+    //         // Compare against the first accessed byte.
+    //         LocalGet {
+    //             local_index: byte_map_index,
+    //         },
+    //         I32Ne,
+    //         If {
+    //             blockty: BlockType::Empty,
+    //         },
+    //     ]);
 
-        instructions.append(&mut vec![
-            // Page-crossing access. At most one subsequent page can be accessed because `length <= PAGE_SIZE`.
-            // The guard is unconditionally triggered for the second accessed page. The guard logic checks whether
-            // this access needs specific handling (updating the byte map and guarding the working set limit).
-            LocalGet {
-                local_index: byte_map_index,
-            },
-            I32Const { value: 1 },
-            I32Add,
-            Call {
-                function_index: page_guard_function_index,
-            },
-            End,
-        ]);
-    }
+    //     instructions.append(&mut vec![
+    //         // Page-crossing access. At most one subsequent page can be accessed because `length <= PAGE_SIZE`.
+    //         // The guard is unconditionally triggered for the second accessed page. The guard logic checks whether
+    //         // this access needs specific handling (updating the byte map and guarding the working set limit).
+    //         LocalGet {
+    //             local_index: byte_map_index,
+    //         },
+    //         I32Const { value: 1 },
+    //         I32Add,
+    //         Call {
+    //             function_index: page_guard_function_index,
+    //         },
+    //         End,
+    //     ]);
+    // }
 
     // Restore the address argument of a native access operation.
     match kind {

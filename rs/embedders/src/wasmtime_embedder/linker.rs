@@ -1540,8 +1540,14 @@ fn main_read_page_guard(
 ) -> Result<(), anyhow::Error> {
     // println!("read access on page {page_index}");
     let first_access = with_memory_loader_and_bytemap(caller, |loader, bytemap| {
+        // If it's marked in the bytemap, nothing to do.
         if bytemap[page_index] != NO_ACCESS {
             return Ok(false);
+        }
+        // This page is marked NO_ACCESS, but if the previous page is accessed
+        // we just need to update the bytemap and handle the next page.
+        if page_index > 0 && bytemap[page_index - 1] != NO_ACCESS {
+            bytemap[page_index] = READ_ONLY_ACCESS;
         }
         loader.load_page(bytemap, PageIndex::new(page_index as u64), AccessType::Read);
         Ok(true)
@@ -1571,7 +1577,13 @@ fn main_write_page_guard(
         let first_access = bytemap[page_index] == NO_ACCESS;
         // println!("Is first access: {first_access}");
         if !first_access {
+            bytemap[page_index] = WRITE_ACCESS;
             return Ok(false);
+        }
+        // Cross page access on previous page will mean this page is already mapped.
+        if page_index > 0 && bytemap[page_index - 1] != NO_ACCESS {
+            bytemap[page_index] = WRITE_ACCESS;
+            return Ok(true);
         }
         loader.load_page(
             bytemap,

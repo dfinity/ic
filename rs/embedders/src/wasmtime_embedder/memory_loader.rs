@@ -29,6 +29,23 @@ pub enum AccessType {
     Write,
 }
 
+fn actual_page_status(bytemap: &[u8], index: usize) -> u8 {
+    if index == 0 {
+        return bytemap[index];
+    }
+
+    let previous = bytemap[index - 1];
+    let current = bytemap[index];
+
+    if previous == WRITE_ACCESS || current == WRITE_ACCESS {
+        return WRITE_ACCESS;
+    }
+    if previous == READ_ONLY_ACCESS || current == READ_ONLY_ACCESS {
+        return READ_ONLY_ACCESS;
+    }
+    NO_ACCESS
+}
+
 fn range_size_in_bytes(range: &Range<PageIndex>) -> usize {
     (range.end.get() - range.start.get()) as usize * PAGE_SIZE
 }
@@ -49,34 +66,30 @@ fn restrict_range_to_unmarked(
         range.contains(&faulting_page),
         "Error checking page:{faulting_page} ∈ range:{range:?}"
     );
-    let default = match access_type {
-        AccessType::Read => NO_ACCESS,
-        AccessType::Write => READ_ONLY_ACCESS,
-    };
     let target = match access_type {
         AccessType::Read => NO_ACCESS,
         AccessType::Write => READ_ONLY_ACCESS,
     };
     // TODO: Need to add back?
     // let range = range_intersection(&range, &self.page_range());
-    let old_start = range.start.get();
-    let mut start = faulting_page.get();
+    let old_start = range.start.get() as usize;
+    let mut start = faulting_page.get() as usize;
     while start > old_start {
-        if bytemap.get(start as usize - 1).unwrap_or(&default) != &target {
+        if start == 0 || actual_page_status(bytemap, start - 1) != target {
             break;
         }
         start -= 1;
     }
-    let old_end = range.end.get();
-    let mut end = faulting_page.get();
+    let old_end = range.end.get() as usize;
+    let mut end = faulting_page.get() as usize;
     while end < old_end {
-        if bytemap.get(end as usize).unwrap_or(&default) != &target {
+        if end > bytemap.len() || actual_page_status(bytemap, end) != target {
             break;
         }
         end += 1;
     }
 
-    PageIndex::new(start)..PageIndex::new(end)
+    PageIndex::new(start as u64)..PageIndex::new(end as u64)
 }
 
 // Returns the range of pages that are predicted to be marked in the future
@@ -178,7 +191,7 @@ impl MemoryLoader {
         access_type: AccessType,
     ) {
         if access_type == AccessType::Write
-            && bytemap[faulting_page.get() as usize] == READ_ONLY_ACCESS
+            && actual_page_status(bytemap, faulting_page.get() as usize) == READ_ONLY_ACCESS
         {
             let prefetch_range =
                 range_from_count(faulting_page, NumOsPages::new(MAX_PAGES_TO_MAP as u64));
@@ -200,9 +213,23 @@ impl MemoryLoader {
             //     min_prefetch_range.start.get(),
             //     min_prefetch_range.end.get()
             // );
-            for i in min_prefetch_range.start.get() as usize..min_prefetch_range.end.get() as usize
-            {
-                bytemap[i] = WRITE_ACCESS;
+            if min_prefetch_range.end.get() - min_prefetch_range.start.get() == 1 {
+                let page_index = min_prefetch_range.end.get() as usize;
+                if page_index < bytemap.len() && bytemap[page_index] == NO_ACCESS {
+                    // Check access beyond end?
+                    let range = std::ops::Range {
+                        start: PageIndex::new(page_index as u64),
+                        end: PageIndex::new(page_index as u64 + 1),
+                    };
+                    self.load_range(range.clone(), range);
+                }
+                bytemap[min_prefetch_range.start.get() as usize] = WRITE_ACCESS;
+            } else {
+                for i in min_prefetch_range.start.get() as usize
+                    ..(min_prefetch_range.end.get() - 1) as usize
+                {
+                    bytemap[i] = WRITE_ACCESS;
+                }
             }
         } else {
             let prefetch_range =
@@ -225,13 +252,32 @@ impl MemoryLoader {
                 AccessType::Write => WRITE_ACCESS,
             };
             // println!("setting {updated_range:?} to {new_value}");
-            for i in updated_range {
-                bytemap[i as usize] = new_value;
+            let count = updated_range.clone().count();
+            if count == 1 {
+                let updated_range = updated_range.clone();
+                let page_index = updated_range.end as usize;
+                if page_index < bytemap.len() && bytemap[page_index] == NO_ACCESS {
+                    // Check access beyond end?
+                    let range = std::ops::Range {
+                        start: PageIndex::new(page_index as u64),
+                        end: PageIndex::new(page_index as u64 + 1),
+                    };
+                    self.load_range(range.clone(), range);
+                }
+                bytemap[updated_range.start as usize] = new_value;
+            } else {
+                for i in updated_range.take(count - 1) {
+                    bytemap[i as usize] = new_value;
+                }
             }
         }
     }
 
-    fn load_range(&self, min_range: Range<PageIndex>, max_range: Range<PageIndex>) -> Range<u64> {
+    pub fn load_range(
+        &self,
+        min_range: Range<PageIndex>,
+        max_range: Range<PageIndex>,
+    ) -> Range<u64> {
         let instructions = self.page_map.get_memory_instructions(min_range, max_range);
         let result = instructions.range.start.get()..instructions.range.end.get();
         self.apply_instructions(instructions);
