@@ -101,7 +101,7 @@ rust_test(
 
 rust_test(
     name = "candid_equality",
-    srcs = glob(["tests/candid_equality.rs"]),
+    srcs = ["tests/candid_equality.rs"],
     data = ["tests/ic.did"],
     env = {"IC_DID": "$(rootpath :tests/ic.did)"},
     deps = [
