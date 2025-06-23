@@ -1,4 +1,5 @@
-use bitcoin::{block::Header, consensus::deserialize, Block};
+use bitcoin::{block::Header, consensus::deserialize, Address, Amount, Block};
+use bitcoincore_rpc::{Auth, Client, RpcApi};
 use candid::{Encode, Principal};
 use ic_agent::{Agent, AgentError};
 use ic_btc_interface::Network;
@@ -7,11 +8,16 @@ use ic_management_canister_types_private::{
     BitcoinGetSuccessorsArgs, BitcoinGetSuccessorsRequestInitial, BitcoinGetSuccessorsResponse,
     BitcoinGetSuccessorsResponsePartial, BitcoinSendTransactionInternalArgs, Payload,
 };
-use ic_system_test_driver::util::{MessageCanister, MESSAGE_CANISTER_WASM};
+use ic_system_test_driver::{
+    driver::{test_env::TestEnv, test_env_api::retry, universal_vm::UniversalVms},
+    util::{MessageCanister, MESSAGE_CANISTER_WASM},
+};
 use ic_types::PrincipalId;
 use ic_utils::interfaces::ManagementCanister;
 use slog::{info, Logger};
-use std::str::FromStr;
+use std::{str::FromStr, time::Duration};
+
+use crate::{utils::UNIVERSAL_VM_NAME, BITCOIND_RPC_PORT};
 
 /// A proxy to make requests to the bitcoin adapter
 ///
@@ -137,6 +143,10 @@ impl<'a> AdapterProxy<'a> {
             headers.extend(new_headers);
             blocks.extend(new_blocks);
 
+            if blocks.is_empty() {
+                break;
+            }
+
             tries += 1;
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         }
@@ -176,4 +186,92 @@ impl<'a> AdapterProxy<'a> {
 
         Ok((vec![reconstructed_block], next))
     }
+}
+
+pub fn get_alice_and_bob_wallets(env: &TestEnv) -> (Client, Client, Address, Address) {
+    let (alice_client, alice_address) = get_test_wallet(env, "alice");
+    let (bob_client, bob_address) = get_test_wallet(env, "bob");
+
+    (alice_client, bob_client, alice_address, bob_address)
+}
+
+fn get_test_wallet(env: &TestEnv, name: &str) -> (Client, Address) {
+    let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
+    let bitcoind_addr = deployed_universal_vm.get_vm().unwrap().ipv6;
+
+    let client = Client::new(
+        format!(
+            "http://[{}]:{}/wallet/{}",
+            bitcoind_addr, BITCOIND_RPC_PORT, name
+        )
+        .as_str(),
+        Auth::UserPass(
+            crate::BITCOIND_RPC_USER.to_string(),
+            crate::BITCOIND_RPC_PASSWORD.to_string(),
+        ),
+    )
+    .unwrap();
+
+    let wallets = retry(
+        "client.list_wallets",
+        env.logger(),
+        Duration::from_secs(100),
+        Duration::from_secs(1),
+        || Ok(client.list_wallets()?),
+    )
+    .expect("Failed to list wallets");
+
+    if wallets.iter().any(|wallet| wallet == name) {
+        retry(
+            "client.load_wallet",
+            env.logger(),
+            Duration::from_secs(100),
+            Duration::from_secs(1),
+            || Ok(client.load_wallet(name)?),
+        )
+        .expect("Failed to load wallet");
+    } else {
+        retry(
+            "client.create_wallet",
+            env.logger(),
+            Duration::from_secs(100),
+            Duration::from_secs(1),
+            || Ok(client.create_wallet(name, None, None, None, None)?),
+        )
+        .expect("Failed to create wallet");
+    }
+
+    let address = client.get_new_address(None, None).unwrap().assume_checked();
+
+    (client, address)
+}
+
+pub fn fund_with_btc(to_fund_client: &Client, to_fund_address: &Address) {
+    let initial_amount = to_fund_client
+        .get_received_by_address(to_fund_address, Some(0))
+        .unwrap()
+        .to_btc();
+
+    to_fund_client
+        .generate_to_address(1, to_fund_address)
+        .unwrap();
+
+    // Generate 100 blocks for coinbase maturity
+    to_fund_client
+        .generate_to_address(100, &get_blackhole_address())
+        .unwrap();
+
+    // The reward for mining a block is 50 bitcoins
+    assert_eq!(
+        to_fund_client
+            .get_received_by_address(to_fund_address, Some(0))
+            .unwrap(),
+        Amount::from_btc(initial_amount + 50.0).unwrap()
+    );
+}
+
+pub fn get_blackhole_address() -> Address {
+    Address::from_str("mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn")
+        .unwrap()
+        .assume_checked()
 }

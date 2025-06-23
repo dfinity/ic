@@ -1,4 +1,5 @@
 use anyhow::Result;
+use bitcoin::Amount;
 use bitcoincore_rpc::RpcApi;
 use ic_system_test_driver::{
     driver::{
@@ -10,7 +11,7 @@ use ic_system_test_driver::{
     util::{assert_create_agent, block_on},
 };
 use ic_tests_ckbtc::{
-    adapter::AdapterProxy,
+    adapter::{fund_with_btc, get_alice_and_bob_wallets, get_blackhole_address, AdapterProxy},
     adapter_test_setup, subnet_sys,
     utils::{ensure_wallet, get_btc_client},
 };
@@ -24,7 +25,7 @@ fn test_received_blocks(env: TestEnv) {
     // Setup client
     let client = get_btc_client(&env);
     ensure_wallet(&client, &log);
-    assert_eq!(0, client.get_blockchain_info().unwrap().blocks);
+    let num_blocks = client.get_blockchain_info().unwrap().blocks;
     info!(log, "Set up bitcoind wallet");
 
     // Mine 150 blocks
@@ -43,7 +44,7 @@ fn test_received_blocks(env: TestEnv) {
             .expect("Failed to syncronize blocks")
     });
 
-    assert_eq!(blocks.len(), 150);
+    assert_eq!(blocks.len() as u64, num_blocks + 150);
     for (h, block) in blocks.iter().enumerate() {
         assert_eq!(
             block.block_hash(),
@@ -52,10 +53,82 @@ fn test_received_blocks(env: TestEnv) {
     }
 }
 
+fn test_receives_new_3rd_party_txs(env: TestEnv) {
+    let log = env.logger();
+    let subnet_sys = subnet_sys(&env);
+    let sys_node = subnet_sys.nodes().next().expect("No node in sys subnet.");
+
+    let client = get_btc_client(&env);
+    ensure_wallet(&client, &log);
+    let num_start_blocks = client.get_blockchain_info().unwrap().blocks;
+    let num_blocks = client.get_blockchain_info().unwrap().blocks;
+    info!(log, "Set up bitcoind wallet");
+
+    let (alice_client, bob_client, alice_address, bob_address) = get_alice_and_bob_wallets(&env);
+    info!(log, "Set up alice and bob");
+
+    fund_with_btc(&alice_client, &alice_address);
+    assert_eq!(
+        alice_client.get_blockchain_info().unwrap().blocks,
+        num_blocks + 101
+    );
+
+    let txid = alice_client
+        .send_to_address(
+            &bob_address,
+            Amount::from_btc(1.0).unwrap(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .expect("Failed to send to Bob");
+    alice_client
+        .generate_to_address(1, &get_blackhole_address())
+        .unwrap();
+    assert_eq!(
+        alice_client.get_blockchain_info().unwrap().blocks,
+        num_blocks + 102
+    );
+
+    let alice_balance = alice_client.get_balance(None, None).unwrap();
+
+    // Take the tx fee into consideration
+    assert!(
+        alice_balance < Amount::from_btc(49.0).unwrap()
+            && alice_balance > Amount::from_btc(48.999).unwrap()
+    );
+    assert_eq!(
+        bob_client.get_balance(None, None).unwrap(),
+        Amount::from_btc(1.0).unwrap()
+    );
+
+    // Instruct the adapter to sync the blocks
+    let anchor = client.get_block_hash(0).unwrap()[..].to_vec();
+    let blocks = block_on(async {
+        let agent = assert_create_agent(sys_node.get_public_url().as_str()).await;
+        let adapter_proxy = AdapterProxy::new(&agent, log).await;
+        adapter_proxy
+            .sync_blocks(&mut vec![], anchor, 150, 15)
+            .await
+            .expect("Failed to syncronize blocks")
+    });
+
+    assert!(blocks
+        .last()
+        .unwrap()
+        .txdata
+        .iter()
+        .any(|tx| tx.compute_txid() == txid));
+}
+
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(adapter_test_setup)
         .add_test(systest!(test_received_blocks))
+        .add_test(systest!(test_receives_new_3rd_party_txs))
         .execute_from_args()?;
     Ok(())
 }
