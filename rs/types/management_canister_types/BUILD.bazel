@@ -18,7 +18,6 @@ permanent_whitelist = [
     "//rs/interfaces:__subpackages__",
     "//rs/messaging:__subpackages__",
     "//rs/management_canister_types/fuzz:__subpackages__",
-    "//rs/node_rewards/canister:__subpackages__",
     "//rs/orchestrator:__subpackages__",
     "//rs/pocket_ic_server:__subpackages__",
     "//rs/prep:__subpackages__",

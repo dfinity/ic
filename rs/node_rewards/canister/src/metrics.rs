@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use candid::Principal;
 use ic_base_types::SubnetId;
 use ic_cdk::api::call::CallResult;
-use ic_management_canister_types_private::{NodeMetricsHistoryArgs, NodeMetricsHistoryResponse};
+use ic_management_canister_types::{NodeMetricsHistoryArgs, NodeMetricsHistoryRecord};
 use ic_stable_structures::StableBTreeMap;
 use rewards_calculation::types::{NodeMetricsDailyRaw, SubnetMetricsDailyKey, UnixTsNanos};
 use std::cell::RefCell;
@@ -19,7 +19,7 @@ pub trait ManagementCanisterClient {
     async fn node_metrics_history(
         &self,
         args: NodeMetricsHistoryArgs,
-    ) -> CallResult<Vec<NodeMetricsHistoryResponse>>;
+    ) -> CallResult<Vec<NodeMetricsHistoryRecord>>;
 }
 
 /// Used to interact with remote Management canisters.
@@ -32,8 +32,8 @@ impl ManagementCanisterClient for ICCanisterClient {
     async fn node_metrics_history(
         &self,
         args: NodeMetricsHistoryArgs,
-    ) -> CallResult<Vec<NodeMetricsHistoryResponse>> {
-        ic_cdk::api::call::call_with_payment128::<_, (Vec<NodeMetricsHistoryResponse>,)>(
+    ) -> CallResult<Vec<NodeMetricsHistoryRecord>> {
+        ic_cdk::api::call::call_with_payment128::<_, (Vec<NodeMetricsHistoryRecord>,)>(
             Principal::management_canister(),
             "node_metrics_history",
             (args,),
@@ -78,7 +78,7 @@ where
         &self,
         subnet_id: SubnetId,
         last_stored_ts: Option<UnixTsNanos>,
-        mut subnet_update: Vec<NodeMetricsHistoryResponse>,
+        mut subnet_update: Vec<NodeMetricsHistoryRecord>,
     ) {
         let mut last_total_metrics: HashMap<_, _> = HashMap::new();
 
@@ -149,8 +149,7 @@ where
     async fn fetch_subnets_metrics(
         &self,
         last_timestamp_per_subnet: &BTreeMap<SubnetId, Option<UnixTsNanos>>,
-    ) -> BTreeMap<(SubnetId, Option<UnixTsNanos>), CallResult<Vec<NodeMetricsHistoryResponse>>>
-    {
+    ) -> BTreeMap<(SubnetId, Option<UnixTsNanos>), CallResult<Vec<NodeMetricsHistoryRecord>>> {
         let mut subnets_history = Vec::new();
 
         for (subnet_id, last_stored_ts) in last_timestamp_per_subnet {
@@ -165,7 +164,7 @@ where
             );
 
             let contract = NodeMetricsHistoryArgs {
-                subnet_id: subnet_id.get(),
+                subnet_id: subnet_id.get().0,
                 start_at_timestamp_nanos: refresh_ts,
             };
 

@@ -11548,7 +11548,7 @@ dependencies = [
  "ic-cdk 0.17.2",
  "ic-cdk-timers",
  "ic-interfaces-registry",
- "ic-management-canister-types-private",
+ "ic-management-canister-types",
  "ic-nervous-system-agent",
  "ic-nervous-system-canisters",
  "ic-nervous-system-integration-tests",
