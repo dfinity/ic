@@ -15,6 +15,22 @@ env:
 anchors:
   image: &image
     image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
+
+  backup-pod-access: &backup-pod-access
+    run: |
+      # The following adds the SSH private key to the ssh-agent such that CI can SSH into the backup pod.
+      if [ -z "${SSH_AUTH_SOCK:-}" ]; then
+        eval "$(ssh-agent -s)"
+        ssh-add - <<'EOF'
+      ${{ secrets.SSH_PRIVATE_KEY_BACKUP_POD }}
+      EOF
+        echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
+      fi
+
+      rm -rf ~/.ssh
+      mkdir -p ~/.ssh
+      chmod 0700 ~/.ssh
+      echo -e "Host *\nUser github-runner\n" > ~/.ssh/config
   dind-large-setup: &dind-large-setup
     runs-on:
       labels: dind-large
@@ -73,13 +89,14 @@ jobs:
     timeout-minutes: 720 # 12 hours
     steps:
       - <<: *checkout
+      - name: Set up backup pod access
+        <<: *backup-pod-access
       - name: Run FI Tests Nightly
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
         with:
           BAZEL_COMMAND: test --keep_going --test_tag_filters=fi_tests_nightly --test_env=SSH_AUTH_SOCK --test_timeout=43200
           BAZEL_TARGETS: //rs/ledger_suite/...
-          SSH_PRIVATE_KEY_BACKUP_POD: ${{ secrets.SSH_PRIVATE_KEY_BACKUP_POD }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
   nns-tests-nightly:
@@ -88,13 +105,14 @@ jobs:
     timeout-minutes: 30
     steps:
       - <<: *checkout
+      - name: Set up backup pod access
+        <<: *backup-pod-access
       - name: Run NNS Tests Nightly
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
         with:
           BAZEL_COMMAND: test --keep_going --test_tag_filters=nns_tests_nightly --test_env=SSH_AUTH_SOCK --test_env=NNS_CANISTER_UPGRADE_SEQUENCE=all
           BAZEL_TARGETS: //rs/nns/...
-          SSH_PRIVATE_KEY_BACKUP_POD: ${{ secrets.SSH_PRIVATE_KEY_BACKUP_POD }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
   system-tests-benchmarks-nightly:
