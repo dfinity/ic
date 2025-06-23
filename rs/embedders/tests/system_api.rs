@@ -2322,17 +2322,17 @@ fn test_env_var_name_operations() {
 
     // Test ic0_env_var_name_exists
     assert_eq!(
-        api.ic0_env_var_name_exists(0, var_name_1.len(), &var_name_1.as_bytes())
+        api.ic0_env_var_name_exists(0, var_name_1.len(), var_name_1.as_bytes())
             .unwrap(),
         1
     );
     assert_eq!(
-        api.ic0_env_var_name_exists(0, var_name_2.len(), &var_name_2.as_bytes())
+        api.ic0_env_var_name_exists(0, var_name_2.len(), var_name_2.as_bytes())
             .unwrap(),
         1
     );
     assert_eq!(
-        api.ic0_env_var_name_exists(0, non_existing_var.len(), &non_existing_var.as_bytes())
+        api.ic0_env_var_name_exists(0, non_existing_var.len(), non_existing_var.as_bytes())
             .unwrap(),
         0
     );
