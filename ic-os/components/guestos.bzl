@@ -164,7 +164,4 @@ component_files = {
 
     # fstrim
     Label("fstrim/sync_fstrim.sh"): "/opt/ic/bin/sync_fstrim.sh",
-
-    # TODO(NODE-1618):
-    Label("misc/update-config/update-guestos-config.service"): "/etc/systemd/system/update-config.service",
 }

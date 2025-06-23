@@ -4,7 +4,7 @@ inputs:
   diff-only:
     required: false
     default: false
-  release-build:
+  stamp-build:
     required: false
     default: true
   upload-artifacts:
@@ -58,7 +58,7 @@ runs:
             echo "::notice::Node Name: ${NODE_NAME}"
 
             diff_only='${{ inputs.diff-only }}'
-            release_build='${{ inputs.release-build }}'
+            stamp_build='${{ inputs.stamp-build }}'
 
             bazel_args=(
                 # default all tests to fail ...
@@ -71,7 +71,7 @@ runs:
                 --flaky_test_attempts=//rs/tests/.*@3
             )
 
-            if [[ $release_build == "true" ]]; then
+            if [[ $stamp_build == "true" ]]; then
               # make sure the version is stamped in
               bazel_args+=( --config=stamped )
             fi
@@ -124,10 +124,10 @@ runs:
         if: inputs.upload-artifacts == 'true' && inputs.CLOUD_CREDENTIALS_CONTENT != ''
         with:
           run: |
-            release_build='${{ inputs.release-build }}'
+            stamp_build='${{ inputs.stamp-build }}'
 
-            if [[ $release_build != "true" ]]; then
-              echo "refusing to upload non-release artifacts"
+            if [[ $stamp_build != "true" ]]; then
+              echo "refusing to upload non-stamped artifacts"
               exit 1
             fi
 

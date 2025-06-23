@@ -42,7 +42,7 @@ jobs:
       - name: build
         run: |
           TARGET='//rs/boundary_node/rate_limits:rate_limit_canister'
-          bazel build --config=ci ${TARGET}
+          bazel build ${TARGET}
 
           OUTPUT='bazel-bin/rs/boundary_node/rate_limits/rate_limit_canister.wasm.gz'
           mv ${OUTPUT} rate_limit_canister.wasm.gz

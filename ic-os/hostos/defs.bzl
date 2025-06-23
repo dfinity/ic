@@ -75,6 +75,8 @@ def image_deps(mode, _malicious = False):
     if "dev" in mode:
         deps["rootfs"].pop("//rs/ic_os/release:config", None)
         deps["rootfs"].update({"//rs/ic_os/release:config_dev": "/opt/ic/bin/config:0755"})
+        deps["rootfs"].pop("//rs/ic_os/release:hostos_tool", None)
+        deps["rootfs"].update({"//rs/ic_os/release:hostos_tool_dev": "/opt/ic/bin/hostos_tool:0755"})
 
     return deps
 

@@ -1497,7 +1497,7 @@ mod test {
         // to make this work, so that the timer accesses the same value of governance.
         set_governance_for_tests(governance);
         let governance = governance_mut();
-        governance.distribute_rewards(Tokens::from_e8s(100_000_000));
+        governance.distribute_voting_rewards_to_neurons(Tokens::from_e8s(100_000_000));
         run_pending_timers_every_interval_for_count(core::time::Duration::from_secs(2), 2);
 
         assert_eq!(
@@ -1515,7 +1515,7 @@ mod test {
             .process_voting_state_machines()
             .now_or_never()
             .unwrap();
-        governance.distribute_rewards(Tokens::from_e8s(100_000_000));
+        governance.distribute_voting_rewards_to_neurons(Tokens::from_e8s(100_000_000));
         // Now rewards should be able to be distributed
         run_pending_timers_every_interval_for_count(core::time::Duration::from_secs(2), 2);
 
