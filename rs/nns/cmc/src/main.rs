@@ -45,6 +45,7 @@ use std::{
     cell::{Cell, RefCell},
     collections::{btree_map::Entry, BTreeMap, BTreeSet},
     convert::TryInto,
+    str::FromStr,
     thread::LocalKey,
     time::Duration,
 };
@@ -442,8 +443,15 @@ fn set_authorized_subnetwork_list(arg: SetAuthorizedSubnetworkListArgs) {
     with_state_mut(|state| {
         let governance_canister_id = state.governance_canister_id;
 
-        if CanisterId::unchecked_from_principal(caller()) != governance_canister_id {
-            panic!("Only the governance canister can set authorized subnetwork lists.");
+        let caller_id = CanisterId::unchecked_from_principal(caller());
+        let subnet_rental_canister_id = CanisterId::unchecked_from_principal(
+            PrincipalId::from_str("qvhpv-4qaaa-aaaaa-aaagq-cai").unwrap(),
+        );
+
+        if caller_id != governance_canister_id || caller_id != subnet_rental_canister_id {
+            panic!(
+                "Only the governance canister and subnet rental canister can set authorized subnetwork lists."
+            );
         }
 
         let assigned_to_types: BTreeSet<&SubnetId> = state
