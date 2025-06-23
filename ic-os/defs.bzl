@@ -190,6 +190,7 @@ def icos_build(
                         (version_txt, "/version.txt:0644"),
                         (boot_args, "/boot_args:0644"),
                         (extra_boot_args, "/extra_boot_args:0644"),
+                        (image_deps["grub_config"], "/grub.cfg:0644"),
                     ]
                 )
             },

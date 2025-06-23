@@ -1,0 +1,10 @@
+[Unit]
+Description=Update grub.cfg file
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/opt/ic/bin/grub-updater.sh
+
+[Install]
+WantedBy=multi-user.target

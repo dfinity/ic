@@ -68,6 +68,8 @@ component_files = {
     Label("misc/guestos/hsm/pcscd"): "/etc/default/pcscd",
     Label("misc/log-config/log-config-guestos.service"): "/etc/systemd/system/log-config.service",
     Label("misc/log-config/log-config.sh"): "/opt/ic/bin/log-config.sh",
+    Label("misc/grub-updater/grub-updater.sh"): "/opt/ic/bin/grub-updater.sh",
+    Label("misc/grub-updater/grub-updater.service"): "/etc/systemd/system/grub-updater.service",
 
     # monitoring
     Label("monitoring/filebeat/setup-filebeat-permissions.sh"): "/opt/ic/bin/setup-filebeat-permissions.sh",
