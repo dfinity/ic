@@ -1,8 +1,6 @@
 use crate::extensions::{validate_extension_wasm, ValidatedRegisterExtension};
 use crate::icrc_ledger_helper::ICRCLedgerHelper;
-use crate::pb::v1::{
-    precise_value, ExtensionInit, Metrics, PreciseMap, PreciseValue, RegisterExtension,
-};
+use crate::pb::v1::{precise, ExtensionInit, Metrics, Precise, PreciseMap, RegisterExtension};
 use crate::{
     canister_control::{
         get_canister_id, perform_execute_generic_nervous_system_function_call,
@@ -2316,8 +2314,8 @@ impl Governance {
         // See ic_sns_init::distributions::FractionalDeveloperVotingPower.insert_treasury_accounts
         let (sns_token_allowance_e8s, icp_token_allowance_e8s) = if let Some(ExtensionInit {
             value:
-                Some(PreciseValue {
-                    precise_value: Some(precise_value::PreciseValue::Map(PreciseMap { mut map })),
+                Some(Precise {
+                    value: Some(precise::Value::Map(PreciseMap { mut map })),
                 }),
         }) = extension_init
         {
@@ -2331,8 +2329,8 @@ impl Governance {
             let icp_amount_e8s = map
                 .remove("treasury_allocation_icp_e8s")
                 .and_then(|v| {
-                    if let PreciseValue {
-                        precise_value: Some(precise_value::PreciseValue::Nat(amount_e8s)),
+                    if let Precise {
+                        value: Some(precise::Value::Nat(amount_e8s)),
                     } = v
                     {
                         Some(amount_e8s)
@@ -2350,8 +2348,8 @@ impl Governance {
             let sns_amount_e8s = map
                 .remove("treasury_allocation_sns_e8s")
                 .and_then(|v| {
-                    if let PreciseValue {
-                        precise_value: Some(precise_value::PreciseValue::Nat(amount_e8s)),
+                    if let Precise {
+                        value: Some(precise::Value::Nat(amount_e8s)),
                     } = v
                     {
                         Some(amount_e8s)
@@ -2362,7 +2360,7 @@ impl Governance {
                 .ok_or_else(|| {
                     GovernanceError::new_with_message(
                         ErrorType::InvalidProposal,
-                        "ExtensionInit must contain an ICP allowance.",
+                        "ExtensionInit must contain an SNS allowance.",
                     )
                 })?;
 
@@ -2417,7 +2415,7 @@ impl Governance {
                     asset: sns_token,
                     owner_account: sns_treasury_manager::Account {
                         owner: store_canister_id.get().0,
-                        subaccount: treasury_icp_subaccount,
+                        subaccount: treasury_sns_subaccount,
                     },
                 },
                 Allowance {
@@ -2425,7 +2423,7 @@ impl Governance {
                     asset: icp_token,
                     owner_account: sns_treasury_manager::Account {
                         owner: store_canister_id.get().0,
-                        subaccount: treasury_sns_subaccount,
+                        subaccount: treasury_icp_subaccount,
                     },
                 },
             ],

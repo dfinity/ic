@@ -31,7 +31,6 @@ pub struct Balances {
 pub type TreasuryManagerResult = Result<Balances, Vec<TransactionError>>;
 
 pub trait TreasuryManager {
-
     /// Implements the `deposit` API function.
     fn deposit(
         &mut self,
@@ -44,10 +43,10 @@ pub trait TreasuryManager {
         request: WithdrawRequest,
     ) -> impl std::future::Future<Output = TreasuryManagerResult> + Send;
 
-    /// Implements the `withdraw` API query function.
+    /// Implements the `audit_trail` API query function.
     fn audit_trail(&self, request: AuditTrailRequest) -> AuditTrail;
 
-    /// Implements the `withdraw` API query function.
+    /// Implements the `balances` API query function.
     fn balances(&self, request: BalancesRequest) -> TreasuryManagerResult;
 
     /// Should not be exposed as an API function, but rather called periodically by the canister.
@@ -101,10 +100,10 @@ impl From<TreasuryManagerOperation> for Vec<u8> {
         const PREFIX: &str = "TreasuryManager";
 
         let suffix = match op {
-            TreasuryManagerOperation::Deposit => "deposit",
-            TreasuryManagerOperation::Balances => "balances",
-            TreasuryManagerOperation::IssueReward => "reward",
-            TreasuryManagerOperation::Withdraw => "withdraw",
+            TreasuryManagerOperation::Deposit => "Deposit",
+            TreasuryManagerOperation::Balances => "Balances",
+            TreasuryManagerOperation::IssueReward => "IssueReward",
+            TreasuryManagerOperation::Withdraw => "Withdraw",
         };
 
         format!("{}.{}", PREFIX, suffix).as_bytes().to_vec()
@@ -132,12 +131,12 @@ pub enum TransactionError {
 
 #[derive(CandidType, Clone, Debug, Deserialize)]
 pub struct Transaction {
+    pub timestamp_ns: u64,
     pub canister_id: Principal,
     // TODO: add low-level traces stores as JSON.
     pub result: Result<TransactionWitness, TransactionError>,
     pub human_readable: String,
-    pub timestamp_ns: u64,
-    pub treasury_operation_phase: TreasuryManagerOperation,
+    pub treasury_operation_operation: TreasuryManagerOperation,
 }
 
 #[derive(CandidType, Clone, Debug, Deserialize)]

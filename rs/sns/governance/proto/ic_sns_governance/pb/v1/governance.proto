@@ -443,8 +443,8 @@ message RegisterDappCanisters {
   repeated ic_base_types.pb.v1.PrincipalId canister_ids = 1;
 }
 
-message PreciseValue {
-  oneof precise_value {
+message Precise {
+  oneof value {
     bool bool = 1;
     bytes blob = 2;
     string text = 3;
@@ -456,15 +456,15 @@ message PreciseValue {
 }
 
 message PreciseArray {
-  repeated PreciseValue array = 1;
+  repeated Precise array = 1;
 }
 
 message PreciseMap {
-  map<string, PreciseValue> map = 1;
+  map<string, Precise> map = 1;
 }
 
 message ExtensionInit {
-  optional PreciseValue value = 1;
+  optional Precise value = 1;
 }
 
 message RegisterExtension {
