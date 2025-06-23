@@ -1049,7 +1049,7 @@ fn report_last_diverged_state(
     )
 }
 
-/// Type for the return value of `populate_metadata`
+/// Type for the return value of populate_metadata
 #[derive(Default)]
 struct PopulatedMetadata {
     certifications_metadata: CertificationsMetadata,
