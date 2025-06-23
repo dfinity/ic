@@ -286,7 +286,7 @@ impl TryFrom<(Time, &Request, CanisterHttpRequestArgs)> for CanisterHttpRequestC
         };
 
         if let Some(false) = args.is_replicated {
-            return Err(CanisterHttpRequestContextError::NonReplicatedNotSupported)
+            return Err(CanisterHttpRequestContextError::NonReplicatedNotSupported);
         }
 
         let max_response_bytes = match args.max_response_bytes {
