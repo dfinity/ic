@@ -17,7 +17,7 @@ use ic_test_utilities_types::{
 };
 use ic_types::{
     batch::BlockmakerMetrics,
-    canister_http::{CanisterHttpMethod, CanisterHttpRequestContext},
+    canister_http::{CanisterHttpMethod, CanisterHttpRequestContext, Replication},
     ingress::WasmResult,
     messages::{CallbackId, CanisterCall, Payload, Request, RequestMetadata},
     time::CoarseTime,
@@ -582,6 +582,7 @@ fn subnet_call_contexts_deserialization() {
         http_method: CanisterHttpMethod::GET,
         transform: Some(transform.clone()),
         time: UNIX_EPOCH,
+        replication: Replication::FullyReplicated,
     };
     subnet_call_context_manager.push_context(SubnetCallContext::CanisterHttpRequest(
         canister_http_request,
