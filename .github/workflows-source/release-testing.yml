@@ -49,7 +49,7 @@ jobs:
   # Run some extra system tests that are skipped on CI Main.
   # Those test suites would overwhelm a runner, so each is run
   # as a separate job.
-  bazel-system-tests:
+  release-system-tests:
     name: Bazel System Tests (${{ matrix.tag }})
     <<: *dind-large-setup
     strategy:
