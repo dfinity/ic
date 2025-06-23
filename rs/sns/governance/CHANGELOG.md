@@ -11,21 +11,6 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
-# 2025-06-20: Proposal 137082
-
-http://dashboard.internetcomputer.org/proposal/137082
-
-## Added
-
-### New `RegisterExtension` proposal type
-
-A new proposal type, `RegisterExtension`, is added for registering SNS extensions.
-Extensions are a new class of SNS canisters that (unlike SNS-controlled dapp canisters)
-can operate on behalf of the DAO, e.g., by managing a portion of the treasury funds.
-
-Note that while `RegisterExtension` proposals are already recognized, they are not enabled yet.
-
-
 # 2025-06-13: Proposal 136989
 
 http://dashboard.internetcomputer.org/proposal/136989
