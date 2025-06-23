@@ -10,7 +10,6 @@ DEPENDENCIES = [
     "//rs/nervous_system/canisters",
     "//rs/nns/constants",
     "//rs/node_rewards/canister/api",
-    "//rs/node_rewards/proto",
     "//rs/node_rewards/rewards_calculation",
     "//rs/protobuf",
     "//rs/registry/canister-client",
