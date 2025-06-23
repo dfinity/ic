@@ -1230,7 +1230,8 @@ fn missing_manifest_is_computed_incrementally() {
 
         // Write checkpoints at height 1 and 2 to the disk.
         for h in [1, 2] {
-            let (_height, state) = state_manager.take_tip();
+            let (_height, mut state) = state_manager.take_tip();
+            insert_dummy_canister(&mut state, canister_test_id(123 + h));
             state_manager.commit_and_certify(state, height(h), CertificationScope::Full, None);
             wait_for_checkpoint(&state_manager, height(h));
         }
