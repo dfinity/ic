@@ -1,6 +1,6 @@
 use crate::systemd_notifier::SystemdNotifier;
 use anyhow::{anyhow, Context, Error, Result};
-use config::guest_vm_config::{assemble_config_media, generate_vm_config};
+use config::hostos::guest_vm_config::{assemble_config_media, generate_vm_config};
 use config_types::{HostOSConfig, Ipv6Config};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{calculate_deterministic_mac, IpVariant, MacAddr6Ext};
