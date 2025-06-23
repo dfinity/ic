@@ -1,5 +1,5 @@
-use crate::guestos_bootstrap_image::BootstrapOptions;
-use crate::guestos_config::generate_guestos_config;
+use super::guestos_bootstrap_image::BootstrapOptions;
+use super::guestos_config::generate_guestos_config;
 use anyhow::{Context, Result};
 use askama::Template;
 use config_types::{GuestOSConfig, HostOSConfig};

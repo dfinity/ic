@@ -1,11 +1,11 @@
 use anyhow::Result;
 use clap::{Args, Parser, Subcommand};
-use config::config_ini::{get_config_ini_settings, ConfigIniSettings};
-use config::deployment_json::get_deployment_settings;
 use config::generate_testnet_config::{
     generate_testnet_config, GenerateTestnetConfigArgs, Ipv6ConfigType,
 };
 use config::serialize_and_write_config;
+use config::setupos::config_ini::{get_config_ini_settings, ConfigIniSettings};
+use config::setupos::deployment_json::get_deployment_settings;
 use config_types::*;
 use macaddr::MacAddr6;
 use network::resolve_mgmt_mac;
