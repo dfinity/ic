@@ -2,10 +2,6 @@ name: Release Testing
 
 on:
   push:
-    branches:
-      - "hotfix-*"
-      - "rc--*"
-  workflow_dispatch:
 
 # new commits interrupt any running workflow on the same branch
 concurrency:
@@ -70,11 +66,7 @@ jobs:
               //rs/tests/... \
               --keep_going
           # prevent artifact name overlap
-<<<<<<< HEAD
           bep-artifact-name: ${{ github.job }}-${{ matrix.tag }}-bep
-=======
-          bel-artifact-name: ${{ github.job }}-${{ matrix.tag }}-bep
->>>>>>> 62dd83e3e1 (Use unique artifact name)
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
   dependency-scan-release-cut:
