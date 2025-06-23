@@ -42,11 +42,7 @@
 //! the timestamp of a request plus the timeout interval. This condition is verifiable by the other nodes in the network.
 //! Once a timeout has made it into a finalized block, the request is answered with an error message.
 use crate::{
-    artifact::{CanisterHttpResponseId, IdentifiableArtifact, PbArtifact},
-    crypto::{CryptoHashOf, Signed},
-    messages::{CallbackId, RejectContext, Request},
-    signature::*,
-    CanisterId, CountBytes, RegistryVersion, Time,
+    artifact::{CanisterHttpResponseId, IdentifiableArtifact, PbArtifact}, crypto::{CryptoHashOf, Signed}, messages::{CallbackId, RejectContext, Request}, node_id_into_protobuf, node_id_try_from_protobuf, signature::*, CanisterId, CountBytes, RegistryVersion, Time
 };
 use ic_base_types::{NodeId, NumBytes, PrincipalId};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
@@ -125,17 +121,46 @@ pub struct CanisterHttpRequestContext {
     pub http_method: CanisterHttpMethod,
     pub transform: Option<Transform>,
     pub time: Time,
+    /// The replication strategy for this request.
     pub replication: Replication,
 }
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
-enum Replication {
+pub enum Replication {
+    /// The request is fully replicated, i.e. all nodes will attempt the http request.
 	FullyReplicated,
+    /// The request is not replicated, however the delegated node is not currently known.
+    NonReplicatedProvisional,
+    /// The request is not replicated, i.e. only the node with the given `NodeId` will attempt the http request.
 	NonReplicated(NodeId)
 }
 
 impl From<&CanisterHttpRequestContext> for pb_metadata::CanisterHttpRequestContext {
     fn from(context: &CanisterHttpRequestContext) -> Self {
+        let replication_message = match &context.replication {
+            Replication::FullyReplicated => {
+                let replication_type =
+                    pb_metadata::replication::ReplicationType::FullyReplicated(());
+                pb_metadata::Replication {
+                    replication_type: Some(replication_type),
+                }
+            }
+            Replication::NonReplicated(node_id) => {
+                let replication_type = pb_metadata::replication::ReplicationType::NonReplicated(
+                    node_id_into_protobuf(*node_id),
+                );
+                pb_metadata::Replication {
+                    replication_type: Some(replication_type),
+                }
+            }
+            Replication::NonReplicatedProvisional => {
+                // This should not be possible. 
+                pb_metadata::Replication {
+                    replication_type: None,
+                }
+            }
+        };
+
         pb_metadata::CanisterHttpRequestContext {
             request: Some((&context.request).into()),
             url: context.url.clone(),
@@ -162,6 +187,7 @@ impl From<&CanisterHttpRequestContext> for pb_metadata::CanisterHttpRequestConte
                 .map(|transform| transform.context.clone()),
             http_method: pb_metadata::HttpMethod::from(&context.http_method).into(),
             time: context.time.as_nanos_since_unix_epoch(),
+            replication: Some(replication_message),
         }
     }
 }
@@ -172,6 +198,21 @@ impl TryFrom<pb_metadata::CanisterHttpRequestContext> for CanisterHttpRequestCon
     fn try_from(context: pb_metadata::CanisterHttpRequestContext) -> Result<Self, Self::Error> {
         let request: Request =
             try_from_option_field(context.request, "CanisterHttpRequestContext::request")?;
+        
+        let replication = match context.replication {
+            Some(replication) => match replication.replication_type {
+                Some(pb_metadata::replication::ReplicationType::FullyReplicated(_)) => {
+                    Replication::FullyReplicated
+                }
+                Some(pb_metadata::replication::ReplicationType::NonReplicated(node_id)) => {
+                    Replication::NonReplicated(node_id_try_from_protobuf(node_id)?)
+                }
+                None => {
+                    Replication::FullyReplicated
+                }
+            },
+            None => Replication::FullyReplicated,
+        };
 
         let transform_method_name = context.transform_method_name;
         let transform_context = context.transform_context;
@@ -220,6 +261,7 @@ impl TryFrom<pb_metadata::CanisterHttpRequestContext> for CanisterHttpRequestCon
                 .try_into()?,
             transform,
             time: Time::from_nanos_since_unix_epoch(context.time),
+            replication,
         })
     }
 }
@@ -292,6 +334,8 @@ impl TryFrom<(Time, &Request, CanisterHttpRequestArgs)> for CanisterHttpRequestC
             }
         };
 
+        let is_replicated = args.is_replicated.unwrap_or(true); 
+
         let max_response_bytes = match args.max_response_bytes {
             Some(max_response_bytes) => {
                 if max_response_bytes > MAX_CANISTER_HTTP_RESPONSE_BYTES {
@@ -342,6 +386,11 @@ impl TryFrom<(Time, &Request, CanisterHttpRequestArgs)> for CanisterHttpRequestC
             },
             transform: args.transform.map(From::from),
             time,
+            replication: if is_replicated {
+                Replication::FullyReplicated
+            } else {
+                Replication::NonReplicatedProvisional
+            },
         })
     }
 }
@@ -712,6 +761,7 @@ mod tests {
                 deadline: NO_DEADLINE,
             },
             time: UNIX_EPOCH,
+            replication: Replication::FullyReplicated,
         };
 
         let expected_size = context.url.len()
@@ -754,6 +804,7 @@ mod tests {
                 deadline: NO_DEADLINE,
             },
             time: UNIX_EPOCH,
+            replication: Replication::FullyReplicated,
         };
 
         let expected_size = context.url.len()
