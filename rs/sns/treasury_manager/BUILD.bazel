@@ -12,7 +12,6 @@ MACRO_DEPENDENCIES = []
 
 ALIASES = {}
 
-
 rust_library(
     name = "treasury_manager",
     srcs = glob([
