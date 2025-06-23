@@ -54,8 +54,6 @@ def image_deps(mode, malicious = False):
 
             # additional libraries to install
             "//rs/ic_os/release:nss_icos": "/usr/lib/x86_64-linux-gnu/libnss_icos.so.2:0644",  # Allows referring to the guest IPv6 by name guestos from host, and host as hostos from guest.
-
-            # TODO(NODE-1518): delete config tool from guestos after switch to new icos config
             "//rs/ic_os/release:config": "/opt/ic/bin/config:0755",
         },
 
@@ -67,13 +65,13 @@ def image_deps(mode, malicious = False):
         "rootfs_size": "3G",
         "bootfs_size": "1G",
         "grub_config": Label("//ic-os/bootloader:guestos_grub.cfg"),
+        "extra_boot_args_template": Label("//ic-os/bootloader:guestos_extra_boot_args.template"),
 
         # Add any custom partitions to the manifest
         "custom_partitions": lambda _: [Label("//ic-os/guestos:partition-config.tzst")],
-
-        # We will install boot_args_template onto the system, after substituting the
-        # hash of the root filesystem into it.
-        "boot_args_template": Label("//ic-os/guestos/context:boot_args.template"),
+        "boot_args_template": Label("//ic-os/bootloader:guestos_boot_args.template"),
+        # GuestOS requires dm-verity root partition signing
+        "requires_root_signing": True,
     }
 
     dev_build_args = ["BUILD_TYPE=dev", "ROOT_PASSWORD=root"]
@@ -95,8 +93,18 @@ def image_deps(mode, malicious = False):
 
     # Update dev rootfs
     if "dev" in mode:
+        # Allow console access
+        deps["rootfs"].update({"//ic-os/guestos/context:allow_console_root": "/etc/allow_console_root:0644"})
+
+        # Dev config tool
         deps["rootfs"].pop("//rs/ic_os/release:config", None)
         deps["rootfs"].update({"//rs/ic_os/release:config_dev": "/opt/ic/bin/config:0755"})
-        deps["rootfs"].update({"//ic-os/guestos/context:allow_console_root": "/etc/allow_console_root:0644"})
+
+    # Update recovery rootfs
+    if "recovery" in mode:
+        deps["rootfs"].update({
+            "//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.sh": "/opt/ic/bin/guestos-recovery-engine.sh:0755",
+            "//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.service": "/etc/systemd/system/guestos-recovery-engine.service:0644",
+        })
 
     return deps

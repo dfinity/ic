@@ -1,6 +1,6 @@
 use assert_matches::assert_matches;
 use candid::Encode;
-use ic_base_types::{CanisterId, PrincipalId, SubnetId};
+use ic_base_types::{PrincipalId, SubnetId};
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_ID,
     TEST_NEURON_2_OWNER_PRINCIPAL,
@@ -29,7 +29,7 @@ use ic_nns_test_utils::{
     state_test_helpers::{
         list_deployed_snses, nns_governance_make_proposal, nns_list_proposals,
         nns_wait_for_proposal_execution, set_controllers, setup_nns_canisters_with_features,
-        state_machine_builder_for_nns_tests,
+        state_machine_builder_for_nns_tests, SPECIFIED_CANISTER_ID,
     },
 };
 use ic_state_machine_tests::StateMachine;
@@ -65,7 +65,7 @@ fn test_several_proposals() {
     setup_nns_canisters_with_features(&state_machine, nns_init_payload, /* features */ &[]);
     add_real_wasms_to_sns_wasms(&state_machine);
     let dapp_canister = state_machine.create_canister_with_cycles(
-        Some(CanisterId::from_u64(1000).get()),
+        Some(SPECIFIED_CANISTER_ID.get()),
         Cycles::zero(),
         None,
     );
@@ -201,7 +201,7 @@ fn test_nf_is_not_permitted() {
     setup_nns_canisters_with_features(&state_machine, nns_init_payload, /* features */ &[]);
     add_real_wasms_to_sns_wasms(&state_machine);
     let dapp_canister = state_machine.create_canister_with_cycles(
-        Some(CanisterId::from_u64(1000).get()),
+        Some(SPECIFIED_CANISTER_ID.get()),
         Cycles::zero(),
         None,
     );
@@ -246,7 +246,7 @@ fn test_nf_is_permitted_with_test_flag() {
     );
     add_real_wasms_to_sns_wasms(&state_machine);
     let dapp_canister = state_machine.create_canister_with_cycles(
-        Some(CanisterId::from_u64(1000).get()),
+        Some(SPECIFIED_CANISTER_ID.get()),
         Cycles::zero(),
         None,
     );

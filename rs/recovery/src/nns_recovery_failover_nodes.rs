@@ -316,6 +316,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
                     self.new_registry_local_store.clone(),
                     CANISTER_CALLER_ID,
                     self.params.replay_until_height,
+                    !self.interactive(),
                 )?,
             )),
 
@@ -326,7 +327,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
 
             StepType::UpdateRegistryLocalStore => Ok(Box::new(
                 self.recovery
-                    .get_update_local_store_step(self.params.subnet_id),
+                    .get_update_local_store_step(self.params.subnet_id, !self.interactive()),
             )),
 
             StepType::CreateRegistryTar => Ok(Box::new(self.recovery.get_create_tars_step())),

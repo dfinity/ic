@@ -188,6 +188,13 @@ pub enum HypervisorError {
         bytes: NumBytes,
         limit: NumBytes,
     },
+    EnvironmentVariableIndexOutOfBounds {
+        index: usize,
+        length: usize,
+    },
+    EnvironmentVariableNotFound {
+        name: String,
+    },
 }
 
 impl From<WasmInstrumentationError> for HypervisorError {
@@ -383,6 +390,16 @@ impl std::fmt::Display for HypervisorError {
                         limit.get(), bytes.get()
                 )
             }
+            Self::EnvironmentVariableIndexOutOfBounds { index, length } => {
+                write!(
+                    f,
+                    "Environment variable index {} is out of bounds. The number of environment variables is {}.",
+                    index, length
+                )
+            }
+            Self::EnvironmentVariableNotFound { name } => {
+                write!(f, "Environment variable {} not found.", name)
+            }
         }
     }
 }
@@ -502,6 +519,14 @@ impl AsErrorHelp for HypervisorError {
             },
             Self::InvalidWasm(inner) => inner.error_help(),
             Self::InstrumentationFailed(inner) => inner.error_help(),
+            Self::EnvironmentVariableIndexOutOfBounds { .. } => ErrorHelp::UserError {
+                suggestion: "".to_string(),
+                doc_link: "".to_string(),
+            },
+            Self::EnvironmentVariableNotFound { .. } => ErrorHelp::UserError {
+                suggestion: "".to_string(),
+                doc_link: "".to_string(),
+            },
         }
     }
 }
@@ -551,6 +576,8 @@ impl HypervisorError {
                 E::InsufficientCyclesInMessageMemoryGrow
             }
             Self::WasmMemoryLimitExceeded { .. } => E::CanisterWasmMemoryLimitExceeded,
+            Self::EnvironmentVariableIndexOutOfBounds { .. } => E::CanisterContractViolation,
+            Self::EnvironmentVariableNotFound { .. } => E::CanisterContractViolation,
         };
         UserError::new(code, description)
     }
@@ -589,6 +616,10 @@ impl HypervisorError {
                 "InsufficientCyclesInMessageMemoryGrow"
             }
             HypervisorError::WasmMemoryLimitExceeded { .. } => "WasmMemoryLimitExceeded",
+            HypervisorError::EnvironmentVariableIndexOutOfBounds { .. } => {
+                "EnvironmentVariableIndexOutOfBounds"
+            }
+            HypervisorError::EnvironmentVariableNotFound { .. } => "EnvironmentVariableNotFound",
         }
     }
 }

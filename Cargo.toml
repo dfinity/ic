@@ -30,7 +30,6 @@ members = [
     "rs/bitcoin/service",
     "rs/bitcoin/ckbtc/agent",
     "rs/bitcoin/ckbtc/minter",
-    "rs/bitcoin/ckbtc/kyt",
     "rs/bitcoin/consensus",
     "rs/bitcoin/checker",
     "rs/bitcoin/mock",
@@ -145,6 +144,7 @@ members = [
     "rs/ic_os/config",
     "rs/ic_os/config_types",
     "rs/ic_os/fstrim_tool",
+    "rs/ic_os/grub",
     "rs/ic_os/metrics_tool",
     "rs/ic_os/os_tools/guestos_tool",
     "rs/ic_os/os_tools/hostos_tool",
@@ -155,6 +155,7 @@ members = [
     "rs/ic_os/nss_icos",
     "rs/ic_os/dev_test_tools/setupos-image-config",
     "rs/ic_os/build_tools/partition_tools",
+    "rs/ic_os/config_types/compatibility_tests",
     "rs/ic_os/dev_test_tools/setupos-disable-checks",
     "rs/ic_os/os_tools/setupos_tool",
     "rs/ic_os/utils",
@@ -515,7 +516,7 @@ assert_matches = "1.5.0"
 async-recursion = "1.0.5"
 async-stream = "0.3.6"
 async-trait = "0.1.83"
-axum = "0.8.4"
+axum = { version = "0.8.4", features = ["ws"] }
 axum-extra = { version = "0.10.1", features = ["typed-header"] }
 axum-server = { version = "0.7.2", features = ["tls-rustls-no-provider"] }
 backoff = "0.4"
@@ -580,7 +581,7 @@ hyper-rustls = { version = "0.27.5", default-features = false, features = [
 hyper-socks2 = { version = "0.9.1", default-features = false }
 hyper-util = { version = "0.1.12", features = ["full"] }
 ic-agent = { version = "0.40.1", features = ["pem", "ring"] }
-ic-bn-lib = { git = "https://github.com/dfinity/ic-bn-lib", rev = "23b3b0b76795c9b75eed96742c2185da0ce9ee2a", features = [
+ic-bn-lib = { git = "https://github.com/dfinity/ic-bn-lib", rev = "620fb49a238b3d8a2caa436b5742ed7ca7012098", features = [
     "acme_alpn",
 ] }
 ic-btc-interface = "0.2.2"
@@ -590,7 +591,7 @@ ic-cdk = "0.17.2"
 ic-cdk-timers = "0.11.0"
 ic-certificate-verification = "3"
 ic-certification = "3"
-ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "73495da1d5ab99891a3580522958f0f635902a87", default-features = false }
+ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "b78562340bd00f05f9c055dcba3ec0f74758c927", default-features = false }
 ic-http-certification = "3.0.3"
 ic-http-gateway = "0.3.0"
 ic-management-canister-types = "0.3.0"
@@ -730,8 +731,9 @@ strum = { version = "0.26.3", features = ["derive"] }
 strum_macros = "0.26.4"
 subtle = "2.6.1"
 syn = { version = "1.0.109", features = ["fold", "full"] }
+systemd = "0.10"
 tar = "0.4.39"
-tempfile = "3.12.0"
+tempfile = "3.20"
 thiserror = "2.0.3"
 threadpool = "1.8.1"
 tikv-jemalloc-ctl = { version = "0.6", features = ["stats"] }
@@ -773,6 +775,7 @@ url = { version = "2.5.3", features = ["serde"] }
 # This breaks `wasm32-unknown-unknown` compatibility.
 # Read https://github.com/uuid-rs/uuid/releases/tag/1.13.0
 uuid = { version = "=1.12.1", features = ["v4", "serde"] }
+virt = "0.4"
 walkdir = "2.3.3"
 walrus = "0.23.3"
 wasm-encoder = { version = "0.228.0", features = ["wasmparser"] }
