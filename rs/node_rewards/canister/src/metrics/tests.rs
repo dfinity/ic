@@ -1,10 +1,10 @@
 use crate::metrics::{MetricsManager, UnixTsNanos};
+use crate::pb::v1::{NodeMetricsDailyStored, SubnetMetricsDailyKeyStored};
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_cdk::api::call::{CallResult, RejectionCode};
 use ic_management_canister_types_private::{
     NodeMetrics, NodeMetricsHistoryArgs, NodeMetricsHistoryResponse,
 };
-use ic_node_rewards_proto::pb::v1::{NodeMetricsDailyStored, SubnetMetricsDailyKeyStored};
 use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
 use ic_stable_structures::DefaultMemoryImpl;
 use rewards_calculation::types::DayEnd;
@@ -23,7 +23,7 @@ mod mock {
 
         #[async_trait]
         impl ManagementCanisterClient for CanisterClient {
-            async fn node_metrics_history(&self, contract: NodeMetricsHistoryArgs) -> CallResult<Vec<NodeMetricsHistoryResponse>>;
+            async fn node_metrics_history(&self, args: NodeMetricsHistoryArgs) -> CallResult<Vec<NodeMetricsHistoryResponse>>;
         }
     }
 }

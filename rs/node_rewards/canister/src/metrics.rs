@@ -1,12 +1,12 @@
+use crate::pb::v1::{
+    NodeMetricsDailyStored, SubnetIdKey, SubnetMetricsDailyKeyStored, SubnetMetricsDailyValueStored,
+};
+use crate::KeyRange;
 use async_trait::async_trait;
 use candid::Principal;
 use ic_base_types::SubnetId;
 use ic_cdk::api::call::CallResult;
 use ic_management_canister_types_private::{NodeMetricsHistoryArgs, NodeMetricsHistoryResponse};
-use ic_node_rewards_proto::pb::v1::{
-    NodeMetricsDailyStored, SubnetIdKey, SubnetMetricsDailyKeyStored, SubnetMetricsDailyValueStored,
-};
-use ic_node_rewards_proto::KeyRange;
 use ic_stable_structures::StableBTreeMap;
 use rewards_calculation::types::{NodeMetricsDailyRaw, SubnetMetricsDailyKey, UnixTsNanos};
 use std::cell::RefCell;
@@ -31,12 +31,12 @@ impl ManagementCanisterClient for ICCanisterClient {
     /// in the 'contract' to fetch daily node metrics.
     async fn node_metrics_history(
         &self,
-        contract: NodeMetricsHistoryArgs,
+        args: NodeMetricsHistoryArgs,
     ) -> CallResult<Vec<NodeMetricsHistoryResponse>> {
         ic_cdk::api::call::call_with_payment128::<_, (Vec<NodeMetricsHistoryResponse>,)>(
             Principal::management_canister(),
             "node_metrics_history",
-            (contract,),
+            (args,),
             0_u128,
         )
         .await
@@ -154,9 +154,10 @@ where
         let mut subnets_history = Vec::new();
 
         for (subnet_id, last_stored_ts) in last_timestamp_per_subnet {
+            // For nodes that were part of the subnet before this update, we only store DAILY metrics per node.
+            // To compute the daily metrics for the first day of this update, we need the TOTAL metrics at last_stored_ts.
             let refresh_ts = last_stored_ts.unwrap_or_default();
-            // For nodes assigned to the subnet before the current update, the TOTAL metrics at last_stored_ts
-            // are required since only DAILY metrics for each node are stored.
+
             ic_cdk::println!(
                 "Updating node metrics for subnet {}: Refreshing metrics from timestamp {}",
                 subnet_id,
