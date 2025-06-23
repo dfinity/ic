@@ -398,8 +398,11 @@ fn test(env: TestEnv, binary_version: String, target_version: String) {
         .expect("Should find file");
 
     assert!(memory_artifact_path.exists());
-    info!(log, "Modify memory file: {:?}", memory_artifact_path);
-    modify_byte_in_file(memory_artifact_path).expect("Modifying a byte failed");
+    //info!(log, "Modify memory file: {:?}", memory_artifact_path);
+    //modify_byte_in_file(memory_artifact_path).expect("Modifying a byte failed");
+    info!(log, "Removing memory file: {:?}", memory_artifact_path);
+    fs::remove_file(&memory_artifact_path).unwrap();
+    assert!(!memory_artifact_path.exists());
 
     info!(log, "Start again the backup process in a separate thread");
     let mut command = Command::new(ic_backup_path);
@@ -475,7 +478,7 @@ fn some_checkpoint_dir(backup_dir: &Path, subnet_id: &SubnetId) -> Option<PathBu
     }
     Some(dir.join(format!("checkpoints/{:016x}", lcp)))
 }
-
+/*
 fn modify_byte_in_file(file_path: PathBuf) -> std::io::Result<()> {
     let mut perms = fs::metadata(&file_path)?.permissions();
     #[allow(clippy::permissions_set_readonly_false)]
@@ -494,7 +497,7 @@ fn modify_byte_in_file(file_path: PathBuf) -> std::io::Result<()> {
     file.seek(SeekFrom::Start(0))?;
     file.write_all(&byte)
 }
-
+*/
 fn cold_storage_exists(log: &Logger, cold_storage_dir: PathBuf) -> bool {
     for _ in 0..12 {
         if dir_exists_and_have_file(log, &cold_storage_dir.join("states"))
