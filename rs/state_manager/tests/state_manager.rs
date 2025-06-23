@@ -1245,7 +1245,7 @@ fn missing_manifest_is_computed_incrementally() {
 
         let canister_id = canister_test_id(123);
 
-        let write_stable_memory = |state: &mut ReplicatedState| {
+        let write_stable_memory = |state: &mut ReplicatedState, index: u64| {
             let mut canister = state.take_canister_state(&canister_id).unwrap();
             canister
                 .execution_state
@@ -1253,7 +1253,7 @@ fn missing_manifest_is_computed_incrementally() {
                 .unwrap()
                 .stable_memory
                 .page_map
-                .update(&[(PageIndex::new(1), &[1_u8; PAGE_SIZE])]);
+                .update(&[(PageIndex::new(index), &[1_u8; PAGE_SIZE])]);
             state.put_canister_state(canister);
         };
 
@@ -1287,9 +1287,9 @@ fn missing_manifest_is_computed_incrementally() {
         state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
         wait_for_checkpoint(&state_manager, height(1));
 
-        // Write a checkpoint at height 2; write stable memory.
+        // Write a checkpoint at height 2; write stable memory at index 1.
         let (_height, mut state) = state_manager.take_tip();
-        write_stable_memory(&mut state);
+        write_stable_memory(&mut state, 1);
         state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
         wait_for_checkpoint(&state_manager, height(2));
 
@@ -1301,9 +1301,9 @@ fn missing_manifest_is_computed_incrementally() {
         // For an incremental manifest computation, something must have been reused.
         assert_ne!(0, reused_at_2_from_1);
 
-        // Write a checkpoint at height 3; write stable memory.
+        // Write a checkpoint at height 3; write stable memory at index 2.
         let (_height, mut state) = state_manager.take_tip();
-        write_stable_memory(&mut state);
+        write_stable_memory(&mut state, 2);
         state_manager.commit_and_certify(state, height(3), CertificationScope::Full, None);
         wait_for_checkpoint(&state_manager, height(3));
 
