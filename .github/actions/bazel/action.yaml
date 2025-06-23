@@ -9,6 +9,9 @@ inputs:
   execlogs-artifact-name:
     required: false
     description: "When provided, the execlogs will be uploaded as an artifact with the specified name."
+  bep-artifact-name:
+    required: false
+    description: "When provided, the build events will be uploaded as an artifact with the specified name. Default: <github.job>-bep"
   GPG_PASSPHRASE:
     required: true
     description: "GPG key to encrypt build events. Upload can be disabled by explicitly setting the input to an empty string."
@@ -65,7 +68,7 @@ runs:
       if: success() || failure()
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ github.job }}-bep
+        name: ${{ inputs.bep-artifact-name || format('{0}-bep', github.job) }}
         retention-days: 14
         if-no-files-found: ignore
         compression-level: 9

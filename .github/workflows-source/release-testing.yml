@@ -69,6 +69,8 @@ jobs:
               --test_tag_filters=${{ matrix.tag }} \
               //rs/tests/... \
               --keep_going
+          # prevent artifact name overlap
+          bep-artifact-name: ${{ github.job }}-${{ matrix.tag }}-bep
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
   dependency-scan-release-cut:
