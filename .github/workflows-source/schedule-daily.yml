@@ -42,7 +42,7 @@ jobs:
 
           launch_bare_metal() {
             # shellcheck disable=SC2046,SC2086
-            bazel --output_base=/var/tmp/bazel-output run ${BAZEL_CI_CONFIG} \
+            bazel --output_base=/var/tmp/bazel-output run \
               //ic-os/setupos/envs/dev:launch_bare_metal -- \
                 --config_path "$(realpath  ./ic-os/dev-tools/bare_metal_deployment/zh2-dll01.yaml)" \
                 --csv_filename "$(realpath file1)" \
@@ -64,7 +64,6 @@ jobs:
 
           bazel clean
         env:
-          BAZEL_CI_CONFIG: "--config=ci"
           ZH2_DLL01_CSV_SECRETS: "${{ secrets.ZH2_DLL01_CSV_SECRETS }}"
           ZH2_FILE_SHARE_KEY: "${{ secrets.ZH2_FILE_SHARE_KEY }}"
 
@@ -78,7 +77,7 @@ jobs:
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
         with:
-          BAZEL_COMMAND: test --config=ci --keep_going --test_tag_filters=fi_tests_nightly --test_env=SSH_AUTH_SOCK --test_timeout=43200
+          BAZEL_COMMAND: test --keep_going --test_tag_filters=fi_tests_nightly --test_env=SSH_AUTH_SOCK --test_timeout=43200
           BAZEL_TARGETS: //rs/ledger_suite/...
           SSH_PRIVATE_KEY_BACKUP_POD: ${{ secrets.SSH_PRIVATE_KEY_BACKUP_POD }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
@@ -93,7 +92,7 @@ jobs:
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
         with:
-          BAZEL_COMMAND: test --config=ci --keep_going --test_tag_filters=nns_tests_nightly --test_env=SSH_AUTH_SOCK --test_env=NNS_CANISTER_UPGRADE_SEQUENCE=all
+          BAZEL_COMMAND: test --keep_going --test_tag_filters=nns_tests_nightly --test_env=SSH_AUTH_SOCK --test_env=NNS_CANISTER_UPGRADE_SEQUENCE=all
           BAZEL_TARGETS: //rs/nns/...
           SSH_PRIVATE_KEY_BACKUP_POD: ${{ secrets.SSH_PRIVATE_KEY_BACKUP_POD }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
@@ -114,7 +113,7 @@ jobs:
         uses: ./.github/actions/bazel-test-all/
         with:
           # note: there's just one performance cluster, so the job can't be parallelized
-          BAZEL_COMMAND: test --config=ci --test_tag_filters=system_test_benchmark --//bazel:enable_upload_perf_systest_results=True --keep_going --jobs 1
+          BAZEL_COMMAND: test --test_tag_filters=system_test_benchmark --//bazel:enable_upload_perf_systest_results=True --keep_going --jobs 1
           BAZEL_TARGETS: ${{ env.BENCHMARK_TARGETS }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
       - name: Post Slack Notification

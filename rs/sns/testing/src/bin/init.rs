@@ -19,7 +19,7 @@ async fn nns_init(args: NnsInitArgs) {
             "Using temporary PocketIC state directory: {}",
             tempdir.path().display()
         );
-        tempdir.into_path()
+        tempdir.keep()
     };
     let mut pocket_ic = PocketIcBuilder::new()
         .with_server_url(args.server_url)

@@ -574,6 +574,10 @@ mod test {
                             LedgerEndpointArg::ApproveArg(args) => {
                                 (CanisterMethodName::Icrc2Approve, Encode!(&args).unwrap())
                             }
+                            LedgerEndpointArg::TransferFromArg(args) => (
+                                CanisterMethodName::Icrc2TransferFrom,
+                                Encode!(&args).unwrap(),
+                            ),
                         };
 
                         let icrc1_transaction = build_icrc1_transaction_from_canister_method_args(
@@ -640,6 +644,28 @@ mod test {
                                         assert_eq!(
                                             icrc1_transaction.created_at_time,
                                             args.created_at_time
+                                        );
+                                    }
+                                    _ => panic!("Operation type mismatch"),
+                                }
+                            }
+                            LedgerEndpointArg::TransferFromArg(args) => {
+                                match icrc1_transaction.operation {
+                                    crate::common::storage::types::IcrcOperation::Transfer {
+                                        to,
+                                        amount,
+                                        from,
+                                        fee,
+                                        ..
+                                    } => {
+                                        assert_eq!(to, args.to);
+                                        assert_eq!(args.amount, amount);
+                                        assert_eq!(from, args.from);
+                                        assert_eq!(fee, args.fee);
+                                        assert_eq!(args.memo, icrc1_transaction.memo);
+                                        assert_eq!(
+                                            args.created_at_time,
+                                            icrc1_transaction.created_at_time
                                         );
                                     }
                                     _ => panic!("Operation type mismatch"),

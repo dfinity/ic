@@ -59,7 +59,7 @@ jobs:
             echo -e "\e[34mRunning rust benchmarks on dedicated machine fr1-spm15!\e[0m"
 
             while IFS= read -r tgt; do
-                bazel run --config=ci "$tgt"
+                bazel run "$tgt"
             done < <(bazel query "attr(tags, 'rust_bench', ${{ matrix.target }})")
 
             while IFS= read -r bench_dir; do
