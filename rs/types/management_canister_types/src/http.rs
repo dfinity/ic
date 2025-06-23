@@ -80,7 +80,7 @@ pub struct CanisterHttpRequestArgs {
     pub body: Option<Vec<u8>>,
     pub method: HttpMethod,
     pub transform: Option<TransformContext>,
-    pub is_replicated: Option<bool>
+    pub is_replicated: Option<bool>,
 }
 
 impl Payload<'_> for CanisterHttpRequestArgs {}
