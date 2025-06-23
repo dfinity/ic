@@ -231,6 +231,8 @@ impl EncryptedKey {
             return Err(EncryptedKeyCombinationError::InsufficientShares);
         }
 
+        // TODO(CRP-2854) This cannot happen because the keys of a BTreeMap are unique
+        // Modify this to use a new infalliable interface once that is created
         let l = LagrangeCoefficients::at_zero(
             &nodes.iter().map(|(k, _v)| *k).collect::<Vec<NodeIndex>>(),
         )

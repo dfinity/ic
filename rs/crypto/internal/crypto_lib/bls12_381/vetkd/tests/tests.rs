@@ -221,7 +221,7 @@ impl<'a> VetkdTestProtocolExecution<'a> {
         &self,
         rng: &mut R,
         input: Option<&[u8]>,
-    ) -> BTreeMap<u32, (G2Affine, EncryptedKeyShare)> {
+    ) -> BTreeMap<NodeIndex, (G2Affine, EncryptedKeyShare)> {
         let mut node_info = BTreeMap::new();
 
         let input = input.unwrap_or(&self.input);
@@ -249,7 +249,7 @@ impl<'a> VetkdTestProtocolExecution<'a> {
             let eks2 = EncryptedKeyShare::deserialize(&eks_bytes).unwrap();
             assert_eq!(eks, eks2);
 
-            node_info.insert(node_idx as u32, (node_pk.clone(), eks.clone()));
+            node_info.insert(node_idx as NodeIndex, (node_pk.clone(), eks.clone()));
         }
 
         node_info
@@ -392,8 +392,8 @@ fn test_protocol_execution() {
 
         // Avoid using a duplicate index for this test
         let random_unused_idx = loop {
-            let idx = (rng.gen::<usize>() % node_eks_wrong_input.len()) as u32;
-            if !shares.keys().any(|x| *x == idx) {
+            let idx = (rng.gen::<usize>() % node_eks_wrong_input.len()) as NodeIndex;
+            if !shares.contains_key(&idx) {
                 break idx;
             }
         };
