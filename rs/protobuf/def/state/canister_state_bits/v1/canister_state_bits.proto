@@ -274,8 +274,12 @@ message CanisterLoadSnapshot {
   bytes snapshot_id = 3;
 }
 
-message CanisterSettingsChange {
+message CanisterControllers {
   repeated types.v1.PrincipalId controllers = 1;
+}
+
+message CanisterSettingsChange {
+  optional CanisterControllers controllers = 1;
   optional bytes environment_variables_hash = 2;
 }
 
