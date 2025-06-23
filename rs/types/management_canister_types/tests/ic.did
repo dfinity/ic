@@ -44,6 +44,7 @@ type change_origin = variant {
 type change_details = variant {
     creation : record {
         controllers : vec principal;
+        environment_variables_hash : opt blob;
     };
     code_uninstall;
     code_deployment : record {
@@ -57,6 +58,10 @@ type change_details = variant {
     };
     controllers_change : record {
         controllers : vec principal;
+    };
+    settings_change : record {
+        controllers : opt vec principal;
+        environment_variables_hash : opt blob;
     };
 };
 
