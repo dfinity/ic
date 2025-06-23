@@ -1509,7 +1509,7 @@ fn handle_compute_manifest_request(
         *rehash_divergence = false;
         return;
     }
-    let _timer = request_timer(&metrics, "compute_manifest_rehash");
+    let _timer = request_timer(metrics, "compute_manifest_rehash");
     let start = Instant::now();
     let rehashed_manifest = crate::manifest::compute_manifest(
         thread_pool,
@@ -1535,11 +1535,7 @@ fn handle_compute_manifest_request(
             err
         )
     });
-    if manifest != rehashed_manifest {
-        *rehash_divergence = true;
-    } else {
-        *rehash_divergence = false;
-    }
+    *rehash_divergence = manifest != rehashed_manifest;
 }
 
 #[cfg(test)]
