@@ -164,7 +164,7 @@ pub fn node_id_into_protobuf(id: NodeId) -> pb::NodeId {
 /// as both `Id` and `pb::NodeId` are defined in other crates.
 pub fn node_id_try_from_option(value: Option<pb::NodeId>) -> Result<NodeId, ProxyDecodeError> {
     let value: pb::NodeId = value.ok_or(ProxyDecodeError::MissingField("NodeId"))?;
-   node_id_try_from_protobuf(value)
+    node_id_try_from_protobuf(value)
 }
 
 pub fn node_id_try_from_protobuf(value: pb::NodeId) -> Result<NodeId, ProxyDecodeError> {

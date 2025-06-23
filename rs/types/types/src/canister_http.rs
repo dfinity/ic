@@ -42,7 +42,12 @@
 //! the timestamp of a request plus the timeout interval. This condition is verifiable by the other nodes in the network.
 //! Once a timeout has made it into a finalized block, the request is answered with an error message.
 use crate::{
-    artifact::{CanisterHttpResponseId, IdentifiableArtifact, PbArtifact}, crypto::{CryptoHashOf, Signed}, messages::{CallbackId, RejectContext, Request}, node_id_into_protobuf, node_id_try_from_protobuf, signature::*, CanisterId, CountBytes, RegistryVersion, Time
+    artifact::{CanisterHttpResponseId, IdentifiableArtifact, PbArtifact},
+    crypto::{CryptoHashOf, Signed},
+    messages::{CallbackId, RejectContext, Request},
+    node_id_into_protobuf, node_id_try_from_protobuf,
+    signature::*,
+    CanisterId, CountBytes, RegistryVersion, Time,
 };
 use ic_base_types::{NodeId, NumBytes, PrincipalId};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
@@ -128,9 +133,9 @@ pub struct CanisterHttpRequestContext {
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub enum Replication {
     /// The request is fully replicated, i.e. all nodes will attempt the http request.
-	FullyReplicated,
+    FullyReplicated,
     /// The request is not replicated, i.e. only the node with the given `NodeId` will attempt the http request.
-	NonReplicated(NodeId)
+    NonReplicated(NodeId),
 }
 
 impl From<&CanisterHttpRequestContext> for pb_metadata::CanisterHttpRequestContext {
@@ -190,7 +195,7 @@ impl TryFrom<pb_metadata::CanisterHttpRequestContext> for CanisterHttpRequestCon
     fn try_from(context: pb_metadata::CanisterHttpRequestContext) -> Result<Self, Self::Error> {
         let request: Request =
             try_from_option_field(context.request, "CanisterHttpRequestContext::request")?;
-        
+
         let replication = match context.replication {
             Some(replication) => match replication.replication_type {
                 Some(pb_metadata::replication::ReplicationType::FullyReplicated(_)) => {
@@ -199,9 +204,7 @@ impl TryFrom<pb_metadata::CanisterHttpRequestContext> for CanisterHttpRequestCon
                 Some(pb_metadata::replication::ReplicationType::NonReplicated(node_id)) => {
                     Replication::NonReplicated(node_id_try_from_protobuf(node_id)?)
                 }
-                None => {
-                    Replication::FullyReplicated
-                }
+                None => Replication::FullyReplicated,
             },
             None => Replication::FullyReplicated,
         };
