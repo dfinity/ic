@@ -2491,7 +2491,7 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
     assert_eq!(err.code(), ErrorCode::InsufficientMemoryAllocation);
     assert!(err
         .description()
-        .contains("Canister was given 64.35 KiB memory allocation but at least"));
+        .contains("Canister was given 64.39 KiB memory allocation but at least"));
 
     // canister history memory usage at the beginning of update_settings
     let canister_history_memory = 2 * size_of::<CanisterChange>() + size_of::<PrincipalId>();
