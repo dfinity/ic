@@ -48,7 +48,7 @@ use crate::{
     signature::*,
     CanisterId, CountBytes, RegistryVersion, Time,
 };
-use ic_base_types::{NumBytes, PrincipalId};
+use ic_base_types::{NodeId, NumBytes, PrincipalId};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
@@ -125,6 +125,13 @@ pub struct CanisterHttpRequestContext {
     pub http_method: CanisterHttpMethod,
     pub transform: Option<Transform>,
     pub time: Time,
+    pub replication: Replication,
+}
+
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+enum Replication {
+	FullyReplicated,
+	NonReplicated(NodeId)
 }
 
 impl From<&CanisterHttpRequestContext> for pb_metadata::CanisterHttpRequestContext {
