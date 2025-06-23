@@ -14,7 +14,7 @@ The following steps outline the recommended approach to introduce a new Manageme
 
 4. [Motoko](https://github.com/dfinity/motoko) needs to be updated. Inform *@eng-motoko* of the work required.
 
-5. Add any new types or update existing ones in `types/management_canister_types`. If possible, stick to existing naming conventions. E.g., error variants tend to have a domain specific prefix and a clear suffix describing the error, e.g., `ErrorCode::CanisterNotFound`. 
+5. Add any new types or update existing ones in `types/management_canister_types` and update their candid types in `types/management_canister_types/tests/ic.did`. If possible, stick to existing naming conventions. E.g., error variants tend to have a domain specific prefix and a clear suffix describing the error, e.g., `ErrorCode::CanisterNotFound`. 
 
 6. Implement the new API in the `execution_environment` crate. Main parts that need to be updated are:
    - the core implementation in the `canister_manager` module;
