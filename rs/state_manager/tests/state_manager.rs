@@ -1223,28 +1223,99 @@ fn missing_manifests_are_recomputed() {
     });
 }
 
+/// Tests that the manifest is computed incrementally using a delta relative to the manifest at a
+/// lower height. Steps are:
+///
+/// - Compute the manifest at height 2 using the delta from the manifest at height 1.
+/// - Compute the manifest at height 3 using the delta from the manifest at height 2.
+/// - Compute the manifests at height 2 and 3 using the deltas from the manifest at height 1.
+///
+/// The third step consists of the first step + a new manifest computation that is expected to
+/// require more hashing than the second step since its done from height 1.
+///
+/// Asserting that more hashing is required in step 3 ensures two things:
+/// - The computation in the second step was actually done from height 2 since it required less
+///   hashing.
+/// - Incremental manifest computation can be done from a height further back than the previous one
+///   (at the cost of more hashing).
 #[test]
 fn missing_manifest_is_computed_incrementally() {
-    state_manager_restart_test_with_metrics(|_metrics, mut state_manager, restart_fn| {
+    state_manager_restart_test_with_metrics(|_metrics, state_manager, restart_fn| {
         use ic_state_manager::testing::StateManagerTesting;
 
-        // Write checkpoints at height 1 and 2 to the disk.
-        for h in [1, 2] {
-            let (_height, mut state) = state_manager.take_tip();
-            insert_dummy_canister(&mut state, canister_test_id(123 + h));
-            state_manager.commit_and_certify(state, height(h), CertificationScope::Full, None);
-            wait_for_checkpoint(&state_manager, height(h));
-        }
+        let canister_id = canister_test_id(123);
 
-        // The manifest at height 2 should now exist; purge it.
-        assert!(state_manager.purge_manifest(height(2)));
+        let write_stable_memory = |state: &mut ReplicatedState| {
+            let mut canister = state.take_canister_state(&canister_id).unwrap();
+            canister
+                .execution_state
+                .as_mut()
+                .unwrap()
+                .stable_memory
+                .page_map
+                .update(&[(PageIndex::new(1), &[1_u8; PAGE_SIZE])]);
+            state.put_canister_state(canister);
+        };
 
-        // There should be a state with manifest at height 1 and one without manifest at
-        // height 2; restarting should result in an incremental manifest computation.
-        let (metrics, state_manager) = restart_fn(state_manager, Some(height(2)));
+        let purge_manifests_and_restart = |mut state_manager: StateManagerImpl,
+                                           purge_manifest_heights: &[Height],
+                                           restart_height: Height|
+         -> (StateManagerImpl, u64) {
+            for h in purge_manifest_heights {
+                assert!(state_manager.purge_manifest(*h));
+            }
+            let (metrics, state_manager) = restart_fn(state_manager, Some(restart_height));
+            wait_for_checkpoint(&state_manager, restart_height);
+
+            let hashed_key = maplit::btreemap! {"type".to_string() => "hashed".to_string()};
+            let reused_key = maplit::btreemap! {"type".to_string() => "reused".to_string()};
+
+            let chunk_bytes = fetch_int_counter_vec(&metrics, "state_manager_manifest_chunk_bytes");
+            // For an incremental manifest computation, something must have been reused.
+            assert_ne!(0, chunk_bytes[&reused_key]);
+
+            // Return the state manager along with the number of bytes hashed.
+            (state_manager, chunk_bytes[&hashed_key])
+        };
+
+        // Write a checkpoint at height 1; insert a canister.
+        let (_height, mut state) = state_manager.take_tip();
+        insert_dummy_canister(&mut state, canister_id);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
+        wait_for_checkpoint(&state_manager, height(1));
+
+        // Write a checkpoint at height 2; write stable memory.
+        let (_height, mut state) = state_manager.take_tip();
+        write_stable_memory(&mut state);
+        state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
         wait_for_checkpoint(&state_manager, height(2));
 
-        assert!(any_manifest_was_incremental(&metrics));
+        let (state_manager, hashed_at_2_from_1) = purge_manifests_and_restart(
+            state_manager,
+            &[height(2)], // Purge manifest at height 2.
+            height(2),    // Restart the state manager at height 2.
+        );
+
+        // Write a checkpoint at height 3; write stable memory.
+        let (_height, mut state) = state_manager.take_tip();
+        write_stable_memory(&mut state);
+        state_manager.commit_and_certify(state, height(3), CertificationScope::Full, None);
+        wait_for_checkpoint(&state_manager, height(3));
+
+        let (state_manager, hashed_at_3_from_2) = purge_manifests_and_restart(
+            state_manager,
+            &[height(3)], // Purge manifest at height 3.
+            height(3),    // Restart the state manager at height 3.
+        );
+
+        let (_, hashed_at_2_and_3_from_1) = purge_manifests_and_restart(
+            state_manager,
+            &[height(2), height(3)], // Purge manifest at height 2 and 3.
+            height(3),               // Restart the state manager at height 3.
+        );
+
+        let hashed_at_3_from_1 = hashed_at_2_and_3_from_1 - hashed_at_2_from_1;
+        assert!(hashed_at_3_from_1 > hashed_at_3_from_2);
     });
 }
 
@@ -1273,7 +1344,7 @@ fn validate_replicated_state_is_called() {
 }
 
 fn any_manifest_was_incremental(metrics: &MetricsRegistry) -> bool {
-    // We detect that the manifest computation was incremental by checking that at least some bytes
+    // we detect that the manifest computation was incremental by checking that at least some bytes
     // are either "reused" or "hashed_and_compared"
     let chunk_bytes = fetch_int_counter_vec(metrics, "state_manager_manifest_chunk_bytes");
     let reused_key = maplit::btreemap! {"type".to_string() => "reused".to_string()};
