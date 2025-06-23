@@ -43,7 +43,7 @@ pub struct Nns {
 pub struct VmResources {
     #[serde_as(as = "DisplayFromStr")]
     pub memory: u32,
-    /// CPU virtualization type: "kvm" or "qemu". If None, defaults to "kvm"
+    /// CPU virtualization type: "kvm" or "qemu".
     pub cpu: String,
     /// Maximum number of virtual CPUs allocated for the GuestOS,
     /// which must be between 1 and the maximum supported by the hypervisor.
