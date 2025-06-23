@@ -1344,7 +1344,7 @@ fn validate_replicated_state_is_called() {
 }
 
 fn any_manifest_was_incremental(metrics: &MetricsRegistry) -> bool {
-    // we detect that the manifest computation was incremental by checking that at least some bytes
+    // We detect that the manifest computation was incremental by checking that at least some bytes
     // are either "reused" or "hashed_and_compared"
     let chunk_bytes = fetch_int_counter_vec(metrics, "state_manager_manifest_chunk_bytes");
     let reused_key = maplit::btreemap! {"type".to_string() => "reused".to_string()};
