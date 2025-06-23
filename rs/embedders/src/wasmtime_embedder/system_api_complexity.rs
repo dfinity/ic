@@ -84,6 +84,7 @@ pub mod overhead {
     pub const ENV_VAR_COUNT: NumInstructions = NumInstructions::new(500);
     pub const ENV_VAR_NAME_SIZE: NumInstructions = NumInstructions::new(500);
     pub const ENV_VAR_NAME_COPY: NumInstructions = NumInstructions::new(500);
+    pub const ENV_VAR_NAME_EXISTS: NumInstructions = NumInstructions::new(500);
     pub const ENV_VAR_VALUE_SIZE: NumInstructions = NumInstructions::new(500);
     pub const ENV_VAR_VALUE_COPY: NumInstructions = NumInstructions::new(500);
     pub const TIME: NumInstructions = NumInstructions::new(500);

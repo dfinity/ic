@@ -1529,6 +1529,7 @@ fn query_cache_future_proof_test() {
         | SystemApiCallId::EnvVarCount
         | SystemApiCallId::EnvVarNameSize
         | SystemApiCallId::EnvVarNameCopy
+        | SystemApiCallId::EnvVarNameExists
         | SystemApiCallId::EnvVarValueSize
         | SystemApiCallId::EnvVarValueCopy
         | SystemApiCallId::Time
