@@ -4,7 +4,7 @@ use crate::pb::v1::{
 use crate::KeyRange;
 use async_trait::async_trait;
 use candid::Principal;
-use ic_base_types::SubnetId;
+use ic_base_types::{PrincipalId, SubnetId};
 use ic_cdk::api::call::CallResult;
 use ic_management_canister_types::{NodeMetricsHistoryArgs, NodeMetricsHistoryRecord};
 use ic_stable_structures::StableBTreeMap;
@@ -125,7 +125,7 @@ where
                     );
 
                     NodeMetricsDailyStored {
-                        node_id: node_metrics.node_id.into(),
+                        node_id: Some(PrincipalId::from(node_metrics.node_id)),
                         num_blocks_proposed: current_proposed_total - last_proposed_total,
                         num_blocks_failed: current_failed_total - last_failed_total,
                     }

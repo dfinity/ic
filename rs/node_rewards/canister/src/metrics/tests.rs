@@ -2,9 +2,7 @@ use crate::metrics::{MetricsManager, UnixTsNanos};
 use crate::pb::v1::{NodeMetricsDailyStored, SubnetMetricsDailyKeyStored};
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_cdk::api::call::{CallResult, RejectionCode};
-use ic_management_canister_types_private::{
-    NodeMetrics, NodeMetricsHistoryArgs, NodeMetricsHistoryResponse,
-};
+use ic_management_canister_types::{NodeMetrics, NodeMetricsHistoryArgs, NodeMetricsHistoryRecord};
 use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
 use ic_stable_structures::DefaultMemoryImpl;
 use rewards_calculation::types::DayEnd;
@@ -12,7 +10,7 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
 
 mod mock {
-    use super::{CallResult, NodeMetricsHistoryArgs, NodeMetricsHistoryResponse};
+    use super::{CallResult, NodeMetricsHistoryArgs, NodeMetricsHistoryRecord};
     use crate::metrics::ManagementCanisterClient;
     use async_trait::async_trait;
     use mockall::mock;
@@ -23,7 +21,7 @@ mod mock {
 
         #[async_trait]
         impl ManagementCanisterClient for CanisterClient {
-            async fn node_metrics_history(&self, args: NodeMetricsHistoryArgs) -> CallResult<Vec<NodeMetricsHistoryResponse>>;
+            async fn node_metrics_history(&self, args: NodeMetricsHistoryArgs) -> CallResult<Vec<NodeMetricsHistoryRecord>>;
         }
     }
 }
@@ -50,12 +48,12 @@ impl MetricsManager<VM> {
     }
 }
 
-fn node_metrics_history_gen(days: u64) -> Vec<NodeMetricsHistoryResponse> {
+fn node_metrics_history_gen(days: u64) -> Vec<NodeMetricsHistoryRecord> {
     let mut result = Vec::new();
     for i in 0..days {
-        result.push(NodeMetricsHistoryResponse {
+        result.push(NodeMetricsHistoryRecord {
             timestamp_nanos: i * ONE_DAY_NANOS,
-            ..Default::default()
+            node_metrics: Vec::new(),
         });
     }
     result
@@ -181,7 +179,7 @@ async fn partial_failures_are_handled_correctly() {
     let subnet_2 = subnet_id(2);
     let mut mock = mock::MockCanisterClient::new();
     mock.expect_node_metrics_history().returning(move |subnet| {
-        if SubnetId::from(subnet.subnet_id) == subnet_1 {
+        if SubnetId::from(PrincipalId::from(subnet.subnet_id)) == subnet_1 {
             CallResult::Err((RejectionCode::Unknown, "Error".to_string()))
         } else {
             CallResult::Ok(node_metrics_history_gen(1))
@@ -262,7 +260,7 @@ impl NodeMetricsHistoryResponseTracker {
                 entry_sub.push(NodeMetrics {
                     num_blocks_proposed_total: proposed,
                     num_block_failures_total: failed,
-                    node_id: node_id.get(),
+                    node_id: node_id.get().0,
                 });
             }
         }
@@ -273,17 +271,22 @@ impl NodeMetricsHistoryResponseTracker {
         &self,
         response_step: usize,
         contract: NodeMetricsHistoryArgs,
-    ) -> Vec<NodeMetricsHistoryResponse> {
+    ) -> Vec<NodeMetricsHistoryRecord> {
         let mut response = Vec::new();
         self.subnets_responses
             .range(
                 contract.start_at_timestamp_nanos
                     ..(contract.start_at_timestamp_nanos + (response_step as u64) * ONE_DAY_NANOS),
             )
-            .filter(|(_, metrics)| metrics.contains_key(&contract.subnet_id.into()))
+            .filter(|(_, metrics)| {
+                metrics.contains_key(&PrincipalId::from(contract.subnet_id).into())
+            })
             .for_each(|(ts, metrics)| {
-                let node_metrics = metrics.get(&contract.subnet_id.into()).unwrap().clone();
-                response.push(NodeMetricsHistoryResponse {
+                let node_metrics = metrics
+                    .get(&PrincipalId::from(contract.subnet_id).into())
+                    .unwrap()
+                    .clone();
+                response.push(NodeMetricsHistoryRecord {
                     node_metrics,
                     timestamp_nanos: *ts,
                 });
@@ -292,7 +295,7 @@ impl NodeMetricsHistoryResponseTracker {
         response
     }
 
-    fn next_2_steps(&self, contract: NodeMetricsHistoryArgs) -> Vec<NodeMetricsHistoryResponse> {
+    fn next_2_steps(&self, contract: NodeMetricsHistoryArgs) -> Vec<NodeMetricsHistoryRecord> {
         self.next(2, contract)
     }
 }
