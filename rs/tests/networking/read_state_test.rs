@@ -469,7 +469,7 @@ fn test_module_hash_and_controllers<F>(
 /// Make an update call by forwarding a "raw_rand" request through the message canister
 fn make_update_call(agent: &Agent, canister_id: &Principal) -> (RequestId, Vec<u8>) {
     let update = agent
-        .update(&canister_id, "forward")
+        .update(canister_id, "forward")
         .with_arg(
             Encode!(&ForwardParams {
                 receiver: Principal::management_canister(),
@@ -484,7 +484,7 @@ fn make_update_call(agent: &Agent, canister_id: &Principal) -> (RequestId, Vec<u
 
     let request_id = update.request_id;
     let CallResponse::Response(result) =
-        block_on(agent.update_signed(canister_id.clone(), update.signed_update)).unwrap()
+        block_on(agent.update_signed(*canister_id, update.signed_update)).unwrap()
     else {
         panic!("Failed to get response");
     };
@@ -543,14 +543,14 @@ fn test_request_path_access(env: TestEnv) {
     let (request_id2, _) = make_update_call(&agent, &canister_id);
 
     for request_id in [request_id1, request_id2] {
-        let paths = vec![vec!["request_status".into(), (*request_id1).into()]];
+        let paths = vec![vec!["request_status".into(), (*request_id).into()]];
 
         // Lookup should succeed for default identity
         let result = read_state_with_identity(&env, paths.clone(), get_identity());
         assert!(result.is_ok());
 
         // Lookup should fail for identity that didn't make the request
-        let result = read_state_with_identity(&env, paths.clone(), random_ed25519_identity());
+        let result = read_state_with_identity(&env, paths, random_ed25519_identity());
         assert_matches!(result, Err(AgentError::HttpError(payload)) if payload.status == 403);
     }
 
