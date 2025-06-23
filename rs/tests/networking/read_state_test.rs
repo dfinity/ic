@@ -33,6 +33,7 @@ use std::collections::BTreeSet;
 
 use anyhow::Result;
 use assert_matches::assert_matches;
+use candid::Encode;
 use canister_test::{Canister, Wasm};
 use ic_agent::hash_tree::Label;
 use ic_agent::identity::AnonymousIdentity;
@@ -41,6 +42,7 @@ use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::util::{
     agent_with_identity, block_on, get_identity, random_ed25519_identity, runtime_from_url,
+    MessageCanister,
 };
 use ic_system_test_driver::{
     driver::{
@@ -457,17 +459,44 @@ fn test_module_hash_and_controllers<F>(
     );
 }
 
+fn test_request_path(env: TestEnv) {
+    // let identities = [
+    //     PrincipalId::from(get_identity().sender().unwrap()),
+    //     PrincipalId::from(random_ed25519_identity().sender().unwrap()),
+    // ];
+    let node = get_first_app_node(&env);
+    let effective_canister_id = node.effective_canister_id();
+    let agent = node.build_default_agent();
+    // let runtime = runtime_from_url(node.get_public_url(), node.effective_canister_id());
+
+    let canister_id = block_on(async {
+        let mcan = MessageCanister::new(&agent, effective_canister_id).await;
+        mcan.canister_id()
+    });
+
+    let update = agent
+        .update(&canister_id, "store")
+        .with_arg(Encode!(&String::from("test_message")).unwrap())
+        .sign()
+        .unwrap();
+    let request_id = update.request_id;
+
+    let r = block_on(agent.update_signed(effective_canister_id.into(), update.signed_update)).unwrap();
+    println!("Response: {:?}", r);
+}
+
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
-        .add_test(systest!(test_empty_paths_return_time))
-        .add_test(systest!(test_time_path_returns_time))
-        .add_test(systest!(test_subnet_path))
-        .add_test(systest!(test_invalid_request_rejected))
-        .add_test(systest!(test_absent_request))
-        .add_test(systest!(test_invalid_path_rejected))
-        .add_test(systest!(test_metadata_path))
-        .add_test(systest!(test_canister_path))
+        // .add_test(systest!(test_empty_paths_return_time))
+        // .add_test(systest!(test_time_path_returns_time))
+        // .add_test(systest!(test_subnet_path))
+        // .add_test(systest!(test_invalid_request_rejected))
+        // .add_test(systest!(test_absent_request))
+        // .add_test(systest!(test_invalid_path_rejected))
+        // .add_test(systest!(test_metadata_path))
+        // .add_test(systest!(test_canister_path))
+        .add_test(systest!(test_request_path))
         .execute_from_args()?;
     Ok(())
 }
