@@ -448,6 +448,9 @@ pub(crate) async fn validate_and_render_action(
                 &disallowed_target_canister_ids,
             )
         }
+        proposal::Action::RegisterExtension(_) => {
+            Err("RegisterExtension proposals are not supported yet.".to_string())
+        }
         proposal::Action::DeregisterDappCanisters(deregister_dapp_canisters) => {
             validate_and_render_deregister_dapp_canisters(
                 deregister_dapp_canisters,

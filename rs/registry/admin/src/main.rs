@@ -1946,6 +1946,14 @@ struct ProposeToAddNodeOperatorCmd {
     /// The ipv6 address.
     #[clap(long)]
     ipv6: Option<String>,
+
+    /// A JSON map from node type to the maximum number of nodes of that type that the
+    /// given Node Operator can be rewarded for.
+    ///
+    /// Example:
+    /// '{ "type1.1": 10, "type3.1": 24 }'
+    #[clap(long)]
+    max_rewardable_nodes: Option<String>,
 }
 
 impl ProposalTitle for ProposeToAddNodeOperatorCmd {
@@ -1970,6 +1978,11 @@ impl ProposalPayload<AddNodeOperatorPayload> for ProposeToAddNodeOperatorCmd {
             .map(|s| parse_rewardable_nodes(s))
             .unwrap_or_default();
 
+        let max_rewardable_nodes = self
+            .max_rewardable_nodes
+            .as_ref()
+            .map(|s| parse_rewardable_nodes(s));
+
         AddNodeOperatorPayload {
             node_operator_principal_id: Some(self.node_operator_principal_id),
             node_allowance: self.node_allowance,
@@ -1981,6 +1994,7 @@ impl ProposalPayload<AddNodeOperatorPayload> for ProposeToAddNodeOperatorCmd {
                 .unwrap_or_default(),
             rewardable_nodes,
             ipv6: self.ipv6.clone(),
+            max_rewardable_nodes,
         }
     }
 }
@@ -2022,6 +2036,14 @@ struct ProposeToUpdateNodeOperatorConfigCmd {
     /// This field is for the case when we want to update the value to be None.
     #[clap(long)]
     pub set_ipv6_to_none: Option<bool>,
+
+    /// A JSON map from node type to the maximum number of nodes of that type that the
+    /// given Node Operator can be rewarded for.
+    ///
+    /// Example:
+    /// '{ "type1.1": 10, "type3.1": 24 }'
+    #[clap(long)]
+    max_rewardable_nodes: Option<String>,
 }
 
 impl ProposalTitle for ProposeToUpdateNodeOperatorConfigCmd {
@@ -2045,6 +2067,11 @@ impl ProposalPayload<UpdateNodeOperatorConfigPayload> for ProposeToUpdateNodeOpe
             .map(|s| parse_rewardable_nodes(s))
             .unwrap_or_default();
 
+        let max_rewardable_nodes = self
+            .max_rewardable_nodes
+            .as_ref()
+            .map(|s| parse_rewardable_nodes(s));
+
         UpdateNodeOperatorConfigPayload {
             node_operator_id: Some(self.node_operator_id),
             node_allowance: self.node_allowance,
@@ -2053,6 +2080,7 @@ impl ProposalPayload<UpdateNodeOperatorConfigPayload> for ProposeToUpdateNodeOpe
             node_provider_id: self.node_provider_id,
             ipv6: self.ipv6.clone(),
             set_ipv6_to_none: self.set_ipv6_to_none,
+            max_rewardable_nodes,
         }
     }
 }
@@ -3877,7 +3905,7 @@ async fn main() {
             let mut success = true;
 
             eprintln!("Download IC-OS .. ");
-            let tmp_dir = tempfile::tempdir().unwrap().into_path();
+            let tmp_dir = tempfile::tempdir().unwrap().keep();
             let mut tmp_file = tmp_dir.clone();
             tmp_file.push("temp-image");
 
@@ -5059,6 +5087,7 @@ async fn print_and_get_last_value<T: Message + Default + serde::Serialize>(
                     pub dc_id: String,
                     pub rewardable_nodes: std::collections::BTreeMap<String, u32>,
                     pub ipv6: Option<String>,
+                    pub max_rewardable_nodes: std::collections::BTreeMap<String, u32>,
                 }
                 let record = NodeOperatorRecord::decode(&bytes[..])
                     .expect("Error decoding value from registry.");
@@ -5075,6 +5104,7 @@ async fn print_and_get_last_value<T: Message + Default + serde::Serialize>(
                     dc_id: record.dc_id,
                     rewardable_nodes: record.rewardable_nodes,
                     ipv6: record.ipv6,
+                    max_rewardable_nodes: record.max_rewardable_nodes,
                 };
                 print_value(
                     &std::str::from_utf8(&key)
@@ -5607,7 +5637,7 @@ async fn download_wasm_module(url: &Url) -> PathBuf {
         panic!("Wasm module urls must use https");
     }
 
-    let tmp_dir = tempfile::tempdir().unwrap().into_path();
+    let tmp_dir = tempfile::tempdir().unwrap().keep();
     let mut tmp_file = tmp_dir.clone();
     tmp_file.push("wasm_module.tar.gz");
 

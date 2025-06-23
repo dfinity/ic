@@ -190,6 +190,7 @@ impl InitArgsBuilder {
             },
             max_memo_length: None,
             feature_flags: None,
+            index_principal: None,
         })
     }
 
@@ -249,6 +250,11 @@ impl InitArgsBuilder {
         self
     }
 
+    pub fn with_index_principal(mut self, index_principal: Principal) -> Self {
+        self.0.index_principal = Some(index_principal);
+        self
+    }
+
     pub fn with_feature_flags(mut self, flags: FeatureFlags) -> Self {
         self.0.feature_flags = Some(flags);
         self
@@ -272,6 +278,7 @@ pub struct InitArgs {
     pub archive_options: ArchiveOptions,
     pub max_memo_length: Option<u16>,
     pub feature_flags: Option<FeatureFlags>,
+    pub index_principal: Option<Principal>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
@@ -348,6 +355,8 @@ pub struct UpgradeArgs {
     pub feature_flags: Option<FeatureFlags>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub change_archive_options: Option<ChangeArchiveOptions>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub index_principal: Option<Principal>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Encode, Decode)]
@@ -599,6 +608,9 @@ pub struct Ledger {
 
     #[serde(default)]
     pub ledger_version: u64,
+
+    #[serde(default)]
+    index_principal: Option<Principal>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
@@ -665,6 +677,7 @@ impl Ledger {
             fee_collector_account,
             max_memo_length,
             feature_flags,
+            index_principal,
         }: InitArgs,
         now: TimeStamp,
     ) -> Self {
@@ -699,6 +712,7 @@ impl Ledger {
             maximum_number_of_accounts: 0,
             accounts_overflow_trim_quantity: 0,
             ledger_version: LEDGER_VERSION,
+            index_principal,
         };
 
         if ledger.fee_collector.as_ref().map(|fc| fc.fee_collector) == Some(ledger.minting_account)
@@ -769,6 +783,10 @@ impl Ledger {
 
     pub fn copy_token_pool(&mut self) {
         self.stable_balances.token_pool = self.balances.token_pool;
+    }
+
+    pub fn set_index_principal(&mut self, index_principal: Principal) {
+        self.index_principal = Some(index_principal);
     }
 }
 
@@ -882,6 +900,10 @@ impl Ledger {
         self.decimals
     }
 
+    pub fn index_principal(&self) -> Option<Principal> {
+        self.index_principal
+    }
+
     pub fn max_take_allowances(&self) -> u64 {
         MAX_TAKE_ALLOWANCES
     }
@@ -910,6 +932,12 @@ impl Ledger {
         // (e.g. because they are fixed or computed dynamically)
         // please also add them to `map_metadata_or_trap` to prevent
         // the entry being set using init or upgrade arguments.
+        if let Some(index_principal) = self.index_principal() {
+            records.push(Value::entry(
+                "icrc106:index_principal",
+                index_principal.to_text(),
+            ));
+        }
         records
     }
 
@@ -971,6 +999,9 @@ impl Ledger {
             if let Some(archive) = maybe_archive.deref_mut() {
                 change_archive_options.apply(archive);
             }
+        }
+        if let Some(index_principal) = args.index_principal {
+            self.index_principal = Some(index_principal);
         }
     }
 

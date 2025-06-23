@@ -49,13 +49,6 @@ bazel_args=( )
 # Setup zig-cache
 mkdir -p /tmp/zig-cache
 
-# Unless explicitly provided, we set a default --repository_cache to a volume mounted inside our runners
-# Only for Linux builds since there `/cache` is mounted to host local storage.
-if [[ ! " $@ " =~ [[:space:]]--repository_cache[[:space:]] ]] && [[ "$(uname)" == "Linux" ]]; then
-    log "setting default repository cache"
-    bazel_args+=(--repository_cache=/cache/bazel)
-fi
-
 # Add some options for build-like commands
 if [[ $bazel_command == "build" ]] || [[ $bazel_command == "test" ]]; then
     command_timestamp=$(date +%s)
@@ -79,6 +72,10 @@ if [[ $bazel_command == "build" ]] || [[ $bazel_command == "test" ]]; then
         # Write build events to the dedicated tempdir
         --build_event_binary_file="$BAZEL_ACTION_METRICS_OUT/bazel-bep-$command_timestamp.pb"
         --profile="$BAZEL_ACTION_METRICS_OUT/profile-$command_timestamp.json"
+        # Associate each action in the profile with a target label.
+        # This helps analysis tools like https://github.com/EngFlow/bazel_invocation_analyzer
+        # break down bottlenecks.
+        --experimental_profile_include_target_label
     )
 
     if [ -n "${BUILDBUDDY_LINKS:-}" ]; then

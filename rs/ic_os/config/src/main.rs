@@ -1,4 +1,3 @@
-use crate::guest_vm_config::{generate_guest_vm_config, GenerateGuestVmConfigArgs};
 use anyhow::Result;
 use clap::{Args, Parser, Subcommand};
 use config::config_ini::{get_config_ini_settings, ConfigIniSettings};
@@ -6,17 +5,13 @@ use config::deployment_json::get_deployment_settings;
 use config::generate_testnet_config::{
     generate_testnet_config, GenerateTestnetConfigArgs, Ipv6ConfigType,
 };
-use config::guestos_config::generate_guestos_config;
 use config::serialize_and_write_config;
-use config::update_config::{update_guestos_config, update_hostos_config};
 use config_types::*;
 use macaddr::MacAddr6;
 use network::resolve_mgmt_mac;
 use regex::Regex;
 use std::fs::File;
 use std::path::{Path, PathBuf};
-
-mod guest_vm_config;
 
 #[derive(Subcommand)]
 #[allow(clippy::large_enum_variant)]
@@ -39,30 +34,8 @@ pub enum Commands {
         #[arg(long, default_value = config::DEFAULT_SETUPOS_HOSTOS_CONFIG_OBJECT_PATH, value_name = "config-hostos.json")]
         hostos_config_json_path: PathBuf,
     },
-    /// Creates GuestOSConfig object from existing HostOS config.json file
-    GenerateGuestosConfig {
-        #[arg(long, default_value = config::DEFAULT_HOSTOS_CONFIG_OBJECT_PATH, value_name = "config.json")]
-        hostos_config_json_path: PathBuf,
-        #[arg(long, default_value = config::DEFAULT_HOSTOS_GUESTOS_CONFIG_OBJECT_PATH, value_name = "config-guestos.json")]
-        guestos_config_json_path: PathBuf,
-    },
     /// Creates a GuestOSConfig object directly from GenerateTestnetConfigClapArgs. Only used for testing purposes.
     GenerateTestnetConfig(GenerateTestnetConfigClapArgs),
-    /// Creates a GuestOSConfig object from existing guestos configuration files
-    UpdateGuestosConfig,
-    UpdateHostosConfig {
-        #[arg(long, default_value = config::DEFAULT_HOSTOS_CONFIG_INI_FILE_PATH, value_name = "config.ini")]
-        config_ini_path: PathBuf,
-
-        #[arg(long, default_value = config::DEFAULT_HOSTOS_DEPLOYMENT_JSON_PATH, value_name = "deployment.json")]
-        deployment_json_path: PathBuf,
-
-        #[arg(long, default_value = config::DEFAULT_HOSTOS_CONFIG_OBJECT_PATH, value_name = "config.json")]
-        hostos_config_json_path: PathBuf,
-    },
-    /// Generates the GuestOS VM configuration by assembling the bootstrap config media image
-    /// and creating the libvirt XML configuration file.
-    GenerateGuestVmConfig(GenerateGuestVmConfigArgs),
 }
 
 #[derive(Parser)]
@@ -297,25 +270,6 @@ pub fn main() -> Result<()> {
 
             Ok(())
         }
-        Some(Commands::GenerateGuestosConfig {
-            hostos_config_json_path,
-            guestos_config_json_path,
-        }) => {
-            let hostos_config_json_path = Path::new(&hostos_config_json_path);
-            let hostos_config: HostOSConfig =
-                serde_json::from_reader(File::open(hostos_config_json_path)?)?;
-
-            let guestos_config = generate_guestos_config(&hostos_config)?;
-            let guestos_config_json_path = Path::new(&guestos_config_json_path);
-            serialize_and_write_config(guestos_config_json_path, &guestos_config)?;
-
-            println!(
-                "GuestOSConfig has been written to {}",
-                guestos_config_json_path.display()
-            );
-
-            Ok(())
-        }
         Some(Commands::GenerateTestnetConfig(clap_args)) => {
             // Convert `clap_args` into `GenerateTestnetConfigArgs`
             let args = GenerateTestnetConfigArgs {
@@ -359,23 +313,9 @@ pub fn main() -> Result<()> {
                 &generate_testnet_config(args)?,
             )
         }
-        // TODO(NODE-1518): delete UpdateGuestosConfig and UpdateHostosConfig after moved to new config format
-        // Regenerate config.json on *every boot* in case the config structure changes between
-        // when we roll out the update-config service and when we roll out the 'config integration'
-        Some(Commands::UpdateGuestosConfig) => update_guestos_config(),
-        Some(Commands::UpdateHostosConfig {
-            config_ini_path,
-            deployment_json_path,
-            hostos_config_json_path,
-        }) => update_hostos_config(
-            &config_ini_path,
-            &deployment_json_path,
-            &hostos_config_json_path,
-        ),
         None => {
             println!("No command provided. Use --help for usage information.");
             Ok(())
         }
-        Some(Commands::GenerateGuestVmConfig(args)) => generate_guest_vm_config(args),
     }
 }

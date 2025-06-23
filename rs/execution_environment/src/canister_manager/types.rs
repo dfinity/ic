@@ -459,6 +459,9 @@ pub(crate) enum CanisterManagerError {
     },
     CanisterSnapshotNotEnoughCycles(CanisterOutOfCyclesError),
     CanisterSnapshotImmutable,
+    CanisterSnapshotInconsistent {
+        message: String,
+    },
     LongExecutionAlreadyInProgress {
         canister_id: CanisterId,
     },
@@ -475,6 +478,9 @@ pub(crate) enum CanisterManagerError {
     SliceTooLarge {
         requested: u64,
         allowed: u64,
+    },
+    InvalidSpecifiedId {
+        specified_id: CanisterId,
     },
 }
 
@@ -664,6 +670,14 @@ impl AsErrorHelp for CanisterManagerError {
             },
             CanisterManagerError::SliceTooLarge { .. } => ErrorHelp::UserError {
                 suggestion: format!("Use a slice size at most {}", MAX_SLICE_SIZE_BYTES),
+                doc_link: "".to_string(),
+            },
+            CanisterManagerError::InvalidSpecifiedId { .. } => ErrorHelp::UserError {
+                suggestion: "Use a `specified_id` that matches a canister ID on the ICP mainnet and a test environment that supports canister creation with `specified_id` (e.g., PocketIC).".to_string(),
+                doc_link: "".to_string(),
+            },
+            CanisterManagerError::CanisterSnapshotInconsistent { .. } => ErrorHelp::UserError {
+                suggestion: "Make sure to upload a complete and valid snapshot. Compare with snapshot metadata from the endpoint `read_canister_snapshot_metadata`".to_string(),
                 doc_link: "".to_string(),
             }
         }
@@ -1005,6 +1019,18 @@ impl From<CanisterManagerError> for UserError {
                 Self::new(
                     ErrorCode::InvalidManagementPayload,
                     format!("Requested slice too large: {} > {}", requested, allowed),
+                )
+            }
+            InvalidSpecifiedId { specified_id } => {
+                Self::new(
+                    ErrorCode::InvalidManagementPayload,
+                    format!("The `specified_id` {specified_id} is invalid because it belongs to the canister allocation ranges of the test environment.{additional_help}")
+                )
+            }
+            CanisterSnapshotInconsistent { message} => {
+                Self::new(
+                    ErrorCode::InvalidManagementPayload,
+                    message,
                 )
             }
         }

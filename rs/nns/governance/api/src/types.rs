@@ -874,6 +874,29 @@ pub mod manage_neuron {
         pub topic: i32,
         pub followees: Vec<NeuronId>,
     }
+    #[derive(
+        candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
+    )]
+    pub struct SetFollowing {
+        pub topic_following: Option<Vec<set_following::FolloweesForTopic>>,
+    }
+    pub mod set_following {
+        use super::*;
+
+        #[derive(
+            candid::CandidType,
+            candid::Deserialize,
+            serde::Serialize,
+            Clone,
+            PartialEq,
+            Debug,
+            Default,
+        )]
+        pub struct FolloweesForTopic {
+            pub followees: Option<Vec<NeuronId>>,
+            pub topic: Option<i32>,
+        }
+    }
     /// Have the neuron vote to either adopt or reject a proposal with a specified
     /// id.
     #[derive(
@@ -952,8 +975,12 @@ pub mod manage_neuron {
     pub struct DisburseMaturity {
         /// The percentage to disburse, from 1 to 100
         pub percentage_to_disburse: u32,
-        /// The (optional) principal to which to transfer the stake.
+        /// The (optional) principal to which to transfer the stake. It should not be set if
+        /// `to_account_identifier` is set.
         pub to_account: ::core::option::Option<super::Account>,
+        /// The (optional) account identifier to which to transfer the stake. It should not be set if
+        /// `to_account` is set.
+        pub to_account_identifier: ::core::option::Option<super::AccountIdentifier>,
     }
 
     /// The ID of the neuron to manage. This can either be a subaccount or a neuron ID.
@@ -985,6 +1012,7 @@ pub mod manage_neuron {
         StakeMaturity(StakeMaturity),
         RefreshVotingPower(RefreshVotingPower),
         DisburseMaturity(DisburseMaturity),
+        SetFollowing(SetFollowing),
         // KEEP THIS IN SYNC WITH ManageNeuronCommandRequest!
     }
 }
@@ -1111,6 +1139,18 @@ pub mod manage_neuron_response {
     }
 
     #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        Clone,
+        Copy,
+        PartialEq,
+        Debug,
+        Default,
+    )]
+    pub struct SetFollowingResponse {}
+
+    #[derive(
         candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug,
     )]
     pub enum Command {
@@ -1129,6 +1169,7 @@ pub mod manage_neuron_response {
         StakeMaturity(StakeMaturityResponse),
         RefreshVotingPower(RefreshVotingPowerResponse),
         DisburseMaturity(DisburseMaturityResponse),
+        SetFollowing(SetFollowingResponse),
     }
 
     // Below, we should remove `manage_neuron_response::`, but that should be
@@ -1293,6 +1334,14 @@ pub mod manage_neuron_response {
                 )),
             }
         }
+
+        pub fn set_following_response(_: ()) -> Self {
+            ManageNeuronResponse {
+                command: Some(manage_neuron_response::Command::SetFollowing(
+                    manage_neuron_response::SetFollowingResponse {},
+                )),
+            }
+        }
     }
 }
 
@@ -1349,6 +1398,7 @@ pub enum ManageNeuronCommandRequest {
     StakeMaturity(manage_neuron::StakeMaturity),
     RefreshVotingPower(manage_neuron::RefreshVotingPower),
     DisburseMaturity(manage_neuron::DisburseMaturity),
+    SetFollowing(manage_neuron::SetFollowing),
     // KEEP THIS IN SYNC WITH manage_neuron::Command!
 }
 
@@ -4378,4 +4428,6 @@ pub struct MaturityDisbursement {
     pub finalize_disbursement_timestamp_seconds: Option<u64>,
     /// The account to disburse the maturity to.
     pub account_to_disburse_to: Option<Account>,
+    /// The account identifier to disburse the maturity to.
+    pub account_identifier_to_disburse_to: Option<AccountIdentifier>,
 }

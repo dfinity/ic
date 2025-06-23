@@ -26,12 +26,11 @@ jobs:
   bazel-system-test-nightly:
     name: Bazel System Test Nightly
     runs-on:
-      group: zh1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:efe6edcd9a9e169843a02f91af98b29514c00cda858ad6612cda28b231b80896
+      image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
       options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
+        -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 180 # 3 hours
     steps:
       - name: Checkout
@@ -42,18 +41,17 @@ jobs:
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
         with:
-          BAZEL_COMMAND: test --config=ci --keep_going --test_tag_filters=system_test_nightly
+          BAZEL_COMMAND: test --keep_going --test_tag_filters=system_test_nightly
           BAZEL_TARGETS: //rs/tests/...
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
   bazel-system-test-staging:
     name: Bazel System Test Staging
     runs-on:
-      group: zh1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:efe6edcd9a9e169843a02f91af98b29514c00cda858ad6612cda28b231b80896
+      image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
       options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
+        -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 180 # 3 hours
     steps:
       - name: Checkout
@@ -64,18 +62,17 @@ jobs:
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
         with:
-          BAZEL_COMMAND: test --config=ci --keep_going --test_tag_filters=system_test_staging
+          BAZEL_COMMAND: test --keep_going --test_tag_filters=system_test_staging
           BAZEL_TARGETS: //rs/tests/...
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
   bazel-system-test-hotfix:
     name: Bazel System Test Hotfix
     runs-on:
-      group: zh1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:efe6edcd9a9e169843a02f91af98b29514c00cda858ad6612cda28b231b80896
+      image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
       options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
+        -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 90
     steps:
       - name: Checkout
@@ -86,18 +83,17 @@ jobs:
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
         with:
-          BAZEL_COMMAND: test --config=ci --keep_going --test_tag_filters=system_test_hotfix
+          BAZEL_COMMAND: test --keep_going --test_tag_filters=system_test_hotfix
           BAZEL_TARGETS: //rs/tests/...
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
   dependency-scan-release-cut:
     name: Dependency Scan for Release
     runs-on:
-      group: zh1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:efe6edcd9a9e169843a02f91af98b29514c00cda858ad6612cda28b231b80896
+      image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
       options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
+        -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 60
     env:
       SHELL_WRAPPER: "/usr/bin/time"
@@ -134,12 +130,11 @@ jobs:
   setup-guest-os-qualification:
     name: Setting up guest os qualification pipeline
     runs-on:
-      group: zh1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:efe6edcd9a9e169843a02f91af98b29514c00cda858ad6612cda28b231b80896
+      image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
       options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
+        -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 180 # 3 hours
     outputs:
       matrix: ${{ steps.generate.outputs.output }}
@@ -162,12 +157,11 @@ jobs:
     strategy:
       matrix: ${{ fromJson(needs.setup-guest-os-qualification.outputs.matrix) }}
     runs-on:
-      group: zh1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:efe6edcd9a9e169843a02f91af98b29514c00cda858ad6612cda28b231b80896
+      image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
       options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
+        -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 180 # 3 hours
     steps:
       - name: Checkout
@@ -177,7 +171,7 @@ jobs:
       - name: Run qualification for version ${{ matrix.version }} from the tip of the branch
         uses: ./.github/actions/bazel-test-all/
         with:
-          BAZEL_COMMAND: test --config=ci --config=systest --keep_going --test_timeout=7200 --test_env=OLD_VERSION=${{ matrix.version }}
+          BAZEL_COMMAND: test --config=systest --keep_going --test_timeout=7200 --test_env=OLD_VERSION=${{ matrix.version }}
           BAZEL_TARGETS: "//rs/tests/dre:guest_os_qualification"
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
   repro-check:

@@ -12,14 +12,13 @@ env:
 jobs:
   bazel-test-bare-metal:
     name: Bazel Test Bare Metal
-    container:
-      image: ghcr.io/dfinity/ic-build@sha256:efe6edcd9a9e169843a02f91af98b29514c00cda858ad6612cda28b231b80896
-      options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
-    timeout-minutes: 120
     runs-on:
-      group: zh1
       labels: dind-large
+    container:
+      image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
+      options: >-
+        -e NODE_NAME --privileged --cgroupns host
+    timeout-minutes: 120
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -31,7 +30,7 @@ jobs:
 
           launch_bare_metal() {
             # shellcheck disable=SC2046,SC2086
-            bazel --output_base=/var/tmp/bazel-output run ${BAZEL_CI_CONFIG} \
+            bazel --output_base=/var/tmp/bazel-output run \
               //ic-os/setupos/envs/dev:launch_bare_metal -- \
                 --config_path "$(realpath  ./ic-os/dev-tools/bare_metal_deployment/zh2-dll01.yaml)" \
                 --csv_filename "$(realpath file1)" \
@@ -53,18 +52,16 @@ jobs:
 
           bazel clean
         env:
-          BAZEL_CI_CONFIG: "--config=ci"
           ZH2_DLL01_CSV_SECRETS: "${{ secrets.ZH2_DLL01_CSV_SECRETS }}"
           ZH2_FILE_SHARE_KEY: "${{ secrets.ZH2_FILE_SHARE_KEY }}"
   fi-tests-nightly:
     name: Bazel Test FI Nightly
     runs-on:
-      group: zh1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:efe6edcd9a9e169843a02f91af98b29514c00cda858ad6612cda28b231b80896
+      image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
       options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
+        -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 720 # 12 hours
     steps:
       - name: Checkout
@@ -73,20 +70,19 @@ jobs:
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
         with:
-          BAZEL_COMMAND: test --config=ci --keep_going --test_tag_filters=fi_tests_nightly --test_env=SSH_AUTH_SOCK --test_timeout=43200
+          BAZEL_COMMAND: test --keep_going --test_tag_filters=fi_tests_nightly --test_env=SSH_AUTH_SOCK --test_timeout=43200
           BAZEL_TARGETS: //rs/ledger_suite/...
           SSH_PRIVATE_KEY_BACKUP_POD: ${{ secrets.SSH_PRIVATE_KEY_BACKUP_POD }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
   nns-tests-nightly:
     name: Bazel Test NNS Nightly
     runs-on:
-      group: zh1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:efe6edcd9a9e169843a02f91af98b29514c00cda858ad6612cda28b231b80896
+      image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
       options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
-    timeout-minutes: 20
+        -e NODE_NAME --privileged --cgroupns host
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -94,19 +90,18 @@ jobs:
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
         with:
-          BAZEL_COMMAND: test --config=ci --keep_going --test_tag_filters=nns_tests_nightly --test_env=SSH_AUTH_SOCK --test_env=NNS_CANISTER_UPGRADE_SEQUENCE=all
+          BAZEL_COMMAND: test --keep_going --test_tag_filters=nns_tests_nightly --test_env=SSH_AUTH_SOCK --test_env=NNS_CANISTER_UPGRADE_SEQUENCE=all
           BAZEL_TARGETS: //rs/nns/...
           SSH_PRIVATE_KEY_BACKUP_POD: ${{ secrets.SSH_PRIVATE_KEY_BACKUP_POD }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
   system-tests-benchmarks-nightly:
     name: Bazel System Test Benchmarks
     runs-on:
-      group: zh1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:efe6edcd9a9e169843a02f91af98b29514c00cda858ad6612cda28b231b80896
+      image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
       options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
+        -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 480
     steps:
       - name: Checkout
@@ -121,7 +116,7 @@ jobs:
         uses: ./.github/actions/bazel-test-all/
         with:
           # note: there's just one performance cluster, so the job can't be parallelized
-          BAZEL_COMMAND: test --config=ci --test_tag_filters=system_test_benchmark --//bazel:enable_upload_perf_systest_results=True --keep_going --jobs 1
+          BAZEL_COMMAND: test --test_tag_filters=system_test_benchmark --//bazel:enable_upload_perf_systest_results=True --keep_going --jobs 1
           BAZEL_TARGETS: ${{ env.BENCHMARK_TARGETS }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
       - name: Post Slack Notification
@@ -136,12 +131,11 @@ jobs:
     if: false
     name: Dependency Scan Nightly
     runs-on:
-      group: zh1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:efe6edcd9a9e169843a02f91af98b29514c00cda858ad6612cda28b231b80896
+      image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
       options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
+        -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 60
     permissions:
       actions: write
@@ -188,12 +182,11 @@ jobs:
   bazel-test-coverage:
     name: Bazel Test Coverage
     runs-on:
-      group: zh1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:efe6edcd9a9e169843a02f91af98b29514c00cda858ad6612cda28b231b80896
+      image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
       options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
+        -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 120
     if: false
     steps:
