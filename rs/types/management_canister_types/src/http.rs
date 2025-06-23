@@ -70,6 +70,7 @@ pub type BoundedHttpHeaders = BoundedVec<
 //       function : func (record {response : http_response; context : blob}) -> (http_response) query;
 //       context : blob;
 //     };
+//     is_replicated: opt bool;
 //   })`
 #[derive(Clone, PartialEq, Debug, CandidType, Deserialize)]
 pub struct CanisterHttpRequestArgs {
