@@ -1207,20 +1207,10 @@ fn cast_vetkd_key_id(key_id: VetKdKeyId) -> ic_management_canister_types::VetKDK
 
 #[derive(Clone)]
 pub struct ChainSignatureRequest {
-    principal: Principal,
-    method_name: String,
-    key_id: MasterPublicKeyId,
-    payload: Vec<u8>,
-}
-
-pub struct LargeSigRequestParams {
     pub principal: Principal,
+    pub method_name: String,
     pub key_id: MasterPublicKeyId,
-    pub derivation_path_length: usize,
-    pub derivation_path_element_size: usize,
-    pub schnorr_message_size: usize,
-    pub vetkd_context_size: usize,
-    pub vetkd_input_size: usize,
+    pub payload: Vec<u8>,
 }
 
 impl ChainSignatureRequest {
@@ -1290,69 +1280,26 @@ impl ChainSignatureRequest {
         }
     }
 
-    pub fn new_large(
-        LargeSigRequestParams {
-            principal,
-            key_id,
-            derivation_path_length,
-            derivation_path_element_size,
-            schnorr_message_size,
-            vetkd_context_size,
-            vetkd_input_size,
-        }: LargeSigRequestParams,
-    ) -> Self {
-        let (method_name, payload) = match key_id.clone() {
-            MasterPublicKeyId::Ecdsa(key_id) => (
-                String::from("gen_ecdsa_sig"),
-                Self::large_ecdsa_payload(
-                    derivation_path_length,
-                    derivation_path_element_size,
-                    key_id,
-                ),
-            ),
-            MasterPublicKeyId::Schnorr(key_id) => (
-                String::from("gen_schnorr_sig"),
-                Self::large_schnorr_payload(
-                    schnorr_message_size,
-                    derivation_path_length,
-                    0,
-                    key_id,
-                ),
-            ),
-            MasterPublicKeyId::VetKd(key_id) => (
-                String::from("gen_vetkd_key"),
-                Self::large_vetkd_payload(vetkd_context_size, vetkd_input_size, key_id),
-            ),
-        };
-
-        Self {
-            principal,
-            method_name,
-            key_id,
-            payload,
-        }
-    }
-
-    pub fn large_ecdsa_payload(
+    pub fn large_ecdsa_method_and_payload(
         derivation_path_length: usize,
         derivation_path_element_size: usize,
         key_id: EcdsaKeyId,
-    ) -> Vec<u8> {
+    ) -> (String, Vec<u8>) {
         let params = GenEcdsaParams {
             derivation_path_length,
             derivation_path_element_size,
             key_id: cast_ecdsa_key_id(key_id),
         };
 
-        Encode!(&params).unwrap()
+        (String::from("gen_ecdsa_sig"), Encode!(&params).unwrap())
     }
 
-    pub fn large_schnorr_payload(
+    pub fn large_schnorr_method_and_payload(
         message_size: usize,
         derivation_path_length: usize,
         derivation_path_element_size: usize,
         key_id: SchnorrKeyId,
-    ) -> Vec<u8> {
+    ) -> (String, Vec<u8>) {
         let params = GenSchnorrParams {
             message_size,
             derivation_path_length,
@@ -1360,21 +1307,21 @@ impl ChainSignatureRequest {
             key_id: cast_schnorr_key_id(key_id),
         };
 
-        Encode!(&params).unwrap()
+        (String::from("gen_schnorr_sig"), Encode!(&params).unwrap())
     }
 
-    pub fn large_vetkd_payload(
+    pub fn large_vetkd_method_and_payload(
         context_size: usize,
         input_size: usize,
         key_id: VetKdKeyId,
-    ) -> Vec<u8> {
+    ) -> (String, Vec<u8>) {
         let params = GenVetkdParams {
             context_size,
             input_size,
             key_id: cast_vetkd_key_id(key_id),
         };
 
-        Encode!(&params).unwrap()
+        (String::from("gen_vetkd_key"), Encode!(&params).unwrap())
     }
 }
 

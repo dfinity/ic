@@ -45,7 +45,7 @@ use ic_consensus_system_test_utils::{
     subnet::enable_chain_key_signing_on_subnet,
 };
 use ic_consensus_threshold_sig_system_test_utils::{
-    run_chain_key_signature_test, ChainSignatureRequest, LargeSigRequestParams,
+    run_chain_key_signature_test, ChainSignatureRequest,
 };
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
@@ -263,15 +263,37 @@ pub fn tecdsa_performance_test(
             // For VetKD, we can vary either the context size or the input size. For simplicity,
             // we test a large input size.
 
-            requests.push(ChainSignatureRequest::new_large(LargeSigRequestParams {
+            let (method_name, payload) = match key_id.clone() {
+                MasterPublicKeyId::Ecdsa(key_id) => {
+                    ChainSignatureRequest::large_ecdsa_method_and_payload(
+                        1,
+                        MAX_MSG_SIZE_BYTES,
+                        key_id,
+                    )
+                }
+                MasterPublicKeyId::Schnorr(key_id) => {
+                    ChainSignatureRequest::large_schnorr_method_and_payload(
+                        MAX_MSG_SIZE_BYTES,
+                        1,
+                        0,
+                        key_id,
+                    )
+                }
+                MasterPublicKeyId::VetKd(key_id) => {
+                    ChainSignatureRequest::large_vetkd_method_and_payload(
+                        MAX_MSG_SIZE_BYTES,
+                        0,
+                        key_id,
+                    )
+                }
+            };
+
+            requests.push(ChainSignatureRequest {
                 principal,
-                key_id: key_id.clone(),
-                derivation_path_length: 1,
-                derivation_path_element_size: MAX_MSG_SIZE_BYTES,
-                schnorr_message_size: MAX_MSG_SIZE_BYTES,
-                vetkd_context_size: MAX_MSG_SIZE_BYTES,
-                vetkd_input_size: 0,
-            }))
+                method_name,
+                key_id,
+                payload,
+            });
         }
     }
 
