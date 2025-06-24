@@ -115,7 +115,7 @@ fn setup(env: TestEnv) {
 /// depending on the limit type. If the limit type is `Local`, then we use the
 /// signer canister as it can generate larger signatures than sending an ingress message
 /// to the message canister.
-async fn get_message_and_signature_depending_on_limit(
+async fn get_signature_depending_on_limit(
     limit_type: &LimitType,
     message: Vec<u8>,
     cycles: Cycles,
@@ -123,30 +123,27 @@ async fn get_message_and_signature_depending_on_limit(
     msg_can: &MessageCanister<'_>,
     sig_can: &SignerCanister<'_>,
     log: &Logger,
-) -> Result<(Vec<u8>, Vec<u8>), String> {
+) -> Result<Vec<u8>, String> {
     let MasterPublicKeyId::Schnorr(key_id) = key_id else {
         // TODO(CON-1522): Create tests for ECDSA and VetKD key ids.
         panic!("Unexpected key id type: {}", key_id);
     };
 
     Ok(match limit_type {
-        LimitType::Local => (
-            sig_can_message(message.len()),
+        LimitType::Local => {
             generate_dummy_schnorr_signature_with_logger(message.len(), 0, 0, key_id, sig_can, log)
                 .await
-                .map(|sig| sig.signature)?,
-        ),
-        LimitType::XNet => (
-            message.clone(),
-            get_schnorr_signature_with_logger(message, cycles, key_id, msg_can, log)
-                .await
-                .map_err(|err| err.to_string())?,
-        ),
+                .map(|sig| sig.signature)?
+        }
+
+        LimitType::XNet => get_schnorr_signature_with_logger(message, cycles, key_id, msg_can, log)
+            .await
+            .map_err(|err| err.to_string())?,
     })
 }
 
 /// Returns the dummy message that the signer canister uses to sign messages.
-fn sig_can_message(message_size: usize) -> Vec<u8> {
+fn dummy_message(message_size: usize) -> Vec<u8> {
     vec![1; message_size]
 }
 
@@ -173,11 +170,11 @@ fn test_message_sizes(subnet: SubnetSnapshot, limit: Limit, log: &Logger) {
         ))
         .unwrap();
 
-        let empty_message = vec![];
+        let empty_message = dummy_message(0);
         info!(log, "Getting signature of empty message for {}", key_id);
-        let (empty_message, signature) = block_on(get_message_and_signature_depending_on_limit(
+        let signature = block_on(get_signature_depending_on_limit(
             &limit.limit_type,
-            empty_message,
+            empty_message.clone(),
             cycles,
             key_id,
             &msg_can,
@@ -189,16 +186,16 @@ fn test_message_sizes(subnet: SubnetSnapshot, limit: Limit, log: &Logger) {
         verify_signature(key_id, &empty_message, &public_key, &signature);
 
         // Subtract 1 KIB to account for message overhead in addition to payload
-        let max_message = vec![0xabu8; limit.size - KIB];
+        let max_message = dummy_message(limit.size - KIB);
         info!(
             log,
             "Getting signature of message with size {} for {}",
             max_message.len(),
             key_id
         );
-        let (max_message, signature) = block_on(get_message_and_signature_depending_on_limit(
+        let signature = block_on(get_signature_depending_on_limit(
             &limit.limit_type,
-            max_message,
+            max_message.clone(),
             cycles,
             key_id,
             &msg_can,
@@ -214,14 +211,14 @@ fn test_message_sizes(subnet: SubnetSnapshot, limit: Limit, log: &Logger) {
         );
         verify_signature(key_id, &max_message, &public_key, &signature);
 
-        let exceeding_message = vec![0xabu8; limit.size];
+        let exceeding_message = dummy_message(limit.size);
         info!(
             log,
             "Getting signature of exceeding message with size {} for {}",
             exceeding_message.len(),
             key_id
         );
-        let result = block_on(get_message_and_signature_depending_on_limit(
+        let result = block_on(get_signature_depending_on_limit(
             &limit.limit_type,
             exceeding_message,
             cycles,
