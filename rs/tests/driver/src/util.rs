@@ -640,7 +640,7 @@ impl<'a> MessageCanister<'a> {
         .expect("Could not create message canister.")
     }
 
-    pub async fn new_with_params_with_timeout(
+    async fn new_with_params_with_timeout(
         agent: &'a Agent,
         effective_canister_id: PrincipalId,
         compute_allocation: Option<u64>,
@@ -658,7 +658,7 @@ impl<'a> MessageCanister<'a> {
         }
     }
 
-    pub async fn new_with_params(
+    async fn new_with_params(
         agent: &'a Agent,
         effective_canister_id: PrincipalId,
         compute_allocation: Option<u64>,
@@ -689,24 +689,9 @@ impl<'a> MessageCanister<'a> {
         effective_canister_id: PrincipalId,
         cycles: C,
     ) -> MessageCanister<'a> {
-        // Create a canister.
-        let mgr = ManagementCanister::create(agent);
-        let canister_id = mgr
-            .create_canister()
-            .as_provisional_create_with_amount(Some(cycles.into()))
-            .with_effective_canister_id(effective_canister_id)
-            .call_and_wait()
+        Self::new_with_params(agent, effective_canister_id, None, Some(cycles.into()))
             .await
-            .unwrap_or_else(|err| panic!("Couldn't create canister with provisional API: {}", err))
-            .0;
-
-        // Install the universal canister.
-        mgr.install_code(&canister_id, MESSAGE_CANISTER_WASM)
-            .call_and_wait()
-            .await
-            .unwrap_or_else(|err| panic!("Couldn't install message canister: {}", err));
-
-        Self { agent, canister_id }
+            .unwrap()
     }
 
     pub fn canister_id(&self) -> Principal {
