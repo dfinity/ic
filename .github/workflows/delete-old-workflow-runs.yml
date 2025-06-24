@@ -2,7 +2,6 @@ name: Delete old workflow runs
 on:
   schedule:
     - cron: "0 8 * * 1"
-  pull_request:
   workflow_dispatch:
     inputs:
       days:
@@ -33,9 +32,9 @@ jobs:
         with:
           token: ${{ github.token }}
           repository: ${{ github.repository }}
-          retain_days: 90
+          retain_days: ${{ github.event.inputs.days }}
           keep_minimum_runs: 0
-          delete_workflow_pattern: "test-namepace"
+          delete_workflow_pattern: ${{ github.event.inputs.delete_workflow_pattern }}
           delete_workflow_by_state_pattern: "active" # don't delete inactive workflows so we can find them if we need to enable them
-          dry_run: true
-          check_branch_existence: true
+          dry_run: ${{ github.event.inputs.dry_run }}
+          check_branch_existence: ${{ github.event.inputs.check_branch_existence }}
