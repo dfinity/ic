@@ -257,8 +257,7 @@ pub fn tecdsa_performance_test(
             // which we would need to account for in the MAX_LARGE_MSG_SIZE_BYTES constant.
             //
             // For Schnorr, we test a large message and a keep the derivation path small,
-            // as the latter is tested in ECDSA (see implementation of
-            // ChainSignatureRequest::new_large).
+            // as the latter is tested in ECDSA.
             //
             // For VetKD, we can vary either the context size or the input size. For simplicity,
             // we test a large input size.
