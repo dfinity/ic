@@ -803,85 +803,12 @@ pub struct SignerCanister<'a> {
 impl<'a> SignerCanister<'a> {
     /// Initializes a [SignerCanister] using the provided [Agent].
     pub async fn new(agent: &'a Agent, effective_canister_id: PrincipalId) -> SignerCanister<'a> {
-        Self::new_with_params_with_timeout(agent, effective_canister_id, None, None)
-            .await
-            .expect("Could not create signer canister.")
-    }
-
-    pub async fn try_new(
-        agent: &'a Agent,
-        effective_canister_id: PrincipalId,
-    ) -> Result<SignerCanister<'a>, String> {
-        Self::new_with_params_with_timeout(agent, effective_canister_id, None, None).await
-    }
-
-    pub async fn new_with_retries(
-        agent: &'a Agent,
-        effective_canister_id: PrincipalId,
-        log: &slog::Logger,
-        timeout: Duration,
-        backoff: Duration,
-    ) -> SignerCanister<'a> {
-        retry_with_msg_async!(
-            format!(
-                "install SignerCanister {}",
-                effective_canister_id.to_string()
-            ),
-            log,
-            timeout,
-            backoff,
-            || async {
-                Self::new_with_params_with_timeout(agent, effective_canister_id, None, None)
-                    .await
-                    .map_err(|e| anyhow!(e))
-            }
-        )
-        .await
-        .expect("Could not create signer canister.")
-    }
-
-    pub async fn new_with_params_with_timeout(
-        agent: &'a Agent,
-        effective_canister_id: PrincipalId,
-        compute_allocation: Option<u64>,
-        cycles: Option<u128>,
-    ) -> Result<SignerCanister<'a>, String> {
-        match timeout(
+        timeout(
             CANISTER_CREATE_TIMEOUT,
-            Self::new_with_params(agent, effective_canister_id, compute_allocation, cycles),
+            Self::new_with_params(agent, effective_canister_id, None, None),
         )
         .await
-        {
-            Ok(Ok(canister)) => Ok(canister),
-            Ok(Err(err)) => Err(format!("Could not create signer canister: {:?}", err)),
-            Err(_elasped) => Err("Timeout while creating signer canister".to_string()),
-        }
-    }
-
-    pub async fn new_with_params(
-        agent: &'a Agent,
-        effective_canister_id: PrincipalId,
-        compute_allocation: Option<u64>,
-        cycles: Option<u128>,
-    ) -> Result<SignerCanister<'a>, String> {
-        // Create a canister.
-        let mgr = ManagementCanister::create(agent);
-        let canister_id = mgr
-            .create_canister()
-            .with_optional_compute_allocation(compute_allocation)
-            .as_provisional_create_with_amount(cycles)
-            .with_effective_canister_id(effective_canister_id)
-            .call_and_wait()
-            .await
-            .map_err(|err| format!("Couldn't create canister with provisional API: {}", err))?
-            .0;
-
-        // Install the signer canister.
-        mgr.install_code(&canister_id, &SIGNER_CANISTER_WASM)
-            .call_and_wait()
-            .await
-            .map_err(|err| format!("Couldn't install signer canister: {}", err))?;
-        Ok(Self { agent, canister_id })
+        .expect("Timeout while creating signer canister")
     }
 
     pub async fn new_with_cycles<C: Into<u128>>(
@@ -889,11 +816,21 @@ impl<'a> SignerCanister<'a> {
         effective_canister_id: PrincipalId,
         cycles: C,
     ) -> SignerCanister<'a> {
+        Self::new_with_params(agent, effective_canister_id, None, Some(cycles.into())).await
+    }
+
+    async fn new_with_params(
+        agent: &'a Agent,
+        effective_canister_id: PrincipalId,
+        compute_allocation: Option<u64>,
+        cycles: Option<u128>,
+    ) -> SignerCanister<'a> {
         // Create a canister.
         let mgr = ManagementCanister::create(agent);
         let canister_id = mgr
             .create_canister()
-            .as_provisional_create_with_amount(Some(cycles.into()))
+            .with_optional_compute_allocation(compute_allocation)
+            .as_provisional_create_with_amount(cycles)
             .with_effective_canister_id(effective_canister_id)
             .call_and_wait()
             .await
@@ -911,12 +848,6 @@ impl<'a> SignerCanister<'a> {
 
     pub fn canister_id(&self) -> Principal {
         self.canister_id
-    }
-
-    /// Initializes a signer canister wrapper from a canister id. Does /NOT/
-    /// perform any installation operation on the runtime.
-    pub fn from_canister_id(agent: &'a Agent, canister_id: Principal) -> SignerCanister<'a> {
-        Self { agent, canister_id }
     }
 
     pub async fn gen_ecdsa_sig(
