@@ -2372,6 +2372,8 @@ impl CanisterManager {
         // has to be a controller of the canister to be renamed.
         validate_controller(canister, &sender)?;
 
+        // TODO(MR-684): Only the migration orchestrator should be able to be the sender.
+
         if state.canister_state(&new_id).is_some() {
             return Err(CanisterManagerError::CanisterAlreadyExists(new_id));
         }

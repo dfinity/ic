@@ -6652,6 +6652,8 @@ fn memory_usage_updates_increment_subnet_available_memory() {
     assert_eq!(initial_subnet_available_memory, subnet_available_memory);
 }
 
+/// Creates and deploys a pair of universal canisters with the second canister being controlled by the first one
+/// in addition to both canisters being controlled by the anonymous principal.
 fn install_two_universal_canisters(
     env1: &StateMachine,
     env2: &StateMachine,
@@ -6690,13 +6692,19 @@ fn rename_canister(
     sender_canister: CanisterId,
     old_canister_id: CanisterId,
     new_canister_id: CanisterId,
-    sender_canister_version: u64,
     new_version: u64,
     new_num_changes: u64,
     send_to_subnet: bool,
 ) -> WasmResult {
     const MAX_TICKS: usize = 100;
-    let user_id = user_test_id(1).get();
+
+    env1.execute_round();
+    let sender_canister_version = env1
+        .get_latest_state()
+        .canister_state(&sender_canister)
+        .unwrap()
+        .system_state
+        .canister_version;
 
     let arguments = RenameCanisterArgs {
         canister_id: old_canister_id.into(),
@@ -6709,7 +6717,7 @@ fn rename_canister(
     };
 
     // Sending the request to the subnet should always work, sending to IC_00 works only if the
-    // routing table is correct.
+    // routing table maps the (old) canister id to the subnet that we want to address.
     let management_canister = if send_to_subnet {
         CanisterId::from(env2.get_subnet_id())
     } else {
@@ -6718,7 +6726,7 @@ fn rename_canister(
 
     let msg_id = env1
         .submit_ingress_as(
-            user_id,
+            PrincipalId::new_anonymous(),
             sender_canister,
             "update",
             wasm()
@@ -6744,9 +6752,6 @@ fn rename_canister(
 
 #[test]
 fn can_rename_canister() {
-    const MAX_TICKS: usize = 100;
-    let user_id = user_test_id(1).get();
-
     let (env1, env2) = two_subnets_simple();
 
     // Create a canister on each of the two subnets.
@@ -6755,21 +6760,24 @@ fn can_rename_canister() {
     let test_blob: Vec<u8> = vec![42, 41];
 
     // Modify the memory of the canister
-    env2.submit_ingress_as(
-        user_id,
+    env2.execute_ingress_as(
+        PrincipalId::new_anonymous(),
         canister_id2,
         "update",
         wasm()
             .stable64_grow(1)
             .stable64_write(0, &test_blob)
+            .reply()
             .build(),
     )
     .unwrap();
 
     let verify_stable_memory = |canister_id| {
-        let msg_id = env2
-            .submit_ingress_as(
-                user_id,
+        env2.start_canister(canister_id).unwrap();
+
+        let wasm_result = env2
+            .execute_ingress_as(
+                PrincipalId::new_anonymous(),
                 canister_id,
                 "update",
                 wasm()
@@ -6779,9 +6787,6 @@ fn can_rename_canister() {
                     .build(),
             )
             .unwrap();
-
-        env2.execute_round();
-        let wasm_result = env2.await_ingress(msg_id, MAX_TICKS).unwrap();
 
         assert_matches!(wasm_result, WasmResult::Reply(r) if r == test_blob);
     };
@@ -6809,7 +6814,6 @@ fn can_rename_canister() {
         canister_id1,
         canister_id2,
         new_canister_id,
-        2,
         new_version,
         new_num_changes,
         false,
@@ -6866,7 +6870,6 @@ fn can_rename_canister() {
         assert_eq!(history_entry.canister_version(), rename_at_version);
         assert_eq!(history_entry.details(), &expected_history_entry);
 
-        env2.start_canister(new_canister_id).unwrap();
         verify_stable_memory(new_canister_id);
     };
 
@@ -6899,6 +6902,8 @@ fn can_rename_canister() {
         .canister_version;
     let third_version = version_before_rename - 10;
     let third_num_changes = 10;
+    assert_lt!(third_version, version_before_rename);
+    assert_lt!(third_num_changes, new_num_changes);
 
     let wasm_result = rename_canister(
         &env1,
@@ -6906,7 +6911,6 @@ fn can_rename_canister() {
         canister_id1,
         new_canister_id,
         third_canister_id,
-        6,
         third_version,
         third_num_changes,
         true,
@@ -6984,7 +6988,6 @@ fn cannot_rename_from_non_nns() {
         canister_id2,
         canister_id1,
         new_canister_id,
-        2,
         0,
         0,
         false,
@@ -7018,7 +7021,6 @@ fn cannot_rename_if_target_exists() {
         canister_id1,
         canister_id2,
         new_canister_id,
-        2,
         0,
         0,
         false,
@@ -7039,7 +7041,6 @@ fn cannot_rename_running_canister() {
         canister_id1,
         canister_id2,
         new_canister_id,
-        2,
         0,
         0,
         false,
@@ -7068,10 +7069,40 @@ fn cannot_rename_with_snapshots() {
         canister_id1,
         canister_id2,
         new_canister_id,
-        2,
         0,
         0,
         false,
     );
     assert_matches!(wasm_result, WasmResult::Reject(r) if r.contains("must not have any snapshots"));
+}
+
+#[test]
+fn only_controllers_can_rename() {
+    let (env1, env2) = two_subnets_simple();
+    let (canister_id1, canister_id2) = install_two_universal_canisters(&env1, &env2);
+
+    env2.stop_canister(canister_id2).unwrap();
+
+    // Remove `canister_id1` from the list of controllers.
+    env2.update_settings(
+        &canister_id2,
+        CanisterSettingsArgsBuilder::new()
+            .with_controllers(vec![PrincipalId::new_anonymous()])
+            .build(),
+    )
+    .unwrap();
+
+    let new_canister_id = CanisterId::from_u64(3 * CANISTER_IDS_PER_SUBNET - 1);
+
+    let wasm_result = rename_canister(
+        &env1,
+        &env2,
+        canister_id1,
+        canister_id2,
+        new_canister_id,
+        0,
+        0,
+        false,
+    );
+    assert_matches!(wasm_result, WasmResult::Reject(r) if r.contains("Only the controllers of the canister"));
 }
