@@ -230,7 +230,7 @@ jobs:
         env:
           NODE_NAME: ${{ runner.name }}
         with:
-          upload-artifacts: ${{ needs.config.outputs.release_build && needs.config.outputs.full_macos_build }}
+          upload-artifacts: ${{ needs.config.outputs.release-build && needs.config.outputs.full_macos_build }}
           BAZEL_COMMAND: ${{ steps.cfg.outputs.build-command }}
           BAZEL_TARGETS: //...
           CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
@@ -315,7 +315,7 @@ jobs:
     name: Upload external artifacts
     <<: *dind-large-setup
     needs: [bazel-test-arm64-linux, bazel-test-arm64-darwin, config]
-    if: ${{ needs.config.outputs.release_build == 'true' }} # GHA output quirk, 'true' is a string
+    if: ${{ needs.config.outputs.release-build == 'true' }} # GHA output quirk, 'true' is a string
     steps:
       - uses: actions/checkout@v4
       - name: Download pocket-ic-server (arm64-linux)
@@ -357,7 +357,7 @@ jobs:
           MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           RUN_ON_DIFF_ONLY: ${{ needs.config.outputs.diff_only }}
-          RELEASE_BUILD: ${{ needs.config.outputs.release_build }}
+          RELEASE_BUILD: ${{ needs.config.outputs.release-build }}
 
   bazel-build-fuzzers:
     name: Bazel Build Fuzzers
