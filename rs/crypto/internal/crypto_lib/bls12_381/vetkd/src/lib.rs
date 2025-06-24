@@ -231,7 +231,7 @@ impl EncryptedKey {
             return Err(EncryptedKeyCombinationError::InsufficientShares);
         }
 
-        let l = LagrangeCoefficients::at_zero(&NodeIndices::from_map(&nodes));
+        let l = LagrangeCoefficients::at_zero(&NodeIndices::from_map(nodes));
 
         let c1 = l
             .interpolate_g1(&nodes.iter().map(|i| &i.1.c1).collect::<Vec<_>>())
