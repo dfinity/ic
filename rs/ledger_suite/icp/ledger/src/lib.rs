@@ -19,7 +19,9 @@ use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemor
 use ic_stable_structures::{storable::Bound, Storable};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use icp_ledger::{
-    AccountIdentifier, Allowance as Allowance103, Allowances, Block, FeatureFlags, LedgerAllowances, LedgerBalances, Memo, Operation, PaymentError, Transaction, TransferError, TransferFee, UpgradeArgs, DEFAULT_TRANSFER_FEE, MAX_TAKE_ALLOWANCES
+    AccountIdentifier, Allowance as Allowance103, Allowances, Block, FeatureFlags,
+    LedgerAllowances, LedgerBalances, Memo, Operation, PaymentError, Transaction, TransferError,
+    TransferFee, UpgradeArgs, DEFAULT_TRANSFER_FEE, MAX_TAKE_ALLOWANCES,
 };
 use icrc_ledger_types::icrc1::account::Account;
 use intmap::IntMap;
@@ -604,7 +606,7 @@ pub fn get_allowances(
     let mut result = vec![];
     let start_account_spender = match spender {
         Some(spender) => (from, spender),
-        None => (from, AccountIdentifier{ hash: [0u8;28] }),
+        None => (from, AccountIdentifier { hash: [0u8; 28] }),
     };
     ALLOWANCES_MEMORY.with_borrow(|allowances| {
         for ((from_account_id, to_spender_id), storable_allowance) in
@@ -618,7 +620,7 @@ pub fn get_allowances(
                     continue;
                 }
             }
-            result.push(Allowance103{
+            result.push(Allowance103 {
                 from_account_id,
                 to_spender_id,
                 allowance: storable_allowance.amount,
