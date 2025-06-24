@@ -6,20 +6,25 @@
 // 5. Simple Organization
 
 use crate::pb::v1::{
-    NodeMetricsDailyStored, SubnetIdKey, SubnetMetricsDailyKeyStored, SubnetMetricsDailyValueStored,
+    NodeMetrics as NodeMetricsProto, SubnetIdKey, SubnetMetricsKey, SubnetMetricsValue,
 };
 use candid::Principal;
-use ic_base_types::{NodeId, PrincipalId, SubnetId};
+use ic_base_types::{PrincipalId, SubnetId};
+use ic_management_canister_types::NodeMetrics;
 use ic_stable_structures::storable::Bound;
 use ic_stable_structures::Storable;
 use prost::Message;
-use rewards_calculation::types::{NodeMetricsDailyRaw, SubnetMetricsDailyKey};
+use rewards_calculation::types::SubnetMetricsDailyKey;
 use std::borrow::Cow;
 
 pub mod canister;
 pub mod metrics;
 pub mod pb;
 pub mod storage;
+
+const HOUR_IN_SECONDS: u64 = 60 * 60;
+const DAY_IN_SECONDS: u64 = HOUR_IN_SECONDS * 24;
+const DAY_IN_NANOS: u64 = DAY_IN_SECONDS * 1_000_000_000;
 
 // Maximum sizes for the storable types chosen as result of test `max_bound_size`
 const MAX_BYTES_SUBNET_ID_STORED: u32 = 33;
@@ -30,6 +35,16 @@ pub const MIN_PRINCIPAL_ID: PrincipalId = PrincipalId(Principal::from_slice(&[])
 pub const MAX_PRINCIPAL_ID: PrincipalId = PrincipalId(Principal::from_slice(
     &[0xFF_u8; PRINCIPAL_MAX_LENGTH_IN_BYTES],
 ));
+
+impl From<NodeMetrics> for NodeMetricsProto {
+    fn from(metrics: NodeMetrics) -> Self {
+        NodeMetricsProto {
+            node_id: Some(metrics.node_id.into()),
+            num_blocks_proposed_total: metrics.num_blocks_proposed_total,
+            num_blocks_failed_total: metrics.num_block_failures_total,
+        }
+    }
+}
 
 impl Storable for SubnetIdKey {
     fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
@@ -67,24 +82,22 @@ pub trait KeyRange {
     fn max_key() -> Self;
 }
 
-impl From<SubnetMetricsDailyKeyStored> for SubnetMetricsDailyKey {
-    fn from(key: SubnetMetricsDailyKeyStored) -> Self {
+impl From<SubnetMetricsKey> for SubnetMetricsDailyKey {
+    fn from(key: SubnetMetricsKey) -> Self {
         Self {
-            day: key.ts.into(),
+            day: key.timestamp_nanos.into(),
             subnet_id: SubnetId::from(key.subnet_id.unwrap()),
         }
     }
 }
 
-impl Storable for SubnetMetricsDailyKeyStored {
+impl Storable for SubnetMetricsKey {
     fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
-        let mut buf = Vec::with_capacity(self.encoded_len());
-        self.encode(&mut buf).unwrap();
-        Cow::Owned(buf)
+        Cow::Owned(self.encode_to_vec())
     }
 
     fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
-        SubnetMetricsDailyKeyStored::decode(bytes.as_ref()).unwrap()
+        SubnetMetricsKey::decode(bytes.as_ref()).unwrap()
     }
 
     const BOUND: Bound = Bound::Bounded {
@@ -93,49 +106,29 @@ impl Storable for SubnetMetricsDailyKeyStored {
     };
 }
 
-impl KeyRange for SubnetMetricsDailyKeyStored {
+impl KeyRange for SubnetMetricsKey {
     fn min_key() -> Self {
         Self {
-            ts: u64::MIN,
+            timestamp_nanos: u64::MIN,
             subnet_id: Some(MIN_PRINCIPAL_ID),
         }
     }
 
     fn max_key() -> Self {
         Self {
-            ts: u64::MAX,
+            timestamp_nanos: u64::MAX,
             subnet_id: Some(MAX_PRINCIPAL_ID),
         }
     }
 }
 
-impl From<NodeMetricsDailyStored> for NodeMetricsDailyRaw {
-    fn from(node_metrics: NodeMetricsDailyStored) -> Self {
-        Self {
-            node_id: NodeId::from(node_metrics.node_id.unwrap()),
-            num_blocks_proposed: node_metrics.num_blocks_proposed,
-            num_blocks_failed: node_metrics.num_blocks_failed,
-        }
-    }
-}
-
-impl From<SubnetMetricsDailyValueStored> for Vec<NodeMetricsDailyRaw> {
-    fn from(subnet_metrics: SubnetMetricsDailyValueStored) -> Self {
-        subnet_metrics
-            .nodes_metrics
-            .into_iter()
-            .map(NodeMetricsDailyRaw::from)
-            .collect()
-    }
-}
-
-impl Storable for SubnetMetricsDailyValueStored {
+impl Storable for SubnetMetricsValue {
     fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
         Cow::Owned(self.encode_to_vec())
     }
 
     fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
-        SubnetMetricsDailyValueStored::decode(bytes.as_ref()).unwrap()
+        SubnetMetricsValue::decode(bytes.as_ref()).unwrap()
     }
 
     const BOUND: Bound = Bound::Unbounded;
@@ -149,8 +142,8 @@ mod tests {
         let max_subnet_id_stored = SubnetIdKey {
             subnet_id: MAX_PRINCIPAL_ID.into(),
         };
-        let max_subnet_metrics_stored_key = SubnetMetricsDailyKeyStored {
-            ts: u64::MAX,
+        let max_subnet_metrics_stored_key = SubnetMetricsKey {
+            timestamp_nanos: u64::MAX,
             subnet_id: MAX_PRINCIPAL_ID.into(),
         };
 

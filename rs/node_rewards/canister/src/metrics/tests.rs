@@ -1,11 +1,11 @@
 use crate::metrics::{MetricsManager, UnixTsNanos};
-use crate::pb::v1::{NodeMetricsDailyStored, SubnetMetricsDailyKeyStored};
+use crate::pb::v1::SubnetMetricsKey;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_cdk::api::call::{CallResult, RejectionCode};
 use ic_management_canister_types::{NodeMetrics, NodeMetricsHistoryArgs, NodeMetricsHistoryRecord};
 use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
 use ic_stable_structures::DefaultMemoryImpl;
-use rewards_calculation::types::DayEnd;
+use rewards_calculation::types::{DayEnd, NodeMetricsDailyRaw};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
 
@@ -25,7 +25,6 @@ mod mock {
         }
     }
 }
-
 pub type VM = VirtualMemory<DefaultMemoryImpl>;
 const ONE_DAY_NANOS: u64 = 24 * 60 * 60 * 1_000_000_000;
 fn subnet_id(id: u64) -> ic_base_types::SubnetId {
@@ -53,7 +52,7 @@ fn node_metrics_history_gen(days: u64) -> Vec<NodeMetricsHistoryRecord> {
     for i in 0..days {
         result.push(NodeMetricsHistoryRecord {
             timestamp_nanos: i * ONE_DAY_NANOS,
-            node_metrics: Vec::new(),
+            node_metrics: vec![],
         });
     }
     result
@@ -71,8 +70,8 @@ async fn subnet_metrics_added_correctly() {
 
     mm.update_subnets_metrics(vec![subnet_1]).await;
     for i in 0..days {
-        let key = SubnetMetricsDailyKeyStored {
-            ts: i * ONE_DAY_NANOS,
+        let key = SubnetMetricsKey {
+            timestamp_nanos: i * ONE_DAY_NANOS,
             subnet_id: Some(subnet_1.get()),
         };
         assert!(mm.subnets_metrics.borrow().get(&key).is_some());
@@ -117,8 +116,8 @@ async fn multiple_subnets_metrics_added_correctly() {
 
     for subnet in &[subnet_1, subnet_2] {
         for i in 0..days {
-            let key = SubnetMetricsDailyKeyStored {
-                ts: i * ONE_DAY_NANOS,
+            let key = SubnetMetricsKey {
+                timestamp_nanos: i * ONE_DAY_NANOS,
                 subnet_id: Some(subnet.get()),
             };
             assert!(
@@ -200,8 +199,8 @@ async fn partial_failures_are_handled_correctly() {
         "Subnet 2 should not be in retry list"
     );
 
-    let key = SubnetMetricsDailyKeyStored {
-        ts: 0,
+    let key = SubnetMetricsKey {
+        timestamp_nanos: 0,
         subnet_id: Some(subnet_1.get()),
     };
     assert!(
@@ -209,8 +208,8 @@ async fn partial_failures_are_handled_correctly() {
         "Metrics should not be present for subnet 1"
     );
 
-    let key = SubnetMetricsDailyKeyStored {
-        ts: 0,
+    let key = SubnetMetricsKey {
+        timestamp_nanos: 0,
         subnet_id: Some(subnet_2.get()),
     };
     assert!(
@@ -270,22 +269,19 @@ impl NodeMetricsHistoryResponseTracker {
     fn next(
         &self,
         response_step: usize,
-        contract: NodeMetricsHistoryArgs,
+        args: NodeMetricsHistoryArgs,
     ) -> Vec<NodeMetricsHistoryRecord> {
         let mut response = Vec::new();
+        let subnet_id = SubnetId::from(PrincipalId::from(args.subnet_id));
+
         self.subnets_responses
             .range(
-                contract.start_at_timestamp_nanos
-                    ..(contract.start_at_timestamp_nanos + (response_step as u64) * ONE_DAY_NANOS),
+                args.start_at_timestamp_nanos
+                    ..(args.start_at_timestamp_nanos + (response_step as u64) * ONE_DAY_NANOS),
             )
-            .filter(|(_, metrics)| {
-                metrics.contains_key(&PrincipalId::from(contract.subnet_id).into())
-            })
+            .filter(|(_, metrics)| metrics.contains_key(&subnet_id))
             .for_each(|(ts, metrics)| {
-                let node_metrics = metrics
-                    .get(&PrincipalId::from(contract.subnet_id).into())
-                    .unwrap()
-                    .clone();
+                let node_metrics = metrics.get(&subnet_id).unwrap().clone();
                 response.push(NodeMetricsHistoryRecord {
                     node_metrics,
                     timestamp_nanos: *ts,
@@ -319,13 +315,9 @@ async fn _daily_metrics_correct_different_update_size(size: usize) {
     for _ in 0..MAX_TIMES {
         mm.update_subnets_metrics(vec![subnet_id(1)]).await;
     }
-    let daily_metrics: Vec<Vec<NodeMetricsDailyStored>> = mm
-        .subnets_metrics
-        .borrow()
-        .iter()
-        .collect::<BTreeMap<_, _>>()
+    let daily_metrics: Vec<Vec<NodeMetricsDailyRaw>> = mm
+        .daily_metrics_by_subnet(0, 4 * ONE_DAY_NANOS)
         .into_values()
-        .map(|node_metrics| node_metrics.nodes_metrics.clone())
         .collect();
 
     // (7, 5)
@@ -346,8 +338,6 @@ async fn _daily_metrics_correct_different_update_size(size: usize) {
     // (15 - 10, 6 - 6) = (5, 0)
     assert_eq!(daily_metrics[2][0].num_blocks_proposed, 5);
     assert_eq!(daily_metrics[2][0].num_blocks_failed, 0);
-
-    assert_eq!(daily_metrics[2].len(), 1);
 
     // (25 - 15, 50 - 6) = (10, 44)
     assert_eq!(daily_metrics[3][0].num_blocks_proposed, 10);

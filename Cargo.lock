@@ -11562,6 +11562,7 @@ dependencies = [
  "ic-stable-structures",
  "ic-state-machine-tests",
  "ic-types",
+ "itertools 0.12.1",
  "maplit",
  "mockall",
  "pocket-ic",

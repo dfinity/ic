@@ -8,17 +8,19 @@ message SubnetIdKey {
   ic_base_types.pb.v1.PrincipalId subnet_id = 1;
 }
 
-message SubnetMetricsDailyKeyStored {
-  uint64 ts = 1;
+message SubnetMetricsKey {
+  // Timestamp in nanoseconds that represents
+  // the moment when the node metrics were recorded by the subnet.
+  uint64 timestamp_nanos = 1;
   ic_base_types.pb.v1.PrincipalId subnet_id = 2;
 }
 
-message SubnetMetricsDailyValueStored {
-  repeated NodeMetricsDailyStored nodes_metrics = 1;
+message SubnetMetricsValue {
+  repeated NodeMetrics nodes_metrics = 1;
 }
 
-message NodeMetricsDailyStored {
+message NodeMetrics {
   ic_base_types.pb.v1.PrincipalId node_id = 1;
-  uint64 num_blocks_proposed = 2;
-  uint64 num_blocks_failed = 3;
+  uint64 num_blocks_proposed_total = 2;
+  uint64 num_blocks_failed_total = 3;
 }
