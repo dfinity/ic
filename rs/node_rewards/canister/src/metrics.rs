@@ -248,7 +248,7 @@ where
                         );
 
                         NodeMetricsDailyRaw {
-                            node_id: NodeId::from(PrincipalId::from(node.node_id.unwrap())),
+                            node_id: NodeId::from(node.node_id.unwrap()),
                             num_blocks_proposed: node.num_blocks_proposed_total
                                 - last_proposed_total,
                             num_blocks_failed: node.num_blocks_failed_total - last_failed_total,
