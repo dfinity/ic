@@ -56,7 +56,7 @@ use ic_types::{Height, ReplicaVersion};
 use slog::{debug, error, info, Logger};
 use std::{
     ffi::OsStr,
-    fs::self,
+    fs,
     io::Write,
     net::IpAddr,
     path::{Path, PathBuf},
