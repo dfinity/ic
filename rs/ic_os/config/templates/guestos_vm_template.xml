@@ -26,6 +26,9 @@
     <reducedPhysBits>1</reducedPhysBits>
     <policy>30000</policy>
   </launchSecurity>
+  <memoryBacking>
+    <locked/>
+  </memoryBacking>
   {% endif -%}
 
   <resource>
