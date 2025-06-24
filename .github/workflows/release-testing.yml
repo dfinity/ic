@@ -27,7 +27,7 @@ jobs:
   # Those test suites would overwhelm a runner, so each is run
   # as a separate job.
   release-system-tests:
-    name: Bazel System Tests
+    name: Release System Tests
     runs-on:
       labels: dind-large
     container:
