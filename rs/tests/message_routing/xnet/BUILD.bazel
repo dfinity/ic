@@ -12,7 +12,7 @@ system_test_nns(
     tags = [
         #TODO: enable k8s when there's enough capacity
         # "k8s",
-        "system_test_staging",
+        "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
@@ -32,7 +32,7 @@ system_test_nns(
     extra_head_nns_tags = ["manual"],  # only run this test with the mainnet NNS canisters.
     tags = [
         "k8s",
-        "system_test_hotfix",
+        "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "long",
