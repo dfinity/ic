@@ -76,7 +76,7 @@ pub fn setup(env: TestEnv) {
     let vm_resources = VmResources {
         vcpus: Some(NrOfVCPUs::new(64)),
         memory_kibibytes: Some(AmountOfMemoryKiB::new(480 << 20)),
-        boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(2560)),
+        boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(3072)),
     };
     let mut ic = InternetComputer::new()
         .with_api_boundary_nodes(1)
