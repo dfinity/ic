@@ -88,7 +88,7 @@ system_test_nns(
     },
     extra_head_nns_tags = ["manual"],  # only run this test with the mainnet NNS canisters.
     tags = [
-        "system_test_nightly",
+        "system_test_large",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
@@ -115,7 +115,7 @@ system_test_nns(
     malicious = True,
     tags = [
         "k8s",
-        "system_test_nightly",
+        "system_test_large",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",

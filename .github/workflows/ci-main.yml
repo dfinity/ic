@@ -129,7 +129,7 @@ jobs:
           set -xeuo pipefail
           # Determine which tests to skip
           EXCLUDED_TEST_TAGS=(
-              system_test_nightly
+              system_test_large
               system_test_benchmark
               fuzz_test
               fi_tests_nightly

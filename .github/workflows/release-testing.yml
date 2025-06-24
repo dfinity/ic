@@ -46,7 +46,7 @@ jobs:
           run: |
             bazel test \
               --config=stamped \
-              --test_tag_filters=system_test_nightly \
+              --test_tag_filters=system_test_large \
               //rs/tests/... \
               --keep_going
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
