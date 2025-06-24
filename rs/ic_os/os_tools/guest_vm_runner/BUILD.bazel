@@ -48,6 +48,9 @@ rust_binary(
     srcs = glob(["src/**/*.rs"]),
     crate_name = "guest_vm_runner",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
     deps = DEPENDENCIES + ["//rs/ic_os/config:config_lib_dev"],
 )
 
@@ -57,6 +60,9 @@ rust_binary(
     crate_name = "guest_vm_runner",
     features = ["dev"],
     proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
     deps = DEPENDENCIES + ["//rs/ic_os/config:config_lib_dev"],
 )
 
