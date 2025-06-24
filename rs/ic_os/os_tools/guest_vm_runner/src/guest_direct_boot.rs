@@ -1,8 +1,8 @@
 use crate::boot_args::read_boot_args;
+use crate::guest_vm_config::DirectBootConfig;
 use crate::mount::{FileSystem, MountOptions, PartitionProvider};
 use anyhow::Context;
 use anyhow::Result;
-use config::guest_vm_config::DirectBootConfig;
 use grub::{BootAlternative, BootCycle, GrubEnv, WithDefault};
 use std::fs::File;
 use tempfile::NamedTempFile;

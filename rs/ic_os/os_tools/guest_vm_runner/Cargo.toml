@@ -1,0 +1,38 @@
+[package]
+name = "guest_vm_runner"
+edition = "2021"
+
+[[bin]]
+name = "guest_vm_runner"
+path = "src/main.rs"
+
+[dependencies]
+config = { path = "../../config" }
+config_types = { path = "../../config_types" }
+deterministic_ips = { path = "../../deterministic_ips" }
+grub = { path = "../../grub" }
+ic-metrics-tool = { path = "../../metrics_tool" }
+partition_tools = { path = "../../build_tools/partition_tools" }
+
+anyhow = { workspace = true }
+askama = { workspace = true }
+async-trait = { workspace = true }
+gpt = { workspace = true }
+macaddr = { workspace = true }
+regex = { workspace = true }
+sys-mount = { workspace = true }
+systemd = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+virt = { workspace = true }
+uuid = { workspace = true }
+
+[features]
+dev = ["config/dev"]
+integration_tests = []
+
+[dev-dependencies]
+goldenfile = "*"
+nix = "*"
+url = "*"
