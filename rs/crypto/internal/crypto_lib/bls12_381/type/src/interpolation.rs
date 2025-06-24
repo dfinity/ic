@@ -1,16 +1,71 @@
 use crate::{G1Affine, G1Projective, G2Affine, G2Projective, NodeIndex, Scalar};
 
 #[derive(Copy, Clone, Debug)]
-/// Error during interpolation
-pub enum InterpolationError {
-    /// The coefficients were empty
-    NoCoefficients,
+/// Error when constructing NodeIndices
+pub enum InvalidNodeIndices {
     /// A node index was duplicated
     DuplicatedNodeIndex,
+}
+
+#[derive(Copy, Clone, Debug)]
+/// Error during interpolation
+pub enum InterpolationError {
     /// No samples were provided for interpolation
     NoSamples,
     /// The set of samples did not match the coefficient count
     WrongSampleCount,
+}
+
+/// Lagrange interoplation samples
+pub struct NodeIndices {
+    index: Vec<NodeIndex>,
+}
+
+impl NodeIndices {
+    /// Construct a NodeIndices from a slice of NodeIndex values
+    ///
+    /// This function will fail if there are any duplicated indices
+    pub fn from_slice(indices: &[NodeIndex]) -> Result<Self, InvalidNodeIndices> {
+        // We assume the node indexes are public, so variable time behavior is ok
+        let mut seen = std::collections::HashSet::new();
+
+        let mut index = Vec::with_capacity(indices.len());
+
+        for nidx in indices {
+            if !seen.insert(nidx) {
+                return Err(InvalidNodeIndices::DuplicatedNodeIndex);
+            }
+            index.push(*nidx)
+        }
+
+        Ok(Self { index })
+    }
+
+    /// Construct a NodeIndices from a BTreeMap with NodeIndex keys
+    ///
+    /// The values of the BTreeMap are ignored
+    pub fn from_map<T>(map: &std::collections::BTreeMap<NodeIndex, T>) -> Self {
+        // The BTreeMap keys are already guaranteed to be unique
+        let mut index = Vec::with_capacity(map.len());
+
+        for nidx in map.keys() {
+            index.push(*nidx);
+        }
+
+        Self { index }
+    }
+
+    /// Construct a NodeIndices from a BTreeSet with NodeIndex keys
+    pub fn from_set(map: &std::collections::BTreeSet<NodeIndex>) -> Self {
+        // The BTreeSet keys are already guaranteed to be unique
+        let mut index = Vec::with_capacity(map.len());
+
+        for nidx in map {
+            index.push(*nidx);
+        }
+
+        Self { index }
+    }
 }
 
 /// Lagrange interpolation
@@ -19,12 +74,8 @@ pub struct LagrangeCoefficients {
 }
 
 impl LagrangeCoefficients {
-    fn new(coefficients: Vec<Scalar>) -> Result<Self, InterpolationError> {
-        if coefficients.is_empty() {
-            return Err(InterpolationError::NoCoefficients);
-        }
-
-        Ok(Self { coefficients })
+    fn new(coefficients: Vec<Scalar>) -> Self {
+        Self { coefficients }
     }
 
     /// Computes Lagrange polynomials evaluated at zero
@@ -34,7 +85,7 @@ impl LagrangeCoefficients {
     ///    * numerator_i = (x_0) * (x_1) * ... * (x_(i-1)) *(x_(i+1)) * ... *(x_n)
     ///    * denominator_i = (x_0 - x_i) * (x_1 - x_i) * ... * (x_(i-1) - x_i) *
     ///      (x_(i+1) - x_i) * ... * (x_n - x_i)
-    pub fn at_zero(samples: &[NodeIndex]) -> Result<Self, InterpolationError> {
+    pub fn at_zero(samples: &NodeIndices) -> Self {
         Self::at_value(Scalar::zero_ref(), samples)
     }
 
@@ -45,19 +96,17 @@ impl LagrangeCoefficients {
     ///    * numerator_i = (x_0-value) * (x_1-value) * ... * (x_(i-1)-value) *(x_(i+1)-value) * ... *(x_n-value)
     ///    * denominator_i = (x_0 - x_i) * (x_1 - x_i) * ... * (x_(i-1) - x_i) *
     ///      (x_(i+1) - x_i) * ... * (x_n - x_i)
-    pub fn at_value(value: &Scalar, samples: &[NodeIndex]) -> Result<Self, InterpolationError> {
-        // This is not strictly required but for our usage it simplifies matters
-        if samples.is_empty() {
-            return Err(InterpolationError::NoSamples);
+    pub fn at_value(value: &Scalar, samples: &NodeIndices) -> Self {
+        if samples.index.is_empty() {
+            return Self::new(vec![]);
         }
 
-        if samples.len() == 1 {
+        if samples.index.len() == 1 {
             return Self::new(vec![Scalar::one()]);
         }
 
-        Self::check_for_duplicates(samples)?;
-
         let samples: Vec<Scalar> = samples
+            .index
             .iter()
             .map(|s| Scalar::from_node_index(*s))
             .collect();
@@ -84,10 +133,17 @@ impl LagrangeCoefficients {
                 denom *= x_j - x_i;
             }
 
-            let inv = match denom.inverse() {
-                None => return Err(InterpolationError::DuplicatedNodeIndex),
-                Some(inv) => inv,
-            };
+            /*
+             * This expect can never fire because:
+             *
+             * 1) The denom is in the prime order scalar group. Thus the only value which
+             *    does not have a valid inverse is zero.
+             * 2) We initialize denom with 1.
+             * 3) We multiply into denom various values, all of which are non-zero
+             *     (because in the loop x_j - x_i must be non-zero)
+             * 4) Since denom is not equal to zero, the inverse must exist.
+             */
+            let inv = denom.inverse().expect("Inversion unexpectedly failed");
 
             *lagrange_i *= inv;
         }
@@ -106,6 +162,8 @@ impl LagrangeCoefficients {
     pub fn interpolate_scalar(&self, y: &[Scalar]) -> Result<Scalar, InterpolationError> {
         if y.len() != self.coefficients.len() {
             return Err(InterpolationError::WrongSampleCount);
+        } else if y.is_empty() {
+            return Err(InterpolationError::NoSamples);
         }
 
         Ok(Scalar::muln_vartime(y, &self.coefficients))
@@ -121,6 +179,8 @@ impl LagrangeCoefficients {
     ) -> Result<G1Affine, InterpolationError> {
         if y.len() != self.coefficients.len() {
             return Err(InterpolationError::WrongSampleCount);
+        } else if y.is_empty() {
+            return Err(InterpolationError::NoSamples);
         }
 
         Ok(G1Projective::muln_affine_vartime(y, &self.coefficients).to_affine())
@@ -136,24 +196,10 @@ impl LagrangeCoefficients {
     ) -> Result<G2Affine, InterpolationError> {
         if y.len() != self.coefficients.len() {
             return Err(InterpolationError::WrongSampleCount);
+        } else if y.is_empty() {
+            return Err(InterpolationError::NoSamples);
         }
 
         Ok(G2Projective::muln_affine_vartime(y, &self.coefficients).to_affine())
-    }
-
-    /// Check for duplicate dealer indexes
-    ///
-    /// Since these are public we don't need to worry about the lack of constant
-    /// time behavior from HashSet
-    fn check_for_duplicates(node_index: &[NodeIndex]) -> Result<(), InterpolationError> {
-        let mut set = std::collections::HashSet::new();
-
-        for i in node_index {
-            if !set.insert(i) {
-                return Err(InterpolationError::DuplicatedNodeIndex);
-            }
-        }
-
-        Ok(())
     }
 }
