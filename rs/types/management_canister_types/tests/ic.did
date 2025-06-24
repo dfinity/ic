@@ -563,7 +563,7 @@ type upload_canister_snapshot_metadata_response = record {
     snapshot_id : blob;
 };
 
-type upload_canister_snapshot_data = record {
+type upload_canister_snapshot_data_args = record {
     canister_id : principal;
     snapshot_id : blob;
     kind : variant {
