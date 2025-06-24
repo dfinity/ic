@@ -33,7 +33,7 @@ jobs:
         with:
           token: ${{ github.token }}
           repository: ${{ github.repository }}
-          retain_days: 90
+          retain_days: 180
           keep_minimum_runs: 0
           delete_workflow_pattern: "test-namespace"
           delete_workflow_by_state_pattern: "active" # don't delete inactive workflows so we can find them if we need to enable them
