@@ -1,10 +1,10 @@
 use candid::Principal;
 use ic_cdk::{
     api::{
-        call::{CallResult, call_with_payment128},
+        call::{call_with_payment128, CallResult},
         management_canister::{
-            ecdsa::{SignWithEcdsaArgument, SignWithEcdsaResponse, sign_with_ecdsa},
-            schnorr::{SignWithSchnorrArgument, SignWithSchnorrResponse, sign_with_schnorr},
+            ecdsa::{sign_with_ecdsa, SignWithEcdsaArgument, SignWithEcdsaResponse},
+            schnorr::{sign_with_schnorr, SignWithSchnorrArgument, SignWithSchnorrResponse},
         },
     },
     update,
