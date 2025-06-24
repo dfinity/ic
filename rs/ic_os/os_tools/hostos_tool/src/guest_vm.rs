@@ -428,7 +428,7 @@ pub async fn run_guest_vm() -> Result<()> {
     service.run(termination_token).await
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "integration_tests"))]
 mod tests {
     use super::*;
     use crate::mount;

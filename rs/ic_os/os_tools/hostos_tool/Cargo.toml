@@ -34,3 +34,6 @@ virt = { workspace = true }
 [dev-dependencies]
 partition_tools = { path = "../../build_tools/partition_tools" }
 regex = { workspace = true }
+
+[features]
+integration_tests = []
