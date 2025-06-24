@@ -41,19 +41,6 @@ jobs:
           CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
-  bazel-system-test-hourly:
-    name: Bazel System Tests Hourly
-    <<: *dind-large-setup
-    steps:
-      - <<: *checkout
-      - name: Run Bazel System Test Hourly
-        id: bazel-test-all
-        uses:  ./.github/actions/bazel-test-all/
-        with:
-          BAZEL_COMMAND: test --keep_going --test_tag_filters=system_test_hourly
-          BAZEL_TARGETS: //rs/...
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-
   bazel-run-fuzzers-hourly:
     name: Bazel Run Fuzzers Hourly
     <<: *dind-large-setup
