@@ -125,6 +125,7 @@ async fn get_signature_depending_on_limit(
     log: &Logger,
 ) -> Result<Vec<u8>, String> {
     let MasterPublicKeyId::Schnorr(key_id) = key_id else {
+        // TODO(CON-1522): Create tests for ECDSA and VetKD key ids.
         panic!("Unexpected key id type: {}", key_id);
     };
 
