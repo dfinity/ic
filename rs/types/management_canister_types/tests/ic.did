@@ -314,6 +314,7 @@ type http_request_args = record {
         function : func(record { response : http_request_result; context : blob }) -> (http_request_result) query;
         context : blob;
     };
+    is_replicated : opt bool;
 };
 
 type ecdsa_public_key_args = record {

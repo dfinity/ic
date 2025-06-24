@@ -191,7 +191,6 @@ jobs:
           fi
           echo "BAZEL_EXTRA_ARGS=${BAZEL_EXTRA_ARGS[@]}" >> $GITHUB_OUTPUT
       - name: Run Bazel Test All
-        id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
         with:
           execlogs-artifact-name: execlogs-bazel-test-all
@@ -227,12 +226,11 @@ jobs:
           fi
 
       - name: Run Bazel Checks on Darwin x86-64
-        id: bazel-test-darwin-x86-64
         uses:  ./.github/actions/bazel-test-all/
         env:
           NODE_NAME: ${{ runner.name }}
         with:
-          upload-artifacts: ${{ needs.config.outputs.release_build && needs.config.outputs.full_macos_build }}
+          upload-artifacts: ${{ needs.config.outputs.release-build && needs.config.outputs.full_macos_build }}
           BAZEL_COMMAND: ${{ steps.cfg.outputs.build-command }}
           BAZEL_TARGETS: //...
           CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
@@ -317,7 +315,7 @@ jobs:
     name: Upload external artifacts
     <<: *dind-large-setup
     needs: [bazel-test-arm64-linux, bazel-test-arm64-darwin, config]
-    if: ${{ needs.config.outputs.release_build == 'true' }} # GHA output quirk, 'true' is a string
+    if: ${{ needs.config.outputs.release-build == 'true' }} # GHA output quirk, 'true' is a string
     steps:
       - uses: actions/checkout@v4
       - name: Download pocket-ic-server (arm64-linux)
@@ -342,7 +340,6 @@ jobs:
           echo '${{ secrets.CLOUD_CREDENTIALS_CONTENT }}' >"$AWS_CREDS"
 
       - name: Upload
-        id: build-ic
         uses: ./.github/actions/bazel
         with:
           run: |
@@ -360,7 +357,7 @@ jobs:
           MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           RUN_ON_DIFF_ONLY: ${{ needs.config.outputs.diff_only }}
-          RELEASE_BUILD: ${{ needs.config.outputs.release_build }}
+          RELEASE_BUILD: ${{ needs.config.outputs.release-build }}
 
   bazel-build-fuzzers:
     name: Bazel Build Fuzzers
@@ -397,7 +394,6 @@ jobs:
       - <<: *checkout
       - <<: *python-setup
       - name: Run Python CI Tests
-        id: python-ci-tests
         shell: bash
         run: |
           set -xeuo pipefail
@@ -424,7 +420,6 @@ jobs:
     steps:
       - <<: *checkout
       - name: Run Build IC
-        id: build-ic
         uses: ./.github/actions/bazel
         with:
           execlogs-artifact-name: execlogs-build-ic
