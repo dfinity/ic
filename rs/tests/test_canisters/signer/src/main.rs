@@ -12,6 +12,8 @@ use ic_cdk::{
 use ic_management_canister_types::{VetKDDeriveKeyArgs, VetKDDeriveKeyResult};
 use ic_signer::{GenEcdsaParams, GenSchnorrParams, GenVetkdParams};
 
+/// Generates a dummy ECDSA signature of given size parameters.
+/// The call does not verify the signature, it only generates it.
 #[update]
 pub async fn gen_ecdsa_sig(
     GenEcdsaParams {
@@ -32,6 +34,8 @@ pub async fn gen_ecdsa_sig(
         .map_err(|err| err.1)
 }
 
+/// Generates a dummy Schnorr signature of given size parameters.
+/// The call does not verify the signature, it only generates it.
 #[update]
 pub async fn gen_schnorr_sig(
     GenSchnorrParams {
@@ -53,6 +57,8 @@ pub async fn gen_schnorr_sig(
         .map_err(|err| err.1)
 }
 
+/// Generates a dummy VetKD key of given size parameters.
+/// The call does not verify the encrypted key, it only generates it.
 #[update]
 pub async fn gen_vetkd_key(
     GenVetkdParams {
