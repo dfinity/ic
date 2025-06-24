@@ -32,7 +32,7 @@ impl SystemdNotifier for DefaultSystemdNotifier {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "integration_tests"))]
 pub(crate) mod testing {
     use super::*;
     use tokio::sync::watch::{channel, Receiver, Sender};
