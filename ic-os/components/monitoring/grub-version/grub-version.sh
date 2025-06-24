@@ -5,8 +5,8 @@ set -e
 source /opt/ic/bin/logging.sh
 source /opt/ic/bin/metrics.sh
 
-GRUB_CONFIG_FILE="/boot/grub/grub.cfg"
-GRUB_FOLDER="/boot/grub"
+GRUB_CONFIG_FILE="/grub/grub.cfg"
+GRUB_FOLDER="/grub"
 
 function update_grub_config_version_metric() {
     if [[ ! -r "${GRUB_CONFIG_FILE}" ]]; then
