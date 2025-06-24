@@ -161,7 +161,6 @@ jobs:
           fi
           echo "BAZEL_EXTRA_ARGS=${BAZEL_EXTRA_ARGS[@]}" >> $GITHUB_OUTPUT
       - name: Run Bazel Test All
-        id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
         with:
           execlogs-artifact-name: execlogs-bazel-test-all
@@ -198,7 +197,6 @@ jobs:
             echo build-command='build --test_tag_filters=test_macos --nobuild' >> "$GITHUB_OUTPUT"
           fi
       - name: Run Bazel Checks on Darwin x86-64
-        id: bazel-test-darwin-x86-64
         uses: ./.github/actions/bazel-test-all/
         env:
           NODE_NAME: ${{ runner.name }}
@@ -309,7 +307,6 @@ jobs:
           mkdir -p "$(dirname "${AWS_CREDS}")"
           echo '${{ secrets.CLOUD_CREDENTIALS_CONTENT }}' >"$AWS_CREDS"
       - name: Upload
-        id: build-ic
         uses: ./.github/actions/bazel
         with:
           run: |
@@ -391,7 +388,6 @@ jobs:
         with:
           python-version: '3.12'
       - name: Run Python CI Tests
-        id: python-ci-tests
         shell: bash
         run: |
           set -xeuo pipefail
@@ -424,7 +420,6 @@ jobs:
         with:
           fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
       - name: Run Build IC
-        id: build-ic
         uses: ./.github/actions/bazel
         with:
           execlogs-artifact-name: execlogs-build-ic
