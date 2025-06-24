@@ -137,6 +137,9 @@ pub mod native_action_ids {
     /// SetTopicsForCustomProposals Action.
     pub const SET_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION: u64 = 16;
 
+    /// RegisterExtension Action.
+    pub const REGISTER_EXTENSION: u64 = 17;
+
     // When adding something to this list, make sure to update the below function.
     pub fn nervous_system_functions() -> Vec<NervousSystemFunction> {
         vec![
@@ -156,6 +159,7 @@ pub mod native_action_ids {
             NervousSystemFunction::manage_dapp_canister_settings(),
             NervousSystemFunction::advance_sns_target_version(),
             NervousSystemFunction::set_topics_for_custom_proposals(),
+            NervousSystemFunction::register_extension(),
         ]
     }
 }
@@ -1192,6 +1196,15 @@ impl NervousSystemFunction {
         }
     }
 
+    fn register_extension() -> NervousSystemFunction {
+        NervousSystemFunction {
+            id: native_action_ids::REGISTER_EXTENSION,
+            name: "Register SNS extension".to_string(),
+            description: Some("Proposal to register a new SNS extension.".to_string()),
+            function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
+        }
+    }
+
     fn deregister_dapp_canisters() -> NervousSystemFunction {
         NervousSystemFunction {
             id: native_action_ids::DEREGISTER_DAPP_CANISTERS,
@@ -1284,6 +1297,7 @@ impl From<Action> for NervousSystemFunction {
                 NervousSystemFunction::transfer_sns_treasury_funds()
             }
             Action::RegisterDappCanisters(_) => NervousSystemFunction::register_dapp_canisters(),
+            Action::RegisterExtension(_) => NervousSystemFunction::register_extension(),
             Action::DeregisterDappCanisters(_) => {
                 NervousSystemFunction::deregister_dapp_canisters()
             }
@@ -1869,6 +1883,7 @@ impl From<&Action> for u64 {
             }
             Action::ExecuteGenericNervousSystemFunction(proposal) => proposal.function_id,
             Action::RegisterDappCanisters(_) => native_action_ids::REGISTER_DAPP_CANISTERS,
+            Action::RegisterExtension(_) => native_action_ids::REGISTER_EXTENSION,
             Action::DeregisterDappCanisters(_) => native_action_ids::DEREGISTER_DAPP_CANISTERS,
             Action::ManageSnsMetadata(_) => native_action_ids::MANAGE_SNS_METADATA,
             Action::TransferSnsTreasuryFunds(_) => native_action_ids::TRANSFER_SNS_TREASURY_FUNDS,

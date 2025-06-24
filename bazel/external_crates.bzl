@@ -119,16 +119,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 },
             ),
         )],
-        "cranelift-isle": [crate.annotation(
-            # Patch for determinism issues
-            patch_args = ["-p4"],
-            patches = ["@@//bazel:cranelift-isle.patch"],
-        )],
-        "cranelift-assembler-x64": [crate.annotation(
-            # Patch for determinism issues
-            patch_args = ["-p3"],
-            patches = ["@@//bazel:cranelift-assembler-lib.patch"],
-        )],
         "secp256k1-sys": [crate.annotation(
             # This specific version is used by ic-btc-kyt canister, which
             # requires an extra cfg flag to avoid linking issues.
@@ -499,7 +489,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 features = ["serde"],
             ),
             "evm_rpc_types": crate.spec(
-                version = "^1.3.0",
+                version = "^1.4.0",
             ),
             "exec": crate.spec(
                 version = "^0.3.1",
@@ -656,7 +646,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic-gateway": crate.spec(
                 git = "https://github.com/dfinity/ic-gateway",
-                rev = "1d087ad6b8e477159e0ce68b30b6cf09d7ce4938",
+                rev = "b78562340bd00f05f9c055dcba3ec0f74758c927",
                 default_features = False,
             ),
             "ic-http-certification": crate.spec(
@@ -1315,6 +1305,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "syscalls": crate.spec(
                 version = "^0.6.18",
             ),
+            "systemd": crate.spec(
+                version = "0.10",
+            ),
             "tar": crate.spec(
                 version = "^0.4.38",
             ),
@@ -1325,7 +1318,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "tempfile": crate.spec(
-                version = "^3.12.0",
+                version = "3.20",
             ),
             "tester": crate.spec(
                 version = "^0.7.0",
@@ -1479,6 +1472,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "serde",
                 ],
             ),
+            "virt": crate.spec(
+                version = "0.4",
+            ),
             "vsock": crate.spec(
                 version = "^0.4",
             ),
@@ -1512,7 +1508,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.228.0",
             ),
             "wasmtime": crate.spec(
-                version = "^32.0.0",
+                version = "^33.0.0",
                 default_features = False,
                 features = [
                     "cranelift",
@@ -1523,7 +1519,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "wasmtime-environ": crate.spec(
-                version = "^32.0.0",
+                version = "^33.0.0",
             ),
             "wast": crate.spec(
                 version = "^228.0.0",

@@ -1,11 +1,9 @@
 //! This module contains definitions for communicating with an Ethereum API using the [JSON RPC](https://ethereum.org/en/developers/docs/apis/json-rpc/)
 //! interface.
 
-use crate::numeric::{BlockNumber, LogIndex};
 use ethnum;
-use evm_rpc_client::HttpOutcallError;
+use evm_rpc_client::{Hex32, HttpOutcallError};
 use ic_cdk::api::call::RejectionCode;
-use ic_ethereum_types::Address;
 use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -50,58 +48,6 @@ impl std::str::FromStr for Data {
 impl AsRef<[u8]> for Data {
     fn as_ref(&self) -> &[u8] {
         &self.0
-    }
-}
-
-#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
-#[serde(transparent)]
-pub struct FixedSizeData(#[serde(with = "ic_ethereum_types::serde_data")] pub [u8; 32]);
-
-impl FixedSizeData {
-    pub const ZERO: Self = Self([0u8; 32]);
-}
-
-impl AsRef<[u8]> for FixedSizeData {
-    fn as_ref(&self) -> &[u8] {
-        &self.0
-    }
-}
-
-impl std::str::FromStr for FixedSizeData {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if !s.starts_with("0x") {
-            return Err("Ethereum hex string doesn't start with 0x".to_string());
-        }
-        let mut bytes = [0u8; 32];
-        hex::decode_to_slice(&s[2..], &mut bytes)
-            .map_err(|e| format!("failed to decode hash from hex: {}", e))?;
-        Ok(Self(bytes))
-    }
-}
-
-impl Debug for FixedSizeData {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:x}", self)
-    }
-}
-
-impl Display for FixedSizeData {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:x}", self)
-    }
-}
-
-impl LowerHex for FixedSizeData {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "0x{}", hex::encode(self.0))
-    }
-}
-
-impl UpperHex for FixedSizeData {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "0x{}", hex::encode_upper(self.0))
     }
 }
 
@@ -157,69 +103,14 @@ impl std::str::FromStr for Hash {
 /// A topic is either a 32 Bytes DATA, or an array of 32 Bytes DATA with "or" options.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Topic {
-    Single(FixedSizeData),
-    Multiple(Vec<FixedSizeData>),
+    Single(Hex32),
+    Multiple(Vec<Hex32>),
 }
 
-impl From<FixedSizeData> for Topic {
-    fn from(data: FixedSizeData) -> Self {
-        Topic::Single(data)
-    }
-}
-
-impl From<Vec<FixedSizeData>> for Topic {
-    fn from(data: Vec<FixedSizeData>) -> Self {
+impl From<Vec<Hex32>> for Topic {
+    fn from(data: Vec<Hex32>) -> Self {
         Topic::Multiple(data)
     }
-}
-
-/// An entry of the [`eth_getLogs`](https://ethereum.org/en/developers/docs/apis/json-rpc/#eth_getlogs) call reply.
-// Example:
-// ```json
-// {
-//    "address": "0x7e41257f7b5c3dd3313ef02b1f4c864fe95bec2b",
-//    "topics": [
-//      "0x2a2607d40f4a6feb97c36e0efd57e0aa3e42e0332af4fceb78f21b7dffcbd657"
-//    ],
-//    "data": "0x00000000000000000000000055654e7405fcb336386ea8f36954a211b2cda764000000000000000000000000000000000000000000000000002386f26fc100000000000000000000000000000000000000000000000000000000000000000060000000000000000000000000000000000000000000000000000000000000003f62327071372d71677a7a692d74623564622d72357363692d637736736c2d6e646f756c2d666f7435742d347a7732702d657a6677692d74616a32792d76716500",
-//    "blockNumber": "0x3aa4f4",
-//    "transactionHash": "0x5618f72c485bd98a3df58d900eabe9e24bfaa972a6fe5227e02233fad2db1154",
-//    "transactionIndex": "0x6",
-//    "blockHash": "0x908e6b84d26d71421bfaa08e7966e0afcef3883a28a53a0a7a31104caf1e94c2",
-//    "logIndex": "0x8",
-//    "removed": false
-//  }
-// ```
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LogEntry {
-    /// The address from which this log originated.
-    pub address: Address,
-    /// Array of 0 to 4 32 Bytes DATA of indexed log arguments.
-    /// In solidity: The first topic is the event signature hash (e.g. Deposit(address,bytes32,uint256)),
-    /// unless you declared the event with the anonymous specifier.
-    pub topics: Vec<FixedSizeData>,
-    /// Contains one or more 32-byte non-indexed log arguments.
-    pub data: Data,
-    /// The block number in which this log appeared.
-    /// None if the block is pending.
-    pub block_number: Option<BlockNumber>,
-    // 32 Bytes - hash of the transactions from which this log was created.
-    // None when its pending log.
-    pub transaction_hash: Option<Hash>,
-    // Integer of the transactions position within the block the log was created from.
-    // None if the log is pending.
-    pub transaction_index: Option<Quantity>,
-    /// 32 Bytes - hash of the block in which this log appeared.
-    /// None if the block is pending.
-    pub block_hash: Option<Hash>,
-    /// Integer of the log index position in the block.
-    /// None if the log is pending.
-    pub log_index: Option<LogIndex>,
-    /// "true" when the log was removed due to a chain reorganization.
-    /// "false" if it's a valid log.
-    #[serde(default)]
-    pub removed: bool,
 }
 
 pub fn is_response_too_large(response: &HttpOutcallError) -> bool {

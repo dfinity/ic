@@ -7,11 +7,10 @@ use ic_config::{
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_embedders::wasmtime_embedder::system_api::{
     sandbox_safe_system_state::SandboxSafeSystemState, ApiType, DefaultOutOfInstructionsHandler,
-    ExecutionParameters, InstructionLimits, NonReplicatedQueryKind, SystemApiImpl,
+    ExecutionParameters, InstructionLimits, SystemApiImpl,
 };
 use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
 use ic_logger::replica_logger::no_op_logger;
-use ic_management_canister_types_private::IC_00;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
@@ -30,6 +29,7 @@ use ic_types::{
     ComputeAllocation, Cycles, MemoryAllocation, NumInstructions, PrincipalId, Time,
 };
 use maplit::btreemap;
+use std::collections::BTreeMap;
 
 pub const CANISTER_CURRENT_MEMORY_USAGE: NumBytes = NumBytes::new(0);
 pub const CANISTER_CURRENT_MESSAGE_MEMORY_USAGE: MessageMemoryUsage = MessageMemoryUsage::ZERO;
@@ -94,7 +94,6 @@ impl ApiTypeBuilder {
 
     pub fn build_system_task_api() -> ApiType {
         ApiType::system_task(
-            IC_00.get(),
             SystemMethod::CanisterHeartbeat,
             UNIX_EPOCH,
             CallContextId::from(1),
@@ -117,21 +116,17 @@ impl ApiTypeBuilder {
             subnet_test_id(1),
             vec![],
             Some(vec![1]),
-            NonReplicatedQueryKind::Pure,
         )
     }
 
     pub fn build_composite_query_api() -> ApiType {
-        ApiType::non_replicated_query(
+        ApiType::composite_query(
             UNIX_EPOCH,
             user_test_id(1).get(),
             subnet_test_id(1),
             vec![],
             Some(vec![1]),
-            NonReplicatedQueryKind::Stateful {
-                call_context_id: CallContextId::from(1),
-                outgoing_request: None,
-            },
+            CallContextId::from(1),
         )
     }
 
@@ -143,20 +138,18 @@ impl ApiTypeBuilder {
             incoming_cycles,
             CallContextId::new(1),
             false,
-            ExecutionMode::Replicated,
             0.into(),
         )
     }
 
     pub fn build_composite_reply_api(incoming_cycles: Cycles) -> ApiType {
-        ApiType::reply_callback(
+        ApiType::composite_reply_callback(
             UNIX_EPOCH,
             PrincipalId::new_anonymous(),
             vec![],
             incoming_cycles,
             CallContextId::new(1),
             false,
-            ExecutionMode::NonReplicated,
             0.into(),
         )
     }
@@ -169,20 +162,18 @@ impl ApiTypeBuilder {
             Cycles::zero(),
             call_context_test_id(1),
             false,
-            ExecutionMode::Replicated,
             0.into(),
         )
     }
 
     pub fn build_composite_reject_api(reject_context: RejectContext) -> ApiType {
-        ApiType::reject_callback(
+        ApiType::composite_reject_callback(
             UNIX_EPOCH,
             PrincipalId::new_anonymous(),
             reject_context,
             Cycles::zero(),
             call_context_test_id(1),
             false,
-            ExecutionMode::NonReplicated,
             0.into(),
         )
     }
@@ -247,7 +238,12 @@ pub fn get_system_api(
 }
 
 pub fn get_system_state() -> SystemState {
-    let mut system_state = SystemStateBuilder::new().build();
+    let mut env_vars = BTreeMap::new();
+    env_vars.insert("TEST_VAR_1".to_string(), "Hello World".to_string());
+    env_vars.insert("PATH".to_string(), "/usr/local/bin:/usr/bin".to_string());
+    let mut system_state = SystemStateBuilder::new()
+        .environment_variables(env_vars)
+        .build();
     system_state
         .new_call_context(
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5), NO_DEADLINE),
