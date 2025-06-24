@@ -1,7 +1,7 @@
 use candid::{CandidType, Deserialize, Encode, Principal};
 use canister_test::{Canister, Cycles};
 use ic_agent::AgentError;
-use ic_base_types::{NodeId, SubnetId};
+use ic_base_types::{CanisterId, NodeId, SubnetId};
 use ic_bls12_381::G1Affine;
 use ic_canister_client::Sender;
 use ic_cdk::api::management_canister::{
@@ -252,9 +252,10 @@ pub fn run_chain_key_signature_test(
     info!(logger, "Run through Chain key signature test.");
     let message_hash = vec![0xabu8; 32];
     block_on(async {
-        let public_key = get_public_key_with_retries(key_id, canister, logger, 100)
-            .await
-            .unwrap();
+        let public_key =
+            get_public_key_with_retries(/*canister_id=*/ None, key_id, canister, logger, 100)
+                .await
+                .unwrap();
         // TODO(CRP-2798): Re-enable vetKD public key equality check as soon as
         // https://github.com/dfinity/ic/pull/5088 is deployed on the NNS subnet.
         if let MasterPublicKeyId::VetKd(_vetkd_key_id) = key_id {
@@ -285,7 +286,10 @@ pub fn get_master_public_key(
         logger,
         "Getting threshold public key for key id: {}.", key_id
     );
-    let public_key = block_on(get_public_key_with_retries(key_id, canister, logger, 100)).unwrap();
+    let public_key = block_on(get_public_key_with_retries(
+        /*canister_id=*/ None, key_id, canister, logger, 100,
+    ))
+    .unwrap();
     info!(logger, "Got public key {:?}", public_key);
     public_key
 }
@@ -324,6 +328,7 @@ pub async fn get_public_key_and_test_signature(
 }
 
 pub async fn get_public_key_with_retries(
+    canister_id: Option<CanisterId>,
     key_id: &MasterPublicKeyId,
     msg_can: &MessageCanister<'_>,
     logger: &Logger,
@@ -331,25 +336,26 @@ pub async fn get_public_key_with_retries(
 ) -> Result<Vec<u8>, AgentError> {
     match key_id {
         MasterPublicKeyId::Ecdsa(key_id) => {
-            get_ecdsa_public_key_with_retries(key_id, msg_can, logger, retries).await
+            get_ecdsa_public_key_with_retries(canister_id, key_id, msg_can, logger, retries).await
         }
         MasterPublicKeyId::Schnorr(key_id) => {
-            get_schnorr_public_key_with_retries(key_id, msg_can, logger, retries).await
+            get_schnorr_public_key_with_retries(canister_id, key_id, msg_can, logger, retries).await
         }
         MasterPublicKeyId::VetKd(key_id) => {
-            get_vetkd_public_key_with_retries(key_id, msg_can, logger, retries).await
+            get_vetkd_public_key_with_retries(canister_id, key_id, msg_can, logger, retries).await
         }
     }
 }
 
 pub async fn get_ecdsa_public_key_with_retries(
+    canister_id: Option<CanisterId>,
     key_id: &EcdsaKeyId,
     msg_can: &MessageCanister<'_>,
     logger: &Logger,
     retries: u64,
 ) -> Result<Vec<u8>, AgentError> {
     let public_key_request = ECDSAPublicKeyArgs {
-        canister_id: None,
+        canister_id,
         derivation_path: DerivationPath::new(vec![]),
         key_id: key_id.clone(),
     };
@@ -394,13 +400,14 @@ pub async fn get_ecdsa_public_key_with_retries(
 }
 
 pub async fn get_schnorr_public_key_with_retries(
+    canister_id: Option<CanisterId>,
     key_id: &SchnorrKeyId,
     msg_can: &MessageCanister<'_>,
     logger: &Logger,
     retries: u64,
 ) -> Result<Vec<u8>, AgentError> {
     let public_key_request = SchnorrPublicKeyArgs {
-        canister_id: None,
+        canister_id,
         derivation_path: DerivationPath::new(vec![]),
         key_id: key_id.clone(),
     };
@@ -460,13 +467,14 @@ pub async fn get_schnorr_public_key_with_retries(
 }
 
 pub async fn get_vetkd_public_key_with_retries(
+    canister_id: Option<CanisterId>,
     key_id: &VetKdKeyId,
     msg_can: &MessageCanister<'_>,
     logger: &Logger,
     retries: u64,
 ) -> Result<Vec<u8>, AgentError> {
     let public_key_request = VetKdPublicKeyArgs {
-        canister_id: None,
+        canister_id,
         context: vec![],
         key_id: key_id.clone(),
     };
@@ -516,7 +524,26 @@ pub async fn get_public_key_with_logger(
     msg_can: &MessageCanister<'_>,
     logger: &Logger,
 ) -> Result<Vec<u8>, AgentError> {
-    get_public_key_with_retries(key_id, msg_can, logger, /*retries=*/ 100).await
+    get_public_key_with_retries(
+        /*canister_id=*/ None, key_id, msg_can, logger, /*retries=*/ 100,
+    )
+    .await
+}
+
+pub async fn get_public_key_from_canister_id_with_logger(
+    canister_id: CanisterId,
+    key_id: &MasterPublicKeyId,
+    msg_can: &MessageCanister<'_>,
+    logger: &Logger,
+) -> Result<Vec<u8>, AgentError> {
+    get_public_key_with_retries(
+        Some(canister_id),
+        key_id,
+        msg_can,
+        logger,
+        /*retries=*/ 100,
+    )
+    .await
 }
 
 pub async fn execute_proposal(
