@@ -12,9 +12,12 @@ rust_library(
     ],
     deps = [
         "//rs/ic_os/config:config_lib",
+        "//rs/ic_os/build_tools/partition_tools",
         "@crate_index//:anyhow",
         "@crate_index//:clap",
         "@crate_index//:serde_json",
+        "@crate_index//:tempfile",
+        "@crate_index//:tokio",
         "@crate_index//:url",
     ],
 )

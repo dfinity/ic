@@ -11,7 +11,8 @@ use tempfile::NamedTempFile;
 
 use partition_tools::{ext::ExtPartition, fat::FatPartition, Partition};
 use setupos_image_config::{
-    update_deployment, write_config, write_public_keys, ConfigIni, DeploymentConfig,
+    update_deployment, update_hostos_boot_args, write_config, write_public_keys, ConfigIni,
+    DeploymentConfig,
 };
 
 #[derive(Parser)]
@@ -165,6 +166,14 @@ async fn main() -> Result<(), Error> {
 
     // Close data partition
     data.close().await?;
+
+    // Handle HostOS boot parameter injection
+    if let Some(boot_param) = &cli.deployment.hostos_recovery_upgrader_boot_parameter {
+        println!("Injecting HostOS boot parameter: hash={}", boot_param);
+        update_hostos_boot_args(&cli.image_path, boot_param)
+            .await
+            .context("failed to update HostOS boot arguments")?;
+    }
 
     Ok(())
 }

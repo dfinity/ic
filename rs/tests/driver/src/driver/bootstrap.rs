@@ -579,17 +579,32 @@ pub fn setup_nested_vms(
 ) -> anyhow::Result<()> {
     let mut result = Ok(());
 
+    // Check if this is a recovery upgrader test - pass hardcoded boot parameter
+    let hostos_boot_parameter =
+        if group_name.contains("recovery") || group_name.contains("upgrader") {
+            Some("sha256:abc123def456789".to_string())
+        } else {
+            None
+        };
+
     thread::scope(|s| {
         let mut join_handles: Vec<ScopedJoinHandle<anyhow::Result<()>>> = vec![];
         for node in nodes {
-            join_handles.push(s.spawn(|| {
+            let hostos_boot_parameter = hostos_boot_parameter.clone();
+            join_handles.push(s.spawn(move || {
                 let vm_name = &node.name;
                 let url = Url::parse(&std::env::var("ENV_DEPS__SETUPOS_DISK_IMG_URL")?)?;
                 let hash = std::env::var("ENV_DEPS__SETUPOS_DISK_IMG_HASH")?;
                 let setupos_image_spec = AttachImageSpec::via_url(url, hash);
 
-                let config_image =
-                    create_setupos_config_image(env, group_name, vm_name, nns_url, nns_public_key)?;
+                let config_image = create_setupos_config_image(
+                    env,
+                    group_name,
+                    vm_name,
+                    nns_url,
+                    nns_public_key,
+                    hostos_boot_parameter.as_deref(),
+                )?;
                 let config_image_spec = AttachImageSpec::new(farm.upload_file(
                     group_name,
                     config_image,
@@ -632,6 +647,7 @@ fn create_setupos_config_image(
     name: &str,
     nns_url: &Url,
     nns_public_key: &str,
+    hostos_boot_parameter: Option<&str>,
 ) -> anyhow::Result<PathBuf> {
     let tmp_dir = env.get_path("setupos");
     fs::create_dir_all(&tmp_dir)?;
@@ -708,6 +724,11 @@ fn create_setupos_config_image(
         if !node_key.trim().is_empty() {
             cmd.arg("--node-operator-private-key").arg(node_key);
         }
+    }
+
+    if let Some(hostos_boot_parameter) = hostos_boot_parameter {
+        cmd.arg("--hostos-recovery-upgrader-boot-parameter")
+            .arg(hostos_boot_parameter);
     }
 
     if !cmd.status()?.success() {
