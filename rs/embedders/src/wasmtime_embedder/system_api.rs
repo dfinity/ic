@@ -3428,17 +3428,22 @@ impl SystemApi for SystemApiImpl {
         let current_usage_delta = self.memory_usage.current_usage.get() as i64
             - (old_memory_usage.current_usage.get() as i64);
 
-        let subnet_available_delta = self
+        let current_subnet_available_memory = self
             .memory_usage
             .subnet_available_memory
-            .get_execution_memory()
-            - old_memory_usage
-                .subnet_available_memory
-                .get_execution_memory();
+            .get_execution_memory();
+
+        let old_subnet_available_memory = old_memory_usage
+            .subnet_available_memory
+            .get_execution_memory();
+
+        let subnet_available_delta = current_subnet_available_memory - old_subnet_available_memory;
         eprintln!(
-            "current_usage_delta: {} GiB, subnet_available_delta: {} GiB",
+            "current_usage_delta: {} GiB, subnet_available_delta: {} GiB, current_subnet_available_memory: {} GiB, old_subnet_available_memory: {} GiB",
             current_usage_delta as f64 / ((1024 * 1024 * 1024) as f64),
-            subnet_available_delta as f64 / ((1024 * 1024 * 1024) as f64)
+            subnet_available_delta as f64 / ((1024 * 1024 * 1024) as f64),
+            current_subnet_available_memory as f64 / ((1024 * 1024 * 1024) as f64),
+            old_subnet_available_memory as f64 / ((1024 * 1024 * 1024) as f64),
         );
 
         match allocate_execution_memory_res {
