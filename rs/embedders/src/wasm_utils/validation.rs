@@ -337,6 +337,57 @@ fn get_valid_system_apis_common(I: ValType) -> HashMap<String, HashMap<String, F
                 },
             )],
         ),
+        // Environment variables
+        (
+            "env_var_count",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![],
+                    return_type: vec![I],
+                },
+            )],
+        ),
+        (
+            "env_var_name_size",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![I],
+                    return_type: vec![I],
+                },
+            )],
+        ),
+        (
+            "env_var_name_copy",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![I, I, I, I],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
+            "env_var_value_size",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![I, I],
+                    return_type: vec![I],
+                },
+            )],
+        ),
+        (
+            "env_var_value_copy",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![I, I, I, I, I],
+                    return_type: vec![],
+                },
+            )],
+        ),
         // Inter-canister method calls
         (
             "call_new",
@@ -546,16 +597,6 @@ fn get_valid_system_apis_common(I: ValType) -> HashMap<String, HashMap<String, F
                 FunctionSignature {
                     param_types: vec![],
                     return_type: vec![ValType::I32],
-                },
-            )],
-        ),
-        (
-            "mint_cycles",
-            vec![(
-                API_VERSION_IC0,
-                FunctionSignature {
-                    param_types: vec![ValType::I64],
-                    return_type: vec![ValType::I64],
                 },
             )],
         ),
@@ -894,7 +935,7 @@ fn set_imports_details(import_details: &mut WasmImportsDetails, import_module: &
         "msg_cycles_available" => import_details.imports_msg_cycles_available = true,
         "msg_cycles_refunded" => import_details.imports_msg_cycles_refunded = true,
         "msg_cycles_accept" => import_details.imports_msg_cycles_accept = true,
-        "mint_cycles" => import_details.imports_mint_cycles = true,
+        "mint_cycles128" => import_details.imports_mint_cycles = true,
         _ => {}
     }
 }

@@ -3,8 +3,7 @@
 //! complex/weird configurations of neurons and proposals against which several
 //! tests are run.
 
-use comparable::{Changed, U64Change};
-use fixtures::{NNSBuilder, NNSStateChange, NeuronBuilder};
+use fixtures::{NNSBuilder, NeuronBuilder};
 use futures::future::FutureExt;
 use ic_base_types::PrincipalId;
 use ic_nervous_system_common::ONE_YEAR_SECONDS;
@@ -13,10 +12,13 @@ use ic_nns_governance::{
     governance::MAX_DISSOLVE_DELAY_SECONDS,
     pb::v1::{
         manage_neuron::{Command, Merge},
-        ManageNeuron, NetworkEconomics,
+        ManageNeuron,
     },
 };
-use ic_nns_governance_api::manage_neuron_response::{Command as CommandResponse, MergeResponse};
+use ic_nns_governance_api::{
+    manage_neuron_response::{Command as CommandResponse, MergeResponse},
+    NetworkEconomics,
+};
 use proptest::prelude::{proptest, TestCaseError};
 
 #[cfg(feature = "tla")]
@@ -89,15 +91,6 @@ fn do_test_merge_neurons(
                 source_neuron_id: Some(NeuronId { id: 1 }),
             })),
         },
-    );
-
-    // Assert no changes (except time) after simulate.
-    prop_assert_changes!(
-        nns,
-        Changed::Changed(vec![NNSStateChange::Now(U64Change(
-            epoch,
-            epoch + ONE_YEAR_SECONDS
-        ))])
     );
 
     let merge_neuron_response = nns

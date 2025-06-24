@@ -55,6 +55,8 @@ enum Size {
 
 #[derive(Copy, Clone, Display, EnumIter)]
 enum Step {
+    #[strum(serialize = "step_1")]
+    OneByte = 1,
     #[strum(serialize = "step_4k")]
     Page = PAGE_SIZE as isize,
     #[strum(serialize = "step_8k")]

@@ -1,109 +1,16 @@
-use anyhow::{bail, Context, Result};
+use crate::guestos_bootstrap_image::BootstrapOptions;
+use crate::guestos_config::generate_guestos_config;
+use anyhow::{Context, Result};
 use askama::Template;
-use clap::Parser;
-use config::guestos_bootstrap_image::BootstrapOptions;
-use config::guestos_config::generate_guestos_config;
-use config::DEFAULT_HOSTOS_CONFIG_OBJECT_PATH;
-use config_types::{GuestOSConfig, HostOSConfig, Ipv6Config};
+use config_types::{GuestOSConfig, HostOSConfig};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{calculate_deterministic_mac, IpVariant};
-use ic_metrics_tool::{Metric, MetricsWriter};
-use std::fs::{self, File};
-use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 // See build.rs
 include!(concat!(env!("OUT_DIR"), "/guestos_vm_template.rs"));
 
-/// Generate the GuestOS VM configuration
-#[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None)]
-pub struct GenerateGuestVmConfigArgs {
-    /// Specify the config media image file
-    #[arg(short, long, default_value = "/run/ic-node/config.img")]
-    media: PathBuf,
-
-    /// Specify the output configuration file
-    #[arg(short, long, default_value = "/var/lib/libvirt/guestos.xml")]
-    output: PathBuf,
-
-    /// Path to the input HostOS config file
-    #[arg(short, long, default_value = DEFAULT_HOSTOS_CONFIG_OBJECT_PATH)]
-    config: PathBuf,
-}
-
-/// Generate the GuestOS VM configuration by assembling the bootstrap config media image
-/// and creating the libvirt XML configuration file.
-pub fn generate_guest_vm_config(args: GenerateGuestVmConfigArgs) -> Result<()> {
-    let metrics_writer = MetricsWriter::new(PathBuf::from(
-        "/run/node_exporter/collector_textfile/hostos_generate_guestos_config.prom",
-    ));
-
-    run(args, &metrics_writer, restorecon)
-}
-
-fn run(
-    args: GenerateGuestVmConfigArgs,
-    metrics_writer: &MetricsWriter,
-    // We pass a functor to allow mocking in tests.
-    restorecon: impl Fn(&Path) -> Result<()>,
-) -> Result<()> {
-    let hostos_config: HostOSConfig = serde_json::from_reader(
-        File::open(&args.config).context("Failed to open HostOS config file")?,
-    )
-    .context("Failed to parse HostOS config file")?;
-
-    assemble_config_media(&hostos_config, &args.media)
-        .context("Failed to assemble config media")?;
-
-    if args.output.exists() {
-        metrics_writer.write_metrics(&[Metric::with_annotation(
-            "hostos_generate_guestos_config",
-            0.0,
-            "HostOS generate GuestOS config",
-        )])?;
-
-        println!(
-            "GuestOS VM config file already exists: {}",
-            args.output.display()
-        );
-
-        return Ok(());
-    }
-
-    let vm_config_path = &args.output;
-
-    // Create parent directory if it doesn't exist
-    if let Some(parent) = vm_config_path.parent() {
-        fs::create_dir_all(parent).context("Failed to create output directory")?;
-    }
-
-    File::create(vm_config_path)
-        .context("Failed to create output file")?
-        .write_all(generate_vm_config(&hostos_config, &args.media)?.as_bytes())
-        .context("Failed to write output file")?;
-
-    // Restore SELinux security context
-    if let Some(parent) = vm_config_path.parent() {
-        restorecon(parent)?
-    }
-
-    println!(
-        "Generating GuestOS configuration file: {}",
-        vm_config_path.display(),
-    );
-
-    metrics_writer.write_metrics(&[Metric::with_annotation(
-        "hostos_generate_guestos_config",
-        1.0,
-        "HostOS generate GuestOS config",
-    )])?;
-
-    Ok(())
-}
-
-fn assemble_config_media(hostos_config: &HostOSConfig, media_path: &Path) -> Result<()> {
+pub fn assemble_config_media(hostos_config: &HostOSConfig, media_path: &Path) -> Result<()> {
     let guestos_config =
         generate_guestos_config(hostos_config).context("Failed to generate GuestOS config")?;
 
@@ -123,14 +30,6 @@ fn make_bootstrap_options(
     hostos_config: &HostOSConfig,
     guestos_config: GuestOSConfig,
 ) -> Result<BootstrapOptions> {
-    let guestos_ipv6_config = match &guestos_config.network_settings.ipv6_config {
-        Ipv6Config::Fixed(ip_config) => ip_config.clone(),
-        _ => bail!(
-            "Expected GuestOS IPv6 address to be fixed but was {:?}",
-            guestos_config.network_settings.ipv6_config
-        ),
-    };
-
     let mut bootstrap_options = BootstrapOptions {
         guestos_config: Some(guestos_config),
         ..Default::default()
@@ -151,47 +50,11 @@ fn make_bootstrap_options(
             Some(PathBuf::from("/boot/config/node_operator_private_key.pem"));
     }
 
-    bootstrap_options.ipv6_address = Some(guestos_ipv6_config.address.clone());
-    bootstrap_options.ipv6_gateway = Some(guestos_ipv6_config.gateway.to_string());
-
-    if let Some(ipv4_config) = &hostos_config.network_settings.ipv4_config {
-        bootstrap_options.ipv4_address = Some(format!(
-            "{}/{}",
-            ipv4_config.address, ipv4_config.prefix_length
-        ));
-        bootstrap_options.ipv4_gateway = Some(ipv4_config.gateway.to_string());
-    }
-
-    if let Some(domain) = &hostos_config.network_settings.domain_name {
-        bootstrap_options.domain = Some(domain.clone());
-    }
-
-    if let Some(node_reward_type) = &hostos_config.icos_settings.node_reward_type {
-        bootstrap_options.node_reward_type = Some(node_reward_type.clone());
-    }
-
-    let hostname = format!(
-        "guest-{}",
-        hostos_config
-            .icos_settings
-            .mgmt_mac
-            .to_string()
-            .replace(":", "")
-    );
-    bootstrap_options.hostname = Some(hostname);
-
-    bootstrap_options.nns_urls = hostos_config
-        .icos_settings
-        .nns_urls
-        .iter()
-        .map(|url| url.to_string())
-        .collect();
-
     Ok(bootstrap_options)
 }
 
 /// Generate the GuestOS VM libvirt XML configuration and return it as String.
-fn generate_vm_config(config: &HostOSConfig, media_path: &Path) -> Result<String> {
+pub fn generate_vm_config(config: &HostOSConfig, media_path: &Path) -> Result<String> {
     let mac_address = calculate_deterministic_mac(
         &config.icos_settings.mgmt_mac,
         config.icos_settings.deployment_environment,
@@ -216,20 +79,9 @@ fn generate_vm_config(config: &HostOSConfig, media_path: &Path) -> Result<String
     .context("Failed to render GuestOS VM XML template")
 }
 
-fn restorecon(path: &Path) -> Result<()> {
-    Command::new("restorecon")
-        .arg("-R")
-        .arg(path)
-        .status()?
-        .success()
-        .then_some(())
-        .context("Failed to run restorecon")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use config::serialize_and_write_config;
     use config_types::{
         DeploymentEnvironment, DeterministicIpv6Config, HostOSConfig, HostOSSettings, ICOSSettings,
         Ipv4Config, Ipv6Config, Logging, NetworkSettings,
@@ -237,7 +89,6 @@ mod tests {
     use goldenfile::Mint;
     use std::env;
     use std::os::unix::prelude::MetadataExt;
-    use std::path::Path;
     use tempfile::tempdir;
 
     fn create_test_hostos_config() -> HostOSConfig {
@@ -281,10 +132,6 @@ mod tests {
         }
     }
 
-    fn mock_restorecon(_path: &Path) -> Result<()> {
-        Ok(())
-    }
-
     #[test]
     fn test_make_bootstrap_options() {
         let mut config = create_test_hostos_config();
@@ -299,14 +146,6 @@ mod tests {
         assert_eq!(
             options,
             BootstrapOptions {
-                ipv6_address: Some("2001:db8::6801:aeff:fe1a:9bb/64".to_string()),
-                ipv6_gateway: Some("2001:db8::ffff".to_string()),
-                ipv4_address: Some("192.168.1.2/24".to_string()),
-                ipv4_gateway: Some("192.168.1.1".to_string()),
-                domain: Some("test.domain".to_string()),
-                node_reward_type: Some("type3.1".to_string()),
-                hostname: Some("guest-001122334455".to_string()),
-                nns_urls: vec!["https://example.com/".to_string()],
                 guestos_config: Some(guestos_config),
                 nns_public_key: Some(PathBuf::from("/boot/config/nns_public_key.pem")),
                 node_operator_private_key: Some(PathBuf::from(
@@ -339,7 +178,7 @@ mod tests {
         };
 
         let vm_config = generate_vm_config(&config, Path::new("/tmp/config.img")).unwrap();
-        fs::write(mint.new_goldenpath(filename).unwrap(), vm_config).unwrap();
+        std::fs::write(mint.new_goldenpath(filename).unwrap(), vm_config).unwrap();
     }
 
     #[test]
@@ -353,72 +192,23 @@ mod tests {
     }
 
     #[test]
-    fn test_run_success() {
+    fn test_assemble_config_media_creates_file() {
         let temp_dir = tempdir().unwrap();
-        let hostos_config_path = temp_dir.path().join("hostos.json");
         let media_path = temp_dir.path().join("config.img");
-        let vm_config_path = temp_dir.path().join("guestos.xml");
-        let metrics_path = temp_dir.path().join("metrics.prom");
+        let config = create_test_hostos_config();
 
-        serialize_and_write_config(&hostos_config_path, &create_test_hostos_config()).unwrap();
+        let result = assemble_config_media(&config, &media_path);
 
-        let args = GenerateGuestVmConfigArgs {
-            media: media_path.clone(),
-            output: vm_config_path.clone(),
-            config: hostos_config_path.clone(),
-        };
-
-        let result = run(
-            args,
-            &MetricsWriter::new(metrics_path.clone()),
-            mock_restorecon,
+        assert!(
+            result.is_ok(),
+            "Failed to assemble config media: {:?}",
+            result
         );
-        assert!(result.is_ok(), "{result:?}");
-
-        assert_eq!(
-            fs::read_to_string(metrics_path).unwrap(),
-            "# HELP hostos_generate_guestos_config HostOS generate GuestOS config\n\
-             # TYPE hostos_generate_guestos_config counter\n\
-             hostos_generate_guestos_config 1\n"
+        assert!(media_path.exists(), "Config media file was not created");
+        assert!(
+            media_path.metadata().unwrap().size() > 0,
+            "Config media file is empty"
         );
-
-        assert!(media_path.metadata().unwrap().size() > 0);
-        assert!(vm_config_path.metadata().unwrap().size() > 0);
-    }
-
-    #[test]
-    fn test_run_existing_output_file() {
-        let temp_dir = tempdir().unwrap();
-        let hostos_config_path = temp_dir.path().join("hostos.json");
-        let media_path = temp_dir.path().join("config.img");
-        let vm_config_path = temp_dir.path().join("guestos.xml");
-        let metrics_path = temp_dir.path().join("metrics.prom");
-
-        serialize_and_write_config(&hostos_config_path, &create_test_hostos_config()).unwrap();
-
-        // Create the output file so it already exists
-        fs::write(&vm_config_path, "test").unwrap();
-
-        let args = GenerateGuestVmConfigArgs {
-            media: media_path,
-            output: vm_config_path,
-            config: hostos_config_path,
-        };
-
-        let result = run(
-            args,
-            &MetricsWriter::new(metrics_path.clone()),
-            mock_restorecon,
-        );
-
-        assert!(result.is_ok());
-
-        assert_eq!(
-            fs::read_to_string(metrics_path).unwrap(),
-            "# HELP hostos_generate_guestos_config HostOS generate GuestOS config\n\
-             # TYPE hostos_generate_guestos_config counter\n\
-             hostos_generate_guestos_config 0\n"
-        )
     }
 
     #[test]

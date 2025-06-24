@@ -1,0 +1,35 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//rs:ic-os-pkg"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:regex",
+    "@crate_index//:strum",
+    "@crate_index//:thiserror",
+]
+
+DEV_DEPENDENCIES = [
+    "@crate_index//:tempfile",
+]
+
+MACRO_DEPENDENCIES = [
+    # Keep sorted.
+]
+
+ALIASES = {}
+
+rust_library(
+    name = "grub",
+    srcs = glob(["src/**/*.rs"]),
+    aliases = ALIASES,
+    crate_name = "grub",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "grub_test",
+    crate = ":grub",
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)

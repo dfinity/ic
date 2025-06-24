@@ -18,6 +18,7 @@ dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_core = { path = "../../rust_canisters/dfn_core" }
 dfn_http_metrics = { path = "../../rust_canisters/dfn_http_metrics" }
 futures = { workspace = true }
+hex = { workspace = true }
 ic-base-types = { path = "../../types/base_types/" }
 ic-certified-map = "0.3.1"
 ic-cdk = { workspace = true }
@@ -58,6 +59,7 @@ on_wire = { path = "../../rust_canisters/on_wire" }
 prost = { workspace = true }
 serde = { workspace = true }
 url = { workspace = true }
+canbench-rs = { version = "0.1.7", optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 getrandom = { version = "0.2", features = ["custom"] }
@@ -102,3 +104,4 @@ tokio = { workspace = true }
 
 [features]
 test = []
+canbench-rs = ["dep:canbench-rs"]

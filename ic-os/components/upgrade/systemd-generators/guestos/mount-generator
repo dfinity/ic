@@ -20,13 +20,23 @@
 
 UNIT_DIR="$1"
 
-function get_boot_arg_value() {
-    local ARGNAME="$1"
-    for ARG in $(cat /proc/cmdline); do
-        echo "$ARG" | while IFS='=' read KEY VALUE; do
-            if [ "$ARGNAME" == "$KEY" ]; then echo "$VALUE"; fi
-        done
-    done
+# Reads properties "boot_alternative" and "boot_cycle" from the grubenv
+# file. The properties are stored as global variables.
+#
+# Arguments:
+# $1 - name of grubenv file
+read_grubenv() {
+    local GRUBENV_FILE="$1"
+
+    while IFS="=" read -r key value; do
+        case "$key" in
+            '#'*) ;;
+            'boot_alternative' | 'boot_cycle')
+                eval "$key=\"$value\""
+                ;;
+            *) ;;
+        esac
+    done <"$GRUBENV_FILE"
 }
 
 function make_requires() {
@@ -91,12 +101,15 @@ function make_var_cryptsetup() {
     echo "ExecStop=/lib/systemd/systemd-cryptsetup detach var_crypt"
 }
 
-CURRENT_SYSTEM=$(get_boot_arg_value dfinity.system)
+# Read current state
+mount /grub
+read_grubenv "/grub/grubenv"
+umount /grub
+CURRENT_SYSTEM="${boot_alternative}"
 
 make_boot_mount "$CURRENT_SYSTEM" >"$UNIT_DIR"/boot.mount
 make_requires localfs.target boot.mount
 make_requires boot-efi.mount boot.mount
-make_requires boot-grub.mount boot.mount
 
 make_var_cryptsetup "$CURRENT_SYSTEM" >"$UNIT_DIR"/systemd-cryptsetup@var_crypt.service
 make_requires dev-mapper-var_crypt.device systemd-cryptsetup@var_crypt.service

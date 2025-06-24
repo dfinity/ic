@@ -47,7 +47,6 @@ jobs:
             "governance-canister.wasm"
             "governance-canister_test.wasm"
             "ic-ckbtc-minter.wasm"
-            "ic-ckbtc-kyt.wasm"
             "identity-canister.wasm"
             "ledger-canister.wasm"
             "ledger-canister_notify-method.wasm"

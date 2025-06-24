@@ -15,56 +15,27 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:efe6edcd9a9e169843a02f91af98b29514c00cda858ad6612cda28b231b80896
+      image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
       options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
+        -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 120
     steps:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Run Bazel Build All No Cache
-        uses: ./.github/actions/bazel-test-all/
+        uses: ./.github/actions/bazel
         with:
-          BAZEL_COMMAND: build --config=ci --repository_cache= --disk_cache= --noremote_accept_cached --remote_instance_name=${CI_COMMIT_SHA}
-          BAZEL_TARGETS: //...
-          CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
+          run: bazel build --config=stamped --config=local //...
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-          # 'upload-artifacts' is required for the BNs as they rely for both dev and prod deployment
-          # on images being uploaded to the S3 bucket
-          upload-artifacts: true
-  bazel-system-test-hourly:
-    name: Bazel System Tests Hourly
-    container:
-      image: ghcr.io/dfinity/ic-build@sha256:efe6edcd9a9e169843a02f91af98b29514c00cda858ad6612cda28b231b80896
-      options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
-    timeout-minutes: 120
-    runs-on:
-      group: zh1
-      labels: dind-large
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Run Bazel System Test Hourly
-        id: bazel-test-all
-        uses: ./.github/actions/bazel-test-all/
-        with:
-          BAZEL_COMMAND: test --config=ci --keep_going --test_tag_filters=system_test_hourly
-          BAZEL_TARGETS: //rs/...
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-          # 'upload-artifacts' is required for the BNs as they rely for both dev and prod deployment
-          # on images being uploaded to the S3 bucket
-          upload-artifacts: true
   bazel-run-fuzzers-hourly:
     name: Bazel Run Fuzzers Hourly
-    container:
-      image: ghcr.io/dfinity/ic-build@sha256:efe6edcd9a9e169843a02f91af98b29514c00cda858ad6612cda28b231b80896
-      options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
-    timeout-minutes: 120
     runs-on:
-      group: zh1
       labels: dind-large
+    container:
+      image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
+      options: >-
+        -e NODE_NAME --privileged --cgroupns host
+    timeout-minutes: 120
     steps:
       - name: Checkout
         uses: actions/checkout@v4

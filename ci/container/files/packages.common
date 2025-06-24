@@ -61,6 +61,8 @@ grub-efi-amd64-bin
 iputils-ping
 libselinux-dev
 libsystemd-dev
+ # Linked in by IC-OS binaries for managing virtual machines programmatically.
+libvirt-dev
 lsb-release
 lvm2
 mtools

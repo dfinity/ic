@@ -11,6 +11,41 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-06-20: Proposal 137080
+
+http://dashboard.internetcomputer.org/proposal/137080
+
+## Added
+
+* Neurons can now perform SetFollowing to configure their following on multiple
+  topics at once. Whereas, before, they would have to perform multiple Follow
+  operations, one for each topic. This brings NNS into alignment with SNS.
+
+
+# 2025-06-13: Proposal 136987
+
+http://dashboard.internetcomputer.org/proposal/136987
+
+## Changed
+
+* Task execution metrics are added for `neuron_data_validation` and
+  `unstake_maturity_of_dissolved_neurons` timer tasks.
+
+## Fixed
+
+* The `account_identifier_to_disburse_to` in the maturity disbursement now contains a 32-byte
+  address rather than the 28-byte one without checksum.
+
+
+# 2025-06-06: Proposal 136890
+
+http://dashboard.internetcomputer.org/proposal/136890
+
+## Added
+
+* Support disbursing maturity to an account identifier, in addition to icrc1 account.
+
+
 # 2025-05-31: Proposal 136795
 
 http://dashboard.internetcomputer.org/proposal/136795

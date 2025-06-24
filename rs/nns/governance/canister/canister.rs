@@ -72,8 +72,6 @@ pub(crate) const LOG_PREFIX: &str = "[Governance] ";
 
 fn schedule_timers() {
     schedule_spawn_neurons();
-    schedule_unstake_maturity_of_dissolved_neurons();
-    schedule_neuron_data_validation();
     schedule_vote_processing();
     schedule_tasks();
 }
@@ -84,20 +82,6 @@ fn schedule_spawn_neurons() {
         spawn(async {
             governance_mut().maybe_spawn_neurons().await;
         });
-    });
-}
-
-const UNSTAKE_MATURITY_OF_DISSOLVED_NEURONS_INTERVAL: Duration = Duration::from_secs(60);
-fn schedule_unstake_maturity_of_dissolved_neurons() {
-    ic_cdk_timers::set_timer_interval(UNSTAKE_MATURITY_OF_DISSOLVED_NEURONS_INTERVAL, || {
-        governance_mut().unstake_maturity_of_dissolved_neurons();
-    });
-}
-
-const NEURON_DATA_VALIDATION_INTERNVAL: Duration = Duration::from_secs(5);
-fn schedule_neuron_data_validation() {
-    ic_cdk_timers::set_timer_interval(NEURON_DATA_VALIDATION_INTERNVAL, || {
-        governance_mut().maybe_run_validations();
     });
 }
 
@@ -177,11 +161,10 @@ fn canister_post_upgrade() {
 
     println!(
         "{}canister_post_upgrade: Initializing with: economics: \
-          {:?}, genesis_timestamp_seconds: {}, neuron count: {}, xdr_conversion_rate: {:?}",
+          {:?}, genesis_timestamp_seconds: {}, xdr_conversion_rate: {:?}",
         LOG_PREFIX,
         restored_state.economics,
         restored_state.genesis_timestamp_seconds,
-        restored_state.neurons.len(),
         restored_state.xdr_conversion_rate,
     );
 
