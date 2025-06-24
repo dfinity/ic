@@ -10368,6 +10368,7 @@ version = "0.9.0"
 dependencies = [
  "arbitrary",
  "candid",
+ "candid_parser",
  "ic-base-types",
  "ic-btc-interface",
  "ic-btc-replica-types",
