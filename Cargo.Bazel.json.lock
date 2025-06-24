@@ -1,5 +1,5 @@
 {
-  "checksum": "5e6446d7191f132a8a03f7eaa7686c487aa0bf067d0c82cc1f69d0f93e61dccd",
+  "checksum": "4ed7397b9cbe4318405d88e7609ca88c24c41771f72edd278e535ec25f3547e1",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -16206,6 +16206,93 @@
       ],
       "license_file": null
     },
+    "crc 3.3.0": {
+      "name": "crc",
+      "version": "3.3.0",
+      "package_url": "https://github.com/mrhooray/crc-rs.git",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/crc/3.3.0/download",
+          "sha256": "9710d3b3739c2e349eb44fe848ad0b7c8cb1e42bd87ee49371df2f7acaf3e675"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "crc",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "crc",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "crc-catalog 2.4.0",
+              "target": "crc_catalog"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "3.3.0"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "crc-catalog 2.4.0": {
+      "name": "crc-catalog",
+      "version": "2.4.0",
+      "package_url": "https://github.com/akhilles/crc-catalog.git",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/crc-catalog/2.4.0/download",
+          "sha256": "19d374276b40fb8bbdee95aef7c7fa6b5316ec764510eb64b8dd0e2ed0d7e7f5"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "crc_catalog",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "crc_catalog",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2018",
+        "version": "2.4.0"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSES"
+    },
     "crc32fast 1.3.2": {
       "name": "crc32fast",
       "version": "1.3.2",
@@ -20291,6 +20378,10 @@
               "target": "goldenfile"
             },
             {
+              "id": "gpt 4.1.0",
+              "target": "gpt"
+            },
+            {
               "id": "group 0.13.0",
               "target": "group"
             },
@@ -21036,6 +21127,10 @@
               "id": "syn 2.0.101",
               "target": "syn",
               "alias": "syn2"
+            },
+            {
+              "id": "sys-mount 3.0.1",
+              "target": "sys_mount"
             },
             {
               "id": "syscalls 0.6.18",
@@ -23817,6 +23912,7 @@
         ],
         "crate_features": {
           "common": [
+            "default",
             "std"
           ],
           "selects": {}
@@ -28516,6 +28612,65 @@
         "MIT"
       ],
       "license_file": null
+    },
+    "gpt 4.1.0": {
+      "name": "gpt",
+      "version": "4.1.0",
+      "package_url": "https://github.com/Quyzi/gpt",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/gpt/4.1.0/download",
+          "sha256": "3696fafb1ecdcc2ae3ce337de73e9202806068594b77d22fdf2f3573c5ec2219"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "gpt",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "gpt",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "bitflags 2.9.0",
+              "target": "bitflags"
+            },
+            {
+              "id": "crc 3.3.0",
+              "target": "crc"
+            },
+            {
+              "id": "simple-bytes 0.2.14",
+              "target": "simple_bytes"
+            },
+            {
+              "id": "uuid 1.12.1",
+              "target": "uuid"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "4.1.0"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
     },
     "group 0.12.1": {
       "name": "group",
@@ -43913,6 +44068,93 @@
         "MIT"
       ],
       "license_file": null
+    },
+    "loopdev-3 0.5.1": {
+      "name": "loopdev-3",
+      "version": "0.5.1",
+      "package_url": "https://github.com/stratis-storage/loopdev-3",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/loopdev-3/0.5.1/download",
+          "sha256": "90a97d7a5124296ee9124a815acdc3dc4a91f577b72812b3f1f99bb959b46e8d"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "loopdev",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "loopdev",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "errno 0.3.10",
+              "target": "errno"
+            },
+            {
+              "id": "libc 0.2.172",
+              "target": "libc"
+            },
+            {
+              "id": "loopdev-3 0.5.1",
+              "target": "build_script_build"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.5.1"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "compile_data_glob_excludes": [
+          "**/*.rs"
+        ],
+        "data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "bindgen 0.69.4",
+              "target": "bindgen"
+            }
+          ],
+          "selects": {}
+        }
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
     },
     "lru 0.7.8": {
       "name": "lru",
@@ -70435,6 +70677,45 @@
       ],
       "license_file": "LICENSE"
     },
+    "simple-bytes 0.2.14": {
+      "name": "simple-bytes",
+      "version": "0.2.14",
+      "package_url": "https://github.com/soerenmeier/simple-bytes",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/simple-bytes/0.2.14/download",
+          "sha256": "c11532d9d241904f095185f35dcdaf930b1427a94d5b01d7002d74ba19b44cc4"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "simple_bytes",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "simple_bytes",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2021",
+        "version": "0.2.14"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "simple_asn1 0.6.2": {
       "name": "simple_asn1",
       "version": "0.6.2",
@@ -71471,6 +71752,61 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
+    },
+    "smart-default 0.7.1": {
+      "name": "smart-default",
+      "version": "0.7.1",
+      "package_url": "https://github.com/idanarye/rust-smart-default",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/smart-default/0.7.1/download",
+          "sha256": "0eb01866308440fc64d6c44d9e86c5cc17adfe33c4d6eed55da9145044d0ffc1"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "smart_default",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "smart_default",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro2 1.0.95",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.40",
+              "target": "quote"
+            },
+            {
+              "id": "syn 2.0.101",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.7.1"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
     },
     "snafu 0.7.5": {
       "name": "snafu",
@@ -73948,6 +74284,87 @@
       },
       "license": "MIT",
       "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
+    "sys-mount 3.0.1": {
+      "name": "sys-mount",
+      "version": "3.0.1",
+      "package_url": "https://github.com/pop-os/sys-mount",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/sys-mount/3.0.1/download",
+          "sha256": "a6acb8bb63826062d5a44b68298cf2e25b84bc151bc0c31c35a83b61f818682a"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "sys_mount",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "sys_mount",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "loop",
+            "loopdev"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "bitflags 2.9.0",
+              "target": "bitflags"
+            },
+            {
+              "id": "libc 0.2.172",
+              "target": "libc"
+            },
+            {
+              "id": "loopdev-3 0.5.1",
+              "target": "loopdev"
+            },
+            {
+              "id": "thiserror 1.0.68",
+              "target": "thiserror"
+            },
+            {
+              "id": "tracing 0.1.41",
+              "target": "tracing"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "smart-default 0.7.1",
+              "target": "smart_default"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "3.0.1"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
         "MIT"
       ],
       "license_file": "LICENSE"
@@ -92616,6 +93033,7 @@
     "get_if_addrs 0.5.3",
     "getrandom 0.2.10",
     "goldenfile 1.8.0",
+    "gpt 4.1.0",
     "group 0.13.0",
     "hashlink 0.8.3",
     "hex 0.4.3",
@@ -92809,6 +93227,7 @@
     "subtle 2.6.1",
     "syn 1.0.109",
     "syn 2.0.101",
+    "sys-mount 3.0.1",
     "syscalls 0.6.18",
     "systemd 0.10.0",
     "tar 0.4.39",

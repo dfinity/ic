@@ -565,6 +565,7 @@ futures = "0.3.31"
 futures-util = "0.3.31"
 getrandom = { version = "0.2", features = ["custom"] }
 goldenfile = "1.8.0"
+gpt = "4.1"
 hex = { version = "0.4.3", features = ["serde"] }
 http = "1.3.1"
 http-body = "1.0.1"
@@ -732,6 +733,7 @@ strum = { version = "0.26.3", features = ["derive"] }
 strum_macros = "0.26.4"
 subtle = "2.6.1"
 syn = { version = "1.0.109", features = ["fold", "full"] }
+sys-mount = "3.0"
 systemd = "0.10"
 tar = "0.4.39"
 tempfile = "3.20"
