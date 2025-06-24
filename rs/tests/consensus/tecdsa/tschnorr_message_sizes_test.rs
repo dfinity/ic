@@ -67,15 +67,12 @@ fn make_schnorr_key_ids_for_all_algorithms() -> Vec<MasterPublicKeyId> {
 /// Creates one system subnet and two application subnets, the first one with schnorr keys enabled.
 fn setup(env: TestEnv) {
     use ic_system_test_driver::driver::test_env_api::*;
-    let size_limit: u64 = (2 * LOCAL_LIMIT.size).try_into().unwrap();
     InternetComputer::new()
         .add_subnet(Subnet::fast_single_node(SubnetType::System))
         .add_subnet(
             Subnet::new(SubnetType::Application)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
                 .add_nodes(NUMBER_OF_NODES)
-                .with_max_block_payload_size(size_limit)
-                .with_max_ingress_message_size(size_limit)
                 .with_chain_key_config(ChainKeyConfig {
                     key_configs: make_schnorr_key_ids_for_all_algorithms()
                         .into_iter()
@@ -92,9 +89,7 @@ fn setup(env: TestEnv) {
         .add_subnet(
             Subnet::new(SubnetType::Application)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
-                .add_nodes(NUMBER_OF_NODES)
-                .with_max_block_payload_size(size_limit)
-                .with_max_ingress_message_size(size_limit),
+                .add_nodes(NUMBER_OF_NODES),
         )
         .setup_and_start(&env)
         .expect("Could not start IC!");
