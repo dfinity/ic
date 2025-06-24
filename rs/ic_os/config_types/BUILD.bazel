@@ -12,6 +12,7 @@ DEPENDENCIES = [
     "@crate_index//:serde_with",
     "@crate_index//:thiserror",
     "@crate_index//:url",
+    "@crate_index//:clap",
 ]
 
 DEV_DEPENDENCIES = [

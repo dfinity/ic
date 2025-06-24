@@ -4,7 +4,6 @@ use std::{
     io::Write,
     net::{Ipv4Addr, Ipv6Addr},
     path::Path,
-    str::FromStr,
 };
 
 use anyhow::{Context, Error};
@@ -67,7 +66,7 @@ pub struct DeploymentConfig {
     pub mgmt_mac: Option<String>,
 
     #[arg(long)]
-    pub deployment_environment: Option<String>,
+    pub deployment_environment: Option<DeploymentEnvironment>,
 
     #[arg(long)]
     pub elasticsearch_hosts: Option<String>,
@@ -165,8 +164,7 @@ pub async fn update_deployment(path: &Path, cfg: &DeploymentConfig) -> Result<()
     }
 
     if let Some(deployment_environment) = &cfg.deployment_environment {
-        deployment_json.deployment.deployment_environment =
-            DeploymentEnvironment::from_str(deployment_environment)?;
+        deployment_json.deployment.deployment_environment = deployment_environment.to_owned();
     }
 
     if let Some(elasticsearch_hosts) = &cfg.elasticsearch_hosts {

@@ -2584,6 +2584,7 @@ name = "config_types"
 version = "1.0.0"
 dependencies = [
  "anyhow",
+ "clap 4.5.27",
  "ic-types",
  "macaddr",
  "once_cell",

@@ -2,7 +2,6 @@ use std::{
     fs::{self},
     io::Write,
     path::PathBuf,
-    str::FromStr,
 };
 
 use anyhow::{bail, Context, Error};
@@ -73,7 +72,7 @@ async fn main() -> Result<(), Error> {
         deployment: Deployment {
             mgmt_mac: cli.deployment.mgmt_mac,
             deployment_environment: match cli.deployment.deployment_environment {
-                Some(env) => DeploymentEnvironment::from_str(&env)?,
+                Some(env) => env,
                 None => DeploymentEnvironment::Mainnet,
             },
         },
