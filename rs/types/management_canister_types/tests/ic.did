@@ -471,6 +471,118 @@ type fetch_canister_logs_result = record {
     canister_log_records: vec canister_log_record;
 };
 
+type read_canister_snapshot_metadata_args = record {
+    canister_id : principal;
+    snapshot_id : blob;
+};
+
+type read_canister_snapshot_metadata_response = record {
+    source : variant {
+        taken_from_canister;
+        metadata_upload;
+    };
+    taken_at_timestamp : nat64;
+    wasm_module_size : nat64;
+    exported_globals : vec variant {
+        i32 : int32;
+        i64 : int64;
+        f32 : float32;
+        f64 : float64;
+        v128 : nat;
+    };
+    wasm_memory_size : nat64;
+    stable_memory_size : nat64;
+    wasm_chunk_store : vec record {
+        hash : blob;
+    };
+    canister_version : nat64;
+    certified_data : blob;
+    global_timer : opt variant {
+        inactive;
+        active : nat64;
+    };
+    on_low_wasm_memory_hook_status : opt variant {
+        condition_not_satisfied;
+        ready;
+        executed;
+    };
+};
+
+type read_canister_snapshot_data_args = record {
+    canister_id : principal;
+    snapshot_id : blob;
+    kind : variant {
+        wasm_module : record {
+            offset : nat64;
+            size : nat64;
+        };
+        main_memory : record {
+            offset : nat64;
+            size : nat64;
+        };
+        stable_memory : record {
+            offset : nat64;
+            size : nat64;
+        };
+        wasm_chunk : record {
+            hash : blob;
+        };
+    };
+};
+
+type read_canister_snapshot_data_response  = record {
+    chunk : blob;
+};
+
+type upload_canister_snapshot_metadata_args = record {
+    canister_id : principal;
+    replace_snapshot : opt blob;
+    wasm_module_size : nat64;
+    exported_globals : vec variant {
+        i32 : int32;
+        i64 : int64;
+        f32 : float32;
+        f64 : float64;
+        v128 : nat;
+    };
+    wasm_memory_size : nat64;
+    stable_memory_size : nat64;
+    certified_data : blob;
+    global_timer : opt variant {
+        inactive;
+        active : nat64;
+    };
+    on_low_wasm_memory_hook_status : opt variant {
+        condition_not_satisfied;
+        ready;
+        executed;
+    };
+};
+
+type upload_canister_snapshot_metadata_response = record {
+    snapshot_id : blob;
+};
+
+type upload_canister_snapshot_data = record {
+    canister_id : principal;
+    snapshot_id : blob;
+    kind : variant {
+        wasm_module : record {
+            offset : nat64;
+        };
+        main_memory : record {
+            offset : nat64;
+        };
+        stable_memory : record {
+            offset : nat64;
+        };
+        wasm_chunk;
+    };
+    chunk : blob;
+};
+
+
+
 service ic : {
     create_canister : (create_canister_args) -> (create_canister_result);
     update_settings : (update_settings_args) -> ();
