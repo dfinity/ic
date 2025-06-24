@@ -50,7 +50,7 @@ jobs:
   # Those test suites would overwhelm a runner, so each is run
   # as a separate job.
   release-system-tests:
-    name: Bazel System Tests
+    name: Release System Tests
     <<: *dind-large-setup
     steps:
       - <<: *checkout
