@@ -476,7 +476,10 @@ pub struct CanisterChange {
     pub canister_version: u64,
     #[prost(oneof = "canister_change::ChangeOrigin", tags = "3, 4")]
     pub change_origin: ::core::option::Option<canister_change::ChangeOrigin>,
-    #[prost(oneof = "canister_change::ChangeDetails", tags = "5, 6, 7, 8, 9, 10")]
+    #[prost(
+        oneof = "canister_change::ChangeDetails",
+        tags = "5, 6, 7, 8, 9, 10, 11"
+    )]
     pub change_details: ::core::option::Option<canister_change::ChangeDetails>,
 }
 /// Nested message and enum types in `CanisterChange`.
