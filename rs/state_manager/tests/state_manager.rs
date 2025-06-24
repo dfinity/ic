@@ -2378,7 +2378,7 @@ fn state_sync_priority_fn_respects_states_to_fetch() {
 fn assert_error_counters(metrics: &MetricsRegistry) {
     assert_eq!(
         0,
-        fetch_int_counter_vec(metrics, "criticale_errors")
+        fetch_int_counter_vec(metrics, "critical_errors")
             .values()
             .sum::<u64>()
     );
@@ -3703,14 +3703,19 @@ fn can_detect_divergence_with_rehash() {
         let (_height, state) = state_manager.take_tip();
         state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
         state_manager.flush_tip_channel();
-        let critical_errors = count_critical_errors();
-        assert_ne!(0, critical_errors);
+        assert_ne!(0, count_critical_errors());
 
         // For the second manifest we expect a full recomputation of the manifest, no new critical errors.
         let (_height, state) = state_manager.take_tip();
+        let reused_key = maplit::btreemap! {"type".to_string() => "reused".to_string()};
+        let reused_bytes =
+            fetch_int_counter_vec(metrics, "state_manager_manifest_chunk_bytes")[&reused_key];
         state_manager.commit_and_certify(state, height(3), CertificationScope::Full, None);
         state_manager.flush_tip_channel();
-        assert_eq!(critical_errors, count_critical_errors());
+        assert_eq!(
+            reused_bytes,
+            fetch_int_counter_vec(metrics, "state_manager_manifest_chunk_bytes")[&reused_key]
+        );
     });
 }
 
