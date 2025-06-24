@@ -34,8 +34,8 @@ use ic_nns_test_utils::{
         nns_governance_get_full_neuron, nns_governance_get_neuron_info,
         nns_governance_make_proposal, nns_increase_dissolve_delay, nns_join_community_fund,
         nns_leave_community_fund, nns_remove_hot_key, nns_send_icp_to_claim_or_refresh_neuron,
-        nns_set_followees_for_neuron, nns_start_dissolving, setup_nns_canisters,
-        state_machine_builder_for_nns_tests,
+        nns_set_auto_stake_maturity, nns_set_followees_for_neuron, nns_start_dissolving,
+        setup_nns_canisters, state_machine_builder_for_nns_tests,
     },
 };
 use ic_state_machine_tests::StateMachine;
@@ -311,6 +311,7 @@ fn create_neuron_with_maturity(
     state_machine: &StateMachine,
     neuron_controller: PrincipalId,
     stake: Tokens,
+    auto_stake: bool,
 ) -> NeuronIdProto {
     let neuron_id = create_neuron_with_stake(state_machine, neuron_controller, stake);
     nns_increase_dissolve_delay(
@@ -320,6 +321,10 @@ fn create_neuron_with_maturity(
         ONE_YEAR_SECONDS * 7,
     )
     .unwrap();
+    if auto_stake {
+        nns_set_auto_stake_maturity(state_machine, neuron_controller, neuron_id, true)
+            .panic_if_error("Failed to set auto stake maturity to true");
+    }
     nns_governance_make_proposal(
         state_machine,
         neuron_controller,
@@ -332,7 +337,8 @@ fn create_neuron_with_maturity(
                 motion_text: "some motion text".to_string(),
             })),
         },
-    );
+    )
+    .panic_if_error("Failed to make proposal");
     state_machine.advance_time(Duration::from_secs(ONE_DAY_SECONDS * 5));
     for _ in 0..100 {
         state_machine.advance_time(Duration::from_secs(1));
@@ -341,7 +347,11 @@ fn create_neuron_with_maturity(
 
     let neuron = nns_governance_get_full_neuron(state_machine, neuron_controller, neuron_id.id)
         .expect("Failed to get neuron");
-    assert!(neuron.maturity_e8s_equivalent > 0);
+    if auto_stake {
+        assert!(neuron.staked_maturity_e8s_equivalent.unwrap() > 0);
+    } else {
+        assert!(neuron.maturity_e8s_equivalent > 0);
+    }
 
     neuron_id
 }
@@ -388,11 +398,13 @@ fn test_neuron_disburse_maturity() {
         &state_machine,
         neuron_1_controller,
         Tokens::from_tokens(1000).unwrap(),
+        false,
     );
     let neuron_id_2 = create_neuron_with_maturity(
         &state_machine,
         neuron_2_controller,
         Tokens::from_tokens(1000).unwrap(),
+        false,
     );
 
     // Step 1.3: check that both neurons have no maturity disbursement in progress, and record their
@@ -459,9 +471,9 @@ fn test_neuron_disburse_maturity() {
     state_machine.advance_time(Duration::from_secs(ONE_DAY_SECONDS * 3));
 
     // Step 4.1: Disburse 100% of maturity for neuron 2 through account identifier.
-    let disburse_destination_2_principal =
-        PrincipalId::new_self_authenticating(b"disburse_destination_2");
-    let disburse_destination_2 = AccountIdentifier::from(disburse_destination_2_principal);
+    let disburse_destination_2_hex =
+        "807077e900000000000000000000000000000000000000000000000000000000";
+    let disburse_destination_2 = AccountIdentifier::from_hex(disburse_destination_2_hex).unwrap();
     let disburse_response = nns_disburse_maturity(
         &state_machine,
         neuron_2_controller,
@@ -499,6 +511,13 @@ fn test_neuron_disburse_maturity() {
     assert_eq!(
         maturity_disbursement_2.amount_e8s.unwrap(),
         original_neuron_2_maturity_e8s_equivalent
+    );
+    assert_eq!(
+        maturity_disbursement_2
+            .account_identifier_to_disburse_to
+            .unwrap()
+            .hash,
+        hex::decode(disburse_destination_2_hex).unwrap()
     );
     assert_eq!(neuron_2.maturity_e8s_equivalent, 0);
 
@@ -714,6 +733,7 @@ fn test_neuron_disburse_maturity_through_neuron_management_proposal() {
         &state_machine,
         managed_neuron_controller,
         Tokens::from_tokens(1000).unwrap(),
+        false,
     );
 
     // Step 1.3: check that the neuron has no maturity disbursement in progress, and record its
@@ -1001,6 +1021,71 @@ fn test_claim_neuron() {
     );
     assert_eq!(neuron_info.age_seconds, 0);
     assert_eq!(neuron_info.stake_e8s, 1_000_000_000);
+}
+
+#[test]
+fn test_unstake_maturity_of_dissolved_neurons() {
+    // Step 1: Prepare the world.
+    let controller = PrincipalId::new_self_authenticating(b"controller");
+    let state_machine = state_machine_builder_for_nns_tests().build();
+    let nns_init_payloads = NnsInitPayloadsBuilder::new()
+        .with_ledger_account(
+            AccountIdentifier::new(controller, None),
+            Tokens::from_tokens(2000).unwrap(),
+        )
+        .build();
+    setup_nns_canisters(&state_machine, nns_init_payloads);
+
+    let neuron_id = create_neuron_with_maturity(
+        &state_machine,
+        controller,
+        Tokens::from_tokens(1000).unwrap(),
+        true,
+    );
+
+    // Step 2: Create a neuron with some staked maturity.
+    let full_neuron =
+        nns_governance_get_full_neuron(&state_machine, controller, neuron_id.id).unwrap();
+    assert_eq!(full_neuron.auto_stake_maturity, Some(true));
+    assert!(full_neuron.staked_maturity_e8s_equivalent.unwrap() > 0);
+    let dissolve_state = full_neuron.dissolve_state.unwrap();
+    let dissolve_delay = match dissolve_state {
+        DissolveState::DissolveDelaySeconds(dissolve_delay) => {
+            // The dissolve delay here should be around 7 years, but in the test we only want to make sure
+            // it's reasonably large enough for the test to continue.
+            assert!(
+                dissolve_delay > 3600,
+                "The dissolve delay should be much greater than 1 hour"
+            );
+            dissolve_delay
+        }
+        _ => panic!("Unexpected dissolve state: {:#?}", dissolve_state),
+    };
+
+    // Step 2: Start dissolving the neuron and advance time to be close to the dissolve delay.
+    nns_start_dissolving(&state_machine, controller, neuron_id).unwrap();
+    state_machine.advance_time(Duration::from_secs(dissolve_delay - 3600));
+    for _ in 0..20 {
+        state_machine.advance_time(Duration::from_secs(5));
+        state_machine.tick();
+    }
+
+    // Step 3: Check that the neuron still has some maturity staked.
+    let full_neuron =
+        nns_governance_get_full_neuron(&state_machine, controller, neuron_id.id).unwrap();
+    assert!(full_neuron.staked_maturity_e8s_equivalent.unwrap() > 0);
+
+    // Step 4: Advance time to be after the dissolve delay.
+    state_machine.advance_time(Duration::from_secs(3600));
+    for _ in 0..20 {
+        state_machine.advance_time(Duration::from_secs(5));
+        state_machine.tick();
+    }
+
+    // Step 5: Check that the neuron has no maturity staked.
+    let full_neuron =
+        nns_governance_get_full_neuron(&state_machine, controller, neuron_id.id).unwrap();
+    assert_eq!(full_neuron.staked_maturity_e8s_equivalent, None);
 }
 
 #[test]

@@ -78,7 +78,7 @@ impl RegistryCanister {
         }
     }
 
-    fn new_with_agent_transformer<F>(url: Vec<Url>, f: F) -> Self
+    pub fn new_with_agent_transformer<F>(url: Vec<Url>, f: F) -> Self
     where
         F: FnMut(Agent) -> Agent,
     {

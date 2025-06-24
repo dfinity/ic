@@ -7,7 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
-## 9.0.1 - 2025-05-16
+## 9.0.2 - 2025-06-06
+
+(Only PocketIC server version bump to v9.0.3.)
+
+
+
+## 9.0.1 - 2025-05-27
+
+(Only PocketIC server version bump to v9.0.2.)
+
+
 
 ## 9.0.0 - 2025-04-30
 

@@ -29,7 +29,7 @@ package with native package managers such as apt get, homebrew, etc..
 
 To build Rust and IC-OS code will require a minimal set of packages. On a Linux
 host the
-`[Dockerfile](https://github.com/dfinity/ic/blob/master/ci/container/Dockerfile)`
+[`Dockerfile`](https://github.com/dfinity/ic/blob/master/ci/container/Dockerfile)
 serves as a reference for the minimal apt installation set. Developers may
 develop inside the build and development container with
 `./ci/container/container-run.sh`.
@@ -40,7 +40,7 @@ bazel test //rs/crypto/sha2:all
 
 Most targets should build on the host machine. However, the IC-OS image only
 builds inside the canonical container (`ic-build-bazel:$TAG`). To enter this
-docker container run `./ci/container/conatiner-run.sh`. This container
+docker container run `./ci/container/container-run.sh`. This container
 is only available in x86-64 environments.
 
 # Building Blocks
@@ -74,7 +74,7 @@ the directory `crypto`.
 
 Builds an executable test binary [or binaries] and runs them, outputting and
 caching the results. Cached results will not be rerun. Bazel only caches passed
-test results. The flag  `--cache_test_results=no` will make Bazel rerun cached
+test results. The flag `--cache_test_results=no` will make Bazel rerun cached
 tests.
 
 To see log output from failed tests add `--test_output=errors`. To see all log
@@ -243,7 +243,7 @@ Example absolute path `bazel build //rs/crypto/sha:sha`
 Example current working dir: `cd rs/crypto/sha; bazel build :sha`
 
 Targets external to the workspace [e.g. third party crates] need to include the
-repository name. For exam-ple `bazel build @crate_index//:openssl`
+repository name. For example `bazel build @crate_index//:openssl`
 
 See
 [https://docs.bazel.build/versions/main/build-ref.html#labels](https://docs.bazel.build/versions/main/build-ref.html#labels)
@@ -271,7 +271,7 @@ test`, also build all targets including those not referenced by any test.
 # Example Cargo to Bazel Conversion MRs
 
 Take a look at the following example migration. It is instructive to compare and
-contrast the  the  `Cargo.toml` file with its associated `BAZEL.build` file.
+contrast the `Cargo.toml` file with its associated `BAZEL.build` file.
 
 - [Criterion Times](https://github.com/dfinity/ic/commit/83bafb9c102eb91b0afde7c5d2260532bc6874d5)
 - [Log Analyzer](https://github.com/dfinity/ic/commit/63b176839c61ebe028cf93ed058f81d5b552efc8)
@@ -533,7 +533,7 @@ shell scripts, Python codebases eventually become more difficult to read,
 maintain and extend.
 
 Therefore, IDX strongly recommends **Golang** over Python for CLIs,
-infrastructure tools and  scripting tasks. The Bazel build infrastructure
+infrastructure tools and scripting tasks. The Bazel build infrastructure
 provides seamless Golang integration into the CI and build system - automation
 tools handles the heavy lifting to generate BUILD files and manage external
 dependencies.

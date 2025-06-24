@@ -98,7 +98,7 @@ use wslpath::windows_to_wsl;
 pub mod common;
 pub mod nonblocking;
 
-pub const EXPECTED_SERVER_VERSION: &str = "9.0.2";
+pub const EXPECTED_SERVER_VERSION: &str = "9.0.3";
 
 // the default timeout of a PocketIC operation
 const DEFAULT_MAX_REQUEST_TIME_MS: u64 = 300_000;
@@ -138,7 +138,7 @@ impl PocketIcState {
     pub fn into_path(self) -> PathBuf {
         match self.state {
             PocketIcStateKind::StateDir(state_dir) => state_dir,
-            PocketIcStateKind::TempDir(temp_dir) => temp_dir.into_path(),
+            PocketIcStateKind::TempDir(temp_dir) => temp_dir.keep(),
         }
     }
 

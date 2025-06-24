@@ -40,10 +40,11 @@ use registry_canister::mutations::{
     do_create_subnet::{
         CreateSubnetPayload, InitialChainKeyConfig, KeyConfig as KeyConfigCreate, KeyConfigRequest,
     },
+    do_recover_subnet::RecoverSubnetPayload,
     do_update_subnet::{ChainKeyConfig, KeyConfig as KeyConfigUpdate, UpdateSubnetPayload},
 };
 use slog::{debug, info, Logger};
-use std::time::Duration;
+use std::{fmt::Debug, time::Duration};
 
 pub const KEY_ID1: &str = "secp256k1";
 
@@ -513,27 +514,25 @@ pub async fn get_public_key_with_logger(
     get_public_key_with_retries(key_id, msg_can, logger, /*retries=*/ 100).await
 }
 
-pub async fn execute_update_subnet_proposal(
+pub async fn execute_proposal(
     governance: &Canister<'_>,
-    proposal_payload: UpdateSubnetPayload,
+    function: NnsFunction,
+    proposal_payload: impl CandidType + Debug,
     title: &str,
     logger: &Logger,
 ) {
     info!(
         logger,
-        "Executing Subnet Update proposal: {:?}", proposal_payload
+        "Executing {:?} proposal: {:?}", function, proposal_payload
     );
 
     let proposal_id = submit_external_update_proposal(
         governance,
         Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
         NeuronId(TEST_NEURON_1_ID),
-        NnsFunction::UpdateConfigOfSubnet,
+        function,
         proposal_payload,
-        format!(
-            "<subnet update proposal created by threshold ecdsa test>: {}",
-            title
-        ),
+        title.to_string(),
         /*summary=*/ String::default(),
     )
     .await;
@@ -541,9 +540,25 @@ pub async fn execute_update_subnet_proposal(
     let proposal_result = vote_and_execute_proposal(governance, proposal_id).await;
     info!(
         logger,
-        "Subnet Update proposal result: {:?}", proposal_result
+        "{:?} proposal result: {:?}", function, proposal_result
     );
     assert_eq!(proposal_result.status, ProposalStatus::Executed as i32);
+}
+
+pub async fn execute_update_subnet_proposal(
+    governance: &Canister<'_>,
+    proposal_payload: UpdateSubnetPayload,
+    title: &str,
+    logger: &Logger,
+) {
+    execute_proposal(
+        governance,
+        NnsFunction::UpdateConfigOfSubnet,
+        proposal_payload,
+        &format!("<subnet update proposal created by system test>: {}", title),
+        logger,
+    )
+    .await;
 }
 
 pub async fn execute_create_subnet_proposal(
@@ -551,28 +566,29 @@ pub async fn execute_create_subnet_proposal(
     proposal_payload: CreateSubnetPayload,
     logger: &Logger,
 ) {
-    info!(
-        logger,
-        "Executing Subnet creation proposal: {:?}", proposal_payload
-    );
-
-    let proposal_id = submit_external_update_proposal(
+    execute_proposal(
         governance,
-        Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
-        NeuronId(TEST_NEURON_1_ID),
         NnsFunction::CreateSubnet,
         proposal_payload,
-        "<subnet creation proposal created by threshold ecdsa test>".to_string(),
-        /*summary=*/ String::default(),
+        "<subnet creation proposal created by system test>",
+        logger,
     )
     .await;
+}
 
-    let proposal_result = vote_and_execute_proposal(governance, proposal_id).await;
-    info!(
+pub async fn execute_recover_subnet_proposal(
+    governance: &Canister<'_>,
+    proposal_payload: RecoverSubnetPayload,
+    logger: &Logger,
+) {
+    execute_proposal(
+        governance,
+        NnsFunction::RecoverSubnet,
+        proposal_payload,
+        "<recover subnet proposal created by system test>",
         logger,
-        "Subnet Creation proposal result: {:?}", proposal_result
-    );
-    assert_eq!(proposal_result.status, ProposalStatus::Executed as i32);
+    )
+    .await;
 }
 
 pub async fn get_signature_with_logger(

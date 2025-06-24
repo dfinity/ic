@@ -1,14 +1,14 @@
-use std::path::{Path, PathBuf};
-use std::process::{Output, Stdio};
-
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{anyhow, bail, ensure, Context, Result};
 use async_trait::async_trait;
 use itertools::Itertools;
 use pcre2::bytes::Regex;
+use std::io::{Read, Seek};
+use std::path::{Path, PathBuf};
+use std::process::{Output, Stdio};
 use tempfile::{tempdir, TempDir};
 use tokio::fs;
 use tokio::fs::File;
-use tokio::io::{self, AsyncReadExt, AsyncSeekExt, AsyncWriteExt, SeekFrom};
+use tokio::io::{self, AsyncSeekExt, AsyncWriteExt, SeekFrom};
 use tokio::process::Command;
 
 use crate::exes::{debugfs, faketime};
@@ -18,9 +18,9 @@ use crate::Partition;
 const STORE_NAME: &str = "backing_store";
 
 pub struct ExtPartition {
-    index: Option<usize>,
     backing_dir: TempDir,
     original: PathBuf,
+    offset_bytes: Option<u64>,
 }
 
 #[async_trait]
@@ -29,26 +29,44 @@ impl Partition for ExtPartition {
     async fn open(image: PathBuf, index: Option<usize>) -> Result<Self> {
         let _ = debugfs().context("debugfs is needed to open ext4 partitions")?;
 
+        if let Some(index) = index {
+            let offset = partition::check_offset(&image, index).await?;
+            let length = partition::check_length(&image, index).await?;
+            Self::open_range(image, offset, length).await
+        } else {
+            // open_range is several times slower than fs::copy, therefore we use fs::copy
+            // on the fast path if no seeking is necessary.
+            let backing_dir = tempdir()?;
+            let output_path = backing_dir.path().join(STORE_NAME);
+            fs::copy(&image, &output_path).await?;
+            Ok(ExtPartition {
+                backing_dir,
+                original: image,
+                offset_bytes: None,
+            })
+        }
+    }
+
+    /// Open an ext4 partition for writing, via debugfs, using explicit offset and length
+    async fn open_range(image: PathBuf, offset_bytes: u64, length_bytes: u64) -> Result<Self> {
+        let _ = debugfs().context("debugfs is needed to open ext4 partitions")?;
+
         let backing_dir = tempdir()?;
         let output_path = backing_dir.path().join(STORE_NAME);
 
-        let mut input = File::open(&image).await?;
+        let mut input = std::fs::File::open(&image)?;
+        let mut output = std::fs::File::create(output_path)?;
 
-        if let Some(index) = index {
-            let mut output = File::create(output_path).await?;
-            let offset = partition::check_offset(&image, index).await?;
-            let length = partition::check_length(&image, index).await?;
-
-            input.seek(SeekFrom::Start(offset)).await?;
-            io::copy(&mut input.take(length), &mut output).await?;
-        } else {
-            // Tokio's io::copy is several times slower than fs::copy, therefore we use fs::copy
-            // on the fast path if no seeking is necessary.
-            fs::copy(&image, &output_path).await?;
-        }
+        // We use blocking IO here because tokio's copy is several times slower than std::io::copy.
+        tokio::task::spawn_blocking(move || {
+            input.seek(SeekFrom::Start(offset_bytes))?;
+            std::io::copy(&mut input.take(length_bytes), &mut output)?;
+            Ok::<(), anyhow::Error>(())
+        })
+        .await??;
 
         Ok(ExtPartition {
-            index,
+            offset_bytes: Some(offset_bytes), // No partition index when using explicit range
             backing_dir,
             original: image,
         })
@@ -59,10 +77,9 @@ impl Partition for ExtPartition {
         let input_path = self.backing_dir.path().join(STORE_NAME);
         let output_path = self.original;
 
-        if let Some(index) = self.index {
+        if let Some(offset) = self.offset_bytes {
             let mut input = File::open(&input_path).await?;
             let mut output = File::options().write(true).open(&output_path).await?;
-            let offset = partition::check_offset(&output_path, index).await?;
 
             output.seek(SeekFrom::Start(offset)).await?;
             io::copy(&mut input, &mut output).await?;
@@ -147,6 +164,28 @@ impl Partition for ExtPartition {
 
         Ok(cleaned_output)
     }
+
+    async fn copy_files_to(&mut self, output: &Path) -> Result<()> {
+        ensure!(
+            output.exists() && output.is_dir(),
+            "output must be an existing directory"
+        );
+
+        // Use debugfs to dump the entire filesystem
+        let out = Command::new(debugfs().context("debugfs is needed to extract contents")?)
+            .args([
+                "-R",
+                &format!("rdump / {}", output.display()),
+                self.backing_dir.path().join(STORE_NAME).to_str().unwrap(),
+            ])
+            .output()
+            .await
+            .context("failed to run debugfs for extraction")?;
+
+        Self::check_debugfs_result(&out)?;
+
+        Ok(())
+    }
 }
 
 impl ExtPartition {
@@ -227,6 +266,7 @@ impl ExtPartition {
             // Some errors we ignore.
             .filter(|error| !error.contains("Ext2 directory already exists"))
             .filter(|error| !error.contains("rm: File not found"))
+            .filter(|error| !error.contains("Invalid argument while changing ownership"))
             .join("\n");
         if !out.status.success() || !errors.is_empty() {
             bail!("debugfs failed:\n{errors}");
@@ -382,7 +422,7 @@ mod test {
         check_lookup(
             &contexts,
             "system_u:object_r:boot_t:s0",
-            "/extra_boot_args",
+            "/boot_args",
             Some("/boot"),
         );
     }
@@ -481,5 +521,48 @@ mod test {
             .expect_err("Expected reading non-existing file to fail")
             .to_string()
             .contains("File not found"));
+    }
+
+    #[tokio::test]
+    async fn copy_files_test() {
+        let dir = tempdir().unwrap();
+        let img_path = dir.path().join("empty_ext4.img");
+        create_empty_partition_img(&img_path)
+            .await
+            .expect("Could not create test partition image");
+
+        let mut partition = ExtPartition::open(img_path.to_path_buf(), None)
+            .await
+            .expect("Could not open partition");
+
+        let input_file_names = ["input.txt", "input2.txt"];
+        for file in input_file_names {
+            let input_path = dir.path().join(file);
+            let output_path = Path::new("/").join(file);
+            fs::write(input_path.clone(), b"").await.unwrap();
+            partition
+                .write_file(&input_path, &output_path)
+                .await
+                .expect("Could not write file in partition");
+        }
+
+        let output_dir = TempDir::new().expect("Could not create temp dir");
+        partition.copy_files_to(output_dir.path()).await.unwrap();
+
+        let mut actual_file_names = std::fs::read_dir(output_dir.path())
+            .expect("read_dir failed")
+            .map(|entry| {
+                entry
+                    .unwrap()
+                    .path()
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect::<Vec<_>>();
+        actual_file_names.sort();
+
+        assert_eq!(actual_file_names, ["input.txt", "input2.txt", "lost+found"]);
     }
 }

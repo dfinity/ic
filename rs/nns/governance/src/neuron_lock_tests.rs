@@ -1,10 +1,7 @@
 use super::*;
 
 use crate::{
-    pb::v1::{
-        governance::neuron_in_flight_command::SyncCommand, manage_neuron::Split,
-        Governance as GovernanceProto,
-    },
+    pb::v1::{governance::neuron_in_flight_command::SyncCommand, manage_neuron::Split},
     test_utils::{MockEnvironment, MockRandomness, StubCMC, StubIcpLedger},
 };
 
@@ -16,7 +13,7 @@ thread_local! {
 
 fn new_governance_for_test() -> Governance {
     Governance::new(
-        GovernanceProto::default(),
+        Default::default(),
         Arc::new(MockEnvironment::new(Default::default(), 0)),
         Arc::new(StubIcpLedger {}),
         Arc::new(StubCMC {}),

@@ -423,6 +423,7 @@ pub(crate) fn spawn_tip_thread(
                             fd_factory,
                         } => {
                             let _timer = request_timer(&metrics, "validate_replicated_state");
+                            let start = Instant::now();
                             debug_assert_eq!(
                                 tip_state.latest_checkpoint_state.page_maps_height,
                                 checkpoint_layout.height()
@@ -450,6 +451,12 @@ pub(crate) fn spawn_tip_thread(
                                     err
                                 )
                             }
+                            info!(
+                                log,
+                                "Validated checkpoint @{} in {:?}",
+                                checkpoint_layout.height(),
+                                start.elapsed()
+                            );
                         }
                     }
                 }
@@ -686,6 +693,8 @@ fn flush_unflushed_checkpoint_ops(
             UnflushedCheckpointOp::RenameCanister(src, dst) => {
                 tip_handler.move_canister_directory(height, src, dst)?;
             }
+            UnflushedCheckpointOp::UploadSnapshotData(..)
+            | UnflushedCheckpointOp::UploadSnapshotMetadata(..) => {}
         }
     }
 
@@ -1284,6 +1293,7 @@ fn serialize_canister_protos_to_tip(
             wasm_memory_limit: canister_state.system_state.wasm_memory_limit,
             next_snapshot_id: canister_state.system_state.next_snapshot_id,
             snapshots_memory_usage: canister_state.system_state.snapshots_memory_usage,
+            environment_variables: canister_state.system_state.environment_variables.clone(),
         }
         .into(),
     )?;

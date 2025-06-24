@@ -1,6 +1,5 @@
 use crate::{
     account_id_index::NeuronAccountIdIndex,
-    is_disburse_maturity_enabled,
     known_neuron_index::{AddKnownNeuronError, KnownNeuronIndex, RemoveKnownNeuronError},
     maturity_disbursement_index::MaturityDisbursementIndex,
     neuron::Neuron,
@@ -760,17 +759,14 @@ where
     }
 
     fn indexes_mut(&mut self) -> Vec<&mut dyn NeuronIndex> {
-        let mut indexes: Vec<&mut dyn NeuronIndex> = vec![
+        vec![
             &mut self.subaccount,
             &mut self.principal,
             &mut self.following,
             &mut self.known_neuron,
             &mut self.account_id,
-        ];
-        if is_disburse_maturity_enabled() {
-            indexes.push(&mut self.maturity_disbursement);
-        }
-        indexes
+            &mut self.maturity_disbursement,
+        ]
     }
 
     // It's OK to expose read-only access to all the indexes.
@@ -806,9 +802,7 @@ where
         self.following.validate();
         self.known_neuron.validate();
         self.account_id.validate();
-        if is_disburse_maturity_enabled() {
-            self.maturity_disbursement.validate();
-        }
+        self.maturity_disbursement.validate();
     }
 }
 

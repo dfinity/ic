@@ -1,5 +1,6 @@
 use candid::Decode;
 use core::sync::atomic::Ordering;
+use ed25519_dalek::{pkcs8::EncodePrivateKey, SigningKey};
 use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
 use ic_btc_adapter_client::setup_bitcoin_adapter_clients;
 use ic_btc_consensus::BitcoinPayloadBuilder;
@@ -22,7 +23,7 @@ use ic_crypto_test_utils_ni_dkg::{
 };
 use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path as LabeledTreePath};
 use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
-use ic_cycles_account_manager::CyclesAccountManager;
+use ic_cycles_account_manager::{CyclesAccountManager, IngressInductionCost};
 pub use ic_error_types::{ErrorCode, UserError};
 use ic_execution_environment::{ExecutionServices, IngressHistoryReaderImpl};
 use ic_http_endpoints_public::{metrics::HttpHandlerMetrics, IngressWatcher, IngressWatcherHandle};
@@ -49,8 +50,11 @@ use ic_limits::{MAX_INGRESS_TTL, PERMITTED_DRIFT, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_logger::replica_logger::no_op_logger;
 use ic_logger::{error, ReplicaLogger};
 use ic_management_canister_types_private::{
-    self as ic00, CanisterIdRecord, InstallCodeArgs, MasterPublicKeyId, Method, Payload,
-    ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs,
+    self as ic00, CanisterIdRecord, CanisterSnapshotDataKind, CanisterSnapshotDataOffset,
+    InstallCodeArgs, MasterPublicKeyId, Method, Payload, ReadCanisterSnapshotDataArgs,
+    ReadCanisterSnapshotDataResponse, ReadCanisterSnapshotMetadataArgs,
+    ReadCanisterSnapshotMetadataResponse, UploadCanisterSnapshotDataArgs,
+    UploadCanisterSnapshotMetadataArgs, UploadCanisterSnapshotMetadataResponse,
 };
 use ic_management_canister_types_private::{
     CanisterHttpResponsePayload, CanisterInstallMode, CanisterSettingsArgs,
@@ -139,15 +143,15 @@ use ic_types::{
     },
     malicious_flags::MaliciousFlags,
     messages::{
-        Blob, Certificate, CertificateDelegation, HttpCallContent, HttpCanisterUpdate,
-        HttpRequestEnvelope, Payload as MsgPayload, Query, QuerySource, RejectContext,
-        SignedIngress, EXPECTED_MESSAGE_ID_LENGTH,
+        extract_effective_canister_id, Blob, Certificate, CertificateDelegation, HttpCallContent,
+        HttpCanisterUpdate, HttpRequestContent, HttpRequestEnvelope, Payload as MsgPayload, Query,
+        QuerySource, RejectContext, SignedIngress, EXPECTED_MESSAGE_ID_LENGTH,
     },
     signature::ThresholdSignature,
     time::GENESIS,
     xnet::{CertifiedStreamSlice, StreamIndex},
     CanisterLog, CountBytes, CryptoHashOfPartialState, Height, NodeId, Randomness, RegistryVersion,
-    ReplicaVersion,
+    ReplicaVersion, SnapshotId,
 };
 use ic_types::{
     canister_http::{
@@ -172,7 +176,7 @@ use rand::{rngs::StdRng, Rng, SeedableRng};
 use serde::Serialize;
 use slog::Level;
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, HashMap},
     convert::TryFrom,
     fmt,
     io::{self, stderr},
@@ -193,6 +197,8 @@ use tower::ServiceExt;
 /// The size of the channel used to communicate between the [`IngressWatcher`] and
 /// execution. Mirrors the size used in production defined in `setup_ic_stack.rs`
 const COMPLETED_EXECUTION_MESSAGES_BUFFER_SIZE: usize = 10_000;
+
+const SNAPSHOT_DATA_CHUNK_SIZE: u64 = 2_000_000;
 
 #[cfg(test)]
 mod tests;
@@ -409,10 +415,10 @@ fn add_subnet_local_registry_records(
                 )
                 .unwrap();
         }
-        let root_key_pair = KeyPair::generate().unwrap();
+
         let root_cert = CertificateParams::new(vec![node.node_id.to_string()])
             .unwrap()
-            .self_signed(&root_key_pair)
+            .self_signed(&node.root_key_pair)
             .unwrap();
         let tls_cert = X509PublicKeyCert {
             certificate_der: root_cert.der().to_vec(),
@@ -810,6 +816,7 @@ pub struct StateMachineNode {
     pub idkg_mega_encryption_key: ic_ed25519::PrivateKey,
     pub http_ip_addr: Ipv6Addr,
     pub xnet_ip_addr: Ipv6Addr,
+    pub root_key_pair: KeyPair,
 }
 
 impl StateMachineNode {
@@ -824,6 +831,10 @@ impl StateMachineNode {
         let mut xnet_ip_addr_bytes = rng.gen::<[u8; 16]>();
         xnet_ip_addr_bytes[0] = 0xe0; // make sure the ipv6 address has no special form
         let xnet_ip_addr = Ipv6Addr::from(xnet_ip_addr_bytes);
+        let seed = rng.gen::<[u8; 32]>();
+        let signing_key = SigningKey::from_bytes(&seed);
+        let pkcs8_bytes = signing_key.to_pkcs8_der().unwrap().as_bytes().to_vec();
+        let root_key_pair: KeyPair = pkcs8_bytes.try_into().unwrap();
         Self {
             node_id: PrincipalId::new_self_authenticating(
                 &node_signing_key.public_key().serialize_rfc8410_der(),
@@ -835,6 +846,7 @@ impl StateMachineNode {
             idkg_mega_encryption_key,
             http_ip_addr,
             xnet_ip_addr,
+            root_key_pair,
         }
     }
 }
@@ -900,6 +912,7 @@ pub struct StateMachine {
     query_stats_payload_builder: Arc<PocketQueryStatsPayloadBuilderImpl>,
     vetkd_payload_builder: Arc<dyn BatchPayloadBuilder>,
     remove_old_states: bool,
+    cycles_account_manager: Arc<CyclesAccountManager>,
     // This field must be the last one so that the temporary directory is deleted at the very end.
     state_dir: Box<dyn StateMachineStateDir>,
     // DO NOT PUT ANY FIELDS AFTER `state_dir`!!!
@@ -1353,6 +1366,7 @@ impl StateMachineBuilder {
             sm.state_manager.clone(),
             sm.registry_client.clone(),
             rng,
+            None,
             xnet_slice_pool_impl,
             refill_task_handle,
             metrics,
@@ -1927,7 +1941,7 @@ impl StateMachine {
             subnet_id,
             replica_logger.clone(),
             state_manager.clone(),
-            cycles_account_manager,
+            cycles_account_manager.clone(),
             malicious_flags,
             RandomStateKind::Deterministic,
         ));
@@ -1991,6 +2005,7 @@ impl StateMachine {
             query_stats_payload_builder: pocket_query_stats_payload_builder,
             vetkd_payload_builder,
             remove_old_states,
+            cycles_account_manager,
         }
     }
 
@@ -2004,6 +2019,12 @@ impl StateMachine {
     }
 
     fn into_components(self) -> (Box<dyn StateMachineStateDir>, u64, Time, u64) {
+        // Finish any asynchronous state manager operations first.
+        self.state_manager.flush_tip_channel();
+        self.state_manager
+            .state_layout()
+            .flush_checkpoint_removal_channel();
+
         let state_manager = Arc::downgrade(&self.state_manager);
         let result = self.into_components_inner();
         // StateManager is owned by an Arc, that is cloned into multiple components and different
@@ -2201,27 +2222,7 @@ impl StateMachine {
         method: impl ToString,
         payload: Vec<u8>,
     ) -> Result<MessageId, SubmitIngressError> {
-        // Build `SignedIngress` with maximum ingress expiry and unique nonce,
-        // omitting delegations and signatures.
-        let ingress_expiry = (self.get_time() + MAX_INGRESS_TTL).as_nanos_since_unix_epoch();
-        let nonce = self.nonce.fetch_add(1, Ordering::Relaxed) + 1;
-        let nonce = Some(nonce.to_le_bytes().into());
-        let msg = SignedIngress::try_from(HttpRequestEnvelope::<HttpCallContent> {
-            content: HttpCallContent::Call {
-                update: HttpCanisterUpdate {
-                    canister_id: Blob(canister_id.get().into_vec()),
-                    method_name: method.to_string(),
-                    arg: Blob(payload.clone()),
-                    sender: sender.into(),
-                    ingress_expiry,
-                    nonce: nonce.clone(),
-                },
-            },
-            sender_pubkey: None,
-            sender_sig: None,
-            sender_delegation: None,
-        })
-        .unwrap();
+        let msg = self.ingress_message(sender, canister_id, method, payload);
         self.submit_signed_ingress(msg)
     }
 
@@ -3252,16 +3253,20 @@ impl StateMachine {
         .map(|_| ())
     }
 
+    fn get_controller(&self, canister_id: &CanisterId) -> PrincipalId {
+        let state = self.state_manager.get_latest_state().take();
+        state
+            .canister_state(canister_id)
+            .and_then(|s| s.controllers().iter().next().cloned())
+            .unwrap_or_else(PrincipalId::new_anonymous)
+    }
+
     /// Create a canister snapshot.
     pub fn take_canister_snapshot(
         &self,
         args: TakeCanisterSnapshotArgs,
     ) -> Result<CanisterSnapshotResponse, UserError> {
-        let state = self.state_manager.get_latest_state().take();
-        let sender = state
-            .canister_state(&args.get_canister_id())
-            .and_then(|s| s.controllers().iter().next().cloned())
-            .unwrap_or_else(PrincipalId::new_anonymous);
+        let sender = self.get_controller(&args.get_canister_id());
         self.execute_ingress_as(
             sender,
             ic00::IC_00,
@@ -3281,11 +3286,7 @@ impl StateMachine {
         &self,
         args: LoadCanisterSnapshotArgs,
     ) -> Result<Vec<u8>, UserError> {
-        let state = self.state_manager.get_latest_state().take();
-        let sender = state
-            .canister_state(&args.get_canister_id())
-            .and_then(|s| s.controllers().iter().next().cloned())
-            .unwrap_or_else(PrincipalId::new_anonymous);
+        let sender = self.get_controller(&args.get_canister_id());
         self.execute_ingress_as(
             sender,
             ic00::IC_00,
@@ -3303,12 +3304,8 @@ impl StateMachine {
     pub fn read_canister_snapshot_metadata(
         &self,
         args: &ReadCanisterSnapshotMetadataArgs,
-    ) -> Result<Vec<u8>, UserError> {
-        let state = self.state_manager.get_latest_state().take();
-        let sender = state
-            .canister_state(&args.get_canister_id())
-            .and_then(|s| s.controllers().iter().next().cloned())
-            .unwrap();
+    ) -> Result<ReadCanisterSnapshotMetadataResponse, UserError> {
+        let sender = self.get_controller(&args.get_canister_id());
         self.execute_ingress_as(
             sender,
             ic00::IC_00,
@@ -3316,7 +3313,7 @@ impl StateMachine {
             args.encode(),
         )
         .map(|res| match res {
-            WasmResult::Reply(data) => Ok(data),
+            WasmResult::Reply(data) => ReadCanisterSnapshotMetadataResponse::decode(&data),
             WasmResult::Reject(reason) => {
                 panic!("read_canister_snapshot_metadata call rejected: {}", reason)
             }
@@ -3326,12 +3323,8 @@ impl StateMachine {
     pub fn read_canister_snapshot_data(
         &self,
         args: &ReadCanisterSnapshotDataArgs,
-    ) -> Result<Vec<u8>, UserError> {
-        let state = self.state_manager.get_latest_state().take();
-        let sender = state
-            .canister_state(&args.get_canister_id())
-            .and_then(|s| s.controllers().iter().next().cloned())
-            .unwrap();
+    ) -> Result<ReadCanisterSnapshotDataResponse, UserError> {
+        let sender = self.get_controller(&args.get_canister_id());
         self.execute_ingress_as(
             sender,
             ic00::IC_00,
@@ -3339,11 +3332,249 @@ impl StateMachine {
             args.encode(),
         )
         .map(|res| match res {
-            WasmResult::Reply(data) => Ok(data),
+            WasmResult::Reply(data) => ReadCanisterSnapshotDataResponse::decode(&data),
             WasmResult::Reject(reason) => {
                 panic!("read_canister_snapshot_data call rejected: {}", reason)
             }
         })?
+    }
+
+    /// Helper to download the whole snapshot chunk store.
+    pub fn get_snapshot_chunk_store(
+        &self,
+        args: &ReadCanisterSnapshotMetadataArgs,
+    ) -> Result<HashMap<Vec<u8>, Vec<u8>>, UserError> {
+        let md = self.read_canister_snapshot_metadata(args)?;
+        let chunk_hashes = md.wasm_chunk_store;
+        let mut res = HashMap::new();
+        for hash in chunk_hashes.into_iter() {
+            let ReadCanisterSnapshotDataResponse { chunk } =
+                self.read_canister_snapshot_data(&ReadCanisterSnapshotDataArgs {
+                    canister_id: args.canister_id,
+                    snapshot_id: args.snapshot_id,
+                    kind: CanisterSnapshotDataKind::WasmChunk {
+                        hash: hash.hash.clone(),
+                    },
+                })?;
+            res.insert(hash.hash, chunk);
+        }
+        Ok(res)
+    }
+
+    /// Helper to download the whole snapshot canister module.
+    pub fn get_snapshot_module(
+        &self,
+        args: &ReadCanisterSnapshotMetadataArgs,
+    ) -> Result<Vec<u8>, UserError> {
+        self.get_snapshot_blob(
+            args,
+            |md: &ReadCanisterSnapshotMetadataResponse| md.wasm_module_size,
+            |offset, size| CanisterSnapshotDataKind::WasmModule { offset, size },
+        )
+    }
+
+    /// Helper to download the whole snapshot canister heap.
+    pub fn get_snapshot_heap(
+        &self,
+        args: &ReadCanisterSnapshotMetadataArgs,
+    ) -> Result<Vec<u8>, UserError> {
+        self.get_snapshot_blob(
+            args,
+            |md: &ReadCanisterSnapshotMetadataResponse| md.wasm_memory_size,
+            |offset, size| CanisterSnapshotDataKind::MainMemory { offset, size },
+        )
+    }
+
+    /// Helper to download the whole snapshot canister stable memory.
+    pub fn get_snapshot_stable_memory(
+        &self,
+        args: &ReadCanisterSnapshotMetadataArgs,
+    ) -> Result<Vec<u8>, UserError> {
+        self.get_snapshot_blob(
+            args,
+            |md: &ReadCanisterSnapshotMetadataResponse| md.stable_memory_size,
+            |offset, size| CanisterSnapshotDataKind::StableMemory { offset, size },
+        )
+    }
+
+    /// Downloads one of the snapshot blobs as a whole.
+    /// Takes two selector closures that determine which blob to target:
+    /// Canister module, heap or stable memory.
+    fn get_snapshot_blob(
+        &self,
+        args: &ReadCanisterSnapshotMetadataArgs,
+        size_extractor: impl Fn(&ReadCanisterSnapshotMetadataResponse) -> u64,
+        kind_gen: impl Fn(u64, u64) -> CanisterSnapshotDataKind,
+    ) -> Result<Vec<u8>, UserError> {
+        let md = self.read_canister_snapshot_metadata(args)?;
+        let mut res = vec![];
+        let module_size = size_extractor(&md);
+        let mut start = 0;
+        while start < module_size {
+            let size = u64::min(SNAPSHOT_DATA_CHUNK_SIZE, module_size - start);
+            let args = ReadCanisterSnapshotDataArgs {
+                canister_id: args.canister_id,
+                snapshot_id: args.snapshot_id,
+                kind: kind_gen(start, size),
+            };
+            start += size;
+            let mut bytes = self.read_canister_snapshot_data(&args)?.chunk;
+            res.append(&mut bytes);
+        }
+        Ok(res)
+    }
+
+    pub fn upload_canister_snapshot_metadata(
+        &self,
+        args: &UploadCanisterSnapshotMetadataArgs,
+    ) -> Result<UploadCanisterSnapshotMetadataResponse, UserError> {
+        let sender = self.get_controller(&args.get_canister_id());
+        self.execute_ingress_as(
+            sender,
+            ic00::IC_00,
+            Method::UploadCanisterSnapshotMetadata,
+            args.encode(),
+        )
+        .map(|res| match res {
+            WasmResult::Reply(data) => UploadCanisterSnapshotMetadataResponse::decode(&data),
+            WasmResult::Reject(reason) => {
+                panic!(
+                    "upload_canister_snapshot_metadata call rejected: {}",
+                    reason
+                )
+            }
+        })?
+    }
+
+    pub fn upload_canister_snapshot_data(
+        &self,
+        args: &UploadCanisterSnapshotDataArgs,
+    ) -> Result<(), UserError> {
+        let sender = self.get_controller(&args.get_canister_id());
+        self.execute_ingress_as(
+            sender,
+            ic00::IC_00,
+            Method::UploadCanisterSnapshotData,
+            args.encode(),
+        )
+        .map(|res| match res {
+            WasmResult::Reply(data) => Decode!(&data, ()).unwrap(),
+            WasmResult::Reject(reason) => {
+                panic!("upload_canister_snapshot_data call rejected: {}", reason)
+            }
+        })
+    }
+
+    /// Uploads `data` to a canister snapshot's module by calling `upload_canister_snapshot_data`
+    /// as often as necessary with chunks of size `SNAPSHOT_DATA_CHUNK_SIZE`.
+    ///
+    /// If given, skips `start_chunk` number of chunks.
+    /// If given, only uploads until `end_chunk` (or until complete, whichever happens earlier).
+    pub fn upload_snapshot_module(
+        &self,
+        canister_id: CanisterId,
+        snapshot_id: SnapshotId,
+        data: impl AsRef<[u8]>,
+        start_chunk: Option<usize>,
+        end_chunk: Option<usize>,
+    ) -> Result<(), UserError> {
+        self.upload_snapshot_blob(
+            canister_id,
+            snapshot_id,
+            data,
+            start_chunk,
+            end_chunk,
+            |x| CanisterSnapshotDataOffset::WasmModule { offset: x },
+        )
+    }
+
+    /// Uploads `data` to a canister snapshot's heap by calling `upload_canister_snapshot_data`
+    /// as often as necessary with chunks of size `SNAPSHOT_DATA_CHUNK_SIZE`.
+    ///
+    /// If given, skips `start_chunk` number of chunks.
+    /// If given, only uploads until `end_chunk` (or until complete, whichever happens earlier).
+    pub fn upload_snapshot_heap(
+        &self,
+        canister_id: CanisterId,
+        snapshot_id: SnapshotId,
+        data: impl AsRef<[u8]>,
+        start_chunk: Option<usize>,
+        end_chunk: Option<usize>,
+    ) -> Result<(), UserError> {
+        self.upload_snapshot_blob(
+            canister_id,
+            snapshot_id,
+            data,
+            start_chunk,
+            end_chunk,
+            |x| CanisterSnapshotDataOffset::MainMemory { offset: x },
+        )
+    }
+
+    /// Uploads `data` to a canister snapshot's stable memory by calling `upload_canister_snapshot_data`
+    /// as often as necessary with chunks of size `SNAPSHOT_DATA_CHUNK_SIZE`.
+    ///
+    /// If given, skips `start_chunk` number of chunks.
+    /// If given, only uploads until `end_chunk` (or until complete, whichever happens earlier).
+    pub fn upload_snapshot_stable_memory(
+        &self,
+        canister_id: CanisterId,
+        snapshot_id: SnapshotId,
+        data: impl AsRef<[u8]>,
+        start_chunk: Option<usize>,
+        end_chunk: Option<usize>,
+    ) -> Result<(), UserError> {
+        self.upload_snapshot_blob(
+            canister_id,
+            snapshot_id,
+            data,
+            start_chunk,
+            end_chunk,
+            |x| CanisterSnapshotDataOffset::StableMemory { offset: x },
+        )
+    }
+
+    /// Uploads `data` to one of the canister snapshot's blobs (wasm module, heap, stable memory)
+    /// by calling `upload_canister_snapshot_data` as often as necessary with chunks of size
+    /// `SNAPSHOT_DATA_CHUNK_SIZE`.
+    /// The targeted blob is determined by the `kind_gen` selector closure.
+    ///
+    /// If given, skips `start_chunk` number of chunks.
+    /// If given, only uploads until `end_chunk` (or until complete, whichever happens earlier).
+    fn upload_snapshot_blob(
+        &self,
+        canister_id: CanisterId,
+        snapshot_id: SnapshotId,
+        data: impl AsRef<[u8]>,
+        start_chunk: Option<usize>,
+        end_chunk: Option<usize>,
+        kind_gen: impl Fn(u64) -> CanisterSnapshotDataOffset,
+    ) -> Result<(), UserError> {
+        let data_size = data.as_ref().len() as u64;
+        let mut cnt = 0;
+        let mut start = 0;
+        while start < data_size {
+            let size = u64::min(SNAPSHOT_DATA_CHUNK_SIZE, data_size - start);
+            if start_chunk.is_some() && cnt < *start_chunk.as_ref().unwrap()
+                || end_chunk.is_some() && cnt >= *end_chunk.as_ref().unwrap()
+            {
+                start += size;
+                cnt += 1;
+                continue;
+            }
+            let kind = kind_gen(start);
+            let chunk = data.as_ref()[start as usize..(start + size) as usize].to_vec();
+            let args = UploadCanisterSnapshotDataArgs {
+                canister_id: canister_id.into(),
+                snapshot_id,
+                kind,
+                chunk,
+            };
+            self.upload_canister_snapshot_data(&args)?;
+            start += size;
+            cnt += 1;
+        }
+        Ok(())
     }
 
     /// Upload a chunk to the wasm chunk store.
@@ -3532,23 +3763,19 @@ impl StateMachine {
         self.execute_ingress_as(PrincipalId::new_anonymous(), canister_id, method, payload)
     }
 
-    /// Sends an ingress message to the canister with the specified ID.
-    ///
-    /// This function is asynchronous. It returns the ID of the ingress message
-    /// that can be awaited later with [await_ingress].
-    pub fn send_ingress_safe(
+    fn ingress_message(
         &self,
         sender: PrincipalId,
         canister_id: CanisterId,
         method: impl ToString,
         payload: Vec<u8>,
-    ) -> Result<MessageId, UserError> {
+    ) -> SignedIngress {
         // Build `SignedIngress` with maximum ingress expiry and unique nonce,
         // omitting delegations and signatures.
         let ingress_expiry = (self.get_time() + MAX_INGRESS_TTL).as_nanos_since_unix_epoch();
-        let nonce = self.nonce.fetch_add(1, Ordering::Relaxed) + 1;
+        let nonce = self.nonce.fetch_add(1, Ordering::Relaxed);
         let nonce_blob = Some(nonce.to_le_bytes().into());
-        let msg = SignedIngress::try_from(HttpRequestEnvelope::<HttpCallContent> {
+        SignedIngress::try_from(HttpRequestEnvelope::<HttpCallContent> {
             content: HttpCallContent::Call {
                 update: HttpCanisterUpdate {
                     canister_id: Blob(canister_id.get().into_vec()),
@@ -3563,7 +3790,39 @@ impl StateMachine {
             sender_sig: None,
             sender_delegation: None,
         })
-        .unwrap();
+        .unwrap()
+    }
+
+    pub fn ingress_message_cost(
+        &self,
+        sender: PrincipalId,
+        canister_id: CanisterId,
+        method: impl ToString,
+        payload: Vec<u8>,
+    ) -> IngressInductionCost {
+        let msg = self.ingress_message(sender, canister_id, method, payload);
+        let effective_canister_id =
+            extract_effective_canister_id(msg.content(), self.get_subnet_id()).unwrap();
+        let subnet_size = self.nodes.len();
+        self.cycles_account_manager.ingress_induction_cost(
+            msg.content(),
+            effective_canister_id,
+            subnet_size,
+        )
+    }
+
+    /// Sends an ingress message to the canister with the specified ID.
+    ///
+    /// This function is asynchronous. It returns the ID of the ingress message
+    /// that can be awaited later with [await_ingress].
+    pub fn send_ingress_safe(
+        &self,
+        sender: PrincipalId,
+        canister_id: CanisterId,
+        method: impl ToString,
+        payload: Vec<u8>,
+    ) -> Result<MessageId, UserError> {
+        let msg = self.ingress_message(sender, canister_id, method, payload);
 
         // Fetch ingress validation settings from the registry.
         let registry_version = self.registry_client.get_latest_version();
@@ -3579,11 +3838,8 @@ impl StateMachine {
             .block_on(ingress_filter.oneshot((provisional_whitelist, msg.clone().into())))
             .unwrap()?;
 
-        let builder = PayloadBuilder::new()
-            .with_max_expiry_time_from_now(self.time())
-            .with_nonce(nonce)
-            .ingress(sender, canister_id, method, payload);
-        let msg_id = builder.ingress_ids().pop().unwrap();
+        let msg_id = msg.content().id();
+        let builder = PayloadBuilder::new().signed_ingress(msg);
         self.execute_payload(builder);
         Ok(msg_id)
     }
@@ -4224,6 +4480,11 @@ impl PayloadBuilder {
 
         self.ingress_messages.push(msg);
         self.nonce = self.nonce.map(|n| n + 1);
+        self
+    }
+
+    pub fn signed_ingress(mut self, msg: SignedIngress) -> Self {
+        self.ingress_messages.push(msg);
         self
     }
 

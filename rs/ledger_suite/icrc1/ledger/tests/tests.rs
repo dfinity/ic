@@ -1,10 +1,10 @@
-use candid::{CandidType, Decode, Encode, Nat};
+use candid::{CandidType, Decode, Encode, Nat, Principal};
 use ic_agent::identity::Identity;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1::{Block, Operation, Transaction};
 use ic_icrc1_ledger::{
     ChangeFeeCollector, FeatureFlags, InitArgs, InitArgsBuilder as LedgerInitArgsBuilder,
-    LedgerArgument,
+    LedgerArgument, UpgradeArgs,
 };
 use ic_icrc1_test_utils::minter_identity;
 use ic_ledger_canister_core::archive::ArchiveOptions;
@@ -211,6 +211,7 @@ fn encode_init_args(args: ic_ledger_suite_state_machine_tests::InitArgs) -> Ledg
         archive_options: args.archive_options,
         max_memo_length: None,
         feature_flags: args.feature_flags,
+        index_principal: args.index_principal,
     })
 }
 
@@ -263,6 +264,14 @@ fn encode_upgrade_args() -> LedgerArgument {
 #[test]
 fn test_metadata() {
     ic_ledger_suite_state_machine_tests::test_metadata(ledger_wasm(), encode_init_args)
+}
+
+#[test]
+fn test_icrc3_supported_block_types() {
+    ic_ledger_suite_state_machine_tests::test_icrc3_supported_block_types(
+        ledger_wasm(),
+        encode_init_args,
+    );
 }
 
 #[test]
@@ -555,12 +564,82 @@ fn test_archiving_in_chunks_returns_disjoint_block_range_locations() {
 }
 
 #[test]
+fn test_archiving_respects_num_blocks_to_archive_upper_limit() {
+    ic_ledger_suite_state_machine_tests::archiving::test_archiving_respects_num_blocks_to_archive_upper_limit(
+        ledger_wasm(), encode_init_args, 250_000,
+        ic_ledger_suite_state_machine_tests::archiving::query_icrc3_get_blocks,
+        icrc_archives,
+        ic_ledger_suite_state_machine_tests::archiving::query_icrc3_get_blocks,
+    );
+}
+
+#[test]
 fn test_get_blocks_returns_multiple_archive_callbacks() {
     ic_ledger_suite_state_machine_tests::archiving::test_get_blocks_returns_multiple_archive_callbacks(
         ledger_wasm(),
         encode_init_args,
         icrc_archives,
         ic_ledger_suite_state_machine_tests::archiving::query_icrc3_get_blocks,
+    );
+}
+
+fn encode_icrc106_upgrade_args(index_principal: Option<Principal>) -> LedgerArgument {
+    LedgerArgument::Upgrade(Some(UpgradeArgs {
+        metadata: None,
+        token_name: None,
+        token_symbol: None,
+        transfer_fee: None,
+        change_fee_collector: None,
+        max_memo_length: None,
+        feature_flags: None,
+        change_archive_options: None,
+        index_principal,
+    }))
+}
+
+#[test]
+fn test_icrc106_unsupported_if_index_not_set() {
+    ic_ledger_suite_state_machine_tests::icrc_106::test_icrc106_supported_even_if_index_not_set(
+        ledger_wasm(),
+        encode_init_args,
+        encode_icrc106_upgrade_args,
+    );
+}
+
+#[test]
+fn test_icrc106_set_index_in_install() {
+    ic_ledger_suite_state_machine_tests::icrc_106::test_icrc106_set_index_in_install(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_icrc106_set_index_in_upgrade() {
+    ic_ledger_suite_state_machine_tests::icrc_106::test_icrc106_set_index_in_upgrade(
+        ledger_wasm(),
+        encode_init_args,
+        encode_icrc106_upgrade_args,
+    );
+}
+
+#[test]
+fn test_icrc106_set_hardcoded_index_in_upgrade() {
+    ic_ledger_suite_state_machine_tests::icrc_106::test_icrc106_set_hardcoded_index_in_upgrade(
+        ledger_wasm(),
+        encode_init_args,
+        encode_icrc106_upgrade_args,
+    );
+}
+
+#[test]
+fn test_upgrade_from_mainnet_ledger_version() {
+    ic_ledger_suite_state_machine_tests::icrc_106::test_upgrade_downgrade_with_mainnet_ledger(
+        ledger_mainnet_wasm(),
+        ledger_wasm(),
+        encode_init_args,
+        encode_upgrade_args,
+        encode_icrc106_upgrade_args,
     );
 }
 
@@ -945,6 +1024,7 @@ fn test_icrc2_feature_flag_doesnt_disable_icrc2_endpoints() {
         },
         max_memo_length: None,
         feature_flags: Some(FeatureFlags { icrc2: false }),
+        index_principal: None,
     }))
     .unwrap();
     let ledger_id = env
@@ -1119,6 +1199,7 @@ fn test_icrc3_get_archives() {
         },
         max_memo_length: None,
         feature_flags: None,
+        index_principal: None,
     });
     let args = Encode!(&args).unwrap();
     let ledger_id = env
@@ -1194,6 +1275,7 @@ fn test_icrc3_get_blocks() {
         },
         max_memo_length: None,
         feature_flags: None,
+        index_principal: None,
     });
     let args = Encode!(&args).unwrap();
     let ledger_id = env
@@ -1468,6 +1550,7 @@ fn test_icrc3_get_blocks_number_of_blocks_limit() {
         },
         max_memo_length: None,
         feature_flags: None,
+        index_principal: None,
     });
 
     let args = Encode!(&args).unwrap();
@@ -2028,6 +2111,7 @@ mod verify_written_blocks {
                 },
                 max_memo_length: None,
                 feature_flags: Some(FeatureFlags { icrc2: true }),
+                index_principal: None,
             });
 
             let args = Encode!(&ledger_arg_init).unwrap();
@@ -2244,6 +2328,7 @@ mod incompatible_token_type_upgrade {
             },
             max_memo_length: None,
             feature_flags: Some(FeatureFlags { icrc2: false }),
+            index_principal: None,
         }))
         .unwrap()
     }

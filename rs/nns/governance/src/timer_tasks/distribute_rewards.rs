@@ -73,10 +73,9 @@ mod tests {
         thread_local! {
             static METRICS_REGISTRY: RefCell<TimerTaskMetricsRegistry> = RefCell::new(TimerTaskMetricsRegistry::default());
         }
-        let governance_proto = crate::pb::v1::Governance::default();
 
         let governance = Governance::new(
-            governance_proto,
+            Default::default(),
             Arc::new(MockEnvironment::new(Default::default(), 0)),
             Arc::new(StubIcpLedger {}),
             Arc::new(StubCMC {}),

@@ -285,7 +285,7 @@ fn test_specified_id() {
 #[test]
 fn test_dashboard() {
     let (server_url, _) = start_server_helper(None, None, false, false);
-    let mut pic = PocketIcBuilder::new()
+    let pic = PocketIcBuilder::new()
         .with_nns_subnet()
         .with_application_subnet()
         .with_server_url(server_url.clone())
@@ -301,20 +301,14 @@ fn test_dashboard() {
     let canister_2 = pic.create_canister_on_subnet(None, None, app_subnet);
     assert_eq!(pic.get_subnet(canister_2).unwrap(), app_subnet);
 
-    let gateway = pic.make_live(None);
-
     let client = Client::new();
-    let instance_dashboard_url =
-        format!("{}instances/{}/_/dashboard", server_url, pic.instance_id());
-    let gateway_dashboard_url = gateway.join("_/dashboard").unwrap().to_string();
-    for dashboard_url in [instance_dashboard_url, gateway_dashboard_url] {
-        let dashboard = client.get(dashboard_url).send().unwrap();
-        let page = String::from_utf8(dashboard.bytes().unwrap().to_vec()).unwrap();
-        assert!(page.contains(&canister_1.to_string()));
-        assert!(page.contains(&canister_2.to_string()));
-        assert!(page.contains(&nns_subnet.to_string()));
-        assert!(page.contains(&app_subnet.to_string()));
-    }
+    let dashboard_url = format!("{}instances/{}/_/dashboard", server_url, pic.instance_id());
+    let dashboard = client.get(dashboard_url).send().unwrap();
+    let page = String::from_utf8(dashboard.bytes().unwrap().to_vec()).unwrap();
+    assert!(page.contains(&canister_1.to_string()));
+    assert!(page.contains(&canister_2.to_string()));
+    assert!(page.contains(&nns_subnet.to_string()));
+    assert!(page.contains(&app_subnet.to_string()));
 }
 
 #[test]

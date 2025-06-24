@@ -2,7 +2,7 @@ load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canbench.bzl", "rust_canbench")
 load("//bazel:canisters.bzl", "rust_canister")
-load("//bazel:defs.bzl", "rust_bench", "rust_test_suite_with_extra_srcs")
+load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 load("//bazel:prost.bzl", "generated_files_check")
 load(":feature_flags.bzl", "test_with_tla")
 
@@ -354,17 +354,6 @@ rust_test(
     ],
 )
 
-rust_bench(
-    name = "scale_bench",
-    srcs = ["benches/scale.rs"],
-    proc_macro_deps = ["@crate_index//:async-trait"],
-    deps = [
-        # Keep sorted.
-        ":governance",
-        "@crate_index//:criterion",
-    ] + DEPENDENCIES + DEV_DEPENDENCIES,
-)
-
 # all TLA models
 # NOTE: the test runner assumes unique basenames
 filegroup(
@@ -400,6 +389,7 @@ rust_test_suite_with_extra_srcs(
     extra_srcs = glob([
         "tests/*/*.rs",
     ]) + ["tests/fake.rs"],
+    flaky = True,  # the governance test times out in over 2% of runs
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     toolchains = ["@bazel_tools//tools/jdk:current_java_runtime"],
     deps = [":governance--test_feature"] + DEPENDENCIES + DEV_DEPENDENCIES + [

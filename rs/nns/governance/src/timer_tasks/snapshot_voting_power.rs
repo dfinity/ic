@@ -92,9 +92,10 @@ mod tests {
     use icp_ledger::Subaccount;
     use std::sync::Arc;
 
+    use ic_nns_governance_api as api;
+
     use crate::{
         neuron::{DissolveStateAndAge, NeuronBuilder},
-        pb::v1::{Governance as GovernanceProto, NetworkEconomics, VotingPowerEconomics},
         test_utils::{MockEnvironment, MockRandomness, StubCMC, StubIcpLedger},
     };
 
@@ -117,9 +118,9 @@ mod tests {
 
     fn new_governance_for_test() -> Governance {
         let mut governance = Governance::new(
-            GovernanceProto {
-                economics: Some(NetworkEconomics {
-                    voting_power_economics: Some(VotingPowerEconomics::DEFAULT),
+            api::Governance {
+                economics: Some(api::NetworkEconomics {
+                    voting_power_economics: Some(api::VotingPowerEconomics::DEFAULT),
                     ..Default::default()
                 }),
                 ..Default::default()
@@ -130,7 +131,7 @@ mod tests {
             Box::new(MockRandomness::new()),
         );
         let dissolve_delay_seconds =
-            VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS;
+            api::VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS;
         governance
             .neuron_store
             .add_neuron(

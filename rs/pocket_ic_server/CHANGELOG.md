@@ -11,6 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+- The endpoint `/instances/<instance_id>/update/await_ingress_message` (execute rounds on the PocketIc instance until the message is executed): to fix a performance regression when using the two endpoints `/instances/<instance_id>/update/tick` and `/instances/<instance_id>/read/ingress_status` in a loop.
+
+
+
+## 9.0.3 - 2025-06-06
+
 ### Changed
 - The endpoint `/instances/<instance_id>/auto_progress` sets the (certified) time of the PocketIC instance
   to the current system time before starting to execute rounds automatically.
@@ -22,7 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
-## 9.0.2 - 2025-05-16
+## 9.0.2 - 2025-05-27
 
 ### Fixed
 - Crash when creating a canister with a specified id on a PocketIC instance created from an existing PocketIC state.

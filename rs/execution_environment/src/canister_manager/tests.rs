@@ -6642,8 +6642,7 @@ fn memory_usage_updates_increment_subnet_available_memory() {
     );
 
     // load canister snapshot
-    let load_snapshot_args =
-        LoadCanisterSnapshotArgs::new(canister_id, snapshot_id.try_into().unwrap(), None);
+    let load_snapshot_args = LoadCanisterSnapshotArgs::new(canister_id, snapshot_id, None);
     test.subnet_message("load_canister_snapshot", load_snapshot_args.encode())
         .unwrap();
 

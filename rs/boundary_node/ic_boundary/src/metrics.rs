@@ -2,7 +2,7 @@
 
 use std::{
     sync::{Arc, RwLock},
-    time::Instant,
+    time::{Instant, SystemTime},
 };
 
 use anyhow::Error;
@@ -14,18 +14,25 @@ use axum::{
     response::{IntoResponse, Response},
     Extension,
 };
+use bytes::Bytes;
+use candid::Principal;
 use http::header::CONTENT_TYPE;
-use ic_bn_lib::prometheus::{
-    proto::MetricFamily, register_histogram_vec_with_registry,
-    register_int_counter_vec_with_registry, register_int_gauge_vec_with_registry,
-    register_int_gauge_with_registry, Encoder, HistogramOpts, HistogramVec, IntCounterVec,
-    IntGauge, IntGaugeVec, Registry, TextEncoder,
-};
+use humantime::format_rfc3339;
 use ic_bn_lib::{
     http::{body::CountingBody, cache::CacheStatus, http_version, ConnInfo},
     tasks::Run,
 };
+use ic_bn_lib::{
+    prometheus::{
+        proto::MetricFamily, register_histogram_vec_with_registry,
+        register_int_counter_vec_with_registry, register_int_gauge_vec_with_registry,
+        register_int_gauge_with_registry, Encoder, HistogramOpts, HistogramVec, IntCounterVec,
+        IntGauge, IntGaugeVec, Registry, TextEncoder,
+    },
+    pubsub::Broker,
+};
 use ic_types::{messages::ReplicaHealthStatus, CanisterId, SubnetId};
+use serde_json::json;
 use sha3::{Digest, Sha3_256};
 use tikv_jemalloc_ctl::{epoch, stats};
 use tokio_util::sync::CancellationToken;
@@ -286,6 +293,7 @@ pub struct HttpMetricParams {
     pub request_sizer: HistogramVec,
     pub response_sizer: HistogramVec,
     pub anonymization_salt: Arc<ArcSwapOption<Vec<u8>>>,
+    pub logs_broker: Option<Arc<Broker<Bytes, Principal>>>,
 }
 
 impl HttpMetricParams {
@@ -294,6 +302,7 @@ impl HttpMetricParams {
         action: &str,
         log_failed_requests_only: bool,
         anonymization_salt: Arc<ArcSwapOption<Vec<u8>>>,
+        logs_broker: Option<Arc<Broker<Bytes, Principal>>>,
     ) -> Self {
         const LABELS_HTTP: &[&str] = &[
             "request_type",
@@ -345,6 +354,7 @@ impl HttpMetricParams {
             .unwrap(),
 
             anonymization_salt,
+            logs_broker,
         }
     }
 }
@@ -458,16 +468,12 @@ pub async fn metrics_middleware(
         .unwrap_or("N/A".into());
 
     // for canister requests we extract canister_id
-    let canister_id = request
-        .extensions()
-        .get::<CanisterId>()
-        .map(|x| x.to_string());
+    let canister_id = request.extensions().get::<CanisterId>().map(|x| x.get().0);
+    let canister_id_str = canister_id.map(|x| x.to_string());
 
     // for /api/v2/subnet requests we extract subnet_id directly from extension
-    let subnet_id = request
-        .extensions()
-        .get::<SubnetId>()
-        .map(|x| x.to_string());
+    let subnet_id = request.extensions().get::<SubnetId>().map(|x| x.get().0);
+    let subnet_id_str = subnet_id.map(|x| x.to_string());
 
     let http_version = http_version(request.version());
 
@@ -480,7 +486,8 @@ pub async fn metrics_middleware(
     let subnet_id = subnet_id.or(response
         .extensions()
         .get::<Arc<RouteSubnet>>()
-        .map(|x| x.id.to_string()));
+        .map(|x| x.id));
+    let subnet_id_str = subnet_id_str.or(subnet_id.map(|x| x.to_string()));
 
     // Extract extensions
     let ctx = response
@@ -514,6 +521,7 @@ pub async fn metrics_middleware(
         request_sizer,
         response_sizer,
         anonymization_salt,
+        logs_broker,
     } = metric_params;
 
     let (parts, body) = response.into_parts();
@@ -541,7 +549,9 @@ pub async fn metrics_middleware(
         // Prepare labels
         // Otherwise "temporary value dropped" error occurs
         let error_cause_lbl = error_cause.clone().unwrap_or("none".to_string());
-        let subnet_id_lbl = subnet_id.clone().unwrap_or(SUBNET_ID_UNKNOWN.to_string());
+        let subnet_id_lbl = subnet_id_str
+            .clone()
+            .unwrap_or_else(|| SUBNET_ID_UNKNOWN.to_string());
         let cache_status_lbl = &cache_status.to_string();
         let cache_bypass_reason_lbl = cache_bypass_reason.clone().unwrap_or("none".to_string());
         let retry_lbl =
@@ -608,9 +618,9 @@ pub async fn metrics_middleware(
                 error_cause,
                 error_details,
                 status = status_code.as_u16(),
-                subnet_id,
+                subnet_id_str,
                 node_id,
-                canister_id,
+                canister_id_str,
                 canister_id_actual = canister_id_actual.map(|x| x.to_string()),
                 canister_id_cbor = ctx.canister_id.map(|x| x.to_string()),
                 sender,
@@ -621,12 +631,48 @@ pub async fn metrics_middleware(
                 request_size = ctx.request_size,
                 response_size,
                 retry_count = &retry_result.as_ref().map(|x| x.retries),
-                retry_success = &retry_result.map(|x| x.success),
+                retry_success = &retry_result.as_ref().map(|x| x.success),
                 %cache_status,
-                cache_bypass_reason = cache_bypass_reason.map(|x| x.to_string()),
+                cache_bypass_reason = cache_bypass_reason_lbl,
                 country_code,
                 client_ip_family = ip_family,
             );
+        }
+
+        // See if have a broker, a canister_id and then extract the topic
+        if let Some(topic) = logs_broker
+            .zip(canister_id)
+            .and_then(|(broker, id)| broker.topic_get(&id))
+        {
+            let ts = format_rfc3339(SystemTime::now()).to_string();
+
+            let msg = json!({
+                "cache_status": cache_status_lbl,
+                "cache_bypass_reason": cache_bypass_reason_lbl,
+                "client_addr": remote_addr,
+                "client_ip_family": ip_family,
+                "client_country_code": country_code,
+                "duration": proc_duration,
+                "error_cause": error_cause,
+                "error_details": error_details,
+                "http_status": status_code.as_u16(),
+                "http_version": http_version,
+                "ic_canister_id": canister_id_str,
+                "ic_node_id": node_id.unwrap_or_default(),
+                "ic_subnet_id": subnet_id_str,
+                "ic_method": ctx.method_name,
+                "ic_sender": sender,
+                "request_id": request_id,
+                "request_size": ctx.request_size,
+                "request_type": request_type,
+                "response_size": response_size,
+                "retry_count": retry_result.as_ref().map(|x| x.retries).unwrap_or(0),
+                "retry_success": &retry_result.map(|x| x.success).unwrap_or_default(),
+                "timestamp": ts,
+            });
+
+            // We don't care for errors in this case
+            let _ = topic.publish(Bytes::from(msg.to_string()));
         }
     });
 

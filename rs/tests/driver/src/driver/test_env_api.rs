@@ -139,7 +139,6 @@ use super::{
 };
 use crate::{
     driver::{
-        boundary_node::BoundaryNodeVm,
         constants::{self, kibana_link, GROUP_TTL, SSH_USERNAME},
         farm::{Farm, GroupSpec},
         log_events,
@@ -2449,17 +2448,6 @@ impl TestEnvAttribute for InitialReplicaVersion {
     fn attribute_name() -> String {
         "initial_replica_version".to_string()
     }
-}
-
-pub fn await_boundary_node_healthy(env: &TestEnv, boundary_node_name: &str) {
-    let boundary_node = env
-        .get_deployed_boundary_node(boundary_node_name)
-        .unwrap()
-        .get_snapshot()
-        .unwrap();
-    boundary_node
-        .await_status_is_healthy()
-        .expect("BN did not come up!");
 }
 
 pub fn emit_group_event(log: &slog::Logger, group: &str) {

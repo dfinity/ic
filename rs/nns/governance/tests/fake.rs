@@ -14,17 +14,16 @@ use ic_nns_common::{
 };
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID,
-    NODE_REWARDS_CANISTER_ID, REGISTRY_CANISTER_ID, SNS_WASM_CANISTER_ID,
+    NODE_REWARDS_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
 use ic_nns_governance::{
     governance::{Environment, Governance, HeapGrowthPotential, RngError},
     pb::v1::{
         manage_neuron, manage_neuron::NeuronIdOrSubaccount, proposal, ExecuteNnsFunction,
-        GovernanceError, ManageNeuron, Motion, NetworkEconomics, Neuron, NnsFunction, Proposal,
-        Vote,
+        GovernanceError, ManageNeuron, Motion, NetworkEconomics, NnsFunction, Proposal, Vote,
     },
-    use_node_provider_reward_canister,
 };
+use ic_nns_governance_api::Neuron;
 use ic_nns_governance_api::{manage_neuron_response, ManageNeuronResponse};
 use ic_sns_root::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
 use ic_sns_swap::pb::v1 as sns_swap_pb;
@@ -32,10 +31,9 @@ use ic_sns_wasm::pb::v1::{DeployedSns, ListDeployedSnsesRequest, ListDeployedSns
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
 use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
 use lazy_static::lazy_static;
-use maplit::{btreemap, hashmap};
+use maplit::btreemap;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
-use registry_canister::pb::v1::NodeProvidersMonthlyXdrRewards;
 use std::{
     collections::{hash_map::Entry, BTreeMap, HashMap},
     convert::{TryFrom, TryInto},
@@ -578,32 +576,20 @@ impl Environment for FakeDriver {
         }
 
         if method_name == "get_node_providers_monthly_xdr_rewards" {
-            if use_node_provider_reward_canister() {
-                assert_eq!(PrincipalId::from(target), NODE_REWARDS_CANISTER_ID.get());
+            assert_eq!(PrincipalId::from(target), NODE_REWARDS_CANISTER_ID.get());
 
-                return Ok(Encode!(&GetNodeProvidersMonthlyXdrRewardsResponse {
-                    rewards: Some(ic_node_rewards_canister_api::monthly_rewards::NodeProvidersMonthlyXdrRewards {
+            return Ok(Encode!(&GetNodeProvidersMonthlyXdrRewardsResponse {
+                rewards: Some(
+                    ic_node_rewards_canister_api::monthly_rewards::NodeProvidersMonthlyXdrRewards {
                         rewards: btreemap! {
                             PrincipalId::new_user_test_id(1).0 => NODE_PROVIDER_REWARD,
                         },
                         registry_version: Some(5)
-                    }),
-                    error: None
-                })
-                .unwrap());
-            } else {
-                assert_eq!(PrincipalId::from(target), REGISTRY_CANISTER_ID.get());
-
-                return Ok(Encode!(&Ok::<NodeProvidersMonthlyXdrRewards, String>(
-                    NodeProvidersMonthlyXdrRewards {
-                        rewards: hashmap! {
-                            PrincipalId::new_user_test_id(1).to_string() => NODE_PROVIDER_REWARD,
-                        },
-                        registry_version: Some(5)
                     }
-                ))
-                .unwrap());
-            }
+                ),
+                error: None
+            })
+            .unwrap());
         }
 
         if method_name == "get_average_icp_xdr_conversion_rate" {

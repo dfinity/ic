@@ -1,9 +1,9 @@
 pub mod config_ini;
 pub mod deployment_json;
 pub mod generate_testnet_config;
+pub mod guest_vm_config;
 pub mod guestos_bootstrap_image;
 pub mod guestos_config;
-pub mod update_config;
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -17,7 +17,6 @@ pub static DEFAULT_SETUPOS_DEPLOYMENT_JSON_PATH: &str = "/data/deployment.json";
 
 pub static DEFAULT_SETUPOS_HOSTOS_CONFIG_OBJECT_PATH: &str = "/var/ic/config/config-hostos.json";
 
-// TODO(NODE-1518): remove unused constants
 pub static DEFAULT_HOSTOS_CONFIG_INI_FILE_PATH: &str = "/boot/config/config.ini";
 pub static DEFAULT_HOSTOS_DEPLOYMENT_JSON_PATH: &str = "/boot/config/deployment.json";
 pub static DEFAULT_HOSTOS_CONFIG_OBJECT_PATH: &str = "/boot/config/config.json";

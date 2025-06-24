@@ -370,25 +370,20 @@ pub fn make_nns_canister_records_key() -> String {
     "nns_canister_records".to_string()
 }
 
-/// Converts first 8 bits of canisterID to u64.  This is used to create a key for
-/// canister ranges.
-fn canister_id_to_u64(canister_id: CanisterId) -> u64 {
-    let bytes: [u8; 8] = canister_id.get().to_vec()[0..8]
-        .try_into()
-        .expect("Could not convert vector to [u8; 8]");
-
-    u64::from_be_bytes(bytes)
-}
-
-pub fn make_canister_ranges_key(range_start: CanisterId, subnet_id: SubnetId) -> String {
+/// Returns a key for the CanisterRange registry entry
+pub fn make_canister_ranges_key(range_start: CanisterId) -> String {
     if CanisterId::try_from_principal_id(range_start.get()).is_err() {
+        // try_from_principal_id ensures the CanisterId is plausibly representing a u64
+        // which is currently an implied requirement for our routing table.
         panic!("Non-routable CanisterId being used as a key");
     }
-    let range_start_u64 = canister_id_to_u64(range_start);
-    format!(
-        "{}{}_{:016X}",
-        CANISTER_RANGES_PREFIX, subnet_id, range_start_u64
-    )
+
+    // This has the same lexicographic ordering as the u64's that are used to create CanisterId, because
+    // the bytes are big-endian encoded in the Principal.
+    // If at some point we stop having the same length CanisterIds, we will need to prepend a length
+    // byte into this encoding to have the same properties apply, and that will also require a data migration.
+    let encoded_range_start = hex::encode(range_start.get().to_vec());
+    format!("{}{}", CANISTER_RANGES_PREFIX, encoded_range_start)
 }
 
 #[cfg(test)]

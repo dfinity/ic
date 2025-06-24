@@ -409,6 +409,8 @@ pub struct CanisterChangeFromCanister {
 pub struct CanisterCreation {
     #[prost(message, repeated, tag = "1")]
     pub controllers: ::prost::alloc::vec::Vec<super::super::super::types::v1::PrincipalId>,
+    #[prost(bytes = "vec", optional, tag = "2")]
+    pub environment_variables_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
 #[derive(Clone, Copy, PartialEq, ::prost::Message)]
 pub struct CanisterCodeUninstall {}
@@ -435,6 +437,18 @@ pub struct CanisterLoadSnapshot {
     pub taken_at_timestamp: u64,
     #[prost(bytes = "vec", tag = "3")]
     pub snapshot_id: ::prost::alloc::vec::Vec<u8>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterControllers {
+    #[prost(message, repeated, tag = "1")]
+    pub controllers: ::prost::alloc::vec::Vec<super::super::super::types::v1::PrincipalId>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterSettingsChange {
+    #[prost(message, optional, tag = "1")]
+    pub controllers: ::core::option::Option<CanisterControllers>,
+    #[prost(bytes = "vec", optional, tag = "2")]
+    pub environment_variables_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterRename {
@@ -487,6 +501,8 @@ pub mod canister_change {
         #[prost(message, tag = "9")]
         CanisterLoadSnapshot(super::CanisterLoadSnapshot),
         #[prost(message, tag = "10")]
+        CanisterSettingsChange(super::CanisterSettingsChange),
+        #[prost(message, tag = "11")]
         CanisterRename(super::CanisterRename),
     }
 }
@@ -681,6 +697,12 @@ pub struct CanisterStateBits {
     /// canister.
     #[prost(message, optional, tag = "54")]
     pub tasks: ::core::option::Option<TaskQueue>,
+    /// A map of environment variable names to their values
+    #[prost(btree_map = "string, string", tag = "55")]
+    pub environment_variables: ::prost::alloc::collections::BTreeMap<
+        ::prost::alloc::string::String,
+        ::prost::alloc::string::String,
+    >,
     #[prost(oneof = "canister_state_bits::CanisterStatus", tags = "11, 12, 13")]
     pub canister_status: ::core::option::Option<canister_state_bits::CanisterStatus>,
 }

@@ -279,8 +279,8 @@ fn test(env: TestEnv, binary_version: String, target_version: String) {
         versions_hot: 1,
     });
     let config = Config {
-        push_metrics: false,
-        metrics_urls: vec![],
+        push_metrics: true,
+        metrics_urls: vec!["https://127.0.0.1:8080".try_into().unwrap()],
         network_name: "testnet".to_string(),
         backup_instance: "backup_test_node".to_string(),
         nns_url: Some(nns_node.get_public_url()),

@@ -17,13 +17,13 @@ use crate::{
 };
 use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat, Principal};
+use evm_rpc_types::Hex32;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_cketh_minter::endpoints::ckerc20::{
     RetrieveErc20Request, WithdrawErc20Arg, WithdrawErc20Error,
 };
 use ic_cketh_minter::endpoints::events::{EventPayload, EventSource};
 use ic_cketh_minter::endpoints::{CkErc20Token, MinterInfo};
-use ic_cketh_minter::eth_rpc::FixedSizeData;
 use ic_cketh_minter::numeric::{BlockNumber, Erc20Value};
 use ic_cketh_minter::SCRAPING_ETH_LOGS_INTERVAL;
 use ic_ethereum_types::Address;
@@ -376,7 +376,7 @@ impl CkErc20Setup {
     pub fn supported_erc20_contract_address_topics(&self) -> Vec<String> {
         self.supported_erc20_contract_addresses()
             .iter()
-            .map(|erc20_address| FixedSizeData(erc20_address.into()).to_string())
+            .map(|erc20_address| Hex32::from(<[u8; 32]>::from(erc20_address)).to_string())
             .collect()
     }
 

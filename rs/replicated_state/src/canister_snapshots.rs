@@ -20,7 +20,6 @@ use ic_types::{
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use ic_wasm_types::CanisterModule;
-use serde_bytes::ByteBuf;
 
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -474,8 +473,16 @@ impl CanisterSnapshot {
         &self.execution_snapshot.stable_memory
     }
 
+    pub fn stable_memory_mut(&mut self) -> &mut PageMemory {
+        &mut self.execution_snapshot.stable_memory
+    }
+
     pub fn wasm_memory(&self) -> &PageMemory {
         &self.execution_snapshot.wasm_memory
+    }
+
+    pub fn wasm_memory_mut(&mut self) -> &mut PageMemory {
+        &mut self.execution_snapshot.wasm_memory
     }
 
     pub fn canister_module(&self) -> &CanisterModule {
@@ -615,14 +622,9 @@ impl ValidatedSnapshotMetadata {
             return Err(MetadataValidationError::CertifiedDataTooLarge);
         }
 
-        let replace_snapshot = raw
-            .replace_snapshot
-            .map(ByteBuf::into_vec)
-            .map(SnapshotId::try_from)
-            .map(Result::unwrap); // TODO: EXC-1997 (safe due to Payload::decode)
         Ok(Self {
             canister_id: raw.canister_id,
-            replace_snapshot,
+            replace_snapshot: raw.replace_snapshot,
             wasm_module_size: NumBytes::new(raw.wasm_module_size),
             exported_globals: raw.exported_globals,
             wasm_memory_size: NumWasmPages::new(

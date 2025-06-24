@@ -148,10 +148,6 @@ UNIVERSAL_VM_RUNTIME_DEPS = [
 
 GRAFANA_RUNTIME_DEPS = UNIVERSAL_VM_RUNTIME_DEPS
 
-BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS = [
-    "//ic-os/boundary-guestos:scripts/build-bootstrap-config-image.sh",
-]
-
 IC_GATEWAY_RUNTIME_DEPS = UNIVERSAL_VM_RUNTIME_DEPS + [
     "//rs/tests:ic_gateway_uvm_config_image",
 ]

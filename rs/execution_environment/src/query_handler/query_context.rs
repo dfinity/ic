@@ -226,6 +226,10 @@ impl<'a> QueryContext<'a> {
                         self.log,
                         "Running composite canister http transform on canister {}.", query.receiver
                     );
+                    return Err(UserError::new(
+                        ErrorCode::CompositeQueryCalledInReplicatedMode,
+                        "Composite query cannot be used as transform in canister http outcalls.",
+                    ));
                 }
             }
             QuerySource::User { .. } => (),
@@ -622,24 +626,22 @@ impl<'a> QueryContext<'a> {
             InstructionLimits::new(FlagStatus::Disabled, instruction_limit, instruction_limit);
         let mut execution_parameters = self.execution_parameters(&canister, instruction_limits);
         let api_type = match response.response_payload {
-            Payload::Data(payload) => ApiType::reply_callback(
+            Payload::Data(payload) => ApiType::composite_reply_callback(
                 time,
                 call_origin.get_principal(),
                 payload.to_vec(),
                 incoming_cycles,
                 call_context_id,
                 call_responded,
-                execution_parameters.execution_mode.clone(),
                 call_context.instructions_executed(),
             ),
-            Payload::Reject(context) => ApiType::reject_callback(
+            Payload::Reject(context) => ApiType::composite_reject_callback(
                 time,
                 call_origin.get_principal(),
                 context,
                 incoming_cycles,
                 call_context_id,
                 call_responded,
-                execution_parameters.execution_mode.clone(),
                 call_context.instructions_executed(),
             ),
         };
@@ -744,10 +746,9 @@ impl<'a> QueryContext<'a> {
         };
         let (cleanup_output, output_execution_state, output_system_state) =
             self.hypervisor.execute(
-                ApiType::Cleanup {
+                ApiType::CompositeCleanup {
                     caller: call_origin.get_principal(),
                     time,
-                    execution_mode: execution_parameters.execution_mode.clone(),
                     call_context_instructions_executed,
                 },
                 time,

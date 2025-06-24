@@ -35,6 +35,7 @@ use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
 use icrc_ledger_types::icrc2::approve::ApproveArgs;
+use icrc_ledger_types::icrc2::transfer_from::TransferFromArgs;
 use lazy_static::lazy_static;
 use num_traits::cast::ToPrimitive;
 use pocket_ic::{PocketIc, PocketIcBuilder};
@@ -56,7 +57,6 @@ use std::str::FromStr;
 use std::time::Instant;
 use std::{
     path::PathBuf,
-    process::Command,
     sync::Arc,
     time::{Duration, SystemTime},
 };
@@ -90,24 +90,6 @@ fn rosetta_bin() -> PathBuf {
 
 fn rosetta_client_bin() -> PathBuf {
     path_from_env("ROSETTA_CLIENT_BIN_PATH")
-}
-
-fn rosetta_cli() -> String {
-    match std::env::var("ROSETTA_CLI").ok() {
-        Some(binary) => binary,
-        None => String::from("rosetta-cli"),
-    }
-}
-
-fn local(file: &str) -> String {
-    match std::env::var("CARGO_MANIFEST_DIR") {
-        Ok(path) => std::path::PathBuf::from(path)
-            .join(file)
-            .into_os_string()
-            .into_string()
-            .unwrap(),
-        Err(_) => String::from(file),
-    }
 }
 
 /// Represents an ICRC-1 ledger canister with its configuration and agent
@@ -443,6 +425,14 @@ async fn generate_block_indices(
                     .unwrap(),
                 LedgerEndpointArg::TransferArg(transfer_arg) => caller_agent
                     .transfer(transfer_arg.clone())
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .0
+                    .to_u64()
+                    .unwrap(),
+                LedgerEndpointArg::TransferFromArg(transfer_from_arg) => caller_agent
+                    .transfer_from(transfer_from_arg.clone())
                     .await
                     .unwrap()
                     .unwrap()
@@ -1398,6 +1388,29 @@ fn test_account_balance() {
                                     involved_accounts.push(*to);
                                 }
                             }
+                            LedgerEndpointArg::TransferFromArg(TransferFromArgs {
+                                from,
+                                to,
+                                amount,
+                                ..
+                            }) => {
+                                // For TransferFrom we always deduct the transfer fee. TransferFrom
+                                // from or to the minter account is not allowed, so we do not need
+                                // to check for it.
+                                accounts_balances.entry(*from).and_modify(|balance| {
+                                    *balance -= amount.0.to_u64().unwrap();
+                                    *balance -= DEFAULT_TRANSFER_FEE;
+                                });
+                                involved_accounts.push(*from);
+
+                                accounts_balances
+                                    .entry(*to)
+                                    .and_modify(|balance| {
+                                        *balance += amount.0.to_u64().unwrap();
+                                    })
+                                    .or_insert(amount.0.to_u64().unwrap());
+                                involved_accounts.push(*to);
+                            }
                         };
 
                         for account in involved_accounts {
@@ -2111,8 +2124,27 @@ fn test_search_transactions() {
         .unwrap()
 }
 
+#[cfg(not(target_os = "macos"))]
 #[test]
 fn test_cli_data() {
+    fn rosetta_cli() -> String {
+        match std::env::var("ROSETTA_CLI").ok() {
+            Some(binary) => binary,
+            None => String::from("rosetta-cli"),
+        }
+    }
+
+    fn local(file: &str) -> String {
+        match std::env::var("CARGO_MANIFEST_DIR") {
+            Ok(path) => std::path::PathBuf::from(path)
+                .join(file)
+                .into_os_string()
+                .into_string()
+                .unwrap(),
+            Err(_) => String::from(file),
+        }
+    }
+
     let mut runner = TestRunner::new(TestRunnerConfig {
         max_shrink_iters: 0,
         cases: *NUM_TEST_CASES,
@@ -2154,7 +2186,7 @@ fn test_cli_data() {
                         0,
                     )
                     .await;
-                    let output = Command::new(rosetta_cli())
+                    let output = std::process::Command::new(rosetta_cli())
                         .args([
                             "check:data",
                             "--configuration-file",

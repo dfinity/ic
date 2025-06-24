@@ -4,7 +4,7 @@ inputs:
   diff-only:
     required: false
     default: false
-  release-build:
+  stamp-build:
     required: false
     default: true
   upload-artifacts:
@@ -20,8 +20,6 @@ inputs:
     required: true
   CLOUD_CREDENTIALS_CONTENT:
     required: false
-  SSH_PRIVATE_KEY_BACKUP_POD:
-    required: false
   GPG_PASSPHRASE:
     required: true
     description: "GPG key to encrypt build events. Upload can be disabled by explicitly setting the input to an empty string."
@@ -29,22 +27,6 @@ inputs:
 runs:
   using: "composite"
   steps:
-      - name: Set up backup pod access
-        shell: bash
-        if: inputs.SSH_PRIVATE_KEY_BACKUP_POD != ''
-        run: |
-          # The following adds the SSH private key to the ssh-agent such that CI can SSH into the backup pod.
-          if [ -z "${SSH_AUTH_SOCK:-}" ]; then
-            eval "$(ssh-agent -s)"
-            ssh-add - <<< '${{ inputs.SSH_PRIVATE_KEY_BACKUP_POD }}'
-            echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
-          fi
-
-          rm -rf ~/.ssh
-          mkdir -p ~/.ssh
-          chmod 0700 ~/.ssh
-          echo -e "Host *\nUser github-runner\n" > ~/.ssh/config
-
       - name: Run Bazel Commands
         uses: ./.github/actions/bazel
         env:
@@ -55,9 +37,10 @@ runs:
           execlogs-artifact-name: ${{ inputs.execlogs-artifact-name }}
           run: |
             set -euo pipefail
+            echo "::notice::Node Name: ${NODE_NAME}"
 
             diff_only='${{ inputs.diff-only }}'
-            release_build='${{ inputs.release-build }}'
+            stamp_build='${{ inputs.stamp-build }}'
 
             bazel_args=(
                 # default all tests to fail ...
@@ -70,7 +53,7 @@ runs:
                 --flaky_test_attempts=//rs/tests/.*@3
             )
 
-            if [[ $release_build == "true" ]]; then
+            if [[ $stamp_build == "true" ]]; then
               # make sure the version is stamped in
               bazel_args+=( --config=stamped )
             fi
@@ -81,15 +64,6 @@ runs:
             for tgt in $BAZEL_TARGETS; do
               bazel_targets+=( "$tgt" )
             done
-
-            # jemalloc -- or rather, the "hermetic" zig toolchain -- has issues when too
-            # many targets are built concurrently (leads to determinism issues & linking
-            # errors).
-            #
-            # To work around this, we build jemalloc separately.
-            if [ $(uname -o) != "Darwin" ]; then
-              bazel build "${bazel_args[@]}" @@jemalloc//:libjemalloc
-            fi
 
             if [[ $diff_only == "true" ]]; then
                 target_pattern_file=$(mktemp)
@@ -132,10 +106,10 @@ runs:
         if: inputs.upload-artifacts == 'true' && inputs.CLOUD_CREDENTIALS_CONTENT != ''
         with:
           run: |
-            release_build='${{ inputs.release-build }}'
+            stamp_build='${{ inputs.stamp-build }}'
 
-            if [[ $release_build != "true" ]]; then
-              echo "refusing to upload non-release artifacts"
+            if [[ $stamp_build != "true" ]]; then
+              echo "refusing to upload non-stamped artifacts"
               exit 1
             fi
 
@@ -147,7 +121,20 @@ runs:
             fi
 
             echo uploading artifacts to remote storage
+            upload_output=$(mktemp) # used in summary
+
             # with --check_up_to_date Bazel will error out if the artifacts
             # to be uploaded were not built in the build step above
             # (this ensures that the exact artifacts built above are uploaded)
-            bazel run --check_up_to_date //:upload-artifacts >>"$GITHUB_STEP_SUMMARY"
+            bazel run --check_up_to_date //:upload-artifacts >"$upload_output"
+            n_uploaded=$(wc -l <"$upload_output")
+            echo "'$n_uploaded' artifacts uploaded"
+
+            # the upload list can get quite big, so we wrap in details/summary
+            {
+              echo '<details><summary>Uploaded '"$n_uploaded"' Artifacts</summary>';
+              cat "$upload_output"
+              echo '</details>';
+            } >>"$GITHUB_STEP_SUMMARY"
+
+            rm "$upload_output"

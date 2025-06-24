@@ -60,3 +60,6 @@ mod timers;
 
 #[cfg(test)]
 mod golden_state_swap_upgrade_twice;
+
+#[cfg(test)]
+mod get_metrics;

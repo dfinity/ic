@@ -57,7 +57,7 @@ impl RecurringAsyncTask for CalculateDistributableRewardsTask {
         match total_supply {
             Ok(total_supply) => {
                 self.governance.with_borrow_mut(|governance| {
-                    governance.distribute_rewards(total_supply);
+                    governance.distribute_voting_rewards_to_neurons(total_supply);
                 });
             }
             Err(err) => {
@@ -86,6 +86,7 @@ mod tests {
     use crate::canister_state::{set_governance_for_tests, CanisterRandomnessGenerator};
     use crate::governance::Governance;
     use crate::test_utils::{MockEnvironment, StubCMC, StubIcpLedger};
+    use ic_nns_governance_api as api;
     use std::sync::Arc;
 
     fn test_delay_until_next_run(
@@ -164,17 +165,15 @@ mod tests {
         let genesis_timestamp_seconds = 10_000;
         let latest_reward_day_after_genesis = 5;
 
-        let governance_proto = crate::pb::v1::Governance {
-            genesis_timestamp_seconds,
-            latest_reward_event: Some(crate::pb::v1::RewardEvent {
-                day_after_genesis: latest_reward_day_after_genesis,
-                ..Default::default()
-            }),
-            ..Default::default()
-        };
-
         let gov = Governance::new(
-            governance_proto,
+            api::Governance {
+                genesis_timestamp_seconds,
+                latest_reward_event: Some(api::RewardEvent {
+                    day_after_genesis: latest_reward_day_after_genesis,
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
             Arc::new(MockEnvironment::new(vec![], now)),
             Arc::new(StubIcpLedger {}),
             Arc::new(StubCMC {}),

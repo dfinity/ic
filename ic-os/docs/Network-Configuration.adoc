@@ -13,7 +13,7 @@ Network configuration details for each IC-OS:
 
 == Deterministic MAC Address
 
-Each IC-OS node must have a unique but deterministic MAC address derived from its BMC MAC address, deployment environment (mainnet vs testnet), and variant type (SetupOS, HostOS, GuestOS, BoundaryGuestOS). This MAC address is then utilized to generate the node's network configuration.
+Each IC-OS node must have a unique but deterministic MAC address derived from its BMC MAC address, deployment environment (mainnet vs testnet), and variant type (SetupOS, HostOS, GuestOS). This MAC address is then utilized to generate the node's network configuration.
 
 For details, see the link:../../rs/ic_os/deterministic_ips/README.md[mac_address README].
 
@@ -33,7 +33,6 @@ Examples:
 
   host-3cecef6b3799
   replica-3cecef6b3799
-  boundary-3cecef6b3799
 
 *2. Persistent Setup Hostname*
 
@@ -48,7 +47,6 @@ Examples:
 
   host-3cecef6b3799-4wd4u
   replica--3cecef6b3799-4wd4u
-  boundary-3cecef6b3799-4wd4u
 
 == IPv6 Address
 

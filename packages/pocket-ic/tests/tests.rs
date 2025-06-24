@@ -2813,3 +2813,84 @@ fn with_empty_subnet_state() {
         .with_subnet_state(SubnetKind::Application, state_dir_path_buf)
         .build();
 }
+
+#[test]
+fn registry_after_instance_restart() {
+    // Create a PocketIC instance with NNS, SNS, II, fiduciary, bitcoin,
+    // 5 application, and 5 system subnets
+    // (a sufficiently high number so that the order of their creation
+    // is different from the order of their subnet IDs and
+    // other hash-based footprints).
+    let state = PocketIcState::new();
+    let mut builder = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_sns_subnet()
+        .with_ii_subnet()
+        .with_fiduciary_subnet()
+        .with_bitcoin_subnet();
+    for _ in 0..5 {
+        builder = builder.with_application_subnet();
+        builder = builder.with_system_subnet();
+    }
+    let pic = builder.with_state(state).build();
+
+    let create_subnet = |pic: &PocketIc, i: u64| {
+        // We derive a "specified" canister ID that exists on the IC mainnet,
+        // but belongs to the canister ranges of no subnet on the PocketIC instance.
+        // That "specified" canister ID has the form: <i> 00000 01 01,
+        // i.e., it is the first canister ID on the <i>-th subnet.
+        let mut slice = [0_u8; 10];
+        slice[..8].copy_from_slice(&(i << 20).to_be_bytes());
+        slice[8] = 0x01;
+        slice[9] = 0x01;
+        let specified_id = Principal::from_slice(&slice);
+        assert!(pic.get_subnet(specified_id).is_none());
+
+        // We create a canister with that specified canister ID: this should succeed
+        // and a new subnet should be created.
+        let canister_id = pic
+            .create_canister_with_id(None, None, specified_id)
+            .unwrap();
+        assert_eq!(canister_id, specified_id);
+        pic.get_subnet(specified_id).unwrap();
+    };
+
+    // Create 10 more application subnets dynamically after the instance has already been created.
+    for i in 1..=10_u64 {
+        create_subnet(&pic, i);
+    }
+
+    // Restart the instance (failures to restore the registry
+    // would result in a panic when restarting the instance).
+    let state = pic.drop_and_take_state().unwrap();
+    let pic = PocketIcBuilder::new().with_state(state).build();
+
+    // Create 10 more application subnets dynamically after the instance has already been restarted.
+    for i in 11..=20_u64 {
+        create_subnet(&pic, i);
+    }
+
+    // Restart the instance (failures to restore the registry
+    // would result in a panic when restarting the instance).
+    let state = pic.drop_and_take_state().unwrap();
+    let _pic = PocketIcBuilder::new().with_state(state).build();
+}
+
+#[test]
+fn test_invalid_specified_id() {
+    // First determine an invalid `specified_id` by creating a canister on a PocketIC instance
+    // whose canister ID belongs to the canister allocation ranges of the PocketIC instance.
+    let pic = PocketIcBuilder::new().with_application_subnet().build();
+    let specified_id = pic.create_canister();
+    drop(pic);
+
+    // Now create a fresh PocketIC instance with the same topology.
+    let pic = PocketIcBuilder::new().with_application_subnet().build();
+
+    // Using the invalid `specified_id` should result in an error.
+    let err = pic
+        .create_canister_with_id(None, None, specified_id)
+        .unwrap_err();
+    let expected_err = format!("The `specified_id` {} is invalid because it belongs to the canister allocation ranges of the test environment.\\nUse a `specified_id` that matches a canister ID on the ICP mainnet and a test environment that supports canister creation with `specified_id` (e.g., PocketIC).", specified_id);
+    assert!(err.contains(&expected_err));
+}
