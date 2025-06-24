@@ -855,7 +855,8 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             .into_iter()
             .collect::<BTreeSet<_>>();
 
-        let node_public_keys = self.try_to_populate_node_public_keys(nodes, registry_version)?;
+        //TODO(Mihai): why clone
+        let node_public_keys = self.try_to_populate_node_public_keys(nodes.clone(), registry_version)?;
 
         let subnet_features = subnet_record.features.unwrap_or_default().into();
         let max_number_of_canisters = subnet_record.max_number_of_canisters;
@@ -944,6 +945,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                 provisional_whitelist,
                 chain_key_settings,
                 subnet_size,
+                node_ids: nodes,
             },
             node_public_keys,
             api_boundary_nodes,

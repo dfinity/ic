@@ -42,13 +42,9 @@
 //! the timestamp of a request plus the timeout interval. This condition is verifiable by the other nodes in the network.
 //! Once a timeout has made it into a finalized block, the request is answered with an error message.
 use crate::{
-    artifact::{CanisterHttpResponseId, IdentifiableArtifact, PbArtifact},
-    crypto::{CryptoHashOf, Signed},
-    messages::{CallbackId, RejectContext, Request},
-    signature::*,
-    CanisterId, CountBytes, RegistryVersion, Time,
+    artifact::{CanisterHttpResponseId, IdentifiableArtifact, PbArtifact}, crypto::{CryptoHashOf, Signed}, messages::{CallbackId, RejectContext, Request}, node_id_into_protobuf, node_id_try_from_option, signature::*, CanisterId, CountBytes, RegistryVersion, Time
 };
-use ic_base_types::{NumBytes, PrincipalId};
+use ic_base_types::{NodeId, NumBytes, PrincipalId};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
@@ -125,6 +121,9 @@ pub struct CanisterHttpRequestContext {
     pub http_method: CanisterHttpMethod,
     pub transform: Option<Transform>,
     pub time: Time,
+    //is_one_of could be removed as it's equivalent to delegated_node_id != None.
+    pub is_one_of: bool,
+    pub delegated_node_id: Option<NodeId>,
 }
 
 impl From<&CanisterHttpRequestContext> for pb_metadata::CanisterHttpRequestContext {
@@ -155,6 +154,9 @@ impl From<&CanisterHttpRequestContext> for pb_metadata::CanisterHttpRequestConte
                 .map(|transform| transform.context.clone()),
             http_method: pb_metadata::HttpMethod::from(&context.http_method).into(),
             time: context.time.as_nanos_since_unix_epoch(),
+            is_one_of: Some(context.is_one_of),
+            delegated_node_id: context.delegated_node_id
+                .map(|node_id| node_id_into_protobuf(node_id)),
         }
     }
 }
@@ -213,6 +215,10 @@ impl TryFrom<pb_metadata::CanisterHttpRequestContext> for CanisterHttpRequestCon
                 .try_into()?,
             transform,
             time: Time::from_nanos_since_unix_epoch(context.time),
+            is_one_of: context.is_one_of.unwrap_or(false),
+            delegated_node_id: node_id_try_from_option(
+                context.delegated_node_id,
+            ).ok(),
         })
     }
 }
@@ -335,6 +341,8 @@ impl TryFrom<(Time, &Request, CanisterHttpRequestArgs)> for CanisterHttpRequestC
             },
             transform: args.transform.map(From::from),
             time,
+            is_one_of: true,
+            delegated_node_id: None,
         })
     }
 }
@@ -705,6 +713,8 @@ mod tests {
                 deadline: NO_DEADLINE,
             },
             time: UNIX_EPOCH,
+            is_one_of: true,
+            delegated_node_id: None,
         };
 
         let expected_size = context.url.len()
@@ -747,6 +757,8 @@ mod tests {
                 deadline: NO_DEADLINE,
             },
             time: UNIX_EPOCH,
+            is_one_of: true,
+            delegated_node_id: None,
         };
 
         let expected_size = context.url.len()

@@ -23,7 +23,7 @@ use ic_interfaces::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{warn, info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
@@ -282,7 +282,7 @@ impl CanisterHttpPayloadBuilderImpl {
 
             let candidates_and_divergences = response_candidates_by_callback_id
                 .into_iter()
-                .filter_map(|(_, grouped_shares)| {
+                .filter_map(|(id, grouped_shares)| {
                     if let Some((metadata, shares)) = grouped_shares.iter().find(|(_, shares)| {
                         unique_responses_count += 1;
                         let signers: BTreeSet<_> =
@@ -317,8 +317,51 @@ impl CanisterHttpPayloadBuilderImpl {
                                 },
                             ))
                         } else {
-                            // If not, we don't include this response candidate at all
-                            None
+                            // Check if this is a one of request.
+                            if let Ok(state) = self
+                                    .state_reader
+                                    .get_state_at(validation_context.certified_height) {
+                                let request_contexts = &state
+                                    .get_ref()
+                                    .metadata
+                                    .subnet_call_context_manager
+                                    .canister_http_request_contexts;
+                                
+                                match request_contexts.get(&id) {
+                                    Some(context) => {
+                                        if context.is_one_of {
+                                            let metadata = grouped_shares
+                                                .iter()
+                                                .next()
+                                                .map(|(metadata, shares)| (metadata.clone(), shares.clone()));
+                                            match metadata {
+                                                Some((metadata, shares)) => {
+                                                    pool_access
+                                                    .get_response_content_by_hash(&metadata.content_hash)
+                                                    .map(|content| {
+                                                        CandidateOrDivergence::Candidate((
+                                                            metadata.clone(),
+                                                            shares.iter().map(|share| share.signature.clone()).collect(),
+                                                            content,
+                                                        ))
+                                                    })
+                                                }
+                                                None => {
+                                                    None
+                                                }
+                                            }
+                                        } else {
+                                            None
+                                        }
+                                    }
+                                    None => {
+                                        None
+                                    }
+                                }
+                            } else {
+                                // If not, we don't include this response candidate at all
+                                None
+                            }
                         }
                     }
                 });
@@ -502,12 +545,51 @@ impl CanisterHttpPayloadBuilderImpl {
                     valid_signers,
                 });
             }
-            if valid_signers.len() < threshold {
-                return invalid_artifact(InvalidCanisterHttpPayloadReason::NotEnoughSigners {
-                    committee,
-                    signers: valid_signers,
-                    expected_threshold: threshold,
-                });
+
+            let callback_id = response.content.id;
+            let context = http_contexts.get(&callback_id).ok_or(
+                CanisterHttpPayloadValidationError::InvalidArtifact(
+                    InvalidCanisterHttpPayloadReason::UnknownCallbackId(callback_id),
+                ),
+            )?;
+            if context.is_one_of {
+                match context.delegated_node_id {
+                    Some(delegated_node_id) => {
+                        if valid_signers.len() != 1 {
+                            //TODO(Mihai): better error propagation pls. 
+                            info!(self.log, "Delegated node id is set, but there are multiple signers: {:?}", valid_signers);
+                            return invalid_artifact(InvalidCanisterHttpPayloadReason::NotEnoughSigners {
+                                committee,
+                                signers: valid_signers,
+                                expected_threshold: threshold,
+                            }); 
+                        }
+                        if valid_signers[0] != delegated_node_id {
+                            info!(self.log, "Delegated node id is set, but the signer is not the delegated node: expected {}, got {:?}", delegated_node_id, valid_signers[0]);
+                            return invalid_artifact(InvalidCanisterHttpPayloadReason::NotEnoughSigners {
+                                committee,
+                                signers: valid_signers,
+                                expected_threshold: threshold,
+                            });
+                        }
+                    }
+                    None => {
+                        info!(self.log, "delegated_node_id not set");
+                        return invalid_artifact(InvalidCanisterHttpPayloadReason::NotEnoughSigners {
+                            committee,
+                            signers: valid_signers,
+                            expected_threshold: threshold,
+                        });
+                    }
+                }
+            } else {
+                if valid_signers.len() < threshold {
+                    return invalid_artifact(InvalidCanisterHttpPayloadReason::NotEnoughSigners {
+                        committee,
+                        signers: valid_signers,
+                        expected_threshold: threshold,
+                    });
+                }
             }
             self.crypto
                 .verify_aggregate(&response.proof, consensus_registry_version)
