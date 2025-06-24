@@ -990,7 +990,7 @@ mod tests {
                 }
 
                 let local_store = Arc::new(LocalStoreImpl::new(temp_dir.as_ref()));
-                let node_config = Config::new(temp_dir.into_path());
+                let node_config = Config::new(temp_dir.keep());
 
                 let node_registration = NodeRegistration::new(
                     self.logger.unwrap_or_else(no_op_logger),

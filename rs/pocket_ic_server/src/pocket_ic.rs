@@ -2103,6 +2103,54 @@ impl TryFrom<RawMessageId> for MessageId {
 }
 
 #[derive(Clone, Debug)]
+pub struct AwaitIngressMessage(pub MessageId);
+
+impl Operation for AwaitIngressMessage {
+    fn compute(&self, pic: &mut PocketIc) -> OpOut {
+        let subnet = route(pic, self.0.effective_principal.clone(), false);
+        match subnet {
+            Ok(subnet) => {
+                // Now, we execute on all subnets until we have the result
+                let max_rounds = 100;
+                for _i in 0..max_rounds {
+                    match subnet.ingress_status(&self.0.msg_id) {
+                        IngressStatus::Known {
+                            state: IngressState::Completed(result),
+                            ..
+                        } => {
+                            return OpOut::CanisterResult(wasm_result_to_canister_result(
+                                result, true,
+                            ));
+                        }
+                        IngressStatus::Known {
+                            state: IngressState::Failed(error),
+                            ..
+                        } => {
+                            return OpOut::CanisterResult(Err(user_error_to_reject_response(
+                                error, true,
+                            )));
+                        }
+                        _ => {}
+                    }
+                    for subnet_ in pic.subnets.get_all() {
+                        subnet_.state_machine.execute_round();
+                    }
+                }
+                OpOut::Error(PocketIcError::BadIngressMessage(format!(
+                    "Failed to answer to ingress {} after {} rounds.",
+                    self.0.msg_id, max_rounds
+                )))
+            }
+            Err(e) => OpOut::Error(PocketIcError::BadIngressMessage(e)),
+        }
+    }
+
+    fn id(&self) -> OpId {
+        OpId(format!("await_update_{}", self.0.msg_id))
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct IngressMessageStatus {
     pub message_id: MessageId,
     pub caller: Option<Principal>,

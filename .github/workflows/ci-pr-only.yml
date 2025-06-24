@@ -20,7 +20,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
+      image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
       options: >-
         -e NODE_NAME
     if: ${{ github.event_name != 'merge_group' }}
@@ -50,7 +50,7 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
+      image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
       options: >-
         -e NODE_NAME
     if: ${{ github.event_name != 'merge_group' }}
@@ -89,13 +89,13 @@ jobs:
         run: ./ci/scripts/lock-generate.sh
   generate-config-fixtures:
     name: Generate Config Fixtures
-    timeout-minutes: 5
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
+      image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
       options: >-
         -e NODE_NAME
+    timeout-minutes: 5
     if: ${{ github.event_name != 'merge_group' }}
     env:
       CI_EVENT_NAME: ${{ github.event_name }}
@@ -128,7 +128,7 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
+      image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
       options: >-
         -e NODE_NAME
     if: ${{ github.event_name != 'merge_group' }}
@@ -189,7 +189,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
+      image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
       options: >-
         -e NODE_NAME
     if: contains(github.event.pull_request.labels.*.name, 'CI_COVERAGE')
@@ -202,7 +202,6 @@ jobs:
       - name: Run Bazel Test Coverage
         shell: bash
         run: |
-          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
           ./ci/scripts/bazel-coverage.sh
       - name: Upload bazel-coverage
         uses: actions/upload-artifact@v4

@@ -34,20 +34,22 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
+    image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
   dind-large-setup: &dind-large-setup
     runs-on:
       labels: dind-large
     container:
       <<: *image
       options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
+        -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 90
   dind-small-setup: &dind-small-setup
     runs-on:
       labels: dind-small
     container:
       <<: *image
+      options: >-
+        -e NODE_NAME
     timeout-minutes: 30
   checkout: &checkout
     name: Checkout
@@ -65,7 +67,7 @@ jobs:
     name: Set Config
     runs-on: ubuntu-latest
     outputs:
-      release_build: ${{ steps.config.outputs.release_build }}
+      release-build: ${{ steps.config.outputs.release-build }}
       diff_only: ${{ steps.config.outputs.diff_only }}
       skip_long_tests: ${{ steps.config.outputs.skip_long_tests }}
       full_macos_build: ${{ steps.config.outputs.full_macos_build }}
@@ -85,8 +87,9 @@ jobs:
               fi
           done
 
-          if [[ "${is_protected_branch:-}" == "true" ]]; then
-              # if we are on a "protected" branch or targeting an rc branch we
+          if [[ "${is_protected_branch:-}" == "true" || '${{ github.event_name }}' == 'workflow_call' ]]; then
+              # if we are on a "protected" branch, targeting an rc branch or
+              # we're called from another workflow (i.e. release-testing) we
               # upload all artifacts and run a release build (with versioning)
               release_build="true"
               diff_only="false"
@@ -120,9 +123,9 @@ jobs:
           echo "| config | value |" >> "$GITHUB_STEP_SUMMARY"
           echo "| --- | --- |" >> "$GITHUB_STEP_SUMMARY"
 
-          echo "release_build: $release_build"
-          echo "release_build=$release_build" >> "$GITHUB_OUTPUT"
-          echo "| \`release_build\` | \`$release_build\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "release-build: $release_build"
+          echo "release-build=$release_build" >> "$GITHUB_OUTPUT"
+          echo "| \`release-build\` | \`$release_build\` |" >> "$GITHUB_STEP_SUMMARY"
 
           echo "diff_only: $diff_only"
           echo "diff_only=$diff_only" >> "$GITHUB_OUTPUT"
@@ -140,6 +143,7 @@ jobs:
     name: Bazel Test All
     needs: [ config ]
     <<: *dind-large-setup
+    timeout-minutes: 120
     runs-on:
       labels: dind-large
     env:
@@ -155,7 +159,6 @@ jobs:
           set -xeuo pipefail
           # Determine which tests to skip
           EXCLUDED_TEST_TAGS=(
-              system_test_hourly
               system_test_nightly
               system_test_nightly_nns
               system_test_staging
@@ -188,14 +191,13 @@ jobs:
           fi
           echo "BAZEL_EXTRA_ARGS=${BAZEL_EXTRA_ARGS[@]}" >> $GITHUB_OUTPUT
       - name: Run Bazel Test All
-        id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
         with:
           execlogs-artifact-name: execlogs-bazel-test-all
           diff-only: ${{ needs.config.outputs.diff_only }}
-          release-build: ${{ needs.config.outputs.release_build }}
-          upload-artifacts: ${{ needs.config.outputs.release_build }}
-          BAZEL_COMMAND: test --config=ci ${{ steps.bazel-extra-args.outputs.BAZEL_EXTRA_ARGS }}
+          stamp-build: ${{ needs.config.outputs.release-build }}
+          upload-artifacts: ${{ needs.config.outputs.release-build }}
+          BAZEL_COMMAND: test ${{ steps.bazel-extra-args.outputs.BAZEL_EXTRA_ARGS }}
           BAZEL_TARGETS: //...
           CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
@@ -207,31 +209,28 @@ jobs:
     runs-on:
       labels: macOS
     # Run on protected branches, but only on public repo
-    # Allow running if CI_MACOS_INTEL label is used
     if: github.repository == 'dfinity/ic'
-
     steps:
       - <<: *checkout
       - name: Set PATH
         run: |
           echo "/usr/local/bin" >> $GITHUB_PATH
           echo "$HOME/.cargo/bin:" >> $GITHUB_PATH
-          # use llvm-clang instead of apple's
-          echo "CC=/usr/local/opt/llvm/bin/clang" >> "$GITHUB_ENV"
       - name: Infer macos intel build command
         id: cfg
         run: |
           if [[ '${{ needs.config.outputs.full_macos_build }}' == 'true' ]]; then
-            echo build-command='test --config=ci --config=macos_ci --test_tag_filters=test_macos' >> "$GITHUB_OUTPUT"
+            echo build-command='test --test_tag_filters=test_macos' >> "$GITHUB_OUTPUT"
           else
-            echo build-command='build --config=ci --config=macos_ci --test_tag_filters=test_macos --nobuild' >> "$GITHUB_OUTPUT"
+            echo build-command='build --test_tag_filters=test_macos --nobuild' >> "$GITHUB_OUTPUT"
           fi
 
       - name: Run Bazel Checks on Darwin x86-64
-        id: bazel-test-darwin-x86-64
         uses:  ./.github/actions/bazel-test-all/
+        env:
+          NODE_NAME: ${{ runner.name }}
         with:
-          upload-artifacts: ${{ needs.config.outputs.release_build && needs.config.outputs.full_macos_build }}
+          upload-artifacts: ${{ needs.config.outputs.release-build && needs.config.outputs.full_macos_build }}
           BAZEL_COMMAND: ${{ steps.cfg.outputs.build-command }}
           BAZEL_TARGETS: //...
           CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
@@ -262,7 +261,7 @@ jobs:
           bazel \
             --noworkspace_rc \
             --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc \
-            build --config=ci //rs/pocket_ic_server:pocket-ic-server
+            build //rs/pocket_ic_server:pocket-ic-server
 
           mkdir -p build
           cp \
@@ -297,7 +296,6 @@ jobs:
             --noworkspace_rc \
             --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc \
             test \
-            --config=ci --config=macos_ci \
             --test_tag_filters="test_macos,test_macos_slow" \
             //packages/pocket-ic/... //rs/... //publish/binaries/...
 
@@ -312,20 +310,27 @@ jobs:
           name: pocket-ic-server-arm64-darwin
           path: ./build/pocket-ic-server-arm64-darwin
 
-  # Upload arm64-linux artifacts, retrieved from the arm64 runner build.
-  upload-arm64-linux-artifacts:
-    name: Upload arm64 linux artifacts
+  # Upload external artifacts, retrieved from non-DFINITY runner builds.
+  upload-external-artifacts:
+    name: Upload external artifacts
     <<: *dind-large-setup
-    needs: [bazel-test-arm64-linux, config]
-    if: needs.config.outputs.release_build
+    needs: [bazel-test-arm64-linux, bazel-test-arm64-darwin, config]
+    if: ${{ needs.config.outputs.release-build == 'true' }} # GHA output quirk, 'true' is a string
     steps:
       - uses: actions/checkout@v4
-      - name: Download pocket-ic-server
+      - name: Download pocket-ic-server (arm64-linux)
         uses: actions/download-artifact@v4
         with:
           name: pocket-ic-server-arm64-linux
           # avoid downloading to workspace to avoid version being marked as dirty
           path: ~/.cache/pocket-ic-server-arm64-linux
+
+      - name: Download pocket-ic-server (arm64-darwin)
+        uses: actions/download-artifact@v4
+        with:
+          name: pocket-ic-server-arm64-darwin
+          # avoid downloading to workspace to avoid version being marked as dirty
+          path: ~/.cache/pocket-ic-server-arm64-darwin
 
       - name: Write AWS credentials
         shell: bash
@@ -335,7 +340,6 @@ jobs:
           echo '${{ secrets.CLOUD_CREDENTIALS_CONTENT }}' >"$AWS_CREDS"
 
       - name: Upload
-        id: build-ic
         uses: ./.github/actions/bazel
         with:
           run: |
@@ -344,12 +348,16 @@ jobs:
             # Create a "bundle" that the uploader can digest
             mkdir -p "$rootdir/binaries/arm64-linux/"
             cp ~/.cache/pocket-ic-server-arm64-linux/pocket-ic-server-arm64-linux "$rootdir/binaries/arm64-linux/pocket-ic-server-arm64-linux"
+
+            mkdir -p "$rootdir/binaries/arm64-darwin/"
+            cp ~/.cache/pocket-ic-server-arm64-darwin/pocket-ic-server-arm64-darwin "$rootdir/binaries/arm64-darwin/pocket-ic-server-arm64-darwin"
+
             bazel run --config=stamped //:artifact-uploader -- "$rootdir"
         env:
           MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           RUN_ON_DIFF_ONLY: ${{ needs.config.outputs.diff_only }}
-          RELEASE_BUILD: ${{ needs.config.outputs.release_build }}
+          RELEASE_BUILD: ${{ needs.config.outputs.release-build }}
 
   bazel-build-fuzzers:
     name: Bazel Build Fuzzers
@@ -357,11 +365,12 @@ jobs:
     steps:
       - <<: *checkout
       - name: Run Bazel Build Fuzzers
-        id: bazel-build-fuzzers
-        uses:  ./.github/actions/bazel-test-all/
+        uses: ./.github/actions/bazel
         with:
-          BAZEL_COMMAND: build --config=ci --keep_going --config=fuzzing --build_tag_filters=libfuzzer
-          BAZEL_TARGETS: //rs/...
+          run: |
+            bazel build //rs/... \
+              --config=stamped --config=fuzzing --build_tag_filters=libfuzzer \
+              --keep_going
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
   bazel-build-fuzzers-afl:
@@ -370,11 +379,12 @@ jobs:
     steps:
       - <<: *checkout
       - name: Run Bazel Build Fuzzers AFL
-        id: bazel-build-fuzzers-afl
-        uses:  ./.github/actions/bazel-test-all/
+        uses: ./.github/actions/bazel
         with:
-          BAZEL_COMMAND: build --config=ci --keep_going --config=afl
-          BAZEL_TARGETS: //rs/...
+          run: |
+            bazel build //rs/... \
+              --config=stamped --config=afl \
+              --keep_going
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
   python-ci-tests:
@@ -384,7 +394,6 @@ jobs:
       - <<: *checkout
       - <<: *python-setup
       - name: Run Python CI Tests
-        id: python-ci-tests
         shell: bash
         run: |
           set -xeuo pipefail
@@ -411,7 +420,6 @@ jobs:
     steps:
       - <<: *checkout
       - name: Run Build IC
-        id: build-ic
         uses: ./.github/actions/bazel
         with:
           execlogs-artifact-name: execlogs-build-ic
@@ -420,7 +428,7 @@ jobs:
           MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           RUN_ON_DIFF_ONLY: ${{ needs.config.outputs.diff_only }}
-          RELEASE_BUILD: ${{ needs.config.outputs.release_build }}
+          RELEASE_BUILD: ${{ needs.config.outputs.release-build }}
 
   build-determinism:
     name: Build Determinism

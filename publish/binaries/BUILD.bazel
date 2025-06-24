@@ -120,7 +120,11 @@ filegroup(
 
 artifact_bundle(
     name = "bundle",
-    inputs = [":binaries"],
+    testonly = True,
+    inputs = [
+        ":binaries",
+        "//rs/sns/testing:sns_testing_bundle",
+    ],
     prefix = "binaries/" + os_info,
     visibility = ["//visibility:public"],
 )
@@ -138,14 +142,6 @@ artifact_bundle(
         "@platforms//os:linux",
         "@platforms//cpu:x86_64",
     ],
-    visibility = ["//visibility:public"],
-)
-
-artifact_bundle(
-    name = "bundle-sns-testing",
-    testonly = True,
-    inputs = ["//rs/sns/testing:sns_testing_bundle"],
-    prefix = "binaries/" + os_info,
     visibility = ["//visibility:public"],
 )
 

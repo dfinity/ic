@@ -138,7 +138,7 @@ impl PocketIcState {
     pub fn into_path(self) -> PathBuf {
         match self.state {
             PocketIcStateKind::StateDir(state_dir) => state_dir,
-            PocketIcStateKind::TempDir(temp_dir) => temp_dir.into_path(),
+            PocketIcStateKind::TempDir(temp_dir) => temp_dir.keep(),
         }
     }
 

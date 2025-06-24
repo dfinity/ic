@@ -23,7 +23,7 @@ use ic_logger::{error, fatal, info, ReplicaLogger};
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterSnapshotDataKind,
     CanisterSnapshotDataOffset, CanisterSnapshotResponse, CanisterStatusResultV2,
-    CanisterStatusType, ChunkHash, GlobalTimer, Method as Ic00Method,
+    CanisterStatusType, ChunkHash, Global, GlobalTimer, Method as Ic00Method,
     ReadCanisterSnapshotDataResponse, ReadCanisterSnapshotMetadataResponse, SnapshotSource,
     StoredChunksReply, UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
     UploadChunkReply,
@@ -64,6 +64,7 @@ use ic_types::{
 use ic_wasm_types::WasmHash;
 use num_traits::{SaturatingAdd, SaturatingSub};
 use prometheus::IntCounter;
+use std::iter::zip;
 use std::path::PathBuf;
 use std::{convert::TryFrom, str::FromStr, sync::Arc};
 
@@ -1087,7 +1088,7 @@ impl CanisterManager {
         new_canister.system_state.add_canister_change(
             state.time(),
             origin,
-            CanisterChangeDetails::canister_creation(controllers),
+            CanisterChangeDetails::canister_creation(controllers, None),
         );
 
         // Add new canister to the replicated state.
@@ -1760,6 +1761,21 @@ impl CanisterManager {
                 }
             };
 
+            // If the snapshot was uploaded, make sure the snapshot's exported globals match the wasm module's.
+            if snapshot.source() == SnapshotSource::MetadataUpload
+                && !globals_match(
+                    &new_execution_state.exported_globals,
+                    &execution_snapshot.exported_globals,
+                )
+            {
+                return (
+                        Err(CanisterManagerError::CanisterSnapshotInconsistent {
+                            message: "Wasm exported globals of canister module and snapshot metadata do not match.".to_string(),
+                        }),
+                        instructions_used,
+                    );
+            }
+
             new_execution_state.exported_globals = execution_snapshot.exported_globals.clone();
             new_execution_state.stable_memory = Memory::from(&execution_snapshot.stable_memory);
             new_execution_state.wasm_memory = Memory::from(&execution_snapshot.wasm_memory);
@@ -1779,6 +1795,24 @@ impl CanisterManager {
         let mut new_canister =
             CanisterState::new(system_state, new_execution_state, scheduler_state);
         let new_memory_usage = new_canister.memory_usage();
+
+        // If the snapshot was uploaded, make sure the snapshot's memory hook status matches the actual status.
+        // Otherwise, the snapshot is invalid.
+        if snapshot.source() == SnapshotSource::MetadataUpload {
+            let hook_condition = new_canister.is_low_wasm_memory_hook_condition_satisfied();
+            let snapshot_hook_status = snapshot.execution_snapshot().on_low_wasm_memory_hook_status;
+            if !snapshot_hook_status
+                .map(|h| h.is_consistent_with(hook_condition))
+                .unwrap_or(true)
+            {
+                return (
+                        Err(CanisterManagerError::CanisterSnapshotInconsistent {
+                            message: format!("Hook status ({:?}) of uploaded snapshot is inconsistent with the canister's state (hook condition satisfied: {}).", snapshot_hook_status, hook_condition),
+                        }),
+                        instructions_used,
+                    );
+            }
+        }
 
         let validated_memory_usage = match self.memory_usage_checks(
             subnet_size,
@@ -1819,7 +1853,7 @@ impl CanisterManager {
             origin,
             CanisterChangeDetails::load_snapshot(
                 snapshot.canister_version(),
-                snapshot_id.to_vec(),
+                snapshot_id,
                 snapshot.taken_at_timestamp().as_nanos_since_unix_epoch(),
             ),
         );
@@ -2057,12 +2091,9 @@ impl CanisterManager {
             })?;
 
         let replace_snapshot_size = match args.replace_snapshot() {
-            Some(replace_snapshot_id) => {
-                let replace_snapshot_id =
-                    SnapshotId::try_from(&replace_snapshot_id.to_vec()).unwrap();
-                self.get_snapshot(canister_id, replace_snapshot_id, state)?
-                    .size()
-            }
+            Some(replace_snapshot_id) => self
+                .get_snapshot(canister_id, replace_snapshot_id, state)?
+                .size(),
             None => {
                 // No replace snapshot ID provided, check whether the maximum number of snapshots
                 // has been reached.
@@ -2242,6 +2273,8 @@ impl CanisterManager {
                 }
                 let mut buffer = Buffer::new(snapshot_inner.wasm_memory().page_map.clone());
                 buffer.write(&args.chunk, offset as usize);
+                let delta = buffer.dirty_pages().collect::<Vec<_>>();
+                snapshot_inner.wasm_memory_mut().page_map.update(&delta);
             }
             CanisterSnapshotDataOffset::StableMemory { offset } => {
                 let max_size_bytes =
@@ -2254,6 +2287,8 @@ impl CanisterManager {
                 }
                 let mut buffer = Buffer::new(snapshot_inner.stable_memory().page_map.clone());
                 buffer.write(&args.chunk, offset as usize);
+                let delta = buffer.dirty_pages().collect::<Vec<_>>();
+                snapshot_inner.stable_memory_mut().page_map.update(&delta);
             }
             CanisterSnapshotDataOffset::WasmChunk => {
                 // The chunk store is initialized as empty, and no memory for it has been reserved yet.
@@ -2461,6 +2496,14 @@ pub fn uninstall_canister(
         });
 
     reject_responses
+}
+
+fn globals_match(g1: &[Global], g2: &[Global]) -> bool {
+    use std::mem::discriminant;
+    if g1.len() != g2.len() {
+        return false;
+    }
+    zip(g1.iter(), g2.iter()).all(|(a, b)| discriminant(a) == discriminant(b))
 }
 
 #[cfg(test)]

@@ -598,6 +598,7 @@ pub struct SandboxSafeSystemState {
     memory_allocation: MemoryAllocation,
     wasm_memory_threshold: NumBytes,
     compute_allocation: ComputeAllocation,
+    environment_variables: BTreeMap<String, String>,
     initial_cycles_balance: Cycles,
     initial_reserved_balance: Cycles,
     reserved_balance_limit: Option<Cycles>,
@@ -634,6 +635,7 @@ impl SandboxSafeSystemState {
         memory_allocation: MemoryAllocation,
         wasm_memory_threshold: NumBytes,
         compute_allocation: ComputeAllocation,
+        environment_variables: BTreeMap<String, String>,
         initial_cycles_balance: Cycles,
         initial_reserved_balance: Cycles,
         reserved_balance_limit: Option<Cycles>,
@@ -665,6 +667,7 @@ impl SandboxSafeSystemState {
             dirty_page_overhead,
             freeze_threshold,
             memory_allocation,
+            environment_variables,
             wasm_memory_threshold,
             compute_allocation,
             system_state_modifications: SystemStateModifications {
@@ -783,6 +786,7 @@ impl SandboxSafeSystemState {
             system_state.memory_allocation,
             system_state.wasm_memory_threshold,
             compute_allocation,
+            system_state.environment_variables.clone(),
             system_state.balance(),
             system_state.reserved_balance(),
             system_state.reserved_balance_limit(),
@@ -820,6 +824,10 @@ impl SandboxSafeSystemState {
 
     pub fn canister_version(&self) -> u64 {
         self.canister_version
+    }
+
+    pub fn environment_variables(&self) -> &BTreeMap<String, String> {
+        &self.environment_variables
     }
 
     pub fn set_global_timer(&mut self, timer: CanisterTimer) {
@@ -1249,7 +1257,8 @@ impl SandboxSafeSystemState {
 
             ApiType::InspectMessage { .. }
             | ApiType::ReplicatedQuery { .. }
-            | ApiType::NonReplicatedQuery { .. } => {
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::CompositeQuery { .. } => {
                 // Queries do not check the freezing threshold because the state
                 // changes are disarded anyways.
                 false
@@ -1257,7 +1266,10 @@ impl SandboxSafeSystemState {
 
             ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
-            | ApiType::Cleanup { .. } => {
+            | ApiType::Cleanup { .. }
+            | ApiType::CompositeReplyCallback { .. }
+            | ApiType::CompositeRejectCallback { .. }
+            | ApiType::CompositeCleanup { .. } => {
                 // Response callbacks are specified to not check the freezing
                 // threshold.
                 false
@@ -1365,7 +1377,11 @@ impl SandboxSafeSystemState {
 
             ApiType::InspectMessage { .. }
             | ApiType::ReplicatedQuery { .. }
-            | ApiType::NonReplicatedQuery { .. } => {
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::CompositeQuery { .. }
+            | ApiType::CompositeReplyCallback { .. }
+            | ApiType::CompositeRejectCallback { .. }
+            | ApiType::CompositeCleanup { .. } => {
                 // Queries do not reserve storage cycles because the state
                 // changes are discarded anyways.
                 false
@@ -1532,6 +1548,7 @@ mod tests {
             MemoryAllocation::BestEffort,
             NumBytes::new(0),
             ComputeAllocation::default(),
+            Default::default(),
             Cycles::new(1_000_000),
             Cycles::zero(),
             None,
@@ -1583,6 +1600,7 @@ mod tests {
             MemoryAllocation::BestEffort,
             NumBytes::new(wasm_memory_threshold),
             ComputeAllocation::default(),
+            Default::default(),
             Cycles::new(1_000_000),
             Cycles::zero(),
             None,

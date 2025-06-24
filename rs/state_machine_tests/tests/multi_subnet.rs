@@ -337,9 +337,9 @@ fn counter_canister_call_test() {
             env1.ingress_status(&msg12_id)
         ),
         (
+            IngressStatus::Unknown,
             IngressStatus::Known { .. },
             IngressStatus::Known { .. },
-            IngressStatus::Unknown
         )
     ));
 

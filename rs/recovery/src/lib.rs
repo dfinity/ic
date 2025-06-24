@@ -386,6 +386,7 @@ impl Recovery {
         subcmd: Option<ReplaySubCmd>,
         canister_caller_id: Option<CanisterId>,
         replay_until_height: Option<u64>,
+        skip_prompts: bool,
     ) -> impl Step {
         ReplayStep {
             logger: self.logger.clone(),
@@ -396,6 +397,7 @@ impl Recovery {
             canister_caller_id,
             replay_until_height,
             result: self.work_dir.join(replay_helper::OUTPUT_FILE_NAME),
+            skip_prompts,
         }
     }
 
@@ -408,6 +410,7 @@ impl Recovery {
         upgrade_url: Url,
         sha256: String,
         replay_until_height: Option<u64>,
+        skip_prompts: bool,
     ) -> RecoveryResult<impl Step> {
         let version_record = format!(
             r#"{{ "release_package_sha256_hex": "{}", "release_package_urls": ["{}"] }}"#,
@@ -428,6 +431,7 @@ impl Recovery {
             }),
             None,
             replay_until_height,
+            skip_prompts,
         ))
     }
 
@@ -439,6 +443,7 @@ impl Recovery {
         new_registry_local_store: PathBuf,
         canister_caller_id: &str,
         replay_until_height: Option<u64>,
+        skip_prompts: bool,
     ) -> RecoveryResult<impl Step> {
         let canister_id = CanisterId::from_str(canister_caller_id).map_err(|e| {
             RecoveryError::invalid_output_error(format!("Failed to parse canister id: {}", e))
@@ -461,6 +466,7 @@ impl Recovery {
             }),
             Some(canister_id),
             replay_until_height,
+            skip_prompts,
         ))
     }
 
@@ -806,15 +812,24 @@ impl Recovery {
     }
 
     /// Return an [UpdateLocalStoreStep] to update the current local store using ic-replay
-    pub fn get_update_local_store_step(&self, subnet_id: SubnetId) -> impl Step {
+    pub fn get_update_local_store_step(
+        &self,
+        subnet_id: SubnetId,
+        skip_prompts: bool,
+    ) -> impl Step {
         UpdateLocalStoreStep {
             subnet_id,
             work_dir: self.work_dir.clone(),
+            skip_prompts,
         }
     }
 
     /// Return an [GetRecoveryCUPStep] to get the recovery CUP using ic-replay
-    pub fn get_recovery_cup_step(&self, subnet_id: SubnetId) -> RecoveryResult<impl Step> {
+    pub fn get_recovery_cup_step(
+        &self,
+        subnet_id: SubnetId,
+        skip_prompts: bool,
+    ) -> RecoveryResult<impl Step> {
         let state_params = self.get_replay_output()?;
         let recovery_height = Recovery::get_recovery_height(state_params.height);
         Ok(GetRecoveryCUPStep {
@@ -824,6 +839,7 @@ impl Recovery {
             state_hash: state_params.hash,
             work_dir: self.work_dir.clone(),
             recovery_height,
+            skip_prompts,
         })
     }
 

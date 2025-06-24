@@ -680,13 +680,9 @@ impl PocketIc {
 
     /// Await an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.
     pub async fn await_call(&self, message_id: RawMessageId) -> Result<Vec<u8>, RejectResponse> {
-        for _ in 0..100 {
-            self.tick().await;
-            if let Some(result) = self.ingress_status(message_id.clone()).await {
-                return result;
-            }
-        }
-        panic!("PocketIC did not complete the update call within 100 rounds")
+        let endpoint = "update/await_ingress_message";
+        let result: RawCanisterResult = self.post(endpoint, message_id).await;
+        result.into()
     }
 
     /// Fetch the status of an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.
