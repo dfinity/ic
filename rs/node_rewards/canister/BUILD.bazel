@@ -23,6 +23,7 @@ DEPENDENCIES = [
     "@crate_index//:ic-cdk-timers",
     "@crate_index//:ic-management-canister-types",
     "@crate_index//:ic-stable-structures",
+    "@crate_index//:itertools",
     "@crate_index//:prost",
 ]
 
@@ -36,7 +37,6 @@ DEV_DEPENDENCIES = [
     "//rs/state_machine_tests",
     "@crate_index//:candid_parser",
     "@crate_index//:futures-util",
-    "@crate_index//:itertools",
     "@crate_index//:maplit",
     "@crate_index//:mockall",
     "@crate_index//:serde_json",
