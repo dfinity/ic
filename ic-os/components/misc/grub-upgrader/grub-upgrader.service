@@ -4,7 +4,7 @@ Description=Update grub.cfg file
 [Service]
 Type=oneshot
 RemainAfterExit=true
-ExecStart=/opt/ic/bin/grub-updater.sh
+ExecStart=/opt/ic/bin/grub-upgrader.sh
 
 [Install]
 WantedBy=multi-user.target

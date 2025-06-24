@@ -69,8 +69,8 @@ component_files = {
     Label("monitoring/logrotate/override.conf"): "/etc/systemd/system/logrotate.service.d/override.conf",
     Label("misc/log-config/log-config-hostos.service"): "/etc/systemd/system/log-config.service",
     Label("misc/log-config/log-config.sh"): "/opt/ic/bin/log-config.sh",
-    Label("misc/grub-updater/grub-updater.sh"): "/opt/ic/bin/grub-updater.sh",
-    Label("misc/grub-updater/grub-updater.service"): "/etc/systemd/system/grub-updater.service",
+    Label("misc/grub-upgrader/grub-upgrader.sh"): "/opt/ic/bin/grub-upgrader.sh",
+    Label("misc/grub-upgrader/grub-upgrader.service"): "/etc/systemd/system/grub-upgrader.service",
 
     # networking
     Label("networking/generate-network-config/hostos/generate-network-config.service"): "/etc/systemd/system/generate-network-config.service",
