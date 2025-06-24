@@ -14,7 +14,14 @@ if [ ! -d "$(dirname "${DST}")" ]; then
     exit 1
 fi
 
-echo "Copying ${SRC} to ${DST}..."
+# Check if destination file exists and compare with source
+if [ -f "${DST}" ] && cmp -s "${SRC}" "${DST}"; then
+    echo "Source and destination grub configurations are identical. No action needed."
+    exit 0
+fi
+
+echo "Source and destination grub configurations differ. Copying ${SRC} to ${DST}..."
 cp "${SRC}" "${DST}"
 
-echo "Grub configuration updated successfully."
+echo "Grub configuration updated successfully. Rebooting..."
+reboot
