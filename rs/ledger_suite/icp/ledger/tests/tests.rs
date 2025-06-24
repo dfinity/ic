@@ -1833,6 +1833,69 @@ fn test_archiving_respects_num_blocks_to_archive_upper_limit() {
     );
 }
 
+#[test]
+fn test_allowance_listing_sequences() {
+    const INITIAL_BALANCE: u64 = 10_000_000;
+    const APPROVE_AMOUNT: u64 = 1_000_000;
+    const NUM_APPROVERS: u64 = 3;
+    const NUM_SPENDERS: u64 = 3;
+    let mut initial_balances = vec![];
+
+    let mut approvers = vec![];
+    for i in 1..NUM_APPROVERS {
+        let pid = PrincipalId::new_user_test_id(i);
+        approvers.push(pid);        
+        initial_balances.push((Account::from(pid.0), INITIAL_BALANCE));
+    }
+
+    let mut spenders = vec![];
+    for i in 100..100 + NUM_SPENDERS {
+        spenders.push(PrincipalId::new_user_test_id(i));        
+    }
+
+    let (env, canister_id) = setup(
+        ledger_wasm_allowance_getter(),
+        encode_init_args,
+        initial_balances,
+    );
+    
+    let approve_args = ApproveArgs {
+        from_subaccount: None,
+        spender: p2.0.into(),
+        amount: Nat::from(APPROVE_AMOUNT),
+        fee: None,
+        memo: None,
+        expires_at: None,
+        expected_allowance: None,
+        created_at_time: None,
+    };
+    let response = env.execute_ingress_as(
+        p1,
+        canister_id,
+        "icrc2_approve",
+        Encode!(&approve_args).unwrap(),
+    );
+    assert!(response.is_ok());
+    let allowance_args = IcpAllowanceArgs {
+        account: AccountIdentifier::from(p1.0),
+        spender: AccountIdentifier::from(p2.0),
+    };
+
+    let response = env.execute_ingress_as(
+        p1,
+        canister_id,
+        "allowance",
+        Encode!(&allowance_args).unwrap(),
+    );
+
+    let result = Decode!(
+        &response.expect("failed to get allowance").bytes(),
+        Allowance
+    )
+    .expect("failed to decode allowance response");
+    assert_eq!(result.allowance.0.to_u64(), Some(APPROVE_AMOUNT));
+}
+
 mod metrics {
     use crate::{encode_init_args, encode_upgrade_args, ledger_wasm};
     use ic_ledger_suite_state_machine_tests::metrics::LedgerSuiteType;
