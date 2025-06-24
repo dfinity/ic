@@ -417,6 +417,23 @@ pub enum CanisterChangeDetails {
 }
 
 impl CanisterChangeDetails {
+    /// An upper bound on the memory required for a `CanisterChangeDetails` entry in the canister history.
+    pub fn max_size() -> NumBytes {
+        use std::mem::size_of;
+        // The largest variant is CanisterSettingsChange
+        NumBytes::new(
+            (size_of::<Self>()
+            + size_of::<Option<Vec<PrincipalId>>>()
+            + size_of::<Vec<PrincipalId>>()
+            /* max number of controllers is 10 */
+            + 10 * size_of::<PrincipalId>()
+            + size_of::<Option<Vec<u8>>>()
+            + size_of::<Vec<u8>>()
+            /* a hash is 32 bytes */
+            + 32) as u64,
+        )
+    }
+
     pub fn canister_creation(
         controllers: Vec<PrincipalId>,
         environment_variables_hash: Option<Vec<u8>>,

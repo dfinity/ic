@@ -2,7 +2,9 @@ use ic_base_types::{NumBytes, NumSeconds};
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
-use ic_management_canister_types_private::{CanisterSettingsArgs, LogVisibilityV2};
+use ic_management_canister_types_private::{
+    CanisterChangeDetails, CanisterSettingsArgs, LogVisibilityV2,
+};
 use ic_replicated_state::MessageMemoryUsage;
 use ic_types::{
     ComputeAllocation, Cycles, InvalidComputeAllocationError, InvalidMemoryAllocationError,
@@ -397,6 +399,7 @@ impl ValidatedCanisterSettings {
 ///     - there must be enough available subnet capacity for the change.
 ///     - there must be enough cycles for storage reservation.
 ///     - there must be enough cycles to avoid freezing the canister.
+///     - there must be enough available subnet memory to store the new canister history entry.
 /// - compute allocation:
 ///     - there must be enough available compute capacity for the change.
 ///     - there must be enough cycles to avoid freezing the canister.
@@ -440,6 +443,11 @@ pub(crate) fn validate_canister_settings(
             new_memory_allocation.allocated_bytes(canister_memory_usage)
         }
     };
+
+    // Both `create_canister` and `upgrade_settings` lead to a canister history entry, which takes up some memory.
+    // At validation time it is not clear which entry it will be, so we might overestimate the memory requirement by
+    // a few dozen bytes.
+    let new_memory_bytes = new_memory_bytes + CanisterChangeDetails::max_size();
 
     // If the available memory in the subnet is negative, then we must cap
     // it at zero such that the new memory allocation can change between
