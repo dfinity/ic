@@ -21,14 +21,12 @@ use ic_system_test_driver::{
     util::runtime_from_url,
 };
 use ic_types::{hostos_version::HostosVersion, NodeId};
+use ssh2::Session;
 
 use slog::info;
 
-/// Use an SSH channel to check the version on the running HostOS.
-pub(crate) fn check_hostos_version(node: &NestedVm) -> String {
-    let session = node
-        .block_on_ssh_session()
-        .expect("Could not reach HostOS VM.");
+/// Helper function to execute version check command over SSH session
+fn execute_version_check(session: Session) -> String {
     let mut channel = session.channel_session().unwrap();
 
     channel.exec("cat /boot/version.txt").unwrap();
@@ -43,6 +41,22 @@ pub(crate) fn check_hostos_version(node: &NestedVm) -> String {
     );
 
     s.trim().to_string()
+}
+
+/// Use an SSH channel to check the version on the running HostOS.
+pub(crate) fn check_hostos_version(node: &NestedVm) -> String {
+    let session = node
+        .block_on_ssh_session()
+        .expect("Could not reach HostOS VM.");
+    execute_version_check(session)
+}
+
+/// Use an SSH channel to check the version on the running GuestOS.
+pub(crate) fn check_guestos_version(node: &NestedVm) -> String {
+    let session = node
+        .block_on_guest_ssh_session()
+        .expect("Could not reach GuestOS VM.");
+    execute_version_check(session)
 }
 
 /// Submit a proposal to elect a new HostOS version
