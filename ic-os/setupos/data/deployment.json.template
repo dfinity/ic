@@ -8,7 +8,7 @@
     "elasticsearch_tags": null
   },
   "nns": {
-    "url": "NNS_URL"
+    "url": ["NNS_URL"]
   },
   "vm_resources": {
     "memory": "490",

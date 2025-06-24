@@ -4,7 +4,7 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use config_types::DeploymentEnvironment;
 use serde::{Deserialize, Serialize};
-use serde_with::{serde_as, CommaSeparator, DisplayFromStr, StringWithSeparator};
+use serde_with::{serde_as, DisplayFromStr};
 use url::Url;
 
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
@@ -31,10 +31,8 @@ pub struct Logging {
     pub elasticsearch_tags: Option<String>,
 }
 
-#[serde_as]
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
 pub struct Nns {
-    #[serde_as(as = "StringWithSeparator::<CommaSeparator, Url>")]
     pub url: Vec<Url>,
 }
 
@@ -72,7 +70,7 @@ mod test {
                 "elasticsearch_tags": null
               },
               "nns": {
-                "url": "https://icp-api.io,https://icp0.io,https://ic0.app"
+                "url": ["https://icp-api.io", "https://icp0.io", "https://ic0.app"]
               },
               "vm_resources": {
                 "memory": "490",
@@ -93,7 +91,7 @@ mod test {
     "elasticsearch_tags": null
   },
   "nns": {
-    "url": "https://icp-api.io,https://icp0.io,https://ic0.app"
+    "url": ["https://icp-api.io", "https://icp0.io", "https://ic0.app"]
   },
   "vm_resources": {
     "memory": "490",
