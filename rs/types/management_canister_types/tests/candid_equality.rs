@@ -202,7 +202,7 @@ fn upload_canister_snapshot_metadata(
 }
 
 #[candid_method(update)]
-fn upload_canister_snapshot_data(_: UploadCanisterSnapshotDataArgs) -> () {
+fn upload_canister_snapshot_data(_: UploadCanisterSnapshotDataArgs) {
     unreachable!()
 }
 
