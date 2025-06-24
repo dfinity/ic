@@ -537,6 +537,9 @@ impl From<SubnetConfigSet> for ExtendedSubnetConfigSet {
     }
 }
 
+/// Specifies ICP features enabled by deploying their corresponding system canisters
+/// when creating a PocketIC instance and keeping them up to date
+/// during the PocketIC instance lifetime.
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
 pub struct IcpFeatures {
     pub registry: bool,
