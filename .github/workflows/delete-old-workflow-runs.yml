@@ -3,20 +3,21 @@ on:
   schedule:
     - cron: "0 8 * * 1"
   workflow_dispatch:
-    days:
-      description: 'Days-worth of runs to keep for each workflow'
-      required: false
-      default: '90'
-    delete_workflow_pattern:
-      description: 'Name or filename of the workflow (if not set, all workflows are targeted)'
-      required: false
-    dry_run:
-      description: 'Logs simulated changes, no deletions are performed'
-      default: false
-    check_branch_existence:
-      description: 'Check if the branch exists before deleting runs'
-      default: false
-      required: false
+    inputs:
+      days:
+        description: 'Days-worth of runs to keep for each workflow'
+        required: false
+        default: '90'
+      delete_workflow_pattern:
+        description: 'Name or filename of the workflow (if not set, all workflows are targeted)'
+        required: false
+      dry_run:
+        description: 'Logs simulated changes, no deletions are performed'
+        default: false
+      check_branch_existence:
+        description: 'Check if the branch exists before deleting runs'
+        default: false
+        required: false
 
 jobs:
   delete_runs:
@@ -33,7 +34,7 @@ jobs:
           repository: ${{ github.repository }}
           retain_days: ${{ github.event.inputs.days }}
           keep_minimum_runs: 0
-          delete_workflow_pattern: ${{ github.event.inputs.delete_workflow_pattern }}
+          delete_workflow_pattern: "test-namepace"
           delete_workflow_by_state_pattern: "active" # don't delete inactive workflows so we can find them if we need to enable them
-          dry_run: ${{ github.event.inputs.dry_run }}
+          dry_run: "true"
           check_branch_existence: ${{ github.event.inputs.check_branch_existence }}
