@@ -35,7 +35,7 @@ mockall = { workspace = true }
 prost = { workspace = true }
 rewards-calculation = { path = "../rewards_calculation" }
 serde = { workspace = true }
-itertools = "0.12.1"
+itertools = { workspace = true }
 
 [dev-dependencies]
 candid_parser = { workspace = true }
