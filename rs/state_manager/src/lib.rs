@@ -1396,24 +1396,6 @@ impl StateManagerImpl {
         metrics.min_resident_height.set(last_snapshot_height);
         metrics.max_resident_height.set(last_snapshot_height);
 
-        // Find the largest height where both the `manifest` and the `checkpoint_layout` are available.
-        let manifest_delta_input =
-            states_metadata
-                .iter()
-                .rev()
-                .find_map(|(height, metadata)| match metadata {
-                    StateMetadata {
-                        checkpoint_layout: Some(checkpoint_layout),
-                        bundled_manifest: Some(bundled_manifest),
-                        ..
-                    } => Some((
-                        *height,
-                        bundled_manifest.manifest.clone(),
-                        checkpoint_layout.clone(),
-                    )),
-                    _ => None,
-                });
-
         let states = Arc::new(parking_lot::RwLock::new(SharedState {
             certifications_metadata,
             states_metadata,
@@ -1429,20 +1411,33 @@ impl StateManagerImpl {
             DeallocatorThread::new("StateDeallocator", Duration::from_millis(1));
 
         for checkpoint_layout in checkpoint_layouts_to_compute_manifest {
-            let target_height = checkpoint_layout.height();
+            // Find the largest height where both the `manifest` and the `checkpoint_layout` are available;
+            // build the manifest data from this height.
+            let manifest_delta =
+                states
+                    .read()
+                    .states_metadata
+                    .iter()
+                    .rev()
+                    .filter(|(height, _)| **height < checkpoint_layout.height())
+                    .find_map(|(height, metadata)| match metadata {
+                        StateMetadata {
+                            checkpoint_layout: Some(checkpoint_layout),
+                            bundled_manifest: Some(bundled_manifest),
+                            ..
+                        } => Some(crate::manifest::ManifestDelta {
+                            base_manifest: bundled_manifest.manifest.clone(),
+                            base_height: *height,
+                            target_height: checkpoint_layout.height(),
+                            base_checkpoint: checkpoint_layout.clone(),
+                        }),
+                        _ => None,
+                    });
+
             tip_channel
                 .send(TipRequest::ComputeManifest {
                     checkpoint_layout,
-                    manifest_delta: manifest_delta_input.clone().map(
-                        |(base_height, base_manifest, base_checkpoint)| {
-                            crate::manifest::ManifestDelta {
-                                base_manifest,
-                                base_height,
-                                target_height,
-                                base_checkpoint,
-                            }
-                        },
-                    ),
+                    manifest_delta,
                     states: states.clone(),
                     persist_metadata_guard: persist_metadata_guard.clone(),
                 })
