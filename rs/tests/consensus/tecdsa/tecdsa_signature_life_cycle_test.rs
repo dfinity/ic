@@ -121,10 +121,9 @@ fn test(env: TestEnv) {
         let message_hash = vec![0xabu8; 32];
         for key_id in &later_key_ids {
             let method_name = public_key_method_name(key_id);
-            let err =
-                get_public_key_with_retries(/*canister_id=*/ None, key_id, &msg_can, log, 20)
-                    .await
-                    .unwrap_err();
+            let err = get_public_key_with_retries(key_id, &msg_can, log, 20)
+                .await
+                .unwrap_err();
             let expected_reject = RejectResponse {
                 reject_code: RejectCode::CanisterReject,
                 reject_message: format!(
