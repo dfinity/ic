@@ -1262,6 +1262,7 @@ fn missing_manifest_is_computed_incrementally() {
 
             state_manager.commit_and_certify(state, height, CertificationScope::Full, None);
             wait_for_checkpoint(&state_manager, height);
+            state_manager.flush_tip_channel();
 
             state_manager
         };
