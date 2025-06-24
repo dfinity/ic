@@ -6,7 +6,7 @@
 #![forbid(missing_docs)]
 
 pub use ic_crypto_internal_bls12_381_type::{G1Affine, G2Affine, PairingInvalidPoint, Scalar};
-use ic_crypto_internal_bls12_381_type::{G2Prepared, Gt, LagrangeCoefficients};
+use ic_crypto_internal_bls12_381_type::{G2Prepared, Gt, LagrangeCoefficients, NodeIndices};
 
 use rand::{CryptoRng, RngCore};
 use std::collections::BTreeMap;
@@ -231,12 +231,7 @@ impl EncryptedKey {
             return Err(EncryptedKeyCombinationError::InsufficientShares);
         }
 
-        // TODO(CRP-2854) This cannot happen because the keys of a BTreeMap are unique
-        // Modify this to use a new infalliable interface once that is created
-        let l = LagrangeCoefficients::at_zero(
-            &nodes.iter().map(|(k, _v)| *k).collect::<Vec<NodeIndex>>(),
-        )
-        .map_err(|_| EncryptedKeyCombinationError::DuplicateNodeIndex)?;
+        let l = LagrangeCoefficients::at_zero(&NodeIndices::from_map(&nodes));
 
         let c1 = l
             .interpolate_g1(&nodes.iter().map(|i| &i.1.c1).collect::<Vec<_>>())
