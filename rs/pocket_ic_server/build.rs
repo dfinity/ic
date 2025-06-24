@@ -30,7 +30,11 @@ struct Dashboard<'a> {{
     )
     .unwrap();
 
-    // Create a dummy registry canister wasm for `cargo` to succeed (`bazel` always sets `REGISTRY_CANISTER_WASM_PATH`).
+    // The environment variable `REGISTRY_CANISTER_WASM_PATH` pointing to a file (storing the registry canister) is needed
+    // for the PocketIC server to compile. There are two flows to support:
+    // - code validation using `cargo`: we create a dummy file and point `REGISTRY_CANISTER_WASM_PATH` to that file for code validation to succeed;
+    // - building the PocketIC server using `bazel`: `bazel` always sets `REGISTRY_CANISTER_WASM_PATH` to an actual file storing the registry canister
+    //   (built separately) and thus we don't override `REGISTRY_CANISTER_WASM_PATH` if already set.
     if std::env::var("REGISTRY_CANISTER_WASM_PATH").is_err() {
         let registry_canister_wasm_path =
             PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("registry.wasm.gz");

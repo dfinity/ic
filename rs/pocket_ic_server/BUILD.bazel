@@ -138,9 +138,11 @@ cargo_build_script(
     name = "build_script",
     srcs = ["build.rs"],
     aliases = ALIASES,
-    # dummy value set to prevent the build script from exporting `REGISTRY_CANISTER_WASM_PATH` itself
-    build_script_env = {"REGISTRY_CANISTER_WASM_PATH": ""},
-    data = ["templates/dashboard.html"],  # build script data (e.g. template files) goes here
+    build_script_env = {"REGISTRY_CANISTER_WASM_PATH": "$(location @mainnet_nns_registry_canister//file)"},
+    data = [
+        "templates/dashboard.html",
+        "@mainnet_nns_registry_canister//file",
+    ],  # build script data (e.g. template files) goes here
     deps = BUILD_DEPENDENCIES,
 )
 
