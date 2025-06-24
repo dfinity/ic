@@ -34,11 +34,9 @@ jobs:
     steps:
       - <<: *checkout
       - name: Run Bazel Build All No Cache
-        uses:  ./.github/actions/bazel-test-all/
+        uses: ./.github/actions/bazel
         with:
-          BAZEL_COMMAND: build --repository_cache= --disk_cache= --noremote_accept_cached --remote_instance_name=${CI_COMMIT_SHA}
-          BAZEL_TARGETS: //...
-          CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
+          run: bazel build --config=stamped --config=local //...
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
   bazel-run-fuzzers-hourly:
