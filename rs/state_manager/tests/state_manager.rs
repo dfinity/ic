@@ -1243,9 +1243,13 @@ fn missing_manifest_is_computed_incrementally() {
     state_manager_restart_test_with_metrics(|_metrics, state_manager, restart_fn| {
         use ic_state_manager::testing::StateManagerTesting;
 
-        let canister_id = canister_test_id(123);
+        let insert_canister_and_write_checkpoint = |state_manager: StateManagerImpl,
+                                                    height: Height,
+                                                    canister_id: CanisterId|
+         -> StateManagerImpl {
+            let (_height, mut state) = state_manager.take_tip();
 
-        let write_stable_memory = |state: &mut ReplicatedState, index: u64| {
+            insert_dummy_canister(&mut state, canister_id);
             let mut canister = state.take_canister_state(&canister_id).unwrap();
             canister
                 .execution_state
@@ -1253,8 +1257,13 @@ fn missing_manifest_is_computed_incrementally() {
                 .unwrap()
                 .stable_memory
                 .page_map
-                .update(&[(PageIndex::new(index), &[1_u8; PAGE_SIZE])]);
+                .update(&[(PageIndex::new(1), &[1_u8; PAGE_SIZE])]);
             state.put_canister_state(canister);
+
+            state_manager.commit_and_certify(state, height, CertificationScope::Full, None);
+            wait_for_checkpoint(&state_manager, height);
+
+            state_manager
         };
 
         let purge_manifests_and_restart = |mut state_manager: StateManagerImpl,
@@ -1281,32 +1290,26 @@ fn missing_manifest_is_computed_incrementally() {
             )
         };
 
-        // Write a checkpoint at height 1; insert a canister.
-        let (_height, mut state) = state_manager.take_tip();
-        insert_dummy_canister(&mut state, canister_id);
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
-        wait_for_checkpoint(&state_manager, height(1));
+        // Create two checkpoints @1 and @2.
+        let state_manager =
+            insert_canister_and_write_checkpoint(state_manager, height(1), canister_test_id(1));
+        let state_manager =
+            insert_canister_and_write_checkpoint(state_manager, height(2), canister_test_id(2));
 
-        // Write a checkpoint at height 2; write stable memory at index 1.
-        let (_height, mut state) = state_manager.take_tip();
-        write_stable_memory(&mut state, 1);
-        state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
-        wait_for_checkpoint(&state_manager, height(2));
-
+        // Trigger an incremental manifest computation @2 with a delta 1 -> 2.
         let (state_manager, reused_at_2_from_1, hashed_at_2_from_1) = purge_manifests_and_restart(
             state_manager,
-            &[height(2)], // Purge manifest at height 2.
-            height(2),    // Restart the state manager at height 2.
+            &[height(2)], // Purge manifest @2.
+            height(2),    // Restart the state manager @2.
         );
         // For an incremental manifest computation, something must have been reused.
         assert_ne!(0, reused_at_2_from_1);
 
-        // Write a checkpoint at height 3; write stable memory at index 2.
-        let (_height, mut state) = state_manager.take_tip();
-        write_stable_memory(&mut state, 2);
-        state_manager.commit_and_certify(state, height(3), CertificationScope::Full, None);
-        wait_for_checkpoint(&state_manager, height(3));
+        // Create a checkpoint @3.
+        let state_manager =
+            insert_canister_and_write_checkpoint(state_manager, height(3), canister_test_id(3));
 
+        // Trigger an incremental manifest computation @3 with a delta 2 -> 3.
         let (state_manager, reused_at_3_from_2, hashed_at_3_from_2) = purge_manifests_and_restart(
             state_manager,
             &[height(3)], // Purge manifest at height 3.
@@ -1315,6 +1318,7 @@ fn missing_manifest_is_computed_incrementally() {
         // For an incremental manifest computation, something must have been reused.
         assert_ne!(0, reused_at_3_from_2);
 
+        // Trigger incremental manifest computations @2 and @3 with deltas 1 -> 2 and 1 -> 3.
         let (_, reused_at_2_and_3_from_1, hashed_at_2_and_3_from_1) = purge_manifests_and_restart(
             state_manager,
             &[height(2), height(3)], // Purge manifest at height 2 and 3.
