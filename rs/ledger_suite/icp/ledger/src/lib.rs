@@ -19,8 +19,7 @@ use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemor
 use ic_stable_structures::{storable::Bound, Storable};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use icp_ledger::{
-    AccountIdentifier, Block, FeatureFlags, LedgerAllowances, LedgerBalances, Memo, Operation,
-    PaymentError, Transaction, TransferError, TransferFee, UpgradeArgs, DEFAULT_TRANSFER_FEE,
+    AccountIdentifier, Allowance as Allowance103, Allowances, Block, FeatureFlags, LedgerAllowances, LedgerBalances, Memo, Operation, PaymentError, Transaction, TransferError, TransferFee, UpgradeArgs, DEFAULT_TRANSFER_FEE, MAX_TAKE_ALLOWANCES
 };
 use icrc_ledger_types::icrc1::account::Account;
 use intmap::IntMap;
@@ -561,6 +560,10 @@ impl Ledger {
             self.feature_flags = feature_flags;
         }
     }
+
+    pub fn max_take_allowances(&self) -> u64 {
+        MAX_TAKE_ALLOWANCES
+    }
 }
 
 pub fn add_payment(
@@ -590,6 +593,42 @@ pub fn change_notification_state(
 
 pub fn balances_len() -> u64 {
     BALANCES_MEMORY.with_borrow(|balances| balances.len())
+}
+
+pub fn get_allowances(
+    from: AccountIdentifier,
+    spender: Option<AccountIdentifier>,
+    max_results: u64,
+    now: u64,
+) -> Allowances {
+    let mut result = vec![];
+    let start_account_spender = match spender {
+        Some(spender) => (from, spender),
+        None => (from, AccountIdentifier{ hash: [0u8;28] }),
+    };
+    ALLOWANCES_MEMORY.with_borrow(|allowances| {
+        for ((from_account_id, to_spender_id), storable_allowance) in
+            allowances.range(start_account_spender..)
+        {
+            if result.len() >= max_results as usize || from_account_id != from {
+                break;
+            }
+            if let Some(expires_at) = storable_allowance.expires_at {
+                if expires_at.as_nanos_since_unix_epoch() <= now {
+                    continue;
+                }
+            }
+            result.push(Allowance103{
+                from_account_id,
+                to_spender_id,
+                allowance: storable_allowance.amount,
+                expires_at: storable_allowance
+                    .expires_at
+                    .map(|t| t.as_nanos_since_unix_epoch()),
+            });
+        }
+    });
+    result
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
