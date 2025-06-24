@@ -604,13 +604,10 @@ pub fn get_allowances(
     now: u64,
 ) -> Allowances {
     let mut result = vec![];
-    let start_account_spender = match spender {
-        Some(spender) => (from, spender),
-        None => (from, AccountIdentifier { hash: [0u8; 28] }),
-    };
+    let start_spender = spender.unwrap_or(AccountIdentifier { hash: [0u8; 28] });
     ALLOWANCES_MEMORY.with_borrow(|allowances| {
         for ((from_account_id, to_spender_id), storable_allowance) in
-            allowances.range(start_account_spender..)
+            allowances.range((from, start_spender)..)
         {
             if result.len() >= max_results as usize || from_account_id != from {
                 break;
