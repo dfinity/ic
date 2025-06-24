@@ -76,18 +76,32 @@ pub fn setup(env: TestEnv) {
     let vm_resources = VmResources {
         vcpus: Some(NrOfVCPUs::new(64)),
         memory_kibibytes: Some(AmountOfMemoryKiB::new(480 << 20)),
-        boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(3072)),
+        boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(4096)),
     };
     let mut ic = InternetComputer::new()
         .with_api_boundary_nodes(1)
         .with_default_vm_resources(vm_resources);
     ic = ic.add_subnet(
-        Subnet::new(SubnetType::System).add_nodes_with_required_host_features(
-            1,
-            vec![HostFeature::Host(
-                "dm1-dll45.dm1.dfinity.network".to_string(),
-            )],
-        ),
+        Subnet::new(SubnetType::System)
+            .add_nodes_with_required_host_features(
+                1,
+                vec![HostFeature::Host(
+                    "dm1-dll45.dm1.dfinity.network".to_string(),
+                )],
+            )
+            .add_nodes_with_required_host_features(
+                1,
+                vec![HostFeature::Host(
+                    "dm1-dll46.dm1.dfinity.network".to_string(),
+                )],
+            )
+            .add_nodes_with_required_host_features(
+                1,
+                vec![HostFeature::Host(
+                    "dm1-dll29.dm1.dfinity.network".to_string(),
+                )],
+            )
+            .add_nodes_with_required_host_features(1, vec![HostFeature::Performance]),
     );
     let num_full_app = NUM_FULL_CONSENSUS_APP_SUBNETS;
     for _ in 0..num_full_app {
