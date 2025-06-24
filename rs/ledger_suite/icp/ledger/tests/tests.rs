@@ -14,13 +14,13 @@ use ic_ledger_suite_state_machine_tests::{
 };
 use ic_state_machine_tests::{ErrorCode, StateMachine, UserError, WasmResult};
 use icp_ledger::{
-    AccountIdBlob, AccountIdentifier, AccountIdentifierByteBuf, ArchiveOptions,
+    AccountIdBlob, AccountIdentifier, AccountIdentifierByteBuf, Allowances, ArchiveOptions,
     ArchivedBlocksRange, Block, CandidBlock, CandidOperation, CandidTransaction, FeatureFlags,
-    GetBlocksArgs, GetBlocksRes, GetBlocksResult, GetEncodedBlocksResult, IcpAllowanceArgs,
-    InitArgs, IterBlocksArgs, IterBlocksRes, LedgerCanisterInitPayload, LedgerCanisterPayload,
-    LedgerCanisterUpgradePayload, Operation, QueryBlocksResponse, QueryEncodedBlocksResponse,
-    TimeStamp, UpgradeArgs, DEFAULT_TRANSFER_FEE, MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST,
-    MAX_BLOCKS_PER_REQUEST,
+    GetBlocksArgs, GetBlocksRes, GetBlocksResult, GetEncodedBlocksResult, GetLegacyAllowancesArgs,
+    IcpAllowanceArgs, InitArgs, IterBlocksArgs, IterBlocksRes, LedgerCanisterInitPayload,
+    LedgerCanisterPayload, LedgerCanisterUpgradePayload, Operation, QueryBlocksResponse,
+    QueryEncodedBlocksResponse, TimeStamp, UpgradeArgs, DEFAULT_TRANSFER_FEE,
+    MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST, MAX_BLOCKS_PER_REQUEST,
 };
 use icrc_ledger_types::icrc1::{
     account::Account,
@@ -1833,6 +1833,33 @@ fn test_archiving_respects_num_blocks_to_archive_upper_limit() {
     );
 }
 
+fn list_allowances(
+    env: &StateMachine,
+    ledger: CanisterId,
+    caller: PrincipalId,
+    from: Option<PrincipalId>,
+    spender: Option<PrincipalId>,
+    take: Option<u64>,
+) -> Allowances {
+    let args = GetLegacyAllowancesArgs {
+        from_account_id: from,
+        prev_spender_id: spender,
+        take,
+    };
+    Decode!(
+        &env.execute_ingress_as(
+            caller,
+            ledger,
+            "get_legacy_allowances",
+            Encode!(&args).unwrap()
+        )
+        .expect("failed to list allowances")
+        .bytes(),
+        Allowances
+    )
+    .expect("failed to decode get__allowances response")
+}
+
 #[test]
 fn test_allowance_listing_sequences() {
     const INITIAL_BALANCE: u64 = 10_000_000;
@@ -1844,38 +1871,56 @@ fn test_allowance_listing_sequences() {
     let mut approvers = vec![];
     for i in 1..NUM_APPROVERS {
         let pid = PrincipalId::new_user_test_id(i);
-        approvers.push(pid);        
+        approvers.push(pid);
         initial_balances.push((Account::from(pid.0), INITIAL_BALANCE));
     }
 
     let mut spenders = vec![];
     for i in 100..100 + NUM_SPENDERS {
-        spenders.push(PrincipalId::new_user_test_id(i));        
+        spenders.push(PrincipalId::new_user_test_id(i));
     }
+    spenders.sort_by(|first, second| {
+        let ai1: AccountIdentifier = Account {
+            owner: first.0,
+            subaccount: None,
+        }
+        .into();
+        let ai2: AccountIdentifier = Account {
+            owner: second.0,
+            subaccount: None,
+        }
+        .into();
+        ai1.cmp(&ai2)
+    });
 
     let (env, canister_id) = setup(
         ledger_wasm_allowance_getter(),
         encode_init_args,
         initial_balances,
     );
-    
-    let approve_args = ApproveArgs {
-        from_subaccount: None,
-        spender: p2.0.into(),
-        amount: Nat::from(APPROVE_AMOUNT),
-        fee: None,
-        memo: None,
-        expires_at: None,
-        expected_allowance: None,
-        created_at_time: None,
-    };
-    let response = env.execute_ingress_as(
-        p1,
-        canister_id,
-        "icrc2_approve",
-        Encode!(&approve_args).unwrap(),
-    );
-    assert!(response.is_ok());
+
+    for approver in &approvers {
+        for spender in &spenders {
+            let approve_args = ApproveArgs {
+                from_subaccount: None,
+                spender: spender.0.into(),
+                amount: Nat::from(APPROVE_AMOUNT),
+                fee: None,
+                memo: None,
+                expires_at: None,
+                expected_allowance: None,
+                created_at_time: None,
+            };
+            let response = env.execute_ingress_as(
+                p1,
+                canister_id,
+                "icrc2_approve",
+                Encode!(&approve_args).unwrap(),
+            );
+            assert!(response.is_ok());
+        }
+    }
+
     let allowance_args = IcpAllowanceArgs {
         account: AccountIdentifier::from(p1.0),
         spender: AccountIdentifier::from(p2.0),
