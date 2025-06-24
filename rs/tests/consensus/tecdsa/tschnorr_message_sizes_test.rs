@@ -21,7 +21,7 @@ use anyhow::Result;
 
 use ic_config::subnet_config::SCHNORR_SIGNATURE_FEE;
 use ic_consensus_threshold_sig_system_test_utils::{
-    generate_dummy_schnorr_signature_with_logger, get_public_key_from_canister_id_with_logger,
+    generate_dummy_schnorr_signature_with_logger, get_public_key_for_canister_id_with_logger,
     get_schnorr_signature_with_logger, make_bip340_key_id, make_eddsa_key_id, verify_signature,
     DKG_INTERVAL, NUMBER_OF_NODES,
 };
@@ -161,7 +161,7 @@ fn test_message_sizes(subnet: SubnetSnapshot, limit: Limit, log: &Logger) {
         info!(log, "Getting the public key for {}", key_id);
         // With a Local limit, it is the signer canister that generates the signature, so we need
         // to get the public key from the latter. Otherwise, we get it from the message canister.
-        let public_key = block_on(get_public_key_from_canister_id_with_logger(
+        let public_key = block_on(get_public_key_for_canister_id_with_logger(
             CanisterId::try_from_principal_id(match limit.limit_type {
                 LimitType::Local => sig_can.canister_id().into(),
                 LimitType::XNet => msg_can.canister_id().into(),
