@@ -8,11 +8,7 @@ use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
-    consensus::idkg::PreSigId,
-    crypto::{canister_threshold_sig::MasterPublicKey, threshold_sig::ni_dkg::NiDkgId},
-    ingress::{IngressStatus, WasmResult},
-    messages::{CertificateDelegation, MessageId, Query, SignedIngressContent},
-    Cycles, ExecutionRound, Height, NumInstructions, Randomness, ReplicaVersion, Time,
+    consensus::idkg::PreSigId, crypto::{canister_threshold_sig::MasterPublicKey, threshold_sig::ni_dkg::NiDkgId}, ingress::{IngressStatus, WasmResult}, messages::{CertificateDelegation, MessageId, Query, SignedIngressContent}, Cycles, ExecutionRound, Height, NodeId, NumInstructions, Randomness, ReplicaVersion, Time
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -1363,6 +1359,7 @@ pub struct RegistryExecutionSettings {
     pub provisional_whitelist: ProvisionalWhitelist,
     pub chain_key_settings: BTreeMap<MasterPublicKeyId, ChainKeySettings>,
     pub subnet_size: usize,
+    pub node_ids: BTreeSet<NodeId>,
 }
 
 /// Chain key configuration of execution that comes from the registry.

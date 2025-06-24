@@ -68,7 +68,7 @@ use ic_replicated_state::{
     CanisterState, ExecutionTask, NetworkTopology, ReplicatedState,
 };
 use ic_types::{
-    canister_http::CanisterHttpRequestContext,
+    canister_http::{CanisterHttpRequestContext, Replication},
     crypto::{
         canister_threshold_sig::{MasterPublicKey, PublicKey},
         threshold_sig::ni_dkg::NiDkgTargetId,
@@ -974,87 +974,35 @@ impl ExecutionEnvironment {
                                 response: Err(err),
                                 refund: msg.take_cycles(),
                             },
-                            Ok(args) => match CanisterHttpRequestContext::try_from((
-                                state.time(),
-                                request.as_ref(),
-                                args,
-                            )) {
-                                Err(err) => ExecuteSubnetMessageResult::Finished {
-                                    response: Err(err.into()),
-                                    refund: msg.take_cycles(),
-                                },
-                                Ok(mut canister_http_request_context) => {
-                                    let http_request_fee =
-                                        self.cycles_account_manager.http_request_fee(
-                                            canister_http_request_context.variable_parts_size(),
-                                            canister_http_request_context.max_response_bytes,
-                                            registry_settings.subnet_size,
-                                        );
-                                    // Here we make sure that we do not let upper layers open new
-                                    // http calls while the maximum number of calls is in-flight.
-                                    // Later, in the http adapter we also have a bounded queue of
-                                    // the same size, but this queue alone is not enough as it is
-                                    // used as the interface between DSM and consensus, and the latter
-                                    // consumes requests from this queue upon the request processing
-                                    // start. This means more elements can be added to the queue, while
-                                    // previous requests are still in-flight.
-                                    if state
-                                        .metadata
-                                        .subnet_call_context_manager
-                                        .canister_http_request_contexts
-                                        .len()
-                                        >= self.config.max_canister_http_requests_in_flight
-                                    {
-                                        let err = Err(UserError::new(
-                                            ErrorCode::CanisterRejectedMessage,
-                                            format!("max number ({}) of http requests in-flight reached.", self.config.max_canister_http_requests_in_flight),
-                                        ));
-                                        ExecuteSubnetMessageResult::Finished {
-                                            response: err,
+                            Ok(args) => {
+                                let is_replicated = args.is_replicated.unwrap_or(true);
+                                match CanisterHttpRequestContext::try_from((
+                                    state.time(),
+                                    request.as_ref(),
+                                    args,
+                                )) {
+                                    Err(err) => ExecuteSubnetMessageResult::Finished {
+                                        response: Err(err.into()),
+                                        refund: msg.take_cycles(),
+                                    },
+                                    Ok(canister_http_request_context) => match self
+                                        .try_add_http_context_to_replicated_state(
+                                            canister_http_request_context,
+                                            &mut state,
+                                            is_replicated,
+                                            request.as_ref(),
+                                            registry_settings,
+                                            rng,
+                                            since,
+                                        ) {
+                                        Err(err) => ExecuteSubnetMessageResult::Finished {
+                                            response: Err(err),
                                             refund: msg.take_cycles(),
-                                        }
-                                    } else if request.payment < http_request_fee {
-                                        let err = Err(UserError::new(
-                                                        ErrorCode::CanisterRejectedMessage,
-                                                        format!(
-                                                            "http_request request sent with {} cycles, but {} cycles are required.",
-                                                            request.payment, http_request_fee
-                                                        ),
-                                                    ));
-                                        ExecuteSubnetMessageResult::Finished {
-                                            response: err,
-                                            refund: msg.take_cycles(),
-                                        }
-                                    } else {
-                                        canister_http_request_context.request.payment -=
-                                            http_request_fee;
-                                        let http_fee = NominalCycles::from(http_request_fee);
-                                        state
-                                            .metadata
-                                            .subnet_metrics
-                                            .consumed_cycles_http_outcalls += http_fee;
-                                        state
-                                            .metadata
-                                            .subnet_metrics
-                                            .observe_consumed_cycles_with_use_case(
-                                                CyclesUseCase::HTTPOutcalls,
-                                                http_fee,
-                                            );
-                                        state.metadata.subnet_call_context_manager.push_context(
-                                            SubnetCallContext::CanisterHttpRequest(
-                                                canister_http_request_context,
-                                            ),
-                                        );
-                                        self.metrics.observe_message_with_label(
-                                            &request.method_name,
-                                            since.elapsed().as_secs_f64(),
-                                            SUBMITTED_OUTCOME_LABEL.into(),
-                                            SUCCESS_STATUS_LABEL.into(),
-                                        );
-                                        ExecuteSubnetMessageResult::Processing
-                                    }
+                                        },
+                                        Ok(()) => ExecuteSubnetMessageResult::Processing,
+                                    },
                                 }
-                            },
+                            }
                         }
                     }
 
@@ -1814,6 +1762,81 @@ impl ExecutionEnvironment {
         // these cases.
         let state = self.finish_subnet_message_execution(state, msg, result, since);
         (state, Some(NumInstructions::from(0)))
+    }
+
+    fn try_add_http_context_to_replicated_state(
+        &self,
+        mut canister_http_request_context: CanisterHttpRequestContext,
+        state: &mut ReplicatedState,
+        is_replicated: bool,
+        request: &Request,
+        registry_settings: &RegistryExecutionSettings,
+        rng: &mut dyn RngCore,
+        since: Instant,
+    ) -> Result<(), UserError> {
+
+        match is_replicated {
+            true => canister_http_request_context.replication = Replication::FullyReplicated,
+            false => {
+                let node_ids = &registry_settings.node_ids;
+                //TODO(mihailjianu_next): go from here. 
+            }
+        }
+
+        let http_request_fee = self.cycles_account_manager.http_request_fee(
+            canister_http_request_context.variable_parts_size(),
+            canister_http_request_context.max_response_bytes,
+            registry_settings.subnet_size,
+        );
+        // Here we make sure that we do not let upper layers open new
+        // http calls while the maximum number of calls is in-flight.
+        // Later, in the http adapter we also have a bounded queue of
+        // the same size, but this queue alone is not enough as it is
+        // used as the interface between DSM and consensus, and the latter
+        // consumes requests from this queue upon the request processing
+        // start. This means more elements can be added to the queue, while
+        // previous requests are still in-flight.
+        if state
+            .metadata
+            .subnet_call_context_manager
+            .canister_http_request_contexts
+            .len()
+            >= self.config.max_canister_http_requests_in_flight
+        {
+            Err(UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "max number ({}) of http requests in-flight reached.",
+                    self.config.max_canister_http_requests_in_flight
+                ),
+            ))
+        } else if request.payment < http_request_fee {
+            Err(UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "http_request request sent with {} cycles, but {} cycles are required.",
+                    request.payment, http_request_fee
+                ),
+            ))
+        } else {
+            canister_http_request_context.request.payment -= http_request_fee;
+            let http_fee = NominalCycles::from(http_request_fee);
+            state.metadata.subnet_metrics.consumed_cycles_http_outcalls += http_fee;
+            state
+                .metadata
+                .subnet_metrics
+                .observe_consumed_cycles_with_use_case(CyclesUseCase::HTTPOutcalls, http_fee);
+            state.metadata.subnet_call_context_manager.push_context(
+                SubnetCallContext::CanisterHttpRequest(canister_http_request_context),
+            );
+            self.metrics.observe_message_with_label(
+                &request.method_name,
+                since.elapsed().as_secs_f64(),
+                SUBMITTED_OUTCOME_LABEL.into(),
+                SUCCESS_STATUS_LABEL.into(),
+            );
+            Ok(())
+        }
     }
 
     /// Observes a subnet message metrics and outputs the given subnet response.

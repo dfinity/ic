@@ -326,10 +326,6 @@ impl TryFrom<(Time, &Request, CanisterHttpRequestArgs)> for CanisterHttpRequestC
             }
         };
 
-        if let Some(false) = args.is_replicated {
-            return Err(CanisterHttpRequestContextError::NonReplicatedNotSupported);
-        }
-
         let max_response_bytes = match args.max_response_bytes {
             Some(max_response_bytes) => {
                 if max_response_bytes > MAX_CANISTER_HTTP_RESPONSE_BYTES {
@@ -380,6 +376,7 @@ impl TryFrom<(Time, &Request, CanisterHttpRequestArgs)> for CanisterHttpRequestC
             },
             transform: args.transform.map(From::from),
             time,
+            // We don't know yet which node will handle the request, so we default to fully replicated.
             replication: Replication::FullyReplicated,
         })
     }
