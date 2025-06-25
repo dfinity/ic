@@ -1,5 +1,5 @@
 {
-  "checksum": "3fdbc5dc42e8404e65ec56b1dd0388586a39632b0f820aee7cf2265980c6efa5",
+  "checksum": "fd45864288a746a16d82b3f29beca2c4052dc434ff425fb6941fb49ca2d3e6b1",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -12937,6 +12937,62 @@
       ],
       "license_file": "LICENSE.txt"
     },
+    "chrono 0.4.41": {
+      "name": "chrono",
+      "version": "0.4.41",
+      "package_url": "https://github.com/chronotope/chrono",
+      "repository": {
+        "Git": {
+          "remote": "https://github.com/chronotope/chrono.git",
+          "commitish": {
+            "Rev": "d1de1d95ead4e59472622761ad545dc4a940992b"
+          }
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "chrono",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "chrono",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "alloc"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "num-traits 0.2.19",
+              "target": "num_traits"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.4.41"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE.txt"
+    },
     "ciborium 0.2.1": {
       "name": "ciborium",
       "version": "0.2.1",
@@ -20133,6 +20189,11 @@
             {
               "id": "chrono 0.4.38",
               "target": "chrono"
+            },
+            {
+              "id": "chrono 0.4.41",
+              "target": "chrono",
+              "alias": "chrono_canisters"
             },
             {
               "id": "ciborium 0.2.1",
@@ -92575,6 +92636,7 @@
     "cfg-if 1.0.0",
     "chacha20poly1305 0.10.1",
     "chrono 0.4.38",
+    "chrono 0.4.41",
     "ciborium 0.2.1",
     "cidr 0.2.3",
     "clap 4.5.20",
