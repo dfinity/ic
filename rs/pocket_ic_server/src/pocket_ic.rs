@@ -850,7 +850,7 @@ impl PocketIcSubnets {
                 log_visibility: Some(LogVisibilityV2::Controllers),
                 wasm_memory_limit: Some(3_221_225_472_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
-                environment_variables: None, 
+                environment_variables: None,
             };
             let canister_id = nns_subnet.state_machine.create_canister_with_cycles(
                 Some(REGISTRY_CANISTER_ID.get()),
