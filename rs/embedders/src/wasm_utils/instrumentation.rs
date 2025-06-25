@@ -121,16 +121,16 @@ use ic_types::methods::WasmMethod;
 use ic_types::NumBytes;
 use ic_types::NumInstructions;
 use ic_wasm_types::{BinaryEncodedWasm, WasmError, WasmInstrumentationError};
-use orca_wasm::ir::module::module_globals::GlobalKind;
 use orca_wasm::{
     ir::{
-        id::{FunctionID, ImportsID},
+        id::{FunctionID, ImportsID, TypeID},
         module::{
             module_functions::{FuncKind, LocalFunction},
+            module_globals::GlobalKind,
             module_imports::ModuleImports,
             GetID, LocalOrImport,
         },
-        types::ElementItems,
+        types::{DataSegmentKind, ElementItems},
     },
     DataType,
 };
@@ -798,29 +798,45 @@ fn mutate_function_indices(module: &mut orca_wasm::Module, f: impl Fn(u32) -> u3
 
     for data_segment in &mut module.data {
         match &mut data_segment.kind {
-            ic_wasm_transform::DataSegmentKind::Passive => {}
-            ic_wasm_transform::DataSegmentKind::Active {
+            DataSegmentKind::Passive => {}
+            DataSegmentKind::Active {
                 memory_index: _,
                 offset_expr,
             } => {
-                mutate_instruction(&f, offset_expr);
+                for op in offset_expr.instructions_mut() {
+                    if let orca_wasm::ir::types::Instructions::RefFunc(id) = op {
+                        *id = FunctionID(f(id.0));
+                    }
+                }
             }
         }
     }
 
     if let Some(start_idx) = module.start.as_mut() {
-        *start_idx = f(*start_idx);
+        *start_idx = FunctionID(f(start_idx.0))
     }
 
-    if let Some(name_section) = module.name_section.as_mut() {
-        for (index, _name) in &mut name_section.function_names {
-            *index = f(*index);
-        }
-        for (index, _map) in &mut name_section.local_names {
-            *index = f(*index);
-        }
-        for (index, _map) in &mut name_section.label_names {
-            *index = f(*index);
+    // TODO: add test that a name section with junk data doesn't crash.
+    for section in module.custom_sections.iter_mut() {
+        if section.name == "name" {
+            let reader = wasmparser::NameSectionReader::new(wasmparser::BinaryReader::new(
+                section.data(),
+                0,
+            ));
+            let mut corrected_names = wasm_encoder::NameMap::new();
+            for name in reader {
+                if let Ok(wasmparser::Name::Function(name_map)) = name {
+                    for entry in name_map {
+                        if let Ok(entry) = entry {
+                            corrected_names.append(f(entry.index), entry.name);
+                        }
+                    }
+                }
+            }
+            let mut new_section = wasm_encoder::NameSection::new();
+            new_section.functions(&corrected_names);
+            let custom = new_section.as_custom();
+            *section = orca_wasm::ir::types::CustomSection::new_owned("name", custom.data.to_vec());
         }
     }
 }
@@ -884,7 +900,15 @@ fn inject_helper_functions(
         fr_type_idx,
     );
 
-    module.imports.extend(old_imports);
+    for import in old_imports.iter() {
+        if let orca_wasm::wasmparser::TypeRef::Func(i) = import.ty {
+            module.add_import_func(
+                import.module.to_string(),
+                import.name.to_string(),
+                TypeID(i),
+            );
+        }
+    }
 
     // now increment all function references by InjectedImports::Count
     let cnt = InjectedImports::count() as u32;

@@ -913,7 +913,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "orca-wasm": crate.spec(
                 git = "https://github.com/adambratschikaye/orca",
-                rev = "708262bbc71b7d86e210c0d966f6573cd908e687",
+                rev = "f179363c086e9c20893730373b85222b8337a132",
             ),
             "p256": crate.spec(
                 version = "^0.13.2",

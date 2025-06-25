@@ -1,5 +1,5 @@
 {
-  "checksum": "875c42400418ce24f42d9241c40af291871c6116138c597481214eac6a0269e9",
+  "checksum": "76f0c3f1ed3c66e2df60e823156e36ee75eb89381104b32ac7b6a48efcb2ac82",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -24366,7 +24366,7 @@
             ],
             "cfg(windows)": [
               {
-                "id": "windows-sys 0.59.0",
+                "id": "windows-sys 0.52.0",
                 "target": "windows_sys"
               }
             ]
@@ -51246,7 +51246,7 @@
         "Git": {
           "remote": "https://github.com/adambratschikaye/orca",
           "commitish": {
-            "Rev": "708262bbc71b7d86e210c0d966f6573cd908e687"
+            "Rev": "f179363c086e9c20893730373b85222b8337a132"
           }
         }
       },
@@ -67050,7 +67050,7 @@
                 "alias": "libc_errno"
               },
               {
-                "id": "windows-sys 0.59.0",
+                "id": "windows-sys 0.52.0",
                 "target": "windows_sys"
               }
             ],
@@ -89657,6 +89657,8 @@
             "Wdk_System_IO",
             "Win32",
             "Win32_Foundation",
+            "Win32_NetworkManagement",
+            "Win32_NetworkManagement_IpHelper",
             "Win32_Networking",
             "Win32_Networking_WinSock",
             "Win32_Security",
@@ -89665,6 +89667,8 @@
             "Win32_Storage_FileSystem",
             "Win32_System",
             "Win32_System_Console",
+            "Win32_System_Diagnostics",
+            "Win32_System_Diagnostics_Debug",
             "Win32_System_IO",
             "Win32_System_Pipes",
             "Win32_System_SystemServices",
@@ -89730,8 +89734,6 @@
             "Wdk_Storage_FileSystem",
             "Win32",
             "Win32_Foundation",
-            "Win32_NetworkManagement",
-            "Win32_NetworkManagement_IpHelper",
             "Win32_Networking",
             "Win32_Networking_WinSock",
             "Win32_Security",

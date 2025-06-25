@@ -4119,7 +4119,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "33d852cb9b869c2a9b3df2f71a3074817f01e1844f839a144f5fcef059a4eb5d"
 dependencies = [
  "libc",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -8519,7 +8519,7 @@ dependencies = [
 [[package]]
 name = "orca-wasm"
 version = "0.9.1"
-source = "git+https://github.com/adambratschikaye/orca?rev=708262bbc71b7d86e210c0d966f6573cd908e687#708262bbc71b7d86e210c0d966f6573cd908e687"
+source = "git+https://github.com/adambratschikaye/orca?rev=f179363c086e9c20893730373b85222b8337a132#f179363c086e9c20893730373b85222b8337a132"
 dependencies = [
  "gimli 0.31.1",
  "log",
@@ -10602,7 +10602,7 @@ dependencies = [
  "errno 0.3.10",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
