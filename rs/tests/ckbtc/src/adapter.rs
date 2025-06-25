@@ -1,7 +1,7 @@
 use bitcoin::{block::Header, consensus::deserialize, Address, Amount, Block};
 use bitcoincore_rpc::{Auth, Client, RpcApi};
 use candid::{Encode, Principal};
-use ic_agent::{Agent, AgentError};
+use ic_agent::{agent::RejectCode, Agent, AgentError};
 use ic_btc_interface::Network;
 use ic_config::execution_environment::BITCOIN_MAINNET_CANISTER_ID;
 use ic_management_canister_types_private::{
@@ -13,7 +13,7 @@ use ic_system_test_driver::{
     util::{MessageCanister, MESSAGE_CANISTER_WASM},
 };
 use ic_types::PrincipalId;
-use ic_utils::interfaces::ManagementCanister;
+use ic_utils::interfaces::{management_canister::CanisterStatus, ManagementCanister};
 use slog::{info, Logger};
 use std::{str::FromStr, time::Duration};
 
@@ -37,18 +37,35 @@ impl<'a> AdapterProxy<'a> {
         let bitcoin_principal_id = PrincipalId::from_str(BITCOIN_MAINNET_CANISTER_ID).unwrap();
         let bitcoin_principal = bitcoin_principal_id.into();
 
-        // Since we need to install the messaging canister at a specific PrincipalId,
-        // we need to install it manually here
         let mgr = ManagementCanister::create(agent);
-        mgr.create_canister()
-            .as_provisional_create_with_specified_id(bitcoin_principal)
-            .call_and_wait()
-            .await
-            .expect("Failed to provision id");
-        mgr.install_code(&(bitcoin_principal), MESSAGE_CANISTER_WASM)
-            .call_and_wait()
-            .await
-            .expect("Failed to install code");
+
+        match mgr.canister_status(&bitcoin_principal).await {
+            Ok((status,)) => {
+                if status.status != CanisterStatus::Running {
+                    panic!("Message canister in unexpected status");
+                }
+            }
+            Err(err) => match err {
+                AgentError::UncertifiedReject { ref reject, .. }
+                    if reject.reject_code == RejectCode::DestinationInvalid =>
+                {
+                    info!(log, "Creating message canister based on error: {:?}", err);
+
+                    // Since we need to install the messaging canister at a
+                    // specific PrincipalId, we need to install it manually here
+                    mgr.create_canister()
+                        .as_provisional_create_with_specified_id(bitcoin_principal)
+                        .call_and_wait()
+                        .await
+                        .expect("Failed to provision id");
+                    mgr.install_code(&(bitcoin_principal), MESSAGE_CANISTER_WASM)
+                        .call_and_wait()
+                        .await
+                        .expect("Failed to install code");
+                }
+                _ => panic!("Unexpected error"),
+            },
+        };
 
         let msg_can = MessageCanister::from_canister_id(agent, bitcoin_principal_id.into());
         Self { msg_can, log }
