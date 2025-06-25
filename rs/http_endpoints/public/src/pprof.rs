@@ -1,6 +1,3 @@
-// TODO(MR-683): Address the regression and re-enable.
-#![allow(dead_code, unused_variables)]
-
 use crate::common::{CONTENT_TYPE_PROTOBUF, CONTENT_TYPE_SVG};
 
 use axum::{
@@ -34,12 +31,10 @@ const PPROF_HOME_HTML: &str = r#"<html>
 <body>
 /_/pprof/<br>
 <br>
-<b>Temporarily disabled due to a regression.</b><br>
-<br>
 Types of profiles available:
 <ul>
-<li><div class=profile-name><a href="/_/pprof/profile">profile</a>:</div> CPU profile in pprof protobuf format. You can specify the duration in the <code>seconds</code> query parameter, and the frequency via the <code>frequency</code> parameter. After you get the profile file, use the <code>go tool pprof</code> command to investigate the profile.</li>
-<li><div class=profile-name><a href="/_/pprof/flamegraph">flamegraph</a>:</div> CPU profile in flamegraph SVG format. You can specify the duration in the <code>seconds</code> query parameter, and the frequency via the <code>frequency</code> parameter.</li>
+<li><div class=profile-name><a href=pprof/profile>profile</a>:</div> CPU profile in pprof protobuf format. You can specify the duration in the <code>seconds</code> query parameter, and the frequency via the <code>frequency</code> parameter. After you get the profile file, use the <code>go tool pprof</code> command to investigate the profile.</li>
+<li><div class=profile-name><a href=pprof/flamegraph>flamegraph</a>:</div> CPU profile in flamegraph SVG format. You can specify the duration in the <code>seconds</code> query parameter, and the frequency via the <code>frequency</code> parameter.</li>
 </ul>
 </p>
 </body>
@@ -74,9 +69,7 @@ impl PprofProfileService {
         let state = PprofProfileService { collector };
         Router::new().route(
             Self::route(),
-            // TODO(MR-683): Address the regression and re-enable.
-            // axum::routing::get(pprof_profile).with_state(state),
-            axum::routing::get(|| async { Html(PPROF_HOME_HTML) }),
+            axum::routing::get(pprof_profile).with_state(state),
         )
     }
 }
@@ -130,9 +123,7 @@ impl PprofFlamegraphService {
         let state = PprofFlamegraphService { collector };
         Router::new().route(
             Self::route(),
-            // TODO(MR-683): Address the regression and re-enable.
-            // axum::routing::get(pprof_flamegraph).with_state(state),
-            axum::routing::get(|| async { Html(PPROF_HOME_HTML) }),
+            axum::routing::get(pprof_flamegraph).with_state(state),
         )
     }
 }
