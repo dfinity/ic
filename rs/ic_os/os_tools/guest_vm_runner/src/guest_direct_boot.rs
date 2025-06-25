@@ -480,7 +480,7 @@ mod tests {
         assert!(result
             .unwrap_err()
             .to_string()
-            .contains("Could not find partition"));
+            .contains("Could not mount grub partition"));
     }
 
     #[tokio::test]
@@ -496,7 +496,7 @@ mod tests {
         assert!(result
             .unwrap_err()
             .to_string()
-            .contains("Could not find partition"));
+            .contains("Could not mount boot partition A"));
     }
 
     #[tokio::test]
