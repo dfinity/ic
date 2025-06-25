@@ -72,6 +72,9 @@ fn test_receives_new_3rd_party_txs(env: TestEnv) {
         start_height + 101
     );
 
+    let alice_balance_initial = alice_client.get_balance(None, None).unwrap();
+    let bob_balance_initial = bob_client.get_balance(None, None).unwrap();
+
     let txid = alice_client
         .send_to_address(
             &bob_address,
@@ -92,17 +95,14 @@ fn test_receives_new_3rd_party_txs(env: TestEnv) {
         start_height + 102
     );
 
-    let alice_balance = alice_client.get_balance(None, None).unwrap();
-
     // Take the tx fee into consideration
+    let alice_balance_diff = alice_balance_initial - alice_client.get_balance(None, None).unwrap();
+    let bob_balance_diff = bob_client.get_balance(None, None).unwrap() - bob_balance_initial;
     assert!(
-        alice_balance < Amount::from_btc(49.0).unwrap()
-            && alice_balance > Amount::from_btc(48.999).unwrap()
+        alice_balance_diff > Amount::from_btc(1.0).unwrap()
+            && alice_balance_diff < Amount::from_btc(1.001).unwrap()
     );
-    assert_eq!(
-        bob_client.get_balance(None, None).unwrap(),
-        Amount::from_btc(1.0).unwrap()
-    );
+    assert_eq!(bob_balance_diff, Amount::from_btc(1.0).unwrap());
 
     // Instruct the adapter to sync the blocks
     let anchor = client.get_block_hash(0).unwrap()[..].to_vec();

@@ -245,8 +245,10 @@ fn get_test_wallet(env: &TestEnv, name: &str) -> (Client, Address) {
 pub fn fund_with_btc(to_fund_client: &Client, to_fund_address: &Address) {
     let initial_amount = to_fund_client
         .get_received_by_address(to_fund_address, Some(0))
-        .unwrap()
-        .to_btc();
+        .unwrap();
+
+    let initial_height = to_fund_client.get_blockchain_info().unwrap().blocks;
+    let expected_rewards = calculate_regtest_reward(initial_height);
 
     to_fund_client
         .generate_to_address(1, to_fund_address)
@@ -262,7 +264,7 @@ pub fn fund_with_btc(to_fund_client: &Client, to_fund_address: &Address) {
         to_fund_client
             .get_received_by_address(to_fund_address, Some(0))
             .unwrap(),
-        Amount::from_btc(initial_amount + 50.0).unwrap()
+        initial_amount + expected_rewards
     );
 }
 
