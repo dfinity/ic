@@ -1,6 +1,8 @@
+use crate::guest_direct_boot::{prepare_direct_boot, DirectBoot};
+use crate::guest_vm_config::{assemble_config_media, generate_vm_config};
+use crate::mount::PartitionProvider;
 use crate::systemd_notifier::SystemdNotifier;
 use anyhow::{anyhow, Context, Error, Result};
-use config::guest_vm_config::{assemble_config_media, generate_vm_config};
 use config_types::{HostOSConfig, Ipv6Config};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{calculate_deterministic_mac, IpVariant, MacAddr6Ext};
@@ -19,19 +21,49 @@ use virt::domain::Domain;
 use virt::error::{ErrorDomain, ErrorNumber};
 use virt::sys::{VIR_DOMAIN_DESTROY_GRACEFUL, VIR_DOMAIN_RUNNING};
 
+mod boot_args;
+mod guest_direct_boot;
+mod guest_vm_config;
+mod mount;
+mod systemd_notifier;
+
 const GUESTOS_DOMAIN_NAME: &str = "guestos";
 const CONSOLE_LOG_PATH: &str = "/var/log/libvirt/qemu/guestos-serial.log";
 const METRICS_FILE_PATH: &str = "/run/node_exporter/collector_textfile/hostos_guestos_service.prom";
 const CONSOLE_TTY_PATH: &str = "/dev/tty1";
 const GUESTOS_SERVICE_NAME: &str = "guestos.service";
+const DEFAULT_GUESTOS_DEVICE: &str = "/dev/hostlvm/guestos";
+
+#[tokio::main]
+pub async fn main() -> Result<()> {
+    println!("Starting GuestOS service");
+
+    let termination_token = CancellationToken::new();
+    setup_signal_handler(termination_token.clone()).context("Failed to setup signal handler")?;
+    let mut service = GuestVmService::new()?;
+    service.run(termination_token).await
+}
+
+fn setup_signal_handler(termination_token: CancellationToken) -> Result<()> {
+    let mut sigterm = signal(SignalKind::terminate())?;
+    let mut sigint = signal(SignalKind::interrupt())?;
+    tokio::spawn(async move {
+        tokio::select! {
+            _ = sigterm.recv() => termination_token.cancel(),
+            _ = sigint.recv() => termination_token.cancel(),
+        }
+    });
+    Ok(())
+}
 
 /// Manages a libvirt-based virtual machine
 pub struct VirtualMachine {
     domain_id: u32,
     libvirt_connect: Connect,
-    // The config media is used by the virtual machine and must be kept alive until the virtual
-    // machine is destroyed.
+    // These fields hold resources (files) that are used by the virtual machine and must be kept
+    // alive until the virtual machine is destroyed.
     _config_media: NamedTempFile,
+    _direct_boot: Option<DirectBoot>,
 }
 
 impl VirtualMachine {
@@ -41,6 +73,7 @@ impl VirtualMachine {
         libvirt_connect: &Connect,
         xml_config: &str,
         config_media: NamedTempFile,
+        direct_boot: Option<DirectBoot>,
     ) -> Result<Self> {
         let mut retries = 3;
         let domain = loop {
@@ -64,6 +97,7 @@ impl VirtualMachine {
             domain_id: domain.get_id().context("Domain does not have id")?,
             libvirt_connect: libvirt_connect.clone(),
             _config_media: config_media,
+            _direct_boot: direct_boot,
         })
     }
 
@@ -133,6 +167,7 @@ pub struct GuestVmService {
     hostos_config: HostOSConfig,
     systemd_notifier: Arc<dyn SystemdNotifier>,
     console_tty: Box<dyn Write + Send + Sync>,
+    partition_provider: Box<dyn PartitionProvider>,
 }
 
 impl GuestVmService {
@@ -146,7 +181,7 @@ impl GuestVmService {
         let metrics_writer = MetricsWriter::new(std::path::PathBuf::from(METRICS_FILE_PATH));
         let libvirt_connection = Connect::open(None).context("Failed to connect to libvirt")?;
         let hostos_config: HostOSConfig =
-            crate::deserialize_config(config::DEFAULT_HOSTOS_CONFIG_OBJECT_PATH)
+            config::deserialize_config(config::DEFAULT_HOSTOS_CONFIG_OBJECT_PATH)
                 .context("Failed to read HostOS config file")?;
         let console_tty = std::fs::File::options()
             .write(true)
@@ -159,6 +194,9 @@ impl GuestVmService {
             hostos_config,
             systemd_notifier: Arc::new(crate::systemd_notifier::DefaultSystemdNotifier),
             console_tty: Box::new(console_tty),
+            partition_provider: Box::new(crate::mount::GptPartitionProvider::new(
+                DEFAULT_GUESTOS_DEVICE.into(),
+            )?),
         })
     }
 
@@ -192,17 +230,36 @@ impl GuestVmService {
     }
 
     async fn start_virtual_machine(&mut self) -> Result<VirtualMachine> {
-        let config_media = NamedTempFile::new()?;
-        assemble_config_media(&self.hostos_config, config_media.path())?;
+        let config_media = NamedTempFile::new().context("Failed to create config media file")?;
 
-        let vm_config = generate_vm_config(&self.hostos_config, config_media.path())
-            .context("Failed to generate GuestOS VM config")?;
+        let direct_boot = prepare_direct_boot(
+            // TODO: We should not refresh in Upgrade VMs once we add them
+            /*should_refresh_grubenv=*/
+            true,
+            self.partition_provider.as_ref(),
+        )
+        .await
+        .context("Failed to prepare direct boot")?;
+
+        assemble_config_media(&self.hostos_config, config_media.path())
+            .context("Failed to assemble config media")?;
+
+        let vm_config = generate_vm_config(
+            &self.hostos_config,
+            config_media.path(),
+            direct_boot.as_ref().map(DirectBoot::to_config),
+        )
+        .context("Failed to generate GuestOS VM config")?;
 
         println!("Creating GuestOS virtual machine");
 
-        let virtual_machine =
-            VirtualMachine::new(&self.libvirt_connection, &vm_config, config_media)
-                .context("Failed to define GuestOS virtual machine")?;
+        let virtual_machine = VirtualMachine::new(
+            &self.libvirt_connection,
+            &vm_config,
+            config_media,
+            direct_boot,
+        )
+        .context("Failed to define GuestOS virtual machine")?;
 
         // Notify systemd that we're ready
         self.systemd_notifier.notify_ready()?;
@@ -379,31 +436,10 @@ impl Drop for GuestVmService {
     }
 }
 
-fn setup_signal_handler(termination_token: CancellationToken) -> Result<()> {
-    let mut sigterm = signal(SignalKind::terminate())?;
-    let mut sigint = signal(SignalKind::interrupt())?;
-    tokio::spawn(async move {
-        tokio::select! {
-            _ = sigterm.recv() => termination_token.cancel(),
-            _ = sigint.recv() => termination_token.cancel(),
-        }
-    });
-    Ok(())
-}
-
-/// The main async function that runs the GuestOS service
-pub async fn run_guest_vm() -> Result<()> {
-    println!("Starting GuestOS service");
-
-    let termination_token = CancellationToken::new();
-    setup_signal_handler(termination_token.clone()).context("Failed to setup signal handler")?;
-    let mut service = GuestVmService::new()?;
-    service.run(termination_token).await
-}
-
-#[cfg(test)]
+#[cfg(all(test, feature = "integration_tests"))]
 mod tests {
     use super::*;
+    use crate::mount;
     use crate::systemd_notifier::testing::MockSystemdNotifier;
     use config_types::{
         DeploymentEnvironment, DeterministicIpv6Config, HostOSSettings, ICOSSettings,
@@ -413,6 +449,7 @@ mod tests {
     use regex::Regex;
     use std::fs::File;
     use std::path::PathBuf;
+    use tempfile::TempDir;
     use tokio::task::JoinHandle;
     use virt::sys::VIR_DOMAIN_RUNNING_BOOTED;
 
@@ -429,12 +466,12 @@ mod tests {
     impl TestServiceInstance {
         async fn wait_for_systemd_ready(&mut self) {
             tokio::select! {
-                    biased;
+                biased;
                     _ = self.systemd_notifier.await_ready() => {/*success*/},
-                    result = &mut self.task => {
-                        panic!("Service stopped before becoming ready. Status: {result:?}");
+                result = &mut self.task => {
+                    panic!("Service stopped before becoming ready. Status: {result:?}");
                 }
-            }
+            };
         }
 
         async fn wait_for_systemd_stopping(&mut self) {
@@ -443,7 +480,7 @@ mod tests {
                 _ = self.systemd_notifier.await_stopping() => {/*success*/},
                 result = &mut self.task => {
                     panic!("Service stopped before notifying about stopping. Status: {result:?}");
-            }
+                }
             };
         }
 
@@ -501,6 +538,18 @@ mod tests {
             config_media_path
         }
 
+        fn get_kernel_path(&self) -> PathBuf {
+            let domain = self.get_domain();
+            let vm_config = domain.get_xml_desc(0).unwrap();
+            let kernel_path = PathBuf::from(
+                &Regex::new("<kernel>([^']+)</kernel>")
+                    .unwrap()
+                    .captures(&vm_config)
+                    .expect("Kernel path not found in VM config")[1],
+            );
+            kernel_path
+        }
+
         async fn assert_no_systemd_stopping_notification(&mut self) {
             tokio::select! {
                 _ = self.systemd_notifier.await_stopping() => {
@@ -522,12 +571,15 @@ mod tests {
     struct TestFixture {
         libvirt_connection: Connect,
         hostos_config: HostOSConfig,
+        guestos_device: NamedTempFile,
         /// Fake libvirt host definition that backs `libvirt_connection`.
         _libvirt_definition: NamedTempFile,
     }
 
     impl TestFixture {
         fn new(hostos_config: HostOSConfig) -> TestFixture {
+            let guestos_device = extract_guestos_image();
+
             let libvirt_definition =
                 NamedTempFile::new().expect("Failed to create libvirt connection");
             std::fs::write(&libvirt_definition, "<node/>").unwrap();
@@ -541,6 +593,7 @@ mod tests {
             TestFixture {
                 libvirt_connection,
                 hostos_config,
+                guestos_device,
                 _libvirt_definition: libvirt_definition,
             }
         }
@@ -559,6 +612,13 @@ mod tests {
                 hostos_config: self.hostos_config.clone(),
                 systemd_notifier: systemd_notifier.clone(),
                 console_tty: Box::new(File::create(console_file.path()).unwrap()),
+                partition_provider: Box::new(
+                    mount::GptPartitionProvider::with_mounter(
+                        self.guestos_device.path().to_path_buf(),
+                        Box::new(mount::testing::ExtractingFilesystemMounter),
+                    )
+                    .unwrap(),
+                ),
             };
 
             // Start the service in the background
@@ -616,6 +676,29 @@ mod tests {
         hostos_config
     }
 
+    fn extract_guestos_image() -> NamedTempFile {
+        let guestos_image_dir = TempDir::new().unwrap();
+        let icos_image_path =
+            std::env::var("ICOS_IMAGE").expect("Could not find ICOS_IMAGE environment variable");
+        assert!(
+            std::process::Command::new("tar")
+                .args(["-xaf", &icos_image_path, "-C"])
+                .arg(guestos_image_dir.path())
+                .status()
+                .unwrap()
+                .success(),
+            "Could not untar image"
+        );
+
+        let guestos_device = NamedTempFile::new().unwrap();
+        std::fs::rename(
+            guestos_image_dir.path().join("disk.img"),
+            guestos_device.path(),
+        )
+        .expect("Could not open guestos device");
+        guestos_device
+    }
+
     #[tokio::test]
     async fn test_run_guest_vm() {
         let fixture = TestFixture::new(valid_hostos_config());
@@ -638,9 +721,11 @@ mod tests {
             "2001:db8::6800:d8ff:fecb:f597",
         ]);
 
-        // Ensure that the config media exists
+        // Ensure that the config media and kernel exist
         let config_media_path = service.get_config_media_path();
         assert!(config_media_path.exists());
+        let kernel_path = service.get_kernel_path();
+        assert!(kernel_path.exists());
 
         nix::sys::signal::raise(SIGTERM).expect("Failed to send SIGTERM");
 

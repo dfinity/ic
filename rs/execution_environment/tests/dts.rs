@@ -1150,7 +1150,8 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
             | Method::NodeMetricsHistory
             | Method::SubnetInfo
             | Method::ProvisionalCreateCanisterWithCycles
-            | Method::ProvisionalTopUpCanister => {}
+            | Method::ProvisionalTopUpCanister
+            | Method::RenameCanister => {}
             // Unsupported methods accepting just one argument.
             // Deleting an aborted canister requires to stop it first.
             // Stopping an aborted canister does not generate a reply.
