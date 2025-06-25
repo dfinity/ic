@@ -240,6 +240,9 @@ pub mod testing {
         }
     }
 
+    /// Map (device, offset, len) -> TempDir
+    type PartitionMap = HashMap<(PathBuf, u64, u64), Arc<TempDir>>;
+
     /// Filesystem mounter for testing that extracts partition contents to temp directories.
     /// This is an alternative to real filesystem mounts when mounts are not possible (e.g. limited
     /// permissions in tests).
@@ -248,7 +251,8 @@ pub mod testing {
     /// always returns the same directory.
     #[derive(Clone)]
     pub struct ExtractingFilesystemMounter {
-        mounts: Arc<tokio::sync::Mutex<HashMap<(PathBuf, u64, u64), Arc<TempDir>>>>,
+        #[allow(clippy::disallowed_types)] // Using tokio Mutex in testing is fine.
+        mounts: Arc<tokio::sync::Mutex<PartitionMap>>,
     }
 
     #[async_trait]
