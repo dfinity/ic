@@ -46,9 +46,9 @@ jobs:
             // TODO: Figure out how to post in such a way that there is a "Resolve" button nearby.
             console.log("Adding reminder to update unreleased_changelog.md...");
             const reminderText = `
-              If this pull request changes the behavior of any canister owned by
-              the Governance team in an externally visible way, make sure that
-              you have done the following:
+              This pull request changes code owned by the Governance team.
+              Therefore, make sure that you have done the following (for
+              Governance-owned code):
 
               1. Add entry(s) to corresponding `unreleased_changelog.md`
                  file(s). This is only necessary if the code changes result in
