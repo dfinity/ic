@@ -2436,6 +2436,13 @@ fn apply_arg_with_caller(
             send_transfer(env, ledger_id, arg.caller.sender().unwrap(), transfer_arg)
                 .expect("transfer failed")
         }
+        LedgerEndpointArg::TransferFromArg(transfer_from_arg) => send_transfer_from(
+            env,
+            ledger_id,
+            arg.caller.sender().unwrap(),
+            transfer_from_arg,
+        )
+        .expect("transfer_from failed"),
     }
 }
 
@@ -2474,7 +2481,6 @@ pub fn test_upgrade_serialization<Tokens>(
 
                 let mut add_tx_and_verify = || {
                     while tx_index < tx_index_target {
-                        apply_arg_with_caller(&env, ledger_id, &transactions[tx_index]);
                         in_memory_ledger.apply_arg_with_caller(
                             &transactions[tx_index],
                             TimeStamp::from_nanos_since_unix_epoch(system_time_to_nanos(
@@ -2483,6 +2489,7 @@ pub fn test_upgrade_serialization<Tokens>(
                             minter_principal,
                             Some(FEE.into()),
                         );
+                        apply_arg_with_caller(&env, ledger_id, &transactions[tx_index]);
                         tx_index += 1;
                     }
                     tx_index_target += ADDITIONAL_TX_BATCH_SIZE;

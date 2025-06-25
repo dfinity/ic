@@ -6,26 +6,33 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/ic_os/config_types",
     "//rs/ic_os/deterministic_ips",
+    "//rs/ic_os/grub",
     "//rs/ic_os/metrics_tool",
     "//rs/ic_os/network",
     "//rs/ic_os/utils",
     "@crate_index//:anyhow",
     "@crate_index//:clap",
+    "@crate_index//:gpt",
+    "@crate_index//:regex",
+    "@crate_index//:sys-mount",
     "@crate_index//:systemd",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
     "@crate_index//:tokio-util",
+    "@crate_index//:uuid",
     "@crate_index//:virt",
     "@libvirt",
 ]
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
+    "//rs/ic_os/build_tools/partition_tools",
     "@crate_index//:nix",
-    "@crate_index//:regex",
 ]
 
-MACRO_DEPENDENCIES = []
+MACRO_DEPENDENCIES = [
+    "@crate_index//:async-trait",
+]
 
 ALIASES = {}
 
@@ -57,5 +64,16 @@ rust_binary(
 rust_test(
     name = "hostos_tool_test",
     crate = ":hostos_tool",
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test(
+    name = "hostos_tool_integration_tests",
+    crate = ":hostos_tool",
+    crate_features = ["integration_tests"],
+    data = ["//ic-os/guestos/envs/prod:disk-img.tar.zst"],
+    env = {"ICOS_IMAGE": "$(rootpath //ic-os/guestos/envs/prod:disk-img.tar.zst)"},
+    # Mark it manual here and expose it in //ic-os/tests:integration_tests
+    tags = ["manual"],
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

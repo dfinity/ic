@@ -9,21 +9,31 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = { workspace = true }
+async-trait = { workspace = true }
 clap = { workspace = true }
 config = { path = "../../config" }
 config_types = { path = "../../config_types" }
 deterministic_ips = { path = "../../deterministic_ips" }
+gpt = { workspace = true }
+grub = { path = "../../grub" }
 ic-metrics-tool = { path = "../../metrics_tool" }
 network = { path = "../../network" }
 nix = { workspace = true }
-utils = { path = "../../utils" }
+regex = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
-virt = { workspace = true }
+utils = { path = "../../utils" }
 tokio-util = { workspace = true }
+uuid = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 systemd = { workspace = true }
+sys-mount = { workspace = true }
+virt = { workspace = true }
 
 [dev-dependencies]
+partition_tools = { path = "../../build_tools/partition_tools" }
 regex = { workspace = true }
+
+[features]
+integration_tests = []

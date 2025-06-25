@@ -1293,6 +1293,7 @@ fn serialize_canister_protos_to_tip(
             wasm_memory_limit: canister_state.system_state.wasm_memory_limit,
             next_snapshot_id: canister_state.system_state.next_snapshot_id,
             snapshots_memory_usage: canister_state.system_state.snapshots_memory_usage,
+            environment_variables: canister_state.system_state.environment_variables.clone(),
         }
         .into(),
     )?;

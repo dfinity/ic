@@ -76,7 +76,6 @@ test --flaky_test_attempts=1
 
 # So that developers can build in debug mode.
 build:dev --compilation_mode=fastbuild
-build:macos_ci --build_tag_filters="-system_test,-fuzz_test"
 
 # Fuzzing configuration
 build:fuzzing --action_env="SANITIZERS_ENABLED=1"
