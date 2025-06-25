@@ -139,7 +139,7 @@ jobs:
           echo "full_macos_build=$full_macos_build" >> "$GITHUB_OUTPUT"
           echo "| \`full_macos_build\` | \`$full_macos_build\` |" >> "$GITHUB_STEP_SUMMARY"
 
-  bazel-test-all:
+  bazel-test-all-test:
     name: Bazel Test All
     needs: [ config ]
     <<: *dind-large-setup
