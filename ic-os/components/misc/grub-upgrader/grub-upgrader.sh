@@ -32,7 +32,7 @@ wait_for_stable_boot() {
 
     while true; do
         local boot_state
-        if boot_state=$(read_boot_state); then
+        if boot_state="$(read_boot_state)"; then
             if [ "${boot_state}" == "stable" ]; then
                 echo "System is stable (boot_cycle=stable). Proceeding with grub update."
                 return 0
