@@ -584,6 +584,7 @@ pub mod test {
                     http_method: CanisterHttpMethod::GET,
                     transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
+                    replication: Replication::FullyReplicated,
                 };
 
                 state_manager
@@ -681,6 +682,7 @@ pub mod test {
                     http_method: CanisterHttpMethod::GET,
                     transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
+                    replication: Replication::FullyReplicated,
                 };
 
                 state_manager
@@ -805,6 +807,7 @@ pub mod test {
                     http_method: CanisterHttpMethod::GET,
                     transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
+                    replication: Replication::FullyReplicated,
                 };
 
                 state_manager
@@ -949,6 +952,7 @@ pub mod test {
                     http_method: CanisterHttpMethod::GET,
                     transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
+                    replication: Replication::FullyReplicated,
                 };
 
                 // Expect times to be called exactly once to check that already

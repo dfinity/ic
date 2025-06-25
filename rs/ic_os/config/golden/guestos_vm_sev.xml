@@ -1,4 +1,4 @@
-<domain type='qemu' id='1'>
+<domain type='kvm' id='1'>
   <name>guestos</name>
   <uuid>fd897da5-8017-41c8-8575-a706dba30766</uuid>
   <metadata>
@@ -9,7 +9,19 @@
   <memory unit='GiB'>490</memory>
   <currentMemory unit='GiB'>490</currentMemory>
   <vcpu placement='static'>56</vcpu>
-  <cpu mode='host-model'/>
+  <cpu mode='host-passthrough' migratable='off'>
+    <cache mode='passthrough'/>
+    <topology sockets='2' cores='14' threads='2'/>
+    <feature policy='require' name='topoext'/>
+  </cpu>
+  <launchSecurity type='sev-snp' kernelHashes='yes'>
+    <cbitpos>51</cbitpos>
+    <reducedPhysBits>1</reducedPhysBits>
+    <policy>30000</policy>
+  </launchSecurity>
+  <memoryBacking>
+    <locked/>
+  </memoryBacking>
   <resource>
     <partition>/machine</partition>
   </resource>
