@@ -217,7 +217,7 @@ pub mod testing {
         async fn mount_partition(
             &self,
             partition_uuid: Uuid,
-            options: MountOptions,
+            _options: MountOptions,
         ) -> Result<Box<dyn MountedPartition>> {
             let partition_dir = self
                 .partitions
