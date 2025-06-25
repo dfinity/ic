@@ -30,6 +30,7 @@ use ic_protobuf::types::v1::{
     CanisterUpgradeOptions as CanisterUpgradeOptionsProto,
     WasmMemoryPersistence as WasmMemoryPersistenceProto,
 };
+use std::collections::BTreeMap;
 use std::hash::{Hash, Hasher};
 
 use num_traits::cast::ToPrimitive;
@@ -1851,6 +1852,17 @@ impl DataSize for PrincipalId {
 
 /// Struct used for encoding/decoding
 /// `(record {
+///     name: text;
+///     value: text;
+/// })`
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
+pub struct EnvironmentVariable {
+    pub name: String,
+    pub value: String,
+}
+
+/// Struct used for encoding/decoding
+/// `(record {
 ///     controllers: opt vec principal;
 ///     compute_allocation: opt nat;
 ///     memory_allocation: opt nat;
@@ -1859,6 +1871,7 @@ impl DataSize for PrincipalId {
 ///     log_visibility : opt log_visibility;
 ///     wasm_memory_limit: opt nat;
 ///     wasm_memory_threshold: opt nat;
+///     environment_variables: opt vec environment_variable;
 /// })`
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
 pub struct CanisterSettingsArgs {
@@ -1870,6 +1883,7 @@ pub struct CanisterSettingsArgs {
     pub log_visibility: Option<LogVisibilityV2>,
     pub wasm_memory_limit: Option<candid::Nat>,
     pub wasm_memory_threshold: Option<candid::Nat>,
+    pub environment_variables: Option<Vec<EnvironmentVariable>>,
 }
 
 impl Payload<'_> for CanisterSettingsArgs {}
@@ -1887,6 +1901,7 @@ impl CanisterSettingsArgs {
             log_visibility: None,
             wasm_memory_limit: None,
             wasm_memory_threshold: None,
+            environment_variables: None,
         }
     }
 }
@@ -1901,6 +1916,7 @@ pub struct CanisterSettingsArgsBuilder {
     log_visibility: Option<LogVisibilityV2>,
     wasm_memory_limit: Option<candid::Nat>,
     wasm_memory_threshold: Option<candid::Nat>,
+    environment_variables: Option<BTreeMap<String, String>>,
 }
 
 #[allow(dead_code)]
@@ -1919,6 +1935,15 @@ impl CanisterSettingsArgsBuilder {
             log_visibility: self.log_visibility,
             wasm_memory_limit: self.wasm_memory_limit,
             wasm_memory_threshold: self.wasm_memory_threshold,
+            environment_variables: self.environment_variables.map(|variables| {
+                variables
+                    .iter()
+                    .map(|(name, value)| EnvironmentVariable {
+                        name: name.clone(),
+                        value: value.clone(),
+                    })
+                    .collect::<Vec<_>>()
+            }),
         }
     }
 
@@ -2000,6 +2025,16 @@ impl CanisterSettingsArgsBuilder {
     pub fn with_wasm_memory_threshold(self, wasm_memory_threshold: u64) -> Self {
         Self {
             wasm_memory_threshold: Some(candid::Nat::from(wasm_memory_threshold)),
+            ..self
+        }
+    }
+
+    pub fn with_environment_variables(
+        self,
+        environment_variables: BTreeMap<String, String>,
+    ) -> Self {
+        Self {
+            environment_variables: Some(environment_variables),
             ..self
         }
     }

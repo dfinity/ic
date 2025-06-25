@@ -92,6 +92,7 @@ pub(crate) struct CanisterManager {
     cycles_account_manager: Arc<CyclesAccountManager>,
     ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+    environment_variables_flag: FlagStatus,
 }
 
 impl CanisterManager {
@@ -102,6 +103,7 @@ impl CanisterManager {
         cycles_account_manager: Arc<CyclesAccountManager>,
         ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+        environment_variables_flag: FlagStatus,
     ) -> Self {
         CanisterManager {
             hypervisor,
@@ -110,6 +112,7 @@ impl CanisterManager {
             cycles_account_manager,
             ingress_history_writer,
             fd_factory,
+            environment_variables_flag,
         }
     }
 
@@ -265,7 +268,7 @@ impl CanisterManager {
     /// Keep this function in sync with `validate_canister_settings()`.
     fn do_update_settings(
         &self,
-        settings: ValidatedCanisterSettings,
+        settings: &ValidatedCanisterSettings,
         canister: &mut CanisterState,
     ) {
         // Note: At this point, the settings are validated.
@@ -317,6 +320,12 @@ impl CanisterManager {
         if let Some(wasm_memory_limit) = settings.wasm_memory_limit() {
             canister.system_state.wasm_memory_limit = Some(wasm_memory_limit);
         }
+        if let Some(environment_variables) = settings.environment_variables() {
+            if self.environment_variables_flag == FlagStatus::Enabled {
+                canister.system_state.environment_variables =
+                    environment_variables.get_environment_variables().clone();
+            }
+        }
     }
 
     /// Tries to apply the requested settings on the canister identified by
@@ -360,7 +369,7 @@ impl CanisterManager {
         let old_mem = canister.memory_allocation().allocated_bytes(old_usage);
         let old_compute_allocation = canister.scheduler_state.compute_allocation.as_percent();
 
-        self.do_update_settings(validated_settings, canister);
+        self.do_update_settings(&validated_settings, canister);
 
         let new_compute_allocation = canister.scheduler_state.compute_allocation.as_percent();
         if old_compute_allocation < new_compute_allocation {
@@ -1061,7 +1070,7 @@ impl CanisterManager {
         let scheduler_state = SchedulerState::new(state.metadata.batch_time);
         let mut new_canister = CanisterState::new(system_state, None, scheduler_state);
 
-        self.do_update_settings(settings, &mut new_canister);
+        self.do_update_settings(&settings, &mut new_canister);
         let new_usage = new_canister.memory_usage();
         let new_mem = new_canister
             .system_state
@@ -1085,11 +1094,29 @@ impl CanisterManager {
             .iter()
             .copied()
             .collect();
-        new_canister.system_state.add_canister_change(
-            state.time(),
-            origin,
-            CanisterChangeDetails::canister_creation(controllers, None),
-        );
+
+        match self.environment_variables_flag {
+            FlagStatus::Enabled => {
+                let environment_variables_hash = settings
+                    .environment_variables()
+                    .map(|env_vars| env_vars.hash());
+                new_canister.system_state.add_canister_change(
+                    state.time(),
+                    origin,
+                    CanisterChangeDetails::canister_creation(
+                        controllers,
+                        environment_variables_hash,
+                    ),
+                );
+            }
+            FlagStatus::Disabled => {
+                new_canister.system_state.add_canister_change(
+                    state.time(),
+                    origin,
+                    CanisterChangeDetails::canister_creation(controllers, None),
+                );
+            }
+        }
 
         // Add new canister to the replicated state.
         state.put_canister_state(new_canister);
