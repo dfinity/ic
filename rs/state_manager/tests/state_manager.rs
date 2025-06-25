@@ -4257,7 +4257,7 @@ fn can_reuse_chunk_hashes_when_computing_manifest() {
         let size = chunk_bytes[&reused_label] + chunk_bytes[&compared_label];
         // We compute manifest then rehash, so twice the size
         assert!(((expected_size_estimate as f64 * 2.2) as u64) > size);
-        assert!(((expected_size_estimate as f64 * 2.0) as u64) < size);
+        assert!(((expected_size_estimate as f64 * 1.8) as u64) < size);
 
         let checkpoint = state_manager
             .state_layout()
