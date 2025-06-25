@@ -49,6 +49,9 @@ pub struct UpgradeArgs {
     /// the get_utxos cache.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub get_utxos_cache_expiration_seconds: Option<u64>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ecdsa_key_name: Option<String>
 }
 
 pub fn post_upgrade(upgrade_args: Option<UpgradeArgs>) {

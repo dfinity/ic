@@ -2,6 +2,7 @@ use assert_matches::assert_matches;
 use bitcoin::util::psbt::serialize::Deserialize;
 use bitcoin::{Address as BtcAddress, Network as BtcNetwork};
 use candid::{CandidType, Decode, Encode, Nat, Principal};
+use chrono::{DateTime, Utc};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_bitcoin_canister_mock::{OutPoint, PushUtxoToAddress, Utxo};
 use ic_btc_checker::{
@@ -39,7 +40,7 @@ use icrc_ledger_types::icrc3::transactions::{GetTransactionsRequest, GetTransact
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::str::FromStr;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 const CHECK_FEE: u64 = 2_000;
 const TRANSFER_FEE: u64 = 10;
@@ -830,7 +831,13 @@ impl CkBtcSetup {
     pub fn replay_events(&self, events: &Vec<Event>) {
         self.env
             .execute_ingress(self.minter_id, "replay_events", Encode!(&events).unwrap())
-            .expect("failed to get minter info");
+            .expect("failed to replay_events");
+    }
+
+    pub fn finalize_requests_now(&self) {
+        self.env
+            .execute_ingress(self.minter_id, "finalize_requests_now", Encode!().unwrap())
+            .expect("failed to finalize_requests_now");
     }
 
     pub fn get_logs(&self) -> Log {
@@ -1469,9 +1476,56 @@ fn test_min_retrieval_amount_custom() {
 #[test]
 fn test_stuck_transaction() {
     let ckbtc = CkBtcSetup::new();
+
+    // init_ecdsa_public_key
+    let user = Principal::from(ckbtc.caller);
+    let withdrawal_account_before_event = ckbtc.withdrawal_account(user.into());
+    assert_eq!(
+        withdrawal_account_before_event.to_string(),
+        "rrkah-fqaaa-aaaaa-aaaaq-cai-crp7eoq.16ed4ca467558d2f8b4191368b32517202925d24ae683f320e3fa17d41c1408e"
+    );
+
     let events = Mainnet.deserialize();
     assert_eq!(events.total_event_count, 366_308);
     ckbtc.replay_events(&events.events);
+    // ckbtc.minter_self_check(); //instruction limit
+
+    //sanity check
+    let status_3rd_stuck_tx = ckbtc.retrieve_btc_status_v2(2_626_488);
+    assert_matches!(
+        status_3rd_stuck_tx,
+        RetrieveBtcStatusV2::Submitted{txid} if txid.to_string() == "422f3115c4f865536f92e94d22cb7b2795b0482e517f7c46561e2234cf03e603"
+    );
+
+    // state machine only works with "master_ecdsa_public_key"
+    let upgrade_args = UpgradeArgs {
+        ecdsa_key_name: Some("master_ecdsa_public_key".to_string()),
+        ..Default::default()
+    };
+    let minter_arg = MinterArg::Upgrade(Some(upgrade_args));
+    assert!(ckbtc
+        .env
+        .upgrade_canister(
+            ckbtc.minter_id,
+            minter_wasm(),
+            Encode!(&minter_arg).unwrap()
+        )
+        .is_ok());
+
+    // init_ecdsa_public_key
+    let withdrawal_account = ckbtc.withdrawal_account(user.into());
+    assert_eq!(withdrawal_account_before_event, withdrawal_account);
+
+    ckbtc
+        .env
+        .set_time(SystemTime::UNIX_EPOCH + Duration::from_secs(1750879059));
+    let datetime: DateTime<Utc> = ckbtc.env.time().into();
+    assert_eq!(
+        datetime.format("%d/%m/%Y %T").to_string(),
+        "25/06/2025 19:17:39"
+    );
+
+    ckbtc.finalize_requests_now();
 }
 
 #[derive(Debug)]

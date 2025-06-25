@@ -24,11 +24,7 @@ use ic_ckbtc_minter::updates::{
     get_btc_address::GetBtcAddressArgs,
     update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus},
 };
-use ic_ckbtc_minter::{
-    finalize_requests,
-    state::eventlog::{EventType, GetEventsArg},
-    storage, {Log, LogEntry, Priority},
-};
+use ic_ckbtc_minter::{finalize_requests, state::eventlog::{EventType, GetEventsArg}, storage, submit_pending_requests, {Log, LogEntry, Priority}};
 use ic_ckbtc_minter::{MinterInfo, IC_CANISTER_RUNTIME};
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use icrc_ledger_types::icrc1::account::Account;
@@ -230,6 +226,7 @@ async fn finalize_requests_now() {
         None => panic!("Failed to retrieve TimerLogicGuard"),
     };
 
+    submit_pending_requests().await;
     finalize_requests().await;
 }
 

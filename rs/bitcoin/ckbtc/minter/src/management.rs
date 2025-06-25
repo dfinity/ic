@@ -84,6 +84,7 @@ impl fmt::Display for Reason {
 
 impl Reason {
     fn from_reject(reject_code: RejectionCode, reject_message: String) -> Self {
+        panic!("reject code: {reject_code:?} reject_message: {reject_message}");
         match reject_code {
             RejectionCode::SysTransient => Self::QueueIsFull,
             RejectionCode::CanisterError => Self::CanisterError(reject_message),

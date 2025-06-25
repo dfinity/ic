@@ -308,7 +308,7 @@ pub async fn estimate_fee_per_vbyte() -> Option<MillisatoshiPerByte> {
 
 /// Constructs and sends out signed Bitcoin transactions for pending retrieve
 /// requests.
-async fn submit_pending_requests() {
+pub async fn submit_pending_requests() {
     // We make requests if we have old requests in the queue or if have enough
     // requests to fill a batch.
     if !state::read_state(|s| s.can_form_a_batch(MIN_PENDING_REQUESTS, ic_cdk::api::time())) {
@@ -525,6 +525,7 @@ fn finalized_txids(candidates: &[state::SubmittedBtcTransaction], new_utxos: &[U
 
 pub async fn finalize_requests() {
     if state::read_state(|s| s.submitted_transactions.is_empty()) {
+        panic!("no submitted txs");
         return;
     }
 
@@ -650,6 +651,16 @@ pub async fn finalize_requests() {
     // integration.
     //
     // Let's resubmit these transactions.
+    panic!(
+        "[finalize_requests]: found {} stuck transactions: {}",
+        maybe_finalized_transactions.len(),
+        maybe_finalized_transactions
+            .keys()
+            .map(|txid| txid.to_string())
+            .collect::<Vec<_>>()
+            .join(","),
+    );
+
     log!(
         P0,
         "[finalize_requests]: found {} stuck transactions: {}",

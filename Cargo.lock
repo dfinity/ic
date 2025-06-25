@@ -7187,6 +7187,7 @@ dependencies = [
  "candid",
  "candid_parser",
  "canister-test",
+ "chrono",
  "ciborium",
  "flate2",
  "hex",

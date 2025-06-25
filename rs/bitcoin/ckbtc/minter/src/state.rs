@@ -474,6 +474,7 @@ impl CkBtcMinterState {
             kyt_principal: _,
             kyt_fee,
             get_utxos_cache_expiration_seconds,
+            ecdsa_key_name,
         }: UpgradeArgs,
     ) {
         if let Some(retrieve_btc_min_amount) = retrieve_btc_min_amount {
@@ -509,6 +510,10 @@ impl CkBtcMinterState {
         if let Some(expiration) = get_utxos_cache_expiration_seconds {
             self.get_utxos_cache
                 .set_expiration(Duration::from_secs(expiration));
+        }
+
+        if let Some(key_name) = ecdsa_key_name {
+            self.ecdsa_key_name = key_name
         }
     }
 

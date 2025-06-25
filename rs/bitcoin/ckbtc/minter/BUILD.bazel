@@ -223,6 +223,7 @@ rust_ic_test(
         "@crate_index//:assert_matches",
         "@crate_index//:bitcoin_0_28",
         "@crate_index//:candid",
+        "@crate_index//:chrono",
         "@crate_index//:flate2",
         "@crate_index//:ic-btc-interface",
         "@crate_index//:ic-cdk",
