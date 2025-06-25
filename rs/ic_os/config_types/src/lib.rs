@@ -176,7 +176,7 @@ pub struct BackupSpoolSettings {
     pub backup_purging_interval_seconds: Option<u64>,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug, clap::ValueEnum)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 #[non_exhaustive]
 pub enum DeploymentEnvironment {
     Mainnet,
