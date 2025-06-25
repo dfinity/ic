@@ -219,6 +219,7 @@ rust_ic_test(
         "//rs/state_machine_tests",
         "//rs/test_utilities/load_wasm",
         "//rs/types/base_types",
+        "//rs/types/management_canister_types",
         "//rs/types/types",
         "@crate_index//:assert_matches",
         "@crate_index//:bitcoin_0_28",

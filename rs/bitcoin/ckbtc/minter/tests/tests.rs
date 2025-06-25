@@ -53,7 +53,7 @@ const SENDER_ID: PrincipalId = PrincipalId::new_user_test_id(1);
 fn default_init_args() -> CkbtcMinterInitArgs {
     CkbtcMinterInitArgs {
         btc_network: Network::Regtest,
-        ecdsa_key_name: "master_ecdsa_public_key".into(),
+        ecdsa_key_name: "key_1".into(),
         retrieve_btc_min_amount: 2000,
         ledger_id: CanisterId::from(0),
         max_time_in_queue_nanos: MAX_TIME_IN_QUEUE.as_nanos() as u64,
@@ -687,9 +687,14 @@ impl CkBtcSetup {
     }
 
     pub fn new_with(btc_network: Network, retrieve_btc_min_amount: u64) -> Self {
+        use ic_management_canister_types_private::{MasterPublicKeyId, EcdsaKeyId, EcdsaCurve};
         let bitcoin_id = bitcoin_canister_id(btc_network);
         let env = StateMachineBuilder::new()
-            .with_master_ecdsa_public_key()
+            // .with_master_ecdsa_public_key()
+            .with_chain_key(MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+              curve: EcdsaCurve::Secp256k1,
+              name: "key_1".to_string(),
+             }))
             .with_default_canister_range()
             .with_extra_canister_range(bitcoin_id..=bitcoin_id)
             .build();

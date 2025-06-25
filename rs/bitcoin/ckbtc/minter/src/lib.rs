@@ -651,16 +651,6 @@ pub async fn finalize_requests() {
     // integration.
     //
     // Let's resubmit these transactions.
-    panic!(
-        "[finalize_requests]: found {} stuck transactions: {}",
-        maybe_finalized_transactions.len(),
-        maybe_finalized_transactions
-            .keys()
-            .map(|txid| txid.to_string())
-            .collect::<Vec<_>>()
-            .join(","),
-    );
-
     log!(
         P0,
         "[finalize_requests]: found {} stuck transactions: {}",
