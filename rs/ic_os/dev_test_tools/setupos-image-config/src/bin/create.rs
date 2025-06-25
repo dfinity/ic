@@ -7,7 +7,7 @@ use std::{
 use anyhow::{bail, Context, Error};
 use clap::Parser;
 
-use config::deployment_json::{Deployment, DeploymentSettings, Logging, Nns, Resources};
+use config::setupos::deployment_json::{Deployment, DeploymentSettings, Logging, Nns, Resources};
 use setupos_image_config::{write_config, ConfigIni, DeploymentConfig};
 
 #[derive(Parser)]
