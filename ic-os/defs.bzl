@@ -299,6 +299,21 @@ def icos_build(
         target_compatible_with = ["@platforms//os:linux"],
     )
 
+    disk_image(
+        name = "disk-img-for-tests.tar",
+        layout = image_deps["partition_table"],
+        partitions = partitions,
+        expanded_size = image_deps.get("expanded_size", default = None),
+        populate_b_partitions = True,
+        tags = ["manual", "no-cache"],
+        testonly = True,
+        target_compatible_with = ["@platforms//os:linux"],
+        visibility = [
+            "//ic-os:__subpackages__",
+            "//rs/ic_os:__subpackages__",
+        ],
+    )
+
     # Disk images just for testing.
     disk_image_no_tar(
         name = "disk.img",
