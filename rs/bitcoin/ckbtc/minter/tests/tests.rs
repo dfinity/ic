@@ -827,6 +827,12 @@ impl CkBtcSetup {
         .unwrap()
     }
 
+    pub fn replay_events(&self, events: &Vec<Event>) {
+        self.env
+            .execute_ingress(self.minter_id, "replay_events", Encode!(&events).unwrap())
+            .expect("failed to get minter info");
+    }
+
     pub fn get_logs(&self) -> Log {
         let request = HttpRequest {
             method: "".to_string(),
@@ -1463,8 +1469,9 @@ fn test_min_retrieval_amount_custom() {
 #[test]
 fn test_stuck_transaction() {
     let ckbtc = CkBtcSetup::new();
-    let mut events = Mainnet.deserialize();
-    panic!("BOOM2!")
+    let events = Mainnet.deserialize();
+    assert_eq!(events.total_event_count, 366_308);
+    ckbtc.replay_events(&events.events);
 }
 
 #[derive(Debug)]
