@@ -82,11 +82,15 @@ jobs:
           chmod 0700 ~/.ssh
           echo -e "Host *\nUser github-runner\n" > ~/.ssh/config
       - name: Run FI Tests Nightly
-        id: bazel-test-all
-        uses: ./.github/actions/bazel-test-all/
+        uses: ./.github/actions/bazel
         with:
-          BAZEL_COMMAND: test --keep_going --test_tag_filters=fi_tests_nightly --test_env=SSH_AUTH_SOCK --test_timeout=43200
-          BAZEL_TARGETS: //rs/ledger_suite/...
+          run: |
+            bazel test \
+              --config=stamped \
+              --test_tag_filters=fi_tests_nightly \
+              //rs/ledger_suite/... \
+              --test_env=SSH_AUTH_SOCK \
+              --keep_going --test_timeout=43200
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
   nns-tests-nightly:
     name: Bazel Test NNS Nightly
@@ -116,11 +120,15 @@ jobs:
           chmod 0700 ~/.ssh
           echo -e "Host *\nUser github-runner\n" > ~/.ssh/config
       - name: Run NNS Tests Nightly
-        id: bazel-test-all
-        uses: ./.github/actions/bazel-test-all/
+        uses: ./.github/actions/bazel
         with:
-          BAZEL_COMMAND: test --keep_going --test_tag_filters=nns_tests_nightly --test_env=SSH_AUTH_SOCK --test_env=NNS_CANISTER_UPGRADE_SEQUENCE=all
-          BAZEL_TARGETS: //rs/nns/...
+          run: |
+            bazel test \
+              --config=stamped \
+              --test_tag_filters=nns_tests_nightly \
+              //rs/nns/... \
+              --test_env=SSH_AUTH_SOCK --test_env=NNS_CANISTER_UPGRADE_SEQUENCE=all \
+              --keep_going
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
   system-tests-benchmarks-nightly:
     name: Bazel System Test Benchmarks
@@ -134,18 +142,22 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Set Benchmark Targets
-        shell: bash
-        run: |
-          set -xeuo pipefail
-          echo "BENCHMARK_TARGETS=$(bazel query 'attr(tags, system_test_benchmark, //rs/...)' | grep -v head_nns | tr '\n' ' ')" >> $GITHUB_ENV
       - name: Test System Test Benchmarks
         id: bazel-system-test-benchmarks
-        uses: ./.github/actions/bazel-test-all/
+        uses: ./.github/actions/bazel
         with:
-          # note: there's just one performance cluster, so the job can't be parallelized
-          BAZEL_COMMAND: test --test_tag_filters=system_test_benchmark --//bazel:enable_upload_perf_systest_results=True --keep_going --jobs 1
-          BAZEL_TARGETS: ${{ env.BENCHMARK_TARGETS }}
+          run: |
+            # note: there's just one performance cluster, so the job can't be parallelized
+            # (hence --jobs=1)
+            # we exclude 'system_test_head_nns' tests to avoid running every benchmark
+            # effectively twice (we don't care about the different between mainnet & head NNS)
+            bazel test \
+              --config=stamped \
+              --test_tag_filters="system_test_benchmark,-system_test_head_nns" \
+              //rs/... \
+              --//bazel:enable_upload_perf_systest_results=True \
+              --test_env=SSH_AUTH_SOCK --test_env=NNS_CANISTER_UPGRADE_SEQUENCE=all \
+              --keep_going --jobs=1
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
       - name: Post Slack Notification
         uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001 # v1.25.0
