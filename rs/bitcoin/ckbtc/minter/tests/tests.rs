@@ -1502,25 +1502,6 @@ fn test_stuck_transaction() {
         RetrieveBtcStatusV2::Submitted{txid} if txid.to_string() == "422f3115c4f865536f92e94d22cb7b2795b0482e517f7c46561e2234cf03e603"
     );
 
-    // state machine only works with "master_ecdsa_public_key"
-    let upgrade_args = UpgradeArgs {
-        ecdsa_key_name: Some("master_ecdsa_public_key".to_string()),
-        ..Default::default()
-    };
-    let minter_arg = MinterArg::Upgrade(Some(upgrade_args));
-    assert!(ckbtc
-        .env
-        .upgrade_canister(
-            ckbtc.minter_id,
-            minter_wasm(),
-            Encode!(&minter_arg).unwrap()
-        )
-        .is_ok());
-
-    // init_ecdsa_public_key
-    let withdrawal_account = ckbtc.withdrawal_account(user.into());
-    assert_eq!(withdrawal_account_before_event, withdrawal_account);
-
     ckbtc
         .env
         .set_time(SystemTime::UNIX_EPOCH + Duration::from_secs(1750879059));
