@@ -8,6 +8,11 @@ type log_visibility = variant {
     allowed_viewers : vec principal;
 };
 
+type environment_variable = record { 
+    name: text; 
+    value: text;
+};
+
 type canister_settings = record {
     controllers : opt vec principal;
     compute_allocation : opt nat;
@@ -17,6 +22,7 @@ type canister_settings = record {
     log_visibility : opt log_visibility;
     wasm_memory_limit : opt nat;
     wasm_memory_threshold : opt nat;
+    environment_variables : opt vec environment_variable;
 };
 
 type definite_canister_settings = record {
@@ -44,7 +50,7 @@ type change_origin = variant {
 type change_details = variant {
     creation : record {
         controllers : vec principal;
-        environment_variables_hash : opt blob;
+        environment_variables_hash : opt blob; 
     };
     code_uninstall;
     code_deployment : record {
@@ -56,13 +62,14 @@ type change_details = variant {
       snapshot_id : snapshot_id;
       taken_at_timestamp : nat64;
     };
+    // Deprecated: `settings_change` is used instead.
     controllers_change : record {
         controllers : vec principal;
     };
-    settings_change : record {
+    settings_change: record {
         controllers : opt vec principal;
-        environment_variables_hash : opt blob;
-    };
+        environment_variables_hash: opt blob;
+    }
 };
 
 type change = record {
