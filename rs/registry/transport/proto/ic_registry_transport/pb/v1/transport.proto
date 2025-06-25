@@ -224,7 +224,7 @@ message RegistryDelta {
 
 // Message to retrieve all the changes from the registry
 // since 'version'.
-message RegistryGetChangesSinceRequest {uint64 version = 1;}
+message RegistryGetChangesSinceRequest { uint64 version = 1; }
 
 // Deprecated; instead, use HighCapacityRegistryGetChangesSinceResponse. See the
 // "Migrating to Large Values/High-Capacity Types" section in the file-level
