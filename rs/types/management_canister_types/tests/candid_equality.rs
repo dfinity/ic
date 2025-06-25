@@ -180,6 +180,32 @@ fn fetch_canister_logs(_: FetchCanisterLogsArgs) -> FetchCanisterLogsResult {
     unreachable!()
 }
 
+#[candid_method(update)]
+fn read_canister_snapshot_metadata(
+    _: ReadCanisterSnapshotMetadataArgs,
+) -> ReadCanisterSnapshotMetadataResponse {
+    unreachable!()
+}
+
+#[candid_method(update)]
+fn read_canister_snapshot_data(
+    _: ReadCanisterSnapshotDataArgs,
+) -> ReadCanisterSnapshotDataResponse {
+    unreachable!()
+}
+
+#[candid_method(update)]
+fn upload_canister_snapshot_metadata(
+    _: UploadCanisterSnapshotMetadataArgs,
+) -> UploadCanisterSnapshotMetadataResponse {
+    unreachable!()
+}
+
+#[candid_method(update)]
+fn upload_canister_snapshot_data(_: UploadCanisterSnapshotDataArgs) {
+    unreachable!()
+}
+
 #[cfg(test)]
 mod test {
     use crate::*;
