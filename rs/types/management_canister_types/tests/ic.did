@@ -69,7 +69,16 @@ type change_details = variant {
     settings_change: record {
         controllers : opt vec principal;
         environment_variables_hash: opt blob;
-    }
+    };
+    rename_canister: record {
+        canister_id : principal;
+        total_num_changes : nat64;
+        rename_to : record {
+            canister_id : principal;
+            version : nat64;
+            total_num_changes : nat64;
+        };
+    };
 };
 
 type change = record {
@@ -588,6 +597,15 @@ type upload_canister_snapshot_data_args = record {
     chunk : blob;
 };
 
+type rename_canister_args = record {
+   canister_id : principal;
+   rename_to : record {
+     canister_id : principal;
+     version : nat64;
+     total_num_changes : nat64;
+   };
+   sender_canister_version : nat64;
+};
 
 
 service ic : {
@@ -636,6 +654,8 @@ service ic : {
     upload_canister_snapshot_metadata : (upload_canister_snapshot_metadata_args) -> (upload_canister_snapshot_metadata_response);
     upload_canister_snapshot_data : (upload_canister_snapshot_data_args) -> ();
     
+    // Canister migration
+    rename_canister: (rename_canister_args) -> ();
 
     // canister logging
     fetch_canister_logs : (fetch_canister_logs_args) -> (fetch_canister_logs_result) query;

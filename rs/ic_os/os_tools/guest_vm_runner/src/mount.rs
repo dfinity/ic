@@ -82,9 +82,6 @@ impl FileSystem {
 
 #[derive(Copy, Clone)]
 pub struct MountOptions {
-    /// Whether to mount the partition read-only
-    pub readonly: bool,
-
     pub file_system: FileSystem,
 }
 
@@ -176,18 +173,14 @@ impl Mounter for LoopDeviceMounter {
     ) -> Result<Box<dyn MountedPartition>> {
         let mount = tokio::task::spawn_blocking(move || {
             let tempdir = TempDir::new()?;
-            let target = tempdir.path();
+            let mount_point = tempdir.path();
             Ok::<LoopDeviceMount, Error>(LoopDeviceMount {
                 mount: Mount::builder()
                     .fstype(FilesystemType::Manual(options.file_system.as_str()))
                     .loopback_offset(offset_bytes)
-                    .flags(if options.readonly {
-                        MountFlags::RDONLY
-                    } else {
-                        MountFlags::empty()
-                    })
+                    .flags(MountFlags::empty())
                     .explicit_loopback()
-                    .mount_autodrop(device, target, UnmountFlags::empty())?,
+                    .mount_autodrop(device, mount_point, UnmountFlags::empty())?,
                 _tempdir: tempdir,
             })
         })
@@ -199,7 +192,7 @@ impl Mounter for LoopDeviceMounter {
 #[cfg(test)]
 pub mod testing {
     use super::*;
-    use anyhow::{ensure, Context};
+    use anyhow::Context;
     use partition_tools::ext::ExtPartition;
     use partition_tools::fat::FatPartition;
     use partition_tools::Partition;
@@ -207,7 +200,6 @@ pub mod testing {
     use std::path::{Path, PathBuf};
     use std::sync::Arc;
     use tempfile::TempDir;
-    use tokio::process::Command;
 
     /// Test partition provider that uses pre-populated directories
     pub struct MockPartitionProvider {
@@ -225,25 +217,12 @@ pub mod testing {
         async fn mount_partition(
             &self,
             partition_uuid: Uuid,
-            options: MountOptions,
+            _options: MountOptions,
         ) -> Result<Box<dyn MountedPartition>> {
             let partition_dir = self
                 .partitions
                 .get(&partition_uuid)
                 .with_context(|| format!("Could not find partition {partition_uuid}"))?;
-
-            if options.readonly {
-                ensure!(
-                    Command::new("chmod")
-                        .arg("-R")
-                        .arg("-w")
-                        .arg(partition_dir.path())
-                        .status()
-                        .await?
-                        .success(),
-                    "Could not chmod directory"
-                );
-            }
 
             Ok(Box::new(MockMount {
                 mount_point: partition_dir.clone(),
@@ -311,19 +290,6 @@ pub mod testing {
                     .await?
                 }
             };
-
-            if options.readonly {
-                ensure!(
-                    Command::new("chmod")
-                        .arg("-R")
-                        .arg("-w")
-                        .arg(extraction_dir.path())
-                        .status()
-                        .await?
-                        .success(),
-                    "Could not chmod directory"
-                );
-            }
 
             Ok(Box::new(MockMount {
                 mount_point: Arc::new(extraction_dir),
