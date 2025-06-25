@@ -1,0 +1,10 @@
+[Unit]
+Description=Custom GuestOS metrics
+Before=node_exporter.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/ic/bin/custom-metrics.sh
+
+[Install]
+WantedBy=multi-user.target

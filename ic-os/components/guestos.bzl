@@ -96,6 +96,8 @@ component_files = {
     Label("monitoring/nft-exporter/nft-exporter.timer"): "/etc/systemd/system/nft-exporter.timer",
     Label("monitoring/custom-metrics/metrics_tool.service"): "/etc/systemd/system/metrics_tool.service",
     Label("monitoring/custom-metrics/metrics_tool.timer"): "/etc/systemd/system/metrics_tool.timer",
+    Label("ic/custom-metrics.sh"): "/opt/ic/bin/custom-metrics.sh",
+    Label("ic/custom-metrics.service"): "/etc/systemd/system/custom-metrics.service",
 
     # networking
     Label("networking/generate-network-config/guestos/generate-network-config.service"): "/etc/systemd/system/generate-network-config.service",
