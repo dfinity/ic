@@ -286,6 +286,7 @@ pub mod testing {
     }
 
     impl ExtractingFilesystemMounter {
+        #[allow(dead_code)]
         pub fn new() -> Self {
             Self {
                 mounts: Default::default(),
