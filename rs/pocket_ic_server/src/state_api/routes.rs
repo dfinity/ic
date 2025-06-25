@@ -1146,7 +1146,20 @@ pub async fn create_instance(
     }): State<AppState>,
     extract::Json(instance_config): extract::Json<InstanceConfig>,
 ) -> (StatusCode, Json<rest::CreateInstanceResponse>) {
-    let subnet_configs = instance_config.subnet_config_set;
+    let mut subnet_configs = instance_config.subnet_config_set;
+    if let Some(ref icp_features) = instance_config.icp_features {
+        subnet_configs = match subnet_configs.try_with_icp_features(icp_features) {
+            Ok(subnet_configs) => subnet_configs,
+            Err(e) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(rest::CreateInstanceResponse::Error {
+                        message: format!("Subnet config failed to validate: {}", e),
+                    }),
+                );
+            }
+        };
+    }
 
     let skip_validate_subnet_configs = instance_config
         .state_dir
@@ -1199,6 +1212,7 @@ pub async fn create_instance(
                 instance_config.nonmainnet_features,
                 log_level,
                 instance_config.bitcoind_addr,
+                instance_config.icp_features,
             )
         })
         .await
