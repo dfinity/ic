@@ -49,8 +49,6 @@ impl<'a> AdapterProxy<'a> {
                 AgentError::UncertifiedReject { ref reject, .. }
                     if reject.reject_code == RejectCode::DestinationInvalid =>
                 {
-                    info!(log, "Creating message canister based on error: {:?}", err);
-
                     // Since we need to install the messaging canister at a
                     // specific PrincipalId, we need to install it manually here
                     mgr.create_canister()

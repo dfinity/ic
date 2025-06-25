@@ -26,6 +26,7 @@ fn test_received_blocks(env: TestEnv) {
     let client = get_btc_client(&env);
     ensure_wallet(&client, &log);
     let start_height = client.get_blockchain_info().unwrap().blocks;
+    let anchor = client.get_block_hash(start_height).unwrap()[..].to_vec();
     info!(log, "Set up bitcoind wallet");
 
     // Mine 150 blocks
@@ -34,7 +35,6 @@ fn test_received_blocks(env: TestEnv) {
     info!(log, "Generated 150");
 
     // Instruct the adapter to sync the blocks
-    let anchor = client.get_block_hash(0).unwrap()[..].to_vec();
     let blocks = block_on(async {
         let agent = assert_create_agent(sys_node.get_public_url().as_str()).await;
         let adapter_proxy = AdapterProxy::new(&agent, log).await;
@@ -61,6 +61,7 @@ fn test_receives_new_3rd_party_txs(env: TestEnv) {
     let client = get_btc_client(&env);
     ensure_wallet(&client, &log);
     let start_height = client.get_blockchain_info().unwrap().blocks;
+    let anchor = client.get_block_hash(start_height).unwrap()[..].to_vec();
     info!(log, "Set up bitcoind wallet");
 
     let (alice_client, bob_client, alice_address, bob_address) = get_alice_and_bob_wallets(&env);
@@ -105,12 +106,11 @@ fn test_receives_new_3rd_party_txs(env: TestEnv) {
     assert_eq!(bob_balance_diff, Amount::from_btc(1.0).unwrap());
 
     // Instruct the adapter to sync the blocks
-    let anchor = client.get_block_hash(0).unwrap()[..].to_vec();
     let blocks = block_on(async {
         let agent = assert_create_agent(sys_node.get_public_url().as_str()).await;
         let adapter_proxy = AdapterProxy::new(&agent, log).await;
         adapter_proxy
-            .sync_blocks(&mut vec![], anchor, 150, 15)
+            .sync_blocks(&mut vec![], anchor, 102, 15)
             .await
             .expect("Failed to syncronize blocks")
     });
