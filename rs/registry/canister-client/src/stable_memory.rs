@@ -60,48 +60,6 @@ impl Storable for StorableRegistryKey {
     };
 }
 
-#[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Default)]
-pub struct TimestampKey(pub u64);
-
-impl Storable for TimestampKey {
-    fn to_bytes(&self) -> Cow<'_, [u8]> {
-        Cow::Owned(self.0.to_be_bytes().to_vec())
-    }
-
-    fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
-        Self(u64::from_be_bytes(
-            bytes.try_into().expect("Invalid version bytes"),
-        ))
-    }
-
-    const BOUND: Bound = Bound::Bounded {
-        max_size: size_of::<u64>() as u32,
-        is_fixed_size: false,
-    };
-}
-
-#[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Default)]
-pub struct RegistryVersionsValue(pub Vec<u64>);
-
-impl Storable for RegistryVersionsValue {
-    fn to_bytes(&self) -> Cow<'_, [u8]> {
-        let versions_b: Vec<u8> = self.0.iter().flat_map(|x| x.to_be_bytes()).collect();
-        Cow::Owned(versions_b)
-    }
-
-    fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
-        let mut versions = Vec::new();
-        for chunk in bytes.chunks_exact(8) {
-            let arr: [u8; 8] = chunk.try_into().expect("Invalid version bytes");
-            versions.push(u64::from_be_bytes(arr));
-        }
-
-        Self(versions)
-    }
-
-    const BOUND: Bound = Bound::Unbounded;
-}
-
 type VM = VirtualMemory<DefaultMemoryImpl>;
 
 pub trait RegistryDataStableMemory: Send + Sync {
@@ -111,14 +69,6 @@ pub trait RegistryDataStableMemory: Send + Sync {
 
     fn with_registry_map_mut<R>(
         f: impl FnOnce(&mut StableBTreeMap<StorableRegistryKey, StorableRegistryValue, VM>) -> R,
-    ) -> R;
-
-    fn with_timestamp_to_registry_versions_map<R>(
-        f: impl FnOnce(&StableBTreeMap<TimestampKey, RegistryVersionsValue, VM>) -> R,
-    ) -> R;
-
-    fn with_timestamp_to_registry_versions_map_mut<R>(
-        f: impl FnOnce(&mut StableBTreeMap<TimestampKey, RegistryVersionsValue, VM>) -> R,
     ) -> R;
 }
 

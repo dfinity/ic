@@ -1,7 +1,4 @@
-use crate::stable_memory::{
-    RegistryDataStableMemory, RegistryVersionsValue, StorableRegistryKey, StorableRegistryValue,
-    TimestampKey,
-};
+use crate::stable_memory::{RegistryDataStableMemory, StorableRegistryKey, StorableRegistryValue};
 use crate::CanisterRegistryClient;
 use async_trait::async_trait;
 use ic_cdk::println;
@@ -47,36 +44,21 @@ impl<S: RegistryDataStableMemory> StableCanisterRegistryClient<S> {
             let mut highest_version_inserted = self.get_latest_version();
 
             S::with_registry_map_mut(|local_registry| {
-                S::with_timestamp_to_registry_versions_map_mut(
-                    |timestamp_to_registry_versions_map| {
-                        for v in delta.values {
-                            let registry_version = RegistryVersion::from(v.version);
-                            highest_version_inserted =
-                                std::cmp::max(highest_version_inserted, registry_version);
+                for v in delta.values {
+                    let registry_version = RegistryVersion::from(v.version);
+                    highest_version_inserted =
+                        std::cmp::max(highest_version_inserted, registry_version);
 
-                            let key = StorableRegistryKey::new(
-                                string_key.to_string(),
-                                registry_version.get(),
-                            );
-                            let value = StorableRegistryValue(if v.deletion_marker {
-                                None
-                            } else {
-                                Some(v.value)
-                            });
+                    let key =
+                        StorableRegistryKey::new(string_key.to_string(), registry_version.get());
+                    let value = StorableRegistryValue(if v.deletion_marker {
+                        None
+                    } else {
+                        Some(v.value)
+                    });
 
-                            let timestamp_key = TimestampKey(v.timestamp_nanoseconds);
-
-                            let mut registry_versions = timestamp_to_registry_versions_map
-                                .get(&timestamp_key)
-                                .unwrap_or_else(|| RegistryVersionsValue(vec![]));
-
-                            registry_versions.0.push(v.version);
-                            timestamp_to_registry_versions_map
-                                .insert(timestamp_key, registry_versions);
-                            local_registry.insert(key, value);
-                        }
-                    },
-                )
+                    local_registry.insert(key, value);
+                }
             });
             // Update the latest version if the inserted version is higher than the current one.
             if highest_version_inserted > self.get_latest_version() {
