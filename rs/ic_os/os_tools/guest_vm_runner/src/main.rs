@@ -230,7 +230,7 @@ impl GuestVmService {
     }
 
     async fn start_virtual_machine(&mut self) -> Result<VirtualMachine> {
-        let config_media = NamedTempFile::new()?;
+        let config_media = NamedTempFile::new().context("Failed to create config media file")?;
 
         let direct_boot = prepare_direct_boot(
             // TODO: We should not refresh in Upgrade VMs once we add them
@@ -238,9 +238,11 @@ impl GuestVmService {
             true,
             self.partition_provider.as_ref(),
         )
-        .await?;
+        .await
+        .context("Failed to prepare direct boot")?;
 
-        assemble_config_media(&self.hostos_config, config_media.path())?;
+        assemble_config_media(&self.hostos_config, config_media.path())
+            .context("Failed to assemble config media")?;
 
         let vm_config = generate_vm_config(
             &self.hostos_config,
