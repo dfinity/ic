@@ -2610,10 +2610,7 @@ impl ExecutionEnvironment {
         state.put_canister_state(canister);
         match result {
             Ok((snapshot_id, instructions_used)) => (
-                Ok(Encode!(&UploadCanisterSnapshotMetadataResponse {
-                    snapshot_id: snapshot_id.to_vec()
-                })
-                .unwrap()),
+                Ok(Encode!(&UploadCanisterSnapshotMetadataResponse { snapshot_id }).unwrap()),
                 instructions_used,
             ),
             Err(e) => (Err(e), NumInstructions::new(0)),

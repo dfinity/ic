@@ -33,7 +33,7 @@ system_test_nns(
     env = MAINNET_ENV,
     tags = [
         "experimental_system_test_colocation",
-        "system_test_hourly",
+        "long_test",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
@@ -61,7 +61,7 @@ system_test_nns(
     name = "upgrade_downgrade_nns_subnet_test",
     env = MAINNET_ENV,
     tags = [
-        "system_test_hourly",
+        "long_test",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
