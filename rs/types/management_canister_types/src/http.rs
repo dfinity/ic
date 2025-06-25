@@ -70,6 +70,7 @@ pub type BoundedHttpHeaders = BoundedVec<
 //       function : func (record {response : http_response; context : blob}) -> (http_response) query;
 //       context : blob;
 //     };
+//     is_replicated: opt bool;
 //   })`
 #[derive(Clone, PartialEq, Debug, CandidType, Deserialize)]
 pub struct CanisterHttpRequestArgs {
@@ -80,6 +81,7 @@ pub struct CanisterHttpRequestArgs {
     pub body: Option<Vec<u8>>,
     pub method: HttpMethod,
     pub transform: Option<TransformContext>,
+    pub is_replicated: Option<bool>,
 }
 
 impl Payload<'_> for CanisterHttpRequestArgs {}
@@ -114,6 +116,7 @@ fn test_http_headers_max_number() {
             body: None,
             method: HttpMethod::GET,
             transform: None,
+            is_replicated: None,
         };
 
         // Act.
@@ -167,6 +170,7 @@ fn test_http_headers_max_total_size() {
             body: None,
             method: HttpMethod::GET,
             transform: None,
+            is_replicated: None,
         };
 
         // Act.
@@ -214,6 +218,7 @@ fn test_http_headers_max_element_size() {
             body: None,
             method: HttpMethod::GET,
             transform: None,
+            is_replicated: None,
         };
 
         // Act.

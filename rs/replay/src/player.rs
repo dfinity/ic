@@ -614,23 +614,30 @@ impl Player {
     // Blocks until the state at the given height is committed.
     fn wait_for_state(&self, height: Height) {
         info!(self.log, "Waiting for the state at height {height}.");
-        loop {
-            // We first check if `height` was executed. Otherwise the state manager
-            // would return a permanent error on a too big height.
-            if self.state_manager.latest_state_height() >= height {
-                if let Some(hash) = self.get_state_hash(height) {
-                    info!(self.log, "Latest checkpoint at height: {}", height);
-                    info!(self.log, "Latest state hash: {}", hex::encode(hash.get().0));
-                };
-                break;
-            }
+        while self.state_manager.latest_state_height() < height {
+            info!(
+                self.log,
+                "State at height {height} hasn't been yet executed. \
+                Current state height = {}. \
+                Retrying in {WAIT_DURATION:?}.",
+                self.state_manager.latest_state_height()
+            );
+
             std::thread::sleep(WAIT_DURATION);
         }
+        info!(self.log, "The state at height {height} has been executed.");
+
         info!(
             self.log,
-            "Latest state height is {}",
-            self.state_manager.latest_state_height()
+            "Waiting until the latest checkpoint is created and verified."
         );
+        self.state_manager.flush_tip_channel();
+        info!(
+            self.log,
+            "The latest checkpoint at height {:?} has been created and verified.",
+            self.state_manager.checkpoint_heights().iter().max()
+        );
+
         assert_eq!(
             height,
             self.state_manager.latest_state_height(),
@@ -723,12 +730,14 @@ impl Player {
                 }
             }
         };
-        println!(
-            "latest_batch_height = {}, batches = {}",
-            last_batch_height,
-            last_batch_height - expected_batch_height.decrement()
+
+        info!(
+            self.log,
+            "Delivered {} batches up to the height {}.",
+            last_batch_height - expected_batch_height.decrement(),
+            last_batch_height
         );
-        println!("Delivered batches up to the height {}", last_batch_height);
+
         last_batch_height
     }
 
@@ -748,14 +757,14 @@ impl Player {
             Some(pool) => {
                 let pool = PoolReader::new(pool);
                 let finalized_height = pool.get_finalized_height();
-                let last_block = pool
-                    .get_finalized_block(finalized_height)
-                    .unwrap_or_else(|| {
-                        panic!(
-                            "Finalized block is not found at height {}",
-                            finalized_height
-                        )
-                    });
+                let target_height = finalized_height.min(
+                    self.replay_target_height
+                        .map(Height::from)
+                        .unwrap_or_else(|| finalized_height),
+                );
+                let last_block = pool.get_finalized_block(target_height).unwrap_or_else(|| {
+                    panic!("Finalized block is not found at height {}", target_height)
+                });
 
                 (
                     last_block.context.registry_version,

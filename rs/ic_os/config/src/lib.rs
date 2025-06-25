@@ -1,10 +1,8 @@
 pub mod config_ini;
 pub mod deployment_json;
 pub mod generate_testnet_config;
-pub mod guest_vm_config;
 pub mod guestos_bootstrap_image;
 pub mod guestos_config;
-pub mod update_config;
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};

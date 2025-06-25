@@ -194,6 +194,27 @@ fn test_encode_decode_non_empty_history() {
         CanisterChangeOrigin::from_canister(canister_test_id(123).get(), None),
         CanisterChangeDetails::settings_change(None, Some(vec![1, 2, 3, 4, 5])),
     ));
+    canister_history.add_canister_change(CanisterChange::new(
+        555,
+        7,
+        CanisterChangeOrigin::from_canister(canister_test_id(123).get(), None),
+        CanisterChangeDetails::settings_change(Some(vec![]), Some(vec![1, 2, 3, 4, 5])),
+    ));
+    canister_history.add_canister_change(CanisterChange::new(
+        555,
+        7,
+        CanisterChangeOrigin::from_canister(canister_test_id(123).get(), None),
+        CanisterChangeDetails::settings_change(
+            Some(vec![canister_test_id(123).into()]),
+            Some(vec![1, 2, 3, 4, 5]),
+        ),
+    ));
+    canister_history.add_canister_change(CanisterChange::new(
+        555,
+        7,
+        CanisterChangeOrigin::from_canister(canister_test_id(123).get(), None),
+        CanisterChangeDetails::settings_change(Some(vec![canister_test_id(123).into()]), None),
+    ));
 
     // A canister state with non-empty history.
     let canister_state_bits = CanisterStateBits {

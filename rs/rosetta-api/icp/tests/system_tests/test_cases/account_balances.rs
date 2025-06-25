@@ -108,6 +108,17 @@ fn test_account_balances() {
                                 };
                                 (block_idx, from_account, transfer_arg.to)
                             }
+                            LedgerEndpointArg::TransferFromArg(transfer_from_arg) => {
+                                let block_idx = caller_agent
+                                    .transfer_from(transfer_from_arg.clone())
+                                    .await
+                                    .unwrap()
+                                    .unwrap()
+                                    .0
+                                    .to_u64()
+                                    .unwrap();
+                                (block_idx, transfer_from_arg.from, transfer_from_arg.to)
+                            }
                         };
 
                         // Store the current balance of the involved accounts and add them to the list of accounts if not already present

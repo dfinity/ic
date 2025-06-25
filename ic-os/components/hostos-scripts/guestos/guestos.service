@@ -5,16 +5,12 @@ After=libvirtd.service
 Requires=guestos-recovery-upgrader.service
 After=guestos-recovery-upgrader.service
 
-# TODO: Remove update-config references in NODE-1518
-After=update-config.service
-Wants=update-config.service
-
 RequiresMountsFor=/var
 
 [Service]
 Type=notify
 ExecStartPre=/opt/ic/bin/detect-first-boot.sh
-ExecStart=/opt/ic/bin/hostos_tool run-guest-vm
+ExecStart=/opt/ic/bin/guest_vm_runner
 ExecStartPost=/opt/ic/bin/manageboot.sh hostos confirm
 Restart=always
 RestartSec=60

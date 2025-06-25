@@ -48,6 +48,7 @@ use icrc_ledger_types::icrc3;
 use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 use icrc_ledger_types::icrc3::blocks::{
     BlockRange, GenericBlock as IcrcBlock, GetBlocksRequest, GetBlocksResponse, GetBlocksResult,
+    SupportedBlockType,
 };
 use icrc_ledger_types::icrc3::transactions::GetTransactionsRequest;
 use icrc_ledger_types::icrc3::transactions::GetTransactionsResponse;
@@ -549,6 +550,16 @@ pub fn supported_standards(env: &StateMachine, ledger: CanisterId) -> Vec<Standa
         Vec<StandardRecord>
     )
     .expect("failed to decode icrc1_supported_standards response")
+}
+
+pub fn supported_block_types(env: &StateMachine, ledger: CanisterId) -> Vec<SupportedBlockType> {
+    Decode!(
+        &env.query(ledger, "icrc3_supported_block_types", Encode!().unwrap())
+            .expect("failed to query supported standards")
+            .bytes(),
+        Vec<SupportedBlockType>
+    )
+    .expect("failed to decode icrc3_supported_block_types response")
 }
 
 pub fn minting_account(env: &StateMachine, ledger: CanisterId) -> Option<Account> {
@@ -1095,6 +1106,25 @@ where
     assert_eq!(
         standards,
         vec!["ICRC-1", "ICRC-10", "ICRC-103", "ICRC-106", "ICRC-2", "ICRC-21", "ICRC-3"]
+    );
+}
+
+pub fn test_icrc3_supported_block_types<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    let (env, canister_id) = setup(ledger_wasm, encode_init_args, vec![]);
+
+    let mut block_types = vec![];
+    for supported_block_type in supported_block_types(&env, canister_id) {
+        block_types.push(supported_block_type.block_type);
+    }
+    block_types.sort();
+    assert_eq!(
+        block_types,
+        vec!["1burn", "1mint", "1xfer", "2approve", "2xfer"]
     );
 }
 
@@ -2406,6 +2436,13 @@ fn apply_arg_with_caller(
             send_transfer(env, ledger_id, arg.caller.sender().unwrap(), transfer_arg)
                 .expect("transfer failed")
         }
+        LedgerEndpointArg::TransferFromArg(transfer_from_arg) => send_transfer_from(
+            env,
+            ledger_id,
+            arg.caller.sender().unwrap(),
+            transfer_from_arg,
+        )
+        .expect("transfer_from failed"),
     }
 }
 
@@ -2444,7 +2481,6 @@ pub fn test_upgrade_serialization<Tokens>(
 
                 let mut add_tx_and_verify = || {
                     while tx_index < tx_index_target {
-                        apply_arg_with_caller(&env, ledger_id, &transactions[tx_index]);
                         in_memory_ledger.apply_arg_with_caller(
                             &transactions[tx_index],
                             TimeStamp::from_nanos_since_unix_epoch(system_time_to_nanos(
@@ -2453,6 +2489,7 @@ pub fn test_upgrade_serialization<Tokens>(
                             minter_principal,
                             Some(FEE.into()),
                         );
+                        apply_arg_with_caller(&env, ledger_id, &transactions[tx_index]);
                         tx_index += 1;
                     }
                     tx_index_target += ADDITIONAL_TX_BATCH_SIZE;

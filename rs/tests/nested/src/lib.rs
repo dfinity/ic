@@ -7,7 +7,13 @@ use canister_test::PrincipalId;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
-    driver::{ic::InternetComputer, nested::NestedVms, test_env::TestEnv, test_env_api::*},
+    driver::{
+        ic::InternetComputer,
+        ic_gateway_vm::{IcGatewayVm, IC_GATEWAY_VM_NAME},
+        nested::NestedVms,
+        test_env::TestEnv,
+        test_env_api::*,
+    },
     retry_with_msg,
     util::block_on,
 };
@@ -38,14 +44,18 @@ pub fn config(env: TestEnv) {
     // Setup "testnet"
     InternetComputer::new()
         .add_fast_single_node_subnet(SubnetType::System)
-        // .with_mainnet_config() TODO: uncomment in NODE-1618
         .with_api_boundary_nodes(1)
+        .with_mainnet_config()
         .with_node_provider(principal)
         .with_node_operator(principal)
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 
     install_nns_and_check_progress(env.topology_snapshot());
+
+    IcGatewayVm::new(IC_GATEWAY_VM_NAME)
+        .start(&env)
+        .expect("failed to setup ic-gateway");
 
     setup_nested_vm(env, HOST_VM_NAME);
 }

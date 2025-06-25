@@ -439,9 +439,14 @@ pub struct CanisterLoadSnapshot {
     pub snapshot_id: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct CanisterSettingsChange {
+pub struct CanisterControllers {
     #[prost(message, repeated, tag = "1")]
     pub controllers: ::prost::alloc::vec::Vec<super::super::super::types::v1::PrincipalId>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterSettingsChange {
+    #[prost(message, optional, tag = "1")]
+    pub controllers: ::core::option::Option<CanisterControllers>,
     #[prost(bytes = "vec", optional, tag = "2")]
     pub environment_variables_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }

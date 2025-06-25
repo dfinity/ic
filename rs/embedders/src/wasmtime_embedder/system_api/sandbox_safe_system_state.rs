@@ -1266,7 +1266,10 @@ impl SandboxSafeSystemState {
 
             ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
-            | ApiType::Cleanup { .. } => {
+            | ApiType::Cleanup { .. }
+            | ApiType::CompositeReplyCallback { .. }
+            | ApiType::CompositeRejectCallback { .. }
+            | ApiType::CompositeCleanup { .. } => {
                 // Response callbacks are specified to not check the freezing
                 // threshold.
                 false
@@ -1375,7 +1378,10 @@ impl SandboxSafeSystemState {
             ApiType::InspectMessage { .. }
             | ApiType::ReplicatedQuery { .. }
             | ApiType::NonReplicatedQuery { .. }
-            | ApiType::CompositeQuery { .. } => {
+            | ApiType::CompositeQuery { .. }
+            | ApiType::CompositeReplyCallback { .. }
+            | ApiType::CompositeRejectCallback { .. }
+            | ApiType::CompositeCleanup { .. } => {
                 // Queries do not reserve storage cycles because the state
                 // changes are discarded anyways.
                 false

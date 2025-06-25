@@ -42,7 +42,7 @@ jobs:
       - name: build
         run: |
           TARGET='//rs/boundary_node/salt_sharing:salt_sharing_canister'
-          bazel build --config=ci ${TARGET}
+          bazel build ${TARGET}
 
           OUTPUT='bazel-bin/rs/boundary_node/salt_sharing/salt_sharing_canister.wasm.gz'
           mv ${OUTPUT} salt_sharing_canister.wasm.gz

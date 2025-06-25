@@ -1880,7 +1880,7 @@ impl CanisterManager {
             origin,
             CanisterChangeDetails::load_snapshot(
                 snapshot.canister_version(),
-                snapshot_id.to_vec(),
+                snapshot_id,
                 snapshot.taken_at_timestamp().as_nanos_since_unix_epoch(),
             ),
         );
@@ -2118,12 +2118,9 @@ impl CanisterManager {
             })?;
 
         let replace_snapshot_size = match args.replace_snapshot() {
-            Some(replace_snapshot_id) => {
-                let replace_snapshot_id =
-                    SnapshotId::try_from(&replace_snapshot_id.to_vec()).unwrap();
-                self.get_snapshot(canister_id, replace_snapshot_id, state)?
-                    .size()
-            }
+            Some(replace_snapshot_id) => self
+                .get_snapshot(canister_id, replace_snapshot_id, state)?
+                .size(),
             None => {
                 // No replace snapshot ID provided, check whether the maximum number of snapshots
                 // has been reached.

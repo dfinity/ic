@@ -3,9 +3,6 @@ Description=Generate network config
 After=bootstrap-ic-node.service
 Wants=bootstrap-ic-node.service
 Before=systemd-networkd.service
-# TODO(NODE-1618):
-After=update-config.service
-Wants=update-config.service
 
 [Install]
 WantedBy=systemd-networkd.service
