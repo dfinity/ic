@@ -71,10 +71,10 @@ async fn main() -> Result<(), Error> {
     let deployment_settings = DeploymentSettings {
         deployment: Deployment {
             mgmt_mac: cli.deployment.mgmt_mac,
-            deployment_environment: match cli.deployment.deployment_environment {
-                Some(env) => env,
-                None => DeploymentEnvironment::Mainnet,
-            },
+            deployment_environment: cli
+                .deployment
+                .deployment_environment
+                .unwrap_or(DeploymentEnvironment::Mainnet),
         },
         logging: Logging {
             elasticsearch_hosts: cli.deployment.elasticsearch_hosts,
