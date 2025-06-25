@@ -1,7 +1,7 @@
 use assert_matches::assert_matches;
 use bitcoin::util::psbt::serialize::Deserialize;
 use bitcoin::{Address as BtcAddress, Network as BtcNetwork};
-use candid::{Decode, Encode, Nat, Principal};
+use candid::{CandidType, Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_bitcoin_canister_mock::{OutPoint, PushUtxoToAddress, Utxo};
 use ic_btc_checker::{
@@ -12,6 +12,7 @@ use ic_btc_interface::Txid;
 use ic_ckbtc_minter::lifecycle::init::{InitArgs as CkbtcMinterInitArgs, MinterArg};
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::queries::{EstimateFeeArg, RetrieveBtcStatusRequest, WithdrawalFee};
+use ic_ckbtc_minter::state::eventlog::Event;
 use ic_ckbtc_minter::state::{BtcRetrievalStatusV2, Mode, RetrieveBtcStatus, RetrieveBtcStatusV2};
 use ic_ckbtc_minter::updates::get_btc_address::GetBtcAddressArgs;
 use ic_ckbtc_minter::updates::retrieve_btc::{
@@ -1462,7 +1463,49 @@ fn test_min_retrieval_amount_custom() {
 #[test]
 fn test_stuck_transaction() {
     let ckbtc = CkBtcSetup::new();
-    panic!("BOOM!")
+    let mut events = Mainnet.deserialize();
+    panic!("BOOM2!")
+}
+
+#[derive(Debug)]
+struct Mainnet;
+
+trait GetEventsFile {
+    fn path_to_events_file(&self) -> PathBuf {
+        let mut path = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+        path.push(format!("test_resources/{}", self.file_name()));
+        path
+    }
+
+    fn file_name(&self) -> &str;
+
+    fn deserialize(&self) -> GetEventsResult {
+        use candid::Decode;
+        use flate2::read::GzDecoder;
+        use std::fs::File;
+        use std::io::Read;
+
+        let file = File::open(self.path_to_events_file()).unwrap();
+        let mut gz = GzDecoder::new(file);
+        let mut decompressed_buffer = Vec::new();
+        gz.read_to_end(&mut decompressed_buffer)
+            .expect("BUG: failed to decompress events");
+        Decode!(&decompressed_buffer, GetEventsResult)
+            .expect("Failed to decode events")
+            .into()
+    }
+}
+
+impl GetEventsFile for Mainnet {
+    fn file_name(&self) -> &str {
+        "mainnet_events.gz"
+    }
+}
+
+#[derive(Clone, Debug, CandidType, serde::Deserialize)]
+pub struct GetEventsResult {
+    pub events: Vec<Event>,
+    pub total_event_count: u64,
 }
 
 #[test]
