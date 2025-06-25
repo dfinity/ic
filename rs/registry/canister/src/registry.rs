@@ -214,6 +214,7 @@ impl Registry {
             version,
             value,
             deletion_marker: false,
+            timestamp_nanoseconds: 0,
         })
     }
 
@@ -1227,7 +1228,8 @@ mod tests {
             Some(RegistryValue {
                 value: max_value,
                 version,
-                deletion_marker: false
+                deletion_marker: false,
+                timestamp_nanoseconds: 0,
             })
         );
     }
