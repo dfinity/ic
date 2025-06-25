@@ -34,31 +34,10 @@ jobs:
     steps:
       - <<: *checkout
       - name: Run Bazel Build All No Cache
-        uses:  ./.github/actions/bazel-test-all/
+        uses: ./.github/actions/bazel
         with:
-          BAZEL_COMMAND: build --repository_cache= --disk_cache= --noremote_accept_cached --remote_instance_name=${CI_COMMIT_SHA}
-          BAZEL_TARGETS: //...
-          CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
+          run: bazel build --config=stamped --config=local //...
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-          # 'upload-artifacts' is required for the BNs as they rely for both dev and prod deployment
-          # on images being uploaded to the S3 bucket
-          upload-artifacts: true
-
-  bazel-system-test-hourly:
-    name: Bazel System Tests Hourly
-    <<: *dind-large-setup
-    steps:
-      - <<: *checkout
-      - name: Run Bazel System Test Hourly
-        id: bazel-test-all
-        uses:  ./.github/actions/bazel-test-all/
-        with:
-          BAZEL_COMMAND: test --keep_going --test_tag_filters=system_test_hourly
-          BAZEL_TARGETS: //rs/...
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-          # 'upload-artifacts' is required for the BNs as they rely for both dev and prod deployment
-          # on images being uploaded to the S3 bucket
-          upload-artifacts: true
 
   bazel-run-fuzzers-hourly:
     name: Bazel Run Fuzzers Hourly

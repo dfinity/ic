@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
-load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "MAINNET_ENV")
+load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "IC_GATEWAY_RUNTIME_DEPS", "MAINNET_ENV")
 load("//rs/tests:system_tests.bzl", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -59,7 +59,7 @@ system_test_nns(
     use_empty_image = True,
     uses_guestos_dev = True,
     uses_setupos_dev = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + IC_GATEWAY_RUNTIME_DEPS,
     deps = RUNNER_DEPENDENCIES,
 )
 
@@ -84,7 +84,7 @@ system_test_nns(
     uses_guestos_dev = True,
     uses_hostos_dev_test = True,
     uses_setupos_dev = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + IC_GATEWAY_RUNTIME_DEPS,
     deps = RUNNER_DEPENDENCIES,
 )
 
@@ -104,7 +104,7 @@ system_test_nns(
     uses_guestos_dev = True,
     uses_hostos_dev_test = True,
     uses_setupos_mainnet = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + ["//ic-os/setupos:config/node_operator_private_key.pem"],
+    runtime_deps = GUESTOS_RUNTIME_DEPS + IC_GATEWAY_RUNTIME_DEPS + ["//ic-os/setupos:config/node_operator_private_key.pem"],
     deps = RUNNER_DEPENDENCIES,
 )
 
@@ -126,6 +126,6 @@ system_test_nns(
     uses_guestos_dev = True,
     uses_hostos_mainnet_update_img = True,
     uses_setupos_mainnet = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + ["//ic-os/setupos:config/node_operator_private_key.pem"],
+    runtime_deps = GUESTOS_RUNTIME_DEPS + IC_GATEWAY_RUNTIME_DEPS + ["//ic-os/setupos:config/node_operator_private_key.pem"],
     deps = RUNNER_DEPENDENCIES,
 )

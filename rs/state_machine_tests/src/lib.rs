@@ -23,7 +23,7 @@ use ic_crypto_test_utils_ni_dkg::{
 };
 use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path as LabeledTreePath};
 use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
-use ic_cycles_account_manager::CyclesAccountManager;
+use ic_cycles_account_manager::{CyclesAccountManager, IngressInductionCost};
 pub use ic_error_types::{ErrorCode, UserError};
 use ic_execution_environment::{ExecutionServices, IngressHistoryReaderImpl};
 use ic_http_endpoints_public::{metrics::HttpHandlerMetrics, IngressWatcher, IngressWatcherHandle};
@@ -142,15 +142,15 @@ use ic_types::{
     },
     malicious_flags::MaliciousFlags,
     messages::{
-        Blob, Certificate, CertificateDelegation, HttpCallContent, HttpCanisterUpdate,
-        HttpRequestEnvelope, Payload as MsgPayload, Query, QuerySource, RejectContext,
-        SignedIngress, EXPECTED_MESSAGE_ID_LENGTH,
+        extract_effective_canister_id, Blob, Certificate, CertificateDelegation, HttpCallContent,
+        HttpCanisterUpdate, HttpRequestContent, HttpRequestEnvelope, Payload as MsgPayload, Query,
+        QuerySource, RejectContext, SignedIngress, EXPECTED_MESSAGE_ID_LENGTH,
     },
     signature::ThresholdSignature,
     time::GENESIS,
     xnet::{CertifiedStreamSlice, StreamIndex},
     CanisterLog, CountBytes, CryptoHashOfPartialState, Height, NodeId, Randomness, RegistryVersion,
-    ReplicaVersion,
+    ReplicaVersion, SnapshotId,
 };
 use ic_types::{
     canister_http::{
@@ -236,8 +236,7 @@ pub fn add_global_registry_records(
     let registry_version = if registry_data_provider.is_empty() {
         INITIAL_REGISTRY_VERSION
     } else {
-        let latest_registry_version = registry_data_provider.latest_version();
-        RegistryVersion::from(latest_registry_version.get() + 1)
+        registry_data_provider.latest_version()
     };
 
     // root subnet record
@@ -352,14 +351,8 @@ fn add_subnet_local_registry_records(
     chain_keys_enabled_status: &BTreeMap<MasterPublicKeyId, bool>,
     ni_dkg_transcript: NiDkgTranscript,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
+    registry_version: RegistryVersion,
 ) -> FakeRegistryClient {
-    let registry_version = if registry_data_provider.is_empty() {
-        INITIAL_REGISTRY_VERSION
-    } else {
-        let latest_registry_version = registry_data_provider.latest_version();
-        RegistryVersion::from(latest_registry_version.get() + 1)
-    };
-
     for node in nodes {
         let node_record = NodeRecord {
             node_operator_id: vec![0],
@@ -911,6 +904,7 @@ pub struct StateMachine {
     query_stats_payload_builder: Arc<PocketQueryStatsPayloadBuilderImpl>,
     vetkd_payload_builder: Arc<dyn BatchPayloadBuilder>,
     remove_old_states: bool,
+    cycles_account_manager: Arc<CyclesAccountManager>,
     // This field must be the last one so that the temporary directory is deleted at the very end.
     state_dir: Box<dyn StateMachineStateDir>,
     // DO NOT PUT ANY FIELDS AFTER `state_dir`!!!
@@ -989,6 +983,7 @@ pub struct StateMachineBuilder {
     log_level: Option<Level>,
     bitcoin_testnet_uds_path: Option<PathBuf>,
     remove_old_states: bool,
+    create_at_registry_version: RegistryVersion,
 }
 
 impl StateMachineBuilder {
@@ -1027,6 +1022,7 @@ impl StateMachineBuilder {
             log_level: Some(Level::Warning),
             bitcoin_testnet_uds_path: None,
             remove_old_states: true,
+            create_at_registry_version: INITIAL_REGISTRY_VERSION,
         }
     }
 
@@ -1249,6 +1245,13 @@ impl StateMachineBuilder {
         }
     }
 
+    pub fn create_at_registry_version(self, registry_version: RegistryVersion) -> Self {
+        Self {
+            create_at_registry_version: registry_version,
+            ..self
+        }
+    }
+
     pub fn build_internal(self) -> StateMachine {
         StateMachine::setup_from_dir(
             self.state_dir,
@@ -1282,6 +1285,7 @@ impl StateMachineBuilder {
             self.seed,
             self.log_level,
             self.remove_old_states,
+            self.create_at_registry_version,
         )
     }
 
@@ -1623,6 +1627,7 @@ impl StateMachine {
         seed: [u8; 32],
         log_level: Option<Level>,
         remove_old_states: bool,
+        create_at_registry_version: RegistryVersion,
     ) -> Self {
         let checkpoint_interval_length = checkpoint_interval_length.unwrap_or(match subnet_type {
             SubnetType::Application | SubnetType::VerifiedApplication => 499,
@@ -1698,6 +1703,7 @@ impl StateMachine {
             &chain_keys_enabled_status,
             ni_dkg_transcript,
             registry_data_provider.clone(),
+            create_at_registry_version,
         );
 
         let cycles_account_manager = Arc::new(CyclesAccountManager::new(
@@ -1939,7 +1945,7 @@ impl StateMachine {
             subnet_id,
             replica_logger.clone(),
             state_manager.clone(),
-            cycles_account_manager,
+            cycles_account_manager.clone(),
             malicious_flags,
             RandomStateKind::Deterministic,
         ));
@@ -2003,6 +2009,7 @@ impl StateMachine {
             query_stats_payload_builder: pocket_query_stats_payload_builder,
             vetkd_payload_builder,
             remove_old_states,
+            cycles_account_manager,
         }
     }
 
@@ -2219,27 +2226,7 @@ impl StateMachine {
         method: impl ToString,
         payload: Vec<u8>,
     ) -> Result<MessageId, SubmitIngressError> {
-        // Build `SignedIngress` with maximum ingress expiry and unique nonce,
-        // omitting delegations and signatures.
-        let ingress_expiry = (self.get_time() + MAX_INGRESS_TTL).as_nanos_since_unix_epoch();
-        let nonce = self.nonce.fetch_add(1, Ordering::Relaxed) + 1;
-        let nonce = Some(nonce.to_le_bytes().into());
-        let msg = SignedIngress::try_from(HttpRequestEnvelope::<HttpCallContent> {
-            content: HttpCallContent::Call {
-                update: HttpCanisterUpdate {
-                    canister_id: Blob(canister_id.get().into_vec()),
-                    method_name: method.to_string(),
-                    arg: Blob(payload.clone()),
-                    sender: sender.into(),
-                    ingress_expiry,
-                    nonce: nonce.clone(),
-                },
-            },
-            sender_pubkey: None,
-            sender_sig: None,
-            sender_delegation: None,
-        })
-        .unwrap();
+        let msg = self.ingress_message(sender, canister_id, method, payload);
         self.submit_signed_ingress(msg)
     }
 
@@ -3368,7 +3355,7 @@ impl StateMachine {
             let ReadCanisterSnapshotDataResponse { chunk } =
                 self.read_canister_snapshot_data(&ReadCanisterSnapshotDataArgs {
                     canister_id: args.canister_id,
-                    snapshot_id: args.snapshot_id.clone(),
+                    snapshot_id: args.snapshot_id,
                     kind: CanisterSnapshotDataKind::WasmChunk {
                         hash: hash.hash.clone(),
                     },
@@ -3431,7 +3418,7 @@ impl StateMachine {
             let size = u64::min(SNAPSHOT_DATA_CHUNK_SIZE, module_size - start);
             let args = ReadCanisterSnapshotDataArgs {
                 canister_id: args.canister_id,
-                snapshot_id: args.snapshot_id.clone(),
+                snapshot_id: args.snapshot_id,
                 kind: kind_gen(start, size),
             };
             start += size;
@@ -3490,7 +3477,7 @@ impl StateMachine {
     pub fn upload_snapshot_module(
         &self,
         canister_id: CanisterId,
-        snapshot_id: Vec<u8>,
+        snapshot_id: SnapshotId,
         data: impl AsRef<[u8]>,
         start_chunk: Option<usize>,
         end_chunk: Option<usize>,
@@ -3513,7 +3500,7 @@ impl StateMachine {
     pub fn upload_snapshot_heap(
         &self,
         canister_id: CanisterId,
-        snapshot_id: Vec<u8>,
+        snapshot_id: SnapshotId,
         data: impl AsRef<[u8]>,
         start_chunk: Option<usize>,
         end_chunk: Option<usize>,
@@ -3536,7 +3523,7 @@ impl StateMachine {
     pub fn upload_snapshot_stable_memory(
         &self,
         canister_id: CanisterId,
-        snapshot_id: Vec<u8>,
+        snapshot_id: SnapshotId,
         data: impl AsRef<[u8]>,
         start_chunk: Option<usize>,
         end_chunk: Option<usize>,
@@ -3561,7 +3548,7 @@ impl StateMachine {
     fn upload_snapshot_blob(
         &self,
         canister_id: CanisterId,
-        snapshot_id: Vec<u8>,
+        snapshot_id: SnapshotId,
         data: impl AsRef<[u8]>,
         start_chunk: Option<usize>,
         end_chunk: Option<usize>,
@@ -3583,7 +3570,7 @@ impl StateMachine {
             let chunk = data.as_ref()[start as usize..(start + size) as usize].to_vec();
             let args = UploadCanisterSnapshotDataArgs {
                 canister_id: canister_id.into(),
-                snapshot_id: snapshot_id.clone(),
+                snapshot_id,
                 kind,
                 chunk,
             };
@@ -3780,23 +3767,19 @@ impl StateMachine {
         self.execute_ingress_as(PrincipalId::new_anonymous(), canister_id, method, payload)
     }
 
-    /// Sends an ingress message to the canister with the specified ID.
-    ///
-    /// This function is asynchronous. It returns the ID of the ingress message
-    /// that can be awaited later with [await_ingress].
-    pub fn send_ingress_safe(
+    fn ingress_message(
         &self,
         sender: PrincipalId,
         canister_id: CanisterId,
         method: impl ToString,
         payload: Vec<u8>,
-    ) -> Result<MessageId, UserError> {
+    ) -> SignedIngress {
         // Build `SignedIngress` with maximum ingress expiry and unique nonce,
         // omitting delegations and signatures.
         let ingress_expiry = (self.get_time() + MAX_INGRESS_TTL).as_nanos_since_unix_epoch();
-        let nonce = self.nonce.fetch_add(1, Ordering::Relaxed) + 1;
+        let nonce = self.nonce.fetch_add(1, Ordering::Relaxed);
         let nonce_blob = Some(nonce.to_le_bytes().into());
-        let msg = SignedIngress::try_from(HttpRequestEnvelope::<HttpCallContent> {
+        SignedIngress::try_from(HttpRequestEnvelope::<HttpCallContent> {
             content: HttpCallContent::Call {
                 update: HttpCanisterUpdate {
                     canister_id: Blob(canister_id.get().into_vec()),
@@ -3811,7 +3794,39 @@ impl StateMachine {
             sender_sig: None,
             sender_delegation: None,
         })
-        .unwrap();
+        .unwrap()
+    }
+
+    pub fn ingress_message_cost(
+        &self,
+        sender: PrincipalId,
+        canister_id: CanisterId,
+        method: impl ToString,
+        payload: Vec<u8>,
+    ) -> IngressInductionCost {
+        let msg = self.ingress_message(sender, canister_id, method, payload);
+        let effective_canister_id =
+            extract_effective_canister_id(msg.content(), self.get_subnet_id()).unwrap();
+        let subnet_size = self.nodes.len();
+        self.cycles_account_manager.ingress_induction_cost(
+            msg.content(),
+            effective_canister_id,
+            subnet_size,
+        )
+    }
+
+    /// Sends an ingress message to the canister with the specified ID.
+    ///
+    /// This function is asynchronous. It returns the ID of the ingress message
+    /// that can be awaited later with [await_ingress].
+    pub fn send_ingress_safe(
+        &self,
+        sender: PrincipalId,
+        canister_id: CanisterId,
+        method: impl ToString,
+        payload: Vec<u8>,
+    ) -> Result<MessageId, UserError> {
+        let msg = self.ingress_message(sender, canister_id, method, payload);
 
         // Fetch ingress validation settings from the registry.
         let registry_version = self.registry_client.get_latest_version();
@@ -3827,11 +3842,8 @@ impl StateMachine {
             .block_on(ingress_filter.oneshot((provisional_whitelist, msg.clone().into())))
             .unwrap()?;
 
-        let builder = PayloadBuilder::new()
-            .with_max_expiry_time_from_now(self.time())
-            .with_nonce(nonce)
-            .ingress(sender, canister_id, method, payload);
-        let msg_id = builder.ingress_ids().pop().unwrap();
+        let msg_id = msg.content().id();
+        let builder = PayloadBuilder::new().signed_ingress(msg);
         self.execute_payload(builder);
         Ok(msg_id)
     }
@@ -4472,6 +4484,11 @@ impl PayloadBuilder {
 
         self.ingress_messages.push(msg);
         self.nonce = self.nonce.map(|n| n + 1);
+        self
+    }
+
+    pub fn signed_ingress(mut self, msg: SignedIngress) -> Self {
+        self.ingress_messages.push(msg);
         self
     }
 

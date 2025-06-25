@@ -308,6 +308,7 @@ def icos_build(
         expanded_size = image_deps.get("expanded_size", default = None),
         tags = ["manual", "no-cache"],
         target_compatible_with = ["@platforms//os:linux"],
+        visibility = visibility,
     )
 
     zstd_compress(

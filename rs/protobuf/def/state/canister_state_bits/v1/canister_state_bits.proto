@@ -254,6 +254,7 @@ message CanisterChangeFromCanister {
 
 message CanisterCreation {
   repeated types.v1.PrincipalId controllers = 1;
+  optional bytes environment_variables_hash = 2;
 }
 
 message CanisterCodeUninstall {}
@@ -273,6 +274,15 @@ message CanisterLoadSnapshot {
   bytes snapshot_id = 3;
 }
 
+message CanisterControllers {
+  repeated types.v1.PrincipalId controllers = 1;
+}
+
+message CanisterSettingsChange {
+  optional CanisterControllers controllers = 1;
+  optional bytes environment_variables_hash = 2;
+}
+
 message CanisterChange {
   uint64 timestamp_nanos = 1;
   uint64 canister_version = 2;
@@ -286,6 +296,7 @@ message CanisterChange {
     CanisterCodeDeployment canister_code_deployment = 7;
     CanisterControllersChange canister_controllers_change = 8;
     CanisterLoadSnapshot canister_load_snapshot = 9;
+    CanisterSettingsChange canister_settings_change = 10;
   }
 }
 
@@ -454,4 +465,6 @@ message CanisterStateBits {
   // Contains tasks that need to be executed before processing any input of the
   // canister.
   TaskQueue tasks = 54;
+  // A map of environment variable names to their values
+  map<string, string> environment_variables = 55;
 }
