@@ -4316,6 +4316,47 @@ impl StateMachine {
     pub fn certify_latest_state(&self) {
         certify_latest_state_helper(self.state_manager.clone(), &self.secret_key, self.subnet_id)
     }
+
+    /// Execute a block containing the latest xnet payload.
+    /// This function assumes the `StateMachine` was built with `StatMachineBuilder::build_with_subnets`.
+    pub fn execute_xnet(&self) {
+        self.certify_latest_state();
+        let certified_height = self.state_manager.latest_certified_height();
+        let registry_version = self.registry_client.get_latest_version();
+        let validation_context = ValidationContext {
+            time: self.get_time(),
+            registry_version,
+            certified_height,
+        };
+        let subnet_record = self
+            .registry_client
+            .get_subnet_record(self.subnet_id, registry_version)
+            .unwrap()
+            .unwrap();
+        let subnet_records = SubnetRecords {
+            membership_version: subnet_record.clone(),
+            context_version: subnet_record,
+        };
+        self.pocket_xnet
+            .read()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .refill(registry_version, self.replica_logger.clone());
+        let payload_builder = self.payload_builder.read().unwrap();
+        let payload_builder = payload_builder.as_ref().unwrap();
+        let batch_payload = payload_builder.get_payload(
+            certified_height,
+            &[], // Because the latest state is certified, we do not need to provide any `past_payloads`.
+            &validation_context,
+            &subnet_records,
+        );
+
+        let xnet_payload = batch_payload.xnet.clone();
+        let payload = PayloadBuilder::new().with_xnet_payload(xnet_payload);
+
+        self.execute_payload(payload);
+    }
 }
 
 /// Make sure the latest state is certified.

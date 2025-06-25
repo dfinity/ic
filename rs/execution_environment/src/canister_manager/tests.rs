@@ -6697,7 +6697,7 @@ fn rename_canister(
 ) -> WasmResult {
     const MAX_TICKS: usize = 100;
 
-    env1.execute_round();
+    env1.tick();
     let sender_canister_version = env1
         .get_latest_state()
         .canister_state(&sender_canister)
@@ -6723,28 +6723,26 @@ fn rename_canister(
         IC_00
     };
 
-    let msg_id = env1
-        .submit_ingress_as(
-            PrincipalId::new_anonymous(),
-            sender_canister,
-            "update",
-            wasm()
-                .call_simple(
-                    management_canister,
-                    Method::RenameCanister,
-                    call_args()
-                        .other_side(arguments.encode())
-                        .on_reject(PayloadBuilder::default().reject_message().reject().build()),
-                )
-                .build(),
-        )
-        .unwrap();
+    let msg_id = env1.send_ingress(
+        PrincipalId::new_anonymous(),
+        sender_canister,
+        "update",
+        wasm()
+            .call_simple(
+                management_canister,
+                Method::RenameCanister,
+                call_args()
+                    .other_side(arguments.encode())
+                    .on_reject(PayloadBuilder::default().reject_message().reject().build()),
+            )
+            .build(),
+    );
 
-    env1.execute_round();
-    env2.execute_round();
-    env1.execute_round();
-    env2.execute_round();
-    env1.execute_round();
+    env1.execute_xnet();
+    env2.execute_xnet();
+    env1.execute_xnet();
+    env2.execute_xnet();
+    env1.execute_xnet();
 
     env1.await_ingress(msg_id, MAX_TICKS).unwrap()
 }
