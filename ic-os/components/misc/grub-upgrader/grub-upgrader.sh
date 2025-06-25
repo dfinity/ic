@@ -47,7 +47,7 @@ wait_for_stable_boot() {
         elapsed_time=$((current_time - start_time))
 
         if [ $elapsed_time -ge $timeout ]; then
-            echo "Timeout reached (10 minutes). System did not become stable. Exiting without updating grub." >&2
+            echo "Timeout reached ($timeout seconds). System did not become stable. Exiting without updating grub." >&2
             exit 1
         fi
 
