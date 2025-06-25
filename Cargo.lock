@@ -2581,11 +2581,9 @@ name = "config"
 version = "1.0.0"
 dependencies = [
  "anyhow",
- "askama",
  "clap 4.5.27",
  "config_types",
  "deterministic_ips",
- "goldenfile",
  "ic-types",
  "macaddr",
  "network",
@@ -5204,6 +5202,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "guest_vm_runner"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "askama",
+ "async-trait",
+ "config",
+ "config_types",
+ "deterministic_ips",
+ "goldenfile",
+ "gpt",
+ "grub",
+ "ic-metrics-tool",
+ "macaddr",
+ "nix 0.24.3",
+ "partition_tools",
+ "regex",
+ "sys-mount",
+ "systemd",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "url",
+ "uuid",
+ "virt",
+]
+
+[[package]]
 name = "guestos_tool"
 version = "1.0.0"
 dependencies = [
@@ -5618,26 +5644,12 @@ name = "hostos_tool"
 version = "1.0.0"
 dependencies = [
  "anyhow",
- "async-trait",
  "clap 4.5.27",
  "config",
  "config_types",
  "deterministic_ips",
- "gpt",
- "grub",
- "ic-metrics-tool",
  "network",
- "nix 0.24.3",
- "partition_tools",
- "regex",
- "sys-mount",
- "systemd",
- "tempfile",
- "tokio",
- "tokio-util",
  "utils",
- "uuid",
- "virt",
 ]
 
 [[package]]
