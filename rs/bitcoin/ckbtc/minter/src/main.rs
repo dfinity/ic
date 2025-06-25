@@ -3,13 +3,16 @@ use ic_btc_interface::Utxo;
 use ic_canister_log::export as export_logs;
 use ic_cdk::{init, post_upgrade, query, update};
 use ic_ckbtc_minter::dashboard::build_dashboard;
+use ic_ckbtc_minter::guard::TimerLogicGuard;
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::lifecycle::{self, init::MinterArg};
 use ic_ckbtc_minter::metrics::encode_metrics;
 use ic_ckbtc_minter::queries::{EstimateFeeArg, RetrieveBtcStatusRequest, WithdrawalFee};
-use ic_ckbtc_minter::state::eventlog::Event;
+use ic_ckbtc_minter::state::eventlog::{replay, Event};
+use ic_ckbtc_minter::state::invariants::CheckInvariants;
 use ic_ckbtc_minter::state::{
-    read_state, BtcRetrievalStatusV2, RetrieveBtcStatus, RetrieveBtcStatusV2,
+    read_state, replace_state, BtcRetrievalStatusV2, CkBtcMinterState, RetrieveBtcStatus,
+    RetrieveBtcStatusV2,
 };
 use ic_ckbtc_minter::tasks::{schedule_now, TaskType};
 use ic_ckbtc_minter::updates::retrieve_btc::{
@@ -22,6 +25,7 @@ use ic_ckbtc_minter::updates::{
     update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus},
 };
 use ic_ckbtc_minter::{
+    finalize_requests,
     state::eventlog::{EventType, GetEventsArg},
     storage, {Log, LogEntry, Priority},
 };
@@ -204,6 +208,29 @@ async fn upload_events(events: Vec<Event>) {
     for event in events {
         storage::record_event_v0(event.payload, &IC_CANISTER_RUNTIME);
     }
+}
+
+#[update]
+async fn replay_events(events: Vec<Event>) {
+    let state =
+        replay::<DoNotCheckInvariants>(events.into_iter()).expect("Failed to replay events");
+    replace_state(state);
+}
+enum DoNotCheckInvariants {}
+impl CheckInvariants for DoNotCheckInvariants {
+    fn check_invariants(state: &CkBtcMinterState) -> Result<(), String> {
+        Ok(())
+    }
+}
+
+#[update]
+async fn finalize_requests_now() {
+    let _guard = match TimerLogicGuard::new() {
+        Some(guard) => guard,
+        None => panic!("Failed to retrieve TimerLogicGuard"),
+    };
+
+    finalize_requests().await;
 }
 
 #[query]

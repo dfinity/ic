@@ -523,7 +523,7 @@ fn finalized_txids(candidates: &[state::SubmittedBtcTransaction], new_utxos: &[U
         .collect()
 }
 
-async fn finalize_requests() {
+pub async fn finalize_requests() {
     if state::read_state(|s| s.submitted_transactions.is_empty()) {
         return;
     }

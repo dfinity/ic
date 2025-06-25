@@ -1460,6 +1460,12 @@ fn test_min_retrieval_amount_custom() {
 }
 
 #[test]
+fn test_stuck_transaction() {
+    let ckbtc = CkBtcSetup::new();
+    panic!("BOOM!")
+}
+
+#[test]
 fn test_transaction_resubmission_finalize_new() {
     let ckbtc = CkBtcSetup::new();
 
