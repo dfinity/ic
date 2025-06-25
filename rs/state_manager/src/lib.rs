@@ -2321,7 +2321,6 @@ impl StateManagerImpl {
             })
             .expect("Failed to send Validate request");
 
-        // On the NNS subnet we never allow incremental manifest computation
         let manifest_delta = {
             let _timer = self
                 .metrics
