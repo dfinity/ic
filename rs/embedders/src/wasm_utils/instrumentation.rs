@@ -121,18 +121,28 @@ use ic_types::methods::WasmMethod;
 use ic_types::NumBytes;
 use ic_types::NumInstructions;
 use ic_wasm_types::{BinaryEncodedWasm, WasmError, WasmInstrumentationError};
-use orca_wasm::ir::module::module_functions::{FuncKind, LocalFunction};
-use orca_wasm::ir::{id::ImportsID, module::module_imports::ModuleImports};
+use orca_wasm::ir::module::module_globals::GlobalKind;
+use orca_wasm::{
+    ir::{
+        id::{FunctionID, ImportsID},
+        module::{
+            module_functions::{FuncKind, LocalFunction},
+            module_imports::ModuleImports,
+            GetID, LocalOrImport,
+        },
+        types::ElementItems,
+    },
+    DataType,
+};
 
 use crate::wasmtime_embedder::{
     STABLE_BYTEMAP_MEMORY_NAME, STABLE_MEMORY_NAME, WASM_HEAP_BYTEMAP_MEMORY_NAME,
     WASM_HEAP_MEMORY_NAME,
 };
 use ic_wasm_transform::{self, Global, Module};
-use orca_wasm::DataType;
 use wasmparser::{
-    BlockType, CompositeInnerType, CompositeType, Export, ExternalKind, FuncType, GlobalType,
-    Import, MemoryType, Operator, SubType, TypeRef, ValType,
+    BlockType, CompositeInnerType, Export, ExternalKind, FuncType, GlobalType, MemoryType,
+    Operator, TypeRef, ValType,
 };
 
 use std::collections::BTreeMap;
@@ -742,38 +752,48 @@ fn mutate_function_indices(module: &mut orca_wasm::Module, f: impl Fn(u32) -> u3
         }
     }
 
-    for func in module.functions.iter_mut() {
-        let FuncKind::Local(local_func) = func else {
-            continue;
-        };
-        for op in &mut local_func.body.instructions {
-            mutate_instruction(&f, &mut op.op);
+    for func in module.functions.iter() {
+        if func.is_local() {
+            let id = func.get_id();
+            let modifier = module.functions.get_fn_modifier(FunctionID(id)).unwrap();
+            for op in modifier.body.instructions {
+                mutate_instruction(&f, &mut op.op);
+            }
         }
     }
 
-    for exp in &mut module.exports {
-        if let ExternalKind::Func = exp.kind {
+    for exp in &mut module.exports.iter_mut() {
+        if let orca_wasm::wasmparser::ExternalKind::Func = exp.kind {
             exp.index = f(exp.index);
         }
     }
 
     for (_, elem_items) in &mut module.elements {
         match elem_items {
-            ic_wasm_transform::ElementItems::Functions(fun_items) => {
+            ElementItems::Functions(fun_items) => {
                 for idx in fun_items {
-                    *idx = f(*idx);
+                    *idx = FunctionID(f(idx.0));
                 }
             }
-            ic_wasm_transform::ElementItems::ConstExprs { ty: _, exprs } => {
-                for op in exprs {
-                    mutate_instruction(&f, op)
-                }
+            ElementItems::ConstExprs { ty: _, exprs } => {
+                // TODO: parse const expressions in orca.
+                // for const_expr in exprs.iter_mut() {
+                //     for op in const_expr {
+                //         mutate_instruction(&f, op)
+                //     }
+                // }
             }
         }
     }
 
-    for global in &mut module.globals {
-        mutate_instruction(&f, &mut global.init_expr)
+    for global in &mut module.globals.iter_mut() {
+        if let GlobalKind::Local(global) = global.kind_mut() {
+            for op in global.init_expr.instructions_mut() {
+                if let orca_wasm::ir::types::Instructions::RefFunc(id) = op {
+                    *id = FunctionID(f(id.0));
+                }
+            }
+        }
     }
 
     for data_segment in &mut module.data {
@@ -1133,7 +1153,7 @@ fn replace_system_api_functions(
         max_wasm_memory_size,
     ) {
         if let Some(old_index) = api_indexes.get(&api) {
-            let type_idx = add_func_type(module, ty);
+            let type_idx = module.types.add_func_type(ty);
             let new_index = (number_of_func_imports + module.functions.len()) as u32;
             module.functions.push(type_idx);
             module.code_sections.push(body);
@@ -1208,7 +1228,7 @@ fn export_additional_symbols<'a>(
         instructions,
     };
 
-    let type_idx = add_func_type(&mut module, func_type);
+    let type_idx = module.types.add_func_type(func_type);
     module.functions.push(type_idx);
     module.code_sections.push(func_body);
 
@@ -1294,7 +1314,7 @@ fn export_additional_symbols<'a>(
         locals: vec![(4, ValType::I32)],
         instructions,
     };
-    let type_idx = add_func_type(&mut module, func_type);
+    let type_idx = module.types.add_func_type(func_type);
     module.functions.push(type_idx);
     module.code_sections.push(func_body);
 
