@@ -5648,6 +5648,7 @@ dependencies = [
  "config",
  "config_types",
  "deterministic_ips",
+ "network",
  "utils",
 ]
 
