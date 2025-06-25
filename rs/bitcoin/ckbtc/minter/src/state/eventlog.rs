@@ -217,6 +217,31 @@ pub struct Event {
     pub payload: EventType,
 }
 
+impl Event {
+    #[allow(deprecated)]
+    pub fn name(&self) -> &'static str {
+        match self.payload {
+            EventType::Init(_) => "Init",
+            EventType::Upgrade(_) => "Upgrade",
+            EventType::ReceivedUtxos { .. } => "ReceivedUtxos",
+            EventType::AcceptedRetrieveBtcRequest(_) => "AcceptedRetrieveBtcRequest",
+            EventType::RemovedRetrieveBtcRequest { .. } => "RemovedRetrieveBtcRequest",
+            EventType::SentBtcTransaction { .. } => "SentBtcTransaction",
+            EventType::ReplacedBtcTransaction { .. } => "ReplacedBtcTransaction",
+            EventType::ConfirmedBtcTransaction { .. } => "ConfirmedBtcTransaction",
+            EventType::CheckedUtxo { .. } => "CheckedUtxo",
+            EventType::CheckedUtxoV2 { .. } => "CheckedUtxoV2",
+            EventType::IgnoredUtxo { .. } => "IgnoredUtxo",
+            EventType::SuspendedUtxo { .. } => "SuspendedUtxo",
+            EventType::DistributedKytFee { .. } => "DistributedKytFee",
+            EventType::RetrieveBtcKytFailed { .. } => "RetrieveBtcKytFailed",
+            EventType::ScheduleDepositReimbursement { .. } => "ScheduleDepositReimbursement",
+            EventType::ReimbursedFailedDeposit { .. } => "ReimbursedFailedDeposit",
+            EventType::CheckedUtxoMintUnknown { .. } => "CheckedUtxoMintUnknown",
+        }
+    }
+}
+
 // TODO XC-261: Inline logic
 impl From<EventType> for Event {
     fn from(value: EventType) -> Self {
@@ -252,13 +277,24 @@ pub fn replay<I: CheckInvariants>(
         },
         None => return Err(ReplayLogError::EmptyLog),
     };
+    replay_events_with_state::<I>(events, &mut state)?;
+    Ok(state)
+}
 
+#[allow(deprecated)]
+pub fn replay_events_with_state<I: CheckInvariants>(
+    events: impl Iterator<Item = Event>,
+    state: &mut CkBtcMinterState,
+) -> Result<(), ReplayLogError> {
     // Because `kyt_principal` was previously used as a default
     // substitute for `kyt_provider` during kyt_fee accounting,
     // we need to keep track of this value so that `distribute_kyt_fee`
     // knows when to skip giving fees to `btc_checker_principal`.
     let mut kyt_principal = None;
-    for event in events {
+    let events_size = events.size_hint();
+    for (index, event) in events.enumerate() {
+        println!("Replaying event {} {index}/{}", event.name(), events_size.0);
+
         match event.payload {
             EventType::Init(args) => {
                 if args.kyt_principal.is_some() {
@@ -450,6 +486,5 @@ pub fn replay<I: CheckInvariants>(
             }
         }
     }
-
-    Ok(state)
+    Ok(())
 }

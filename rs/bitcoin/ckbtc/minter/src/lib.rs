@@ -557,11 +557,13 @@ async fn finalize_requests() {
     // Transactions whose change outpoint is present in the newly fetched UTXOs
     // can be finalized. Note that all new minter transactions must have a
     // change output because minter always charges a fee for converting tokens.
+    //Complexity |submitted_transactions| x |new_utxos|
     let confirmed_transactions: Vec<_> =
         state::read_state(|s| finalized_txids(&s.submitted_transactions, &new_utxos));
 
     // It's possible that some transactions we considered lost or rejected became finalized in the
     // meantime. If that happens, we should stop waiting for replacement transactions to finalize.
+    //Complexity |stuck_transactions| x |new_utxos|
     let unstuck_transactions: Vec<_> =
         state::read_state(|s| finalized_txids(&s.stuck_transactions, &new_utxos));
 
@@ -577,6 +579,7 @@ async fn finalize_requests() {
 
     for txid in &unstuck_transactions {
         state::read_state(|s| {
+            // linear in |replacement_txid|
             if let Some(replacement_txid) = s.find_last_replacement_tx(txid) {
                 maybe_finalized_transactions.remove(replacement_txid);
             }

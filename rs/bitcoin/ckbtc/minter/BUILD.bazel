@@ -179,6 +179,7 @@ rust_test(
         "@crate_index//:candid",
         "@crate_index//:flate2",
         "@crate_index//:ic-agent",
+        "@crate_index//:ic-btc-interface",
         "@crate_index//:ic-stable-structures",
         "@crate_index//:serde",
         "@crate_index//:tokio",
