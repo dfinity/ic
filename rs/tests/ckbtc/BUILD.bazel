@@ -1,6 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
 load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
-load("//rs/tests:system_tests.bzl", "system_test_nns")
+load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs/tests:__subpackages__"])
 
@@ -233,13 +233,12 @@ system_test_nns(
     deps = DEPENDENCIES + [":ckbtc"],
 )
 
-system_test_nns(
+system_test(
     name = "adapter_basics_test",
     env = {
         "CKBTC_UVM_CONFIG_PATH": "$(rootpath //rs/tests:ckbtc_uvm_config_image)",
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
     },
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],

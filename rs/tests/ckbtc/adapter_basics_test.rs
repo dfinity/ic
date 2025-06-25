@@ -25,7 +25,7 @@ fn test_received_blocks(env: TestEnv) {
     // Setup client
     let client = get_btc_client(&env);
     ensure_wallet(&client, &log);
-    let num_blocks = client.get_blockchain_info().unwrap().blocks;
+    let start_height = client.get_blockchain_info().unwrap().blocks;
     info!(log, "Set up bitcoind wallet");
 
     // Mine 150 blocks
@@ -44,7 +44,7 @@ fn test_received_blocks(env: TestEnv) {
             .expect("Failed to syncronize blocks")
     });
 
-    assert_eq!(blocks.len() as u64, num_blocks + 150);
+    assert_eq!(blocks.len() as u64, start_height + 150);
     for (h, block) in blocks.iter().enumerate() {
         assert_eq!(
             block.block_hash(),
@@ -60,8 +60,7 @@ fn test_receives_new_3rd_party_txs(env: TestEnv) {
 
     let client = get_btc_client(&env);
     ensure_wallet(&client, &log);
-    let num_start_blocks = client.get_blockchain_info().unwrap().blocks;
-    let num_blocks = client.get_blockchain_info().unwrap().blocks;
+    let start_height = client.get_blockchain_info().unwrap().blocks;
     info!(log, "Set up bitcoind wallet");
 
     let (alice_client, bob_client, alice_address, bob_address) = get_alice_and_bob_wallets(&env);
@@ -70,7 +69,7 @@ fn test_receives_new_3rd_party_txs(env: TestEnv) {
     fund_with_btc(&alice_client, &alice_address);
     assert_eq!(
         alice_client.get_blockchain_info().unwrap().blocks,
-        num_blocks + 101
+        start_height + 101
     );
 
     let txid = alice_client
@@ -90,7 +89,7 @@ fn test_receives_new_3rd_party_txs(env: TestEnv) {
         .unwrap();
     assert_eq!(
         alice_client.get_blockchain_info().unwrap().blocks,
-        num_blocks + 102
+        start_height + 102
     );
 
     let alice_balance = alice_client.get_balance(None, None).unwrap();

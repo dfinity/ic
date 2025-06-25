@@ -143,10 +143,6 @@ impl<'a> AdapterProxy<'a> {
             headers.extend(new_headers);
             blocks.extend(new_blocks);
 
-            if blocks.is_empty() {
-                break;
-            }
-
             tries += 1;
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         }
@@ -268,6 +264,12 @@ pub fn fund_with_btc(to_fund_client: &Client, to_fund_address: &Address) {
             .unwrap(),
         Amount::from_btc(initial_amount + 50.0).unwrap()
     );
+}
+
+fn calculate_regtest_reward(height: u64) -> Amount {
+    let halvings = (height / 150) as u32;
+    let base_reward = Amount::from_btc(50.0).unwrap();
+    base_reward / 2u64.pow(halvings)
 }
 
 pub fn get_blackhole_address() -> Address {
