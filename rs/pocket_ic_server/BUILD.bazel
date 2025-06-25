@@ -1,6 +1,5 @@
 load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
-load("//bazel:defs.bzl", "rust_ic_test")
 
 BUILD_DEPENDENCIES = []
 
@@ -22,10 +21,13 @@ LIB_DEPENDENCIES = [
     "//rs/https_outcalls/service",
     "//rs/interfaces",
     "//rs/interfaces/adapter_client",
+    "//rs/interfaces/registry",
     "//rs/interfaces/state_manager",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
+    "//rs/nns/constants",
     "//rs/protobuf",
+    "//rs/registry/canister",
     "//rs/registry/keys",
     "//rs/registry/proto_data_provider",
     "//rs/registry/routing_table",
@@ -136,7 +138,11 @@ cargo_build_script(
     name = "build_script",
     srcs = ["build.rs"],
     aliases = ALIASES,
-    data = ["templates/dashboard.html"],  # build script data (e.g. template files) goes here
+    build_script_env = {"REGISTRY_CANISTER_WASM_PATH": "$(location @mainnet_nns_registry_canister//file)"},
+    data = [
+        "templates/dashboard.html",
+        "@mainnet_nns_registry_canister//file",
+    ],  # build script data (e.g. template files) goes here
     deps = BUILD_DEPENDENCIES,
 )
 
@@ -162,16 +168,13 @@ rust_library(
     ] + glob([
         "src/state_api/**/*.rs",
     ]),
+    compile_data = ["@mainnet_nns_registry_canister//file"],
     crate_name = "pocket_ic_server",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    rustc_env = {
+        "REGISTRY_CANISTER_WASM_PATH": "$(location @mainnet_nns_registry_canister//file)",
+    },
     version = "9.0.3",
-    deps = LIB_DEPENDENCIES + [":build_script"],
-)
-
-rust_ic_test(
-    name = "pic_test",
-    srcs = glob(["src/**/*.rs"]),
-    proc_macro_deps = MACRO_DEPENDENCIES,
     deps = LIB_DEPENDENCIES + [":build_script"],
 )
 
@@ -186,14 +189,12 @@ rust_ic_test(
         aliases = {},
         data = [
             ":pocket-ic-server",
-            "//rs/registry/canister:registry-canister",
             "@ii_dev_canister//file",
             "@mozilla_root_ca_store//file",
         ],
         env = {
             "RUST_TEST_THREADS": "2",
             "POCKET_IC_BIN": "$(rootpath :pocket-ic-server)",
-            "REGISTRY_WASM": "$(rootpath //rs/registry/canister:registry-canister)",
             "II_WASM": "$(rootpath @ii_dev_canister//file)",
             "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
         },

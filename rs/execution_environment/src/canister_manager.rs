@@ -93,6 +93,7 @@ pub(crate) struct CanisterManager {
     cycles_account_manager: Arc<CyclesAccountManager>,
     ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+    environment_variables_flag: FlagStatus,
 }
 
 impl CanisterManager {
@@ -103,6 +104,7 @@ impl CanisterManager {
         cycles_account_manager: Arc<CyclesAccountManager>,
         ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+        environment_variables_flag: FlagStatus,
     ) -> Self {
         CanisterManager {
             hypervisor,
@@ -111,6 +113,7 @@ impl CanisterManager {
             cycles_account_manager,
             ingress_history_writer,
             fd_factory,
+            environment_variables_flag,
         }
     }
 
@@ -319,6 +322,12 @@ impl CanisterManager {
         }
         if let Some(wasm_memory_limit) = settings.wasm_memory_limit() {
             canister.system_state.wasm_memory_limit = Some(wasm_memory_limit);
+        }
+        if let Some(environment_variables) = settings.environment_variables() {
+            if self.environment_variables_flag == FlagStatus::Enabled {
+                canister.system_state.environment_variables =
+                    environment_variables.get_environment_variables().clone();
+            }
         }
     }
 

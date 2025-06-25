@@ -247,6 +247,7 @@ fn is_supported(api_type: SystemApiCallId, context: &str) -> bool {
         SystemApiCallId::EnvVarCount => vec!["*"],
         SystemApiCallId::EnvVarNameSize => vec!["*"],
         SystemApiCallId::EnvVarNameCopy => vec!["*"],
+        SystemApiCallId::EnvVarNameExists => vec!["*"],
         SystemApiCallId::EnvVarValueSize => vec!["*"],
         SystemApiCallId::EnvVarValueCopy => vec!["*"],
     };
@@ -803,6 +804,19 @@ fn api_availability_test(
         SystemApiCallId::EnvVarNameCopy => {
             assert_api_availability(
                 |api| api.ic0_env_var_name_copy(0, 0, 0, 0, &mut [0; 128]),
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
+        SystemApiCallId::EnvVarNameExists => {
+            let mut heap = vec![0u8; 64];
+            let var_name = b"TEST_VAR_1";
+            copy_to_heap(&mut heap, var_name);
+            assert_api_availability(
+                |api| api.ic0_env_var_name_exists(0, var_name.len(), &heap.clone()),
                 api_type,
                 &system_state,
                 cycles_account_manager,
@@ -2290,6 +2304,7 @@ fn test_env_var_name_operations() {
     let var_name_2 = "TEST_VAR_22".to_string();
     let var_value_1 = "TEST_VALUE_1".to_string();
     let var_value_2 = "TEST_VALUE_2".to_string();
+    let non_existing_var = "does_not_exist".to_string();
 
     env_vars.insert(var_name_1.clone(), var_value_1.clone());
     env_vars.insert(var_name_2.clone(), var_value_2.clone());
@@ -2304,6 +2319,23 @@ fn test_env_var_name_operations() {
 
     // Test ic0_env_var_count
     assert_eq!(api.ic0_env_var_count().unwrap(), 2);
+
+    // Test ic0_env_var_name_exists
+    assert_eq!(
+        api.ic0_env_var_name_exists(0, var_name_1.len(), var_name_1.as_bytes())
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        api.ic0_env_var_name_exists(0, var_name_2.len(), var_name_2.as_bytes())
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        api.ic0_env_var_name_exists(0, non_existing_var.len(), non_existing_var.as_bytes())
+            .unwrap(),
+        0
+    );
 
     // Test ic0_env_var_name_size
     assert_eq!(api.ic0_env_var_name_size(0).unwrap(), var_name_1.len()); // "TEST_VAR_1"
