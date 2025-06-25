@@ -50,7 +50,7 @@
       <address type='pci' domain='0x0000' bus='0x04' slot='0x00' function='0x0'/>
     </disk>
     <disk type='file' device='disk'>
-      <source file='/tmp/config.img' />
+      <source file='/tmp/config.img'/>
       <target dev='sda' bus='usb' removable='on'/>
     </disk>
     <controller type='usb' index='0' model='ich9-ehci1'>
