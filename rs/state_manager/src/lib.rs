@@ -1413,26 +1413,25 @@ impl StateManagerImpl {
         for checkpoint_layout in checkpoint_layouts_to_compute_manifest {
             // Find the largest height where both the `manifest` and the `checkpoint_layout` are available;
             // build the manifest data from this height.
-            let manifest_delta =
-                states
-                    .read()
-                    .states_metadata
-                    .iter()
-                    .rev()
-                    .filter(|(height, _)| **height < checkpoint_layout.height())
-                    .find_map(|(height, metadata)| match metadata {
-                        StateMetadata {
-                            checkpoint_layout: Some(checkpoint_layout),
-                            bundled_manifest: Some(bundled_manifest),
-                            ..
-                        } => Some(crate::manifest::ManifestDelta {
-                            base_manifest: bundled_manifest.manifest.clone(),
-                            base_height: *height,
-                            target_height: checkpoint_layout.height(),
-                            base_checkpoint: checkpoint_layout.clone(),
-                        }),
-                        _ => None,
-                    });
+            let manifest_delta = states
+                .read()
+                .states_metadata
+                .iter()
+                .rev()
+                .filter(|(height, _)| **height < checkpoint_layout.height())
+                .find_map(|(height, metadata)| match metadata {
+                    StateMetadata {
+                        checkpoint_layout: Some(checkpoint_layout),
+                        bundled_manifest: Some(bundled_manifest),
+                        ..
+                    } => Some(crate::manifest::ManifestDelta {
+                        base_manifest: bundled_manifest.manifest.clone(),
+                        base_height: *height,
+                        target_height: checkpoint_layout.height(),
+                        base_checkpoint: checkpoint_layout.clone(),
+                    }),
+                    _ => None,
+                });
 
             tip_channel
                 .send(TipRequest::ComputeManifest {
