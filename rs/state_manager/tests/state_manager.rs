@@ -1255,15 +1255,15 @@ fn missing_manifest_is_computed_incrementally() {
             let (_height, mut state) = state_manager.take_tip();
 
             insert_dummy_canister(&mut state, canister_id);
-            let mut canister = state.take_canister_state(&canister_id).unwrap();
-            canister
+            state
+                .canister_state_mut(&canister_id)
+                .unwrap()
                 .execution_state
                 .as_mut()
                 .unwrap()
                 .stable_memory
                 .page_map
                 .update(&[(PageIndex::new(1), &[1_u8; PAGE_SIZE])]);
-            state.put_canister_state(canister);
 
             state_manager.commit_and_certify(state, height, CertificationScope::Full, None);
             wait_for_checkpoint(&state_manager, height);
