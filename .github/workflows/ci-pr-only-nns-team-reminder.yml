@@ -54,11 +54,14 @@ jobs:
                  file(s). This is only necessary if the code changes result in
                  externally visible behavior changes.
 
-              2. If there are behavior changes, are they breaking? If so, are
-                 your clients ready for them? If not, put your changes behind a
-                 "feature flag". If you have a feature flag, then, do NOT add
-                 entries to `unreleased_changelog.md` in this PR, but rather, in
-                 the later PR, when you set the flag to "enable".
+              2. If there are behavior changes, are they breaking? This is
+                 usually due to some new requirement(s) imposed by the canister,
+                 or removal of guarantees supplied by the canister. If the
+                 changes are breaking, are your clients ready for them? If not,
+                 put your changes behind a "feature flag". If you have a feature
+                 flag, then, do NOT add entrie(s) to `unreleased_changelog.md`
+                 in this PR, but rather, do that later when you set the flag to
+                 "enable" in another PR.
 
               3. Is data migration needed? (If so, make sure it is part of this
                  PR.)
