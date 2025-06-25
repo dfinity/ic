@@ -420,7 +420,7 @@ pub enum CanisterChangeDetails {
 impl CanisterChangeDetails {
     pub fn canister_creation(
         controllers: Vec<PrincipalId>,
-        environment_variables_hash: Option< [u8; HASH_LENGTH]>,
+        environment_variables_hash: Option<[u8; HASH_LENGTH]>,
     ) -> CanisterChangeDetails {
         CanisterChangeDetails::CanisterCreation(CanisterCreationRecord {
             controllers,
@@ -690,7 +690,8 @@ impl From<&CanisterChangeDetails> for pb_canister_state_bits::canister_change::C
                             .map(|c| (*c).into())
                             .collect::<Vec<ic_protobuf::types::v1::PrincipalId>>(),
                         environment_variables_hash: canister_creation
-                            .environment_variables_hash.map(|hash| hash.to_vec()),
+                            .environment_variables_hash
+                            .map(|hash| hash.to_vec()),
                     },
                 )
             }
@@ -758,19 +759,20 @@ impl TryFrom<pb_canister_state_bits::canister_change::ChangeDetails> for Caniste
             pb_canister_state_bits::canister_change::ChangeDetails::CanisterCreation(
                 canister_creation,
             ) => {
-                let environment_variables_hash = match canister_creation.environment_variables_hash {
+                let environment_variables_hash = match canister_creation.environment_variables_hash
+                {
                     Some(bytes) => Some(try_decode_hash(bytes)?),
                     None => None,
                 };
                 Ok(CanisterChangeDetails::canister_creation(
-                canister_creation
-                    .controllers
-                    .into_iter()
-                    .map(TryInto::try_into)
-                    .collect::<Result<Vec<PrincipalId>, _>>()?,
+                    canister_creation
+                        .controllers
+                        .into_iter()
+                        .map(TryInto::try_into)
+                        .collect::<Result<Vec<PrincipalId>, _>>()?,
                     environment_variables_hash,
-            ))
-        },
+                ))
+            }
             pb_canister_state_bits::canister_change::ChangeDetails::CanisterCodeUninstall(_) => {
                 Ok(CanisterChangeDetails::CanisterCodeUninstall)
             }
