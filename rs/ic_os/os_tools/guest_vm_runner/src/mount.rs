@@ -3,9 +3,8 @@ use async_trait::async_trait;
 use gpt::GptDisk;
 use std::fs::File;
 use std::path::{Path, PathBuf};
-use sys_mount::FilesystemType;
 #[cfg(target_os = "linux")]
-use sys_mount::{Mount, MountFlags, UnmountDrop, UnmountFlags};
+use sys_mount::{FilesystemType, Mount, MountFlags, UnmountDrop, UnmountFlags};
 use tempfile::TempDir;
 use uuid::Uuid;
 
@@ -244,7 +243,13 @@ pub mod testing {
     /// Filesystem mounter for testing that extracts partition contents to temp directories.
     /// This is an alternative to real filesystem mounts when mounts are not possible (e.g. limited
     /// permissions in tests).
-    pub struct ExtractingFilesystemMounter;
+    ///
+    /// The mounter "remembers" the extracted partitions, so extracting the same device/offset/len
+    /// always returns the same directory.
+    #[derive(Clone)]
+    pub struct ExtractingFilesystemMounter {
+        mounts: Arc<tokio::sync::Mutex<HashMap<(PathBuf, u64, u64), Arc<TempDir>>>>,
+    }
 
     #[async_trait]
     impl Mounter for ExtractingFilesystemMounter {
@@ -255,6 +260,41 @@ pub mod testing {
             len_bytes: u64,
             options: MountOptions,
         ) -> Result<Box<dyn MountedPartition>> {
+            let key = (device.clone(), offset_bytes, len_bytes);
+            let mut mounts = self.mounts.lock().await;
+            if !mounts.contains_key(&key) {
+                mounts.insert(
+                    key.clone(),
+                    self.extract_partition_to_tempdir(
+                        device.clone(),
+                        offset_bytes,
+                        len_bytes,
+                        options,
+                    )
+                    .await?,
+                );
+            }
+
+            Ok(Box::new(MockMount {
+                mount_point: mounts.get(&key).unwrap().clone(),
+            }))
+        }
+    }
+
+    impl ExtractingFilesystemMounter {
+        pub fn new() -> Self {
+            Self {
+                mounts: Default::default(),
+            }
+        }
+
+        async fn extract_partition_to_tempdir(
+            &self,
+            device: PathBuf,
+            offset_bytes: u64,
+            len_bytes: u64,
+            options: MountOptions,
+        ) -> Result<Arc<TempDir>> {
             async fn extract_partition<P: Partition>(
                 device: &Path,
                 offset_bytes: u64,
@@ -278,7 +318,7 @@ pub mod testing {
                         len_bytes,
                         extraction_dir.path(),
                     )
-                    .await?
+                    .await
                 }
                 FileSystem::Ext4 => {
                     extract_partition::<ExtPartition>(
@@ -287,13 +327,15 @@ pub mod testing {
                         len_bytes,
                         extraction_dir.path(),
                     )
-                    .await?
+                    .await
                 }
-            };
+            }
+            .context(format!(
+                "Could not extract partition to {}",
+                extraction_dir.path().display()
+            ))?;
 
-            Ok(Box::new(MockMount {
-                mount_point: Arc::new(extraction_dir),
-            }))
+            Ok(Arc::new(extraction_dir))
         }
     }
 }
