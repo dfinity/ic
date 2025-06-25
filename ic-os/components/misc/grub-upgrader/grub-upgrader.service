@@ -1,5 +1,5 @@
 [Unit]
-Description=Update grub.cfg file
+Description=Upgrade grub.cfg file
 
 [Service]
 Type=oneshot
