@@ -6,7 +6,7 @@ source /opt/ic/bin/logging.sh
 source /opt/ic/bin/metrics.sh
 
 GRUB_CONFIG_FILE="/grub/grub.cfg"
-GRUB_FOLDER="/grub"
+BOOTX64_EFI_FILE="/boot/efi/EFI/Boot/bootx64.efi"
 
 function update_grub_config_version_metric() {
     if [[ ! -r "${GRUB_CONFIG_FILE}" ]]; then
@@ -24,17 +24,17 @@ function update_grub_config_version_metric() {
 }
 
 function update_grub_version_metric() {
-    if [[ ! -d "${GRUB_FOLDER}" ]]; then
-        write_log "ERROR: Cannot access grub folder: ${GRUB_FOLDER}"
+    if [[ ! -r "${BOOTX64_EFI_FILE}" ]]; then
+        write_log "ERROR: Cannot read bootx64.efi file: ${BOOTX64_EFI_FILE}"
         return 1
     fi
 
-    grub_folder_hash=$(find "${GRUB_FOLDER}" -type f -exec sha256sum {} \; | sort | sha256sum | cut -d' ' -f1)
-    write_log "Found grub folder hash: ${grub_folder_hash}"
-    write_metric_attr "grub_version" \
-        "{version=\"${grub_folder_hash}\"}" \
+    grub_bootx64_hash=$(sha256sum "${BOOTX64_EFI_FILE}" | cut -d' ' -f1)
+    write_log "Found bootx64.efi hash: ${grub_bootx64_hash}"
+    write_metric_attr "grub_efi_version" \
+        "{version=\"${grub_bootx64_hash}\"}" \
         "1" \
-        "Grub folder contents version hash" \
+        "Bootx64.efi file version hash" \
         "gauge"
 }
 
