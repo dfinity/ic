@@ -17,8 +17,8 @@ DEPENDENCIES = [
     "//rs/types/types",
     "@crate_index//:anyhow",
     "@crate_index//:slog",
-    "@crate_index//:url",
     "@crate_index//:ssh2",
+    "@crate_index//:url",
 ]
 
 RUNNER_DEPENDENCIES = [
