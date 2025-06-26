@@ -27,7 +27,7 @@ use ic_registry_subnet_features::SubnetFeatures;
 use ic_test_utilities::state_manager::RefMockStateManager;
 use ic_test_utilities_registry::SubnetRecordBuilder;
 use ic_test_utilities_types::{
-    ids::{canister_test_id, node_test_id, subnet_test_id},
+    ids::{canister_test_id, node_id_to_u64, node_test_id, subnet_test_id},
     messages::RequestBuilder,
 };
 use ic_types::{
@@ -824,6 +824,99 @@ fn divergence_error_message() {
                 .to_string()
         ))
     );
+}
+
+#[test]
+fn non_replicated_request_with_extra_share_includes_only_delegated_share() {
+    // This test ensures that if the pool contains both a valid share from the
+    // delegated node and a stray share from another node for the same non-replicated
+    // request, the logic correctly includes ONLY the valid share in the proof.
+
+    test_config_with_http_feature(true, 4, |mut payload_builder, canister_http_pool| {
+        // In the test setup, the block maker is node 0. We'll make this the delegated node.
+        let delegated_node_id = node_test_id(0);
+        let other_node_id = node_test_id(1);
+        let callback_id = CallbackId::from(42);
+
+        // 1. Setup a non-replicated request delegated to our block maker (`delegated_node_id`).
+        let request_context = CanisterHttpRequestContext {
+            request: RequestBuilder::default().build(),
+            url: "https://example.com".to_string(),
+            max_response_bytes: None,
+            headers: vec![],
+            body: None,
+            http_method: CanisterHttpMethod::GET,
+            transform: None,
+            time: UNIX_EPOCH,
+            replication: ic_types::canister_http::Replication::NonReplicated(delegated_node_id),
+        };
+
+        // Insert the context in the replicated state
+        let mut init_state = ic_test_utilities_state::get_initial_state(0, 0);
+        init_state
+            .metadata
+            .subnet_call_context_manager
+            .canister_http_request_contexts
+            .insert(callback_id, request_context);
+
+        let state_manager = Arc::new(RefMockStateManager::default());
+        state_manager
+            .get_mut()
+            .expect_get_state_at()
+            .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
+                Height::new(0),
+                Arc::new(init_state),
+            )));
+        payload_builder.state_reader = state_manager;
+
+        // Create two shares for the same metadata: one from the correct delegated
+        // node, and one from another "malicious" node.
+        let (response, metadata) = test_response_and_metadata(callback_id.get());
+        let correct_share = metadata_to_share(node_id_to_u64(delegated_node_id), &metadata);
+        let extra_share = metadata_to_share(node_id_to_u64(other_node_id), &metadata);
+
+        // Add both shares to the pool.
+        //    - The block maker (which is the delegated_node_id) adds its own share and content.
+        //    - It also receives the "extra" share from the other node.
+        {
+            let mut pool_access = canister_http_pool.write().unwrap();
+            add_own_share_to_pool(pool_access.deref_mut(), &correct_share, &response);
+            add_received_shares_to_pool(pool_access.deref_mut(), vec![extra_share]);
+        }
+
+        // ACT
+        let payload = payload_builder.build_payload(
+            Height::new(1),
+            NumBytes::new(MAX_CANISTER_HTTP_PAYLOAD_SIZE as u64),
+            &[],
+            &default_validation_context(),
+        );
+
+        // ASSERT
+        let parsed_payload = bytes_to_payload(&payload).expect("Failed to parse payload");
+
+        // We should have exactly one response in the payload.
+        assert_eq!(
+            parsed_payload.responses.len(),
+            1,
+            "Expected exactly one response in the payload"
+        );
+
+        // The response must contain EXACTLY ONE signature, proving the "extra" share was ignored.
+        let proof = &parsed_payload.responses[0].proof;
+        assert_eq!(
+            proof.signature.signatures_map.len(),
+            1,
+            "Proof should contain exactly one signature"
+        );
+        assert!(
+            proof
+                .signature
+                .signatures_map
+                .contains_key(&delegated_node_id),
+            "The single signature must be from the delegated node"
+        );
+    });
 }
 
 /// Build some test metadata and response, which is valid and can be used in
