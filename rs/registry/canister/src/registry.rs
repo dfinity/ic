@@ -199,7 +199,7 @@ impl Registry {
         let HighCapacityRegistryValue {
             version,
             content,
-            timestamp_nanoseconds: _,
+            timestamp_nanoseconds,
         } = self.get_high_capacity(key, version)?;
 
         let value = content
@@ -214,7 +214,7 @@ impl Registry {
             version,
             value,
             deletion_marker: false,
-            timestamp_nanoseconds: 0,
+            timestamp_nanoseconds: *timestamp_nanoseconds,
         })
     }
 
