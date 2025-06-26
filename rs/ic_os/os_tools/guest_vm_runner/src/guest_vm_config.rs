@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use askama::Template;
-use config::guestos_bootstrap_image::BootstrapOptions;
-use config::guestos_config::generate_guestos_config;
+use config::hostos::guestos_bootstrap_image::BootstrapOptions;
+use config::hostos::guestos_config::generate_guestos_config;
 use config_types::{GuestOSConfig, HostOSConfig};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{calculate_deterministic_mac, IpVariant};
