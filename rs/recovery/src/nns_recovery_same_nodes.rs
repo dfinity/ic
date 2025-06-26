@@ -224,6 +224,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                         url,
                         hash,
                         self.params.replay_until_height,
+                        !self.interactive(),
                     )?))
                 } else {
                     Ok(Box::new(self.recovery.get_replay_step(
@@ -231,6 +232,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                         None,
                         None,
                         self.params.replay_until_height,
+                        !self.interactive(),
                     )))
                 }
             }
@@ -243,10 +245,10 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                 if self.params.upgrade_version.is_none() {
                     Err(RecoveryError::StepSkipped)
                 } else {
-                    Ok(Box::new(
-                        self.recovery
-                            .get_update_local_store_step(self.params.subnet_id),
-                    ))
+                    Ok(Box::new(self.recovery.get_update_local_store_step(
+                        self.params.subnet_id,
+                        !self.interactive(),
+                    )))
                 }
             }
 
@@ -257,7 +259,8 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
             )),
 
             StepType::GetRecoveryCUP => Ok(Box::new(
-                self.recovery.get_recovery_cup_step(self.params.subnet_id)?,
+                self.recovery
+                    .get_recovery_cup_step(self.params.subnet_id, !self.interactive())?,
             )),
 
             StepType::UploadCUPandRegistry => Ok(Box::new(

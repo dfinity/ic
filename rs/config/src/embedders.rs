@@ -112,6 +112,8 @@ pub struct FeatureFlags {
     pub wasm64: FlagStatus,
     /// Collect a backtrace from the canister when it panics.
     pub canister_backtrace: FlagStatus,
+    /// If this flag is enabled, then the environment variables are supported.
+    pub environment_variables: FlagStatus,
 }
 
 impl FeatureFlags {
@@ -121,6 +123,7 @@ impl FeatureFlags {
             write_barrier: FlagStatus::Disabled,
             wasm64: FlagStatus::Enabled,
             canister_backtrace: FlagStatus::Enabled,
+            environment_variables: FlagStatus::Disabled,
         }
     }
 }

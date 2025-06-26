@@ -172,6 +172,7 @@ impl ThresholdSignerMetrics {
 pub struct IDkgPayloadMetrics {
     payload_metrics: IntGaugeVec,
     payload_errors: IntCounterVec,
+    pub(crate) payload_duration: HistogramVec,
     /// Critical error for failure to create/reshare key transcript
     pub(crate) critical_error_master_key_transcript_missing: IntCounter,
 }
@@ -187,6 +188,14 @@ impl IDkgPayloadMetrics {
             payload_errors: metrics_registry.int_counter_vec(
                 "idkg_payload_errors",
                 "IDkg payload related errors",
+                &["type"],
+            ),
+            payload_duration: metrics_registry.histogram_vec(
+                "idkg_payload_duration_seconds",
+                "Time taken to create an IDkg payload, in seconds",
+                // 0.1ms, 0.2ms, 0.5ms, 1ms, 2ms, 5ms, 10ms, 20ms, 50ms, 100ms, 200ms, 500ms,
+                // 1s, 2s, 5s, 10s, 20s, 50s, 100s, 200s, 500s
+                decimal_buckets(-4, 2),
                 &["type"],
             ),
             critical_error_master_key_transcript_missing: metrics_registry

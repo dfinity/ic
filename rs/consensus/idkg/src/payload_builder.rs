@@ -172,6 +172,13 @@ pub fn create_summary_payload(
     idkg_payload_metrics: Option<&IDkgPayloadMetrics>,
     log: &ReplicaLogger,
 ) -> Result<idkg::Summary, IDkgPayloadError> {
+    let _time = idkg_payload_metrics.map(|metrics| {
+        metrics
+            .payload_duration
+            .with_label_values(&["summary"])
+            .start_timer()
+    });
+
     let height = parent_block.height().increment();
     let prev_summary_block = pool_reader
         .dkg_summary_block(parent_block)
@@ -477,6 +484,11 @@ pub fn create_data_payload(
     idkg_payload_metrics: &IDkgPayloadMetrics,
     log: &ReplicaLogger,
 ) -> Result<idkg::Payload, IDkgPayloadError> {
+    let _time = idkg_payload_metrics
+        .payload_duration
+        .with_label_values(&["data"])
+        .start_timer();
+
     // Return None if parent block does not have IDKG payload.
     if parent_block.payload.as_ref().as_idkg().is_none() {
         return Ok(None);
