@@ -55,26 +55,16 @@ pub fn test(env: TestEnv) {
 
     block_on(async {
         let url = format!("https://[{webserver_ipv6}]:20443/random");
-        test_single_replica_random_endpoint_works(
-            &proxy_canister,
-            url.clone(),
-            &logger,
-        )
-        .await;
-    
-        test_fully_replicated_random_endpoint_fails(
-            &proxy_canister,
-            url,
-            &logger,
-        )
-        .await;
+        test_single_replica_random_endpoint_works(&proxy_canister, url.clone(), &logger).await;
+
+        test_fully_replicated_random_endpoint_fails(&proxy_canister, url, &logger).await;
     });
 }
 
 async fn make_single_replica_request(
     proxy_canister: &Canister<'_>,
     url: String,
-    context: &str
+    context: &str,
 ) -> Result<RemoteHttpResponse, (RejectionCode, String)> {
     make_request(proxy_canister, url, context, false).await
 }
@@ -82,7 +72,7 @@ async fn make_single_replica_request(
 async fn make_fully_replicated_request(
     proxy_canister: &Canister<'_>,
     url: String,
-    context: &str
+    context: &str,
 ) -> Result<RemoteHttpResponse, (RejectionCode, String)> {
     make_request(proxy_canister, url, context, true).await
 }
@@ -120,7 +110,11 @@ async fn make_request(
         .expect("Update call to proxy canister failed")
 }
 
-async fn test_single_replica_random_endpoint_works(proxy_canister: &Canister<'_>, url: String, logger: &Logger) {
+async fn test_single_replica_random_endpoint_works(
+    proxy_canister: &Canister<'_>,
+    url: String,
+    logger: &Logger,
+) {
     ic_system_test_driver::retry_with_msg_async!(
         format!(
             "calling send_request of proxy canister {} with URL {}",
@@ -144,7 +138,11 @@ async fn test_single_replica_random_endpoint_works(proxy_canister: &Canister<'_>
     .expect("Timeout on doing a canister http call to the webserver");
 }
 
-async fn test_fully_replicated_random_endpoint_fails(proxy_canister: &Canister<'_>, url: String, logger: &Logger) {
+async fn test_fully_replicated_random_endpoint_fails(
+    proxy_canister: &Canister<'_>,
+    url: String,
+    logger: &Logger,
+) {
     ic_system_test_driver::retry_with_msg_async!(
         format!(
             "calling send_request of proxy canister {} with URL {}",
@@ -158,7 +156,7 @@ async fn test_fully_replicated_random_endpoint_fails(proxy_canister: &Canister<'
             let context = "There is context to be appended in body";
             let res = make_fully_replicated_request(proxy_canister, url.to_string(), context).await;
             if !matches!(res, Err((RejectionCode::SysTransient, _))) {
-                // The probability of at least 3 nodes agreeing on the random value is ~1 in 10^18, 
+                // The probability of at least 3 nodes agreeing on the random value is ~1 in 10^18,
                 // which is astronomically low. Furthermore, even if that happens, we retry.
                 bail!(
                     "Http request succeeded or did not return the expected error: {:?}",

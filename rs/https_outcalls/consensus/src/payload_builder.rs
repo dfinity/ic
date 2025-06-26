@@ -294,9 +294,7 @@ impl CanisterHttpPayloadBuilderImpl {
 
                         if let Some(context) = canister_http_request_contexts.get(&id) {
                             if let Replication::NonReplicated(node_id) = context.replication {
-                                return shares
-                                    .iter()
-                                    .any(|share| share.signature.signer == node_id)
+                                return shares.iter().any(|share| share.signature.signer == node_id);
                             }
                         }
 
