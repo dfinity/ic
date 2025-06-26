@@ -13,7 +13,7 @@ use ic_logger::{error, info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::types::v1 as pb;
-use ic_types::consensus::dkg::DkgSummary;
+use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscript;
 use ic_types::{
     artifact::{CertificationMessageId, ConsensusMessageId, IDkgMessageId},
     batch::BatchPayload,
@@ -21,7 +21,7 @@ use ic_types::{
         certification::{
             Certification, CertificationMessage, CertificationMessageHash, CertificationShare,
         },
-        dkg::DkgDataPayload,
+        dkg::{DkgDataPayload, DkgSummary},
         idkg::{
             EcdsaSigShare, IDkgArtifactId, IDkgArtifactIdData, IDkgArtifactIdDataOf, IDkgMessage,
             IDkgMessageType, IDkgPrefix, IDkgPrefixOf, IterationPattern, SchnorrSigShare, SigShare,
@@ -175,6 +175,7 @@ pub(crate) enum TypeKey {
     VetKdKeyShare,
     IDkgComplaint,
     IDkgOpening,
+    IDkgTranscript,
 }
 
 impl TypeKey {
@@ -1637,6 +1638,9 @@ impl From<IDkgMessageId> for IDkgIdKey {
             IDkgArtifactId::Opening(_, data) => {
                 pb::IDkgArtifactIdData::from(data.get()).encode_to_vec()
             }
+            IDkgArtifactId::Transcript(_, data) => {
+                pb::IDkgArtifactIdData::from(data.get()).encode_to_vec()
+            }
         };
         bytes.extend_from_slice(&id_data_bytes);
         IDkgIdKey(bytes)
@@ -1716,6 +1720,10 @@ fn deser_idkg_message_id(
             IDkgArtifactIdDataOf::new(deser_idkg_artifact_id_data(id_data_bytes)?),
         ),
         IDkgMessageType::Opening => IDkgArtifactId::Opening(
+            IDkgPrefixOf::new(prefix),
+            IDkgArtifactIdDataOf::new(deser_idkg_artifact_id_data(id_data_bytes)?),
+        ),
+        IDkgMessageType::Transcript => IDkgArtifactId::Transcript(
             IDkgPrefixOf::new(prefix),
             IDkgArtifactIdDataOf::new(deser_idkg_artifact_id_data(id_data_bytes)?),
         ),
@@ -2006,6 +2014,7 @@ impl PersistentIDkgPoolSection {
             IDkgMessageType::VetKdKeyShare => TypeKey::VetKdKeyShare,
             IDkgMessageType::Complaint => TypeKey::IDkgComplaint,
             IDkgMessageType::Opening => TypeKey::IDkgOpening,
+            IDkgMessageType::Transcript => TypeKey::IDkgTranscript,
         }
     }
 }
@@ -2153,6 +2162,19 @@ impl IDkgPoolSection for PersistentIDkgPoolSection {
         prefix: IDkgPrefixOf<SignedIDkgOpening>,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgOpening)> + '_> {
         let message_db = self.get_message_db(IDkgMessageType::Opening);
+        message_db.iter(Some(IterationPattern::Prefix(prefix.get())))
+    }
+
+    fn transcripts(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, IDkgTranscript)> + '_> {
+        let message_db = self.get_message_db(IDkgMessageType::Transcript);
+        message_db.iter(None)
+    }
+
+    fn transcripts_by_prefix(
+        &self,
+        prefix: IDkgPrefixOf<IDkgTranscript>,
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, IDkgTranscript)> + '_> {
+        let message_db = self.get_message_db(IDkgMessageType::Transcript);
         message_db.iter(Some(IterationPattern::Prefix(prefix.get())))
     }
 }
