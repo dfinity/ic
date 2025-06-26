@@ -1,7 +1,6 @@
 load("@rules_motoko//motoko:defs.bzl", "motoko_binary", "motoko_library")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:candid.bzl", "did_git_test")
-load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_ic_test_suite")
 load("//bazel:prost.bzl", "generated_files_check")
 
@@ -75,21 +74,6 @@ motoko_binary(
     deps = [":ledger_mo_lib"],
 )
 
-rust_canister(
-    name = "test_notified_canister",
-    srcs = ["tests/notified/notified.rs"],
-    service_file = ":tests/notified/notified.did",
-    deps = [
-        # Keep sorted.
-        ":icp_ledger",
-        "//rs/rust_canisters/dfn_candid",
-        "//rs/rust_canisters/dfn_core",
-        "//rs/rust_canisters/dfn_protobuf",
-        "//rs/types/base_types",
-        "@crate_index//:lazy_static",
-    ],
-)
-
 rust_ic_test_suite(
     name = "ledger_canister_integration_test",
     timeout = "long",
@@ -101,7 +85,6 @@ rust_ic_test_suite(
     data = [
         "ledger.did",
         ":ledger_proxy.wasm",
-        ":test_notified_canister",
         "//rs/ledger_suite/icp/archive:ledger-archive-node-canister-wasm",
         "//rs/ledger_suite/icp/index:ic-icp-index-canister",
         "//rs/ledger_suite/icp/ledger:ledger-canister-wasm",
@@ -122,7 +105,6 @@ rust_ic_test_suite(
         "MAINNET_ICP_LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath @mainnet_icp_ledger-archive-node-canister//file)",
         "MAINNET_ICP_LEDGER_CANISTER_WASM_PATH": "$(rootpath @mainnet_icp_ledger_canister//file)",
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
-        "TEST_NOTIFIED_WASM_PATH": "$(rootpath :test_notified_canister)",
     },
     deps = [
         # Keep sorted.

@@ -63,6 +63,8 @@ use ledger_canister::{
     balances_len, Ledger, LEDGER, LEDGER_VERSION, MAX_MESSAGE_SIZE_BYTES, UPGRADES_MEMORY,
 };
 use num_traits::cast::ToPrimitive;
+#[cfg(feature = "notify-method")]
+use on_wire::BytesS;
 #[allow(unused_imports)]
 use on_wire::IntoWire;
 use std::cell::RefCell;
@@ -387,10 +389,6 @@ thread_local! {
     static PRE_UPGRADE_INSTRUCTIONS_CONSUMED: RefCell<u64> = const { RefCell::new(0) };
     static POST_UPGRADE_INSTRUCTIONS_CONSUMED: RefCell<u64> = const { RefCell::new(0) };
 }
-
-// Copied from dfn_core::BytesS so as to be able to remove dependency.
-#[cfg(feature = "notify-method")]
-pub struct BytesS(pub Vec<u8>);
 
 /// You can notify a canister that you have made a payment to it. The
 /// payment must have been made to the account of a canister and from the

@@ -2233,52 +2233,6 @@ async fn ledger_assert_num_nodes(ledger: &Canister<'_>, num_expected: usize) -> 
 }
 
 #[test]
-fn call_with_cleanup() {
-    local_test_e(|r| async move {
-        let proj = Project::new();
-
-        let test_canister = proj
-            .cargo_bin("test-notified", &[])
-            .install_(&r, Vec::new())
-            .await?;
-
-        // Check the dirty call behaves badly.
-        let r: Result<(), String> = test_canister
-            .update_("dirty_call", bytes, Encode!(&()).unwrap())
-            .await
-            .map(|b| Decode!(&b, ()).unwrap());
-        println!("{:?}", r);
-        assert!(r.unwrap_err().contains("Failed successfully"),);
-
-        let r: Result<(), String> = test_canister
-            .update_("dirty_call", bytes, Encode!(&()).unwrap())
-            .await
-            .map(|b| Decode!(&b, ()).unwrap());
-        println!("{:?}", r);
-        assert_eq!(r, Ok(()));
-
-        let r: Result<(), String> = test_canister
-            .update_("clean_call", bytes, Encode!(&()).unwrap())
-            .await
-            .map(|b| Decode!(&b, ()).unwrap());
-        println!("{:?}", r);
-
-        assert!(r.unwrap_err().contains("Failed successfully"));
-
-        let r: Result<(), String> = test_canister
-            .update_("clean_call", bytes, Encode!(&()).unwrap())
-            .await
-            .map(|b| Decode!(&b, ()).unwrap());
-        println!("{:?}", r);
-        assert!(
-            r.unwrap_err().contains("Failed successfully"),
-            "The lock was not released so it can't successfully fail"
-        );
-        Ok(())
-    })
-}
-
-#[test]
 fn transfer_fee_pb_test() {
     local_test_e(|r| async move {
         let proj = Project::new();
