@@ -65,12 +65,6 @@ pub struct CanisterHttpPayloadBuilderMetrics {
     /// The number of timeouts that have met the threshold for inclusion in
     /// the block.
     pub included_timeouts: IntGauge,
-    /// The number of non replicated responses which are includable in the latest
-    /// attempt to create a block. Concretely, these responses are present in the 
-    /// pool and have the right signature, however there is a chance it's not 
-    /// included in the latest payload because it would exceed the maximum size 
-    /// of the payload.
-    pub includedable_non_replicated_requests: IntGauge,
 }
 
 impl CanisterHttpPayloadBuilderMetrics {
@@ -102,11 +96,7 @@ impl CanisterHttpPayloadBuilderMetrics {
             included_timeouts: metrics_registry.int_gauge(
                 "canister_http_unique_timeouts",
                 "The number of timeouts that could be included in a block"
-            ),
-            includedable_non_replicated_requests: metrics_registry.int_gauge(
-                "canister_http_includable_non_replicated_requests",
-                "The number of non-replicated canister HTTP responses that could be included in the block"
-            ),
+            )
         }
     }
 }
