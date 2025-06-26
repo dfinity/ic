@@ -4235,6 +4235,7 @@ fn can_reuse_chunk_hashes_when_computing_manifest() {
 
         state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
         wait_for_checkpoint(&state_manager, height(1));
+        state_manager.flush_tip_channel();
 
         let mut reused_label = Labels::new();
         reused_label.insert("type".to_string(), "reused".to_string());
@@ -4249,6 +4250,7 @@ fn can_reuse_chunk_hashes_when_computing_manifest() {
 
         state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
         let state_2_hash = wait_for_checkpoint(&state_manager, height(2));
+        state_manager.flush_tip_channel();
 
         // Second checkpoint can leverage heap chunks computed previously as well as the wasm binary.
         let chunk_bytes = fetch_int_counter_vec(metrics, "state_manager_manifest_chunk_bytes");
@@ -4257,7 +4259,7 @@ fn can_reuse_chunk_hashes_when_computing_manifest() {
         let size = chunk_bytes[&reused_label] + chunk_bytes[&compared_label];
         // We compute manifest then rehash, so twice the size
         assert!(((expected_size_estimate as f64 * 2.2) as u64) > size);
-        assert!(((expected_size_estimate as f64 * 1.8) as u64) < size);
+        assert!(((expected_size_estimate as f64 * 2.0) as u64) < size);
 
         let checkpoint = state_manager
             .state_layout()
