@@ -31,7 +31,7 @@ use ic_agent::agent::route_provider::RoundRobinRouteProvider;
 use ic_gateway::ic_bn_lib::http::{
     headers::{X_IC_CANISTER_ID, X_REQUESTED_WITH, X_REQUEST_ID},
     proxy::proxy,
-    Client, ConnInfo, Stats,
+    Client, ConnInfo,
 };
 use ic_gateway::{setup_router, Cli};
 use ic_types::{canister_http::CanisterHttpRequestId, CanisterId, NodeId, PrincipalId, SubnetId};
@@ -57,11 +57,9 @@ use tokio::{
     task::{spawn, spawn_blocking, JoinHandle, JoinSet},
     time::{self, sleep},
 };
-use tokio_util::sync::CancellationToken;
 use tower::ServiceExt;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::{debug, error, trace};
-use uuid::Uuid;
 
 // The maximum wait time for a computation to finish synchronously.
 const DEFAULT_SYNC_WAIT_DURATION: Duration = Duration::from_secs(10);
@@ -693,6 +691,7 @@ impl ApiState {
                     args.push("127.0.0.1".to_string());
                 }
                 args.push("--domain-canister-id-from-query-params".to_string());
+                args.push("--domain-canister-id-from-referer".to_string());
                 args.push("--ic-unsafe-root-key-fetch".to_string());
                 let cli = Cli::parse_from(args);
 
@@ -734,17 +733,7 @@ impl ApiState {
                             )),
                     )
                     .fallback(|mut request: AxumRequest| async move {
-                        let conn_info = ConnInfo {
-                            id: Uuid::now_v7(),
-                            accepted_at: std::time::Instant::now(),
-                            // `remote_addr` is arbitrary in this context
-                            remote_addr: ic_gateway::ic_bn_lib::http::server::Addr::Tcp(
-                                "127.0.0.1:8080".parse().unwrap(),
-                            ),
-                            traffic: Arc::new(Stats::new()),
-                            req_count: AtomicU64::new(0),
-                            close: CancellationToken::new(),
-                        };
+                        let conn_info = ConnInfo::default();
                         request.extensions_mut().insert(Arc::new(conn_info));
                         ic_gateway_router.oneshot(request).await
                     })

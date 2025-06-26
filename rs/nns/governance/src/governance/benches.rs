@@ -10,9 +10,9 @@ use crate::{
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
     neuron_store::NeuronStore,
     pb::v1::{
-        install_code::CanisterInstallMode, neuron::Followees, proposal::Action, Ballot, BallotInfo,
-        CreateServiceNervousSystem, ExecuteNnsFunction, InstallCode, KnownNeuron, ListProposalInfo,
-        NnsFunction, Proposal, ProposalData, Topic, Vote,
+        install_code::CanisterInstallMode, proposal::Action, Ballot, BallotInfo,
+        CreateServiceNervousSystem, ExecuteNnsFunction, Followees, InstallCode, KnownNeuron,
+        ListProposalInfo, NnsFunction, Proposal, ProposalData, Topic, Vote,
     },
     test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
 };
@@ -557,7 +557,9 @@ fn distribute_rewards_with_stable_neurons() -> BenchResult {
             .unwrap();
     }
 
-    bench_fn(|| governance.distribute_rewards(Tokens::new(10_000_000, 0).unwrap()))
+    bench_fn(|| {
+        governance.distribute_voting_rewards_to_neurons(Tokens::new(10_000_000, 0).unwrap())
+    })
 }
 
 #[bench(raw)]

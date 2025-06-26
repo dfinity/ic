@@ -165,7 +165,7 @@ impl VetKdPayloadBuilderImpl {
             .into_iter()
             .map(|key_config| key_config.key_id)
             // Skip keys that don't need to run NIDKG protocol
-            .filter(|key_id| !key_id.is_idkg_key())
+            .filter(|key_id| key_id.is_vetkd_key())
             // Skip keys that are disabled
             .filter(|key_id| {
                 enabled_subnets

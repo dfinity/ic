@@ -2,29 +2,111 @@ use std::sync::Arc;
 
 use axum::{
     body::Body,
-    extract::{Request, State},
+    extract::{
+        ws::{CloseFrame, Message, Utf8Bytes, WebSocket, WebSocketUpgrade},
+        Path, Request, State,
+    },
     http::StatusCode,
     response::IntoResponse,
     Extension,
 };
-
+use bytes::Bytes;
+use candid::Principal;
 use http::header::{CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS};
-use ic_bn_lib::http::headers::{
-    CONTENT_TYPE_CBOR, X_CONTENT_TYPE_OPTIONS_NO_SNIFF, X_FRAME_OPTIONS_DENY,
+use ic_bn_lib::{
+    http::headers::{CONTENT_TYPE_CBOR, X_CONTENT_TYPE_OPTIONS_NO_SNIFF, X_FRAME_OPTIONS_DENY},
+    pubsub::{Broker, Subscriber},
 };
 use ic_types::{
     messages::{HttpStatusResponse, ReplicaHealthStatus},
     CanisterId, SubnetId,
 };
 use serde::Serialize;
+use tokio::{select, sync::broadcast::error::RecvError};
 
 use crate::{
     errors::{ApiError, ErrorCause},
-    routes::RequestContext,
+    routes::{Lookup, RequestContext},
     snapshot::Node,
 };
 
 pub use crate::routes::{Health, Proxy, RootKey};
+
+#[derive(Clone, derive_new::new)]
+pub struct LogsState {
+    broker: Arc<Broker<Bytes, Principal>>,
+    route_lookup: Arc<dyn Lookup>,
+}
+
+pub async fn logs_canister(
+    ws: WebSocketUpgrade,
+    Path(canister_id): Path<CanisterId>,
+    State(state): State<LogsState>,
+) -> impl IntoResponse {
+    if state
+        .route_lookup
+        .lookup_subnet_by_canister_id(&canister_id)
+        .is_err()
+    {
+        return (
+            StatusCode::NOT_FOUND,
+            "The provided canister ID wasn't found in the routing table",
+        )
+            .into_response();
+    }
+
+    // Try to subscribe to a given topic
+    let Ok(sub) = state.broker.subscribe(&canister_id.get().0) else {
+        return (StatusCode::TOO_MANY_REQUESTS, "Too many subscribers").into_response();
+    };
+
+    ws.on_upgrade(move |socket| logs_canister_ws(socket, sub))
+        .into_response()
+}
+
+async fn logs_canister_ws(mut socket: WebSocket, mut sub: Subscriber<Bytes>) {
+    loop {
+        select! {
+            biased;
+
+            // Discard whatever client might send us and check for disconnects
+            res = socket.recv() => {
+                match res {
+                    None => return,
+                    Some(Err(_)) => return,
+                    _ => {},
+                }
+            }
+
+            // Read log messages from the topic
+            msg = sub.recv() => {
+                match msg {
+                    Ok(v) => {
+                        // Send the message to the client
+                        if socket.send(Message::Binary(v)).await.is_err() {
+                            return;
+                        }
+                    },
+
+                    Err(RecvError::Lagged(_)) => {
+                        // Just ignore if the client is lagging
+                    },
+
+                    Err(RecvError::Closed) => {
+                        let _ = socket
+                            .send(Message::Close(Some(CloseFrame {
+                                code: 410,
+                                reason: Utf8Bytes::from_static("Closed due to inactivity"),
+                            })))
+                            .await;
+
+                        return
+                    },
+                }
+            }
+        }
+    }
+}
 
 // Handler: emit an HTTP status code that signals the service's state
 pub async fn health(State(h): State<Arc<dyn Health>>) -> impl IntoResponse {

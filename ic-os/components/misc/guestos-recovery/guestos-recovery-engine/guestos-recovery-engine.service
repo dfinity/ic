@@ -1,0 +1,21 @@
+[Unit]
+Description=Recovery Engine
+After=upgrade-shared-data-store.service
+Wants=network-online.target
+After=network-online.target
+Before=ic-replica.service
+
+[Install]
+WantedBy=multi-user.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/opt/ic/bin/guestos-recovery-engine.sh
+Restart=on-failure
+RestartSec=10
+
+# All guestos services that networking depends on log their outputs to the 
+# console to be piped to the host terminal if the verbose flag is enabled.
+StandardOutput=journal+console
+StandardError=journal+console
