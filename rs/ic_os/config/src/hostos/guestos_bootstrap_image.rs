@@ -192,7 +192,12 @@ impl BootstrapOptions {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use config_types::{DeploymentEnvironment, ICOSSettings, Ipv6Config, NetworkSettings};
+    use config_types::{
+        DeploymentEnvironment, GuestOSUpgradeConfig, GuestVMType, ICOSSettings, Ipv6Config,
+        NetworkSettings,
+    };
+    use std::net::Ipv6Addr;
+    use std::str::FromStr;
 
     #[test]
     fn test_build_bootstrap_config_image_succeeds_with_default_options() {
@@ -249,6 +254,10 @@ mod tests {
                 icos_dev_settings: Default::default(),
             },
             guestos_settings: Default::default(),
+            guest_vm_type: GuestVMType::Default,
+            upgrade_config: GuestOSUpgradeConfig {
+                peer_guest_vm_address: Some(Ipv6Addr::from_str("2001:db8::1")?),
+            },
         };
 
         let nns_key_path = test_files_dir.join("nns.pem");

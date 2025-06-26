@@ -394,7 +394,6 @@ fn build_chunk_table_parallel(
                         metrics.chunk_bytes.with_label_values(&[LABEL_VALUE_HASHED_AND_COMPARED]).inc_by(chunk_info.size_bytes as u64);
 
                         let recomputed_hash = recompute_chunk_hash();
-                        debug_assert_eq!(recomputed_hash, precomputed_hash);
                         if recomputed_hash != precomputed_hash {
                             metrics.reused_chunk_hash_error_count.inc();
                             error!(
@@ -481,7 +480,6 @@ fn build_chunk_table_sequential(
                         // We have both a reused and a recomputed hash, so we can compare them to
                         // monitor for issues
                         let recomputed_chunk_hash = recompute_chunk_hash();
-                        debug_assert_eq!(recomputed_chunk_hash, reused_chunk_hash);
                         if recomputed_chunk_hash != reused_chunk_hash {
                             metrics.reused_chunk_hash_error_count.inc();
                             error!(
@@ -766,6 +764,12 @@ fn dirty_pages_to_dirty_chunks(
     Ok(dirty_chunks)
 }
 
+#[derive(PartialEq, Eq)]
+pub enum RehashManifest {
+    Yes,
+    No,
+}
+
 /// Computes manifest for the checkpoint located at `checkpoint_root_path`.
 pub fn compute_manifest(
     thread_pool: &mut scoped_threadpool::Pool,
@@ -775,6 +779,7 @@ pub fn compute_manifest(
     checkpoint: &CheckpointLayout<ReadOnly>,
     max_chunk_size: u32,
     opt_manifest_delta: Option<ManifestDelta>,
+    rehash: RehashManifest,
 ) -> Result<Manifest, CheckpointError> {
     let mut files = {
         let mut files = Vec::new();
@@ -819,7 +824,11 @@ pub fn compute_manifest(
                     dirty_file_chunks,
                     max_chunk_size,
                     manifest_delta.target_height.get(),
-                    REHASH_EVERY_NTH_CHUNK,
+                    if rehash == RehashManifest::Yes {
+                        REHASH_EVERY_NTH_CHUNK
+                    } else {
+                        u64::MAX
+                    },
                 )
             } else {
                 default_hash_plan(&files, max_chunk_size)
@@ -1343,5 +1352,6 @@ pub fn manifest_from_path(path: &Path) -> Result<Manifest, CheckpointError> {
         &cp_layout,
         DEFAULT_CHUNK_SIZE,
         None,
+        RehashManifest::No,
     )
 }
