@@ -355,33 +355,17 @@ jobs:
           RUN_ON_DIFF_ONLY: ${{ needs.config.outputs.diff_only }}
           RELEASE_BUILD: ${{ needs.config.outputs.release-build }}
 
-  bazel-build-fuzzers:
-    name: Bazel Build Fuzzers
+  bazel-run-fuzzers:
+    name: Bazel Run Fuzzers
     <<: *dind-large-setup
     steps:
       - <<: *checkout
-      - name: Run Bazel Build Fuzzers
-        uses: ./.github/actions/bazel
-        with:
-          run: |
-            bazel build //rs/... \
-              --config=stamped --config=fuzzing --build_tag_filters=libfuzzer \
-              --keep_going
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-
-  bazel-build-fuzzers-afl:
-    name: Bazel Build Fuzzers AFL
-    <<: *dind-large-setup
-    steps:
-      - <<: *checkout
-      - name: Run Bazel Build Fuzzers AFL
-        uses: ./.github/actions/bazel
-        with:
-          run: |
-            bazel build //rs/... \
-              --config=stamped --config=afl \
-              --keep_going
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+      - name: Run Libfuzzer targets
+        shell: bash
+        run: ./bin/fuzzing/run-all-fuzzers.sh --libfuzzer 100
+      - name: Run AFL targets
+        shell: bash
+        run: ./bin/fuzzing/run-all-fuzzers.sh --afl 100
 
   python-ci-tests:
     name: Python CI Tests
@@ -479,6 +463,20 @@ jobs:
             execlogs-cache/execlogs.csv \
             execlogs-nocache/execlogs.csv \
             | awk -F, 'BEGIN { N_BAD=0; } $3 != $4 { print $1 " " $2 ": " $3 " != " $4; N_BAD++; } END { if (N_BAD) { print N_BAD " mismatches found"; exit 1; } else { print "No mismatches"; }; }'
+
+  bazel-build-all-no-cache:
+    name: Bazel Build All No Cache
+    needs: [config]
+    if: ${{ needs.config.outputs.skip_long_tests != 'true' }} # GHA output quirk, 'true' is a string
+    <<: *dind-large-setup
+    steps:
+      - <<: *checkout
+      - name: Run Bazel Build All No Cache
+        uses: ./.github/actions/bazel
+        with:
+          run: bazel build --config=stamped --config=local //...
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+
 
   cargo-clippy-linux:
     name: Cargo Clippy Linux
