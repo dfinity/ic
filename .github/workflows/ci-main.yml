@@ -603,7 +603,8 @@ jobs:
             bazel run //:artifact-uploader -- "$rootdir"
 
             # Get version and checksum
-            RECOVERY_VERSION="$(bazel build //bazel:version.txt; cat bazel-bin/bazel/version.txt)"
+            bazel build //bazel:version.txt
+            RECOVERY_VERSION="$(cat bazel-bin/bazel/version.txt)"
             RECOVERY_HASH="$(sha256sum $rootdir/guest-os/recovery-artifacts/recovery.tar.zst | cut -d' ' -f1)"
 
             # Set environment variables for the next steps
@@ -611,7 +612,7 @@ jobs:
             echo "RECOVERY_STORE_CONTENT1=${RECOVERY_STORE_CONTENT1}" >> "$GITHUB_ENV"
             echo "RECOVERY_STORE_CONTENT2=${RECOVERY_STORE_CONTENT2}" >> "$GITHUB_ENV"
             echo "RECOVERY_VERSION=${RECOVERY_VERSION}" >> "$GITHUB_ENV"
-            echo "RECOVERY_HASH=${RECOVERY_EXPECTED_RECOVERY_HASH}" >> "$GITHUB_ENV"
+            echo "RECOVERY_HASH=${RECOVERY_HASH}" >> "$GITHUB_ENV"
       - name: Adapt guestos-recovery-engine script
         run: |
           sed -i "s/readonly VERSION=\"\"/readonly VERSION=\"${RECOVERY_VERSION}\"/" ic-os/components/misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.sh
@@ -626,5 +627,5 @@ jobs:
       - name: Cleanup
         if: always()
         run: |
-          git switch "$BRANCH_NAME"
+          git checkout "$BRANCH_NAME"
           git branch -D "$TEMP_BRANCH"
