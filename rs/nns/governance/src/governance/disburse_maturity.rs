@@ -40,7 +40,8 @@ const DISBURSEMENT_DELAY_SECONDS: u64 = ONE_DAY_SECONDS * 7;
 /// The maximum number of disbursements in a neuron. This makes it possible to do daily
 /// disbursements after every reward event (as 10 > 7).
 const MAX_NUM_DISBURSEMENTS: usize = 10;
-/// The minimum amount of ICP to disburse in a single transaction.
+/// The minimum amount of ICP to disburse in a single transaction. The maturity disbursement amount
+/// after being adjusted for the worst case maturity modulation should be at least this amount.
 pub const MINIMUM_DISBURSEMENT_E8S: u64 = E8;
 // We do not retry the task more frequently than once a minute, so that if there is anything wrong
 // with the task, we don't use too many resources. How this is chosen: assuming the task can max out
