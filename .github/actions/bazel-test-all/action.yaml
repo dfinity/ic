@@ -43,14 +43,7 @@ runs:
             stamp_build='${{ inputs.stamp-build }}'
 
             bazel_args=(
-                # default all tests to fail ...
-                #   ... after three attempts for tests marked as flaky
-                #   ... after three attempts for all tests in //rs/tests
-                #   ... after the first attempt for other tests
-                #   see also:
-                #     https://bazel.build/reference/command-line-reference#build-flag--flaky_test_attempts
-                --flaky_test_attempts=default
-                --flaky_test_attempts=//rs/tests/.*@3
+                --config=flaky_retry # auto retry eg systests
             )
 
             if [[ $stamp_build == "true" ]]; then
