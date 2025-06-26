@@ -1907,8 +1907,9 @@ mod anonymous_burn {
             .install_canister(mainnet_wasm.clone(), Encode!(&payload).unwrap(), None)
             .expect("Unable to install the mainnet Ledger canister");
 
-        let anonymous_balance = balance_of(&env, canister_id, anonymous.0);
-        assert_eq!(anonymous_balance, INITIAL_BALANCE);
+        assert_eq!(INITIAL_BALANCE, balance_of(&env, canister_id, anonymous.0));
+        assert_eq!(INITIAL_BALANCE, balance_of(&env, canister_id, p1.0));
+        assert_eq!(INITIAL_BALANCE * 2, total_supply(&env, canister_id));
 
         // Verify that only the two mint blocks are present in the ledger.
         let query_blocks_response = query_blocks(&env, anonymous.0, canister_id, 0, 10u64);
@@ -1949,9 +1950,11 @@ mod anonymous_burn {
         )
         .unwrap();
 
-        // Expect the funds in the default subaccount of the anonymous principal to have been burned.
-        let anonymous_balance = balance_of(&env, canister_id, anonymous.0);
-        assert_eq!(anonymous_balance, 0u64);
+        // Expect the funds in the default subaccount of the anonymous principal to have been
+        // burned, and the total supply to have been reduced accordingly.
+        assert_eq!(0u64, balance_of(&env, canister_id, anonymous.0));
+        assert_eq!(INITIAL_BALANCE, balance_of(&env, canister_id, p1.0));
+        assert_eq!(INITIAL_BALANCE, total_supply(&env, canister_id));
         // Verify that a new Burn block was created.
         let query_blocks_response = query_blocks(
             &env,
@@ -2005,8 +2008,9 @@ mod anonymous_burn {
             .install_canister(mainnet_wasm.clone(), Encode!(&payload).unwrap(), None)
             .expect("Unable to install the mainnet Ledger canister");
 
-        let anonymous_balance = balance_of(&env, canister_id, anonymous.0);
-        assert_eq!(anonymous_balance, 0u64);
+        assert_eq!(0u64, balance_of(&env, canister_id, anonymous.0));
+        assert_eq!(INITIAL_BALANCE, balance_of(&env, canister_id, p1.0));
+        assert_eq!(INITIAL_BALANCE, total_supply(&env, canister_id));
 
         // Verify that only the single mint block is present in the ledger.
         let query_blocks_response = query_blocks(&env, anonymous.0, canister_id, 0, 10u64);
@@ -2022,9 +2026,11 @@ mod anonymous_burn {
         )
         .unwrap();
 
-        // Expect the default subaccount of the anonymous principal to still be empty.
-        let anonymous_balance = balance_of(&env, canister_id, anonymous.0);
-        assert_eq!(anonymous_balance, 0u64);
+        // Expect the default subaccount of the anonymous principal to still be empty, and the
+        // total supply to remain unchanged.
+        assert_eq!(0u64, balance_of(&env, canister_id, anonymous.0));
+        assert_eq!(INITIAL_BALANCE, balance_of(&env, canister_id, p1.0));
+        assert_eq!(INITIAL_BALANCE, total_supply(&env, canister_id));
         // Verify that a no new blocks were created.
         let query_blocks_response = query_blocks(
             &env,
