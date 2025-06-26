@@ -198,7 +198,7 @@ pub fn main() -> Result<()> {
                     elasticsearch_tags: deployment_json_settings.logging.elasticsearch_tags,
                 },
                 use_nns_public_key: Path::new("/data/nns_public_key.pem").exists(),
-                nns_urls: deployment_json_settings.nns.url.clone(),
+                nns_urls: deployment_json_settings.nns.urls.clone(),
                 use_node_operator_private_key: Path::new("/config/node_operator_private_key.pem")
                     .exists(),
                 enable_trusted_execution_environment,

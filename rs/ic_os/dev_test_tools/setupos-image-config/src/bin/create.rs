@@ -81,7 +81,7 @@ async fn main() -> Result<(), Error> {
             elasticsearch_tags: cli.deployment.elasticsearch_tags,
         },
         nns: Nns {
-            url: cli.deployment.nns_url.into_iter().collect(),
+            urls: cli.deployment.nns_urls.into_iter().collect(),
         },
         vm_resources: VmResources {
             memory: cli.deployment.memory_gb.unwrap_or(490),

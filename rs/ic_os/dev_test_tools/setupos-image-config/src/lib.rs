@@ -46,7 +46,7 @@ pub struct ConfigIni {
 #[derive(Args)]
 pub struct DeploymentConfig {
     #[arg(long)]
-    pub nns_url: Option<Url>,
+    pub nns_urls: Option<Url>,
 
     #[arg(long, allow_hyphen_values = true)]
     pub nns_public_key: Option<String>,
@@ -147,8 +147,8 @@ pub async fn update_deployment(path: &Path, cfg: &DeploymentConfig) -> Result<()
         deployment_json.deployment.mgmt_mac = Some(mgmt_mac.to_owned());
     }
 
-    if let Some(nns_url) = &cfg.nns_url {
-        deployment_json.nns.url = vec![nns_url.clone()];
+    if let Some(nns_urls) = &cfg.nns_urls {
+        deployment_json.nns.urls = vec![nns_urls.clone()];
     }
 
     if let Some(memory) = cfg.memory_gb {

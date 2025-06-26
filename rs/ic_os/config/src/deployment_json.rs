@@ -33,7 +33,7 @@ pub struct Logging {
 
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
 pub struct Nns {
-    pub url: Vec<Url>,
+    pub urls: Vec<Url>,
 }
 
 #[serde_as]
@@ -70,7 +70,7 @@ mod test {
                 "elasticsearch_tags": null
               },
               "nns": {
-                "url": ["https://icp-api.io", "https://icp0.io", "https://ic0.app"]
+                "urls": ["https://icp-api.io", "https://icp0.io", "https://ic0.app"]
               },
               "vm_resources": {
                 "memory": "490",
@@ -91,7 +91,7 @@ mod test {
     "elasticsearch_tags": null
   },
   "nns": {
-    "url": ["https://icp-api.io", "https://icp0.io", "https://ic0.app"]
+    "urls": ["https://icp-api.io", "https://icp0.io", "https://ic0.app"]
   },
   "vm_resources": {
     "memory": "490",
@@ -112,7 +112,7 @@ mod test {
                 elasticsearch_tags: None,
             },
             nns: Nns {
-                url: vec![
+                urls: vec![
                     Url::parse("https://icp-api.io").unwrap(),
                     Url::parse("https://icp0.io").unwrap(),
                     Url::parse("https://ic0.app").unwrap(),
