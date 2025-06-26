@@ -3,28 +3,19 @@ use ic_logger::{info, warn, ReplicaLogger};
 use ic_protobuf::{
     registry::{
         node::v1::ConnectionEndpoint,
-        routing_table::v1::RoutingTable as PbRoutingTable,
         subnet::v1::{SubnetListRecord, SubnetRecord, SubnetType},
     },
     types::v1::{PrincipalId as PrincipalIdProto, SubnetId as SubnetIdProto},
 };
 use ic_registry_client_helpers::{
     crypto::CryptoRegistry,
-    routing_table::RoutingTableRegistry,
     subnet::{SubnetRegistry, SubnetTransportRegistry},
 };
-use ic_registry_keys::{
-    make_routing_table_record_key, make_subnet_list_record_key, make_subnet_record_key,
-    ROOT_SUBNET_ID_KEY,
-};
+use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key, ROOT_SUBNET_ID_KEY};
 use ic_registry_local_store::{Changelog, ChangelogEntry, KeyMutation, LocalStore};
 use ic_registry_nns_data_provider::registry::RegistryCanister;
-use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_types::{crypto::threshold_sig::ThresholdSigPublicKey, NodeId, RegistryVersion, SubnetId};
-use std::{
-    collections::BTreeMap, convert::TryFrom, fmt::Debug, net::IpAddr, str::FromStr, sync::Arc,
-    time::Duration,
-};
+use std::{fmt::Debug, net::IpAddr, str::FromStr, sync::Arc, time::Duration};
 use url::Url;
 
 const MAX_CONSECUTIVE_FAILURES: i64 = 3;
@@ -279,19 +270,6 @@ impl InternalState {
         mut new_nns_subnet_record: SubnetRecord,
     ) {
         use prost::Message;
-        let registry_version = RegistryVersion::from(changelog.len() as u64);
-
-        let routing_table = self
-            .registry_client
-            .get_routing_table(registry_version)
-            .expect("Could not query registry for routing table.")
-            .expect("No routing table configured in registry");
-
-        let old_nns_subnet_id = self
-            .registry_client
-            .get_root_subnet_id(registry_version)
-            .expect("Could not query registry for nns subnet id")
-            .expect("No NNS subnet id configured in the registry");
 
         assert!(!changelog.is_empty());
 
@@ -301,7 +279,6 @@ impl InternalState {
         last.retain(|k| {
             k.key != ROOT_SUBNET_ID_KEY
                 && k.key != make_subnet_list_record_key()
-                && k.key != make_routing_table_record_key()
                 && k.key != subnet_record_key
         });
 
@@ -345,33 +322,6 @@ impl InternalState {
         last.push(KeyMutation {
             key: make_subnet_list_record_key(),
             value: Some(subnet_list_record_bytes),
-        });
-
-        // adjust routing table
-        let new_routing_table: BTreeMap<CanisterIdRange, SubnetId> = routing_table
-            .into_iter()
-            .filter_map(|(r, s_id)| {
-                if s_id == old_nns_subnet_id {
-                    Some((r, new_nns_subnet_id))
-                } else {
-                    None
-                }
-            })
-            .collect();
-
-        // It's safe to unwrap here because we started from a valid table and
-        // removed entries from it.  Removing entries cannot invalidate the
-        // table.
-        let new_routing_table =
-            RoutingTable::try_from(new_routing_table).expect("bug: invalid routing table");
-        let pb_routing_table = PbRoutingTable::from(new_routing_table);
-        let mut pb_routing_table_bytes = vec![];
-        pb_routing_table
-            .encode(&mut pb_routing_table_bytes)
-            .expect("encode can't fail");
-        last.push(KeyMutation {
-            key: make_routing_table_record_key(),
-            value: Some(pb_routing_table_bytes),
         });
     }
 
