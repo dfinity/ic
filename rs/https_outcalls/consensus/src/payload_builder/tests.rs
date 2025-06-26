@@ -338,6 +338,7 @@ fn timeout_priority() {
                     transform: None,
                     // this is the important one
                     time: UNIX_EPOCH,
+                    replication: ic_types::canister_http::Replication::FullyReplicated,
                 };
                 init_state
                     .metadata

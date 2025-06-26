@@ -66,6 +66,20 @@ use std::{
 };
 use strum_macros::AsRefStr;
 
+/// In order to have a bound on the advertised consensus pool, we place a limit on
+/// the notarization/certification gap.
+/// We will not notarize or validate artifacts with a height greater than the given
+/// value above the latest certification. During validation, the only exception to
+/// this are CUPs, which  have no upper bound on the height to be validated.
+pub(crate) const ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP: u64 = 70;
+
+/// In order to have a bound on the advertised consensus pool, we place a limit on
+/// the gap between notarized height and the height of the next pending CUP.
+/// We will not notarize or validate artifacts with a height greater than the given
+/// value above the latest CUP. During validation, the only exception to this are
+/// CUPs, which have no upper bound on the height to be validated.
+pub(crate) const ACCEPTABLE_NOTARIZATION_CUP_GAP: u64 = 130;
+
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, AsRefStr)]
 #[strum(serialize_all = "snake_case")]
 enum ConsensusSubcomponent {

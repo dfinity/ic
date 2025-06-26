@@ -31,6 +31,7 @@ def image_deps(mode, _malicious = False):
             # additional files to install
             "//rs/ic_os/release:vsock_host": "/opt/ic/bin/vsock_host:0755",
             "//rs/ic_os/release:hostos_tool": "/opt/ic/bin/hostos_tool:0755",
+            "//rs/ic_os/release:guest_vm_runner": "/opt/ic/bin/guest_vm_runner:0755",
             "//rs/ic_os/release:metrics-proxy": "/opt/ic/bin/metrics-proxy:0755",
             "//rs/ic_os/release:config": "/opt/ic/bin/config:0755",
 
@@ -46,7 +47,9 @@ def image_deps(mode, _malicious = False):
         "rootfs_size": "3G",
         "bootfs_size": "100M",
         "grub_config": Label("//ic-os/bootloader:hostos_grub.cfg"),
-        "extra_boot_args": Label("//ic-os/hostos/context:extra_boot_args"),
+        "extra_boot_args_template": Label("//ic-os/bootloader:hostos_extra_boot_args.template"),
+        "boot_args_template": Label("//ic-os/bootloader:hostos_boot_args.template"),
+        "requires_root_signing": False,
 
         # Add any custom partitions to the manifest
         "custom_partitions": _custom_partitions,
@@ -73,6 +76,12 @@ def image_deps(mode, _malicious = False):
     if "dev" in mode:
         deps["rootfs"].pop("//rs/ic_os/release:config", None)
         deps["rootfs"].update({"//rs/ic_os/release:config_dev": "/opt/ic/bin/config:0755"})
+
+        deps["rootfs"].pop("//rs/ic_os/release:hostos_tool", None)
+        deps["rootfs"].update({"//rs/ic_os/release:hostos_tool_dev": "/opt/ic/bin/hostos_tool:0755"})
+
+        deps["rootfs"].pop("//rs/ic_os/release:guest_vm_runner", None)
+        deps["rootfs"].update({"//rs/ic_os/release:guest_vm_runner_dev": "/opt/ic/bin/guest_vm_runner:0755"})
 
     return deps
 

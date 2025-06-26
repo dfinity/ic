@@ -929,6 +929,15 @@ impl SystemMetadata {
         self.canister_allocation_ranges.total_count() as u64 - generated_canister_ids
     }
 
+    /// Returns `true` iff the given `specified_id` is valid when used in `provisional_create_canister_with_cycles`, i.e.,
+    /// iff the given `specified_id` does not belong to the canister allocation ranges.
+    pub fn validate_specified_id(&self, specified_id: &CanisterId) -> bool {
+        !self
+            .canister_allocation_ranges
+            .iter()
+            .any(|range| range.contains(specified_id))
+    }
+
     /// Splits the `MetadataState` as part of subnet splitting phase 1:
     ///  * for the split subnet (B), produces a new `MetadataState`, with the given
     ///    batch time (if `Some`) or the original subnet's batch time (if `None`);
@@ -2187,6 +2196,10 @@ pub enum UnflushedCheckpointOp {
     TakeSnapshot(CanisterId, SnapshotId),
     /// A snapshot was loaded to a canister.
     LoadSnapshot(CanisterId, SnapshotId),
+    /// A snapshot was created via metadata upload.
+    UploadSnapshotMetadata(SnapshotId),
+    /// Binary data was uploaded to a snapshot
+    UploadSnapshotData(SnapshotId),
     /// A canister was renamed.
     RenameCanister(CanisterId, CanisterId),
 }
@@ -2228,6 +2241,16 @@ impl UnflushedCheckpointOps {
             canister_id,
             snapshot_id,
         ));
+    }
+
+    pub fn create_snapshot_from_metadata(&mut self, snapshot_id: SnapshotId) {
+        self.operations
+            .push(UnflushedCheckpointOp::UploadSnapshotMetadata(snapshot_id));
+    }
+
+    pub fn upload_data(&mut self, snapshot_id: SnapshotId) {
+        self.operations
+            .push(UnflushedCheckpointOp::UploadSnapshotData(snapshot_id));
     }
 
     pub fn rename_canister(&mut self, old_canister_id: CanisterId, new_canister_id: CanisterId) {

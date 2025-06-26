@@ -267,6 +267,14 @@ fn test_metadata() {
 }
 
 #[test]
+fn test_icrc3_supported_block_types() {
+    ic_ledger_suite_state_machine_tests::test_icrc3_supported_block_types(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
 fn test_upgrade() {
     ic_ledger_suite_state_machine_tests::test_upgrade(ledger_wasm(), encode_init_args)
 }
@@ -609,6 +617,15 @@ fn test_icrc106_set_index_in_install() {
 #[test]
 fn test_icrc106_set_index_in_upgrade() {
     ic_ledger_suite_state_machine_tests::icrc_106::test_icrc106_set_index_in_upgrade(
+        ledger_wasm(),
+        encode_init_args,
+        encode_icrc106_upgrade_args,
+    );
+}
+
+#[test]
+fn test_icrc106_set_hardcoded_index_in_upgrade() {
+    ic_ledger_suite_state_machine_tests::icrc_106::test_icrc106_set_hardcoded_index_in_upgrade(
         ledger_wasm(),
         encode_init_args,
         encode_icrc106_upgrade_args,

@@ -34,5 +34,6 @@ mod node;
 pub mod node_management;
 pub mod prepare_canister_migration;
 pub mod reroute_canister_ranges;
-mod routing_table;
+// TODO after the registry_lifecycle migration relying on this module is done, make private again
+pub(crate) mod routing_table;
 mod subnet;

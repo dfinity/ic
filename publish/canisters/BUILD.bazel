@@ -19,7 +19,6 @@ CANISTERS = {
     "ic-btc-checker.wasm.gz": "//rs/bitcoin/checker:btc_checker_canister",
     "ic-ckbtc-minter.wasm.gz": "//rs/bitcoin/ckbtc/minter:ckbtc_minter",
     "ic-ckbtc-minter_debug.wasm.gz": "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
-    "ic-ckbtc-kyt.wasm.gz": "//rs/bitcoin/ckbtc/kyt:kyt_canister",
     "ic-cketh-minter.wasm.gz": "//rs/ethereum/cketh/minter:cketh_minter",
     "ic-icrc1-index-ng.wasm.gz": "//rs/ledger_suite/icrc1/index-ng:index_ng_canister",
     "ic-icrc1-index-ng-u256.wasm.gz": "//rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256",

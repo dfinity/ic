@@ -8,7 +8,10 @@ use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
-        farm::HostFeature, ic::InternetComputer, nested::NestedVms, test_env::TestEnv,
+        ic::InternetComputer,
+        ic_gateway_vm::{IcGatewayVm, IC_GATEWAY_VM_NAME},
+        nested::NestedVms,
+        test_env::TestEnv,
         test_env_api::*,
     },
     retry_with_msg,
@@ -40,21 +43,19 @@ pub fn config(env: TestEnv) {
 
     // Setup "testnet"
     InternetComputer::new()
-        // The Farm hosts in the dm1 DC run:
-        // Ubuntu-24.04, libvirt-10.0.0 and QEMU-8.2.2 while the other (older) Farm hosts run
-        // Ubuntu-20.04, libvirt-6.6.0  and QEMU-5.0.0.
-        // If the host VM is allocated to these older hosts the nested guest VM often runs into soft CPU lockups.
-        // So we temporarily require that this test is hosted in dm1 until the other Farm hosts are upgraded to Ubuntu 24.04.
-        .with_required_host_features(vec![HostFeature::DC("dm1".to_string())])
         .add_fast_single_node_subnet(SubnetType::System)
-        // .with_mainnet_config() TODO: uncomment in NODE-1518
         .with_api_boundary_nodes(1)
+        .with_mainnet_config()
         .with_node_provider(principal)
         .with_node_operator(principal)
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 
     install_nns_and_check_progress(env.topology_snapshot());
+
+    IcGatewayVm::new(IC_GATEWAY_VM_NAME)
+        .start(&env)
+        .expect("failed to setup ic-gateway");
 
     setup_nested_vm(env, HOST_VM_NAME);
 }
