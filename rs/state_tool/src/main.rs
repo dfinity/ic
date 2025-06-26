@@ -160,6 +160,13 @@ enum Opt {
         #[clap(long, required = true, num_args(1..))]
         migrated_ranges: Vec<CanisterIdRange>,
     },
+
+    #[clap(name = "parse_overlay")]
+    ParseOverlay {
+        /// Path to the manifest dump.
+        #[clap(long, required = true)]
+        path: PathBuf,
+    },
 }
 
 /// Command line arguments for the `copy` command with eith
@@ -271,6 +278,9 @@ pub(crate) fn main_inner(args: Vec<String>) {
             Time::from_nanos_since_unix_epoch(batch_time_nanos),
             migrated_ranges,
         ),
+        Opt::ParseOverlay {
+            path,
+        } => commands::parse_overlay::do_parse_overlay(path),
     };
 
     if let Err(e) = result {

@@ -411,7 +411,7 @@ impl StorageImpl {
 
 /// A single overlay file describing a not necessarily exhaustive set of pages.
 #[derive(Clone)]
-pub(crate) struct OverlayFile {
+pub struct OverlayFile {
     /// A memory map of the entire file.
     /// Invariant: `mapping` satisfies `check_correctness(&mapping)`.
     mapping: Arc<Mapping>,
@@ -548,7 +548,7 @@ impl OverlayFile {
 
     /// Number of pages in this overlay file containing data.
     #[allow(dead_code)]
-    fn num_pages(&self) -> usize {
+    pub fn num_pages(&self) -> usize {
         num_pages(&self.mapping)
     }
 
@@ -720,7 +720,7 @@ impl OverlayFile {
     }
 
     /// Iterate over all ranges in the index.
-    fn index_iter(&self) -> impl Iterator<Item = PageIndexRange> + '_ {
+    pub fn index_iter(&self) -> impl Iterator<Item = PageIndexRange> + '_ {
         self.index_slice().iter().map(PageIndexRange::from)
     }
 }
@@ -1513,20 +1513,20 @@ impl MergeCandidate {
     }
 }
 
-struct FileIndexTag;
+pub struct FileIndexTag;
 /// Physical position of a page in an overlay file (smallest `PageIndex` has `FileIndex` 0, second smallest
 /// has `FileIndex` 1).
-type FileIndex = Id<FileIndexTag, u64>;
+pub type FileIndex = Id<FileIndexTag, u64>;
 
 /// A representation of a range of `PageIndex` backed by an overlay file.
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
-struct PageIndexRange {
+pub struct PageIndexRange {
     /// Start of the range in the `PageMap`, i.e. where to mmap to.
-    start_page: PageIndex,
+    pub start_page: PageIndex,
     /// End of the range in the `PageMap`.
-    end_page: PageIndex,
+    pub end_page: PageIndex,
     /// Offset of the range in the overlay file.
-    start_file_index: FileIndex,
+    pub start_file_index: FileIndex,
 }
 
 impl PageIndexRange {

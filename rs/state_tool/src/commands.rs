@@ -11,6 +11,7 @@ pub mod split;
 pub mod split_manifest;
 mod utils;
 pub mod verify_manifest;
+pub mod parse_overlay;
 
 /// Creates a logger that writes directly to `stderr`.
 fn logger() -> ic_logger::ReplicaLogger {
