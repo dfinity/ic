@@ -613,5 +613,5 @@ jobs:
       - name: Cleanup
         if: always()
         run: |
-          git switch "$BRANCH_NAME"
+          git checkout "$BRANCH_NAME"
           git branch -D "$TEMP_BRANCH"
