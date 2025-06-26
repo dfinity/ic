@@ -548,6 +548,16 @@ jobs:
           mkdir -p "$(dirname "${AWS_CREDS}")"
           echo '${{ secrets.CLOUD_CREDENTIALS_CONTENT }}' >"$AWS_CREDS"
 
+      - name: Checkout a temporary branch
+        run: |
+          TEMP_BRANCH="recovery-engine-test-$(date +%s)"
+          echo "TEMP_BRANCH=${TEMP_BRANCH}" >> "$GITHUB_ENV"
+          git checkout -b "$TEMP_BRANCH"
+
+      - name: Let AWS overwrite the recovery artifacts
+        run: |
+          sed -i 's/--immutable \\/d' ci/src/artifacts/upload.sh
+
       - name: Generate and upload recovery artifacts
         uses: ./.github/actions/bazel
         with:
@@ -589,11 +599,6 @@ jobs:
 
       - name: Adapt guestos-recovery-engine script
         run: |
-          TEMP_BRANCH="recovery-engine-test-$(date +%s)"
-          echo "TEMP_BRANCH=${TEMP_BRANCH}" >> "$GITHUB_ENV"
-          git checkout -b "$TEMP_BRANCH"
-
-          # Replace the version and expected hash in the script
           sed -i "s/readonly VERSION=\"\"/readonly VERSION=\"${RECOVERY_VERSION}\"/" ic-os/components/misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.sh
           sed -i "s/readonly EXPECTED_RECOVERY_HASH=\"\"/readonly EXPECTED_RECOVERY_HASH=\"${RECOVERY_HASH}\"/" ic-os/components/misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.sh
 
