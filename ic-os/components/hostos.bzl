@@ -23,6 +23,8 @@ component_files = {
     Label("hostos-scripts/verbose-logging/verbose-logging.sh"): "/opt/ic/bin/verbose-logging.sh",
     Label("hostos-scripts/verbose-logging/verbose-logging.service"): "/etc/systemd/system/verbose-logging.service",
     Label("hostos-scripts/verbose-logging/logrotate.d/verbose-logging"): "/etc/logrotate.d/verbose-logging",
+    Label("hostos-scripts/grub-upgrader/grub-upgrader.sh"): "/opt/ic/bin/grub-upgrader.sh",
+    Label("hostos-scripts/grub-upgrader/grub-upgrader.service"): "/etc/systemd/system/grub-upgrader.service",
 
     # early-boot
     Label("early-boot/relabel-machine-id/relabel-machine-id.sh"): "/opt/ic/bin/relabel-machine-id.sh",
@@ -53,8 +55,6 @@ component_files = {
     Label("misc/hostos/20-ipmi.rules"): "/etc/udev/rules.d/20-ipmi.rules",
     Label("misc/guestos-recovery/guestos-recovery-upgrader/guestos-recovery-upgrader.sh"): "/opt/ic/bin/guestos-recovery-upgrader.sh",
     Label("misc/guestos-recovery/guestos-recovery-upgrader/guestos-recovery-upgrader.service"): "/etc/systemd/system/guestos-recovery-upgrader.service",
-    Label("misc/grub-upgrader/grub-upgrader.sh"): "/opt/ic/bin/grub-upgrader.sh",
-    Label("misc/grub-upgrader/grub-upgrader.service"): "/etc/systemd/system/grub-upgrader.service",
 
     # monitoring
     Label("monitoring/systemd-user/user@.service"): "/etc/systemd/system/user@.service",
