@@ -124,7 +124,7 @@ system_test_nns(
     tags = [
         # TODO(NET-1710): enable on CI again when the problematic firewall rule in the IC node has been removed.
         #"long_test",
-        #"system_test_nightly",
+        #"system_test_large",
         "manual",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
@@ -327,7 +327,7 @@ system_test_nns(
     flaky = True,  # flakiness rate of 20% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "k8s",
-        "system_test_nightly",
+        "system_test_large",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
@@ -346,7 +346,7 @@ system_test_nns(
     tags = [
         "experimental_system_test_colocation",
         "k8s",
-        "system_test_nightly",
+        "system_test_large",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,

@@ -42,13 +42,13 @@ use ic_management_canister_types_private::{
     EmptyBlob, InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs,
     LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs,
     Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
-    ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs, ReshareChainKeyArgs,
-    SchnorrAlgorithm, SchnorrPublicKeyArgs, SchnorrPublicKeyResponse, SetupInitialDKGArgs,
-    SignWithECDSAArgs, SignWithSchnorrArgs, SignWithSchnorrAux, StoredChunksArgs, SubnetInfoArgs,
-    SubnetInfoResponse, TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs,
-    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
-    UploadCanisterSnapshotMetadataResponse, UploadChunkArgs, VetKdDeriveKeyArgs,
-    VetKdPublicKeyArgs, VetKdPublicKeyResult, IC_00,
+    ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs, RenameCanisterArgs,
+    ReshareChainKeyArgs, SchnorrAlgorithm, SchnorrPublicKeyArgs, SchnorrPublicKeyResponse,
+    SetupInitialDKGArgs, SignWithECDSAArgs, SignWithSchnorrArgs, SignWithSchnorrAux,
+    StoredChunksArgs, SubnetInfoArgs, SubnetInfoResponse, TakeCanisterSnapshotArgs,
+    UninstallCodeArgs, UpdateSettingsArgs, UploadCanisterSnapshotDataArgs,
+    UploadCanisterSnapshotMetadataArgs, UploadCanisterSnapshotMetadataResponse, UploadChunkArgs,
+    VetKdDeriveKeyArgs, VetKdPublicKeyArgs, VetKdPublicKeyResult, IC_00,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -419,6 +419,7 @@ impl ExecutionEnvironment {
             Arc::clone(&cycles_account_manager),
             Arc::clone(&ingress_history_writer),
             fd_factory,
+            config.environment_variables,
         );
         // Deallocate `SystemStates` and `ExecutionStates` in the background. Sleep for
         // 0.1 ms between deallocations, to spread out the load on the memory allocator
@@ -1741,6 +1742,19 @@ impl ExecutionEnvironment {
                 }
             }
 
+            Ok(Ic00Method::RenameCanister) => {
+                let res = RenameCanisterArgs::decode(payload).and_then(|args| {
+                    let canister_id = args.get_canister_id();
+                    let origin = msg.canister_change_origin(args.get_sender_canister_version());
+                    self.rename_canister(*msg.sender(), &mut state, args, origin)
+                        .map(|res| (res, Some(canister_id)))
+                });
+                ExecuteSubnetMessageResult::Finished {
+                    response: res,
+                    refund: msg.take_cycles(),
+                }
+            }
+
             Err(ParseError::VariantNotFound) => {
                 let res = Err(UserError::new(
                     ErrorCode::CanisterMethodNotFound,
@@ -2586,6 +2600,49 @@ impl ExecutionEnvironment {
             .map_err(UserError::from);
 
         // Put canister back.
+        state.put_canister_state(canister);
+        result
+    }
+
+    fn rename_canister(
+        &self,
+        sender: PrincipalId,
+        state: &mut ReplicatedState,
+        args: RenameCanisterArgs,
+        origin: CanisterChangeOrigin,
+    ) -> Result<Vec<u8>, UserError> {
+        let old_id = args.get_canister_id();
+        let new_id = args.rename_to.get_canister_id();
+        let to_version = args.rename_to.version;
+        let to_total_num_changes = args.rename_to.total_num_changes;
+
+        // Take canister out.
+        let mut canister = match state.take_canister_state(&old_id) {
+            None => {
+                return Err(UserError::new(
+                    ErrorCode::CanisterNotFound,
+                    format!("Canister {} not found.", old_id),
+                ))
+            }
+            Some(canister) => canister,
+        };
+
+        let result = self
+            .canister_manager
+            .rename_canister(
+                sender,
+                &mut canister,
+                origin,
+                old_id,
+                new_id,
+                to_version,
+                to_total_num_changes,
+                state,
+            )
+            .map(|()| EmptyBlob.encode())
+            .map_err(|err| err.into());
+
+        // Put canister back with the new id.
         state.put_canister_state(canister);
         result
     }

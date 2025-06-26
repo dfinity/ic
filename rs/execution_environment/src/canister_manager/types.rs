@@ -482,6 +482,8 @@ pub(crate) enum CanisterManagerError {
     InvalidSpecifiedId {
         specified_id: CanisterId,
     },
+    RenameCanisterNotStopped(CanisterId),
+    RenameCanisterHasSnapshot(CanisterId),
 }
 
 impl AsErrorHelp for CanisterManagerError {
@@ -679,6 +681,18 @@ impl AsErrorHelp for CanisterManagerError {
             CanisterManagerError::CanisterSnapshotInconsistent { .. } => ErrorHelp::UserError {
                 suggestion: "Make sure to upload a complete and valid snapshot. Compare with snapshot metadata from the endpoint `read_canister_snapshot_metadata`".to_string(),
                 doc_link: "".to_string(),
+            },
+            CanisterManagerError::RenameCanisterNotStopped { .. } => {
+                ErrorHelp::UserError {
+                    suggestion: "Stop the canister before renaming.".to_string(),
+                    doc_link: "".to_string(),
+                }
+            },
+            CanisterManagerError::RenameCanisterHasSnapshot { .. } => {
+                ErrorHelp::UserError {
+                    suggestion: "Delete all snapshots before renaming.".to_string(),
+                    doc_link: "".to_string(),
+                }
             }
         }
     }
@@ -1019,6 +1033,23 @@ impl From<CanisterManagerError> for UserError {
                 Self::new(
                     ErrorCode::InvalidManagementPayload,
                     format!("Requested slice too large: {} > {}", requested, allowed),
+                )}
+            RenameCanisterNotStopped(canister_id) => {
+                Self::new(
+                    ErrorCode::CanisterNotStopped,
+                    format!(
+                        "Canister {} must be stopped before it is renamed.{additional_help}",
+                        canister_id,
+                    )
+                )
+            }
+            RenameCanisterHasSnapshot(canister_id) => {
+                Self::new(
+                    ErrorCode::CanisterNonEmpty,
+                    format!(
+                        "Canister {} must not have any snapshots before it is renamed.{additional_help}",
+                        canister_id,
+                    )
                 )
             }
             InvalidSpecifiedId { specified_id } => {
