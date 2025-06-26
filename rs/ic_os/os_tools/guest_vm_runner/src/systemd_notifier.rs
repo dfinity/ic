@@ -32,7 +32,7 @@ impl SystemdNotifier for DefaultSystemdNotifier {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "integration_tests"))]
 pub(crate) mod testing {
     use super::*;
     use tokio::sync::watch::{channel, Receiver, Sender};
@@ -66,12 +66,18 @@ pub(crate) mod testing {
 
     impl SystemdNotifier for MockSystemdNotifier {
         fn notify_ready(&self) -> Result<()> {
-            self.ready.0.send(true).unwrap();
+            self.ready
+                .0
+                .send(true)
+                .expect("Failed to send ready notification");
             Ok(())
         }
 
         fn notify_stopping(&self, _status: &str) -> Result<()> {
-            self.stopping.0.send(true).unwrap();
+            self.stopping
+                .0
+                .send(true)
+                .expect("Failed to send stopping notification");
             Ok(())
         }
     }
