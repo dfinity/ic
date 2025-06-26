@@ -16,7 +16,6 @@ impl NodeType {
             NodeType::SetupOS => 0x0f,
             NodeType::HostOS => 0x00,
             NodeType::GuestOS => 0x01,
-            // 0x02 is reserved (previously used for BoundaryOS), don't use it
         }
     }
 }
