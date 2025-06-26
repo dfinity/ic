@@ -1223,11 +1223,6 @@ mod tests {
         apply_mutations_skip_invariant_checks(&mut registry, mutations);
 
         assert_eq!(registry.latest_version(), version);
-        println!(
-            "timestamp {} max: {}",
-            registry.get(key, version).unwrap().timestamp_nanoseconds,
-            u64::MAX
-        );
         assert_eq!(
             registry.get(key, version),
             Some(RegistryValue {
