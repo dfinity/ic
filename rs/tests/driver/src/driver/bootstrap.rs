@@ -417,7 +417,6 @@ fn create_config_disk_image(
         generate_ic_boundary_tls_cert: None,
     };
 
-    // TODO(NODE-1518): remove passing old config (only exists to pass *downgrade* CI tests)
     let mut bootstrap_options = BootstrapOptions {
         ic_registry_local_store: Some(
             test_env
@@ -439,9 +438,6 @@ fn create_config_disk_image(
         config.ipv6_config_type = Some(Ipv6ConfigType::Fixed);
         config.fixed_address = Some(ip.clone());
         config.fixed_gateway = Some(gateway.clone());
-
-        bootstrap_options.ipv6_address = Some(ip);
-        bootstrap_options.ipv6_gateway = Some(gateway);
     }
 
     // If we have a root subnet, specify the correct NNS url.
@@ -453,7 +449,6 @@ fn create_config_disk_image(
     {
         let nns_url = format!("http://[{}]:8080", node.get_ip_addr());
         config.nns_urls = Some(vec![nns_url.clone()]);
-        bootstrap_options.nns_urls.push(nns_url);
     }
 
     if let Some(malicious_behavior) = malicious_behavior {
@@ -462,7 +457,6 @@ fn create_config_disk_image(
             "Node with id={} has malicious behavior={:?}", node.node_id, malicious_behavior
         );
         config.malicious_behavior = Some(serde_json::to_string(&malicious_behavior)?);
-        bootstrap_options.malicious_behavior = Some(malicious_behavior);
     }
 
     if let Some(query_stats_epoch_length) = query_stats_epoch_length {
@@ -473,7 +467,6 @@ fn create_config_disk_image(
             query_stats_epoch_length
         );
         config.query_stats_epoch_length = Some(query_stats_epoch_length);
-        bootstrap_options.query_stats_epoch_length = Some(query_stats_epoch_length);
     }
 
     if let Some(ref ipv4_config) = ipv4_config {
@@ -484,13 +477,6 @@ fn create_config_disk_image(
         config.ipv4_address = Some(ipv4_config.ip_addr().to_string());
         config.ipv4_gateway = Some(ipv4_config.gateway_ip_addr().to_string());
         config.ipv4_prefix_length = Some(ipv4_config.prefix_length().try_into().unwrap());
-
-        bootstrap_options.ipv4_address = Some(format!(
-            "{}/{:?}",
-            ipv4_config.ip_addr(),
-            ipv4_config.prefix_length()
-        ));
-        bootstrap_options.ipv4_gateway = Some(ipv4_config.gateway_ip_addr().to_string());
     }
 
     // if the node has a domain name, generate a certificate to be used
@@ -505,7 +491,6 @@ fn create_config_disk_image(
             "Node with id={} has domain_name {}", node.node_id, domain_name,
         );
         config.domain_name = Some(domain_name.to_string());
-        bootstrap_options.domain = Some(domain_name.to_string());
     }
 
     let elasticsearch_hosts: Vec<String> = get_elasticsearch_hosts()?;
@@ -515,30 +500,25 @@ fn create_config_disk_image(
     );
     if !elasticsearch_hosts.is_empty() {
         config.elasticsearch_hosts = Some(elasticsearch_hosts.join(" "));
-        bootstrap_options.elasticsearch_hosts = elasticsearch_hosts.clone();
     }
 
     // The bitcoin_addr specifies the local bitcoin node that the bitcoin adapter should connect to in the system test environment.
     if let Ok(bitcoind_addr) = test_env.read_json_object::<String, _>(BITCOIND_ADDR_PATH) {
         config.bitcoind_addr = Some(bitcoind_addr.clone());
-        bootstrap_options.bitcoind_addr = Some(bitcoind_addr);
     }
 
     // The jaeger_addr specifies the local Jaeger node that the nodes should connect to in the system test environment.
     if let Ok(jaeger_addr) = test_env.read_json_object::<String, _>(JAEGER_ADDR_PATH) {
         config.jaeger_addr = Some(jaeger_addr.clone());
-        bootstrap_options.jaeger_addr = Some(jaeger_addr);
     }
 
     // The socks_proxy configuration indicates that a socks proxy is available to the system test environment.
     if let Ok(socks_proxy) = test_env.read_json_object::<String, _>(SOCKS_PROXY_PATH) {
         config.socks_proxy = Some(socks_proxy.clone());
-        bootstrap_options.socks_proxy = Some(socks_proxy);
     }
 
     let hostname = node.node_id.to_string();
     config.hostname = Some(hostname.clone());
-    bootstrap_options.hostname = Some(hostname);
 
     // Generate the GuestOS config and set it in bootstrap_options
     bootstrap_options.guestos_config = Some(generate_testnet_config(config)?);
@@ -707,7 +687,7 @@ fn create_setupos_config_image(
         .arg(cpu)
         .arg("--nr-of-vcpus")
         .arg((HOSTOS_VCPUS_PER_VM / 2).to_string())
-        .arg("--nns-url")
+        .arg("--nns-urls")
         .arg(nns_url.to_string())
         .arg("--nns-public-key")
         .arg(nns_public_key)

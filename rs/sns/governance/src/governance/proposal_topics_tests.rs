@@ -178,6 +178,13 @@ fn test_all_topics() {
                 ProposalCriticality::Critical,
             )),
         ),
+        (
+            pb::proposal::Action::RegisterExtension(Default::default()),
+            Ok((
+                Some(pb::Topic::CriticalDappOperations),
+                ProposalCriticality::Critical,
+            )),
+        ),
     ];
 
     // Smoke test

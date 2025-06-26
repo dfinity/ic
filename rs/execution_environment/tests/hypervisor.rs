@@ -1291,9 +1291,8 @@ fn ic0_msg_arg_data_size_is_not_available_in_reject_callback() {
     let err = test.ingress(caller_id, "update", caller).unwrap_err();
     assert_eq!(ErrorCode::CanisterContractViolation, err.code());
     assert!(
-        err.description().contains(
-            "\"ic0_msg_arg_data_size\" cannot be executed in replicated reject callback mode"
-        ),
+        err.description()
+            .contains("\"ic0_msg_arg_data_size\" cannot be executed in reject callback mode"),
         "Unexpected error message: {}",
         err.description()
     );
@@ -1389,9 +1388,8 @@ fn ic0_msg_arg_data_copy_is_not_available_in_reject_callback() {
     let err = test.ingress(caller_id, "update", caller).unwrap_err();
     assert_eq!(ErrorCode::CanisterContractViolation, err.code());
     assert!(
-        err.description().contains(
-            "\"ic0_msg_arg_data_copy\" cannot be executed in replicated reject callback mode"
-        ),
+        err.description()
+            .contains("\"ic0_msg_arg_data_copy\" cannot be executed in reject callback mode"),
         "Unexpected error message: {}",
         err.description()
     );
@@ -2337,17 +2335,14 @@ const MINT_CYCLES: &str = r#"
         (import "ic0" "msg_reply_data_append"
             (func $msg_reply_data_append (param i32) (param i32))
         )
-        (import "ic0" "mint_cycles"
-            (func $mint_cycles (param i64) (result i64))
+        (import "ic0" "mint_cycles128"
+            (func $mint_cycles128 (param i64) (param i64) (param i32))
         )
         (import "ic0" "msg_reply" (func $ic0_msg_reply))
 
         (func (export "canister_update test")
-            (i64.store
-                ;; store at the beginning of the heap
-                (i32.const 0) ;; store at the beginning of the heap
-                (call $mint_cycles (i64.const 10000000000))
-            )
+            ;; store at the beginning of the heap
+            (call $mint_cycles128 (i64.const 0) (i64.const 10000000000) (i32.const 0))
             (call $msg_reply_data_append (i32.const 0) (i32.const 8))
             (call $ic0_msg_reply)
         )
@@ -2363,7 +2358,7 @@ fn ic0_mint_cycles_fails_on_application_subnet() {
     assert_eq!(ErrorCode::CanisterContractViolation, err.code());
     assert!(err
         .description()
-        .contains("ic0.mint_cycles cannot be executed"));
+        .contains("ic0.mint_cycles128 cannot be executed"));
     let canister_state = test.canister_state(canister_id);
     assert_eq!(0, canister_state.system_state.queues().output_queues_len());
     assert_balance_equals(
@@ -2384,7 +2379,7 @@ fn ic0_mint_cycles_fails_on_system_subnet_non_cmc() {
     assert_eq!(ErrorCode::CanisterContractViolation, err.code());
     assert!(err
         .description()
-        .contains("ic0.mint_cycles cannot be executed"));
+        .contains("ic0.mint_cycles128 cannot be executed"));
     let canister_state = test.canister_state(canister_id);
     assert_eq!(0, canister_state.system_state.queues().output_queues_len());
     assert_balance_equals(
@@ -2430,7 +2425,7 @@ fn verify_error_and_no_effect(mut test: ExecutionTest) {
     assert_eq!(ErrorCode::CanisterContractViolation, err.code());
     assert!(err
         .description()
-        .contains("ic0.mint_cycles cannot be executed"));
+        .contains("ic0.mint_cycles128 cannot be executed"));
     let canister_state = test.canister_state(canister_id);
     assert_eq!(0, canister_state.system_state.queues().output_queues_len());
     assert_balance_equals(
@@ -8219,11 +8214,12 @@ fn ic0_mint_cycles_u64() {
         .build();
     let wat = r#"
         (module
-            (import "ic0" "mint_cycles" (func $mint_cycles (param i64) (result i64)))
+            (import "ic0" "mint_cycles128" (func $mint_cycles128 (param i64) (param i64) (param i32)))
 
             (func (export "canister_update test")
-                (drop (call $mint_cycles (i64.const 18446744073709551615)))
+                (call $mint_cycles128 (i64.const 0) (i64.const 18446744073709551615) (i32.const 0))
             )
+            (memory 1 1)
         )"#;
     let mut canister_id = test.canister_from_wat(wat).unwrap();
     // This loop should finish after four iterations.

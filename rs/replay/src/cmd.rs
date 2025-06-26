@@ -40,6 +40,10 @@ pub struct ReplayToolArgs {
     #[clap(long)]
     /// The replay will stop at this height and make a checkpoint.
     pub replay_until_height: Option<u64>,
+
+    #[clap(long)]
+    /// Whether or not to skip prompts for user input.
+    pub skip_prompts: bool,
 }
 
 #[derive(Clone, Subcommand)]
