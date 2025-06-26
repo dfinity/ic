@@ -289,24 +289,31 @@ impl CanisterHttpPayloadBuilderImpl {
             let candidates_and_divergences = response_candidates_by_callback_id
                 .into_iter()
                 .filter_map(|(id, grouped_shares)| {
-                    if let Some((metadata, shares)) = grouped_shares.iter().find(|(_, shares)| {
-                        unique_responses_count += 1;
+                    let consensus_candidate =
+                        grouped_shares.iter().find_map(|(metadata, shares)| {
+                            unique_responses_count += 1;
 
-                        if let Some(context) = canister_http_request_contexts.get(&id) {
-                            if let Replication::NonReplicated(node_id) = context.replication {
-                                return shares
-                                    .iter()
-                                    .any(|share| share.signature.signer == node_id);
+                            if let Some(context) = canister_http_request_contexts.get(&id) {
+                                if let Replication::NonReplicated(node_id) = context.replication {
+                                    // For a non-replicated call, we require EXACTLY ONE share,
+                                    // and it MUST be from the designated node.
+                                    return shares
+                                        .iter()
+                                        .find(|share| share.signature.signer == node_id)
+                                        .map(|correct_share| (metadata, vec![*correct_share]));
+                                }
                             }
-                        }
 
-                        let signers: BTreeSet<_> =
-                            shares.iter().map(|share| share.signature.signer).collect();
-                        // We need at least threshold different signers to include the response
-                        signers.len() >= threshold
-                    }) {
-                        // A set of grouped shares large enough to meet the
-                        // threshold was found, we should produce a result.
+                            let signers: BTreeSet<_> =
+                                shares.iter().map(|share| share.signature.signer).collect();
+                            if signers.len() >= threshold {
+                                Some((metadata, shares.clone()))
+                            } else {
+                                None
+                            }
+                        });
+
+                    if let Some((metadata, shares)) = consensus_candidate {
                         pool_access
                             .get_response_content_by_hash(&metadata.content_hash)
                             .map(|content| {
