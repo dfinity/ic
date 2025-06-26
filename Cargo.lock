@@ -5206,6 +5206,7 @@ dependencies = [
  "anyhow",
  "askama",
  "async-trait",
+ "clap 4.5.27",
  "config",
  "config_types",
  "deterministic_ips",

@@ -12,6 +12,7 @@ DEPENDENCIES = [
     "//rs/ic_os/metrics_tool",
     "@crate_index//:anyhow",
     "@crate_index//:askama",
+    "@crate_index//:clap",
     "@crate_index//:gpt",
     "@crate_index//:macaddr",
     "@crate_index//:regex",

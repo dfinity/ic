@@ -1,6 +1,7 @@
 use crate::boot_args::read_boot_args;
 use crate::guest_vm_config::DirectBootConfig;
 use crate::mount::{FileSystem, MountOptions, PartitionProvider};
+use crate::GuestVMType;
 use anyhow::Context;
 use anyhow::Result;
 use grub::{BootAlternative, BootCycle, GrubEnv, WithDefault};
@@ -59,9 +60,14 @@ impl DirectBoot {
 ///   (old GuestOS)
 /// * `Err` - If any error occurs during preparation
 pub async fn prepare_direct_boot(
-    should_refresh_grubenv: bool,
+    guest_vm_type: GuestVMType,
     guest_partition_provider: &dyn PartitionProvider,
 ) -> Result<Option<DirectBoot>> {
+    let should_refresh_grubenv = match guest_vm_type {
+        GuestVMType::Default => true,
+        GuestVMType::Upgrade => false,
+    };
+
     let grub_partition = guest_partition_provider
         .mount_partition(
             GRUB_PARTITION_UUID,
@@ -79,10 +85,14 @@ pub async fn prepare_direct_boot(
     let grubenv_is_changing = should_refresh_grubenv
         && refresh_grubenv(&mut grubenv).context("Failed to refresh grubenv")?;
 
-    let boot_alternative = grubenv
+    let mut boot_alternative = grubenv
         .boot_alternative
         .clone()
         .context("Failed to read boot_alternative from grubenv")?;
+
+    if guest_vm_type == GuestVMType::Upgrade {
+        boot_alternative = boot_alternative.get_opposite();
+    }
 
     // The variable name inside 'boot_args' that contains the kernel command line parameters.
     // Note that this depends on the boot alternative since they contain the root partition and
@@ -268,9 +278,9 @@ mod tests {
     impl TestSetup {
         async fn prepare_direct_boot(
             &self,
-            should_refresh_grubenv: bool,
+            guest_vm_type: GuestVMType,
         ) -> Result<Option<DirectBoot>> {
-            prepare_direct_boot(should_refresh_grubenv, &self.partition_provider).await
+            prepare_direct_boot(guest_vm_type, &self.partition_provider).await
         }
 
         fn get_grubenv(&self) -> GrubEnv {
@@ -337,7 +347,7 @@ mod tests {
             .build();
 
         let direct_boot = setup
-            .prepare_direct_boot(true)
+            .prepare_direct_boot(GuestVMType::Default)
             .await
             .expect("prepare_direct_boot failed")
             .expect("prepare_direct_boot returned None");
@@ -355,7 +365,7 @@ mod tests {
             .build();
 
         let direct_boot = setup
-            .prepare_direct_boot(true)
+            .prepare_direct_boot(GuestVMType::Default)
             .await
             .expect("prepare_direct_boot failed")
             .expect("prepare_direct_boot returned None");
@@ -369,7 +379,7 @@ mod tests {
         let setup = TestSetupBuilder::new().build();
 
         let direct_boot = setup
-            .prepare_direct_boot(true)
+            .prepare_direct_boot(GuestVMType::Default)
             .await
             .expect("prepare_direct_boot failed")
             .expect("prepare_direct_boot returned None");
@@ -385,7 +395,7 @@ mod tests {
             .build();
 
         setup
-            .prepare_direct_boot(true)
+            .prepare_direct_boot(GuestVMType::Default)
             .await
             .expect("prepare_direct_boot failed")
             .expect("prepare_direct_boot returned None");
@@ -400,7 +410,7 @@ mod tests {
             .build();
 
         setup
-            .prepare_direct_boot(true)
+            .prepare_direct_boot(GuestVMType::Default)
             .await
             .expect("prepare_direct_boot failed")
             .expect("prepare_direct_boot returned None");
@@ -415,7 +425,7 @@ mod tests {
             .build();
 
         setup
-            .prepare_direct_boot(true)
+            .prepare_direct_boot(GuestVMType::Default)
             .await
             .expect("prepare_direct_boot failed")
             .expect("prepare_direct_boot returned None");
@@ -430,7 +440,7 @@ mod tests {
             .build();
 
         setup
-            .prepare_direct_boot(true)
+            .prepare_direct_boot(GuestVMType::Default)
             .await
             .expect("prepare_direct_boot failed")
             .expect("prepare_direct_boot returned None");
@@ -445,7 +455,7 @@ mod tests {
             .build();
 
         setup
-            .prepare_direct_boot(true)
+            .prepare_direct_boot(GuestVMType::Default)
             .await
             .expect("prepare_direct_boot failed")
             .expect("prepare_direct_boot returned None");
@@ -454,13 +464,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_no_grubenv_refresh() {
+    async fn test_no_grubenv_refresh_if_upgrade() {
         let setup = TestSetupBuilder::new()
             .with_grubenv(BootAlternative::A, BootCycle::FirstBoot)
             .build();
 
         setup
-            .prepare_direct_boot(false)
+            .prepare_direct_boot(GuestVMType::Upgrade)
             .await
             .expect("prepare_direct_boot failed")
             .expect("prepare_direct_boot returned None");
@@ -475,7 +485,7 @@ mod tests {
     async fn test_missing_grub_partition() {
         let provider = MockPartitionProvider::new(HashMap::new());
 
-        let result = prepare_direct_boot(false, &provider).await;
+        let result = prepare_direct_boot(GuestVMType::Default, &provider).await;
 
         assert!(result
             .unwrap_err()
@@ -491,7 +501,7 @@ mod tests {
         partitions.insert(GRUB_PARTITION_UUID, grub_partition);
         let provider = MockPartitionProvider::new(partitions);
 
-        let result = prepare_direct_boot(false, &provider).await;
+        let result = prepare_direct_boot(GuestVMType::Default, &provider).await;
 
         assert!(result
             .unwrap_err()
@@ -507,7 +517,7 @@ mod tests {
             .build();
 
         let result = setup
-            .prepare_direct_boot(true)
+            .prepare_direct_boot(GuestVMType::Default)
             .await
             .expect("prepare_direct_boot failed");
         assert!(result.is_none());
@@ -526,10 +536,26 @@ mod tests {
             .build();
 
         assert!(setup
-            .prepare_direct_boot(false)
+            .prepare_direct_boot(GuestVMType::Default)
             .await
             .expect_err("prepare_direct_boot should fail")
             .to_string()
             .contains("vmlinuz"));
+    }
+
+    #[tokio::test]
+    async fn test_opposite_boot_alternative_in_upgrade_vm() {
+        let setup = TestSetupBuilder::new()
+            .with_grubenv(BootAlternative::A, BootCycle::Stable)
+            .with_boot_args("args_a", "args_b")
+            .build();
+
+        assert!(setup
+            .prepare_direct_boot(GuestVMType::Upgrade)
+            .await
+            .expect("prepare_direct_boot failed")
+            .expect("prepare_direct_boot returned None")
+            .kernel_cmdline
+            .contains("args_b"));
     }
 }
