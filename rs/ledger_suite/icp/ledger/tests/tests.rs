@@ -1873,7 +1873,7 @@ fn test_allowance_listing_sequences() {
         spenders.push(PrincipalId::new_user_test_id(i));
     }
     spenders.sort_by(|first, second| {
-        Account::from(first.0).cmp(&Account::from(second.0))
+        AccountIdentifier::from(first.0).cmp(&AccountIdentifier::from(second.0))
     });
 
     let (env, canister_id) = setup(
@@ -1905,27 +1905,31 @@ fn test_allowance_listing_sequences() {
     }
 
     let mut args = GetLegacyAllowancesArgs {
-        from_account_id: Account::from(approvers[0].0).into(),
+        from_account_id: AccountIdentifier::from(approvers[0].0),
         prev_spender_id: None,
         take: None,
     };
 
     for approver in approvers {
         for (s_index, spender) in spenders.iter().enumerate() {
-            println!("***** approver {:?}, spender {:?}", approver, spender);
             let mut expected = vec![];
-            for i in s_index..NUM_SPENDERS as usize {
-                expected.push((Account::from(approver.0).into(), Account::from(spenders[i].0).into()));
+            for i in s_index + 1..NUM_SPENDERS as usize {
+                expected.push((AccountIdentifier::from(approver.0), AccountIdentifier::from(spenders[i].0)));
             }
 
-            args.from_account_id = Account::from(approver.0).into();
-            args.prev_spender_id = Some(Account::from(spender.0).into());
+            args.from_account_id = AccountIdentifier::from(approver.0);
+
+            args.prev_spender_id = Some(AccountIdentifier::from(spender.0));
             let allowances = list_allowances(&env, canister_id, approver, &args);
             let spender_approver_pairs: Vec<(AccountIdentifier, AccountIdentifier)> = allowances.into_iter().map(|a| (a.from_account_id, a.to_spender_id)).collect();
             assert_eq!(expected, spender_approver_pairs);
 
             if s_index == 0 {
-                
+                expected.insert(0, (AccountIdentifier::from(approver.0), AccountIdentifier::from(spenders[0].0))); 
+                args.prev_spender_id = None;
+                let allowances = list_allowances(&env, canister_id, approver, &args);
+                let spender_approver_pairs: Vec<(AccountIdentifier, AccountIdentifier)> = allowances.into_iter().map(|a| (a.from_account_id, a.to_spender_id)).collect();
+                assert_eq!(expected, spender_approver_pairs);
             }
             
         }
