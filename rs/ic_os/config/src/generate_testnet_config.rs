@@ -246,6 +246,9 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
         network_settings,
         icos_settings,
         guestos_settings,
+        // We don't support upgrades in testnets.
+        guest_vm_type: GuestVMType::Default,
+        upgrade_config: GuestOSUpgradeConfig::default(),
     };
 
     Ok(guestos_config)

@@ -26,9 +26,10 @@ use std::collections::HashMap;
 use std::fmt;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::str::FromStr;
+use strum::EnumString;
 use url::Url;
 
-pub const CONFIG_VERSION: &str = "1.2.0";
+pub const CONFIG_VERSION: &str = "1.3.0";
 
 /// List of field names that have been removed and should not be reused.
 pub static RESERVED_FIELD_NAMES: &[&str] = &[];
@@ -59,6 +60,17 @@ pub struct HostOSConfig {
     pub guestos_settings: GuestOSSettings,
 }
 
+/// The type of the virtual machine running the GuestOS.
+#[derive(Serialize, Deserialize, Copy, Clone, Eq, PartialEq, Debug, EnumString)]
+#[serde(rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
+pub enum GuestVMType {
+    /// This is what runs most of the time, executing the replica, serving requests, etc.
+    Default,
+    /// The Guest VM brought up temporarily during the GuestOS upgrade process.
+    Upgrade,
+}
+
 /// GuestOS configuration. In production, this struct inherits settings from `HostOSConfig`.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct GuestOSConfig {
@@ -67,6 +79,9 @@ pub struct GuestOSConfig {
     pub network_settings: NetworkSettings,
     pub icos_settings: ICOSSettings,
     pub guestos_settings: GuestOSSettings,
+    pub guest_vm_type: GuestVMType,
+    #[serde(default)]
+    pub upgrade_config: GuestOSUpgradeConfig,
 }
 
 #[serde_as]
@@ -132,6 +147,16 @@ impl Default for HostOSSettings {
 
 const fn default_vm_nr_of_vcpus() -> u32 {
     64
+}
+
+/// Config specific to the GuestOS upgrade process.
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Default, Clone)]
+pub struct GuestOSUpgradeConfig {
+    /// IPv6 address of the peer Guest virtual machine.
+    /// Inside the Default VM, it's the address of the Upgrade VM.
+    /// Inside the Upgrade VM, it's the address of the Default VM.
+    #[serde(default)]
+    pub peer_guest_vm_address: Option<Ipv6Addr>,
 }
 
 /// GuestOS-specific settings.

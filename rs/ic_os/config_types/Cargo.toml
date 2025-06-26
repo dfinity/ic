@@ -4,15 +4,13 @@ version = "1.0.0"
 edition = "2021"
 
 [dependencies]
-anyhow = { workspace = true }
 ic-types = { path = "../../types/types" }
 macaddr = { workspace = true }
 url = { workspace = true }
-serde_json = { workspace = true }
 serde = { workspace = true }
 serde_with = "1.6.2"
 thiserror = { workspace = true }
+strum = "0.26.3"
 
 [dev-dependencies]
-once_cell = "1.8"
-tempfile = { workspace = true }
+serde_json = { workspace = true }

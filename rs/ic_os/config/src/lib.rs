@@ -107,6 +107,8 @@ mod tests {
             network_settings: network_settings.clone(),
             icos_settings: icos_settings.clone(),
             guestos_settings: guestos_settings.clone(),
+            guest_vm_type: GuestVMType::Default,
+            upgrade_config: Default::default(),
         };
 
         fn serialize_and_deserialize<T>(config: &T)
