@@ -2,6 +2,7 @@ use std::fs::File;
 use std::path::Path;
 
 use anyhow::{Context, Result};
+use config_types::DeploymentEnvironment;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 use url::Url;
@@ -11,76 +12,45 @@ pub struct DeploymentSettings {
     pub deployment: Deployment,
     pub logging: Logging,
     pub nns: Nns,
-    pub resources: Resources,
+    pub vm_resources: VmResources,
 }
 
+#[serde_as]
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
 pub struct Deployment {
-    pub name: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    /// The deployment environment is either "mainnet" or "testnet"
+    #[serde_as(as = "DisplayFromStr")]
+    pub deployment_environment: DeploymentEnvironment,
+    /// Optional management MAC address for network configuration, used for nested environments
     pub mgmt_mac: Option<String>,
 }
 
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
 pub struct Logging {
-    pub hosts: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub tags: Option<String>,
+    pub elasticsearch_hosts: Option<String>,
+    pub elasticsearch_tags: Option<String>,
 }
 
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
 pub struct Nns {
-    #[serde(with = "comma_urls")]
-    pub url: Vec<Url>,
+    pub urls: Vec<Url>,
 }
 
 #[serde_as]
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
-pub struct Resources {
+pub struct VmResources {
     #[serde_as(as = "DisplayFromStr")]
     pub memory: u32,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    /// Can be "kvm" or "qemu". If None, is treated as "kvm".
-    pub cpu: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    /// CPU virtualization type: "kvm" or "qemu".
+    pub cpu: String,
     /// Maximum number of virtual CPUs allocated for the GuestOS,
     /// which must be between 1 and the maximum supported by the hypervisor.
-    /// If None, defaults to 64.
-    pub nr_of_vcpus: Option<u32>,
+    pub nr_of_vcpus: u32,
 }
 
 pub fn get_deployment_settings(deployment_json: &Path) -> Result<DeploymentSettings> {
     let file = File::open(deployment_json).context("failed to open deployment config file")?;
     serde_json::from_reader(&file).context("Invalid json content")
-}
-
-mod comma_urls {
-    use serde::{de, Deserialize, Deserializer, Serializer};
-    use url::Url;
-
-    pub(crate) fn serialize<S>(urls: &[Url], s: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        s.serialize_str(
-            &urls
-                .iter()
-                .map(|v| v.to_string())
-                .collect::<Vec<_>>()
-                .join(","),
-        )
-    }
-
-    pub(crate) fn deserialize<'de, D>(d: D) -> Result<Vec<Url>, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s: String = Deserialize::deserialize(d)?;
-
-        s.split(',')
-            .map(|v| v.parse::<Url>().map_err(de::Error::custom))
-            .collect()
-    }
 }
 
 #[cfg(test)]
@@ -92,19 +62,20 @@ mod test {
     static DEPLOYMENT_VALUE: Lazy<Value> = Lazy::new(|| {
         json!({
               "deployment": {
-                "name": "mainnet",
+                "deployment_environment": "mainnet",
                 "mgmt_mac": null
               },
               "logging": {
-                "hosts": "elasticsearch.ch1-obsdev1.dfinity.network:443"
+                "elasticsearch_hosts": "elasticsearch.ch1-obsdev1.dfinity.network:443",
+                "elasticsearch_tags": null
               },
               "nns": {
-                "url": "https://icp-api.io,https://icp0.io,https://ic0.app"
+                "urls": ["https://icp-api.io", "https://icp0.io", "https://ic0.app"]
               },
-              "resources": {
+              "vm_resources": {
                 "memory": "490",
                 "cpu": "kvm",
-                "nr_of_vcpus": null
+                "nr_of_vcpus": 64
               }
             }
         )
@@ -112,19 +83,20 @@ mod test {
 
     const DEPLOYMENT_STR: &str = r#"{
   "deployment": {
-    "name": "mainnet",
+    "deployment_environment": "mainnet",
     "mgmt_mac": null
   },
   "logging": {
-    "hosts": "elasticsearch.ch1-obsdev1.dfinity.network:443"
+    "elasticsearch_hosts": "elasticsearch.ch1-obsdev1.dfinity.network:443",
+    "elasticsearch_tags": null
   },
   "nns": {
-    "url": "https://icp-api.io,https://icp0.io,https://ic0.app"
+    "urls": ["https://icp-api.io", "https://icp0.io", "https://ic0.app"]
   },
-  "resources": {
+  "vm_resources": {
     "memory": "490",
     "cpu": "kvm",
-    "nr_of_vcpus": null
+    "nr_of_vcpus": 64
   }
 }"#;
 
@@ -132,21 +104,24 @@ mod test {
         let hosts = ["elasticsearch.ch1-obsdev1.dfinity.network:443"].join(" ");
         DeploymentSettings {
             deployment: Deployment {
-                name: "mainnet".to_string(),
+                deployment_environment: DeploymentEnvironment::Mainnet,
                 mgmt_mac: None,
             },
-            logging: Logging { hosts, tags: None },
+            logging: Logging {
+                elasticsearch_hosts: Some(hosts),
+                elasticsearch_tags: None,
+            },
             nns: Nns {
-                url: vec![
+                urls: vec![
                     Url::parse("https://icp-api.io").unwrap(),
                     Url::parse("https://icp0.io").unwrap(),
                     Url::parse("https://ic0.app").unwrap(),
                 ],
             },
-            resources: Resources {
+            vm_resources: VmResources {
                 memory: 490,
-                cpu: Some("kvm".to_string()),
-                nr_of_vcpus: None,
+                cpu: "kvm".to_string(),
+                nr_of_vcpus: 64,
             },
         }
     });
