@@ -25,6 +25,21 @@ use ic_system_test_driver::{
 };
 use slog::info;
 
+fn to_hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{:02x}", b)).collect()
+}
+
+/// Protobuf files are binary files, and since we deserialize them into UTF-8 strings,
+/// we first convert them to hex strings and compare those.
+fn assert_hex_eq_utf8(actual: String, expected: String, error_message: &str) {
+    assert!(
+        actual == to_hex(expected.as_bytes()),
+        "{}. Expected: {}",
+        error_message,
+        expected
+    );
+}
+
 pub fn setup(env: TestEnv) {
     InternetComputer::new()
         .use_recovery_image()
@@ -49,15 +64,20 @@ pub fn test(env: TestEnv) {
 
     let ssh_session = node.block_on_ssh_session().unwrap();
 
+    // Protobuf files are binary files, and since we deserialize them into UTF-8 strings,
+    // we first convert them to hex strings and compare those.
     let cup_proto = execute_bash_command(
         &ssh_session,
-        String::from("cat /var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb"),
+        String::from(
+            "od -An -tx1 -v /var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb | tr -d ' \\n'",
+        ),
     )
     .unwrap();
-    assert!(
-        cup_proto == expected_cup_proto,
-        "Unexpected content in cup.types.v1.CatchUpPackage.pb: {}",
-        cup_proto
+
+    assert_hex_eq_utf8(
+        cup_proto,
+        expected_cup_proto,
+        "Unexpected content in cup.types.v1.CatchUpPackage.pb",
     );
 
     let local_store_1 = execute_bash_command(
@@ -65,11 +85,10 @@ pub fn test(env: TestEnv) {
         String::from("cat ic_registry_local_store/0001020304/05/06/07.pb"),
     )
     .expect("ic_registry_local_store has the wrong structure");
-    assert!(
-        local_store_1 == expected_local_store_1,
-        "Unexpected content in local store files: {}. Expected: {}",
+    assert_hex_eq_utf8(
         local_store_1,
-        expected_local_store_1
+        expected_local_store_1,
+        "Unexpected content in local store files",
     );
 
     let local_store_2 = execute_bash_command(
@@ -77,11 +96,10 @@ pub fn test(env: TestEnv) {
         String::from("cat ic_registry_local_store/08090a0b0c/0d/0e/0f.pb"),
     )
     .expect("ic_registry_local_store has the wrong structure");
-    assert!(
-        local_store_2 == expected_local_store_2,
-        "Unexpected content in local store files: {}. Expected: {}",
+    assert_hex_eq_utf8(
         local_store_2,
-        expected_local_store_2
+        expected_local_store_2,
+        "Unexpected content in local store files",
     );
 }
 
