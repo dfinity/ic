@@ -340,12 +340,13 @@ async fn submit_pending_requests() {
             .map(|req| (req.address.clone(), req.amount))
             .collect();
 
-        let amount = outputs.iter().map(|(_, amount)| amount).sum::<u64>();
-        let inputs = utxos_selection(amount, &mut s.available_utxos, outputs.len());
-
-        match build_unsigned_transaction(&inputs, outputs, main_address, fee_millisatoshi_per_vbyte)
-        {
-            Ok((unsigned_tx, change_output)) => {
+        match build_unsigned_transaction(
+            &mut s.available_utxos,
+            outputs,
+            main_address,
+            fee_millisatoshi_per_vbyte,
+        ) {
+            Ok((unsigned_tx, change_output, utxos)) => {
                 for req in batch.iter() {
                     s.push_in_flight_request(req.block_index, state::InFlightStatus::Signing);
                 }
@@ -358,7 +359,7 @@ async fn submit_pending_requests() {
                     network: s.btc_network,
                     unsigned_tx,
                     requests: batch,
-                    utxos: inputs,
+                    utxos,
                 })
             }
             Err(BuildTxError::AmountTooLow) => {
@@ -681,7 +682,7 @@ async fn finalize_requests() {
             .map(|req| (req.address.clone(), req.amount))
             .collect();
         let input_utxos = submitted_tx.used_utxos;
-        let (unsigned_tx, change_output) = match build_unsigned_transaction(
+        let (unsigned_tx, change_output) = match build_unsigned_transaction_from_inputs(
             &input_utxos,
             outputs,
             main_address.clone(),
@@ -1000,13 +1001,32 @@ pub enum BuildTxError {
 /// ```
 ///
 pub fn build_unsigned_transaction(
+    available_utxos: &mut BTreeSet<Utxo>,
+    outputs: Vec<(BitcoinAddress, Satoshi)>,
+    main_address: BitcoinAddress,
+    fee_per_vbyte: u64,
+) -> Result<(tx::UnsignedTransaction, state::ChangeOutput, Vec<Utxo>), BuildTxError> {
+    let amount = outputs.iter().map(|(_, amount)| amount).sum::<u64>();
+    let inputs = utxos_selection(amount, available_utxos, outputs.len());
+    match build_unsigned_transaction_from_inputs(&inputs, outputs, main_address, fee_per_vbyte) {
+        Ok((tx, change)) => Ok((tx, change, inputs)),
+        Err(err) => {
+            // Undo mutation to available_utxos in the error case
+            for utxo in inputs {
+                assert!(available_utxos.insert(utxo));
+            }
+            Err(err)
+        }
+    }
+}
+
+fn build_unsigned_transaction_from_inputs(
     input_utxos: &[Utxo],
     outputs: Vec<(BitcoinAddress, Satoshi)>,
     main_address: BitcoinAddress,
     fee_per_vbyte: u64,
 ) -> Result<(tx::UnsignedTransaction, state::ChangeOutput), BuildTxError> {
     assert!(!outputs.is_empty());
-
     /// Having a sequence number lower than (0xffffffff - 1) signals the use of replacement by fee.
     /// It allows us to increase the fee of a transaction already sent to the mempool.
     /// The rbf option is used in `resubmit_retrieve_btc`.
