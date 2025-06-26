@@ -206,6 +206,11 @@ fn upload_canister_snapshot_data(_: UploadCanisterSnapshotDataArgs) {
     unreachable!()
 }
 
+#[candid_method(update)]
+fn rename_canister(_: RenameCanisterArgs) {
+    unreachable!()
+}
+
 #[cfg(test)]
 mod test {
     use crate::*;

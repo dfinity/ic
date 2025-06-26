@@ -230,7 +230,7 @@ impl GuestVmService {
     }
 
     async fn start_virtual_machine(&mut self) -> Result<VirtualMachine> {
-        let config_media = NamedTempFile::new()?;
+        let config_media = NamedTempFile::new().context("Failed to create config media file")?;
 
         let direct_boot = prepare_direct_boot(
             // TODO: We should not refresh in Upgrade VMs once we add them
@@ -238,9 +238,11 @@ impl GuestVmService {
             true,
             self.partition_provider.as_ref(),
         )
-        .await?;
+        .await
+        .context("Failed to prepare direct boot")?;
 
-        assemble_config_media(&self.hostos_config, config_media.path())?;
+        assemble_config_media(&self.hostos_config, config_media.path())
+            .context("Failed to assemble config media")?;
 
         let vm_config = generate_vm_config(
             &self.hostos_config,
@@ -437,7 +439,8 @@ impl Drop for GuestVmService {
 #[cfg(all(test, feature = "integration_tests"))]
 mod tests {
     use super::*;
-    use crate::mount;
+    use crate::mount::testing::ExtractingFilesystemMounter;
+    use crate::mount::GptPartitionProvider;
     use crate::systemd_notifier::testing::MockSystemdNotifier;
     use config_types::{
         DeploymentEnvironment, DeterministicIpv6Config, HostOSSettings, ICOSSettings,
@@ -570,6 +573,7 @@ mod tests {
         libvirt_connection: Connect,
         hostos_config: HostOSConfig,
         guestos_device: NamedTempFile,
+        mock_mounter: ExtractingFilesystemMounter,
         /// Fake libvirt host definition that backs `libvirt_connection`.
         _libvirt_definition: NamedTempFile,
     }
@@ -592,6 +596,7 @@ mod tests {
                 libvirt_connection,
                 hostos_config,
                 guestos_device,
+                mock_mounter: ExtractingFilesystemMounter::new(),
                 _libvirt_definition: libvirt_definition,
             }
         }
@@ -611,9 +616,9 @@ mod tests {
                 systemd_notifier: systemd_notifier.clone(),
                 console_tty: Box::new(File::create(console_file.path()).unwrap()),
                 partition_provider: Box::new(
-                    mount::GptPartitionProvider::with_mounter(
+                    GptPartitionProvider::with_mounter(
                         self.guestos_device.path().to_path_buf(),
-                        Box::new(mount::testing::ExtractingFilesystemMounter),
+                        Box::new(self.mock_mounter.clone()),
                     )
                     .unwrap(),
                 ),

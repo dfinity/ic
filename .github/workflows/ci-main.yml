@@ -129,10 +129,7 @@ jobs:
           set -xeuo pipefail
           # Determine which tests to skip
           EXCLUDED_TEST_TAGS=(
-              system_test_nightly
-              system_test_nightly_nns
-              system_test_staging
-              system_test_hotfix
+              system_test_large
               system_test_benchmark
               fuzz_test
               fi_tests_nightly
@@ -184,10 +181,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
-      - name: Set PATH
-        run: |
-          echo "/usr/local/bin" >> $GITHUB_PATH
-          echo "$HOME/.cargo/bin:" >> $GITHUB_PATH
       - name: Infer macos intel build command
         id: cfg
         run: |
@@ -325,8 +318,8 @@ jobs:
           BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           RUN_ON_DIFF_ONLY: ${{ needs.config.outputs.diff_only }}
           RELEASE_BUILD: ${{ needs.config.outputs.release-build }}
-  bazel-build-fuzzers:
-    name: Bazel Build Fuzzers
+  bazel-run-fuzzers:
+    name: Bazel Run Fuzzers
     runs-on:
       labels: dind-large
     container:
@@ -339,36 +332,12 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
-      - name: Run Bazel Build Fuzzers
-        uses: ./.github/actions/bazel
-        with:
-          run: |
-            bazel build //rs/... \
-              --config=stamped --config=fuzzing --build_tag_filters=libfuzzer \
-              --keep_going
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-  bazel-build-fuzzers-afl:
-    name: Bazel Build Fuzzers AFL
-    runs-on:
-      labels: dind-large
-    container:
-      image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
-      options: >-
-        -e NODE_NAME --privileged --cgroupns host
-    timeout-minutes: 90
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
-      - name: Run Bazel Build Fuzzers AFL
-        uses: ./.github/actions/bazel
-        with:
-          run: |
-            bazel build //rs/... \
-              --config=stamped --config=afl \
-              --keep_going
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+      - name: Run Libfuzzer targets
+        shell: bash
+        run: ./bin/fuzzing/run-all-fuzzers.sh --libfuzzer 100
+      - name: Run AFL targets
+        shell: bash
+        run: ./bin/fuzzing/run-all-fuzzers.sh --afl 100
   python-ci-tests:
     name: Python CI Tests
     runs-on:
@@ -481,6 +450,27 @@ jobs:
             execlogs-cache/execlogs.csv \
             execlogs-nocache/execlogs.csv \
             | awk -F, 'BEGIN { N_BAD=0; } $3 != $4 { print $1 " " $2 ": " $3 " != " $4; N_BAD++; } END { if (N_BAD) { print N_BAD " mismatches found"; exit 1; } else { print "No mismatches"; }; }'
+  bazel-build-all-no-cache:
+    name: Bazel Build All No Cache
+    needs: [config]
+    if: ${{ needs.config.outputs.skip_long_tests != 'true' }} # GHA output quirk, 'true' is a string
+    runs-on:
+      labels: dind-large
+    container:
+      image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
+      options: >-
+        -e NODE_NAME --privileged --cgroupns host
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
+      - name: Run Bazel Build All No Cache
+        uses: ./.github/actions/bazel
+        with:
+          run: bazel build --config=stamped --config=local //...
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
   cargo-clippy-linux:
     name: Cargo Clippy Linux
     runs-on:

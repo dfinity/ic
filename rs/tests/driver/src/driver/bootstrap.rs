@@ -687,7 +687,7 @@ fn create_setupos_config_image(
         .arg(cpu)
         .arg("--nr-of-vcpus")
         .arg((HOSTOS_VCPUS_PER_VM / 2).to_string())
-        .arg("--nns-url")
+        .arg("--nns-urls")
         .arg(nns_url.to_string())
         .arg("--nns-public-key")
         .arg(nns_public_key)
