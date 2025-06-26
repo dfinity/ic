@@ -46,24 +46,14 @@ impl NodeIndices {
     /// The values of the BTreeMap are ignored
     pub fn from_map<T>(map: &std::collections::BTreeMap<NodeIndex, T>) -> Self {
         // The BTreeMap keys are already guaranteed to be unique
-        let mut index = Vec::with_capacity(map.len());
-
-        for nidx in map.keys() {
-            index.push(*nidx);
-        }
-
+        let index = map.keys().copied().collect();
         Self { index }
     }
 
-    /// Construct a NodeIndices from a BTreeSet with NodeIndex keys
+    /// Construct a NodeIndices from a BTreeSet with NodeIndex values
     pub fn from_set(map: &std::collections::BTreeSet<NodeIndex>) -> Self {
-        // The BTreeSet keys are already guaranteed to be unique
-        let mut index = Vec::with_capacity(map.len());
-
-        for nidx in map {
-            index.push(*nidx);
-        }
-
+        // The BTreeSet values are already guaranteed to be unique
+        let index = map.iter().copied().collect();
         Self { index }
     }
 }

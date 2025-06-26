@@ -197,8 +197,6 @@ pub enum EncryptedKeyDeserializationError {
 #[derive(Clone, Debug, Eq, PartialEq)]
 /// Error indicating that combining shares into an encrypted key failed
 pub enum EncryptedKeyCombinationError {
-    /// Two shares had the same node index
-    DuplicateNodeIndex,
     /// There were insufficient shares to perform combination
     InsufficientShares,
     /// Not enough valid shares
