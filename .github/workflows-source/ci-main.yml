@@ -235,11 +235,11 @@ jobs:
           # Clean up the output base for the next run
           sudo rm -rf /var/tmp/bazel-output
 
-  # Build the arm64-linux variant of pocket-ic-server and makes
+  # Build & test the arm64-linux variant of pocket-ic-server and makes
   # it available as a GHA artifact
   # NOTE: uses 'namespace.so' runners
   bazel-test-arm64-linux:
-    name: Bazel Build arm64-linux
+    name: Bazel Test arm64-linux
     runs-on: namespace-profile-arm64-linux # profile created in namespace console
     if: github.repository == 'dfinity/ic' # only run on public repo, not private since Namespace runners are not configured there, so these CI jobs get stuck otherwise.
     steps:
