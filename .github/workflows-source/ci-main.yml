@@ -325,32 +325,26 @@ jobs:
           # avoid downloading to workspace to avoid version being marked as dirty
           path: ~/.cache/pocket-ic-server-arm64-darwin
 
-      - name: Write AWS credentials
-        shell: bash
+      - name: Prepare bundle
+        id: prepare-bundle
         run: |
-          AWS_CREDS="${HOME}/.aws/credentials"
-          mkdir -p "$(dirname "${AWS_CREDS}")"
-          echo '${{ secrets.CLOUD_CREDENTIALS_CONTENT }}' >"$AWS_CREDS"
-
-      - name: Upload
-        uses: ./.github/actions/bazel
-        with:
-          run: |
-            rootdir=$(mktemp -d)
+            bundledir=$(mktemp -d)
 
             # Create a "bundle" that the uploader can digest
-            mkdir -p "$rootdir/binaries/arm64-linux/"
-            cp ~/.cache/pocket-ic-server-arm64-linux/pocket-ic-server-arm64-linux "$rootdir/binaries/arm64-linux/pocket-ic-server-arm64-linux"
+            mkdir -p "$bundledir/binaries/arm64-linux/"
+            cp ~/.cache/pocket-ic-server-arm64-linux/pocket-ic-server-arm64-linux "$bundledir/binaries/arm64-linux/pocket-ic-server-arm64-linux"
 
-            mkdir -p "$rootdir/binaries/arm64-darwin/"
-            cp ~/.cache/pocket-ic-server-arm64-darwin/pocket-ic-server-arm64-darwin "$rootdir/binaries/arm64-darwin/pocket-ic-server-arm64-darwin"
+            mkdir -p "$bundledir/binaries/arm64-darwin/"
+            cp ~/.cache/pocket-ic-server-arm64-darwin/pocket-ic-server-arm64-darwin "$bundledir/binaries/arm64-darwin/pocket-ic-server-arm64-darwin"
 
-            bazel run --config=stamped //:artifact-uploader -- "$rootdir"
-        env:
-          MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          RUN_ON_DIFF_ONLY: ${{ needs.config.outputs.diff_only }}
-          RELEASE_BUILD: ${{ needs.config.outputs.release-build }}
+            echo bundledir="$bundledir" >> "$GITHUB_OUTPUT"
+
+      - name: Upload
+        uses: ./.github/actions/upload-artifacts
+        with:
+          name: arm64 artifacts
+          upload-command: bazel run --config=stamped //:artifact-uploader -- ${{ steps.prepare-bundle.outputs.bundledir }}
+          credentials-content: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
 
   bazel-run-fuzzers:
     name: Bazel Run Fuzzers

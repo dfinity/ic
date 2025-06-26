@@ -102,39 +102,12 @@ runs:
             bazel ${{ inputs.BAZEL_COMMAND }} "${bazel_args[@]}"
 
       - name: Upload to S3
-        uses: ./.github/actions/bazel
+        uses: ./.github/actions/upload-artifacts
         if: inputs.upload-artifacts == 'true' && inputs.CLOUD_CREDENTIALS_CONTENT != ''
         with:
-          run: |
-            stamp_build='${{ inputs.stamp-build }}'
-
-            if [[ $stamp_build != "true" ]]; then
-              echo "refusing to upload non-stamped artifacts"
-              exit 1
-            fi
-
-            AWS_CREDS="${HOME}/.aws/credentials"
-            if ! [ -e "$AWS_CREDS" ]; then
-              echo writing remote storage credentials
-              mkdir -p "$(dirname "${AWS_CREDS}")"
-              echo '${{ inputs.CLOUD_CREDENTIALS_CONTENT }}' >"$AWS_CREDS"
-            fi
-
-            echo uploading artifacts to remote storage
-            upload_output=$(mktemp) # used in summary
-
-            # with --check_up_to_date Bazel will error out if the artifacts
-            # to be uploaded were not built in the build step above
-            # (this ensures that the exact artifacts built above are uploaded)
-            bazel run --check_up_to_date //:upload-artifacts >"$upload_output"
-            n_uploaded=$(wc -l <"$upload_output")
-            echo "'$n_uploaded' artifacts uploaded"
-
-            # the upload list can get quite big, so we wrap in details/summary
-            {
-              echo '<details><summary>Uploaded '"$n_uploaded"' Artifacts</summary>';
-              cat "$upload_output"
-              echo '</details>';
-            } >>"$GITHUB_STEP_SUMMARY"
-
-            rm "$upload_output"
+          name: Bazel Test All
+          # with --check_up_to_date Bazel will error out if the artifacts
+          # to be uploaded were not built in the build step above
+          # (this ensures that the exact artifacts built above are uploaded)
+          upload-command: bazel run --check_up_to_date //:upload-artifacts
+          credentials-content: ${{ inputs.CLOUD_CREDENTIALS_CONTENT }}
