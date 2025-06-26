@@ -240,6 +240,7 @@ pub struct FinalizerMetrics {
     pub idkg_xnet_reshare_agreements: IntCounterVec,
     // canister http payload metrics
     pub canister_http_success_delivered: IntCounter,
+    pub canister_http_single_replica_delivered: IntCounter,
     pub canister_http_timeouts_delivered: IntCounter,
     pub canister_http_divergences_delivered: IntCounter,
     pub canister_http_payload_bytes_delivered: Histogram,
@@ -326,6 +327,10 @@ impl FinalizerMetrics {
                 "canister_http_success_delivered",
                 "Total number of canister http messages successfully delivered",
             ),
+            canister_http_single_replica_delivered: metrics_registry.int_counter(
+                "canister_http_single_replica_delivered",
+                "Total number of canister http messages delivered as single replica responses",
+            ),
             canister_http_timeouts_delivered: metrics_registry.int_counter(
                 "canister_http_timeouts_delivered",
                 "Total number of canister http messages delivered as timeouts",
@@ -358,6 +363,8 @@ impl FinalizerMetrics {
         );
         self.canister_http_success_delivered
             .inc_by(batch_stats.canister_http.responses as u64);
+        self.canister_http_single_replica_delivered
+            .inc_by(batch_stats.canister_http.single_signature_responses as u64);
         self.canister_http_timeouts_delivered
             .inc_by(batch_stats.canister_http.timeouts as u64);
         self.canister_http_divergences_delivered

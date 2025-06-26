@@ -23,7 +23,7 @@ use ic_interfaces::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{info, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
@@ -34,7 +34,7 @@ use ic_types::{
     canister_http::{
         CanisterHttpResponse, CanisterHttpResponseContent, CanisterHttpResponseDivergence,
         CanisterHttpResponseMetadata, CanisterHttpResponseProof, CanisterHttpResponseWithConsensus,
-        CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK, CANISTER_HTTP_TIMEOUT_INTERVAL,
+        Replication, CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK, CANISTER_HTTP_TIMEOUT_INTERVAL,
     },
     consensus::Committee,
     crypto::Signed,
@@ -64,6 +64,7 @@ pub struct CanisterHttpBatchStats {
     pub responses: usize,
     pub timeouts: usize,
     pub divergence_responses: usize,
+    pub single_signature_responses: usize,
     pub payload_bytes: usize,
 }
 
@@ -211,37 +212,42 @@ impl CanisterHttpPayloadBuilderImpl {
         let mut active_shares = 0;
         let mut unique_responses_count = 0;
 
+        let empty_contexts = BTreeMap::new();
+
+        let state_result = self
+            .state_reader
+            .get_state_at(validation_context.certified_height);
+
+        let canister_http_request_contexts = if let Ok(state) = &state_result {
+            &state
+                .get_ref()
+                .metadata
+                .subnet_call_context_manager
+                .canister_http_request_contexts
+        } else {
+            &empty_contexts
+        };
+
         // Check the state for timeouts NOTE: We can not use the existing
         // timed out artifacts for this task, since we don't have consensus
         // on them. For example a malicious node might publish a single
         // timed out metadata share and we would pick it up to generate a
         // time out response. Instead, we scan the state metadata for timed
         // out requests and generate time out responses based on that
-        if let Ok(state) = self
-            .state_reader
-            .get_state_at(validation_context.certified_height)
-        {
-            // Iterate over all outstanding canister http requests
-            for (callback_id, request) in state
-                .get_ref()
-                .metadata
-                .subnet_call_context_manager
-                .canister_http_request_contexts
-                .iter()
+        // Iterate over all outstanding canister http requests
+        for (callback_id, request) in canister_http_request_contexts.iter() {
+            unique_includable_responses += 1;
+            let candidate_size = callback_id.count_bytes();
+            let size = NumBytes::new((accumulated_size + candidate_size) as u64);
+            if size >= max_payload_size {
+                // All timeouts have the same size, so we can stop iterating.
+                break;
+            } else if request.time + CANISTER_HTTP_TIMEOUT_INTERVAL < validation_context.time
+                && !delivered_ids.contains(callback_id)
             {
-                unique_includable_responses += 1;
-                let candidate_size = callback_id.count_bytes();
-                let size = NumBytes::new((accumulated_size + candidate_size) as u64);
-                if size >= max_payload_size {
-                    // All timeouts have the same size, so we can stop iterating.
-                    break;
-                } else if request.time + CANISTER_HTTP_TIMEOUT_INTERVAL < validation_context.time
-                    && !delivered_ids.contains(callback_id)
-                {
-                    timeouts_included += 1;
-                    timeouts.push(*callback_id);
-                    accumulated_size += candidate_size;
-                }
+                timeouts_included += 1;
+                timeouts.push(*callback_id);
+                accumulated_size += candidate_size;
             }
         }
 
@@ -282,9 +288,24 @@ impl CanisterHttpPayloadBuilderImpl {
 
             let candidates_and_divergences = response_candidates_by_callback_id
                 .into_iter()
-                .filter_map(|(_, grouped_shares)| {
+                .filter_map(|(id, grouped_shares)| {
                     if let Some((metadata, shares)) = grouped_shares.iter().find(|(_, shares)| {
                         unique_responses_count += 1;
+
+                        if let Some(context) = canister_http_request_contexts.get(&id) {
+                            if let Replication::NonReplicated(node_id) = context.replication {
+                                let is_valid = shares
+                                    .iter()
+                                    .any(|share| share.signature.signer == node_id);
+                                if is_valid {
+                                    self.metrics
+                                        .includedable_non_replicated_requests
+                                        .inc();
+                                }
+                                return is_valid;
+                            }
+                        }
+
                         let signers: BTreeSet<_> =
                             shares.iter().map(|share| share.signature.signer).collect();
                         // We need at least threshold different signers to include the response
@@ -478,37 +499,55 @@ impl CanisterHttpPayloadBuilderImpl {
         // NOTE: We do this in a separate loop because this check is expensive and we want to
         // do all the cheap checks first
         for response in &payload.responses {
-            let threshold = match self
-                .membership
-                .get_committee_threshold(height, Committee::CanisterHttp)
-            {
-                Ok(threshold) => threshold,
-                Err(err) => {
-                    warn!(self.log, "Failed to get membership: {:?}", err);
-                    return validation_failed(CanisterHttpPayloadValidationFailure::Membership);
-                }
-            };
+            let callback_id = response.content.id;
+            let context = http_contexts.get(&callback_id).ok_or(
+                CanisterHttpPayloadValidationError::InvalidArtifact(
+                    InvalidCanisterHttpPayloadReason::UnknownCallbackId(callback_id),
+                ),
+            )?;
+
+            let (effective_committee, effective_threshold) =
+                if let Replication::NonReplicated(node_id) = context.replication {
+                    (vec![node_id], 1)
+                } else {
+                    let threshold = match self
+                        .membership
+                        .get_committee_threshold(height, Committee::CanisterHttp)
+                    {
+                        Ok(threshold) => threshold,
+                        Err(err) => {
+                            warn!(self.log, "Failed to get membership: {:?}", err);
+                            return validation_failed(
+                                CanisterHttpPayloadValidationFailure::Membership,
+                            );
+                        }
+                    };
+                    (committee.clone(), threshold)
+                };
+
             let (valid_signers, invalid_signers): (Vec<NodeId>, Vec<NodeId>) = response
                 .proof
                 .signature
                 .signatures_map
                 .keys()
                 .cloned()
-                .partition(|signer| committee.iter().any(|id| id == signer));
+                .partition(|signer| effective_committee.iter().any(|id| id == signer));
             if !invalid_signers.is_empty() {
                 return invalid_artifact(InvalidCanisterHttpPayloadReason::SignersNotMembers {
                     invalid_signers,
-                    committee,
+                    committee: effective_committee,
                     valid_signers,
                 });
             }
-            if valid_signers.len() < threshold {
+
+            if valid_signers.len() < effective_threshold {
                 return invalid_artifact(InvalidCanisterHttpPayloadReason::NotEnoughSigners {
-                    committee,
+                    committee: effective_committee,
                     signers: valid_signers,
-                    expected_threshold: threshold,
+                    expected_threshold: effective_threshold,
                 });
             }
+
             self.crypto
                 .verify_aggregate(&response.proof, consensus_registry_version)
                 .map_err(|err| {
@@ -660,6 +699,9 @@ impl IntoMessages<(Vec<ConsensusResponse>, CanisterHttpBatchStats)>
             .expect("Failed to parse a payload that was already validated");
 
         let responses = messages.responses.into_iter().map(|response| {
+            if response.proof.signature.signatures_map.len() == 1 {
+                stats.single_signature_responses += 1;
+            }
             stats.responses += 1;
             ConsensusResponse::new(
                 response.content.id,

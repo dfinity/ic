@@ -239,6 +239,14 @@ impl CanisterHttpPoolManagerImpl {
         };
 
         for (id, context) in http_requests {
+            if let Replication::NonReplicated(delegated_node_id) = context.replication {
+                if delegated_node_id != self.replica_config.node_id {
+                    // If the request is delegated to another node, we do not make a request.
+                    // The delegated node will handle it.
+                    continue;
+                }
+            }
+
             if !request_ids_already_made.contains(&id) {
                 let timeout = context.time + Duration::from_secs(5 * 60);
                 if let Err(err) = self

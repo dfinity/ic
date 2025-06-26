@@ -58,6 +58,10 @@ name = "ic-systest-canister-http-fault-tolerance"
 path = "canister_http_fault_tolerance_test.rs"
 
 [[bin]]
+name = "ic-systest-canister-http-single-replica"
+path = "canister_http_single_replica_test.rs"
+
+[[bin]]
 name = "ic-systest-canister-http-socks"
 path = "canister_http_socks_test.rs"
 
@@ -88,7 +92,6 @@ path = "firewall_max_connections_test.rs"
 [[bin]]
 name = "ic-systest-firewall-priority-test"
 path = "firewall_priority_test.rs"
-
 
 [[bin]]
 name = "ic-systest-http-endpoints-public-spec-test"

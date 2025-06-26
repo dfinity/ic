@@ -91,6 +91,7 @@ use ic_utils_thread::deallocator_thread::{DeallocationSender, DeallocatorThread}
 use ic_wasm_types::WasmHash;
 use phantom_newtype::AmountOf;
 use prometheus::IntCounter;
+use rand::Rng;
 use rand::RngCore;
 use std::{
     collections::{BTreeMap, HashMap},
@@ -1774,12 +1775,21 @@ impl ExecutionEnvironment {
         rng: &mut dyn RngCore,
         since: Instant,
     ) -> Result<(), UserError> {
-
         match is_replicated {
             true => canister_http_request_context.replication = Replication::FullyReplicated,
             false => {
                 let node_ids = &registry_settings.node_ids;
-                //TODO(mihailjianu_next): go from here. 
+                let nodes_vec = node_ids.iter().collect::<Vec<_>>();
+                if nodes_vec.is_empty() {
+                    return Err(UserError::new(
+                        ErrorCode::CanisterRejectedMessage,
+                        "No nodes available for non-replicated HTTP request.".to_string(),
+                    ));
+                }
+                let random_index = rng.gen_range(0..nodes_vec.len());
+                let delegated_node_id = nodes_vec[random_index];
+                canister_http_request_context.replication =
+                    Replication::NonReplicated(*delegated_node_id);
             }
         }
 
