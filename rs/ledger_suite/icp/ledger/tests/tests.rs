@@ -12,7 +12,7 @@ use ic_ledger_suite_state_machine_tests::{
     send_approval, send_transfer, send_transfer_from, setup, supported_standards, total_supply,
     transfer, AllowanceProvider, FEE, MINTER,
 };
-use ic_state_machine_tests::{ErrorCode, StateMachine, UserError, WasmResult};
+use ic_state_machine_tests::{ErrorCode, StateMachine, UserError};
 use icp_ledger::{
     AccountIdBlob, AccountIdentifier, AccountIdentifierByteBuf, ArchiveOptions,
     ArchivedBlocksRange, Block, CandidBlock, CandidOperation, CandidTransaction, FeatureFlags,
@@ -1698,7 +1698,7 @@ fn test_notify_caller_logging() {
     .expect("transfer failed");
 
     // Send the notification
-    match &env
+    let user_error = env
         .execute_ingress_as(
             user1,
             canister_id,
@@ -1712,17 +1712,11 @@ fn test_notify_caller_logging() {
             })
             .unwrap(),
         )
-        .expect("failed to query blocks")
-    {
-        // Since we didn't install a canister that can receive the notify,
-        // we should get a reject.
-        WasmResult::Reply(reply) => {
-            panic!("unexpected reply: {:?}", reply);
-        }
-        WasmResult::Reject(reject) => {
-            assert!(reject.contains("No route to canister"))
-        }
-    }
+        .expect_err("notify call should panic");
+    assert_eq!(user_error.code(), ErrorCode::CanisterCalledTrap);
+    assert!(user_error
+        .description()
+        .contains("Please migrate to the CMC notify"));
 
     // Verify that the ledger logged the caller of the notify method.
     let log = env.canister_log(canister_id);
