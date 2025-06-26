@@ -136,9 +136,11 @@ def main():
     parser.add_argument("-o", "--out", help="Target (tar) file to write disk image to", type=str)
     parser.add_argument("-p", "--partition_table", help="CSV file describing the partition table", type=str)
     parser.add_argument("-s", "--expanded-size", help="Optional size to grow the image to", required=False, type=str)
-    parser.add_argument("--populate-b-partitions",
-                        help="Whether to populate the B partition set with the same content as the A partition set "
-                             "(mostly for testing). The default behavior is to leave the B partitions empty.")
+    parser.add_argument(
+        "--populate-b-partitions",
+        help="Whether to populate the B partition set with the same content as the A partition set "
+        "(mostly for testing). The default behavior is to leave the B partitions empty.",
+    )
     parser.add_argument(
         "partitions",
         metavar="partition",
@@ -180,7 +182,7 @@ def main():
         # Remove the prefix from any partitions before doing a lookup.
         for prefix in ("A_", "B_"):
             if name.startswith(prefix):
-                name = name[len(prefix):]
+                name = name[len(prefix) :]
 
         partition_file = select_partition_file(name, partition_files)
 
