@@ -11,8 +11,7 @@ serde_json = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }
-config = { path = "../../config" }
-config_types = { path = "../../config_types" }
+config = { path = "../../config"}
 
 [[bin]]
 name = "setupos-create-config"

@@ -6,7 +6,6 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/types/types",
     "@crate_index//:anyhow",
-    "@crate_index//:clap",
     "@crate_index//:macaddr",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
