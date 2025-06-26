@@ -127,8 +127,8 @@ fn test_cmc_mints_cycles_when_cmc_has_exchange_rate() {
         let account = AccountIdentifier::new(*TEST_USER1_PRINCIPAL, None);
         let icpts = Tokens::new(100, 0).unwrap();
 
-        // The CMC subaccount to send ICP to. In this test we try to top-up an existing
-        // canister, and Governance is simply a convenient pre-existing canister.
+        // In this test we try to top-up an existing canister, and Governance is simply a
+        // convenient pre-existing canister.
         let canister_to_top_up = GOVERNANCE_CANISTER_ID.get();
 
         let nns_init_payload = NnsInitPayloadsBuilder::new()
