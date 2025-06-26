@@ -1291,10 +1291,11 @@ fn validate_payload_fails_when_non_replicated_proof_is_for_fully_replicated_requ
         let mut proof = response_and_metadata_to_proof(&response, &metadata);
 
         // The proof only contains one signature.
-        proof.proof.signature.signatures_map.insert(
-            signer_node_id,
-            BasicSigOf::new(BasicSig(vec![])),
-        );
+        proof
+            .proof
+            .signature
+            .signatures_map
+            .insert(signer_node_id, BasicSigOf::new(BasicSig(vec![])));
 
         let payload = CanisterHttpPayload {
             responses: vec![proof],
