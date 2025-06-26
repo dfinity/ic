@@ -62,7 +62,7 @@ ipnet = { workspace = true }
 lazy_static = { workspace = true }
 maxminddb = "0.24"
 mockall = { workspace = true }
-moka = { version = "0.12.8", features = ["sync", "future"] }
+moka = { version = "0.12.8", features = ["sync"] }
 nftables = { workspace = true }
 nix = { workspace = true }
 rand = { workspace = true }

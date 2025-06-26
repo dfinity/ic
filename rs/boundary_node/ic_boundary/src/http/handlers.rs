@@ -1,4 +1,7 @@
-use std::sync::Arc;
+use std::{
+    net::IpAddr,
+    sync::{Arc, Mutex},
+};
 
 use axum::{
     body::Body,
@@ -14,13 +17,17 @@ use bytes::Bytes;
 use candid::Principal;
 use http::header::{CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS};
 use ic_bn_lib::{
-    http::headers::{CONTENT_TYPE_CBOR, X_CONTENT_TYPE_OPTIONS_NO_SNIFF, X_FRAME_OPTIONS_DENY},
+    http::{
+        headers::{CONTENT_TYPE_CBOR, X_CONTENT_TYPE_OPTIONS_NO_SNIFF, X_FRAME_OPTIONS_DENY},
+        ConnInfo,
+    },
     pubsub::{Broker, Subscriber},
 };
 use ic_types::{
     messages::{HttpStatusResponse, ReplicaHealthStatus},
     CanisterId, SubnetId,
 };
+use moka::sync::{Cache, CacheBuilder};
 use serde::Serialize;
 use tokio::{select, sync::broadcast::error::RecvError};
 
@@ -32,16 +39,39 @@ use crate::{
 
 pub use crate::routes::{Health, Proxy, RootKey};
 
-#[derive(Clone, derive_new::new)]
+#[derive(Clone)]
 pub struct LogsState {
     broker: Arc<Broker<Bytes, Principal>>,
     route_lookup: Arc<dyn Lookup>,
+    ip_cache: Cache<(IpAddr, Principal), Arc<Mutex<u16>>>,
+    max_subscribers_per_ip_per_topic: u16,
 }
 
+impl LogsState {
+    pub fn new(
+        broker: Arc<Broker<Bytes, Principal>>,
+        route_lookup: Arc<dyn Lookup>,
+        max_subscribers_per_ip_per_topic: u16,
+    ) -> Self {
+        // Some sensible defaults for now.
+        // Cache key+value should consume around 60-70 bytes, so we can spare a ~100MB for the cache I guess.
+        let ip_cache = CacheBuilder::new(2_000_000).build();
+
+        Self {
+            broker,
+            route_lookup,
+            ip_cache,
+            max_subscribers_per_ip_per_topic,
+        }
+    }
+}
+
+/// Handles websocket requests for canister logs
 pub async fn logs_canister(
     ws: WebSocketUpgrade,
+    Extension(conn_info): Extension<Arc<ConnInfo>>,
     Path(canister_id): Path<CanisterId>,
-    State(state): State<LogsState>,
+    State(state): State<Arc<LogsState>>,
 ) -> impl IntoResponse {
     if state
         .route_lookup
@@ -55,16 +85,54 @@ pub async fn logs_canister(
             .into_response();
     }
 
-    // Try to subscribe to a given topic
-    let Ok(sub) = state.broker.subscribe(&canister_id.get().0) else {
-        return (StatusCode::TOO_MANY_REQUESTS, "Too many subscribers").into_response();
+    let ip = conn_info.remote_addr.ip();
+    let canister_id = canister_id.get().0;
+
+    // Get or create a counter
+    let counter = state
+        .ip_cache
+        .get_with((ip, canister_id), || Arc::new(Mutex::new(0)));
+
+    // Make mutex scope narrower
+    let sub = {
+        // Check if we're over the limit
+        let mut counter = counter.lock().unwrap();
+        if *counter >= state.max_subscribers_per_ip_per_topic {
+            return (
+                StatusCode::TOO_MANY_REQUESTS,
+                "Too many subscribers from your IP address to this Canister",
+            )
+                .into_response();
+        }
+
+        // Try to subscribe to a given topic
+        let Ok(sub) = state.broker.subscribe(&canister_id) else {
+            return (
+                StatusCode::TOO_MANY_REQUESTS,
+                "Too many subscribers to this Canister",
+            )
+                .into_response();
+        };
+
+        // Increment the counter
+        *counter += 1;
+        sub
     };
 
-    ws.on_upgrade(move |socket| logs_canister_ws(socket, sub))
+    // Upgrade to websocket & fire up the processing loop
+    ws.on_upgrade(move |socket| logs_canister_ws(socket, sub, state, counter, ip, canister_id))
         .into_response()
 }
 
-async fn logs_canister_ws(mut socket: WebSocket, mut sub: Subscriber<Bytes>) {
+/// Handles websocket requests for canister logs: inner part
+async fn logs_canister_ws(
+    mut socket: WebSocket,
+    mut sub: Subscriber<Bytes>,
+    state: Arc<LogsState>,
+    counter: Arc<Mutex<u16>>,
+    ip: IpAddr,
+    canister_id: Principal,
+) {
     loop {
         select! {
             biased;
@@ -72,8 +140,8 @@ async fn logs_canister_ws(mut socket: WebSocket, mut sub: Subscriber<Bytes>) {
             // Discard whatever client might send us and check for disconnects
             res = socket.recv() => {
                 match res {
-                    None => return,
-                    Some(Err(_)) => return,
+                    None => break,
+                    Some(Err(_)) => break,
                     _ => {},
                 }
             }
@@ -84,7 +152,7 @@ async fn logs_canister_ws(mut socket: WebSocket, mut sub: Subscriber<Bytes>) {
                     Ok(v) => {
                         // Send the message to the client
                         if socket.send(Message::Binary(v)).await.is_err() {
-                            return;
+                            break;
                         }
                     },
 
@@ -100,11 +168,18 @@ async fn logs_canister_ws(mut socket: WebSocket, mut sub: Subscriber<Bytes>) {
                             })))
                             .await;
 
-                        return
+                        break;
                     },
                 }
             }
         }
+    }
+
+    // When the connection is done - decrement the counter and remove it if it has reached zero
+    let mut counter = counter.lock().unwrap();
+    *counter -= 1;
+    if *counter == 0 {
+        state.ip_cache.invalidate(&(ip, canister_id));
     }
 }
 
