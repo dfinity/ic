@@ -1,6 +1,6 @@
 use ic_replicated_state::page_map::storage::OverlayFile;
-use std::path::PathBuf;
 use std::cmp::Reverse;
+use std::path::PathBuf;
 
 pub fn do_parse_overlay(path: PathBuf) -> Result<(), String> {
     let overlay = OverlayFile::load(&path).map_err(|_| "Unable to open file")?;
