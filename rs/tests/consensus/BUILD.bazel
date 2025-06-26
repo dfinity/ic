@@ -253,12 +253,18 @@ system_test_nns(
     ],
 )
 
+# Run this test with
+#     bazel test \
+#         --test_env=RECOVERY_CUP_CONTENT \
+#         --test_env=RECOVERY_STORE_CONTENT1 \
+#         --test_env=RECOVERY_STORE_CONTENT2 \
+#         //rs/tests/consensus:guestos_recovery_engine_test`
 system_test(
-    name = "recovery_engine_test",
+    name = "guestos_recovery_engine_test",
     tags = [
         "k8s",
         "manual",
-        "system_test_nightly",
+        "system_test_large",
     ],
     target_compatible_with = ["@platforms//os:linux"],
     uses_guestos_recovery = True,

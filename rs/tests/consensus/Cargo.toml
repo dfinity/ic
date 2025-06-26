@@ -80,7 +80,7 @@ path = "max_xnet_payload_size_test.rs"
 
 [[bin]]
 name = "ic-systest-recovery-engine-test"
-path = "recovery_engine_test.rs"
+path = "guestos_recovery_engine_test.rs"
 
 [[bin]]
 name = "ic-systest-request-auth-malicious-replica-test"
