@@ -3424,6 +3424,7 @@ fn test_environment_variable_system_api() {
       (import "ic0" "env_var_count" (func $ic0_env_var_count (result i32)))
       (import "ic0" "env_var_name_size" (func $env_var_name_size (param i32) (result i32)))
       (import "ic0" "env_var_name_copy" (func $env_var_name_copy (param i32 i32 i32 i32)))
+      (import "ic0" "env_var_name_exists" (func $env_var_name_exists (param i32 i32) (result i32)))
       (import "ic0" "env_var_value_size" (func $env_var_value_size (param i32 i32) (result i32)))
       (import "ic0" "env_var_value_copy" (func $env_var_value_copy (param i32 i32 i32 i32 i32)))
       (import "ic0" "trap" (func $trap (param i32 i32)))
@@ -3447,7 +3448,7 @@ fn test_environment_variable_system_api() {
             (call $trap (i32.const 0) (i32.const 0))
           )
         )
-
+       
         ;; Copy first name to memory
         (local.set $index (i32.const 0))
         (local.set $name_size (call $env_var_name_size (local.get $index)))
@@ -3456,6 +3457,13 @@ fn test_environment_variable_system_api() {
             (local.get $name_dst)  ;; dst
             (i32.const 0)          ;; offset
             (local.get $name_size) ;; (name) size
+        )
+        
+        ;; Assert that the first name exists:
+        (if (i32.ne (call $env_var_name_exists (local.get $name_dst) (local.get $name_size)) (i32.const 1))
+          (then
+            (call $trap (i32.const 0) (i32.const 0))
+          )
         )
 
         ;; Copy first value to memory
@@ -3479,6 +3487,13 @@ fn test_environment_variable_system_api() {
             (local.get $name_dst)  ;; dst
             (i32.const 0)          ;; offset
             (local.get $name_size) ;; (name) size
+        )
+
+        ;; Assert that the second name exists:
+        (if (i32.ne (call $env_var_name_exists (local.get $name_dst) (local.get $name_size)) (i32.const 1))
+          (then
+            (call $trap (i32.const 0) (i32.const 0))
+          )
         )
 
         ;; Copy second value to memory

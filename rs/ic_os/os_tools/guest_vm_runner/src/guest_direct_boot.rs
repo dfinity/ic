@@ -1,8 +1,8 @@
 use crate::boot_args::read_boot_args;
+use crate::guest_vm_config::DirectBootConfig;
 use crate::mount::{FileSystem, MountOptions, PartitionProvider};
 use anyhow::Context;
 use anyhow::Result;
-use config::guest_vm_config::DirectBootConfig;
 use grub::{BootAlternative, BootCycle, GrubEnv, WithDefault};
 use std::fs::File;
 use tempfile::NamedTempFile;
@@ -66,17 +66,18 @@ pub async fn prepare_direct_boot(
         .mount_partition(
             GRUB_PARTITION_UUID,
             MountOptions {
-                readonly: !should_refresh_grubenv,
                 file_system: GRUB_PARTITION_FS,
             },
         )
-        .await?;
+        .await
+        .context("Could not mount grub partition")?;
 
     let grubenv_path = grub_partition.mount_point().join("grubenv");
     let mut grubenv =
         GrubEnv::read_from(File::open(&grubenv_path).context("Could not open grubenv")?)?;
 
-    let grubenv_is_changing = should_refresh_grubenv && refresh_grubenv(&mut grubenv)?;
+    let grubenv_is_changing = should_refresh_grubenv
+        && refresh_grubenv(&mut grubenv).context("Failed to refresh grubenv")?;
 
     let boot_alternative = grubenv
         .boot_alternative
@@ -95,11 +96,11 @@ pub async fn prepare_direct_boot(
         .mount_partition(
             boot_partition_uuid,
             MountOptions {
-                readonly: true,
                 file_system: BOOT_PARTITION_FS,
             },
         )
-        .await?;
+        .await
+        .with_context(|| format!("Could not mount boot partition {boot_alternative}"))?;
 
     let boot_args_path = boot_partition.mount_point().join("boot_args");
     // Older GuestOS releases do not have the boot_args file. If the file exists, we have a modern
@@ -479,7 +480,7 @@ mod tests {
         assert!(result
             .unwrap_err()
             .to_string()
-            .contains("Could not find partition"));
+            .contains("Could not mount grub partition"));
     }
 
     #[tokio::test]
@@ -495,7 +496,7 @@ mod tests {
         assert!(result
             .unwrap_err()
             .to_string()
-            .contains("Could not find partition"));
+            .contains("Could not mount boot partition A"));
     }
 
     #[tokio::test]
