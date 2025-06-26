@@ -1912,12 +1912,13 @@ fn test_allowance_listing_sequences() {
 
     for approver in approvers {
         for (s_index, spender) in spenders.iter().enumerate() {
+            args.from_account_id = AccountIdentifier::from(approver.0);
+
+            // We expect all pairs with the current approver and spenders starting after the current spender.
             let mut expected = vec![];
             for i in s_index + 1..NUM_SPENDERS as usize {
                 expected.push((AccountIdentifier::from(approver.0), AccountIdentifier::from(spenders[i].0)));
             }
-
-            args.from_account_id = AccountIdentifier::from(approver.0);
 
             args.prev_spender_id = Some(AccountIdentifier::from(spender.0));
             let allowances = list_allowances(&env, canister_id, approver, &args);
@@ -1925,6 +1926,7 @@ fn test_allowance_listing_sequences() {
             assert_eq!(expected, spender_approver_pairs);
 
             if s_index == 0 {
+                // If s_index is 0 we can also list all allowances by not specifying the prev_spender_id.
                 expected.insert(0, (AccountIdentifier::from(approver.0), AccountIdentifier::from(spenders[0].0))); 
                 args.prev_spender_id = None;
                 let allowances = list_allowances(&env, canister_id, approver, &args);
