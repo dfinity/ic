@@ -218,12 +218,17 @@ jobs:
           # Creates a bazelrc configuration fragment which tells bazel where the cache lives.
           nsc bazel cache setup --bazelrc=/tmp/bazel-cache.bazelrc
       - uses: actions/checkout@v4
-      - name: build
+      - name: Build and Test
         run: |
+          # run pocket-ic tests
           bazel \
             --noworkspace_rc \
             --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc \
-            build //rs/pocket_ic_server:pocket-ic-server
+            test \
+              //packages/pocket-ic:all \
+              //rs/pocket_ic_server:test \
+              //rs/pocket_ic_server:gateway \
+              //rs/pocket_ic_server:pocket-ic-server
 
           mkdir -p build
           cp \
