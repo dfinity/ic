@@ -61,20 +61,15 @@ pub struct HostOSConfig {
 }
 
 /// The type of the virtual machine running the GuestOS.
-#[derive(Serialize, Deserialize, Copy, Clone, Eq, PartialEq, Debug, EnumString)]
+#[derive(Serialize, Deserialize, Copy, Clone, Eq, PartialEq, Debug, EnumString, Default)]
 #[serde(rename_all = "snake_case")]
 #[strum(serialize_all = "snake_case")]
 pub enum GuestVMType {
     /// This is what runs most of the time, executing the replica, serving requests, etc.
+    #[default]
     Default,
     /// The Guest VM brought up temporarily during the GuestOS upgrade process.
     Upgrade,
-}
-
-impl Default for GuestVMType {
-    fn default() -> Self {
-        GuestVMType::Default
-    }
 }
 
 /// GuestOS configuration. In production, this struct inherits settings from `HostOSConfig`.

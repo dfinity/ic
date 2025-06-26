@@ -45,6 +45,8 @@ pub fn deserialize_config<T: for<'de> Deserialize<'de>, P: AsRef<Path>>(file_pat
 #[cfg(test)]
 mod tests {
     use config_types::*;
+    use std::net::Ipv6Addr;
+    use std::str::FromStr;
 
     #[test]
     fn test_serialize_and_deserialize() {
@@ -106,7 +108,9 @@ mod tests {
             icos_settings: icos_settings.clone(),
             guestos_settings: guestos_settings.clone(),
             guest_vm_type: GuestVMType::Default,
-            upgrade_config: Default::default(),
+            upgrade_config: GuestOSUpgradeConfig {
+                peer_guest_vm_address: Some(Ipv6Addr::from_str("2001:db8::1").unwrap()),
+            },
         };
 
         fn serialize_and_deserialize<T>(config: &T)
