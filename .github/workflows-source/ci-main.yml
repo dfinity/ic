@@ -212,10 +212,6 @@ jobs:
     if: github.repository == 'dfinity/ic'
     steps:
       - <<: *checkout
-      - name: Set PATH
-        run: |
-          echo "/usr/local/bin" >> $GITHUB_PATH
-          echo "$HOME/.cargo/bin:" >> $GITHUB_PATH
       - name: Infer macos intel build command
         id: cfg
         run: |
