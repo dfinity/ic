@@ -484,9 +484,10 @@ fn validate_transcript_refs(
             }
         }
     }
+    let chunk_size = (verify_transcript_args.len() + MAX_PARALLELISM - 1) / MAX_PARALLELISM;
     let results = verify_transcript_args
         .into_par_iter()
-        .chunks(MAX_PARALLELISM)
+        .chunks(chunk_size.max(1))
         .flat_map_iter(|chunk| {
             chunk.into_iter().map(|(params, transcript)| {
                 crypto
@@ -603,9 +604,10 @@ fn validate_new_signature_agreements(
         }
     }
 
+    let chunk_size = (verify_sig_args.len() + MAX_PARALLELISM - 1) / MAX_PARALLELISM;
     verify_sig_args
         .into_par_iter()
-        .chunks(MAX_PARALLELISM)
+        .chunks(chunk_size.max(1))
         .flat_map_iter(|chunk| {
             chunk.into_iter().map(|(id, context, data)| {
                 validate_combined_signature(crypto, block_reader, id, context, data)

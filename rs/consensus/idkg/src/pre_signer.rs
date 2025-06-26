@@ -108,8 +108,9 @@ impl IDkgPreSignerImpl {
             })
             .collect::<Vec<_>>();
 
+        let chunk_size = (inputs.len() + MAX_PARALLELISM - 1) / MAX_PARALLELISM;
         inputs
-            .par_chunks(MAX_PARALLELISM)
+            .par_chunks(chunk_size.max(1))
             .flat_map_iter(|chunk| {
                 chunk
                     .iter()
@@ -199,9 +200,10 @@ impl IDkgPreSignerImpl {
             }
         }
 
+        let chunk_size = (inputs.len() + MAX_PARALLELISM - 1) / MAX_PARALLELISM;
         let results: Vec<_> = inputs
             .into_par_iter()
-            .chunks(MAX_PARALLELISM)
+            .chunks(chunk_size.max(1))
             .flat_map_iter(|chunk| {
                 chunk
                     .into_iter()
@@ -312,8 +314,9 @@ impl IDkgPreSignerImpl {
             })
             .collect::<Vec<_>>();
 
+        let chunk_size = (inputs.len() + MAX_PARALLELISM - 1) / MAX_PARALLELISM;
         inputs
-            .par_chunks(MAX_PARALLELISM)
+            .par_chunks(chunk_size.max(1))
             .flat_map_iter(|chunk| {
                 chunk
                     .iter()
@@ -496,9 +499,10 @@ impl IDkgPreSignerImpl {
             }
         }
 
+        let chunk_size = (inputs.len() + MAX_PARALLELISM - 1) / MAX_PARALLELISM;
         let results: Vec<_> = inputs
             .into_par_iter()
-            .chunks(MAX_PARALLELISM)
+            .chunks(chunk_size.max(1))
             .flat_map_iter(|chunk| {
                 chunk.into_iter().flat_map(
                     |(id, support, signed_dealing, transcript_params_ref)| {
@@ -616,10 +620,10 @@ impl IDkgPreSignerImpl {
         }
 
         let inputs = inputs.into_iter().collect::<Vec<_>>();
-
+        let chunk_size = (inputs.len() + MAX_PARALLELISM - 1) / MAX_PARALLELISM;
         inputs
             .into_par_iter()
-            .chunks(MAX_PARALLELISM)
+            .chunks(chunk_size.max(1))
             .flat_map_iter(|chunk| {
                 chunk
                     .into_iter()

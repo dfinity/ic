@@ -78,7 +78,7 @@ use std::time::Duration;
 use tokio::runtime::{Builder, Runtime};
 
 // Environment parameters
-const NODES_COUNT: usize = 13;
+const NODES_COUNT: usize = 34;
 const SUCCESS_THRESHOLD: f64 = 0.33; // If more than 33% of the expected calls are successful the test passes
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1);
 const TESTING_PERIOD: Duration = Duration::from_secs(600); // testing time under load
@@ -95,10 +95,10 @@ const LATENCY: Duration = Duration::from_millis(120); // artificial added latenc
                                                       //     .with_bandwidth(BANDWIDTH_MBITS);
 
 // Signature parameters
-const PRE_SIGNATURES_TO_CREATE: u32 = 120;
-const MAX_QUEUE_SIZE: u32 = 60;
+const PRE_SIGNATURES_TO_CREATE: u32 = 20;
+const MAX_QUEUE_SIZE: u32 = 80;
 const CANISTER_COUNT: usize = 4;
-const SIGNATURE_REQUESTS_PER_SECOND: f64 = 15.0;
+const SIGNATURE_REQUESTS_PER_SECOND: f64 = 1.0;
 const SCHNORR_MSG_SIZE_BYTES: usize = 32; // 2MiB minus some message overhead
 
 const BENCHMARK_REPORT_FILE: &str = "benchmark/benchmark.json";
