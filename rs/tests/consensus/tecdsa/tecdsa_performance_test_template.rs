@@ -101,6 +101,7 @@ const CANISTER_COUNT: usize = 4;
 const SIGNATURE_REQUESTS_PER_SECOND: f64 = 2.5;
 
 const SMALL_MSG_SIZE_BYTES: usize = 32;
+#[allow(dead_code)]
 const LARGE_MSG_SIZE_BYTES: usize = 10_484_000; // 10MiB minus some message overhead
 
 // By default, we keep a small message size, to avoid permanent heavy test load.
