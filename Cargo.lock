@@ -2601,14 +2601,12 @@ dependencies = [
 name = "config_types"
 version = "1.0.0"
 dependencies = [
- "anyhow",
  "ic-types",
  "macaddr",
- "once_cell",
  "serde",
  "serde_json",
  "serde_with 1.14.0",
- "tempfile",
+ "strum 0.26.3",
  "thiserror 2.0.12",
  "url",
 ]
@@ -5208,6 +5206,7 @@ dependencies = [
  "anyhow",
  "askama",
  "async-trait",
+ "clap 4.5.27",
  "config",
  "config_types",
  "deterministic_ips",
