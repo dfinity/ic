@@ -134,20 +134,15 @@ jobs:
         uses: ./.github/actions/bazel
         with:
           run: |
-            set -euo pipefail
-
-            target_pattern_file=$(mktemp)
-            bazel query 'attr(tags, system_test_benchmark, //rs/...)' | grep -v head_nns > "$target_pattern_file"
-
-            echo "inferred system test benchmark targets:"
-            cat "$target_pattern_file"
-
-            # note: there's just one performance cluster, so the job can't be parallelized (hence --jobs=1)
+            # note: there's just one performance cluster, so the job can't be parallelized
+            # (hence --jobs=1)
+            # we exclude 'system_test_head_nns' tests to avoid running every benchmark
+            # effectively twice (we don't care about the different between mainnet & head NNS)
             bazel test \
               --config=stamped \
-              --test_tag_filters=system_test_benchmark \
+              --test_tag_filters="system_test_benchmark,-system_test_head_nns" \
+              //rs/... \
               --//bazel:enable_upload_perf_systest_results=True \
-              --target_pattern_file="$target_pattern_file" \
               --test_env=SSH_AUTH_SOCK --test_env=NNS_CANISTER_UPGRADE_SEQUENCE=all \
               --keep_going --jobs=1
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}

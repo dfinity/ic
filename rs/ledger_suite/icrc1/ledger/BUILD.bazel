@@ -269,6 +269,7 @@ package(default_visibility = ["//visibility:public"])
 [
     rust_ic_test(
         name = "ledger_test" + name_suffix,
+        timeout = "long",
         srcs = ["tests/tests.rs"],
         crate_features = features,
         data = [

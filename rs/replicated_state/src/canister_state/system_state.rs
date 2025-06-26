@@ -280,6 +280,11 @@ impl CanisterHistory {
         self.total_num_changes
     }
 
+    /// Overwrites the `total_num_changes`, which can happen in the context of canister migration.
+    pub fn set_total_num_changes(&mut self, total_num_changes: u64) {
+        self.total_num_changes = total_num_changes;
+    }
+
     pub fn get_memory_usage(&self) -> NumBytes {
         self.canister_history_memory_usage
     }
@@ -1950,6 +1955,12 @@ impl SystemState {
             change_details,
         );
         self.canister_history.add_canister_change(new_change);
+    }
+
+    /// Overwrite the `total_num_changes` of the canister history. This can happen in the context of canister migration.
+    pub fn set_canister_history_total_num_changes(&mut self, total_num_changes: u64) {
+        self.canister_history
+            .set_total_num_changes(total_num_changes);
     }
 
     pub fn get_canister_history(&self) -> &CanisterHistory {

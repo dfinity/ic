@@ -27,7 +27,7 @@ jobs:
   # Those test suites would overwhelm a runner, so each is run
   # as a separate job.
   release-system-tests:
-    name: Bazel System Tests (${{ matrix.tag }})
+    name: Release System Tests
     runs-on:
       labels: dind-large
     container:
@@ -35,12 +35,6 @@ jobs:
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 180 # 3 hours
-    strategy:
-      matrix:
-        tag:
-          - system_test_nightly
-          - system_test_staging
-          - system_test_hotfix
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -52,11 +46,9 @@ jobs:
           run: |
             bazel test \
               --config=stamped \
-              --test_tag_filters=${{ matrix.tag }} \
+              --test_tag_filters=system_test_large \
               //rs/tests/... \
               --keep_going
-          # prevent artifact name overlap
-          bep-artifact-name: ${{ github.job }}-${{ matrix.tag }}-bep
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
   dependency-scan-release-cut:
     name: Dependency Scan for Release
