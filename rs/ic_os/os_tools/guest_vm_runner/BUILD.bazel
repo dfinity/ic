@@ -51,14 +51,14 @@ rust_binary(
     target_compatible_with = [
         "@platforms//os:linux",
     ],
-    deps = DEPENDENCIES + ["//rs/ic_os/config:config_lib_dev"],
+    deps = DEPENDENCIES + ["//rs/ic_os/config:config_lib"],
 )
 
 rust_binary(
     name = "guest_vm_runner_dev",
     srcs = glob(["src/**/*.rs"]),
+    crate_features = ["dev"],
     crate_name = "guest_vm_runner",
-    features = ["dev"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = [
         "@platforms//os:linux",
@@ -83,8 +83,8 @@ rust_test(
         "dev",
         "integration_tests",
     ],
-    data = glob(["golden/*"]) + ["//ic-os/guestos/envs/prod:disk-img.tar.zst"],
-    env = {"ICOS_IMAGE": "$(rootpath //ic-os/guestos/envs/prod:disk-img.tar.zst)"},
+    data = glob(["golden/*"]) + ["//ic-os/guestos/envs/prod:disk-img-for-tests.tar"],
+    env = {"ICOS_IMAGE": "$(rootpath //ic-os/guestos/envs/prod:disk-img-for-tests.tar)"},
     # Mark it manual here and expose it in //ic-os/tests:integration_tests
     tags = ["manual"],
     deps = DEV_DEPENDENCIES,
