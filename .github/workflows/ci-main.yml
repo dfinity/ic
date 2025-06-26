@@ -621,11 +621,11 @@ jobs:
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
         with:
-          BAZEL_COMMAND: test --config=ci --test_tag_filters=system_test_large --test_env=RECOVERY_CUP_CONTENT --test_env=RECOVERY_STORE_CONTENT1 --test_env=RECOVERY_STORE_CONTENT2
+          BAZEL_COMMAND: test --test_tag_filters=system_test_large --test_env=RECOVERY_CUP_CONTENT --test_env=RECOVERY_STORE_CONTENT1 --test_env=RECOVERY_STORE_CONTENT2
           BAZEL_TARGETS: //rs/tests/consensus:guestos_recovery_engine_test
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
       - name: Cleanup
         if: always()
         run: |
-          git checkout "$BRANCH_NAME"
+          git checkout "$CI_COMMIT_SHA"
           git branch -D "$TEMP_BRANCH"
