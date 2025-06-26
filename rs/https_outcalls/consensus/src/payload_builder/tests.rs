@@ -1240,6 +1240,102 @@ fn validate_payload_fails_for_response_with_no_signatures() {
     });
 }
 
+#[test]
+fn validate_payload_fails_when_non_replicated_proof_is_for_fully_replicated_request() {
+    // This test ensures the validator rejects a payload that provides a single-signature
+    // proof (as if for a NonReplicated request) when the true context in the state
+    // indicates the request was actually FullyReplicated, thus requiring more signatures.
+
+    // ARRANGE
+    // Use a subnet of 4, where the threshold for a replicated request is 2f+1 = 3.
+    let subnet_size = 4;
+    test_config_with_http_feature(true, subnet_size, |mut payload_builder, _| {
+        let signer_node_id = node_test_id(1);
+        let callback_id = CallbackId::from(101);
+
+        // 1. Create a context where the request is FullyReplicated. This is what
+        //    the validator will see in the certified state and treat as the source of truth.
+        let request_context = CanisterHttpRequestContext {
+            request: RequestBuilder::default().build(),
+            url: String::new(),
+            max_response_bytes: None,
+            headers: vec![],
+            body: None,
+            http_method: CanisterHttpMethod::GET,
+            transform: None,
+            time: UNIX_EPOCH,
+            // The state says the request is replicated.
+            replication: ic_types::canister_http::Replication::FullyReplicated,
+        };
+
+        // Inject this context into the state reader.
+        let mut init_state = ic_test_utilities_state::get_initial_state(0, 0);
+        init_state
+            .metadata
+            .subnet_call_context_manager
+            .canister_http_request_contexts
+            .insert(callback_id, request_context);
+        let state_manager = Arc::new(RefMockStateManager::default());
+        state_manager
+            .get_mut()
+            .expect_get_state_at()
+            .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
+                Height::new(0),
+                Arc::new(init_state),
+            )));
+        payload_builder.state_reader = state_manager;
+
+        // 2. Craft a payload that provides a proof with only a single signature,
+        //    as if it were for a NonReplicated request.
+        let (response, metadata) = test_response_and_metadata(callback_id.get());
+        let mut proof = response_and_metadata_to_proof(&response, &metadata);
+
+        // The proof only contains one signature.
+        proof.proof.signature.signatures_map.insert(
+            signer_node_id,
+            BasicSigOf::new(BasicSig(vec![])),
+        );
+
+        let payload = CanisterHttpPayload {
+            responses: vec![proof],
+            ..Default::default()
+        };
+        let payload_bytes = payload_to_bytes(&payload, NumBytes::new(4 * 1024 * 1024));
+
+        // ACT
+        let validation_result = payload_builder.validate_payload(
+            Height::from(1),
+            &test_proposal_context(&default_validation_context()),
+            &payload_bytes,
+            &[],
+        );
+
+        // ASSERT
+        // Validation must fail. The validator looks at the state, sees the request
+        // is FullyReplicated, and determines the threshold is 3. The payload only
+        // provides 1 signature, so it fails with NotEnoughSigners.
+        match validation_result {
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::NotEnoughSigners {
+                        signers,
+                        expected_threshold,
+                        ..
+                    },
+                ),
+            )) => {
+                assert_eq!(signers.len(), 1, "There should be one valid signer found");
+                // For a subnet of 4, faults tolerated f=1, threshold 2f+1=3
+                assert_eq!(
+                    expected_threshold, 3,
+                    "Expected threshold for replicated request was not met"
+                );
+            }
+            res => panic!("Expected NotEnoughSigners error, but got {:?}", res),
+        }
+    });
+}
+
 /// Build some test metadata and response, which is valid and can be used in
 /// different tests
 pub(crate) fn test_response_and_metadata(
