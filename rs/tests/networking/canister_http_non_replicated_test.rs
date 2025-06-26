@@ -4,7 +4,7 @@ Title:: Basic HTTP requests from canisters
 Goal:: Ensure simple HTTP requests can be made from canisters.
 
 Run with:
-ict test //rs/tests/networking:canister_http_single_replica_test -- --test_tmpdir=./canister_http_single_replica_test
+ict test //rs/tests/networking:canister_http_non_replicated_test -- --test_tmpdir=./canister_http_non_replicated_test
 
 Runbook::
 0. Instantiate a universal VM with a webserver
@@ -55,13 +55,13 @@ pub fn test(env: TestEnv) {
 
     block_on(async {
         let url = format!("https://[{webserver_ipv6}]:20443/random");
-        test_single_replica_random_endpoint_works(&proxy_canister, url.clone(), &logger).await;
+        test_non_replicated_random_endpoint_works(&proxy_canister, url.clone(), &logger).await;
 
         test_fully_replicated_random_endpoint_fails(&proxy_canister, url, &logger).await;
     });
 }
 
-async fn make_single_replica_request(
+async fn make_non_replicated_request(
     proxy_canister: &Canister<'_>,
     url: String,
     context: &str,
@@ -110,7 +110,7 @@ async fn make_request(
         .expect("Update call to proxy canister failed")
 }
 
-async fn test_single_replica_random_endpoint_works(
+async fn test_non_replicated_random_endpoint_works(
     proxy_canister: &Canister<'_>,
     url: String,
     logger: &Logger,
@@ -126,7 +126,7 @@ async fn test_single_replica_random_endpoint_works(
         RETRY_BACKOFF,
         || async {
             let context = "There is context to be appended in body";
-            let res = make_single_replica_request(proxy_canister, url.to_string(), context).await;
+            let res = make_non_replicated_request(proxy_canister, url.to_string(), context).await;
             if !matches!(res, Ok(ref x) if x.status == 200 && x.body.contains(context)) {
                 bail!("Http request failed response: {:?}", res);
             }

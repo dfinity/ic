@@ -58,8 +58,8 @@ name = "ic-systest-canister-http-fault-tolerance"
 path = "canister_http_fault_tolerance_test.rs"
 
 [[bin]]
-name = "ic-systest-canister-http-single-replica"
-path = "canister_http_single_replica_test.rs"
+name = "ic-systest-canister-http-non-replicated"
+path = "canister_http_non_replicated_test.rs"
 
 [[bin]]
 name = "ic-systest-canister-http-socks"

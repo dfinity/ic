@@ -188,7 +188,7 @@ system_test_nns(
 )
 
 system_test_nns(
-    name = "canister_http_single_replica_test",
+    name = "canister_http_non_replicated_test",
     env = {
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
