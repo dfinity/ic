@@ -523,8 +523,6 @@ impl Ledger {
     }
 
     pub fn can_send(&self, _principal_id: &PrincipalId) -> bool {
-        // If we include more principals here, we need to update the trap message
-        // in `icrc1_transfer` and similar functions.
         true
     }
 
