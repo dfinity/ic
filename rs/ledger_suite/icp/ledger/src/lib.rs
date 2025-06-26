@@ -609,6 +609,9 @@ pub fn get_allowances(
         for ((from_account_id, to_spender_id), storable_allowance) in
             allowances.range((from, start_spender)..)
         {
+            if spender.is_some() && start_spender == to_spender_id {
+                continue;
+            }
             if result.len() >= max_results as usize || from_account_id != from {
                 break;
             }

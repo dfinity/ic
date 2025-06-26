@@ -1682,20 +1682,13 @@ fn is_ledger_ready() -> bool {
 #[query]
 #[candid_method(query)]
 fn get_legacy_allowances(arg: GetLegacyAllowancesArgs) -> Allowances {
-    let from_account_id = arg.from_account_id.unwrap_or_else(|| {
-        Account {
-            owner: ic_cdk::api::caller(),
-            subaccount: None,
-        }
-        .into()
-    });
     let max_take_allowances = Access::with_ledger(|ledger| ledger.max_take_allowances());
     let max_results = arg
         .take
         .map(|take| std::cmp::min(take, max_take_allowances))
         .unwrap_or(max_take_allowances);
     get_allowances(
-        from_account_id,
+        arg.from_account_id,
         arg.prev_spender_id,
         max_results,
         ic_cdk::api::time(),

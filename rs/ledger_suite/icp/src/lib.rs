@@ -1253,7 +1253,7 @@ pub fn from_proto_bytes<T: ToProto>(msg: Vec<u8>) -> Result<T, String> {
 /// The arguments for the `get_legacy_allowances` endpoint.
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct GetLegacyAllowancesArgs {
-    pub from_account_id: Option<AccountIdentifier>,
+    pub from_account_id: AccountIdentifier,
     pub prev_spender_id: Option<AccountIdentifier>,
     pub take: Option<u64>,
 }

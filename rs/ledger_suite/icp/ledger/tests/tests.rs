@@ -1837,21 +1837,14 @@ fn list_allowances(
     env: &StateMachine,
     ledger: CanisterId,
     caller: PrincipalId,
-    from: Option<PrincipalId>,
-    spender: Option<PrincipalId>,
-    take: Option<u64>,
+    args: &GetLegacyAllowancesArgs,
 ) -> Allowances {
-    let args = GetLegacyAllowancesArgs {
-        from_account_id: from,
-        prev_spender_id: spender,
-        take,
-    };
     Decode!(
         &env.execute_ingress_as(
             caller,
             ledger,
             "get_legacy_allowances",
-            Encode!(&args).unwrap()
+            Encode!(args).unwrap()
         )
         .expect("failed to list allowances")
         .bytes(),
@@ -1869,8 +1862,8 @@ fn test_allowance_listing_sequences() {
     let mut initial_balances = vec![];
 
     let mut approvers = vec![];
-    for i in 1..NUM_APPROVERS {
-        let pid = PrincipalId::new_user_test_id(i);
+    for i in 0..NUM_APPROVERS {
+        let pid = PrincipalId::new_user_test_id(i+1);
         approvers.push(pid);
         initial_balances.push((Account::from(pid.0), INITIAL_BALANCE));
     }
@@ -1880,17 +1873,7 @@ fn test_allowance_listing_sequences() {
         spenders.push(PrincipalId::new_user_test_id(i));
     }
     spenders.sort_by(|first, second| {
-        let ai1: AccountIdentifier = Account {
-            owner: first.0,
-            subaccount: None,
-        }
-        .into();
-        let ai2: AccountIdentifier = Account {
-            owner: second.0,
-            subaccount: None,
-        }
-        .into();
-        ai1.cmp(&ai2)
+        Account::from(first.0).cmp(&Account::from(second.0))
     });
 
     let (env, canister_id) = setup(
@@ -1903,7 +1886,7 @@ fn test_allowance_listing_sequences() {
         for spender in &spenders {
             let approve_args = ApproveArgs {
                 from_subaccount: None,
-                spender: spender.0.into(),
+                spender: Account::from(spender.0),
                 amount: Nat::from(APPROVE_AMOUNT),
                 fee: None,
                 memo: None,
@@ -1912,7 +1895,7 @@ fn test_allowance_listing_sequences() {
                 created_at_time: None,
             };
             let response = env.execute_ingress_as(
-                p1,
+                *approver,
                 canister_id,
                 "icrc2_approve",
                 Encode!(&approve_args).unwrap(),
@@ -1921,24 +1904,32 @@ fn test_allowance_listing_sequences() {
         }
     }
 
-    let allowance_args = IcpAllowanceArgs {
-        account: AccountIdentifier::from(p1.0),
-        spender: AccountIdentifier::from(p2.0),
+    let mut args = GetLegacyAllowancesArgs {
+        from_account_id: Account::from(approvers[0].0).into(),
+        prev_spender_id: None,
+        take: None,
     };
 
-    let response = env.execute_ingress_as(
-        p1,
-        canister_id,
-        "allowance",
-        Encode!(&allowance_args).unwrap(),
-    );
+    for approver in approvers {
+        for (s_index, spender) in spenders.iter().enumerate() {
+            println!("***** approver {:?}, spender {:?}", approver, spender);
+            let mut expected = vec![];
+            for i in s_index..NUM_SPENDERS as usize {
+                expected.push((Account::from(approver.0).into(), Account::from(spenders[i].0).into()));
+            }
 
-    let result = Decode!(
-        &response.expect("failed to get allowance").bytes(),
-        Allowance
-    )
-    .expect("failed to decode allowance response");
-    assert_eq!(result.allowance.0.to_u64(), Some(APPROVE_AMOUNT));
+            args.from_account_id = Account::from(approver.0).into();
+            args.prev_spender_id = Some(Account::from(spender.0).into());
+            let allowances = list_allowances(&env, canister_id, approver, &args);
+            let spender_approver_pairs: Vec<(AccountIdentifier, AccountIdentifier)> = allowances.into_iter().map(|a| (a.from_account_id, a.to_spender_id)).collect();
+            assert_eq!(expected, spender_approver_pairs);
+
+            if s_index == 0 {
+                
+            }
+            
+        }
+    }
 }
 
 mod metrics {
