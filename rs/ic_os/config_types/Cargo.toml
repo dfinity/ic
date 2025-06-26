@@ -8,9 +8,9 @@ ic-types = { path = "../../types/types" }
 macaddr = { workspace = true }
 url = { workspace = true }
 serde = { workspace = true }
-serde_with = "1.6.2"
+serde_with = { workspace = true }
 thiserror = { workspace = true }
-strum = "0.26.3"
+strum = { workspace = true }
 
 [dev-dependencies]
 serde_json = { workspace = true }
