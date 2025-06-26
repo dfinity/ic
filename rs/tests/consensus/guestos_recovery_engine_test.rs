@@ -19,7 +19,7 @@ use ic_system_test_driver::{
         group::SystemTestGroup,
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
-        test_env_api::{get_recovery_ic_os_img_url, GetFirstHealthyNodeSnapshot, SshSession},
+        test_env_api::{GetFirstHealthyNodeSnapshot, SshSession},
     },
     systest,
 };
