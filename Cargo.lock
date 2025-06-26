@@ -3725,7 +3725,6 @@ dependencies = [
  "config_types",
  "ic-crypto-sha2",
  "macaddr",
- "thiserror 2.0.12",
 ]
 
 [[package]]
