@@ -9,29 +9,16 @@ use http::{
     },
     Method,
 };
-use ic_bn_lib::http::headers::{X_IC_CANISTER_ID, X_REQUESTED_WITH, X_REQUEST_ID};
+use ic_bn_lib::http::headers::X_REQUESTED_WITH;
 use tower_http::cors::{Any, CorsLayer};
 
 // Methods allowed
-pub const ALLOW_METHODS: [Method; 6] = [
-    Method::HEAD,
-    Method::GET,
-    Method::POST,
-    Method::PUT,
-    Method::DELETE,
-    Method::PATCH,
-];
+const ALLOW_METHODS: [Method; 3] = [Method::HEAD, Method::GET, Method::POST];
 
 // Base headers
-const EXPOSE_HEADERS: [HeaderName; 5] = [
-    ACCEPT_RANGES,
-    CONTENT_LENGTH,
-    CONTENT_RANGE,
-    X_REQUEST_ID,
-    X_IC_CANISTER_ID,
-];
+const EXPOSE_HEADERS: [HeaderName; 3] = [ACCEPT_RANGES, CONTENT_LENGTH, CONTENT_RANGE];
 
-pub const ALLOW_HEADERS: [HeaderName; 10] = [
+const ALLOW_HEADERS: [HeaderName; 9] = [
     USER_AGENT,
     DNT,
     IF_NONE_MATCH,
@@ -41,7 +28,6 @@ pub const ALLOW_HEADERS: [HeaderName; 10] = [
     RANGE,
     COOKIE,
     X_REQUESTED_WITH,
-    X_IC_CANISTER_ID,
 ];
 
 /// Some default CORS layer
