@@ -556,7 +556,7 @@ jobs:
 
       - name: Let AWS overwrite the recovery artifacts
         run: |
-          sed -i 's/--immutable \\/d' ci/src/artifacts/upload.sh
+          sed -i '/--immutable \\/d' ci/src/artifacts/upload.sh
 
       - name: Generate and upload recovery artifacts
         uses: ./.github/actions/bazel
