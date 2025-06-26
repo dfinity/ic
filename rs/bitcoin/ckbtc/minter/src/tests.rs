@@ -1,6 +1,6 @@
 use crate::{
     address::BitcoinAddress,
-    build_unsigned_transaction, estimate_retrieve_btc_fee, evaluate_minter_fee, fake_sign, greedy,
+    estimate_retrieve_btc_fee, evaluate_minter_fee, fake_sign, greedy,
     lifecycle::init::InitArgs,
     state::invariants::CheckInvariantsImpl,
     state::{
@@ -14,7 +14,7 @@ use bitcoin::network::constants::Network as BtcNetwork;
 use bitcoin::util::psbt::serialize::{Deserialize, Serialize};
 use candid::Principal;
 use ic_base_types::CanisterId;
-use ic_btc_interface::{OutPoint, Utxo};
+use ic_btc_interface::{OutPoint, Satoshi, Utxo};
 use icrc_ledger_types::icrc1::account::Account;
 use maplit::btreeset;
 use proptest::{
@@ -185,6 +185,26 @@ fn signed_tx_to_bitcoin_tx(tx: &tx::SignedTransaction) -> bitcoin::Transaction {
             })
             .collect(),
     }
+}
+
+fn build_unsigned_transaction(
+    available_utxos: &mut BTreeSet<Utxo>,
+    outputs: Vec<(BitcoinAddress, Satoshi)>,
+    main_address: BitcoinAddress,
+    fee_per_vbyte: u64,
+) -> Result<
+    (
+        tx::UnsignedTransaction,
+        crate::state::ChangeOutput,
+        Vec<Utxo>,
+    ),
+    BuildTxError,
+> {
+    let amount = outputs.iter().map(|(_, amount)| amount).sum::<u64>();
+    let inputs = crate::utxos_selection(amount, available_utxos, outputs.len());
+
+    crate::build_unsigned_transaction(&inputs, outputs, main_address, fee_per_vbyte)
+        .map(|(tx, change)| (tx, change, inputs))
 }
 
 #[test]
