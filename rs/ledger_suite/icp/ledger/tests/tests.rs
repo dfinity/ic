@@ -229,6 +229,7 @@ fn test_icp_anonymous_transfers() {
     const INITIAL_BALANCE: u64 = 10_000_000;
     const TRANSFER_AMOUNT: u64 = 1_000_000;
     let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
     let anon = PrincipalId::new_anonymous();
     let (env, canister_id) = setup(
         ledger_wasm(),
@@ -239,9 +240,32 @@ fn test_icp_anonymous_transfers() {
         ],
     );
 
-    assert_eq!(2 * INITIAL_BALANCE, total_supply(&env, canister_id));
-    assert_eq!(INITIAL_BALANCE, balance_of(&env, canister_id, p1.0));
-    assert_eq!(INITIAL_BALANCE, balance_of(&env, canister_id, anon.0));
+    let mut expected_total_supply = INITIAL_BALANCE * 2;
+    let mut expected_balance_p1 = INITIAL_BALANCE;
+    let mut expected_balance_p2 = 0;
+    let mut expected_balance_anon = INITIAL_BALANCE;
+
+    let check_expected_balances_and_total_supply =
+        |expected_total_supply: &u64,
+         expected_balance_p1: &u64,
+         expected_balance_p2: &u64,
+         expected_balance_anon: &u64| {
+            assert_eq!(expected_total_supply, &total_supply(&env, canister_id));
+            assert_eq!(expected_balance_p1, &balance_of(&env, canister_id, p1.0));
+            assert_eq!(expected_balance_p2, &balance_of(&env, canister_id, p2.0));
+            assert_eq!(
+                expected_balance_anon,
+                &balance_of(&env, canister_id, anon.0)
+            );
+        };
+
+    // Check initial balances and total supply
+    check_expected_balances_and_total_supply(
+        &expected_total_supply,
+        &expected_balance_p1,
+        &expected_balance_p2,
+        &expected_balance_anon,
+    );
 
     // Transfer to the account of the anonymous principal using `icrc1_transfer` succeeds
     // The expected block index after the transfer is 2 (0 and 1 are the initial mints to `p1` and `anon`).
@@ -251,6 +275,15 @@ fn test_icp_anonymous_transfers() {
         expected_block_index
     );
     expected_block_index += 1;
+    expected_total_supply -= FEE;
+    expected_balance_p1 -= TRANSFER_AMOUNT + FEE;
+    expected_balance_anon += TRANSFER_AMOUNT;
+    check_expected_balances_and_total_supply(
+        &expected_total_supply,
+        &expected_balance_p1,
+        &expected_balance_p2,
+        &expected_balance_anon,
+    );
 
     // Transfer to the account of the anonymous principal using the ICP-specific `transfer` succeeds
     let transfer_args = icp_ledger::TransferArgs {
@@ -276,21 +309,39 @@ fn test_icp_anonymous_transfers() {
     .expect("failed to decode transfer response");
     assert_eq!(result, Ok(expected_block_index));
     expected_block_index += 1;
+    expected_total_supply -= FEE;
+    expected_balance_p1 -= TRANSFER_AMOUNT + FEE;
+    expected_balance_anon += TRANSFER_AMOUNT;
+    check_expected_balances_and_total_supply(
+        &expected_total_supply,
+        &expected_balance_p1,
+        &expected_balance_p2,
+        &expected_balance_anon,
+    );
 
     // Transfer from the account of the anonymous principal using `icrc1_transfer` succeeds
     assert_eq!(
-        transfer(&env, canister_id, anon.0, p1.0, TRANSFER_AMOUNT).expect("transfer failed"),
+        transfer(&env, canister_id, anon.0, p2.0, TRANSFER_AMOUNT).expect("transfer failed"),
         expected_block_index
     );
     expected_block_index += 1;
+    expected_total_supply -= FEE;
+    expected_balance_anon -= TRANSFER_AMOUNT + FEE;
+    expected_balance_p2 += TRANSFER_AMOUNT;
+    check_expected_balances_and_total_supply(
+        &expected_total_supply,
+        &expected_balance_p1,
+        &expected_balance_p2,
+        &expected_balance_anon,
+    );
 
-    // Transfer from the account of the anonymous principal using the ICP-specific `transfer` fails
+    // Transfer from the account of the anonymous principal using the ICP-specific `transfer` succeeds
     let transfer_args = icp_ledger::TransferArgs {
         memo: icp_ledger::Memo(0u64),
         amount: Tokens::from_e8s(TRANSFER_AMOUNT),
         fee: Tokens::from_e8s(FEE),
         from_subaccount: None,
-        to: AccountIdentifier::new(p1, None).to_address(),
+        to: AccountIdentifier::new(p2, None).to_address(),
         created_at_time: None,
     };
     let response = env.execute_ingress_as(
@@ -307,18 +358,14 @@ fn test_icp_anonymous_transfers() {
     )
     .expect("failed to decode transfer response");
     assert_eq!(result, Ok(expected_block_index));
-
-    assert_eq!(
-        2 * INITIAL_BALANCE - FEE * 4,
-        total_supply(&env, canister_id)
-    );
-    assert_eq!(
-        INITIAL_BALANCE - FEE * 2,
-        balance_of(&env, canister_id, p1.0)
-    );
-    assert_eq!(
-        INITIAL_BALANCE - FEE * 2,
-        balance_of(&env, canister_id, anon.0)
+    expected_total_supply -= FEE;
+    expected_balance_anon -= TRANSFER_AMOUNT + FEE;
+    expected_balance_p2 += TRANSFER_AMOUNT;
+    check_expected_balances_and_total_supply(
+        &expected_total_supply,
+        &expected_balance_p1,
+        &expected_balance_p2,
+        &expected_balance_anon,
     );
 }
 
