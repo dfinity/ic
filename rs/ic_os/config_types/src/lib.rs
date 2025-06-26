@@ -71,6 +71,12 @@ pub enum GuestVMType {
     Upgrade,
 }
 
+impl Default for GuestVMType {
+    fn default() -> Self {
+        GuestVMType::Default
+    }
+}
+
 /// GuestOS configuration. In production, this struct inherits settings from `HostOSConfig`.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct GuestOSConfig {
@@ -79,6 +85,7 @@ pub struct GuestOSConfig {
     pub network_settings: NetworkSettings,
     pub icos_settings: ICOSSettings,
     pub guestos_settings: GuestOSSettings,
+    #[serde(default)]
     pub guest_vm_type: GuestVMType,
     #[serde(default)]
     pub upgrade_config: GuestOSUpgradeConfig,
