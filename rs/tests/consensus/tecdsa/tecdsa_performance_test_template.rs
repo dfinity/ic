@@ -99,7 +99,13 @@ const PRE_SIGNATURES_TO_CREATE: u32 = 30;
 const MAX_QUEUE_SIZE: u32 = 10;
 const CANISTER_COUNT: usize = 4;
 const SIGNATURE_REQUESTS_PER_SECOND: f64 = 2.5;
-const MAX_MSG_SIZE_BYTES: usize = 10_484_000; // 10MiB minus some message overhead
+
+const SMALL_MSG_SIZE_BYTES: usize = 32;
+const LARGE_MSG_SIZE_BYTES: usize = 10_484_000; // 10MiB minus some message overhead
+
+// By default, we keep a small message size, to avoid permanent heavy test load.
+// Change to LARGE_MSG_SIZE_BYTES to test large signature requests.
+const MSG_SIZE_BYTES: usize = SMALL_MSG_SIZE_BYTES;
 
 const BENCHMARK_REPORT_FILE: &str = "benchmark/benchmark.json";
 
@@ -254,7 +260,7 @@ pub fn tecdsa_performance_test(
             // For simplicity, we test one derivation element of maximum size. We could
             // also test a big number of small elements, but this would imply a larger
             // serialization overhead (as it would include the length of each element),
-            // which we would need to account for in the MAX_LARGE_MSG_SIZE_BYTES constant.
+            // which we would need to account for in the LARGE_MSG_SIZE_BYTES constant.
             //
             // For Schnorr, we test a large message and a keep the derivation path small,
             // as the latter is tested in ECDSA.
@@ -264,26 +270,18 @@ pub fn tecdsa_performance_test(
 
             let (method_name, payload) = match key_id.clone() {
                 MasterPublicKeyId::Ecdsa(key_id) => {
-                    ChainSignatureRequest::large_ecdsa_method_and_payload(
-                        1,
-                        MAX_MSG_SIZE_BYTES,
-                        key_id,
-                    )
+                    ChainSignatureRequest::large_ecdsa_method_and_payload(1, MSG_SIZE_BYTES, key_id)
                 }
                 MasterPublicKeyId::Schnorr(key_id) => {
                     ChainSignatureRequest::large_schnorr_method_and_payload(
-                        MAX_MSG_SIZE_BYTES,
+                        MSG_SIZE_BYTES,
                         1,
                         0,
                         key_id,
                     )
                 }
                 MasterPublicKeyId::VetKd(key_id) => {
-                    ChainSignatureRequest::large_vetkd_method_and_payload(
-                        MAX_MSG_SIZE_BYTES,
-                        0,
-                        key_id,
-                    )
+                    ChainSignatureRequest::large_vetkd_method_and_payload(MSG_SIZE_BYTES, 0, key_id)
                 }
             };
 
