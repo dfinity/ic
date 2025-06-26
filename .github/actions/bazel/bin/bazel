@@ -54,6 +54,15 @@ if [[ $bazel_command == "build" ]] || [[ $bazel_command == "test" ]]; then
     command_timestamp=$(date +%s)
     bazel_args+=(
 
+        # default all tests to fail ...
+        #   ... after three attempts for tests marked as flaky
+        #   ... after three attempts for all tests in //rs/tests
+        #   ... after the first attempt for other tests
+        #   see also:
+        #     https://bazel.build/reference/command-line-reference#build-flag--flaky_test_attempts
+        --flaky_test_attempts=default
+        --flaky_test_attempts=//rs/tests/.*@3
+
         # write execlog, mostly for build reproducibility checks
         --execution_log_compact_file="$BAZEL_ACTION_METRICS_OUT/execlog-$command_timestamp.zst"
 

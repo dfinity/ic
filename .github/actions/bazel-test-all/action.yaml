@@ -42,16 +42,7 @@ runs:
             diff_only='${{ inputs.diff-only }}'
             stamp_build='${{ inputs.stamp-build }}'
 
-            bazel_args=(
-                # default all tests to fail ...
-                #   ... after three attempts for tests marked as flaky
-                #   ... after three attempts for all tests in //rs/tests
-                #   ... after the first attempt for other tests
-                #   see also:
-                #     https://bazel.build/reference/command-line-reference#build-flag--flaky_test_attempts
-                --flaky_test_attempts=default
-                --flaky_test_attempts=//rs/tests/.*@3
-            )
+            bazel_args=()
 
             if [[ $stamp_build == "true" ]]; then
               # make sure the version is stamped in
