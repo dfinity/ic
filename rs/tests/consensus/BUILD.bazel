@@ -272,6 +272,7 @@ system_test(
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
+        "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
         "@crate_index//:slog",
