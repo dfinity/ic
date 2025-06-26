@@ -595,7 +595,7 @@ jobs:
             echo "RECOVERY_STORE_CONTENT1=${RECOVERY_STORE_CONTENT1}" >> "$GITHUB_ENV"
             echo "RECOVERY_STORE_CONTENT2=${RECOVERY_STORE_CONTENT2}" >> "$GITHUB_ENV"
             echo "RECOVERY_VERSION=${RECOVERY_VERSION}" >> "$GITHUB_ENV"
-            echo "RECOVERY_HASH=${RECOVERY_EXPECTED_RECOVERY_HASH}" >> "$GITHUB_ENV"
+            echo "RECOVERY_HASH=${RECOVERY_HASH}" >> "$GITHUB_ENV"
 
       - name: Adapt guestos-recovery-engine script
         run: |
