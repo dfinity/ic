@@ -670,7 +670,7 @@ pub async fn finalize_requests() {
 
     let key_name = state::read_state(|s| s.ecdsa_key_name.clone());
 
-    for (old_txid, submitted_tx) in maybe_finalized_transactions {
+    for (index, (old_txid, submitted_tx)) in maybe_finalized_transactions.into_iter().enumerate() {
         let mut utxos: BTreeSet<_> = submitted_tx.used_utxos.iter().cloned().collect();
 
         let tx_fee_per_vbyte = match submitted_tx.fee_per_vbyte {
@@ -710,9 +710,11 @@ pub async fn finalize_requests() {
 
         let outpoint_account = state::read_state(|s| filter_output_accounts(s, &unsigned_tx));
 
-        assert!(
-            utxos.is_empty(),
-            "build_unsigned_transaction didn't use all inputs"
+        assert_eq!(
+            utxos,
+            BTreeSet::default(),
+            "build_unsigned_transaction {index} for {} didn't use all inputs. Previously submitted TX: {submitted_tx:?}. New TX: {unsigned_tx:?}",
+            old_txid,
         );
         assert_eq!(used_utxos.len(), submitted_tx.used_utxos.len());
 
@@ -855,6 +857,7 @@ fn greedy(target: u64, available_utxos: &mut BTreeSet<Utxo>) -> Vec<Utxo> {
     let mut solution = vec![];
     let mut goal = target;
     while goal > 0 {
+        println!("Goal {goal}");
         let utxo = match available_utxos.iter().max_by_key(|u| u.value) {
             Some(max_utxo) if max_utxo.value < goal => max_utxo.clone(),
             Some(_) => available_utxos
@@ -871,6 +874,7 @@ fn greedy(target: u64, available_utxos: &mut BTreeSet<Utxo>) -> Vec<Utxo> {
                 return vec![];
             }
         };
+        println!("UTXO {utxo:?}");
         goal = goal.saturating_sub(utxo.value);
         assert!(available_utxos.remove(&utxo));
         solution.push(utxo);

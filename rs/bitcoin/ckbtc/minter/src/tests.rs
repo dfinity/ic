@@ -8,13 +8,13 @@ use crate::{
         SubmittedBtcTransaction,
     },
     test_fixtures::arbitrary,
-    tx, BuildTxError, CacheWithExpiration, Network, MINTER_ADDRESS_DUST_LIMIT,
+    tx, utxos_selection, BuildTxError, CacheWithExpiration, Network, MINTER_ADDRESS_DUST_LIMIT,
 };
 use bitcoin::network::constants::Network as BtcNetwork;
 use bitcoin::util::psbt::serialize::{Deserialize, Serialize};
 use candid::Principal;
 use ic_base_types::CanisterId;
-use ic_btc_interface::{OutPoint, Utxo};
+use ic_btc_interface::{OutPoint, Txid, Utxo};
 use icrc_ledger_types::icrc1::account::Account;
 use maplit::btreeset;
 use proptest::{
@@ -1225,4 +1225,39 @@ proptest! {
             assert_eq!(cache.get(&i, max_key), expected_val);
         }
     }
+}
+
+#[test]
+fn test_utxos_selection() {
+    //UTXOs from `422f3115c4f865536f92e94d22cb7b2795b0482e517f7c46561e2234cf03e603`.
+    let target = 157_990;
+    let utxo_117 = Utxo {
+        outpoint: OutPoint {
+            txid: Txid::from([
+                117, 219, 203, 2, 46, 215, 129, 132, 15, 150, 208, 33, 176, 123, 214, 116, 231,
+                210, 30, 81, 179, 57, 81, 203, 18, 14, 34, 119, 120, 102, 208, 89,
+            ]),
+            vout: 0,
+        },
+        value: 50_000,
+        height: 902114,
+    };
+    let utxo_141 = Utxo {
+        outpoint: OutPoint {
+            txid: Txid::from([
+                141, 123, 45, 7, 79, 177, 177, 145, 143, 77, 206, 60, 201, 97, 232, 50, 79, 38,
+                200, 87, 91, 46, 70, 135, 80, 3, 217, 21, 39, 160, 255, 148,
+            ]),
+            vout: 0,
+        },
+        value: 158_000,
+        height: 901322,
+    };
+    let mut available_utxos = btreeset! {utxo_117.clone(), utxo_141.clone()};
+    let output_count = 1;
+
+    let result = utxos_selection(target, &mut available_utxos, output_count);
+
+    assert_eq!(result, vec![utxo_141]);
+    assert_eq!(available_utxos, btreeset! {utxo_117});
 }
