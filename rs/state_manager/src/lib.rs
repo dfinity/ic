@@ -1153,6 +1153,7 @@ struct CreateCheckpointResult {
 }
 
 impl StateManagerImpl {
+    /// Finish all asynchronous checkpointing operations, including checkpoint verification and manifest computation.
     pub fn flush_tip_channel(&self) {
         flush_tip_channel(&self.tip_channel)
     }
@@ -2320,7 +2321,11 @@ impl StateManagerImpl {
             })
             .expect("Failed to send Validate request");
 
-        let manifest_delta = {
+        // On the NNS subnet we never allow incremental manifest computation
+        let is_nns = self.own_subnet_id == state.metadata.network_topology.nns_subnet_id;
+        let manifest_delta = if is_nns {
+            None
+        } else {
             let _timer = self
                 .metrics
                 .checkpoint_metrics
@@ -2373,7 +2378,10 @@ impl StateManagerImpl {
         };
 
         let elapsed = start.elapsed();
-        info!(self.log, "Created checkpoint @{} in {:?}", height, elapsed);
+        info!(
+            self.log,
+            "Created unverified checkpoint @{} in {:?}", height, elapsed
+        );
         self.metrics
             .checkpoint_op_duration
             .with_label_values(&["create"])

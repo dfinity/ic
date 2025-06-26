@@ -88,9 +88,8 @@ system_test_nns(
     tags = [
         "experimental_system_test_colocation",
         "k8s",
-        "manual",  # the test is not reliable
+        "long_test",
         "subnet_recovery",
-        "system_test_hourly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev_test = True,
@@ -245,7 +244,7 @@ system_test_nns(
     tags = [
         "experimental_system_test_colocation",
         "subnet_recovery",
-        "system_test_hourly",
+        "system_test_large",  # only run as part of release-testing since this test requires many resources.
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",

@@ -337,6 +337,67 @@ fn get_valid_system_apis_common(I: ValType) -> HashMap<String, HashMap<String, F
                 },
             )],
         ),
+        // Environment variables
+        (
+            "env_var_count",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![],
+                    return_type: vec![I],
+                },
+            )],
+        ),
+        (
+            "env_var_name_size",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![I],
+                    return_type: vec![I],
+                },
+            )],
+        ),
+        (
+            "env_var_name_copy",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![I, I, I, I],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
+            "env_var_name_exists",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![I, I],
+                    return_type: vec![ValType::I32],
+                },
+            )],
+        ),
+        (
+            "env_var_value_size",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![I, I],
+                    return_type: vec![I],
+                },
+            )],
+        ),
+        (
+            "env_var_value_copy",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![I, I, I, I, I],
+                    return_type: vec![],
+                },
+            )],
+        ),
         // Inter-canister method calls
         (
             "call_new",

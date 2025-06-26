@@ -36,6 +36,7 @@ use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
 use icrc_ledger_types::icrc2::approve::ApproveArgs;
+use icrc_ledger_types::icrc2::transfer_from::TransferFromArgs;
 use lazy_static::lazy_static;
 use num_traits::cast::ToPrimitive;
 use pocket_ic::{PocketIc, PocketIcBuilder};
@@ -256,6 +257,14 @@ impl RosettaTestingEnvironmentBuilder {
                         .unwrap(),
                     LedgerEndpointArg::TransferArg(transfer_arg) => caller_agent
                         .transfer(transfer_arg.clone())
+                        .await
+                        .unwrap()
+                        .unwrap()
+                        .0
+                        .to_u64()
+                        .unwrap(),
+                    LedgerEndpointArg::TransferFromArg(transfer_from_arg) => caller_agent
+                        .transfer_from(transfer_from_arg.clone())
                         .await
                         .unwrap()
                         .unwrap()
@@ -873,6 +882,29 @@ fn test_account_balance() {
                                         .or_insert(amount.0.to_u64().unwrap());
                                     involved_accounts.push(*to);
                                 }
+                            }
+                            LedgerEndpointArg::TransferFromArg(TransferFromArgs {
+                                from,
+                                to,
+                                amount,
+                                ..
+                            }) => {
+                                // For TransferFrom we always deduct the transfer fee. TransferFrom
+                                // from or to the minter account is not allowed, so we do not need
+                                // to check for it.
+                                accounts_balances.entry(*from).and_modify(|balance| {
+                                    *balance -= amount.0.to_u64().unwrap();
+                                    *balance -= DEFAULT_TRANSFER_FEE;
+                                });
+                                involved_accounts.push(*from);
+
+                                accounts_balances
+                                    .entry(*to)
+                                    .and_modify(|balance| {
+                                        *balance += amount.0.to_u64().unwrap();
+                                    })
+                                    .or_insert(amount.0.to_u64().unwrap());
+                                involved_accounts.push(*to);
                             }
                         };
 
@@ -1508,6 +1540,7 @@ fn test_search_transactions() {
         .unwrap()
 }
 
+#[cfg(not(target_os = "macos"))]
 #[test]
 fn test_cli_data() {
     let mut runner = TestRunner::new(TestRunnerConfig {

@@ -1228,6 +1228,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "bindgen"
+version = "0.71.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5f58bf3d7db68cfbac37cfc485a8d711e87e064c3d0fe0435b92f7a407f9d6b3"
+dependencies = [
+ "bitflags 2.9.0",
+ "cexpr",
+ "clang-sys",
+ "itertools 0.13.0",
+ "log",
+ "prettyplease",
+ "proc-macro2",
+ "quote",
+ "regex",
+ "rustc-hash 2.1.0",
+ "shlex",
+ "syn 2.0.101",
+]
+
+[[package]]
 name = "binread"
 version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1634,6 +1654,12 @@ dependencies = [
  "regex-automata 0.4.9",
  "serde",
 ]
+
+[[package]]
+name = "build-env"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1522ac6ee801a11bf9ef3f80403f4ede6eb41291fac3dde3de09989679305f25"
 
 [[package]]
 name = "build-info"
@@ -2044,7 +2070,7 @@ dependencies = [
 
 [[package]]
 name = "canlog"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "candid",
  "canlog_derive",
@@ -2555,12 +2581,9 @@ name = "config"
 version = "1.0.0"
 dependencies = [
  "anyhow",
- "askama",
  "clap 4.5.27",
  "config_types",
  "deterministic_ips",
- "goldenfile",
- "ic-metrics-tool",
  "ic-types",
  "macaddr",
  "network",
@@ -2587,6 +2610,18 @@ dependencies = [
  "serde_with 1.14.0",
  "tempfile",
  "thiserror 2.0.12",
+ "url",
+]
+
+[[package]]
+name = "config_types_compatibility_lib"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "config_types",
+ "macaddr",
+ "serde",
+ "serde_json",
  "url",
 ]
 
@@ -2718,6 +2753,7 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-system-test-driver",
  "ic-types",
+ "ic-utils 0.40.1",
  "ic_consensus_system_test_utils",
  "ic_consensus_threshold_sig_system_test_utils",
  "slog",
@@ -3027,6 +3063,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "85256fac1519a7d25a040c1d850fba67478f3f021ad5fdf738ba4425ee862dbf"
 
 [[package]]
+name = "crc"
+version = "3.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9710d3b3739c2e349eb44fe848ad0b7c8cb1e42bd87ee49371df2f7acaf3e675"
+dependencies = [
+ "crc-catalog",
+]
+
+[[package]]
+name = "crc-catalog"
+version = "2.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "19d374276b40fb8bbdee95aef7c7fa6b5316ec764510eb64b8dd0e2ed0d7e7f5"
+
+[[package]]
 name = "crc32fast"
 version = "1.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3230,6 +3281,16 @@ checksum = "13b588ba4ac1a99f7f2964d24b3d896ddc6bf847ee3855dbd4366f058cfcd331"
 dependencies = [
  "quote",
  "syn 2.0.101",
+]
+
+[[package]]
+name = "cstr-argument"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b6bd9c8e659a473bce955ae5c35b116af38af11a7acb0b480e01f3ed348aeb40"
+dependencies = [
+ "cfg-if 1.0.0",
+ "memchr",
 ]
 
 [[package]]
@@ -4693,7 +4754,28 @@ version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f6f339eb8adc052cd2ca78910fda869aefa38d22d5cb648e6485e4d3fc06f3b1"
 dependencies = [
- "foreign-types-shared",
+ "foreign-types-shared 0.1.1",
+]
+
+[[package]]
+name = "foreign-types"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d737d9aa519fb7b749cbc3b962edcf310a8dd1f4b67c91c4f83975dbdd17d965"
+dependencies = [
+ "foreign-types-macros",
+ "foreign-types-shared 0.3.1",
+]
+
+[[package]]
+name = "foreign-types-macros"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1a5c6c585bc94aaf2c7b51dd4c2ba22680844aba4c687be581871a6f518c5742"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.101",
 ]
 
 [[package]]
@@ -4701,6 +4783,12 @@ name = "foreign-types-shared"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "00b0228411908ca8685dba7fc2cdd70ec9990a6e753e89b6ac91a84c40fbaf4b"
+
+[[package]]
+name = "foreign-types-shared"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aa9a19cbb55df58761df49b23516a86d432839add4af60fc256da840f66ed35b"
 
 [[package]]
 name = "form_urlencoded"
@@ -5070,6 +5158,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "gpt"
+version = "4.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3696fafb1ecdcc2ae3ce337de73e9202806068594b77d22fdf2f3573c5ec2219"
+dependencies = [
+ "bitflags 2.9.0",
+ "crc",
+ "simple-bytes",
+ "uuid",
+]
+
+[[package]]
 name = "group"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5089,6 +5189,44 @@ dependencies = [
  "ff 0.13.0",
  "rand_core 0.6.4",
  "subtle",
+]
+
+[[package]]
+name = "grub"
+version = "1.0.0"
+dependencies = [
+ "regex",
+ "strum 0.26.3",
+ "tempfile",
+ "thiserror 2.0.12",
+]
+
+[[package]]
+name = "guest_vm_runner"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "askama",
+ "async-trait",
+ "config",
+ "config_types",
+ "deterministic_ips",
+ "goldenfile",
+ "gpt",
+ "grub",
+ "ic-metrics-tool",
+ "macaddr",
+ "nix 0.24.3",
+ "partition_tools",
+ "regex",
+ "sys-mount",
+ "systemd",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "url",
+ "uuid",
+ "virt",
 ]
 
 [[package]]
@@ -6153,6 +6291,7 @@ dependencies = [
  "proptest-derive",
  "prost 0.13.4",
  "serde",
+ "serde_bytes",
  "serde_cbor",
  "strum 0.26.3",
  "strum_macros 0.26.4",
@@ -9036,7 +9175,7 @@ dependencies = [
 [[package]]
 name = "ic-gateway"
 version = "0.2.0"
-source = "git+https://github.com/dfinity/ic-gateway?rev=1d087ad6b8e477159e0ce68b30b6cf09d7ce4938#1d087ad6b8e477159e0ce68b30b6cf09d7ce4938"
+source = "git+https://github.com/dfinity/ic-gateway?rev=b78562340bd00f05f9c055dcba3ec0f74758c927#b78562340bd00f05f9c055dcba3ec0f74758c927"
 dependencies = [
  "ahash 0.8.11",
  "anyhow",
@@ -9822,6 +9961,7 @@ dependencies = [
  "rosetta-core",
  "serde_bytes",
  "serde_json",
+ "strum 0.26.3",
 ]
 
 [[package]]
@@ -10293,6 +10433,7 @@ version = "0.9.0"
 dependencies = [
  "arbitrary",
  "candid",
+ "candid_parser",
  "ic-base-types",
  "ic-btc-interface",
  "ic-btc-replica-types",
@@ -10414,7 +10555,7 @@ dependencies = [
 
 [[package]]
 name = "ic-metrics-assert"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-trait",
  "candid",
@@ -15073,14 +15214,13 @@ dependencies = [
 
 [[package]]
 name = "icrc-ledger-types"
-version = "0.1.9"
+version = "0.1.10"
 dependencies = [
  "assert_matches",
  "base32",
  "candid",
  "crc32fast",
  "hex",
- "ic-cdk 0.17.2",
  "ic-stable-structures",
  "icrc-cbor",
  "itertools 0.12.1",
@@ -16279,6 +16419,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "libsystemd-sys"
+version = "0.9.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ed080163caa59cc29b34bce2209b737149a4bac148cd9a8b04e4c12822798119"
+dependencies = [
+ "build-env",
+ "libc",
+ "pkg-config",
+]
+
+[[package]]
 name = "libusb1-sys"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -16505,6 +16656,17 @@ dependencies = [
  "scoped-tls",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "loopdev-3"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5c48e069775cb94ff50e9cd572544e439c65d5856207119fef992a09ce8f2517"
+dependencies = [
+ "bindgen 0.71.1",
+ "errno 0.3.10",
+ "libc",
 ]
 
 [[package]]
@@ -17626,7 +17788,7 @@ checksum = "61cfb4e166a8bb8c9b55c500bc2308550148ece889be90f609377e58140f42c6"
 dependencies = [
  "bitflags 2.9.0",
  "cfg-if 1.0.0",
- "foreign-types",
+ "foreign-types 0.3.2",
  "libc",
  "once_cell",
  "openssl-macros",
@@ -17797,8 +17959,7 @@ dependencies = [
  "hyper 1.6.0",
  "hyper-rustls 0.27.5",
  "hyper-util",
- "ic-canister-client",
- "ic-canister-client-sender",
+ "ic-agent",
  "ic-config",
  "ic-consensus",
  "ic-consensus-dkg",
@@ -17811,6 +17972,7 @@ dependencies = [
  "ic-crypto-test-utils-tls",
  "ic-crypto-tls-interfaces",
  "ic-dashboard",
+ "ic-ed25519",
  "ic-http-endpoints-async-utils",
  "ic-http-endpoints-metrics",
  "ic-http-utils",
@@ -21392,6 +21554,7 @@ dependencies = [
  "anyhow",
  "clap 4.5.27",
  "config",
+ "config_types",
  "partition_tools",
  "serde_json",
  "tempfile",
@@ -21555,6 +21718,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "simple-bytes"
+version = "0.2.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c11532d9d241904f095185f35dcdaf930b1427a94d5b01d7002d74ba19b44cc4"
+
+[[package]]
 name = "simple_asn1"
 version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -21707,6 +21876,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3c5e1a9a646d36c3599cd173a41282daf47c44583ad367b8e6837255952e5c67"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "smart-default"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0eb01866308440fc64d6c44d9e86c5cc17adfe33c4d6eed55da9145044d0ffc1"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.101",
 ]
 
 [[package]]
@@ -22235,6 +22415,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "sys-mount"
+version = "3.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a6acb8bb63826062d5a44b68298cf2e25b84bc151bc0c31c35a83b61f818682a"
+dependencies = [
+ "bitflags 2.9.0",
+ "libc",
+ "loopdev-3",
+ "smart-default",
+ "thiserror 1.0.69",
+ "tracing",
+]
+
+[[package]]
 name = "system-configuration"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -22274,6 +22468,21 @@ checksum = "8e1d1b10ced5ca923a1fcb8d03e96b8d3268065d724548c0211415ff6ac6bac4"
 dependencies = [
  "core-foundation-sys",
  "libc",
+]
+
+[[package]]
+name = "systemd"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "afec0101d9ae8ab26aedf0840109df689938ea7e538aa03df4369f1854f11562"
+dependencies = [
+ "cstr-argument",
+ "foreign-types 0.5.0",
+ "libc",
+ "libsystemd-sys",
+ "log",
+ "memchr",
+ "utf8-cstr",
 ]
 
 [[package]]
@@ -22392,15 +22601,14 @@ dependencies = [
 
 [[package]]
 name = "tempfile"
-version = "3.16.0"
+version = "3.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "38c246215d7d24f48ae091a2902398798e05d978b24315d6efbc00ede9a8bb91"
+checksum = "e8a64e3985349f2441a1a9ef0b853f869006c3855f2cda6862a94d26ebb9d6a1"
 dependencies = [
- "cfg-if 1.0.0",
  "fastrand",
  "getrandom 0.3.1",
  "once_cell",
- "rustix 0.38.44",
+ "rustix 1.0.5",
  "windows-sys 0.59.0",
 ]
 
@@ -22933,16 +23141,16 @@ dependencies = [
 
 [[package]]
 name = "tokio-util"
-version = "0.7.13"
+version = "0.7.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d7fcaa8d55a2bdd6b83ace262b016eca0d79ee02818c5c1bcdf0305114081078"
+checksum = "66a539a9ad6d5d281510d5bd368c973d636c02dbf8a67300bfb6b950696ad7df"
 dependencies = [
  "bytes",
  "futures-core",
  "futures-io",
  "futures-sink",
  "futures-util",
- "hashbrown 0.14.5",
+ "hashbrown 0.15.2",
  "pin-project-lite",
  "slab",
  "tokio",
@@ -23626,6 +23834,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c8232dd3cdaed5356e0f716d285e4b40b932ac434100fe9b7e0e8e935b9e6246"
 
 [[package]]
+name = "utf8-cstr"
+version = "0.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "55bcbb425141152b10d5693095950b51c3745d019363fc2929ffd8f61449b628"
+
+[[package]]
 name = "utf8-width"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -23677,6 +23891,27 @@ name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
+
+[[package]]
+name = "virt"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77a05f77c836efa9be343b5419663cf829d75203b813579993cdd9c44f51767e"
+dependencies = [
+ "libc",
+ "uuid",
+ "virt-sys",
+]
+
+[[package]]
+name = "virt-sys"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c504e459878f09177f41bf2f8bb3e9a8af4fca7a09e73152fee02535d501601c"
+dependencies = [
+ "libc",
+ "pkg-config",
+]
 
 [[package]]
 name = "vrl"

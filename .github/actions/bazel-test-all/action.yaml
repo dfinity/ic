@@ -4,7 +4,7 @@ inputs:
   diff-only:
     required: false
     default: false
-  release-build:
+  stamp-build:
     required: false
     default: true
   upload-artifacts:
@@ -20,8 +20,6 @@ inputs:
     required: true
   CLOUD_CREDENTIALS_CONTENT:
     required: false
-  SSH_PRIVATE_KEY_BACKUP_POD:
-    required: false
   GPG_PASSPHRASE:
     required: true
     description: "GPG key to encrypt build events. Upload can be disabled by explicitly setting the input to an empty string."
@@ -29,22 +27,6 @@ inputs:
 runs:
   using: "composite"
   steps:
-      - name: Set up backup pod access
-        shell: bash
-        if: inputs.SSH_PRIVATE_KEY_BACKUP_POD != ''
-        run: |
-          # The following adds the SSH private key to the ssh-agent such that CI can SSH into the backup pod.
-          if [ -z "${SSH_AUTH_SOCK:-}" ]; then
-            eval "$(ssh-agent -s)"
-            ssh-add - <<< '${{ inputs.SSH_PRIVATE_KEY_BACKUP_POD }}'
-            echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
-          fi
-
-          rm -rf ~/.ssh
-          mkdir -p ~/.ssh
-          chmod 0700 ~/.ssh
-          echo -e "Host *\nUser github-runner\n" > ~/.ssh/config
-
       - name: Run Bazel Commands
         uses: ./.github/actions/bazel
         env:
@@ -58,7 +40,7 @@ runs:
             echo "::notice::Node Name: ${NODE_NAME}"
 
             diff_only='${{ inputs.diff-only }}'
-            release_build='${{ inputs.release-build }}'
+            stamp_build='${{ inputs.stamp-build }}'
 
             bazel_args=(
                 # default all tests to fail ...
@@ -71,7 +53,7 @@ runs:
                 --flaky_test_attempts=//rs/tests/.*@3
             )
 
-            if [[ $release_build == "true" ]]; then
+            if [[ $stamp_build == "true" ]]; then
               # make sure the version is stamped in
               bazel_args+=( --config=stamped )
             fi
@@ -124,10 +106,10 @@ runs:
         if: inputs.upload-artifacts == 'true' && inputs.CLOUD_CREDENTIALS_CONTENT != ''
         with:
           run: |
-            release_build='${{ inputs.release-build }}'
+            stamp_build='${{ inputs.stamp-build }}'
 
-            if [[ $release_build != "true" ]]; then
-              echo "refusing to upload non-release artifacts"
+            if [[ $stamp_build != "true" ]]; then
+              echo "refusing to upload non-stamped artifacts"
               exit 1
             fi
 
