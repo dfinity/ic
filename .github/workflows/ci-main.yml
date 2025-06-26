@@ -561,37 +561,79 @@ jobs:
           set -eExuo pipefail
           export CARGO_TERM_COLOR=always # ensure output has colors
           cargo build --release --locked
+  # # TODO: REMOVE. Only for development purposes. Do not merge.
+  # recovery-engine-test:
+  #   name: Recovery Engine Test
+  #   runs-on:
+  #     labels: dind-large
+  #   container:
+  #     image: ghcr.io/dfinity/ic-build@sha256:e4862aca9dfa7e342f44cb4ba48923de4306099d26b067ee285f5e0ebe87162a
+  #     options: >-
+  #       -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
+  #   timeout-minutes: 60
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v4
+  #       with:
+  #         fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
+  #     # TODO: add artifact hash edit
+  #     - name: Create temporary branch
+  #       run: |
+  #         TEMP_BRANCH="recovery-engine-test-$(date +%s)"
+  #         echo "TEMP_BRANCH=${TEMP_BRANCH}" >> "$GITHUB_ENV"
+  #         git checkout -b "$TEMP_BRANCH"
+  #         echo "This is a dummy file for testing" > dummy_test_file.txt
+  #     - name: Run tests
+  #       id: bazel-test-all
+  #       uses: ./.github/actions/bazel-test-all/
+  #       with:
+  #         BAZEL_COMMAND: test --config=ci --keep_going --test_tag_filters=system_test_nightly
+  #         BAZEL_TARGETS: //rs/tests/consensus:recovery_engine_test
+  #         GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+  #     - name: Cleanup
+  #       if: always()
+  #       run: |
+  #         git checkout "$CI_COMMIT_SHA"
+  #         git branch -D "$TEMP_BRANCH"
   # TODO: REMOVE. Only for development purposes. Do not merge.
-  recovery-engine-test:
-    name: Recovery Engine Test
+  upload-dummy-artifacts:
+    name: Upload Dummy Artifacts
     runs-on:
       labels: dind-large
     container:
       image: ghcr.io/dfinity/ic-build@sha256:e4862aca9dfa7e342f44cb4ba48923de4306099d26b067ee285f5e0ebe87162a
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
-    timeout-minutes: 60
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
-      # TODO: add artifact hash edit
-      - name: Create temporary branch
+      - name: Write AWS credentials
+        shell: bash
         run: |
-          TEMP_BRANCH="recovery-engine-test-$(date +%s)"
-          echo "TEMP_BRANCH=${TEMP_BRANCH}" >> "$GITHUB_ENV"
-          git checkout -b "$TEMP_BRANCH"
-          echo "This is a dummy file for testing" > dummy_test_file.txt
-      - name: Run tests
-        id: bazel-test-all
-        uses: ./.github/actions/bazel-test-all/
+          AWS_CREDS="${HOME}/.aws/credentials"
+          mkdir -p "$(dirname "${AWS_CREDS}")"
+          echo '${{ secrets.CLOUD_CREDENTIALS_CONTENT }}' >"$AWS_CREDS"
+      - name: Upload
+        uses: ./.github/actions/bazel
         with:
-          BAZEL_COMMAND: test --config=ci --keep_going --test_tag_filters=system_test_nightly
-          BAZEL_TARGETS: //rs/tests/consensus:recovery_engine_test
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-      - name: Cleanup
-        if: always()
-        run: |
-          git checkout "$CI_COMMIT_SHA"
-          git branch -D "$TEMP_BRANCH"
+          run: |
+            rootdir=$(mktemp -d)
+            pushd "$rootdir"
+
+            # Create dummy recovery artifacts
+            mkdir -p guest-os/recovery-artifacts && cd "$_"
+            echo -n "test cup proto" > cup.proto
+            mkdir ic_registry_local_store
+            cd ic_registry_local_store
+            mkdir -p 0001020304/05/06 && echo -n "test 07.pb" > "$_"/07.pb
+            mkdir -p 08090a0b0c/0d/0e && echo -n "test 0f.pb" > "$_"/0f.pb
+            tar zcf ../ic_registry_local_store.tar.zst *
+            cd ..
+            tar zcf recovery.tar.zst cup.proto ic_registry_local_store.tar.zst
+            rm -rf cup.proto ic_registry_local_store ic_registry_local_store.tar.zst
+
+            popd
+            bazel run //:artifact-uploader -- "$rootdir"
