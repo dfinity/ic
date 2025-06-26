@@ -73,6 +73,21 @@ impl NestedVm {
 
         self.env.read_json_object(ip_path)
     }
+
+    /// Create an SSH session to the guest VM with retry logic
+    pub fn block_on_guest_ssh_session(&self) -> Result<Session> {
+        let nested_network = self.get_nested_network()?;
+        retry_with_msg!(
+            format!(
+                "get_ssh_session to guest {}",
+                nested_network.guest_ip.to_string()
+            ),
+            self.env.logger(),
+            SSH_RETRY_TIMEOUT,
+            RETRY_BACKOFF,
+            || { get_ssh_session_from_env(&self.env, IpAddr::V6(nested_network.guest_ip)) }
+        )
+    }
 }
 
 impl HasTestEnv for NestedVm {

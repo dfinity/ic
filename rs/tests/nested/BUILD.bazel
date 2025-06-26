@@ -18,6 +18,7 @@ DEPENDENCIES = [
     "@crate_index//:anyhow",
     "@crate_index//:slog",
     "@crate_index//:url",
+    "@crate_index//:ssh2",
 ]
 
 RUNNER_DEPENDENCIES = [
@@ -67,6 +68,13 @@ rust_binary(
     name = "upgrade_test_bin",
     testonly = True,
     srcs = ["upgrade.rs"],
+    deps = DEPENDENCIES + [":nested"],
+)
+
+rust_binary(
+    name = "recovery_upgrader_test_bin",
+    testonly = True,
+    srcs = ["recovery_upgrader_test.rs"],
     deps = DEPENDENCIES + [":nested"],
 )
 
@@ -127,5 +135,22 @@ system_test_nns(
     uses_hostos_mainnet_update_img = True,
     uses_setupos_mainnet = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + IC_GATEWAY_RUNTIME_DEPS + ["//ic-os/setupos:config/node_operator_private_key.pem"],
+    deps = RUNNER_DEPENDENCIES,
+)
+
+# Tests the recovery-upgrader component by upgrading to the latest release using the recovery-upgrader component
+system_test_nns(
+    name = "recovery_upgrader_test",
+    env = MAINNET_ENV,
+    extra_head_nns_tags = [],
+    flaky = True,
+    tags = ["long_test"],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    test_driver_target = ":recovery_upgrader_test_bin",
+    test_timeout = "eternal",
+    use_empty_image = True,
+    uses_guestos_dev = True,
+    uses_setupos_dev = True,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + IC_GATEWAY_RUNTIME_DEPS,
     deps = RUNNER_DEPENDENCIES,
 )

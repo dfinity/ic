@@ -23,8 +23,8 @@ use slog::info;
 
 mod util;
 use util::{
-    check_hostos_version, elect_hostos_version, setup_nested_vm, start_nested_vm,
-    update_nodes_hostos_version,
+    check_guestos_version, check_hostos_version, elect_hostos_version, setup_nested_vm,
+    start_nested_vm, update_nodes_hostos_version,
 };
 
 use anyhow::bail;
@@ -215,4 +215,81 @@ pub fn upgrade_hostos(env: TestEnv) {
     info!(logger, "Version found is: '{}'", new_version);
 
     assert!(new_version != original_version);
+}
+
+/// Test the recovery upgrader functionality on nested VMs.
+/// This test verifies that the recovery upgrader can successfully upgrade
+/// the system components in a nested VM environment.
+pub fn recovery_upgrader_test(env: TestEnv) {
+    let logger = env.logger();
+
+    let initial_topology = block_on(
+        env.topology_snapshot()
+            .block_for_min_registry_version(ic_types::RegistryVersion::from(1)),
+    )
+    .unwrap();
+
+    info!(logger, "Starting recovery upgrader test...");
+
+    start_nested_vm(env.clone());
+
+    // Wait for node to join the testnet
+    info!(logger, "Waiting for node to join ...");
+    let new_topology = block_on(
+        initial_topology.block_for_newer_registry_version_within_duration(
+            NODE_REGISTRATION_TIMEOUT,
+            NODE_REGISTRATION_BACKOFF,
+        ),
+    )
+    .unwrap();
+
+    let host = env
+        .get_nested_vm(HOST_VM_NAME)
+        .expect("Unable to find GuestOS node.");
+
+    // Check version
+    info!(
+        logger,
+        "Checking version via SSH on GuestOS: '{}'",
+        host.get_vm().expect("Unable to get GuestOS VM.").ipv6
+    );
+    let original_version = check_guestos_version(&host);
+    info!(logger, "Version found is: '{}'", original_version);
+
+    // info!(logger, "Retrieving the current boot ID from the host before we upgrade so we can determine when it rebooted post upgrade...");
+    // let retrieve_host_boot_id = || {
+    //     host.block_on_bash_script("journalctl -q --list-boots | tail -n1 | awk '{print $2}'")
+    //         .unwrap()
+    //         .trim()
+    //         .to_string()
+    // };
+    // let host_boot_id_pre_upgrade = retrieve_host_boot_id();
+    // info!(
+    //     logger,
+    //     "Host boot ID pre upgrade: '{}'", host_boot_id_pre_upgrade
+    // );
+
+    info!(logger, "Sleeping for 30 minutes...");
+    std::thread::sleep(Duration::from_secs(30 * 60));
+    info!(logger, "Sleep completed");
+
+    // TODO: Add recovery upgrader specific test logic here
+
+    info!(logger, "Waiting for the GuestOS upgrade to apply...");
+
+    // Check the GuestOS version again after upgrade
+    info!(
+        logger,
+        "Checking version via SSH on GuestOS: '{}'",
+        host.get_vm().expect("Unable to get GuestOS VM.").ipv6
+    );
+    let new_version = check_guestos_version(&host);
+    info!(logger, "Version found is: '{}'", new_version);
+
+    assert!(new_version != original_version);
+
+    info!(
+        logger,
+        "Recovery upgrader test setup complete - implement test logic"
+    );
 }

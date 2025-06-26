@@ -19,6 +19,7 @@ ic-types = { path = "../../types/types" }
 ic_consensus_system_test_utils = { path = "../consensus/utils" }
 slog = { workspace = true }
 url = { workspace = true }
+ssh2 = { workspace = true }
 
 [[bin]]
 name = "registration"
