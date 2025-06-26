@@ -2216,7 +2216,7 @@ impl CanisterManager {
 
         let snapshot_id =
             SnapshotId::from((canister.canister_id(), canister.new_local_snapshot_id()));
-        state.take_snapshot(snapshot_id, Arc::new(new_snapshot));
+        state.create_snapshot_from_metadata(snapshot_id, Arc::new(new_snapshot));
         canister.system_state.snapshots_memory_usage = canister
             .system_state
             .snapshots_memory_usage
