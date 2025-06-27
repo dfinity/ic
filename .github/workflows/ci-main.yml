@@ -176,9 +176,10 @@ jobs:
     # Run on protected branches, but only on public repo
     if: github.repository == 'dfinity/ic'
     steps:
-      - uses: actions/checkout@v4
-        # The amd64-darwin runners are pretty slow so we don't always run the tests -- we do however
-        # wanna make sure bazel evaluates successfully.
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
       - name: Evaluate workspace
         uses: ./.github/actions/bazel
         with:
