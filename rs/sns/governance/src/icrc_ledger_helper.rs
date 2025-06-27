@@ -59,11 +59,14 @@ impl<'a> ICRCLedgerHelper<'a> {
         let block = match &blocks[..] {
             [] => Ok(0),
             [block] => &block.block,
-            blocks => return Err(format!(
-                "Error parsing a Nat value `{:?}` to u64: expected a unique u64 value, got {:?}.",
-                self.ledger.canister_id(),
-                blocks.len(),
-            )),
+            blocks => {
+                return Err(format!(
+                    "Error parsing a Nat value `{:?}` to u64: expected a unique u64 value, \
+                     got {:?}.",
+                    self.ledger.canister_id(),
+                    blocks.len(),
+                ))
+            }
         };
 
         // We assume in each block we have 1 and only 1 transaction.
