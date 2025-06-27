@@ -144,9 +144,11 @@ fn test_sns_metrics() {
             // Make 2 proposals, one for t0 + 2 * ONE_MONTH, one for t0,
             // where t0 ic the current time of the state machine.
             let proposal1_id = 1;
+            #[allow(clippy::identity_op)]
             let proposal1 = ProposalData {
                 id: Some(ProposalId { id: proposal1_id }),
                 proposal_creation_timestamp_seconds: state_machine_time,
+                executed_timestamp_seconds: state_machine_time + 1 * ONE_MONTH,
                 ..Default::default()
             };
 
@@ -176,7 +178,8 @@ fn test_sns_metrics() {
                 Some(vec![]),
             );
 
-            state_machine.advance_time(Duration::from_secs(2 * ONE_MONTH));
+            state_machine.advance_time(Duration::from_secs(ONE_MONTH));
+            state_machine.tick();
 
             let _ = icrc1_transfer(
                 &state_machine,
@@ -227,11 +230,23 @@ fn test_sns_metrics() {
                 panic!("Expected `num_recently_submitted_proposals` to be Some(_)");
             };
 
-            // @todo
             assert_eq!(
                 num_recently_submitted_proposals, 1,
                 "Expected 1 proposals to be submitted, got {}",
                 num_recently_submitted_proposals
+            );
+        }
+
+        {
+            let Some(num_recently_executed_proposals) = metrics.num_recently_executed_proposals
+            else {
+                panic!("Expected `num_recently_executed_proposals` to be Some(_)");
+            };
+
+            assert_eq!(
+                num_recently_executed_proposals, 1,
+                "Expected 1 proposals to be executed, got {}",
+                num_recently_executed_proposals
             );
         }
 
