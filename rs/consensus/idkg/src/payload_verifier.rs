@@ -23,14 +23,12 @@
 
 use crate::{
     metrics::timed_call,
-    payload_builder::IDkgPayloadError,
-    payload_builder::{create_data_payload_helper, create_summary_payload},
+    payload_builder::{create_data_payload_helper, create_summary_payload, IDkgPayloadError},
     pre_signer::IDkgTranscriptBuilder,
     signer::ThresholdSignatureBuilder,
-    utils::build_signature_inputs,
     utils::{
-        block_chain_cache, get_idkg_chain_key_config_if_enabled, BuildSignatureInputsError,
-        IDkgBlockReaderImpl, InvalidChainCacheError,
+        block_chain_cache, build_signature_inputs, get_idkg_chain_key_config_if_enabled,
+        BuildSignatureInputsError, IDkgBlockReaderImpl, InvalidChainCacheError, MAX_PARALLELISM,
     },
 };
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
@@ -71,6 +69,7 @@ use ic_types::{
     Height, SubnetId,
 };
 use prometheus::HistogramVec;
+use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use std::{collections::BTreeMap, convert::TryFrom};
 
 #[allow(clippy::enum_variant_names)]
@@ -459,12 +458,12 @@ fn validate_transcript_refs(
     curr_height: Height,
 ) -> Result<BTreeMap<IDkgTranscriptId, IDkgTranscript>, IDkgValidationError> {
     use InvalidIDkgPayloadReason::*;
-    let mut count = 0;
     let idkg_transcripts = &curr_payload.idkg_transcripts;
     let prev_configs = prev_payload
         .iter_transcript_configs_in_creation()
         .map(|config| (config.transcript_id, config))
         .collect::<BTreeMap<_, _>>();
+    let mut verify_transcript_args = Vec::new();
     for transcript_ref in curr_payload.active_transcripts().iter() {
         if transcript_ref.height >= curr_height || block_reader.transcript(transcript_ref).is_err()
         {
@@ -479,20 +478,29 @@ fn validate_transcript_refs(
                 let params = config
                     .translate(block_reader)
                     .map_err(TranscriptParamsError)?;
-                crypto
-                    .verify_transcript(&params, transcript)
-                    .map_err(IDkgVerifyTranscriptError)?;
-                count += 1;
+                verify_transcript_args.push((params, transcript));
             } else {
                 return Err(NewTranscriptNotFound(*transcript_id).into());
             }
         }
     }
-    if count as usize == idkg_transcripts.len() {
-        Ok(idkg_transcripts.clone())
-    } else {
-        Err(NewTranscriptMiscount(count).into())
+    let results = verify_transcript_args
+        .into_par_iter()
+        .chunks(MAX_PARALLELISM)
+        .flat_map_iter(|chunk| {
+            chunk.into_iter().map(|(params, transcript)| {
+                crypto
+                    .verify_transcript(&params, transcript)
+                    .map_err(IDkgVerifyTranscriptError)
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    if results.len() != idkg_transcripts.len() {
+        return Err(NewTranscriptMiscount(results.len() as u64).into());
     }
+
+    Ok(idkg_transcripts.clone())
 }
 
 fn validate_reshare_dealings(
@@ -572,16 +580,15 @@ fn validate_new_signature_agreements(
     prev_payload: &idkg::IDkgPayload,
     curr_payload: &idkg::IDkgPayload,
 ) -> Result<BTreeMap<CallbackId, CombinedSignature>, IDkgValidationError> {
-    use InvalidIDkgPayloadReason::*;
-    let mut new_signatures = BTreeMap::new();
-    let context_map = state
-        .signature_request_contexts()
+    let contexts = state.signature_request_contexts();
+    let context_map = contexts
         .iter()
         .flat_map(|(id, ctxt)| {
             IDkgSignWithThresholdContext::try_from(ctxt)
                 .map(|ctxt| (ctxt.pseudo_random_id, (*id, ctxt)))
         })
         .collect::<BTreeMap<_, _>>();
+    let mut verify_sig_args = Vec::new();
     for (random_id, completed) in curr_payload.signature_agreements.iter() {
         if let idkg::CompletedSignature::Unreported(response) = completed {
             if let ic_types::messages::Payload::Data(data) = &response.payload {
@@ -591,48 +598,64 @@ fn validate_new_signature_agreements(
                 let (id, context) = context_map.get(random_id).ok_or(
                     InvalidIDkgPayloadReason::NewSignatureMissingContext(*random_id),
                 )?;
-                let (_, input_ref) = build_signature_inputs(*id, context, block_reader)
-                    .map_err(InvalidIDkgPayloadReason::NewSignatureBuildInputsError)?;
-                match input_ref {
-                    ThresholdSigInputsRef::Ecdsa(input_ref) => {
-                        let input = input_ref
-                            .translate(block_reader)
-                            .map_err(InvalidIDkgPayloadReason::from)?;
-                        let reply = SignWithECDSAReply::decode(data).map_err(|err| {
-                            InvalidIDkgPayloadReason::DecodingError(format!("{:?}", err))
-                        })?;
-                        let signature = ThresholdEcdsaCombinedSignature {
-                            signature: reply.signature,
-                        };
-                        ThresholdEcdsaSigVerifier::verify_combined_sig(crypto, &input, &signature)
-                            .map_err(ThresholdEcdsaVerifyCombinedSignatureError)?;
-                        new_signatures.insert(*id, CombinedSignature::Ecdsa(signature));
-                    }
-                    ThresholdSigInputsRef::Schnorr(input_ref) => {
-                        let input = input_ref
-                            .translate(block_reader)
-                            .map_err(InvalidIDkgPayloadReason::from)?;
-                        let reply = SignWithSchnorrReply::decode(data).map_err(|err| {
-                            InvalidIDkgPayloadReason::DecodingError(format!("{:?}", err))
-                        })?;
-                        let signature = ThresholdSchnorrCombinedSignature {
-                            signature: reply.signature,
-                        };
-                        ThresholdSchnorrSigVerifier::verify_combined_sig(
-                            crypto, &input, &signature,
-                        )
-                        .map_err(ThresholdSchnorrVerifyCombinedSignatureError)?;
-                        new_signatures.insert(*id, CombinedSignature::Schnorr(signature));
-                    }
-                    ThresholdSigInputsRef::VetKd(_) => {
-                        // We don't expect to find agreements for vet KD contexts in the IDKG payload
-                        return Err(InvalidIDkgPayloadReason::VetKdUnexpected(*id).into());
-                    }
-                }
+                verify_sig_args.push((*id, context, data));
             }
         }
     }
-    Ok(new_signatures)
+
+    verify_sig_args
+        .into_par_iter()
+        .chunks(MAX_PARALLELISM)
+        .flat_map_iter(|chunk| {
+            chunk.into_iter().map(|(id, context, data)| {
+                validate_combined_signature(crypto, block_reader, id, context, data)
+            })
+        })
+        .collect()
+}
+
+fn validate_combined_signature(
+    crypto: &dyn ConsensusCrypto,
+    block_reader: &dyn IDkgBlockReader,
+    id: CallbackId,
+    context: &SignWithThresholdContext,
+    data: &[u8],
+) -> Result<(CallbackId, CombinedSignature), IDkgValidationError> {
+    use InvalidIDkgPayloadReason::*;
+    let (_, input_ref) = build_signature_inputs(id, context, block_reader)
+        .map_err(InvalidIDkgPayloadReason::NewSignatureBuildInputsError)?;
+    match input_ref {
+        ThresholdSigInputsRef::Ecdsa(input_ref) => {
+            let input = input_ref
+                .translate(block_reader)
+                .map_err(InvalidIDkgPayloadReason::from)?;
+            let reply = SignWithECDSAReply::decode(data)
+                .map_err(|err| InvalidIDkgPayloadReason::DecodingError(format!("{:?}", err)))?;
+            let signature = ThresholdEcdsaCombinedSignature {
+                signature: reply.signature,
+            };
+            ThresholdEcdsaSigVerifier::verify_combined_sig(crypto, &input, &signature)
+                .map_err(ThresholdEcdsaVerifyCombinedSignatureError)?;
+            Ok((id, CombinedSignature::Ecdsa(signature)))
+        }
+        ThresholdSigInputsRef::Schnorr(input_ref) => {
+            let input = input_ref
+                .translate(block_reader)
+                .map_err(InvalidIDkgPayloadReason::from)?;
+            let reply = SignWithSchnorrReply::decode(data)
+                .map_err(|err| InvalidIDkgPayloadReason::DecodingError(format!("{:?}", err)))?;
+            let signature = ThresholdSchnorrCombinedSignature {
+                signature: reply.signature,
+            };
+            ThresholdSchnorrSigVerifier::verify_combined_sig(crypto, &input, &signature)
+                .map_err(ThresholdSchnorrVerifyCombinedSignatureError)?;
+            Ok((id, CombinedSignature::Schnorr(signature)))
+        }
+        ThresholdSigInputsRef::VetKd(_) => {
+            // We don't expect to find agreements for vet KD contexts in the IDKG payload
+            Err(InvalidIDkgPayloadReason::VetKdUnexpected(id).into())
+        }
+    }
 }
 
 #[cfg(test)]
