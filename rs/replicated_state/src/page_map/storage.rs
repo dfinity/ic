@@ -411,7 +411,7 @@ impl StorageImpl {
 
 /// A single overlay file describing a not necessarily exhaustive set of pages.
 #[derive(Clone)]
-pub(crate) struct OverlayFile {
+pub struct OverlayFile {
     /// A memory map of the entire file.
     /// Invariant: `mapping` satisfies `check_correctness(&mapping)`.
     mapping: Arc<Mapping>,
@@ -548,7 +548,7 @@ impl OverlayFile {
 
     /// Number of pages in this overlay file containing data.
     #[allow(dead_code)]
-    fn num_pages(&self) -> usize {
+    pub fn num_pages(&self) -> usize {
         num_pages(&self.mapping)
     }
 
@@ -720,8 +720,14 @@ impl OverlayFile {
     }
 
     /// Iterate over all ranges in the index.
-    fn index_iter(&self) -> impl Iterator<Item = PageIndexRange> + '_ {
+    pub fn index_iter(&self) -> impl Iterator<Item = PageIndexRange> + '_ {
         self.index_slice().iter().map(PageIndexRange::from)
+    }
+}
+
+impl std::fmt::Debug for OverlayFile {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        fmt.debug_list().entries(self.index_iter()).finish()
     }
 }
 
@@ -1520,7 +1526,7 @@ type FileIndex = Id<FileIndexTag, u64>;
 
 /// A representation of a range of `PageIndex` backed by an overlay file.
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
-struct PageIndexRange {
+pub struct PageIndexRange {
     /// Start of the range in the `PageMap`, i.e. where to mmap to.
     start_page: PageIndex,
     /// End of the range in the `PageMap`.
@@ -1565,6 +1571,11 @@ impl PageIndexRange {
                 FileIndex::from(i - self.start_page.get() + self.start_file_index.get()),
             )
         })
+    }
+
+    #[allow(clippy::len_without_is_empty)]
+    pub fn len(&self) -> u64 {
+        self.end_page.get() - self.start_page.get()
     }
 }
 

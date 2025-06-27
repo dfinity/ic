@@ -7,6 +7,7 @@ pub mod decode;
 pub mod import_state;
 pub mod list;
 pub mod manifest;
+pub mod parse_overlay;
 pub mod split;
 pub mod split_manifest;
 mod utils;

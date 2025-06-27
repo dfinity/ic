@@ -302,6 +302,7 @@ pub mod fake {
                         value,
                         version,
                         deletion_marker,
+                        timestamp_nanoseconds: 0,
                     };
                     entry.insert(index, registry_value)
                 }
@@ -324,6 +325,7 @@ pub mod fake {
                     value: mutation.value,
                     version: next_version,
                     deletion_marker: mutation.mutation_type == Type::Delete as i32,
+                    timestamp_nanoseconds: 0,
                 })
             }
             // Set next version.

@@ -1,5 +1,3 @@
-#![allow(clippy::disallowed_types)]
-
 use std::{
     sync::{Arc, RwLock},
     time::{Instant, SystemTime},

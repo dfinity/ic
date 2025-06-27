@@ -30,6 +30,7 @@ use ic_management_canister_types_private::{
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_replicated_state::canister_snapshots::ValidatedSnapshotMetadata;
+use ic_replicated_state::canister_state::execution_state::SandboxMemory;
 use ic_replicated_state::canister_state::system_state::wasm_chunk_store::{
     ChunkValidationResult, WasmChunkHash, CHUNK_SIZE,
 };
@@ -92,6 +93,7 @@ pub(crate) struct CanisterManager {
     cycles_account_manager: Arc<CyclesAccountManager>,
     ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+    environment_variables_flag: FlagStatus,
 }
 
 impl CanisterManager {
@@ -102,6 +104,7 @@ impl CanisterManager {
         cycles_account_manager: Arc<CyclesAccountManager>,
         ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+        environment_variables_flag: FlagStatus,
     ) -> Self {
         CanisterManager {
             hypervisor,
@@ -110,6 +113,7 @@ impl CanisterManager {
             cycles_account_manager,
             ingress_history_writer,
             fd_factory,
+            environment_variables_flag,
         }
     }
 
@@ -157,7 +161,9 @@ impl CanisterManager {
             | Ok(Ic00Method::BitcoinSendTransactionInternal)
             | Ok(Ic00Method::BitcoinGetCurrentFeePercentiles)
             | Ok(Ic00Method::NodeMetricsHistory)
-            | Ok(Ic00Method::SubnetInfo) => Err(UserError::new(
+            | Ok(Ic00Method::SubnetInfo)
+            // `RenameCanister` can only be called from the NNS subnet.
+            | Ok(Ic00Method::RenameCanister) => Err(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!("Only canisters can call ic00 method {}", method_name),
             )),
@@ -265,7 +271,7 @@ impl CanisterManager {
     /// Keep this function in sync with `validate_canister_settings()`.
     fn do_update_settings(
         &self,
-        settings: ValidatedCanisterSettings,
+        settings: &ValidatedCanisterSettings,
         canister: &mut CanisterState,
     ) {
         // Note: At this point, the settings are validated.
@@ -317,6 +323,12 @@ impl CanisterManager {
         if let Some(wasm_memory_limit) = settings.wasm_memory_limit() {
             canister.system_state.wasm_memory_limit = Some(wasm_memory_limit);
         }
+        if let Some(environment_variables) = settings.environment_variables() {
+            if self.environment_variables_flag == FlagStatus::Enabled {
+                canister.system_state.environment_variables =
+                    environment_variables.get_environment_variables().clone();
+            }
+        }
     }
 
     /// Tries to apply the requested settings on the canister identified by
@@ -360,7 +372,7 @@ impl CanisterManager {
         let old_mem = canister.memory_allocation().allocated_bytes(old_usage);
         let old_compute_allocation = canister.scheduler_state.compute_allocation.as_percent();
 
-        self.do_update_settings(validated_settings, canister);
+        self.do_update_settings(&validated_settings, canister);
 
         let new_compute_allocation = canister.scheduler_state.compute_allocation.as_percent();
         if old_compute_allocation < new_compute_allocation {
@@ -1061,7 +1073,7 @@ impl CanisterManager {
         let scheduler_state = SchedulerState::new(state.metadata.batch_time);
         let mut new_canister = CanisterState::new(system_state, None, scheduler_state);
 
-        self.do_update_settings(settings, &mut new_canister);
+        self.do_update_settings(&settings, &mut new_canister);
         let new_usage = new_canister.memory_usage();
         let new_mem = new_canister
             .system_state
@@ -1085,11 +1097,29 @@ impl CanisterManager {
             .iter()
             .copied()
             .collect();
-        new_canister.system_state.add_canister_change(
-            state.time(),
-            origin,
-            CanisterChangeDetails::canister_creation(controllers, None),
-        );
+
+        match self.environment_variables_flag {
+            FlagStatus::Enabled => {
+                let environment_variables_hash = settings
+                    .environment_variables()
+                    .map(|env_vars| env_vars.hash());
+                new_canister.system_state.add_canister_change(
+                    state.time(),
+                    origin,
+                    CanisterChangeDetails::canister_creation(
+                        controllers,
+                        environment_variables_hash,
+                    ),
+                );
+            }
+            FlagStatus::Disabled => {
+                new_canister.system_state.add_canister_change(
+                    state.time(),
+                    origin,
+                    CanisterChangeDetails::canister_creation(controllers, None),
+                );
+            }
+        }
 
         // Add new canister to the replicated state.
         state.put_canister_state(new_canister);
@@ -1853,7 +1883,7 @@ impl CanisterManager {
             origin,
             CanisterChangeDetails::load_snapshot(
                 snapshot.canister_version(),
-                snapshot_id.to_vec(),
+                snapshot_id,
                 snapshot.taken_at_timestamp().as_nanos_since_unix_epoch(),
             ),
         );
@@ -2091,12 +2121,9 @@ impl CanisterManager {
             })?;
 
         let replace_snapshot_size = match args.replace_snapshot() {
-            Some(replace_snapshot_id) => {
-                let replace_snapshot_id =
-                    SnapshotId::try_from(&replace_snapshot_id.to_vec()).unwrap();
-                self.get_snapshot(canister_id, replace_snapshot_id, state)?
-                    .size()
-            }
+            Some(replace_snapshot_id) => self
+                .get_snapshot(canister_id, replace_snapshot_id, state)?
+                .size(),
             None => {
                 // No replace snapshot ID provided, check whether the maximum number of snapshots
                 // has been reached.
@@ -2189,7 +2216,7 @@ impl CanisterManager {
 
         let snapshot_id =
             SnapshotId::from((canister.canister_id(), canister.new_local_snapshot_id()));
-        state.take_snapshot(snapshot_id, Arc::new(new_snapshot));
+        state.create_snapshot_from_metadata(snapshot_id, Arc::new(new_snapshot));
         canister.system_state.snapshots_memory_usage = canister
             .system_state
             .snapshots_memory_usage
@@ -2201,7 +2228,7 @@ impl CanisterManager {
     /// Fails if the arguments are incompatible with the memory sizes given in the metadata or if the wasm chunk store is already full.
     /// The memory used is already accounted for during `create_snapshot_from_metadata` (except
     /// for the wasm chunk store), but the instructions used to write the data must be taken
-    /// into account here in any case.  
+    /// into account here in any case.
     pub(crate) fn write_snapshot_data(
         &self,
         sender: PrincipalId,
@@ -2395,6 +2422,74 @@ impl CanisterManager {
                 self.config.upload_wasm_chunk_instructions,
             ),
         }
+    }
+
+    /// Renames the canister from `old_id` to `new_id` and adds the appropriate entry into the canister history.
+    pub(crate) fn rename_canister(
+        &self,
+        sender: PrincipalId,
+        canister: &mut CanisterState,
+        origin: CanisterChangeOrigin,
+        old_id: CanisterId,
+        new_id: CanisterId,
+        to_version: u64,
+        to_total_num_changes: u64,
+        state: &mut ReplicatedState,
+    ) -> Result<(), CanisterManagerError> {
+        // In addition to this endpoint only being available from the NNS subnet, the calling canister
+        // has to be a controller of the canister to be renamed.
+        validate_controller(canister, &sender)?;
+
+        // TODO(MR-684): Only the migration orchestrator should be able to be the sender.
+
+        if state.canister_state(&new_id).is_some() {
+            return Err(CanisterManagerError::CanisterAlreadyExists(new_id));
+        }
+
+        if canister.status() != CanisterStatusType::Stopped {
+            return Err(CanisterManagerError::RenameCanisterNotStopped(old_id));
+        }
+
+        if state.canister_snapshots.count_by_canister(&old_id) > 0 {
+            return Err(CanisterManagerError::RenameCanisterHasSnapshot(old_id));
+        }
+
+        canister.system_state.canister_id = new_id;
+        let old_total_num_changes = canister
+            .system_state
+            .get_canister_history()
+            .get_total_num_changes();
+        // Renaming canisters overwrites the total length of the canister history to the original canister's value.
+        // The canister version is bumped to be monotone w.r.t. both the original and new values.
+        canister
+            .system_state
+            .set_canister_history_total_num_changes(to_total_num_changes);
+        let old_version = canister.system_state.canister_version;
+        canister.system_state.canister_version = std::cmp::max(old_version, to_version) + 1;
+        canister.system_state.add_canister_change(
+            state.time(),
+            origin,
+            CanisterChangeDetails::rename_canister(
+                old_id.into(),
+                old_total_num_changes,
+                new_id.into(),
+                to_version,
+                to_total_num_changes,
+            ),
+        );
+
+        if let Some(execution_state) = canister.execution_state.as_mut() {
+            execution_state.wasm_memory.sandbox_memory = SandboxMemory::new();
+            execution_state.stable_memory.sandbox_memory = SandboxMemory::new();
+            execution_state.wasm_binary.clear_compilation_cache();
+        }
+
+        state
+            .metadata
+            .unflushed_checkpoint_ops
+            .rename_canister(old_id, new_id);
+
+        Ok(())
     }
 }
 
