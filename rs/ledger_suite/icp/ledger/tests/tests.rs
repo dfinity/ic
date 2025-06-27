@@ -2062,6 +2062,81 @@ fn test_allowance_listing_values() {
     assert_eq!(allowances.len(), 2);
 }
 
+#[test]
+fn test_allowance_listing_take() {
+    const INITIAL_BALANCE: u64 = 1_000_000_000;
+    const MAX_RESULTS: usize = 500;
+    const NUM_SPENDERS: usize = MAX_RESULTS + 1;
+
+    let approver = PrincipalId::new_user_test_id(1);
+
+    let mut spenders = vec![];
+    for i in 2..2 + NUM_SPENDERS {
+        spenders.push(PrincipalId::new_user_test_id(i as u64));
+    }
+    spenders.sort_by(|first, second| {
+        AccountIdentifier::from(first.0).cmp(&AccountIdentifier::from(second.0))
+    });
+    assert_eq!(spenders.len(), MAX_RESULTS + 1);
+
+    let (env, canister_id) = setup(
+        ledger_wasm_allowance_getter(),
+        encode_init_args,
+        vec![(Account::from(approver.0), INITIAL_BALANCE)],
+    );
+
+    let approve_args = ApproveArgs {
+        from_subaccount: None,
+        spender: Account::from(spenders[0].0),
+        amount: Nat::from(1u64),
+        fee: None,
+        memo: None,
+        expires_at: None,
+        expected_allowance: None,
+        created_at_time: None,
+    };
+    let send_approval = |args: &ApproveArgs| {
+        let response = env.execute_ingress_as(
+            approver,
+            canister_id,
+            "icrc2_approve",
+            Encode!(args).unwrap(),
+        );
+        assert!(response.is_ok());
+    };
+
+    for spender in &spenders {
+        let args = ApproveArgs {
+            spender: Account::from(spender.0),
+            ..approve_args.clone()
+        };
+        send_approval(&args);        
+    }
+
+
+    let mut args = GetLegacyAllowancesArgs {
+        from_account_id: AccountIdentifier::from(approver),
+        prev_spender_id: None,
+        take: None,
+    };
+
+    let allowances = list_allowances(&env, canister_id, approver, &args);
+    assert_eq!(allowances.len(), MAX_RESULTS);
+
+    args.take = Some(0u64);
+    let allowances = list_allowances(&env, canister_id, approver, &args);
+    assert_eq!(allowances.len(), 0);
+
+    args.take = Some(5u64);
+    let allowances = list_allowances(&env, canister_id, approver, &args);
+    assert_eq!(allowances.len(), 5);
+
+    args.take = Some(u64::MAX);
+    let allowances = list_allowances(&env, canister_id, approver, &args);
+    assert_eq!(allowances.len(), MAX_RESULTS);
+
+}
+
 mod metrics {
     use crate::{encode_init_args, encode_upgrade_args, ledger_wasm};
     use ic_ledger_suite_state_machine_tests::metrics::LedgerSuiteType;
