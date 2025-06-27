@@ -2110,9 +2110,8 @@ fn test_allowance_listing_take() {
             spender: Account::from(spender.0),
             ..approve_args.clone()
         };
-        send_approval(&args);        
+        send_approval(&args);
     }
-
 
     let mut args = GetLegacyAllowancesArgs {
         from_account_id: AccountIdentifier::from(approver),
@@ -2134,7 +2133,6 @@ fn test_allowance_listing_take() {
     args.take = Some(u64::MAX);
     let allowances = list_allowances(&env, canister_id, approver, &args);
     assert_eq!(allowances.len(), MAX_RESULTS);
-
 }
 
 mod metrics {
