@@ -3,7 +3,7 @@ use ic_crypto_sha2::Sha256;
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
-use ic_management_canister_types_private::{CanisterSettingsArgs, LogVisibilityV2};
+use ic_management_canister_types_private::{CanisterSettingsArgs, LogVisibilityV2, HASH_LENGTH};
 use ic_replicated_state::MessageMemoryUsage;
 use ic_types::{
     ComputeAllocation, Cycles, InvalidComputeAllocationError, InvalidMemoryAllocationError,
@@ -434,7 +434,7 @@ impl EnvironmentVariables {
         }
     }
 
-    pub fn hash(&self) -> Vec<u8> {
+    pub fn hash(&self) -> [u8; HASH_LENGTH] {
         // Create a vector to store the hashes of key-value pairs
         let mut hashes: Vec<Vec<u8>> = Vec::new();
 
@@ -454,7 +454,7 @@ impl EnvironmentVariables {
             hasher.write(&hash);
         }
 
-        hasher.finish().to_vec()
+        hasher.finish()
     }
 
     pub fn get_environment_variables(&self) -> BTreeMap<String, String> {

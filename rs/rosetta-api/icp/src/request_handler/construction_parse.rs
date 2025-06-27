@@ -675,6 +675,7 @@ mod tests {
             true,
             None,
             false,
+            false, // optimize_search_indexes: disabled for tests
         ))
         .unwrap();
         // Create a mock canister ID for testing

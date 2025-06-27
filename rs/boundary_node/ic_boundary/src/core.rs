@@ -68,6 +68,7 @@ use crate::{
         handlers::{self, logs_canister, LogsState},
         middleware::{
             cache::{cache_middleware, CacheState},
+            cors::{self},
             geoip::{self},
             process::{self},
             retry::{retry_request, RetryParams},
@@ -946,7 +947,7 @@ pub fn setup_router(
             BrokerBuilder::new()
                 .with_buffer_size(cli.obs.obs_log_websocket_buffer)
                 .with_idle_timeout(cli.obs.obs_log_websocket_idle_timeout)
-                .with_max_subscribers(cli.obs.obs_log_websocket_max_subscribers)
+                .with_max_subscribers(cli.obs.obs_log_websocket_max_subscribers_per_topic)
                 .with_max_topics(cli.obs.obs_log_websocket_max_topics)
                 .with_metric_registry(metrics_registry)
                 .build(),
@@ -1092,12 +1093,19 @@ pub fn setup_router(
         .merge(health_route);
 
     if let Some(v) = logs_broker {
-        let state = LogsState::new(v, lookup);
-        let logs_canister_router =
-            Router::new().route("/canister/{canister_id}", any(logs_canister));
+        let state = Arc::new(LogsState::new(
+            v,
+            lookup,
+            cli.obs.obs_log_websocket_max_subscribers_per_topic_per_ip,
+        ));
+
+        let logs_canister_router = Router::new()
+            .route("/canister/{canister_id}", any(logs_canister))
+            .layer(cors::layer());
         let logs_router = Router::new()
             .nest("/logs", logs_canister_router)
             .with_state(state);
+
         router = router.merge(logs_router);
     }
 

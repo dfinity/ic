@@ -1387,6 +1387,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "tokio-test": crate.spec(
                 version = "^0.4.4",
             ),
+            "tokio-tungstenite": crate.spec(
+                version = "^0.26.0",
+            ),
             "tokio-util": crate.spec(
                 version = "^0.7.13",
                 features = [
