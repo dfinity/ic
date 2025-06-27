@@ -13501,27 +13501,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-starter"
-version = "0.9.0"
-dependencies = [
- "anyhow",
- "clap 4.5.27",
- "ic-config",
- "ic-logger",
- "ic-management-canister-types-private",
- "ic-prep",
- "ic-protobuf",
- "ic-registry-provisional-whitelist",
- "ic-registry-subnet-features",
- "ic-registry-subnet-type",
- "ic-types",
- "serde",
- "serde_json",
- "slog",
- "tempfile",
-]
-
-[[package]]
 name = "ic-state-layout"
 version = "0.9.0"
 dependencies = [
@@ -18705,7 +18684,6 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-registry-transport",
  "ic-replicated-state",
- "ic-starter",
  "ic-state-machine-tests",
  "ic-state-manager",
  "ic-test-utilities",
