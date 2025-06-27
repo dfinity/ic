@@ -20,6 +20,6 @@ to the number of submitted proposals).
 
 ## Fixed
 
-Fixed a bug in the decored of Candid `Nat` values as `u64`.
+Fixed a bug in the decoder of Candid `Nat` values as `u64`.
 
 ## Security
