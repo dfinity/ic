@@ -479,6 +479,19 @@ type icrc21_consent_message_response = variant {
     Err: icrc21_error;
 };
 
+type GetAllowancesArgs = record {
+    from_account_id: TextAccountIdentifier;
+    prev_spender_id: opt TextAccountIdentifier;
+    take: opt nat64;
+};
+
+type Allowance103 = record {
+    from_account_id: TextAccountIdentifier;
+    to_spender_id: TextAccountIdentifier;
+    allowance: Tokens;
+    expires_at: opt nat64;
+};
+
 service: (LedgerCanisterPayload) -> {
     // Transfers tokens from a subaccount of the caller to the destination address.
     // The source address is computed from the principal of the caller and the specified subaccount.
@@ -533,6 +546,8 @@ service: (LedgerCanisterPayload) -> {
 
     icrc21_canister_call_consent_message: (icrc21_consent_message_request) -> (icrc21_consent_message_response);
     icrc10_supported_standards : () -> (vec record { name : text; url : text }) query;
+
+    get_allowances : (GetAllowancesArgs) -> (vec Allowance103) query;
 
     is_ledger_ready: () -> (bool) query;
 }
