@@ -46,11 +46,11 @@ use icp_ledger::{
     from_proto_bytes, max_blocks_per_request, protobuf, to_proto_bytes, tokens_into_proto,
     AccountBalanceArgs, AccountIdBlob, AccountIdentifier, AccountIdentifierByteBuf, Allowances,
     ArchiveInfo, ArchivedBlocksRange, ArchivedEncodedBlocksRange, Archives,
-    BinaryAccountBalanceArgs, Block, BlockArg, CandidBlock, Decimals, FeatureFlags, GetBlocksArgs,
-    GetBlocksRes, GetAllowancesArgs, IterBlocksArgs, IterBlocksRes, LedgerCanisterPayload,
-    Memo, Name, Operation, PaymentError, QueryBlocksResponse, QueryEncodedBlocksResponse, SendArgs,
-    Subaccount, Symbol, TipOfChainRes, TotalSupplyArgs, Transaction, TransferArgs, TransferError,
-    TransferFee, TransferFeeArgs, MEMO_SIZE_BYTES,
+    BinaryAccountBalanceArgs, Block, BlockArg, CandidBlock, Decimals, FeatureFlags,
+    GetAllowancesArgs, GetBlocksArgs, GetBlocksRes, IterBlocksArgs, IterBlocksRes,
+    LedgerCanisterPayload, Memo, Name, Operation, PaymentError, QueryBlocksResponse,
+    QueryEncodedBlocksResponse, SendArgs, Subaccount, Symbol, TipOfChainRes, TotalSupplyArgs,
+    Transaction, TransferArgs, TransferError, TransferFee, TransferFeeArgs, MEMO_SIZE_BYTES,
 };
 use icrc_ledger_types::icrc1::transfer::TransferError as Icrc1TransferError;
 use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
