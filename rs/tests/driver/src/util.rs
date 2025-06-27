@@ -27,8 +27,12 @@ use ic_agent::{
     Agent, AgentError, Identity, Signature,
 };
 use ic_canister_client::{Agent as DeprecatedAgent, Sender};
+use ic_cdk::api::management_canister::{
+    ecdsa::SignWithEcdsaResponse, schnorr::SignWithSchnorrResponse,
+};
 use ic_config::ConfigOptional;
 use ic_limits::MAX_INGRESS_TTL;
+use ic_management_canister_types::VetKDDeriveKeyResult;
 use ic_management_canister_types_private::{CanisterStatusResultV2, EmptyBlob, Payload};
 use ic_message::ForwardParams;
 use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
@@ -43,6 +47,7 @@ use ic_nns_governance_api::{
 use ic_nns_test_utils::governance::upgrade_nns_canister_with_args_by_proposal;
 use ic_registry_subnet_type::SubnetType;
 use ic_rosetta_api::convert::to_arg;
+use ic_signer::{GenEcdsaParams, GenSchnorrParams, GenVetkdParams};
 use ic_sns_swap::pb::v1::{NeuronBasketConstructionParameters, Params};
 use ic_test_identity::TEST_IDENTITY_KEYPAIR;
 use ic_types::{
@@ -125,15 +130,19 @@ pub fn runtime_from_url(url: Url, effective_canister_id: PrincipalId) -> Runtime
 lazy_static! {
     /// The WASM of the Universal Canister.
     pub static ref UNIVERSAL_CANISTER_WASM: &'static [u8] = {
-        let vec = get_universal_canister_wasm();
+        let vec = get_canister_wasm("UNIVERSAL_CANISTER_WASM_PATH");
+        Box::leak(vec.into_boxed_slice())
+    };
+
+    pub static ref SIGNER_CANISTER_WASM: &'static [u8] = {
+        let vec = get_canister_wasm("SIGNER_CANISTER_WASM_PATH");
         Box::leak(vec.into_boxed_slice())
     };
 }
 
-fn get_universal_canister_wasm() -> Vec<u8> {
+fn get_canister_wasm(env_var: &str) -> Vec<u8> {
     let uc_wasm_path = get_dependency_path(
-        std::env::var("UNIVERSAL_CANISTER_WASM_PATH")
-            .expect("UNIVERSAL_CANISTER_WASM_PATH not set"),
+        std::env::var(env_var).unwrap_or_else(|e| panic!("{:?} not set: {e:?}", env_var)),
     );
     std::fs::read(&uc_wasm_path)
         .unwrap_or_else(|e| panic!("Could not read WASM from {:?}: {e:?}", uc_wasm_path))
@@ -631,7 +640,7 @@ impl<'a> MessageCanister<'a> {
         .expect("Could not create message canister.")
     }
 
-    pub async fn new_with_params_with_timeout(
+    async fn new_with_params_with_timeout(
         agent: &'a Agent,
         effective_canister_id: PrincipalId,
         compute_allocation: Option<u64>,
@@ -649,7 +658,7 @@ impl<'a> MessageCanister<'a> {
         }
     }
 
-    pub async fn new_with_params(
+    async fn new_with_params(
         agent: &'a Agent,
         effective_canister_id: PrincipalId,
         compute_allocation: Option<u64>,
@@ -680,24 +689,9 @@ impl<'a> MessageCanister<'a> {
         effective_canister_id: PrincipalId,
         cycles: C,
     ) -> MessageCanister<'a> {
-        // Create a canister.
-        let mgr = ManagementCanister::create(agent);
-        let canister_id = mgr
-            .create_canister()
-            .as_provisional_create_with_amount(Some(cycles.into()))
-            .with_effective_canister_id(effective_canister_id)
-            .call_and_wait()
+        Self::new_with_params(agent, effective_canister_id, None, Some(cycles.into()))
             .await
-            .unwrap_or_else(|err| panic!("Couldn't create canister with provisional API: {}", err))
-            .0;
-
-        // Install the universal canister.
-        mgr.install_code(&canister_id, MESSAGE_CANISTER_WASM)
-            .call_and_wait()
-            .await
-            .unwrap_or_else(|err| panic!("Couldn't install message canister: {}", err));
-
-        Self { agent, canister_id }
+            .unwrap()
     }
 
     pub fn canister_id(&self) -> Principal {
@@ -781,6 +775,109 @@ impl<'a> MessageCanister<'a> {
         self.try_read_msg()
             .await
             .unwrap_or_else(|err| panic!("Could not read message: {}", err))
+    }
+}
+
+/// Provides an abstraction to the signer canister.
+#[derive(Clone)]
+pub struct SignerCanister<'a> {
+    agent: &'a Agent,
+    canister_id: Principal,
+}
+
+impl<'a> SignerCanister<'a> {
+    /// Initializes a [SignerCanister] using the provided [Agent].
+    pub async fn new(agent: &'a Agent, effective_canister_id: PrincipalId) -> SignerCanister<'a> {
+        timeout(
+            CANISTER_CREATE_TIMEOUT,
+            Self::new_with_params(agent, effective_canister_id, None, None),
+        )
+        .await
+        .expect("Timeout while creating signer canister")
+    }
+
+    pub async fn new_with_cycles<C: Into<u128>>(
+        agent: &'a Agent,
+        effective_canister_id: PrincipalId,
+        cycles: C,
+    ) -> SignerCanister<'a> {
+        Self::new_with_params(agent, effective_canister_id, None, Some(cycles.into())).await
+    }
+
+    async fn new_with_params(
+        agent: &'a Agent,
+        effective_canister_id: PrincipalId,
+        compute_allocation: Option<u64>,
+        cycles: Option<u128>,
+    ) -> SignerCanister<'a> {
+        // Create a canister.
+        let mgr = ManagementCanister::create(agent);
+        let canister_id = mgr
+            .create_canister()
+            .with_optional_compute_allocation(compute_allocation)
+            .as_provisional_create_with_amount(cycles)
+            .with_effective_canister_id(effective_canister_id)
+            .call_and_wait()
+            .await
+            .unwrap_or_else(|err| panic!("Couldn't create canister with provisional API: {}", err))
+            .0;
+
+        // Install the signer canister.
+        mgr.install_code(&canister_id, &SIGNER_CANISTER_WASM)
+            .call_and_wait()
+            .await
+            .unwrap_or_else(|err| panic!("Couldn't install signer canister: {}", err));
+
+        Self { agent, canister_id }
+    }
+
+    pub fn canister_id(&self) -> Principal {
+        self.canister_id
+    }
+
+    pub async fn gen_ecdsa_sig(
+        &self,
+        params: GenEcdsaParams,
+    ) -> Result<SignWithEcdsaResponse, String> {
+        let bytes = self
+            .agent
+            .update(&self.canister_id, "gen_ecdsa_sig")
+            .with_arg(Encode!(&params).unwrap())
+            .call_and_wait()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        Decode!(&bytes, Result<SignWithEcdsaResponse, String>).unwrap()
+    }
+
+    pub async fn gen_schnorr_sig(
+        &self,
+        params: GenSchnorrParams,
+    ) -> Result<SignWithSchnorrResponse, String> {
+        let bytes = self
+            .agent
+            .update(&self.canister_id, "gen_schnorr_sig")
+            .with_arg(Encode!(&params).unwrap())
+            .call_and_wait()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        Decode!(&bytes, Result<SignWithSchnorrResponse, String>).unwrap()
+    }
+
+    pub async fn gen_vetkd_key(
+        &self,
+        params: GenVetkdParams,
+    ) -> Result<VetKDDeriveKeyResult, String> {
+        let bytes = self
+            .agent
+            .update(&self.canister_id, "gen_vetkd_key")
+            .with_arg(Encode!(&params).unwrap())
+            .call_and_wait()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        Decode!(&bytes, Result<VetKDDeriveKeyResult, String>).unwrap()
     }
 }
 
