@@ -55,7 +55,7 @@ impl Storable for StorableRegistryKey {
         let bytes = bytes.as_ref();
         let len = bytes.len();
         let (remaining_bytes, timestamp_bytes) = bytes.split_at(len - 8);
-        let (key_bytes, version_bytes) = remaining_bytes.split_at(len - 8);
+        let (key_bytes, version_bytes) = remaining_bytes.split_at(len - 16);
 
         let key = String::from_utf8(key_bytes.to_vec()).expect("Invalid UTF-8 in key");
         let version = u64::from_be_bytes(version_bytes.try_into().expect("Invalid version bytes"));
