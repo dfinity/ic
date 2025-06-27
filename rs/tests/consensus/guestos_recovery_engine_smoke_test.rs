@@ -1,14 +1,23 @@
 /* tag::catalog[]
 
-TODO:
-Title:: NNS recovery engine
+Title:: GuestOS recovery engine smoke test
 
 Goal::
-The test ensures that a subnet can be recovered via recovery artifacts using the recovery image.
+Verify that the guest OS recovery engine downloads the recovery artifacts, extracts
+them, and places them in the correct locations.
 
-Runbook:: ...
+Runbook::
+. The CI will create dummy recovery artifacts and upload them to the expected URLs.
+  The randomly generated content of these artifacts is passed as environment variables
+  to the test.
+. The test sets up an IC with a single system subnet with one node loaded with the
+  recovery image.
+. The test connects to the node via SSH and verifies that the recovery artifacts were
+  downloaded, extracted, and placed in the correct locations.
 
-Success:: ...
+Success::
+. The recovery artifacts are extracted, placed in the correct locations, and their
+  content matches the expected content (i.e. the content found in the upstreams).
 
 end::catalog[] */
 
