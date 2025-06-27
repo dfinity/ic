@@ -25,20 +25,17 @@ impl NodeIndices {
     /// Construct a NodeIndices from a slice of NodeIndex values
     ///
     /// This function will fail if there are any duplicated indices
-    pub fn from_slice(slice: &[NodeIndex]) -> Result<Self, InvalidNodeIndices> {
+    pub fn from_slice(indices: &[NodeIndex]) -> Result<Self, InvalidNodeIndices> {
         // We assume the node indices are public, so variable time behavior is ok
         let mut seen = std::collections::HashSet::new();
 
-        let mut indices = Vec::with_capacity(slice.len());
-
-        for nidx in slice {
+        for nidx in indices {
             if !seen.insert(nidx) {
                 return Err(InvalidNodeIndices::DuplicatedNodeIndex);
             }
-            indices.push(*nidx)
         }
 
-        Ok(Self { indices })
+        Ok(Self { indices: indices.to_vec() })
     }
 
     /// Construct a NodeIndices from a BTreeMap with NodeIndex keys
