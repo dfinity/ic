@@ -351,7 +351,11 @@ impl CanisterHttpPoolManagerImpl {
             return Vec::new();
         };
 
-        let active_contexts = self.active_contexts();
+        let active_contexts = &self
+            .latest_state()
+            .metadata
+            .subnet_call_context_manager
+            .canister_http_request_contexts;
         let next_callback_id = self.next_callback_id();
 
         let key_from_share =
@@ -489,14 +493,8 @@ impl CanisterHttpPoolManagerImpl {
             .collect()
     }
 
-    fn active_contexts(&self) -> BTreeMap<CallbackId, CanisterHttpRequestContext> {
-        self.state_reader
-            .get_latest_state()
-            .get_ref()
-            .metadata
-            .subnet_call_context_manager
-            .canister_http_request_contexts
-            .clone()
+    fn latest_state(&self) -> Arc<ReplicatedState> {
+        self.state_reader.get_latest_state().get_ref().clone()
     }
 
     fn next_callback_id(&self) -> CallbackId {

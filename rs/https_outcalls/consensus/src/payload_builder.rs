@@ -529,10 +529,11 @@ impl CanisterHttpPayloadBuilderImpl {
                     replication: Replication::NonReplicated(ref node_id),
                     ..
                 }) => (vec![*node_id], 1),
-                None | Some(&CanisterHttpRequestContext {
+                None
+                | Some(&CanisterHttpRequestContext {
                     replication: Replication::FullyReplicated,
                     ..
-                })  => {
+                }) => {
                     let threshold = match self
                         .membership
                         .get_committee_threshold(height, Committee::CanisterHttp)
