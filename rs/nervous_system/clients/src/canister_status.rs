@@ -84,7 +84,7 @@ pub struct CanisterStatusResult {
     pub memory_size: candid::Nat,
     pub settings: DefiniteCanisterSettings,
     pub cycles: candid::Nat,
-    pub idle_cycles_burned_per_day: Option<candid::Nat>,
+    pub idle_cycles_burned_per_day: candid::Nat,
     pub reserved_cycles: Option<candid::Nat>,
     pub query_stats: Option<QueryStats>,
 }
@@ -159,7 +159,6 @@ impl From<CanisterStatusResultFromManagementCanister> for CanisterStatusResult {
         let settings = DefiniteCanisterSettings::from(settings);
         let query_stats = Some(QueryStats::from(query_stats));
 
-        let idle_cycles_burned_per_day = Some(idle_cycles_burned_per_day);
         let reserved_cycles = Some(reserved_cycles);
 
         CanisterStatusResult {
@@ -532,7 +531,7 @@ mod tests {
                 wasm_memory_threshold: Some(candid::Nat::from(94_u32)),
             },
             cycles: candid::Nat::from(999_u32),
-            idle_cycles_burned_per_day: Some(candid::Nat::from(998_u32)),
+            idle_cycles_burned_per_day: candid::Nat::from(998_u32),
             reserved_cycles: Some(candid::Nat::from(997_u32)),
             query_stats: Some(QueryStats {
                 num_calls_total: Some(candid::Nat::from(93_u32)),
