@@ -52,6 +52,7 @@ ic-icrc1-ledger = { path = "../../ledger_suite/icrc1/ledger" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
+ic-management-canister-types = { workspace = true }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-message = { path = "../test_canisters/message" }
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
@@ -82,6 +83,7 @@ ic-registry-subnet-features = { path = "../../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-registry-transport = { path = "../../registry/transport" }
 ic-rosetta-api = { path = "../../rosetta-api/icp" }
+ic-signer = { path = "../test_canisters/signer" }
 ic-sns-governance = { path = "../../sns/governance" }
 ic-sns-init = { path = "../../sns/init" }
 ic-sns-root = { path = "../../sns/root" }
