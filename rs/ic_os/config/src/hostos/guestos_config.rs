@@ -1,5 +1,7 @@
 use anyhow::Result;
-use config_types::{FixedIpv6Config, GuestOSConfig, HostOSConfig, Ipv6Config};
+use config_types::{
+    FixedIpv6Config, GuestOSConfig, GuestOSUpgradeConfig, GuestVMType, HostOSConfig, Ipv6Config,
+};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{calculate_deterministic_mac, IpVariant, MacAddr6Ext};
 use utils::to_cidr;
@@ -39,6 +41,9 @@ pub fn generate_guestos_config(hostos_config: &HostOSConfig) -> Result<GuestOSCo
         network_settings: guestos_network_settings,
         icos_settings: hostos_config.icos_settings,
         guestos_settings: hostos_config.guestos_settings,
+        // TODO: Set these fields when adding Upgrade VMs.
+        guest_vm_type: GuestVMType::Default,
+        upgrade_config: GuestOSUpgradeConfig::default(),
     };
 
     Ok(guestos_config)

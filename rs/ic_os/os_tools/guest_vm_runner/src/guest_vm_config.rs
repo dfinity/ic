@@ -1,7 +1,7 @@
-use crate::guestos_bootstrap_image::BootstrapOptions;
-use crate::guestos_config::generate_guestos_config;
 use anyhow::{Context, Result};
 use askama::Template;
+use config::hostos::guestos_bootstrap_image::BootstrapOptions;
+use config::hostos::guestos_config::generate_guestos_config;
 use config_types::{GuestOSConfig, HostOSConfig};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{calculate_deterministic_mac, IpVariant};
@@ -9,6 +9,16 @@ use std::path::{Path, PathBuf};
 
 // See build.rs
 include!(concat!(env!("OUT_DIR"), "/guestos_vm_template.rs"));
+
+#[derive(Debug)]
+pub struct DirectBootConfig {
+    /// The kernel file
+    pub kernel: PathBuf,
+    /// The initrd file
+    pub initrd: PathBuf,
+    /// Kernel command line parameters
+    pub kernel_cmdline: String,
+}
 
 pub fn assemble_config_media(hostos_config: &HostOSConfig, media_path: &Path) -> Result<()> {
     let guestos_config =
@@ -54,7 +64,11 @@ fn make_bootstrap_options(
 }
 
 /// Generate the GuestOS VM libvirt XML configuration and return it as String.
-pub fn generate_vm_config(config: &HostOSConfig, media_path: &Path) -> Result<String> {
+pub fn generate_vm_config(
+    config: &HostOSConfig,
+    media_path: &Path,
+    direct_boot: Option<DirectBootConfig>,
+) -> Result<String> {
     let mac_address = calculate_deterministic_mac(
         &config.icos_settings.mgmt_mac,
         config.icos_settings.deployment_environment,
@@ -69,11 +83,13 @@ pub fn generate_vm_config(config: &HostOSConfig, media_path: &Path) -> Result<St
     };
 
     GuestOSTemplateProps {
-        cpu_domain,
+        cpu_domain: cpu_domain.to_string(),
         vm_memory: config.hostos_settings.vm_memory,
         nr_of_vcpus: config.hostos_settings.vm_nr_of_vcpus,
         mac_address,
-        config_media: &media_path.display().to_string(),
+        config_media: media_path.display().to_string(),
+        direct_boot,
+        enable_sev: config.icos_settings.enable_trusted_execution_environment,
     }
     .render()
     .context("Failed to render GuestOS VM XML template")
@@ -166,29 +182,77 @@ mod tests {
         path
     }
 
-    fn test_vm_config(cpu_type: &str, filename: &str) {
+    fn test_vm_config(
+        hostos_settings: HostOSSettings,
+        enable_trusted_execution_environment: bool,
+        enable_direct_boot: bool,
+        filename: &str,
+    ) {
         let mut mint = Mint::new(goldenfiles_path());
         let mut config = create_test_hostos_config();
+        config.icos_settings.enable_trusted_execution_environment =
+            enable_trusted_execution_environment;
 
-        config.hostos_settings = HostOSSettings {
-            vm_memory: 490,
-            vm_cpu: cpu_type.to_string(),
-            vm_nr_of_vcpus: 56,
-            verbose: false,
+        config.hostos_settings = hostos_settings;
+
+        let direct_boot = if enable_direct_boot {
+            Some(DirectBootConfig {
+                kernel: PathBuf::from("/tmp/test-kernel"),
+                initrd: PathBuf::from("/tmp/test-initrd"),
+                kernel_cmdline: "security=selinux selinux=1 enforcing=0".to_string(),
+            })
+        } else {
+            None
         };
 
-        let vm_config = generate_vm_config(&config, Path::new("/tmp/config.img")).unwrap();
+        let vm_config =
+            generate_vm_config(&config, Path::new("/tmp/config.img"), direct_boot).unwrap();
         std::fs::write(mint.new_goldenpath(filename).unwrap(), vm_config).unwrap();
     }
 
     #[test]
     fn test_generate_vm_config_qemu() {
-        test_vm_config("qemu", "guestos_vm_qemu.xml");
+        test_vm_config(
+            HostOSSettings {
+                vm_memory: 490,
+                vm_cpu: "qemu".to_string(),
+                vm_nr_of_vcpus: 56,
+                ..HostOSSettings::default()
+            },
+            /*enable_trusted_execution_environment=*/ false,
+            /*enable_direct_boot=*/ true,
+            "guestos_vm_qemu.xml",
+        );
     }
 
     #[test]
     fn test_generate_vm_config_kvm() {
-        test_vm_config("kvm", "guestos_vm_kvm.xml");
+        test_vm_config(
+            HostOSSettings {
+                vm_memory: 490,
+                vm_cpu: "kvm".to_string(),
+                vm_nr_of_vcpus: 56,
+                ..HostOSSettings::default()
+            },
+            /*enable_trusted_execution_environment=*/ false,
+            /*enable_direct_boot=*/ false,
+            "guestos_vm_kvm.xml",
+        );
+    }
+
+    #[test]
+    fn test_generate_vm_config_sev() {
+        test_vm_config(
+            HostOSSettings {
+                vm_memory: 490,
+                vm_cpu: "kvm".to_string(),
+                vm_nr_of_vcpus: 56,
+                ..HostOSSettings::default()
+            },
+            /*enable_trusted_execution_environment=*/ true,
+            /*enable_direct_boot=*/ true,
+            "guestos_vm_sev.xml",
+        );
     }
 
     #[test]

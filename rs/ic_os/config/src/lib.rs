@@ -1,9 +1,6 @@
-pub mod config_ini;
-pub mod deployment_json;
 pub mod generate_testnet_config;
-pub mod guest_vm_config;
-pub mod guestos_bootstrap_image;
-pub mod guestos_config;
+pub mod hostos;
+pub mod setupos;
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -48,6 +45,8 @@ pub fn deserialize_config<T: for<'de> Deserialize<'de>, P: AsRef<Path>>(file_pat
 #[cfg(test)]
 mod tests {
     use config_types::*;
+    use std::net::Ipv6Addr;
+    use std::str::FromStr;
 
     #[test]
     fn test_serialize_and_deserialize() {
@@ -108,6 +107,10 @@ mod tests {
             network_settings: network_settings.clone(),
             icos_settings: icos_settings.clone(),
             guestos_settings: guestos_settings.clone(),
+            guest_vm_type: GuestVMType::Default,
+            upgrade_config: GuestOSUpgradeConfig {
+                peer_guest_vm_address: Some(Ipv6Addr::from_str("2001:db8::1").unwrap()),
+            },
         };
 
         fn serialize_and_deserialize<T>(config: &T)
