@@ -255,9 +255,9 @@ system_test_nns(
 
 # Run this test with
 #     bazel test \
-#         --test_env=RECOVERY_CUP_CONTENT_HEX \
-#         --test_env=RECOVERY_STORE_CONTENT1_HEX \
-#         --test_env=RECOVERY_STORE_CONTENT2_HEX \
+#         --test_env=RECOVERY_CUP_CONTENT_B64 \
+#         --test_env=RECOVERY_STORE_CONTENT1_B64 \
+#         --test_env=RECOVERY_STORE_CONTENT2_B64 \
 #         //rs/tests/consensus:guestos_recovery_engine_smoke_test`
 system_test(
     name = "guestos_recovery_engine_smoke_test",

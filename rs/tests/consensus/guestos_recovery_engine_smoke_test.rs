@@ -39,7 +39,12 @@ fn cmp_as_result(actual: &str, expected: &str, error_message: &str) -> Result<()
     if actual == expected {
         Ok(())
     } else {
-        Err(anyhow!("{}. Expected: {}", error_message, expected))
+        Err(anyhow!(
+            "{}. Actual: {}. Expected: {}.",
+            error_message,
+            actual,
+            expected
+        ))
     }
 }
 
@@ -55,12 +60,12 @@ pub fn test(env: TestEnv) {
     let log = env.logger();
     info!(log, "Running recovery engine test...");
 
-    let expected_cup_proto = std::env::var("RECOVERY_CUP_CONTENT_HEX")
-        .expect("RECOVERY_CUP_CONTENT_HEX environment variable not found");
-    let expected_local_store_1 = std::env::var("RECOVERY_STORE_CONTENT1_HEX")
-        .expect("RECOVERY_STORE_CONTENT1_HEX environment variable not found");
-    let expected_local_store_2 = std::env::var("RECOVERY_STORE_CONTENT2_HEX")
-        .expect("RECOVERY_STORE_CONTENT2_HEX environment variable not found");
+    let expected_cup_proto = std::env::var("RECOVERY_CUP_CONTENT_B64")
+        .expect("RECOVERY_CUP_CONTENT_B64 environment variable not found");
+    let expected_local_store_1 = std::env::var("RECOVERY_STORE_CONTENT1_B64")
+        .expect("RECOVERY_STORE_CONTENT1_B64 environment variable not found");
+    let expected_local_store_2 = std::env::var("RECOVERY_STORE_CONTENT2_B64")
+        .expect("RECOVERY_STORE_CONTENT2_B64 environment variable not found");
 
     let node = env
         .topology_snapshot()
@@ -75,11 +80,11 @@ pub fn test(env: TestEnv) {
     // are racing against each other.
     retry_with_msg!("verify CUP", log.clone(), secs(30), secs(5), || {
         // Protobuf files are binary files, and since we deserialize them into UTF-8 strings,
-        // we read their hex encoding and compare those.
+        // we read their base64 encoding and compare those.
         let cup_proto = execute_bash_command(
             &ssh_session,
             String::from(
-                "od -An -tx1 -v /var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb | tr -d ' \\n'",
+                "base64 /var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb | tr -d '\\n'",
             ),
         )
         .unwrap();
@@ -89,7 +94,8 @@ pub fn test(env: TestEnv) {
             &expected_cup_proto,
             "Unexpected content in CUP file",
         )
-    }).unwrap();
+    })
+    .unwrap();
 
     retry_with_msg!(
         "verify local store 1",
@@ -99,7 +105,7 @@ pub fn test(env: TestEnv) {
         || {
             let local_store_1 = execute_bash_command(
                 &ssh_session,
-                String::from("od -An -tx1 -v  /var/lib/ic/data/ic_registry_local_store/0001020304/05/06/07.pb | tr -d ' \\n'"),
+                String::from("base64 /var/lib/ic/data/ic_registry_local_store/0001020304/05/06/07.pb | tr -d '\\n'"),
             )
             .expect("ic_registry_local_store has the wrong structure");
 
@@ -119,7 +125,7 @@ pub fn test(env: TestEnv) {
         || {
             let local_store_2 = execute_bash_command(
                 &ssh_session,
-                String::from("od -An -tx1 -v  /var/lib/ic/data/ic_registry_local_store/08090a0b0c/0d/0e/0f.pb | tr -d ' \\n'"),
+                String::from("base64 /var/lib/ic/data/ic_registry_local_store/08090a0b0c/0d/0e/0f.pb | tr -d '\\n'"),
             )
             .expect("ic_registry_local_store has the wrong structure");
 
