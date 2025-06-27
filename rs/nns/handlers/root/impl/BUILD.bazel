@@ -33,6 +33,7 @@ BASE_DEPENDENCIES = [
     "//rs/rust_canisters/on_wire",
     "//rs/types/base_types",
     "//rs/types/management_canister_types",
+    "//rs/registry/canister",
     "@crate_index//:build-info",
     "@crate_index//:candid",
     "@crate_index//:ic-cdk",
