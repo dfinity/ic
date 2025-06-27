@@ -35,7 +35,9 @@ impl NodeIndices {
             }
         }
 
-        Ok(Self { indices: indices.to_vec() })
+        Ok(Self {
+            indices: indices.to_vec(),
+        })
     }
 
     /// Construct a NodeIndices from a BTreeMap with NodeIndex keys
