@@ -1638,6 +1638,7 @@ message GetMetricsRequest {
 message Metrics {
   uint64 num_recently_submitted_proposals = 1;
   uint64 last_ledger_block_timestamp = 2;
+  uint64 num_recently_executed_proposals = 3;
 }
 
 // Request message for 'get_sns_initialization_parameters'
