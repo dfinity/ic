@@ -23,7 +23,7 @@ use ic_ckbtc_minter::updates::update_balance::{
 };
 use ic_ckbtc_minter::{
     Log, MinterInfo, Network, CKBTC_LEDGER_MEMO_SIZE, MIN_RELAY_FEE_PER_VBYTE,
-    MIN_RESUBMISSION_DELAY,
+    MIN_RESUBMISSION_DELAY, UTXOS_COUNT_THRESHOLD,
 };
 use ic_http_types::{HttpRequest, HttpResponse};
 use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
@@ -35,7 +35,7 @@ use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc3::transactions::{GetTransactionsRequest, GetTransactionsResponse};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::Duration;
@@ -880,10 +880,16 @@ impl CkBtcSetup {
     }
 
     pub fn deposit_utxo(&self, account: impl Into<Account>, utxo: Utxo) {
+        self.deposit_utxos(account, vec![utxo])
+    }
+
+    pub fn deposit_utxos(&self, account: impl Into<Account>, utxos: Vec<Utxo>) {
         let account = account.into();
         let deposit_address = self.get_btc_address(account);
 
-        self.push_utxo(deposit_address, utxo.clone());
+        for utxo in utxos.iter() {
+            self.push_utxo(deposit_address.clone(), utxo.clone());
+        }
 
         let utxo_status = Decode!(
             &assert_reply(
@@ -904,14 +910,22 @@ impl CkBtcSetup {
         )
         .unwrap();
 
-        assert_eq!(
-            utxo_status.unwrap(),
-            vec![UtxoStatus::Minted {
-                block_index: 0,
-                minted_amount: utxo.value - CHECK_FEE,
-                utxo,
-            }]
-        );
+        let minted = utxo_status.unwrap();
+        assert_eq!(minted.len(), utxos.len());
+        let minted = minted
+            .into_iter()
+            .map(|status| {
+                assert_matches!(&status,
+                    UtxoStatus::Minted { minted_amount, utxo, .. }
+                    if utxo.value - CHECK_FEE == *minted_amount
+                );
+                match status {
+                    UtxoStatus::Minted { utxo, .. } => utxo,
+                    _ => unreachable!(),
+                }
+            })
+            .collect::<BTreeSet<_>>();
+        assert_eq!(minted, utxos.iter().cloned().collect::<BTreeSet<_>>());
     }
 
     pub fn get_transactions(&self, arg: GetTransactionsRequest) -> GetTransactionsResponse {
@@ -1163,7 +1177,6 @@ impl CkBtcSetup {
     pub fn await_btc_transaction(&self, block_index: u64, max_ticks: usize) -> Txid {
         let mut last_status = None;
         for _ in 0..max_ticks {
-            dbg!(self.get_logs());
             let status_v2 = self.retrieve_btc_status_v2(block_index);
             let status = self.retrieve_btc_status(block_index);
             assert_eq!(RetrieveBtcStatusV2::from(status.clone()), status_v2);
@@ -1177,6 +1190,7 @@ impl CkBtcSetup {
                 }
             }
         }
+        dbg!(self.get_logs());
         panic!(
             "the minter did not submit a transaction in {} ticks; last status {:?}",
             max_ticks, last_status
@@ -1465,25 +1479,41 @@ fn test_transaction_resubmission_finalize_new() {
 
     // Step 1: deposit ckBTC
 
-    let deposit_value = 100_000_000;
-    let utxo = Utxo {
-        height: 0,
-        outpoint: OutPoint {
-            txid: range_to_txid(1..=32),
-            vout: 1,
-        },
-        value: deposit_value,
-    };
-
     let user = Principal::from(ckbtc.caller);
+    let deposit_value = 1_000_000;
 
-    ckbtc.deposit_utxo(user, utxo);
+    // Create many utxos that exceeds threshold by 2 so that after consuming
+    // one, the remaining available count is still greater than the threshold.
+    // This is to make sure utxo count optimization is triggered.
+    let count = UTXOS_COUNT_THRESHOLD + 2;
+    let utxos = (0..count)
+        .map(|i| {
+            let mut txid = vec![0; 32];
+            txid[0] = (i % 256) as u8;
+            txid[1] = (i / 256) as u8;
+            Utxo {
+                height: 0,
+                outpoint: OutPoint {
+                    txid: vec_to_txid(txid),
+                    vout: 1,
+                },
+                value: deposit_value,
+            }
+        })
+        .collect::<Vec<_>>();
+    ckbtc.deposit_utxos(user, utxos);
 
-    assert_eq!(ckbtc.balance_of(user), Nat::from(deposit_value - CHECK_FEE));
+    assert_eq!(
+        ckbtc.balance_of(user),
+        Nat::from(count as u64 * (deposit_value - CHECK_FEE))
+    );
 
     // Step 2: request a withdrawal
 
-    let withdrawal_amount = 50_000_000;
+    // This withdraw_amount only needs 1 input utxo, but due to
+    // available_utxos.len() > UTXOS_COUNT_THRESHOLD, the minter will
+    // include 2 input utxos.
+    let withdrawal_amount = 900_000;
     let withdrawal_account = ckbtc.withdrawal_account(user.into());
     ckbtc.transfer(user, withdrawal_account, withdrawal_amount);
 
@@ -1500,6 +1530,7 @@ fn test_transaction_resubmission_finalize_new() {
     let tx = mempool
         .get(&txid)
         .expect("the mempool does not contain the original transaction");
+    assert_eq!(tx.input.len(), 2, "expect 2 input utxos: {:?}", tx);
 
     // Step 4: wait for the transaction resubmission
 
