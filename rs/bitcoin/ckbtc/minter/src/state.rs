@@ -1311,7 +1311,7 @@ impl CkBtcMinterState {
     }
 
     pub fn estimate_median_fee_per_vbyte(&self) -> Option<MillisatoshiPerByte> {
-        /// The default fee we use on regtest networks .
+        /// The default fee we use on regtest networks.
         const DEFAULT_REGTEST_FEE: MillisatoshiPerByte = 5_000;
 
         let median_fee = match &self.btc_network {
