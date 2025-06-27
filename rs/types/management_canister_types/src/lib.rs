@@ -44,7 +44,7 @@ use strum_macros::{Display, EnumCount, EnumIter, EnumString};
 /// The id of the management canister.
 pub const IC_00: CanisterId = CanisterId::ic_00();
 pub const MAX_CONTROLLERS: usize = 10;
-const WASM_HASH_LENGTH: usize = 32;
+pub const HASH_LENGTH: usize = 32;
 /// The maximum length of a BIP32 derivation path
 ///
 /// The extended public key format uses a byte to represent the derivation
@@ -267,7 +267,7 @@ impl CanisterChangeOrigin {
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct CanisterCreationRecord {
     controllers: Vec<PrincipalId>,
-    environment_variables_hash: Option<Vec<u8>>,
+    environment_variables_hash: Option<[u8; HASH_LENGTH]>,
 }
 
 impl CanisterCreationRecord {
@@ -275,8 +275,8 @@ impl CanisterCreationRecord {
         &self.controllers
     }
 
-    pub fn environment_variables_hash(&self) -> Option<Vec<u8>> {
-        self.environment_variables_hash.clone()
+    pub fn environment_variables_hash(&self) -> Option<[u8; HASH_LENGTH]> {
+        self.environment_variables_hash
     }
 }
 
@@ -290,14 +290,14 @@ impl CanisterCreationRecord {
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct CanisterCodeDeploymentRecord {
     mode: CanisterInstallMode,
-    module_hash: [u8; WASM_HASH_LENGTH],
+    module_hash: [u8; HASH_LENGTH],
 }
 
 impl CanisterCodeDeploymentRecord {
     pub fn mode(&self) -> CanisterInstallMode {
         self.mode
     }
-    pub fn module_hash(&self) -> [u8; WASM_HASH_LENGTH] {
+    pub fn module_hash(&self) -> [u8; HASH_LENGTH] {
         self.module_hash
     }
 }
@@ -451,7 +451,7 @@ pub enum CanisterChangeDetails {
 impl CanisterChangeDetails {
     pub fn canister_creation(
         controllers: Vec<PrincipalId>,
-        environment_variables_hash: Option<Vec<u8>>,
+        environment_variables_hash: Option<[u8; HASH_LENGTH]>,
     ) -> CanisterChangeDetails {
         CanisterChangeDetails::CanisterCreation(CanisterCreationRecord {
             controllers,
@@ -461,7 +461,7 @@ impl CanisterChangeDetails {
 
     pub fn code_deployment(
         mode: CanisterInstallMode,
-        module_hash: [u8; WASM_HASH_LENGTH],
+        module_hash: [u8; HASH_LENGTH],
     ) -> CanisterChangeDetails {
         CanisterChangeDetails::CanisterCodeDeployment(CanisterCodeDeploymentRecord {
             mode,
@@ -743,7 +743,7 @@ impl From<&CanisterChangeDetails> for pb_canister_state_bits::canister_change::C
                             .collect::<Vec<ic_protobuf::types::v1::PrincipalId>>(),
                         environment_variables_hash: canister_creation
                             .environment_variables_hash
-                            .clone(),
+                            .map(|hash| hash.to_vec()),
                     },
                 )
             }
@@ -823,14 +823,21 @@ impl TryFrom<pb_canister_state_bits::canister_change::ChangeDetails> for Caniste
         match item {
             pb_canister_state_bits::canister_change::ChangeDetails::CanisterCreation(
                 canister_creation,
-            ) => Ok(CanisterChangeDetails::canister_creation(
-                canister_creation
-                    .controllers
-                    .into_iter()
-                    .map(TryInto::try_into)
-                    .collect::<Result<Vec<PrincipalId>, _>>()?,
-                canister_creation.environment_variables_hash.clone(),
-            )),
+            ) => {
+                let environment_variables_hash = match canister_creation.environment_variables_hash
+                {
+                    Some(bytes) => Some(try_decode_hash(bytes)?),
+                    None => None,
+                };
+                Ok(CanisterChangeDetails::canister_creation(
+                    canister_creation
+                        .controllers
+                        .into_iter()
+                        .map(TryInto::try_into)
+                        .collect::<Result<Vec<PrincipalId>, _>>()?,
+                    environment_variables_hash,
+                ))
+            }
             pb_canister_state_bits::canister_change::ChangeDetails::CanisterCodeUninstall(_) => {
                 Ok(CanisterChangeDetails::CanisterCodeUninstall)
             }
