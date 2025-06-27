@@ -25,7 +25,7 @@ use ic_types::{
 use rand::Rng;
 use std::{
     cell::RefCell,
-    collections::{BTreeSet, HashSet},
+    collections::{BTreeMap, BTreeSet, HashSet},
     convert::TryInto,
     sync::{Arc, Mutex},
     time::Duration,
@@ -351,7 +351,7 @@ impl CanisterHttpPoolManagerImpl {
             return Vec::new();
         };
 
-        let active_callback_ids = self.active_callback_ids();
+        let active_contexts = self.active_contexts();
         let next_callback_id = self.next_callback_id();
 
         let key_from_share =
@@ -374,8 +374,21 @@ impl CanisterHttpPoolManagerImpl {
                     ));
                 }
 
-                if !active_callback_ids.contains(&share.content.id) {
-                    return Some(CanisterHttpChangeAction::RemoveUnvalidated(share.clone()));
+                match active_contexts.get(&share.content.id) {
+                    Some(context) => {
+                        if let Replication::NonReplicated(node_id) = context.replication {
+                            if node_id != share.signature.signer {
+                                return Some(CanisterHttpChangeAction::HandleInvalid(
+                                    share.clone(),
+                                    "Share signed by node that is not the delegated node for the request"
+                                        .to_string(),
+                                ));
+                            }
+                        }
+                    }
+                    None => {
+                        return Some(CanisterHttpChangeAction::RemoveUnvalidated(share.clone()));
+                    }
                 }
 
                 let node_is_in_committee = self
@@ -476,6 +489,16 @@ impl CanisterHttpPoolManagerImpl {
             .collect()
     }
 
+    fn active_contexts(&self) -> BTreeMap<CallbackId, CanisterHttpRequestContext> {
+        self.state_reader
+            .get_latest_state()
+            .get_ref()
+            .metadata
+            .subnet_call_context_manager
+            .canister_http_request_contexts
+            .clone()
+    }
+
     fn next_callback_id(&self) -> CallbackId {
         self.state_reader
             .get_latest_state()
@@ -524,7 +547,6 @@ pub mod test {
     };
     use mockall::predicate::*;
     use mockall::*;
-    use std::collections::BTreeMap;
 
     mock! {
         pub NonBlockingChannel<Request: 'static> {
