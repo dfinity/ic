@@ -2031,8 +2031,8 @@ impl Governance {
 
         Ok(Metrics {
             num_recently_submitted_proposals,
-            last_ledger_block_timestamp,
             num_recently_executed_proposals,
+            last_ledger_block_timestamp,
         })
     }
 

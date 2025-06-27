@@ -57,15 +57,13 @@ impl<'a> ICRCLedgerHelper<'a> {
         let GetBlocksResult { blocks, .. } = call_icrc3_get_blocks(args).await?;
 
         let block = match &blocks[..] {
+            [] => Ok(0),
             [block] => &block.block,
-            blocks => {
-                return Err(format!(
-                    "Error parsing response from {}.icrc3_get_blocks: expected a single block,
-                 got {} blocks.",
-                    self.ledger.canister_id(),
-                    blocks.len(),
-                ))
-            }
+            blocks => return Err(format!(
+                "Error parsing a Nat value `{:?}` to u64: expected a unique u64 value, got {:?}.",
+                self.ledger.canister_id(),
+                blocks.len(),
+            )),
         };
 
         // We assume in each block we have 1 and only 1 transaction.
