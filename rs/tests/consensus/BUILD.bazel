@@ -258,9 +258,9 @@ system_test_nns(
 #         --test_env=RECOVERY_CUP_CONTENT \
 #         --test_env=RECOVERY_STORE_CONTENT1 \
 #         --test_env=RECOVERY_STORE_CONTENT2 \
-#         //rs/tests/consensus:guestos_recovery_engine_test`
+#         //rs/tests/consensus:guestos_recovery_engine_smoke_test`
 system_test(
-    name = "guestos_recovery_engine_test",
+    name = "guestos_recovery_engine_smoke_test",
     tags = [
         "k8s",
         "manual",

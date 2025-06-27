@@ -79,8 +79,8 @@ name = "ic-systest-max-net-payload-size-test"
 path = "max_xnet_payload_size_test.rs"
 
 [[bin]]
-name = "ic-systest-recovery-engine-test"
-path = "guestos_recovery_engine_test.rs"
+name = "ic-systest-guestos-recovery-engine-smoke-test"
+path = "guestos_recovery_engine_smoke_test.rs"
 
 [[bin]]
 name = "ic-systest-request-auth-malicious-replica-test"
