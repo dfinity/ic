@@ -83,7 +83,7 @@ pub fn test(env: TestEnv) {
 
     let local_store_1 = execute_bash_command(
         &ssh_session,
-        String::from("cat ic_registry_local_store/0001020304/05/06/07.pb"),
+        String::from("od -An -tx1 -v  /var/lib/ic/data/ic_registry_local_store/0001020304/05/06/07.pb | tr -d ' \\n'"),
     )
     .expect("ic_registry_local_store has the wrong structure");
     assert_hex_eq_utf8(
@@ -94,7 +94,7 @@ pub fn test(env: TestEnv) {
 
     let local_store_2 = execute_bash_command(
         &ssh_session,
-        String::from("cat ic_registry_local_store/08090a0b0c/0d/0e/0f.pb"),
+        String::from("od -An -tx1 -v  /var/lib/ic/data/ic_registry_local_store/08090a0b0c/0d/0e/0f.pb | tr -d ' \\n'"),
     )
     .expect("ic_registry_local_store has the wrong structure");
     assert_hex_eq_utf8(
