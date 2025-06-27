@@ -534,7 +534,7 @@ jobs:
           cargo build --release --locked
 
   # TODO: REMOVE. Only for development purposes. Do not merge.
-  recovery-engine-test:
+  recovery-engine-smoke-test:
     name: Recovery Engine Smoke Test
     <<: *dind-large-setup
     timeout-minutes: 60
