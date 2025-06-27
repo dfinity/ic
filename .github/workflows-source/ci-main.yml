@@ -567,9 +567,9 @@ jobs:
             pushd "$rootdir"
 
             # Create dummy CUP and dummy local store
-            RECOVERY_CUP_CONTENT=$(head /dev/urandom | tr -dc 'A-Za-z0-9' | head -c 20)
-            RECOVERY_STORE_CONTENT1=$(head /dev/urandom | tr -dc 'A-Za-z0-9' | head -c 20)
-            RECOVERY_STORE_CONTENT2=$(head /dev/urandom | tr -dc 'A-Za-z0-9' | head -c 20)
+            RECOVERY_CUP_CONTENT=$(head /dev/urandom | head -c 100)
+            RECOVERY_STORE_CONTENT1=$(head /dev/urandom | head -c 100)
+            RECOVERY_STORE_CONTENT2=$(head /dev/urandom | head -c 100)
 
             # Pack the dummy CUP and local store into an archive
             mkdir -p guest-os/recovery-artifacts/DELETE-ME && cd "$_"
