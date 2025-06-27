@@ -608,6 +608,70 @@ impl RosettaClient {
         .await
     }
 
+    /// Get the aggregated balance of all subaccounts for a principal.
+    /// 
+    /// This method gets the sum of balances across all subaccounts for the given principal.
+    /// The account_identifier must not specify a subaccount (must be None), otherwise 
+    /// the request will fail with an error.
+    /// 
+    /// # Arguments
+    /// * `block_index` - The block index at which to query the balance
+    /// * `account_identifier` - The account identifier (must have no subaccount)
+    /// * `network_identifier` - The network identifier
+    /// 
+    /// # Returns
+    /// Returns the aggregated balance across all subaccounts for the principal
+    /// 
+    /// # Example
+    /// ```rust,no_run
+    /// # use ic_icrc_rosetta_client::RosettaClient;
+    /// # use rosetta_core::identifiers::{AccountIdentifier, NetworkIdentifier};
+    /// # use icrc_ledger_types::icrc1::account::Account;
+    /// # use candid::Principal;
+    /// # #[tokio::main]
+    /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let client = RosettaClient::from_str_url("http://localhost:8080")?;
+    /// let principal = Principal::from_text("rdmx6-jaaaa-aaaah-qcaiq-cai")?;
+    /// let account = Account { owner: principal, subaccount: None };
+    /// let account_identifier = AccountIdentifier::from(account);
+    /// let network_identifier = NetworkIdentifier::new("ICRC-1".to_string(), "ledger_id".to_string());
+    /// 
+    /// let response = client.account_balance_aggregated(
+    ///     0, // block index
+    ///     account_identifier,
+    ///     network_identifier
+    /// ).await?;
+    /// 
+    /// println!("Aggregated balance: {}", response.balances[0].value);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn account_balance_aggregated(
+        &self,
+        block_index: u64,
+        account_identifier: AccountIdentifier,
+        network_identifier: NetworkIdentifier,
+    ) -> Result<AccountBalanceResponse, Error> {
+        use serde_json::{Map, Value};
+        
+        let mut metadata_map = Map::new();
+        metadata_map.insert("aggregate_all_subaccounts".to_string(), Value::Bool(true));
+        
+        self.call_endpoint(
+            "/account/balance",
+            &AccountBalanceRequest {
+                block_identifier: Some(PartialBlockIdentifier {
+                    index: Some(block_index),
+                    hash: None,
+                }),
+                account_identifier,
+                network_identifier,
+                metadata: Some(metadata_map),
+            },
+        )
+        .await
+    }
+
     pub async fn construction_submit(
         &self,
         network_identifier: NetworkIdentifier,
@@ -713,3 +777,5 @@ impl RosettaClient {
         .await
     }
 }
+
+

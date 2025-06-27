@@ -2,6 +2,7 @@ use crate::common::storage::types::{RosettaBlock, RosettaCounter};
 use crate::MetadataEntry;
 use anyhow::{bail, Context};
 use candid::Nat;
+use ic_base_types::PrincipalId;
 use ic_ledger_core::tokens::Zero;
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
 use icrc_ledger_types::icrc1::account::Account;
@@ -668,6 +669,48 @@ pub fn get_account_balance_at_block_idx(
         })?
         .map(|x: String| Nat::from_str(&x))
         .transpose()?)
+}
+
+/// Gets the aggregated balance of all subaccounts for a given principal at a specific block index.
+/// Returns the sum of all subaccount balances for the principal.
+pub fn get_aggregated_balance_for_principal_at_block_idx(
+    connection: &Connection,
+    principal: &PrincipalId,
+    block_idx: u64,
+) -> anyhow::Result<Nat> {
+    // Query to get the latest balance for each subaccount of the principal at or before the given block index
+    let mut stmt = connection.prepare_cached(
+        "SELECT DISTINCT a1.subaccount, a1.amount
+         FROM account_balances a1
+         WHERE a1.principal = :principal
+         AND a1.block_idx <= :block_idx
+         AND a1.block_idx = (
+             SELECT MAX(a2.block_idx)
+             FROM account_balances a2
+             WHERE a2.principal = a1.principal
+             AND a2.subaccount = a1.subaccount
+             AND a2.block_idx <= :block_idx
+         )"
+    )?;
+
+    let rows = stmt.query_map(named_params! {
+        ":principal": principal.as_slice(),
+        ":block_idx": block_idx
+    }, |row| {
+        let amount_str: String = row.get(1)?;
+        Ok(Nat::from_str(&amount_str).map_err(|_| rusqlite::Error::InvalidColumnType(
+            1, "amount".to_string(), rusqlite::types::Type::Text
+        ))?)
+    })?;
+
+    let mut total_balance = Nat(BigUint::zero());
+    for balance_result in rows {
+        let balance = balance_result?;
+        total_balance = Nat(total_balance.0.checked_add(&balance.0)
+            .with_context(|| "Overflow while aggregating balances")?);
+    }
+
+    Ok(total_balance)
 }
 
 pub fn get_blocks_by_custom_query<P>(
