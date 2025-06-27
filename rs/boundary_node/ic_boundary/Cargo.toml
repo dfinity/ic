@@ -103,6 +103,7 @@ x509-parser = { workspace = true }
 criterion = { workspace = true }
 indoc = "1.0"
 tempfile = { workspace = true }
+tokio-tungstenite = "0.26"
 
 [[bench]]
 name = "perf"
