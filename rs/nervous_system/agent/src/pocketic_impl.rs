@@ -1,5 +1,7 @@
-use crate::{AgentFor, CallCanisters, CanisterInfo, ProgressNetwork};
-use crate::{CallCanistersWithStoppedCanisterError, Request};
+use crate::{
+    AgentFor, CallCanisters, CallCanistersWithStoppedCanisterError, CanisterInfo, ProgressNetwork,
+    Request,
+};
 use candid::Principal;
 use ic_management_canister_types::{CanisterStatusResult, DefiniteCanisterSettings};
 use pocket_ic::common::rest::RawEffectivePrincipal;
@@ -72,22 +74,20 @@ impl CallCanisters for PocketIcAgent<'_> {
                     .update_call(canister_id, self.sender, request.method(), request_bytes)
                     .await
             }
+        } else if let Some(effective_canister_id) = effective_canister_id {
+            self.pocket_ic
+                .query_call_with_effective_principal(
+                    canister_id,
+                    effective_canister_id,
+                    self.sender,
+                    request.method(),
+                    request_bytes,
+                )
+                .await
         } else {
-            if let Some(effective_canister_id) = effective_canister_id {
-                self.pocket_ic
-                    .query_call_with_effective_principal(
-                        canister_id,
-                        effective_canister_id,
-                        self.sender,
-                        request.method(),
-                        request_bytes,
-                    )
-                    .await
-            } else {
-                self.pocket_ic
-                    .query_call(canister_id, self.sender, request.method(), request_bytes)
-                    .await
-            }
+            self.pocket_ic
+                .query_call(canister_id, self.sender, request.method(), request_bytes)
+                .await
         }
         .map_err(PocketIcCallError::PocketIc)?;
 

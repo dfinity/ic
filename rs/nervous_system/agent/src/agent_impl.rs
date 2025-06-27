@@ -1,5 +1,6 @@
-use crate::{CallCanisters, CallCanistersWithStoppedCanisterError, ProgressNetwork};
-use crate::{CanisterInfo, Request};
+use crate::{
+    CallCanisters, CallCanistersWithStoppedCanisterError, CanisterInfo, ProgressNetwork, Request,
+};
 use candid::Principal;
 use ic_agent::agent::{RejectCode, RejectResponse};
 use ic_agent::{Agent, AgentError};
