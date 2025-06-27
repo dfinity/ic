@@ -1,6 +1,4 @@
-use crate::stable_memory::{
-    RegistryDataStableMemory, StorableRegistryKey, StorableRegistryValue, TimestampKey,
-};
+use crate::stable_memory::{RegistryDataStableMemory, StorableRegistryKey, StorableRegistryValue};
 use crate::CanisterRegistryClient;
 use async_trait::async_trait;
 use ic_cdk::println;
@@ -12,6 +10,7 @@ use ic_nervous_system_canisters::registry::Registry;
 use ic_registry_transport::pb::v1::RegistryDelta;
 use ic_types::registry::RegistryClientError;
 use ic_types::RegistryVersion;
+use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::marker::PhantomData;
@@ -29,13 +28,27 @@ pub struct StableCanisterRegistryClient<S: RegistryDataStableMemory> {
     latest_version: AtomicU64,
     // Registry client to interact with the canister
     registry: Arc<dyn Registry>,
+    // A map holding the mapping of timestamps to registry versions.
+    pub timestamp_to_versions_map: RefCell<BTreeMap<u64, Vec<RegistryVersion>>>,
 }
 
 impl<S: RegistryDataStableMemory> StableCanisterRegistryClient<S> {
     pub fn new(registry: Arc<dyn Registry>) -> Self {
+        let timestamp_to_versions_map = S::with_registry_map(|local_registry| {
+            local_registry
+                .iter()
+                .fold(BTreeMap::new(), |mut acc, (k, v)| {
+                    acc.entry(k.timestamp_nanoseconds)
+                        .or_default()
+                        .push(RegistryVersion::from(k.version));
+                    acc
+                })
+        });
+
         Self {
             _stable_memory: PhantomData,
             latest_version: AtomicU64::new(0),
+            timestamp_to_versions_map: RefCell::new(timestamp_to_versions_map),
             registry,
         }
     }
@@ -46,36 +59,30 @@ impl<S: RegistryDataStableMemory> StableCanisterRegistryClient<S> {
             let mut highest_version_inserted = self.get_latest_version();
 
             S::with_registry_map_mut(|local_registry| {
-                S::with_timestamp_to_registry_versions_map_mut(
-                    |timestamp_to_registry_versions_map| {
-                        for v in delta.values {
-                            let registry_version = RegistryVersion::from(v.version);
-                            highest_version_inserted =
-                                std::cmp::max(highest_version_inserted, registry_version);
+                for v in delta.values {
+                    let registry_version = RegistryVersion::from(v.version);
+                    highest_version_inserted =
+                        std::cmp::max(highest_version_inserted, registry_version);
 
-                            let key = StorableRegistryKey::new(
-                                string_key.to_string(),
-                                registry_version.get(),
-                            );
-                            let value = StorableRegistryValue(if v.deletion_marker {
-                                None
-                            } else {
-                                Some(v.value)
-                            });
+                    let key = StorableRegistryKey {
+                        key: string_key.to_string(),
+                        version: registry_version.get(),
+                        timestamp_nanoseconds: v.timestamp_nanoseconds,
+                    };
+                    let value = StorableRegistryValue(if v.deletion_marker {
+                        None
+                    } else {
+                        Some(v.value)
+                    });
 
-                            let timestamp_key = TimestampKey(v.timestamp_nanoseconds);
+                    local_registry.insert(key, value);
 
-                            let mut registry_versions = timestamp_to_registry_versions_map
-                                .get(&timestamp_key)
-                                .unwrap_or_default();
-
-                            registry_versions.0.push(v.version);
-                            timestamp_to_registry_versions_map
-                                .insert(timestamp_key, registry_versions);
-                            local_registry.insert(key, value);
-                        }
-                    },
-                )
+                    self.timestamp_to_versions_map
+                        .borrow_mut()
+                        .entry(v.timestamp_nanoseconds)
+                        .or_default()
+                        .push(registry_version);
+                }
             });
             // Update the latest version if the inserted version is higher than the current one.
             if highest_version_inserted > self.get_latest_version() {
@@ -96,7 +103,10 @@ impl<S: RegistryDataStableMemory> StableCanisterRegistryClient<S> {
             return Err(RegistryClientError::VersionNotAvailable { version });
         }
 
-        let start_range = StorableRegistryKey::new(key_prefix.to_string(), Default::default());
+        let start_range = StorableRegistryKey {
+            key: key_prefix.to_string(),
+            ..Default::default()
+        };
 
         let mut effective_records = BTreeMap::new();
         S::with_registry_map(|map| {
@@ -131,8 +141,15 @@ impl<S: RegistryDataStableMemory> CanisterRegistryClient for StableCanisterRegis
             return Err(RegistryClientError::VersionNotAvailable { version });
         }
 
-        let start_range = StorableRegistryKey::new(key.to_string(), Default::default());
-        let end_range = StorableRegistryKey::new(key.to_string(), version.get());
+        let start_range = StorableRegistryKey {
+            key: key.to_string(),
+            ..Default::default()
+        };
+        let end_range = StorableRegistryKey {
+            key: key.to_string(),
+            version: version.get(),
+            ..Default::default()
+        };
 
         let result = S::with_registry_map(|map| {
             map.range(start_range..=end_range)

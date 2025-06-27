@@ -11,10 +11,7 @@ mod stable_canister_client;
 mod stable_memory;
 
 pub use stable_canister_client::StableCanisterRegistryClient;
-pub use stable_memory::{
-    RegistryDataStableMemory, RegistryVersionsValue, StorableRegistryKey, StorableRegistryValue,
-    TimestampKey,
-};
+pub use stable_memory::{RegistryDataStableMemory, StorableRegistryKey, StorableRegistryValue};
 
 /// The CanisterRegistryClient provides methods to maintain and read a local cache of Registry data
 /// This is similar to the RegistryClient interface use in the protocol, but without the
