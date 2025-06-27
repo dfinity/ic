@@ -20,10 +20,13 @@ use crate::lifecycle::upgrade::UpgradeArgs;
 use crate::logs::P0;
 use crate::state::invariants::{CheckInvariants, CheckInvariantsImpl};
 use crate::updates::update_balance::SuspendedUtxo;
-use crate::{address::BitcoinAddress, ECDSAPublicKey, GetUtxosCache, Network, Timestamp};
+use crate::{
+    address::BitcoinAddress, compute_min_withdrawal_amount, ECDSAPublicKey, GetUtxosCache, Network,
+    Timestamp,
+};
 use candid::{CandidType, Deserialize, Principal};
 use ic_base_types::CanisterId;
-use ic_btc_interface::{OutPoint, Txid, Utxo};
+use ic_btc_interface::{MillisatoshiPerByte, OutPoint, Txid, Utxo};
 use ic_canister_log::log;
 use ic_utils_ensure::ensure_eq;
 use icrc_ledger_types::icrc1::account::Account;
@@ -1305,6 +1308,54 @@ impl CkBtcMinterState {
                 None
             }
         })
+    }
+
+    pub fn estimate_median_fee_per_vbyte(&self) -> Option<MillisatoshiPerByte> {
+        /// The default fee we use on regtest networks .
+        const DEFAULT_REGTEST_FEE: MillisatoshiPerByte = 5_000;
+
+        let median_fee = match &self.btc_network {
+            Network::Mainnet | Network::Testnet => {
+                if self.last_fee_per_vbyte.len() < 100 {
+                    return None;
+                }
+                Some(self.last_fee_per_vbyte[50])
+            }
+            Network::Regtest => Some(DEFAULT_REGTEST_FEE),
+        };
+        median_fee.map(|f| f.max(self.minimum_fee_per_vbyte()))
+    }
+
+    pub fn update_median_fee_per_vbyte(
+        &mut self,
+        fees: Vec<MillisatoshiPerByte>,
+    ) -> Option<MillisatoshiPerByte> {
+        if fees.len() < 100 {
+            log!(
+                P0,
+                "[update_median_fee_per_vbyte]: not enough data points ({}) to compute the fee",
+                fees.len()
+            );
+            return None;
+        }
+        self.last_fee_per_vbyte = fees;
+        let median_fee = self
+            .estimate_median_fee_per_vbyte()
+            .expect("BUG: last_fee_per_vbyte set");
+        self.fee_based_retrieve_btc_min_amount =
+            compute_min_withdrawal_amount(median_fee, self.retrieve_btc_min_amount, self.check_fee);
+        Some(median_fee)
+    }
+
+    /// An estimated fee per vbyte of 142 millistatoshis per vbyte was selected around 2025.06.21 01:09:50 UTC
+    /// for Bitcoin Mainnet, whereas the median fee around that time should have been 2_000.
+    /// Until we know the root cause, we ensure that the estimated fee has a meaningful minimum value.
+    pub const fn minimum_fee_per_vbyte(&self) -> MillisatoshiPerByte {
+        match &self.btc_network {
+            Network::Mainnet => 1_500,
+            Network::Testnet => 1_000,
+            Network::Regtest => 0,
+        }
     }
 }
 
