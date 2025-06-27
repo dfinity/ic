@@ -34,7 +34,7 @@ verify_file_hash() {
 
 download_recovery_artifact() {
     local base_url="$1"
-    local recovery_url="${base_url}/ic/${VERSION}/guest-os/recovery-artifacts/recovery.tar.zst"
+    local recovery_url="${base_url}/ic/${VERSION}/guest-os/recovery-artifacts/DELETE-ME/recovery.tar.zst"
 
     echo "Attempting to download recovery artifact from $recovery_url"
 

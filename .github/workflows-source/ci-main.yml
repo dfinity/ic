@@ -572,7 +572,7 @@ jobs:
             RECOVERY_STORE_CONTENT2=$(head /dev/urandom | tr -dc 'A-Za-z0-9' | head -c 20)
 
             # Pack the dummy CUP and local store into an archive
-            mkdir -p guest-os/recovery-artifacts && cd "$_"
+            mkdir -p guest-os/recovery-artifacts/DELETE-ME && cd "$_"
             echo -n "${RECOVERY_CUP_CONTENT}" > cup.proto
             mkdir ic_registry_local_store
             cd ic_registry_local_store
@@ -590,7 +590,7 @@ jobs:
             # Get version and checksum
             bazel build //bazel:version.txt
             RECOVERY_VERSION="$(cat bazel-bin/bazel/version.txt)"
-            RECOVERY_HASH="$(sha256sum $rootdir/guest-os/recovery-artifacts/recovery.tar.zst | cut -d' ' -f1)"
+            RECOVERY_HASH="$(sha256sum $rootdir/guest-os/recovery-artifacts/DELETE-ME/recovery.tar.zst | cut -d' ' -f1)"
 
             # Set environment variables for the next steps
             echo "RECOVERY_CUP_CONTENT=${RECOVERY_CUP_CONTENT}" >> "$GITHUB_ENV"
