@@ -36,7 +36,7 @@ impl<S: RegistryDataStableMemory> StableCanisterRegistryClient<S> {
         let timestamp_to_versions_map = S::with_registry_map(|local_registry| {
             local_registry.iter().fold(
                 BTreeMap::new(),
-                |mut acc: std::collections::BTreeMap<u64, Vec<RegistryVersion>>, (k, v)| {
+                |mut acc: std::collections::BTreeMap<u64, Vec<RegistryVersion>>, (k, _)| {
                     acc.entry(k.timestamp_nanoseconds)
                         .or_default()
                         .push(RegistryVersion::from(k.version));
