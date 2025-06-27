@@ -236,7 +236,7 @@ impl CanisterHttpPayloadBuilderImpl {
         // time out response. Instead, we scan the state metadata for timed
         // out requests and generate time out responses based on that
         // Iterate over all outstanding canister http requests
-        for (callback_id, request) in canister_http_request_contexts.iter() {
+        for (callback_id, request) in canister_http_request_contexts {
             unique_includable_responses += 1;
             let candidate_size = callback_id.count_bytes();
             let size = NumBytes::new((accumulated_size + candidate_size) as u64);

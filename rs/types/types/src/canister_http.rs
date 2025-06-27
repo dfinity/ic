@@ -448,12 +448,17 @@ impl CanisterHttpRequestContext {
 
         let replication = match args.is_replicated {
             Some(false) => {
-                let nodes_vec: Vec<_> = node_ids.iter().collect();
-                if nodes_vec.is_empty() {
+                if node_ids.is_empty() {
                     return Err(CanisterHttpRequestContextError::NoNodesAvailableForDelegation);
                 }
-                let random_index = rng.gen_range(0..nodes_vec.len());
-                let delegated_node_id = nodes_vec[random_index];
+
+                let random_index = rng.gen_range(0..node_ids.len());
+
+                let delegated_node_id = node_ids
+                    .iter()
+                    .nth(random_index)
+                    .ok_or(CanisterHttpRequestContextError::NoNodesAvailableForDelegation)?; // never panic.
+
                 Replication::NonReplicated(*delegated_node_id)
             }
             _ => Replication::FullyReplicated,
