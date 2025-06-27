@@ -2043,24 +2043,4 @@ VALUES (:idx, :block_idx)"#,
         assert!(!index_names.contains(&"spender_account_index".to_string()));
         assert!(!index_names.contains(&"operation_type_index".to_string()));
     }
-
-    #[test]
-    fn test_index_optimization_performance_impact() {
-        // This test verifies that both indexed and non-indexed databases can be created
-        // and basic queries work. It documents the performance optimization feature.
-
-        let _blocks_with_indexes = Blocks::new_in_memory(
-            RosettaDbConfig::with_rosetta_blocks_disabled(IndexOptimization::Enabled),
-        )
-        .unwrap();
-        let _blocks_without_indexes =
-            Blocks::new_in_memory(RosettaDbConfig::default_disabled()).unwrap();
-
-        // This test documents the performance benefit but doesn't run actual queries
-        // as they can vary significantly across different hardware and database states.
-        // In practice, indexed queries should be faster for large datasets.
-        println!(
-            "Performance test completed - indexes can improve query performance significantly"
-        );
-    }
 }
