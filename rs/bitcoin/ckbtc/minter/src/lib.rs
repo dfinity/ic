@@ -266,34 +266,13 @@ fn compute_min_withdrawal_amount(
 /// None if the Bitcoin canister is unavailable or does not have enough data for
 /// an estimate yet.
 pub async fn estimate_fee_per_vbyte() -> Option<MillisatoshiPerByte> {
-    /// The default fee we use on regtest networks if there are not enough data
-    /// to compute the median fee.
-    const DEFAULT_FEE: MillisatoshiPerByte = 5_000;
-
     let btc_network = state::read_state(|s| s.btc_network);
     match management::get_current_fees(btc_network).await {
         Ok(fees) => {
             if btc_network == Network::Regtest {
-                return Some(DEFAULT_FEE);
+                return state::read_state(|s| s.estimate_median_fee_per_vbyte());
             }
-            if fees.len() >= 100 {
-                state::mutate_state(|s| {
-                    s.last_fee_per_vbyte.clone_from(&fees);
-                    s.fee_based_retrieve_btc_min_amount = compute_min_withdrawal_amount(
-                        fees[50],
-                        s.retrieve_btc_min_amount,
-                        s.check_fee,
-                    );
-                });
-                Some(fees[50])
-            } else {
-                log!(
-                    P0,
-                    "[estimate_fee_per_vbyte]: not enough data points ({}) to compute the fee",
-                    fees.len()
-                );
-                None
-            }
+            state::mutate_state(|s| s.update_median_fee_per_vbyte(fees))
         }
         Err(err) => {
             log!(
