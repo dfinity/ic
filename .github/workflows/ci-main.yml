@@ -605,9 +605,9 @@ jobs:
             RECOVERY_HASH="$(sha256sum $rootdir/guest-os/recovery-artifacts/DELETE-ME/recovery.tar.zst | cut -d' ' -f1)"
 
             # Encode contents in hexadecimal to avoid terminal/console issues
-            RECOVERY_CUP_CONTENT_HEX="$(echo -n ${RECOVERY_CUP_CONTENT} | od -An -tx1 -v | tr -d ' \\n')"
-            RECOVERY_STORE_CONTENT1_HEX="$(echo -n ${RECOVERY_STORE_CONTENT1} | od -An -tx1 -v | tr -d ' \\n')"
-            RECOVERY_STORE_CONTENT2_HEX="$(echo -n ${RECOVERY_STORE_CONTENT2} | od -An -tx1 -v | tr -d ' \\n')"
+            RECOVERY_CUP_CONTENT_HEX="$(echo -n ${RECOVERY_CUP_CONTENT} | od -An -tx1 -v | tr -d ' \n')"
+            RECOVERY_STORE_CONTENT1_HEX="$(echo -n ${RECOVERY_STORE_CONTENT1} | od -An -tx1 -v | tr -d ' \n')"
+            RECOVERY_STORE_CONTENT2_HEX="$(echo -n ${RECOVERY_STORE_CONTENT2} | od -An -tx1 -v | tr -d ' \n')"
 
             # Set environment variables for the next steps
             echo "RECOVERY_CUP_CONTENT_HEX=${RECOVERY_CUP_CONTENT_HEX}" >> "$GITHUB_ENV"
