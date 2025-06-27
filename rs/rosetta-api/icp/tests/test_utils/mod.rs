@@ -38,6 +38,7 @@ pub struct TestLedger {
     pub submit_queue: RwLock<Vec<HashedBlock>>,
     pub transfer_fee: Tokens,
     pub next_block_timestamp: Mutex<TimeStamp>,
+    #[allow(dead_code)]
     pub stop_token: Arc<AtomicBool>,
 }
 
