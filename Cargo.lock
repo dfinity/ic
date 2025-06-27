@@ -12864,6 +12864,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-signer"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "ic-cdk 0.17.2",
+ "ic-management-canister-types",
+ "ic_bls12_381",
+ "serde",
+]
+
+[[package]]
 name = "ic-sns-audit"
 version = "0.9.0"
 dependencies = [
@@ -13841,6 +13852,7 @@ dependencies = [
  "ic-interfaces-registry",
  "ic-ledger-core",
  "ic-limits",
+ "ic-management-canister-types",
  "ic-management-canister-types-private",
  "ic-message",
  "ic-nervous-system-clients",
@@ -13871,6 +13883,7 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-registry-transport",
  "ic-rosetta-api",
+ "ic-signer",
  "ic-sns-governance",
  "ic-sns-init",
  "ic-sns-root",
@@ -15014,8 +15027,10 @@ dependencies = [
  "ic-agent",
  "ic-base-types",
  "ic-canister-client",
+ "ic-cdk 0.17.2",
  "ic-config",
  "ic-limits",
+ "ic-management-canister-types",
  "ic-management-canister-types-private",
  "ic-message",
  "ic-nervous-system-common-test-keys",
@@ -15025,6 +15040,7 @@ dependencies = [
  "ic-prep",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
+ "ic-signer",
  "ic-system-test-driver",
  "ic-types",
  "ic-types-test-utils",
