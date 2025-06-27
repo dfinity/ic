@@ -98,10 +98,15 @@ pub fn setup(env: TestEnv) {
             .add_nodes_with_required_host_features(
                 1,
                 vec![HostFeature::Host(
-                    "dm1-dll29.dm1.dfinity.network".to_string(),
+                    "dm1-dll33.dm1.dfinity.network".to_string(),
                 )],
             )
-            .add_nodes_with_required_host_features(1, vec![HostFeature::Performance]),
+            .add_nodes_with_required_host_features(
+                1,
+                vec![HostFeature::Host(
+                    "dm1-dll34.dm1.dfinity.network".to_string(),
+                )],
+            ),
     );
     let num_full_app = NUM_FULL_CONSENSUS_APP_SUBNETS;
     for _ in 0..num_full_app {
