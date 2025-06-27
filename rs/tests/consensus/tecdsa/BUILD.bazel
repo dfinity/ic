@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "SIGNER_CANISTER_ENV", "SIGNER_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -53,12 +53,13 @@ system_test_nns(
 
 system_test_nns(
     name = "tschnorr_message_sizes_test",
+    env = SIGNER_CANISTER_ENV,
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
-    runtime_deps = GUESTOS_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + SIGNER_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/config",
@@ -319,7 +320,7 @@ system_test_nns(
         "memory_kibibytes": 512142680,
         "boot_image_minimal_size_gibibytes": 500,
     },
-    env = {
+    env = SIGNER_CANISTER_ENV | {
         "TECDSA_PERFORMANCE_TEST_KEY_IDS": "ecdsa_secp256k1",
         "BENCHMARK_NAME": "tecdsa_performance_test",
     },
@@ -330,7 +331,7 @@ system_test_nns(
     ],
     test_driver_target = tecdsa_performance_test_template.test_driver_target,
     test_timeout = "eternal",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + SIGNER_CANISTER_RUNTIME_DEPS,
 )
 
 system_test_nns(
@@ -344,7 +345,7 @@ system_test_nns(
         "memory_kibibytes": 512142680,
         "boot_image_minimal_size_gibibytes": 500,
     },
-    env = {
+    env = SIGNER_CANISTER_ENV | {
         "TECDSA_PERFORMANCE_TEST_KEY_IDS": "schnorr_ed25519",
         "BENCHMARK_NAME": "tschnorr_ed25519_performance_test",
     },
@@ -355,7 +356,7 @@ system_test_nns(
     ],
     test_driver_target = tecdsa_performance_test_template.test_driver_target,
     test_timeout = "eternal",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + SIGNER_CANISTER_RUNTIME_DEPS,
 )
 
 system_test_nns(
@@ -369,7 +370,7 @@ system_test_nns(
         "memory_kibibytes": 512142680,
         "boot_image_minimal_size_gibibytes": 500,
     },
-    env = {
+    env = SIGNER_CANISTER_ENV | {
         "TECDSA_PERFORMANCE_TEST_KEY_IDS": "schnorr_bip340",
         "BENCHMARK_NAME": "tschnorr_bip340_performance_test",
     },
@@ -380,7 +381,7 @@ system_test_nns(
     ],
     test_driver_target = tecdsa_performance_test_template.test_driver_target,
     test_timeout = "eternal",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + SIGNER_CANISTER_RUNTIME_DEPS,
 )
 
 system_test_nns(
@@ -394,7 +395,7 @@ system_test_nns(
         "memory_kibibytes": 512142680,
         "boot_image_minimal_size_gibibytes": 500,
     },
-    env = {
+    env = SIGNER_CANISTER_ENV | {
         "TECDSA_PERFORMANCE_TEST_KEY_IDS": "vetkd_bls12_381_g2",
         "BENCHMARK_NAME": "vetkd_performance_test",
     },
@@ -405,5 +406,5 @@ system_test_nns(
     ],
     test_driver_target = tecdsa_performance_test_template.test_driver_target,
     test_timeout = "eternal",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + SIGNER_CANISTER_RUNTIME_DEPS,
 )
