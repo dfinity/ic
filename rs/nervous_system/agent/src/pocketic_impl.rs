@@ -49,10 +49,15 @@ impl CallCanisters for PocketIcAgent<'_> {
         let canister_id = canister_id.into();
 
         let request_bytes = request.payload().map_err(PocketIcCallError::CandidEncode)?;
+
+        let effective_canister_id = request
+            .effective_canister_id()
+            .map(|effective_canister_id| {
+                RawEffectivePrincipal::CanisterId(effective_canister_id.as_slice().to_vec())
+            });
+
         let response = if request.update() {
-            if let Some(effective_canister_id) = request.effective_canister_id() {
-                let effective_canister_id =
-                    RawEffectivePrincipal::CanisterId(effective_canister_id.as_slice().to_vec());
+            if let Some(effective_canister_id) = effective_canister_id {
                 self.pocket_ic
                     .update_call_with_effective_principal(
                         canister_id,
@@ -68,9 +73,21 @@ impl CallCanisters for PocketIcAgent<'_> {
                     .await
             }
         } else {
-            self.pocket_ic
-                .query_call(canister_id, self.sender, request.method(), request_bytes)
-                .await
+            if let Some(effective_canister_id) = effective_canister_id {
+                self.pocket_ic
+                    .query_call_with_effective_principal(
+                        canister_id,
+                        effective_canister_id,
+                        self.sender,
+                        request.method(),
+                        request_bytes,
+                    )
+                    .await
+            } else {
+                self.pocket_ic
+                    .query_call(canister_id, self.sender, request.method(), request_bytes)
+                    .await
+            }
         }
         .map_err(PocketIcCallError::PocketIc)?;
 

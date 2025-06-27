@@ -38,14 +38,13 @@ impl CallCanisters for Agent {
         let payload = request.payload().map_err(AgentCallError::CandidEncode)?;
 
         let response = if request.update() {
-            let call = if let Some(effective_canister_id) = request.effective_canister_id() {
-                self.update(&canister_id, method)
-                    .with_effective_canister_id(effective_canister_id)
-            } else {
-                self.update(&canister_id, method)
-            };
+            let mut call = self.update(&canister_id, method).with_arg(payload);
 
-            let response = call.with_arg(payload).call().await?;
+            if let Some(effective_canister_id) = request.effective_canister_id() {
+                call = call.with_effective_canister_id(effective_canister_id);
+            }
+
+            let response = call.call().await?;
 
             let (response, _cert) = match response {
                 ic_agent::agent::CallResponse::Response(response) => response,
@@ -53,12 +52,16 @@ impl CallCanisters for Agent {
                     self.wait(&request_id, canister_id).await?
                 }
             };
+
             response
         } else {
-            self.query(&canister_id, method)
-                .with_arg(payload)
-                .call()
-                .await?
+            let mut call = self.query(&canister_id, method).with_arg(payload);
+
+            if let Some(effective_canister_id) = request.effective_canister_id() {
+                call = call.with_effective_canister_id(effective_canister_id);
+            }
+
+            call.call().await?
         };
 
         let response =
