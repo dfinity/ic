@@ -60,8 +60,10 @@ use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     state::system_metadata::v1 as pb_metadata,
 };
+use rand::{Rng, RngCore};
 use serde::{Deserialize, Serialize};
 use std::{
+    collections::BTreeSet,
     convert::{TryFrom, TryInto},
     mem::size_of,
     time::Duration,
@@ -397,6 +399,91 @@ impl CanisterHttpRequestContext {
             });
         NumBytes::from(request_size as u64)
     }
+
+    pub fn generate_from_args(
+        time: Time,
+        request: &Request,
+        args: CanisterHttpRequestArgs,
+        node_ids: &BTreeSet<NodeId>,
+        rng: &mut dyn RngCore,
+    ) -> Result<Self, CanisterHttpRequestContextError> {
+        if let Some(transform_principal_id) = args.transform_principal() {
+            if request.sender.get() != transform_principal_id {
+                return Err(CanisterHttpRequestContextError::TransformPrincipalId(
+                    InvalidTransformPrincipalId {
+                        expected_principal_id: request.sender.get(),
+                        actual_principal_id: transform_principal_id,
+                    },
+                ));
+            }
+        };
+
+        let max_response_bytes = match args.max_response_bytes {
+            Some(max_response_bytes) => {
+                if max_response_bytes > MAX_CANISTER_HTTP_RESPONSE_BYTES {
+                    Err(CanisterHttpRequestContextError::MaxResponseBytes(
+                        InvalidMaxResponseBytes {
+                            min: 0,
+                            max: MAX_CANISTER_HTTP_RESPONSE_BYTES,
+                            given: max_response_bytes,
+                        },
+                    ))
+                } else {
+                    Ok(Some(NumBytes::from(max_response_bytes)))
+                }
+            }
+            None => Ok(None),
+        }?;
+
+        let url_len = args.url.len();
+        if url_len > MAX_CANISTER_HTTP_URL_SIZE {
+            return Err(CanisterHttpRequestContextError::UrlTooLong(url_len));
+        }
+
+        let request_body = args.body;
+        validate_http_headers_and_body(
+            args.headers.get(),
+            request_body.as_ref().unwrap_or(&vec![]),
+        )?;
+
+        let replication = match args.is_replicated {
+            Some(false) => {
+                let nodes_vec: Vec<_> = node_ids.iter().collect();
+                if nodes_vec.is_empty() {
+                    return Err(CanisterHttpRequestContextError::NoNodesAvailableForDelegation);
+                }
+                let random_index = rng.gen_range(0..nodes_vec.len());
+                let delegated_node_id = nodes_vec[random_index];
+                Replication::NonReplicated(*delegated_node_id)
+            }
+            _ => Replication::FullyReplicated,
+        };
+
+        Ok(CanisterHttpRequestContext {
+            request: request.clone(),
+            url: args.url,
+            max_response_bytes,
+            headers: args
+                .headers
+                .get()
+                .clone()
+                .into_iter()
+                .map(|h| CanisterHttpHeader {
+                    name: h.name,
+                    value: h.value,
+                })
+                .collect(),
+            body: request_body,
+            http_method: match args.method {
+                HttpMethod::GET => CanisterHttpMethod::GET,
+                HttpMethod::POST => CanisterHttpMethod::POST,
+                HttpMethod::HEAD => CanisterHttpMethod::HEAD,
+            },
+            transform: args.transform.map(From::from),
+            time,
+            replication,
+        })
+    }
 }
 
 /// The error that occurs when an end-user specifies an invalid
@@ -429,6 +516,7 @@ pub enum CanisterHttpRequestContextError {
     TooLargeHeaders(usize),
     TooLargeRequest(usize),
     NonReplicatedNotSupported,
+    NoNodesAvailableForDelegation,
 }
 
 impl From<CanisterHttpRequestContextError> for UserError {
@@ -491,6 +579,12 @@ impl From<CanisterHttpRequestContextError> for UserError {
                 UserError::new(
                     ErrorCode::CanisterRejectedMessage,
                     "Canister HTTP requests with is_replicated=false are not supported".to_string(),
+                )
+            }
+            CanisterHttpRequestContextError::NoNodesAvailableForDelegation => {
+                UserError::new(
+                    ErrorCode::CanisterRejectedMessage,
+                    "No nodes available for delegation for non-replicated HTTP request.".to_string(),
                 )
             }
         }

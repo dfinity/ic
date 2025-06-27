@@ -32,9 +32,10 @@ use ic_types::{
         CanisterHttpPayload, ConsensusResponse, ValidationContext, MAX_CANISTER_HTTP_PAYLOAD_SIZE,
     },
     canister_http::{
-        CanisterHttpResponse, CanisterHttpResponseContent, CanisterHttpResponseDivergence,
-        CanisterHttpResponseMetadata, CanisterHttpResponseProof, CanisterHttpResponseWithConsensus,
-        Replication, CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK, CANISTER_HTTP_TIMEOUT_INTERVAL,
+        CanisterHttpRequestContext, CanisterHttpResponse, CanisterHttpResponseContent,
+        CanisterHttpResponseDivergence, CanisterHttpResponseMetadata, CanisterHttpResponseProof,
+        CanisterHttpResponseWithConsensus, Replication, CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK,
+        CANISTER_HTTP_TIMEOUT_INTERVAL,
     },
     consensus::Committee,
     crypto::Signed,
@@ -501,16 +502,12 @@ impl CanisterHttpPayloadBuilderImpl {
         // do all the cheap checks first
         for response in &payload.responses {
             let callback_id = response.content.id;
-            let context = http_contexts.get(&callback_id).ok_or(
-                CanisterHttpPayloadValidationError::InvalidArtifact(
-                    InvalidCanisterHttpPayloadReason::UnknownCallbackId(callback_id),
-                ),
-            )?;
-
-            let (effective_committee, effective_threshold) =
-                if let Replication::NonReplicated(node_id) = context.replication {
-                    (vec![node_id], 1)
-                } else {
+            let (effective_committee, effective_threshold) = match http_contexts.get(&callback_id) {
+                Some(&CanisterHttpRequestContext {
+                    replication: Replication::NonReplicated(ref node_id),
+                    ..
+                }) => (vec![node_id.clone()], 1),
+                _ => {
                     let threshold = match self
                         .membership
                         .get_committee_threshold(height, Committee::CanisterHttp)
@@ -524,7 +521,8 @@ impl CanisterHttpPayloadBuilderImpl {
                         }
                     };
                     (committee.clone(), threshold)
-                };
+                }
+            };
 
             let (valid_signers, invalid_signers): (Vec<NodeId>, Vec<NodeId>) = response
                 .proof

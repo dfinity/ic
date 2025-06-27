@@ -50,7 +50,7 @@ use proxy_canister::{
     UnvalidatedCanisterHttpRequestArgs,
 };
 use serde_json::Value;
-use std::{collections::HashSet, convert::TryFrom};
+use std::collections::{BTreeSet, HashSet};
 
 const MAX_REQUEST_BYTES_LIMIT: usize = 2_000_000;
 const MAX_MAX_RESPONSE_BYTES: usize = 2_000_000;
@@ -2414,14 +2414,16 @@ fn expected_cycle_cost(
         .max_response_bytes
         .unwrap_or(MAX_CANISTER_HTTP_REQUEST_BYTES);
 
-    let dummy_context = CanisterHttpRequestContext::try_from((
+    let dummy_context = CanisterHttpRequestContext::generate_from_args(
         UNIX_EPOCH,
         &RequestBuilder::default()
             .receiver(CanisterId::from(1))
             .sender(proxy_canister)
             .build(),
         request.into(),
-    ))
+        &BTreeSet::new(),
+        &mut rand::thread_rng(),
+    )
     .unwrap();
     let req_size = dummy_context.variable_parts_size();
     let cycle_fee = cm.http_request_fee(req_size, Some(NumBytes::from(response_size)), subnet_size);

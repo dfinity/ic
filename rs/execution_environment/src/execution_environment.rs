@@ -68,7 +68,7 @@ use ic_replicated_state::{
     CanisterState, ExecutionTask, NetworkTopology, ReplicatedState,
 };
 use ic_types::{
-    canister_http::{CanisterHttpRequestContext, Replication},
+    canister_http::CanisterHttpRequestContext,
     crypto::{
         canister_threshold_sig::{MasterPublicKey, PublicKey},
         threshold_sig::ni_dkg::NiDkgTargetId,
@@ -91,7 +91,6 @@ use ic_utils_thread::deallocator_thread::{DeallocationSender, DeallocatorThread}
 use ic_wasm_types::WasmHash;
 use phantom_newtype::AmountOf;
 use prometheus::IntCounter;
-use rand::Rng;
 use rand::RngCore;
 use std::{
     collections::{BTreeMap, HashMap},
@@ -977,12 +976,13 @@ impl ExecutionEnvironment {
                                 refund: msg.take_cycles(),
                             },
                             Ok(args) => {
-                                let is_replicated = args.is_replicated.unwrap_or(true);
-                                match CanisterHttpRequestContext::try_from((
+                                match CanisterHttpRequestContext::generate_from_args(
                                     state.time(),
                                     request.as_ref(),
                                     args,
-                                )) {
+                                    &registry_settings.node_ids,
+                                    rng,
+                                ) {
                                     Err(err) => ExecuteSubnetMessageResult::Finished {
                                         response: Err(err.into()),
                                         refund: msg.take_cycles(),
@@ -991,10 +991,8 @@ impl ExecutionEnvironment {
                                         .try_add_http_context_to_replicated_state(
                                             canister_http_request_context,
                                             &mut state,
-                                            is_replicated,
                                             request.as_ref(),
                                             registry_settings,
-                                            rng,
                                             since,
                                         ) {
                                         Err(err) => ExecuteSubnetMessageResult::Finished {
@@ -1783,30 +1781,10 @@ impl ExecutionEnvironment {
         &self,
         mut canister_http_request_context: CanisterHttpRequestContext,
         state: &mut ReplicatedState,
-        is_replicated: bool,
         request: &Request,
         registry_settings: &RegistryExecutionSettings,
-        rng: &mut dyn RngCore,
         since: Instant,
     ) -> Result<(), UserError> {
-        match is_replicated {
-            true => canister_http_request_context.replication = Replication::FullyReplicated,
-            false => {
-                let node_ids = &registry_settings.node_ids;
-                let nodes_vec = node_ids.iter().collect::<Vec<_>>();
-                if nodes_vec.is_empty() {
-                    return Err(UserError::new(
-                        ErrorCode::CanisterRejectedMessage,
-                        "No nodes available for non-replicated HTTP request.".to_string(),
-                    ));
-                }
-                let random_index = rng.gen_range(0..nodes_vec.len());
-                let delegated_node_id = nodes_vec[random_index];
-                canister_http_request_context.replication =
-                    Replication::NonReplicated(*delegated_node_id);
-            }
-        }
-
         let http_request_fee = self.cycles_account_manager.http_request_fee(
             canister_http_request_context.variable_parts_size(),
             canister_http_request_context.max_response_bytes,

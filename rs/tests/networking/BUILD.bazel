@@ -157,6 +157,7 @@ system_test_nns(
         "//rs/types/types",
         "@crate_index//:assert_matches",
         "@crate_index//:ic-agent",
+        "@crate_index//:rand",
         "@crate_index//:serde",
         "@crate_index//:serde_json",
         "@crate_index//:tokio",
@@ -195,7 +196,6 @@ system_test_nns(
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
         "k8s",
-        "long_test",  # since it takes longer than 5 minutes.
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
