@@ -35,14 +35,8 @@ use ic_system_test_driver::{
 };
 use slog::info;
 
-fn to_hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{:02x}", b)).collect()
-}
-
-/// Protobuf files are binary files, and since we deserialize them into UTF-8 strings,
-/// we read their hex encoding and compare those.
-fn hex_eq_utf8(actual: &str, expected: &str, error_message: &str) -> Result<()> {
-    if actual == to_hex(expected.as_bytes()) {
+fn cmp_as_result(actual: &str, expected: &str, error_message: &str) -> Result<()> {
+    if actual == expected {
         Ok(())
     } else {
         Err(anyhow!("{}. Expected: {}", error_message, expected))
@@ -61,12 +55,12 @@ pub fn test(env: TestEnv) {
     let log = env.logger();
     info!(log, "Running recovery engine test...");
 
-    let expected_cup_proto = std::env::var("RECOVERY_CUP_CONTENT")
-        .expect("RECOVERY_CUP_CONTENT environment variable not found");
-    let expected_local_store_1 = std::env::var("RECOVERY_STORE_CONTENT1")
-        .expect("RECOVERY_STORE_CONTENT1 environment variable not found");
-    let expected_local_store_2 = std::env::var("RECOVERY_STORE_CONTENT2")
-        .expect("RECOVERY_STORE_CONTENT2 environment variable not found");
+    let expected_cup_proto = std::env::var("RECOVERY_CUP_CONTENT_HEX")
+        .expect("RECOVERY_CUP_CONTENT_HEX environment variable not found");
+    let expected_local_store_1 = std::env::var("RECOVERY_STORE_CONTENT1_HEX")
+        .expect("RECOVERY_STORE_CONTENT1_HEX environment variable not found");
+    let expected_local_store_2 = std::env::var("RECOVERY_STORE_CONTENT2_HEX")
+        .expect("RECOVERY_STORE_CONTENT2_HEX environment variable not found");
 
     let node = env
         .topology_snapshot()
@@ -90,7 +84,7 @@ pub fn test(env: TestEnv) {
         )
         .unwrap();
 
-        hex_eq_utf8(
+        cmp_as_result(
             &cup_proto,
             &expected_cup_proto,
             "Unexpected content in CUP file",
@@ -104,12 +98,12 @@ pub fn test(env: TestEnv) {
         secs(5),
         || {
             let local_store_1 = execute_bash_command(
-            &ssh_session,
-            String::from("od -An -tx1 -v  /var/lib/ic/data/ic_registry_local_store/0001020304/05/06/07.pb | tr -d ' \\n'"),
-        )
-        .expect("ic_registry_local_store has the wrong structure");
+                &ssh_session,
+                String::from("od -An -tx1 -v  /var/lib/ic/data/ic_registry_local_store/0001020304/05/06/07.pb | tr -d ' \\n'"),
+            )
+            .expect("ic_registry_local_store has the wrong structure");
 
-            hex_eq_utf8(
+            cmp_as_result(
                 &local_store_1,
                 &expected_local_store_1,
                 "Unexpected content in local store files",
@@ -124,12 +118,12 @@ pub fn test(env: TestEnv) {
         secs(5),
         || {
             let local_store_2 = execute_bash_command(
-            &ssh_session,
-            String::from("od -An -tx1 -v  /var/lib/ic/data/ic_registry_local_store/08090a0b0c/0d/0e/0f.pb | tr -d ' \\n'"),
-        )
-        .expect("ic_registry_local_store has the wrong structure");
+                &ssh_session,
+                String::from("od -An -tx1 -v  /var/lib/ic/data/ic_registry_local_store/08090a0b0c/0d/0e/0f.pb | tr -d ' \\n'"),
+            )
+            .expect("ic_registry_local_store has the wrong structure");
 
-            hex_eq_utf8(
+            cmp_as_result(
                 &local_store_2,
                 &expected_local_store_2,
                 "Unexpected content in local store files",
