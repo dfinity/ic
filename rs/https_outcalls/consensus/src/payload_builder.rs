@@ -305,7 +305,7 @@ impl CanisterHttpPayloadBuilderImpl {
                                         .find(|share| share.signature.signer == *node_id)
                                         .map(|correct_share| (metadata, vec![*correct_share]))
                                 }
-                                _ => {
+                                None | Some(Replication::FullyReplicated) => {
                                     let signers: BTreeSet<_> =
                                         shares.iter().map(|share| share.signature.signer).collect();
                                     if signers.len() >= threshold {
@@ -529,7 +529,10 @@ impl CanisterHttpPayloadBuilderImpl {
                     replication: Replication::NonReplicated(ref node_id),
                     ..
                 }) => (vec![*node_id], 1),
-                _ => {
+                None | Some(&CanisterHttpRequestContext {
+                    replication: Replication::FullyReplicated,
+                    ..
+                })  => {
                     let threshold = match self
                         .membership
                         .get_committee_threshold(height, Committee::CanisterHttp)

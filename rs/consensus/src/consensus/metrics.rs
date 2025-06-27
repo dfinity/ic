@@ -329,7 +329,7 @@ impl FinalizerMetrics {
             ),
             canister_http_non_replicated_delivered: metrics_registry.int_counter(
                 "canister_http_non_replicated_delivered",
-                "Total number of canister http messages delivered as no replicated responses",
+                "Total number of canister http messages delivered as non replicated responses",
             ),
             canister_http_timeouts_delivered: metrics_registry.int_counter(
                 "canister_http_timeouts_delivered",
