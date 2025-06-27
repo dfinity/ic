@@ -8,10 +8,13 @@ use ic_btc_checker::{
     BtcNetwork as CheckerBtcNetwork, CheckArg, CheckMode, InitArg as CheckerInitArg,
     UpgradeArg as CheckerUpgradeArg,
 };
-use ic_btc_interface::Txid;
+use ic_btc_interface::{
+    GetCurrentFeePercentilesRequest, MillisatoshiPerByte, NetworkInRequest, Txid,
+};
 use ic_ckbtc_minter::lifecycle::init::{InitArgs as CkbtcMinterInitArgs, MinterArg};
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::queries::{EstimateFeeArg, RetrieveBtcStatusRequest, WithdrawalFee};
+use ic_ckbtc_minter::state::eventlog::{Event, EventType};
 use ic_ckbtc_minter::state::{BtcRetrievalStatusV2, Mode, RetrieveBtcStatus, RetrieveBtcStatusV2};
 use ic_ckbtc_minter::updates::get_btc_address::GetBtcAddressArgs;
 use ic_ckbtc_minter::updates::retrieve_btc::{
@@ -760,7 +763,26 @@ impl CkBtcSetup {
         }
     }
 
-    pub fn set_fee_percentiles(&self, fees: &Vec<u64>) {
+    pub fn bitcoin_get_current_fee_percentiles(&self) -> Vec<MillisatoshiPerByte> {
+        Decode!(
+            &assert_reply(
+                self.env
+                    .execute_ingress(
+                        self.bitcoin_id,
+                        "bitcoin_get_current_fee_percentiles",
+                        Encode!(&GetCurrentFeePercentilesRequest {
+                            network: NetworkInRequest::Mainnet,
+                        })
+                        .unwrap(),
+                    )
+                    .expect("failed to get fee percentiles")
+            ),
+            Vec<MillisatoshiPerByte>
+        )
+        .expect("Failed to call bitcoin_get_current_fee_percentiles")
+    }
+
+    pub fn set_fee_percentiles(&self, fees: &Vec<MillisatoshiPerByte>) {
         self.env
             .execute_ingress(
                 self.bitcoin_id,
@@ -843,6 +865,37 @@ impl CkBtcSetup {
         )
         .unwrap();
         serde_json::from_slice(&response.body).expect("failed to parse ckbtc minter log")
+    }
+
+    pub fn get_events(&self) -> Vec<Event> {
+        const MAX_EVENTS_PER_QUERY: u64 = 2000;
+        let mut events = Vec::new();
+        loop {
+            let fetched_events = self.get_events_batch(events.len() as u64, MAX_EVENTS_PER_QUERY);
+            if fetched_events.is_empty() {
+                break;
+            }
+            events.extend(fetched_events);
+        }
+        events
+    }
+
+    fn get_events_batch(&self, start: u64, length: u64) -> Vec<Event> {
+        use ic_ckbtc_minter::state::eventlog::GetEventsArg;
+
+        Decode!(
+            &assert_reply(
+                self.env
+                    .query(
+                        self.minter_id,
+                        "get_events",
+                        Encode!(&GetEventsArg { start, length }).unwrap()
+                    )
+                    .expect("failed to query minter events")
+            ),
+            Vec<Event>
+        )
+        .expect("Failed to call get_events")
     }
 
     pub fn refresh_fee_percentiles(&self) {
@@ -1897,88 +1950,117 @@ fn test_filter_logs() {
 
 #[test]
 fn test_retrieve_btc_with_approval() {
-    let ckbtc = CkBtcSetup::new();
-
-    // Step 1: deposit ckBTC
-
-    let deposit_value = 100_000_000;
-    let utxo = Utxo {
-        height: 0,
-        outpoint: OutPoint {
-            txid: range_to_txid(1..=32),
-            vout: 1,
-        },
-        value: deposit_value,
-    };
-
-    let user = Principal::from(ckbtc.caller);
-
-    ckbtc.deposit_utxo(user, utxo);
-    assert_eq!(ckbtc.balance_of(user), Nat::from(deposit_value - CHECK_FEE));
-
-    // Step 2: request a withdrawal
-
-    let withdrawal_amount = 50_000_000;
-    ckbtc.approve_minter(user, withdrawal_amount, None);
-    let fee_estimate = ckbtc.estimate_withdrawal_fee(Some(withdrawal_amount));
-
-    let RetrieveBtcOk { block_index } = ckbtc
-        .retrieve_btc_with_approval(WITHDRAWAL_ADDRESS.to_string(), withdrawal_amount, None)
-        .expect("retrieve_btc failed");
-
-    let get_transaction_request = GetTransactionsRequest {
-        start: block_index.into(),
-        length: 1_u8.into(),
-    };
-    let res = ckbtc.get_transactions(get_transaction_request);
-    let memo = res.transactions[0].burn.clone().unwrap().memo.unwrap();
-    use ic_ckbtc_minter::memo::BurnMemo;
-
-    let decoded_data = minicbor::decode::<BurnMemo>(&memo.0).expect("failed to decode memo");
-    assert_eq!(
-        decoded_data,
-        BurnMemo::Convert {
-            address: Some(WITHDRAWAL_ADDRESS),
-            kyt_fee: None,
-            status: None,
-        },
-        "memo not found in burn"
-    );
-
-    ckbtc.env.advance_time(MAX_TIME_IN_QUEUE);
-
-    // Step 3: wait for the transaction to be submitted
-
-    let txid = ckbtc.await_btc_transaction(block_index, 10);
-    let mempool = ckbtc.mempool();
-    assert_eq!(
-        mempool.len(),
-        1,
-        "ckbtc transaction did not appear in the mempool"
-    );
-    let tx = mempool
-        .get(&txid)
-        .expect("the mempool does not contain the withdrawal transaction");
-
-    assert_eq!(2, tx.output.len());
-    assert_eq!(
-        tx.output[0].value,
-        withdrawal_amount - fee_estimate.minter_fee - fee_estimate.bitcoin_fee
-    );
-
-    // Step 4: confirm the transaction
-
-    ckbtc.finalize_transaction(tx);
-    assert_eq!(ckbtc.await_finalization(block_index, 10), txid);
-
-    ckbtc
-        .check_minter_metrics()
-        .assert_contains_metric_matching(
-            r#"ckbtc_minter_sign_with_ecdsa_latency_bucket\{result="success",le="(\d+|\+Inf)"\} 1 \d+"#,
-        )
-        .assert_does_not_contain_metric_matching(
-            r#"ckbtc_minter_sign_with_ecdsa_latency_bucket\{result="failure",le="(\d+|\+Inf)"\} 1 \d+"#
+    fn test(
+        current_fee_percentiles: &Vec<MillisatoshiPerByte>,
+        actual_median_fee_per_vbyte: MillisatoshiPerByte,
+        expected_fee_per_vbyte: MillisatoshiPerByte,
+    ) {
+        let ckbtc = CkBtcSetup::new();
+        ckbtc.set_fee_percentiles(current_fee_percentiles);
+        assert_eq!(
+            actual_median_fee_per_vbyte,
+            ckbtc.bitcoin_get_current_fee_percentiles()[50]
         );
+
+        // Step 1: deposit ckBTC
+
+        let deposit_value = 100_000_000;
+        let utxo = Utxo {
+            height: 0,
+            outpoint: OutPoint {
+                txid: range_to_txid(1..=32),
+                vout: 1,
+            },
+            value: deposit_value,
+        };
+
+        let user = Principal::from(ckbtc.caller);
+
+        ckbtc.deposit_utxo(user, utxo);
+        assert_eq!(ckbtc.balance_of(user), Nat::from(deposit_value - CHECK_FEE));
+
+        // Step 2: request a withdrawal
+
+        let withdrawal_amount = 50_000_000;
+        ckbtc.approve_minter(user, withdrawal_amount, None);
+        let fee_estimate = ckbtc.estimate_withdrawal_fee(Some(withdrawal_amount));
+
+        let RetrieveBtcOk { block_index } = ckbtc
+            .retrieve_btc_with_approval(WITHDRAWAL_ADDRESS.to_string(), withdrawal_amount, None)
+            .expect("retrieve_btc failed");
+
+        let get_transaction_request = GetTransactionsRequest {
+            start: block_index.into(),
+            length: 1_u8.into(),
+        };
+        let res = ckbtc.get_transactions(get_transaction_request);
+        let memo = res.transactions[0].burn.clone().unwrap().memo.unwrap();
+        use ic_ckbtc_minter::memo::BurnMemo;
+
+        let decoded_data = minicbor::decode::<BurnMemo>(&memo.0).expect("failed to decode memo");
+        assert_eq!(
+            decoded_data,
+            BurnMemo::Convert {
+                address: Some(WITHDRAWAL_ADDRESS),
+                kyt_fee: None,
+                status: None,
+            },
+            "memo not found in burn"
+        );
+
+        ckbtc.env.advance_time(MAX_TIME_IN_QUEUE);
+
+        // Step 3: wait for the transaction to be submitted
+
+        let txid = ckbtc.await_btc_transaction(block_index, 10);
+        let mempool = ckbtc.mempool();
+        assert_eq!(
+            mempool.len(),
+            1,
+            "ckbtc transaction did not appear in the mempool"
+        );
+        let tx = mempool
+            .get(&txid)
+            .expect("the mempool does not contain the withdrawal transaction");
+
+        assert_eq!(2, tx.output.len());
+        assert_eq!(
+            tx.output[0].value,
+            withdrawal_amount - fee_estimate.minter_fee - fee_estimate.bitcoin_fee
+        );
+
+        assert_matches!(
+            ckbtc.get_events().pop().unwrap().payload,
+            EventType::SentBtcTransaction {
+                txid: txid_event,
+                fee_per_vbyte,
+                ..
+            } if txid_event == txid && fee_per_vbyte == Some(expected_fee_per_vbyte)
+        );
+
+        // Step 4: confirm the transaction
+
+        ckbtc.finalize_transaction(tx);
+        assert_eq!(ckbtc.await_finalization(block_index, 10), txid);
+
+        ckbtc
+            .check_minter_metrics()
+            .assert_contains_metric_matching(
+                r#"ckbtc_minter_sign_with_ecdsa_latency_bucket\{result="success",le="(\d+|\+Inf)"\} 1 \d+"#,
+            )
+            .assert_does_not_contain_metric_matching(
+                r#"ckbtc_minter_sign_with_ecdsa_latency_bucket\{result="failure",le="(\d+|\+Inf)"\} 1 \d+"#
+            );
+    }
+
+    // regular fees, use median
+    test(
+        &(1..=100).map(|i| i * 100).collect::<Vec<u64>>(),
+        5_100,
+        5_100,
+    );
+    // unusually low fees, use hardcoded minimum value instead of median
+    test(&[142_u64; 100].to_vec(), 142, 1_500);
 }
 
 #[test]
