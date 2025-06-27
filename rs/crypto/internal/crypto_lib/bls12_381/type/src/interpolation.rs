@@ -18,7 +18,7 @@ pub enum InterpolationError {
 
 /// Lagrange interoplation samples
 pub struct NodeIndices {
-    index: Vec<NodeIndex>,
+    indicies: Vec<NodeIndex>,
 }
 
 impl NodeIndices {
@@ -26,19 +26,19 @@ impl NodeIndices {
     ///
     /// This function will fail if there are any duplicated indices
     pub fn from_slice(indices: &[NodeIndex]) -> Result<Self, InvalidNodeIndices> {
-        // We assume the node indexes are public, so variable time behavior is ok
+        // We assume the node indicies are public, so variable time behavior is ok
         let mut seen = std::collections::HashSet::new();
 
-        let mut index = Vec::with_capacity(indices.len());
+        let mut indicies = Vec::with_capacity(indices.len());
 
         for nidx in indices {
             if !seen.insert(nidx) {
                 return Err(InvalidNodeIndices::DuplicatedNodeIndex);
             }
-            index.push(*nidx)
+            indicies.push(*nidx)
         }
 
-        Ok(Self { index })
+        Ok(Self { indicies })
     }
 
     /// Construct a NodeIndices from a BTreeMap with NodeIndex keys
@@ -46,15 +46,15 @@ impl NodeIndices {
     /// The values of the BTreeMap are ignored
     pub fn from_map<T>(map: &std::collections::BTreeMap<NodeIndex, T>) -> Self {
         // The BTreeMap keys are already guaranteed to be unique
-        let index = map.keys().copied().collect();
-        Self { index }
+        let indicies = map.keys().copied().collect();
+        Self { indicies }
     }
 
     /// Construct a NodeIndices from a BTreeSet with NodeIndex values
     pub fn from_set(map: &std::collections::BTreeSet<NodeIndex>) -> Self {
         // The BTreeSet values are already guaranteed to be unique
-        let index = map.iter().copied().collect();
-        Self { index }
+        let indicies = map.iter().copied().collect();
+        Self { indicies }
     }
 }
 
@@ -87,16 +87,16 @@ impl LagrangeCoefficients {
     ///    * denominator_i = (x_0 - x_i) * (x_1 - x_i) * ... * (x_(i-1) - x_i) *
     ///      (x_(i+1) - x_i) * ... * (x_n - x_i)
     pub fn at_value(value: &Scalar, samples: &NodeIndices) -> Self {
-        if samples.index.is_empty() {
+        if samples.indicies.is_empty() {
             return Self::new(vec![]);
         }
 
-        if samples.index.len() == 1 {
+        if samples.indicies.len() == 1 {
             return Self::new(vec![Scalar::one()]);
         }
 
         let samples: Vec<Scalar> = samples
-            .index
+            .indicies
             .iter()
             .map(|s| Scalar::from_node_index(*s))
             .collect();
