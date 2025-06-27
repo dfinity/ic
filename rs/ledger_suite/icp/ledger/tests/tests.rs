@@ -1917,7 +1917,11 @@ fn test_allowance_listing_sequences() {
 
             // We expect all pairs with the current approver and spenders starting after the current spender.
             let mut expected = vec![];
-            for spender in spenders.iter().take(NUM_SPENDERS as usize).skip(s_index + 1) {
+            for spender in spenders
+                .iter()
+                .take(NUM_SPENDERS as usize)
+                .skip(s_index + 1)
+            {
                 expected.push((
                     AccountIdentifier::from(approver.0),
                     AccountIdentifier::from(spender.0),
