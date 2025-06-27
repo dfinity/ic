@@ -16,13 +16,12 @@ Previous ckBTC minter proposal: https://dashboard.internetcomputer.org/proposal/
 
 ## Motivation
 
-Upgrade the ckBTC minter to include the latest code changes, notably:
+3 transactions ckBTC → BTC (withdrawals) are currently stuck and this is due to 2 bugs:
 
-* Improve `update_balance` latency by caching `get_utxos` results. Set `get_utxos_cache_expiration_seconds` parameter to
-  60 seconds.
-* Increase concurrent BTC withdrawal request limit from 1,000 to 5,000.
-* Add latency metric for `sign_with_ecdsa`.
-* Allow `get_btc_address` calls from the anonymous principal.
+1. An extremely low fee per vbyte was chosen by the minter for those transactions, which prevented them from being mined.
+2. There is a deterministic panic occurring in the minter when it tries to resubmit those transactions, which means that those transactions are currently stuck.
+
+See this forum [post](https://forum.dfinity.org/t/ckbtc-a-canister-issued-bitcoin-twin-token-on-the-ic-1-1-backed-by-btc/17606/202) for more details.
 
 ## Release Notes
 
