@@ -12,7 +12,7 @@ Success:: ...
 
 end::catalog[] */
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use ic_consensus_system_test_utils::ssh_access::execute_bash_command;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
@@ -20,9 +20,9 @@ use ic_system_test_driver::{
         group::SystemTestGroup,
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
-        test_env_api::{HasTopologySnapshot, IcNodeContainer, SshSession},
+        test_env_api::{secs, HasTopologySnapshot, IcNodeContainer, SshSession},
     },
-    systest,
+    retry_with_msg, systest,
 };
 use slog::info;
 
@@ -32,13 +32,12 @@ fn to_hex(bytes: &[u8]) -> String {
 
 /// Protobuf files are binary files, and since we deserialize them into UTF-8 strings,
 /// we read their hex encoding and compare those.
-fn assert_hex_eq_utf8(actual: String, expected: String, error_message: &str) {
-    assert!(
-        actual == to_hex(expected.as_bytes()),
-        "{}. Expected: {}",
-        error_message,
-        expected
-    );
+fn hex_eq_utf8(actual: &str, expected: &str, error_message: &str) -> Result<()> {
+    if actual == to_hex(expected.as_bytes()) {
+        Ok(())
+    } else {
+        Err(anyhow!("{}. Expected: {}", error_message, expected))
+    }
 }
 
 pub fn setup(env: TestEnv) {
@@ -69,47 +68,65 @@ pub fn test(env: TestEnv) {
 
     let ssh_session = node.block_on_ssh_session().unwrap();
 
-    // Protobuf files are binary files, and since we deserialize them into UTF-8 strings,
-    // we read their hex encoding and compare those.
-    let cup_proto = execute_bash_command(
-        &ssh_session,
-        String::from(
-            "od -An -tx1 -v /var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb | tr -d ' \\n'",
-        ),
-    )
-    .unwrap();
+    // We retry multiple times because the CUP being overwritten and this read
+    // are racing against each other.
+    retry_with_msg!("verify CUP", log.clone(), secs(30), secs(5), || {
+        // Protobuf files are binary files, and since we deserialize them into UTF-8 strings,
+        // we read their hex encoding and compare those.
+        let cup_proto = execute_bash_command(
+            &ssh_session,
+            String::from(
+                "od -An -tx1 -v /var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb | tr -d ' \\n'",
+            ),
+        )
+        .unwrap();
 
-    assert_hex_eq_utf8(
-        cup_proto,
-        expected_cup_proto,
-        "Unexpected content in CUP file",
-    );
+        hex_eq_utf8(
+            &cup_proto,
+            &expected_cup_proto,
+            "Unexpected content in CUP file",
+        )
+    }).unwrap();
 
-    // Protobuf files are binary files, and since we deserialize them into UTF-8 strings,
-    // we read their hex encoding and compare those.
-    let local_store_1 = execute_bash_command(
-        &ssh_session,
-        String::from("od -An -tx1 -v  /var/lib/ic/data/ic_registry_local_store/0001020304/05/06/07.pb | tr -d ' \\n'"),
-    )
-    .expect("ic_registry_local_store has the wrong structure");
-    assert_hex_eq_utf8(
-        local_store_1,
-        expected_local_store_1,
-        "Unexpected content in local store files",
-    );
+    retry_with_msg!(
+        "verify local store 1",
+        log.clone(),
+        secs(30),
+        secs(5),
+        || {
+            let local_store_1 = execute_bash_command(
+            &ssh_session,
+            String::from("od -An -tx1 -v  /var/lib/ic/data/ic_registry_local_store/0001020304/05/06/07.pb | tr -d ' \\n'"),
+        )
+        .expect("ic_registry_local_store has the wrong structure");
 
-    // Protobuf files are binary files, and since we deserialize them into UTF-8 strings,
-    // we read their hex encoding and compare those.
-    let local_store_2 = execute_bash_command(
-        &ssh_session,
-        String::from("od -An -tx1 -v  /var/lib/ic/data/ic_registry_local_store/08090a0b0c/0d/0e/0f.pb | tr -d ' \\n'"),
-    )
-    .expect("ic_registry_local_store has the wrong structure");
-    assert_hex_eq_utf8(
-        local_store_2,
-        expected_local_store_2,
-        "Unexpected content in local store files",
-    );
+            hex_eq_utf8(
+                &local_store_1,
+                &expected_local_store_1,
+                "Unexpected content in local store files",
+            )
+        }
+    ).unwrap();
+
+    retry_with_msg!(
+        "verify local store 2",
+        log.clone(),
+        secs(30),
+        secs(5),
+        || {
+            let local_store_2 = execute_bash_command(
+            &ssh_session,
+            String::from("od -An -tx1 -v  /var/lib/ic/data/ic_registry_local_store/08090a0b0c/0d/0e/0f.pb | tr -d ' \\n'"),
+        )
+        .expect("ic_registry_local_store has the wrong structure");
+
+            hex_eq_utf8(
+                &local_store_2,
+                &expected_local_store_2,
+                "Unexpected content in local store files",
+            )
+        }
+    ).unwrap();
 }
 
 pub fn main() -> Result<()> {
