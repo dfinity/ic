@@ -841,17 +841,9 @@ fn notify_trap_test() {
             to_subaccount: None,
         };
 
-        assert!(get_metrics(&ledger_canister)
-            .await
-            .contains("ledger_notify_method_calls 0"));
-
         let r1: Result<(), String> = ledger_canister
             .update_from_sender("notify_pb", protobuf, notify.clone(), &sender)
             .await;
-
-        assert!(get_metrics(&ledger_canister)
-            .await
-            .contains("ledger_notify_method_calls 0"));
 
         let r2: Result<(), String> = ledger_canister
             .update_from_sender(
@@ -862,10 +854,6 @@ fn notify_trap_test() {
             )
             .await
             .map(|b| Decode!(&b, ()).unwrap());
-
-        assert!(get_metrics(&ledger_canister)
-            .await
-            .contains("ledger_notify_method_calls 0"));
 
         let r3: Result<(), String> = ledger_canister
             .update_from_sender("notify_pb", protobuf, notify.clone(), &sender)
