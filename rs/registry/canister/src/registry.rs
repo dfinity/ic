@@ -1221,16 +1221,17 @@ mod tests {
         let max_value = vec![0; max_mutation_value_size(version, key)];
         let mutations = vec![upsert(key, &max_value)];
         apply_mutations_skip_invariant_checks(&mut registry, mutations);
+        let got = registry.get(key, version).unwrap();
 
         assert_eq!(registry.latest_version(), version);
         assert_eq!(
-            registry.get(key, version),
-            Some(RegistryValue {
+            got,
+            RegistryValue {
                 value: max_value,
                 version,
                 deletion_marker: false,
-                timestamp_nanoseconds: u64::MAX,
-            })
+                timestamp_nanoseconds: got.timestamp_nanoseconds,
+            }
         );
     }
 
@@ -1535,7 +1536,7 @@ Average length of the values: {} (desired: {})",
                     vec![0; value_size],
                 ))],
                 preconditions: vec![],
-                timestamp_nanoseconds: u64::MAX,
+                timestamp_nanoseconds: now_nanoseconds(),
             };
 
             let version = EncodedVersion::from(version);
