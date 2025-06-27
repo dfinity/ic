@@ -60,8 +60,8 @@ impl<'a> ICRCLedgerHelper<'a> {
             [block] => &block.block,
             blocks => {
                 return Err(format!(
-                    "Error parsing a Nat value `{:?}` to u64: expected a unique u64 value, \
-                     got {:?}.",
+                    "Error parsing response from {}.icrc3_get_blocks: expected a single block,
+                     got {} blocks.",
                     self.ledger.canister_id(),
                     blocks.len(),
                 ))
