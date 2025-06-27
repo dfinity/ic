@@ -31,7 +31,7 @@ fn to_hex(bytes: &[u8]) -> String {
 }
 
 /// Protobuf files are binary files, and since we deserialize them into UTF-8 strings,
-/// we first convert them to hex strings and compare those.
+/// we read their hex encoding and compare those.
 fn assert_hex_eq_utf8(actual: String, expected: String, error_message: &str) {
     assert!(
         actual == to_hex(expected.as_bytes()),
@@ -70,7 +70,7 @@ pub fn test(env: TestEnv) {
     let ssh_session = node.block_on_ssh_session().unwrap();
 
     // Protobuf files are binary files, and since we deserialize them into UTF-8 strings,
-    // we first convert them to hex strings and compare those.
+    // we read their hex encoding and compare those.
     let cup_proto = execute_bash_command(
         &ssh_session,
         String::from(
@@ -82,9 +82,11 @@ pub fn test(env: TestEnv) {
     assert_hex_eq_utf8(
         cup_proto,
         expected_cup_proto,
-        "Unexpected content in cup.types.v1.CatchUpPackage.pb",
+        "Unexpected content in CUP file",
     );
 
+    // Protobuf files are binary files, and since we deserialize them into UTF-8 strings,
+    // we read their hex encoding and compare those.
     let local_store_1 = execute_bash_command(
         &ssh_session,
         String::from("od -An -tx1 -v  /var/lib/ic/data/ic_registry_local_store/0001020304/05/06/07.pb | tr -d ' \\n'"),
@@ -96,6 +98,8 @@ pub fn test(env: TestEnv) {
         "Unexpected content in local store files",
     );
 
+    // Protobuf files are binary files, and since we deserialize them into UTF-8 strings,
+    // we read their hex encoding and compare those.
     let local_store_2 = execute_bash_command(
         &ssh_session,
         String::from("od -An -tx1 -v  /var/lib/ic/data/ic_registry_local_store/08090a0b0c/0d/0e/0f.pb | tr -d ' \\n'"),
