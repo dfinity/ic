@@ -2252,9 +2252,17 @@ impl StateManagerImpl {
                 .metrics
                 .checkpoint_metrics
                 .make_checkpoint_step_duration
-                .with_label_values(&["wait_for_manifest_merge_and_flush"])
+                .with_label_values(&["flush_prev_async_checkpointing"])
                 .start_timer();
-            // We need the previous manifest computation to complete because:
+            // At this point, some asynchronous operations related to previous checkpointing may still be in progress.
+            // These operations do not block execution, but we must ensure they complete before continuing with the new checkpoint.
+            // Specifically, these operations include:
+            //   1) Serializing protos to the unverified checkpoint,
+            //   2) Validating replicated state and finalizing the checkpoint,
+            //   3) Computing manifest for the checkpoint,
+            //   4) Resetting the tip and merging the overlays.
+            //
+            // In particular, we need the previous manifest computation to complete because:
             //   1) We need it to speed up the next manifest computation using ManifestDelta
             //   2) We don't want to run too much ahead of the latest ready manifest.
             self.flush_tip_channel();
