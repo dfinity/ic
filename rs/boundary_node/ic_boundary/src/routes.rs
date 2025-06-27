@@ -121,7 +121,7 @@ pub trait RootKey: Sync + Send {
 pub struct ProxyRouter {
     http_client: Arc<dyn HttpClient>,
     routing_table: Arc<ArcSwapOption<Routes>>,
-    published_registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
+    registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
     subnets_alive_threshold: f64,
     nodes_per_subnet_alive_threshold: f64,
 }
@@ -168,7 +168,7 @@ impl Lookup for ProxyRouter {
 
 impl RootKey for ProxyRouter {
     fn root_key(&self) -> Option<Vec<u8>> {
-        self.published_registry_snapshot
+        self.registry_snapshot
             .load_full()
             .map(|x| x.nns_public_key.clone())
     }
@@ -178,7 +178,7 @@ impl Health for ProxyRouter {
     fn health(&self) -> ReplicaHealthStatus {
         match (
             self.routing_table.load_full(),
-            self.published_registry_snapshot.load_full(),
+            self.registry_snapshot.load_full(),
         ) {
             (Some(rt), Some(snap)) => {
                 if snap.subnets.is_empty() {
@@ -331,7 +331,7 @@ pub(crate) mod test {
     #[tokio::test]
     async fn test_health() -> Result<(), Error> {
         let routing_table = Arc::new(ArcSwapOption::empty());
-        let published_registry_snapshot = Arc::new(ArcSwapOption::empty());
+        let registry_snapshot = Arc::new(ArcSwapOption::empty());
 
         let persister = Persister::new(routing_table.clone());
 
@@ -339,14 +339,14 @@ pub(crate) mod test {
         let proxy_router = Arc::new(ProxyRouter::new(
             http_client,
             routing_table,
-            published_registry_snapshot.clone(),
+            registry_snapshot.clone(),
             0.51,
             0.6666,
         ));
 
         // Install snapshot
         let (snapshot, _, _) = test_registry_snapshot(5, 3);
-        published_registry_snapshot.store(Some(Arc::new(snapshot.clone())));
+        registry_snapshot.store(Some(Arc::new(snapshot.clone())));
 
         // Initial state
         assert_eq!(proxy_router.health(), ReplicaHealthStatus::Starting);
@@ -486,7 +486,7 @@ pub(crate) mod test {
 
         // Install snapshot with zero subnets
         let (snapshot, _, _) = test_registry_snapshot(0, 0);
-        published_registry_snapshot.store(Some(Arc::new(snapshot.clone())));
+        registry_snapshot.store(Some(Arc::new(snapshot.clone())));
         persister.persist(snapshot.subnets.clone());
 
         // Make sure it doesn't crash
@@ -497,7 +497,7 @@ pub(crate) mod test {
 
         // Install snapshot with subnets which have zero nodes
         let (snapshot, _, _) = test_registry_snapshot(5, 0);
-        published_registry_snapshot.store(Some(Arc::new(snapshot.clone())));
+        registry_snapshot.store(Some(Arc::new(snapshot.clone())));
         persister.persist(snapshot.subnets.clone());
 
         // Make sure it doesn't crash
@@ -522,18 +522,18 @@ pub(crate) mod test {
         ];
 
         let routing_table = Arc::new(ArcSwapOption::empty());
-        let published_registry_snapshot = Arc::new(ArcSwapOption::empty());
+        let registry_snapshot = Arc::new(ArcSwapOption::empty());
 
         let persister = Persister::new(routing_table.clone());
         let (mut snapshot, _, _) = test_registry_snapshot(5, 3);
         snapshot.nns_public_key = ROOT_KEY.into();
-        published_registry_snapshot.store(Some(Arc::new(snapshot.clone())));
+        registry_snapshot.store(Some(Arc::new(snapshot.clone())));
 
         let http_client = Arc::new(TestHttpClient(1));
         let proxy_router = Arc::new(ProxyRouter::new(
             http_client,
             routing_table,
-            published_registry_snapshot,
+            registry_snapshot,
             0.51,
             0.6666,
         ));
