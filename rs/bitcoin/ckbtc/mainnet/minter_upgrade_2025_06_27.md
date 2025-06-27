@@ -16,12 +16,21 @@ Previous ckBTC minter proposal: https://dashboard.internetcomputer.org/proposal/
 
 ## Motivation
 
-3 transactions ckBTC → BTC (withdrawals) are currently stuck and this is due to 2 bugs:
+Upgrade the ckBTC minter to try to unblock three transactions ckBTC → BTC (withdrawals) that are currently stuck since
+2025.06.21.
 
-1. An extremely low fee per vbyte was chosen by the minter for those transactions, which prevented them from being mined.
-2. There is a deterministic panic occurring in the minter when it tries to resubmit those transactions, which means that those transactions are currently stuck.
+After analysis, see this
+forum [**post**](https://forum.dfinity.org/t/ckbtc-a-canister-issued-bitcoin-twin-token-on-the-ic-1-1-backed-by-btc/17606/202)
+for more details, the problem appears to be due to the following:
 
-See this forum [post](https://forum.dfinity.org/t/ckbtc-a-canister-issued-bitcoin-twin-token-on-the-ic-1-1-backed-by-btc/17606/202) for more details.
+1. An extremely low fee per vbyte was chosen by the minter for those transactions, which prevented them from being mined
+   in the first place. We currently don’t have a satisfying explanation for how this low median fee was computed and are
+   also investigating the bitcoin canister. A stop-gap solution was introduced
+   in [#5742](https://github.com/dfinity/ic/pull/5742), to ensure that the fee per vbyte computed by the minter is
+   always at elast 1.5 sats/vbyte (for Bitcoin Mainnet).
+2. There is a deterministic panic occurring in the minter when it tries to resubmit those transactions, which explains
+   why those transactions are currently stuck. This should be completely fixed
+   by [#5713](https://github.com/dfinity/ic/pull/5713).
 
 ## Release Notes
 
