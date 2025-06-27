@@ -10,7 +10,6 @@ use ic_nervous_system_canisters::registry::Registry;
 use ic_registry_transport::pb::v1::RegistryDelta;
 use ic_types::registry::RegistryClientError;
 use ic_types::RegistryVersion;
-use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::marker::PhantomData;
@@ -29,20 +28,21 @@ pub struct StableCanisterRegistryClient<S: RegistryDataStableMemory> {
     // Registry client to interact with the canister
     registry: Arc<dyn Registry>,
     // A map holding the mapping of timestamps to registry versions.
-    pub timestamp_to_versions_map: Arc<RwLock<BTreeMap<u64, Vec<RegistryVersion>>>>,
+    timestamp_to_versions_map: Arc<RwLock<BTreeMap<u64, Vec<RegistryVersion>>>>,
 }
 
 impl<S: RegistryDataStableMemory> StableCanisterRegistryClient<S> {
     pub fn new(registry: Arc<dyn Registry>) -> Self {
         let timestamp_to_versions_map = S::with_registry_map(|local_registry| {
-            local_registry
-                .iter()
-                .fold(BTreeMap::new(), |mut acc, (k, v)| {
+            local_registry.iter().fold(
+                BTreeMap::new(),
+                |mut acc: std::collections::BTreeMap<u64, Vec<RegistryVersion>>, (k, v)| {
                     acc.entry(k.timestamp_nanoseconds)
                         .or_default()
                         .push(RegistryVersion::from(k.version));
                     acc
-                })
+                },
+            )
         });
 
         Self {
@@ -51,6 +51,10 @@ impl<S: RegistryDataStableMemory> StableCanisterRegistryClient<S> {
             timestamp_to_versions_map: Arc::new(RwLock::new(timestamp_to_versions_map)),
             registry,
         }
+    }
+
+    pub fn timestamp_to_versions_map(&self) -> Arc<RwLock<BTreeMap<u64, Vec<RegistryVersion>>>> {
+        self.timestamp_to_versions_map.clone()
     }
 
     fn add_deltas(&self, deltas: Vec<RegistryDelta>) -> Result<(), String> {
