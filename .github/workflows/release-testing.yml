@@ -46,7 +46,8 @@ jobs:
           run: |
             bazel test \
               --config=stamped \
-              --test_tag_filters=system_test_nightly,system_test_staging,system_test_hotfix \
+              --config=flaky_retry \
+              --test_tag_filters=system_test_large \
               //rs/tests/... \
               --keep_going
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
@@ -138,6 +139,7 @@ jobs:
           run: |
             bazel test \
               --config=stamped \
+              --config=flaky_retry \
               --test_tag_filters= \
               //rs/tests/dre:guest_os_qualification \
               --test_env=OLD_VERSION=${{ matrix.version }} \
