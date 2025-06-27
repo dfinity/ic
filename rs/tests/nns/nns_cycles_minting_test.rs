@@ -260,34 +260,6 @@ pub fn test(env: TestEnv) {
         )
         .await;
 
-        // remove when ledger notify goes away
-        {
-            user1
-                .transfer(
-                    Tokens::from_e8s(send_amount.get_e8s() + 2 * DEFAULT_TRANSFER_FEE.get_e8s()),
-                    controller_user.principal_id(),
-                )
-                .await;
-            let (err, refund_block) = controller_user
-                .create_canister_ledger(send_amount)
-                .await
-                .unwrap_err();
-
-            info!(logger, "error: {}", err);
-            assert!(err.contains("No subnets in which to create a canister"));
-
-            /* Check that the funds for the failed creation attempt are returned to use
-             * (minus the fees). */
-            let refund_block = refund_block.unwrap();
-            tst.check_refund(
-                refund_block,
-                send_amount,
-                CREATE_CANISTER_REFUND_FEE,
-                controller_user.principal_id(),
-            )
-            .await;
-        }
-
         /* Register a subnet. */
         info!(logger, "registering subnets");
         let app_subnet_ids: Vec<_> = topology
@@ -319,32 +291,6 @@ pub fn test(env: TestEnv) {
             *TEST_USER1_PRINCIPAL,
         )
         .await;
-
-        // remove when ledger notify goes away
-        {
-            user1
-                .transfer(
-                    Tokens::from_e8s(small_amount.get_e8s() + DEFAULT_TRANSFER_FEE.get_e8s()),
-                    controller_user.principal_id(),
-                )
-                .await;
-            let (err, refund_block) = controller_user
-                .create_canister_ledger(small_amount)
-                .await
-                .unwrap_err();
-
-            info!(logger, "error: {}", err);
-            assert!(err.contains("Creating a canister requires a fee of"));
-
-            let refund_block = refund_block.unwrap();
-            tst.check_refund(
-                refund_block,
-                small_amount,
-                CREATE_CANISTER_REFUND_FEE,
-                controller_user.principal_id(),
-            )
-            .await;
-        }
 
         /* Create with funds < the refund fee. */
         info!(logger, "creating canister (not enough funds 2)");
@@ -378,42 +324,6 @@ pub fn test(env: TestEnv) {
                 assert_eq!(spender, None);
             }
             _ => panic!("unexpected block {:?}", txn),
-        }
-
-        // remove when ledger notify goes away
-        {
-            user1
-                .transfer(
-                    Tokens::from_e8s(tiny_amount.get_e8s() + DEFAULT_TRANSFER_FEE.get_e8s()),
-                    controller_user.principal_id(),
-                )
-                .await;
-            let (err, no_refund_block) = controller_user
-                .create_canister_ledger(tiny_amount)
-                .await
-                .unwrap_err();
-
-            info!(logger, "error: {}", err);
-            assert!(err.contains("Creating a canister requires a fee of"));
-
-            /* There should be no refund, all the funds will be burned. */
-            assert!(no_refund_block.is_none());
-
-            let block = tst.get_tip().await.unwrap();
-            let txn = block.transaction();
-
-            match txn.operation {
-                Operation::Burn {
-                    from,
-                    amount,
-                    spender,
-                } => {
-                    assert_eq!(tiny_amount, amount);
-                    assert_eq!(tst.get_balance(from).await, Tokens::ZERO);
-                    assert_eq!(spender, None);
-                }
-                _ => panic!("unexpected block {:?}", txn),
-            }
         }
 
         /* Create with sufficient funds. */
@@ -489,7 +399,7 @@ pub fn test(env: TestEnv) {
             .notify_top_up_cmc(bh, None, &new_canister_id)
             .await
             .unwrap();
-        // already notified. Ledger path should fail
+        // ledger path should fail
         user1
             .notify_top_up_ledger(bh, None, &new_canister_id)
             .await
@@ -506,23 +416,16 @@ pub fn test(env: TestEnv) {
 
         let bh = user1.pay_for_top_up(topup3, None, &new_canister_id).await;
 
-        user1
-            .notify_top_up_ledger(bh, None, &new_canister_id)
-            .await
-            .unwrap();
-        // second notification fails
+        // ledger notification should fail
         user1
             .notify_top_up_ledger(bh, None, &new_canister_id)
             .await
             .unwrap_err();
         // cmc should return successful topup status
-        let tip = tst.get_tip().await.unwrap();
         user1
             .notify_top_up_cmc(bh, None, &new_canister_id)
             .await
             .unwrap();
-        let tip2 = tst.get_tip().await.unwrap();
-        assert_eq!(tip, tip2, "No block should have been created");
 
         assert_eq!(
             tst.get_balance(user1.acc_for_top_up(&new_canister_id))
@@ -531,7 +434,7 @@ pub fn test(env: TestEnv) {
             "All funds from cmc subaccount should have disappeared after topups"
         );
 
-        //notification by a different user should fail on ledger path
+        // notification should fail on ledger path
         user2
             .notify_top_up_ledger(bh, None, &new_canister_id)
             .await
@@ -587,97 +490,6 @@ pub fn test(env: TestEnv) {
             _ => panic!("unexpected block {:?}", txn),
         }
 
-        // remove when ledger notify goes away
-        {
-            user1
-                .transfer(
-                    Tokens::from_e8s(initial_amount.get_e8s() + DEFAULT_TRANSFER_FEE.get_e8s()),
-                    controller_user.principal_id(),
-                )
-                .await;
-            let new_canister_id = controller_user
-                .create_canister_ledger(initial_amount)
-                .await
-                .unwrap();
-
-            /* Check that the funds for the canister creation attempt are burned. */
-            let block = tst.get_tip().await.unwrap();
-            let txn = block.transaction();
-
-            match txn.operation {
-                Operation::Burn {
-                    from,
-                    amount,
-                    spender,
-                } => {
-                    assert_eq!(amount, initial_amount);
-                    assert_eq!(tst.get_balance(from).await, Tokens::ZERO);
-                    assert_eq!(spender, None);
-                }
-                _ => panic!("unexpected block {:?}", txn),
-            }
-
-            info!(logger, "topping up");
-
-            let top_up_amount = Tokens::new(5_000, 0).unwrap();
-
-            user1
-                .top_up_canister_ledger(top_up_amount, None, &new_canister_id)
-                .await
-                .unwrap();
-
-            /* Check the controller / cycles balance. */
-            let msg_size = CandidOne(CanisterIdRecord::from(new_canister_id))
-                .into_bytes()
-                .unwrap()
-                .len();
-
-            let nonce_size = 8; // see RemoteTestRuntime::get_nonce_vec
-
-            let new_canister_status: CanisterStatusResultV2 =
-                runtime_from_url(app_node.get_public_url(), app_node.effective_canister_id())
-                    .get_management_canister_with_effective_canister_id(new_canister_id.into())
-                    .update_from_sender(
-                        "canister_status",
-                        candid_one,
-                        CanisterIdRecord::from(new_canister_id),
-                        &Sender::from_keypair(&controller_user_keypair),
-                    )
-                    .await
-                    .unwrap();
-
-            assert_eq!(new_canister_status.controller(), controller_pid);
-            let config = CyclesAccountManagerConfig::application_subnet();
-            let fees = scale_cycles(
-                config.canister_creation_fee
-                    + config.ingress_message_reception_fee
-                    + config.ingress_byte_reception_fee
-                        * (msg_size + "canister_status".len() + nonce_size),
-            );
-            let expected_cycles = (icpts_to_cycles
-                .to_cycles(initial_amount.checked_add(&top_up_amount).unwrap())
-                - fees)
-                .get();
-            assert_eq!(new_canister_status.cycles(), expected_cycles);
-
-            /* Check that the funds for the canister top up attempt are burned. */
-            let block = tst.get_tip().await.unwrap();
-            let txn = block.transaction();
-
-            match txn.operation {
-                Operation::Burn {
-                    from,
-                    amount,
-                    spender,
-                } => {
-                    assert_eq!(amount, top_up_amount);
-                    assert_eq!(tst.get_balance(from).await, Tokens::ZERO);
-                    assert_eq!(spender, None);
-                }
-                _ => panic!("unexpected block {:?}", txn),
-            }
-        }
-
         /* Override the list of subnets for a specific controller. */
         info!(logger, "registering subnets override");
         let system_subnet_ids: Vec<_> = topology
@@ -714,39 +526,6 @@ pub fn test(env: TestEnv) {
             new_canister_status.cycles(),
             icpts_to_cycles.to_cycles(nns_amount).get()
         );
-
-        // remove when ledger notify goes away
-        {
-            let nns_amount = Tokens::new(2, 0).unwrap();
-            user1
-                .transfer(
-                    Tokens::from_e8s(nns_amount.get_e8s() + DEFAULT_TRANSFER_FEE.get_e8s()),
-                    controller_user.principal_id(),
-                )
-                .await;
-            let new_canister_id = controller_user
-                .create_canister_ledger(nns_amount)
-                .await
-                .unwrap();
-
-            /* Check the controller / cycles balance. */
-            let new_canister_status: CanisterStatusResultV2 = nns
-                .get_management_canister_with_effective_canister_id(new_canister_id.into())
-                .update_from_sender(
-                    "canister_status",
-                    candid_one,
-                    CanisterIdRecord::from(new_canister_id),
-                    &Sender::from_keypair(&controller_user_keypair),
-                )
-                .await
-                .unwrap();
-
-            assert_eq!(new_canister_status.controller(), controller_pid);
-            assert_eq!(
-                new_canister_status.cycles(),
-                icpts_to_cycles.to_cycles(nns_amount).get()
-            );
-        }
 
         /* Try upgrading the cycles minting canister. This should
          * preserve its state (such as the principal -> subnets
@@ -792,20 +571,6 @@ pub fn test(env: TestEnv) {
             err.0
         );
 
-        // remove when ledger notify goes away
-        {
-            let err = user1
-                .notify_canister_create_ledger(block, None, &controller_pid)
-                .await
-                .unwrap_err();
-
-            assert!(
-                err.0.contains("has no update method"),
-                "Error message was: {}",
-                err.0
-            );
-        }
-
         info!(logger, "upgrading cycles minting canister");
         let wasm = Project::cargo_bin_maybe_from_env("cycles-minting-canister", &[]);
 
@@ -836,18 +601,6 @@ pub fn test(env: TestEnv) {
             .await
             .unwrap();
 
-        // remove when ledger notify goes away
-        user1
-            .transfer(
-                Tokens::from_e8s(nns_amount.get_e8s() + DEFAULT_TRANSFER_FEE.get_e8s()),
-                controller_user.principal_id(),
-            )
-            .await;
-        controller_user
-            .create_canister_ledger(nns_amount)
-            .await
-            .unwrap();
-
         /* Exceed the daily cycles minting limit. */
         info!(logger, "creating canister (exceeding daily limit)");
 
@@ -871,35 +624,6 @@ pub fn test(env: TestEnv) {
         )
         .await;
 
-        // remove when ledger notify goes away
-        {
-            let amount = Tokens::new(300_000, 0).unwrap();
-            user1
-                .transfer(
-                    Tokens::from_e8s(amount.get_e8s() + DEFAULT_TRANSFER_FEE.get_e8s()),
-                    controller_user.principal_id(),
-                )
-                .await;
-            let (err, refund_block) = controller_user
-                .create_canister_ledger(amount)
-                .await
-                .unwrap_err();
-
-            info!(logger, "error: {}", err);
-            assert!(err.contains(
-                "cycles have been minted in the last 3600 seconds, please try again later"
-            ));
-
-            let refund_block = refund_block.unwrap();
-            tst.check_refund(
-                refund_block,
-                amount,
-                CREATE_CANISTER_REFUND_FEE,
-                controller_user.principal_id(),
-            )
-            .await;
-        }
-
         /* Test getting the total number of cycles minted. */
         let cycles_minted: u64 = tst
             .query_pb(&CYCLES_MINTING_CANISTER_ID, "total_cycles_minted", ())
@@ -921,7 +645,7 @@ pub fn test(env: TestEnv) {
         let total_cycles = cycles_minted + cmc_initial_cycles_balance;
 
         assert_eq!(
-            Cycles::from(total_cycles / 2),
+            Cycles::from(total_cycles),
             icpts_to_cycles.to_cycles(total_icpts)
         );
     });

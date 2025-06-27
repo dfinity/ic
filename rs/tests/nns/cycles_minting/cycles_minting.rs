@@ -91,19 +91,6 @@ impl UserHandle {
         CandidOne::from_bytes(bytes).map(|c| c.0)
     }
 
-    /// Creates a canister via the deprecated ledger.notify flow. That is,
-    ///
-    ///     1. Send ICP to the CMC.
-    ///
-    ///     2. Call ledger.noitfy.
-    pub async fn create_canister_ledger(&self, amount: Tokens) -> CreateCanisterResult {
-        let block = self
-            .pay_for_canister(amount, None, &self.principal_id())
-            .await;
-        self.notify_canister_create_ledger(block, None, &self.principal_id())
-            .await
-    }
-
     /// Creates a canister using the notify_create_canister flow. That is,
     ///
     ///     1. Send ICP to the CMC.
@@ -135,19 +122,6 @@ impl UserHandle {
         PrincipalId::new_self_authenticating(&ic_canister_client_sender::ed25519_public_key_to_der(
             self.user_keypair.public_key.to_vec(),
         ))
-    }
-
-    pub async fn top_up_canister_ledger(
-        &self,
-        amount: Tokens,
-        sender_subaccount: Option<Subaccount>,
-        target_canister_id: &CanisterId,
-    ) -> TopUpCanisterResult {
-        let block = self
-            .pay_for_top_up(amount, sender_subaccount, target_canister_id)
-            .await;
-        self.notify_top_up_ledger(block, sender_subaccount, target_canister_id)
-            .await
     }
 
     pub async fn top_up_canister_cmc(
@@ -245,6 +219,8 @@ impl UserHandle {
         }
     }
 
+    /// Notify the ledger canister about a canister creation. This deprecated path is no longer
+    /// supported - the ledger traps when the `notify_pb` method is called, so this will always fail.
     pub async fn notify_canister_create_ledger(
         &self,
         block: BlockIndex,
@@ -299,6 +275,8 @@ impl UserHandle {
         }
     }
 
+    /// Notify the ledger canister about a canister top-up. This deprecated path is no longer
+    /// supported - the ledger traps when the `notify_pb` method is called, so this will always fail.
     pub async fn notify_top_up_ledger(
         &self,
         block: BlockIndex,
