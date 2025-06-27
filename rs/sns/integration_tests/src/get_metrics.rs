@@ -203,7 +203,7 @@ fn test_sns_metrics() {
     state_machine.tick();
     {
         // Prepare the payload to get metrics during the last month.
-        let time_window_seconds = ONE_MONTH;
+        let time_window_seconds = 2 * ONE_MONTH;
         let payload = GetMetricsRequest {
             time_window_seconds: Some(time_window_seconds),
         };
@@ -231,7 +231,7 @@ fn test_sns_metrics() {
             };
 
             assert_eq!(
-                num_recently_submitted_proposals, 1,
+                num_recently_submitted_proposals, 2,
                 "Expected 1 proposals to be submitted, got {}",
                 num_recently_submitted_proposals
             );
