@@ -535,7 +535,7 @@ jobs:
 
   # TODO: REMOVE. Only for development purposes. Do not merge.
   recovery-engine-test:
-    name: Recovery Engine Test
+    name: Recovery Engine Smoke Test
     <<: *dind-large-setup
     timeout-minutes: 60
     steps:
@@ -553,11 +553,6 @@ jobs:
           TEMP_BRANCH="recovery-engine-test-$(date +%s)"
           echo "TEMP_BRANCH=${TEMP_BRANCH}" >> "$GITHUB_ENV"
           git checkout -b "$TEMP_BRANCH"
-
-      - name: Let rclone overwrite the recovery artifacts and disable cache
-        run: |
-          sed -i '/--immutable \\/d' ci/src/artifacts/upload.sh
-          sed -i '/rclone_common_flags=(/a\    --header-upload="Cache-Control: no-cache"' ci/src/artifacts/upload.sh
 
       - name: Generate and upload recovery artifacts
         uses: ./.github/actions/bazel
@@ -585,7 +580,7 @@ jobs:
 
             # Upload the archive
             popd
-            bazel run //:artifact-uploader -- "$rootdir"
+            IS_GUESTOS_RECOVERY_ENGINE_SMOKE_TEST=1 bazel run //:artifact-uploader -- "$rootdir"
 
             # Get version and checksum
             bazel build //bazel:version.txt
