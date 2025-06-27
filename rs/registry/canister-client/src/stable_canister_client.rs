@@ -54,7 +54,7 @@ impl<S: RegistryDataStableMemory> StableCanisterRegistryClient<S> {
     }
 
     pub fn timestamp_to_versions_map(&self) -> Arc<RwLock<BTreeMap<u64, Vec<RegistryVersion>>>> {
-        self.timestamp_to_versions_map.clone()
+        Arc::clone(&self.timestamp_to_versions_map)
     }
 
     fn add_deltas(&self, deltas: Vec<RegistryDelta>) -> Result<(), String> {
