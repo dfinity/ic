@@ -594,6 +594,7 @@ jobs:
             echo "RECOVERY_STORE_CONTENT2_B64=${RECOVERY_STORE_CONTENT2_B64}" >> "$GITHUB_ENV"
             echo "RECOVERY_VERSION=${RECOVERY_VERSION}" >> "$GITHUB_ENV"
             echo "RECOVERY_HASH=${RECOVERY_HASH}" >> "$GITHUB_ENV"
+          GPG_PASSPHRASE: ""
 
       - name: Adapt guestos-recovery-engine script
         run: |
