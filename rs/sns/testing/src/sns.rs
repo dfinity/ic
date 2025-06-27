@@ -502,6 +502,15 @@ pub async fn propose_sns_controlled_canister_upgrade<C: CallCanisters + Progress
         .await
         .unwrap()
         .expect("Expecting the identity to have a Neuron");
+
+    fn format_full_hash(hash: &[u8]) -> String {
+        hash.iter()
+            .map(|b| format!("{:02x}", b))
+            .collect::<Vec<_>>()
+            .join("")
+    }
+    println!("SNS neuron_id = {}", format_full_hash(&neuron_id.id));
+
     propose(
         dev_participant_agent,
         neuron_id,

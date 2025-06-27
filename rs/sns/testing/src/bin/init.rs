@@ -27,6 +27,7 @@ async fn nns_init(args: NnsInitArgs) {
         .with_nns_subnet()
         .with_sns_subnet()
         .with_ii_subnet()
+        .with_fiduciary_subnet()
         .with_application_subnet()
         .build_async()
         .await;
@@ -66,6 +67,7 @@ async fn nns_init(args: NnsInitArgs) {
         deciding_nns_neuron_id,
     )
     .await;
+
     println!("NNS initialized");
     println!(
         "Use the following Neuron ID for further testing: {}",

@@ -17,6 +17,8 @@ use ic_nns_governance_api::{neuron::DissolveState, Neuron};
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use icp_ledger::{AccountIdentifier, Tokens};
 use pocket_ic::nonblocking::PocketIc;
+use crate::CanisterId;
+use std::str::FromStr;
 
 use crate::utils::{check_canister_installed, ALL_SNS_TESTING_CANISTER_IDS};
 
@@ -95,6 +97,34 @@ pub async fn bootstrap_nns(
     }
 
     install_frontend_nns_canisters(pocket_ic).await;
+
+    let _kong_backend_canister_id = {
+        let wasm_path = std::env::var("KONG_BACKEND_CANISTER_WASM_PATH")
+            .expect("KONG_BACKEND_CANISTER_WASM_PATH must be set.");
+
+        let kong_backend_wasm = Wasm::from_file(wasm_path);
+
+        let controllers = vec![PrincipalId::new_user_test_id(42)];
+
+        // Canister ID from the mainnet.
+        // See https://dashboard.internetcomputer.org/canister/2ipq2-uqaaa-aaaar-qailq-cai
+        let canister_id = CanisterId::try_from_principal_id(
+            PrincipalId::from_str("2ipq2-uqaaa-aaaar-qailq-cai").unwrap(),
+        )
+        .unwrap();
+
+        install_canister_with_controllers(
+            &pocket_ic,
+            "KongSwap Backend Canister",
+            canister_id,
+            vec![],
+            kong_backend_wasm,
+            controllers,
+        )
+        .await;
+
+        canister_id
+    };
 }
 
 #[derive(CandidType)]
