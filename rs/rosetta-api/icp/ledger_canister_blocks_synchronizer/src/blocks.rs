@@ -729,8 +729,9 @@ impl Blocks {
         use std::sync::atomic::{AtomicUsize, Ordering};
         static COUNTER: AtomicUsize = AtomicUsize::new(0);
         let counter = COUNTER.fetch_add(1, Ordering::SeqCst);
-        let connection = rusqlite::Connection::open(format!("file:memdb{}?mode=memory&cache=private", counter))
-            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+        let connection =
+            rusqlite::Connection::open(format!("file:memdb{}?mode=memory&cache=private", counter))
+                .map_err(|e| BlockStoreError::Other(e.to_string()))?;
         Self::new(connection, enable_rosetta_blocks, optimize_search_indexes)
     }
 
@@ -749,9 +750,11 @@ impl Blocks {
             .unwrap()
             .execute("PRAGMA foreign_keys = 1", [])
             .map_err(|e| BlockStoreError::Other(e.to_string()))?;
-        store.create_tables(enable_rosetta_blocks, optimize_search_indexes).map_err(|e| {
-            BlockStoreError::Other(format!("Failed to initialize SQLite database: {}", e))
-        })?;
+        store
+            .create_tables(enable_rosetta_blocks, optimize_search_indexes)
+            .map_err(|e| {
+                BlockStoreError::Other(format!("Failed to initialize SQLite database: {}", e))
+            })?;
         store.cache_rosetta_blocks_mode().map_err(|e| {
             BlockStoreError::Other(format!(
                 "Failed to determine the Rosetta Blocks Mode: {}",
@@ -763,7 +766,11 @@ impl Blocks {
         Ok(store)
     }
 
-    fn create_tables(&self, enable_rosetta_blocks: bool, optimize_search_indexes: bool) -> Result<(), rusqlite::Error> {
+    fn create_tables(
+        &self,
+        enable_rosetta_blocks: bool,
+        optimize_search_indexes: bool,
+    ) -> Result<(), rusqlite::Error> {
         let mut connection = self.connection.lock().unwrap();
         let tx = connection.transaction()?;
         tx.execute(
@@ -865,7 +872,7 @@ impl Blocks {
             "#,
                 [],
             )?;
-            
+
             // To account index
             tx.execute(
                 r#"
@@ -874,7 +881,7 @@ impl Blocks {
             "#,
                 [],
             )?;
-            
+
             // Spender account index
             tx.execute(
                 r#"
@@ -883,7 +890,7 @@ impl Blocks {
             "#,
                 [],
             )?;
-            
+
             // Operation type index for searching by transaction type
             tx.execute(
                 r#"
@@ -1947,34 +1954,54 @@ VALUES (:idx, :block_idx)"#,
     fn test_search_indexes_creation_when_enabled() {
         let blocks = Blocks::new_in_memory(true, true).unwrap();
         let connection = blocks.connection.lock().unwrap();
-        
+
         // Check that indexes exist when optimization is enabled
-        let index_query = "SELECT name FROM sqlite_master WHERE type='index' AND name IN (?, ?, ?, ?)";
+        let index_query =
+            "SELECT name FROM sqlite_master WHERE type='index' AND name IN (?, ?, ?, ?)";
         let mut stmt = connection.prepare(index_query).unwrap();
-        let index_names: Vec<String> = stmt.query_map(
-            ["from_account_index", "to_account_index", "spender_account_index", "operation_type_index"],
-            |row| row.get::<_, String>(0)
-        ).unwrap().collect::<Result<Vec<_>, _>>().unwrap();
-        
+        let index_names: Vec<String> = stmt
+            .query_map(
+                [
+                    "from_account_index",
+                    "to_account_index",
+                    "spender_account_index",
+                    "operation_type_index",
+                ],
+                |row| row.get::<_, String>(0),
+            )
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+
         assert!(index_names.contains(&"from_account_index".to_string()));
         assert!(index_names.contains(&"to_account_index".to_string()));
         assert!(index_names.contains(&"spender_account_index".to_string()));
         assert!(index_names.contains(&"operation_type_index".to_string()));
     }
-    
+
     #[test]
     fn test_search_indexes_not_created_when_disabled() {
         let blocks = Blocks::new_in_memory(true, false).unwrap();
         let connection = blocks.connection.lock().unwrap();
-        
+
         // Check that indexes don't exist when optimization is disabled
-        let index_query = "SELECT name FROM sqlite_master WHERE type='index' AND name IN (?, ?, ?, ?)";
+        let index_query =
+            "SELECT name FROM sqlite_master WHERE type='index' AND name IN (?, ?, ?, ?)";
         let mut stmt = connection.prepare(index_query).unwrap();
-        let index_names: Vec<String> = stmt.query_map(
-            ["from_account_index", "to_account_index", "spender_account_index", "operation_type_index"],
-            |row| row.get::<_, String>(0)
-        ).unwrap().collect::<Result<Vec<_>, _>>().unwrap();
-        
+        let index_names: Vec<String> = stmt
+            .query_map(
+                [
+                    "from_account_index",
+                    "to_account_index",
+                    "spender_account_index",
+                    "operation_type_index",
+                ],
+                |row| row.get::<_, String>(0),
+            )
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+
         // These specific indexes should not exist
         assert!(!index_names.contains(&"from_account_index".to_string()));
         assert!(!index_names.contains(&"to_account_index".to_string()));
