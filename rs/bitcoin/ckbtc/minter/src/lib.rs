@@ -1006,6 +1006,7 @@ pub fn build_unsigned_transaction(
     main_address: BitcoinAddress,
     fee_per_vbyte: u64,
 ) -> Result<(tx::UnsignedTransaction, state::ChangeOutput, Vec<Utxo>), BuildTxError> {
+    assert!(!outputs.is_empty());
     let amount = outputs.iter().map(|(_, amount)| amount).sum::<u64>();
     let inputs = utxos_selection(amount, available_utxos, outputs.len());
     match build_unsigned_transaction_from_inputs(&inputs, outputs, main_address, fee_per_vbyte) {
