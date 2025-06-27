@@ -7,10 +7,12 @@
 
 use candid::{CandidType, Deserialize, Principal};
 use ic_agent::Agent;
-use ic_ckbtc_minter::state::eventlog::{replay, Event, EventType};
+use ic_btc_interface::{Txid, Utxo};
+use ic_ckbtc_minter::state::eventlog::{replay, replay_events_with_state, Event, EventType};
 use ic_ckbtc_minter::state::invariants::{CheckInvariants, CheckInvariantsImpl};
-use ic_ckbtc_minter::state::CkBtcMinterState;
-use ic_ckbtc_minter::Network;
+use ic_ckbtc_minter::state::{ChangeOutput, CkBtcMinterState};
+use ic_ckbtc_minter::{Network, Timestamp};
+use std::fmt::Debug;
 use std::path::PathBuf;
 
 fn assert_useless_events_is_empty(events: impl Iterator<Item = Event>) {
@@ -84,7 +86,156 @@ async fn should_replay_events_for_mainnet() {
         .expect("Failed to check invariants");
 
     assert_eq!(state.btc_network, Network::Mainnet);
-    assert_eq!(state.get_total_btc_managed(), 20_209_150_152);
+    assert_eq!(state.get_total_btc_managed(), 30_954_321_017);
+}
+
+#[tokio::test]
+async fn stuck_transactions() {
+    Mainnet.retrieve_and_store_events_if_env().await;
+    let events = Mainnet.deserialize();
+    assert_eq!(events.total_event_count, 366_308);
+
+    let first_stuck_transaction =
+        SentBtcTransaction::from_event(events.events[352_446].clone()).unwrap();
+    assert_eq!(
+        first_stuck_transaction.inner.txid.to_string(),
+        "23e46d53929d513cb1dc1b0fa63f9b142f2676958e6e6f0e45653949def954b2"
+    );
+    println!(
+        "First stuck transaction {} {first_stuck_transaction:?}",
+        first_stuck_transaction.inner.txid
+    );
+
+    let second_stuck_transaction =
+        SentBtcTransaction::from_event(events.events[352_489].clone()).unwrap();
+    assert_eq!(
+        second_stuck_transaction.inner.txid.to_string(),
+        "db9e317d38803b83115959ac857e2005855ce572d446351034080864aa8edeb5"
+    );
+    println!(
+        "Second stuck transaction {} {second_stuck_transaction:?}",
+        second_stuck_transaction.inner.txid
+    );
+
+    let third_stuck_transaction =
+        SentBtcTransaction::from_event(events.events[352_527].clone()).unwrap();
+    assert_eq!(
+        third_stuck_transaction.inner.txid.to_string(),
+        "422f3115c4f865536f92e94d22cb7b2795b0482e517f7c46561e2234cf03e603"
+    );
+    println!(
+        "Third stuck transaction {} {third_stuck_transaction:?}",
+        third_stuck_transaction.inner.txid
+    );
+
+    // for (index, event) in events.events.iter().enumerate() {
+    //     match &event.payload {
+    //         EventType::SentBtcTransaction {
+    //             request_block_indices,
+    //             ..
+    //         } if request_block_indices.contains(&2626488) => {
+    //             panic!("index {index}")
+    //         }
+    //         _ => {}
+    //     };
+    // }
+
+    // let first_stuck_transaction = ensure_exactly_one(
+    //     events
+    //         .events
+    //         .into_iter()
+    //         .filter_map(|event| match &event.payload {
+    //             EventType::SentBtcTransaction {
+    //                 request_block_indices,
+    //                 ..
+    //             } if request_block_indices.contains(&2_626_383_u64) => {
+    //                 SentBtcTransaction::from_event(event)
+    //             }
+    //             _ => None,
+    //         })
+    //         .collect(),
+    // );
+    //
+    // panic!(
+    //     "First stuck transaction {} {first_stuck_transaction:?}",
+    //     first_stuck_transaction.inner.txid
+    // );
+}
+
+// Replaying all events and checking the invariants from the beginning takes too long (timeout after 2h)
+// so we just check the invariants at the point where the first stuck transaction was sent.
+#[tokio::test]
+async fn replay_events_and_check_invariants_since_first_stuck_transactions() {
+    Mainnet.retrieve_and_store_events_if_env().await;
+    let mut events = Mainnet.deserialize();
+    assert_eq!(events.total_event_count, 366_308);
+    let index_event_first_tx_stuck = 352_446;
+    let events_after_inclusive_1st_stuck_tx = events.events.split_off(index_event_first_tx_stuck);
+    let events_before_1st_stuck_tx = events.events;
+
+    let mut state = replay::<SkipCheckInvariantsImpl>(events_before_1st_stuck_tx.into_iter())
+        .expect("Failed to replay events");
+    state
+        .check_invariants()
+        .expect("Failed to check invariants");
+
+    replay_events_with_state::<CheckInvariantsImpl>(
+        events_after_inclusive_1st_stuck_tx.into_iter(),
+        &mut state,
+    )
+    .expect("Failed to check invariants");
+}
+
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+struct Timestamped<Inner> {
+    timestamp: Timestamp,
+    inner: Inner,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
+struct SentBtcTransaction {
+    /// Block indices of retrieve_btc requests that caused the transaction.
+    request_block_indices: Vec<u64>,
+    /// The Txid of the Bitcoin transaction.
+    txid: Txid,
+    /// UTXOs used for the transaction.
+    utxos: Vec<Utxo>,
+    /// The output with the minter's change, if any.
+    change_output: Option<ChangeOutput>,
+    /// The IC time at which the minter submitted the transaction.
+    submitted_at: u64,
+    /// The fee per vbyte (in millisatoshi) that we used for the transaction.
+    fee_per_vbyte: Option<u64>,
+}
+
+impl SentBtcTransaction {
+    fn from_event(event: Event) -> Option<Timestamped<SentBtcTransaction>> {
+        match event.payload {
+            EventType::SentBtcTransaction {
+                request_block_indices,
+                txid,
+                utxos,
+                change_output,
+                submitted_at,
+                fee_per_vbyte,
+            } => Some(Timestamped {
+                timestamp: Timestamp::new(
+                    event
+                        .timestamp
+                        .expect("should have a timestamp since it was added a few months ago"),
+                ),
+                inner: SentBtcTransaction {
+                    request_block_indices,
+                    txid,
+                    utxos,
+                    change_output,
+                    submitted_at,
+                    fee_per_vbyte,
+                },
+            }),
+            _ => None,
+        }
+    }
 }
 
 #[tokio::test]

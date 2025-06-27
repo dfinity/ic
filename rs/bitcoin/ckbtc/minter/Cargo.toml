@@ -51,6 +51,7 @@ serde_json = { workspace = true }
 assert_matches = { workspace = true }
 bitcoin = { version = "0.28.2" }
 candid_parser = { workspace = true }
+chrono = {workspace = true}
 canister-test = { path = "../../../rust_canisters/canister_test" }
 flate2 = { workspace = true }
 ic-agent = { workspace = true }

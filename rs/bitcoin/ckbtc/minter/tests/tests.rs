@@ -1,7 +1,8 @@
 use assert_matches::assert_matches;
 use bitcoin::util::psbt::serialize::Deserialize;
 use bitcoin::{Address as BtcAddress, Network as BtcNetwork};
-use candid::{Decode, Encode, Nat, Principal};
+use candid::{CandidType, Decode, Encode, Nat, Principal};
+use chrono::{DateTime, Utc};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_bitcoin_canister_mock::{OutPoint, PushUtxoToAddress, Utxo};
 use ic_btc_checker::{
@@ -12,6 +13,7 @@ use ic_btc_interface::Txid;
 use ic_ckbtc_minter::lifecycle::init::{InitArgs as CkbtcMinterInitArgs, MinterArg};
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::queries::{EstimateFeeArg, RetrieveBtcStatusRequest, WithdrawalFee};
+use ic_ckbtc_minter::state::eventlog::Event;
 use ic_ckbtc_minter::state::{BtcRetrievalStatusV2, Mode, RetrieveBtcStatus, RetrieveBtcStatusV2};
 use ic_ckbtc_minter::updates::get_btc_address::GetBtcAddressArgs;
 use ic_ckbtc_minter::updates::retrieve_btc::{
@@ -38,7 +40,7 @@ use icrc_ledger_types::icrc3::transactions::{GetTransactionsRequest, GetTransact
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::str::FromStr;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 const CHECK_FEE: u64 = 2_000;
 const TRANSFER_FEE: u64 = 10;
@@ -51,7 +53,7 @@ const SENDER_ID: PrincipalId = PrincipalId::new_user_test_id(1);
 fn default_init_args() -> CkbtcMinterInitArgs {
     CkbtcMinterInitArgs {
         btc_network: Network::Regtest,
-        ecdsa_key_name: "master_ecdsa_public_key".into(),
+        ecdsa_key_name: "key_1".into(),
         retrieve_btc_min_amount: 2000,
         ledger_id: CanisterId::from(0),
         max_time_in_queue_nanos: MAX_TIME_IN_QUEUE.as_nanos() as u64,
@@ -685,9 +687,14 @@ impl CkBtcSetup {
     }
 
     pub fn new_with(btc_network: Network, retrieve_btc_min_amount: u64) -> Self {
+        use ic_management_canister_types_private::{MasterPublicKeyId, EcdsaKeyId, EcdsaCurve};
         let bitcoin_id = bitcoin_canister_id(btc_network);
         let env = StateMachineBuilder::new()
-            .with_master_ecdsa_public_key()
+            // .with_master_ecdsa_public_key()
+            .with_chain_key(MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+              curve: EcdsaCurve::Secp256k1,
+              name: "key_1".to_string(),
+             }))
             .with_default_canister_range()
             .with_extra_canister_range(bitcoin_id..=bitcoin_id)
             .build();
@@ -824,6 +831,18 @@ impl CkBtcSetup {
             MinterInfo
         )
         .unwrap()
+    }
+
+    pub fn replay_events(&self, events: &Vec<Event>) {
+        self.env
+            .execute_ingress(self.minter_id, "replay_events", Encode!(&events).unwrap())
+            .expect("failed to replay_events");
+    }
+
+    pub fn finalize_requests_now(&self) {
+        self.env
+            .execute_ingress(self.minter_id, "finalize_requests_now", Encode!().unwrap())
+            .expect("failed to finalize_requests_now");
     }
 
     pub fn get_logs(&self) -> Log {
@@ -1457,6 +1476,83 @@ fn test_min_retrieval_amount_custom() {
         .is_ok());
     let retrieve_btc_min_amount = ckbtc.get_minter_info().retrieve_btc_min_amount;
     assert_eq!(retrieve_btc_min_amount, min_amount);
+}
+
+#[test]
+fn test_stuck_transaction() {
+    let ckbtc = CkBtcSetup::new();
+
+    // init_ecdsa_public_key
+    let user = Principal::from(ckbtc.caller);
+    let withdrawal_account_before_event = ckbtc.withdrawal_account(user.into());
+    assert_eq!(
+        withdrawal_account_before_event.to_string(),
+        "rrkah-fqaaa-aaaaa-aaaaq-cai-crp7eoq.16ed4ca467558d2f8b4191368b32517202925d24ae683f320e3fa17d41c1408e"
+    );
+
+    let events = Mainnet.deserialize();
+    assert_eq!(events.total_event_count, 366_308);
+    ckbtc.replay_events(&events.events);
+    // ckbtc.minter_self_check(); //instruction limit
+
+    //sanity check
+    let status_3rd_stuck_tx = ckbtc.retrieve_btc_status_v2(2_626_488);
+    assert_matches!(
+        status_3rd_stuck_tx,
+        RetrieveBtcStatusV2::Submitted{txid} if txid.to_string() == "422f3115c4f865536f92e94d22cb7b2795b0482e517f7c46561e2234cf03e603"
+    );
+
+    ckbtc
+        .env
+        .set_time(SystemTime::UNIX_EPOCH + Duration::from_secs(1750879059));
+    let datetime: DateTime<Utc> = ckbtc.env.time().into();
+    assert_eq!(
+        datetime.format("%d/%m/%Y %T").to_string(),
+        "25/06/2025 19:17:39"
+    );
+
+    ckbtc.finalize_requests_now();
+}
+
+#[derive(Debug)]
+struct Mainnet;
+
+trait GetEventsFile {
+    fn path_to_events_file(&self) -> PathBuf {
+        let mut path = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+        path.push(format!("test_resources/{}", self.file_name()));
+        path
+    }
+
+    fn file_name(&self) -> &str;
+
+    fn deserialize(&self) -> GetEventsResult {
+        use candid::Decode;
+        use flate2::read::GzDecoder;
+        use std::fs::File;
+        use std::io::Read;
+
+        let file = File::open(self.path_to_events_file()).unwrap();
+        let mut gz = GzDecoder::new(file);
+        let mut decompressed_buffer = Vec::new();
+        gz.read_to_end(&mut decompressed_buffer)
+            .expect("BUG: failed to decompress events");
+        Decode!(&decompressed_buffer, GetEventsResult)
+            .expect("Failed to decode events")
+            .into()
+    }
+}
+
+impl GetEventsFile for Mainnet {
+    fn file_name(&self) -> &str {
+        "mainnet_events.gz"
+    }
+}
+
+#[derive(Clone, Debug, CandidType, serde::Deserialize)]
+pub struct GetEventsResult {
+    pub events: Vec<Event>,
+    pub total_event_count: u64,
 }
 
 #[test]
