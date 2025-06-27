@@ -420,7 +420,6 @@ pub async fn notify(
 
 #[cfg(feature = "notify-method")]
 fn notify_trap_msg() -> String {
-    // Not sure if this `print` works anymore either due to the subsequent `trap`.
     let caller_principal_id = PrincipalId::from(caller());
     print(format!(
         "[ledger] notify method called by [{}]",
