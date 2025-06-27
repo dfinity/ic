@@ -189,6 +189,7 @@ impl Registry {
                     value,
                     version: _,
                     deletion_marker: _,
+                    timestamp_nanoseconds: _,
                 }) => assert_ne!(
                     NodeRecord::decode(value.as_slice()).unwrap(),
                     NodeRecord::default()
