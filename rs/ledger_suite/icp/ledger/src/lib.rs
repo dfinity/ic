@@ -597,7 +597,7 @@ pub fn balances_len() -> u64 {
     BALANCES_MEMORY.with_borrow(|balances| balances.len())
 }
 
-pub fn get_allowances(
+pub fn get_allowances_list(
     from: AccountIdentifier,
     spender: Option<AccountIdentifier>,
     max_results: u64,

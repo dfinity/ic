@@ -47,7 +47,7 @@ use icp_ledger::{
     AccountBalanceArgs, AccountIdBlob, AccountIdentifier, AccountIdentifierByteBuf, Allowances,
     ArchiveInfo, ArchivedBlocksRange, ArchivedEncodedBlocksRange, Archives,
     BinaryAccountBalanceArgs, Block, BlockArg, CandidBlock, Decimals, FeatureFlags, GetBlocksArgs,
-    GetBlocksRes, GetLegacyAllowancesArgs, IterBlocksArgs, IterBlocksRes, LedgerCanisterPayload,
+    GetBlocksRes, GetAllowancesArgs, IterBlocksArgs, IterBlocksRes, LedgerCanisterPayload,
     Memo, Name, Operation, PaymentError, QueryBlocksResponse, QueryEncodedBlocksResponse, SendArgs,
     Subaccount, Symbol, TipOfChainRes, TotalSupplyArgs, Transaction, TransferArgs, TransferError,
     TransferFee, TransferFeeArgs, MEMO_SIZE_BYTES,
@@ -69,7 +69,7 @@ use icrc_ledger_types::{
     icrc21::{errors::Icrc21Error, requests::ConsentMessageRequest, responses::ConsentInfo},
 };
 use ledger_canister::{
-    balances_len, get_allowances, Ledger, LEDGER, LEDGER_VERSION, MAX_MESSAGE_SIZE_BYTES,
+    balances_len, get_allowances_list, Ledger, LEDGER, LEDGER_VERSION, MAX_MESSAGE_SIZE_BYTES,
     UPGRADES_MEMORY,
 };
 use num_traits::cast::ToPrimitive;
@@ -1681,13 +1681,13 @@ fn is_ledger_ready() -> bool {
 
 #[query]
 #[candid_method(query)]
-fn get_legacy_allowances(arg: GetLegacyAllowancesArgs) -> Allowances {
+fn get_allowances(arg: GetAllowancesArgs) -> Allowances {
     let max_take_allowances = Access::with_ledger(|ledger| ledger.max_take_allowances());
     let max_results = arg
         .take
         .map(|take| std::cmp::min(take, max_take_allowances))
         .unwrap_or(max_take_allowances);
-    get_allowances(
+    get_allowances_list(
         arg.from_account_id,
         arg.prev_spender_id,
         max_results,

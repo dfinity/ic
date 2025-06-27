@@ -1250,15 +1250,15 @@ pub fn from_proto_bytes<T: ToProto>(msg: Vec<u8>) -> Result<T, String> {
     T::from_proto(prost::Message::decode(&msg[..]).map_err(|e| e.to_string())?)
 }
 
-/// The arguments for the `get_legacy_allowances` endpoint.
+/// The arguments for the `get_allowances` endpoint.
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct GetLegacyAllowancesArgs {
+pub struct GetAllowancesArgs {
     pub from_account_id: AccountIdentifier,
     pub prev_spender_id: Option<AccountIdentifier>,
     pub take: Option<u64>,
 }
 
-/// The allowance returned by the `get_legacy_allowances` endpoint.
+/// The allowance returned by the `get_allowances` endpoint.
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Allowance {
     pub from_account_id: AccountIdentifier,
@@ -1267,7 +1267,7 @@ pub struct Allowance {
     pub expires_at: Option<u64>,
 }
 
-/// The allowances vector returned by the `get_legacy_allowances` endpoint.
+/// The allowances vector returned by the `get_allowances` endpoint.
 pub type Allowances = Vec<Allowance>;
 
 #[cfg(test)]

@@ -16,7 +16,7 @@ use ic_state_machine_tests::{ErrorCode, StateMachine, UserError, WasmResult};
 use icp_ledger::{
     AccountIdBlob, AccountIdentifier, AccountIdentifierByteBuf, Allowances, ArchiveOptions,
     ArchivedBlocksRange, Block, CandidBlock, CandidOperation, CandidTransaction, FeatureFlags,
-    GetBlocksArgs, GetBlocksRes, GetBlocksResult, GetEncodedBlocksResult, GetLegacyAllowancesArgs,
+    GetBlocksArgs, GetBlocksRes, GetBlocksResult, GetEncodedBlocksResult, GetAllowancesArgs,
     IcpAllowanceArgs, InitArgs, IterBlocksArgs, IterBlocksRes, LedgerCanisterInitPayload,
     LedgerCanisterPayload, LedgerCanisterUpgradePayload, Operation, QueryBlocksResponse,
     QueryEncodedBlocksResponse, TimeStamp, UpgradeArgs, DEFAULT_TRANSFER_FEE,
@@ -1837,13 +1837,13 @@ fn list_allowances(
     env: &StateMachine,
     ledger: CanisterId,
     caller: PrincipalId,
-    args: &GetLegacyAllowancesArgs,
+    args: &GetAllowancesArgs,
 ) -> Allowances {
     Decode!(
         &env.execute_ingress_as(
             caller,
             ledger,
-            "get_legacy_allowances",
+            "get_allowances",
             Encode!(args).unwrap()
         )
         .expect("failed to list allowances")
@@ -1904,7 +1904,7 @@ fn test_allowance_listing_sequences() {
         }
     }
 
-    let mut args = GetLegacyAllowancesArgs {
+    let mut args = GetAllowancesArgs {
         from_account_id: AccountIdentifier::from(approvers[0].0),
         prev_spender_id: None,
         take: None,
@@ -2022,7 +2022,7 @@ fn test_allowance_listing_values() {
     };
     send_approval(&args);
 
-    let args = GetLegacyAllowancesArgs {
+    let args = GetAllowancesArgs {
         from_account_id: AccountIdentifier::from(approver),
         prev_spender_id: None,
         take: None,
@@ -2116,7 +2116,7 @@ fn test_allowance_listing_take() {
         send_approval(&args);
     }
 
-    let mut args = GetLegacyAllowancesArgs {
+    let mut args = GetAllowancesArgs {
         from_account_id: AccountIdentifier::from(approver),
         prev_spender_id: None,
         take: None,
