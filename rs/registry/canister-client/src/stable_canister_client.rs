@@ -16,7 +16,7 @@ use std::collections::BTreeMap;
 use std::marker::PhantomData;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering as AtomicOrdering;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 /// This implementation of CanisterRegistryClient uses StableMemory to store a copy of the
 /// Registry data in the canister.  An implementation of RegistryDataStableMemory trait that
@@ -29,7 +29,7 @@ pub struct StableCanisterRegistryClient<S: RegistryDataStableMemory> {
     // Registry client to interact with the canister
     registry: Arc<dyn Registry>,
     // A map holding the mapping of timestamps to registry versions.
-    pub timestamp_to_versions_map: RefCell<BTreeMap<u64, Vec<RegistryVersion>>>,
+    pub timestamp_to_versions_map: Arc<RwLock<BTreeMap<u64, Vec<RegistryVersion>>>>,
 }
 
 impl<S: RegistryDataStableMemory> StableCanisterRegistryClient<S> {
@@ -48,7 +48,7 @@ impl<S: RegistryDataStableMemory> StableCanisterRegistryClient<S> {
         Self {
             _stable_memory: PhantomData,
             latest_version: AtomicU64::new(0),
-            timestamp_to_versions_map: RefCell::new(timestamp_to_versions_map),
+            timestamp_to_versions_map: Arc::new(RwLock::new(timestamp_to_versions_map)),
             registry,
         }
     }
@@ -78,7 +78,8 @@ impl<S: RegistryDataStableMemory> StableCanisterRegistryClient<S> {
                     local_registry.insert(key, value);
 
                     self.timestamp_to_versions_map
-                        .borrow_mut()
+                        .write()
+                        .unwrap()
                         .entry(v.timestamp_nanoseconds)
                         .or_default()
                         .push(registry_version);
