@@ -163,6 +163,7 @@ rust_library(
     testonly = True,
     srcs = [
         "src/lib.rs",
+        "src/nonmainnet_features.rs",
         "src/pocket_ic.rs",
     ] + glob([
         "src/state_api/**/*.rs",
