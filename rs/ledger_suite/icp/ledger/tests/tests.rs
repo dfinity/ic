@@ -34,6 +34,7 @@ use serde_bytes::ByteBuf;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
+use std::u64;
 
 fn system_time_to_nanos(t: SystemTime) -> u64 {
     t.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos() as u64
@@ -1937,6 +1938,108 @@ fn test_allowance_listing_sequences() {
         }
     }
 }
+
+#[test]
+fn test_allowance_listing_values() {
+    const INITIAL_BALANCE: u64 = 10_000_000;
+    const NUM_SPENDERS: u64 = 3;
+
+    let approver = PrincipalId::new_user_test_id(1);
+
+    let mut spenders = vec![];
+    for i in 2..2 + NUM_SPENDERS {
+        spenders.push(PrincipalId::new_user_test_id(i));
+    }
+    spenders.sort_by(|first, second| {
+        AccountIdentifier::from(first.0).cmp(&AccountIdentifier::from(second.0))
+    });
+
+    let (env, canister_id) = setup(
+        ledger_wasm_allowance_getter(),
+        encode_init_args,
+        vec![(Account::from(approver.0), INITIAL_BALANCE)],
+    );
+
+    
+    let approve_args = ApproveArgs {
+        from_subaccount: None,
+        spender: Account::from(spenders[0].0),
+        amount: Nat::from(1u64),
+        fee: None,
+        memo: None,
+        expires_at: None,
+        expected_allowance: None,
+        created_at_time: None,
+    };
+    let send_approval = |args: &ApproveArgs| {
+        let response = env.execute_ingress_as(
+            approver,
+            canister_id,
+            "icrc2_approve",
+            Encode!(args).unwrap(),
+        );
+        assert!(response.is_ok());
+    };
+
+    // Simplest possible approval
+    send_approval(&approve_args);
+
+    // Expiration far in the future
+    let now = system_time_to_nanos(env.time());
+    let expiration_far = Some(now + Duration::from_secs(3600).as_nanos() as u64);
+    let args = ApproveArgs {
+        spender: Account::from(spenders[1].0),
+        amount: Nat::from(1_000_000u64),
+        expires_at: expiration_far,
+        ..approve_args.clone()
+    };
+    send_approval(&args);
+
+    // Expiration far in the future, max possible allowance
+    let expiration_near = Some(now + Duration::from_secs(10).as_nanos() as u64);
+    let args = ApproveArgs {
+        spender: Account::from(spenders[2].0),
+        amount: Nat::from(u64::MAX),
+        expires_at: expiration_near,
+        ..approve_args
+    };
+    send_approval(&args);
+        
+
+    let args = GetLegacyAllowancesArgs {
+        from_account_id: AccountIdentifier::from(approver),
+        prev_spender_id: None,
+        take: None,
+    };
+
+    let allowances = list_allowances(&env, canister_id, approver, &args);
+
+    let simple = allowances[0].clone();
+    assert_eq!(simple.from_account_id, AccountIdentifier::from(approver.0));
+    assert_eq!(simple.to_spender_id, AccountIdentifier::from(spenders[0].0));
+    assert_eq!(simple.allowance, Tokens::from(1));
+    assert_eq!(simple.expires_at, None);
+
+    let exp_far = allowances[1].clone();
+    assert_eq!(exp_far.from_account_id, AccountIdentifier::from(approver.0));
+    assert_eq!(exp_far.to_spender_id, AccountIdentifier::from(spenders[1].0));
+    assert_eq!(exp_far.allowance, Tokens::from(1_000_000));
+    assert_eq!(exp_far.expires_at, expiration_far);
+
+    let exp_near = allowances[2].clone();
+    assert_eq!(exp_near.from_account_id, AccountIdentifier::from(approver.0));
+    assert_eq!(exp_near.to_spender_id, AccountIdentifier::from(spenders[2].0));
+    assert_eq!(exp_near.allowance, Tokens::from(u64::MAX));
+    assert_eq!(exp_near.expires_at, expiration_near);
+
+    env.advance_time(Duration::from_secs(10));
+
+    let allowances = list_allowances(&env, canister_id, approver, &args);
+    assert_eq!(simple, allowances[0]);
+    assert_eq!(exp_far, allowances[1]);
+    assert_eq!(allowances.len(), 2);
+}
+
 
 mod metrics {
     use crate::{encode_init_args, encode_upgrade_args, ledger_wasm};
