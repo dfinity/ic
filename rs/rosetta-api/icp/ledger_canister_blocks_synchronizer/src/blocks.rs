@@ -702,6 +702,49 @@ pub enum RosettaBlocksMode {
     Enabled { first_rosetta_block_index: u64 },
 }
 
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub enum RosettaBlocksConfig {
+    Enabled,
+    Disabled,
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub enum IndexOptimization {
+    Enabled,
+    Disabled,
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub struct RosettaDbConfig {
+    pub rosetta_blocks: RosettaBlocksConfig,
+    pub index_optimization: IndexOptimization,
+}
+
+impl RosettaDbConfig {
+    pub fn new(rosetta_blocks: RosettaBlocksConfig, index_optimization: IndexOptimization) -> Self {
+        Self {
+            rosetta_blocks,
+            index_optimization,
+        }
+    }
+
+    pub fn with_rosetta_blocks_enabled(index_optimization: IndexOptimization) -> Self {
+        Self::new(RosettaBlocksConfig::Enabled, index_optimization)
+    }
+
+    pub fn with_rosetta_blocks_disabled(index_optimization: IndexOptimization) -> Self {
+        Self::new(RosettaBlocksConfig::Disabled, index_optimization)
+    }
+
+    pub fn default_enabled() -> Self {
+        Self::new(RosettaBlocksConfig::Enabled, IndexOptimization::Enabled)
+    }
+
+    pub fn default_disabled() -> Self {
+        Self::new(RosettaBlocksConfig::Disabled, IndexOptimization::Disabled)
+    }
+}
+
 pub struct Blocks {
     connection: Mutex<rusqlite::Connection>,
     pub rosetta_blocks_mode: RosettaBlocksMode,
@@ -710,26 +753,30 @@ pub struct Blocks {
 impl Blocks {
     pub fn new_persistent(
         location: &Path,
-        enable_rosetta_blocks: bool,
+        config: RosettaDbConfig,
     ) -> Result<Self, BlockStoreError> {
         std::fs::create_dir_all(location)
             .expect("Unable to create directory for SQLite on-disk store.");
         let path = location.join("db.sqlite");
         let connection =
-            rusqlite::Connection::open(path).expect("Unable to open SQLite database connection");
-        Self::new(connection, enable_rosetta_blocks)
+            rusqlite::Connection::open(path).map_err(|e| BlockStoreError::Other(e.to_string()))?;
+        Self::new(connection, config)
     }
 
-    /// Constructs a new SQLite in-memory store.
-    pub fn new_in_memory(enable_rosetta_blocks: bool) -> Result<Self, BlockStoreError> {
-        let connection = rusqlite::Connection::open_in_memory()
-            .expect("Unable to open SQLite in-memory database connection");
-        Self::new(connection, enable_rosetta_blocks)
+    pub fn new_in_memory(config: RosettaDbConfig) -> Result<Self, BlockStoreError> {
+        // Use a unique in-memory database for each instance to avoid locks in parallel tests.
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        static COUNTER: AtomicUsize = AtomicUsize::new(0);
+        let counter = COUNTER.fetch_add(1, Ordering::SeqCst);
+        let connection =
+            rusqlite::Connection::open(format!("file:memdb{}?mode=memory&cache=private", counter))
+                .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+        Self::new(connection, config)
     }
 
     fn new(
         connection: rusqlite::Connection,
-        enable_rosetta_blocks: bool,
+        config: RosettaDbConfig,
     ) -> Result<Self, BlockStoreError> {
         let mut store = Self {
             connection: Mutex::new(connection),
@@ -741,7 +788,7 @@ impl Blocks {
             .unwrap()
             .execute("PRAGMA foreign_keys = 1", [])
             .map_err(|e| BlockStoreError::Other(e.to_string()))?;
-        store.create_tables(enable_rosetta_blocks).map_err(|e| {
+        store.create_tables(config).map_err(|e| {
             BlockStoreError::Other(format!("Failed to initialize SQLite database: {}", e))
         })?;
         store.cache_rosetta_blocks_mode().map_err(|e| {
@@ -755,7 +802,7 @@ impl Blocks {
         Ok(store)
     }
 
-    fn create_tables(&self, enable_rosetta_blocks: bool) -> Result<(), rusqlite::Error> {
+    fn create_tables(&self, config: RosettaDbConfig) -> Result<(), rusqlite::Error> {
         let mut connection = self.connection.lock().unwrap();
         let tx = connection.transaction()?;
         tx.execute(
@@ -796,7 +843,7 @@ impl Blocks {
             "#,
             [],
         )?;
-        if enable_rosetta_blocks {
+        if config.rosetta_blocks == RosettaBlocksConfig::Enabled {
             // Use two tables for Rosetta Blocks. The first one contains
             // the metadata of the block while second one contains the
             // mapping Rosetta Block Index <-> Block Index
@@ -846,6 +893,45 @@ impl Blocks {
         "#,
             [],
         )?;
+
+        // Add account and operation type indexes if optimization is enabled
+        if config.index_optimization == IndexOptimization::Enabled {
+            // From account index
+            tx.execute(
+                r#"
+            CREATE INDEX IF NOT EXISTS from_account_index 
+            ON blocks(from_account)
+            "#,
+                [],
+            )?;
+
+            // To account index
+            tx.execute(
+                r#"
+            CREATE INDEX IF NOT EXISTS to_account_index 
+            ON blocks(to_account)
+            "#,
+                [],
+            )?;
+
+            // Spender account index
+            tx.execute(
+                r#"
+            CREATE INDEX IF NOT EXISTS spender_account_index 
+            ON blocks(spender_account)
+            "#,
+                [],
+            )?;
+
+            // Operation type index for searching by transaction type
+            tx.execute(
+                r#"
+            CREATE INDEX IF NOT EXISTS operation_type_index 
+            ON blocks(operation_type)
+            "#,
+                [],
+            )?;
+        }
 
         tx.commit()
     }
@@ -1630,7 +1716,7 @@ struct RosettaBlockIndices {
 
 #[cfg(test)]
 mod tests {
-    use super::Blocks;
+    use super::{Blocks, IndexOptimization, RosettaDbConfig};
     use crate::rosetta_block::RosettaBlock;
     use candid::Principal;
     use ic_ledger_core::block::BlockType;
@@ -1688,7 +1774,7 @@ mod tests {
             transactions: [(0, transaction0), (1, transaction1)].into_iter().collect(),
         };
 
-        let mut blocks = Blocks::new_in_memory(true).unwrap();
+        let mut blocks = Blocks::new_in_memory(RosettaDbConfig::default_enabled()).unwrap();
         blocks.push(&hashed_block0).unwrap();
         blocks.push(&hashed_block1).unwrap();
         let mut connection = blocks.connection.lock().unwrap();
@@ -1697,7 +1783,7 @@ mod tests {
         let mut insert_rosetta_block_stmt = transaction
             .prepare_cached(
                 r#"INSERT INTO rosetta_blocks (rosetta_block_idx, hash, timestamp)
-        VALUES (:idx, :hash, :timestamp)"#,
+                VALUES (:idx, :hash, :timestamp)"#,
             )
             .unwrap();
         let mut insert_rosetta_block_transaction_stmt = transaction
@@ -1725,7 +1811,7 @@ VALUES (:idx, :block_idx)"#,
 
     #[test]
     fn test_update_balance_book_with_large_values() {
-        let mut blocks = Blocks::new_in_memory(false).unwrap();
+        let mut blocks = Blocks::new_in_memory(RosettaDbConfig::default_disabled()).unwrap();
 
         let account = AccountIdentifier::new(ic_types::PrincipalId(Principal::anonymous()), None);
 
@@ -1771,7 +1857,7 @@ VALUES (:idx, :block_idx)"#,
         use super::database_access;
         use rusqlite::params;
 
-        let blocks = Blocks::new_in_memory(false).unwrap();
+        let blocks = Blocks::new_in_memory(RosettaDbConfig::default_disabled()).unwrap();
         let mut connection = blocks.connection.lock().unwrap();
 
         let account1 = AccountIdentifier::new(ic_types::PrincipalId(Principal::anonymous()), None);
@@ -1843,7 +1929,7 @@ VALUES (:idx, :block_idx)"#,
         use super::database_access;
         use rusqlite::params;
 
-        let blocks = Blocks::new_in_memory(false).unwrap();
+        let blocks = Blocks::new_in_memory(RosettaDbConfig::default_disabled()).unwrap();
         let mut connection = blocks.connection.lock().unwrap();
 
         let account = AccountIdentifier::new(ic_types::PrincipalId(Principal::anonymous()), None);
@@ -1894,5 +1980,67 @@ VALUES (:idx, :block_idx)"#,
         assert_eq!(max_value_as_i64, -1i64);
         assert_eq!((-8446744073709551616i64) as u64, 10000000000000000000u64);
         assert_eq!((-1i64) as u64, u64::MAX);
+    }
+
+    #[test]
+    fn test_search_indexes_creation_when_enabled() {
+        let blocks = Blocks::new_in_memory(RosettaDbConfig::default_enabled()).unwrap();
+        let connection = blocks.connection.lock().unwrap();
+
+        // Check that indexes exist when optimization is enabled
+        let index_query =
+            "SELECT name FROM sqlite_master WHERE type='index' AND name IN (?, ?, ?, ?)";
+        let mut stmt = connection.prepare(index_query).unwrap();
+        let index_names: Vec<String> = stmt
+            .query_map(
+                [
+                    "from_account_index",
+                    "to_account_index",
+                    "spender_account_index",
+                    "operation_type_index",
+                ],
+                |row| row.get::<_, String>(0),
+            )
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+
+        assert!(index_names.contains(&"from_account_index".to_string()));
+        assert!(index_names.contains(&"to_account_index".to_string()));
+        assert!(index_names.contains(&"spender_account_index".to_string()));
+        assert!(index_names.contains(&"operation_type_index".to_string()));
+    }
+
+    #[test]
+    fn test_search_indexes_not_created_when_disabled() {
+        let blocks = Blocks::new_in_memory(RosettaDbConfig::with_rosetta_blocks_enabled(
+            IndexOptimization::Disabled,
+        ))
+        .unwrap();
+        let connection = blocks.connection.lock().unwrap();
+
+        // Check that indexes don't exist when optimization is disabled
+        let index_query =
+            "SELECT name FROM sqlite_master WHERE type='index' AND name IN (?, ?, ?, ?)";
+        let mut stmt = connection.prepare(index_query).unwrap();
+        let index_names: Vec<String> = stmt
+            .query_map(
+                [
+                    "from_account_index",
+                    "to_account_index",
+                    "spender_account_index",
+                    "operation_type_index",
+                ],
+                |row| row.get::<_, String>(0),
+            )
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+
+        // These specific indexes should not exist
+        assert!(!index_names.contains(&"from_account_index".to_string()));
+        assert!(!index_names.contains(&"to_account_index".to_string()));
+        assert!(!index_names.contains(&"spender_account_index".to_string()));
+        assert!(!index_names.contains(&"operation_type_index".to_string()));
     }
 }
