@@ -16,7 +16,7 @@ use ic_state_machine_tests::{ErrorCode, StateMachine, UserError, WasmResult};
 use icp_ledger::{
     AccountIdBlob, AccountIdentifier, AccountIdentifierByteBuf, Allowances, ArchiveOptions,
     ArchivedBlocksRange, Block, CandidBlock, CandidOperation, CandidTransaction, FeatureFlags,
-    GetBlocksArgs, GetBlocksRes, GetBlocksResult, GetEncodedBlocksResult, GetAllowancesArgs,
+    GetAllowancesArgs, GetBlocksArgs, GetBlocksRes, GetBlocksResult, GetEncodedBlocksResult,
     IcpAllowanceArgs, InitArgs, IterBlocksArgs, IterBlocksRes, LedgerCanisterInitPayload,
     LedgerCanisterPayload, LedgerCanisterUpgradePayload, Operation, QueryBlocksResponse,
     QueryEncodedBlocksResponse, TimeStamp, UpgradeArgs, DEFAULT_TRANSFER_FEE,
@@ -1840,14 +1840,9 @@ fn list_allowances(
     args: &GetAllowancesArgs,
 ) -> Allowances {
     Decode!(
-        &env.execute_ingress_as(
-            caller,
-            ledger,
-            "get_allowances",
-            Encode!(args).unwrap()
-        )
-        .expect("failed to list allowances")
-        .bytes(),
+        &env.execute_ingress_as(caller, ledger, "get_allowances", Encode!(args).unwrap())
+            .expect("failed to list allowances")
+            .bytes(),
         Allowances
     )
     .expect("failed to decode get__allowances response")
