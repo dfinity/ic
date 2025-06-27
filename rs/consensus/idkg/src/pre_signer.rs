@@ -41,8 +41,7 @@ use rayon::{
     slice::ParallelSlice,
 };
 use std::{
-    cell::RefCell,
-    collections::{btree_map::Entry, BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet},
     fmt::{self, Debug, Formatter},
     sync::Arc,
 };
@@ -2801,6 +2800,14 @@ mod tests {
             &mut rng,
         );
         let tid = params.transcript_id();
+        let params_ref = IDkgTranscriptParamsRef {
+            transcript_id: params.transcript_id(),
+            dealers: params.dealers().get().clone(),
+            receivers: params.receivers().get().clone(),
+            registry_version: params.registry_version(),
+            algorithm_id: params.algorithm_id(),
+            operation_type_ref: ic_types::consensus::idkg::IDkgTranscriptOperationRef::Random,
+        };
         let (dealings, supports) = get_dealings_and_support(&env, &params);
         let block_reader =
             TestIDkgBlockReader::for_pre_signer_test(tid.source_height(), vec![(&params).into()]);
@@ -2823,7 +2830,7 @@ mod tests {
 
                     // tid is requested, but there are no dealings for it, the transcript cannot
                     // be completed
-                    let result = b.get_completed_transcript(tid);
+                    let result = b.get_completed_transcript(&params_ref);
                     assert_matches!(result, None);
                 }
 
@@ -2848,7 +2855,7 @@ mod tests {
                     assert_matches!(result, None);
 
                     // there are no support shares, no transcript should be completed
-                    let result = b.get_completed_transcript(tid);
+                    let result = b.get_completed_transcript(&params_ref);
                     assert_matches!(result, None);
                 }
 
@@ -2869,7 +2876,7 @@ mod tests {
                     logger.clone(),
                 );
                 // the transcript should be completed now
-                let result = b.get_completed_transcript(tid);
+                let result = b.get_completed_transcript(&params_ref);
                 assert_matches!(result, Some(t) if t.transcript_id == tid);
 
                 // returned dealings should be equal to the ones we inserted
@@ -2891,7 +2898,7 @@ mod tests {
                         logger.clone(),
                     );
                     // the transcript is no longer requested, it should not be returned
-                    let result = b.get_completed_transcript(tid);
+                    let result = b.get_completed_transcript(&params_ref);
                     assert_matches!(result, None);
                 }
 
@@ -2904,7 +2911,7 @@ mod tests {
                     logger,
                 );
                 // transcript completion should fail on crypto failures
-                let result = b.get_completed_transcript(tid);
+                let result = b.get_completed_transcript(&params_ref);
                 assert_matches!(result, None);
             })
         });

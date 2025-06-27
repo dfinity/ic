@@ -1,7 +1,4 @@
-use crate::{
-    payload_builder::IDkgPayloadError, pre_signer::IDkgTranscriptBuilder,
-    utils::algorithm_for_key_id,
-};
+use crate::{payload_builder::IDkgPayloadError, utils::algorithm_for_key_id};
 use ic_logger::{debug, error, ReplicaLogger};
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_subnet_features::ChainKeyConfig;
