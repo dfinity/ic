@@ -598,7 +598,7 @@ impl CheckpointLoader {
             durations.apply(&self.metrics);
         }
 
-        Ok(CanisterSnapshots::new(canister_snapshots))
+        Ok(CanisterSnapshots::new(canister_snapshots, BTreeMap::new())) // TODO
     }
 
     fn validate_eq_canister_snapshots(

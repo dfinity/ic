@@ -1655,7 +1655,7 @@ impl ExecutionEnvironment {
             Ok(Ic00Method::ListCanisterSnapshots) => {
                 let res = ListCanisterSnapshotArgs::decode(payload).and_then(|args| {
                     let canister_id = args.get_canister_id();
-                    self.list_canister_snapshot(*msg.sender(), &mut state, args)
+                    self.list_canister_snapshots(*msg.sender(), &mut state, args)
                         .map(|res| (res, Some(canister_id)))
                 });
                 ExecuteSubnetMessageResult::Finished {
@@ -2467,7 +2467,7 @@ impl ExecutionEnvironment {
     }
 
     /// Lists the snapshots belonging to the specified canister.
-    fn list_canister_snapshot(
+    fn list_canister_snapshots(
         &self,
         sender: PrincipalId,
         state: &mut ReplicatedState,
@@ -2477,7 +2477,7 @@ impl ExecutionEnvironment {
 
         let result = self
             .canister_manager
-            .list_canister_snapshot(sender, canister, state)
+            .list_canister_snapshots(sender, canister, state)
             .map_err(UserError::from)?;
 
         Ok(Encode!(&result).unwrap())
