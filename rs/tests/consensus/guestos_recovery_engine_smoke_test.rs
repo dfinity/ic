@@ -20,7 +20,7 @@ use ic_system_test_driver::{
         group::SystemTestGroup,
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
-        test_env_api::{GetFirstHealthyNodeSnapshot, SshSession},
+        test_env_api::{HasTopologySnapshot, IcNodeContainer, SshSession},
     },
     systest,
 };
@@ -60,8 +60,12 @@ pub fn test(env: TestEnv) {
     let expected_local_store_2 = std::env::var("RECOVERY_STORE_CONTENT2")
         .expect("RECOVERY_STORE_CONTENT2 environment variable not found");
 
-    let node = env.get_first_healthy_node_snapshot();
-    info!(log, "Node {} is available.", node.node_id);
+    let node = env
+        .topology_snapshot()
+        .subnets()
+        .flat_map(|s| s.nodes())
+        .next()
+        .unwrap();
 
     let ssh_session = node.block_on_ssh_session().unwrap();
 
