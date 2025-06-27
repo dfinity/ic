@@ -1573,6 +1573,7 @@ impl PageIndexRange {
         })
     }
 
+    #[allow(clippy::len_without_is_empty)]
     pub fn len(&self) -> u64 {
         self.end_page.get() - self.start_page.get()
     }
