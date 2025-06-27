@@ -1043,7 +1043,7 @@ impl ChainSignatureRequest {
         ForwardParams {
             receiver: Principal::management_canister(),
             method: "sign_with_ecdsa".to_string(),
-            cycles: ECDSA_SIGNATURE_FEE.get() * 2,
+            cycles: ECDSA_SIGNATURE_FEE.get() * 4,
             payload: Encode!(&signature_request).unwrap(),
         }
     }

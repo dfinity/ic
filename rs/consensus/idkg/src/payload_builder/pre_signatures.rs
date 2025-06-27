@@ -15,7 +15,7 @@ use ic_types::{
         HasIDkgMasterPublicKeyId, IDkgMasterPublicKeyId, IDkgUIDGenerator, PreSigId,
         TranscriptAttributes, UnmaskedTranscriptWithAttributes,
     },
-    crypto::canister_threshold_sig::idkg::IDkgTranscript,
+    crypto::canister_threshold_sig::idkg::{IDkgTranscript, IDkgTranscriptId},
     messages::CallbackId,
     Height, NodeId, RegistryVersion,
 };
@@ -29,7 +29,7 @@ use std::collections::{BTreeMap, BTreeSet};
 /// Returns the newly created transcripts.
 pub(super) fn update_pre_signatures_in_creation(
     payload: &mut idkg::IDkgPayload,
-    transcript_cache: &dyn IDkgTranscriptBuilder,
+    mut transcripts: BTreeMap<IDkgTranscriptId, IDkgTranscript>,
     height: Height,
     log: &ReplicaLogger,
 ) -> Result<Vec<IDkgTranscript>, IDkgPayloadError> {
@@ -55,7 +55,7 @@ pub(super) fn update_pre_signatures_in_creation(
                 *pre_signature_id,
                 quadruple,
                 key_transcript,
-                transcript_cache,
+                &mut transcripts,
                 &mut payload.uid_generator,
                 height,
                 log,
@@ -63,7 +63,7 @@ pub(super) fn update_pre_signatures_in_creation(
             PreSignatureInCreation::Schnorr(transcript) => update_schnorr_transcript_in_creation(
                 *pre_signature_id,
                 transcript,
-                transcript_cache,
+                &mut transcripts,
                 height,
                 log,
             )?,
@@ -128,7 +128,7 @@ fn update_ecdsa_quadruple_in_creation(
     pre_signature_id: PreSigId,
     quadruple: &mut QuadrupleInCreation,
     key_transcript: &UnmaskedTranscriptWithAttributes,
-    transcript_cache: &dyn IDkgTranscriptBuilder,
+    transcripts: &mut BTreeMap<IDkgTranscriptId, IDkgTranscript>,
     uid_generator: &mut IDkgUIDGenerator,
     height: Height,
     log: &ReplicaLogger,
@@ -138,8 +138,8 @@ fn update_ecdsa_quadruple_in_creation(
     let receivers = key_transcript.receivers().clone();
     // Update quadruple with completed transcripts
     if quadruple.lambda_masked.is_none() {
-        if let Some(transcript) = transcript_cache
-            .get_completed_transcript(quadruple.lambda_config.as_ref().transcript_id)
+        if let Some(transcript) =
+            transcripts.remove(&quadruple.lambda_config.as_ref().transcript_id)
         {
             debug!(
                 log,
@@ -152,8 +152,8 @@ fn update_ecdsa_quadruple_in_creation(
         }
     }
     if quadruple.kappa_unmasked.is_none() {
-        if let Some(transcript) = transcript_cache
-            .get_completed_transcript(quadruple.kappa_unmasked_config.as_ref().transcript_id)
+        if let Some(transcript) =
+            transcripts.remove(&quadruple.kappa_unmasked_config.as_ref().transcript_id)
         {
             debug!(
                 log,
@@ -169,9 +169,7 @@ fn update_ecdsa_quadruple_in_creation(
     }
     if quadruple.key_times_lambda.is_none() {
         if let Some(config) = &quadruple.key_times_lambda_config {
-            if let Some(transcript) =
-                transcript_cache.get_completed_transcript(config.as_ref().transcript_id)
-            {
+            if let Some(transcript) = transcripts.remove(&config.as_ref().transcript_id) {
                 debug!(
                     log,
                     "update_ecdsa_quadruple_in_creation: {:?} key_times_lambda transcript is made",
@@ -185,9 +183,7 @@ fn update_ecdsa_quadruple_in_creation(
     }
     if quadruple.kappa_times_lambda.is_none() {
         if let Some(config) = &quadruple.kappa_times_lambda_config {
-            if let Some(transcript) =
-                transcript_cache.get_completed_transcript(config.as_ref().transcript_id)
-            {
+            if let Some(transcript) = transcripts.remove(&config.as_ref().transcript_id) {
                 debug!(
                     log,
                     "update_ecdsa_quadruple_in_creation: {:?} kappa_times_lambda transcript is made",
@@ -259,15 +255,15 @@ fn update_ecdsa_quadruple_in_creation(
 fn update_schnorr_transcript_in_creation(
     pre_signature_id: PreSigId,
     pre_signature: &mut TranscriptInCreation,
-    transcript_cache: &dyn IDkgTranscriptBuilder,
+    transcripts: &mut BTreeMap<IDkgTranscriptId, IDkgTranscript>,
     height: Height,
     log: &ReplicaLogger,
 ) -> Result<(bool, Vec<IDkgTranscript>), IDkgPayloadError> {
     let mut new_transcripts = Vec::new();
     // Update pre_signature with completed transcripts
     if pre_signature.blinder_unmasked.is_none() {
-        if let Some(transcript) = transcript_cache
-            .get_completed_transcript(pre_signature.blinder_unmasked_config.as_ref().transcript_id)
+        if let Some(transcript) =
+            transcripts.remove(&pre_signature.blinder_unmasked_config.as_ref().transcript_id)
         {
             debug!(
                 log,

@@ -51,7 +51,7 @@ use ic_types::{
         idkg::{
             self,
             common::{CombinedSignature, ThresholdSigInputsRef},
-            ecdsa, schnorr, IDkgBlockReader, TranscriptRef,
+            ecdsa, schnorr, IDkgBlockReader, IDkgTranscriptParamsRef, TranscriptRef,
         },
         Block, BlockPayload, HasHeight,
     },
@@ -421,8 +421,11 @@ struct CachedBuilder {
 }
 
 impl IDkgTranscriptBuilder for CachedBuilder {
-    fn get_completed_transcript(&self, transcript_id: IDkgTranscriptId) -> Option<IDkgTranscript> {
-        self.transcripts.get(&transcript_id).cloned()
+    fn get_completed_transcript(
+        &self,
+        params_ref: &IDkgTranscriptParamsRef,
+    ) -> Option<IDkgTranscript> {
+        self.transcripts.get(&params_ref.transcript_id).cloned()
     }
 
     fn get_validated_dealings(&self, transcript_id: IDkgTranscriptId) -> Vec<SignedIDkgDealing> {
@@ -484,9 +487,10 @@ fn validate_transcript_refs(
             }
         }
     }
+    let chunk_size = (verify_transcript_args.len().max(1) + MAX_PARALLELISM - 1) / MAX_PARALLELISM;
     let results = verify_transcript_args
         .into_par_iter()
-        .chunks(MAX_PARALLELISM)
+        .chunks(chunk_size)
         .flat_map_iter(|chunk| {
             chunk.into_iter().map(|(params, transcript)| {
                 crypto
@@ -602,10 +606,10 @@ fn validate_new_signature_agreements(
             }
         }
     }
-
+    let chunk_size = (verify_sig_args.len().max(1) + MAX_PARALLELISM - 1) / MAX_PARALLELISM;
     verify_sig_args
         .into_par_iter()
-        .chunks(MAX_PARALLELISM)
+        .chunks(chunk_size)
         .flat_map_iter(|chunk| {
             chunk.into_iter().map(|(id, context, data)| {
                 validate_combined_signature(crypto, block_reader, id, context, data)

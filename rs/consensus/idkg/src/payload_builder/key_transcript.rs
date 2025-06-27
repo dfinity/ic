@@ -96,9 +96,7 @@ pub(super) fn update_next_key_transcript(
 
         (Some(_), idkg::KeyTranscriptCreation::ReshareOfUnmaskedParams(config)) => {
             // check if the next key transcript has been made
-            if let Some(transcript) =
-                transcript_cache.get_completed_transcript(config.as_ref().transcript_id)
-            {
+            if let Some(transcript) = transcript_cache.get_completed_transcript(config.as_ref()) {
                 info!(
                     log,
                     "IDkg key transcript created from ReshareOfUnmasked {:?} \
@@ -133,9 +131,7 @@ pub(super) fn update_next_key_transcript(
 
         (None, idkg::KeyTranscriptCreation::RandomTranscriptParams(config)) => {
             // Check if the random transcript has been created
-            if let Some(transcript) =
-                transcript_cache.get_completed_transcript(config.as_ref().transcript_id)
-            {
+            if let Some(transcript) = transcript_cache.get_completed_transcript(config.as_ref()) {
                 let receivers_set = receivers.iter().copied().collect::<BTreeSet<_>>();
                 let transcript_ref = idkg::MaskedTranscript::try_from((height, &transcript))?;
                 key_transcript.next_in_creation =
@@ -154,9 +150,7 @@ pub(super) fn update_next_key_transcript(
 
         (None, idkg::KeyTranscriptCreation::ReshareOfMaskedParams(config)) => {
             // Check if the unmasked transcript has been created
-            if let Some(transcript) =
-                transcript_cache.get_completed_transcript(config.as_ref().transcript_id)
-            {
+            if let Some(transcript) = transcript_cache.get_completed_transcript(config.as_ref()) {
                 info!(
                     log,
                     "IDkg key transcript created from ReshareOfMasked {:?} \
@@ -174,9 +168,7 @@ pub(super) fn update_next_key_transcript(
 
         (None, idkg::KeyTranscriptCreation::XnetReshareOfUnmaskedParams((_, config))) => {
             // Check if the unmasked transcript has been created
-            if let Some(transcript) =
-                transcript_cache.get_completed_transcript(config.as_ref().transcript_id)
-            {
+            if let Some(transcript) = transcript_cache.get_completed_transcript(config.as_ref()) {
                 // next_unused_transcript_id is not updated, since the transcript_id specified
                 // by the reshared param will be used.
                 info!(

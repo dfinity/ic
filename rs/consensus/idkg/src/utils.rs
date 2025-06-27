@@ -56,7 +56,7 @@ use std::{
     sync::Arc,
 };
 
-pub(crate) const MAX_PARALLELISM: usize = 8;
+pub(crate) const MAX_PARALLELISM: usize = 16;
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct InvalidChainCacheError(String);

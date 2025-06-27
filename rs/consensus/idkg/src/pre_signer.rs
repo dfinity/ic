@@ -108,9 +108,9 @@ impl IDkgPreSignerImpl {
                     )
             })
             .collect::<Vec<_>>();
-
+        let chunk_size = (inputs.len().max(1) + MAX_PARALLELISM - 1) / MAX_PARALLELISM;
         inputs
-            .par_chunks(MAX_PARALLELISM)
+            .par_chunks(chunk_size)
             .flat_map_iter(|chunk| {
                 chunk
                     .iter()
@@ -199,10 +199,10 @@ impl IDkgPreSignerImpl {
                 Action::Defer => {}
             }
         }
-
+        let chunk_size = (inputs.len().max(1) + MAX_PARALLELISM - 1) / MAX_PARALLELISM;
         let results: Vec<_> = inputs
             .into_par_iter()
-            .chunks(MAX_PARALLELISM)
+            .chunks(chunk_size)
             .flat_map_iter(|chunk| {
                 chunk
                     .into_iter()
@@ -312,9 +312,9 @@ impl IDkgPreSignerImpl {
                 }
             })
             .collect::<Vec<_>>();
-
+        let chunk_size = (inputs.len().max(1) + MAX_PARALLELISM - 1) / MAX_PARALLELISM;
         inputs
-            .par_chunks(MAX_PARALLELISM)
+            .par_chunks(chunk_size)
             .flat_map_iter(|chunk| {
                 chunk
                     .iter()
@@ -496,10 +496,10 @@ impl IDkgPreSignerImpl {
                 Action::Defer => {}
             }
         }
-
+        let chunk_size = (inputs.len().max(1) + MAX_PARALLELISM - 1) / MAX_PARALLELISM;
         let results: Vec<_> = inputs
             .into_par_iter()
-            .chunks(MAX_PARALLELISM)
+            .chunks(chunk_size)
             .flat_map_iter(|chunk| {
                 chunk.into_iter().flat_map(
                     |(id, support, signed_dealing, transcript_params_ref)| {
@@ -1023,10 +1023,13 @@ impl IDkgPreSigner for IDkgPreSignerImpl {
     }
 }
 
-pub(crate) trait IDkgTranscriptBuilder {
+pub(crate) trait IDkgTranscriptBuilder: Send + Sync {
     /// Returns the specified transcript if it can be successfully
     /// built from the current entries in the IDKG pool
-    fn get_completed_transcript(&self, transcript_id: IDkgTranscriptId) -> Option<IDkgTranscript>;
+    fn get_completed_transcript(
+        &self,
+        params_ref: &IDkgTranscriptParamsRef,
+    ) -> Option<IDkgTranscript>;
 
     /// Returns the validated dealings for the given transcript Id from
     /// the IDKG pool
@@ -1038,7 +1041,6 @@ pub(crate) struct IDkgTranscriptBuilderImpl<'a> {
     crypto: &'a dyn ConsensusCrypto,
     metrics: &'a IDkgPayloadMetrics,
     idkg_pool: &'a dyn IDkgPool,
-    cache: RefCell<BTreeMap<IDkgTranscriptId, IDkgTranscript>>,
     log: ReplicaLogger,
 }
 
@@ -1054,42 +1056,32 @@ impl<'a> IDkgTranscriptBuilderImpl<'a> {
             block_reader,
             crypto,
             idkg_pool,
-            cache: RefCell::new(BTreeMap::new()),
             metrics,
             log,
         }
     }
 
     /// Build the specified transcript from the pool.
-    fn build_transcript(&self, transcript_id: IDkgTranscriptId) -> Option<IDkgTranscript> {
+    fn build_transcript(&self, params_ref: &IDkgTranscriptParamsRef) -> Option<IDkgTranscript> {
+        let transcript_id = params_ref.transcript_id;
         // Look up the transcript params
-        let transcript_params = match self
-            .block_reader
-            .requested_transcripts()
-            .find(|transcript_params| transcript_params.transcript_id == transcript_id)
-        {
-            Some(params_ref) => match params_ref.translate(self.block_reader) {
-                Ok(transcript_params) => transcript_params,
-                Err(error) => {
-                    warn!(
-                        self.log,
-                        "build_transcript(): failed to translate transcript ref: \
+        let transcript_params = match params_ref.translate(self.block_reader) {
+            Ok(transcript_params) => transcript_params,
+            Err(error) => {
+                warn!(
+                    self.log,
+                    "build_transcript(): failed to translate transcript ref: \
                                 transcript_params_ref = {:?}, tip = {:?}, error = {:?}",
-                        params_ref,
-                        self.block_reader.tip_height(),
-                        error
-                    );
-                    self.metrics
-                        .transcript_builder_errors_inc("resolve_transcript_refs");
-                    return None;
-                }
-            },
-            None => {
+                    params_ref,
+                    self.block_reader.tip_height(),
+                    error
+                );
                 self.metrics
-                    .transcript_builder_errors_inc("missing_transcript_params");
+                    .transcript_builder_errors_inc("resolve_transcript_refs");
                 return None;
             }
         };
+
         let mut completed_dealings = BatchSignedIDkgDealings::new();
 
         // Step 1: Build the verified dealings by aggregating the support shares
@@ -1264,17 +1256,11 @@ impl<'a> IDkgTranscriptBuilderImpl<'a> {
 }
 
 impl IDkgTranscriptBuilder for IDkgTranscriptBuilderImpl<'_> {
-    fn get_completed_transcript(&self, transcript_id: IDkgTranscriptId) -> Option<IDkgTranscript> {
-        timed_call(
-            "get_completed_transcript",
-            || match self.cache.borrow_mut().entry(transcript_id) {
-                Entry::Vacant(e) => self
-                    .build_transcript(transcript_id)
-                    .map(|transcript| e.insert(transcript).clone()),
-                Entry::Occupied(e) => Some(e.get().clone()),
-            },
-            &self.metrics.transcript_builder_duration,
-        )
+    fn get_completed_transcript(
+        &self,
+        params_ref: &IDkgTranscriptParamsRef,
+    ) -> Option<IDkgTranscript> {
+        self.build_transcript(params_ref)
     }
 
     fn get_validated_dealings(&self, transcript_id: IDkgTranscriptId) -> Vec<SignedIDkgDealing> {

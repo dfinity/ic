@@ -402,11 +402,14 @@ impl TestIDkgTranscriptBuilder {
 }
 
 impl IDkgTranscriptBuilder for TestIDkgTranscriptBuilder {
-    fn get_completed_transcript(&self, transcript_id: IDkgTranscriptId) -> Option<IDkgTranscript> {
+    fn get_completed_transcript(
+        &self,
+        params_ref: &IDkgTranscriptParamsRef,
+    ) -> Option<IDkgTranscript> {
         self.transcripts
             .lock()
             .unwrap()
-            .get(&transcript_id)
+            .get(&params_ref.transcript_id)
             .cloned()
     }
 
