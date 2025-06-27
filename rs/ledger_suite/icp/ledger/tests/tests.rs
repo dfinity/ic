@@ -34,7 +34,6 @@ use serde_bytes::ByteBuf;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
-use std::u64;
 
 fn system_time_to_nanos(t: SystemTime) -> u64 {
     t.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos() as u64
