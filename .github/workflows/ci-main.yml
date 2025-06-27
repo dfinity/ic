@@ -546,7 +546,7 @@ jobs:
           export CARGO_TERM_COLOR=always # ensure output has colors
           cargo build --release --locked
   # TODO: REMOVE. Only for development purposes. Do not merge.
-  recovery-engine-test:
+  recovery-engine-smoke-test:
     name: Recovery Engine Smoke Test
     runs-on:
       labels: dind-large
@@ -611,6 +611,7 @@ jobs:
             echo "RECOVERY_STORE_CONTENT2_B64=${RECOVERY_STORE_CONTENT2_B64}" >> "$GITHUB_ENV"
             echo "RECOVERY_VERSION=${RECOVERY_VERSION}" >> "$GITHUB_ENV"
             echo "RECOVERY_HASH=${RECOVERY_HASH}" >> "$GITHUB_ENV"
+          GPG_PASSPHRASE: ""
       - name: Adapt guestos-recovery-engine script
         run: |
           sed -i "s/readonly VERSION=\"\"/readonly VERSION=\"${RECOVERY_VERSION}\"/" ic-os/components/misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.sh
