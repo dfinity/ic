@@ -506,7 +506,7 @@ impl CanisterHttpPayloadBuilderImpl {
                 Some(&CanisterHttpRequestContext {
                     replication: Replication::NonReplicated(ref node_id),
                     ..
-                }) => (vec![node_id.clone()], 1),
+                }) => (vec![*node_id], 1),
                 _ => {
                     let threshold = match self
                         .membership
