@@ -63,10 +63,6 @@ use ledger_canister::{
     balances_len, Ledger, LEDGER, LEDGER_VERSION, MAX_MESSAGE_SIZE_BYTES, UPGRADES_MEMORY,
 };
 use num_traits::cast::ToPrimitive;
-#[cfg(feature = "notify-method")]
-use on_wire::BytesS;
-#[allow(unused_imports)]
-use on_wire::IntoWire;
 use std::cell::RefCell;
 use std::io::{Read, Write};
 use std::{
@@ -390,44 +386,16 @@ thread_local! {
     static POST_UPGRADE_INSTRUCTIONS_CONSUMED: RefCell<u64> = const { RefCell::new(0) };
 }
 
-/// You can notify a canister that you have made a payment to it. The
-/// payment must have been made to the account of a canister and from the
-/// callers account. You cannot notify a canister about a transaction it has
-/// already been successfully notified of. If the canister rejects the
-/// notification call it is not considered to have been notified.
-///
-/// # Arguments
-///
-/// * `block_height` -  The height of the block you would like to send a
-///   notification about.
-/// * `max_fee` - The fee of the payment.
-/// * `from_subaccount` - The subaccount that made the payment.
-/// * `to_canister` - The canister that received the payment.
-/// * `to_subaccount` - The subaccount that received the payment.
-/// * `notify_using_protobuf` - Whether the notification should be encoded using
-///   protobuf or candid.
 #[cfg(feature = "notify-method")]
-pub async fn notify(
-    _block_height: BlockIndex,
-    _max_fee: Tokens,
-    _from_subaccount: Option<Subaccount>,
-    _to_canister: CanisterId,
-    _to_subaccount: Option<Subaccount>,
-    _notify_using_protobuf: bool,
-) -> Result<BytesS, String> {
-    trap(&notify_trap_msg());
-}
-
-#[cfg(feature = "notify-method")]
-fn notify_trap_msg() -> String {
+fn trap_since_notify_is_not_longer_supported() {
     let caller_principal_id = PrincipalId::from(caller());
     print(format!(
         "[ledger] notify method called by [{}]",
         caller_principal_id
     ));
 
-    "The notify method is no longer supported. \
-    Please migrate to the CMC notify flow: https://forum.dfinity.org/t/deprecating-the-ledger-notify-flow-for-minting-cycles-in-favor-of-cmc-notify/42502".to_string()
+    trap("The notify method is no longer supported. \
+    Please migrate to the CMC notify flow: https://forum.dfinity.org/t/deprecating-the-ledger-notify-flow-for-minting-cycles-in-favor-of-cmc-notify/42502");
 }
 
 /// This gives you the index of the last block added to the chain
@@ -799,7 +767,7 @@ async fn send_dfx(arg: SendArgs) -> BlockIndex {
 #[cfg(feature = "notify-method")]
 #[export_name = "canister_update notify_pb"]
 fn notify_() {
-    trap(&notify_trap_msg());
+    trap_since_notify_is_not_longer_supported();
 }
 
 #[update]
@@ -902,7 +870,7 @@ async fn icrc2_transfer_from(arg: TransferFromArgs) -> Result<Nat, TransferFromE
 #[cfg(feature = "notify-method")]
 #[export_name = "canister_update notify_dfx"]
 fn notify_dfx_() {
-    trap(&notify_trap_msg());
+    trap_since_notify_is_not_longer_supported();
 }
 
 #[export_name = "canister_query block_pb"]

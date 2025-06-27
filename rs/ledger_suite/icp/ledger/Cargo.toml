@@ -34,7 +34,6 @@ intmap = { version = "1.1.0", features = ["serde"] }
 lazy_static = { workspace = true }
 minicbor = { workspace = true }
 num-traits = { workspace = true }
-on_wire = { path = "../../../rust_canisters/on_wire" }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
@@ -46,6 +45,7 @@ ic-ledger-suite-state-machine-tests = { path = "../../tests/sm-tests" }
 ic-icrc1-test-utils = { path = "../../icrc1/test_utils" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
+on_wire = { path = "../../../rust_canisters/on_wire" }
 proptest = { workspace = true }
 
 [features]
