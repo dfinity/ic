@@ -3,7 +3,7 @@ use ic_ledger_canister_blocks_synchronizer_test_utils::sample_data::Scribe;
 use ic_rosetta_api::request_handler::RosettaRequestHandler;
 use ic_rosetta_api::rosetta_server::RosettaApiServer;
 use std::process::Command;
-use std::sync::{atomic::AtomicBool, Arc};
+use std::sync::Arc;
 use tracing::log::debug;
 
 mod test_utils;
@@ -39,7 +39,7 @@ async fn rosetta_cli_data_test() {
         scribe.gen_transaction();
     }
 
-    let ledger = Arc::new(TestLedger::new(Arc::new(AtomicBool::new(false))));
+    let ledger = Arc::new(TestLedger::new());
     let req_handler = RosettaRequestHandler::new_with_default_blockchain(ledger.clone());
     for b in &scribe.blockchain {
         ledger.add_block(b.clone()).await.ok();
@@ -103,7 +103,7 @@ async fn rosetta_cli_construction_create_account_test() {
         scribe.gen_transaction();
     }
 
-    let ledger = Arc::new(TestLedger::new(Arc::new(AtomicBool::new(false))));
+    let ledger = Arc::new(TestLedger::new());
     let req_handler = RosettaRequestHandler::new_with_default_blockchain(ledger.clone());
     for b in &scribe.blockchain {
         ledger.add_block(b.clone()).await.ok();
@@ -186,7 +186,7 @@ async fn rosetta_cli_construction_test() {
         100_000_000_007,
     );
 
-    let ledger = Arc::new(TestLedger::new(Arc::new(AtomicBool::new(false))));
+    let ledger = Arc::new(TestLedger::new());
     let req_handler = RosettaRequestHandler::new_with_default_blockchain(ledger.clone());
     for b in &scribe.blockchain {
         ledger.add_block(b.clone()).await.ok();

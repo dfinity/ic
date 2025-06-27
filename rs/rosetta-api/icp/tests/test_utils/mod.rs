@@ -1,6 +1,8 @@
 #![allow(clippy::disallowed_types)]
 use async_trait::async_trait;
-use ic_ledger_canister_blocks_synchronizer::blocks::{Blocks, HashedBlock, RosettaBlocksMode};
+use ic_ledger_canister_blocks_synchronizer::blocks::{
+    Blocks, HashedBlock, RosettaBlocksMode, RosettaDbConfig,
+};
 use ic_ledger_canister_core::ledger::LedgerTransaction;
 use ic_ledger_core::{block::BlockType, timestamp::TimeStamp};
 use ic_nns_governance_api::{manage_neuron::NeuronIdOrSubaccount, KnownNeuron, ProposalInfo};
@@ -38,15 +40,14 @@ pub struct TestLedger {
     pub submit_queue: RwLock<Vec<HashedBlock>>,
     pub transfer_fee: Tokens,
     pub next_block_timestamp: Mutex<TimeStamp>,
-    #[allow(dead_code)]
-    pub stop_token: Arc<AtomicBool>,
 }
 
 impl TestLedger {
-    pub fn new(stop_token: Arc<AtomicBool>) -> Self {
+    pub fn new() -> Self {
         Self {
-            stop_token,
-            blockchain: RwLock::new(Blocks::new_in_memory(false, false).unwrap()),
+            blockchain: RwLock::new(
+                Blocks::new_in_memory(RosettaDbConfig::default_disabled()).unwrap(),
+            ),
             canister_id: CanisterId::unchecked_from_principal(
                 PrincipalId::from_str("5v3p4-iyaaa-aaaaa-qaaaa-cai").unwrap(),
             ),
@@ -102,7 +103,7 @@ fn next_millisecond(t: TimeStamp) -> TimeStamp {
 
 impl Default for TestLedger {
     fn default() -> Self {
-        Self::new(Arc::new(AtomicBool::new(false)))
+        Self::new()
     }
 }
 

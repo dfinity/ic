@@ -14,7 +14,7 @@ use tokio::time::Duration;
 use tracing::{debug, error, info, trace};
 
 use crate::blocks::BlockStoreError;
-use crate::blocks::{Blocks, HashedBlock};
+use crate::blocks::{Blocks, HashedBlock, RosettaDbConfig};
 use crate::blocks_access::BlocksAccess;
 use crate::certification::{verify_block_hash, VerificationInfo};
 use crate::errors::Error;
@@ -57,16 +57,13 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
         store_location: Option<&std::path::Path>,
         store_max_blocks: Option<u64>,
         verification_info: Option<VerificationInfo>,
-        enable_rosetta_blocks: bool,
-        optimize_search_indexes: bool,
+        config: RosettaDbConfig,
     ) -> Result<LedgerBlocksSynchronizer<B>, Error> {
         let rosetta_metrics =
             RosettaMetrics::new("ICP".to_string(), "ryjl3-tyaaa-aaaaa-aaaba-cai".to_string());
         let mut blocks = match store_location {
-            Some(loc) => {
-                Blocks::new_persistent(loc, enable_rosetta_blocks, optimize_search_indexes)?
-            }
-            None => Blocks::new_in_memory(enable_rosetta_blocks, optimize_search_indexes)?,
+            Some(loc) => Blocks::new_persistent(loc, config)?,
+            None => Blocks::new_in_memory(config)?,
         };
 
         if let Some(blocks_access) = &blocks_access {
@@ -453,6 +450,7 @@ mod test {
         AccountIdentifier, Block, BlockIndex, Memo, TipOfChainRes, DEFAULT_TRANSFER_FEE,
     };
 
+    use crate::blocks::RosettaDbConfig;
     use crate::blocks_access::BlocksAccess;
     use crate::ledger_blocks_sync::LedgerBlocksSynchronizer;
 
@@ -502,8 +500,7 @@ mod test {
             /* store_location = */ None,
             /* store_max_blocks = */ None,
             /* verification_info = */ None,
-            false,
-            false,
+            RosettaDbConfig::default_disabled(),
         )
         .await
         .unwrap()

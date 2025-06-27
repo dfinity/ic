@@ -39,7 +39,7 @@ use reqwest::{Client, StatusCode};
 use tracing::{debug, error, warn};
 
 use ic_ledger_canister_blocks_synchronizer::{
-    blocks::{Blocks, RosettaBlocksMode},
+    blocks::{Blocks, IndexOptimization, RosettaBlocksConfig, RosettaBlocksMode, RosettaDbConfig},
     canister_access::{make_agent, CanisterAccess},
     certification::VerificationInfo,
     ledger_blocks_sync::LedgerBlocksSynchronizer,
@@ -181,13 +181,25 @@ impl LedgerClient {
             root_key,
             canister_id,
         });
+        let config = RosettaDbConfig::new(
+            if enable_rosetta_blocks {
+                RosettaBlocksConfig::Enabled
+            } else {
+                RosettaBlocksConfig::Disabled
+            },
+            if optimize_search_indexes {
+                IndexOptimization::Enabled
+            } else {
+                IndexOptimization::Disabled
+            },
+        );
+
         let ledger_blocks_synchronizer = LedgerBlocksSynchronizer::new(
             canister_access.clone(),
             store_location,
             store_max_blocks,
             verification_info,
-            enable_rosetta_blocks,
-            optimize_search_indexes,
+            config,
         )
         .await?;
 
