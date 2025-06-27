@@ -1864,7 +1864,7 @@ fn test_allowance_listing_sequences() {
 
     let mut approvers = vec![];
     for i in 0..NUM_APPROVERS {
-        let pid = PrincipalId::new_user_test_id(i+1);
+        let pid = PrincipalId::new_user_test_id(i + 1);
         approvers.push(pid);
         initial_balances.push((Account::from(pid.0), INITIAL_BALANCE));
     }
@@ -1918,23 +1918,38 @@ fn test_allowance_listing_sequences() {
             // We expect all pairs with the current approver and spenders starting after the current spender.
             let mut expected = vec![];
             for i in s_index + 1..NUM_SPENDERS as usize {
-                expected.push((AccountIdentifier::from(approver.0), AccountIdentifier::from(spenders[i].0)));
+                expected.push((
+                    AccountIdentifier::from(approver.0),
+                    AccountIdentifier::from(spenders[i].0),
+                ));
             }
 
             args.prev_spender_id = Some(AccountIdentifier::from(spender.0));
             let allowances = list_allowances(&env, canister_id, approver, &args);
-            let spender_approver_pairs: Vec<(AccountIdentifier, AccountIdentifier)> = allowances.into_iter().map(|a| (a.from_account_id, a.to_spender_id)).collect();
+            let spender_approver_pairs: Vec<(AccountIdentifier, AccountIdentifier)> = allowances
+                .into_iter()
+                .map(|a| (a.from_account_id, a.to_spender_id))
+                .collect();
             assert_eq!(expected, spender_approver_pairs);
 
             if s_index == 0 {
                 // If s_index is 0 we can also list all allowances by not specifying the prev_spender_id.
-                expected.insert(0, (AccountIdentifier::from(approver.0), AccountIdentifier::from(spenders[0].0))); 
+                expected.insert(
+                    0,
+                    (
+                        AccountIdentifier::from(approver.0),
+                        AccountIdentifier::from(spenders[0].0),
+                    ),
+                );
                 args.prev_spender_id = None;
                 let allowances = list_allowances(&env, canister_id, approver, &args);
-                let spender_approver_pairs: Vec<(AccountIdentifier, AccountIdentifier)> = allowances.into_iter().map(|a| (a.from_account_id, a.to_spender_id)).collect();
+                let spender_approver_pairs: Vec<(AccountIdentifier, AccountIdentifier)> =
+                    allowances
+                        .into_iter()
+                        .map(|a| (a.from_account_id, a.to_spender_id))
+                        .collect();
                 assert_eq!(expected, spender_approver_pairs);
             }
-            
         }
     }
 }
@@ -1960,7 +1975,6 @@ fn test_allowance_listing_values() {
         vec![(Account::from(approver.0), INITIAL_BALANCE)],
     );
 
-    
     let approve_args = ApproveArgs {
         from_subaccount: None,
         spender: Account::from(spenders[0].0),
@@ -2004,7 +2018,6 @@ fn test_allowance_listing_values() {
         ..approve_args
     };
     send_approval(&args);
-        
 
     let args = GetLegacyAllowancesArgs {
         from_account_id: AccountIdentifier::from(approver),
@@ -2022,13 +2035,22 @@ fn test_allowance_listing_values() {
 
     let exp_far = allowances[1].clone();
     assert_eq!(exp_far.from_account_id, AccountIdentifier::from(approver.0));
-    assert_eq!(exp_far.to_spender_id, AccountIdentifier::from(spenders[1].0));
+    assert_eq!(
+        exp_far.to_spender_id,
+        AccountIdentifier::from(spenders[1].0)
+    );
     assert_eq!(exp_far.allowance, Tokens::from(1_000_000));
     assert_eq!(exp_far.expires_at, expiration_far);
 
     let exp_near = allowances[2].clone();
-    assert_eq!(exp_near.from_account_id, AccountIdentifier::from(approver.0));
-    assert_eq!(exp_near.to_spender_id, AccountIdentifier::from(spenders[2].0));
+    assert_eq!(
+        exp_near.from_account_id,
+        AccountIdentifier::from(approver.0)
+    );
+    assert_eq!(
+        exp_near.to_spender_id,
+        AccountIdentifier::from(spenders[2].0)
+    );
     assert_eq!(exp_near.allowance, Tokens::from(u64::MAX));
     assert_eq!(exp_near.expires_at, expiration_near);
 
@@ -2039,7 +2061,6 @@ fn test_allowance_listing_values() {
     assert_eq!(exp_far, allowances[1]);
     assert_eq!(allowances.len(), 2);
 }
-
 
 mod metrics {
     use crate::{encode_init_args, encode_upgrade_args, ledger_wasm};
