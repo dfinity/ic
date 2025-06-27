@@ -108,9 +108,9 @@ fn decode_nat_to_u64(value: Nat) -> Result<u64, String> {
         [] => Ok(0),
         [val] => Ok(*val),
         vals => Err(format!(
-            "Error parsing a Nat value `{:?}` to u64: expected a unique u64 value, got {:?}",
+            "Nat value `{:?}` is too large, max supported value: {}",
             &value,
-            vals.len(),
+            u64::MAX,
         )),
     }
 }
@@ -123,7 +123,13 @@ fn test_decoding_nat() {
         (Nat::from(1234_u64), Ok(1234_u64)),
         (Nat::from(1_000_000_000_u64), Ok(1_000_000_000_u64)),
         (Nat::from(u64::MAX), Ok(u64::MAX)),
-        (Nat::from(u64::MAX) + Nat::from(1_u64), Err("Error parsing a Nat value `Nat(18446744073709551616)` to u64: expected a unique u64 value, got 2".to_string())),
+        (
+            Nat::from(u64::MAX) + Nat::from(1_u64),
+            Err(format!(
+                "Nat value `Nat(18446744073709551616)` is too large, max supported value: {}",
+                u64::MAX
+            )),
+        ),
     ];
 
     for (num_nat, expected) in test_cases {
