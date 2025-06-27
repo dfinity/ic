@@ -554,7 +554,7 @@ jobs:
           echo "TEMP_BRANCH=${TEMP_BRANCH}" >> "$GITHUB_ENV"
           git checkout -b "$TEMP_BRANCH"
 
-      - name: Let AWS overwrite the recovery artifacts and disable cache
+      - name: Let rclone overwrite the recovery artifacts and disable cache
         run: |
           sed -i '/--immutable \\/d' ci/src/artifacts/upload.sh
           sed -i '/rclone_common_flags=(/a\    --header-upload="Cache-Control: no-cache"' ci/src/artifacts/upload.sh
