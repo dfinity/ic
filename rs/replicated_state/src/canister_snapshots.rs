@@ -379,12 +379,12 @@ pub struct PartialCanisterSnapshot {
     pub wasm_memory: PageMemory,
     /// Chunk store. Its max size is specified in the `size` field.
     #[validate_eq(CompareWithValidateEq)]
-    chunk_store: WasmChunkStore,
+    pub chunk_store: WasmChunkStore,
     /// The Wasm global variables.
     #[validate_eq(Ignore)]
     pub exported_globals: Vec<Global>,
     /// The certified data blob belonging to the canister.
-    certified_data: Vec<u8>,
+    pub certified_data: Vec<u8>,
     /// Status of global timer
     pub global_timer: Option<CanisterTimer>,
     /// Whether the hook is inactive, ready or executed.
