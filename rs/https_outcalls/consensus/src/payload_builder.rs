@@ -488,6 +488,25 @@ impl CanisterHttpPayloadBuilderImpl {
             }
         }
 
+        // Check that there are no duplicate responses among non-replicated requests.
+        // As it's very easy for a malicious delegated node to submit multiple responses (even different).
+        let mut non_replicated_ids = HashSet::new();
+        for response in &payload.responses {
+            let callback_id = &response.content.id;
+
+            if let Some(&CanisterHttpRequestContext {
+                replication: Replication::NonReplicated(_),
+                ..
+            }) = http_contexts.get(callback_id)
+            {
+                if !non_replicated_ids.insert(callback_id) {
+                    return invalid_artifact(InvalidCanisterHttpPayloadReason::DuplicateResponse(
+                        *callback_id,
+                    ));
+                }
+            }
+        }
+
         let committee = self
             .membership
             .get_canister_http_committee(height)

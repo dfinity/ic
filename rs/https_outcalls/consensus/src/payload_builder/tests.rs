@@ -1337,6 +1337,89 @@ fn validate_payload_fails_when_non_replicated_proof_is_for_fully_replicated_requ
     });
 }
 
+#[test]
+fn validate_payload_fails_for_duplicate_non_replicated_response() {
+    // This test ensures the validator rejects a payload containing two identical
+    // proofs for the same NonReplicated request.
+
+    // ARRANGE
+    test_config_with_http_feature(true, 4, |mut payload_builder, _| {
+        let delegated_node_id = node_test_id(1);
+        let duplicate_callback_id = CallbackId::from(102);
+
+        // 1. Define the context for the NonReplicated request.
+        let request_context = CanisterHttpRequestContext {
+            request: RequestBuilder::default().build(),
+            url: String::new(),
+            max_response_bytes: None,
+            headers: vec![],
+            body: None,
+            http_method: CanisterHttpMethod::GET,
+            transform: None,
+            time: UNIX_EPOCH,
+            replication: ic_types::canister_http::Replication::NonReplicated(delegated_node_id),
+        };
+
+        // 2. Inject this context into the state reader
+        let mut init_state = ic_test_utilities_state::get_initial_state(0, 0);
+        init_state
+            .metadata
+            .subnet_call_context_manager
+            .canister_http_request_contexts
+            .insert(duplicate_callback_id, request_context);
+        let state_manager = Arc::new(RefMockStateManager::default());
+        state_manager
+            .get_mut()
+            .expect_get_state_at()
+            .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
+                Height::new(0),
+                Arc::new(init_state),
+            )));
+        payload_builder.state_reader = state_manager;
+
+        // 3. Craft a valid proof for the NonReplicated response.
+        let (response, metadata) = test_response_and_metadata(duplicate_callback_id.get());
+        let mut proof = response_and_metadata_to_proof(&response, &metadata);
+        proof
+            .proof
+            .signature
+            .signatures_map
+            .insert(delegated_node_id, BasicSigOf::new(BasicSig(vec![])));
+
+        // 4. Create a payload that includes this same proof twice.
+        let payload = CanisterHttpPayload {
+            responses: vec![proof.clone(), proof], // Duplicate the proof
+            ..Default::default()
+        };
+        let payload_bytes = payload_to_bytes(&payload, NumBytes::new(4 * 1024 * 1024));
+
+        // ACT
+        let validation_result = payload_builder.validate_payload(
+            Height::from(1),
+            &test_proposal_context(&default_validation_context()),
+            &payload_bytes,
+            &[],
+        );
+
+        // ASSERT
+        // Validation must fail because two responses for the same NonReplicated
+        // request ID are not allowed.
+        match validation_result {
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::DuplicateResponse(callback_id),
+                ),
+            )) => {
+                assert_eq!(
+                    callback_id, duplicate_callback_id,
+                    "The error should report the correct duplicate callback ID"
+                );
+            }
+            res => panic!("Expected DuplicateResponse error, but got {:?}", res),
+        }
+    });
+}
+
 /// Build some test metadata and response, which is valid and can be used in
 /// different tests
 pub(crate) fn test_response_and_metadata(
