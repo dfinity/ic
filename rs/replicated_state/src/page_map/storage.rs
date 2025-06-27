@@ -725,6 +725,12 @@ impl OverlayFile {
     }
 }
 
+impl std::fmt::Debug for OverlayFile {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        fmt.debug_list().entries(self.index_iter()).finish()
+    }
+}
+
 /// The index portion of the file as a slice of pairs of numbers, each describing
 /// a range of pages.
 /// See `OverlayVersion` for an explanation of how the index is structured.
@@ -1513,20 +1519,20 @@ impl MergeCandidate {
     }
 }
 
-pub struct FileIndexTag;
+struct FileIndexTag;
 /// Physical position of a page in an overlay file (smallest `PageIndex` has `FileIndex` 0, second smallest
 /// has `FileIndex` 1).
-pub type FileIndex = Id<FileIndexTag, u64>;
+type FileIndex = Id<FileIndexTag, u64>;
 
 /// A representation of a range of `PageIndex` backed by an overlay file.
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct PageIndexRange {
     /// Start of the range in the `PageMap`, i.e. where to mmap to.
-    pub start_page: PageIndex,
+    start_page: PageIndex,
     /// End of the range in the `PageMap`.
-    pub end_page: PageIndex,
+    end_page: PageIndex,
     /// Offset of the range in the overlay file.
-    pub start_file_index: FileIndex,
+    start_file_index: FileIndex,
 }
 
 impl PageIndexRange {
@@ -1565,6 +1571,10 @@ impl PageIndexRange {
                 FileIndex::from(i - self.start_page.get() + self.start_file_index.get()),
             )
         })
+    }
+
+    pub fn len(&self) -> u64 {
+        self.end_page.get() - self.start_page.get()
     }
 }
 
