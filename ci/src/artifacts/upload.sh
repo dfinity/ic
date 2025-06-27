@@ -41,7 +41,7 @@ upload() {
     # NOTE: we upload a "directory" and narrow down the upload with --files-from so that only
     # the current artifact is uploaded. Without this, --immutable does not work as expected.
     # https://github.com/rclone/rclone/issues/4921
-    AWS_PROFILE=default rclone \
+    AWS_PROFILE=default rclone -v \
         "${rclone_common_flags[@]}" \
         --s3-provider=AWS \
         --s3-region=eu-central-1 \
