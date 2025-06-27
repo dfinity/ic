@@ -63,7 +63,9 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
         let rosetta_metrics =
             RosettaMetrics::new("ICP".to_string(), "ryjl3-tyaaa-aaaaa-aaaba-cai".to_string());
         let mut blocks = match store_location {
-            Some(loc) => Blocks::new_persistent(loc, enable_rosetta_blocks, optimize_search_indexes)?,
+            Some(loc) => {
+                Blocks::new_persistent(loc, enable_rosetta_blocks, optimize_search_indexes)?
+            }
             None => Blocks::new_in_memory(enable_rosetta_blocks, optimize_search_indexes)?,
         };
 

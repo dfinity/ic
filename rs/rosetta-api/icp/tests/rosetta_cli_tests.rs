@@ -3,7 +3,7 @@ use ic_ledger_canister_blocks_synchronizer_test_utils::sample_data::Scribe;
 use ic_rosetta_api::request_handler::RosettaRequestHandler;
 use ic_rosetta_api::rosetta_server::RosettaApiServer;
 use std::process::Command;
-use std::sync::{Arc, atomic::AtomicBool};
+use std::sync::{atomic::AtomicBool, Arc};
 use tracing::log::debug;
 
 mod test_utils;

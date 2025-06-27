@@ -658,8 +658,12 @@ impl RosettaRequestHandler {
         Ok(network_status)
     }
 
-    pub fn assert_has_indexed_field(&self, request: &models::SearchTransactionsRequest) -> Result<(), ApiError> {
-        let has_indexed_field = request.transaction_identifier.is_some() || request.account_identifier.is_some();
+    pub fn assert_has_indexed_field(
+        &self,
+        request: &models::SearchTransactionsRequest,
+    ) -> Result<(), ApiError> {
+        let has_indexed_field =
+            request.transaction_identifier.is_some() || request.account_identifier.is_some();
         if !has_indexed_field {
             return Err(ApiError::invalid_request("At least one of transaction_identifier, type_, or account_identifier must be provided to perform an efficient search".to_owned()));
         }
