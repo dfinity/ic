@@ -293,24 +293,27 @@ impl CanisterHttpPayloadBuilderImpl {
                     let consensus_candidate =
                         grouped_shares.iter().find_map(|(metadata, shares)| {
                             unique_responses_count += 1;
-
-                            if let Some(context) = canister_http_request_contexts.get(&id) {
-                                if let Replication::NonReplicated(node_id) = context.replication {
+                            match canister_http_request_contexts
+                                .get(&id)
+                                .map(|context| &context.replication)
+                            {
+                                Some(Replication::NonReplicated(node_id)) => {
                                     // For a non-replicated call, we require EXACTLY ONE share,
                                     // and it MUST be from the designated node.
-                                    return shares
+                                    shares
                                         .iter()
-                                        .find(|share| share.signature.signer == node_id)
-                                        .map(|correct_share| (metadata, vec![*correct_share]));
+                                        .find(|share| share.signature.signer == *node_id)
+                                        .map(|correct_share| (metadata, vec![*correct_share]))
                                 }
-                            }
-
-                            let signers: BTreeSet<_> =
-                                shares.iter().map(|share| share.signature.signer).collect();
-                            if signers.len() >= threshold {
-                                Some((metadata, shares.clone()))
-                            } else {
-                                None
+                                _ => {
+                                    let signers: BTreeSet<_> =
+                                        shares.iter().map(|share| share.signature.signer).collect();
+                                    if signers.len() >= threshold {
+                                        Some((metadata, shares.clone()))
+                                    } else {
+                                        None
+                                    }
+                                }
                             }
                         });
 
