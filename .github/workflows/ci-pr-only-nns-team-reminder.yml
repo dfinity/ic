@@ -50,7 +50,7 @@ jobs:
               Therefore, make sure that you have done the following (for
               Governance-owned code):
 
-              1. Add entry(s) to corresponding `unreleased_changelog.md`
+              1. Add entry(s) to corresponding \`unreleased_changelog.md\`
                  file(s). This is only necessary if the code changes result in
                  externally visible behavior changes.
 
@@ -59,7 +59,7 @@ jobs:
                  or removal of guarantees supplied by the canister. If the
                  changes are breaking, are your clients ready for them? If not,
                  put your changes behind a "feature flag". If you have a feature
-                 flag, then, do NOT add entrie(s) to `unreleased_changelog.md`
+                 flag, then, do NOT add entrie(s) to \`unreleased_changelog.md\`
                  in this PR, but rather, do that later when you set the flag to
                  "enable" in another PR.
 
