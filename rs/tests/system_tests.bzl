@@ -395,15 +395,12 @@ def system_test_nns(name, extra_head_nns_tags = ["system_test_large"], **kwargs)
     )
 
     original_tags = kwargs.pop("tags", [])
-    tags = extra_head_nns_tags
-    tags = tags + [tag for tag in original_tags if tag not in tags]
-    tags = tags + ["system_test_head_nns"]
     kwargs["test_driver_target"] = mainnet_nns_systest.test_driver_target
     system_test(
         name + "_head_nns",
         env = env | NNS_CANISTER_ENV,
         runtime_deps = runtime_deps + NNS_CANISTER_RUNTIME_DEPS,
-        tags = tags,
+        tags = [tag for tag in original_tags if tag not in extra_head_nns_tags] + extra_head_nns_tags,
         **kwargs
     )
     return struct(test_driver_target = mainnet_nns_systest.test_driver_target)

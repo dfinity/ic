@@ -146,7 +146,7 @@ fn test_encode_decode_non_empty_history() {
         CanisterChangeOrigin::from_user(user_test_id(42).get()),
         CanisterChangeDetails::canister_creation(
             vec![canister_test_id(777).get(), user_test_id(42).get()],
-            Some(vec![4; 32]),
+            Some([4; 32]),
         ),
     ));
     canister_history.add_canister_change(CanisterChange::new(
