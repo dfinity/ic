@@ -1,5 +1,4 @@
 use anyhow::Result;
-
 use bitcoincore_rpc::RpcApi;
 use candid::{Nat, Principal};
 use ic_base_types::PrincipalId;
@@ -20,8 +19,8 @@ use ic_system_test_driver::{
     util::{assert_create_agent, block_on, runtime_from_url, UniversalCanister},
 };
 use ic_tests_ckbtc::{
-    create_canister, install_bitcoin_canister, install_btc_checker, install_ledger, install_minter,
-    setup, subnet_app, subnet_sys, upgrade_btc_checker,
+    ckbtc_setup, create_canister, install_bitcoin_canister, install_btc_checker, install_ledger,
+    install_minter, subnet_app, subnet_sys, upgrade_btc_checker,
     utils::{
         assert_account_balance, assert_mint_transaction, assert_no_new_utxo, assert_no_transaction,
         ensure_wallet, generate_blocks, get_btc_address, get_btc_client, send_to_btc_address,
@@ -367,7 +366,7 @@ pub fn test_btc_checker(env: TestEnv) {
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_setup(setup)
+        .with_setup(ckbtc_setup)
         .add_test(systest!(test_btc_checker))
         .execute_from_args()?;
     Ok(())
