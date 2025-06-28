@@ -58,6 +58,30 @@ pub fn test_icrc106_set_index_in_install<T>(
     assert_index_set(&env, ledger_canister_id, index_principal);
 }
 
+pub fn test_icrc106_set_index_in_install_with_mainnet_ledger_wasm<T>(
+    ledger_wasm: Vec<u8>,
+    encode_ledger_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    let env = StateMachine::new();
+    let ledger_canister_id = env.create_canister(None);
+    let index_canister_id = env.create_canister(None);
+    let index_principal = Principal::from(index_canister_id.get());
+    let ledger_init_args = encode_ledger_init_args(InitArgs {
+        index_principal: Some(index_principal),
+        ..init_args(vec![])
+    });
+    env.install_existing_canister(
+        ledger_canister_id,
+        ledger_wasm.clone(),
+        Encode!(&ledger_init_args).unwrap(),
+    )
+    .expect("should successfully install ledger canister");
+
+    assert_index_not_set(&env, ledger_canister_id, false);
+}
+
 pub fn test_icrc106_set_index_in_upgrade<T, U>(
     ledger_wasm: Vec<u8>,
     encode_init_args: fn(InitArgs) -> T,
