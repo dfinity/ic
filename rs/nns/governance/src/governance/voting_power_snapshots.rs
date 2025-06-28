@@ -1,6 +1,6 @@
 #![allow(unused)]
 use crate::{
-    governance::LOG_PREFIX,
+    governance::{LOG_PREFIX, MAX_FOLLOWEES_PER_TOPIC},
     neuron_store::voting_power::VotingPowerSnapshot,
     pb::v1::{Ballot, NeuronIdToVotingPowerMap, VotingPowerTotal},
 };
@@ -96,6 +96,15 @@ impl VotingPowerSnapshots {
     ) {
         let (voting_power_map, voting_power_total) =
             <(NeuronIdToVotingPowerMap, VotingPowerTotal)>::from(snapshot);
+        // We are being defensive here to make sure that the voting power snapshot is not taken as a
+        // neuron management proposal, which is a special case where the ballots are created from
+        // NeuronManagement topic followees rather than all voting eligible neurons.
+        if voting_power_total.total_potential_voting_power <= MAX_FOLLOWEES_PER_TOPIC as u64 {
+            ic_cdk::println!(
+                "Voting power total is less than MAX_FOLLOWEES_PER_TOPIC. This should not happen."
+            );
+            return;
+        }
         insert_and_truncate(
             &mut self.neuron_id_to_voting_power_maps,
             timestamp_seconds,
@@ -151,7 +160,12 @@ impl VotingPowerSnapshots {
         total_potential_voting_power: u64,
         now_seconds: TimestampSeconds,
     ) -> Option<(TimestampSeconds, VotingPowerSnapshot)> {
-        // Step 1: find the voting power totals entry with the minimum total potential voting power,
+        // Step 1: check if there are enough snapshots to detect a spike.
+        if self.voting_power_totals.len() < MAX_VOTING_POWER_SNAPSHOTS {
+            return None;
+        }
+
+        // Step 2: find the voting power totals entry with the minimum total potential voting power,
         // if a spike is detected.
         let Some((
             timestamp_with_minimum_total_potential_voting_power,
@@ -168,7 +182,7 @@ impl VotingPowerSnapshots {
             return None;
         };
 
-        // Step 2: find the voting power map for the timestamp with the minimum potential voting power.
+        // Step 3: find the voting power map for the timestamp with the minimum potential voting power.
         let Some(voting_power_map) = self
             .neuron_id_to_voting_power_maps
             .get(&timestamp_with_minimum_total_potential_voting_power)
@@ -181,7 +195,7 @@ impl VotingPowerSnapshots {
             return None;
         };
 
-        // Step 3: returns the previous voting power map since a voting power spike is detected.
+        // Step 4: returns the previous voting power map since a voting power spike is detected.
         let previous_voting_power_snapshot = VotingPowerSnapshot::from((
             voting_power_map,
             totals_with_minimum_total_potential_voting_power,
