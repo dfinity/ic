@@ -10,6 +10,7 @@ version.workspace = true
 anyhow = { workspace = true }
 candid = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
+ic-types = { path = "../../types/types" }
 ic-registry-subnet-features = { path = "../../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-system-test-driver = { path = "../driver" }
@@ -21,8 +22,12 @@ reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }
+canister-test = { path = "../../rust_canisters/canister_test" }
+ic-nns-constants = { path = "../../nns/constants" }
+ic_consensus_threshold_sig_system_test_utils = { path = "../consensus/tecdsa/utils" }
 url = { workspace = true }
 xrc-mock = { path = "../../rosetta-api/tvl/xrc_mock" }
+ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 
 [[bin]]
 name = "large"
