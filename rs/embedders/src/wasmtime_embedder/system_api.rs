@@ -10,7 +10,7 @@ use ic_interfaces::execution_environment::{
     StableMemoryApi, SubnetAvailableMemory, SystemApi, SystemApiCallCounters,
     TrapCode::{self, CyclesAmountTooBigFor64Bit},
 };
-use ic_logger::{error, ReplicaLogger};
+use ic_logger::{error, info, ReplicaLogger};
 use ic_management_canister_types_private::{
     EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
     VetKdKeyId, IC_00,
@@ -836,6 +836,7 @@ pub enum CostReturnCode {
 }
 /// A struct to gather the relevant fields that correspond to a canister's
 /// memory consumption.
+#[derive(Debug)]
 struct MemoryUsage {
     /// Upper limit on how much the memory the canister could use.
     limit: NumBytes,
@@ -3408,7 +3409,7 @@ impl SystemApi for SystemApiImpl {
         if resulting_size > MAX_STABLE_MEMORY_IN_BYTES / WASM_PAGE_SIZE_IN_BYTES as u64 {
             return Ok(StableGrowOutcome::Failure);
         }
-        match self.memory_usage.allocate_execution_memory(
+        let allocate_execution_memory_res = self.memory_usage.allocate_execution_memory(
             // From the checks above we know that converting `additional_pages`
             // to bytes will not overflow, so the `unwrap()` will succeed.
             ic_replicated_state::num_bytes_try_from(NumWasmPages::new(additional_pages as usize))
@@ -3417,7 +3418,14 @@ impl SystemApi for SystemApiImpl {
             &mut self.sandbox_safe_system_state,
             &self.execution_parameters.subnet_memory_saturation,
             ExecutionMemoryType::StableMemory,
-        ) {
+        );
+        info!(
+            self.log,
+            "allocate_execution_memory_res: {:?}", allocate_execution_memory_res,
+        );
+        info!(self.log, "memory_usage: {:?}", self.memory_usage,);
+
+        match allocate_execution_memory_res {
             Ok(()) => Ok(StableGrowOutcome::Success),
             Err(err @ HypervisorError::InsufficientCyclesInMemoryGrow { .. }) => {
                 // Trap instead of returning -1 in order to give the developer
