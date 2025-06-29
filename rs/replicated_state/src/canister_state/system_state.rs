@@ -2185,7 +2185,9 @@ pub(crate) fn should_enqueue_input(
 
 /// Helper function to get a mutable reference to the `CallContextManager` when
 /// `Running` or `Stopping`, `None` if `Stopped`.
-fn call_context_manager_mut(status: &mut CanisterStatus) -> Option<&mut CallContextManager> {
+pub(super) fn call_context_manager_mut(
+    status: &mut CanisterStatus,
+) -> Option<&mut CallContextManager> {
     match status {
         CanisterStatus::Running {
             call_context_manager,
