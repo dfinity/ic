@@ -179,6 +179,7 @@ def system_test(
         colocated_test_driver_vm_forward_ssh_agent = False,
         uses_guestos_dev = False,
         uses_guestos_dev_test = False,
+        uses_guestos_recovery = False,
         uses_setupos_dev = False,
         uses_setupos_mainnet = False,
         uses_hostos_dev_test = False,
@@ -213,6 +214,7 @@ def system_test(
       For example: [ "performance" ]
       uses_guestos_dev: the test uses ic-os/guestos/envs/dev (will be also automatically added as dependency).
       uses_guestos_dev_test: the test uses //ic-os/guestos/envs/dev:update-img-test (will be also automatically added as dependency).
+      uses_guestos_recovery: the test uses //ic-os/guestos/envs/recovery (will be also automatically added as dependency).
       uses_setupos_dev: the test uses ic-os/setupos/envs/dev (will be also automatically added as dependency).
       uses_hostos_dev_test: the test uses ic-os/hostos/envs/dev:update-img-test (will be also automatically added as dependency).
       uses_hostos_mainnet_update_img: the test uses mainnet HostOS update image version marked in mainnet-icos-revisions.json.
@@ -291,6 +293,10 @@ def system_test(
 
     if uses_guestos_dev_test:
         icos_images["ENV_DEPS__GUESTOS_UPDATE_IMG_TEST"] = _guestos + "update-img-test.tar.zst"
+
+    if uses_guestos_recovery:
+        _guestos_recovery = "//ic-os/guestos/envs/recovery:"
+        icos_images["ENV_DEPS__GUESTOS_RECOVERY_DISK_IMG"] = _guestos_recovery + "disk-img.tar.zst"
 
     if malicious:
         _guestos_malicous = "//ic-os/guestos/envs/dev-malicious:"
