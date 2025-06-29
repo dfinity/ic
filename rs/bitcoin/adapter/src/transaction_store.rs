@@ -2,11 +2,7 @@ use std::collections::HashSet;
 use std::net::SocketAddr;
 use std::{time::Duration, time::SystemTime};
 
-use bitcoin::consensus::deserialize;
-use bitcoin::{
-    blockdata::transaction::Transaction, hash_types::Txid, p2p::message::NetworkMessage,
-    p2p::message_blockdata::Inventory,
-};
+use crate::import::{deserialize, Inventory, NetworkMessage, Transaction, Txid};
 use hashlink::LinkedHashMap;
 use ic_logger::{debug, info, trace, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -145,7 +141,7 @@ impl TransactionStore {
                         channel
                             .send(Command {
                                 address: Some(address),
-                                message: NetworkMessage::Inv(std::mem::take(&mut inventory)),
+                                message: NetworkMessage::Inv(std::mem::take(&mut inventory).into()),
                             })
                             .ok();
                     }
@@ -159,7 +155,7 @@ impl TransactionStore {
                 channel
                     .send(Command {
                         address: Some(address),
-                        message: NetworkMessage::Inv(inventory),
+                        message: NetworkMessage::Inv(inventory.into()),
                     })
                     .ok();
             }
@@ -198,15 +194,14 @@ impl TransactionStore {
     }
 }
 
+#[cfg(not(feature = "dogecoin"))]
 #[cfg(test)]
 mod test {
     use super::*;
     use crate::common::test_common::TestChannel;
-    use bitcoin::{
+    use crate::import::{
         absolute::{LockTime, LOCK_TIME_THRESHOLD},
-        blockdata::constants::genesis_block,
-        consensus::serialize,
-        Network, Transaction,
+        genesis_block, serialize, Network, Transaction,
     };
     use ic_logger::replica_logger::no_op_logger;
     use std::str::FromStr;

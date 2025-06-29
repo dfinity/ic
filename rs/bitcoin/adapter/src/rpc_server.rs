@@ -1,11 +1,11 @@
 use crate::{
     blockchainstate::BlockchainState,
     get_successors_handler::{GetSuccessorsRequest, GetSuccessorsResponse},
+    import::{BlockHash, Encodable, Hash},
     metrics::{ServiceMetrics, LABEL_GET_SUCCESSOR, LABEL_SEND_TRANSACTION},
     BlockchainManagerRequest, Config, GetSuccessorsHandler, IncomingSource,
     TransactionManagerRequest,
 };
-use bitcoin::{consensus::Encodable, hashes::Hash, BlockHash};
 use ic_btc_service::{
     btc_service_server::{BtcService, BtcServiceServer},
     BtcServiceGetSuccessorsRequest, BtcServiceGetSuccessorsResponse,
@@ -86,11 +86,12 @@ impl BtcService for BtcServiceImpl {
             .start_timer();
         let _ = self.last_received_tx.send(Some(Instant::now()));
         let inner = request.into_inner();
+        println!("rpc server received GetSuccessorsRequest");
         debug!(self.logger, "Received GetSuccessorsRequest: {:?}", inner);
         let request = inner.try_into()?;
 
         match BtcServiceGetSuccessorsResponse::try_from(
-            self.get_successors_handler.get_successors(request).await?,
+            self.get_successors_handler.get_successors(request)?,
         ) {
             Ok(res) => {
                 debug!(self.logger, "Sending GetSuccessorsResponse: {:?}", res);
