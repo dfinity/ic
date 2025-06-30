@@ -903,7 +903,7 @@ impl MemoryUsage {
         if wasm_memory_usage > max_wasm_memory {
             error!(
                 log,
-                "[EXC-BUG] Canister {}: stable memory current_usage {} > stable memory limit {}",
+                "[EXC-BUG] Canister {}: wasm memory current_usage {} > wasm memory limit {}",
                 canister_id,
                 wasm_memory_usage,
                 max_wasm_memory,
