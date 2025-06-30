@@ -1,7 +1,6 @@
 //! This module contains definitions for communicating with an Ethereum API using the [JSON RPC](https://ethereum.org/en/developers/docs/apis/json-rpc/)
 //! interface.
 
-use ethnum;
 use evm_rpc_client::{Hex32, HttpOutcallError};
 use ic_cdk::api::call::RejectionCode;
 use minicbor::{Decode, Encode};
