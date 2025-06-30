@@ -37,6 +37,7 @@ mod tests;
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub enum CspBasicSignatureError {
+    PublicKeyNotFound,
     SecretKeyNotFound {
         algorithm: AlgorithmId,
         key_id: KeyId,
@@ -65,6 +66,7 @@ pub enum CspBasicSignatureKeygenError {
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub enum CspMultiSignatureError {
+    PublicKeyNotFound,
     SecretKeyNotFound {
         algorithm: AlgorithmId,
         key_id: KeyId,
@@ -417,7 +419,6 @@ pub trait BasicSignatureCspVault {
     /// # Arguments
     /// * `algorithm_id` specifies the signature algorithm
     /// * `message` is the message to be signed
-    /// * `key_id` determines the private key to sign with
     /// # Returns
     /// The computed signature.
     /// # Note
@@ -432,7 +433,6 @@ pub trait BasicSignatureCspVault {
         &self,
         algorithm_id: AlgorithmId,
         message: Vec<u8>,
-        key_id: KeyId,
     ) -> Result<CspSignature, CspBasicSignatureError>;
 
     /// Generates a node signing public/private key pair.
@@ -461,7 +461,6 @@ pub trait MultiSignatureCspVault {
     /// # Arguments
     /// * `algorithm_id` specifies the signature algorithm
     /// * `message` is the message to be signed
-    /// * `key_id` determines the private key to sign with
     /// # Returns
     /// The computed signature.
     ///
@@ -473,7 +472,6 @@ pub trait MultiSignatureCspVault {
         &self,
         algorithm_id: AlgorithmId,
         message: Vec<u8>,
-        key_id: KeyId,
     ) -> Result<CspSignature, CspMultiSignatureError>;
 
     /// Generates a public/private key pair, with a proof of possession.
