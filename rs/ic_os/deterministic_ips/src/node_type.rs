@@ -8,7 +8,6 @@ pub enum NodeType {
     SetupOS,
     HostOS,
     GuestOS,
-    BoundaryOS,
 }
 
 impl NodeType {
@@ -17,7 +16,6 @@ impl NodeType {
             NodeType::SetupOS => 0x0f,
             NodeType::HostOS => 0x00,
             NodeType::GuestOS => 0x01,
-            NodeType::BoundaryOS => 0x02,
         }
     }
 }
@@ -28,7 +26,6 @@ impl fmt::Display for NodeType {
             NodeType::SetupOS => write!(f, "SetupOS"),
             NodeType::HostOS => write!(f, "HostOS"),
             NodeType::GuestOS => write!(f, "GuestOS"),
-            NodeType::BoundaryOS => write!(f, "BoundaryOS"),
         }
     }
 }
@@ -41,7 +38,6 @@ impl FromStr for NodeType {
             "setupos" => Ok(NodeType::SetupOS),
             "hostos" => Ok(NodeType::HostOS),
             "guestos" => Ok(NodeType::GuestOS),
-            "boundary" => Ok(NodeType::BoundaryOS),
             _ => Err(anyhow!("Invalid node type: {}", s)),
         }
     }

@@ -12,7 +12,7 @@ use ic_embedders::{
     },
 };
 use ic_interfaces::execution_environment::{
-    CanisterBacktrace, ExecutionMode, HypervisorError, SystemApi, TrapCode,
+    CanisterBacktrace, HypervisorError, SystemApi, TrapCode,
 };
 use ic_management_canister_types_private::Global;
 use ic_registry_subnet_type::SubnetType;
@@ -24,13 +24,10 @@ use ic_types::{
     messages::RejectContext,
     methods::{FuncRef, WasmClosure, WasmMethod},
     time::UNIX_EPOCH,
-    Cycles, NumBytes, NumInstructions,
+    Cycles, NumBytes, NumInstructions, PrincipalId,
 };
 
 const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
-
-#[cfg(target_os = "linux")]
-use ic_types::PrincipalId;
 
 /// Ensures that attempts to execute messages on wasm modules that do not
 /// define memory fails.
@@ -2573,7 +2570,6 @@ fn wasm64_reject_msg_copy() {
         Cycles::zero(),
         call_context_test_id(13),
         false,
-        ExecutionMode::Replicated,
         NumInstructions::new(700),
     );
 
@@ -3096,7 +3092,6 @@ fn wasm64_msg_cycles_refunded128() {
         Cycles::new(777),
         call_context_test_id(13),
         false,
-        ExecutionMode::Replicated,
         NumInstructions::new(700),
     );
 
@@ -3417,4 +3412,174 @@ fn wasm64_saturate_fun_index() {
             panic!("Expected registration of new calback")
         }
     }
+}
+
+#[test]
+fn test_environment_variable_system_api() {
+    let wat = r#"
+(module
+      (import "ic0" "msg_reply" (func $msg_reply))
+      (import "ic0" "msg_reply_data_append"
+            (func $msg_reply_data_append (param i32 i32)))
+      (import "ic0" "env_var_count" (func $ic0_env_var_count (result i32)))
+      (import "ic0" "env_var_name_size" (func $env_var_name_size (param i32) (result i32)))
+      (import "ic0" "env_var_name_copy" (func $env_var_name_copy (param i32 i32 i32 i32)))
+      (import "ic0" "env_var_name_exists" (func $env_var_name_exists (param i32 i32) (result i32)))
+      (import "ic0" "env_var_value_size" (func $env_var_value_size (param i32 i32) (result i32)))
+      (import "ic0" "env_var_value_copy" (func $env_var_value_copy (param i32 i32 i32 i32 i32)))
+      (import "ic0" "trap" (func $trap (param i32 i32)))
+
+      (func (export "canister_update go")
+        (local $name_dst i32)
+        (local $output_dst i32)
+        (local $var_count i32)
+        (local $index i32)
+        (local $name_size i32)
+        (local $value_size i32)
+
+        (local.set $name_dst (i32.const 0))
+        (local.set $output_dst (i32.const 1000)) ;; output buffer starting after enough slack for the name buffer
+
+        ;; Assert that the number of environment variables is 2:
+        ;; this update call traps with an empty error message if this is not the case
+        (local.set $var_count (call $ic0_env_var_count))
+        (if (i32.ne (local.get $var_count) (i32.const 2))
+          (then
+            (call $trap (i32.const 0) (i32.const 0))
+          )
+        )
+       
+        ;; Copy first name to memory
+        (local.set $index (i32.const 0))
+        (local.set $name_size (call $env_var_name_size (local.get $index)))
+        (call $env_var_name_copy
+            (local.get $index)     ;; index
+            (local.get $name_dst)  ;; dst
+            (i32.const 0)          ;; offset
+            (local.get $name_size) ;; (name) size
+        )
+        
+        ;; Assert that the first name exists:
+        (if (i32.ne (call $env_var_name_exists (local.get $name_dst) (local.get $name_size)) (i32.const 1))
+          (then
+            (call $trap (i32.const 0) (i32.const 0))
+          )
+        )
+
+        ;; Copy first value to memory
+        (local.set $value_size (call $env_var_value_size (local.get $name_dst) (local.get $name_size)))
+        (call $env_var_value_copy
+            (local.get $name_dst)   ;; name_src
+            (local.get $name_size)  ;; name_size
+            (local.get $output_dst) ;; dst
+            (i32.const 0)           ;; offset
+            (local.get $value_size) ;; (value) size
+        )
+
+        ;; Append first value to reply
+        (call $msg_reply_data_append (local.get $output_dst) (local.get $value_size))
+
+        ;; Copy second name to memory
+        (local.set $index (i32.const 1))
+        (local.set $name_size (call $env_var_name_size (local.get $index)))
+        (call $env_var_name_copy
+            (local.get $index)     ;; index
+            (local.get $name_dst)  ;; dst
+            (i32.const 0)          ;; offset
+            (local.get $name_size) ;; (name) size
+        )
+
+        ;; Assert that the second name exists:
+        (if (i32.ne (call $env_var_name_exists (local.get $name_dst) (local.get $name_size)) (i32.const 1))
+          (then
+            (call $trap (i32.const 0) (i32.const 0))
+          )
+        )
+
+        ;; Copy second value to memory
+        (local.set $value_size (call $env_var_value_size (local.get $name_dst) (local.get $name_size)))
+        (call $env_var_value_copy
+            (local.get $name_dst)   ;; name_src
+            (local.get $name_size)  ;; name_size
+            (local.get $output_dst) ;; dst
+            (i32.const 0)           ;; offset
+            (local.get $value_size) ;; (value) size
+        )
+
+        ;; Append second value to reply
+        (call $msg_reply_data_append (local.get $output_dst) (local.get $value_size))
+
+        ;; Finish the reply
+        (call $msg_reply)
+      )
+
+      (memory (export "memory") 10)
+)"#;
+
+    // Add test environment variables
+    let mut env_vars = std::collections::BTreeMap::new();
+    env_vars.insert("TEST_VAR_1".to_string(), "Hello World".to_string());
+    env_vars.insert("TEST_VAR_2".to_string(), "Test Value".to_string());
+
+    let mut config = ic_config::embedders::Config::default();
+    config.feature_flags.environment_variables = FlagStatus::Enabled;
+
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_api_type(ApiType::update(
+            UNIX_EPOCH,
+            vec![],
+            Cycles::zero(),
+            PrincipalId::new_user_test_id(0),
+            0.into(),
+        ))
+        .with_config(config)
+        .with_environment_variables(env_vars)
+        .with_wat(wat)
+        .build();
+    let run_result = instance.run(FuncRef::Method(WasmMethod::Update("go".to_string())));
+    let result = instance
+        .store_data_mut()
+        .system_api_mut()
+        .unwrap()
+        .take_execution_result(run_result.as_ref().err());
+
+    assert_eq!(
+        result,
+        Ok(Some(WasmResult::Reply(b"Hello WorldTest Value".to_vec())))
+    );
+}
+
+// TODO(EXC-2071): Delete test when feature flag is removed.
+#[test]
+fn test_environment_variable_system_api_not_enabled() {
+    let wat = r#"
+    (module
+        (import "ic0" "env_var_count" (func $ic0_env_var_count (result i32)))
+
+        (func (export "canister_update go")
+            (call $ic0_env_var_count)
+            drop
+        )
+    )"#;
+
+    let mut config = ic_config::embedders::Config::default();
+    config.feature_flags.environment_variables = FlagStatus::Disabled;
+
+    let builder = WasmtimeInstanceBuilder::new()
+        .with_wat(wat)
+        .with_config(config)
+        .with_api_type(ApiType::update(
+            UNIX_EPOCH,
+            vec![],
+            Cycles::zero(),
+            PrincipalId::new_user_test_id(0),
+            0.into(),
+        ));
+
+    let instance = builder.try_build();
+    assert!(instance.is_err());
+    assert_matches!(
+        instance.err().unwrap().0,
+        HypervisorError::WasmEngineError { .. }
+    );
 }

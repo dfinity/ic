@@ -935,6 +935,47 @@ impl From<pb_api::manage_neuron::DisburseMaturity> for pb::manage_neuron::Disbur
     }
 }
 
+impl From<pb::manage_neuron::SetFollowing> for pb_api::manage_neuron::SetFollowing {
+    fn from(item: pb::manage_neuron::SetFollowing) -> Self {
+        Self {
+            topic_following: Some(item.topic_following.into_iter().map(|x| x.into()).collect()),
+        }
+    }
+}
+impl From<pb_api::manage_neuron::SetFollowing> for pb::manage_neuron::SetFollowing {
+    fn from(item: pb_api::manage_neuron::SetFollowing) -> Self {
+        Self {
+            topic_following: item
+                .topic_following
+                .unwrap_or_default()
+                .into_iter()
+                .map(|x| x.into())
+                .collect(),
+        }
+    }
+}
+
+impl From<pb::manage_neuron::set_following::FolloweesForTopic>
+    for pb_api::manage_neuron::set_following::FolloweesForTopic
+{
+    fn from(item: pb::manage_neuron::set_following::FolloweesForTopic) -> Self {
+        Self {
+            followees: Some(item.followees),
+            topic: item.topic,
+        }
+    }
+}
+impl From<pb_api::manage_neuron::set_following::FolloweesForTopic>
+    for pb::manage_neuron::set_following::FolloweesForTopic
+{
+    fn from(item: pb_api::manage_neuron::set_following::FolloweesForTopic) -> Self {
+        Self {
+            followees: item.followees.unwrap_or_default(),
+            topic: item.topic,
+        }
+    }
+}
+
 impl From<pb::manage_neuron::claim_or_refresh::MemoAndController>
     for pb_api::manage_neuron::claim_or_refresh::MemoAndController
 {
@@ -1051,6 +1092,9 @@ impl From<pb::manage_neuron::Command> for pb_api::manage_neuron::Command {
             pb::manage_neuron::Command::DisburseMaturity(v) => {
                 pb_api::manage_neuron::Command::DisburseMaturity(v.into())
             }
+            pb::manage_neuron::Command::SetFollowing(v) => {
+                pb_api::manage_neuron::Command::SetFollowing(v.into())
+            }
         }
     }
 }
@@ -1092,6 +1136,9 @@ impl From<pb_api::manage_neuron::Command> for pb::manage_neuron::Command {
             }
             pb_api::manage_neuron::Command::DisburseMaturity(v) => {
                 pb::manage_neuron::Command::DisburseMaturity(v.into())
+            }
+            pb_api::manage_neuron::Command::SetFollowing(v) => {
+                pb::manage_neuron::Command::SetFollowing(v.into())
             }
         }
     }
@@ -1140,6 +1187,9 @@ impl From<pb_api::ManageNeuronCommandRequest> for pb::manage_neuron::Command {
             }
             pb_api::ManageNeuronCommandRequest::DisburseMaturity(v) => {
                 pb::manage_neuron::Command::DisburseMaturity(v.into())
+            }
+            pb_api::ManageNeuronCommandRequest::SetFollowing(v) => {
+                pb::manage_neuron::Command::SetFollowing(v.into())
             }
         }
     }

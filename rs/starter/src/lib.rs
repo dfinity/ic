@@ -23,6 +23,8 @@ pub fn hypervisor_config(canister_sandboxing: bool) -> HypervisorConfig {
         rate_limiting_of_heap_delta: FlagStatus::Disabled,
         rate_limiting_of_instructions: FlagStatus::Disabled,
         query_stats_epoch_length: 60,
+        canister_snapshot_download: FlagStatus::Enabled,
+        canister_snapshot_upload: FlagStatus::Enabled,
         ..HypervisorConfig::default()
     }
 }

@@ -480,6 +480,36 @@ pub struct RegisterDappCanisters {
     /// At least one canister ID is required.
     pub canister_ids: Vec<::ic_base_types::PrincipalId>,
 }
+
+#[derive(
+    candid::CandidType, candid::Deserialize, comparable::Comparable, Clone, Debug, PartialEq,
+)]
+pub enum PreciseValue {
+    Bool(bool),
+    Blob(Vec<u8>),
+    Text(String),
+    Nat(u64),
+    Int(i64),
+    Array(Vec<PreciseValue>),
+    Map(BTreeMap<String, PreciseValue>),
+}
+
+#[derive(
+    candid::CandidType, candid::Deserialize, comparable::Comparable, Clone, Debug, PartialEq,
+)]
+pub struct ExtensionInit {
+    pub value: Option<PreciseValue>,
+}
+
+#[derive(
+    candid::CandidType, candid::Deserialize, comparable::Comparable, Clone, Debug, PartialEq,
+)]
+pub struct RegisterExtension {
+    /// Where the extension canister Wasm can be found.
+    pub chunked_canister_wasm: Option<ChunkedCanisterWasm>,
+
+    pub extension_init: Option<ExtensionInit>,
+}
 /// A proposal to remove a list of dapps from the SNS and assign them to new controllers
 #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
 pub struct DeregisterDappCanisters {
@@ -648,6 +678,10 @@ pub mod proposal {
         ///
         /// Id = 16;
         SetTopicsForCustomProposals(super::SetTopicsForCustomProposals),
+        /// Register an SNS extension canister.
+        ///
+        /// Id = 17.
+        RegisterExtension(super::RegisterExtension),
     }
 }
 #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
@@ -1657,6 +1691,7 @@ pub mod get_metrics_response {
     #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
     pub struct Metrics {
         pub num_recently_submitted_proposals: Option<u64>,
+        pub num_recently_executed_proposals: Option<u64>,
         pub last_ledger_block_timestamp: Option<u64>,
     }
 
