@@ -31,7 +31,15 @@ use ic_system_test_driver::{
     util::{agent_observes_canister_module, assert_create_agent, block_on},
 };
 use ic_types::PrincipalId;
-use reqwest::{redirect::Policy, ClientBuilder, StatusCode};
+use reqwest::{
+    header::{
+        ACCESS_CONTROL_ALLOW_HEADERS, ACCESS_CONTROL_ALLOW_METHODS, ACCESS_CONTROL_ALLOW_ORIGIN,
+        ACCESS_CONTROL_MAX_AGE, CACHE_CONTROL, CONTENT_TYPE, COOKIE, DNT, IF_MODIFIED_SINCE,
+        IF_NONE_MATCH, RANGE, USER_AGENT,
+    },
+    redirect::Policy,
+    ClientBuilder, Method, Request, StatusCode,
+};
 use serde::Deserialize;
 use slog::{info, Logger};
 use std::net::SocketAddr;
@@ -380,6 +388,83 @@ pub fn content_type_headers_test(env: TestEnv) {
                     "DENY",
                     "Header x-frame-options does not match expected value: DENY",
                 );
+                Ok(())
+            }
+        )
+        .await
+        .unwrap();
+    });
+}
+
+/* tag::catalog[]
+Title:: Boundary nodes websocket CORS test
+
+Goal:: Make sure the boundary node sets correct CORS headers on the Websocket logs endpoint
+
+end::catalog[] */
+
+pub fn logs_websocket_cors_test(env: TestEnv) {
+    let logger = env.logger();
+
+    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
+    rt.block_on(async move {
+        let (http_client, host) = setup_client(env.clone()).expect("failed to setup client");
+        info!(&logger, "Connecting to the API BN via {host}");
+
+        ic_system_test_driver::retry_with_msg_async!(
+            "Making a status call to inspect the headers",
+            &logger,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                info!(&logger, "Requesting websocket logs endpoint...");
+                let req = Request::new(
+                    Method::OPTIONS,
+                    format!("https://{host}/logs/canister/aaaaa-aa")
+                        .parse()
+                        .unwrap(),
+                );
+
+                let res = http_client.execute(req).await.unwrap();
+
+                let headers = res.headers();
+                assert_eq!(
+                    headers.get(ACCESS_CONTROL_ALLOW_METHODS).unwrap(),
+                    "HEAD,GET,POST",
+                    "Header ACCESS_CONTROL_ALLOW_METHODS does not match expected value: HEAD,GET,POST"
+                );
+
+                assert_eq!(
+                    headers.get(ACCESS_CONTROL_MAX_AGE).unwrap(),
+                    "7200",
+                    "Header ACCESS_CONTROL_MAX_AGE does not match expected value: 7200"
+                );
+
+                assert_eq!(
+                    headers.get(ACCESS_CONTROL_ALLOW_ORIGIN).unwrap(),
+                    "*",
+                    "Header ACCESS_CONTROL_ALLOW_ORIGIN does not match expected value: *"
+                );
+
+                let expected_headers = &[
+                    USER_AGENT,
+                    DNT,
+                    IF_NONE_MATCH,
+                    IF_MODIFIED_SINCE,
+                    CACHE_CONTROL,
+                    CONTENT_TYPE,
+                    RANGE,
+                    COOKIE
+                ];
+                let allow_headers = headers.get(ACCESS_CONTROL_ALLOW_HEADERS).unwrap().to_str().unwrap();
+
+                for x in expected_headers {
+                    assert!(
+                        allow_headers.contains(&x.to_string()),
+                        "Header ACCESS_CONTROL_ALLOW_HEADERS does not contain header {x}"
+                    );
+                }
+
                 Ok(())
             }
         )
