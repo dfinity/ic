@@ -40,8 +40,7 @@ impl std::fmt::Display for GetSubnetForCanisterError {
 const MAX_RANGES_PER_CANISTER_RANGES: u16 = 20;
 
 /// Complexity O(n)
-// TODO after migration runs in registry_lifecycle.rs, make this function private to this module again.
-pub(crate) fn mutations_for_canister_ranges(
+fn mutations_for_canister_ranges(
     registry: &Registry,
     new_rt: &RoutingTable,
 ) -> Vec<RegistryMutation> {
