@@ -11,8 +11,11 @@ use ic_protobuf::{
 };
 use ic_types::{
     canister_http::CanisterHttpRequestContext,
-    consensus::idkg::PreSigId,
-    crypto::threshold_sig::ni_dkg::{id::ni_dkg_target_id, NiDkgId, NiDkgTargetId},
+    consensus::idkg::{common::PreSignature, PreSigId},
+    crypto::{
+        canister_threshold_sig::idkg::IDkgTranscript,
+        threshold_sig::ni_dkg::{id::ni_dkg_target_id, NiDkgId, NiDkgTargetId},
+    },
     messages::{CallbackId, CanisterCall, Request, StopCanisterCallId},
     node_id_into_protobuf, node_id_try_from_option, CanisterId, ExecutionRound, Height, NodeId,
     RegistryVersion, Time,
@@ -205,6 +208,12 @@ impl CanisterManagementCalls {
     }
 }
 
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct PreSignatureStash {
+    key_transcript: Arc<IDkgTranscript>,
+    pre_signatures: BTreeMap<PreSigId, PreSignature>,
+}
+
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct SubnetCallContextManager {
     /// Should increase monotonically. This property is used to determine if a request
@@ -219,6 +228,7 @@ pub struct SubnetCallContextManager {
         BTreeMap<CallbackId, BitcoinSendTransactionInternalContext>,
     canister_management_calls: CanisterManagementCalls,
     pub raw_rand_contexts: VecDeque<RawRandContext>,
+    pub pre_signature_stashes: BTreeMap<MasterPublicKeyId, PreSignatureStash>,
 }
 
 impl SubnetCallContextManager {
@@ -493,6 +503,24 @@ impl From<&SubnetCallContextManager> for pb_metadata::SubnetCallContextManager {
                     },
                 )
                 .collect(),
+            pre_signature_stashes: item
+                .pre_signature_stashes
+                .iter()
+                .map(
+                    |(key_id, pre_signature_stash)| pb_metadata::PreSignatureStashTree {
+                        key_id: Some(key_id.into()),
+                        key_transcript: Some(pre_signature_stash.key_transcript.as_ref().into()),
+                        pre_signatures: pre_signature_stash
+                            .pre_signatures
+                            .iter()
+                            .map(|(id, pre_sig)| pb_metadata::PreSignatureIdPair {
+                                pre_sig_id: id.0,
+                                pre_signature: Some(pre_sig.into()),
+                            })
+                            .collect(),
+                    },
+                )
+                .collect(),
             canister_http_request_contexts: item
                 .canister_http_request_contexts
                 .iter()
@@ -593,6 +621,35 @@ impl TryFrom<(Time, pb_metadata::SubnetCallContextManager)> for SubnetCallContex
             sign_with_threshold_contexts.insert(CallbackId::new(entry.callback_id), context);
         }
 
+        let mut pre_signature_stashes = BTreeMap::<MasterPublicKeyId, PreSignatureStash>::new();
+        for entry in item.pre_signature_stashes {
+            let key_id: MasterPublicKeyId = try_from_option_field(
+                entry.key_id,
+                "SystemMetadata::PreSignatureStash::MasterPublicKeyId",
+            )?;
+            let key_transcript: IDkgTranscript = try_from_option_field(
+                entry.key_transcript.as_ref(),
+                "SystemMetadata::PreSignatureStash::IDkgTranscript",
+            )?;
+            let mut pre_signatures = BTreeMap::new();
+            for pre_signature in entry.pre_signatures {
+                pre_signatures.insert(
+                    PreSigId(pre_signature.pre_sig_id),
+                    try_from_option_field(
+                        pre_signature.pre_signature.as_ref(),
+                        "SystemMetadata::PreSignatureStash::PreSignature",
+                    )?,
+                );
+            }
+            pre_signature_stashes.insert(
+                key_id,
+                PreSignatureStash {
+                    key_transcript: Arc::new(key_transcript),
+                    pre_signatures,
+                },
+            );
+        }
+
         let mut canister_http_request_contexts =
             BTreeMap::<CallbackId, CanisterHttpRequestContext>::new();
         for entry in item.canister_http_request_contexts {
@@ -682,6 +739,7 @@ impl TryFrom<(Time, pb_metadata::SubnetCallContextManager)> for SubnetCallContex
             },
             raw_rand_contexts,
             reshare_chain_key_contexts,
+            pre_signature_stashes,
         })
     }
 }
@@ -1428,6 +1486,7 @@ mod testing {
             bitcoin_send_transaction_internal_contexts: Default::default(),
             canister_management_calls,
             raw_rand_contexts: Default::default(),
+            pre_signature_stashes: Default::default(),
         };
     }
 }

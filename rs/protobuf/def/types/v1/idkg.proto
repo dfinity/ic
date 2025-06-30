@@ -138,6 +138,25 @@ message PreSignatureRef {
   }
 }
 
+
+message EcdsaPreSignatureQuadruple {
+  registry.subnet.v1.IDkgTranscript kappa_unmasked = 1;
+  registry.subnet.v1.IDkgTranscript lambda_masked = 2;
+  registry.subnet.v1.IDkgTranscript kappa_times_lambda = 3;
+  registry.subnet.v1.IDkgTranscript key_times_lambda = 4;
+}
+
+message SchnorrPreSignatureTranscript {
+  registry.subnet.v1.IDkgTranscript blinder_unmasked = 1;
+}
+
+message PreSignature {
+  oneof msg {
+    EcdsaPreSignatureQuadruple ecdsa = 1;
+    SchnorrPreSignatureTranscript schnorr = 2;
+  }
+}
+
 message QuadrupleInCreation {
   reserved 1, 2, 5;
 

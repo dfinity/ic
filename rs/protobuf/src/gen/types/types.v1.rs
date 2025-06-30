@@ -824,6 +824,40 @@ pub mod pre_signature_ref {
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct EcdsaPreSignatureQuadruple {
+    #[prost(message, optional, tag = "1")]
+    pub kappa_unmasked: ::core::option::Option<super::super::registry::subnet::v1::IDkgTranscript>,
+    #[prost(message, optional, tag = "2")]
+    pub lambda_masked: ::core::option::Option<super::super::registry::subnet::v1::IDkgTranscript>,
+    #[prost(message, optional, tag = "3")]
+    pub kappa_times_lambda:
+        ::core::option::Option<super::super::registry::subnet::v1::IDkgTranscript>,
+    #[prost(message, optional, tag = "4")]
+    pub key_times_lambda:
+        ::core::option::Option<super::super::registry::subnet::v1::IDkgTranscript>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SchnorrPreSignatureTranscript {
+    #[prost(message, optional, tag = "1")]
+    pub blinder_unmasked:
+        ::core::option::Option<super::super::registry::subnet::v1::IDkgTranscript>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PreSignature {
+    #[prost(oneof = "pre_signature::Msg", tags = "1, 2")]
+    pub msg: ::core::option::Option<pre_signature::Msg>,
+}
+/// Nested message and enum types in `PreSignature`.
+pub mod pre_signature {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Msg {
+        #[prost(message, tag = "1")]
+        Ecdsa(super::EcdsaPreSignatureQuadruple),
+        #[prost(message, tag = "2")]
+        Schnorr(super::SchnorrPreSignatureTranscript),
+    }
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct QuadrupleInCreation {
     #[prost(message, optional, tag = "3")]
     pub lambda_config: ::core::option::Option<RandomTranscriptParams>,
