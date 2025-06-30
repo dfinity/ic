@@ -67,7 +67,9 @@ def main():
         else:
             # Handle optional subaccount for regular balance
             subaccount = args.sub_account if args.sub_account else None
-            balance_response = client.get_balance(principal=args.principal_id, subaccount=subaccount, verbose=args.verbose)
+            balance_response = client.get_balance(
+                principal=args.principal_id, subaccount=subaccount, verbose=args.verbose
+            )
 
         # Display the results
         if args.raw:
@@ -83,7 +85,7 @@ def main():
             if args.aggregate:
                 print("\nAggregated Account Balance:")
                 print(f"  Principal: {args.principal_id}")
-                print(f"  Scope: All subaccounts (aggregated)")
+                print("  Scope: All subaccounts (aggregated)")
                 print(f"  Token: {symbol} (decimals: {decimals})")
                 print(f"  Total Balance: {human_balance} {symbol} ({raw_balance} raw units)")
                 print(f"  Block Index: {balance_response['block_identifier']['index']}")
@@ -93,7 +95,7 @@ def main():
                 if args.sub_account:
                     print(f"  Subaccount: {args.sub_account}")
                 else:
-                    print(f"  Subaccount: Default (None)")
+                    print("  Subaccount: Default (None)")
                 print(f"  Token: {symbol} (decimals: {decimals})")
                 print(f"  Balance: {human_balance} {symbol} ({raw_balance} raw units)")
                 print(f"  Block Index: {balance_response['block_identifier']['index']}")

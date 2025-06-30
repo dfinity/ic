@@ -680,10 +680,9 @@ pub fn get_aggregated_balance_for_principal_at_block_idx(
 ) -> anyhow::Result<Nat> {
     // Query to get the latest balance for each subaccount of the principal at or before the given block index
     let mut stmt = connection.prepare_cached(
-        "SELECT DISTINCT a1.subaccount, a1.amount
+        "SELECT a1.subaccount, a1.amount
          FROM account_balances a1
          WHERE a1.principal = :principal
-         AND a1.block_idx <= :block_idx
          AND a1.block_idx = (
              SELECT MAX(a2.block_idx)
              FROM account_balances a2

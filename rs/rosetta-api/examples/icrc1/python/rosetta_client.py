@@ -278,8 +278,8 @@ class RosettaClient:
     def get_aggregated_balance(self, principal, verbose=False):
         """
         Get the aggregated balance of all subaccounts for a principal.
-        
-        This method returns the sum of balances across all subaccounts 
+
+        This method returns the sum of balances across all subaccounts
         of the specified principal.
 
         Args:
@@ -298,11 +298,9 @@ class RosettaClient:
 
         # Add the aggregate_all_subaccounts flag to metadata
         payload = {
-            "network_identifier": self.network, 
+            "network_identifier": self.network,
             "account_identifier": account_identifier,
-            "metadata": {
-                "aggregate_all_subaccounts": True
-            }
+            "metadata": {"aggregate_all_subaccounts": True},
         }
 
         balance_response = self.send_request("/account/balance", payload, verbose)
