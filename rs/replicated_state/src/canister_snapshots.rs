@@ -71,8 +71,8 @@ impl CanisterSnapshots {
 
     /// Inserts a chunk into a snaphot's chunk store and updates its `size` and
     /// the `CanisterSnapshots`' `memory_usage` by the maximum chunk size.
-    /// Returns an error if the given snapshot ID could not be found. In this case,
-    /// the method has no effect.
+    /// Returns an error if the given snapshot ID could not be found or is immutable.
+    /// In this case, the method has no effect.
     #[allow(clippy::result_unit_err)]
     pub fn insert_chunk(
         &mut self,
@@ -453,6 +453,9 @@ impl PartialCanisterSnapshot {
         Ok(())
     }
 
+    /// Writes to one of the page-backed memories (main or stable).
+    /// Returns an error if `offset` + `chunk.len()` exceeds the
+    /// length of the memory.
     pub fn write_to_page_memory(
         page_memory: &mut PageMemory,
         offset: u64,
@@ -461,7 +464,7 @@ impl PartialCanisterSnapshot {
         let max_size_bytes = page_memory.size.get() * WASM_PAGE_SIZE_IN_BYTES;
         if max_size_bytes < chunk.len().saturating_add(offset as usize) {
             return Err(format!(
-                "Offset {} + slice length {} exceeds main memory length {}.",
+                "Offset {} + slice length {} exceeds page memory length {}.",
                 offset,
                 chunk.len(),
                 max_size_bytes,
