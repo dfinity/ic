@@ -283,6 +283,9 @@ impl ProposeToCreateSubnetCmd {
             ssh_backup_access: self.ssh_backup_access.clone(),
             max_number_of_canisters: self.max_number_of_canisters.unwrap_or_default(),
             chain_key_config,
+            canister_cycles_cost_schedule: Some(
+                do_create_subnet::CanisterCyclesCostSchedule::Normal,
+            ),
 
             // Deprecated fields.
             ingress_bytes_per_block_soft_cap: Default::default(),

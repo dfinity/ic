@@ -283,6 +283,10 @@ pub struct CreateSubnetPayload {
 
     pub chain_key_config: Option<InitialChainKeyConfig>,
 
+    /// None is treated the same as Some(Normal). Some(Normal) should be
+    /// preferred over None though, because explicit is better than implicit.
+    pub canister_cycles_cost_schedule: Option<CanisterCyclesCostSchedule>,
+
     // TODO(NNS1-2444): The fields below are deprecated and they are not read anywhere.
     pub ingress_bytes_per_block_soft_cap: u64,
     pub gossip_max_artifact_streams_per_peer: u32,
@@ -463,6 +467,34 @@ impl TryFrom<KeyConfigRequest> for KeyConfigRequestInternal {
             subnet_id,
         })
     }
+}
+
+/// How much (in cycles) does it cost a canister to do computation? Examples of
+/// types of computation that canisters do and generally need to pay for in
+/// cycles:
+///
+///     1. Execute instructions.
+///     2. Store Data - In normal memory, and stable memory.
+#[derive(Clone, Copy, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
+pub enum CanisterCyclesCostSchedule {
+    /// Use the cost schedule associate with the subnet's type.
+    #[default]
+    Normal,
+
+    /// This is used by rented subnets. This is because rented subnets get paid
+    /// for in a different way: ICP is supplied up front, and converted to
+    /// enough cycles to last for months. Then, those cycles are steadily burned
+    /// down at a constant rate. The "user" of a rented subnet can also "top up"
+    /// along the way. This isn't necessarily a cheaper way to do computation on
+    /// the ICP, but it has a couple of advantages:
+    ///
+    ///     1. The user has the EXCLUSIVE right to create canisters in the subnet.
+    ///
+    ///     2. The user can "recruit" the nodes. This means, that they can, for
+    ///        example, have all the nodes be located in a limited set of
+    ///        jurisdictions (e.g. all nodes are in Switzerland or
+    ///        Liechtenstein).
+    Free,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
