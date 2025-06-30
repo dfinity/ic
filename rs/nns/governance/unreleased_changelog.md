@@ -10,6 +10,7 @@ on the process that this file is part of, see
 ## Added
 
 * Add a metric for the nubmer of spawning neurons.
+* Use a previous voting power snapshot to create ballots if a voting power spike id detected.
 
 ## Changed
 
