@@ -412,7 +412,7 @@ pub fn logs_websocket_cors_test(env: TestEnv) {
         info!(&logger, "Connecting to the API BN via {host}");
 
         ic_system_test_driver::retry_with_msg_async!(
-            "Making a status call to inspect the headers",
+            "Making a call to inspect the headers",
             &logger,
             READY_WAIT_TIMEOUT,
             RETRY_BACKOFF,
@@ -456,11 +456,11 @@ pub fn logs_websocket_cors_test(env: TestEnv) {
                     RANGE,
                     COOKIE
                 ];
-                let allow_headers = headers.get(ACCESS_CONTROL_ALLOW_HEADERS).unwrap().to_str().unwrap();
+                let allow_headers = headers.get(ACCESS_CONTROL_ALLOW_HEADERS).unwrap().to_str().unwrap().to_ascii_lowercase();
 
                 for x in expected_headers {
                     assert!(
-                        allow_headers.contains(&x.to_string()),
+                        allow_headers.contains(&x.to_string().to_ascii_lowercase()),
                         "Header ACCESS_CONTROL_ALLOW_HEADERS does not contain header {x}"
                     );
                 }
