@@ -1,5 +1,5 @@
 {
-  "checksum": "05466746c98208a9cf0763a7119d94f42a48d01a562a034c0b14c013c654165d",
+  "checksum": "27e6a0550c49829a71f7359e6509ba37ac377d089cc8821537beb01638dfe280",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -21397,6 +21397,10 @@
             {
               "id": "tokio-test 0.4.4",
               "target": "tokio_test"
+            },
+            {
+              "id": "tokio-tungstenite 0.26.2",
+              "target": "tokio_tungstenite"
             },
             {
               "id": "tokio-util 0.7.13",
@@ -93285,6 +93289,7 @@
     "tokio-socks 0.5.2",
     "tokio-stream 0.1.17",
     "tokio-test 0.4.4",
+    "tokio-tungstenite 0.26.2",
     "tokio-util 0.7.13",
     "toml 0.5.11",
     "tonic 0.12.3",

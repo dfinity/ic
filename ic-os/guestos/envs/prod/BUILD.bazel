@@ -28,6 +28,12 @@ file_size_check(
     max_file_size = 450 * 1000 * 1000,  # 416 MB on 2025-03-21
 )
 
+file_size_check(
+    name = "update_img_test_size_check",
+    file = icos_images.update_image_test,
+    max_file_size = 450 * 1000 * 1000,  # 417 MB on 2025-06-26
+)
+
 # Export checksums & build artifacts
 # (image is used for GuestOS upgrades)
 artifact_bundle(

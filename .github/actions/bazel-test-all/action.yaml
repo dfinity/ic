@@ -1,5 +1,5 @@
 name: 'Bazel-Test-All'
-description: 'Run Bazel Test'
+description: 'Run Bazel Test with some optional speed optimizations'
 inputs:
   diff-only:
     required: false
@@ -13,11 +13,9 @@ inputs:
   execlogs-artifact-name:
     required: false
     description: "When provided, the execlogs will be uploaded as an artifact with the specified name."
-  BAZEL_COMMAND:
+  extra-bazel-args:
     required: true
-    default: 'test'
-  BAZEL_TARGETS:
-    required: true
+    description: "Extra arguments to pass to 'bazel test'"
   CLOUD_CREDENTIALS_CONTENT:
     required: false
   GPG_PASSPHRASE:
@@ -51,13 +49,6 @@ runs:
               bazel_args+=( --config=stamped )
             fi
 
-            BAZEL_TARGETS='${{ inputs.BAZEL_TARGETS }}'
-
-            bazel_targets=( )
-            for tgt in $BAZEL_TARGETS; do
-              bazel_targets+=( "$tgt" )
-            done
-
             if [[ $diff_only == "true" ]]; then
                 target_pattern_file=$(mktemp)
                 trap "rm $target_pattern_file" INT TERM EXIT
@@ -74,7 +65,7 @@ runs:
                 # the targets that are expected to be built.
                 comm -12 \
                   <("${CI_PROJECT_DIR:-}"/ci/bazel-scripts/diff.sh "$commit_range" | sort) \
-                  <(IFS='+'; bazel query "${bazel_targets[*]} except attr(tags, \"manual\", //...)" | sort; ) > "$target_pattern_file"
+                  <(IFS='+'; bazel query "//... except attr(tags, \"manual\", //...)" | sort; ) > "$target_pattern_file"
 
                 # if bazel targets is empty we don't need to run any tests
                 if [ $(wc <"$target_pattern_file" -l) -eq 0 ]; then
@@ -86,13 +77,13 @@ runs:
                 # complaining about the argument list being too long.
                 bazel_args+=( --target_pattern_file="$target_pattern_file" )
             else
-                bazel_args+=( "${bazel_targets[@]}" )
+                bazel_args+=( //... )
             fi
 
             echo "Building as user: $(whoami)"
             echo "Bazel version: $(bazel version)"
 
-            bazel ${{ inputs.BAZEL_COMMAND }} "${bazel_args[@]}"
+            bazel test ${{ inputs.extra-bazel-args }} "${bazel_args[@]}"
 
       - name: Upload to S3
         uses: ./.github/actions/upload-artifacts

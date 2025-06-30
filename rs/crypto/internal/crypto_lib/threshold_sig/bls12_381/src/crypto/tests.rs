@@ -7,7 +7,7 @@ use super::super::types::{
 };
 use crate::crypto::hash_message_to_g1;
 use crate::types::PublicKey;
-use ic_crypto_internal_bls12_381_type::{G2Projective, LagrangeCoefficients, Scalar};
+use ic_crypto_internal_bls12_381_type::{G2Projective, LagrangeCoefficients, NodeIndices, Scalar};
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_types::crypto::error::InvalidArgumentError;
@@ -42,7 +42,7 @@ pub mod util {
     /// original secret polynomial.
     pub fn combined_secret_key(secret_keys: &[SecretKey]) -> SecretKey {
         let node_ids = (0..secret_keys.len() as NodeIndex).collect::<Vec<_>>();
-        let interp = LagrangeCoefficients::at_zero(&node_ids).unwrap();
+        let interp = LagrangeCoefficients::at_zero(&NodeIndices::from_slice(&node_ids).unwrap());
         interp.interpolate_scalar(secret_keys).unwrap()
     }
 
@@ -350,7 +350,7 @@ mod resharing_util {
     /// values) interpolate the value at zero.
     pub fn interpolate_secret_key(shares: &[SecretKey]) -> SecretKey {
         let node_ids = (0..shares.len() as NodeIndex).collect::<Vec<_>>();
-        let interp = LagrangeCoefficients::at_zero(&node_ids).unwrap();
+        let interp = LagrangeCoefficients::at_zero(&NodeIndices::from_slice(&node_ids).unwrap());
         interp.interpolate_scalar(shares).unwrap()
     }
 

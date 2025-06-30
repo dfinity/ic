@@ -348,7 +348,7 @@ pub(crate) fn spawn_tip_thread(
                             checkpoint_layout,
                             pagemaptypes,
                         } => {
-                            let _timer = request_timer(&metrics, "reset_tip_to");
+                            let timer = request_timer(&metrics, "reset_tip_to");
                             tip_state.tip_folder_state = Default::default();
                             tip_state.tip_folder_state.page_maps_height =
                                 tip_state.latest_checkpoint_state.page_maps_height;
@@ -367,6 +367,9 @@ pub(crate) fn spawn_tip_thread(
                                         err
                                     );
                                 });
+                            drop(timer);
+
+                            let _timer = request_timer(&metrics, "merge");
                             merge(
                                 &mut tip_handler,
                                 &pagemaptypes,
@@ -389,7 +392,7 @@ pub(crate) fn spawn_tip_thread(
                             states,
                             persist_metadata_guard,
                         } => {
-                            let _timer = request_timer(&metrics, "compute_manifest");
+                            let _timer = request_timer(&metrics, "compute_manifest_total");
                             if let Some(manifest_delta) = &manifest_delta {
                                 info!(
                                     log,
@@ -426,7 +429,8 @@ pub(crate) fn spawn_tip_thread(
                             own_subnet_type,
                             fd_factory,
                         } => {
-                            let _timer = request_timer(&metrics, "validate_replicated_state");
+                            let _timer =
+                                request_timer(&metrics, "validate_replicated_state_and_finalize");
                             let start = Instant::now();
                             debug_assert_eq!(
                                 tip_state.latest_checkpoint_state.page_maps_height,

@@ -1231,7 +1231,7 @@ fn validate_replicated_state_is_called() {
             "state_manager_tip_handler_request_duration_seconds",
         );
         for (label, _stats) in request_duration.iter() {
-            if label.get("request") == Some(&"validate_replicated_state".to_string()) {
+            if label.get("request") == Some(&"validate_replicated_state_and_finalize".to_string()) {
                 return true;
             }
         }
