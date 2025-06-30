@@ -1346,7 +1346,12 @@ fn canister_history_memory_usage_ignored_in_invariant_checks() {
     let (env, _test_canister, _test_canister_sha256) = test_setup(SubnetType::Application, now);
 
     let canister_id = env
-        .install_canister_with_cycles(UNIVERSAL_CANISTER_WASM.to_vec(), vec![], None, INITIAL_CYCLES_BALANCE)
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            vec![],
+            None,
+            INITIAL_CYCLES_BALANCE,
+        )
         .unwrap();
     let memory_size = || {
         let status = env.canister_status(canister_id).unwrap().unwrap();
@@ -1368,7 +1373,15 @@ fn canister_history_memory_usage_ignored_in_invariant_checks() {
     // Execute an ingress message on the canister to make it "active" and trigger canister invariant checks:
     // they pass because canister history memory usage is ignored in canister invariant checks,
     // but the update calls fails because it cannot grow its memory beyond the memory allocation.
-    let err = env.execute_ingress_as(PrincipalId::new_anonymous(), canister_id, "update", wasm().reply().build())
+    let err = env
+        .execute_ingress_as(
+            PrincipalId::new_anonymous(),
+            canister_id,
+            "update",
+            wasm().reply().build(),
+        )
         .unwrap_err();
-    assert!(err.description().contains("Canister cannot grow its memory usage."));
+    assert!(err
+        .description()
+        .contains("Canister cannot grow its memory usage."));
 }
