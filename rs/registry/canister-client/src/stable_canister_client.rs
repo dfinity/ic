@@ -15,7 +15,7 @@ use std::collections::BTreeMap;
 use std::marker::PhantomData;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering as AtomicOrdering;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, RwLock, RwLockReadGuard};
 
 /// This implementation of CanisterRegistryClient uses StableMemory to store a copy of the
 /// Registry data in the canister.  An implementation of RegistryDataStableMemory trait that
@@ -53,8 +53,10 @@ impl<S: RegistryDataStableMemory> StableCanisterRegistryClient<S> {
         }
     }
 
-    pub fn timestamp_to_versions_map(&self) -> Arc<RwLock<BTreeMap<u64, Vec<RegistryVersion>>>> {
-        Arc::clone(&self.timestamp_to_versions_map)
+    pub fn timestamp_to_versions_map(
+        &self,
+    ) -> RwLockReadGuard<BTreeMap<u64, Vec<RegistryVersion>>> {
+        self.timestamp_to_versions_map.read().unwrap()
     }
 
     fn add_deltas(&self, deltas: Vec<RegistryDelta>) -> Result<(), String> {
