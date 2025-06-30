@@ -1223,6 +1223,123 @@ fn missing_manifests_are_recomputed() {
     });
 }
 
+/// Tests that the manifest is computed incrementally using a delta relative to the manifest at a
+/// lower height. Steps are:
+///
+/// - Compute the manifest at height 2 using the delta from the manifest at height 1.
+/// - Compute the manifest at height 3 using the delta from the manifest at height 2.
+/// - Compute the manifests at height 2 and 3 using the deltas from the manifest at height 1.
+///
+/// The third step consists of the first step + a new manifest computation that is expected to
+/// require more hashing than the second step since it's done from height 1.
+///
+/// Asserting that more hashing is required in step 3 ensures two things:
+/// - The computation in the second step was actually done from height 2 since it required less
+///   hashing.
+/// - Incremental manifest computation can be done from a height further back than the previous one
+///   (at the cost of more hashing).
+#[test]
+fn missing_manifest_is_computed_incrementally() {
+    state_manager_restart_test_with_metrics(|_metrics, state_manager, restart_fn| {
+        use ic_state_manager::testing::StateManagerTesting;
+
+        let hashed_key = maplit::btreemap! {"type".to_string() => "hashed".to_string()};
+        let reused_key = maplit::btreemap! {"type".to_string() => "reused".to_string()};
+        let hashed_and_compared_key =
+            maplit::btreemap! {"type".to_string() => "hashed_and_compared".to_string()};
+
+        let insert_canister_and_write_checkpoint = |state_manager: StateManagerImpl,
+                                                    height: Height,
+                                                    canister_id: CanisterId|
+         -> StateManagerImpl {
+            let (_height, mut state) = state_manager.take_tip();
+
+            insert_dummy_canister(&mut state, canister_id);
+            state
+                .canister_state_mut(&canister_id)
+                .unwrap()
+                .execution_state
+                .as_mut()
+                .unwrap()
+                .stable_memory
+                .page_map
+                .update(&[(PageIndex::new(1), &[1_u8; PAGE_SIZE])]);
+
+            state_manager.commit_and_certify(state, height, CertificationScope::Full, None);
+            wait_for_checkpoint(&state_manager, height);
+            state_manager.flush_tip_channel();
+
+            state_manager
+        };
+
+        let purge_manifests_and_restart = |mut state_manager: StateManagerImpl,
+                                           purge_manifest_heights: &[Height],
+                                           restart_height: Height|
+         -> (StateManagerImpl, u64, u64) {
+            for h in purge_manifest_heights {
+                assert!(state_manager.purge_manifest(*h));
+            }
+            let (metrics, state_manager) = restart_fn(state_manager, Some(restart_height));
+            wait_for_checkpoint(&state_manager, restart_height);
+
+            let chunk_bytes = fetch_int_counter_vec(&metrics, "state_manager_manifest_chunk_bytes");
+
+            // Return the state manager along with the number of reused bytes and the
+            // number of bytes hashed.
+            (
+                state_manager,
+                chunk_bytes[&reused_key] + chunk_bytes[&hashed_and_compared_key],
+                chunk_bytes[&hashed_key],
+            )
+        };
+
+        // Create two checkpoints @1 and @2.
+        let state_manager =
+            insert_canister_and_write_checkpoint(state_manager, height(1), canister_test_id(1));
+        let state_manager =
+            insert_canister_and_write_checkpoint(state_manager, height(2), canister_test_id(2));
+
+        // Trigger an incremental manifest computation @2 with a delta 1 -> 2.
+        let (state_manager, incremental_at_2_from_1, hashed_at_2_from_1) =
+            purge_manifests_and_restart(
+                state_manager,
+                &[height(2)], // Purge manifest @2.
+                height(2),    // Restart the state manager @2.
+            );
+        // For an incremental manifest computation, something must have been incremental.
+        assert_ne!(0, incremental_at_2_from_1);
+
+        // Create a checkpoint @3.
+        let state_manager =
+            insert_canister_and_write_checkpoint(state_manager, height(3), canister_test_id(3));
+
+        // Trigger an incremental manifest computation @3 with a delta 2 -> 3.
+        let (state_manager, incremental_at_3_from_2, hashed_at_3_from_2) =
+            purge_manifests_and_restart(
+                state_manager,
+                &[height(3)], // Purge manifest at height 3.
+                height(3),    // Restart the state manager at height 3.
+            );
+        // For an incremental manifest computation, something must have been incremental.
+        assert_ne!(0, incremental_at_3_from_2);
+
+        // Trigger incremental manifest computations @2 and @3 with deltas 1 -> 2 and 1 -> 3.
+        let (_, incremental_at_2_and_3_from_1, hashed_at_2_and_3_from_1) =
+            purge_manifests_and_restart(
+                state_manager,
+                &[height(2), height(3)], // Purge manifest at height 2 and 3.
+                height(3),               // Restart the state manager at height 3.
+            );
+        // For an incremental manifest computation, something must have been incremental;
+        // since the both manifest computations are expected to be incremental, it
+        // must be larger than the one in step 1.
+        assert!(incremental_at_2_and_3_from_1 > incremental_at_2_from_1);
+
+        let hashed_at_3_from_1 = hashed_at_2_and_3_from_1 - hashed_at_2_from_1;
+        assert!(hashed_at_3_from_1 > hashed_at_3_from_2);
+    });
+}
+
 #[test]
 fn validate_replicated_state_is_called() {
     fn validate_was_called(metrics: &MetricsRegistry) -> bool {
