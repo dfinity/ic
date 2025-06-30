@@ -4,9 +4,8 @@ use crate::utils::env;
 use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkGroup, Criterion};
 use ic_management_canister_types_private::{
     CanisterSettingsArgsBuilder, CanisterSnapshotDataKind, CanisterSnapshotDataOffset,
-    CanisterSnapshotResponse, LoadCanisterSnapshotArgs, ReadCanisterSnapshotDataArgs,
-    ReadCanisterSnapshotMetadataArgs, TakeCanisterSnapshotArgs, UploadCanisterSnapshotDataArgs,
-    UploadCanisterSnapshotMetadataArgs,
+    LoadCanisterSnapshotArgs, ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs,
+    TakeCanisterSnapshotArgs, UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
 };
 use ic_state_machine_tests::StateMachine;
 use ic_types::{CanisterId, Cycles, SnapshotId};
@@ -302,8 +301,7 @@ fn write_canister_snapshot_data_bench<M: criterion::measurement::Measurement>(
                     CanisterSnapshotDataOffset::MainMemory { offset },
                     vec![42],
                 );
-                let _ = env
-                    .upload_canister_snapshot_data(&args)
+                env.upload_canister_snapshot_data(&args)
                     .expect("Error writing snapshot data");
                 env
             },
@@ -322,8 +320,7 @@ fn write_canister_snapshot_data_bench<M: criterion::measurement::Measurement>(
                     CanisterSnapshotDataOffset::MainMemory { offset },
                     vec![42],
                 );
-                let _ = env
-                    .upload_canister_snapshot_data(&args)
+                env.upload_canister_snapshot_data(&args)
                     .expect("Error writing snapshot data");
                 env.set_checkpoints_enabled(true);
                 env.tick();
