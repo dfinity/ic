@@ -579,19 +579,6 @@ fn legacy_induct_loopback_stream_with_zero_subnet_wasm_custom_sections_limit() {
     });
 }
 
-/// Tests that canister memory limit is ignored by
-/// `StreamHandlerImpl::induct_loopback_stream()` for system subnets.
-#[test]
-fn system_subnet_induct_loopback_stream_ignores_canister_memory_limit() {
-    // A stream handler with a canister memory limit that only allows up to 3 reservations.
-    induct_loopback_stream_ignores_memory_limit_impl(HypervisorConfig {
-        max_canister_memory_size_wasm32: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2),
-        // For consistency reasons in case this test is run against Wasm64 canisters.
-        max_canister_memory_size_wasm64: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2),
-        ..Default::default()
-    });
-}
-
 /// Tests that subnet memory limit is ignored by
 /// `StreamHandlerImpl::induct_loopback_stream()` for system subnets.
 #[test]

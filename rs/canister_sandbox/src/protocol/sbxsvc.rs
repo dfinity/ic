@@ -467,7 +467,7 @@ mod tests {
                         NumInstructions::new(123),
                         NumInstructions::new(12),
                     ),
-                    canister_memory_limit: NumBytes::new(123),
+                    canister_memory_limit: Some(NumBytes::new(123)),
                     wasm_memory_limit: Some(NumBytes::new(123)),
                     memory_allocation: MemoryAllocation::Reserved(NumBytes::new(123)),
                     canister_guaranteed_callback_quota: 123,

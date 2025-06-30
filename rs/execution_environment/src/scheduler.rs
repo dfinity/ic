@@ -27,8 +27,7 @@ use ic_management_canister_types_private::{
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::{
     canister_state::{
-        execution_state::NextScheduledMethod, execution_state::WasmExecutionMode,
-        system_state::CyclesUseCase, NextExecution,
+        execution_state::NextScheduledMethod, system_state::CyclesUseCase, NextExecution,
     },
     num_bytes_try_from,
     page_map::PageAllocatorFileDescriptor,
@@ -1085,14 +1084,7 @@ impl SchedulerImpl {
         for canister_id in canister_ids {
             let canister = state.canister_states.get(canister_id).unwrap();
 
-            let wasm_execution_mode = canister
-                .execution_state
-                .as_ref()
-                .map_or(WasmExecutionMode::Wasm32, |es| es.wasm_execution_mode);
-
-            if let Err(err) = canister
-                .check_invariants(self.exec_env.max_canister_memory_size(wasm_execution_mode))
-            {
+            if let Err(err) = canister.check_invariants() {
                 let msg = format!(
                     "{}: At Round {} @ time {}, canister {} has invalid state after execution. Invariant check failed with err: {}",
                     CANISTER_INVARIANT_BROKEN,

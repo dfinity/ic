@@ -27,8 +27,8 @@ use ic_logger::{error, info, ReplicaLogger};
 use ic_query_stats::QueryStatsCollector;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::execution_state::WasmExecutionMode, CallContextAction, CallOrigin,
-    CanisterState, MessageMemoryUsage, NetworkTopology, ReplicatedState,
+    CallContextAction, CallOrigin, CanisterState, MessageMemoryUsage, NetworkTopology,
+    ReplicatedState,
 };
 use ic_types::{
     batch::QueryStats,
@@ -96,8 +96,6 @@ pub(super) struct QueryContext<'a> {
     network_topology: Arc<NetworkTopology>,
     // Certificate for certified queries + canister ID of the root query of this context
     data_certificate: (Vec<u8>, CanisterId),
-    max_canister_memory_size_wasm32: NumBytes,
-    max_canister_memory_size_wasm64: NumBytes,
     max_instructions_per_query: NumInstructions,
     max_query_call_graph_depth: usize,
     instruction_overhead_per_query_call: RoundInstructions,
@@ -131,8 +129,6 @@ impl<'a> QueryContext<'a> {
         subnet_available_memory: SubnetAvailableMemory,
         subnet_available_callbacks: i64,
         canister_guaranteed_callback_quota: u64,
-        max_canister_memory_size_wasm32: NumBytes,
-        max_canister_memory_size_wasm64: NumBytes,
         max_instructions_per_query: NumInstructions,
         max_query_call_graph_depth: usize,
         max_query_call_graph_instructions: NumInstructions,
@@ -159,8 +155,6 @@ impl<'a> QueryContext<'a> {
             state,
             network_topology,
             data_certificate: (data_certificate, canister_id),
-            max_canister_memory_size_wasm32,
-            max_canister_memory_size_wasm64,
             max_instructions_per_query,
             max_query_call_graph_depth,
             instruction_overhead_per_query_call: as_round_instructions(
@@ -1075,19 +1069,9 @@ impl<'a> QueryContext<'a> {
         canister: &CanisterState,
         instruction_limits: InstructionLimits,
     ) -> ExecutionParameters {
-        let wasm_execution_mode = canister
-            .execution_state
-            .as_ref()
-            .map_or(WasmExecutionMode::Wasm32, |state| state.wasm_execution_mode);
-
-        let max_canister_memory_size = match wasm_execution_mode {
-            WasmExecutionMode::Wasm32 => self.max_canister_memory_size_wasm32,
-            WasmExecutionMode::Wasm64 => self.max_canister_memory_size_wasm64,
-        };
-
         ExecutionParameters {
             instruction_limits,
-            canister_memory_limit: canister.memory_limit(max_canister_memory_size),
+            canister_memory_limit: canister.memory_limit(),
             wasm_memory_limit: canister.wasm_memory_limit(),
             memory_allocation: canister.memory_allocation(),
             canister_guaranteed_callback_quota: self.canister_guaranteed_callback_quota,

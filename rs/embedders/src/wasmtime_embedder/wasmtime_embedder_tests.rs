@@ -69,7 +69,7 @@ fn test_wasmtime_system_api() {
         api_type.caller(),
         api_type.call_context_id(),
     );
-    let canister_memory_limit = NumBytes::from(4 << 30);
+    let canister_memory_limit = Some(NumBytes::from(4 << 30));
     let canister_current_memory_usage = NumBytes::from(0);
     let canister_current_message_memory_usage = MessageMemoryUsage::ZERO;
     let system_api = SystemApiImpl::new(

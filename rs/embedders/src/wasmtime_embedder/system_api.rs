@@ -181,7 +181,7 @@ impl InstructionLimits {
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct ExecutionParameters {
     pub instruction_limits: InstructionLimits,
-    pub canister_memory_limit: NumBytes,
+    pub canister_memory_limit: Option<NumBytes>,
     // The limit on the Wasm memory set by the developer in canister settings.
     pub wasm_memory_limit: Option<NumBytes>,
     pub memory_allocation: MemoryAllocation,
@@ -838,7 +838,7 @@ pub enum CostReturnCode {
 /// memory consumption.
 struct MemoryUsage {
     /// Upper limit on how much the memory the canister could use.
-    limit: NumBytes,
+    limit: Option<NumBytes>,
 
     /// The Wasm memory limit set by the developer in canister settings.
     wasm_memory_limit: Option<NumBytes>,
@@ -874,7 +874,7 @@ impl MemoryUsage {
     fn new(
         log: ReplicaLogger,
         canister_id: CanisterId,
-        limit: NumBytes,
+        limit: Option<NumBytes>,
         wasm_memory_limit: Option<NumBytes>,
         current_usage: NumBytes,
         stable_memory_usage: NumBytes,
@@ -883,18 +883,20 @@ impl MemoryUsage {
         subnet_available_memory: SubnetAvailableMemory,
         memory_allocation: MemoryAllocation,
     ) -> Self {
-        // A canister's current usage should never exceed its limit. This is
-        // most probably a bug. Panicking here due to this inconsistency has the
-        // danger of putting the entire subnet in a crash loop. Log an error
-        // message to page the on-call team and try to stumble along.
-        if current_usage > limit {
-            error!(
-                log,
-                "[EXC-BUG] Canister {}: current_usage {} > limit {}",
-                canister_id,
-                current_usage,
-                limit
-            );
+        if let Some(limit) = limit {
+            // A canister's current usage should never exceed its limit. This is
+            // most probably a bug. Panicking here due to this inconsistency has the
+            // danger of putting the entire subnet in a crash loop. Log an error
+            // message to page the on-call team and try to stumble along.
+            if current_usage > limit {
+                error!(
+                    log,
+                    "[EXC-BUG] Canister {}: current_usage {} > limit {}",
+                    canister_id,
+                    current_usage,
+                    limit
+                );
+            }
         }
 
         Self {
@@ -983,8 +985,14 @@ impl MemoryUsage {
             .current_usage
             .get()
             .overflowing_add(execution_bytes.get());
-        if overflow || new_usage > self.limit.get() {
+        if overflow {
             return Err(HypervisorError::OutOfMemory);
+        }
+
+        if let Some(limit) = self.limit {
+            if new_usage > limit.get() {
+                return Err(HypervisorError::OutOfMemory);
+            }
         }
 
         sandbox_safe_system_state.check_freezing_threshold_for_memory_grow(

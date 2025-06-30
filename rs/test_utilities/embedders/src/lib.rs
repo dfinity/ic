@@ -185,7 +185,7 @@ impl WasmtimeInstanceBuilder {
                     self.num_instructions,
                     self.num_instructions,
                 ),
-                canister_memory_limit: self.canister_memory_limit,
+                canister_memory_limit: Some(self.canister_memory_limit),
                 wasm_memory_limit: None,
                 memory_allocation: MemoryAllocation::default(),
                 canister_guaranteed_callback_quota: canister_callback_quota,
