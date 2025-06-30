@@ -4,8 +4,9 @@ use crate::utils::env;
 use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkGroup, Criterion};
 use ic_management_canister_types_private::{
     CanisterSettingsArgsBuilder, CanisterSnapshotDataKind, CanisterSnapshotDataOffset,
-    LoadCanisterSnapshotArgs, ReadCanisterSnapshotDataArgs, TakeCanisterSnapshotArgs,
-    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
+    CanisterSnapshotResponse, LoadCanisterSnapshotArgs, ReadCanisterSnapshotDataArgs,
+    ReadCanisterSnapshotMetadataArgs, TakeCanisterSnapshotArgs, UploadCanisterSnapshotDataArgs,
+    UploadCanisterSnapshotMetadataArgs,
 };
 use ic_state_machine_tests::StateMachine;
 use ic_types::{CanisterId, Cycles, SnapshotId};
@@ -54,19 +55,45 @@ fn env_and_canister(canister_size: u64) -> (StateMachine, CanisterId) {
 fn env_and_canister_snapshot(canister_size: u64) -> (StateMachine, CanisterId, SnapshotId) {
     let (env, canister_id) = env_and_canister(canister_size);
     let snapshot_id = env
+        .take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None))
+        .expect("Error taking canister snapshot")
+        .snapshot_id();
+    // Skip a few rounds to avoid `CanisterHeapDeltaRateLimited`.
+    for _ in 0..100 {
+        env.tick();
+    }
+    (env, canister_id, snapshot_id)
+}
+
+fn env_and_writeable_canister_snapshot(
+    canister_size: u64,
+) -> (StateMachine, CanisterId, SnapshotId) {
+    let (env, canister_id, snapshot_id) = env_and_canister_snapshot(canister_size);
+    let args = ReadCanisterSnapshotMetadataArgs::new(canister_id, snapshot_id);
+    let md = env.read_canister_snapshot_metadata(&args).unwrap();
+    let module = env.get_snapshot_module(&args).unwrap();
+    let main_memory = env.get_snapshot_heap(&args).unwrap();
+    let stable_memory = env.get_snapshot_stable_memory(&args).unwrap();
+    let snapshot_id = env
         .upload_canister_snapshot_metadata(&UploadCanisterSnapshotMetadataArgs::new(
             canister_id,
             None,
-            1000,
-            vec![],
-            canister_size,
-            0,
-            vec![],
-            None,
-            None,
+            md.wasm_module_size,
+            md.exported_globals,
+            md.wasm_memory_size,
+            md.stable_memory_size,
+            md.certified_data,
+            md.global_timer,
+            md.on_low_wasm_memory_hook_status,
         ))
         .expect("Error taking canister snapshot")
         .snapshot_id;
+    env.upload_snapshot_module(canister_id, snapshot_id, module, None, None)
+        .unwrap();
+    env.upload_snapshot_heap(canister_id, snapshot_id, main_memory, None, None)
+        .unwrap();
+    env.upload_snapshot_stable_memory(canister_id, snapshot_id, stable_memory, None, None)
+        .unwrap();
     // Skip a few rounds to avoid `CanisterHeapDeltaRateLimited`.
     for _ in 0..100 {
         env.tick();
@@ -265,7 +292,7 @@ fn write_canister_snapshot_data_bench<M: criterion::measurement::Measurement>(
 ) {
     group.bench_function(bench_name, |b| {
         b.iter_batched(
-            || env_and_canister_snapshot(canister_size),
+            || env_and_writeable_canister_snapshot(canister_size),
             |(env, canister_id, snapshot_id)| {
                 let mut rng = rand::thread_rng();
                 let offset = rng.gen_range(0..canister_size - 1);
@@ -285,7 +312,7 @@ fn write_canister_snapshot_data_bench<M: criterion::measurement::Measurement>(
     });
     group.bench_function(format!("{bench_name}+checkpoint"), |b| {
         b.iter_batched(
-            || env_and_canister_snapshot(canister_size),
+            || env_and_writeable_canister_snapshot(canister_size),
             |(env, canister_id, snapshot_id)| {
                 let mut rng = rand::thread_rng();
                 let offset = rng.gen_range(0..canister_size - 1);
@@ -316,7 +343,6 @@ pub fn benchmark(c: &mut Criterion) {
         ("3000 MiB", 3000 * MIB),
         ("4000 MiB", 4000 * MIB),
     ];
-
     let mut group = c.benchmark_group("canister_snapshot_baseline");
     for (name, size) in sizes {
         baseline_bench(&mut group, name, size);
