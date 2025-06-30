@@ -410,6 +410,7 @@ pub struct RenameToRecord {
 /// variant {
 ///   creation : record {
 ///     controllers : vec principal;
+///     environment_variables_hash: opt blob;
 ///   };
 ///   code_uninstall;
 ///   code_deployment : record {
