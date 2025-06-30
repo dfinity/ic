@@ -605,7 +605,7 @@ jobs:
           # Get version and checksum
           bazel build //bazel:version.txt
           RECOVERY_VERSION="$(cat bazel-bin/bazel/version.txt)"
-          RECOVERY_HASH="$(sha256sum $rootdir/guest-os/recovery-artifacts/DELETE-ME/recovery.tar.zst | cut -d' ' -f1)"
+          RECOVERY_HASH="$(sha256sum $rootdir/guest-os/recovery-artifacts/recovery.tar.zst | cut -d' ' -f1)"
 
           # Set environment variables for the next steps
           echo "RECOVERY_CUP_CONTENT_B64=${RECOVERY_CUP_CONTENT_B64}" >> "$GITHUB_ENV"
