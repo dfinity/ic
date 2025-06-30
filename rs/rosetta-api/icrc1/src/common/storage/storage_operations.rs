@@ -700,13 +700,13 @@ pub fn get_aggregated_balance_for_principal_at_block_idx(
         },
         |row| {
             let amount_str: String = row.get(1)?;
-            Ok(Nat::from_str(&amount_str).map_err(|_| {
+            Nat::from_str(&amount_str).map_err(|_| {
                 rusqlite::Error::InvalidColumnType(
                     1,
                     "amount".to_string(),
                     rusqlite::types::Type::Text,
                 )
-            })?)
+            })
         },
     )?;
 
