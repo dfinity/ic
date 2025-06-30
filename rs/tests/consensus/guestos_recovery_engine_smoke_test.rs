@@ -21,7 +21,7 @@ Success::
 
 end::catalog[] */
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, ensure, Result};
 use ic_consensus_system_test_utils::ssh_access::execute_bash_command;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
@@ -36,16 +36,14 @@ use ic_system_test_driver::{
 use slog::info;
 
 fn cmp_as_result(actual: &str, expected: &str, error_message: &str) -> Result<()> {
-    if actual == expected {
-        Ok(())
-    } else {
-        Err(anyhow!(
-            "{}. Actual: {}. Expected: {}.",
-            error_message,
-            actual,
-            expected
-        ))
-    }
+    ensure!(
+        actual == expected,
+        "{}. Actual: {}. Expected: {}.",
+        error_message,
+        actual,
+        expected
+    );
+    Ok(())
 }
 
 pub fn setup(env: TestEnv) {
