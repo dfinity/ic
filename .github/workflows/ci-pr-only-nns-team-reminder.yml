@@ -35,14 +35,14 @@ jobs:
               repo: "ic",
               pull_number: pullRequestNumber,
             });
-            const alreadyRemindedAboutUnreleasedChangelog = reviews
+            const alreadyRemindedGovernanceChecklist = reviews
               .data
               .some(review => review
                 .body
-                .startsWith("If this pull request changes the behavior")
+                .includes("GOVERNANCE_CHECKLIST_REMINDER_DEDUP")
               );
-            console.log("alreadyRemindedAboutUnreleasedChangelog = " + alreadyRemindedAboutUnreleasedChangelog);
-            if (alreadyRemindedAboutUnreleasedChangelog) {
+            console.log("alreadyRemindedGovernanceChecklist = " + alreadyRemindedGovernanceChecklist);
+            if (alreadyRemindedGovernanceChecklist) {
               return;
             }
 
@@ -95,6 +95,8 @@ jobs:
               For a more comprehensive checklist, [see here][checklist].
 
               [checklist]: https://docs.google.com/document/d/1YeeCzVDB3PmvCGvV0OqZpV-R5F0fMGahoTlmXaIjj_U/edit?tab=t.0#heading=h.thlqmyi5yk1
+
+              GOVERNANCE_CHECKLIST_REMINDER_DEDUP
             `
             .replace(/^ +/gm, '')
             .trim();
