@@ -1,3 +1,4 @@
+use crate::flags::is_routing_table_single_entry_obsolete;
 use crate::mutations::node_management::common::get_key_family_iter_at_version;
 use crate::{common::LOG_PREFIX, pb::v1::SubnetForCanister, registry::Registry};
 use dfn_core::CanisterId;
@@ -191,12 +192,13 @@ pub(crate) fn routing_table_into_registry_mutation(
 ) -> Vec<RegistryMutation> {
     let mut mutations = mutations_for_canister_ranges(registry, &routing_table);
 
-    let new_routing_table = pb::RoutingTable::from(routing_table);
-    mutations.push(upsert(
-        make_routing_table_record_key().as_bytes(),
-        new_routing_table.encode_to_vec(),
-    ));
-
+    if !is_routing_table_single_entry_obsolete() {
+        let new_routing_table = pb::RoutingTable::from(routing_table);
+        mutations.push(upsert(
+            make_routing_table_record_key().as_bytes(),
+            new_routing_table.encode_to_vec(),
+        ));
+    }
     mutations
 }
 
@@ -238,8 +240,7 @@ impl Registry {
     }
     /// Get the routing table or panic on error with a message.
     pub fn get_routing_table_or_panic(&self, version: u64) -> RoutingTable {
-        self.get_routing_table(version)
-            .unwrap_or_else(|e| panic!("{e}"))
+        self.get_routing_table_from_canister_range_records_or_panic(version)
     }
 
     pub fn get_routing_table_from_canister_range_records_or_panic(
@@ -838,3 +839,7 @@ mod tests {
         compare_rt_mutations(expected, mutations);
     }
 }
+
+#[cfg(feature = "canbench-rs")]
+#[path = "routing_table_benches.rs"]
+mod benches;

@@ -1,0 +1,491 @@
+<?xml version="1.0" standalone="no"?><!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd"><svg version="1.1" width="1200" height="150" onload="init(evt)" viewBox="0 0 1200 150" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:fg="http://github.com/jonhoo/inferno"><!--Flame graph stack visualization. See https://github.com/brendangregg/FlameGraph for latest version, and http://www.brendangregg.com/flamegraphs.html for examples.--><!--NOTES: --><defs><linearGradient id="background" y1="0" y2="1" x1="0" x2="0"><stop stop-color="#eeeeee" offset="5%"/><stop stop-color="#eeeeb0" offset="95%"/></linearGradient></defs><style type="text/css">
+text { font-family:monospace; font-size:12px }
+#title { text-anchor:middle; font-size:17px; }
+#matched { text-anchor:end; }
+#search { text-anchor:end; opacity:0.1; cursor:pointer; }
+#search:hover, #search.show { opacity:1; }
+#subtitle { text-anchor:middle; font-color:rgb(160,160,160); }
+#unzoom { cursor:pointer; }
+#frames > *:hover { stroke:black; stroke-width:0.5; cursor:pointer; }
+.hide { display:none; }
+.parent { opacity:0.5; }
+</style><script type="text/ecmascript"><![CDATA[
+        var nametype = 'Function:';
+        var fontsize = 12;
+        var fontwidth = 0.59;
+        var xpad = 10;
+        var inverted = false;
+        var searchcolor = 'rgb(230,0,230)';
+        var fluiddrawing = true;
+        var truncate_text_right = false;
+    ]]><![CDATA["use strict";
+var details, searchbtn, unzoombtn, matchedtxt, svg, searching, frames, known_font_width;
+function init(evt) {
+    details = document.getElementById("details").firstChild;
+    searchbtn = document.getElementById("search");
+    unzoombtn = document.getElementById("unzoom");
+    matchedtxt = document.getElementById("matched");
+    svg = document.getElementsByTagName("svg")[0];
+    frames = document.getElementById("frames");
+    known_font_width = get_monospace_width(frames);
+    total_samples = parseInt(frames.attributes.total_samples.value);
+    searching = 0;
+
+    // Use GET parameters to restore a flamegraph's state.
+    var restore_state = function() {
+        var params = get_params();
+        if (params.x && params.y)
+            zoom(find_group(document.querySelector('[*|x="' + params.x + '"][y="' + params.y + '"]')));
+        if (params.s)
+            search(params.s);
+    };
+
+    if (fluiddrawing) {
+        // Make width dynamic so the SVG fits its parent's width.
+        svg.removeAttribute("width");
+        // Edge requires us to have a viewBox that gets updated with size changes.
+        var isEdge = /Edge\/\d./i.test(navigator.userAgent);
+        if (!isEdge) {
+            svg.removeAttribute("viewBox");
+        }
+        var update_for_width_change = function() {
+            if (isEdge) {
+                svg.attributes.viewBox.value = "0 0 " + svg.width.baseVal.value + " " + svg.height.baseVal.value;
+            }
+
+            // Keep consistent padding on left and right of frames container.
+            frames.attributes.width.value = svg.width.baseVal.value - xpad * 2;
+
+            // Text truncation needs to be adjusted for the current width.
+            update_text_for_elements(frames.children);
+
+            // Keep search elements at a fixed distance from right edge.
+            var svgWidth = svg.width.baseVal.value;
+            searchbtn.attributes.x.value = svgWidth - xpad;
+            matchedtxt.attributes.x.value = svgWidth - xpad;
+        };
+        window.addEventListener('resize', function() {
+            update_for_width_change();
+        });
+        // This needs to be done asynchronously for Safari to work.
+        setTimeout(function() {
+            unzoom();
+            update_for_width_change();
+            restore_state();
+        }, 0);
+    } else {
+        restore_state();
+    }
+}
+// event listeners
+window.addEventListener("click", function(e) {
+    var target = find_group(e.target);
+    if (target) {
+        if (target.nodeName == "a") {
+            if (e.ctrlKey === false) return;
+            e.preventDefault();
+        }
+        if (target.classList.contains("parent")) unzoom();
+        zoom(target);
+
+        // set parameters for zoom state
+        var el = target.querySelector("rect");
+        if (el && el.attributes && el.attributes.y && el.attributes["fg:x"]) {
+            var params = get_params()
+            params.x = el.attributes["fg:x"].value;
+            params.y = el.attributes.y.value;
+            history.replaceState(null, null, parse_params(params));
+        }
+    }
+    else if (e.target.id == "unzoom") {
+        unzoom();
+
+        // remove zoom state
+        var params = get_params();
+        if (params.x) delete params.x;
+        if (params.y) delete params.y;
+        history.replaceState(null, null, parse_params(params));
+    }
+    else if (e.target.id == "search") search_prompt();
+}, false)
+// mouse-over for info
+// show
+window.addEventListener("mouseover", function(e) {
+    var target = find_group(e.target);
+    if (target) details.nodeValue = nametype + " " + g_to_text(target);
+}, false)
+// clear
+window.addEventListener("mouseout", function(e) {
+    var target = find_group(e.target);
+    if (target) details.nodeValue = ' ';
+}, false)
+// ctrl-F for search
+window.addEventListener("keydown",function (e) {
+    if (e.keyCode === 114 || (e.ctrlKey && e.keyCode === 70)) {
+        e.preventDefault();
+        search_prompt();
+    }
+}, false)
+// functions
+function get_params() {
+    var params = {};
+    var paramsarr = window.location.search.substr(1).split('&');
+    for (var i = 0; i < paramsarr.length; ++i) {
+        var tmp = paramsarr[i].split("=");
+        if (!tmp[0] || !tmp[1]) continue;
+        params[tmp[0]]  = decodeURIComponent(tmp[1]);
+    }
+    return params;
+}
+function parse_params(params) {
+    var uri = "?";
+    for (var key in params) {
+        uri += key + '=' + encodeURIComponent(params[key]) + '&';
+    }
+    if (uri.slice(-1) == "&")
+        uri = uri.substring(0, uri.length - 1);
+    if (uri == '?')
+        uri = window.location.href.split('?')[0];
+    return uri;
+}
+function find_child(node, selector) {
+    var children = node.querySelectorAll(selector);
+    if (children.length) return children[0];
+    return;
+}
+function find_group(node) {
+    var parent = node.parentElement;
+    if (!parent) return;
+    if (parent.id == "frames") return node;
+    return find_group(parent);
+}
+function orig_save(e, attr, val) {
+    if (e.attributes["fg:orig_" + attr] != undefined) return;
+    if (e.attributes[attr] == undefined) return;
+    if (val == undefined) val = e.attributes[attr].value;
+    e.setAttribute("fg:orig_" + attr, val);
+}
+function orig_load(e, attr) {
+    if (e.attributes["fg:orig_"+attr] == undefined) return;
+    e.attributes[attr].value = e.attributes["fg:orig_" + attr].value;
+    e.removeAttribute("fg:orig_" + attr);
+}
+function g_to_text(e) {
+    var text = find_child(e, "title").firstChild.nodeValue;
+    return (text)
+}
+function g_to_func(e) {
+    var func = g_to_text(e);
+    // if there's any manipulation we want to do to the function
+    // name before it's searched, do it here before returning.
+    return (func);
+}
+function get_monospace_width(frames) {
+    // Given the id="frames" element, return the width of text characters if
+    // this is a monospace font, otherwise return 0.
+    text = find_child(frames.children[0], "text");
+    originalContent = text.textContent;
+    text.textContent = "!";
+    bangWidth = text.getComputedTextLength();
+    text.textContent = "W";
+    wWidth = text.getComputedTextLength();
+    text.textContent = originalContent;
+    if (bangWidth === wWidth) {
+        return bangWidth;
+    } else {
+        return 0;
+    }
+}
+function update_text_for_elements(elements) {
+    // In order to render quickly in the browser, you want to do one pass of
+    // reading attributes, and one pass of mutating attributes. See
+    // https://web.dev/avoid-large-complex-layouts-and-layout-thrashing/ for details.
+
+    // Fall back to inefficient calculation, if we're variable-width font.
+    // TODO This should be optimized somehow too.
+    if (known_font_width === 0) {
+        for (var i = 0; i < elements.length; i++) {
+            update_text(elements[i]);
+        }
+        return;
+    }
+
+    var textElemNewAttributes = [];
+    for (var i = 0; i < elements.length; i++) {
+        var e = elements[i];
+        var r = find_child(e, "rect");
+        var t = find_child(e, "text");
+        var w = parseFloat(r.attributes.width.value) * frames.attributes.width.value / 100 - 3;
+        var txt = find_child(e, "title").textContent.replace(/\([^(]*\)$/,"");
+        var newX = format_percent((parseFloat(r.attributes.x.value) + (100 * 3 / frames.attributes.width.value)));
+
+        // Smaller than this size won't fit anything
+        if (w < 2 * known_font_width) {
+            textElemNewAttributes.push([newX, ""]);
+            continue;
+        }
+
+        // Fit in full text width
+        if (txt.length * known_font_width < w) {
+            textElemNewAttributes.push([newX, txt]);
+            continue;
+        }
+
+        var substringLength = Math.floor(w / known_font_width) - 2;
+        if (truncate_text_right) {
+            // Truncate the right side of the text.
+            textElemNewAttributes.push([newX, txt.substring(0, substringLength) + ".."]);
+            continue;
+        } else {
+            // Truncate the left side of the text.
+            textElemNewAttributes.push([newX, ".." + txt.substring(txt.length - substringLength, txt.length)]);
+            continue;
+        }
+    }
+
+    console.assert(textElemNewAttributes.length === elements.length, "Resize failed, please file a bug at https://github.com/jonhoo/inferno/");
+
+    // Now that we know new textContent, set it all in one go so we don't refresh a bazillion times.
+    for (var i = 0; i < elements.length; i++) {
+        var e = elements[i];
+        var values = textElemNewAttributes[i];
+        var t = find_child(e, "text");
+        t.attributes.x.value = values[0];
+        t.textContent = values[1];
+    }
+}
+
+function update_text(e) {
+    var r = find_child(e, "rect");
+    var t = find_child(e, "text");
+    var w = parseFloat(r.attributes.width.value) * frames.attributes.width.value / 100 - 3;
+    var txt = find_child(e, "title").textContent.replace(/\([^(]*\)$/,"");
+    t.attributes.x.value = format_percent((parseFloat(r.attributes.x.value) + (100 * 3 / frames.attributes.width.value)));
+
+    // Smaller than this size won't fit anything
+    if (w < 2 * fontsize * fontwidth) {
+        t.textContent = "";
+        return;
+    }
+    t.textContent = txt;
+    // Fit in full text width
+    if (t.getComputedTextLength() < w)
+        return;
+    if (truncate_text_right) {
+        // Truncate the right side of the text.
+        for (var x = txt.length - 2; x > 0; x--) {
+            if (t.getSubStringLength(0, x + 2) <= w) {
+                t.textContent = txt.substring(0, x) + "..";
+                return;
+            }
+        }
+    } else {
+        // Truncate the left side of the text.
+        for (var x = 2; x < txt.length; x++) {
+            if (t.getSubStringLength(x - 2, txt.length) <= w) {
+                t.textContent = ".." + txt.substring(x, txt.length);
+                return;
+            }
+        }
+    }
+    t.textContent = "";
+}
+// zoom
+function zoom_reset(e) {
+    if (e.tagName == "rect") {
+        e.attributes.x.value = format_percent(100 * parseInt(e.attributes["fg:x"].value) / total_samples);
+        e.attributes.width.value = format_percent(100 * parseInt(e.attributes["fg:w"].value) / total_samples);
+    }
+    if (e.childNodes == undefined) return;
+    for(var i = 0, c = e.childNodes; i < c.length; i++) {
+        zoom_reset(c[i]);
+    }
+}
+function zoom_child(e, x, zoomed_width_samples) {
+    if (e.tagName == "text") {
+        var parent_x = parseFloat(find_child(e.parentNode, "rect[x]").attributes.x.value);
+        e.attributes.x.value = format_percent(parent_x + (100 * 3 / frames.attributes.width.value));
+    } else if (e.tagName == "rect") {
+        e.attributes.x.value = format_percent(100 * (parseInt(e.attributes["fg:x"].value) - x) / zoomed_width_samples);
+        e.attributes.width.value = format_percent(100 * parseInt(e.attributes["fg:w"].value) / zoomed_width_samples);
+    }
+    if (e.childNodes == undefined) return;
+    for(var i = 0, c = e.childNodes; i < c.length; i++) {
+        zoom_child(c[i], x, zoomed_width_samples);
+    }
+}
+function zoom_parent(e) {
+    if (e.attributes) {
+        if (e.attributes.x != undefined) {
+            e.attributes.x.value = "0.0%";
+        }
+        if (e.attributes.width != undefined) {
+            e.attributes.width.value = "100.0%";
+        }
+    }
+    if (e.childNodes == undefined) return;
+    for(var i = 0, c = e.childNodes; i < c.length; i++) {
+        zoom_parent(c[i]);
+    }
+}
+function zoom(node) {
+    var attr = find_child(node, "rect").attributes;
+    var width = parseInt(attr["fg:w"].value);
+    var xmin = parseInt(attr["fg:x"].value);
+    var xmax = xmin + width;
+    var ymin = parseFloat(attr.y.value);
+    unzoombtn.classList.remove("hide");
+    var el = frames.children;
+    var to_update_text = [];
+    for (var i = 0; i < el.length; i++) {
+        var e = el[i];
+        var a = find_child(e, "rect").attributes;
+        var ex = parseInt(a["fg:x"].value);
+        var ew = parseInt(a["fg:w"].value);
+        // Is it an ancestor
+        if (!inverted) {
+            var upstack = parseFloat(a.y.value) > ymin;
+        } else {
+            var upstack = parseFloat(a.y.value) < ymin;
+        }
+        if (upstack) {
+            // Direct ancestor
+            if (ex <= xmin && (ex+ew) >= xmax) {
+                e.classList.add("parent");
+                zoom_parent(e);
+                to_update_text.push(e);
+            }
+            // not in current path
+            else
+                e.classList.add("hide");
+        }
+        // Children maybe
+        else {
+            // no common path
+            if (ex < xmin || ex >= xmax) {
+                e.classList.add("hide");
+            }
+            else {
+                zoom_child(e, xmin, width);
+                to_update_text.push(e);
+            }
+        }
+    }
+    update_text_for_elements(to_update_text);
+}
+function unzoom() {
+    unzoombtn.classList.add("hide");
+    var el = frames.children;
+    for(var i = 0; i < el.length; i++) {
+        el[i].classList.remove("parent");
+        el[i].classList.remove("hide");
+        zoom_reset(el[i]);
+    }
+    update_text_for_elements(el);
+}
+// search
+function reset_search() {
+    var el = document.querySelectorAll("#frames rect");
+    for (var i = 0; i < el.length; i++) {
+        orig_load(el[i], "fill")
+    }
+    var params = get_params();
+    delete params.s;
+    history.replaceState(null, null, parse_params(params));
+}
+function search_prompt() {
+    if (!searching) {
+        var term = prompt("Enter a search term (regexp " +
+            "allowed, eg: ^ext4_)", "");
+        if (term != null) {
+            search(term)
+        }
+    } else {
+        reset_search();
+        searching = 0;
+        searchbtn.classList.remove("show");
+        searchbtn.firstChild.nodeValue = "Search"
+        matchedtxt.classList.add("hide");
+        matchedtxt.firstChild.nodeValue = ""
+    }
+}
+function search(term) {
+    var re = new RegExp(term);
+    var el = frames.children;
+    var matches = new Object();
+    var maxwidth = 0;
+    for (var i = 0; i < el.length; i++) {
+        var e = el[i];
+        // Skip over frames which are either not visible, or below the zoomed-to frame
+        if (e.classList.contains("hide") || e.classList.contains("parent")) {
+            continue;
+        }
+        var func = g_to_func(e);
+        var rect = find_child(e, "rect");
+        if (func == null || rect == null)
+            continue;
+        // Save max width. Only works as we have a root frame
+        var w = parseInt(rect.attributes["fg:w"].value);
+        if (w > maxwidth)
+            maxwidth = w;
+        if (func.match(re)) {
+            // highlight
+            var x = parseInt(rect.attributes["fg:x"].value);
+            orig_save(rect, "fill");
+            rect.attributes.fill.value = searchcolor;
+            // remember matches
+            if (matches[x] == undefined) {
+                matches[x] = w;
+            } else {
+                if (w > matches[x]) {
+                    // overwrite with parent
+                    matches[x] = w;
+                }
+            }
+            searching = 1;
+        }
+    }
+    if (!searching)
+        return;
+    var params = get_params();
+    params.s = term;
+    history.replaceState(null, null, parse_params(params));
+
+    searchbtn.classList.add("show");
+    searchbtn.firstChild.nodeValue = "Reset Search";
+    // calculate percent matched, excluding vertical overlap
+    var count = 0;
+    var lastx = -1;
+    var lastw = 0;
+    var keys = Array();
+    for (k in matches) {
+        if (matches.hasOwnProperty(k))
+            keys.push(k);
+    }
+    // sort the matched frames by their x location
+    // ascending, then width descending
+    keys.sort(function(a, b){
+        return a - b;
+    });
+    // Step through frames saving only the biggest bottom-up frames
+    // thanks to the sort order. This relies on the tree property
+    // where children are always smaller than their parents.
+    for (var k in keys) {
+        var x = parseInt(keys[k]);
+        var w = matches[keys[k]];
+        if (x >= lastx + lastw) {
+            count += w;
+            lastx = x;
+            lastw = w;
+        }
+    }
+    // display matched percent
+    matchedtxt.classList.remove("hide");
+    var pct = 100 * count / maxwidth;
+    if (pct != 100) pct = pct.toFixed(1);
+    matchedtxt.firstChild.nodeValue = "Matched: " + pct + "%";
+}
+function format_percent(n) {
+    return n.toFixed(4) + "%";
+}
+]]></script><rect x="0" y="0" width="100%" height="150" fill="url(#background)"/><text id="title" fill="rgb(0,0,0)" x="50.0000%" y="24.00">measure_snapshot_creation_with_100_segments_of_1000_entries</text><text id="details" fill="rgb(0,0,0)" x="10" y="133.00"> </text><text id="unzoom" class="hide" fill="rgb(0,0,0)" x="10" y="24.00">Reset Zoom</text><text id="search" fill="rgb(0,0,0)" x="1190" y="24.00">Search</text><text id="matched" fill="rgb(0,0,0)" x="1190" y="133.00"> </text><svg id="frames" x="10" width="1180" total_samples="6434510"><g><title>memcmp (768 instructions, 0.01%)</title><rect x="0.0189%" y="37" width="0.0119%" height="15" fill="rgb(207,189,37)" fg:x="1214" fg:w="768"/><text x="0.2689%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (955 instructions, 0.01%)</title><rect x="0.0189%" y="53" width="0.0148%" height="15" fill="rgb(232,79,19)" fg:x="1214" fg:w="955"/><text x="0.2689%" y="63.50"></text></g><g><title>memcmp (1,537 instructions, 0.02%)</title><rect x="0.0399%" y="37" width="0.0239%" height="15" fill="rgb(222,35,34)" fg:x="2567" fg:w="1537"/><text x="0.2899%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (1,789 instructions, 0.03%)</title><rect x="0.0399%" y="53" width="0.0278%" height="15" fill="rgb(230,152,22)" fg:x="2567" fg:w="1789"/><text x="0.2899%" y="63.50"></text></g><g><title>memcmp (2,304 instructions, 0.04%)</title><rect x="0.0739%" y="37" width="0.0358%" height="15" fill="rgb(212,51,11)" fg:x="4754" fg:w="2304"/><text x="0.3239%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (2,622 instructions, 0.04%)</title><rect x="0.0739%" y="53" width="0.0407%" height="15" fill="rgb(210,173,43)" fg:x="4754" fg:w="2622"/><text x="0.3239%" y="63.50"></text></g><g><title>memcmp (3,072 instructions, 0.05%)</title><rect x="0.1208%" y="37" width="0.0477%" height="15" fill="rgb(216,197,22)" fg:x="7774" fg:w="3072"/><text x="0.3708%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (3,455 instructions, 0.05%)</title><rect x="0.1208%" y="53" width="0.0537%" height="15" fill="rgb(214,182,20)" fg:x="7774" fg:w="3455"/><text x="0.3708%" y="63.50"></text></g><g><title>memcmp (3,711 instructions, 0.06%)</title><rect x="0.1807%" y="37" width="0.0577%" height="15" fill="rgb(212,31,1)" fg:x="11627" fg:w="3711"/><text x="0.4307%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (4,158 instructions, 0.06%)</title><rect x="0.1807%" y="53" width="0.0646%" height="15" fill="rgb(246,144,1)" fg:x="11627" fg:w="4158"/><text x="0.4307%" y="63.50"></text></g><g><title>memcmp (4,478 instructions, 0.07%)</title><rect x="0.2515%" y="37" width="0.0696%" height="15" fill="rgb(227,175,37)" fg:x="16183" fg:w="4478"/><text x="0.5015%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (4,991 instructions, 0.08%)</title><rect x="0.2515%" y="53" width="0.0776%" height="15" fill="rgb(209,44,4)" fg:x="16183" fg:w="4991"/><text x="0.5015%" y="63.50"></text></g><g><title>memcmp (5,247 instructions, 0.08%)</title><rect x="0.3353%" y="37" width="0.0815%" height="15" fill="rgb(226,200,17)" fg:x="21573" fg:w="5247"/><text x="0.5853%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (5,824 instructions, 0.09%)</title><rect x="0.3353%" y="53" width="0.0905%" height="15" fill="rgb(223,54,51)" fg:x="21573" fg:w="5824"/><text x="0.5853%" y="63.50"></text></g><g><title>memcmp (6,014 instructions, 0.09%)</title><rect x="0.4320%" y="37" width="0.0935%" height="15" fill="rgb(251,25,0)" fg:x="27795" fg:w="6014"/><text x="0.6820%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (6,657 instructions, 0.10%)</title><rect x="0.4320%" y="53" width="0.1035%" height="15" fill="rgb(220,129,13)" fg:x="27795" fg:w="6657"/><text x="0.6820%" y="63.50"></text></g><g><title>memcmp (6,679 instructions, 0.10%)</title><rect x="0.5416%" y="37" width="0.1038%" height="15" fill="rgb(232,144,21)" fg:x="34850" fg:w="6679"/><text x="0.7916%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (7,386 instructions, 0.11%)</title><rect x="0.5416%" y="53" width="0.1148%" height="15" fill="rgb(206,93,36)" fg:x="34850" fg:w="7386"/><text x="0.7916%" y="63.50"></text></g><g><title>memcmp (7,447 instructions, 0.12%)</title><rect x="0.6626%" y="37" width="0.1157%" height="15" fill="rgb(247,44,28)" fg:x="42635" fg:w="7447"/><text x="0.9126%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (8,219 instructions, 0.13%)</title><rect x="0.6626%" y="53" width="0.1277%" height="15" fill="rgb(223,128,49)" fg:x="42635" fg:w="8219"/><text x="0.9126%" y="63.50"></text></g><g><title>memcmp (8,214 instructions, 0.13%)</title><rect x="0.7965%" y="37" width="0.1277%" height="15" fill="rgb(210,26,49)" fg:x="51253" fg:w="8214"/><text x="1.0465%" y="47.50"></text></g><g><title>dlmalloc::dlmalloc::Dlmalloc&lt;A&gt;::malloc (744 instructions, 0.01%)</title><rect x="0.9242%" y="37" width="0.0116%" height="15" fill="rgb(224,83,50)" fg:x="59467" fg:w="744"/><text x="1.1742%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (10,331 instructions, 0.16%)</title><rect x="0.7965%" y="53" width="0.1606%" height="15" fill="rgb(243,47,43)" fg:x="51253" fg:w="10331"/><text x="1.0465%" y="63.50"></text></g><g><title>memcmp (4,530 instructions, 0.07%)</title><rect x="0.9633%" y="37" width="0.0704%" height="15" fill="rgb(244,34,12)" fg:x="61982" fg:w="4530"/><text x="1.2133%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (5,082 instructions, 0.08%)</title><rect x="0.9633%" y="53" width="0.0790%" height="15" fill="rgb(218,90,21)" fg:x="61982" fg:w="5082"/><text x="1.2133%" y="63.50"></text></g><g><title>memcmp (5,195 instructions, 0.08%)</title><rect x="1.0484%" y="37" width="0.0807%" height="15" fill="rgb(235,49,37)" fg:x="67462" fg:w="5195"/><text x="1.2984%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (5,811 instructions, 0.09%)</title><rect x="1.0484%" y="53" width="0.0903%" height="15" fill="rgb(248,29,8)" fg:x="67462" fg:w="5811"/><text x="1.2984%" y="63.50"></text></g><g><title>memcmp (5,962 instructions, 0.09%)</title><rect x="1.1449%" y="37" width="0.0927%" height="15" fill="rgb(237,186,32)" fg:x="73671" fg:w="5962"/><text x="1.3949%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (6,644 instructions, 0.10%)</title><rect x="1.1449%" y="53" width="0.1033%" height="15" fill="rgb(249,216,32)" fg:x="73671" fg:w="6644"/><text x="1.3949%" y="63.50"></text></g><g><title>memcmp (6,731 instructions, 0.10%)</title><rect x="1.2544%" y="37" width="0.1046%" height="15" fill="rgb(212,7,9)" fg:x="80713" fg:w="6731"/><text x="1.5044%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (7,477 instructions, 0.12%)</title><rect x="1.2544%" y="53" width="0.1162%" height="15" fill="rgb(222,72,16)" fg:x="80713" fg:w="7477"/><text x="1.5044%" y="63.50"></text></g><g><title>memcmp (7,499 instructions, 0.12%)</title><rect x="1.3768%" y="37" width="0.1165%" height="15" fill="rgb(235,165,0)" fg:x="88588" fg:w="7499"/><text x="1.6268%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (8,311 instructions, 0.13%)</title><rect x="1.3768%" y="53" width="0.1292%" height="15" fill="rgb(232,135,9)" fg:x="88588" fg:w="8311"/><text x="1.6268%" y="63.50"></text></g><g><title>memcmp (8,162 instructions, 0.13%)</title><rect x="1.5121%" y="37" width="0.1268%" height="15" fill="rgb(223,13,27)" fg:x="97297" fg:w="8162"/><text x="1.7621%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (9,040 instructions, 0.14%)</title><rect x="1.5121%" y="53" width="0.1405%" height="15" fill="rgb(253,5,37)" fg:x="97297" fg:w="9040"/><text x="1.7621%" y="63.50"></text></g><g><title>memcmp (8,931 instructions, 0.14%)</title><rect x="1.6588%" y="37" width="0.1388%" height="15" fill="rgb(230,96,5)" fg:x="106735" fg:w="8931"/><text x="1.9088%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (10,813 instructions, 0.17%)</title><rect x="1.6588%" y="53" width="0.1680%" height="15" fill="rgb(254,19,33)" fg:x="106735" fg:w="10813"/><text x="1.9088%" y="63.50"></text></g><g><title>memcmp (5,247 instructions, 0.08%)</title><rect x="1.8330%" y="37" width="0.0815%" height="15" fill="rgb(245,69,45)" fg:x="117946" fg:w="5247"/><text x="2.0830%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (5,863 instructions, 0.09%)</title><rect x="1.8330%" y="53" width="0.0911%" height="15" fill="rgb(225,175,10)" fg:x="117946" fg:w="5863"/><text x="2.0830%" y="63.50"></text></g><g><title>memcmp (6,014 instructions, 0.09%)</title><rect x="1.9303%" y="37" width="0.0935%" height="15" fill="rgb(227,26,31)" fg:x="124207" fg:w="6014"/><text x="2.1803%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (6,696 instructions, 0.10%)</title><rect x="1.9303%" y="53" width="0.1041%" height="15" fill="rgb(209,196,1)" fg:x="124207" fg:w="6696"/><text x="2.1803%" y="63.50"></text></g><g><title>memcmp (6,679 instructions, 0.10%)</title><rect x="2.0406%" y="37" width="0.1038%" height="15" fill="rgb(226,12,24)" fg:x="131301" fg:w="6679"/><text x="2.2906%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (7,425 instructions, 0.12%)</title><rect x="2.0406%" y="53" width="0.1154%" height="15" fill="rgb(245,13,23)" fg:x="131301" fg:w="7425"/><text x="2.2906%" y="63.50"></text></g><g><title>memcmp (7,447 instructions, 0.12%)</title><rect x="2.1622%" y="37" width="0.1157%" height="15" fill="rgb(245,68,26)" fg:x="139124" fg:w="7447"/><text x="2.4122%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (8,259 instructions, 0.13%)</title><rect x="2.1622%" y="53" width="0.1284%" height="15" fill="rgb(235,47,54)" fg:x="139124" fg:w="8259"/><text x="2.4122%" y="63.50"></text></g><g><title>memcmp (8,214 instructions, 0.13%)</title><rect x="2.2967%" y="37" width="0.1277%" height="15" fill="rgb(241,224,27)" fg:x="147781" fg:w="8214"/><text x="2.5467%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (9,092 instructions, 0.14%)</title><rect x="2.2967%" y="53" width="0.1413%" height="15" fill="rgb(214,178,49)" fg:x="147781" fg:w="9092"/><text x="2.5467%" y="63.50"></text></g><g><title>memcmp (8,983 instructions, 0.14%)</title><rect x="2.4442%" y="37" width="0.1396%" height="15" fill="rgb(224,71,11)" fg:x="157271" fg:w="8983"/><text x="2.6942%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (9,925 instructions, 0.15%)</title><rect x="2.4442%" y="53" width="0.1542%" height="15" fill="rgb(242,209,28)" fg:x="157271" fg:w="9925"/><text x="2.6942%" y="63.50"></text></g><g><title>memcmp (9,647 instructions, 0.15%)</title><rect x="2.6046%" y="37" width="0.1499%" height="15" fill="rgb(250,77,9)" fg:x="167595" fg:w="9647"/><text x="2.8546%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (11,627 instructions, 0.18%)</title><rect x="2.6046%" y="53" width="0.1807%" height="15" fill="rgb(233,54,40)" fg:x="167595" fg:w="11627"/><text x="2.8546%" y="63.50"></text></g><g><title>memcmp (5,963 instructions, 0.09%)</title><rect x="2.7915%" y="37" width="0.0927%" height="15" fill="rgb(240,125,12)" fg:x="179620" fg:w="5963"/><text x="3.0415%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (6,644 instructions, 0.10%)</title><rect x="2.7915%" y="53" width="0.1033%" height="15" fill="rgb(241,12,32)" fg:x="179620" fg:w="6644"/><text x="3.0415%" y="63.50"></text></g><g><title>memcmp (6,730 instructions, 0.10%)</title><rect x="2.9010%" y="37" width="0.1046%" height="15" fill="rgb(246,35,37)" fg:x="186663" fg:w="6730"/><text x="3.1510%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (7,477 instructions, 0.12%)</title><rect x="2.9010%" y="53" width="0.1162%" height="15" fill="rgb(215,203,18)" fg:x="186663" fg:w="7477"/><text x="3.1510%" y="63.50"></text></g><g><title>memcmp (7,498 instructions, 0.12%)</title><rect x="3.0234%" y="37" width="0.1165%" height="15" fill="rgb(242,121,54)" fg:x="194538" fg:w="7498"/><text x="3.2734%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (8,310 instructions, 0.13%)</title><rect x="3.0234%" y="53" width="0.1291%" height="15" fill="rgb(252,145,50)" fg:x="194538" fg:w="8310"/><text x="3.2734%" y="63.50"></text></g><g><title>memcmp (8,163 instructions, 0.13%)</title><rect x="3.1587%" y="37" width="0.1269%" height="15" fill="rgb(222,108,45)" fg:x="203246" fg:w="8163"/><text x="3.4087%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (9,040 instructions, 0.14%)</title><rect x="3.1587%" y="53" width="0.1405%" height="15" fill="rgb(246,121,5)" fg:x="203246" fg:w="9040"/><text x="3.4087%" y="63.50"></text></g><g><title>memcmp (8,930 instructions, 0.14%)</title><rect x="3.3054%" y="37" width="0.1388%" height="15" fill="rgb(245,182,11)" fg:x="212684" fg:w="8930"/><text x="3.5554%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (9,873 instructions, 0.15%)</title><rect x="3.3054%" y="53" width="0.1534%" height="15" fill="rgb(253,208,43)" fg:x="212684" fg:w="9873"/><text x="3.5554%" y="63.50"></text></g><g><title>memcmp (9,698 instructions, 0.15%)</title><rect x="3.4650%" y="37" width="0.1507%" height="15" fill="rgb(214,91,39)" fg:x="222955" fg:w="9698"/><text x="3.7150%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (10,705 instructions, 0.17%)</title><rect x="3.4650%" y="53" width="0.1664%" height="15" fill="rgb(248,34,38)" fg:x="222955" fg:w="10705"/><text x="3.7150%" y="63.50"></text></g><g><title>memcmp (10,467 instructions, 0.16%)</title><rect x="3.6375%" y="37" width="0.1627%" height="15" fill="rgb(222,181,48)" fg:x="234058" fg:w="10467"/><text x="3.8875%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (12,479 instructions, 0.19%)</title><rect x="3.6375%" y="53" width="0.1939%" height="15" fill="rgb(239,75,9)" fg:x="234058" fg:w="12479"/><text x="3.8875%" y="63.50"></text></g><g><title>memcmp (6,678 instructions, 0.10%)</title><rect x="3.8377%" y="37" width="0.1038%" height="15" fill="rgb(232,188,50)" fg:x="246935" fg:w="6678"/><text x="4.0877%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (7,425 instructions, 0.12%)</title><rect x="3.8377%" y="53" width="0.1154%" height="15" fill="rgb(219,167,26)" fg:x="246935" fg:w="7425"/><text x="4.0877%" y="63.50"></text></g><g><title>memcmp (7,447 instructions, 0.12%)</title><rect x="3.9592%" y="37" width="0.1157%" height="15" fill="rgb(234,149,49)" fg:x="254758" fg:w="7447"/><text x="4.2092%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (8,259 instructions, 0.13%)</title><rect x="3.9592%" y="53" width="0.1284%" height="15" fill="rgb(251,12,17)" fg:x="254758" fg:w="8259"/><text x="4.2092%" y="63.50"></text></g><g><title>memcmp (8,214 instructions, 0.13%)</title><rect x="4.0938%" y="37" width="0.1277%" height="15" fill="rgb(215,225,5)" fg:x="263415" fg:w="8214"/><text x="4.3438%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (9,092 instructions, 0.14%)</title><rect x="4.0938%" y="53" width="0.1413%" height="15" fill="rgb(207,91,9)" fg:x="263415" fg:w="9092"/><text x="4.3438%" y="63.50"></text></g><g><title>memcmp (8,983 instructions, 0.14%)</title><rect x="4.2413%" y="37" width="0.1396%" height="15" fill="rgb(212,18,33)" fg:x="272905" fg:w="8983"/><text x="4.4913%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (9,925 instructions, 0.15%)</title><rect x="4.2413%" y="53" width="0.1542%" height="15" fill="rgb(231,65,2)" fg:x="272905" fg:w="9925"/><text x="4.4913%" y="63.50"></text></g><g><title>memcmp (9,648 instructions, 0.15%)</title><rect x="4.4017%" y="37" width="0.1499%" height="15" fill="rgb(222,58,52)" fg:x="283228" fg:w="9648"/><text x="4.6517%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (10,654 instructions, 0.17%)</title><rect x="4.4017%" y="53" width="0.1656%" height="15" fill="rgb(223,73,44)" fg:x="283228" fg:w="10654"/><text x="4.6517%" y="63.50"></text></g><g><title>memcmp (10,416 instructions, 0.16%)</title><rect x="4.5735%" y="37" width="0.1619%" height="15" fill="rgb(234,136,50)" fg:x="294281" fg:w="10416"/><text x="4.8235%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (11,487 instructions, 0.18%)</title><rect x="4.5735%" y="53" width="0.1785%" height="15" fill="rgb(254,181,20)" fg:x="294281" fg:w="11487"/><text x="4.8235%" y="63.50"></text></g><g><title>memcmp (11,183 instructions, 0.17%)</title><rect x="4.7582%" y="37" width="0.1738%" height="15" fill="rgb(208,8,18)" fg:x="306166" fg:w="11183"/><text x="5.0082%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (13,296 instructions, 0.21%)</title><rect x="4.7582%" y="53" width="0.2066%" height="15" fill="rgb(232,185,41)" fg:x="306166" fg:w="13296"/><text x="5.0082%" y="63.50"></text></g><g><title>memcmp (7,498 instructions, 0.12%)</title><rect x="4.9710%" y="37" width="0.1165%" height="15" fill="rgb(235,73,10)" fg:x="319860" fg:w="7498"/><text x="5.2210%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (8,310 instructions, 0.13%)</title><rect x="4.9710%" y="53" width="0.1291%" height="15" fill="rgb(213,156,40)" fg:x="319860" fg:w="8310"/><text x="5.2210%" y="63.50"></text></g><g><title>memcmp (8,162 instructions, 0.13%)</title><rect x="5.1063%" y="37" width="0.1268%" height="15" fill="rgb(221,164,34)" fg:x="328568" fg:w="8162"/><text x="5.3563%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (9,039 instructions, 0.14%)</title><rect x="5.1063%" y="53" width="0.1405%" height="15" fill="rgb(236,64,20)" fg:x="328568" fg:w="9039"/><text x="5.3563%" y="63.50"></text></g><g><title>memcmp (8,931 instructions, 0.14%)</title><rect x="5.2530%" y="37" width="0.1388%" height="15" fill="rgb(207,2,39)" fg:x="338005" fg:w="8931"/><text x="5.5030%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (9,873 instructions, 0.15%)</title><rect x="5.2530%" y="53" width="0.1534%" height="15" fill="rgb(227,22,50)" fg:x="338005" fg:w="9873"/><text x="5.5030%" y="63.50"></text></g><g><title>memcmp (9,700 instructions, 0.15%)</title><rect x="5.4126%" y="37" width="0.1507%" height="15" fill="rgb(208,5,15)" fg:x="348276" fg:w="9700"/><text x="5.6626%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (10,706 instructions, 0.17%)</title><rect x="5.4126%" y="53" width="0.1664%" height="15" fill="rgb(223,143,22)" fg:x="348276" fg:w="10706"/><text x="5.6626%" y="63.50"></text></g><g><title>memcmp (10,467 instructions, 0.16%)</title><rect x="5.5852%" y="37" width="0.1627%" height="15" fill="rgb(236,120,46)" fg:x="359380" fg:w="10467"/><text x="5.8352%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (11,539 instructions, 0.18%)</title><rect x="5.5852%" y="53" width="0.1793%" height="15" fill="rgb(231,133,36)" fg:x="359380" fg:w="11539"/><text x="5.8352%" y="63.50"></text></g><g><title>memcmp (11,235 instructions, 0.17%)</title><rect x="5.7707%" y="37" width="0.1746%" height="15" fill="rgb(225,148,46)" fg:x="371318" fg:w="11235"/><text x="6.0207%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (12,372 instructions, 0.19%)</title><rect x="5.7707%" y="53" width="0.1923%" height="15" fill="rgb(216,100,47)" fg:x="371318" fg:w="12372"/><text x="6.0207%" y="63.50"></text></g><g><title>memcmp (11,874 instructions, 0.18%)</title><rect x="5.9692%" y="37" width="0.1845%" height="15" fill="rgb(252,214,41)" fg:x="384088" fg:w="11874"/><text x="6.2192%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (14,010 instructions, 0.22%)</title><rect x="5.9692%" y="53" width="0.2177%" height="15" fill="rgb(223,181,18)" fg:x="384088" fg:w="14010"/><text x="6.2192%" y="63.50"></text></g><g><title>memcmp (8,189 instructions, 0.13%)</title><rect x="6.1931%" y="37" width="0.1273%" height="15" fill="rgb(217,122,34)" fg:x="398496" fg:w="8189"/><text x="6.4431%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (9,066 instructions, 0.14%)</title><rect x="6.1931%" y="53" width="0.1409%" height="15" fill="rgb(210,77,41)" fg:x="398496" fg:w="9066"/><text x="6.4431%" y="63.50"></text></g><g><title>memcmp (8,957 instructions, 0.14%)</title><rect x="6.3402%" y="37" width="0.1392%" height="15" fill="rgb(231,65,46)" fg:x="407960" fg:w="8957"/><text x="6.5902%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (9,899 instructions, 0.15%)</title><rect x="6.3402%" y="53" width="0.1538%" height="15" fill="rgb(228,198,46)" fg:x="407960" fg:w="9899"/><text x="6.5902%" y="63.50"></text></g><g><title>memcmp (9,724 instructions, 0.15%)</title><rect x="6.5002%" y="37" width="0.1511%" height="15" fill="rgb(234,216,34)" fg:x="418257" fg:w="9724"/><text x="6.7502%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (10,731 instructions, 0.17%)</title><rect x="6.5002%" y="53" width="0.1668%" height="15" fill="rgb(207,124,46)" fg:x="418257" fg:w="10731"/><text x="6.7502%" y="63.50"></text></g><g><title>memcmp (10,389 instructions, 0.16%)</title><rect x="6.6732%" y="37" width="0.1615%" height="15" fill="rgb(241,121,44)" fg:x="429387" fg:w="10389"/><text x="6.9232%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (11,461 instructions, 0.18%)</title><rect x="6.6732%" y="53" width="0.1781%" height="15" fill="rgb(220,218,14)" fg:x="429387" fg:w="11461"/><text x="6.9232%" y="63.50"></text></g><g><title>memcmp (11,157 instructions, 0.17%)</title><rect x="6.8575%" y="37" width="0.1734%" height="15" fill="rgb(207,11,38)" fg:x="441246" fg:w="11157"/><text x="7.1075%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (12,294 instructions, 0.19%)</title><rect x="6.8575%" y="53" width="0.1911%" height="15" fill="rgb(214,182,27)" fg:x="441246" fg:w="12294"/><text x="7.1075%" y="63.50"></text></g><g><title>memcmp (11,926 instructions, 0.19%)</title><rect x="7.0548%" y="37" width="0.1853%" height="15" fill="rgb(248,107,37)" fg:x="453939" fg:w="11926"/><text x="7.3048%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (13,127 instructions, 0.20%)</title><rect x="7.0548%" y="53" width="0.2040%" height="15" fill="rgb(239,196,5)" fg:x="453939" fg:w="13127"/><text x="7.3048%" y="63.50"></text></g><g><title>memcmp (12,693 instructions, 0.20%)</title><rect x="7.2650%" y="37" width="0.1973%" height="15" fill="rgb(208,149,48)" fg:x="467465" fg:w="12693"/><text x="7.5150%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (14,977 instructions, 0.23%)</title><rect x="7.2650%" y="53" width="0.2328%" height="15" fill="rgb(237,4,21)" fg:x="467465" fg:w="14977"/><text x="7.5150%" y="63.50"></text></g><g><title>memcmp (8,905 instructions, 0.14%)</title><rect x="7.5039%" y="37" width="0.1384%" height="15" fill="rgb(233,162,48)" fg:x="482841" fg:w="8905"/><text x="7.7539%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (9,846 instructions, 0.15%)</title><rect x="7.5039%" y="53" width="0.1530%" height="15" fill="rgb(254,118,39)" fg:x="482841" fg:w="9846"/><text x="7.7539%" y="63.50"></text></g><g><title>memcmp (9,673 instructions, 0.15%)</title><rect x="7.6631%" y="37" width="0.1503%" height="15" fill="rgb(218,36,3)" fg:x="493086" fg:w="9673"/><text x="7.9131%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (10,680 instructions, 0.17%)</title><rect x="7.6631%" y="53" width="0.1660%" height="15" fill="rgb(243,53,24)" fg:x="493086" fg:w="10680"/><text x="7.9131%" y="63.50"></text></g><g><title>memcmp (10,441 instructions, 0.16%)</title><rect x="7.8353%" y="37" width="0.1623%" height="15" fill="rgb(226,107,13)" fg:x="504164" fg:w="10441"/><text x="8.0853%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (11,513 instructions, 0.18%)</title><rect x="7.8353%" y="53" width="0.1789%" height="15" fill="rgb(242,93,54)" fg:x="504164" fg:w="11513"/><text x="8.0853%" y="63.50"></text></g><g><title>memcmp (11,209 instructions, 0.17%)</title><rect x="8.0204%" y="37" width="0.1742%" height="15" fill="rgb(225,102,3)" fg:x="516075" fg:w="11209"/><text x="8.2704%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (12,346 instructions, 0.19%)</title><rect x="8.0204%" y="53" width="0.1919%" height="15" fill="rgb(228,86,6)" fg:x="516075" fg:w="12346"/><text x="8.2704%" y="63.50"></text></g><g><title>memcmp (11,872 instructions, 0.18%)</title><rect x="8.2185%" y="37" width="0.1845%" height="15" fill="rgb(232,127,36)" fg:x="528819" fg:w="11872"/><text x="8.4685%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (13,075 instructions, 0.20%)</title><rect x="8.2185%" y="53" width="0.2032%" height="15" fill="rgb(207,199,12)" fg:x="528819" fg:w="13075"/><text x="8.4685%" y="63.50"></text></g><g><title>memcmp (12,640 instructions, 0.20%)</title><rect x="8.4279%" y="37" width="0.1964%" height="15" fill="rgb(233,102,53)" fg:x="542292" fg:w="12640"/><text x="8.6779%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (13,908 instructions, 0.22%)</title><rect x="8.4279%" y="53" width="0.2161%" height="15" fill="rgb(236,150,18)" fg:x="542292" fg:w="13908"/><text x="8.6779%" y="63.50"></text></g><g><title>memcmp (13,409 instructions, 0.21%)</title><rect x="8.6502%" y="37" width="0.2084%" height="15" fill="rgb(211,103,47)" fg:x="556599" fg:w="13409"/><text x="8.9002%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (15,717 instructions, 0.24%)</title><rect x="8.6502%" y="53" width="0.2443%" height="15" fill="rgb(239,126,19)" fg:x="556599" fg:w="15717"/><text x="8.9002%" y="63.50"></text></g><g><title>memcmp (9,725 instructions, 0.15%)</title><rect x="8.8977%" y="37" width="0.1511%" height="15" fill="rgb(240,70,5)" fg:x="572525" fg:w="9725"/><text x="9.1477%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (10,732 instructions, 0.17%)</title><rect x="8.8977%" y="53" width="0.1668%" height="15" fill="rgb(218,61,41)" fg:x="572525" fg:w="10732"/><text x="9.1477%" y="63.50"></text></g><g><title>memcmp (10,389 instructions, 0.16%)</title><rect x="9.0678%" y="37" width="0.1615%" height="15" fill="rgb(247,188,19)" fg:x="583466" fg:w="10389"/><text x="9.3178%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (11,461 instructions, 0.18%)</title><rect x="9.0678%" y="53" width="0.1781%" height="15" fill="rgb(211,26,29)" fg:x="583466" fg:w="11461"/><text x="9.3178%" y="63.50"></text></g><g><title>memcmp (11,157 instructions, 0.17%)</title><rect x="9.2558%" y="37" width="0.1734%" height="15" fill="rgb(216,132,45)" fg:x="595568" fg:w="11157"/><text x="9.5058%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (12,295 instructions, 0.19%)</title><rect x="9.2558%" y="53" width="0.1911%" height="15" fill="rgb(215,83,10)" fg:x="595568" fg:w="12295"/><text x="9.5058%" y="63.50"></text></g><g><title>memcmp (11,925 instructions, 0.19%)</title><rect x="9.4569%" y="37" width="0.1853%" height="15" fill="rgb(214,164,24)" fg:x="608504" fg:w="11925"/><text x="9.7069%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (13,127 instructions, 0.20%)</title><rect x="9.4569%" y="53" width="0.2040%" height="15" fill="rgb(230,69,50)" fg:x="608504" fg:w="13127"/><text x="9.7069%" y="63.50"></text></g><g><title>memcmp (12,694 instructions, 0.20%)</title><rect x="9.6709%" y="37" width="0.1973%" height="15" fill="rgb(235,120,6)" fg:x="622272" fg:w="12694"/><text x="9.9209%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (13,961 instructions, 0.22%)</title><rect x="9.6709%" y="53" width="0.2170%" height="15" fill="rgb(239,128,48)" fg:x="622272" fg:w="13961"/><text x="9.9209%" y="63.50"></text></g><g><title>memcmp (12,890 instructions, 0.20%)</title><rect x="9.8911%" y="37" width="0.2003%" height="15" fill="rgb(251,139,25)" fg:x="636442" fg:w="12890"/><text x="10.1411%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (14,222 instructions, 0.22%)</title><rect x="9.8911%" y="53" width="0.2210%" height="15" fill="rgb(234,74,17)" fg:x="636442" fg:w="14222"/><text x="10.1411%" y="63.50"></text></g><g><title>memcmp (13,657 instructions, 0.21%)</title><rect x="10.1221%" y="37" width="0.2122%" height="15" fill="rgb(221,217,5)" fg:x="651305" fg:w="13657"/><text x="10.3721%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (15,989 instructions, 0.25%)</title><rect x="10.1221%" y="53" width="0.2485%" height="15" fill="rgb(251,104,33)" fg:x="651305" fg:w="15989"/><text x="10.3721%" y="63.50"></text></g><g><title>memcmp (10,129 instructions, 0.16%)</title><rect x="10.3805%" y="37" width="0.1574%" height="15" fill="rgb(223,222,2)" fg:x="667935" fg:w="10129"/><text x="10.6305%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (11,201 instructions, 0.17%)</title><rect x="10.3805%" y="53" width="0.1741%" height="15" fill="rgb(240,3,21)" fg:x="667935" fg:w="11201"/><text x="10.6305%" y="63.50"></text></g><g><title>memcmp (10,898 instructions, 0.17%)</title><rect x="10.5645%" y="37" width="0.1694%" height="15" fill="rgb(230,63,12)" fg:x="679777" fg:w="10898"/><text x="10.8145%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (12,035 instructions, 0.19%)</title><rect x="10.5645%" y="53" width="0.1870%" height="15" fill="rgb(234,215,8)" fg:x="679777" fg:w="12035"/><text x="10.8145%" y="63.50"></text></g><g><title>memcmp (11,562 instructions, 0.18%)</title><rect x="10.7615%" y="37" width="0.1797%" height="15" fill="rgb(237,102,2)" fg:x="692453" fg:w="11562"/><text x="11.0115%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (12,763 instructions, 0.20%)</title><rect x="10.7615%" y="53" width="0.1984%" height="15" fill="rgb(235,183,54)" fg:x="692453" fg:w="12763"/><text x="11.0115%" y="63.50"></text></g><g><title>memcmp (12,329 instructions, 0.19%)</title><rect x="10.9632%" y="37" width="0.1916%" height="15" fill="rgb(239,207,52)" fg:x="705425" fg:w="12329"/><text x="11.2132%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (13,597 instructions, 0.21%)</title><rect x="10.9632%" y="53" width="0.2113%" height="15" fill="rgb(252,5,32)" fg:x="705425" fg:w="13597"/><text x="11.2132%" y="63.50"></text></g><g><title>memcmp (13,097 instructions, 0.20%)</title><rect x="11.1844%" y="37" width="0.2035%" height="15" fill="rgb(247,127,27)" fg:x="719663" fg:w="13097"/><text x="11.4344%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (14,430 instructions, 0.22%)</title><rect x="11.1844%" y="53" width="0.2243%" height="15" fill="rgb(227,196,32)" fg:x="719663" fg:w="14430"/><text x="11.4344%" y="63.50"></text></g><g><title>memcmp (13,865 instructions, 0.22%)</title><rect x="11.4186%" y="37" width="0.2155%" height="15" fill="rgb(251,120,1)" fg:x="734734" fg:w="13865"/><text x="11.6686%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (15,263 instructions, 0.24%)</title><rect x="11.4186%" y="53" width="0.2372%" height="15" fill="rgb(213,177,1)" fg:x="734734" fg:w="15263"/><text x="11.6686%" y="63.50"></text></g><g><title>memcmp (14,530 instructions, 0.23%)</title><rect x="11.6658%" y="37" width="0.2258%" height="15" fill="rgb(206,33,29)" fg:x="750638" fg:w="14530"/><text x="11.9158%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (16,967 instructions, 0.26%)</title><rect x="11.6658%" y="53" width="0.2637%" height="15" fill="rgb(220,167,1)" fg:x="750638" fg:w="16967"/><text x="11.9158%" y="63.50"></text></g><g><title>memcmp (10,923 instructions, 0.17%)</title><rect x="11.9395%" y="37" width="0.1698%" height="15" fill="rgb(235,77,4)" fg:x="768246" fg:w="10923"/><text x="12.1895%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (12,061 instructions, 0.19%)</title><rect x="11.9395%" y="53" width="0.1874%" height="15" fill="rgb(215,4,47)" fg:x="768246" fg:w="12061"/><text x="12.1895%" y="63.50"></text></g><g><title>memcmp (11,691 instructions, 0.18%)</title><rect x="12.1302%" y="37" width="0.1817%" height="15" fill="rgb(209,194,51)" fg:x="780516" fg:w="11691"/><text x="12.3802%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (12,893 instructions, 0.20%)</title><rect x="12.1302%" y="53" width="0.2004%" height="15" fill="rgb(241,168,54)" fg:x="780516" fg:w="12893"/><text x="12.3802%" y="63.50"></text></g><g><title>memcmp (12,459 instructions, 0.19%)</title><rect x="12.3405%" y="37" width="0.1936%" height="15" fill="rgb(245,18,25)" fg:x="794050" fg:w="12459"/><text x="12.5905%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (13,727 instructions, 0.21%)</title><rect x="12.3405%" y="53" width="0.2133%" height="15" fill="rgb(206,165,20)" fg:x="794050" fg:w="13727"/><text x="12.5905%" y="63.50"></text></g><g><title>memcmp (13,124 instructions, 0.20%)</title><rect x="12.5638%" y="37" width="0.2040%" height="15" fill="rgb(245,34,44)" fg:x="808418" fg:w="13124"/><text x="12.8138%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (14,456 instructions, 0.22%)</title><rect x="12.5638%" y="53" width="0.2247%" height="15" fill="rgb(207,19,53)" fg:x="808418" fg:w="14456"/><text x="12.8138%" y="63.50"></text></g><g><title>memcmp (13,891 instructions, 0.22%)</title><rect x="12.7984%" y="37" width="0.2159%" height="15" fill="rgb(246,51,40)" fg:x="823515" fg:w="13891"/><text x="13.0484%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (15,289 instructions, 0.24%)</title><rect x="12.7984%" y="53" width="0.2376%" height="15" fill="rgb(232,54,51)" fg:x="823515" fg:w="15289"/><text x="13.0484%" y="63.50"></text></g><g><title>memcmp (14,659 instructions, 0.23%)</title><rect x="13.0460%" y="37" width="0.2278%" height="15" fill="rgb(236,166,19)" fg:x="839445" fg:w="14659"/><text x="13.2960%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (16,122 instructions, 0.25%)</title><rect x="13.0460%" y="53" width="0.2506%" height="15" fill="rgb(248,110,38)" fg:x="839445" fg:w="16122"/><text x="13.2960%" y="63.50"></text></g><g><title>memcmp (15,428 instructions, 0.24%)</title><rect x="13.2998%" y="37" width="0.2398%" height="15" fill="rgb(216,175,48)" fg:x="855776" fg:w="15428"/><text x="13.5498%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (17,930 instructions, 0.28%)</title><rect x="13.2998%" y="53" width="0.2787%" height="15" fill="rgb(213,139,1)" fg:x="855776" fg:w="17930"/><text x="13.5498%" y="63.50"></text></g><g><title>memcmp (11,639 instructions, 0.18%)</title><rect x="13.5884%" y="37" width="0.1809%" height="15" fill="rgb(205,112,50)" fg:x="874347" fg:w="11639"/><text x="13.8384%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (12,841 instructions, 0.20%)</title><rect x="13.5884%" y="53" width="0.1996%" height="15" fill="rgb(205,43,44)" fg:x="874347" fg:w="12841"/><text x="13.8384%" y="63.50"></text></g><g><title>memcmp (12,408 instructions, 0.19%)</title><rect x="13.7979%" y="37" width="0.1928%" height="15" fill="rgb(232,174,22)" fg:x="887829" fg:w="12408"/><text x="14.0479%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (13,675 instructions, 0.21%)</title><rect x="13.7979%" y="53" width="0.2125%" height="15" fill="rgb(235,137,36)" fg:x="887829" fg:w="13675"/><text x="14.0479%" y="63.50"></text></g><g><title>memcmp (13,174 instructions, 0.20%)</title><rect x="14.0204%" y="37" width="0.2047%" height="15" fill="rgb(224,16,34)" fg:x="902145" fg:w="13174"/><text x="14.2704%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (14,507 instructions, 0.23%)</title><rect x="14.0204%" y="53" width="0.2255%" height="15" fill="rgb(230,216,26)" fg:x="902145" fg:w="14507"/><text x="14.2704%" y="63.50"></text></g><g><title>memcmp (13,943 instructions, 0.22%)</title><rect x="14.2558%" y="37" width="0.2167%" height="15" fill="rgb(243,61,14)" fg:x="917293" fg:w="13943"/><text x="14.5058%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (15,340 instructions, 0.24%)</title><rect x="14.2558%" y="53" width="0.2384%" height="15" fill="rgb(224,122,16)" fg:x="917293" fg:w="15340"/><text x="14.5058%" y="63.50"></text></g><g><title>memcmp (14,712 instructions, 0.23%)</title><rect x="14.4975%" y="37" width="0.2286%" height="15" fill="rgb(228,85,33)" fg:x="932842" fg:w="14712"/><text x="14.7475%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (16,174 instructions, 0.25%)</title><rect x="14.4975%" y="53" width="0.2514%" height="15" fill="rgb(211,67,6)" fg:x="932842" fg:w="16174"/><text x="14.7475%" y="63.50"></text></g><g><title>memcmp (15,349 instructions, 0.24%)</title><rect x="14.7588%" y="37" width="0.2385%" height="15" fill="rgb(219,116,27)" fg:x="949657" fg:w="15349"/><text x="15.0088%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (16,877 instructions, 0.26%)</title><rect x="14.7588%" y="53" width="0.2623%" height="15" fill="rgb(216,124,45)" fg:x="949657" fg:w="16877"/><text x="15.0088%" y="63.50"></text></g><g><title>memcmp (16,117 instructions, 0.25%)</title><rect x="15.0311%" y="37" width="0.2505%" height="15" fill="rgb(239,24,25)" fg:x="967175" fg:w="16117"/><text x="15.2811%" y="47.50"></text></g><g><title>alloc::collections::btree::node::Handle&lt;alloc::collections::btree::node::NodeRef&lt;alloc::collections::btree::node::marker::Mut,K,V,alloc::collections::btree::node::marker::Internal&gt;,alloc::collections::btree::node::marker::KV&gt;::split (1,083 instructions, 0.02%)</title><rect x="15.2879%" y="37" width="0.0168%" height="15" fill="rgb(242,118,14)" fg:x="983701" fg:w="1083"/><text x="15.5379%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (20,395 instructions, 0.32%)</title><rect x="15.0311%" y="53" width="0.3170%" height="15" fill="rgb(223,62,23)" fg:x="967175" fg:w="20395"/><text x="15.2811%" y="63.50"></text></g><g><title>memcmp (8,137 instructions, 0.13%)</title><rect x="15.3579%" y="37" width="0.1265%" height="15" fill="rgb(224,18,6)" fg:x="988208" fg:w="8137"/><text x="15.6079%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (9,053 instructions, 0.14%)</title><rect x="15.3579%" y="53" width="0.1407%" height="15" fill="rgb(227,166,29)" fg:x="988208" fg:w="9053"/><text x="15.6079%" y="63.50"></text></g><g><title>memcmp (8,906 instructions, 0.14%)</title><rect x="15.5086%" y="37" width="0.1384%" height="15" fill="rgb(239,17,48)" fg:x="997902" fg:w="8906"/><text x="15.7586%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (9,886 instructions, 0.15%)</title><rect x="15.5086%" y="53" width="0.1536%" height="15" fill="rgb(251,165,51)" fg:x="997902" fg:w="9886"/><text x="15.7586%" y="63.50"></text></g><g><title>memcmp (9,569 instructions, 0.15%)</title><rect x="15.6655%" y="37" width="0.1487%" height="15" fill="rgb(212,18,42)" fg:x="1007997" fg:w="9569"/><text x="15.9155%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (10,615 instructions, 0.16%)</title><rect x="15.6655%" y="53" width="0.1650%" height="15" fill="rgb(242,144,43)" fg:x="1007997" fg:w="10615"/><text x="15.9155%" y="63.50"></text></g><g><title>memcmp (10,336 instructions, 0.16%)</title><rect x="15.8404%" y="37" width="0.1606%" height="15" fill="rgb(250,12,26)" fg:x="1019253" fg:w="10336"/><text x="16.0904%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (11,448 instructions, 0.18%)</title><rect x="15.8404%" y="53" width="0.1779%" height="15" fill="rgb(231,55,6)" fg:x="1019253" fg:w="11448"/><text x="16.0904%" y="63.50"></text></g><g><title>memcmp (11,104 instructions, 0.17%)</title><rect x="16.0283%" y="37" width="0.1726%" height="15" fill="rgb(208,18,42)" fg:x="1031342" fg:w="11104"/><text x="16.2783%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (12,281 instructions, 0.19%)</title><rect x="16.0283%" y="53" width="0.1909%" height="15" fill="rgb(234,140,4)" fg:x="1031342" fg:w="12281"/><text x="16.2783%" y="63.50"></text></g><g><title>memcmp (11,873 instructions, 0.18%)</title><rect x="16.2291%" y="37" width="0.1845%" height="15" fill="rgb(250,47,30)" fg:x="1044264" fg:w="11873"/><text x="16.4791%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (13,114 instructions, 0.20%)</title><rect x="16.2291%" y="53" width="0.2038%" height="15" fill="rgb(222,69,3)" fg:x="1044264" fg:w="13114"/><text x="16.4791%" y="63.50"></text></g><g><title>memcmp (12,537 instructions, 0.19%)</title><rect x="16.4362%" y="37" width="0.1948%" height="15" fill="rgb(230,156,37)" fg:x="1057587" fg:w="12537"/><text x="16.6862%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (14,818 instructions, 0.23%)</title><rect x="16.4362%" y="53" width="0.2303%" height="15" fill="rgb(247,199,42)" fg:x="1057587" fg:w="14818"/><text x="16.6862%" y="63.50"></text></g><g><title>memcmp (8,852 instructions, 0.14%)</title><rect x="16.6764%" y="37" width="0.1376%" height="15" fill="rgb(235,144,18)" fg:x="1073046" fg:w="8852"/><text x="16.9264%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (9,834 instructions, 0.15%)</title><rect x="16.6764%" y="53" width="0.1528%" height="15" fill="rgb(227,47,6)" fg:x="1073046" fg:w="9834"/><text x="16.9264%" y="63.50"></text></g><g><title>memcmp (9,621 instructions, 0.15%)</title><rect x="16.8392%" y="37" width="0.1495%" height="15" fill="rgb(208,65,18)" fg:x="1083521" fg:w="9621"/><text x="17.0892%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (10,667 instructions, 0.17%)</title><rect x="16.8392%" y="53" width="0.1658%" height="15" fill="rgb(248,45,1)" fg:x="1083521" fg:w="10667"/><text x="17.0892%" y="63.50"></text></g><g><title>memcmp (10,389 instructions, 0.16%)</title><rect x="17.0150%" y="37" width="0.1615%" height="15" fill="rgb(249,119,47)" fg:x="1094829" fg:w="10389"/><text x="17.2650%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (11,500 instructions, 0.18%)</title><rect x="17.0150%" y="53" width="0.1787%" height="15" fill="rgb(221,152,25)" fg:x="1094829" fg:w="11500"/><text x="17.2650%" y="63.50"></text></g><g><title>memcmp (11,053 instructions, 0.17%)</title><rect x="17.2036%" y="37" width="0.1718%" height="15" fill="rgb(208,142,37)" fg:x="1106970" fg:w="11053"/><text x="17.4536%" y="47.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (12,229 instructions, 0.19%)</title><rect x="17.2036%" y="53" width="0.1901%" height="15" fill="rgb(209,177,39)" fg:x="1106970" fg:w="12229"/><text x="17.4536%" y="63.50"></text></g><g><title>registry_canister::invariants::checks::&lt;impl registry_canister::registry::Registry&gt;::take_latest_snapshot (6,365,750 instructions, 98.93%)</title><rect x="0.0000%" y="69" width="98.9314%" height="15" fill="rgb(233,117,23)" fg:x="0" fg:w="6365750"/><text x="0.2500%" y="79.50">registry_canister::invariants::checks::&lt;impl registry_canister::registry::Registry&gt;::take_latest_snapshot</text></g><g><title>alloc::collections::btree::navigate::&lt;impl alloc::collections::btree::node::Handle&lt;alloc::collections::btree::node::NodeRef&lt;alloc::collections::btree::node::marker::Dying,K,V,alloc::collections::btree::node::marker::Leaf&gt;,alloc::collections::btree::node::marker::Edge&gt;&gt;::deallocating_next_unchecked (680 instructions, 0.01%)</title><rect x="99.2727%" y="53" width="0.0106%" height="15" fill="rgb(251,33,37)" fg:x="6387715" fg:w="680"/><text x="99.5227%" y="63.50"></text></g><g><title>dlmalloc::dlmalloc::Dlmalloc&lt;A&gt;::free (1,005 instructions, 0.02%)</title><rect x="99.6675%" y="53" width="0.0156%" height="15" fill="rgb(237,36,2)" fg:x="6413117" fg:w="1005"/><text x="99.9175%" y="63.50"></text></g><g><title>&lt;alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt; as core::ops::drop::Drop&gt;::drop (68,525 instructions, 1.06%)</title><rect x="98.9314%" y="69" width="1.0650%" height="15" fill="rgb(228,92,11)" fg:x="6365750" fg:w="68525"/><text x="99.1814%" y="79.50"></text></g><g><title>all (6,434,510 instructions, 100%)</title><rect x="0.0000%" y="101" width="100.0000%" height="15" fill="rgb(230,86,25)" fg:x="0" fg:w="6434510"/><text x="0.2500%" y="111.50"></text></g><g><title>measure_snapshot_creation_with_100_segments_of_1000_entries (6,434,510 instructions, 100.00%)</title><rect x="0.0000%" y="85" width="100.0000%" height="15" fill="rgb(251,156,19)" fg:x="0" fg:w="6434510"/><text x="0.2500%" y="95.50">measure_snapshot_creation_with_100_segments_of_1000_entries</text></g></svg></svg>

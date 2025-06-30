@@ -19,6 +19,7 @@ REPO_PATH="$(dirname "$(readlink "$WORKSPACE")")"
 REPO_RESULTS_PATH="${REPO_PATH}/${CANBENCH_RESULTS_PATH}"
 CANBENCH_OUTPUT="$(mktemp -t canbench_output.txt.XXXX)"
 NOISE_THRESHOLD_ARG="${NOISE_THRESHOLD:+--noise-threshold ${NOISE_THRESHOLD}}"
+PATTERN_ARG="${CANBENCH_PATTERN:+${CANBENCH_PATTERN}}"
 
 # Generates a canbench.yml dynamically to be used by canbench.
 CANBENCH_YML="${RUNFILES}/canbench.yml"
@@ -49,7 +50,7 @@ fi
 
 if [ $# -eq 0 ]; then
     # Runs the benchmark without updating the results file.
-    ${CANBENCH_BIN} --no-runtime-integrity-check --runtime-path ${POCKET_IC_BIN} ${NOISE_THRESHOLD_ARG}
+    ${CANBENCH_BIN} ${PATTERN_ARG} --no-runtime-integrity-check --runtime-path ${POCKET_IC_BIN} ${NOISE_THRESHOLD_ARG}
 elif [ "$1" = "--update" ]; then
     # Runs the benchmark while updating the results file.
     ${CANBENCH_BIN} --no-runtime-integrity-check --runtime-path ${POCKET_IC_BIN} ${NOISE_THRESHOLD_ARG} --persist
@@ -73,7 +74,7 @@ elif [ "$1" = "--test" ]; then
         exit 0
     fi
 elif [ "$1" = "--debug" ]; then
-    ${CANBENCH_BIN} --no-runtime-integrity-check --runtime-path ${POCKET_IC_BIN} ${NOISE_THRESHOLD_ARG} --instruction-tracing
+    ${CANBENCH_BIN} ${PATTERN_ARG} --no-runtime-integrity-check --runtime-path ${POCKET_IC_BIN} ${NOISE_THRESHOLD_ARG} --instruction-tracing
 else
     echo "Unknown command: $1"
     exit 1

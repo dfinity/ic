@@ -1,0 +1,491 @@
+<?xml version="1.0" standalone="no"?><!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd"><svg version="1.1" width="1200" height="342" onload="init(evt)" viewBox="0 0 1200 342" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:fg="http://github.com/jonhoo/inferno"><!--Flame graph stack visualization. See https://github.com/brendangregg/FlameGraph for latest version, and http://www.brendangregg.com/flamegraphs.html for examples.--><!--NOTES: --><defs><linearGradient id="background" y1="0" y2="1" x1="0" x2="0"><stop stop-color="#eeeeee" offset="5%"/><stop stop-color="#eeeeb0" offset="95%"/></linearGradient></defs><style type="text/css">
+text { font-family:monospace; font-size:12px }
+#title { text-anchor:middle; font-size:17px; }
+#matched { text-anchor:end; }
+#search { text-anchor:end; opacity:0.1; cursor:pointer; }
+#search:hover, #search.show { opacity:1; }
+#subtitle { text-anchor:middle; font-color:rgb(160,160,160); }
+#unzoom { cursor:pointer; }
+#frames > *:hover { stroke:black; stroke-width:0.5; cursor:pointer; }
+.hide { display:none; }
+.parent { opacity:0.5; }
+</style><script type="text/ecmascript"><![CDATA[
+        var nametype = 'Function:';
+        var fontsize = 12;
+        var fontwidth = 0.59;
+        var xpad = 10;
+        var inverted = false;
+        var searchcolor = 'rgb(230,0,230)';
+        var fluiddrawing = true;
+        var truncate_text_right = false;
+    ]]><![CDATA["use strict";
+var details, searchbtn, unzoombtn, matchedtxt, svg, searching, frames, known_font_width;
+function init(evt) {
+    details = document.getElementById("details").firstChild;
+    searchbtn = document.getElementById("search");
+    unzoombtn = document.getElementById("unzoom");
+    matchedtxt = document.getElementById("matched");
+    svg = document.getElementsByTagName("svg")[0];
+    frames = document.getElementById("frames");
+    known_font_width = get_monospace_width(frames);
+    total_samples = parseInt(frames.attributes.total_samples.value);
+    searching = 0;
+
+    // Use GET parameters to restore a flamegraph's state.
+    var restore_state = function() {
+        var params = get_params();
+        if (params.x && params.y)
+            zoom(find_group(document.querySelector('[*|x="' + params.x + '"][y="' + params.y + '"]')));
+        if (params.s)
+            search(params.s);
+    };
+
+    if (fluiddrawing) {
+        // Make width dynamic so the SVG fits its parent's width.
+        svg.removeAttribute("width");
+        // Edge requires us to have a viewBox that gets updated with size changes.
+        var isEdge = /Edge\/\d./i.test(navigator.userAgent);
+        if (!isEdge) {
+            svg.removeAttribute("viewBox");
+        }
+        var update_for_width_change = function() {
+            if (isEdge) {
+                svg.attributes.viewBox.value = "0 0 " + svg.width.baseVal.value + " " + svg.height.baseVal.value;
+            }
+
+            // Keep consistent padding on left and right of frames container.
+            frames.attributes.width.value = svg.width.baseVal.value - xpad * 2;
+
+            // Text truncation needs to be adjusted for the current width.
+            update_text_for_elements(frames.children);
+
+            // Keep search elements at a fixed distance from right edge.
+            var svgWidth = svg.width.baseVal.value;
+            searchbtn.attributes.x.value = svgWidth - xpad;
+            matchedtxt.attributes.x.value = svgWidth - xpad;
+        };
+        window.addEventListener('resize', function() {
+            update_for_width_change();
+        });
+        // This needs to be done asynchronously for Safari to work.
+        setTimeout(function() {
+            unzoom();
+            update_for_width_change();
+            restore_state();
+        }, 0);
+    } else {
+        restore_state();
+    }
+}
+// event listeners
+window.addEventListener("click", function(e) {
+    var target = find_group(e.target);
+    if (target) {
+        if (target.nodeName == "a") {
+            if (e.ctrlKey === false) return;
+            e.preventDefault();
+        }
+        if (target.classList.contains("parent")) unzoom();
+        zoom(target);
+
+        // set parameters for zoom state
+        var el = target.querySelector("rect");
+        if (el && el.attributes && el.attributes.y && el.attributes["fg:x"]) {
+            var params = get_params()
+            params.x = el.attributes["fg:x"].value;
+            params.y = el.attributes.y.value;
+            history.replaceState(null, null, parse_params(params));
+        }
+    }
+    else if (e.target.id == "unzoom") {
+        unzoom();
+
+        // remove zoom state
+        var params = get_params();
+        if (params.x) delete params.x;
+        if (params.y) delete params.y;
+        history.replaceState(null, null, parse_params(params));
+    }
+    else if (e.target.id == "search") search_prompt();
+}, false)
+// mouse-over for info
+// show
+window.addEventListener("mouseover", function(e) {
+    var target = find_group(e.target);
+    if (target) details.nodeValue = nametype + " " + g_to_text(target);
+}, false)
+// clear
+window.addEventListener("mouseout", function(e) {
+    var target = find_group(e.target);
+    if (target) details.nodeValue = ' ';
+}, false)
+// ctrl-F for search
+window.addEventListener("keydown",function (e) {
+    if (e.keyCode === 114 || (e.ctrlKey && e.keyCode === 70)) {
+        e.preventDefault();
+        search_prompt();
+    }
+}, false)
+// functions
+function get_params() {
+    var params = {};
+    var paramsarr = window.location.search.substr(1).split('&');
+    for (var i = 0; i < paramsarr.length; ++i) {
+        var tmp = paramsarr[i].split("=");
+        if (!tmp[0] || !tmp[1]) continue;
+        params[tmp[0]]  = decodeURIComponent(tmp[1]);
+    }
+    return params;
+}
+function parse_params(params) {
+    var uri = "?";
+    for (var key in params) {
+        uri += key + '=' + encodeURIComponent(params[key]) + '&';
+    }
+    if (uri.slice(-1) == "&")
+        uri = uri.substring(0, uri.length - 1);
+    if (uri == '?')
+        uri = window.location.href.split('?')[0];
+    return uri;
+}
+function find_child(node, selector) {
+    var children = node.querySelectorAll(selector);
+    if (children.length) return children[0];
+    return;
+}
+function find_group(node) {
+    var parent = node.parentElement;
+    if (!parent) return;
+    if (parent.id == "frames") return node;
+    return find_group(parent);
+}
+function orig_save(e, attr, val) {
+    if (e.attributes["fg:orig_" + attr] != undefined) return;
+    if (e.attributes[attr] == undefined) return;
+    if (val == undefined) val = e.attributes[attr].value;
+    e.setAttribute("fg:orig_" + attr, val);
+}
+function orig_load(e, attr) {
+    if (e.attributes["fg:orig_"+attr] == undefined) return;
+    e.attributes[attr].value = e.attributes["fg:orig_" + attr].value;
+    e.removeAttribute("fg:orig_" + attr);
+}
+function g_to_text(e) {
+    var text = find_child(e, "title").firstChild.nodeValue;
+    return (text)
+}
+function g_to_func(e) {
+    var func = g_to_text(e);
+    // if there's any manipulation we want to do to the function
+    // name before it's searched, do it here before returning.
+    return (func);
+}
+function get_monospace_width(frames) {
+    // Given the id="frames" element, return the width of text characters if
+    // this is a monospace font, otherwise return 0.
+    text = find_child(frames.children[0], "text");
+    originalContent = text.textContent;
+    text.textContent = "!";
+    bangWidth = text.getComputedTextLength();
+    text.textContent = "W";
+    wWidth = text.getComputedTextLength();
+    text.textContent = originalContent;
+    if (bangWidth === wWidth) {
+        return bangWidth;
+    } else {
+        return 0;
+    }
+}
+function update_text_for_elements(elements) {
+    // In order to render quickly in the browser, you want to do one pass of
+    // reading attributes, and one pass of mutating attributes. See
+    // https://web.dev/avoid-large-complex-layouts-and-layout-thrashing/ for details.
+
+    // Fall back to inefficient calculation, if we're variable-width font.
+    // TODO This should be optimized somehow too.
+    if (known_font_width === 0) {
+        for (var i = 0; i < elements.length; i++) {
+            update_text(elements[i]);
+        }
+        return;
+    }
+
+    var textElemNewAttributes = [];
+    for (var i = 0; i < elements.length; i++) {
+        var e = elements[i];
+        var r = find_child(e, "rect");
+        var t = find_child(e, "text");
+        var w = parseFloat(r.attributes.width.value) * frames.attributes.width.value / 100 - 3;
+        var txt = find_child(e, "title").textContent.replace(/\([^(]*\)$/,"");
+        var newX = format_percent((parseFloat(r.attributes.x.value) + (100 * 3 / frames.attributes.width.value)));
+
+        // Smaller than this size won't fit anything
+        if (w < 2 * known_font_width) {
+            textElemNewAttributes.push([newX, ""]);
+            continue;
+        }
+
+        // Fit in full text width
+        if (txt.length * known_font_width < w) {
+            textElemNewAttributes.push([newX, txt]);
+            continue;
+        }
+
+        var substringLength = Math.floor(w / known_font_width) - 2;
+        if (truncate_text_right) {
+            // Truncate the right side of the text.
+            textElemNewAttributes.push([newX, txt.substring(0, substringLength) + ".."]);
+            continue;
+        } else {
+            // Truncate the left side of the text.
+            textElemNewAttributes.push([newX, ".." + txt.substring(txt.length - substringLength, txt.length)]);
+            continue;
+        }
+    }
+
+    console.assert(textElemNewAttributes.length === elements.length, "Resize failed, please file a bug at https://github.com/jonhoo/inferno/");
+
+    // Now that we know new textContent, set it all in one go so we don't refresh a bazillion times.
+    for (var i = 0; i < elements.length; i++) {
+        var e = elements[i];
+        var values = textElemNewAttributes[i];
+        var t = find_child(e, "text");
+        t.attributes.x.value = values[0];
+        t.textContent = values[1];
+    }
+}
+
+function update_text(e) {
+    var r = find_child(e, "rect");
+    var t = find_child(e, "text");
+    var w = parseFloat(r.attributes.width.value) * frames.attributes.width.value / 100 - 3;
+    var txt = find_child(e, "title").textContent.replace(/\([^(]*\)$/,"");
+    t.attributes.x.value = format_percent((parseFloat(r.attributes.x.value) + (100 * 3 / frames.attributes.width.value)));
+
+    // Smaller than this size won't fit anything
+    if (w < 2 * fontsize * fontwidth) {
+        t.textContent = "";
+        return;
+    }
+    t.textContent = txt;
+    // Fit in full text width
+    if (t.getComputedTextLength() < w)
+        return;
+    if (truncate_text_right) {
+        // Truncate the right side of the text.
+        for (var x = txt.length - 2; x > 0; x--) {
+            if (t.getSubStringLength(0, x + 2) <= w) {
+                t.textContent = txt.substring(0, x) + "..";
+                return;
+            }
+        }
+    } else {
+        // Truncate the left side of the text.
+        for (var x = 2; x < txt.length; x++) {
+            if (t.getSubStringLength(x - 2, txt.length) <= w) {
+                t.textContent = ".." + txt.substring(x, txt.length);
+                return;
+            }
+        }
+    }
+    t.textContent = "";
+}
+// zoom
+function zoom_reset(e) {
+    if (e.tagName == "rect") {
+        e.attributes.x.value = format_percent(100 * parseInt(e.attributes["fg:x"].value) / total_samples);
+        e.attributes.width.value = format_percent(100 * parseInt(e.attributes["fg:w"].value) / total_samples);
+    }
+    if (e.childNodes == undefined) return;
+    for(var i = 0, c = e.childNodes; i < c.length; i++) {
+        zoom_reset(c[i]);
+    }
+}
+function zoom_child(e, x, zoomed_width_samples) {
+    if (e.tagName == "text") {
+        var parent_x = parseFloat(find_child(e.parentNode, "rect[x]").attributes.x.value);
+        e.attributes.x.value = format_percent(parent_x + (100 * 3 / frames.attributes.width.value));
+    } else if (e.tagName == "rect") {
+        e.attributes.x.value = format_percent(100 * (parseInt(e.attributes["fg:x"].value) - x) / zoomed_width_samples);
+        e.attributes.width.value = format_percent(100 * parseInt(e.attributes["fg:w"].value) / zoomed_width_samples);
+    }
+    if (e.childNodes == undefined) return;
+    for(var i = 0, c = e.childNodes; i < c.length; i++) {
+        zoom_child(c[i], x, zoomed_width_samples);
+    }
+}
+function zoom_parent(e) {
+    if (e.attributes) {
+        if (e.attributes.x != undefined) {
+            e.attributes.x.value = "0.0%";
+        }
+        if (e.attributes.width != undefined) {
+            e.attributes.width.value = "100.0%";
+        }
+    }
+    if (e.childNodes == undefined) return;
+    for(var i = 0, c = e.childNodes; i < c.length; i++) {
+        zoom_parent(c[i]);
+    }
+}
+function zoom(node) {
+    var attr = find_child(node, "rect").attributes;
+    var width = parseInt(attr["fg:w"].value);
+    var xmin = parseInt(attr["fg:x"].value);
+    var xmax = xmin + width;
+    var ymin = parseFloat(attr.y.value);
+    unzoombtn.classList.remove("hide");
+    var el = frames.children;
+    var to_update_text = [];
+    for (var i = 0; i < el.length; i++) {
+        var e = el[i];
+        var a = find_child(e, "rect").attributes;
+        var ex = parseInt(a["fg:x"].value);
+        var ew = parseInt(a["fg:w"].value);
+        // Is it an ancestor
+        if (!inverted) {
+            var upstack = parseFloat(a.y.value) > ymin;
+        } else {
+            var upstack = parseFloat(a.y.value) < ymin;
+        }
+        if (upstack) {
+            // Direct ancestor
+            if (ex <= xmin && (ex+ew) >= xmax) {
+                e.classList.add("parent");
+                zoom_parent(e);
+                to_update_text.push(e);
+            }
+            // not in current path
+            else
+                e.classList.add("hide");
+        }
+        // Children maybe
+        else {
+            // no common path
+            if (ex < xmin || ex >= xmax) {
+                e.classList.add("hide");
+            }
+            else {
+                zoom_child(e, xmin, width);
+                to_update_text.push(e);
+            }
+        }
+    }
+    update_text_for_elements(to_update_text);
+}
+function unzoom() {
+    unzoombtn.classList.add("hide");
+    var el = frames.children;
+    for(var i = 0; i < el.length; i++) {
+        el[i].classList.remove("parent");
+        el[i].classList.remove("hide");
+        zoom_reset(el[i]);
+    }
+    update_text_for_elements(el);
+}
+// search
+function reset_search() {
+    var el = document.querySelectorAll("#frames rect");
+    for (var i = 0; i < el.length; i++) {
+        orig_load(el[i], "fill")
+    }
+    var params = get_params();
+    delete params.s;
+    history.replaceState(null, null, parse_params(params));
+}
+function search_prompt() {
+    if (!searching) {
+        var term = prompt("Enter a search term (regexp " +
+            "allowed, eg: ^ext4_)", "");
+        if (term != null) {
+            search(term)
+        }
+    } else {
+        reset_search();
+        searching = 0;
+        searchbtn.classList.remove("show");
+        searchbtn.firstChild.nodeValue = "Search"
+        matchedtxt.classList.add("hide");
+        matchedtxt.firstChild.nodeValue = ""
+    }
+}
+function search(term) {
+    var re = new RegExp(term);
+    var el = frames.children;
+    var matches = new Object();
+    var maxwidth = 0;
+    for (var i = 0; i < el.length; i++) {
+        var e = el[i];
+        // Skip over frames which are either not visible, or below the zoomed-to frame
+        if (e.classList.contains("hide") || e.classList.contains("parent")) {
+            continue;
+        }
+        var func = g_to_func(e);
+        var rect = find_child(e, "rect");
+        if (func == null || rect == null)
+            continue;
+        // Save max width. Only works as we have a root frame
+        var w = parseInt(rect.attributes["fg:w"].value);
+        if (w > maxwidth)
+            maxwidth = w;
+        if (func.match(re)) {
+            // highlight
+            var x = parseInt(rect.attributes["fg:x"].value);
+            orig_save(rect, "fill");
+            rect.attributes.fill.value = searchcolor;
+            // remember matches
+            if (matches[x] == undefined) {
+                matches[x] = w;
+            } else {
+                if (w > matches[x]) {
+                    // overwrite with parent
+                    matches[x] = w;
+                }
+            }
+            searching = 1;
+        }
+    }
+    if (!searching)
+        return;
+    var params = get_params();
+    params.s = term;
+    history.replaceState(null, null, parse_params(params));
+
+    searchbtn.classList.add("show");
+    searchbtn.firstChild.nodeValue = "Reset Search";
+    // calculate percent matched, excluding vertical overlap
+    var count = 0;
+    var lastx = -1;
+    var lastw = 0;
+    var keys = Array();
+    for (k in matches) {
+        if (matches.hasOwnProperty(k))
+            keys.push(k);
+    }
+    // sort the matched frames by their x location
+    // ascending, then width descending
+    keys.sort(function(a, b){
+        return a - b;
+    });
+    // Step through frames saving only the biggest bottom-up frames
+    // thanks to the sort order. This relies on the tree property
+    // where children are always smaller than their parents.
+    for (var k in keys) {
+        var x = parseInt(keys[k]);
+        var w = matches[keys[k]];
+        if (x >= lastx + lastw) {
+            count += w;
+            lastx = x;
+            lastw = w;
+        }
+    }
+    // display matched percent
+    matchedtxt.classList.remove("hide");
+    var pct = 100 * count / maxwidth;
+    if (pct != 100) pct = pct.toFixed(1);
+    matchedtxt.firstChild.nodeValue = "Matched: " + pct + "%";
+}
+function format_percent(n) {
+    return n.toFixed(4) + "%";
+}
+]]></script><rect x="0" y="0" width="100%" height="342" fill="url(#background)"/><text id="title" fill="rgb(0,0,0)" x="50.0000%" y="24.00">upgrade_with_routing_table_10k</text><text id="details" fill="rgb(0,0,0)" x="10" y="325.00"> </text><text id="unzoom" class="hide" fill="rgb(0,0,0)" x="10" y="24.00">Reset Zoom</text><text id="search" fill="rgb(0,0,0)" x="1190" y="24.00">Search</text><text id="matched" fill="rgb(0,0,0)" x="1190" y="325.00"> </text><svg id="frames" x="10" width="1180" total_samples="5580042821"><g><title>sha2::sha256::compress256 (490,764,125 instructions, 8.79%)</title><rect x="0.0000%" y="69" width="8.7950%" height="15" fill="rgb(246,99,17)" fg:x="0" fg:w="490764125"/><text x="0.2500%" y="79.50">sha2::sha256..</text></g><g><title>ic_certified_map::hashtree::leaf_hash (490,836,769 instructions, 8.80%)</title><rect x="0.0000%" y="85" width="8.7963%" height="15" fill="rgb(224,20,7)" fg:x="0" fg:w="490836769"/><text x="0.2500%" y="95.50">ic_certified..</text></g><g><title>sha2::sha256::compress256 (1,100,159 instructions, 0.02%)</title><rect x="8.7963%" y="69" width="0.0197%" height="15" fill="rgb(210,170,22)" fg:x="490836769" fg:w="1100159"/><text x="9.0463%" y="79.50"></text></g><g><title>ic_certified_map::hashtree::fork_hash (1,160,304 instructions, 0.02%)</title><rect x="8.7963%" y="85" width="0.0208%" height="15" fill="rgb(245,116,29)" fg:x="490836769" fg:w="1160304"/><text x="9.0463%" y="95.50"></text></g><g><title>sha2::sha256::compress256 (733,425 instructions, 0.01%)</title><rect x="8.8171%" y="69" width="0.0131%" height="15" fill="rgb(231,156,11)" fg:x="491997073" fg:w="733425"/><text x="9.0671%" y="79.50"></text></g><g><title>ic_certified_map::hashtree::labeled_hash (799,285 instructions, 0.01%)</title><rect x="8.8171%" y="85" width="0.0143%" height="15" fill="rgb(246,40,31)" fg:x="491997073" fg:w="799285"/><text x="9.0671%" y="95.50"></text></g><g><title>ic_certified_map::rbtree::Node&lt;K,V&gt;::compute_subtree_hash (492,845,231 instructions, 8.83%)</title><rect x="0.0000%" y="101" width="8.8323%" height="15" fill="rgb(222,99,15)" fg:x="0" fg:w="492845231"/><text x="0.2500%" y="111.50">ic_certified..</text></g><g><title>sha2::sha256::compress256 (490,764,122 instructions, 8.79%)</title><rect x="8.8323%" y="53" width="8.7950%" height="15" fill="rgb(225,28,50)" fg:x="492845231" fg:w="490764122"/><text x="9.0823%" y="63.50">sha2::sha256..</text></g><g><title>ic_certified_map::hashtree::leaf_hash (490,836,764 instructions, 8.80%)</title><rect x="8.8323%" y="69" width="8.7963%" height="15" fill="rgb(213,135,42)" fg:x="492845231" fg:w="490836764"/><text x="9.0823%" y="79.50">ic_certified..</text></g><g><title>sha2::sha256::compress256 (733,425 instructions, 0.01%)</title><rect x="17.6286%" y="53" width="0.0131%" height="15" fill="rgb(250,66,6)" fg:x="983681995" fg:w="733425"/><text x="17.8786%" y="63.50"></text></g><g><title>ic_certified_map::hashtree::labeled_hash (799,286 instructions, 0.01%)</title><rect x="17.6286%" y="69" width="0.0143%" height="15" fill="rgb(223,132,33)" fg:x="983681995" fg:w="799286"/><text x="17.8786%" y="79.50"></text></g><g><title>ic_certified_map::rbtree::Node&lt;K,V&gt;::compute_subtree_hash (492,049,520 instructions, 8.82%)</title><rect x="8.8323%" y="85" width="8.8180%" height="15" fill="rgb(241,216,9)" fg:x="492845231" fg:w="492049520"/><text x="9.0823%" y="95.50">ic_certified..</text></g><g><title>ic_certified_map::rbtree::balance (492,060,525 instructions, 8.82%)</title><rect x="8.8323%" y="101" width="8.8182%" height="15" fill="rgb(216,14,38)" fg:x="492845231" fg:w="492060525"/><text x="9.0823%" y="111.50">ic_certified..</text></g><g><title>sha2::sha256::compress256 (490,976,200 instructions, 8.80%)</title><rect x="17.6505%" y="69" width="8.7988%" height="15" fill="rgb(220,221,8)" fg:x="984905756" fg:w="490976200"/><text x="17.9005%" y="79.50">sha2::sha256..</text></g><g><title>ic_certified_map::hashtree::leaf_hash (491,048,956 instructions, 8.80%)</title><rect x="17.6505%" y="85" width="8.8001%" height="15" fill="rgb(234,16,8)" fg:x="984905756" fg:w="491048956"/><text x="17.9005%" y="95.50">ic_certified..</text></g><g><title>sha2::sha256::compress256 (733,439 instructions, 0.01%)</title><rect x="26.4506%" y="69" width="0.0131%" height="15" fill="rgb(214,38,29)" fg:x="1475954712" fg:w="733439"/><text x="26.7006%" y="79.50"></text></g><g><title>ic_certified_map::hashtree::labeled_hash (799,294 instructions, 0.01%)</title><rect x="26.4506%" y="85" width="0.0143%" height="15" fill="rgb(253,149,31)" fg:x="1475954712" fg:w="799294"/><text x="26.7006%" y="95.50"></text></g><g><title>ic_certified_map::rbtree::RbTree&lt;K,V&gt;::insert::go (491,875,415 instructions, 8.81%)</title><rect x="17.6505%" y="101" width="8.8149%" height="15" fill="rgb(215,227,9)" fg:x="984905756" fg:w="491875415"/><text x="17.9005%" y="111.50">ic_certified..</text></g><g><title>sha2::sha256::compress256 (131,930,981 instructions, 2.36%)</title><rect x="26.4654%" y="85" width="2.3643%" height="15" fill="rgb(234,86,26)" fg:x="1476781171" fg:w="131930981"/><text x="26.7154%" y="95.50">sh..</text></g><g><title>ic_certified_map::hashtree::leaf_hash (131,994,333 instructions, 2.37%)</title><rect x="26.4654%" y="101" width="2.3655%" height="15" fill="rgb(232,58,49)" fg:x="1476781171" fg:w="131994333"/><text x="26.7154%" y="111.50">ic..</text></g><g><title>sha2::sha256::compress256 (634,316 instructions, 0.01%)</title><rect x="28.8309%" y="85" width="0.0114%" height="15" fill="rgb(217,45,4)" fg:x="1608775504" fg:w="634316"/><text x="29.0809%" y="95.50"></text></g><g><title>ic_certified_map::hashtree::labeled_hash (691,279 instructions, 0.01%)</title><rect x="28.8309%" y="101" width="0.0124%" height="15" fill="rgb(206,186,47)" fg:x="1608775504" fg:w="691279"/><text x="29.0809%" y="111.50"></text></g><g><title>ic_certified_map::rbtree::RbTree&lt;K,V&gt;::insert::go (1,609,518,629 instructions, 28.84%)</title><rect x="0.0000%" y="117" width="28.8442%" height="15" fill="rgb(212,213,13)" fg:x="0" fg:w="1609518629"/><text x="0.2500%" y="127.50">ic_certified_map::rbtree::RbTree&lt;K,V&gt;::insert:..</text></g><g><title>sha2::sha256::compress256 (612,860,673 instructions, 10.98%)</title><rect x="28.8442%" y="85" width="10.9831%" height="15" fill="rgb(254,222,8)" fg:x="1609518629" fg:w="612860673"/><text x="29.0942%" y="95.50">sha2::sha256::co..</text></g><g><title>ic_certified_map::hashtree::leaf_hash (612,996,828 instructions, 10.99%)</title><rect x="28.8442%" y="101" width="10.9855%" height="15" fill="rgb(212,72,4)" fg:x="1609518629" fg:w="612996828"/><text x="29.0942%" y="111.50">ic_certified_map..</text></g><g><title>sha2::sha256::compress256 (2,418,353 instructions, 0.04%)</title><rect x="39.8297%" y="85" width="0.0433%" height="15" fill="rgb(240,56,38)" fg:x="2222515457" fg:w="2418353"/><text x="40.0797%" y="95.50"></text></g><g><title>ic_certified_map::hashtree::fork_hash (2,550,582 instructions, 0.05%)</title><rect x="39.8297%" y="101" width="0.0457%" height="15" fill="rgb(213,125,11)" fg:x="2222515457" fg:w="2550582"/><text x="40.0797%" y="111.50"></text></g><g><title>sha2::sha256::compress256 (1,367,766 instructions, 0.02%)</title><rect x="39.8754%" y="85" width="0.0245%" height="15" fill="rgb(210,104,28)" fg:x="2225066039" fg:w="1367766"/><text x="40.1254%" y="95.50"></text></g><g><title>ic_certified_map::hashtree::labeled_hash (1,490,570 instructions, 0.03%)</title><rect x="39.8754%" y="101" width="0.0267%" height="15" fill="rgb(248,72,33)" fg:x="2225066039" fg:w="1490570"/><text x="40.1254%" y="111.50"></text></g><g><title>ic_certified_map::rbtree::Node&lt;K,V&gt;::compute_subtree_hash (617,140,855 instructions, 11.06%)</title><rect x="28.8442%" y="117" width="11.0598%" height="15" fill="rgb(206,33,52)" fg:x="1609518629" fg:w="617140855"/><text x="29.0942%" y="127.50">ic_certified_map..</text></g><g><title>sha2::sha256::compress256 (375,540,048 instructions, 6.73%)</title><rect x="39.9040%" y="69" width="6.7301%" height="15" fill="rgb(228,67,10)" fg:x="2226659484" fg:w="375540048"/><text x="40.1540%" y="79.50">sha2::sha..</text></g><g><title>ic_certified_map::hashtree::leaf_hash (375,640,838 instructions, 6.73%)</title><rect x="39.9040%" y="85" width="6.7319%" height="15" fill="rgb(221,56,51)" fg:x="2226659484" fg:w="375640838"/><text x="40.1540%" y="95.50">ic_certif..</text></g><g><title>sha2::sha256::compress256 (1,070,412 instructions, 0.02%)</title><rect x="46.6358%" y="69" width="0.0192%" height="15" fill="rgb(233,224,5)" fg:x="2602300322" fg:w="1070412"/><text x="46.8858%" y="79.50"></text></g><g><title>ic_certified_map::hashtree::fork_hash (1,128,940 instructions, 0.02%)</title><rect x="46.6358%" y="85" width="0.0202%" height="15" fill="rgb(242,179,48)" fg:x="2602300322" fg:w="1128940"/><text x="46.8858%" y="95.50"></text></g><g><title>sha2::sha256::compress256 (1,010,951 instructions, 0.02%)</title><rect x="46.6561%" y="69" width="0.0181%" height="15" fill="rgb(246,24,25)" fg:x="2603429262" fg:w="1010951"/><text x="46.9061%" y="79.50"></text></g><g><title>ic_certified_map::hashtree::labeled_hash (1,101,719 instructions, 0.02%)</title><rect x="46.6561%" y="85" width="0.0197%" height="15" fill="rgb(235,109,50)" fg:x="2603429262" fg:w="1101719"/><text x="46.9061%" y="95.50"></text></g><g><title>ic_certified_map::rbtree::Node&lt;K,V&gt;::compute_subtree_hash (377,925,717 instructions, 6.77%)</title><rect x="39.9040%" y="101" width="6.7728%" height="15" fill="rgb(206,134,6)" fg:x="2226659484" fg:w="377925717"/><text x="40.1540%" y="111.50">ic_certif..</text></g><g><title>ic_certified_map::rbtree::balance (377,942,469 instructions, 6.77%)</title><rect x="39.9040%" y="117" width="6.7731%" height="15" fill="rgb(238,50,5)" fg:x="2226659484" fg:w="377942469"/><text x="40.1540%" y="127.50">ic_certif..</text></g><g><title>sha2::sha256::compress256 (2,424,138 instructions, 0.04%)</title><rect x="46.6771%" y="101" width="0.0434%" height="15" fill="rgb(210,214,49)" fg:x="2604601953" fg:w="2424138"/><text x="46.9271%" y="111.50"></text></g><g><title>ic_certified_map::hashtree::leaf_hash (2,456,168 instructions, 0.04%)</title><rect x="46.6771%" y="117" width="0.0440%" height="15" fill="rgb(245,190,14)" fg:x="2604601953" fg:w="2456168"/><text x="46.9271%" y="127.50"></text></g><g><title>ic_certified_map::rbtree::RbTree&lt;K,V&gt;::insert::go (2,607,466,848 instructions, 46.73%)</title><rect x="0.0000%" y="133" width="46.7284%" height="15" fill="rgb(245,28,40)" fg:x="0" fg:w="2607466848"/><text x="0.2500%" y="143.50">ic_certified_map::rbtree::RbTree&lt;K,V&gt;::insert::go</text></g><g><title>sha2::sha256::compress256 (608,942,382 instructions, 10.91%)</title><rect x="46.7284%" y="101" width="10.9129%" height="15" fill="rgb(218,45,11)" fg:x="2607466848" fg:w="608942382"/><text x="46.9784%" y="111.50">sha2::sha256::co..</text></g><g><title>ic_certified_map::hashtree::leaf_hash (609,111,075 instructions, 10.92%)</title><rect x="46.7284%" y="117" width="10.9159%" height="15" fill="rgb(222,167,21)" fg:x="2607466848" fg:w="609111075"/><text x="46.9784%" y="127.50">ic_certified_map..</text></g><g><title>sha2::sha256::compress256 (3,211,265 instructions, 0.06%)</title><rect x="57.6443%" y="101" width="0.0575%" height="15" fill="rgb(221,177,2)" fg:x="3216577923" fg:w="3211265"/><text x="57.8943%" y="111.50"></text></g><g><title>ic_certified_map::hashtree::fork_hash (3,386,845 instructions, 0.06%)</title><rect x="57.6443%" y="117" width="0.0607%" height="15" fill="rgb(240,113,8)" fg:x="3216577923" fg:w="3386845"/><text x="57.8943%" y="127.50"></text></g><g><title>sha2::sha256::compress256 (1,684,924 instructions, 0.03%)</title><rect x="57.7050%" y="101" width="0.0302%" height="15" fill="rgb(247,19,33)" fg:x="3219964768" fg:w="1684924"/><text x="57.9550%" y="111.50"></text></g><g><title>ic_certified_map::hashtree::labeled_hash (1,836,200 instructions, 0.03%)</title><rect x="57.7050%" y="117" width="0.0329%" height="15" fill="rgb(242,225,23)" fg:x="3219964768" fg:w="1836200"/><text x="57.9550%" y="127.50"></text></g><g><title>ic_certified_map::rbtree::Node&lt;K,V&gt;::compute_subtree_hash (614,468,293 instructions, 11.01%)</title><rect x="46.7284%" y="133" width="11.0119%" height="15" fill="rgb(242,35,44)" fg:x="2607466848" fg:w="614468293"/><text x="46.9784%" y="143.50">ic_certified_map..</text></g><g><title>sha2::sha256::compress256 (180,034,228 instructions, 3.23%)</title><rect x="57.7403%" y="85" width="3.2264%" height="15" fill="rgb(243,190,23)" fg:x="3221935141" fg:w="180034228"/><text x="57.9903%" y="95.50">sha..</text></g><g><title>ic_certified_map::hashtree::leaf_hash (180,115,900 instructions, 3.23%)</title><rect x="57.7403%" y="101" width="3.2279%" height="15" fill="rgb(222,175,4)" fg:x="3221935141" fg:w="180115900"/><text x="57.9903%" y="111.50">ic_..</text></g><g><title>sha2::sha256::compress256 (1,149,727 instructions, 0.02%)</title><rect x="60.9682%" y="85" width="0.0206%" height="15" fill="rgb(212,128,15)" fg:x="3402051041" fg:w="1149727"/><text x="61.2182%" y="95.50"></text></g><g><title>ic_certified_map::hashtree::fork_hash (1,212,579 instructions, 0.02%)</title><rect x="60.9682%" y="101" width="0.0217%" height="15" fill="rgb(239,130,34)" fg:x="3402051041" fg:w="1212579"/><text x="61.2182%" y="111.50"></text></g><g><title>sha2::sha256::compress256 (812,738 instructions, 0.01%)</title><rect x="60.9899%" y="85" width="0.0146%" height="15" fill="rgb(219,151,17)" fg:x="3403263620" fg:w="812738"/><text x="61.2399%" y="95.50"></text></g><g><title>ic_certified_map::hashtree::labeled_hash (885,704 instructions, 0.02%)</title><rect x="60.9899%" y="101" width="0.0159%" height="15" fill="rgb(228,219,53)" fg:x="3403263620" fg:w="885704"/><text x="61.2399%" y="111.50"></text></g><g><title>ic_certified_map::rbtree::Node&lt;K,V&gt;::compute_subtree_hash (182,266,649 instructions, 3.27%)</title><rect x="57.7403%" y="117" width="3.2664%" height="15" fill="rgb(213,79,28)" fg:x="3221935141" fg:w="182266649"/><text x="57.9903%" y="127.50">ic_..</text></g><g><title>ic_certified_map::rbtree::balance (182,282,479 instructions, 3.27%)</title><rect x="57.7403%" y="133" width="3.2667%" height="15" fill="rgb(238,71,18)" fg:x="3221935141" fg:w="182282479"/><text x="57.9903%" y="143.50">ic_..</text></g><g><title>sha2::sha256::compress256 (1,229,299 instructions, 0.02%)</title><rect x="61.0070%" y="117" width="0.0220%" height="15" fill="rgb(235,57,53)" fg:x="3404217620" fg:w="1229299"/><text x="61.2570%" y="127.50"></text></g><g><title>ic_certified_map::hashtree::leaf_hash (1,245,191 instructions, 0.02%)</title><rect x="61.0070%" y="133" width="0.0223%" height="15" fill="rgb(213,199,2)" fg:x="3404217620" fg:w="1245191"/><text x="61.2570%" y="143.50"></text></g><g><title>ic_certified_map::rbtree::RbTree&lt;K,V&gt;::insert::go (3,405,703,968 instructions, 61.03%)</title><rect x="0.0000%" y="149" width="61.0337%" height="15" fill="rgb(206,61,23)" fg:x="0" fg:w="3405703968"/><text x="0.2500%" y="159.50">ic_certified_map::rbtree::RbTree&lt;K,V&gt;::insert::go</text></g><g><title>sha2::sha256::compress256 (586,616,457 instructions, 10.51%)</title><rect x="61.0337%" y="117" width="10.5128%" height="15" fill="rgb(253,31,27)" fg:x="3405703968" fg:w="586616457"/><text x="61.2837%" y="127.50">sha2::sha256::c..</text></g><g><title>ic_certified_map::hashtree::leaf_hash (586,801,039 instructions, 10.52%)</title><rect x="61.0337%" y="133" width="10.5161%" height="15" fill="rgb(220,117,48)" fg:x="3405703968" fg:w="586801039"/><text x="61.2837%" y="143.50">ic_certified_ma..</text></g><g><title>sha2::sha256::compress256 (3,607,696 instructions, 0.06%)</title><rect x="71.5497%" y="117" width="0.0647%" height="15" fill="rgb(236,168,14)" fg:x="3992505007" fg:w="3607696"/><text x="71.7997%" y="127.50"></text></g><g><title>ic_certified_map::hashtree::fork_hash (3,804,961 instructions, 0.07%)</title><rect x="71.5497%" y="133" width="0.0682%" height="15" fill="rgb(241,100,8)" fg:x="3992505007" fg:w="3804961"/><text x="71.7997%" y="143.50"></text></g><g><title>sha2::sha256::compress256 (1,843,496 instructions, 0.03%)</title><rect x="71.6179%" y="117" width="0.0330%" height="15" fill="rgb(212,211,50)" fg:x="3996309968" fg:w="1843496"/><text x="71.8679%" y="127.50"></text></g><g><title>ic_certified_map::hashtree::labeled_hash (2,009,022 instructions, 0.04%)</title><rect x="71.6179%" y="133" width="0.0360%" height="15" fill="rgb(237,221,25)" fg:x="3996309968" fg:w="2009022"/><text x="71.8679%" y="143.50"></text></g><g><title>ic_certified_map::rbtree::Node&lt;K,V&gt;::compute_subtree_hash (592,764,850 instructions, 10.62%)</title><rect x="61.0337%" y="149" width="10.6229%" height="15" fill="rgb(209,229,50)" fg:x="3405703968" fg:w="592764850"/><text x="61.2837%" y="159.50">ic_certified_map..</text></g><g><title>sha2::sha256::compress256 (93,031,872 instructions, 1.67%)</title><rect x="71.6566%" y="101" width="1.6672%" height="15" fill="rgb(232,213,43)" fg:x="3998468818" fg:w="93031872"/><text x="71.9066%" y="111.50"></text></g><g><title>ic_certified_map::hashtree::leaf_hash (93,089,612 instructions, 1.67%)</title><rect x="71.6566%" y="117" width="1.6683%" height="15" fill="rgb(241,107,1)" fg:x="3998468818" fg:w="93089612"/><text x="71.9066%" y="127.50"></text></g><g><title>sha2::sha256::compress256 (911,842 instructions, 0.02%)</title><rect x="73.3249%" y="101" width="0.0163%" height="15" fill="rgb(253,101,6)" fg:x="4091558430" fg:w="911842"/><text x="73.5749%" y="111.50"></text></g><g><title>ic_certified_map::hashtree::fork_hash (961,696 instructions, 0.02%)</title><rect x="73.3249%" y="117" width="0.0172%" height="15" fill="rgb(236,114,22)" fg:x="4091558430" fg:w="961696"/><text x="73.5749%" y="127.50"></text></g><g><title>sha2::sha256::compress256 (574,848 instructions, 0.01%)</title><rect x="73.3421%" y="101" width="0.0103%" height="15" fill="rgb(227,34,26)" fg:x="4092520126" fg:w="574848"/><text x="73.5921%" y="111.50"></text></g><g><title>ic_certified_map::hashtree::labeled_hash (626,466 instructions, 0.01%)</title><rect x="73.3421%" y="117" width="0.0112%" height="15" fill="rgb(248,146,26)" fg:x="4092520126" fg:w="626466"/><text x="73.5921%" y="127.50"></text></g><g><title>ic_certified_map::rbtree::Node&lt;K,V&gt;::compute_subtree_hash (94,717,959 instructions, 1.70%)</title><rect x="71.6566%" y="133" width="1.6974%" height="15" fill="rgb(222,148,3)" fg:x="3998468818" fg:w="94717959"/><text x="71.9066%" y="143.50"></text></g><g><title>ic_certified_map::rbtree::balance (94,731,528 instructions, 1.70%)</title><rect x="71.6566%" y="149" width="1.6977%" height="15" fill="rgb(249,90,8)" fg:x="3998468818" fg:w="94731528"/><text x="71.9066%" y="159.50"></text></g><g><title>ic_certified_map::rbtree::RbTree&lt;K,V&gt;::insert::go (4,093,770,165 instructions, 73.36%)</title><rect x="0.0000%" y="165" width="73.3645%" height="15" fill="rgb(229,97,49)" fg:x="0" fg:w="4093770165"/><text x="0.2500%" y="175.50">ic_certified_map::rbtree::RbTree&lt;K,V&gt;::insert::go</text></g><g><title>sha2::sha256::compress256 (529,070,886 instructions, 9.48%)</title><rect x="73.3645%" y="133" width="9.4815%" height="15" fill="rgb(232,130,1)" fg:x="4093770165" fg:w="529070886"/><text x="73.6145%" y="143.50">sha2::sha256::..</text></g><g><title>ic_certified_map::hashtree::leaf_hash (529,264,767 instructions, 9.48%)</title><rect x="73.3645%" y="149" width="9.4850%" height="15" fill="rgb(225,193,5)" fg:x="4093770165" fg:w="529264767"/><text x="73.6145%" y="159.50">ic_certified_m..</text></g><g><title>sha2::sha256::compress256 (3,805,901 instructions, 0.07%)</title><rect x="82.8495%" y="133" width="0.0682%" height="15" fill="rgb(249,85,47)" fg:x="4623034932" fg:w="3805901"/><text x="83.0995%" y="143.50"></text></g><g><title>ic_certified_map::hashtree::fork_hash (4,014,016 instructions, 0.07%)</title><rect x="82.8495%" y="149" width="0.0719%" height="15" fill="rgb(244,189,19)" fg:x="4623034932" fg:w="4014016"/><text x="83.0995%" y="159.50"></text></g><g><title>sha2::sha256::compress256 (1,922,786 instructions, 0.03%)</title><rect x="82.9214%" y="133" width="0.0345%" height="15" fill="rgb(212,196,23)" fg:x="4627048948" fg:w="1922786"/><text x="83.1714%" y="143.50"></text></g><g><title>ic_certified_map::hashtree::labeled_hash (2,095,438 instructions, 0.04%)</title><rect x="82.9214%" y="149" width="0.0376%" height="15" fill="rgb(240,88,1)" fg:x="4627048948" fg:w="2095438"/><text x="83.1714%" y="159.50"></text></g><g><title>ic_certified_map::rbtree::Node&lt;K,V&gt;::compute_subtree_hash (535,531,897 instructions, 9.60%)</title><rect x="73.3645%" y="165" width="9.5973%" height="15" fill="rgb(244,149,51)" fg:x="4093770165" fg:w="535531897"/><text x="73.6145%" y="175.50">ic_certified_m..</text></g><g><title>sha2::sha256::compress256 (34,206,256 instructions, 0.61%)</title><rect x="82.9618%" y="117" width="0.6130%" height="15" fill="rgb(229,23,9)" fg:x="4629302062" fg:w="34206256"/><text x="83.2118%" y="127.50"></text></g><g><title>ic_certified_map::hashtree::leaf_hash (34,242,263 instructions, 0.61%)</title><rect x="82.9618%" y="133" width="0.6137%" height="15" fill="rgb(206,58,45)" fg:x="4629302062" fg:w="34242263"/><text x="83.2118%" y="143.50"></text></g><g><title>sha2::sha256::compress256 (594,689 instructions, 0.01%)</title><rect x="83.5754%" y="117" width="0.0107%" height="15" fill="rgb(244,213,26)" fg:x="4663544325" fg:w="594689"/><text x="83.8254%" y="127.50"></text></g><g><title>ic_certified_map::hashtree::fork_hash (627,199 instructions, 0.01%)</title><rect x="83.5754%" y="133" width="0.0112%" height="15" fill="rgb(238,72,39)" fg:x="4663544325" fg:w="627199"/><text x="83.8254%" y="143.50"></text></g><g><title>ic_certified_map::rbtree::Node&lt;K,V&gt;::compute_subtree_hash (35,284,113 instructions, 0.63%)</title><rect x="82.9618%" y="149" width="0.6323%" height="15" fill="rgb(224,160,0)" fg:x="4629302062" fg:w="35284113"/><text x="83.2118%" y="159.50"></text></g><g><title>ic_certified_map::rbtree::balance (35,295,405 instructions, 0.63%)</title><rect x="82.9618%" y="165" width="0.6325%" height="15" fill="rgb(249,1,2)" fg:x="4629302062" fg:w="35295405"/><text x="83.2118%" y="175.50"></text></g><g><title>ic_certified_map::rbtree::RbTree&lt;K,V&gt;::insert::go (4,664,825,007 instructions, 83.60%)</title><rect x="0.0000%" y="181" width="83.5984%" height="15" fill="rgb(206,116,38)" fg:x="0" fg:w="4664825007"/><text x="0.2500%" y="191.50">ic_certified_map::rbtree::RbTree&lt;K,V&gt;::insert::go</text></g><g><title>sha2::sha256::compress256 (265,395,851 instructions, 4.76%)</title><rect x="83.5984%" y="149" width="4.7562%" height="15" fill="rgb(241,97,24)" fg:x="4664825007" fg:w="265395851"/><text x="83.8484%" y="159.50">sha2::..</text></g><g><title>ic_certified_map::hashtree::leaf_hash (265,591,163 instructions, 4.76%)</title><rect x="83.5984%" y="165" width="4.7597%" height="15" fill="rgb(223,110,36)" fg:x="4664825007" fg:w="265591163"/><text x="83.8484%" y="175.50">ic_cer..</text></g><g><title>sha2::sha256::compress256 (3,905,025 instructions, 0.07%)</title><rect x="88.3580%" y="149" width="0.0700%" height="15" fill="rgb(216,12,17)" fg:x="4930416170" fg:w="3905025"/><text x="88.6080%" y="159.50"></text></g><g><title>ic_certified_map::hashtree::fork_hash (4,118,549 instructions, 0.07%)</title><rect x="88.3580%" y="165" width="0.0738%" height="15" fill="rgb(245,187,39)" fg:x="4930416170" fg:w="4118549"/><text x="88.6080%" y="175.50"></text></g><g><title>sha2::sha256::compress256 (1,962,414 instructions, 0.04%)</title><rect x="88.4318%" y="149" width="0.0352%" height="15" fill="rgb(226,21,42)" fg:x="4934534719" fg:w="1962414"/><text x="88.6818%" y="159.50"></text></g><g><title>ic_certified_map::hashtree::labeled_hash (2,138,626 instructions, 0.04%)</title><rect x="88.4318%" y="165" width="0.0383%" height="15" fill="rgb(230,148,24)" fg:x="4934534719" fg:w="2138626"/><text x="88.6818%" y="175.50"></text></g><g><title>ic_certified_map::rbtree::Node&lt;K,V&gt;::compute_subtree_hash (272,009,934 instructions, 4.87%)</title><rect x="83.5984%" y="181" width="4.8747%" height="15" fill="rgb(243,173,23)" fg:x="4664825007" fg:w="272009934"/><text x="83.8484%" y="191.50">ic_cer..</text></g><g><title>sha2::sha256::compress256 (7,059,324 instructions, 0.13%)</title><rect x="88.4731%" y="133" width="0.1265%" height="15" fill="rgb(223,134,35)" fg:x="4936834941" fg:w="7059324"/><text x="88.7231%" y="143.50"></text></g><g><title>ic_certified_map::hashtree::leaf_hash (7,080,977 instructions, 0.13%)</title><rect x="88.4731%" y="149" width="0.1269%" height="15" fill="rgb(233,175,9)" fg:x="4936834941" fg:w="7080977"/><text x="88.7231%" y="159.50"></text></g><g><title>ic_certified_map::rbtree::Node&lt;K,V&gt;::compute_subtree_hash (7,732,017 instructions, 0.14%)</title><rect x="88.4731%" y="165" width="0.1386%" height="15" fill="rgb(218,224,12)" fg:x="4936834941" fg:w="7732017"/><text x="88.7231%" y="175.50"></text></g><g><title>ic_certified_map::rbtree::balance (7,741,797 instructions, 0.14%)</title><rect x="88.4731%" y="181" width="0.1387%" height="15" fill="rgb(236,30,43)" fg:x="4936834941" fg:w="7741797"/><text x="88.7231%" y="191.50"></text></g><g><title>ic_certified_map::rbtree::RbTree&lt;K,V&gt;::insert::go (4,944,702,401 instructions, 88.61%)</title><rect x="0.0000%" y="197" width="88.6141%" height="15" fill="rgb(244,75,7)" fg:x="0" fg:w="4944702401"/><text x="0.2500%" y="207.50">ic_certified_map::rbtree::RbTree&lt;K,V&gt;::insert::go</text></g><g><title>sha2::sha256::compress256 (71,262,931 instructions, 1.28%)</title><rect x="88.6141%" y="165" width="1.2771%" height="15" fill="rgb(224,214,23)" fg:x="4944702401" fg:w="71262931"/><text x="88.8641%" y="175.50"></text></g><g><title>ic_certified_map::hashtree::leaf_hash (71,461,393 instructions, 1.28%)</title><rect x="88.6141%" y="181" width="1.2807%" height="15" fill="rgb(250,51,26)" fg:x="4944702401" fg:w="71461393"/><text x="88.8641%" y="191.50"></text></g><g><title>sha2::sha256::compress256 (3,954,598 instructions, 0.07%)</title><rect x="89.8947%" y="165" width="0.0709%" height="15" fill="rgb(223,15,10)" fg:x="5016163794" fg:w="3954598"/><text x="90.1447%" y="175.50"></text></g><g><title>ic_certified_map::hashtree::fork_hash (4,170,831 instructions, 0.07%)</title><rect x="89.8947%" y="181" width="0.0747%" height="15" fill="rgb(215,115,16)" fg:x="5016163794" fg:w="4170831"/><text x="90.1447%" y="191.50"></text></g><g><title>sha2::sha256::compress256 (1,982,258 instructions, 0.04%)</title><rect x="89.9695%" y="165" width="0.0355%" height="15" fill="rgb(218,26,31)" fg:x="5020334625" fg:w="1982258"/><text x="90.2195%" y="175.50"></text></g><g><title>ic_certified_map::hashtree::labeled_hash (2,160,241 instructions, 0.04%)</title><rect x="89.9695%" y="181" width="0.0387%" height="15" fill="rgb(230,15,32)" fg:x="5020334625" fg:w="2160241"/><text x="90.2195%" y="191.50"></text></g><g><title>ic_certified_map::rbtree::Node&lt;K,V&gt;::compute_subtree_hash (77,955,998 instructions, 1.40%)</title><rect x="88.6141%" y="197" width="1.3971%" height="15" fill="rgb(248,6,3)" fg:x="4944702401" fg:w="77955998"/><text x="88.8641%" y="207.50"></text></g><g><title>sha2::sha256::compress256 (6,456,983 instructions, 0.12%)</title><rect x="90.0111%" y="149" width="0.1157%" height="15" fill="rgb(252,54,36)" fg:x="5022658399" fg:w="6456983"/><text x="90.2611%" y="159.50"></text></g><g><title>ic_certified_map::hashtree::leaf_hash (6,470,662 instructions, 0.12%)</title><rect x="90.0111%" y="165" width="0.1160%" height="15" fill="rgb(214,65,15)" fg:x="5022658399" fg:w="6470662"/><text x="90.2611%" y="175.50"></text></g><g><title>ic_certified_map::rbtree::Node&lt;K,V&gt;::compute_subtree_hash (6,893,755 instructions, 0.12%)</title><rect x="90.0111%" y="181" width="0.1235%" height="15" fill="rgb(234,26,53)" fg:x="5022658399" fg:w="6893755"/><text x="90.2611%" y="191.50"></text></g><g><title>ic_certified_map::rbtree::balance (6,902,132 instructions, 0.12%)</title><rect x="90.0111%" y="197" width="0.1237%" height="15" fill="rgb(220,36,34)" fg:x="5022658399" fg:w="6902132"/><text x="90.2611%" y="207.50"></text></g><g><title>ic_certified_map::rbtree::RbTree&lt;K,V&gt;::insert::go (5,029,649,825 instructions, 90.14%)</title><rect x="0.0000%" y="213" width="90.1364%" height="15" fill="rgb(215,127,44)" fg:x="0" fg:w="5029649825"/><text x="0.2500%" y="223.50">ic_certified_map::rbtree::RbTree&lt;K,V&gt;::insert::go</text></g><g><title>memcmp (91,928,311 instructions, 1.65%)</title><rect x="90.1364%" y="197" width="1.6474%" height="15" fill="rgb(237,211,18)" fg:x="5029649825" fg:w="91928311"/><text x="90.3864%" y="207.50"></text></g><g><title>dlmalloc::dlmalloc::Dlmalloc&lt;A&gt;::free (781,998 instructions, 0.01%)</title><rect x="91.7839%" y="197" width="0.0140%" height="15" fill="rgb(254,90,51)" fg:x="5121578136" fg:w="781998"/><text x="92.0339%" y="207.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::entry (103,000,559 instructions, 1.85%)</title><rect x="90.1364%" y="213" width="1.8459%" height="15" fill="rgb(235,54,52)" fg:x="5029649825" fg:w="103000559"/><text x="90.3864%" y="223.50">a..</text></g><g><title>memcmp (6,849,659 instructions, 0.12%)</title><rect x="91.9823%" y="181" width="0.1228%" height="15" fill="rgb(231,62,50)" fg:x="5132650384" fg:w="6849659"/><text x="92.2323%" y="191.50"></text></g><g><title>core::slice::sort::stable::drift::sort (7,375,955 instructions, 0.13%)</title><rect x="91.9823%" y="197" width="0.1322%" height="15" fill="rgb(250,18,28)" fg:x="5132650384" fg:w="7375955"/><text x="92.2323%" y="207.50"></text></g><g><title>core::slice::sort::stable::driftsort_main (7,380,767 instructions, 0.13%)</title><rect x="91.9823%" y="213" width="0.1323%" height="15" fill="rgb(227,221,36)" fg:x="5132650384" fg:w="7380767"/><text x="92.2323%" y="223.50"></text></g><g><title>dlmalloc::dlmalloc::Dlmalloc&lt;A&gt;::insert_large_chunk (585,994 instructions, 0.01%)</title><rect x="92.1145%" y="197" width="0.0105%" height="15" fill="rgb(248,49,44)" fg:x="5140031151" fg:w="585994"/><text x="92.3645%" y="207.50"></text></g><g><title>dlmalloc::dlmalloc::Dlmalloc&lt;A&gt;::malloc (4,531,264 instructions, 0.08%)</title><rect x="92.1145%" y="213" width="0.0812%" height="15" fill="rgb(213,194,29)" fg:x="5140031151" fg:w="4531264"/><text x="92.3645%" y="223.50"></text></g><g><title>dlmalloc::dlmalloc::Dlmalloc&lt;A&gt;::free (2,304,382 instructions, 0.04%)</title><rect x="92.1958%" y="197" width="0.0413%" height="15" fill="rgb(223,183,18)" fg:x="5144562415" fg:w="2304382"/><text x="92.4458%" y="207.50"></text></g><g><title>&lt;alloc::vec::Vec&lt;T,A&gt; as core::ops::drop::Drop&gt;::drop (3,830,584 instructions, 0.07%)</title><rect x="92.1958%" y="213" width="0.0686%" height="15" fill="rgb(244,79,8)" fg:x="5144562415" fg:w="3830584"/><text x="92.4458%" y="223.50"></text></g><g><title>__rust_realloc (1,211,607 instructions, 0.02%)</title><rect x="92.2644%" y="165" width="0.0217%" height="15" fill="rgb(222,191,2)" fg:x="5148392999" fg:w="1211607"/><text x="92.5144%" y="175.50"></text></g><g><title>alloc::raw_vec::finish_grow (1,488,364 instructions, 0.03%)</title><rect x="92.2644%" y="181" width="0.0267%" height="15" fill="rgb(251,94,46)" fg:x="5148392999" fg:w="1488364"/><text x="92.5144%" y="191.50"></text></g><g><title>alloc::raw_vec::RawVec&lt;T,A&gt;::grow_one (1,674,420 instructions, 0.03%)</title><rect x="92.2644%" y="197" width="0.0300%" height="15" fill="rgb(241,221,14)" fg:x="5148392999" fg:w="1674420"/><text x="92.5144%" y="207.50"></text></g><g><title>alloc::collections::vec_deque::VecDeque&lt;T,A&gt;::grow (1,753,249 instructions, 0.03%)</title><rect x="92.2644%" y="213" width="0.0314%" height="15" fill="rgb(209,199,0)" fg:x="5148392999" fg:w="1753249"/><text x="92.5144%" y="223.50"></text></g><g><title>prost::encoding::varint::encode_varint.24850 (1,587,966 instructions, 0.03%)</title><rect x="92.2958%" y="213" width="0.0285%" height="15" fill="rgb(221,202,25)" fg:x="5150146248" fg:w="1587966"/><text x="92.5458%" y="223.50"></text></g><g><title>alloc::collections::btree::map::entry::Entry&lt;K,V,A&gt;::or_default (883,046 instructions, 0.02%)</title><rect x="92.3243%" y="213" width="0.0158%" height="15" fill="rgb(238,133,25)" fg:x="5151734214" fg:w="883046"/><text x="92.5743%" y="223.50"></text></g><g><title>registry_canister::registry::Registry::apply_mutations_as_version (5,180,962,773 instructions, 92.85%)</title><rect x="0.0000%" y="229" width="92.8481%" height="15" fill="rgb(228,110,49)" fg:x="0" fg:w="5180962773"/><text x="0.2500%" y="239.50">registry_canister::registry::Registry::apply_mutations_as_version</text></g><g><title>dlmalloc::dlmalloc::Dlmalloc&lt;A&gt;::malloc (3,328,081 instructions, 0.06%)</title><rect x="92.8481%" y="85" width="0.0596%" height="15" fill="rgb(234,51,10)" fg:x="5180962773" fg:w="3328081"/><text x="93.0981%" y="95.50"></text></g><g><title>alloc::raw_vec::finish_grow (4,572,806 instructions, 0.08%)</title><rect x="92.8481%" y="101" width="0.0819%" height="15" fill="rgb(227,34,47)" fg:x="5180962773" fg:w="4572806"/><text x="93.0981%" y="111.50"></text></g><g><title>alloc::raw_vec::RawVecInner&lt;A&gt;::reserve::do_reserve_and_handle (8,564,619 instructions, 0.15%)</title><rect x="92.8481%" y="117" width="0.1535%" height="15" fill="rgb(222,121,15)" fg:x="5180962773" fg:w="8564619"/><text x="93.0981%" y="127.50"></text></g><g><title>dlmalloc::dlmalloc::Dlmalloc&lt;A&gt;::free (2,691,038 instructions, 0.05%)</title><rect x="93.0016%" y="101" width="0.0482%" height="15" fill="rgb(227,21,27)" fg:x="5189527392" fg:w="2691038"/><text x="93.2516%" y="111.50"></text></g><g><title>bytes::bytes::promotable_even_drop (5,807,488 instructions, 0.10%)</title><rect x="93.0016%" y="117" width="0.1041%" height="15" fill="rgb(212,208,26)" fg:x="5189527392" fg:w="5807488"/><text x="93.2516%" y="127.50"></text></g><g><title>dlmalloc::dlmalloc::Dlmalloc&lt;A&gt;::malloc (2,931,386 instructions, 0.05%)</title><rect x="93.1056%" y="117" width="0.0525%" height="15" fill="rgb(225,225,0)" fg:x="5195334880" fg:w="2931386"/><text x="93.3556%" y="127.50"></text></g><g><title>prost::encoding::varint::decode_varint (1,259,397 instructions, 0.02%)</title><rect x="93.1582%" y="117" width="0.0226%" height="15" fill="rgb(209,211,3)" fg:x="5198266266" fg:w="1259397"/><text x="93.4082%" y="127.50"></text></g><g><title>prost::encoding::bytes::merge (41,580,355 instructions, 0.75%)</title><rect x="92.8481%" y="133" width="0.7452%" height="15" fill="rgb(205,62,35)" fg:x="5180962773" fg:w="41580355"/><text x="93.0981%" y="143.50"></text></g><g><title>prost::encoding::varint::decode_varint (2,519,268 instructions, 0.05%)</title><rect x="93.5932%" y="133" width="0.0451%" height="15" fill="rgb(221,136,30)" fg:x="5222543128" fg:w="2519268"/><text x="93.8432%" y="143.50"></text></g><g><title>prost::encoding::message::merge (50,809,491 instructions, 0.91%)</title><rect x="92.8481%" y="149" width="0.9106%" height="15" fill="rgb(214,161,7)" fg:x="5180962773" fg:w="50809491"/><text x="93.0981%" y="159.50"></text></g><g><title>prost::encoding::varint::decode_varint (2,519,651 instructions, 0.05%)</title><rect x="93.7586%" y="149" width="0.0452%" height="15" fill="rgb(235,40,49)" fg:x="5231772264" fg:w="2519651"/><text x="94.0086%" y="159.50"></text></g><g><title>prost::encoding::message::merge (60,397,379 instructions, 1.08%)</title><rect x="92.8481%" y="165" width="1.0824%" height="15" fill="rgb(212,17,53)" fg:x="5180962773" fg:w="60397379"/><text x="93.0981%" y="175.50"></text></g><g><title>prost::encoding::varint::decode_varint (1,889,542 instructions, 0.03%)</title><rect x="93.9305%" y="165" width="0.0339%" height="15" fill="rgb(222,160,2)" fg:x="5241360152" fg:w="1889542"/><text x="94.1805%" y="175.50"></text></g><g><title>dlmalloc::dlmalloc::Dlmalloc&lt;A&gt;::malloc (1,581,632 instructions, 0.03%)</title><rect x="94.0634%" y="101" width="0.0283%" height="15" fill="rgb(212,2,47)" fg:x="5248779449" fg:w="1581632"/><text x="94.3134%" y="111.50"></text></g><g><title>alloc::raw_vec::finish_grow (2,203,893 instructions, 0.04%)</title><rect x="94.0634%" y="117" width="0.0395%" height="15" fill="rgb(250,51,20)" fg:x="5248779449" fg:w="2203893"/><text x="94.3134%" y="127.50"></text></g><g><title>alloc::raw_vec::RawVecInner&lt;A&gt;::reserve::do_reserve_and_handle (4,199,582 instructions, 0.08%)</title><rect x="94.0634%" y="133" width="0.0753%" height="15" fill="rgb(238,40,41)" fg:x="5248779449" fg:w="4199582"/><text x="94.3134%" y="143.50"></text></g><g><title>dlmalloc::dlmalloc::Dlmalloc&lt;A&gt;::free (1,345,571 instructions, 0.02%)</title><rect x="94.1387%" y="117" width="0.0241%" height="15" fill="rgb(251,66,46)" fg:x="5252979031" fg:w="1345571"/><text x="94.3887%" y="127.50"></text></g><g><title>bytes::bytes::promotable_even_drop (2,903,677 instructions, 0.05%)</title><rect x="94.1387%" y="133" width="0.0520%" height="15" fill="rgb(251,121,2)" fg:x="5252979031" fg:w="2903677"/><text x="94.3887%" y="143.50"></text></g><g><title>dlmalloc::dlmalloc::Dlmalloc&lt;A&gt;::malloc (1,465,633 instructions, 0.03%)</title><rect x="94.1907%" y="133" width="0.0263%" height="15" fill="rgb(206,202,38)" fg:x="5255882708" fg:w="1465633"/><text x="94.4407%" y="143.50"></text></g><g><title>prost::encoding::varint::decode_varint (629,802 instructions, 0.01%)</title><rect x="94.2170%" y="133" width="0.0113%" height="15" fill="rgb(205,81,36)" fg:x="5257348341" fg:w="629802"/><text x="94.4670%" y="143.50"></text></g><g><title>prost::encoding::bytes::merge (20,707,520 instructions, 0.37%)</title><rect x="94.0634%" y="149" width="0.3711%" height="15" fill="rgb(221,200,29)" fg:x="5248779449" fg:w="20707520"/><text x="94.3134%" y="159.50"></text></g><g><title>prost::encoding::varint::decode_varint (1,259,714 instructions, 0.02%)</title><rect x="94.4345%" y="149" width="0.0226%" height="15" fill="rgb(225,2,1)" fg:x="5269486969" fg:w="1259714"/><text x="94.6845%" y="159.50"></text></g><g><title>prost::encoding::message::merge (25,322,243 instructions, 0.45%)</title><rect x="94.0634%" y="165" width="0.4538%" height="15" fill="rgb(208,196,43)" fg:x="5248779449" fg:w="25322243"/><text x="94.3134%" y="175.50"></text></g><g><title>prost::encoding::varint::decode_varint (1,259,863 instructions, 0.02%)</title><rect x="94.5172%" y="165" width="0.0226%" height="15" fill="rgb(249,174,26)" fg:x="5274101692" fg:w="1259863"/><text x="94.7672%" y="175.50"></text></g><g><title>prost::encoding::merge_loop (97,634,295 instructions, 1.75%)</title><rect x="92.8481%" y="181" width="1.7497%" height="15" fill="rgb(241,136,24)" fg:x="5180962773" fg:w="97634295"/><text x="93.0981%" y="191.50"></text></g><g><title>__rust_realloc (1,938,312 instructions, 0.03%)</title><rect x="94.5978%" y="149" width="0.0347%" height="15" fill="rgb(221,78,41)" fg:x="5278597068" fg:w="1938312"/><text x="94.8478%" y="159.50"></text></g><g><title>alloc::raw_vec::finish_grow (2,256,896 instructions, 0.04%)</title><rect x="94.5978%" y="165" width="0.0404%" height="15" fill="rgb(226,98,8)" fg:x="5278597068" fg:w="2256896"/><text x="94.8478%" y="175.50"></text></g><g><title>alloc::raw_vec::RawVec&lt;T,A&gt;::grow_one (2,534,944 instructions, 0.05%)</title><rect x="94.5978%" y="181" width="0.0454%" height="15" fill="rgb(210,23,34)" fg:x="5278597068" fg:w="2534944"/><text x="94.8478%" y="191.50"></text></g><g><title>prost::encoding::varint::decode_varint (2,519,102 instructions, 0.05%)</title><rect x="94.6432%" y="181" width="0.0451%" height="15" fill="rgb(239,93,0)" fg:x="5281132012" fg:w="2519102"/><text x="94.8932%" y="191.50"></text></g><g><title>prost::message::Message::decode (112,137,528 instructions, 2.01%)</title><rect x="92.8481%" y="197" width="2.0096%" height="15" fill="rgb(233,196,17)" fg:x="5180962773" fg:w="112137528"/><text x="93.0981%" y="207.50">p..</text></g><g><title>std::thread::local::LocalKey&lt;T&gt;::with (112,292,477 instructions, 2.01%)</title><rect x="92.8481%" y="213" width="2.0124%" height="15" fill="rgb(210,74,54)" fg:x="5180962773" fg:w="112292477"/><text x="93.0981%" y="223.50">s..</text></g><g><title>dlmalloc::dlmalloc::Dlmalloc&lt;A&gt;::unlink_chunk (2,267,540 instructions, 0.04%)</title><rect x="94.8605%" y="165" width="0.0406%" height="15" fill="rgb(220,22,9)" fg:x="5293255250" fg:w="2267540"/><text x="95.1105%" y="175.50"></text></g><g><title>dlmalloc::dlmalloc::Dlmalloc&lt;A&gt;::free (11,866,772 instructions, 0.21%)</title><rect x="94.8605%" y="181" width="0.2127%" height="15" fill="rgb(221,146,0)" fg:x="5293255250" fg:w="11866772"/><text x="95.1105%" y="191.50"></text></g><g><title>&lt;alloc::vec::Vec&lt;T,A&gt; as core::ops::drop::Drop&gt;::drop (16,527,321 instructions, 0.30%)</title><rect x="94.8605%" y="197" width="0.2962%" height="15" fill="rgb(223,33,6)" fg:x="5293255250" fg:w="16527321"/><text x="95.1105%" y="207.50"></text></g><g><title>&lt;alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt; as core::ops::drop::Drop&gt;::drop (17,484,126 instructions, 0.31%)</title><rect x="94.8605%" y="213" width="0.3133%" height="15" fill="rgb(206,95,42)" fg:x="5293255250" fg:w="17484126"/><text x="95.1105%" y="223.50"></text></g><g><title>memcmp (9,926,783 instructions, 0.18%)</title><rect x="95.1738%" y="213" width="0.1779%" height="15" fill="rgb(212,221,14)" fg:x="5310739376" fg:w="9926783"/><text x="95.4238%" y="223.50"></text></g><g><title>alloc::raw_vec::finish_grow (611,166 instructions, 0.01%)</title><rect x="95.3517%" y="101" width="0.0110%" height="15" fill="rgb(213,229,42)" fg:x="5320666159" fg:w="611166"/><text x="95.6017%" y="111.50"></text></g><g><title>alloc::raw_vec::RawVecInner&lt;A&gt;::reserve::do_reserve_and_handle (721,546 instructions, 0.01%)</title><rect x="95.3517%" y="117" width="0.0129%" height="15" fill="rgb(232,166,30)" fg:x="5320666159" fg:w="721546"/><text x="95.6017%" y="127.50"></text></g><g><title>&lt;alloc::string::String as core::fmt::Write&gt;::write_str (941,867 instructions, 0.02%)</title><rect x="95.3517%" y="133" width="0.0169%" height="15" fill="rgb(250,209,11)" fg:x="5320666159" fg:w="941867"/><text x="95.6017%" y="143.50"></text></g><g><title>core::fmt::Formatter::pad (979,831 instructions, 0.02%)</title><rect x="95.3517%" y="149" width="0.0176%" height="15" fill="rgb(220,31,43)" fg:x="5320666159" fg:w="979831"/><text x="95.6017%" y="159.50"></text></g><g><title>&lt;alloc::string::String as core::fmt::Display&gt;::fmt (994,158 instructions, 0.02%)</title><rect x="95.3517%" y="165" width="0.0178%" height="15" fill="rgb(245,31,43)" fg:x="5320666159" fg:w="994158"/><text x="95.6017%" y="175.50"></text></g><g><title>core::fmt::write (1,702,603 instructions, 0.03%)</title><rect x="95.3517%" y="181" width="0.0305%" height="15" fill="rgb(254,71,21)" fg:x="5320666159" fg:w="1702603"/><text x="95.6017%" y="191.50"></text></g><g><title>alloc::fmt::format::format_inner (1,917,360 instructions, 0.03%)</title><rect x="95.3517%" y="197" width="0.0344%" height="15" fill="rgb(211,165,32)" fg:x="5320666159" fg:w="1917360"/><text x="95.6017%" y="207.50"></text></g><g><title>ic_registry_keys::make_canister_ranges_key (4,497,241 instructions, 0.08%)</title><rect x="95.3517%" y="213" width="0.0806%" height="15" fill="rgb(235,15,47)" fg:x="5320666159" fg:w="4497241"/><text x="95.6017%" y="223.50"></text></g><g><title>&lt;core::iter::adapters::GenericShunt&lt;I,R&gt; as core::iter::traits::iterator::Iterator&gt;::next (1,621,726 instructions, 0.03%)</title><rect x="95.4323%" y="213" width="0.0291%" height="15" fill="rgb(206,127,6)" fg:x="5325163400" fg:w="1621726"/><text x="95.6823%" y="223.50"></text></g><g><title>alloc::raw_vec::finish_grow (610,212 instructions, 0.01%)</title><rect x="95.4614%" y="197" width="0.0109%" height="15" fill="rgb(215,2,17)" fg:x="5326785126" fg:w="610212"/><text x="95.7114%" y="207.50"></text></g><g><title>alloc::raw_vec::RawVecInner&lt;A&gt;::reserve::do_reserve_and_handle (765,193 instructions, 0.01%)</title><rect x="95.4614%" y="213" width="0.0137%" height="15" fill="rgb(249,55,45)" fg:x="5326785126" fg:w="765193"/><text x="95.7114%" y="223.50"></text></g><g><title>alloc::collections::btree::map::entry::VacantEntry&lt;K,V,A&gt;::insert (704,841 instructions, 0.01%)</title><rect x="95.4751%" y="213" width="0.0126%" height="15" fill="rgb(208,93,20)" fg:x="5327550319" fg:w="704841"/><text x="95.7251%" y="223.50"></text></g><g><title>&lt;ic_base_types::canister_id::CanisterId as core::convert::TryFrom&lt;alloc::vec::Vec&lt;u8&gt;&gt;&gt;::try_from (615,228 instructions, 0.01%)</title><rect x="95.4877%" y="213" width="0.0110%" height="15" fill="rgb(213,18,44)" fg:x="5328255160" fg:w="615228"/><text x="95.7377%" y="223.50"></text></g><g><title>registry_canister::mutations::routing_table::mutations_for_canister_ranges (156,729,619 instructions, 2.81%)</title><rect x="92.8481%" y="229" width="2.8088%" height="15" fill="rgb(248,181,6)" fg:x="5180962773" fg:w="156729619"/><text x="93.0981%" y="239.50">re..</text></g><g><title>sha2::sha256::compress256 (11,531,181 instructions, 0.21%)</title><rect x="95.6568%" y="37" width="0.2067%" height="15" fill="rgb(246,62,10)" fg:x="5337692392" fg:w="11531181"/><text x="95.9068%" y="47.50"></text></g><g><title>ic_certified_map::hashtree::leaf_hash (11,533,208 instructions, 0.21%)</title><rect x="95.6568%" y="53" width="0.2067%" height="15" fill="rgb(254,72,5)" fg:x="5337692392" fg:w="11533208"/><text x="95.9068%" y="63.50"></text></g><g><title>ic_certified_map::rbtree::Node&lt;K,V&gt;::compute_subtree_hash (11,565,986 instructions, 0.21%)</title><rect x="95.6568%" y="69" width="0.2073%" height="15" fill="rgb(213,5,38)" fg:x="5337692392" fg:w="11565986"/><text x="95.9068%" y="79.50"></text></g><g><title>ic_certified_map::rbtree::balance (11,566,202 instructions, 0.21%)</title><rect x="95.6568%" y="85" width="0.2073%" height="15" fill="rgb(216,75,25)" fg:x="5337692392" fg:w="11566202"/><text x="95.9068%" y="95.50"></text></g><g><title>sha2::sha256::compress256 (6,806,254 instructions, 0.12%)</title><rect x="95.8641%" y="53" width="0.1220%" height="15" fill="rgb(243,50,5)" fg:x="5349258594" fg:w="6806254"/><text x="96.1141%" y="63.50"></text></g><g><title>ic_certified_map::hashtree::leaf_hash (6,807,308 instructions, 0.12%)</title><rect x="95.8641%" y="69" width="0.1220%" height="15" fill="rgb(213,119,31)" fg:x="5349258594" fg:w="6807308"/><text x="96.1141%" y="79.50"></text></g><g><title>ic_certified_map::rbtree::Node&lt;K,V&gt;::compute_subtree_hash (6,829,063 instructions, 0.12%)</title><rect x="95.8641%" y="85" width="0.1224%" height="15" fill="rgb(205,122,33)" fg:x="5349258594" fg:w="6829063"/><text x="96.1141%" y="95.50"></text></g><g><title>sha2::sha256::compress256 (4,724,927 instructions, 0.08%)</title><rect x="95.9865%" y="53" width="0.0847%" height="15" fill="rgb(246,168,12)" fg:x="5356087657" fg:w="4724927"/><text x="96.2365%" y="63.50"></text></g><g><title>ic_certified_map::hashtree::leaf_hash (4,725,900 instructions, 0.08%)</title><rect x="95.9865%" y="69" width="0.0847%" height="15" fill="rgb(234,226,51)" fg:x="5356087657" fg:w="4725900"/><text x="96.2365%" y="79.50"></text></g><g><title>ic_certified_map::rbtree::RbTree&lt;K,V&gt;::insert::go (4,737,069 instructions, 0.08%)</title><rect x="95.9865%" y="85" width="0.0849%" height="15" fill="rgb(252,161,21)" fg:x="5356087657" fg:w="4737069"/><text x="96.2365%" y="95.50"></text></g><g><title>ic_certified_map::rbtree::RbTree&lt;K,V&gt;::insert::go (23,132,697 instructions, 0.41%)</title><rect x="95.6568%" y="101" width="0.4146%" height="15" fill="rgb(248,3,54)" fg:x="5337692392" fg:w="23132697"/><text x="95.9068%" y="111.50"></text></g><g><title>sha2::sha256::compress256 (6,411,671 instructions, 0.11%)</title><rect x="96.0714%" y="69" width="0.1149%" height="15" fill="rgb(235,77,48)" fg:x="5360825089" fg:w="6411671"/><text x="96.3214%" y="79.50"></text></g><g><title>ic_certified_map::hashtree::leaf_hash (6,412,645 instructions, 0.11%)</title><rect x="96.0714%" y="85" width="0.1149%" height="15" fill="rgb(210,80,17)" fg:x="5360825089" fg:w="6412645"/><text x="96.3214%" y="95.50"></text></g><g><title>ic_certified_map::rbtree::Node&lt;K,V&gt;::compute_subtree_hash (6,445,171 instructions, 0.12%)</title><rect x="96.0714%" y="101" width="0.1155%" height="15" fill="rgb(238,229,40)" fg:x="5360825089" fg:w="6445171"/><text x="96.3214%" y="111.50"></text></g><g><title>ic_certified_map::rbtree::RbTree&lt;K,V&gt;::insert::go (29,578,278 instructions, 0.53%)</title><rect x="95.6568%" y="117" width="0.5301%" height="15" fill="rgb(208,137,4)" fg:x="5337692392" fg:w="29578278"/><text x="95.9068%" y="127.50"></text></g><g><title>sha2::sha256::compress256 (6,825,959 instructions, 0.12%)</title><rect x="96.1869%" y="85" width="0.1223%" height="15" fill="rgb(233,121,31)" fg:x="5367270670" fg:w="6825959"/><text x="96.4369%" y="95.50"></text></g><g><title>ic_certified_map::hashtree::leaf_hash (6,826,933 instructions, 0.12%)</title><rect x="96.1869%" y="101" width="0.1223%" height="15" fill="rgb(242,155,19)" fg:x="5367270670" fg:w="6826933"/><text x="96.4369%" y="111.50"></text></g><g><title>ic_certified_map::rbtree::Node&lt;K,V&gt;::compute_subtree_hash (6,859,460 instructions, 0.12%)</title><rect x="96.1869%" y="117" width="0.1229%" height="15" fill="rgb(218,111,47)" fg:x="5367270670" fg:w="6859460"/><text x="96.4369%" y="127.50"></text></g><g><title>ic_certified_map::rbtree::RbTree&lt;K,V&gt;::insert::go (36,438,125 instructions, 0.65%)</title><rect x="95.6568%" y="133" width="0.6530%" height="15" fill="rgb(249,24,17)" fg:x="5337692392" fg:w="36438125"/><text x="95.9068%" y="143.50"></text></g><g><title>sha2::sha256::compress256 (7,018,306 instructions, 0.13%)</title><rect x="96.3098%" y="101" width="0.1258%" height="15" fill="rgb(226,89,49)" fg:x="5374130517" fg:w="7018306"/><text x="96.5598%" y="111.50"></text></g><g><title>ic_certified_map::hashtree::leaf_hash (7,019,280 instructions, 0.13%)</title><rect x="96.3098%" y="117" width="0.1258%" height="15" fill="rgb(210,219,16)" fg:x="5374130517" fg:w="7019280"/><text x="96.5598%" y="127.50"></text></g><g><title>ic_certified_map::rbtree::Node&lt;K,V&gt;::compute_subtree_hash (7,051,808 instructions, 0.13%)</title><rect x="96.3098%" y="133" width="0.1264%" height="15" fill="rgb(211,81,53)" fg:x="5374130517" fg:w="7051808"/><text x="96.5598%" y="143.50"></text></g><g><title>ic_certified_map::rbtree::RbTree&lt;K,V&gt;::insert::go (43,490,341 instructions, 0.78%)</title><rect x="95.6568%" y="149" width="0.7794%" height="15" fill="rgb(211,219,18)" fg:x="5337692392" fg:w="43490341"/><text x="95.9068%" y="159.50"></text></g><g><title>sha2::sha256::compress256 (6,954,191 instructions, 0.12%)</title><rect x="96.4362%" y="117" width="0.1246%" height="15" fill="rgb(244,101,38)" fg:x="5381182733" fg:w="6954191"/><text x="96.6862%" y="127.50"></text></g><g><title>ic_certified_map::hashtree::leaf_hash (6,955,164 instructions, 0.12%)</title><rect x="96.4362%" y="133" width="0.1246%" height="15" fill="rgb(223,133,53)" fg:x="5381182733" fg:w="6955164"/><text x="96.6862%" y="143.50"></text></g><g><title>ic_certified_map::rbtree::Node&lt;K,V&gt;::compute_subtree_hash (6,987,691 instructions, 0.13%)</title><rect x="96.4362%" y="149" width="0.1252%" height="15" fill="rgb(229,19,16)" fg:x="5381182733" fg:w="6987691"/><text x="96.6862%" y="159.50"></text></g><g><title>ic_certified_map::rbtree::RbTree&lt;K,V&gt;::insert::go (50,478,419 instructions, 0.90%)</title><rect x="95.6568%" y="165" width="0.9046%" height="15" fill="rgb(253,131,49)" fg:x="5337692392" fg:w="50478419"/><text x="95.9068%" y="175.50"></text></g><g><title>sha2::sha256::compress256 (6,697,726 instructions, 0.12%)</title><rect x="96.5615%" y="133" width="0.1200%" height="15" fill="rgb(240,186,48)" fg:x="5388170811" fg:w="6697726"/><text x="96.8115%" y="143.50"></text></g><g><title>ic_certified_map::hashtree::leaf_hash (6,698,700 instructions, 0.12%)</title><rect x="96.5615%" y="149" width="0.1200%" height="15" fill="rgb(248,228,13)" fg:x="5388170811" fg:w="6698700"/><text x="96.8115%" y="159.50"></text></g><g><title>ic_certified_map::rbtree::Node&lt;K,V&gt;::compute_subtree_hash (6,731,227 instructions, 0.12%)</title><rect x="96.5615%" y="165" width="0.1206%" height="15" fill="rgb(210,70,24)" fg:x="5388170811" fg:w="6731227"/><text x="96.8115%" y="175.50"></text></g><g><title>ic_certified_map::rbtree::RbTree&lt;K,V&gt;::insert::go (57,210,034 instructions, 1.03%)</title><rect x="95.6568%" y="181" width="1.0253%" height="15" fill="rgb(248,163,7)" fg:x="5337692392" fg:w="57210034"/><text x="95.9068%" y="191.50"></text></g><g><title>sha2::sha256::compress256 (5,859,287 instructions, 0.11%)</title><rect x="96.6821%" y="149" width="0.1050%" height="15" fill="rgb(232,71,32)" fg:x="5394902426" fg:w="5859287"/><text x="96.9321%" y="159.50"></text></g><g><title>ic_certified_map::hashtree::leaf_hash (5,860,261 instructions, 0.11%)</title><rect x="96.6821%" y="165" width="0.1050%" height="15" fill="rgb(240,90,7)" fg:x="5394902426" fg:w="5860261"/><text x="96.9321%" y="175.50"></text></g><g><title>ic_certified_map::rbtree::Node&lt;K,V&gt;::compute_subtree_hash (5,892,787 instructions, 0.11%)</title><rect x="96.6821%" y="181" width="0.1056%" height="15" fill="rgb(254,41,30)" fg:x="5394902426" fg:w="5892787"/><text x="96.9321%" y="191.50"></text></g><g><title>ic_certified_map::rbtree::RbTree&lt;K,V&gt;::insert::go (63,103,231 instructions, 1.13%)</title><rect x="95.6568%" y="197" width="1.1309%" height="15" fill="rgb(244,207,31)" fg:x="5337692392" fg:w="63103231"/><text x="95.9068%" y="207.50"></text></g><g><title>memcmp (14,541,483 instructions, 0.26%)</title><rect x="96.7877%" y="181" width="0.2606%" height="15" fill="rgb(229,172,12)" fg:x="5400795623" fg:w="14541483"/><text x="97.0377%" y="191.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::entry (16,448,558 instructions, 0.29%)</title><rect x="96.7877%" y="197" width="0.2948%" height="15" fill="rgb(217,64,24)" fg:x="5400795623" fg:w="16448558"/><text x="97.0377%" y="207.50"></text></g><g><title>memcmp (997,223 instructions, 0.02%)</title><rect x="97.0825%" y="165" width="0.0179%" height="15" fill="rgb(207,63,31)" fg:x="5417244181" fg:w="997223"/><text x="97.3325%" y="175.50"></text></g><g><title>core::slice::sort::stable::drift::sort (1,069,253 instructions, 0.02%)</title><rect x="97.0825%" y="181" width="0.0192%" height="15" fill="rgb(219,30,11)" fg:x="5417244181" fg:w="1069253"/><text x="97.3325%" y="191.50"></text></g><g><title>core::slice::sort::stable::driftsort_main (1,069,616 instructions, 0.02%)</title><rect x="97.0825%" y="197" width="0.0192%" height="15" fill="rgb(245,74,7)" fg:x="5417244181" fg:w="1069616"/><text x="97.3325%" y="207.50"></text></g><g><title>registry_canister::registry::Registry::apply_mutations_as_version (83,055,730 instructions, 1.49%)</title><rect x="95.6568%" y="213" width="1.4884%" height="15" fill="rgb(214,197,9)" fg:x="5337692392" fg:w="83055730"/><text x="95.9068%" y="223.50"></text></g><g><title>memcmp (22,255,729 instructions, 0.40%)</title><rect x="97.1453%" y="165" width="0.3988%" height="15" fill="rgb(220,225,19)" fg:x="5420748122" fg:w="22255729"/><text x="97.3953%" y="175.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::insert (24,858,402 instructions, 0.45%)</title><rect x="97.1453%" y="181" width="0.4455%" height="15" fill="rgb(250,72,33)" fg:x="5420748122" fg:w="24858402"/><text x="97.3953%" y="191.50"></text></g><g><title>registry_canister::invariants::checks::&lt;impl registry_canister::registry::Registry&gt;::take_latest_snapshot (26,880,489 instructions, 0.48%)</title><rect x="97.1453%" y="197" width="0.4817%" height="15" fill="rgb(252,105,49)" fg:x="5420748122" fg:w="26880489"/><text x="97.3953%" y="207.50"></text></g><g><title>&lt;core::fmt::builders::PadAdapter as core::fmt::Write&gt;::write_str (1,196,045 instructions, 0.02%)</title><rect x="97.6270%" y="133" width="0.0214%" height="15" fill="rgb(225,220,23)" fg:x="5447628611" fg:w="1196045"/><text x="97.8770%" y="143.50"></text></g><g><title>&lt;str as core::fmt::Debug&gt;::fmt (5,938,771 instructions, 0.11%)</title><rect x="97.6270%" y="149" width="0.1064%" height="15" fill="rgb(244,101,14)" fg:x="5447628611" fg:w="5938771"/><text x="97.8770%" y="159.50"></text></g><g><title>&lt;&amp;T as core::fmt::Debug&gt;::fmt (6,566,077 instructions, 0.12%)</title><rect x="97.6270%" y="165" width="0.1177%" height="15" fill="rgb(212,186,38)" fg:x="5447628611" fg:w="6566077"/><text x="97.8770%" y="175.50"></text></g><g><title>core::fmt::write (6,576,495 instructions, 0.12%)</title><rect x="97.6270%" y="181" width="0.1179%" height="15" fill="rgb(228,0,40)" fg:x="5447628611" fg:w="6576495"/><text x="97.8770%" y="191.50"></text></g><g><title>alloc::fmt::format::format_inner (6,577,603 instructions, 0.12%)</title><rect x="97.6270%" y="197" width="0.1179%" height="15" fill="rgb(222,23,50)" fg:x="5447628611" fg:w="6577603"/><text x="97.8770%" y="207.50"></text></g><g><title>__rust_realloc (623,979 instructions, 0.01%)</title><rect x="97.7449%" y="101" width="0.0112%" height="15" fill="rgb(220,193,29)" fg:x="5454206214" fg:w="623979"/><text x="97.9949%" y="111.50"></text></g><g><title>alloc::raw_vec::finish_grow (695,379 instructions, 0.01%)</title><rect x="97.7449%" y="117" width="0.0125%" height="15" fill="rgb(209,193,9)" fg:x="5454206214" fg:w="695379"/><text x="97.9949%" y="127.50"></text></g><g><title>alloc::raw_vec::RawVecInner&lt;A&gt;::reserve::do_reserve_and_handle (850,279 instructions, 0.02%)</title><rect x="97.7449%" y="133" width="0.0152%" height="15" fill="rgb(240,83,24)" fg:x="5454206214" fg:w="850279"/><text x="97.9949%" y="143.50"></text></g><g><title>&lt;alloc::string::String as core::fmt::Write&gt;::write_str.1436 (1,251,056 instructions, 0.02%)</title><rect x="97.7449%" y="149" width="0.0224%" height="15" fill="rgb(226,137,24)" fg:x="5454206214" fg:w="1251056"/><text x="97.9949%" y="159.50"></text></g><g><title>core::fmt::Formatter::pad (1,327,015 instructions, 0.02%)</title><rect x="97.7449%" y="165" width="0.0238%" height="15" fill="rgb(248,73,26)" fg:x="5454206214" fg:w="1327015"/><text x="97.9949%" y="175.50"></text></g><g><title>&lt;alloc::string::String as core::fmt::Display&gt;::fmt (1,355,627 instructions, 0.02%)</title><rect x="97.7449%" y="181" width="0.0243%" height="15" fill="rgb(213,51,5)" fg:x="5454206214" fg:w="1355627"/><text x="97.9949%" y="191.50"></text></g><g><title>__rust_realloc (558,464 instructions, 0.01%)</title><rect x="97.7692%" y="101" width="0.0100%" height="15" fill="rgb(214,54,20)" fg:x="5455561841" fg:w="558464"/><text x="98.0192%" y="111.50"></text></g><g><title>alloc::raw_vec::finish_grow (629,862 instructions, 0.01%)</title><rect x="97.7692%" y="117" width="0.0113%" height="15" fill="rgb(211,102,17)" fg:x="5455561841" fg:w="629862"/><text x="98.0192%" y="127.50"></text></g><g><title>alloc::raw_vec::RawVecInner&lt;A&gt;::reserve::do_reserve_and_handle (784,761 instructions, 0.01%)</title><rect x="97.7692%" y="133" width="0.0141%" height="15" fill="rgb(215,84,40)" fg:x="5455561841" fg:w="784761"/><text x="98.0192%" y="143.50"></text></g><g><title>&lt;alloc::string::String as core::fmt::Write&gt;::write_str.1436 (988,371 instructions, 0.02%)</title><rect x="97.7692%" y="149" width="0.0177%" height="15" fill="rgb(207,137,13)" fg:x="5455561841" fg:w="988371"/><text x="98.0192%" y="159.50"></text></g><g><title>core::fmt::Formatter::pad (1,026,358 instructions, 0.02%)</title><rect x="97.7692%" y="165" width="0.0184%" height="15" fill="rgb(243,165,13)" fg:x="5455561841" fg:w="1026358"/><text x="98.0192%" y="175.50"></text></g><g><title>&lt;&amp;T as core::fmt::Display&gt;::fmt (1,040,668 instructions, 0.02%)</title><rect x="97.7692%" y="181" width="0.0186%" height="15" fill="rgb(230,84,29)" fg:x="5455561841" fg:w="1040668"/><text x="98.0192%" y="191.50"></text></g><g><title>&lt;alloc::string::String as core::fmt::Write&gt;::write_str.1436 (1,020,905 instructions, 0.02%)</title><rect x="97.7878%" y="181" width="0.0183%" height="15" fill="rgb(223,21,0)" fg:x="5456602509" fg:w="1020905"/><text x="98.0378%" y="191.50"></text></g><g><title>core::fmt::write (3,871,153 instructions, 0.07%)</title><rect x="97.7449%" y="197" width="0.0694%" height="15" fill="rgb(213,131,45)" fg:x="5454206214" fg:w="3871153"/><text x="97.9949%" y="207.50"></text></g><g><title>memcmp (3,651,102 instructions, 0.07%)</title><rect x="97.8143%" y="197" width="0.0654%" height="15" fill="rgb(220,118,13)" fg:x="5458077367" fg:w="3651102"/><text x="98.0643%" y="207.50"></text></g><g><title>dlmalloc::dlmalloc::Dlmalloc&lt;A&gt;::free (849,012 instructions, 0.02%)</title><rect x="97.8797%" y="197" width="0.0152%" height="15" fill="rgb(254,215,22)" fg:x="5461728469" fg:w="849012"/><text x="98.1297%" y="207.50"></text></g><g><title>alloc::collections::btree::remove::&lt;impl alloc::collections::btree::node::Handle&lt;alloc::collections::btree::node::NodeRef&lt;alloc::collections::btree::node::marker::Mut,K,V,alloc::collections::btree::node::marker::Leaf&gt;,alloc::collections::btree::node::marker::KV&gt;&gt;::remove_leaf_kv (628,414 instructions, 0.01%)</title><rect x="97.8949%" y="197" width="0.0113%" height="15" fill="rgb(221,154,8)" fg:x="5462577481" fg:w="628414"/><text x="98.1449%" y="207.50"></text></g><g><title>registry_canister::invariants::checks::&lt;impl registry_canister::registry::Registry&gt;::check_global_state_invariants (51,395,391 instructions, 0.92%)</title><rect x="97.1453%" y="213" width="0.9211%" height="15" fill="rgb(224,52,34)" fg:x="5420748122" fg:w="51395391"/><text x="97.3953%" y="223.50"></text></g><g><title>memcmp (14,541,482 instructions, 0.26%)</title><rect x="98.0663%" y="197" width="0.2606%" height="15" fill="rgb(238,40,53)" fg:x="5472143513" fg:w="14541482"/><text x="98.3163%" y="207.50"></text></g><g><title>core::ops::function::impls::&lt;impl core::ops::function::FnOnce&lt;A&gt; for &amp;mut F&gt;::call_once (16,177,665 instructions, 0.29%)</title><rect x="98.0663%" y="213" width="0.2899%" height="15" fill="rgb(239,126,21)" fg:x="5472143513" fg:w="16177665"/><text x="98.3163%" y="223.50"></text></g><g><title>registry_canister::registry::Registry::maybe_apply_mutation_internal (151,053,412 instructions, 2.71%)</title><rect x="95.6568%" y="229" width="2.7070%" height="15" fill="rgb(222,202,5)" fg:x="5337692392" fg:w="151053412"/><text x="95.9068%" y="239.50">re..</text></g><g><title>dlmalloc::dlmalloc::Dlmalloc&lt;A&gt;::malloc (4,465,375 instructions, 0.08%)</title><rect x="98.3639%" y="181" width="0.0800%" height="15" fill="rgb(245,135,7)" fg:x="5488745804" fg:w="4465375"/><text x="98.6139%" y="191.50"></text></g><g><title>alloc::raw_vec::finish_grow (5,092,052 instructions, 0.09%)</title><rect x="98.3639%" y="197" width="0.0913%" height="15" fill="rgb(221,10,33)" fg:x="5488745804" fg:w="5092052"/><text x="98.6139%" y="207.50"></text></g><g><title>alloc::raw_vec::RawVecInner&lt;A&gt;::reserve::do_reserve_and_handle (7,101,200 instructions, 0.13%)</title><rect x="98.3639%" y="213" width="0.1273%" height="15" fill="rgb(236,80,32)" fg:x="5488745804" fg:w="7101200"/><text x="98.6139%" y="223.50"></text></g><g><title>dlmalloc::dlmalloc::Dlmalloc&lt;A&gt;::malloc (4,281,404 instructions, 0.08%)</title><rect x="98.4911%" y="213" width="0.0767%" height="15" fill="rgb(217,28,34)" fg:x="5495847004" fg:w="4281404"/><text x="98.7411%" y="223.50"></text></g><g><title>dlmalloc::dlmalloc::Dlmalloc&lt;A&gt;::free (2,091,988 instructions, 0.04%)</title><rect x="98.5679%" y="197" width="0.0375%" height="15" fill="rgb(228,177,52)" fg:x="5500128408" fg:w="2091988"/><text x="98.8179%" y="207.50"></text></g><g><title>bytes::bytes::promotable_even_drop (3,660,341 instructions, 0.07%)</title><rect x="98.5679%" y="213" width="0.0656%" height="15" fill="rgb(237,1,7)" fg:x="5500128408" fg:w="3660341"/><text x="98.8179%" y="223.50"></text></g><g><title>prost::encoding::varint::decode_varint (894,268 instructions, 0.02%)</title><rect x="98.6335%" y="213" width="0.0160%" height="15" fill="rgb(229,56,8)" fg:x="5503788749" fg:w="894268"/><text x="98.8835%" y="223.50"></text></g><g><title>prost::encoding::bytes::merge (43,167,952 instructions, 0.77%)</title><rect x="98.3639%" y="229" width="0.7736%" height="15" fill="rgb(214,8,18)" fg:x="5488745804" fg:w="43167952"/><text x="98.6139%" y="239.50"></text></g><g><title>prost::encoding::varint::decode_varint (2,205,705 instructions, 0.04%)</title><rect x="99.1375%" y="229" width="0.0395%" height="15" fill="rgb(235,16,25)" fg:x="5531913756" fg:w="2205705"/><text x="99.3875%" y="239.50"></text></g><g><title>__rust_realloc (679,389 instructions, 0.01%)</title><rect x="99.1770%" y="197" width="0.0122%" height="15" fill="rgb(216,214,4)" fg:x="5534119461" fg:w="679389"/><text x="99.4270%" y="207.50"></text></g><g><title>alloc::raw_vec::finish_grow (733,577 instructions, 0.01%)</title><rect x="99.1770%" y="213" width="0.0131%" height="15" fill="rgb(229,206,44)" fg:x="5534119461" fg:w="733577"/><text x="99.4270%" y="223.50"></text></g><g><title>alloc::raw_vec::RawVec&lt;T,A&gt;::grow_one (781,580 instructions, 0.01%)</title><rect x="99.1770%" y="229" width="0.0140%" height="15" fill="rgb(246,14,2)" fg:x="5534119461" fg:w="781580"/><text x="99.4270%" y="239.50"></text></g><g><title>registry_canister::registry_lifecycle::canister_post_upgrade (5,541,004,546 instructions, 99.30%)</title><rect x="0.0000%" y="245" width="99.3004%" height="15" fill="rgb(244,117,15)" fg:x="0" fg:w="5541004546"/><text x="0.2500%" y="255.50">registry_canister::registry_lifecycle::canister_post_upgrade</text></g><g><title>prost::encoding::bytes::merge (16,618,520 instructions, 0.30%)</title><rect x="99.3004%" y="245" width="0.2978%" height="15" fill="rgb(250,143,14)" fg:x="5541004546" fg:w="16618520"/><text x="99.5504%" y="255.50"></text></g><g><title>registry_canister::mutations::routing_table::benches::upgrade_with_routing_table::{{closure}} (5,574,360,613 instructions, 99.90%)</title><rect x="0.0000%" y="261" width="99.8982%" height="15" fill="rgb(224,167,45)" fg:x="0" fg:w="5574360613"/><text x="0.2500%" y="271.50">registry_canister::mutations::routing_table::benches::upgrade_with_routing_table::{{closure}}</text></g><g><title>dlmalloc::dlmalloc::Dlmalloc&lt;A&gt;::unlink_chunk (986,089 instructions, 0.02%)</title><rect x="99.8982%" y="229" width="0.0177%" height="15" fill="rgb(246,159,28)" fg:x="5574360613" fg:w="986089"/><text x="100.1482%" y="239.50"></text></g><g><title>dlmalloc::dlmalloc::Dlmalloc&lt;A&gt;::free (4,321,407 instructions, 0.08%)</title><rect x="99.8982%" y="245" width="0.0774%" height="15" fill="rgb(206,73,40)" fg:x="5574360613" fg:w="4321407"/><text x="100.1482%" y="255.50"></text></g><g><title>&lt;alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt; as core::ops::drop::Drop&gt;::drop (5,520,327 instructions, 0.10%)</title><rect x="99.8982%" y="261" width="0.0989%" height="15" fill="rgb(242,203,1)" fg:x="5574360613" fg:w="5520327"/><text x="100.1482%" y="271.50"></text></g><g><title>all (5,580,042,821 instructions, 100%)</title><rect x="0.0000%" y="293" width="100.0000%" height="15" fill="rgb(216,180,4)" fg:x="0" fg:w="5580042821"/><text x="0.2500%" y="303.50"></text></g><g><title>upgrade_with_routing_table_10k (5,580,042,821 instructions, 100.00%)</title><rect x="0.0000%" y="277" width="100.0000%" height="15" fill="rgb(250,81,27)" fg:x="0" fg:w="5580042821"/><text x="0.2500%" y="287.50">upgrade_with_routing_table_10k</text></g></svg></svg>

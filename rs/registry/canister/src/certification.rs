@@ -74,7 +74,9 @@ pub fn recertify_registry(registry: &Registry) {
         &labeled_hash(b"delta", &registry.changelog().root_hash()),
     );
 
-    set_certified_data(&root_hash);
+    if !cfg!(feature = "canbench-rs") {
+        set_certified_data(&root_hash);
+    }
 }
 
 #[cfg(all(not(target_arch = "wasm32"), not(test)))]

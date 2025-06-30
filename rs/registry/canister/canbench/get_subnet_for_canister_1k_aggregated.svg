@@ -1,0 +1,491 @@
+<?xml version="1.0" standalone="no"?><!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd"><svg version="1.1" width="1200" height="294" onload="init(evt)" viewBox="0 0 1200 294" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:fg="http://github.com/jonhoo/inferno"><!--Flame graph stack visualization. See https://github.com/brendangregg/FlameGraph for latest version, and http://www.brendangregg.com/flamegraphs.html for examples.--><!--NOTES: --><defs><linearGradient id="background" y1="0" y2="1" x1="0" x2="0"><stop stop-color="#eeeeee" offset="5%"/><stop stop-color="#eeeeb0" offset="95%"/></linearGradient></defs><style type="text/css">
+text { font-family:monospace; font-size:12px }
+#title { text-anchor:middle; font-size:17px; }
+#matched { text-anchor:end; }
+#search { text-anchor:end; opacity:0.1; cursor:pointer; }
+#search:hover, #search.show { opacity:1; }
+#subtitle { text-anchor:middle; font-color:rgb(160,160,160); }
+#unzoom { cursor:pointer; }
+#frames > *:hover { stroke:black; stroke-width:0.5; cursor:pointer; }
+.hide { display:none; }
+.parent { opacity:0.5; }
+</style><script type="text/ecmascript"><![CDATA[
+        var nametype = 'Function:';
+        var fontsize = 12;
+        var fontwidth = 0.59;
+        var xpad = 10;
+        var inverted = false;
+        var searchcolor = 'rgb(230,0,230)';
+        var fluiddrawing = true;
+        var truncate_text_right = false;
+    ]]><![CDATA["use strict";
+var details, searchbtn, unzoombtn, matchedtxt, svg, searching, frames, known_font_width;
+function init(evt) {
+    details = document.getElementById("details").firstChild;
+    searchbtn = document.getElementById("search");
+    unzoombtn = document.getElementById("unzoom");
+    matchedtxt = document.getElementById("matched");
+    svg = document.getElementsByTagName("svg")[0];
+    frames = document.getElementById("frames");
+    known_font_width = get_monospace_width(frames);
+    total_samples = parseInt(frames.attributes.total_samples.value);
+    searching = 0;
+
+    // Use GET parameters to restore a flamegraph's state.
+    var restore_state = function() {
+        var params = get_params();
+        if (params.x && params.y)
+            zoom(find_group(document.querySelector('[*|x="' + params.x + '"][y="' + params.y + '"]')));
+        if (params.s)
+            search(params.s);
+    };
+
+    if (fluiddrawing) {
+        // Make width dynamic so the SVG fits its parent's width.
+        svg.removeAttribute("width");
+        // Edge requires us to have a viewBox that gets updated with size changes.
+        var isEdge = /Edge\/\d./i.test(navigator.userAgent);
+        if (!isEdge) {
+            svg.removeAttribute("viewBox");
+        }
+        var update_for_width_change = function() {
+            if (isEdge) {
+                svg.attributes.viewBox.value = "0 0 " + svg.width.baseVal.value + " " + svg.height.baseVal.value;
+            }
+
+            // Keep consistent padding on left and right of frames container.
+            frames.attributes.width.value = svg.width.baseVal.value - xpad * 2;
+
+            // Text truncation needs to be adjusted for the current width.
+            update_text_for_elements(frames.children);
+
+            // Keep search elements at a fixed distance from right edge.
+            var svgWidth = svg.width.baseVal.value;
+            searchbtn.attributes.x.value = svgWidth - xpad;
+            matchedtxt.attributes.x.value = svgWidth - xpad;
+        };
+        window.addEventListener('resize', function() {
+            update_for_width_change();
+        });
+        // This needs to be done asynchronously for Safari to work.
+        setTimeout(function() {
+            unzoom();
+            update_for_width_change();
+            restore_state();
+        }, 0);
+    } else {
+        restore_state();
+    }
+}
+// event listeners
+window.addEventListener("click", function(e) {
+    var target = find_group(e.target);
+    if (target) {
+        if (target.nodeName == "a") {
+            if (e.ctrlKey === false) return;
+            e.preventDefault();
+        }
+        if (target.classList.contains("parent")) unzoom();
+        zoom(target);
+
+        // set parameters for zoom state
+        var el = target.querySelector("rect");
+        if (el && el.attributes && el.attributes.y && el.attributes["fg:x"]) {
+            var params = get_params()
+            params.x = el.attributes["fg:x"].value;
+            params.y = el.attributes.y.value;
+            history.replaceState(null, null, parse_params(params));
+        }
+    }
+    else if (e.target.id == "unzoom") {
+        unzoom();
+
+        // remove zoom state
+        var params = get_params();
+        if (params.x) delete params.x;
+        if (params.y) delete params.y;
+        history.replaceState(null, null, parse_params(params));
+    }
+    else if (e.target.id == "search") search_prompt();
+}, false)
+// mouse-over for info
+// show
+window.addEventListener("mouseover", function(e) {
+    var target = find_group(e.target);
+    if (target) details.nodeValue = nametype + " " + g_to_text(target);
+}, false)
+// clear
+window.addEventListener("mouseout", function(e) {
+    var target = find_group(e.target);
+    if (target) details.nodeValue = ' ';
+}, false)
+// ctrl-F for search
+window.addEventListener("keydown",function (e) {
+    if (e.keyCode === 114 || (e.ctrlKey && e.keyCode === 70)) {
+        e.preventDefault();
+        search_prompt();
+    }
+}, false)
+// functions
+function get_params() {
+    var params = {};
+    var paramsarr = window.location.search.substr(1).split('&');
+    for (var i = 0; i < paramsarr.length; ++i) {
+        var tmp = paramsarr[i].split("=");
+        if (!tmp[0] || !tmp[1]) continue;
+        params[tmp[0]]  = decodeURIComponent(tmp[1]);
+    }
+    return params;
+}
+function parse_params(params) {
+    var uri = "?";
+    for (var key in params) {
+        uri += key + '=' + encodeURIComponent(params[key]) + '&';
+    }
+    if (uri.slice(-1) == "&")
+        uri = uri.substring(0, uri.length - 1);
+    if (uri == '?')
+        uri = window.location.href.split('?')[0];
+    return uri;
+}
+function find_child(node, selector) {
+    var children = node.querySelectorAll(selector);
+    if (children.length) return children[0];
+    return;
+}
+function find_group(node) {
+    var parent = node.parentElement;
+    if (!parent) return;
+    if (parent.id == "frames") return node;
+    return find_group(parent);
+}
+function orig_save(e, attr, val) {
+    if (e.attributes["fg:orig_" + attr] != undefined) return;
+    if (e.attributes[attr] == undefined) return;
+    if (val == undefined) val = e.attributes[attr].value;
+    e.setAttribute("fg:orig_" + attr, val);
+}
+function orig_load(e, attr) {
+    if (e.attributes["fg:orig_"+attr] == undefined) return;
+    e.attributes[attr].value = e.attributes["fg:orig_" + attr].value;
+    e.removeAttribute("fg:orig_" + attr);
+}
+function g_to_text(e) {
+    var text = find_child(e, "title").firstChild.nodeValue;
+    return (text)
+}
+function g_to_func(e) {
+    var func = g_to_text(e);
+    // if there's any manipulation we want to do to the function
+    // name before it's searched, do it here before returning.
+    return (func);
+}
+function get_monospace_width(frames) {
+    // Given the id="frames" element, return the width of text characters if
+    // this is a monospace font, otherwise return 0.
+    text = find_child(frames.children[0], "text");
+    originalContent = text.textContent;
+    text.textContent = "!";
+    bangWidth = text.getComputedTextLength();
+    text.textContent = "W";
+    wWidth = text.getComputedTextLength();
+    text.textContent = originalContent;
+    if (bangWidth === wWidth) {
+        return bangWidth;
+    } else {
+        return 0;
+    }
+}
+function update_text_for_elements(elements) {
+    // In order to render quickly in the browser, you want to do one pass of
+    // reading attributes, and one pass of mutating attributes. See
+    // https://web.dev/avoid-large-complex-layouts-and-layout-thrashing/ for details.
+
+    // Fall back to inefficient calculation, if we're variable-width font.
+    // TODO This should be optimized somehow too.
+    if (known_font_width === 0) {
+        for (var i = 0; i < elements.length; i++) {
+            update_text(elements[i]);
+        }
+        return;
+    }
+
+    var textElemNewAttributes = [];
+    for (var i = 0; i < elements.length; i++) {
+        var e = elements[i];
+        var r = find_child(e, "rect");
+        var t = find_child(e, "text");
+        var w = parseFloat(r.attributes.width.value) * frames.attributes.width.value / 100 - 3;
+        var txt = find_child(e, "title").textContent.replace(/\([^(]*\)$/,"");
+        var newX = format_percent((parseFloat(r.attributes.x.value) + (100 * 3 / frames.attributes.width.value)));
+
+        // Smaller than this size won't fit anything
+        if (w < 2 * known_font_width) {
+            textElemNewAttributes.push([newX, ""]);
+            continue;
+        }
+
+        // Fit in full text width
+        if (txt.length * known_font_width < w) {
+            textElemNewAttributes.push([newX, txt]);
+            continue;
+        }
+
+        var substringLength = Math.floor(w / known_font_width) - 2;
+        if (truncate_text_right) {
+            // Truncate the right side of the text.
+            textElemNewAttributes.push([newX, txt.substring(0, substringLength) + ".."]);
+            continue;
+        } else {
+            // Truncate the left side of the text.
+            textElemNewAttributes.push([newX, ".." + txt.substring(txt.length - substringLength, txt.length)]);
+            continue;
+        }
+    }
+
+    console.assert(textElemNewAttributes.length === elements.length, "Resize failed, please file a bug at https://github.com/jonhoo/inferno/");
+
+    // Now that we know new textContent, set it all in one go so we don't refresh a bazillion times.
+    for (var i = 0; i < elements.length; i++) {
+        var e = elements[i];
+        var values = textElemNewAttributes[i];
+        var t = find_child(e, "text");
+        t.attributes.x.value = values[0];
+        t.textContent = values[1];
+    }
+}
+
+function update_text(e) {
+    var r = find_child(e, "rect");
+    var t = find_child(e, "text");
+    var w = parseFloat(r.attributes.width.value) * frames.attributes.width.value / 100 - 3;
+    var txt = find_child(e, "title").textContent.replace(/\([^(]*\)$/,"");
+    t.attributes.x.value = format_percent((parseFloat(r.attributes.x.value) + (100 * 3 / frames.attributes.width.value)));
+
+    // Smaller than this size won't fit anything
+    if (w < 2 * fontsize * fontwidth) {
+        t.textContent = "";
+        return;
+    }
+    t.textContent = txt;
+    // Fit in full text width
+    if (t.getComputedTextLength() < w)
+        return;
+    if (truncate_text_right) {
+        // Truncate the right side of the text.
+        for (var x = txt.length - 2; x > 0; x--) {
+            if (t.getSubStringLength(0, x + 2) <= w) {
+                t.textContent = txt.substring(0, x) + "..";
+                return;
+            }
+        }
+    } else {
+        // Truncate the left side of the text.
+        for (var x = 2; x < txt.length; x++) {
+            if (t.getSubStringLength(x - 2, txt.length) <= w) {
+                t.textContent = ".." + txt.substring(x, txt.length);
+                return;
+            }
+        }
+    }
+    t.textContent = "";
+}
+// zoom
+function zoom_reset(e) {
+    if (e.tagName == "rect") {
+        e.attributes.x.value = format_percent(100 * parseInt(e.attributes["fg:x"].value) / total_samples);
+        e.attributes.width.value = format_percent(100 * parseInt(e.attributes["fg:w"].value) / total_samples);
+    }
+    if (e.childNodes == undefined) return;
+    for(var i = 0, c = e.childNodes; i < c.length; i++) {
+        zoom_reset(c[i]);
+    }
+}
+function zoom_child(e, x, zoomed_width_samples) {
+    if (e.tagName == "text") {
+        var parent_x = parseFloat(find_child(e.parentNode, "rect[x]").attributes.x.value);
+        e.attributes.x.value = format_percent(parent_x + (100 * 3 / frames.attributes.width.value));
+    } else if (e.tagName == "rect") {
+        e.attributes.x.value = format_percent(100 * (parseInt(e.attributes["fg:x"].value) - x) / zoomed_width_samples);
+        e.attributes.width.value = format_percent(100 * parseInt(e.attributes["fg:w"].value) / zoomed_width_samples);
+    }
+    if (e.childNodes == undefined) return;
+    for(var i = 0, c = e.childNodes; i < c.length; i++) {
+        zoom_child(c[i], x, zoomed_width_samples);
+    }
+}
+function zoom_parent(e) {
+    if (e.attributes) {
+        if (e.attributes.x != undefined) {
+            e.attributes.x.value = "0.0%";
+        }
+        if (e.attributes.width != undefined) {
+            e.attributes.width.value = "100.0%";
+        }
+    }
+    if (e.childNodes == undefined) return;
+    for(var i = 0, c = e.childNodes; i < c.length; i++) {
+        zoom_parent(c[i]);
+    }
+}
+function zoom(node) {
+    var attr = find_child(node, "rect").attributes;
+    var width = parseInt(attr["fg:w"].value);
+    var xmin = parseInt(attr["fg:x"].value);
+    var xmax = xmin + width;
+    var ymin = parseFloat(attr.y.value);
+    unzoombtn.classList.remove("hide");
+    var el = frames.children;
+    var to_update_text = [];
+    for (var i = 0; i < el.length; i++) {
+        var e = el[i];
+        var a = find_child(e, "rect").attributes;
+        var ex = parseInt(a["fg:x"].value);
+        var ew = parseInt(a["fg:w"].value);
+        // Is it an ancestor
+        if (!inverted) {
+            var upstack = parseFloat(a.y.value) > ymin;
+        } else {
+            var upstack = parseFloat(a.y.value) < ymin;
+        }
+        if (upstack) {
+            // Direct ancestor
+            if (ex <= xmin && (ex+ew) >= xmax) {
+                e.classList.add("parent");
+                zoom_parent(e);
+                to_update_text.push(e);
+            }
+            // not in current path
+            else
+                e.classList.add("hide");
+        }
+        // Children maybe
+        else {
+            // no common path
+            if (ex < xmin || ex >= xmax) {
+                e.classList.add("hide");
+            }
+            else {
+                zoom_child(e, xmin, width);
+                to_update_text.push(e);
+            }
+        }
+    }
+    update_text_for_elements(to_update_text);
+}
+function unzoom() {
+    unzoombtn.classList.add("hide");
+    var el = frames.children;
+    for(var i = 0; i < el.length; i++) {
+        el[i].classList.remove("parent");
+        el[i].classList.remove("hide");
+        zoom_reset(el[i]);
+    }
+    update_text_for_elements(el);
+}
+// search
+function reset_search() {
+    var el = document.querySelectorAll("#frames rect");
+    for (var i = 0; i < el.length; i++) {
+        orig_load(el[i], "fill")
+    }
+    var params = get_params();
+    delete params.s;
+    history.replaceState(null, null, parse_params(params));
+}
+function search_prompt() {
+    if (!searching) {
+        var term = prompt("Enter a search term (regexp " +
+            "allowed, eg: ^ext4_)", "");
+        if (term != null) {
+            search(term)
+        }
+    } else {
+        reset_search();
+        searching = 0;
+        searchbtn.classList.remove("show");
+        searchbtn.firstChild.nodeValue = "Search"
+        matchedtxt.classList.add("hide");
+        matchedtxt.firstChild.nodeValue = ""
+    }
+}
+function search(term) {
+    var re = new RegExp(term);
+    var el = frames.children;
+    var matches = new Object();
+    var maxwidth = 0;
+    for (var i = 0; i < el.length; i++) {
+        var e = el[i];
+        // Skip over frames which are either not visible, or below the zoomed-to frame
+        if (e.classList.contains("hide") || e.classList.contains("parent")) {
+            continue;
+        }
+        var func = g_to_func(e);
+        var rect = find_child(e, "rect");
+        if (func == null || rect == null)
+            continue;
+        // Save max width. Only works as we have a root frame
+        var w = parseInt(rect.attributes["fg:w"].value);
+        if (w > maxwidth)
+            maxwidth = w;
+        if (func.match(re)) {
+            // highlight
+            var x = parseInt(rect.attributes["fg:x"].value);
+            orig_save(rect, "fill");
+            rect.attributes.fill.value = searchcolor;
+            // remember matches
+            if (matches[x] == undefined) {
+                matches[x] = w;
+            } else {
+                if (w > matches[x]) {
+                    // overwrite with parent
+                    matches[x] = w;
+                }
+            }
+            searching = 1;
+        }
+    }
+    if (!searching)
+        return;
+    var params = get_params();
+    params.s = term;
+    history.replaceState(null, null, parse_params(params));
+
+    searchbtn.classList.add("show");
+    searchbtn.firstChild.nodeValue = "Reset Search";
+    // calculate percent matched, excluding vertical overlap
+    var count = 0;
+    var lastx = -1;
+    var lastw = 0;
+    var keys = Array();
+    for (k in matches) {
+        if (matches.hasOwnProperty(k))
+            keys.push(k);
+    }
+    // sort the matched frames by their x location
+    // ascending, then width descending
+    keys.sort(function(a, b){
+        return a - b;
+    });
+    // Step through frames saving only the biggest bottom-up frames
+    // thanks to the sort order. This relies on the tree property
+    // where children are always smaller than their parents.
+    for (var k in keys) {
+        var x = parseInt(keys[k]);
+        var w = matches[keys[k]];
+        if (x >= lastx + lastw) {
+            count += w;
+            lastx = x;
+            lastw = w;
+        }
+    }
+    // display matched percent
+    matchedtxt.classList.remove("hide");
+    var pct = 100 * count / maxwidth;
+    if (pct != 100) pct = pct.toFixed(1);
+    matchedtxt.firstChild.nodeValue = "Matched: " + pct + "%";
+}
+function format_percent(n) {
+    return n.toFixed(4) + "%";
+}
+]]></script><rect x="0" y="0" width="100%" height="294" fill="url(#background)"/><text id="title" fill="rgb(0,0,0)" x="50.0000%" y="24.00">get_subnet_for_canister_1k</text><text id="details" fill="rgb(0,0,0)" x="10" y="277.00"> </text><text id="unzoom" class="hide" fill="rgb(0,0,0)" x="10" y="24.00">Reset Zoom</text><text id="search" fill="rgb(0,0,0)" x="1190" y="24.00">Search</text><text id="matched" fill="rgb(0,0,0)" x="1190" y="277.00"> </text><svg id="frames" x="10" width="1180" total_samples="2706622499"><g><title>dlmalloc::dlmalloc::Dlmalloc&lt;A&gt;::unlink_chunk (15,902,449 instructions, 0.59%)</title><rect x="0.0000%" y="117" width="0.5875%" height="15" fill="rgb(249,228,39)" fg:x="0" fg:w="15902449"/><text x="0.2500%" y="127.50"></text></g><g><title>dlmalloc::dlmalloc::Dlmalloc&lt;A&gt;::free (72,243,505 instructions, 2.67%)</title><rect x="0.0000%" y="133" width="2.6691%" height="15" fill="rgb(216,79,43)" fg:x="0" fg:w="72243505"/><text x="0.2500%" y="143.50">dl..</text></g><g><title>&lt;ic_base_types::canister_id::CanisterId as core::convert::TryFrom&lt;ic_protobuf::types::v1::CanisterId&gt;&gt;::try_from (202,649,834 instructions, 7.49%)</title><rect x="0.0000%" y="149" width="7.4872%" height="15" fill="rgb(228,95,12)" fg:x="0" fg:w="202649834"/><text x="0.2500%" y="159.50">&lt;ic_base_t..</text></g><g><title>ic_protobuf::proxy::try_from_option_field (285,561,556 instructions, 10.55%)</title><rect x="0.0000%" y="165" width="10.5505%" height="15" fill="rgb(249,221,15)" fg:x="0" fg:w="285561556"/><text x="0.2500%" y="175.50">ic_protobuf::pr..</text></g><g><title>dlmalloc::dlmalloc::Dlmalloc&lt;A&gt;::unlink_chunk (8,055,245 instructions, 0.30%)</title><rect x="10.5505%" y="133" width="0.2976%" height="15" fill="rgb(233,34,13)" fg:x="285561556" fg:w="8055245"/><text x="10.8005%" y="143.50"></text></g><g><title>dlmalloc::dlmalloc::Dlmalloc&lt;A&gt;::free (36,559,211 instructions, 1.35%)</title><rect x="10.5505%" y="149" width="1.3507%" height="15" fill="rgb(214,103,39)" fg:x="285561556" fg:w="36559211"/><text x="10.8005%" y="159.50"></text></g><g><title>ic_base_types::subnet_id_try_from_protobuf (95,747,870 instructions, 3.54%)</title><rect x="10.5505%" y="165" width="3.5375%" height="15" fill="rgb(251,126,39)" fg:x="285561556" fg:w="95747870"/><text x="10.8005%" y="175.50">ic_..</text></g><g><title>&lt;core::iter::adapters::GenericShunt&lt;I,R&gt; as core::iter::traits::iterator::Iterator&gt;::next (474,884,637 instructions, 17.55%)</title><rect x="0.0000%" y="181" width="17.5453%" height="15" fill="rgb(214,216,36)" fg:x="0" fg:w="474884637"/><text x="0.2500%" y="191.50">&lt;core::iter::adapters::Gene..</text></g><g><title>memcmp (35,692,343 instructions, 1.32%)</title><rect x="17.5453%" y="149" width="1.3187%" height="15" fill="rgb(220,221,8)" fg:x="474884637" fg:w="35692343"/><text x="17.7953%" y="159.50"></text></g><g><title>dlmalloc::dlmalloc::Dlmalloc&lt;A&gt;::insert_large_chunk (1,242,818 instructions, 0.05%)</title><rect x="18.8640%" y="133" width="0.0459%" height="15" fill="rgb(240,216,3)" fg:x="510576980" fg:w="1242818"/><text x="19.1140%" y="143.50"></text></g><g><title>dlmalloc::dlmalloc::Dlmalloc&lt;A&gt;::malloc (7,900,754 instructions, 0.29%)</title><rect x="18.8640%" y="149" width="0.2919%" height="15" fill="rgb(232,218,17)" fg:x="510576980" fg:w="7900754"/><text x="19.1140%" y="159.50"></text></g><g><title>alloc::collections::btree::node::BalancingContext&lt;K,V&gt;::bulk_steal_left (317,156 instructions, 0.01%)</title><rect x="19.1559%" y="149" width="0.0117%" height="15" fill="rgb(229,163,45)" fg:x="518477734" fg:w="317156"/><text x="19.4059%" y="159.50"></text></g><g><title>alloc::collections::btree::append::&lt;impl alloc::collections::btree::node::NodeRef&lt;alloc::collections::btree::node::marker::Owned,K,V,alloc::collections::btree::node::marker::LeafOrInternal&gt;&gt;::bulk_push (252,476,123 instructions, 9.33%)</title><rect x="17.5453%" y="165" width="9.3281%" height="15" fill="rgb(231,110,42)" fg:x="474884637" fg:w="252476123"/><text x="17.7953%" y="175.50">alloc::collec..</text></g><g><title>memcmp (35,692,362 instructions, 1.32%)</title><rect x="26.8734%" y="133" width="1.3187%" height="15" fill="rgb(208,170,48)" fg:x="727360760" fg:w="35692362"/><text x="27.1234%" y="143.50"></text></g><g><title>core::slice::sort::stable::drift::sort (49,352,002 instructions, 1.82%)</title><rect x="26.8734%" y="149" width="1.8234%" height="15" fill="rgb(239,116,25)" fg:x="727360760" fg:w="49352002"/><text x="27.1234%" y="159.50">c..</text></g><g><title>core::slice::sort::stable::driftsort_main (49,382,378 instructions, 1.82%)</title><rect x="26.8734%" y="165" width="1.8245%" height="15" fill="rgb(219,200,50)" fg:x="727360760" fg:w="49382378"/><text x="27.1234%" y="175.50">c..</text></g><g><title>dlmalloc::dlmalloc::Dlmalloc&lt;A&gt;::unlink_chunk (953,755 instructions, 0.04%)</title><rect x="28.6979%" y="133" width="0.0352%" height="15" fill="rgb(245,200,0)" fg:x="776743138" fg:w="953755"/><text x="28.9479%" y="143.50"></text></g><g><title>dlmalloc::dlmalloc::Dlmalloc&lt;A&gt;::free (4,416,221 instructions, 0.16%)</title><rect x="28.6979%" y="149" width="0.1632%" height="15" fill="rgb(245,119,33)" fg:x="776743138" fg:w="4416221"/><text x="28.9479%" y="159.50"></text></g><g><title>alloc::collections::btree::navigate::&lt;impl alloc::collections::btree::node::Handle&lt;alloc::collections::btree::node::NodeRef&lt;alloc::collections::btree::node::marker::Dying,K,V,alloc::collections::btree::node::marker::Leaf&gt;,alloc::collections::btree::node::marker::Edge&gt;&gt;::deallocating_next_unchecked (13,248,387 instructions, 0.49%)</title><rect x="28.6979%" y="165" width="0.4895%" height="15" fill="rgb(231,125,12)" fg:x="776743138" fg:w="13248387"/><text x="28.9479%" y="175.50"></text></g><g><title>memcmp (2,859,630 instructions, 0.11%)</title><rect x="29.1874%" y="165" width="0.1057%" height="15" fill="rgb(216,96,41)" fg:x="789991525" fg:w="2859630"/><text x="29.4374%" y="175.50"></text></g><g><title>ic_registry_routing_table::RoutingTable::optimize (444,194,004 instructions, 16.41%)</title><rect x="17.5453%" y="181" width="16.4114%" height="15" fill="rgb(248,43,45)" fg:x="474884637" fg:w="444194004"/><text x="17.7953%" y="191.50">ic_registry_routing_table..</text></g><g><title>memcmp (35,692,351 instructions, 1.32%)</title><rect x="33.9567%" y="165" width="1.3187%" height="15" fill="rgb(217,222,7)" fg:x="919078641" fg:w="35692351"/><text x="34.2067%" y="175.50"></text></g><g><title>dlmalloc::dlmalloc::Dlmalloc&lt;A&gt;::insert_large_chunk (1,242,795 instructions, 0.05%)</title><rect x="35.2754%" y="149" width="0.0459%" height="15" fill="rgb(233,28,6)" fg:x="954770992" fg:w="1242795"/><text x="35.5254%" y="159.50"></text></g><g><title>dlmalloc::dlmalloc::Dlmalloc&lt;A&gt;::malloc (7,906,981 instructions, 0.29%)</title><rect x="35.2754%" y="165" width="0.2921%" height="15" fill="rgb(231,218,15)" fg:x="954770992" fg:w="7906981"/><text x="35.5254%" y="175.50"></text></g><g><title>alloc::collections::btree::node::BalancingContext&lt;K,V&gt;::bulk_steal_left (317,156 instructions, 0.01%)</title><rect x="35.5675%" y="165" width="0.0117%" height="15" fill="rgb(226,171,48)" fg:x="962677973" fg:w="317156"/><text x="35.8175%" y="175.50"></text></g><g><title>alloc::collections::btree::append::&lt;impl alloc::collections::btree::node::NodeRef&lt;alloc::collections::btree::node::marker::Owned,K,V,alloc::collections::btree::node::marker::LeafOrInternal&gt;&gt;::bulk_push (252,491,740 instructions, 9.33%)</title><rect x="33.9567%" y="181" width="9.3287%" height="15" fill="rgb(235,201,9)" fg:x="919078641" fg:w="252491740"/><text x="34.2067%" y="191.50">alloc::collec..</text></g><g><title>memcmp (130,870,408 instructions, 4.84%)</title><rect x="43.2853%" y="181" width="4.8352%" height="15" fill="rgb(217,80,15)" fg:x="1171570381" fg:w="130870408"/><text x="43.5353%" y="191.50">memcmp</text></g><g><title>memcmp (35,692,368 instructions, 1.32%)</title><rect x="48.1205%" y="149" width="1.3187%" height="15" fill="rgb(219,152,8)" fg:x="1302440789" fg:w="35692368"/><text x="48.3705%" y="159.50"></text></g><g><title>core::slice::sort::stable::drift::sort (49,352,009 instructions, 1.82%)</title><rect x="48.1205%" y="165" width="1.8234%" height="15" fill="rgb(243,107,38)" fg:x="1302440789" fg:w="49352009"/><text x="48.3705%" y="175.50">c..</text></g><g><title>core::slice::sort::stable::driftsort_main (49,382,384 instructions, 1.82%)</title><rect x="48.1205%" y="181" width="1.8245%" height="15" fill="rgb(231,17,5)" fg:x="1302440789" fg:w="49382384"/><text x="48.3705%" y="191.50">c..</text></g><g><title>&lt;alloc::collections::btree::map::Keys&lt;K,V&gt; as core::iter::traits::iterator::Iterator&gt;::next (14,146,318 instructions, 0.52%)</title><rect x="49.9450%" y="181" width="0.5227%" height="15" fill="rgb(209,25,54)" fg:x="1351823173" fg:w="14146318"/><text x="50.1950%" y="191.50"></text></g><g><title>__rust_realloc (4,388,414 instructions, 0.16%)</title><rect x="50.4677%" y="149" width="0.1621%" height="15" fill="rgb(219,0,2)" fg:x="1365969491" fg:w="4388414"/><text x="50.7177%" y="159.50"></text></g><g><title>alloc::raw_vec::finish_grow (4,439,999 instructions, 0.16%)</title><rect x="50.4677%" y="165" width="0.1640%" height="15" fill="rgb(246,9,5)" fg:x="1365969491" fg:w="4439999"/><text x="50.7177%" y="175.50"></text></g><g><title>alloc::raw_vec::RawVecInner&lt;A&gt;::reserve::do_reserve_and_handle (4,545,588 instructions, 0.17%)</title><rect x="50.4677%" y="181" width="0.1679%" height="15" fill="rgb(226,159,4)" fg:x="1365969491" fg:w="4545588"/><text x="50.7177%" y="191.50"></text></g><g><title>ic_registry_routing_table::proto::&lt;impl core::convert::TryFrom&lt;ic_protobuf::registry::routing_table::v1::RoutingTable&gt; for ic_registry_routing_table::RoutingTable&gt;::try_from (1,450,426,386 instructions, 53.59%)</title><rect x="0.0000%" y="197" width="53.5881%" height="15" fill="rgb(219,175,34)" fg:x="0" fg:w="1450426386"/><text x="0.2500%" y="207.50">ic_registry_routing_table::proto::&lt;impl core::convert::TryFrom&lt;ic_protobuf::registry::ro..</text></g><g><title>dlmalloc::dlmalloc::Dlmalloc&lt;A&gt;::malloc (32,699,124 instructions, 1.21%)</title><rect x="53.5881%" y="37" width="1.2081%" height="15" fill="rgb(236,10,46)" fg:x="1450426386" fg:w="32699124"/><text x="53.8381%" y="47.50"></text></g><g><title>alloc::raw_vec::finish_grow (45,801,876 instructions, 1.69%)</title><rect x="53.5881%" y="53" width="1.6922%" height="15" fill="rgb(240,211,16)" fg:x="1450426386" fg:w="45801876"/><text x="53.8381%" y="63.50"></text></g><g><title>alloc::raw_vec::RawVecInner&lt;A&gt;::reserve::do_reserve_and_handle (87,526,150 instructions, 3.23%)</title><rect x="53.5881%" y="69" width="3.2338%" height="15" fill="rgb(205,3,43)" fg:x="1450426386" fg:w="87526150"/><text x="53.8381%" y="79.50">all..</text></g><g><title>dlmalloc::dlmalloc::Dlmalloc&lt;A&gt;::free (28,107,984 instructions, 1.04%)</title><rect x="56.8218%" y="53" width="1.0385%" height="15" fill="rgb(245,7,22)" fg:x="1537952536" fg:w="28107984"/><text x="57.0718%" y="63.50"></text></g><g><title>bytes::bytes::promotable_even_drop (60,706,368 instructions, 2.24%)</title><rect x="56.8218%" y="69" width="2.2429%" height="15" fill="rgb(239,132,32)" fg:x="1537952536" fg:w="60706368"/><text x="57.0718%" y="79.50">b..</text></g><g><title>dlmalloc::dlmalloc::Dlmalloc&lt;A&gt;::malloc (30,612,318 instructions, 1.13%)</title><rect x="59.0647%" y="69" width="1.1310%" height="15" fill="rgb(228,202,34)" fg:x="1598658904" fg:w="30612318"/><text x="59.3147%" y="79.50"></text></g><g><title>prost::encoding::varint::decode_varint (13,188,259 instructions, 0.49%)</title><rect x="60.1957%" y="69" width="0.4873%" height="15" fill="rgb(254,200,22)" fg:x="1629271222" fg:w="13188259"/><text x="60.4457%" y="79.50"></text></g><g><title>prost::encoding::bytes::merge (432,190,782 instructions, 15.97%)</title><rect x="53.5881%" y="85" width="15.9679%" height="15" fill="rgb(219,10,39)" fg:x="1450426386" fg:w="432190782"/><text x="53.8381%" y="95.50">prost::encoding::bytes::m..</text></g><g><title>prost::encoding::varint::decode_varint (26,376,544 instructions, 0.97%)</title><rect x="69.5560%" y="85" width="0.9745%" height="15" fill="rgb(226,210,39)" fg:x="1882617168" fg:w="26376544"/><text x="69.8060%" y="95.50"></text></g><g><title>prost::encoding::merge_loop (520,860,770 instructions, 19.24%)</title><rect x="53.5881%" y="101" width="19.2439%" height="15" fill="rgb(208,219,16)" fg:x="1450426386" fg:w="520860770"/><text x="53.8381%" y="111.50">prost::encoding::merge_loop</text></g><g><title>prost::encoding::varint::decode_varint (26,376,649 instructions, 0.97%)</title><rect x="72.8320%" y="101" width="0.9745%" height="15" fill="rgb(216,158,51)" fg:x="1971287156" fg:w="26376649"/><text x="73.0820%" y="111.50"></text></g><g><title>prost::encoding::message::merge (625,708,194 instructions, 23.12%)</title><rect x="53.5881%" y="117" width="23.1177%" height="15" fill="rgb(233,14,44)" fg:x="1450426386" fg:w="625708194"/><text x="53.8381%" y="127.50">prost::encoding::message::merge</text></g><g><title>prost::encoding::varint::decode_varint (19,782,289 instructions, 0.73%)</title><rect x="76.7057%" y="117" width="0.7309%" height="15" fill="rgb(237,97,39)" fg:x="2076134580" fg:w="19782289"/><text x="76.9557%" y="127.50"></text></g><g><title>dlmalloc::dlmalloc::Dlmalloc&lt;A&gt;::malloc (16,415,358 instructions, 0.61%)</title><rect x="79.5727%" y="53" width="0.6065%" height="15" fill="rgb(218,198,43)" fg:x="2153732986" fg:w="16415358"/><text x="79.8227%" y="63.50"></text></g><g><title>alloc::raw_vec::finish_grow (22,966,718 instructions, 0.85%)</title><rect x="79.5727%" y="69" width="0.8485%" height="15" fill="rgb(231,104,20)" fg:x="2153732986" fg:w="22966718"/><text x="79.8227%" y="79.50"></text></g><g><title>alloc::raw_vec::RawVecInner&lt;A&gt;::reserve::do_reserve_and_handle (43,828,747 instructions, 1.62%)</title><rect x="79.5727%" y="85" width="1.6193%" height="15" fill="rgb(254,36,13)" fg:x="2153732986" fg:w="43828747"/><text x="79.8227%" y="95.50"></text></g><g><title>dlmalloc::dlmalloc::Dlmalloc&lt;A&gt;::free (14,054,097 instructions, 0.52%)</title><rect x="81.1920%" y="69" width="0.5192%" height="15" fill="rgb(248,14,50)" fg:x="2197561733" fg:w="14054097"/><text x="81.4420%" y="79.50"></text></g><g><title>bytes::bytes::promotable_even_drop (30,353,296 instructions, 1.12%)</title><rect x="81.1920%" y="85" width="1.1214%" height="15" fill="rgb(217,107,29)" fg:x="2197561733" fg:w="30353296"/><text x="81.4420%" y="95.50"></text></g><g><title>dlmalloc::dlmalloc::Dlmalloc&lt;A&gt;::malloc (15,305,975 instructions, 0.57%)</title><rect x="82.3135%" y="85" width="0.5655%" height="15" fill="rgb(251,169,33)" fg:x="2227915029" fg:w="15305975"/><text x="82.5635%" y="95.50"></text></g><g><title>prost::encoding::varint::decode_varint (6,594,029 instructions, 0.24%)</title><rect x="82.8790%" y="85" width="0.2436%" height="15" fill="rgb(217,108,32)" fg:x="2243221004" fg:w="6594029"/><text x="83.1290%" y="95.50"></text></g><g><title>prost::encoding::bytes::merge (216,160,916 instructions, 7.99%)</title><rect x="79.5727%" y="101" width="7.9864%" height="15" fill="rgb(219,66,42)" fg:x="2153732986" fg:w="216160916"/><text x="79.8227%" y="111.50">prost::enco..</text></g><g><title>prost::encoding::varint::decode_varint (13,188,254 instructions, 0.49%)</title><rect x="87.5591%" y="101" width="0.4873%" height="15" fill="rgb(206,180,7)" fg:x="2369893902" fg:w="13188254"/><text x="87.8091%" y="111.50"></text></g><g><title>prost::encoding::merge_loop (260,495,966 instructions, 9.62%)</title><rect x="79.5727%" y="117" width="9.6244%" height="15" fill="rgb(208,226,31)" fg:x="2153732986" fg:w="260495966"/><text x="79.8227%" y="127.50">prost::encodin..</text></g><g><title>prost::encoding::varint::decode_varint (13,188,176 instructions, 0.49%)</title><rect x="89.1971%" y="117" width="0.4873%" height="15" fill="rgb(218,26,49)" fg:x="2414228952" fg:w="13188176"/><text x="89.4471%" y="127.50"></text></g><g><title>prost::encoding::merge_loop (1,013,944,751 instructions, 37.46%)</title><rect x="53.5881%" y="133" width="37.4616%" height="15" fill="rgb(233,197,48)" fg:x="1450426386" fg:w="1013944751"/><text x="53.8381%" y="143.50">prost::encoding::merge_loop</text></g><g><title>dlmalloc::dlmalloc::Dlmalloc&lt;A&gt;::insert_large_chunk (534,418 instructions, 0.02%)</title><rect x="91.0497%" y="69" width="0.0197%" height="15" fill="rgb(252,181,51)" fg:x="2464371137" fg:w="534418"/><text x="91.2997%" y="79.50"></text></g><g><title>dlmalloc::dlmalloc::Dlmalloc&lt;A&gt;::malloc (9,087,850 instructions, 0.34%)</title><rect x="91.0497%" y="85" width="0.3358%" height="15" fill="rgb(253,90,19)" fg:x="2464371137" fg:w="9087850"/><text x="91.2997%" y="95.50"></text></g><g><title>dlmalloc::dlmalloc::Dlmalloc&lt;A&gt;::free (2,657,326 instructions, 0.10%)</title><rect x="91.3854%" y="85" width="0.0982%" height="15" fill="rgb(215,171,30)" fg:x="2473458987" fg:w="2657326"/><text x="91.6354%" y="95.50"></text></g><g><title>dlmalloc::dlmalloc::Dlmalloc&lt;A&gt;::unlink_chunk (283,650 instructions, 0.01%)</title><rect x="91.4836%" y="85" width="0.0105%" height="15" fill="rgb(214,222,9)" fg:x="2476116313" fg:w="283650"/><text x="91.7336%" y="95.50"></text></g><g><title>__rust_realloc (26,020,490 instructions, 0.96%)</title><rect x="91.0497%" y="101" width="0.9614%" height="15" fill="rgb(223,3,22)" fg:x="2464371137" fg:w="26020490"/><text x="91.2997%" y="111.50"></text></g><g><title>dlmalloc::dlmalloc::Dlmalloc&lt;A&gt;::malloc (1,469,999 instructions, 0.05%)</title><rect x="92.0110%" y="101" width="0.0543%" height="15" fill="rgb(225,196,46)" fg:x="2490391627" fg:w="1469999"/><text x="92.2610%" y="111.50"></text></g><g><title>alloc::raw_vec::finish_grow (29,633,522 instructions, 1.09%)</title><rect x="91.0497%" y="117" width="1.0949%" height="15" fill="rgb(209,110,37)" fg:x="2464371137" fg:w="29633522"/><text x="91.2997%" y="127.50"></text></g><g><title>alloc::raw_vec::RawVec&lt;T,A&gt;::grow_one (32,568,731 instructions, 1.20%)</title><rect x="91.0497%" y="133" width="1.2033%" height="15" fill="rgb(249,89,12)" fg:x="2464371137" fg:w="32568731"/><text x="91.2997%" y="143.50"></text></g><g><title>prost::encoding::varint::decode_varint (26,376,312 instructions, 0.97%)</title><rect x="92.2530%" y="133" width="0.9745%" height="15" fill="rgb(226,27,33)" fg:x="2496939868" fg:w="26376312"/><text x="92.5030%" y="143.50"></text></g><g><title>prost::message::Message::decode (1,171,576,639 instructions, 43.29%)</title><rect x="53.5881%" y="149" width="43.2856%" height="15" fill="rgb(213,82,22)" fg:x="1450426386" fg:w="1171576639"/><text x="53.8381%" y="159.50">prost::message::Message::decode</text></g><g><title>std::thread::local::LocalKey&lt;T&gt;::with (1,173,205,818 instructions, 43.35%)</title><rect x="53.5881%" y="165" width="43.3457%" height="15" fill="rgb(248,140,0)" fg:x="1450426386" fg:w="1173205818"/><text x="53.8381%" y="175.50">std::thread::local::LocalKey&lt;T&gt;::with</text></g><g><title>memcmp (12,112,049 instructions, 0.45%)</title><rect x="96.9338%" y="165" width="0.4475%" height="15" fill="rgb(228,106,3)" fg:x="2623632204" fg:w="12112049"/><text x="97.1838%" y="175.50"></text></g><g><title>dlmalloc::dlmalloc::Dlmalloc&lt;A&gt;::free (2,178,139 instructions, 0.08%)</title><rect x="97.3813%" y="149" width="0.0805%" height="15" fill="rgb(209,23,37)" fg:x="2635744253" fg:w="2178139"/><text x="97.6313%" y="159.50"></text></g><g><title>&lt;alloc::vec::into_iter::IntoIter&lt;T,A&gt; as core::ops::drop::Drop&gt;::drop (3,194,155 instructions, 0.12%)</title><rect x="97.3813%" y="165" width="0.1180%" height="15" fill="rgb(241,93,50)" fg:x="2635744253" fg:w="3194155"/><text x="97.6313%" y="175.50"></text></g><g><title>core::str::converts::from_utf8 (2,405,942 instructions, 0.09%)</title><rect x="97.4993%" y="165" width="0.0889%" height="15" fill="rgb(253,46,43)" fg:x="2638938408" fg:w="2405942"/><text x="97.7493%" y="175.50"></text></g><g><title>dlmalloc::dlmalloc::Dlmalloc&lt;A&gt;::malloc (1,171,964 instructions, 0.04%)</title><rect x="97.5882%" y="165" width="0.0433%" height="15" fill="rgb(226,206,43)" fg:x="2641344350" fg:w="1171964"/><text x="97.8382%" y="175.50"></text></g><g><title>&lt;alloc::collections::btree::map::Range&lt;K,V&gt; as core::iter::traits::iterator::Iterator&gt;::next (1,073,152 instructions, 0.04%)</title><rect x="97.6315%" y="165" width="0.0396%" height="15" fill="rgb(217,54,7)" fg:x="2642516314" fg:w="1073152"/><text x="97.8815%" y="175.50"></text></g><g><title>dlmalloc::dlmalloc::Dlmalloc&lt;A&gt;::free (628,089 instructions, 0.02%)</title><rect x="97.6712%" y="165" width="0.0232%" height="15" fill="rgb(223,5,52)" fg:x="2643589466" fg:w="628089"/><text x="97.9212%" y="175.50"></text></g><g><title>&lt;core::iter::adapters::flatten::FlatMap&lt;I,U,F&gt; as core::iter::traits::iterator::Iterator&gt;::next (1,215,572,991 instructions, 44.91%)</title><rect x="53.5881%" y="181" width="44.9111%" height="15" fill="rgb(206,52,46)" fg:x="1450426386" fg:w="1215572991"/><text x="53.8381%" y="191.50">&lt;core::iter::adapters::flatten::FlatMap&lt;I,U,F&gt; as core::iter::traits::iter..</text></g><g><title>__rust_realloc (4,681,010 instructions, 0.17%)</title><rect x="98.4991%" y="149" width="0.1729%" height="15" fill="rgb(253,136,11)" fg:x="2665999377" fg:w="4681010"/><text x="98.7491%" y="159.50"></text></g><g><title>alloc::raw_vec::finish_grow (4,717,138 instructions, 0.17%)</title><rect x="98.4991%" y="165" width="0.1743%" height="15" fill="rgb(208,106,33)" fg:x="2665999377" fg:w="4717138"/><text x="98.7491%" y="175.50"></text></g><g><title>alloc::raw_vec::RawVecInner&lt;A&gt;::reserve::do_reserve_and_handle (4,795,229 instructions, 0.18%)</title><rect x="98.4991%" y="181" width="0.1772%" height="15" fill="rgb(206,54,4)" fg:x="2665999377" fg:w="4795229"/><text x="98.7491%" y="191.50"></text></g><g><title>&lt;alloc::vec::Vec&lt;T&gt; as alloc::vec::spec_from_iter::SpecFromIter&lt;T,I&gt;&gt;::from_iter (1,240,557,105 instructions, 45.83%)</title><rect x="53.5881%" y="197" width="45.8341%" height="15" fill="rgb(213,3,15)" fg:x="1450426386" fg:w="1240557105"/><text x="53.8381%" y="207.50">&lt;alloc::vec::Vec&lt;T&gt; as alloc::vec::spec_from_iter::SpecFromIter&lt;T,I&gt;&gt;::from..</text></g><g><title>dlmalloc::dlmalloc::Dlmalloc&lt;A&gt;::unlink_chunk (992,479 instructions, 0.04%)</title><rect x="99.4222%" y="165" width="0.0367%" height="15" fill="rgb(252,211,39)" fg:x="2690983491" fg:w="992479"/><text x="99.6722%" y="175.50"></text></g><g><title>dlmalloc::dlmalloc::Dlmalloc&lt;A&gt;::free (4,533,706 instructions, 0.17%)</title><rect x="99.4222%" y="181" width="0.1675%" height="15" fill="rgb(223,6,36)" fg:x="2690983491" fg:w="4533706"/><text x="99.6722%" y="191.50"></text></g><g><title>&lt;alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt; as core::ops::drop::Drop&gt;::drop (14,775,724 instructions, 0.55%)</title><rect x="99.4222%" y="197" width="0.5459%" height="15" fill="rgb(252,169,45)" fg:x="2690983491" fg:w="14775724"/><text x="99.6722%" y="207.50"></text></g><g><title>alloc::collections::btree::search::&lt;impl alloc::collections::btree::node::NodeRef&lt;BorrowType,K,V,Type&gt;&gt;::find_upper_bound_index (388,713 instructions, 0.01%)</title><rect x="99.9681%" y="165" width="0.0144%" height="15" fill="rgb(212,48,26)" fg:x="2705759215" fg:w="388713"/><text x="100.2181%" y="175.50"></text></g><g><title>alloc::collections::btree::map::BTreeMap&lt;K,V,A&gt;::range (428,806 instructions, 0.02%)</title><rect x="99.9681%" y="181" width="0.0158%" height="15" fill="rgb(251,102,48)" fg:x="2705759215" fg:w="428806"/><text x="100.2181%" y="191.50"></text></g><g><title>ic_registry_routing_table::RoutingTable::lookup_entry (513,445 instructions, 0.02%)</title><rect x="99.9681%" y="197" width="0.0190%" height="15" fill="rgb(243,208,16)" fg:x="2705759215" fg:w="513445"/><text x="100.2181%" y="207.50"></text></g><g><title>registry_canister::mutations::routing_table::&lt;impl registry_canister::registry::Registry&gt;::get_subnet_for_canister (2,706,506,971 instructions, 100.00%)</title><rect x="0.0000%" y="213" width="99.9957%" height="15" fill="rgb(219,96,24)" fg:x="0" fg:w="2706506971"/><text x="0.2500%" y="223.50">registry_canister::mutations::routing_table::&lt;impl registry_canister::registry::Registry&gt;::get_subnet_for_canister</text></g><g><title>all (2,706,622,499 instructions, 100%)</title><rect x="0.0000%" y="245" width="100.0000%" height="15" fill="rgb(219,33,29)" fg:x="0" fg:w="2706622499"/><text x="0.2500%" y="255.50"></text></g><g><title>get_subnet_for_canister_1k (2,706,622,499 instructions, 100.00%)</title><rect x="0.0000%" y="229" width="100.0000%" height="15" fill="rgb(223,176,5)" fg:x="0" fg:w="2706622499"/><text x="0.2500%" y="239.50">get_subnet_for_canister_1k</text></g></svg></svg>

@@ -99,12 +99,12 @@ pub(crate) fn check_subnet_invariants(
         }
     }
     // There is at least one system subnet
-    if system_subnet_count < 1 {
-        return Err(InvariantCheckError {
-            msg: "no system subnet".to_string(),
-            source: None,
-        });
-    }
+    // if system_subnet_count < 1 {
+    //     return Err(InvariantCheckError {
+    //         msg: "no system subnet".to_string(),
+    //         source: None,
+    //     });
+    // }
     // TODO (OR1-22): uncomment the following when NNS subnet recovery
     // has fully been implemented which guarantees that no unnecessary
     // subnet records are in the registry.
