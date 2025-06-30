@@ -27,6 +27,7 @@ use ic_types::{
     methods::{SystemMethod, WasmClosure},
     CanisterId, CanisterLog, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
     NumInstructions, NumOsPages, PrincipalId, SubnetId, Time, MAX_STABLE_MEMORY_IN_BYTES,
+    MAX_WASM64_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES,
 };
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 use ic_wasm_types::doc_ref;
@@ -879,6 +880,7 @@ impl MemoryUsage {
         current_usage: NumBytes,
         stable_memory_usage: NumBytes,
         wasm_memory_usage: NumBytes,
+        max_wasm_memory: NumBytes,
         current_message_usage: MessageMemoryUsage,
         subnet_available_memory: SubnetAvailableMemory,
         memory_allocation: MemoryAllocation,
@@ -897,6 +899,15 @@ impl MemoryUsage {
                     limit
                 );
             }
+        }
+        if wasm_memory_usage > max_wasm_memory {
+            error!(
+                log,
+                "[EXC-BUG] Canister {}: stable memory current_usage {} > stable memory limit {}",
+                canister_id,
+                wasm_memory_usage,
+                max_wasm_memory,
+            );
         }
         if stable_memory_usage > NumBytes::new(MAX_STABLE_MEMORY_IN_BYTES) {
             error!(
@@ -1255,6 +1266,11 @@ impl SystemApiImpl {
             .map(|v| NumBytes::new(v as u64))
             .expect("Wasm memory size is larger than maximal allowed.");
 
+        let max_wasm_memory = if sandbox_safe_system_state.is_wasm64_execution {
+            MAX_WASM64_MEMORY_IN_BYTES
+        } else {
+            MAX_WASM_MEMORY_IN_BYTES
+        };
         let memory_usage = MemoryUsage::new(
             log.clone(),
             sandbox_safe_system_state.canister_id,
@@ -1263,6 +1279,7 @@ impl SystemApiImpl {
             canister_current_memory_usage,
             stable_memory_usage,
             wasm_memory_usage,
+            NumBytes::new(max_wasm_memory),
             canister_current_message_memory_usage,
             subnet_available_memory,
             execution_parameters.memory_allocation,
