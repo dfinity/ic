@@ -855,7 +855,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             .into_iter()
             .collect::<BTreeSet<_>>();
 
-        let node_public_keys = self.try_to_populate_node_public_keys(nodes, registry_version)?;
+        let node_public_keys = self.try_to_populate_node_public_keys(&nodes, registry_version)?;
 
         let subnet_features = subnet_record.features.unwrap_or_default().into();
         let max_number_of_canisters = subnet_record.max_number_of_canisters;
@@ -944,6 +944,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                 provisional_whitelist,
                 chain_key_settings,
                 subnet_size,
+                node_ids: nodes,
             },
             node_public_keys,
             api_boundary_nodes,
@@ -1093,14 +1094,14 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
     /// This method skips missing or invalid node keys so that the `read_registry` method does not stall the subnet.
     fn try_to_populate_node_public_keys(
         &self,
-        nodes: BTreeSet<NodeId>,
+        nodes: &BTreeSet<NodeId>,
         registry_version: RegistryVersion,
     ) -> Result<NodePublicKeys, ReadRegistryError> {
         let mut node_public_keys: NodePublicKeys = BTreeMap::new();
         for node_id in nodes {
             let optional_public_key_proto = self
                 .registry
-                .get_crypto_key_for_node(node_id, KeyPurpose::NodeSigning, registry_version)
+                .get_crypto_key_for_node(*node_id, KeyPurpose::NodeSigning, registry_version)
                 .map_err(|err| {
                     registry_error(&format!("public key of node {}", node_id), None, err)
                 })?;
@@ -1111,7 +1112,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                     // If the public key protobuf is invalid, we continue without stalling the subnet.
                     match ic_ed25519::PublicKey::convert_raw_to_der(&public_key_proto.key_value) {
                         Ok(pk_der) => {
-                            node_public_keys.insert(node_id, pk_der);
+                            node_public_keys.insert(*node_id, pk_der);
                         }
                         Err(err) => {
                             self.metrics
