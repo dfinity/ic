@@ -366,7 +366,7 @@ impl CanisterLoadSnapshotRecord {
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct CanisterSettingsChangeRecord {
     controllers: Option<Vec<PrincipalId>>,
-    environment_variables_hash: Option<Vec<u8>>,
+    environment_variables_hash: Option<[u8; HASH_LENGTH]>,
 }
 
 impl CanisterSettingsChangeRecord {
@@ -374,7 +374,7 @@ impl CanisterSettingsChangeRecord {
         self.controllers.as_deref()
     }
 
-    pub fn environment_variables_hash(&self) -> Option<Vec<u8>> {
+    pub fn environment_variables_hash(&self) -> Option<[u8; HASH_LENGTH]> {
         self.environment_variables_hash.clone()
     }
 }
@@ -489,7 +489,7 @@ impl CanisterChangeDetails {
 
     pub fn settings_change(
         controllers: Option<Vec<PrincipalId>>,
-        environment_variables_hash: Option<Vec<u8>>,
+        environment_variables_hash: Option<[u8; HASH_LENGTH]>,
     ) -> CanisterChangeDetails {
         CanisterChangeDetails::CanisterSettingsChange(CanisterSettingsChangeRecord {
             controllers,
@@ -781,6 +781,10 @@ impl From<&CanisterChangeDetails> for pb_canister_state_bits::canister_change::C
                 )
             }
             CanisterChangeDetails::CanisterSettingsChange(canister_settings_change) => {
+                let environment_variables_hash = canister_settings_change
+                    .environment_variables_hash
+                    .map(|hash| hash.to_vec());
+
                 pb_canister_state_bits::canister_change::ChangeDetails::CanisterSettingsChange(
                     pb_canister_state_bits::CanisterSettingsChange {
                         controllers: canister_settings_change.controllers.as_ref().map(
@@ -791,9 +795,7 @@ impl From<&CanisterChangeDetails> for pb_canister_state_bits::canister_change::C
                                     .collect::<Vec<ic_protobuf::types::v1::PrincipalId>>(),
                             },
                         ),
-                        environment_variables_hash: canister_settings_change
-                            .environment_variables_hash
-                            .clone(),
+                        environment_variables_hash,
                     },
                 )
             }
@@ -901,9 +903,14 @@ impl TryFrom<pb_canister_state_bits::canister_change::ChangeDetails> for Caniste
                             .collect::<Result<Vec<PrincipalId>, _>>()?,
                     ),
                 };
+                let environment_variables_hash =
+                    match canister_settings_change.environment_variables_hash {
+                        Some(bytes) => Some(try_decode_hash(bytes)?),
+                        None => None,
+                    };
                 Ok(CanisterChangeDetails::settings_change(
                     controllers,
-                    canister_settings_change.environment_variables_hash.clone(),
+                    environment_variables_hash,
                 ))
             }
             pb_canister_state_bits::canister_change::ChangeDetails::CanisterRename(
