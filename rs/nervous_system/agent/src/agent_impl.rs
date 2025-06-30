@@ -1,5 +1,6 @@
-use crate::{CallCanisters, CallCanistersWithStoppedCanisterError, ProgressNetwork};
-use crate::{CanisterInfo, Request};
+use crate::{
+    CallCanisters, CallCanistersWithStoppedCanisterError, CanisterInfo, ProgressNetwork, Request,
+};
 use candid::Principal;
 use ic_agent::agent::{RejectCode, RejectResponse};
 use ic_agent::{Agent, AgentError};
@@ -34,25 +35,34 @@ impl CallCanisters for Agent {
         request: R,
     ) -> Result<R::Response, Self::Error> {
         let canister_id = canister_id.into();
-        let request_bytes = request.payload().map_err(AgentCallError::CandidEncode)?;
+        let method = request.method();
+        let payload = request.payload().map_err(AgentCallError::CandidEncode)?;
+
         let response = if request.update() {
-            let request = self
-                .update(&canister_id, request.method())
-                .with_arg(request_bytes)
-                .call()
-                .await?;
-            let (response, _cert) = match request {
+            let mut call = self.update(&canister_id, method).with_arg(payload);
+
+            if let Some(effective_canister_id) = request.effective_canister_id() {
+                call = call.with_effective_canister_id(effective_canister_id);
+            }
+
+            let response = call.call().await?;
+
+            let (response, _cert) = match response {
                 ic_agent::agent::CallResponse::Response(response) => response,
                 ic_agent::agent::CallResponse::Poll(request_id) => {
                     self.wait(&request_id, canister_id).await?
                 }
             };
+
             response
         } else {
-            self.query(&canister_id, request.method())
-                .with_arg(request_bytes)
-                .call()
-                .await?
+            let mut call = self.query(&canister_id, method).with_arg(payload);
+
+            if let Some(effective_canister_id) = request.effective_canister_id() {
+                call = call.with_effective_canister_id(effective_canister_id);
+            }
+
+            call.call().await?
         };
 
         let response =

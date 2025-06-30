@@ -199,7 +199,7 @@ impl Registry {
         let HighCapacityRegistryValue {
             version,
             content,
-            timestamp_nanoseconds: _,
+            timestamp_nanoseconds,
         } = self.get_high_capacity(key, version)?;
 
         let value = content
@@ -214,6 +214,7 @@ impl Registry {
             version,
             value,
             deletion_marker: false,
+            timestamp_nanoseconds: *timestamp_nanoseconds,
         })
     }
 
@@ -1220,15 +1221,17 @@ mod tests {
         let max_value = vec![0; max_mutation_value_size(version, key)];
         let mutations = vec![upsert(key, &max_value)];
         apply_mutations_skip_invariant_checks(&mut registry, mutations);
+        let got = registry.get(key, version).unwrap();
 
         assert_eq!(registry.latest_version(), version);
         assert_eq!(
-            registry.get(key, version),
-            Some(RegistryValue {
+            got,
+            RegistryValue {
                 value: max_value,
                 version,
-                deletion_marker: false
-            })
+                deletion_marker: false,
+                timestamp_nanoseconds: got.timestamp_nanoseconds,
+            }
         );
     }
 
