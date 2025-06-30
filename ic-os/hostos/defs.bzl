@@ -34,6 +34,7 @@ def image_deps(mode, _malicious = False):
             "//rs/ic_os/release:guest_vm_runner": "/opt/ic/bin/guest_vm_runner:0755",
             "//rs/ic_os/release:metrics-proxy": "/opt/ic/bin/metrics-proxy:0755",
             "//rs/ic_os/release:config": "/opt/ic/bin/config:0755",
+            "//ic-os/components/ovmf:OVMF.fd": "/usr/share/ovmf/OVMF.fd:0644",
 
             # additional libraries to install
             "//rs/ic_os/release:nss_icos": "/usr/lib/x86_64-linux-gnu/libnss_icos.so.2:0644",

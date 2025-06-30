@@ -1,0 +1,43 @@
+package(default_visibility = ["//visibility:public"])
+
+genrule(
+    name = "ovmf_sev",
+    outs = ["OVMF.fd"],
+    cmd = """
+        REPOSITORY=https://github.com/tianocore/edk2.git
+        TAG=edk2-stable202505
+
+        out="$$(realpath $@)"
+        workdir="$$(mktemp -d)"
+        trap "rm -rf $$workdir" EXIT
+        cd "$$workdir"
+        git clone --depth 1 --branch $$TAG $$REPOSITORY
+        cd edk2
+        git submodule update --init \
+            BaseTools/Source/C/BrotliCompress/brotli \
+            MdePkg/Library/MipiSysTLib/mipisyst \
+            MdeModulePkg/Library/BrotliCustomDecompressLib/brotli \
+            SecurityPkg/DeviceSecurity/SpdmLib/libspdm \
+            CryptoPkg/Library/OpensslLib/openssl \
+            CryptoPkg/Library/MbedTlsLib/mbedtls
+        make -C BaseTools
+
+        set +u # edksetup.sh reads undefined variables
+        source edksetup.sh
+        set -u
+
+        # Configure build
+        sed -i 's#^ACTIVE_PLATFORM.*#ACTIVE_PLATFORM=OvmfPkg/AmdSev/AmdSevX64.dsc#' Conf/target.txt
+        sed -i 's#^TARGET.*#TARGET=RELEASE#' Conf/target.txt
+        sed -i 's#^TARGET_ARCH.*#TARGET_ARCH=X64#' Conf/target.txt
+        sed -i 's#^TOOL_CHAIN_TAG.*#TOOL_CHAIN_TAG=CLANGDWARF#' Conf/target.txt
+
+        # Required for building AmdSev package without grub. Workaround found in
+        # https://github.com/kata-containers/kata-containers/blob/CCv0/tools/packaging/static-build/ovmf/build-ovmf.sh#L53
+        touch OvmfPkg/AmdSev/Grub/grub.efi
+
+        build
+
+        mv Build/AmdSev/RELEASE_CLANGDWARF/FV/OVMF.fd "$$out"
+    """,
+)
