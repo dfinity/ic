@@ -33,7 +33,7 @@ read_config_variables
 
 # Production socks5 proxy url needs to include schema, host and port to be accepted by the adapters.
 # Testnets deploy with a development socks_proxy config value to overwrite the production socks proxy with the testnet proxy.
-SOCKS_PROXY="socks5://socks5.ic0.app:1080"
+SOCKS_PROXY="socks5h://socks5.ic0.app:1080"
 if [ "${config_socks_proxy}" != "" ] && [ "${config_socks_proxy}" != "null" ]; then
     SOCKS_PROXY="${config_socks_proxy}"
 fi

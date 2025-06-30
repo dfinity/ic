@@ -42,13 +42,13 @@ use ic_management_canister_types_private::{
     EmptyBlob, InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs,
     LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs,
     Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
-    ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs, ReshareChainKeyArgs,
-    SchnorrAlgorithm, SchnorrPublicKeyArgs, SchnorrPublicKeyResponse, SetupInitialDKGArgs,
-    SignWithECDSAArgs, SignWithSchnorrArgs, SignWithSchnorrAux, StoredChunksArgs, SubnetInfoArgs,
-    SubnetInfoResponse, TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs,
-    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
-    UploadCanisterSnapshotMetadataResponse, UploadChunkArgs, VetKdDeriveKeyArgs,
-    VetKdPublicKeyArgs, VetKdPublicKeyResult, IC_00,
+    ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs, RenameCanisterArgs,
+    ReshareChainKeyArgs, SchnorrAlgorithm, SchnorrPublicKeyArgs, SchnorrPublicKeyResponse,
+    SetupInitialDKGArgs, SignWithECDSAArgs, SignWithSchnorrArgs, SignWithSchnorrAux,
+    StoredChunksArgs, SubnetInfoArgs, SubnetInfoResponse, TakeCanisterSnapshotArgs,
+    UninstallCodeArgs, UpdateSettingsArgs, UploadCanisterSnapshotDataArgs,
+    UploadCanisterSnapshotMetadataArgs, UploadCanisterSnapshotMetadataResponse, UploadChunkArgs,
+    VetKdDeriveKeyArgs, VetKdPublicKeyArgs, VetKdPublicKeyResult, IC_00,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -418,6 +418,7 @@ impl ExecutionEnvironment {
             Arc::clone(&cycles_account_manager),
             Arc::clone(&ingress_history_writer),
             fd_factory,
+            config.environment_variables,
         );
         // Deallocate `SystemStates` and `ExecutionStates` in the background. Sleep for
         // 0.1 ms between deallocations, to spread out the load on the memory allocator
@@ -529,6 +530,26 @@ impl ExecutionEnvironment {
                         let time_elapsed =
                             state.time().saturating_duration_since(context.get_time());
                         let request = context.get_request();
+
+                        if let SubnetCallContext::CanisterHttpRequest(context) = &context {
+                            let old_price = self.cycles_account_manager.http_request_fee(
+                                context.variable_parts_size(),
+                                context.max_response_bytes,
+                                registry_settings.subnet_size,
+                            );
+
+                            let new_price = self.cycles_account_manager.http_request_fee_beta(
+                                context.variable_parts_size(),
+                                context.max_response_bytes,
+                                registry_settings.subnet_size,
+                                NumBytes::from(response.payload_size_bytes()),
+                            );
+
+                            self.metrics
+                                .observe_http_outcall_price_change(old_price, new_price);
+                            self.metrics
+                                .observe_http_outcall_request(context, &response);
+                        }
 
                         self.metrics.observe_subnet_message(
                             &request.method_name,
@@ -1772,6 +1793,19 @@ impl ExecutionEnvironment {
                 }
             }
 
+            Ok(Ic00Method::RenameCanister) => {
+                let res = RenameCanisterArgs::decode(payload).and_then(|args| {
+                    let canister_id = args.get_canister_id();
+                    let origin = msg.canister_change_origin(args.get_sender_canister_version());
+                    self.rename_canister(*msg.sender(), &mut state, args, origin)
+                        .map(|res| (res, Some(canister_id)))
+                });
+                ExecuteSubnetMessageResult::Finished {
+                    response: res,
+                    refund: msg.take_cycles(),
+                }
+            }
+
             Err(ParseError::VariantNotFound) => {
                 let res = Err(UserError::new(
                     ErrorCode::CanisterMethodNotFound,
@@ -2537,6 +2571,49 @@ impl ExecutionEnvironment {
         result
     }
 
+    fn rename_canister(
+        &self,
+        sender: PrincipalId,
+        state: &mut ReplicatedState,
+        args: RenameCanisterArgs,
+        origin: CanisterChangeOrigin,
+    ) -> Result<Vec<u8>, UserError> {
+        let old_id = args.get_canister_id();
+        let new_id = args.rename_to.get_canister_id();
+        let to_version = args.rename_to.version;
+        let to_total_num_changes = args.rename_to.total_num_changes;
+
+        // Take canister out.
+        let mut canister = match state.take_canister_state(&old_id) {
+            None => {
+                return Err(UserError::new(
+                    ErrorCode::CanisterNotFound,
+                    format!("Canister {} not found.", old_id),
+                ))
+            }
+            Some(canister) => canister,
+        };
+
+        let result = self
+            .canister_manager
+            .rename_canister(
+                sender,
+                &mut canister,
+                origin,
+                old_id,
+                new_id,
+                to_version,
+                to_total_num_changes,
+                state,
+            )
+            .map(|()| EmptyBlob.encode())
+            .map_err(|err| err.into());
+
+        // Put canister back with the new id.
+        state.put_canister_state(canister);
+        result
+    }
+
     fn read_canister_snapshot_metadata(
         &self,
         sender: PrincipalId,
@@ -2589,10 +2666,7 @@ impl ExecutionEnvironment {
         state.put_canister_state(canister);
         match result {
             Ok((snapshot_id, instructions_used)) => (
-                Ok(Encode!(&UploadCanisterSnapshotMetadataResponse {
-                    snapshot_id: snapshot_id.to_vec()
-                })
-                .unwrap()),
+                Ok(Encode!(&UploadCanisterSnapshotMetadataResponse { snapshot_id }).unwrap()),
                 instructions_used,
             ),
             Err(e) => (Err(e), NumInstructions::new(0)),

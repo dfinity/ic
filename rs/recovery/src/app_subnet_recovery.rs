@@ -376,6 +376,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                 None,
                 None,
                 self.params.replay_until_height,
+                !self.interactive(),
             ))),
 
             StepType::ValidateReplayOutput => Ok(Box::new(

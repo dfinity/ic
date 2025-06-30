@@ -4,10 +4,11 @@ mod scraping;
 mod tests;
 
 use crate::checked_amount::CheckedAmountOf;
-use crate::eth_rpc::{FixedSizeData, Hash};
+use crate::eth_rpc::Hash;
 use crate::logs::{DEBUG, INFO};
 use crate::numeric::{BlockNumber, Erc20Value, LogIndex, Wei};
 use candid::Principal;
+use evm_rpc_client::Hex32;
 use hex_literal::hex;
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
@@ -238,7 +239,7 @@ pub enum ReceivedEventError {
 #[derive(Clone, Eq, PartialEq, Debug, Error)]
 pub enum EventSourceError {
     #[error("failed to decode principal from bytes {invalid_principal}")]
-    InvalidPrincipal { invalid_principal: FixedSizeData },
+    InvalidPrincipal { invalid_principal: Hex32 },
     #[error("invalid ReceivedEthEvent: {0}")]
     InvalidEvent(String),
 }

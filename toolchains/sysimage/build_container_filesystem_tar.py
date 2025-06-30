@@ -17,10 +17,8 @@ import invoke
 from loguru import logger as log
 
 from toolchains.sysimage.utils import (
-    path_owned_by_root,
     purge_podman,
     remove_image,
-    take_ownership_of_file,
 )
 
 
@@ -103,18 +101,21 @@ def export_container_filesystem(container_cmd: str, image_tag: str, destination_
     Export the filesystem from an image.
     Creates container - but does not start it, avoiding timestamp and other determinism issues.
     """
+    tempdir = tempfile.mkdtemp()
+    tar_file = tempdir + "/temp.tar"
+    fakeroot_statefile = tempdir + "/fakeroot.state"
+    tar_dir = tempdir + "/tar"
+
     container_name = image_tag + "_container"
     invoke.run(f"{container_cmd} create --name {container_name} {image_tag}")
-    invoke.run(f"{container_cmd} export -o {destination_tar_filename} {container_name}")
+    invoke.run(f"{container_cmd} export -o {tar_file} {container_name}")
+    invoke.run(f"mkdir -p {tar_dir}")
+    invoke.run(f"fakeroot -s {fakeroot_statefile} tar xpf {tar_file} --same-owner --numeric-owner -C {tar_dir}")
+    invoke.run(
+        f"fakeroot -i {fakeroot_statefile} tar cf {destination_tar_filename} --numeric-owner --sort=name --exclude='run/*' -C {tar_dir} $(ls -A {tar_dir})"
+    )
     invoke.run("sync")
     invoke.run(f"{container_cmd} container rm {container_name}")
-
-    destination_tar_path = Path(destination_tar_filename)
-    # Using sudo w/ podman requires changing permissions on the output tar file (not the tar contents)
-    assert path_owned_by_root(
-        destination_tar_path
-    ), f"'{destination_tar_path}' not owned by root. Remove this and the next line."
-    take_ownership_of_file(destination_tar_path)
 
 
 def resolve_file_args(context_dir: str, file_build_args: List[str]) -> List[str]:

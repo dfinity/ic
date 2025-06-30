@@ -32,9 +32,9 @@ jobs:
       labels: dind-large
 
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:e4862aca9dfa7e342f44cb4ba48923de4306099d26b067ee285f5e0ebe87162a
+      image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
       options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
+        -e NODE_NAME --privileged --cgroupns host -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
 
     steps:
       - uses: actions/checkout@v4
@@ -42,7 +42,7 @@ jobs:
       - name: build
         run: |
           TARGET='//rs/boundary_node/rate_limits:rate_limit_canister'
-          bazel build --config=ci ${TARGET}
+          bazel build ${TARGET}
 
           OUTPUT='bazel-bin/rs/boundary_node/rate_limits/rate_limit_canister.wasm.gz'
           mv ${OUTPUT} rate_limit_canister.wasm.gz

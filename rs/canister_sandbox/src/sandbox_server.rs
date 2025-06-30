@@ -197,6 +197,7 @@ mod tests {
             MemoryAllocation::BestEffort,
             NumBytes::new(0),
             ComputeAllocation::default(),
+            Default::default(),
             Cycles::new(1_000_000),
             Cycles::zero(),
             None,

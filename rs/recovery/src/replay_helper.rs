@@ -23,6 +23,7 @@ pub async fn replay(
     subcmd: Option<SubCommand>,
     replay_until_height: Option<u64>,
     output: PathBuf,
+    skip_prompts: bool,
 ) -> RecoveryResult<StateParams> {
     let args = ReplayToolArgs {
         subnet_id: Some(ClapSubnetId::from_str(&subnet_id.to_string()).unwrap()),
@@ -31,6 +32,7 @@ pub async fn replay(
         replay_until_height,
         subcmd,
         data_root: Some(data_root),
+        skip_prompts,
     };
     // Since replay output needs to be persisted anyway in case the recovery process
     // is restarted, we avoid declaring a return value and moving out of the

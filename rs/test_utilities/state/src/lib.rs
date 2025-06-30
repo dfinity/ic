@@ -467,6 +467,14 @@ impl SystemStateBuilder {
         self
     }
 
+    pub fn environment_variables(
+        mut self,
+        environment_variables: BTreeMap<String, String>,
+    ) -> Self {
+        self.system_state.environment_variables = environment_variables;
+        self
+    }
+
     pub fn empty_task_queue_with_on_low_wasm_memory_hook_status(
         mut self,
         on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,

@@ -48,7 +48,7 @@ use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{block_on, MessageCanister};
 use ic_types::Height;
 use slog::info;
-use std::fs;
+use std::{cmp, fs};
 use url::Url;
 
 const DKG_INTERVAL: u64 = 9;
@@ -180,7 +180,7 @@ pub fn test(env: TestEnv) {
     let subnet_args = NNSRecoveryFailoverNodesArgs {
         subnet_id: topo_broken_ic.root_subnet_id(),
         replica_version: Some(ic_version),
-        replay_until_height: None,
+        replay_until_height: None, // We will set this after breaking the subnet, see below
         aux_ip: None,
         aux_user: None,
         registry_url: None,
@@ -243,11 +243,19 @@ pub fn test(env: TestEnv) {
         .expect("Missing metrics for upload node");
     let dn_node_metrics = block_on(get_node_metrics(&logger, &download_node.get_ip_addr()))
         .expect("Missing metrics for download node");
-    if dn_node_metrics.finalization_height < ot_node_metrics.finalization_height {
+    if dn_node_metrics.certification_height < ot_node_metrics.certification_height {
         info!(logger, "Use the other node for download.");
         subnet_recovery.params.download_node = Some(nns_node.get_ip_addr());
         subnet_recovery.params.validate_nns_url = download_node.get_public_url();
     }
+
+    subnet_recovery.params.replay_until_height = Some(
+        cmp::max(
+            dn_node_metrics.certification_height,
+            ot_node_metrics.certification_height,
+        )
+        .get(),
+    );
 
     info!(
         logger,

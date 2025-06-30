@@ -2,6 +2,7 @@ syntax = "proto3";
 package state.metadata.v1;
 
 import "bitcoin/v1/bitcoin.proto";
+import "google/protobuf/empty.proto";
 import "google/protobuf/wrappers.proto";
 import "registry/routing_table/v1/routing_table.proto";
 import "registry/subnet/v1/subnet.proto";
@@ -133,7 +134,15 @@ message CanisterHttpRequestContext {
   repeated HttpHeader headers = 7;
   optional uint64 max_response_bytes = 9;
   google.protobuf.BytesValue transform_context = 10;
+  optional Replication replication = 11;
   reserved 5;
+}
+
+message Replication {
+  oneof replication_type {
+    google.protobuf.Empty fully_replicated = 1;
+    types.v1.NodeId non_replicated = 2;
+  }
 }
 
 message CanisterHttpRequestContextTree {

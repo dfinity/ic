@@ -2294,7 +2294,8 @@ fn get_instructions_limits_for_subnet_message(
             | ReadCanisterSnapshotMetadata
             | ReadCanisterSnapshotData
             | UploadCanisterSnapshotMetadata
-            | UploadCanisterSnapshotData => default_limits,
+            | UploadCanisterSnapshotData
+            | RenameCanister => default_limits,
             InstallCode | InstallChunkedCode => InstructionLimits::new(
                 dts,
                 config.max_instructions_per_install_code,

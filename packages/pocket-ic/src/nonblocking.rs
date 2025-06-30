@@ -1,7 +1,7 @@
 use crate::common::rest::{
     ApiResponse, AutoProgressConfig, BlobCompression, BlobId, CanisterHttpRequest,
     CreateHttpGatewayResponse, CreateInstanceResponse, ExtendedSubnetConfigSet, HttpGatewayBackend,
-    HttpGatewayConfig, HttpGatewayInfo, HttpsConfig, InstanceConfig, InstanceId,
+    HttpGatewayConfig, HttpGatewayInfo, HttpsConfig, IcpFeatures, InstanceConfig, InstanceId,
     MockCanisterHttpResponse, RawAddCycles, RawCanisterCall, RawCanisterHttpRequest, RawCanisterId,
     RawCanisterResult, RawCycles, RawEffectivePrincipal, RawIngressStatusArgs, RawMessageId,
     RawMockCanisterHttpResponse, RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId,
@@ -139,6 +139,7 @@ impl PocketIc {
         nonmainnet_features: bool,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
+        icp_features: IcpFeatures,
     ) -> Self {
         let server_url = if let Some(server_url) = server_url {
             server_url
@@ -146,7 +147,10 @@ impl PocketIc {
             start_or_reuse_server(server_binary).await
         };
 
-        let subnet_config_set = subnet_config_set.into();
+        let subnet_config_set = subnet_config_set
+            .into()
+            .try_with_icp_features(&icp_features)
+            .unwrap();
 
         // copy the read-only state dir to the state dir
         // (creating an empty temp dir to serve as the state dir if no state dir is provided)
@@ -195,6 +199,7 @@ impl PocketIc {
             nonmainnet_features,
             log_level: log_level.map(|l| l.to_string()),
             bitcoind_addr,
+            icp_features: Some(icp_features),
         };
 
         let test_driver_pid = std::process::id();
@@ -675,13 +680,9 @@ impl PocketIc {
 
     /// Await an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.
     pub async fn await_call(&self, message_id: RawMessageId) -> Result<Vec<u8>, RejectResponse> {
-        for _ in 0..100 {
-            self.tick().await;
-            if let Some(result) = self.ingress_status(message_id.clone()).await {
-                return result;
-            }
-        }
-        panic!("PocketIC did not complete the update call within 100 rounds")
+        let endpoint = "update/await_ingress_message";
+        let result: RawCanisterResult = self.post(endpoint, message_id).await;
+        result.into()
     }
 
     /// Fetch the status of an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.

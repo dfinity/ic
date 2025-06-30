@@ -51,6 +51,7 @@ impl From<UnvalidatedCanisterHttpRequestArgs>
             body: args.body,
             method: args.method,
             transform: args.transform,
+            is_replicated: None,
         }
     }
 }

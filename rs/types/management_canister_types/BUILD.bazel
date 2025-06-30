@@ -98,3 +98,16 @@ rust_test(
     name = "management_canister_types_test",
     crate = ":management_canister_types",
 )
+
+rust_test(
+    name = "candid_equality",
+    srcs = ["tests/candid_equality.rs"],
+    data = ["tests/ic.did"],
+    env = {"IC_DID": "$(rootpath :tests/ic.did)"},
+    deps = [
+        # Keep sorted.
+        ":management_canister_types",
+        "@crate_index//:candid",
+        "@crate_index//:candid_parser",
+    ],
+)

@@ -184,6 +184,23 @@ pub struct CanisterHttpRequestContext {
     pub max_response_bytes: ::core::option::Option<u64>,
     #[prost(message, optional, tag = "10")]
     pub transform_context: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    #[prost(message, optional, tag = "11")]
+    pub replication: ::core::option::Option<Replication>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Replication {
+    #[prost(oneof = "replication::ReplicationType", tags = "1, 2")]
+    pub replication_type: ::core::option::Option<replication::ReplicationType>,
+}
+/// Nested message and enum types in `Replication`.
+pub mod replication {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum ReplicationType {
+        #[prost(message, tag = "1")]
+        FullyReplicated(()),
+        #[prost(message, tag = "2")]
+        NonReplicated(super::super::super::super::types::v1::NodeId),
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpRequestContextTree {

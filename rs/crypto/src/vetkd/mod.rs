@@ -376,14 +376,14 @@ fn combine_encrypted_key_shares_internal<C: ThresholdSignatureCspClient>(
             Ok((node_id, *node_index, clib_share))
         })
         .collect::<Result<_, _>>()?;
-    let clib_shares_for_combine_all: Vec<(NodeIndex, EncryptedKeyShare)> = clib_shares
+    let clib_shares_for_combine_all: BTreeMap<NodeIndex, EncryptedKeyShare> = clib_shares
         .iter()
         .map(|(_node_id, node_index, clib_share)| (*node_index, clib_share.clone()))
         .collect();
     let context = DerivationContext::new(args.context.caller.as_slice(), &args.context.context);
 
     match ic_crypto_internal_bls12_381_vetkd::EncryptedKey::combine_all(
-        &clib_shares_for_combine_all[..],
+        &clib_shares_for_combine_all,
         reconstruction_threshold,
         &master_public_key,
         &transport_public_key,
@@ -402,14 +402,14 @@ fn combine_encrypted_key_shares_internal<C: ThresholdSignatureCspClient>(
                 falling back to EncryptedKey::combine_valid_shares"
             );
 
-            let clib_shares_for_combine_valid: Vec<(NodeIndex, G2Affine, EncryptedKeyShare)> = clib_shares
-                .iter()
+            let clib_shares_for_combine_valid: BTreeMap<NodeIndex, (G2Affine, EncryptedKeyShare)> = clib_shares
+                .into_iter()
                 .map(|(node_id, node_index, clib_share)| {
                     let node_public_key = lazily_calculated_public_key_from_store(
                         lockable_threshold_sig_data_store,
                         threshold_sig_csp_client,
                         &args.ni_dkg_id,
-                        *node_id,
+                        node_id,
                     )
                     .map_err(|e| {
                         VetKdKeyShareCombinationError::IndividualPublicKeyComputationError(e)
@@ -422,12 +422,12 @@ fn combine_encrypted_key_shares_internal<C: ThresholdSignatureCspClient>(
                             ))
                         }
                     }?;
-                    Ok((*node_index, node_public_key_g2affine, clib_share.clone()))
+                    Ok((node_index, (node_public_key_g2affine, clib_share.clone())))
                 })
                 .collect::<Result<_, _>>()?;
 
             ic_crypto_internal_bls12_381_vetkd::EncryptedKey::combine_valid_shares(
-                &clib_shares_for_combine_valid[..],
+                &clib_shares_for_combine_valid,
                 reconstruction_threshold,
                 &master_public_key,
                 &transport_public_key,

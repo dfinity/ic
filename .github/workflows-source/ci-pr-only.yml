@@ -17,7 +17,7 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:e4862aca9dfa7e342f44cb4ba48923de4306099d26b067ee285f5e0ebe87162a
+    image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
   container: &container
     container:
       <<: *image

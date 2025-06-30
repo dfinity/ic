@@ -2,15 +2,15 @@
 Description=Manage GuestOS virtual machine
 Requires=libvirtd.service
 After=libvirtd.service
-Requires=generate-guestos-config.service
-After=generate-guestos-config.service
 Requires=guestos-recovery-upgrader.service
 After=guestos-recovery-upgrader.service
+
+RequiresMountsFor=/var
 
 [Service]
 Type=notify
 ExecStartPre=/opt/ic/bin/detect-first-boot.sh
-ExecStart=/opt/ic/bin/guestos.sh
+ExecStart=/opt/ic/bin/guest_vm_runner
 ExecStartPost=/opt/ic/bin/manageboot.sh hostos confirm
 Restart=always
 RestartSec=60

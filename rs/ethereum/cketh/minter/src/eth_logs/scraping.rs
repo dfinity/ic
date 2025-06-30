@@ -3,10 +3,11 @@ use crate::eth_logs::{
     RECEIVED_ERC20_EVENT_TOPIC, RECEIVED_ETH_EVENT_TOPIC,
     RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC,
 };
-use crate::eth_rpc::{FixedSizeData, Topic};
+use crate::eth_rpc::Topic;
 use crate::numeric::BlockNumber;
 use crate::state::eth_logs_scraping::LogScrapingId;
 use crate::state::State;
+use evm_rpc_client::Hex32;
 use ic_ethereum_types::Address;
 use std::iter::once;
 
@@ -51,7 +52,7 @@ impl LogScraping for ReceivedEthLogScraping {
     fn next_scrape(state: &State) -> Option<Scrape> {
         let contract_address = *Self::contract_address(state)?;
         let last_scraped_block_number = Self::last_scraped_block_number(state);
-        let topics = vec![Topic::from(FixedSizeData(RECEIVED_ETH_EVENT_TOPIC))];
+        let topics = vec![Topic::Single(Hex32::from(RECEIVED_ETH_EVENT_TOPIC))];
         Some(Scrape {
             contract_address,
             last_scraped_block_number,
@@ -73,7 +74,7 @@ impl LogScraping for ReceivedErc20LogScraping {
         let contract_address = *Self::contract_address(state)?;
         let last_scraped_block_number = Self::last_scraped_block_number(state);
 
-        let mut topics: Vec<_> = vec![Topic::from(FixedSizeData(RECEIVED_ERC20_EVENT_TOPIC))];
+        let mut topics: Vec<_> = vec![Topic::Single(Hex32::from(RECEIVED_ERC20_EVENT_TOPIC))];
         // We add token contract addresses as additional topics to match.
         // It has a disjunction semantics, so it will match if event matches any one of these addresses.
         topics.push(
@@ -100,13 +101,13 @@ impl LogScraping for ReceivedEthOrErc20LogScraping {
         let contract_address = *Self::contract_address(state)?;
         let last_scraped_block_number = Self::last_scraped_block_number(state);
 
-        let mut topics: Vec<_> = vec![Topic::from(FixedSizeData(
+        let mut topics: Vec<_> = vec![Topic::Single(Hex32::from(
             RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC,
         ))];
         // We add token contract addresses as additional topics to match.
         // It has a disjunction semantics, so it will match if event matches any one of these addresses.
         topics.push(
-            once(FixedSizeData::ZERO)
+            once(Hex32::from([0_u8; 32]))
                 .chain(erc20_smart_contracts_addresses_as_topics(state))
                 .collect::<Vec<_>>()
                 .into(),
@@ -120,11 +121,9 @@ impl LogScraping for ReceivedEthOrErc20LogScraping {
     }
 }
 
-fn erc20_smart_contracts_addresses_as_topics(
-    state: &State,
-) -> impl Iterator<Item = FixedSizeData> + '_ {
+fn erc20_smart_contracts_addresses_as_topics(state: &State) -> impl Iterator<Item = Hex32> + '_ {
     state
         .ckerc20_tokens
         .alt_keys()
-        .map(|address| FixedSizeData(address.into()))
+        .map(|address| Hex32::from(<[u8; 32]>::from(address)))
 }

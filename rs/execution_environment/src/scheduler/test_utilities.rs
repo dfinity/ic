@@ -1446,9 +1446,12 @@ impl TestWasmExecutorCore {
             | ApiType::ReplicatedQuery { .. }
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::CompositeQuery { .. }
+            | ApiType::CompositeReplyCallback { .. }
+            | ApiType::CompositeRejectCallback { .. }
             | ApiType::InspectMessage { .. }
             | ApiType::Start { .. }
-            | ApiType::Cleanup { .. } => {
+            | ApiType::Cleanup { .. }
+            | ApiType::CompositeCleanup { .. } => {
                 unreachable!("The test Wasm executor does not support {}", input.api_type)
             }
         }

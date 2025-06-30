@@ -7,6 +7,7 @@ use ic_system_test_driver::{
     driver::{
         bootstrap::{setup_nested_vms, start_nested_vms},
         farm::Farm,
+        ic_gateway_vm::{HasIcGatewayVm, IC_GATEWAY_VM_NAME},
         nested::{NestedNode, NestedVm, NestedVms},
         resource::{allocate_resources, get_resource_request_for_nested_nodes},
         test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
@@ -22,7 +23,6 @@ use ic_system_test_driver::{
 use ic_types::{hostos_version::HostosVersion, NodeId};
 
 use slog::info;
-use url::Url;
 
 /// Use an SSH channel to check the version on the running HostOS.
 pub(crate) fn check_hostos_version(node: &NestedVm) -> String {
@@ -113,13 +113,10 @@ pub(crate) fn setup_nested_vm(env: TestEnv, name: &str) {
             .expect("Unable to write nested VM.");
     }
 
-    let api_boundary_node = env
-        .topology_snapshot()
-        .api_boundary_nodes()
-        .next()
-        .expect("No API BN present");
-    let api_bn_url = Url::parse(&format!("https://[{}]/", api_boundary_node.get_ip_addr()))
-        .expect("Could not parse Url");
+    let ic_gateway = env
+        .get_deployed_ic_gateway(IC_GATEWAY_VM_NAME)
+        .expect("No HTTP gateway found");
+    let ic_gateway_url = ic_gateway.get_public_url();
 
     let nns_public_key =
         std::fs::read_to_string(env.prep_dir("").unwrap().root_public_key_path()).unwrap();
@@ -129,7 +126,7 @@ pub(crate) fn setup_nested_vm(env: TestEnv, name: &str) {
         &env,
         &farm,
         &group_name,
-        &api_bn_url,
+        &ic_gateway_url,
         &nns_public_key,
     )
     .expect("Unable to setup nested VMs.");

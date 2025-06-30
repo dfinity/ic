@@ -2117,6 +2117,10 @@ impl Governance {
                 self.perform_register_dapp_canisters(register_dapp_canisters)
                     .await
             }
+            Action::RegisterExtension(_) => Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                "RegisterExtension proposals are not supported yet.",
+            )),
             Action::DeregisterDappCanisters(deregister_dapp_canisters) => {
                 self.perform_deregister_dapp_canisters(deregister_dapp_canisters)
                     .await

@@ -8,6 +8,7 @@ use pocket_ic::common::rest::{
 use pocket_ic::{PocketIc, PocketIcBuilder};
 use rcgen::{CertificateParams, KeyPair};
 use reqwest::blocking::Client;
+use reqwest::header;
 use reqwest::Url;
 use reqwest::{Client as NonblockingClient, StatusCode};
 use std::io::Write;
@@ -44,6 +45,10 @@ async fn deploy_ii_async(pic: &pocket_ic::nonblocking::PocketIc) -> Principal {
 // - http(s)://<canister-id>.raw.localhost:<port>
 // - http(s)://<canister-id>.example.com:<port>
 // - http(s)://<canister-id>.raw.example.com:<port>
+// and the following referer headers:
+// - http(s)://<canister-id>.localhost:<port>
+// - http(s)://<canister-id>.raw.localhost:<port>
+// - http(s)://localhost:<port>/?canisterId=<canister-id>
 
 async fn test_gateway(server_url: Url, https: bool) {
     // Create a PocketIC instance.
@@ -188,6 +193,37 @@ async fn test_gateway(server_url: Url, https: bool) {
 
     for url in test_urls {
         let res = client.get(url).send().await.unwrap();
+        let page = String::from_utf8(res.bytes().await.unwrap().to_vec()).unwrap();
+        assert!(page.contains("<title>Internet Identity</title>"));
+    }
+
+    // infer canister ID from the referer header
+    let mut test_referers = vec![];
+
+    // perform request where canister ID is specified in the referer header host
+    let referer_url = format!("{}://{}.{}:{}", proto, canister_id, localhost, port);
+    test_referers.push(referer_url);
+
+    let referer_url = format!("{}://{}.raw.{}:{}", proto, canister_id, localhost, port);
+    test_referers.push(referer_url);
+
+    // perform request where canister ID is specified in the referer header query parameters
+    let referer_url = format!(
+        "{}://{}:{}/?canisterId={}",
+        proto, localhost, port, canister_id
+    );
+    test_referers.push(referer_url);
+
+    let test_url = format!("{}://{}:{}", proto, localhost, port);
+
+    for referer in test_referers {
+        // perform request where canister ID is specified in the referer header
+        let res = client
+            .get(&test_url)
+            .header(header::REFERER, referer)
+            .send()
+            .await
+            .unwrap();
         let page = String::from_utf8(res.bytes().await.unwrap().to_vec()).unwrap();
         assert!(page.contains("<title>Internet Identity</title>"));
     }

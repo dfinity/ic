@@ -190,6 +190,7 @@ def icos_build(
                         (version_txt, "/version.txt:0644"),
                         (boot_args, "/boot_args:0644"),
                         (extra_boot_args, "/extra_boot_args:0644"),
+                        (image_deps["grub_config"], "/grub.cfg:0644"),
                     ]
                 )
             },
@@ -307,6 +308,7 @@ def icos_build(
         expanded_size = image_deps.get("expanded_size", default = None),
         tags = ["manual", "no-cache"],
         target_compatible_with = ["@platforms//os:linux"],
+        visibility = visibility,
     )
 
     zstd_compress(

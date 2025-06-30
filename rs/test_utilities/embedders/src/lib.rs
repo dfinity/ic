@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::{convert::TryFrom, rc::Rc};
 
 use ic_base_types::NumBytes;
@@ -42,6 +43,7 @@ pub struct WasmtimeInstanceBuilder {
     config: ic_config::embedders::Config,
     canister_memory_limit: NumBytes,
     memory_usage: NumBytes,
+    environment_variables: BTreeMap<String, String>,
 }
 
 impl Default for WasmtimeInstanceBuilder {
@@ -57,6 +59,7 @@ impl Default for WasmtimeInstanceBuilder {
             config: ic_config::embedders::Config::default(),
             canister_memory_limit: NumBytes::from(4 << 30), // Set to 4 GiB by default
             memory_usage: NumBytes::from(0),
+            environment_variables: BTreeMap::new(),
         }
     }
 }
@@ -120,6 +123,16 @@ impl WasmtimeInstanceBuilder {
         }
     }
 
+    pub fn with_environment_variables(
+        self,
+        environment_variables: BTreeMap<String, String>,
+    ) -> Self {
+        Self {
+            environment_variables,
+            ..self
+        }
+    }
+
     pub fn try_build(self) -> Result<WasmtimeInstance, (HypervisorError, SystemApiImpl)> {
         let log = no_op_logger();
 
@@ -133,7 +146,9 @@ impl WasmtimeInstanceBuilder {
         let (compiled, _result) = compile(&embedder, &BinaryEncodedWasm::new(wasm));
 
         let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
-        let system_state = SystemStateBuilder::default().build();
+        let system_state = SystemStateBuilder::default()
+            .environment_variables(self.environment_variables)
+            .build();
         let dirty_page_overhead = match self.subnet_type {
             SubnetType::Application => SchedulerConfig::application_subnet(),
             SubnetType::VerifiedApplication => SchedulerConfig::verified_application_subnet(),

@@ -1858,6 +1858,7 @@ fn http_request_bound_holds() {
             }),
             context: transform_context.clone(),
         }),
+        is_replicated: None,
     };
 
     // Create request to HTTP_REQUEST method.
@@ -2415,6 +2416,7 @@ fn execute_canister_http_request() {
             }),
             context: transform_context.clone(),
         }),
+        is_replicated: None,
     };
 
     // Create request to HTTP_REQUEST method.
@@ -2494,6 +2496,7 @@ fn execute_canister_http_request_disabled() {
             }),
             context: vec![0, 1, 2],
         }),
+        is_replicated: None,
     };
 
     // Create request to HTTP_REQUEST method.

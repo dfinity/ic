@@ -5,9 +5,9 @@ mod parser {
         ReceivedEthLogParser, RECEIVED_ERC20_EVENT_TOPIC, RECEIVED_ETH_EVENT_TOPIC,
         RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC,
     };
-    use crate::eth_rpc::LogEntry;
     use crate::numeric::{BlockNumber, Erc20Value, LogIndex, Wei};
     use candid::Principal;
+    use evm_rpc_client::LogEntry;
     use ic_sha3::Keccak256;
     use std::str::FromStr;
 
@@ -41,11 +41,11 @@ mod parser {
                 "0x09efcdab00000000000100000000000000000000000000000000000000000000"
             ],
             "data": "0x000000000000000000000000000000000000000000000000002386f26fc10000",
-            "blockNumber": "0x3ca487",
+            "blockNumber": 3974279,
             "transactionHash": "0x705f826861c802b407843e99af986cfde8749b669e5e0a5a150f4350bcaa9bc3",
-            "transactionIndex": "0x22",
+            "transactionIndex": 34,
             "blockHash": "0x8436209a391f7bc076123616ecb229602124eb6c1007f5eae84df8e098885d3c",
-            "logIndex": "0x27",
+            "logIndex": 39,
             "removed": false
         }"#;
         let parsed_event =
@@ -80,11 +80,11 @@ mod parser {
                 "0x1d9facb184cbe453de4841b6b9d9cc95bfc065344e485789b550544529020000"
             ],
             "data": "0x0000000000000000000000000000000000000000000000008ac7230489e80000",
-            "blockNumber": "0x5146a4",
+            "blockNumber": 5326500,
             "transactionHash": "0x44d8e93a8f4bbc89ad35fc4fbbdb12cb597b4832da09c0b2300777be180fde87",
-            "transactionIndex": "0x22",
+            "transactionIndex": 34,
             "blockHash": "0x0cbfb260e2e589ef110e63314279eb3ef2e307e46fa5409f08c101976858f80a",
-            "logIndex": "0x27",
+            "logIndex": 39,
             "removed": false
         }"#;
         let parsed_event =
@@ -125,11 +125,11 @@ mod parser {
                 "0x1d9facb184cbe453de4841b6b9d9cc95bfc065344e485789b550544529020000"
             ],
             "data": "0x000000000000000000000000000000000000000000000000000000000000000aff00000000000000000000000000000000000000000000000000000000000000",
-            "blockNumber": "0x6a5c7b",
+            "blockNumber": 6970491,
             "transactionHash": "0x89a5cd5304b8e210e1888862be09d6bb75ba0d1b9e741021223758f92f714a15",
-            "transactionIndex": "0x7",
+            "transactionIndex": 7,
             "blockHash": "0x610b7733af90f0ddbcc15756e6de041c928804ad01a1bb036aeeec43e29a1a45",
-            "logIndex": "0x5",
+            "logIndex": 5,
             "removed": false
         }"#;
         let parsed_event = ReceivedEthOrErc20LogParser::parse_log(
@@ -173,11 +173,11 @@ mod parser {
                 "0x1d9facb184cbe453de4841b6b9d9cc95bfc065344e485789b550544529020000"
             ],
             "data": "0x00000000000000000000000000000000000000000000000000038d7ea4c68000ff00000000000000000000000000000000000000000000000000000000000000",
-            "blockNumber": "0x6a5c69",
+            "blockNumber": 6970473,
             "transactionHash": "0x5a258e23fa361d60dcee4cd1eac24473cc4391e1cb4022aea722c49ab26cadf8",
-            "transactionIndex": "0xc",
+            "transactionIndex": 12,
             "blockHash": "0xc419283f22e6c6d33971837a01962c9688f291499971bd22b08e596db40b167a",
-            "logIndex": "0xa",
+            "logIndex": 10,
             "removed": false
         }"#;
         let parsed_event = ReceivedEthOrErc20LogParser::parse_log(
@@ -219,11 +219,11 @@ mod parser {
                 "0x09efcdab00000000000100000000000000000000000000000000000000000000"
             ],
             "data": "0x000000000000000000000000000000000000000000000000002386f26fc10000",
-            "blockNumber": "0x3ca487",
+            "blockNumber": 3974279,
             "transactionHash": "0x705f826861c802b407843e99af986cfde8749b669e5e0a5a150f4350bcaa9bc3",
-            "transactionIndex": "0x22",
+            "transactionIndex": 34,
             "blockHash": "0x8436209a391f7bc076123616ecb229602124eb6c1007f5eae84df8e098885d3c",
-            "logIndex": "0x27",
+            "logIndex": 39,
             "removed": true
         }"#;
 
@@ -253,11 +253,12 @@ mod scraping {
             LogScraping, ReceivedEthOrErc20LogScraping,
             RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC,
         };
-        use crate::eth_rpc::{FixedSizeData, Topic};
+        use crate::eth_rpc::Topic;
         use crate::lifecycle::EthereumNetwork;
         use crate::numeric::BlockNumber;
         use crate::state::eth_logs_scraping::LogScrapingId;
         use crate::test_fixtures::initial_state;
+        use evm_rpc_client::Hex32;
         use hex_literal::hex;
         use ic_ethereum_types::Address;
 
@@ -300,10 +301,10 @@ mod scraping {
             assert_eq!(
                 scrape_without_erc20.topics,
                 vec![
-                    Topic::Single(FixedSizeData(
+                    Topic::Single(Hex32::from(
                         RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC
                     )),
-                    Topic::Multiple(vec![FixedSizeData::ZERO])
+                    Topic::Multiple(vec![Hex32::from([0_u8; 32])])
                 ]
             );
 
@@ -325,7 +326,7 @@ mod scraping {
                         let mut topics = scrape_without_erc20.topics;
                         let _ = std::mem::replace(
                             &mut topics[1],
-                            Topic::Multiple(vec![FixedSizeData::ZERO, FixedSizeData(hex!("0000000000000000000000001c7d4b196cb0c7b01d743fbc6116a902379c7238"))]),
+                            Topic::Multiple(vec![Hex32::from([0_u8; 32]), Hex32::from(hex!("0000000000000000000000001c7d4b196cb0c7b01d743fbc6116a902379c7238"))]),
                         );
                         topics
                     },
@@ -338,9 +339,9 @@ mod scraping {
 
 mod parse_principal_from_slice {
     use crate::eth_logs::parse_principal_from_slice;
-    use crate::eth_rpc::FixedSizeData;
     use assert_matches::assert_matches;
     use candid::Principal;
+    use evm_rpc_client::Hex32;
     use std::str::FromStr;
 
     const PRINCIPAL: &str = "2chl6-4hpzw-vqaaa-aaaaa-c";
@@ -431,11 +432,8 @@ mod parse_principal_from_slice {
             "0x09efcdab00000000000100000000000000000000000000000000000000000000"
         );
 
-        let decoded_principal = parse_principal_from_slice(
-            FixedSizeData::from_str(&encoded_principal)
-                .unwrap()
-                .as_ref(),
-        );
+        let decoded_principal =
+            parse_principal_from_slice(Hex32::from_str(&encoded_principal).unwrap().as_ref());
 
         assert_eq!(decoded_principal, Ok(principal));
     }
