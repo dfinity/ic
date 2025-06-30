@@ -41,7 +41,7 @@ use crate::{
     errors::ErrorCause,
     http::middleware::{cache::CacheState, geoip, retry::RetryResult},
     persist::RouteSubnet,
-    routes::{RequestContext, RequestType},
+    routes::{Health, RequestContext, RequestType},
     snapshot::{Node, RegistrySnapshot},
 };
 
@@ -138,8 +138,10 @@ pub struct MetricsRunner {
 
     mem_allocated: IntGauge,
     mem_resident: IntGauge,
+    healthy: IntGauge,
 
     published_registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
+    health: Arc<dyn Health>,
 }
 
 // Snapshots & encodes the metrics for the handler to export
@@ -149,6 +151,7 @@ impl MetricsRunner {
         registry: Registry,
         cache_state: Option<Arc<CacheState>>,
         published_registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
+        health: Arc<dyn Health>,
     ) -> Self {
         let mem_allocated = register_int_gauge_with_registry!(
             format!("memory_allocated"),
@@ -164,6 +167,13 @@ impl MetricsRunner {
         )
         .unwrap();
 
+        let healthy = register_int_gauge_with_registry!(
+            format!("healthy"),
+            format!("Node health status"),
+            registry
+        )
+        .unwrap();
+
         Self {
             metrics_cache,
             registry,
@@ -171,7 +181,9 @@ impl MetricsRunner {
             cache_state,
             mem_allocated,
             mem_resident,
+            healthy,
             published_registry_snapshot,
+            health,
         }
     }
 }
@@ -189,6 +201,10 @@ impl Run for MetricsRunner {
         if let Some(v) = &self.cache_state {
             v.update_metrics().await;
         }
+
+        // Record health metric
+        let healthy: i64 = (self.health.health() == ReplicaHealthStatus::Healthy).into();
+        self.healthy.set(healthy);
 
         // Get a snapshot of metrics
         let mut metric_families = self.registry.gather();
