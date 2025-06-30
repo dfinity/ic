@@ -6,9 +6,8 @@ load("//publish:defs.bzl", "artifact_bundle")
 # Check
 #       //ic-os/guestos/BUILD.bazel for examples
 #    or //ic-os/defs.bzl for the full list of targets.
-# TODO: revert back to recovery. Only exists for development purposes.
 icos_images = icos_build(
-    name = "dev-recovery",
+    name = "recovery",
     image_deps_func = image_deps,
     tags = [
         "manual",
