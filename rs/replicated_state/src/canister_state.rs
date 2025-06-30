@@ -345,13 +345,15 @@ impl CanisterState {
     pub fn check_invariants(&self, default_limit: NumBytes) -> Result<(), String> {
         let memory_used = self.memory_usage();
         let memory_limit = self.memory_limit(default_limit);
+        let canister_history_memory_usage = self.canister_history_memory_usage();
 
-        if memory_used > memory_limit {
+        if memory_used > memory_limit + canister_history_memory_usage {
             return Err(format!(
-                "Invariant broken: Memory of canister {} exceeds the limit allowed: used {}, allowed {}",
+                "Invariant broken: Memory of canister {} exceeds the limit allowed: used {}, allowed {}, canister history memory usage {}",
                 self.canister_id(),
                 memory_used,
-                memory_limit
+                memory_limit,
+                canister_history_memory_usage,
             ));
         }
 
