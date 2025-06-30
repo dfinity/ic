@@ -25,7 +25,7 @@ test_registry_data_stable_memory_impl!(DummyState, STATE);
 pub fn add_record_helper(key: &str, version: u64, value: Option<u64>) {
     STATE.with_borrow_mut(|map| {
         map.insert(
-            StorableRegistryKey::new(key.to_string(), version),
+            StorableRegistryKey::new(key.to_string(), version, 0),
             StorableRegistryValue(value.map(|v| vec![v as u8])),
         );
     });
