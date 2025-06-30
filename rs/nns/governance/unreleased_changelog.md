@@ -9,6 +9,8 @@ on the process that this file is part of, see
 
 ## Added
 
+* Add a metric for the nubmer of spawning neurons.
+
 ## Changed
 
 ## Deprecated
