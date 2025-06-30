@@ -2017,7 +2017,11 @@ impl Governance {
         &self,
         request: GetMetricsRequest,
     ) -> Result<Metrics, GovernanceError> {
-        let num_recently_submitted_proposals = self.recent_proposals(request.time_window_seconds);
+        let num_recently_submitted_proposals =
+            self.recently_submitted_proposals(request.time_window_seconds);
+
+        let num_recently_executed_proposals =
+            self.recently_executed_proposals(request.time_window_seconds);
         let icrc_ledger_helper = ICRCLedgerHelper::with_ledger(self.ledger.as_ref());
 
         let last_ledger_block_timestamp = icrc_ledger_helper
@@ -2029,11 +2033,12 @@ impl Governance {
 
         Ok(Metrics {
             num_recently_submitted_proposals,
+            num_recently_executed_proposals,
             last_ledger_block_timestamp,
         })
     }
 
-    fn recent_proposals(&self, time_window_seconds: u64) -> u64 {
+    fn recently_submitted_proposals(&self, time_window_seconds: u64) -> u64 {
         self.proto
             .proposals
             .values()
@@ -2042,6 +2047,19 @@ impl Governance {
                 self.env
                     .now()
                     .saturating_sub(proposal.proposal_creation_timestamp_seconds)
+                    <= time_window_seconds
+            })
+            .count() as u64
+    }
+
+    fn recently_executed_proposals(&self, time_window_seconds: u64) -> u64 {
+        self.proto
+            .proposals
+            .values()
+            .filter(|proposal| {
+                self.env
+                    .now()
+                    .saturating_sub(proposal.executed_timestamp_seconds)
                     <= time_window_seconds
             })
             .count() as u64

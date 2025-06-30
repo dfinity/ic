@@ -27,20 +27,14 @@ jobs:
   # Those test suites would overwhelm a runner, so each is run
   # as a separate job.
   release-system-tests:
-    name: Bazel System Tests (${{ matrix.tag }})
+    name: Release System Tests
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
+      image: ghcr.io/dfinity/ic-build@sha256:02165696a5201b1a347a28e548c32dc9590d60975c22be26ac1ea7e72573523d
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 180 # 3 hours
-    strategy:
-      matrix:
-        tag:
-          - system_test_nightly
-          - system_test_staging
-          - system_test_hotfix
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -52,18 +46,17 @@ jobs:
           run: |
             bazel test \
               --config=stamped \
-              --test_tag_filters=${{ matrix.tag }} \
+              --config=flaky_retry \
+              --test_tag_filters=system_test_large \
               //rs/tests/... \
               --keep_going
-          # prevent artifact name overlap
-          bep-artifact-name: ${{ github.job }}-${{ matrix.tag }}-bep
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
   dependency-scan-release-cut:
     name: Dependency Scan for Release
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
+      image: ghcr.io/dfinity/ic-build@sha256:02165696a5201b1a347a28e548c32dc9590d60975c22be26ac1ea7e72573523d
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 60
@@ -104,7 +97,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
+      image: ghcr.io/dfinity/ic-build@sha256:02165696a5201b1a347a28e548c32dc9590d60975c22be26ac1ea7e72573523d
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 180 # 3 hours
@@ -131,7 +124,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
+      image: ghcr.io/dfinity/ic-build@sha256:02165696a5201b1a347a28e548c32dc9590d60975c22be26ac1ea7e72573523d
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 180 # 3 hours
@@ -146,6 +139,7 @@ jobs:
           run: |
             bazel test \
               --config=stamped \
+              --config=flaky_retry \
               --test_tag_filters= \
               //rs/tests/dre:guest_os_qualification \
               --test_env=OLD_VERSION=${{ matrix.version }} \

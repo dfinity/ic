@@ -2169,6 +2169,65 @@ impl SystemApi for SystemApiImpl {
         result
     }
 
+    fn ic0_env_var_name_exists(
+        &self,
+        name_src: usize,
+        name_size: usize,
+        heap: &[u8],
+    ) -> HypervisorResult<i32> {
+        let result = match &self.api_type {
+            ApiType::Start { .. } => Err(self.error_for("ic0_env_var_name_exists")),
+            ApiType::Init { .. }
+            | ApiType::SystemTask { .. }
+            | ApiType::Update { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::CompositeQuery { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::CompositeCleanup { .. }
+            | ApiType::CompositeReplyCallback { .. }
+            | ApiType::CompositeRejectCallback { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::RejectCallback { .. }
+            | ApiType::InspectMessage { .. } => {
+                if name_size > MAX_ENV_VAR_NAME_SIZE {
+                    return Err(HypervisorError::UserContractViolation {
+                        error: "ic0.env_var_name_exists: Variable name is too large.".to_string(),
+                        suggestion: "".to_string(),
+                        doc_link: "".to_string(),
+                    });
+                }
+
+                let name_bytes = valid_subslice(
+                    "ic0.env_var_name_exists heap",
+                    InternalAddress::new(name_src),
+                    InternalAddress::new(name_size),
+                    heap,
+                )?;
+
+                let name = std::str::from_utf8(name_bytes).map_err(|_| {
+                    HypervisorError::UserContractViolation {
+                        error:
+                            "ic0.env_var_name_exists: Variable name is not a valid UTF-8 string."
+                                .to_string(),
+                        suggestion:
+                            "Provide a valid UTF-8 string for the environment variable name."
+                                .to_string(),
+                        doc_link: "".to_string(),
+                    }
+                })?;
+                Ok(self
+                    .sandbox_safe_system_state
+                    .environment_variables()
+                    .contains_key(name) as i32)
+            }
+        };
+
+        trace_syscall!(self, EnvVarNameExists, result);
+        result
+    }
+
     fn ic0_env_var_value_size(
         &self,
         name_src: usize,

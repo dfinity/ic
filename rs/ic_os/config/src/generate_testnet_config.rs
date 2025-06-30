@@ -246,6 +246,8 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
         network_settings,
         icos_settings,
         guestos_settings,
+        guest_vm_type: GuestVMType::Default,
+        upgrade_config: GuestOSUpgradeConfig::default(),
     };
 
     Ok(guestos_config)

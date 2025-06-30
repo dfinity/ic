@@ -33,6 +33,11 @@ pub trait Request: Send {
     fn method(&self) -> &'static str;
     fn update(&self) -> bool;
     fn payload(&self) -> Result<Vec<u8>, candid::Error>;
+
+    /// See https://internetcomputer.org/docs/references/ic-interface-spec#http-interface
+    fn effective_canister_id(&self) -> Option<Principal> {
+        None
+    }
     type Response: CandidType + DeserializeOwned + Send;
 }
 

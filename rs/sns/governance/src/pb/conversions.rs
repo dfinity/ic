@@ -1,3 +1,5 @@
+use core::option::Option::Some;
+
 use crate::pb::v1::{self as pb};
 use crate::topics;
 use ic_sns_governance_api::pb::v1 as pb_api;
@@ -1950,9 +1952,12 @@ impl From<pb::Metrics> for pb_api::get_metrics_response::Metrics {
         let pb::Metrics {
             num_recently_submitted_proposals,
             last_ledger_block_timestamp,
+            num_recently_executed_proposals,
         } = item;
 
         let num_recently_submitted_proposals = Some(num_recently_submitted_proposals);
+        let num_recently_executed_proposals = Some(num_recently_executed_proposals);
+
         let last_ledger_block_timestamp = if last_ledger_block_timestamp == 0 {
             None
         } else {
@@ -1961,6 +1966,7 @@ impl From<pb::Metrics> for pb_api::get_metrics_response::Metrics {
 
         Self {
             num_recently_submitted_proposals,
+            num_recently_executed_proposals,
             last_ledger_block_timestamp,
         }
     }

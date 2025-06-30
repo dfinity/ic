@@ -2341,6 +2341,8 @@ pub struct Metrics {
     pub num_recently_submitted_proposals: u64,
     #[prost(uint64, tag = "2")]
     pub last_ledger_block_timestamp: u64,
+    #[prost(uint64, tag = "3")]
+    pub num_recently_executed_proposals: u64,
 }
 /// Request message for 'get_sns_initialization_parameters'
 #[derive(

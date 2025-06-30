@@ -343,11 +343,13 @@ fn test_caching_behavior_of_get_latest_version() {
                     value: vec![1],
                     version: 1,
                     deletion_marker: false,
+                    timestamp_nanoseconds: 0,
                 },
                 RegistryValue {
                     value: vec![2],
                     version: 2,
                     deletion_marker: false,
+                    timestamp_nanoseconds: 0,
                 },
             ],
         }])
@@ -377,6 +379,7 @@ fn test_caching_behavior_of_get_latest_version() {
                 value: vec![3],
                 version: 3,
                 deletion_marker: false,
+                timestamp_nanoseconds: 0,
             }],
         }])
         .expect("Couldn't add deltas");

@@ -499,12 +499,16 @@ class RosettaClient:
         }
         return self._send("block/transaction", payload, verbose=verbose)
 
-    def search_transactions(self, address=None, start_index=None, limit=10, verbose=False):
+    def search_transactions(
+        self, address=None, transaction_hash=None, operation_type=None, start_index=None, limit=10, verbose=False
+    ):
         """
-        Search for transactions related to an address.
+        Search for transactions related to an address, by hash, or by operation type.
 
         Args:
             address (str, optional): The account identifier to search for. Defaults to None.
+            transaction_hash (str, optional): The transaction hash to search for. Defaults to None.
+            operation_type (str, optional): The operation type to search for (e.g., TRANSFER, MINT). Defaults to None.
             start_index (int, optional): The starting index for pagination. Defaults to None.
             limit (int, optional): The maximum number of transactions to return. Defaults to 10.
             verbose (bool, optional): Whether to print verbose output. Defaults to False.
@@ -517,6 +521,12 @@ class RosettaClient:
 
         if address:
             payload["account_identifier"] = {"address": address}
+
+        if transaction_hash:
+            payload["transaction_identifier"] = {"hash": transaction_hash}
+
+        if operation_type:
+            payload["type"] = operation_type
 
         if start_index:
             payload["offset"] = start_index
