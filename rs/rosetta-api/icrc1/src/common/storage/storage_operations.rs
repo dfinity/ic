@@ -690,23 +690,32 @@ pub fn get_aggregated_balance_for_principal_at_block_idx(
              WHERE a2.principal = a1.principal
              AND a2.subaccount = a1.subaccount
              AND a2.block_idx <= :block_idx
-         )"
+         )",
     )?;
 
-    let rows = stmt.query_map(named_params! {
-        ":principal": principal.as_slice(),
-        ":block_idx": block_idx
-    }, |row| {
-        let amount_str: String = row.get(1)?;
-        Ok(Nat::from_str(&amount_str).map_err(|_| rusqlite::Error::InvalidColumnType(
-            1, "amount".to_string(), rusqlite::types::Type::Text
-        ))?)
-    })?;
+    let rows = stmt.query_map(
+        named_params! {
+            ":principal": principal.as_slice(),
+            ":block_idx": block_idx
+        },
+        |row| {
+            let amount_str: String = row.get(1)?;
+            Ok(Nat::from_str(&amount_str).map_err(|_| {
+                rusqlite::Error::InvalidColumnType(
+                    1,
+                    "amount".to_string(),
+                    rusqlite::types::Type::Text,
+                )
+            })?)
+        },
+    )?;
 
     let mut total_balance = Nat(BigUint::zero());
     for balance_result in rows {
         let balance = balance_result?;
-        total_balance = Nat(total_balance.0.checked_add(&balance.0)
+        total_balance = Nat(total_balance
+            .0
+            .checked_add(&balance.0)
             .with_context(|| "Overflow while aggregating balances")?);
     }
 

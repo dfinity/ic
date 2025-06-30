@@ -57,12 +57,14 @@ fn test_aggregated_balance_method_creates_correct_metadata() {
     // We can't easily test the internal metadata creation without mocking the HTTP client,
     // but we can test that the method exists and has the right signature
     let client = RosettaClient::from_str_url("http://localhost:8080").unwrap();
-    
+
     // This test verifies the method signature exists and is callable
     rt.block_on(async {
         // This will fail with a connection error since there's no server,
         // but it proves the method exists with the right signature
-        let result = client.account_balance_aggregated(0, account_identifier, network_identifier).await;
+        let result = client
+            .account_balance_aggregated(0, account_identifier, network_identifier)
+            .await;
         assert!(result.is_err()); // Expected to fail due to no server
     });
 }
@@ -92,7 +94,7 @@ fn test_regular_balance_vs_aggregated_balance_requests() {
     // Aggregated balance request (with metadata)
     let mut metadata_map = Map::new();
     metadata_map.insert("aggregate_all_subaccounts".to_string(), Value::Bool(true));
-    
+
     let aggregated_request = AccountBalanceRequest {
         block_identifier: Some(PartialBlockIdentifier {
             index: Some(0),
@@ -106,7 +108,7 @@ fn test_regular_balance_vs_aggregated_balance_requests() {
     // Verify the difference
     assert!(regular_request.metadata.is_none());
     assert!(aggregated_request.metadata.is_some());
-    
+
     let metadata = aggregated_request.metadata.unwrap();
     assert_eq!(
         metadata.get("aggregate_all_subaccounts"),
@@ -179,10 +181,14 @@ fn test_account_suitable_for_aggregation() {
 
     // The aggregatable account should be the one used with account_balance_aggregated
     // The documentation states that the account must not specify a subaccount
-    assert!(aggregatable_account.subaccount.is_none(), 
-        "Account suitable for aggregation must have subaccount = None");
-    assert!(non_aggregatable_account.subaccount.is_some(), 
-        "Account with specific subaccount should not be used for aggregation");
+    assert!(
+        aggregatable_account.subaccount.is_none(),
+        "Account suitable for aggregation must have subaccount = None"
+    );
+    assert!(
+        non_aggregatable_account.subaccount.is_some(),
+        "Account with specific subaccount should not be used for aggregation"
+    );
 }
 
 #[test]
@@ -198,6 +204,9 @@ fn test_aggregate_all_subaccounts_metadata_field() {
     // Test that it's different from false
     let mut metadata_false = Map::new();
     metadata_false.insert("aggregate_all_subaccounts".to_string(), Value::Bool(false));
-    
-    assert_ne!(metadata["aggregate_all_subaccounts"], metadata_false["aggregate_all_subaccounts"]);
+
+    assert_ne!(
+        metadata["aggregate_all_subaccounts"],
+        metadata_false["aggregate_all_subaccounts"]
+    );
 }

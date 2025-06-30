@@ -308,7 +308,11 @@ impl StorageClient {
         block_idx: u64,
     ) -> anyhow::Result<Nat> {
         let open_connection = self.storage_connection.lock().unwrap();
-        storage_operations::get_aggregated_balance_for_principal_at_block_idx(&open_connection, principal, block_idx)
+        storage_operations::get_aggregated_balance_for_principal_at_block_idx(
+            &open_connection,
+            principal,
+            block_idx,
+        )
     }
 
     pub fn get_block_count(&self) -> anyhow::Result<u64> {

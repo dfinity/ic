@@ -246,17 +246,17 @@ pub fn account_balance_with_metadata(
         // Validate that no subaccount is specified when aggregating all subaccounts
         let account = Account::try_from(account_identifier.clone())
             .map_err(|err| Error::parsing_unsuccessful(&err))?;
-        
+
         // Check if a non-default subaccount is specified
         // Note: subaccount None and Some([0; 32]) both represent the default subaccount
         let has_non_default_subaccount = match account.subaccount {
             None => false,
             Some(subaccount) => subaccount != [0u8; 32],
         };
-        
+
         if has_non_default_subaccount {
-            return Err(Error::request_processing_error(&
-                "Cannot specify subaccount when aggregate_all_subaccounts is true".to_owned()
+            return Err(Error::request_processing_error(
+                &"Cannot specify subaccount when aggregate_all_subaccounts is true".to_owned(),
             ));
         }
 
@@ -1504,51 +1504,54 @@ mod test {
 
     #[test]
     fn test_account_balance_with_aggregate_all_subaccounts() {
+        use crate::common::storage::types::{
+            IcrcBlock, IcrcOperation, IcrcTransaction, RosettaBlock,
+        };
         use candid::{Nat, Principal};
         use icrc_ledger_types::icrc1::account::Account;
         use rosetta_core::identifiers::AccountIdentifier;
         use serde_json::{Map, Value};
-        use crate::common::storage::types::{IcrcBlock, IcrcOperation, IcrcTransaction, RosettaBlock};
 
         let storage_client = StorageClient::new_in_memory().unwrap();
         let metadata = Metadata::from_args("ICP".to_string(), 8);
-        
+
         let principal = Principal::anonymous();
-        
+
         // First, add some blocks to the database so we can test the validation logic
-        let main_account = Account { owner: principal, subaccount: None };
-        let blocks = vec![
-            RosettaBlock::from_icrc_ledger_block(
-                IcrcBlock {
-                    parent_hash: None,
-                    transaction: IcrcTransaction {
-                        operation: IcrcOperation::Mint {
-                            to: main_account,
-                            amount: Nat::from(1000u64),
-                        },
-                        created_at_time: Some(1000),
-                        memo: None,
+        let main_account = Account {
+            owner: principal,
+            subaccount: None,
+        };
+        let blocks = vec![RosettaBlock::from_icrc_ledger_block(
+            IcrcBlock {
+                parent_hash: None,
+                transaction: IcrcTransaction {
+                    operation: IcrcOperation::Mint {
+                        to: main_account,
+                        amount: Nat::from(1000u64),
                     },
-                    effective_fee: None,
-                    timestamp: 1000,
-                    fee_collector: None,
-                    fee_collector_block_index: None,
+                    created_at_time: Some(1000),
+                    memo: None,
                 },
-                0,
-            ),
-        ];
-        
+                effective_fee: None,
+                timestamp: 1000,
+                fee_collector: None,
+                fee_collector_block_index: None,
+            },
+            0,
+        )];
+
         storage_client.store_blocks(blocks).unwrap();
         storage_client.update_account_balances().unwrap();
-        
+
         // Test 1: Aggregate flag with subaccount should fail
         let account_with_subaccount = Account {
             owner: principal,
             subaccount: Some([1u8; 32]),
         };
-        
+
         let account_identifier = AccountIdentifier::from(account_with_subaccount);
-        
+
         let mut metadata_map = Map::new();
         metadata_map.insert("aggregate_all_subaccounts".to_string(), Value::Bool(true));
         let metadata_obj = Some(metadata_map.clone());
@@ -1561,13 +1564,14 @@ mod test {
             metadata.decimals,
             metadata.symbol.clone(),
         );
-        
+
         assert!(result.is_err());
         // Now that we have blocks, we should get the validation error
         match result.unwrap_err() {
             Error(err) => {
                 let description = err.description.as_ref().unwrap();
-                assert!(description.contains("Cannot specify subaccount when aggregate_all_subaccounts is true"));
+                assert!(description
+                    .contains("Cannot specify subaccount when aggregate_all_subaccounts is true"));
             }
         }
 
@@ -1575,8 +1579,11 @@ mod test {
         // Use a separate storage client for the aggregation test
         let storage_client2 = StorageClient::new_in_memory().unwrap();
         let subaccount1 = [1u8; 32];
-        let account1 = Account { owner: principal, subaccount: Some(subaccount1) };
-        
+        let account1 = Account {
+            owner: principal,
+            subaccount: Some(subaccount1),
+        };
+
         // Create simple minting transactions
         let blocks = vec![
             RosettaBlock::from_icrc_ledger_block(
@@ -1616,16 +1623,19 @@ mod test {
                 1,
             ),
         ];
-        
+
         storage_client2.store_blocks(blocks).unwrap();
         storage_client2.update_account_balances().unwrap();
-        
+
         // Test aggregated balance: Should be 500 + 1000 = 1500
         // For aggregated balance, we need to use an account identifier that represents
         // the principal without any subaccount information (which is None)
-        let account_for_aggregation = Account { owner: principal, subaccount: None };
+        let account_for_aggregation = Account {
+            owner: principal,
+            subaccount: None,
+        };
         let account_identifier = AccountIdentifier::from(account_for_aggregation);
-        
+
         let result = account_balance_with_metadata(
             &storage_client2,
             &account_identifier,
@@ -1634,12 +1644,12 @@ mod test {
             metadata.decimals,
             metadata.symbol.clone(),
         );
-        
+
         assert!(result.is_ok());
         let balance_response = result.unwrap();
         assert_eq!(balance_response.balances.len(), 1);
         assert_eq!(balance_response.balances[0].value.to_string(), "1500");
-        
+
         // Test individual account balances to verify they're correct
         let account1_identifier = AccountIdentifier::from(account1);
         let result1 = account_balance_with_metadata(
@@ -1652,7 +1662,7 @@ mod test {
         );
         assert!(result1.is_ok());
         assert_eq!(result1.unwrap().balances[0].value.to_string(), "1000");
-        
+
         let main_account_identifier = AccountIdentifier::from(main_account);
         let result_main = account_balance_with_metadata(
             &storage_client2,
@@ -1664,7 +1674,7 @@ mod test {
         );
         assert!(result_main.is_ok());
         assert_eq!(result_main.unwrap().balances[0].value.to_string(), "500");
-        
+
         // Test 3: Normal account balance request without aggregate flag should work
         let result = account_balance_with_metadata(
             &storage_client2,
@@ -1674,7 +1684,7 @@ mod test {
             metadata.decimals,
             metadata.symbol.clone(),
         );
-        
+
         assert!(result.is_ok());
         let balance_response = result.unwrap();
         assert_eq!(balance_response.balances.len(), 1);
@@ -1684,42 +1694,62 @@ mod test {
 
     #[test]
     fn test_subaccount_transfers_and_balances() {
+        use crate::common::storage::types::{
+            IcrcBlock, IcrcOperation, IcrcTransaction, RosettaBlock,
+        };
         use candid::{Nat, Principal};
         use icrc_ledger_types::icrc1::account::Account;
         use rosetta_core::identifiers::AccountIdentifier;
-        use crate::common::storage::types::{IcrcBlock, IcrcOperation, IcrcTransaction, RosettaBlock};
 
         let storage_client = StorageClient::new_in_memory().unwrap();
         let metadata = Metadata::from_args("ICP".to_string(), 8);
-        
+
         let principal = Principal::anonymous();
-        
+
         // Create accounts with different subaccounts
-        let main_account = Account { owner: principal, subaccount: None };
+        let main_account = Account {
+            owner: principal,
+            subaccount: None,
+        };
         let subaccount1 = [1u8; 32];
-        let account1 = Account { owner: principal, subaccount: Some(subaccount1) };
+        let account1 = Account {
+            owner: principal,
+            subaccount: Some(subaccount1),
+        };
         let subaccount2 = [2u8; 32];
-        let account2 = Account { owner: principal, subaccount: Some(subaccount2) };
-        
+        let account2 = Account {
+            owner: principal,
+            subaccount: Some(subaccount2),
+        };
+
         // Create a different principal for external transfers
         let other_principal = Principal::from_slice(&[1, 2, 3, 4, 5]);
-        let other_account = Account { owner: other_principal, subaccount: None };
-        
+        let other_account = Account {
+            owner: other_principal,
+            subaccount: None,
+        };
+
         // Simulate a series of transactions that would come through Rosetta construction API:
         // 1. Mint to main account (block 0)
         // 2. Transfer from main account to subaccount1 (block 1)
         // 3. Transfer from main account to subaccount2 (block 2)
         // 4. Transfer from subaccount1 to other_account (block 3)
-        
+
         // Test the AccountIdentifier round-trip conversion to ensure subaccounts are preserved
         let account1_identifier: AccountIdentifier = account1.clone().into();
         let account1_converted: Account = account1_identifier.try_into().unwrap();
-        assert_eq!(account1, account1_converted, "Account with subaccount should survive round-trip conversion");
-        
+        assert_eq!(
+            account1, account1_converted,
+            "Account with subaccount should survive round-trip conversion"
+        );
+
         let account2_identifier: AccountIdentifier = account2.clone().into();
         let account2_converted: Account = account2_identifier.try_into().unwrap();
-        assert_eq!(account2, account2_converted, "Account with subaccount should survive round-trip conversion");
-        
+        assert_eq!(
+            account2, account2_converted,
+            "Account with subaccount should survive round-trip conversion"
+        );
+
         let blocks = vec![
             // Block 0: Mint 1000 to main account
             RosettaBlock {
@@ -1807,13 +1837,13 @@ mod test {
                 },
             },
         ];
-        
+
         // Store blocks
         storage_client.store_blocks(blocks).unwrap();
-        
+
         // Update account balances
         storage_client.update_account_balances().unwrap();
-        
+
         // Test individual account balances
         let main_balance = account_balance(
             &storage_client,
@@ -1821,44 +1851,51 @@ mod test {
             &None,
             metadata.decimals,
             metadata.symbol.clone(),
-        ).unwrap();
+        )
+        .unwrap();
         // Main account: 1000 - 300 - 10 - 200 - 10 = 480
         assert_eq!(main_balance.balances[0].value.to_string(), "480");
-        
+
         let account1_balance = account_balance(
             &storage_client,
             &account1.clone().into(),
             &None,
             metadata.decimals,
             metadata.symbol.clone(),
-        ).unwrap();
+        )
+        .unwrap();
         // Account1: 300 - 150 - 10 = 140
         assert_eq!(account1_balance.balances[0].value.to_string(), "140");
-        
+
         let account2_balance = account_balance(
             &storage_client,
             &account2.clone().into(),
             &None,
             metadata.decimals,
             metadata.symbol.clone(),
-        ).unwrap();
+        )
+        .unwrap();
         // Account2: 200
         assert_eq!(account2_balance.balances[0].value.to_string(), "200");
-        
+
         let other_balance = account_balance(
             &storage_client,
             &other_account.clone().into(),
             &None,
             metadata.decimals,
             metadata.symbol.clone(),
-        ).unwrap();
+        )
+        .unwrap();
         // Other account: 150
         assert_eq!(other_balance.balances[0].value.to_string(), "150");
-        
+
         // Test aggregated balance
         let mut metadata_map = serde_json::Map::new();
-        metadata_map.insert("aggregate_all_subaccounts".to_string(), serde_json::Value::Bool(true));
-        
+        metadata_map.insert(
+            "aggregate_all_subaccounts".to_string(),
+            serde_json::Value::Bool(true),
+        );
+
         let aggregated_balance = account_balance_with_metadata(
             &storage_client,
             &main_account.clone().into(),
@@ -1866,8 +1903,9 @@ mod test {
             &Some(metadata_map),
             metadata.decimals,
             metadata.symbol.clone(),
-        ).unwrap();
-        
+        )
+        .unwrap();
+
         // Aggregated balance: 480 (main) + 140 (account1) + 200 (account2) = 820
         assert_eq!(aggregated_balance.balances[0].value.to_string(), "820");
     }
@@ -1875,49 +1913,49 @@ mod test {
     #[test]
     fn test_construction_api_subaccount_preservation() {
         // Test that the construction API preserves subaccounts correctly through the entire flow
+        use crate::common::utils::utils::rosetta_core_operations_to_icrc1_operation;
         use candid::{Nat, Principal};
         use icrc_ledger_types::icrc1::account::Account;
-        use rosetta_core::identifiers::AccountIdentifier;
-        use rosetta_core::objects::{Amount, Operation, Currency};
-        use rosetta_core::identifiers::OperationIdentifier;
         use num_bigint::BigInt;
-        use crate::common::utils::utils::rosetta_core_operations_to_icrc1_operation;
-        
+        use rosetta_core::identifiers::AccountIdentifier;
+        use rosetta_core::identifiers::OperationIdentifier;
+        use rosetta_core::objects::{Amount, Currency, Operation};
+
         let principal1 = Principal::from_text("rdmx6-jaaaa-aaaaa-aaadq-cai").unwrap();
         let principal2 = Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap();
-        
+
         // Create accounts with specific non-zero subaccounts
-        let from_subaccount = [1u8; 32];  // Non-zero subaccount
+        let from_subaccount = [1u8; 32]; // Non-zero subaccount
         let mut to_subaccount = [0u8; 32];
-        to_subaccount[31] = 42;  // Different non-zero subaccount: [0, 0, ..., 0, 42]
-        
+        to_subaccount[31] = 42; // Different non-zero subaccount: [0, 0, ..., 0, 42]
+
         let from_account = Account {
             owner: principal1,
             subaccount: Some(from_subaccount),
         };
-        
+
         let to_account = Account {
             owner: principal2,
             subaccount: Some(to_subaccount),
         };
-        
+
         println!("Original from_account: {:?}", from_account);
         println!("Original to_account: {:?}", to_account);
-        
+
         // Step 1: Convert accounts to AccountIdentifiers (like the client would)
         let from_account_identifier: AccountIdentifier = from_account.clone().into();
         let to_account_identifier: AccountIdentifier = to_account.clone().into();
-        
+
         println!("from_account_identifier: {:?}", from_account_identifier);
         println!("to_account_identifier: {:?}", to_account_identifier);
-        
+
         // Step 2: Build Rosetta operations (like the client would)
         let currency = Currency {
             symbol: "ICP".to_string(),
             decimals: 8,
             metadata: None,
         };
-        
+
         let transfer_from_operation = Operation {
             operation_identifier: OperationIdentifier {
                 index: 0,
@@ -1951,12 +1989,12 @@ mod test {
             coin_change: None,
             metadata: None,
         };
-        
+
         let operations = vec![transfer_from_operation, transfer_to_operation];
-        
+
         // Step 3: Convert operations to ICRC1 operation (like the server would)
         let icrc1_operation = rosetta_core_operations_to_icrc1_operation(operations).unwrap();
-        
+
         // Step 4: Verify the operation preserves subaccounts
         match icrc1_operation {
             crate::common::storage::types::IcrcOperation::Transfer {
@@ -1964,13 +2002,20 @@ mod test {
             } => {
                 println!("Converted from: {:?}", from);
                 println!("Converted to: {:?}", to);
-                
-                assert_eq!(from, from_account, 
-                    "From account with subaccount should be preserved through construction API");
-                assert_eq!(to, to_account,
-                    "To account with subaccount should be preserved through construction API");
-                assert_eq!(amount, Nat::from(100000000u64),
-                    "Amount should be preserved");
+
+                assert_eq!(
+                    from, from_account,
+                    "From account with subaccount should be preserved through construction API"
+                );
+                assert_eq!(
+                    to, to_account,
+                    "To account with subaccount should be preserved through construction API"
+                );
+                assert_eq!(
+                    amount,
+                    Nat::from(100000000u64),
+                    "Amount should be preserved"
+                );
             }
             _ => panic!("Expected Transfer operation"),
         }
@@ -1983,68 +2028,86 @@ mod test {
         use candid::Principal;
         use icrc_ledger_types::icrc1::account::Account;
         use rosetta_core::identifiers::AccountIdentifier;
-        
+
         let principal = Principal::from_text("rdmx6-jaaaa-aaaaa-aaadq-cai").unwrap();
-        
+
         // Test 1: Account with None subaccount should remain None after round-trip
         let account_none = Account {
             owner: principal,
             subaccount: None,
         };
-        
+
         let account_identifier_none: AccountIdentifier = account_none.clone().into();
         let converted_back_none: Account = account_identifier_none.try_into().unwrap();
-        
+
         println!("Original account (None): {:?}", account_none);
         println!("Converted back (None): {:?}", converted_back_none);
-        
+
         // This should pass with correct code, fail with buggy code
-        assert_eq!(account_none, converted_back_none,
-            "Account with None subaccount should be preserved through round-trip conversion");
-        
+        assert_eq!(
+            account_none, converted_back_none,
+            "Account with None subaccount should be preserved through round-trip conversion"
+        );
+
         // Test 2: Account with non-zero subaccount should be preserved
         let non_zero_subaccount = [1u8; 32];
         let account_nonzero = Account {
             owner: principal,
             subaccount: Some(non_zero_subaccount),
         };
-        
+
         let account_identifier_nonzero: AccountIdentifier = account_nonzero.clone().into();
         let converted_back_nonzero: Account = account_identifier_nonzero.try_into().unwrap();
-        
+
         println!("Original account (non-zero): {:?}", account_nonzero);
         println!("Converted back (non-zero): {:?}", converted_back_nonzero);
-        
+
         // This should pass with correct code, fail with buggy code
-        assert_eq!(account_nonzero, converted_back_nonzero,
-            "Account with non-zero subaccount should be preserved through round-trip conversion");
+        assert_eq!(
+            account_nonzero, converted_back_nonzero,
+            "Account with non-zero subaccount should be preserved through round-trip conversion"
+        );
     }
 
     #[test]
     fn test_debug_aggregated_balance_sql() {
+        use crate::common::storage::types::{
+            IcrcBlock, IcrcOperation, IcrcTransaction, RosettaBlock,
+        };
         use candid::{Nat, Principal};
-        use icrc_ledger_types::icrc1::account::Account;
-        use crate::common::storage::types::{IcrcBlock, IcrcOperation, IcrcTransaction, RosettaBlock};
         use ic_base_types::PrincipalId;
+        use icrc_ledger_types::icrc1::account::Account;
 
         let storage_client = StorageClient::new_in_memory().unwrap();
         let _metadata = Metadata::from_args("ICP".to_string(), 8);
-        
+
         let principal = Principal::anonymous();
-        
+
         // Create the EXACT scenario that causes the bug:
         // 1. Default subaccount (None) - stored as [0; 32] in DB due to effective_subaccount()
         // 2. Explicit [0; 32] subaccount - also stored as [0; 32] in DB
         // 3. Non-zero subaccount - stored as its actual value
-        
-        let main_account = Account { owner: principal, subaccount: None };
-        let explicit_zero_account = Account { owner: principal, subaccount: Some([0u8; 32]) };
-        let subaccount1 = [0u8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1];
-        let account1 = Account { owner: principal, subaccount: Some(subaccount1) };
-        
+
+        let main_account = Account {
+            owner: principal,
+            subaccount: None,
+        };
+        let explicit_zero_account = Account {
+            owner: principal,
+            subaccount: Some([0u8; 32]),
+        };
+        let subaccount1 = [
+            0u8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 1,
+        ];
+        let account1 = Account {
+            owner: principal,
+            subaccount: Some(subaccount1),
+        };
+
         // Create transactions to give each account a balance
         let mut blocks = Vec::new();
-        
+
         // Block 0: Mint 0.06 to main account (None subaccount)
         blocks.push(RosettaBlock::from_icrc_ledger_block(
             IcrcBlock {
@@ -2064,8 +2127,8 @@ mod test {
             },
             0,
         ));
-        
-        // Block 1: Mint 0.01 to explicit [0;32] subaccount  
+
+        // Block 1: Mint 0.01 to explicit [0;32] subaccount
         blocks.push(RosettaBlock::from_icrc_ledger_block(
             IcrcBlock {
                 parent_hash: None,
@@ -2084,7 +2147,7 @@ mod test {
             },
             1,
         ));
-        
+
         // Block 2: Mint 0.01 to account1 (non-zero subaccount)
         blocks.push(RosettaBlock::from_icrc_ledger_block(
             IcrcBlock {
@@ -2104,48 +2167,65 @@ mod test {
             },
             2,
         ));
-        
+
         // Store blocks and update balances
         storage_client.store_blocks(blocks).unwrap();
         storage_client.update_account_balances().unwrap();
-        
+
         // Check individual balances (use a reasonable high block index instead of u64::MAX)
         let high_block_idx = 1000u64;
-        let main_balance = storage_client.get_account_balance_at_block_idx(&main_account, high_block_idx).unwrap().unwrap_or(Nat::from(0u64));
-        let explicit_zero_balance = storage_client.get_account_balance_at_block_idx(&explicit_zero_account, high_block_idx).unwrap().unwrap_or(Nat::from(0u64));
-        let account1_balance = storage_client.get_account_balance_at_block_idx(&account1, high_block_idx).unwrap().unwrap_or(Nat::from(0u64));
-        
+        let main_balance = storage_client
+            .get_account_balance_at_block_idx(&main_account, high_block_idx)
+            .unwrap()
+            .unwrap_or(Nat::from(0u64));
+        let explicit_zero_balance = storage_client
+            .get_account_balance_at_block_idx(&explicit_zero_account, high_block_idx)
+            .unwrap()
+            .unwrap_or(Nat::from(0u64));
+        let account1_balance = storage_client
+            .get_account_balance_at_block_idx(&account1, high_block_idx)
+            .unwrap()
+            .unwrap_or(Nat::from(0u64));
+
         println!("Individual balances:");
         println!("  Main account (None): {}", main_balance);
         println!("  Explicit [0;32] account: {}", explicit_zero_balance);
         println!("  Account1 (non-zero): {}", account1_balance);
-        
+
         // Check aggregated balance
-        let aggregated_balance = storage_client.get_aggregated_balance_for_principal_at_block_idx(
-            &PrincipalId::from(principal),
-            high_block_idx,
-        ).unwrap();
-        
+        let aggregated_balance = storage_client
+            .get_aggregated_balance_for_principal_at_block_idx(
+                &PrincipalId::from(principal),
+                high_block_idx,
+            )
+            .unwrap();
+
         println!("Aggregated balance: {}", aggregated_balance);
-        
+
         // Expected: 6000000 + 1000000 + 1000000 = 8000000
         let expected_total = Nat::from(8000000u64);
         println!("Expected total: {}", expected_total);
-        
+
         // Debug: Let's manually check what the SQL query returns by using the storage operations directly
         println!("Debug: This demonstrates the bug where DISTINCT subaccounts causes incorrect aggregation");
         println!("Both None and Some([0;32]) get stored as [0;32] in the database");
         println!("The DISTINCT clause in the aggregation query then treats them as one account");
-        
+
         // Use a simpler approach - just check if the aggregated balance matches expected
-        println!("Checking if aggregated balance ({}) matches expected ({})", aggregated_balance, expected_total);
-        
+        println!(
+            "Checking if aggregated balance ({}) matches expected ({})",
+            aggregated_balance, expected_total
+        );
+
         // This should FAIL due to the bug - aggregated balance will be less than expected
         // because the DISTINCT clause treats None and Some([0;32]) as the same subaccount
         if aggregated_balance == expected_total {
             println!("✓ Aggregated balance matches expected total!");
         } else {
-            println!("✗ BUG CONFIRMED: Aggregated balance mismatch: got {}, expected {}", aggregated_balance, expected_total);
+            println!(
+                "✗ BUG CONFIRMED: Aggregated balance mismatch: got {}, expected {}",
+                aggregated_balance, expected_total
+            );
             println!("This happens because both None and Some([0;32]) are stored as [0;32] in the database");
             println!("The DISTINCT clause in the aggregation SQL treats them as one account instead of two");
         }
