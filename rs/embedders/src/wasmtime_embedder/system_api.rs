@@ -883,11 +883,11 @@ impl MemoryUsage {
         subnet_available_memory: SubnetAvailableMemory,
         memory_allocation: MemoryAllocation,
     ) -> Self {
+        // A canister's current memory usage should never exceed the following limits. This is
+        // most probably a bug. Panicking here due to this inconsistency has the
+        // danger of putting the entire subnet in a crash loop. Log an error
+        // message to page the on-call team and try to stumble along.
         if let Some(limit) = limit {
-            // A canister's current usage should never exceed its limit. This is
-            // most probably a bug. Panicking here due to this inconsistency has the
-            // danger of putting the entire subnet in a crash loop. Log an error
-            // message to page the on-call team and try to stumble along.
             if current_usage > limit {
                 error!(
                     log,
@@ -897,6 +897,15 @@ impl MemoryUsage {
                     limit
                 );
             }
+        }
+        if stable_memory_usage > NumBytes::new(MAX_STABLE_MEMORY_IN_BYTES) {
+            error!(
+                log,
+                "[EXC-BUG] Canister {}: stable memory current_usage {} > stable memory limit {}",
+                canister_id,
+                stable_memory_usage,
+                MAX_STABLE_MEMORY_IN_BYTES,
+            );
         }
 
         Self {
