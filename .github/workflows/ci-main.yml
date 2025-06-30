@@ -267,7 +267,7 @@ jobs:
             --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc \
             test \
             --test_tag_filters="test_macos,test_macos_slow" \
-            //packages/pocket-ic/... //rs/... //publish/binaries/...
+            //...
 
           mkdir -p build
           cp \
