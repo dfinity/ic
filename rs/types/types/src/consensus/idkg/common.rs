@@ -24,11 +24,14 @@ use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::registry::subnet::v1 as subnet_pb;
 use ic_protobuf::types::v1 as pb;
 use serde::{Deserialize, Serialize};
-use std::{convert::{AsMut, AsRef, TryFrom}, sync::Arc};
 use std::hash::Hash;
 use std::{
     collections::BTreeSet,
     fmt::{self, Display, Formatter},
+};
+use std::{
+    convert::{AsMut, AsRef, TryFrom},
+    sync::Arc,
 };
 
 use super::{

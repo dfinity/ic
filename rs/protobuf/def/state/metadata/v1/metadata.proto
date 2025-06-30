@@ -9,8 +9,8 @@ import "registry/subnet/v1/subnet.proto";
 import "state/canister_state_bits/v1/canister_state_bits.proto";
 import "state/ingress/v1/ingress.proto";
 import "state/queues/v1/queues.proto";
-import "types/v1/types.proto";
 import "types/v1/idkg.proto";
+import "types/v1/types.proto";
 
 message Time {
   uint64 time_nanos = 1;
