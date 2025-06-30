@@ -587,7 +587,7 @@ jobs:
           RECOVERY_STORE_CONTENT2_B64=$(head /dev/urandom | head -c 100 | base64 | tr -d '\n')
 
           # Pack the dummy CUP and local store into an archive
-          mkdir -p guest-os/recovery-artifacts/DELETE-ME && cd "$_"
+          mkdir -p guest-os/recovery-artifacts && cd "$_"
           echo -n "${RECOVERY_CUP_CONTENT_B64}" | base64 -d > cup.proto
           mkdir ic_registry_local_store
           cd ic_registry_local_store
