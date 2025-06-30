@@ -1706,3 +1706,23 @@ fn test_compute_ballots_for_new_proposal() {
         }
     );
 }
+
+#[derive(candid::CandidType, candid::Deserialize)]
+struct TypeWithOptNat {
+    pub value: Option<candid::Nat>,
+}
+
+#[derive(candid::CandidType, candid::Deserialize)]
+struct TypeWithNat {
+    pub value: candid::Nat,
+}
+
+#[test]
+fn encode_decode_opt_nat_to_nat() {
+    let original = TypeWithNat {
+        value: candid::Nat::from(42u32),
+    };
+    let encoded = Encode!(&original).unwrap();
+    let decoded: TypeWithOptNat = Decode!(&encoded, TypeWithOptNat).unwrap();
+    assert_eq!(decoded.value, Some(candid::Nat::from(42u32)));
+}
