@@ -5,6 +5,7 @@ on:
     types:
       - review_requested
 
+# This helps avoid duplicate reviews from this bot.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
