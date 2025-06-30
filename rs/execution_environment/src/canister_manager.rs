@@ -2238,43 +2238,37 @@ impl CanisterManager {
 
         match args.kind {
             CanisterSnapshotDataOffset::WasmModule { offset } => {
-                let res = partial_snapshot
-                    .wasm_module
-                    .write(&args.chunk, offset as usize);
-                if res.is_err() {
-                    return Err(CanisterManagerError::InvalidSlice {
+                partial_snapshot
+                    .write_to_wasm_module(offset as usize, &args.chunk)
+                    .map_err(|_| CanisterManagerError::InvalidSlice {
                         offset,
                         size: args.chunk.len() as u64,
-                    });
-                }
+                    })
+                    .unwrap();
             }
             CanisterSnapshotDataOffset::MainMemory { offset } => {
-                let max_size_bytes =
-                    partial_snapshot.wasm_memory.size.get() * WASM_PAGE_SIZE_IN_BYTES;
-                if max_size_bytes < args.chunk.len().saturating_add(offset as usize) {
-                    return Err(CanisterManagerError::InvalidSlice {
-                        offset,
-                        size: args.chunk.len() as u64,
-                    });
-                }
-                let mut buffer = Buffer::new(partial_snapshot.wasm_memory.page_map.clone());
-                buffer.write(&args.chunk, offset as usize);
-                let delta = buffer.dirty_pages().collect::<Vec<_>>();
-                partial_snapshot.wasm_memory.page_map.update(&delta);
+                PartialCanisterSnapshot::write_to_page_memory(
+                    &mut partial_snapshot.wasm_memory,
+                    offset,
+                    &args.chunk,
+                )
+                .map_err(|_| CanisterManagerError::InvalidSlice {
+                    offset,
+                    size: args.chunk.len() as u64,
+                })
+                .unwrap();
             }
             CanisterSnapshotDataOffset::StableMemory { offset } => {
-                let max_size_bytes =
-                    partial_snapshot.stable_memory.size.get() * WASM_PAGE_SIZE_IN_BYTES;
-                if max_size_bytes < args.chunk.len().saturating_add(offset as usize) {
-                    return Err(CanisterManagerError::InvalidSlice {
-                        offset,
-                        size: args.chunk.len() as u64,
-                    });
-                }
-                let mut buffer = Buffer::new(partial_snapshot.stable_memory.page_map.clone());
-                buffer.write(&args.chunk, offset as usize);
-                let delta = buffer.dirty_pages().collect::<Vec<_>>();
-                partial_snapshot.stable_memory.page_map.update(&delta);
+                PartialCanisterSnapshot::write_to_page_memory(
+                    &mut partial_snapshot.stable_memory,
+                    offset,
+                    &args.chunk,
+                )
+                .map_err(|_| CanisterManagerError::InvalidSlice {
+                    offset,
+                    size: args.chunk.len() as u64,
+                })
+                .unwrap();
             }
             CanisterSnapshotDataOffset::WasmChunk => {
                 // The chunk store is initialized as empty, and no memory for it has been reserved yet.

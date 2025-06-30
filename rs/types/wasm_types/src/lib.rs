@@ -97,20 +97,6 @@ impl CanisterModule {
         matches!(self.module, ModuleStorage::File(_))
     }
 
-    /// Overwrite the module at `offset` with `buf`. This may invalidate the
-    /// module, and will change its hash. It's useful for uploading a module
-    /// chunk by chunk.
-    /// Returns an error if `offset` + `buf.len()` > `module.len()`.
-    pub fn write(&mut self, buf: &[u8], offset: usize) -> Result<(), String> {
-        match self.module.write(buf, offset) {
-            Ok(()) => {
-                self.module_hash = ic_crypto_sha2::Sha256::hash(self.module.as_slice());
-                Ok(())
-            }
-            Err(e) => Err(e),
-        }
-    }
-
     pub fn as_slice(&self) -> &[u8] {
         self.module.as_slice()
     }
@@ -371,32 +357,6 @@ impl ModuleStorage {
         }
     }
 
-    /// Overwrites the module bytes from `offset` with `buf`.
-    /// Returns the original module if `offset` + `buf.len()` exceeds the
-    /// length of the module.
-    ///
-    /// This may invalidate the module, but is useful for uploading a
-    /// module chunk by chunk.
-    fn write(&mut self, buf: &[u8], offset: usize) -> Result<(), String> {
-        let end = offset.saturating_add(buf.len());
-        if self.len() < end {
-            return Err(format!(
-                "Offset {} + slice length {} exceeds module length {}.",
-                offset,
-                buf.len(),
-                self.len()
-            ));
-        }
-        let mut arc = match self {
-            ModuleStorage::Memory(bytes) => Arc::clone(bytes),
-            ModuleStorage::File(file) => Arc::new(file.as_slice().to_vec()),
-        };
-        let inner = Arc::make_mut(&mut arc);
-        inner[offset..end].copy_from_slice(buf);
-        *self = ModuleStorage::Memory(arc);
-        Ok(())
-    }
-
     fn len(&self) -> usize {
         match &self {
             ModuleStorage::Memory(arc) => arc.len(),
@@ -427,47 +387,5 @@ mod tests {
         let hash = WasmHash([255; WASM_HASH_LENGTH]);
         let expected: String = "ff".repeat(WASM_HASH_LENGTH);
         assert_eq!(expected, format!("{}", hash));
-    }
-
-    #[test]
-    fn test_chunk_write_to_module() {
-        let original_module = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
-        let original_hash = ic_crypto_sha2::Sha256::hash(original_module.as_slice());
-        let chunk_size = 4;
-        let mut module = CanisterModule::new(original_module.clone());
-        assert_eq!(original_hash, module.module_hash());
-
-        let mut offset = 0;
-        for chunk in original_module.chunks(chunk_size) {
-            module.write(chunk, offset).unwrap();
-            offset += chunk.len();
-        }
-        assert_eq!(&original_module, module.as_slice());
-        assert_eq!(original_hash, module.module_hash());
-
-        module.write(&[1, 2, 3], 999).unwrap_err();
-        module
-            .write(&[1, 2, 3], original_module.len() - 1)
-            .unwrap_err();
-        module
-            .write(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 0)
-            .unwrap_err();
-    }
-
-    #[test]
-    fn test_write_module_file() {
-        use std::io::Write;
-        let mut tmp = tempfile::NamedTempFile::new().unwrap();
-        tmp.write_all(&[0x00, 0x61, 0x73, 0x6d, 0x00, 0x00, 0x00, 0x00])
-            .unwrap();
-        let test_wasm_file = TestWasmFile(tmp.path().to_path_buf());
-        let mut module =
-            CanisterModule::new_from_file(Box::new(test_wasm_file), WasmHash([0; 32]), None)
-                .unwrap();
-        module.write(&[9], 5).unwrap();
-        assert_eq!(
-            &[0x00, 0x61, 0x73, 0x6d, 0x00, 0x09, 0x00, 0x00],
-            module.as_slice()
-        );
     }
 }

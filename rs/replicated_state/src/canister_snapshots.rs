@@ -9,7 +9,7 @@ use crate::{
 };
 use ic_config::embedders::{MAX_GLOBALS, WASM_MAX_SIZE};
 use ic_management_canister_types_private::{
-    CanisterSnapshotResponse, Global, GlobalTimer, OnLowWasmMemoryHookStatus, SnapshotSource,
+    Global, GlobalTimer, OnLowWasmMemoryHookStatus, SnapshotSource,
     UploadCanisterSnapshotMetadataArgs,
 };
 use ic_sys::PAGE_SIZE;
@@ -200,11 +200,11 @@ impl CanisterSnapshots {
                 let tuple = self
                     .snapshots
                     .get(snapshot_id)
-                    .map(|s| (*snapshot_id, s.taken_at_timestamp().clone(), s.size()));
+                    .map(|s| (*snapshot_id, *s.taken_at_timestamp(), s.size()));
                 let partial_tuple = self
                     .partial_snapshots
                     .get(snapshot_id)
-                    .map(|s| (*snapshot_id, s.taken_at_timestamp().clone(), s.size()));
+                    .map(|s| (*snapshot_id, *s.taken_at_timestamp(), s.size()));
                 res.push(tuple.or(partial_tuple).unwrap())
             }
         }
@@ -434,6 +434,44 @@ impl PartialCanisterSnapshot {
 
     pub fn size(&self) -> NumBytes {
         self.size
+    }
+
+    /// Overwrites the module bytes from `offset` with `chunk`.
+    /// Returns an error if `offset` + `chunk.len()` exceeds the
+    /// length of the module.
+    pub fn write_to_wasm_module(&mut self, offset: usize, chunk: &[u8]) -> Result<(), String> {
+        let end = offset.saturating_add(chunk.len());
+        if self.wasm_module.len() < end {
+            return Err(format!(
+                "Offset {} + slice length {} exceeds module length {}.",
+                offset,
+                chunk.len(),
+                self.wasm_module.len()
+            ));
+        }
+        self.wasm_module[offset..end].copy_from_slice(chunk);
+        Ok(())
+    }
+
+    pub fn write_to_page_memory(
+        page_memory: &mut PageMemory,
+        offset: u64,
+        chunk: &[u8],
+    ) -> Result<(), String> {
+        let max_size_bytes = page_memory.size.get() * WASM_PAGE_SIZE_IN_BYTES;
+        if max_size_bytes < chunk.len().saturating_add(offset as usize) {
+            return Err(format!(
+                "Offset {} + slice length {} exceeds main memory length {}.",
+                offset,
+                chunk.len(),
+                max_size_bytes,
+            ));
+        }
+        let mut buffer = Buffer::new(page_memory.page_map.clone());
+        buffer.write(chunk, offset as usize);
+        let delta = buffer.dirty_pages().collect::<Vec<_>>();
+        page_memory.page_map.update(&delta);
+        Ok(())
     }
 }
 
