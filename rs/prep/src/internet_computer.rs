@@ -298,8 +298,7 @@ pub struct IcConfig {
     ssh_readonly_access_to_unassigned_nodes: Vec<String>,
 
     /// Whether or not to assign canister ID allocation range for specified IDs to subnet.
-    /// By default, it has the value 'false', but it can be set to true when ic-starter is
-    /// run with --use_specified_ids_allocation_range flag.
+    /// By default, it has the value 'false'.
     use_specified_ids_allocation_range: bool,
 
     /// Whitelisted firewall prefixes for initial registry state, separated by

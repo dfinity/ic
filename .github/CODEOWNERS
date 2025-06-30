@@ -224,7 +224,6 @@ go_deps.bzl               @dfinity/idx
 /rs/rust_canisters/downstream_calls_test/               @dfinity/ic-message-routing-owners
 /rs/rust_canisters/random_traffic_test/                 @dfinity/ic-message-routing-owners
 /rs/sns/                                                @dfinity/governance-team
-/rs/starter/                                            @dfinity/consensus
 /rs/state_layout/                                       @dfinity/ic-message-routing-owners
 /rs/state_machine_tests/                                @dfinity/ic-message-routing-owners @dfinity/pocket-ic
 /rs/state_manager/                                      @dfinity/ic-message-routing-owners

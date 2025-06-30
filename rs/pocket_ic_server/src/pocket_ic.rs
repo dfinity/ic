@@ -491,7 +491,7 @@ impl PocketIcSubnets {
         let subnet_size = subnet_size(subnet_kind);
         let mut subnet_config = SubnetConfig::new(subnet_type);
         let mut hypervisor_config = if nonmainnet_features {
-            ic_starter::hypervisor_config(true)
+            crate::nonmainnet_features::hypervisor_config(true)
         } else {
             execution_environment::Config::default()
         };
