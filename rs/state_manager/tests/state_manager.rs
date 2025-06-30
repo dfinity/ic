@@ -1231,7 +1231,7 @@ fn validate_replicated_state_is_called() {
             "state_manager_tip_handler_request_duration_seconds",
         );
         for (label, _stats) in request_duration.iter() {
-            if label.get("request") == Some(&"validate_replicated_state".to_string()) {
+            if label.get("request") == Some(&"validate_replicated_state_and_finalize".to_string()) {
                 return true;
             }
         }
@@ -3640,6 +3640,86 @@ fn can_recover_from_corruption_on_state_sync() {
 }
 
 #[test]
+fn can_detect_divergence_with_rehash() {
+    use ic_state_layout::{CheckpointLayout, RwPolicy};
+
+    state_manager_test(|metrics, state_manager| {
+        use std::os::unix::fs::FileExt;
+        let (_height, mut state) = state_manager.take_tip();
+
+        insert_dummy_canister(&mut state, canister_test_id(100));
+
+        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+        let execution_state = canister_state.execution_state.as_mut().unwrap();
+        for i in 0..10000 {
+            execution_state
+                .wasm_memory
+                .page_map
+                .update(&[(PageIndex::new(i), &[99u8; PAGE_SIZE])]);
+        }
+
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
+        state_manager.flush_tip_channel();
+
+        // Corrupt some data
+        let state_layout = state_manager.state_layout();
+        let mutable_cp_layout = CheckpointLayout::<RwPolicy<()>>::new_untracked(
+            state_layout
+                .checkpoint_verified(height(1))
+                .unwrap()
+                .raw_path()
+                .to_path_buf(),
+            height(1),
+        )
+        .unwrap();
+
+        let canister_layout = mutable_cp_layout.canister(&canister_test_id(100)).unwrap();
+        let canister_memory = canister_layout
+            .vmemory_0()
+            .existing_overlays()
+            .unwrap()
+            .remove(0);
+        make_mutable(&canister_memory).unwrap();
+        for i in 0..10000 {
+            std::fs::OpenOptions::new()
+                .write(true)
+                .create(false)
+                .truncate(false)
+                .open(&canister_memory)
+                .unwrap()
+                .write_all_at(b"Garbage", i * 4096)
+                .unwrap();
+        }
+        make_readonly(&canister_memory).unwrap();
+
+        let count_critical_errors = || {
+            fetch_int_counter_vec(metrics, "critical_errors")
+                .values()
+                .sum::<u64>()
+        };
+
+        assert_eq!(0, count_critical_errors());
+        // After the first manifest, we expect to detect a divergence and raise critical errors counter.
+        let (_height, state) = state_manager.take_tip();
+        state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
+        state_manager.flush_tip_channel();
+        assert_ne!(0, count_critical_errors());
+
+        // For the second manifest we expect a full recomputation of the manifest, no new critical errors.
+        let (_height, state) = state_manager.take_tip();
+        let reused_key = maplit::btreemap! {"type".to_string() => "reused".to_string()};
+        let reused_bytes =
+            fetch_int_counter_vec(metrics, "state_manager_manifest_chunk_bytes")[&reused_key];
+        state_manager.commit_and_certify(state, height(3), CertificationScope::Full, None);
+        state_manager.flush_tip_channel();
+        assert_eq!(
+            reused_bytes,
+            fetch_int_counter_vec(metrics, "state_manager_manifest_chunk_bytes")[&reused_key]
+        );
+    });
+}
+
+#[test]
 fn do_not_crash_in_loop_due_to_corrupted_state_sync() {
     use ic_state_layout::{CheckpointLayout, RwPolicy};
     use std::panic::{self, AssertUnwindSafe};
@@ -4128,7 +4208,7 @@ fn can_short_circuit_state_sync() {
 
 #[test]
 fn can_reuse_chunk_hashes_when_computing_manifest() {
-    use ic_state_manager::manifest::{compute_manifest, validate_manifest};
+    use ic_state_manager::manifest::{compute_manifest, validate_manifest, RehashManifest};
     use ic_state_manager::ManifestMetrics;
     use ic_types::state_sync::CURRENT_STATE_SYNC_VERSION;
 
@@ -4138,21 +4218,24 @@ fn can_reuse_chunk_hashes_when_computing_manifest() {
         let canister_state = state.canister_state_mut(&canister_test_id(1)).unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
 
-        const NEW_WASM_PAGE: u64 = 300;
-        const WASM_PAGES: u64 = 2;
-        execution_state.wasm_memory.page_map.update(&[
-            (PageIndex::new(1), &[1u8; PAGE_SIZE]),
-            (PageIndex::new(NEW_WASM_PAGE), &[2u8; PAGE_SIZE]),
-        ]);
-        const NEW_STABLE_PAGE: u64 = 500;
-        const STABLE_PAGES: u64 = 2;
-        execution_state.stable_memory.page_map.update(&[
-            (PageIndex::new(1), &[1u8; PAGE_SIZE]),
-            (PageIndex::new(NEW_STABLE_PAGE), &[2u8; PAGE_SIZE]),
-        ]);
+        const WASM_PAGES: u64 = 300;
+        for i in 0..WASM_PAGES {
+            execution_state
+                .wasm_memory
+                .page_map
+                .update(&[(PageIndex::new(i), &[i as u8; PAGE_SIZE])]);
+        }
+        const STABLE_PAGES: u64 = 500;
+        for i in 0..STABLE_PAGES {
+            execution_state
+                .stable_memory
+                .page_map
+                .update(&[(PageIndex::new(i), &[i as u8; PAGE_SIZE])]);
+        }
 
         state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
         wait_for_checkpoint(&state_manager, height(1));
+        state_manager.flush_tip_channel();
 
         let mut reused_label = Labels::new();
         reused_label.insert("type".to_string(), "reused".to_string());
@@ -4167,14 +4250,16 @@ fn can_reuse_chunk_hashes_when_computing_manifest() {
 
         state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
         let state_2_hash = wait_for_checkpoint(&state_manager, height(2));
+        state_manager.flush_tip_channel();
 
         // Second checkpoint can leverage heap chunks computed previously as well as the wasm binary.
         let chunk_bytes = fetch_int_counter_vec(metrics, "state_manager_manifest_chunk_bytes");
         let expected_size_estimate =
             PAGE_SIZE as u64 * (WASM_PAGES + STABLE_PAGES) + empty_wasm_size() as u64;
         let size = chunk_bytes[&reused_label] + chunk_bytes[&compared_label];
-        assert!(((expected_size_estimate as f64 * 1.1) as u64) > size);
-        assert!(((expected_size_estimate as f64 * 0.9) as u64) < size);
+        // We compute manifest then rehash, so twice the size
+        assert!(((expected_size_estimate as f64 * 2.2) as u64) > size);
+        assert!(((expected_size_estimate as f64 * 2.0) as u64) < size);
 
         let checkpoint = state_manager
             .state_layout()
@@ -4191,6 +4276,7 @@ fn can_reuse_chunk_hashes_when_computing_manifest() {
             &checkpoint,
             DEFAULT_CHUNK_SIZE,
             None,
+            RehashManifest::No,
         )
         .expect("failed to compute manifest");
 

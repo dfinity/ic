@@ -74,6 +74,13 @@ struct Opt {
     )]
     watchdog_timeout_seconds: u64,
 
+    /// Enable optimization for search/transactions by creating additional indexes
+    #[clap(
+        long = "optimize-search-indexes",
+        help = "Create additional indexes to optimize transaction search performance. May increase the database size by ~30%."
+    )]
+    optimize_search_indexes: bool,
+
     #[cfg(feature = "rosetta-blocks")]
     #[clap(long = "enable-rosetta-blocks")]
     enable_rosetta_blocks: bool,
@@ -239,6 +246,7 @@ async fn main() -> std::io::Result<()> {
         expose_metrics,
         blockchain,
         watchdog_timeout_seconds,
+        optimize_search_indexes,
         ..
     } = opt;
 
@@ -261,6 +269,7 @@ async fn main() -> std::io::Result<()> {
         offline,
         root_key,
         enable_rosetta_blocks,
+        optimize_search_indexes,
     )
     .await
     .map_err(|e| {

@@ -1,0 +1,14 @@
+[package]
+name = "ic-signer"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+candid = { workspace = true }
+ic-cdk = { workspace = true }
+ic-management-canister-types = { workspace = true }
+ic_bls12_381 = { workspace = true }
+serde = { workspace = true }

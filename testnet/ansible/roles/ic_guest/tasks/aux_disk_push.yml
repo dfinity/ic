@@ -1,13 +1,13 @@
 ---
 - name: Remove existing disk-img.tar.zst
-  file:
+  ansible.builtin.file:
     state: absent
     path: "{{ ic_disk_path }}/disk-img.tar.zst"
   run_once: true
   tags: [ic_guest]
 
 - name: Archive disk.img
-  command:
+  ansible.builtin.command:
     cmd: |
         tar --directory={{ ic_disk_path }} --create \
             --sparse \
@@ -22,14 +22,14 @@
   tags: [ic_guest]
 
 - name: Synchronize disk-img.tar.zst
-  synchronize:
-    mode: push
+  ansible.builtin.copy:
+    mode: preserve
     src: "{{ ic_disk_path }}/disk-img.tar.zst"
     dest: /var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/aux/disk-img.tar.zst
   tags: [ic_guest]
 
 - name: Unarchive file disk-img.tar.zst
-  unarchive:
+  ansible.builtin.unarchive:
     src: /var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/aux_disk-img.tar.zst
     dest: /var/local/ic/disk
     owner: root
