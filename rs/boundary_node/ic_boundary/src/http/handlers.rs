@@ -336,7 +336,7 @@ mod test {
                 .await
                 .unwrap();
 
-        let (mut socket3, _) =
+        let (socket3, _) =
             tokio_tungstenite::connect_async(format!("ws://{addr}/logs/canister/aaaaa-aa"))
                 .await
                 .unwrap();
@@ -347,6 +347,14 @@ mod test {
                 .await
                 .is_err()
         );
+
+        // Make sure we can subscribe again if we disconnect one of the subscribers
+        drop(socket3);
+
+        let (mut socket3, _) =
+            tokio_tungstenite::connect_async(format!("ws://{addr}/logs/canister/aaaaa-aa"))
+                .await
+                .unwrap();
 
         // But we can subscribe to another canister
         let (mut socket4, _) =
