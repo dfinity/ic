@@ -257,7 +257,6 @@ system_test(
         "manual",
         "system_test_large",
     ],
-    target_compatible_with = ["@platforms//os:linux"],
     uses_guestos_recovery = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
