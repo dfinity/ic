@@ -34,7 +34,6 @@ use ic_replicated_state::canister_state::system_state::wasm_chunk_store::{
     ChunkValidationResult, WasmChunkHash, CHUNK_SIZE,
 };
 use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
-use ic_replicated_state::page_map::Buffer;
 use ic_replicated_state::{
     canister_snapshots::CanisterSnapshot,
     canister_state::{

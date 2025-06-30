@@ -367,14 +367,7 @@ impl ModuleStorage {
 
 #[cfg(test)]
 mod tests {
-    use crate::{CanisterModule, MemoryMappableWasmFile, WasmHash, WASM_HASH_LENGTH};
-    use std::path::{Path, PathBuf};
-    struct TestWasmFile(PathBuf);
-    impl MemoryMappableWasmFile for TestWasmFile {
-        fn path(&self) -> &Path {
-            &self.0
-        }
-    }
+    use crate::{WasmHash, WASM_HASH_LENGTH};
 
     #[test]
     fn wasmhash_display() {
