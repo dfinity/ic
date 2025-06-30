@@ -24,7 +24,7 @@ use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::registry::subnet::v1 as subnet_pb;
 use ic_protobuf::types::v1 as pb;
 use serde::{Deserialize, Serialize};
-use std::convert::{AsMut, AsRef, TryFrom};
+use std::{convert::{AsMut, AsRef, TryFrom}, sync::Arc};
 use std::hash::Hash;
 use std::{
     collections::BTreeSet,
@@ -1185,16 +1185,16 @@ impl Display for SignatureScheme {
 /// which is a frequent operation.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PreSignature {
-    Ecdsa(EcdsaPreSignatureQuadruple),
-    Schnorr(SchnorrPreSignatureTranscript),
+    Ecdsa(Arc<EcdsaPreSignatureQuadruple>),
+    Schnorr(Arc<SchnorrPreSignatureTranscript>),
 }
 
 impl From<&PreSignature> for pb::PreSignature {
     fn from(value: &PreSignature) -> Self {
         use pb::pre_signature::Msg;
         let msg = match value {
-            PreSignature::Schnorr(x) => Msg::Schnorr(x.into()),
-            PreSignature::Ecdsa(x) => Msg::Ecdsa(x.into()),
+            PreSignature::Schnorr(x) => Msg::Schnorr(x.as_ref().into()),
+            PreSignature::Ecdsa(x) => Msg::Ecdsa(x.as_ref().into()),
         };
         Self { msg: Some(msg) }
     }
@@ -1208,8 +1208,8 @@ impl TryFrom<&pb::PreSignature> for PreSignature {
             return Err(ProxyDecodeError::MissingField("PreSignature::msg"));
         };
         Ok(match msg {
-            Msg::Schnorr(x) => PreSignature::Schnorr(x.try_into()?),
-            Msg::Ecdsa(x) => PreSignature::Ecdsa(x.try_into()?),
+            Msg::Schnorr(x) => PreSignature::Schnorr(Arc::new(x.try_into()?)),
+            Msg::Ecdsa(x) => PreSignature::Ecdsa(Arc::new(x.try_into()?)),
         })
     }
 }
