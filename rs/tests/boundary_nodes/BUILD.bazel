@@ -11,7 +11,6 @@ system_test_nns(
     tags = [
         "k8s",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -28,7 +27,6 @@ system_test_nns(
     tags = [
         "long_test",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "long",
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
     deps = [
@@ -46,7 +44,6 @@ system_test_nns(
     tags = [
         "k8s",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS +
                    UNIVERSAL_VM_RUNTIME_DEPS +
                    CERTIFICATE_ORCHESTRATOR_RUNTIME_DEPS,
@@ -76,7 +73,6 @@ system_test_nns(
     tags = [
         "k8s",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + [
         "//rs/boundary_node/salt_sharing:salt_sharing_canister",
     ],
@@ -109,7 +105,6 @@ system_test_nns(
     tags = [
         "k8s",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + [
         "//rs/boundary_node/rate_limits:rate_limit_canister",
     ],
@@ -146,7 +141,6 @@ system_test_nns(
         "boot_image_minimal_size_gibibytes": 500,
     },
     tags = ["manual"],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -170,7 +164,6 @@ system_test(
         "k8s",
         "manual",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -193,7 +186,6 @@ system_test(
         "k8s",
         "manual",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -210,7 +202,6 @@ system_test_nns(
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = [
         # Keep sorted.

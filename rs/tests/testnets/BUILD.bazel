@@ -16,7 +16,6 @@ system_test(
         "k8s",
         "manual",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     visibility = ["//visibility:public"],  # public because part of top-level manual test suite
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = [
@@ -34,7 +33,6 @@ system_test(
         "k8s",
         "manual",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -51,7 +49,6 @@ system_test_nns(
         "k8s",
         "manual",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -69,7 +66,6 @@ system_test(
         "k8s",
         "manual",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -85,7 +81,6 @@ system_test_nns(
         "dynamic_testnet",
         "manual",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE,
     deps = [
         # Keep sorted.
@@ -102,7 +97,6 @@ system_test_nns(
         "dynamic_testnet",
         "manual",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE + GRAFANA_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -120,7 +114,6 @@ system_test_nns(
         "dynamic_testnet",
         "manual",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE + GRAFANA_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -139,7 +132,6 @@ system_test(
         "dynamic_testnet",
         "manual",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/tests/dre/utils:os_qualification_utils",
@@ -161,7 +153,6 @@ system_test_nns(
         "dynamic_testnet",
         "manual",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE + GRAFANA_RUNTIME_DEPS + [
         "//rs/ledger_suite/icrc1/ledger:ledger_canister",
         "@ii_dev_canister//file",
@@ -190,7 +181,6 @@ system_test_nns(
         "dynamic_testnet",
         "manual",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE + GRAFANA_RUNTIME_DEPS + [
         "//rs/ledger_suite/icrc1/ledger:ledger_canister",
         "@ii_dev_canister//file",
@@ -218,7 +208,6 @@ system_test_nns(
         "dynamic_testnet",
         "manual",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + SNS_CANISTER_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE + GRAFANA_RUNTIME_DEPS + [
         "@ii_dev_canister//file",
         "@nns_dapp_canister//file",
@@ -242,7 +231,6 @@ system_test_nns(
         "dynamic_testnet",
         "manual",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE + GRAFANA_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -265,7 +253,6 @@ system_test_nns(
         "dynamic_testnet",
         "manual",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + SNS_CANISTER_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE + GRAFANA_RUNTIME_DEPS + [
         "@ii_dev_canister//file",
         "@nns_dapp_canister//file",
@@ -295,7 +282,6 @@ system_test_nns(
         "dynamic_testnet",
         "manual",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + SNS_CANISTER_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE + GRAFANA_RUNTIME_DEPS + [
         "//rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister",
         "@ii_dev_canister//file",

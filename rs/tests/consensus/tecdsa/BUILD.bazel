@@ -9,7 +9,6 @@ system_test_nns(
     tags = [
         "k8s",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev = True,
     uses_guestos_dev_test = True,
     deps = [
@@ -33,7 +32,6 @@ system_test_nns(
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -61,7 +59,6 @@ system_test_nns(
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + SIGNER_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -84,7 +81,6 @@ system_test_nns(
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -108,7 +104,6 @@ system_test_nns(
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -130,7 +125,6 @@ system_test_nns(
         "k8s",
         "long_test",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -154,7 +148,6 @@ system_test_nns(
         "k8s",
         "long_test",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -173,7 +166,6 @@ system_test_nns(
         "k8s",
         "long_test",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -193,7 +185,6 @@ system_test_nns(
         "k8s",
         "long_test",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -222,7 +213,6 @@ system_test_nns(
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -248,7 +238,6 @@ system_test_nns(
         "k8s",
         "long_test",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -268,7 +257,6 @@ system_test_nns(
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -299,7 +287,6 @@ tecdsa_performance_test_template = system_test_nns(
         "experimental_system_test_colocation",
         "manual",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = [

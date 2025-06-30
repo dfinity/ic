@@ -8,7 +8,6 @@ system_test_nns(
     proc_macro_deps = [
         "@crate_index//:indoc",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
         "//rs/nns/constants",
@@ -32,7 +31,6 @@ system_test(
         "k8s",
         "manual",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
         # Keep sorted.

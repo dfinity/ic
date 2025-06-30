@@ -10,7 +10,6 @@ system_test_nns(
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -36,7 +35,6 @@ system_test_nns(
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -55,7 +53,6 @@ system_test_nns(
     tags = [
         "k8s",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -76,7 +73,6 @@ system_test_nns(
 system_test(
     name = "cup_compatibility_test",
     env = MAINNET_ENV,
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = [
         "//rs/tests:cup_compatibility/binaries",
     ],
@@ -99,7 +95,6 @@ system_test_nns(
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -119,7 +114,6 @@ system_test_nns(
         "k8s",
         "long_test",
     ],
-    target_compatible_with = ["@platforms//os:linux"],
     uses_guestos_dev_test = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
     deps = [
@@ -140,7 +134,6 @@ system_test_nns(
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
         "//rs/interfaces/registry",

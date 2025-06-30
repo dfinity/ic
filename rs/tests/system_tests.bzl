@@ -242,6 +242,7 @@ def system_test(
             name = bin_name,
             testonly = True,
             srcs = original_srcs + [name + ".rs"],
+            target_compatible_with = ["@platforms//os:linux"],
             **kwargs
         )
         test_driver_target = bin_name
