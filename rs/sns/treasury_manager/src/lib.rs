@@ -1,5 +1,5 @@
 use candid::{CandidType, Nat, Principal};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize, Serializer};
 use std::collections::BTreeMap;
 
 #[derive(CandidType, Clone, Debug, Deserialize)]
@@ -18,6 +18,7 @@ pub enum TreasuryManagerArg {
 
 #[derive(CandidType, Clone, Debug, Deserialize, PartialEq)]
 pub struct Balance {
+    #[serde(serialize_with = "serialize_nat_as_u64")]
     pub amount_decimals: Nat,
     pub owner_account: Account,
 }
@@ -86,7 +87,7 @@ pub struct WithdrawRequest {
 #[derive(CandidType, Clone, Debug, Deserialize, PartialEq)]
 pub struct AuditTrailRequest {}
 
-#[derive(CandidType, Clone, Copy, Debug, Deserialize)]
+#[derive(CandidType, Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 pub enum TreasuryManagerOperation {
     Deposit,
     Balances,
@@ -110,7 +111,7 @@ impl From<TreasuryManagerOperation> for Vec<u8> {
     }
 }
 
-#[derive(CandidType, Clone, Debug, Deserialize, PartialEq)]
+#[derive(CandidType, Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub enum TransactionError {
     /// Prevents the call from being attempted.
     Precondition(String),
@@ -129,35 +130,19 @@ pub enum TransactionError {
     Postcondition(String),
 }
 
-#[derive(CandidType, Clone, Debug, Deserialize)]
+#[derive(CandidType, Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Transaction {
     pub timestamp_ns: u64,
     pub canister_id: Principal,
-    // TODO: add low-level traces stores as JSON.
+    // TODO: add low-level traces stored as JSON.
     pub result: Result<TransactionWitness, TransactionError>,
     pub human_readable: String,
     pub treasury_manager_operation: TreasuryManagerOperation,
 }
 
-#[derive(CandidType, Clone, Debug, Deserialize)]
+#[derive(CandidType, Clone, Debug, Deserialize, PartialEq)]
 pub struct AuditTrail {
-    transactions: Vec<Transaction>,
-}
-
-impl AuditTrail {
-    pub fn new() -> Self {
-        AuditTrail {
-            transactions: vec![],
-        }
-    }
-
-    pub fn record_event(&mut self, event: Transaction) {
-        self.transactions.push(event);
-    }
-
-    pub fn transactions(&self) -> &[Transaction] {
-        &self.transactions
-    }
+    pub transactions: Vec<Transaction>,
 }
 
 #[derive(CandidType, Clone, Debug, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -165,6 +150,7 @@ pub enum Asset {
     Token {
         symbol: String,
         ledger_canister_id: Principal,
+        #[serde(serialize_with = "serialize_nat_as_u64")]
         ledger_fee_decimals: Nat,
     },
 }
@@ -174,24 +160,36 @@ pub struct Allowance {
     pub asset: Asset,
 
     /// Total amount that may be consumed, including the fees.
+    #[serde(serialize_with = "serialize_nat_as_u64")]
     pub amount_decimals: Nat,
 
     /// The owner account is used to return the leftover assets and issue rewards.
     pub owner_account: Account,
 }
 
-#[derive(CandidType, Clone, Debug, Deserialize)]
+#[derive(CandidType, Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Transfer {
     pub ledger_canister_id: String,
+    #[serde(serialize_with = "serialize_nat_as_u64")]
     pub amount_decimals: Nat,
+    #[serde(serialize_with = "serialize_nat_as_u64")]
     pub block_index: Nat,
 }
 
-#[derive(CandidType, Clone, Debug, Deserialize)]
+#[derive(CandidType, Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub enum TransactionWitness {
     Ledger(Vec<Transfer>),
 
     /// Represents a transaction that is not related to the ledger, e.g., DEX operations.
     /// The argument is a (best-effort) JSON encoding of the response (for human inspection).
     NonLedger(String),
+}
+
+fn serialize_nat_as_u64<S>(nat: &Nat, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    // Convert Nat to u64 for JSON serialization
+    let value: String = nat.to_string();
+    serializer.serialize_str(&value)
 }
