@@ -9,9 +9,6 @@ on the process that this file is part of, see
 
 ## Added
 
-The `get_metrics` function response now includes the number of *executed* proposal (in addition
-to the number of submitted proposals).
-
 ## Changed
 
 ## Deprecated
@@ -19,7 +16,5 @@ to the number of submitted proposals).
 ## Removed
 
 ## Fixed
-
-Fixed a bug in the decoder of Candid `Nat` values as `u64`.
 
 ## Security
