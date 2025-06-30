@@ -3,8 +3,9 @@
 use crate::utils::env;
 use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkGroup, Criterion};
 use ic_management_canister_types_private::{
-    CanisterSettingsArgsBuilder, CanisterSnapshotDataKind, LoadCanisterSnapshotArgs,
-    ReadCanisterSnapshotDataArgs, TakeCanisterSnapshotArgs,
+    CanisterSettingsArgsBuilder, CanisterSnapshotDataKind, CanisterSnapshotDataOffset,
+    LoadCanisterSnapshotArgs, ReadCanisterSnapshotDataArgs, TakeCanisterSnapshotArgs,
+    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
 };
 use ic_state_machine_tests::StateMachine;
 use ic_types::{CanisterId, Cycles, SnapshotId};
@@ -53,9 +54,19 @@ fn env_and_canister(canister_size: u64) -> (StateMachine, CanisterId) {
 fn env_and_canister_snapshot(canister_size: u64) -> (StateMachine, CanisterId, SnapshotId) {
     let (env, canister_id) = env_and_canister(canister_size);
     let snapshot_id = env
-        .take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None))
+        .upload_canister_snapshot_metadata(&UploadCanisterSnapshotMetadataArgs::new(
+            canister_id,
+            None,
+            1000,
+            vec![],
+            canister_size,
+            0,
+            vec![],
+            None,
+            None,
+        ))
         .expect("Error taking canister snapshot")
-        .snapshot_id();
+        .snapshot_id;
     // Skip a few rounds to avoid `CanisterHeapDeltaRateLimited`.
     for _ in 0..100 {
         env.tick();
@@ -247,6 +258,55 @@ fn read_canister_snapshot_data_bench<M: criterion::measurement::Measurement>(
     });
 }
 
+fn write_canister_snapshot_data_bench<M: criterion::measurement::Measurement>(
+    group: &mut BenchmarkGroup<M>,
+    bench_name: &str,
+    canister_size: u64,
+) {
+    group.bench_function(bench_name, |b| {
+        b.iter_batched(
+            || env_and_canister_snapshot(canister_size),
+            |(env, canister_id, snapshot_id)| {
+                let mut rng = rand::thread_rng();
+                let offset = rng.gen_range(0..canister_size - 1);
+                let args = UploadCanisterSnapshotDataArgs::new(
+                    canister_id,
+                    snapshot_id,
+                    CanisterSnapshotDataOffset::MainMemory { offset },
+                    vec![42],
+                );
+                let _ = env
+                    .upload_canister_snapshot_data(&args)
+                    .expect("Error writing snapshot data");
+                env
+            },
+            BatchSize::SmallInput,
+        );
+    });
+    group.bench_function(format!("{bench_name}+checkpoint"), |b| {
+        b.iter_batched(
+            || env_and_canister_snapshot(canister_size),
+            |(env, canister_id, snapshot_id)| {
+                let mut rng = rand::thread_rng();
+                let offset = rng.gen_range(0..canister_size - 1);
+                let args = UploadCanisterSnapshotDataArgs::new(
+                    canister_id,
+                    snapshot_id,
+                    CanisterSnapshotDataOffset::MainMemory { offset },
+                    vec![42],
+                );
+                let _ = env
+                    .upload_canister_snapshot_data(&args)
+                    .expect("Error writing snapshot data");
+                env.set_checkpoints_enabled(true);
+                env.tick();
+                env
+            },
+            BatchSize::SmallInput,
+        );
+    });
+}
+
 pub fn benchmark(c: &mut Criterion) {
     let sizes = [
         ("10 MiB", 10 * MIB),
@@ -256,6 +316,7 @@ pub fn benchmark(c: &mut Criterion) {
         ("3000 MiB", 3000 * MIB),
         ("4000 MiB", 4000 * MIB),
     ];
+
     let mut group = c.benchmark_group("canister_snapshot_baseline");
     for (name, size) in sizes {
         baseline_bench(&mut group, name, size);
@@ -283,6 +344,12 @@ pub fn benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("read_canister_snapshot_data");
     for (name, size) in sizes {
         read_canister_snapshot_data_bench(&mut group, name, size);
+    }
+    group.finish();
+
+    let mut group = c.benchmark_group("write_canister_snapshot_data_bench");
+    for (name, size) in sizes {
+        write_canister_snapshot_data_bench(&mut group, name, size);
     }
     group.finish();
 }
