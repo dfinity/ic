@@ -482,6 +482,18 @@ pub fn encode_metrics(
         "The total amount of potential voting power (in the most recent proposal).",
     )?;
 
+    let proposals_using_previous_voting_power_snapshots = governance
+        .heap_data
+        .proposals
+        .values()
+        .filter(|proposal| proposal.previous_ballots_timestamp_seconds.is_some())
+        .count();
+    w.encode_gauge(
+        "governance_proposals_using_previous_voting_power_snapshots",
+        proposals_using_previous_voting_power_snapshots as f64,
+        "The number of proposals that are using previous voting power snapshots.",
+    )?;
+
     // Neuron Indexes
 
     let neuron_store::NeuronIndexesLens {
