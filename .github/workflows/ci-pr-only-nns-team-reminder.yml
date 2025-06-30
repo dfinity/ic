@@ -78,7 +78,7 @@ jobs:
 
               * Done.
 
-              * $REASON_WHY_NO_NEED. E.g. for `unreleased_changelog.md`, "No
+              * $REASON_WHY_NO_NEED. E.g. for \`unreleased_changelog.md\`, "No
                 canister behavior changes.", or for item 2, "Existing APIs
                 behave as before.".
 
