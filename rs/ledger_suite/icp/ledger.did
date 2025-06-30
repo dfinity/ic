@@ -485,7 +485,7 @@ type GetAllowancesArgs = record {
     take: opt nat64;
 };
 
-type Allowance103 = record {
+type Allowances = vec record {
     from_account_id: TextAccountIdentifier;
     to_spender_id: TextAccountIdentifier;
     allowance: Tokens;
@@ -547,7 +547,7 @@ service: (LedgerCanisterPayload) -> {
     icrc21_canister_call_consent_message: (icrc21_consent_message_request) -> (icrc21_consent_message_response);
     icrc10_supported_standards : () -> (vec record { name : text; url : text }) query;
 
-    get_allowances : (GetAllowancesArgs) -> (vec Allowance103) query;
+    get_allowances : (GetAllowancesArgs) -> (Allowances) query;
 
     is_ledger_ready: () -> (bool) query;
 }
