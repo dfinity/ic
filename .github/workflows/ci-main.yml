@@ -269,6 +269,8 @@ jobs:
 
             # necessary artifacts & tests for pocket -ic
             //packages/pocket-ic:all \
+            # NOTE: technically covered by //rs/... above, but
+            # added explicitly for clarity
             //rs/pocket_ic_server:test \
             //rs/pocket_ic_server:gateway \
             //rs/pocket_ic_server:pocket-ic-server
