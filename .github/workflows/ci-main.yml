@@ -576,78 +576,58 @@ jobs:
           TEMP_BRANCH="recovery-engine-test-$(date +%s)"
           echo "TEMP_BRANCH=${TEMP_BRANCH}" >> "$GITHUB_ENV"
           git checkout -b "$TEMP_BRANCH"
-      # Create a known tempdir where build events will be written
-      - id: metrics-tmpdir
-        shell: bash
-        run: |
-          metrics_out=$(mktemp -d)
-          echo "dir=$metrics_out" >> $GITHUB_OUTPUT
       - name: Generate and upload recovery artifacts
-        shell: bash
-        run: |
-          set -euo pipefail
+        uses: ./.github/actions/bazel
+        with:
+          run: |
+            rootdir=$(mktemp -d)
+            pushd "$rootdir"
 
-          # Here we overwrite the PATH with our custom bazel wrapper to ensure
-          # the specified commands are run with the CI-specific options included
-          # in the wrapper.
-          export BAZEL_ACTION_OLDPATH="$PATH"
-          # github.action_path doesn't seem to work
-          PATH="$PWD/.github/actions/bazel/bin:$BAZEL_ACTION_OLDPATH"
-          hash -r
+            # Create dummy CUP and dummy local store
+            # Keep it base64 encoded in variables to avoid unsafe bytes
+            RECOVERY_CUP_CONTENT_B64=$(head /dev/urandom | head -c 100 | base64 | tr -d '\n')
+            RECOVERY_STORE_CONTENT1_B64=$(head /dev/urandom | head -c 100 | base64 | tr -d '\n')
+            RECOVERY_STORE_CONTENT2_B64=$(head /dev/urandom | head -c 100 | base64 | tr -d '\n')
 
-          # Used by the bazel wrapper
-          export BAZEL_ACTION_METRICS_OUT='${{ steps.metrics-tmpdir.outputs.dir }}'
+            # Pack the dummy CUP and local store into an archive
+            mkdir -p guest-os/recovery-artifacts && cd "$_"
+            echo -n "${RECOVERY_CUP_CONTENT_B64}" | base64 -d > cup.proto
+            mkdir ic_registry_local_store
+            cd ic_registry_local_store
+            mkdir -p 0001020304/05/06 && echo -n "${RECOVERY_STORE_CONTENT1_B64}" | base64 -d > "$_"/07.pb
+            mkdir -p 08090a0b0c/0d/0e && echo -n "${RECOVERY_STORE_CONTENT2_B64}" | base64 -d > "$_"/0f.pb
+            tar zcf ../ic_registry_local_store.tar.zst *
+            cd ..
+            tar zcf recovery.tar.zst cup.proto ic_registry_local_store.tar.zst
+            rm -rf cup.proto ic_registry_local_store ic_registry_local_store.tar.zst
 
-          rootdir=$(mktemp -d)
-          pushd "$rootdir"
+            # Upload the archive
+            popd
+            IS_GUESTOS_RECOVERY_ENGINE_SMOKE_TEST=1 bazel run //:artifact-uploader -- "$rootdir"
 
-          # Create dummy CUP and dummy local store
-          # Keep it base64 encoded in variables to avoid unsafe bytes
-          RECOVERY_CUP_CONTENT_B64=$(head /dev/urandom | head -c 100 | base64 | tr -d '\n')
-          RECOVERY_STORE_CONTENT1_B64=$(head /dev/urandom | head -c 100 | base64 | tr -d '\n')
-          RECOVERY_STORE_CONTENT2_B64=$(head /dev/urandom | head -c 100 | base64 | tr -d '\n')
+            # Get version and checksum
+            bazel build //bazel:version.txt
+            RECOVERY_VERSION="$(cat bazel-bin/bazel/version.txt)"
+            RECOVERY_HASH="$(sha256sum $rootdir/guest-os/recovery-artifacts/recovery.tar.zst | cut -d' ' -f1)"
 
-          # Pack the dummy CUP and local store into an archive
-          mkdir -p guest-os/recovery-artifacts && cd "$_"
-          echo -n "${RECOVERY_CUP_CONTENT_B64}" | base64 -d > cup.proto
-          mkdir ic_registry_local_store
-          cd ic_registry_local_store
-          mkdir -p 0001020304/05/06 && echo -n "${RECOVERY_STORE_CONTENT1_B64}" | base64 -d > "$_"/07.pb
-          mkdir -p 08090a0b0c/0d/0e && echo -n "${RECOVERY_STORE_CONTENT2_B64}" | base64 -d > "$_"/0f.pb
-          tar zcf ../ic_registry_local_store.tar.zst *
-          cd ..
-          tar zcf recovery.tar.zst cup.proto ic_registry_local_store.tar.zst
-          rm -rf cup.proto ic_registry_local_store ic_registry_local_store.tar.zst
-
-          # Upload the archive
-          popd
-          IS_GUESTOS_RECOVERY_ENGINE_SMOKE_TEST=1 bazel run //:artifact-uploader -- "$rootdir"
-
-          # Get version and checksum
-          bazel build //bazel:version.txt
-          RECOVERY_VERSION="$(cat bazel-bin/bazel/version.txt)"
-          RECOVERY_HASH="$(sha256sum $rootdir/guest-os/recovery-artifacts/recovery.tar.zst | cut -d' ' -f1)"
-
-          # Set environment variables for the next steps
-          echo "RECOVERY_CUP_CONTENT_B64=${RECOVERY_CUP_CONTENT_B64}" >> "$GITHUB_ENV"
-          echo "RECOVERY_STORE_CONTENT1_B64=${RECOVERY_STORE_CONTENT1_B64}" >> "$GITHUB_ENV"
-          echo "RECOVERY_STORE_CONTENT2_B64=${RECOVERY_STORE_CONTENT2_B64}" >> "$GITHUB_ENV"
-          echo "RECOVERY_VERSION=${RECOVERY_VERSION}" >> "$GITHUB_ENV"
-          echo "RECOVERY_HASH=${RECOVERY_HASH}" >> "$GITHUB_ENV"
+            # Set environment variables for the next steps
+            echo "RECOVERY_CUP_CONTENT_B64=${RECOVERY_CUP_CONTENT_B64}" >> "$GITHUB_ENV"
+            echo "RECOVERY_STORE_CONTENT1_B64=${RECOVERY_STORE_CONTENT1_B64}" >> "$GITHUB_ENV"
+            echo "RECOVERY_STORE_CONTENT2_B64=${RECOVERY_STORE_CONTENT2_B64}" >> "$GITHUB_ENV"
+            echo "RECOVERY_VERSION=${RECOVERY_VERSION}" >> "$GITHUB_ENV"
+            echo "RECOVERY_HASH=${RECOVERY_HASH}" >> "$GITHUB_ENV"
       - name: Adapt guestos-recovery-engine script
         run: |
           sed -i "s/readonly VERSION=\"\"/readonly VERSION=\"${RECOVERY_VERSION}\"/" ic-os/components/misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.sh
           sed -i "s/readonly EXPECTED_RECOVERY_HASH=\"\"/readonly EXPECTED_RECOVERY_HASH=\"${RECOVERY_HASH}\"/" ic-os/components/misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.sh
-      - name: Run tests
-        id: bazel-test-all
-        uses: ./.github/actions/bazel-test-all/
+      - name: Run test
+        uses: ./.github/actions/bazel/
         with:
-          BAZEL_COMMAND: test --test_tag_filters=system_test_large --test_env=RECOVERY_CUP_CONTENT_B64 --test_env=RECOVERY_STORE_CONTENT1_B64 --test_env=RECOVERY_STORE_CONTENT2_B64
-          BAZEL_TARGETS: //rs/tests/consensus:guestos_recovery_engine_smoke_test
+          run: |
+            bazel test --test_tag_filters=system_test_large --test_env=RECOVERY_CUP_CONTENT_B64 --test_env=RECOVERY_STORE_CONTENT1_B64 --test_env=RECOVERY_STORE_CONTENT2_B64 //rs/tests/consensus:guestos_recovery_engine_smoke_test
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
       - name: Cleanup
         if: always()
         run: |
-          rm -rf '${{ steps.metrics-tmpdir.outputs.dir }}'
           git checkout "$CI_COMMIT_SHA"
           git branch -D "$TEMP_BRANCH"
