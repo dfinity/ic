@@ -1736,14 +1736,14 @@ mod test {
         // 4. Transfer from subaccount1 to other_account (block 3)
 
         // Test the AccountIdentifier round-trip conversion to ensure subaccounts are preserved
-        let account1_identifier: AccountIdentifier = account1.clone().into();
+        let account1_identifier: AccountIdentifier = account1.into();
         let account1_converted: Account = account1_identifier.try_into().unwrap();
         assert_eq!(
             account1, account1_converted,
             "Account with subaccount should survive round-trip conversion"
         );
 
-        let account2_identifier: AccountIdentifier = account2.clone().into();
+        let account2_identifier: AccountIdentifier = account2.into();
         let account2_converted: Account = account2_identifier.try_into().unwrap();
         assert_eq!(
             account2, account2_converted,
@@ -1758,7 +1758,7 @@ mod test {
                     parent_hash: None,
                     transaction: IcrcTransaction {
                         operation: IcrcOperation::Mint {
-                            to: main_account.clone(),
+                            to: main_account,
                             amount: Nat::from(1000u64),
                         },
                         created_at_time: Some(1000),
@@ -1777,8 +1777,8 @@ mod test {
                     parent_hash: None,
                     transaction: IcrcTransaction {
                         operation: IcrcOperation::Transfer {
-                            from: main_account.clone(),
-                            to: account1.clone(),
+                            from: main_account,
+                            to: account1,
                             spender: None,
                             amount: Nat::from(300u64),
                             fee: Some(Nat::from(10u64)),
@@ -1799,8 +1799,8 @@ mod test {
                     parent_hash: None,
                     transaction: IcrcTransaction {
                         operation: IcrcOperation::Transfer {
-                            from: main_account.clone(),
-                            to: account2.clone(),
+                            from: main_account,
+                            to: account2,
                             spender: None,
                             amount: Nat::from(200u64),
                             fee: Some(Nat::from(10u64)),
@@ -1821,8 +1821,8 @@ mod test {
                     parent_hash: None,
                     transaction: IcrcTransaction {
                         operation: IcrcOperation::Transfer {
-                            from: account1.clone(),
-                            to: other_account.clone(),
+                            from: account1,
+                            to: other_account,
                             spender: None,
                             amount: Nat::from(150u64),
                             fee: Some(Nat::from(10u64)),
@@ -1847,7 +1847,7 @@ mod test {
         // Test individual account balances
         let main_balance = account_balance(
             &storage_client,
-            &main_account.clone().into(),
+            &main_account.into(),
             &None,
             metadata.decimals,
             metadata.symbol.clone(),
@@ -1858,7 +1858,7 @@ mod test {
 
         let account1_balance = account_balance(
             &storage_client,
-            &account1.clone().into(),
+            &account1.into(),
             &None,
             metadata.decimals,
             metadata.symbol.clone(),
@@ -1869,7 +1869,7 @@ mod test {
 
         let account2_balance = account_balance(
             &storage_client,
-            &account2.clone().into(),
+            &account2.into(),
             &None,
             metadata.decimals,
             metadata.symbol.clone(),
@@ -1880,7 +1880,7 @@ mod test {
 
         let other_balance = account_balance(
             &storage_client,
-            &other_account.clone().into(),
+            &other_account.into(),
             &None,
             metadata.decimals,
             metadata.symbol.clone(),
@@ -1898,7 +1898,7 @@ mod test {
 
         let aggregated_balance = account_balance_with_metadata(
             &storage_client,
-            &main_account.clone().into(),
+            &main_account.into(),
             &None,
             &Some(metadata_map),
             metadata.decimals,
@@ -1943,8 +1943,8 @@ mod test {
         println!("Original to_account: {:?}", to_account);
 
         // Step 1: Convert accounts to AccountIdentifiers (like the client would)
-        let from_account_identifier: AccountIdentifier = from_account.clone().into();
-        let to_account_identifier: AccountIdentifier = to_account.clone().into();
+        let from_account_identifier: AccountIdentifier = from_account.into();
+        let to_account_identifier: AccountIdentifier = to_account.into();
 
         println!("from_account_identifier: {:?}", from_account_identifier);
         println!("to_account_identifier: {:?}", to_account_identifier);
@@ -2037,7 +2037,7 @@ mod test {
             subaccount: None,
         };
 
-        let account_identifier_none: AccountIdentifier = account_none.clone().into();
+        let account_identifier_none: AccountIdentifier = account_none.into();
         let converted_back_none: Account = account_identifier_none.try_into().unwrap();
 
         println!("Original account (None): {:?}", account_none);
@@ -2056,7 +2056,7 @@ mod test {
             subaccount: Some(non_zero_subaccount),
         };
 
-        let account_identifier_nonzero: AccountIdentifier = account_nonzero.clone().into();
+        let account_identifier_nonzero: AccountIdentifier = account_nonzero.into();
         let converted_back_nonzero: Account = account_identifier_nonzero.try_into().unwrap();
 
         println!("Original account (non-zero): {:?}", account_nonzero);
@@ -2106,67 +2106,65 @@ mod test {
         };
 
         // Create transactions to give each account a balance
-        let mut blocks = Vec::new();
-
-        // Block 0: Mint 0.06 to main account (None subaccount)
-        blocks.push(RosettaBlock::from_icrc_ledger_block(
-            IcrcBlock {
-                parent_hash: None,
-                transaction: IcrcTransaction {
-                    operation: IcrcOperation::Mint {
-                        to: main_account,
-                        amount: Nat::from(6000000u64), // 0.06 tokens
+        let blocks = vec![
+            // Block 0: Mint 0.06 to main account (None subaccount)
+            RosettaBlock::from_icrc_ledger_block(
+                IcrcBlock {
+                    parent_hash: None,
+                    transaction: IcrcTransaction {
+                        operation: IcrcOperation::Mint {
+                            to: main_account,
+                            amount: Nat::from(6000000u64), // 0.06 tokens
+                        },
+                        created_at_time: Some(1),
+                        memo: None,
                     },
-                    created_at_time: Some(1),
-                    memo: None,
+                    effective_fee: None,
+                    timestamp: 1,
+                    fee_collector: None,
+                    fee_collector_block_index: None,
                 },
-                effective_fee: None,
-                timestamp: 1,
-                fee_collector: None,
-                fee_collector_block_index: None,
-            },
-            0,
-        ));
-
-        // Block 1: Mint 0.01 to explicit [0;32] subaccount
-        blocks.push(RosettaBlock::from_icrc_ledger_block(
-            IcrcBlock {
-                parent_hash: None,
-                transaction: IcrcTransaction {
-                    operation: IcrcOperation::Mint {
-                        to: explicit_zero_account,
-                        amount: Nat::from(1000000u64), // 0.01 tokens
+                0,
+            ),
+            // Block 1: Mint 0.01 to explicit [0;32] subaccount
+            RosettaBlock::from_icrc_ledger_block(
+                IcrcBlock {
+                    parent_hash: None,
+                    transaction: IcrcTransaction {
+                        operation: IcrcOperation::Mint {
+                            to: explicit_zero_account,
+                            amount: Nat::from(1000000u64), // 0.01 tokens
+                        },
+                        created_at_time: Some(2),
+                        memo: None,
                     },
-                    created_at_time: Some(2),
-                    memo: None,
+                    effective_fee: None,
+                    timestamp: 2,
+                    fee_collector: None,
+                    fee_collector_block_index: None,
                 },
-                effective_fee: None,
-                timestamp: 2,
-                fee_collector: None,
-                fee_collector_block_index: None,
-            },
-            1,
-        ));
-
-        // Block 2: Mint 0.01 to account1 (non-zero subaccount)
-        blocks.push(RosettaBlock::from_icrc_ledger_block(
-            IcrcBlock {
-                parent_hash: None,
-                transaction: IcrcTransaction {
-                    operation: IcrcOperation::Mint {
-                        to: account1,
-                        amount: Nat::from(1000000u64), // 0.01 tokens
+                1,
+            ),
+            // Block 2: Mint 0.01 to account1 (non-zero subaccount)
+            RosettaBlock::from_icrc_ledger_block(
+                IcrcBlock {
+                    parent_hash: None,
+                    transaction: IcrcTransaction {
+                        operation: IcrcOperation::Mint {
+                            to: account1,
+                            amount: Nat::from(1000000u64), // 0.01 tokens
+                        },
+                        created_at_time: Some(3),
+                        memo: None,
                     },
-                    created_at_time: Some(3),
-                    memo: None,
+                    effective_fee: None,
+                    timestamp: 3,
+                    fee_collector: None,
+                    fee_collector_block_index: None,
                 },
-                effective_fee: None,
-                timestamp: 3,
-                fee_collector: None,
-                fee_collector_block_index: None,
-            },
-            2,
-        ));
+                2,
+            ),
+        ];
 
         // Store blocks and update balances
         storage_client.store_blocks(blocks).unwrap();
