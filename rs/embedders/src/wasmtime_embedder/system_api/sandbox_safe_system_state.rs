@@ -789,7 +789,7 @@ impl SandboxSafeSystemState {
             system_state.memory_allocation,
             system_state.wasm_memory_threshold,
             compute_allocation,
-            system_state.environment_variables.clone(),
+            system_state.environment_variables.clone().into(),
             system_state.balance(),
             system_state.reserved_balance(),
             system_state.reserved_balance_limit(),

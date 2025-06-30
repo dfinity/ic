@@ -13,7 +13,7 @@ use crate::{
 };
 use assert_matches::assert_matches;
 use candid::{CandidType, Decode, Encode};
-use ic_base_types::{NumSeconds, PrincipalId};
+use ic_base_types::{NumSeconds, EnvironmentVariables, PrincipalId};
 use ic_config::{
     execution_environment::{
         Config, CANISTER_GUARANTEED_CALLBACK_QUOTA, DEFAULT_WASM_MEMORY_LIMIT,
@@ -6667,16 +6667,17 @@ fn test_environment_variables_are_changed_via_create_canister() {
         })
         .build();
 
-    let mut env_vars = BTreeMap::new();
-    env_vars.insert("KEY1".to_string(), "VALUE1".to_string());
-    env_vars.insert("KEY2".to_string(), "VALUE2".to_string());
+    let env_vars = EnvironmentVariables::new(BTreeMap::from([
+        ("KEY1".to_string(), "VALUE1".to_string()),
+        ("KEY2".to_string(), "VALUE2".to_string()),
+    ]));
 
     // Create canister with environment variables.
     let canister_id = test
         .create_canister_with_settings(
             Cycles::new(1_000_000_000_000_000),
             CanisterSettingsArgsBuilder::new()
-                .with_environment_variables(env_vars.clone())
+                .with_environment_variables(env_vars.clone().into())
                 .build(),
         )
         .unwrap();
@@ -6696,15 +6697,16 @@ fn test_environment_variables_are_updated_on_update_settings() {
         .build();
     let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
 
-    let mut env_vars = BTreeMap::new();
-    env_vars.insert("KEY1".to_string(), "VALUE1".to_string());
-    env_vars.insert("KEY2".to_string(), "VALUE2".to_string());
+    let env_vars = EnvironmentVariables::new(BTreeMap::from([
+        ("KEY1".to_string(), "VALUE1".to_string()),
+        ("KEY2".to_string(), "VALUE2".to_string()),
+    ]));
 
     // Set environment variables via `update_settings`.
     let args = UpdateSettingsArgs {
         canister_id: canister_id.get(),
         settings: CanisterSettingsArgsBuilder::new()
-            .with_environment_variables(env_vars.clone())
+            .with_environment_variables(env_vars.clone().into())
             .build(),
         sender_canister_version: None,
     };
@@ -6739,9 +6741,10 @@ fn test_environment_variables_are_not_set_when_disabled() {
         .build();
 
     // Create environment variables.
-    let mut env_vars = BTreeMap::new();
-    env_vars.insert("KEY1".to_string(), "VALUE1".to_string());
-    env_vars.insert("KEY2".to_string(), "VALUE2".to_string());
+    let env_vars = BTreeMap::from([
+        ("KEY1".to_string(), "VALUE1".to_string()),
+        ("KEY2".to_string(), "VALUE2".to_string()),
+    ]);
 
     // Create canister with environment variables.
     let canister_id = test
@@ -6755,7 +6758,7 @@ fn test_environment_variables_are_not_set_when_disabled() {
 
     // Verify environment variables are not set.
     let canister = test.canister_state(canister_id);
-    assert_eq!(canister.system_state.environment_variables, BTreeMap::new());
+    assert_eq!(canister.system_state.environment_variables, EnvironmentVariables::new(BTreeMap::new()));
 
     // Set environment variables via `update_settings`.
     let args = UpdateSettingsArgs {
@@ -6770,7 +6773,7 @@ fn test_environment_variables_are_not_set_when_disabled() {
 
     // Verify environment variables are not set.
     let canister = test.canister_state(canister_id);
-    assert_eq!(canister.system_state.environment_variables, BTreeMap::new());
+    assert_eq!(canister.system_state.environment_variables, EnvironmentVariables::new(BTreeMap::new()));
 }
 
 /// Creates and deploys a pair of universal canisters with the second canister being controlled by the first one
