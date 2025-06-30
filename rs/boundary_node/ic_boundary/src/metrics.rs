@@ -524,7 +524,7 @@ pub async fn metrics_middleware(
 
     // Prepare fields
     let status_code = response.status();
-    let sender = ctx.sender.map(|x| x.to_string());
+    let sender = ctx.sender.map(|x| x.to_string()).unwrap_or_default();
     let node_id = node.as_ref().map(|x| x.id.to_string());
 
     let HttpMetricParams {
@@ -619,8 +619,8 @@ pub async fn metrics_middleware(
             hex::encode(&result[..16])
         };
 
-        let remote_addr = hash_fn(&remote_addr);
-        let sender = hash_fn(&sender.unwrap_or_default());
+        let remote_addr_hashed = hash_fn(&remote_addr);
+        let sender_hashed = hash_fn(&sender);
 
         // Log
         if !log_failed_requests_only || failed {
@@ -637,8 +637,8 @@ pub async fn metrics_middleware(
                 canister_id_str,
                 canister_id_actual = canister_id_actual.map(|x| x.to_string()),
                 canister_id_cbor = ctx.canister_id.map(|x| x.to_string()),
-                sender,
-                remote_addr,
+                sender_hashed,
+                remote_addr_hashed,
                 method = ctx.method_name,
                 duration = proc_duration,
                 duration_full = full_duration,
@@ -659,11 +659,12 @@ pub async fn metrics_middleware(
             .and_then(|(broker, id)| broker.topic_get(&id))
         {
             let ts = format_rfc3339(SystemTime::now()).to_string();
+            let client_id = hash_fn(&format!("{sender}{remote_addr}"));
 
             let msg = json!({
                 "cache_status": cache_status_lbl,
                 "cache_bypass_reason": cache_bypass_reason_lbl,
-                "client_addr": remote_addr,
+                "client_id": client_id,
                 "client_ip_family": ip_family,
                 "client_country_code": country_code,
                 "duration": proc_duration,
@@ -675,13 +676,10 @@ pub async fn metrics_middleware(
                 "ic_node_id": node_id.unwrap_or_default(),
                 "ic_subnet_id": subnet_id_str,
                 "ic_method": ctx.method_name,
-                "ic_sender": sender,
                 "request_id": request_id,
                 "request_size": ctx.request_size,
                 "request_type": request_type,
                 "response_size": response_size,
-                "retry_count": retry_result.as_ref().map(|x| x.retries).unwrap_or(0),
-                "retry_success": &retry_result.map(|x| x.success).unwrap_or_default(),
                 "timestamp": ts,
             });
 
