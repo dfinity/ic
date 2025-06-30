@@ -782,10 +782,6 @@ impl From<&CanisterChangeDetails> for pb_canister_state_bits::canister_change::C
                 )
             }
             CanisterChangeDetails::CanisterSettingsChange(canister_settings_change) => {
-                let environment_variables_hash = canister_settings_change
-                    .environment_variables_hash
-                    .map(|hash| hash.to_vec());
-
                 pb_canister_state_bits::canister_change::ChangeDetails::CanisterSettingsChange(
                     pb_canister_state_bits::CanisterSettingsChange {
                         controllers: canister_settings_change.controllers.as_ref().map(
@@ -796,7 +792,9 @@ impl From<&CanisterChangeDetails> for pb_canister_state_bits::canister_change::C
                                     .collect::<Vec<ic_protobuf::types::v1::PrincipalId>>(),
                             },
                         ),
-                        environment_variables_hash,
+                        environment_variables_hash: canister_settings_change
+                            .environment_variables_hash
+                            .map(|hash| hash.to_vec()),
                     },
                 )
             }
