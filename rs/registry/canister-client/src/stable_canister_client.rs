@@ -153,7 +153,7 @@ impl<S: RegistryDataStableMemory> CanisterRegistryClient for StableCanisterRegis
         let end_range = StorableRegistryKey {
             key: key.to_string(),
             version: version.get(),
-            ..Default::default()
+            timestamp_nanoseconds: u64::MAX,
         };
 
         let result = S::with_registry_map(|map| {
