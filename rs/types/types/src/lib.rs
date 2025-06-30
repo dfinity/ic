@@ -111,7 +111,6 @@ use std::fmt;
 use std::sync::Arc;
 use strum_macros::EnumIter;
 use thousands::Separable;
-
 pub struct UserTag {}
 /// An end-user's [`PrincipalId`].
 pub type UserId = Id<UserTag, PrincipalId>;

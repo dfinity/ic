@@ -15,6 +15,7 @@ pub use http::{
 };
 use ic_base_types::{
     CanisterId, NodeId, NumBytes, PrincipalId, RegistryVersion, SnapshotId, SubnetId,
+    EnvironmentVariables,
 };
 use ic_error_types::{ErrorCode, UserError};
 use ic_protobuf::proxy::ProxyDecodeError;
@@ -1105,6 +1106,7 @@ impl TryFrom<pb_canister_state_bits::LogVisibilityV2> for LogVisibilityV2 {
 ///     log_visibility: log_visibility;
 ///     wasm_memory_limit: nat;
 ///     wasm_memory_threshold: nat;
+///     environment_variables: vec environment_variable;
 /// })`
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct DefiniteCanisterSettingsArgs {
@@ -1117,6 +1119,7 @@ pub struct DefiniteCanisterSettingsArgs {
     log_visibility: LogVisibilityV2,
     wasm_memory_limit: candid::Nat,
     wasm_memory_threshold: candid::Nat,
+    environment_variables: Vec<EnvironmentVariable>,
 }
 
 impl DefiniteCanisterSettingsArgs {
@@ -1130,10 +1133,15 @@ impl DefiniteCanisterSettingsArgs {
         log_visibility: LogVisibilityV2,
         wasm_memory_limit: Option<u64>,
         wasm_memory_threshold: u64,
+        environment_variables: EnvironmentVariables,
     ) -> Self {
         let memory_allocation = candid::Nat::from(memory_allocation.unwrap_or(0));
         let reserved_cycles_limit = candid::Nat::from(reserved_cycles_limit.unwrap_or(0));
         let wasm_memory_limit = candid::Nat::from(wasm_memory_limit.unwrap_or(0));
+        let environment_variables = environment_variables.iter().map(|(name, value)| EnvironmentVariable {
+            name: name.clone(),
+            value: value.clone(),
+        }).collect::<Vec<EnvironmentVariable>>();
         Self {
             controller,
             controllers,
@@ -1144,6 +1152,7 @@ impl DefiniteCanisterSettingsArgs {
             log_visibility,
             wasm_memory_limit,
             wasm_memory_threshold: candid::Nat::from(wasm_memory_threshold),
+            environment_variables,
         }
     }
 
@@ -1177,6 +1186,10 @@ impl DefiniteCanisterSettingsArgs {
 
     pub fn freezing_threshold(&self) -> candid::Nat {
         self.freezing_threshold.clone()
+    }
+
+    pub fn environment_variables(&self) -> Vec<EnvironmentVariable> {
+        self.environment_variables.clone()
     }
 }
 
@@ -1277,6 +1290,7 @@ impl CanisterStatusResultV2 {
         query_egress_payload_size: u128,
         wasm_memory_limit: Option<u64>,
         wasm_memory_threshold: u64,
+        environment_variables: EnvironmentVariables,
     ) -> Self {
         Self {
             status,
@@ -1307,6 +1321,7 @@ impl CanisterStatusResultV2 {
                 log_visibility,
                 wasm_memory_limit,
                 wasm_memory_threshold,
+                environment_variables,
             ),
             freezing_threshold: candid::Nat::from(freezing_threshold),
             idle_cycles_burned_per_day: candid::Nat::from(idle_cycles_burned_per_day),

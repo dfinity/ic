@@ -326,7 +326,7 @@ impl CanisterManager {
         if let Some(environment_variables) = settings.environment_variables() {
             if self.environment_variables_flag == FlagStatus::Enabled {
                 canister.system_state.environment_variables =
-                    environment_variables.get_environment_variables().clone();
+                    environment_variables.clone();
             }
         }
     }
@@ -865,6 +865,7 @@ impl CanisterManager {
                 .egress_payload_size,
             wasm_memory_limit.map(|x| x.get()),
             wasm_memory_threshold.get(),
+            canister.system_state.environment_variables.clone(),
         ))
     }
 

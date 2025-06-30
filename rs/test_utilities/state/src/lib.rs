@@ -1,4 +1,4 @@
-use ic_base_types::NumSeconds;
+use ic_base_types::{NumSeconds, EnvironmentVariables};
 use ic_btc_replica_types::BitcoinAdapterRequestWrapper;
 use ic_management_canister_types_private::{
     CanisterStatusType, EcdsaCurve, EcdsaKeyId, LogVisibilityV2, MasterPublicKeyId,
@@ -471,7 +471,7 @@ impl SystemStateBuilder {
         mut self,
         environment_variables: BTreeMap<String, String>,
     ) -> Self {
-        self.system_state.environment_variables = environment_variables;
+        self.system_state.environment_variables = EnvironmentVariables::new(environment_variables);
         self
     }
 
