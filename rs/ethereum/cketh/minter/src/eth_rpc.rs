@@ -1,55 +1,11 @@
 //! This module contains definitions for communicating with an Ethereum API using the [JSON RPC](https://ethereum.org/en/developers/docs/apis/json-rpc/)
 //! interface.
 
-use ethnum;
 use evm_rpc_client::{Hex32, HttpOutcallError};
 use ic_cdk::api::call::RejectionCode;
 use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use std::fmt::{Debug, Display, Formatter, LowerHex, UpperHex};
-
-#[cfg(test)]
-mod tests;
-
-// This constant is our approximation of the expected header size.
-// The HTTP standard doesn't define any limit, and many implementations limit
-// the headers size to 8 KiB. We chose a lower limit because headers observed on most providers
-// fit in the constant defined below, and if there is spike, then the payload size adjustment
-// should take care of that.
-pub const HEADER_SIZE_LIMIT: u64 = 2 * 1024;
-
-// This constant comes from the IC specification:
-// > If provided, the value must not exceed 2MB
-const HTTP_MAX_SIZE: u64 = 2_000_000;
-
-pub const MAX_PAYLOAD_SIZE: u64 = HTTP_MAX_SIZE - HEADER_SIZE_LIMIT;
-
-pub type Quantity = ethnum::u256;
-
-pub fn into_nat(quantity: Quantity) -> candid::Nat {
-    use num_bigint::BigUint;
-    candid::Nat::from(BigUint::from_bytes_be(&quantity.to_be_bytes()))
-}
-
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
-#[serde(transparent)]
-pub struct Data(#[serde(with = "ic_ethereum_types::serde_data")] pub Vec<u8>);
-
-impl std::str::FromStr for Data {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        serde_json::from_value(Value::String(s.to_string()))
-            .map_err(|e| format!("failed to parse data from string: {}", e))
-    }
-}
-
-impl AsRef<[u8]> for Data {
-    fn as_ref(&self) -> &[u8] {
-        &self.0
-    }
-}
 
 #[derive(
     Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Decode, Deserialize, Encode, Serialize,
