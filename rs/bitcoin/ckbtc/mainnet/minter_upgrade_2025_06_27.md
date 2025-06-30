@@ -27,7 +27,7 @@ for more details, the problem appears to be due to the following:
    in the first place. We currently don’t have a satisfying explanation for how this low median fee was computed and are
    also investigating the bitcoin canister. A stop-gap solution was introduced
    in [#5742](https://github.com/dfinity/ic/pull/5742), to ensure that the fee per vbyte computed by the minter is
-   always at elast 1.5 sats/vbyte (for Bitcoin Mainnet).
+   always at least 1.5 sats/vbyte (for Bitcoin Mainnet).
 2. There is a deterministic panic occurring in the minter when it tries to resubmit those transactions, which explains
    why those transactions are currently stuck. This should be completely fixed
    by [#5713](https://github.com/dfinity/ic/pull/5713).
