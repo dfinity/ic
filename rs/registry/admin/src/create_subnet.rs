@@ -321,6 +321,9 @@ mod tests {
 
     fn minimal_create_payload() -> do_create_subnet::CreateSubnetPayload {
         do_create_subnet::CreateSubnetPayload {
+            canister_cycles_cost_schedule: Some(
+                do_create_subnet::CanisterCyclesCostSchedule::Normal,
+            ),
             ..Default::default()
         }
     }
