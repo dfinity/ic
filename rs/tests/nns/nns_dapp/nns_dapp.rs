@@ -211,13 +211,13 @@ pub fn install_ii_nns_dapp_and_subnet_rental(
 pub fn set_icp_xdr_exchange_rate(env: &TestEnv, xdr_permyriad_per_icp: u64) {
     let topology = env.topology_snapshot();
     let nns_node = topology.root_subnet().nodes().next().unwrap();
-    let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
+    let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_secs();
     block_on(async move {
-        update_xdr_per_icp(&nns_runtime, timestamp, xdr_permyriad_per_icp)
+        update_xdr_per_icp(&nns, timestamp, xdr_permyriad_per_icp)
             .await
             .unwrap();
     });
