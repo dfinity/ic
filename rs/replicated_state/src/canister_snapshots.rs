@@ -563,6 +563,18 @@ impl PartialCanisterSnapshot {
     pub fn execution_snapshot_mut(&mut self) -> &mut MutableExecutionStateSnapshot {
         &mut self.execution_snapshot
     }
+
+    pub fn chunk_store_mut(&mut self) -> &mut WasmChunkStore {
+        &mut self.chunk_store
+    }
+
+    pub fn stable_memory_mut(&mut self) -> &mut PageMemory {
+        &mut self.execution_snapshot.stable_memory
+    }
+
+    pub fn wasm_memory_mut(&mut self) -> &mut PageMemory {
+        &mut self.execution_snapshot.wasm_memory
+    }
 }
 
 /// Impl for both immutable and partial snapshots.
@@ -595,16 +607,8 @@ impl<T> CanisterSnapshotImpl<T> {
         &self.execution_snapshot.stable_memory
     }
 
-    pub fn stable_memory_mut(&mut self) -> &mut PageMemory {
-        &mut self.execution_snapshot.stable_memory
-    }
-
     pub fn wasm_memory(&self) -> &PageMemory {
         &self.execution_snapshot.wasm_memory
-    }
-
-    pub fn wasm_memory_mut(&mut self) -> &mut PageMemory {
-        &mut self.execution_snapshot.wasm_memory
     }
 
     pub fn canister_module_impl(&self) -> &CanisterModuleImpl<T> {
@@ -621,10 +625,6 @@ impl<T> CanisterSnapshotImpl<T> {
 
     pub fn certified_data(&self) -> &Vec<u8> {
         &self.certified_data
-    }
-
-    pub fn chunk_store_mut(&mut self) -> &mut WasmChunkStore {
-        &mut self.chunk_store
     }
 
     /// Returns the heap delta produced by this snapshot.
