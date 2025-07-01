@@ -163,6 +163,7 @@ pub fn test(env: TestEnv) {
                                 context: vec![0, 1, 2],
                             }),
                             max_response_bytes: None,
+                            is_replicated: None,
                         },
                         cycles: 500_000_000_000,
                     },
