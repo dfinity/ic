@@ -152,6 +152,7 @@ system_test_nns(
         "//rs/types/types",
         "@crate_index//:assert_matches",
         "@crate_index//:ic-agent",
+        "@crate_index//:rand",
         "@crate_index//:serde",
         "@crate_index//:serde_json",
         "@crate_index//:tokio",
@@ -179,6 +180,21 @@ system_test_nns(
         "@crate_index//:reqwest",
         "@crate_index//:tokio",
     ],
+)
+
+system_test_nns(
+    name = "canister_http_non_replicated_test",
+    env = {
+        "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
+    },
+    tags = [
+        "k8s",
+    ],
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        UNIVERSAL_VM_RUNTIME_DEPS +
+        CANISTER_HTTP_RUNTIME_DEPS + PROXY_CANISTER_RUNTIME_DEPS,
+    deps = CANISTER_HTTP_BASE_DEPS + ["//rs/rust_canisters/canister_test"],
 )
 
 system_test_nns(
@@ -212,6 +228,7 @@ system_test_nns(
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/idx/wabt-tests",
+        "//rs/tests/test_canisters/message:lib",
         "//rs/types/base_types",
         "//rs/types/types",
         "//rs/universal_canister/lib",
