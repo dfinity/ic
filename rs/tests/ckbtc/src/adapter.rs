@@ -232,16 +232,8 @@ fn get_test_wallet(env: &TestEnv, name: &str) -> (Client, Address) {
     )
     .expect("Failed to list wallets");
 
-    if wallets.iter().any(|wallet| wallet == name) {
-        retry(
-            "client.load_wallet",
-            env.logger(),
-            Duration::from_secs(100),
-            Duration::from_secs(1),
-            || Ok(client.load_wallet(name)?),
-        )
-        .expect("Failed to load wallet");
-    } else {
+    // Create wallet if it doesn't exist
+    if !wallets.iter().any(|wallet| wallet == name) {
         retry(
             "client.create_wallet",
             env.logger(),
@@ -253,7 +245,6 @@ fn get_test_wallet(env: &TestEnv, name: &str) -> (Client, Address) {
     }
 
     let address = client.get_new_address(None, None).unwrap().assume_checked();
-
     (client, address)
 }
 
