@@ -138,7 +138,6 @@ message PreSignatureRef {
   }
 }
 
-
 message EcdsaPreSignatureQuadruple {
   registry.subnet.v1.IDkgTranscript kappa_unmasked = 1;
   registry.subnet.v1.IDkgTranscript lambda_masked = 2;

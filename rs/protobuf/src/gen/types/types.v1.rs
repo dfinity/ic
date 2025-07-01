@@ -842,6 +842,7 @@ pub struct SchnorrPreSignatureTranscript {
     pub blinder_unmasked:
         ::core::option::Option<super::super::registry::subnet::v1::IDkgTranscript>,
 }
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PreSignature {
     #[prost(oneof = "pre_signature::Msg", tags = "1, 2")]
@@ -849,6 +850,7 @@ pub struct PreSignature {
 }
 /// Nested message and enum types in `PreSignature`.
 pub mod pre_signature {
+    #[allow(clippy::large_enum_variant)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Msg {
         #[prost(message, tag = "1")]
