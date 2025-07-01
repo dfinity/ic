@@ -12171,6 +12171,7 @@ dependencies = [
  "ic-interfaces-registry",
  "ic-registry-common-proto",
  "ic-registry-local-store-artifacts",
+ "ic-registry-transport",
  "ic-sys",
  "ic-types",
  "prost 0.13.4",

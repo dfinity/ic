@@ -3,6 +3,7 @@ use ic_registry_common_proto::pb::local_store::v1::{
     ChangelogEntry as PbChangelogEntry, Delta as PbDelta, KeyMutation as PbKeyMutation,
     MutationType,
 };
+use ic_registry_transport::pb::v1::HighCapacityRegistryValue;
 use ic_sys::fs::{sync_path, write_protobuf_simple, write_protobuf_using_tmp_file};
 use ic_types::registry::RegistryDataProviderError;
 use ic_types::RegistryVersion;
@@ -219,6 +220,15 @@ impl RegistryDataProvider for LocalStoreImpl {
                 version: version + RegistryVersion::from((i as u64) + 1),
                 key: km.key.clone(),
                 value: km.value.clone(),
+                timestamp_nanoseconds: km
+                    .value
+                    .as_ref()
+                    .map(|buf| {
+                        HighCapacityRegistryValue::decode(buf.as_slice())
+                            .unwrap()
+                            .timestamp_nanoseconds
+                    })
+                    .unwrap_or_default(),
             })
             .collect();
         Ok(res)
