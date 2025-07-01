@@ -27,7 +27,7 @@ mod tests;
 // the headers size to 8 KiB. We chose a lower limit because headers observed on most providers
 // fit in the constant defined below, and if there is spike, then the payload size adjustment
 // should take care of that.
-pub const HEADER_SIZE_LIMIT: u64 = 2 * 1024;
+const HEADER_SIZE_LIMIT: u64 = 2 * 1024;
 // We expect most of the calls to contain zero events.
 const ETH_GET_LOGS_INITIAL_RESPONSE_SIZE_ESTIMATE: u64 = 100;
 const TOTAL_NUMBER_OF_PROVIDERS: u8 = 4;
