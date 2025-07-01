@@ -140,6 +140,7 @@ pub fn install_ii_nns_dapp_and_subnet_rental(
     );
 
     // set the NNS root canister as a controller of the Subnet Rental Canister
+    let nns_agent = nns_node.build_default_agent();
     block_on(async move {
         set_controller(
             &SUBNET_RENTAL_CANISTER_ID.get().0,
