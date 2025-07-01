@@ -365,7 +365,6 @@ members = [
     "rs/sns/swap/proto_library",
     "rs/sns/test_utils",
     "rs/sns/testing",
-    "rs/starter",
     "rs/state_layout",
     "rs/state_machine_tests",
     "rs/state_manager",

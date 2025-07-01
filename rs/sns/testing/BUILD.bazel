@@ -135,6 +135,9 @@ rust_test(
 
 rust_test(
     name = "sns_testing_ci",
+    # the test sometimes times out on CI with default timeout
+    # of "moderate" (5 minutes) - 2025-07-01
+    timeout = "long",
     srcs = ["tests/sns_testing_ci.rs"],
     data = DEV_DATA,
     env = DEV_ENV,
