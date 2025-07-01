@@ -1189,6 +1189,12 @@ message ProposalData {
 
   // The topic of the proposal.
   optional Topic topic = 23;
+
+  // When a voting power spike is detected, ballots are created using a previous snapshot of the
+  // voting power, and this field indicates the timestamp at which the snapshot was taken. This
+  // field should not be set in normal circumstances, and if it is set, it is an indicator that a
+  // bug might have caused the voting power spike.
+  optional uint64 previous_ballots_timestamp_seconds = 24;
 }
 
 // This structure contains data for settling the Neurons' Fund participation in an SNS token swap.
@@ -2037,6 +2043,7 @@ message Governance {
     map<uint64, double> dissolving_neurons_e8s_buckets_ect = 33;
     map<uint64, double> not_dissolving_neurons_e8s_buckets_seed = 34;
     map<uint64, double> not_dissolving_neurons_e8s_buckets_ect = 35;
+    uint64 spawning_neurons_count = 42;
 
     // Deprecated. Use non_self_authenticating_controller_neuron_subset_metrics instead.
     optional uint64 total_voting_power_non_self_authenticating_controller = 36;

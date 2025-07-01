@@ -51,7 +51,6 @@ system_test_nns(
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
@@ -69,7 +68,6 @@ system_test_nns(
         "long_testasdfasdf",
         "manual",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
@@ -97,7 +95,6 @@ system_test_nns(
         "dynamic_testnet",
         "manual",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
@@ -127,7 +124,6 @@ system_test_nns(
         #"system_test_large",
         "manual",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
@@ -143,7 +139,6 @@ system_test_nns(
     env = {
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
@@ -173,7 +168,6 @@ system_test_nns(
         "k8s",
         "manual",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
@@ -213,7 +207,6 @@ system_test_nns(
         "k8s",
         "long_test",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
@@ -227,7 +220,6 @@ system_test_nns(
     tags = [
         "k8s",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -257,7 +249,6 @@ system_test_nns(
     tags = [
         "long_test",
     ],
-    target_compatible_with = ["@platforms//os:linux"],
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -281,7 +272,6 @@ system_test_nns(
     tags = [
         "long_test",
     ],
-    target_compatible_with = ["@platforms//os:linux"],
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
     deps = COMMON_DEPS + [
         "@crate_index//:tokio",
@@ -294,7 +284,6 @@ system_test_nns(
     tags = [
         "long_test",
     ],
-    target_compatible_with = ["@platforms//os:linux"],
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
     deps = COMMON_DEPS + [
         "//rs/nns/governance/api",
@@ -311,7 +300,6 @@ system_test(
     name = "http_endpoints_public_spec_test",
     env = UNIVERSAL_CANISTER_ENV,
     flaky = False,
-    target_compatible_with = ["@platforms//os:linux"],
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = COMMON_DEPS + HTTP_ENDPOINTS_DEPS + [
         "@crate_index//:ic-agent",
@@ -328,7 +316,6 @@ system_test_nns(
         "k8s",
         "system_test_large",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = COMMON_DEPS + [
@@ -347,7 +334,6 @@ system_test_nns(
         "k8s",
         "system_test_large",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
     deps = COMMON_DEPS + [
         "//rs/types/base_types",
@@ -362,7 +348,6 @@ system_test_nns(
         "k8s",
         "manual",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS + [
         "//rs/tests:jaeger_uvm_config_image",
@@ -380,7 +365,6 @@ system_test_nns(
         "k8s",
         "long_test",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "long",
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
     deps = COMMON_DEPS + [
@@ -395,7 +379,6 @@ system_test_nns(
         "experimental_system_test_colocation",
         "long_test",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "long",
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
     deps = COMMON_DEPS + [
@@ -411,7 +394,6 @@ system_test(
     tags = [
         "manual",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS + [
         "//rs/tests/networking/canisters:cloner_canister",
