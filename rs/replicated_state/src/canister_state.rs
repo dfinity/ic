@@ -345,13 +345,20 @@ impl CanisterState {
     pub fn check_invariants(&self) -> Result<(), String> {
         if let Some(memory_limit) = self.memory_limit() {
             let memory_used = self.memory_usage();
+            let canister_history_memory_usage = self.canister_history_memory_usage();
 
-            if memory_used > memory_limit {
+            // We check if the memory usage exceeds the limit while ignoring the canister history memory usage
+            // (whose growth is not validated against memory limits properly), i.e., we want to log an error if
+            // `memory_used - canister_history_memory_usage > memory_limit`.
+            // To avoid subtraction, we check for
+            // `memory_used > memory_limit + canister_history_memory_usage` instead.
+            if memory_used > memory_limit + canister_history_memory_usage {
                 return Err(format!(
-                "Invariant broken: Memory of canister {} exceeds the limit allowed: used {}, allowed {}",
+                "Invariant broken: Memory of canister {} exceeds the limit allowed: used {}, allowed {}, canister history memory usage {}",
                 self.canister_id(),
                 memory_used,
-                memory_limit
+                memory_limit,
+                canister_history_memory_usage,
             ));
             }
         }

@@ -54,7 +54,6 @@ system_test_nns(
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev_test = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
@@ -73,7 +72,6 @@ system_test_nns(
         "long_test",
         "subnet_recovery",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev_test = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
@@ -91,7 +89,6 @@ system_test_nns(
         "long_test",
         "subnet_recovery",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev_test = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
@@ -110,7 +107,6 @@ system_test_nns(
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev_test = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
@@ -129,7 +125,6 @@ system_test_nns(
         "long_test",
         "subnet_recovery",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev = True,
     uses_guestos_dev_test = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
@@ -149,7 +144,6 @@ system_test_nns(
         "long_test",
         "subnet_recovery",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev = True,
     uses_guestos_dev_test = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
@@ -169,7 +163,6 @@ system_test_nns(
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev_test = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
@@ -188,7 +181,6 @@ system_test_nns(
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev_test = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
@@ -206,7 +198,6 @@ system_test_nns(
         "long_test",
         "subnet_recovery",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev = True,
     uses_guestos_dev_test = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
@@ -226,7 +217,6 @@ system_test_nns(
         "long_test",
         "subnet_recovery",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev = True,
     uses_guestos_dev_test = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
@@ -246,7 +236,6 @@ system_test_nns(
         "subnet_recovery",
         "system_test_large",  # only run as part of release-testing since this test requires many resources.
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
     uses_guestos_dev = True,
     uses_guestos_dev_test = True,
@@ -267,7 +256,6 @@ system_test_nns(
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev_test = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
@@ -291,7 +279,6 @@ system_test_nns(
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +

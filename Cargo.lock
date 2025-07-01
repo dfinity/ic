@@ -12677,7 +12677,7 @@ dependencies = [
 
 [[package]]
 name = "ic-rosetta-api"
-version = "2.1.5"
+version = "2.1.6"
 dependencies = [
  "actix-rt",
  "actix-web",
@@ -13498,27 +13498,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f0f5684f577e0146738cd11afed789109c4f51ba963c75823c48c1501dc53278"
 dependencies = [
  "ic_principal",
-]
-
-[[package]]
-name = "ic-starter"
-version = "0.9.0"
-dependencies = [
- "anyhow",
- "clap 4.5.27",
- "ic-config",
- "ic-logger",
- "ic-management-canister-types-private",
- "ic-prep",
- "ic-protobuf",
- "ic-registry-provisional-whitelist",
- "ic-registry-subnet-features",
- "ic-registry-subnet-type",
- "ic-types",
- "serde",
- "serde_json",
- "slog",
- "tempfile",
 ]
 
 [[package]]
@@ -18705,7 +18684,6 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-registry-transport",
  "ic-replicated-state",
- "ic-starter",
  "ic-state-machine-tests",
  "ic-state-manager",
  "ic-test-utilities",
