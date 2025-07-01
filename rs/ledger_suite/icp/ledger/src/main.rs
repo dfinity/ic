@@ -1679,6 +1679,13 @@ fn is_ledger_ready() -> bool {
     true
 }
 
+/// Get allowances where the approver is `arg.from_account_id`. If `arg.prev_spender_id`
+/// is not specified, the list starts from the first allowance from `arg.from_account_id`.
+/// If `arg.prev_spender_id` is specified, the list starts with allowance that is lexicographically
+/// larger than (`arg.from_account_id`, `arg.prev_spender_id`). This way `arg.prev_spender_id`
+/// can be used for pagination - the user can specify which allowance they already saw.
+/// `arg.take` can be used to limit the number of returned allowances. If not specified,
+/// at most 500 allowances will be returned.
 #[query]
 #[candid_method(query)]
 fn get_allowances(arg: GetAllowancesArgs) -> Allowances {
