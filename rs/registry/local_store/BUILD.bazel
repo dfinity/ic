@@ -11,7 +11,6 @@ rust_library(
         # Keep sorted.
         "//rs/interfaces/registry",
         "//rs/registry/proto",
-        "//rs/registry/transport",
         "//rs/sys",
         "//rs/types/types",
         "@crate_index//:prost",
