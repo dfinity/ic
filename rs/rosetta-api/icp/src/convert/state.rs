@@ -3,7 +3,7 @@ use crate::{
     models::seconds::Seconds,
     request::Request,
     request_types::{
-        AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, ListNeurons, MergeMaturity,
+        AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, ListNeurons,
         NeuronInfo, PublicKeyOrPrincipal, RefreshVotingPower, RegisterVote, RemoveHotKey,
         SetDissolveTimestamp, Spawn, Stake, StakeMaturity, StartDissolve, StopDissolve,
     },
@@ -298,28 +298,6 @@ impl State {
             proposal,
             vote,
             neuron_index,
-        }));
-        Ok(())
-    }
-
-    pub fn merge_maturity(
-        &mut self,
-        account: icp_ledger::AccountIdentifier,
-        neuron_index: u64,
-        percentage_to_merge: Option<u32>,
-    ) -> Result<(), ApiError> {
-        if let Some(pct) = percentage_to_merge {
-            if !(1..=100).contains(&pct) {
-                let msg = format!("Invalid percentage to merge: {}", pct);
-                let err = ApiError::InvalidTransaction(false, msg.into());
-                return Err(err);
-            }
-        }
-        self.flush()?;
-        self.actions.push(Request::MergeMaturity(MergeMaturity {
-            account,
-            neuron_index,
-            percentage_to_merge: percentage_to_merge.unwrap_or(100),
         }));
         Ok(())
     }

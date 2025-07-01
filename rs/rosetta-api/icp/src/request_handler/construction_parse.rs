@@ -4,7 +4,7 @@ use crate::{
     models::{ConstructionParseRequest, ConstructionParseResponse, ParsedTransaction},
     request_handler::{verify_network_id, RosettaRequestHandler},
     request_types::{
-        AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, ListNeurons, MergeMaturity,
+        AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, ListNeurons,
         NeuronInfo, PublicKeyOrPrincipal, RefreshVotingPower, RegisterVote, RemoveHotKey,
         RequestType, SetDissolveTimestamp, Spawn, Stake, StakeMaturity, StartDissolve,
         StopDissolve,
@@ -90,9 +90,6 @@ impl RosettaRequestHandler {
                 }
                 RequestType::RegisterVote { neuron_index } => {
                     register_vote(&mut requests, arg, from, neuron_index)?
-                }
-                RequestType::MergeMaturity { neuron_index } => {
-                    merge_maturity(&mut requests, arg, from, neuron_index)?
                 }
                 RequestType::StakeMaturity { neuron_index } => {
                     stake_maturity(&mut requests, arg, from, neuron_index)?
@@ -450,33 +447,6 @@ fn register_vote(
             account: from,
             proposal: proposal.map(|p| p.id),
             vote,
-            neuron_index,
-        }));
-    } else {
-        return Err(ApiError::internal_error(
-            "Incompatible manage_neuron command".to_string(),
-        ));
-    }
-    Ok(())
-}
-
-/// Handle MERGE_MATURITY.
-fn merge_maturity(
-    requests: &mut Vec<Request>,
-    arg: Blob,
-    from: AccountIdentifier,
-    neuron_index: u64,
-) -> Result<(), ApiError> {
-    let manage: ManageNeuron = candid::decode_one(arg.0.as_ref()).map_err(|e| {
-        ApiError::internal_error(format!("Could not decode ManageNeuron argument: {:?}", e))
-    })?;
-    if let Some(Command::MergeMaturity(manage_neuron::MergeMaturity {
-        percentage_to_merge,
-    })) = manage.command
-    {
-        requests.push(Request::MergeMaturity(MergeMaturity {
-            account: from,
-            percentage_to_merge,
             neuron_index,
         }));
     } else {
