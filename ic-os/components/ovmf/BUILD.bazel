@@ -1,5 +1,8 @@
 package(default_visibility = ["//visibility:public"])
 
+# There is no way using new_git_repository to check out only a limited number of submodules, furthermore
+# new_git_repository does not cache the git repo, therefore it takes much longer. We found a bug in new_git_repository,
+# with filenames containing non-ASCII characters. Because of all these reasons, we use a genrule instead.
 genrule(
     name = "ovmf_sev",
     outs = ["OVMF.fd"],
@@ -20,23 +23,13 @@ genrule(
             SecurityPkg/DeviceSecurity/SpdmLib/libspdm \
             CryptoPkg/Library/OpensslLib/openssl \
             CryptoPkg/Library/MbedTlsLib/mbedtls
-        make -C BaseTools
 
-        set +u # edksetup.sh reads undefined variables
-        source edksetup.sh
-        set -u
-
-        # Configure build
-        sed -i 's#^ACTIVE_PLATFORM.*#ACTIVE_PLATFORM=OvmfPkg/AmdSev/AmdSevX64.dsc#' Conf/target.txt
-        sed -i 's#^TARGET.*#TARGET=RELEASE#' Conf/target.txt
-        sed -i 's#^TARGET_ARCH.*#TARGET_ARCH=X64#' Conf/target.txt
-        sed -i 's#^TOOL_CHAIN_TAG.*#TOOL_CHAIN_TAG=CLANGDWARF#' Conf/target.txt
 
         # Required for building AmdSev package without grub. Workaround found in
-        # https://github.com/kata-containers/kata-containers/blob/CCv0/tools/packaging/static-build/ovmf/build-ovmf.sh#L53
+        # https://github.com/kata-containers/kata-containers/blob/d0df91935b8840036c2891b1f93dd8059ebe486a/tools/packaging/static-build/ovmf/build-ovmf.sh#L53
         touch OvmfPkg/AmdSev/Grub/grub.efi
 
-        build
+        OvmfPkg/build.sh -a X64 -b RELEASE -t CLANGDWARF -p OvmfPkg/AmdSev/AmdSevX64.dsc
 
         mv Build/AmdSev/RELEASE_CLANGDWARF/FV/OVMF.fd "$$out"
     """,
