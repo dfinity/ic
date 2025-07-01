@@ -25,7 +25,7 @@ use ic_types::{
 use rand::Rng;
 use std::{
     cell::RefCell,
-    collections::{BTreeMap, BTreeSet, HashSet},
+    collections::{BTreeSet, HashSet},
     convert::TryInto,
     sync::{Arc, Mutex},
     time::Duration,
@@ -542,6 +542,7 @@ pub mod test {
     };
     use mockall::predicate::*;
     use mockall::*;
+    use std::collections::BTreeMap;
 
     mock! {
         pub NonBlockingChannel<Request: 'static> {

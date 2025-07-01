@@ -239,8 +239,7 @@ pub struct FinalizerMetrics {
     pub idkg_ongoing_xnet_reshares: IntGaugeVec,
     pub idkg_xnet_reshare_agreements: IntCounterVec,
     // canister http payload metrics
-    pub canister_http_success_delivered: IntCounter,
-    pub canister_http_non_replicated_delivered: IntCounter,
+    pub canister_http_success_delivered: IntCounterVec,
     pub canister_http_timeouts_delivered: IntCounter,
     pub canister_http_divergences_delivered: IntCounter,
     pub canister_http_payload_bytes_delivered: Histogram,
@@ -323,13 +322,10 @@ impl FinalizerMetrics {
                 &[KEY_ID_LABEL],
             ),
             // canister http payload metrics
-            canister_http_success_delivered: metrics_registry.int_counter(
+            canister_http_success_delivered: metrics_registry.int_counter_vec(
                 "canister_http_success_delivered",
                 "Total number of canister http messages successfully delivered",
-            ),
-            canister_http_non_replicated_delivered: metrics_registry.int_counter(
-                "canister_http_non_replicated_delivered",
-                "Total number of canister http messages delivered as non replicated responses",
+                &["REPLICATION"],
             ),
             canister_http_timeouts_delivered: metrics_registry.int_counter(
                 "canister_http_timeouts_delivered",
@@ -362,8 +358,10 @@ impl FinalizerMetrics {
             block_stats.block_height as i64 - block_stats.block_context_certified_height as i64,
         );
         self.canister_http_success_delivered
+            .with_label_values(&["fully_replicated"])
             .inc_by(batch_stats.canister_http.responses as u64);
-        self.canister_http_non_replicated_delivered
+        self.canister_http_success_delivered
+            .with_label_values(&["non_replicated"])
             .inc_by(batch_stats.canister_http.single_signature_responses as u64);
         self.canister_http_timeouts_delivered
             .inc_by(batch_stats.canister_http.timeouts as u64);
