@@ -131,8 +131,6 @@ fn test_send_tx(env: TestEnv) {
 
     let client = get_btc_client(&env);
     ensure_wallet(&client, &log);
-    let start_height = client.get_blockchain_info().unwrap().blocks;
-    let anchor = client.get_block_hash(start_height).unwrap()[..].to_vec();
     info!(log, "Set up bitcoind wallet");
 
     let (alice_client, bob_client, alice_address, bob_address) = get_alice_and_bob_wallets(&env);
