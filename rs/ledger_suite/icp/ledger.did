@@ -479,12 +479,17 @@ type icrc21_consent_message_response = variant {
     Err: icrc21_error;
 };
 
+// The arguments for the `get_allowances` endpoint.
+// The `prev_spender_id` argument can be used for pagination. If specified
+// the endpoint returns allowances that are lexicographically greater than
+// (`from_account_id`, `prev_spender_id`) - start with spender after `prev_spender_id`.
 type GetAllowancesArgs = record {
     from_account_id: TextAccountIdentifier;
     prev_spender_id: opt TextAccountIdentifier;
     take: opt nat64;
 };
 
+// The allowances returned by the `get_allowances` endpoint.
 type Allowances = vec record {
     from_account_id: TextAccountIdentifier;
     to_spender_id: TextAccountIdentifier;
