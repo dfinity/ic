@@ -17,10 +17,9 @@ use crate::{
     },
     request_types::{
         ChangeAutoStakeMaturityMetadata, DisburseMetadata, FollowMetadata, KeyMetadata,
-        ListNeuronsMetadata, NeuronIdentifierMetadata, NeuronInfoMetadata,
-        PublicKeyOrPrincipal, RegisterVoteMetadata, RequestResultMetadata,
-        SetDissolveTimestampMetadata, SpawnMetadata, StakeMaturityMetadata, Status,
-        STATUS_COMPLETED,
+        ListNeuronsMetadata, NeuronIdentifierMetadata, NeuronInfoMetadata, PublicKeyOrPrincipal,
+        RegisterVoteMetadata, RequestResultMetadata, SetDissolveTimestampMetadata, SpawnMetadata,
+        StakeMaturityMetadata, Status, STATUS_COMPLETED,
     },
     transaction_id::TransactionIdentifier,
 };

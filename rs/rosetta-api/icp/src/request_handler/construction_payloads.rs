@@ -22,10 +22,9 @@ use crate::{
     request::Request,
     request_handler::{make_sig_data, verify_network_id, RosettaRequestHandler},
     request_types::{
-        AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, ListNeurons,
-        NeuronInfo, PublicKeyOrPrincipal, RefreshVotingPower, RegisterVote, RemoveHotKey,
-        RequestType, SetDissolveTimestamp, Spawn, Stake, StakeMaturity, StartDissolve,
-        StopDissolve,
+        AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, ListNeurons, NeuronInfo,
+        PublicKeyOrPrincipal, RefreshVotingPower, RegisterVote, RemoveHotKey, RequestType,
+        SetDissolveTimestamp, Spawn, Stake, StakeMaturity, StartDissolve, StopDissolve,
     },
 };
 use ic_nns_governance_api::{

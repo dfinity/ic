@@ -4,10 +4,9 @@ use crate::{
     models::{ConstructionParseRequest, ConstructionParseResponse, ParsedTransaction},
     request_handler::{verify_network_id, RosettaRequestHandler},
     request_types::{
-        AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, ListNeurons,
-        NeuronInfo, PublicKeyOrPrincipal, RefreshVotingPower, RegisterVote, RemoveHotKey,
-        RequestType, SetDissolveTimestamp, Spawn, Stake, StakeMaturity, StartDissolve,
-        StopDissolve,
+        AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, ListNeurons, NeuronInfo,
+        PublicKeyOrPrincipal, RefreshVotingPower, RegisterVote, RemoveHotKey, RequestType,
+        SetDissolveTimestamp, Spawn, Stake, StakeMaturity, StartDissolve, StopDissolve,
     },
 };
 use rosetta_core::objects::ObjectMap;

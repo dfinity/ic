@@ -3,9 +3,9 @@ use crate::{
     models::seconds::Seconds,
     request::Request,
     request_types::{
-        AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, ListNeurons,
-        NeuronInfo, PublicKeyOrPrincipal, RefreshVotingPower, RegisterVote, RemoveHotKey,
-        SetDissolveTimestamp, Spawn, Stake, StakeMaturity, StartDissolve, StopDissolve,
+        AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, ListNeurons, NeuronInfo,
+        PublicKeyOrPrincipal, RefreshVotingPower, RegisterVote, RemoveHotKey, SetDissolveTimestamp,
+        Spawn, Stake, StakeMaturity, StartDissolve, StopDissolve,
     },
 };
 use ic_types::PrincipalId;
