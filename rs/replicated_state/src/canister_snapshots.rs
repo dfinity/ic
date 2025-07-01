@@ -19,7 +19,7 @@ use ic_types::{
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
-use ic_wasm_types::CanisterModule;
+use ic_wasm_types::{CanisterModule, CanisterModuleImpl, Mutable};
 
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -352,138 +352,15 @@ impl From<&PageMemory> for Memory {
     }
 }
 
-/// Snapshots created via metadata upload are incomplete, as they have no binary data.
-/// Such `PartialCanisterSnapshots` must be mutable (whereas regular snapshots should be immutable).
-/// Once the data upload is finished, a call to `load_snapshot` validates and transforms a
-/// `PartialCanisterSnapshot` into a regular, immutable `CanisterSnapshot`.
-#[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
-pub struct PartialCanisterSnapshot {
-    /// Identifies the canister to which this partial snapshot belongs.
-    canister_id: CanisterId,
-    /// The timestamp indicating the moment the snapshot metadata was uploaded.
-    taken_at_timestamp: Time,
-    /// The canister version at the time of creating the snapshot.
-    canister_version: u64,
-    /// Amount of memory used by a snapshot in bytes.
-    size: NumBytes,
-    /// The max size of the module, as specified in the uploaded metadata.
-    pub wasm_module_size: NumBytes,
-    /// The canister module.
-    #[validate_eq(Ignore)]
-    pub wasm_module: Vec<u8>,
-    /// Stable memory. Its max size is specified in the `size` field.
-    #[validate_eq(CompareWithValidateEq)]
-    pub stable_memory: PageMemory,
-    /// Wasm memory.Its max size is specified in the `size` field.  
-    #[validate_eq(CompareWithValidateEq)]
-    pub wasm_memory: PageMemory,
-    /// Chunk store. Its max size is specified in the `size` field.
-    #[validate_eq(CompareWithValidateEq)]
-    pub chunk_store: WasmChunkStore,
-    /// The Wasm global variables.
-    #[validate_eq(Ignore)]
-    pub exported_globals: Vec<Global>,
-    /// The certified data blob belonging to the canister.
-    pub certified_data: Vec<u8>,
-    /// Status of global timer
-    pub global_timer: Option<CanisterTimer>,
-    /// Whether the hook is inactive, ready or executed.
-    pub on_low_wasm_memory_hook_status: Option<OnLowWasmMemoryHookStatus>,
-}
-
-impl PartialCanisterSnapshot {
-    pub fn from_metadata(
-        metadata: ValidatedSnapshotMetadata,
-        taken_at_timestamp: Time,
-        canister_version: u64,
-        fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
-    ) -> Self {
-        let stable_memory = PageMemory {
-            page_map: PageMap::new(Arc::clone(&fd_factory)),
-            size: metadata.stable_memory_size,
-        };
-        let wasm_memory = PageMemory {
-            page_map: PageMap::new(Arc::clone(&fd_factory)),
-            size: metadata.wasm_memory_size,
-        };
-        let chunk_store = WasmChunkStore::new(Arc::clone(&fd_factory));
-        Self {
-            canister_id: CanisterId::try_from(metadata.canister_id).unwrap(),
-            taken_at_timestamp,
-            canister_version,
-            size: metadata.snapshot_size_bytes(),
-            wasm_module_size: metadata.wasm_module_size,
-            wasm_module: vec![0; metadata.wasm_module_size.get() as usize],
-            stable_memory,
-            wasm_memory,
-            chunk_store,
-            exported_globals: metadata.exported_globals,
-            certified_data: metadata.certified_data,
-            global_timer: metadata.global_timer.map(CanisterTimer::from),
-            on_low_wasm_memory_hook_status: metadata.on_low_wasm_memory_hook_status,
-        }
-    }
-
-    pub fn canister_id(&self) -> CanisterId {
-        self.canister_id
-    }
-
-    pub fn taken_at_timestamp(&self) -> &Time {
-        &self.taken_at_timestamp
-    }
-
-    pub fn size(&self) -> NumBytes {
-        self.size
-    }
-
-    /// Overwrites the module bytes from `offset` with `chunk`.
-    /// Returns an error if `offset` + `chunk.len()` exceeds the
-    /// length of the module.
-    pub fn write_to_wasm_module(&mut self, offset: usize, chunk: &[u8]) -> Result<(), String> {
-        let end = offset.saturating_add(chunk.len());
-        if self.wasm_module.len() < end {
-            return Err(format!(
-                "Offset {} + slice length {} exceeds module length {}.",
-                offset,
-                chunk.len(),
-                self.wasm_module.len()
-            ));
-        }
-        self.wasm_module[offset..end].copy_from_slice(chunk);
-        Ok(())
-    }
-
-    /// Writes to one of the page-backed memories (main or stable).
-    /// Returns an error if `offset` + `chunk.len()` exceeds the
-    /// length of the memory.
-    pub fn write_to_page_memory(
-        page_memory: &mut PageMemory,
-        offset: u64,
-        chunk: &[u8],
-    ) -> Result<(), String> {
-        let max_size_bytes = page_memory.size.get() * WASM_PAGE_SIZE_IN_BYTES;
-        if max_size_bytes < chunk.len().saturating_add(offset as usize) {
-            return Err(format!(
-                "Offset {} + slice length {} exceeds page memory length {}.",
-                offset,
-                chunk.len(),
-                max_size_bytes,
-            ));
-        }
-        let mut buffer = Buffer::new(page_memory.page_map.clone());
-        buffer.write(chunk, offset as usize);
-        let delta = buffer.dirty_pages().collect::<Vec<_>>();
-        page_memory.page_map.update(&delta);
-        Ok(())
-    }
-}
+pub type ExecutionStateSnapshot = ExecutionStateSnapshotImpl<()>;
+pub type MutableExecutionStateSnapshot = ExecutionStateSnapshotImpl<Mutable>;
 
 /// Contains all information related to a canister's execution state.
 #[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
-pub struct ExecutionStateSnapshot {
+pub struct ExecutionStateSnapshotImpl<T> {
     /// The raw canister module.
     #[validate_eq(Ignore)]
-    pub wasm_binary: CanisterModule,
+    pub wasm_binary: CanisterModuleImpl<T>,
     /// The Wasm global variables.
     /// Note: The hypervisor instrumentations exports all global variables,
     /// including originally internal global variables.
@@ -501,9 +378,16 @@ pub struct ExecutionStateSnapshot {
     pub on_low_wasm_memory_hook_status: Option<OnLowWasmMemoryHookStatus>,
 }
 
+pub type CanisterSnapshot = CanisterSnapshotImpl<()>;
+
+/// Snapshots created via metadata upload are incomplete, as they have no binary data.
+/// Such `PartialCanisterSnapshots` must be mutable (whereas regular snapshots should be immutable).
+/// Once the data upload is finished, a call to `load_snapshot` validates and transforms a
+/// `PartialCanisterSnapshot` into a regular, immutable `CanisterSnapshot`.
+pub type PartialCanisterSnapshot = CanisterSnapshotImpl<Mutable>;
 /// Contains all information related to a canister snapshot.
 #[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
-pub struct CanisterSnapshot {
+pub struct CanisterSnapshotImpl<T> {
     /// Identifies the canister to which this snapshot belongs.
     canister_id: CanisterId,
     /// Whether this snapshot was created from the canister or uploaded manually.
@@ -520,10 +404,12 @@ pub struct CanisterSnapshot {
     #[validate_eq(CompareWithValidateEq)]
     chunk_store: WasmChunkStore,
     #[validate_eq(CompareWithValidateEq)]
-    execution_snapshot: ExecutionStateSnapshot,
+    execution_snapshot: ExecutionStateSnapshotImpl<T>,
 }
 
+/// Impl specific to immutable snapshots
 impl CanisterSnapshot {
+    // TODO
     pub fn new(
         canister_id: CanisterId,
         source: SnapshotSource,
@@ -584,6 +470,103 @@ impl CanisterSnapshot {
         })
     }
 
+    pub fn execution_snapshot(&self) -> &ExecutionStateSnapshot {
+        &self.execution_snapshot
+    }
+
+    pub fn canister_module(&self) -> &CanisterModule {
+        &self.execution_snapshot.wasm_binary
+    }
+}
+
+/// Impl specific to mutable/partial snapshots
+impl PartialCanisterSnapshot {
+    pub fn from_metadata(
+        metadata: &ValidatedSnapshotMetadata,
+        taken_at_timestamp: Time,
+        canister_version: u64,
+        fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+    ) -> Self {
+        let stable_memory = PageMemory {
+            page_map: PageMap::new(Arc::clone(&fd_factory)),
+            size: metadata.stable_memory_size,
+        };
+        let wasm_memory = PageMemory {
+            page_map: PageMap::new(Arc::clone(&fd_factory)),
+            size: metadata.wasm_memory_size,
+        };
+        let execution_snapshot = ExecutionStateSnapshotImpl::<Mutable> {
+            wasm_binary: CanisterModuleImpl::<Mutable>::new(vec![
+                0;
+                metadata.wasm_module_size.get()
+                    as usize
+            ]),
+            exported_globals: metadata.exported_globals.clone(),
+            stable_memory,
+            wasm_memory,
+            global_timer: metadata.global_timer.map(CanisterTimer::from),
+            on_low_wasm_memory_hook_status: metadata.on_low_wasm_memory_hook_status,
+        };
+        let chunk_store = WasmChunkStore::new(Arc::clone(&fd_factory));
+        Self {
+            canister_id: CanisterId::try_from(metadata.canister_id).unwrap(),
+            source: SnapshotSource::MetadataUpload,
+            taken_at_timestamp,
+            canister_version,
+            size: metadata.snapshot_size_bytes(),
+            certified_data: metadata.certified_data.clone(),
+            chunk_store,
+            execution_snapshot,
+        }
+    }
+
+    /// Overwrites the module bytes from `offset` with `chunk`.
+    /// Returns an error if `offset` + `chunk.len()` exceeds the
+    /// length of the module.
+    pub fn write_to_wasm_module(&mut self, offset: usize, chunk: &[u8]) -> Result<(), String> {
+        let end = offset.saturating_add(chunk.len());
+        if self.execution_snapshot.wasm_binary.len() < end {
+            return Err(format!(
+                "Offset {} + slice length {} exceeds module length {}.",
+                offset,
+                chunk.len(),
+                self.execution_snapshot.wasm_binary.len()
+            ));
+        }
+        self.execution_snapshot.wasm_binary.write(chunk, offset)
+    }
+
+    /// Writes to one of the page-backed memories (main or stable).
+    /// Returns an error if `offset` + `chunk.len()` exceeds the
+    /// length of the memory.
+    pub fn write_to_page_memory(
+        page_memory: &mut PageMemory,
+        offset: u64,
+        chunk: &[u8],
+    ) -> Result<(), String> {
+        let max_size_bytes = page_memory.size.get() * WASM_PAGE_SIZE_IN_BYTES;
+        if max_size_bytes < chunk.len().saturating_add(offset as usize) {
+            return Err(format!(
+                "Offset {} + slice length {} exceeds page memory length {}.",
+                offset,
+                chunk.len(),
+                max_size_bytes,
+            ));
+        }
+        let mut buffer = Buffer::new(page_memory.page_map.clone());
+        buffer.write(chunk, offset as usize);
+        let delta = buffer.dirty_pages().collect::<Vec<_>>();
+        page_memory.page_map.update(&delta);
+        Ok(())
+    }
+
+    pub fn execution_snapshot_mut(&mut self) -> &mut MutableExecutionStateSnapshot {
+        &mut self.execution_snapshot
+    }
+}
+
+/// Impl for both immutable and partial snapshots.
+impl<T> CanisterSnapshotImpl<T> {
     pub fn canister_id(&self) -> CanisterId {
         self.canister_id
     }
@@ -604,7 +587,7 @@ impl CanisterSnapshot {
         self.size
     }
 
-    pub fn execution_snapshot(&self) -> &ExecutionStateSnapshot {
+    pub fn execution_snapshot_impl(&self) -> &ExecutionStateSnapshotImpl<T> {
         &self.execution_snapshot
     }
 
@@ -624,7 +607,7 @@ impl CanisterSnapshot {
         &mut self.execution_snapshot.wasm_memory
     }
 
-    pub fn canister_module(&self) -> &CanisterModule {
+    pub fn canister_module_impl(&self) -> &CanisterModuleImpl<T> {
         &self.execution_snapshot.wasm_binary
     }
 
@@ -642,10 +625,6 @@ impl CanisterSnapshot {
 
     pub fn chunk_store_mut(&mut self) -> &mut WasmChunkStore {
         &mut self.chunk_store
-    }
-
-    pub fn execution_snapshot_mut(&mut self) -> &mut ExecutionStateSnapshot {
-        &mut self.execution_snapshot
     }
 
     /// Returns the heap delta produced by this snapshot.
