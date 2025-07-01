@@ -443,6 +443,36 @@ message RegisterDappCanisters {
   repeated ic_base_types.pb.v1.PrincipalId canister_ids = 1;
 }
 
+message PreciseValue {
+  oneof precise_value {
+    bool bool = 1;
+    bytes blob = 2;
+    string text = 3;
+    uint64 nat = 4;
+    int64 int = 5;
+    PreciseArray array = 6;
+    PreciseMap map = 7;
+  }
+}
+
+message PreciseArray {
+  repeated PreciseValue array = 1;
+}
+
+message PreciseMap {
+  map<string, PreciseValue> map = 1;
+}
+
+message ExtensionInit {
+  optional PreciseValue value = 1;
+}
+
+message RegisterExtension {
+  optional ChunkedCanisterWasm chunked_canister_wasm = 1;
+
+  optional ExtensionInit extension_init = 2;
+}
+
 // A proposal to remove a list of dapps from the SNS and assign them to new controllers
 message DeregisterDappCanisters {
   // The canister IDs to be deregistered (i.e. removed from the management of the SNS).
@@ -627,8 +657,13 @@ message Proposal {
 
     // Change the mapping from custom proposal types to topics.
     //
-    // Id = 16;
+    // Id = 16.
     SetTopicsForCustomProposals set_topics_for_custom_proposals = 20;
+
+    // Register an SNS extension canister.
+    //
+    // Id = 17.
+    RegisterExtension register_extension = 21;
   }
 }
 
@@ -1603,6 +1638,7 @@ message GetMetricsRequest {
 message Metrics {
   uint64 num_recently_submitted_proposals = 1;
   uint64 last_ledger_block_timestamp = 2;
+  uint64 num_recently_executed_proposals = 3;
 }
 
 // Request message for 'get_sns_initialization_parameters'

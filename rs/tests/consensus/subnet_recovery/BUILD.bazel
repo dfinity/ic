@@ -54,7 +54,6 @@ system_test_nns(
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev_test = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
@@ -73,7 +72,6 @@ system_test_nns(
         "long_test",
         "subnet_recovery",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev_test = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
@@ -88,11 +86,9 @@ system_test_nns(
     tags = [
         "experimental_system_test_colocation",
         "k8s",
-        "manual",  # the test is not reliable
+        "long_test",
         "subnet_recovery",
-        "system_test_hourly",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev_test = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
@@ -111,7 +107,6 @@ system_test_nns(
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev_test = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
@@ -130,7 +125,6 @@ system_test_nns(
         "long_test",
         "subnet_recovery",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev = True,
     uses_guestos_dev_test = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
@@ -150,7 +144,6 @@ system_test_nns(
         "long_test",
         "subnet_recovery",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev = True,
     uses_guestos_dev_test = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
@@ -170,7 +163,6 @@ system_test_nns(
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev_test = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
@@ -189,7 +181,6 @@ system_test_nns(
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev_test = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
@@ -207,7 +198,6 @@ system_test_nns(
         "long_test",
         "subnet_recovery",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev = True,
     uses_guestos_dev_test = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
@@ -227,7 +217,6 @@ system_test_nns(
         "long_test",
         "subnet_recovery",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev = True,
     uses_guestos_dev_test = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
@@ -244,11 +233,9 @@ system_test_nns(
     flaky = True,  # flakiness rate of over 2.21% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "experimental_system_test_colocation",
-        "manual",  # the test is not reliable
         "subnet_recovery",
-        "system_test_hourly",
+        "system_test_large",  # only run as part of release-testing since this test requires many resources.
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
     uses_guestos_dev = True,
     uses_guestos_dev_test = True,
@@ -269,7 +256,6 @@ system_test_nns(
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev_test = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
@@ -293,7 +279,6 @@ system_test_nns(
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
