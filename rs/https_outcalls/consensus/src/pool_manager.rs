@@ -380,14 +380,11 @@ impl CanisterHttpPoolManagerImpl {
 
                 match active_contexts.get(&share.content.id) {
                     Some(context) => {
-                        if let Replication::NonReplicated(node_id) = context.replication {
-                            if node_id != share.signature.signer {
-                                return Some(CanisterHttpChangeAction::HandleInvalid(
-                                    share.clone(),
-                                    "Share signed by node that is not the delegated node for the request"
-                                        .to_string(),
-                                ));
-                            }
+                        if matches!(context.replication, Replication::NonReplicated(node_id) if node_id != share.signature.signer) {
+                            return Some(CanisterHttpChangeAction::HandleInvalid(
+                                share.clone(),
+                                "Share signed by node that is not the delegated node for the request".to_string(),
+                            ));
                         }
                     }
                     None => {

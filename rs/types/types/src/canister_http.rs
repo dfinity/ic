@@ -517,7 +517,7 @@ impl From<CanisterHttpRequestContextError> for UserError {
             CanisterHttpRequestContextError::NoNodesAvailableForDelegation => {
                 UserError::new(
                     ErrorCode::CanisterRejectedMessage,
-                    "No nodes available for delegation for non-replicated HTTP request.".to_string(),
+                    "No nodes available for delegation for non-replicated canister HTTP request.".to_string(),
                 )
             }
         }
