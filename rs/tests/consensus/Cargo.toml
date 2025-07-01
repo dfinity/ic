@@ -41,6 +41,7 @@ reqwest = { workspace = true }
 serde_cbor = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }
+ssh2 = { workspace = true }
 ic-subnet-splitting = { path = "../../recovery/subnet_splitting" }
 tempfile = { workspace = true }
 tokio = { workspace = true }

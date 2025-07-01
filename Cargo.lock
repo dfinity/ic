@@ -15012,6 +15012,7 @@ dependencies = [
  "serde_cbor",
  "serde_json",
  "slog",
+ "ssh2",
  "tempfile",
  "tokio",
  "url",

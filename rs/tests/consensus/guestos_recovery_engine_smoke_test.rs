@@ -34,15 +34,86 @@ use ic_system_test_driver::{
     retry_with_msg, systest,
 };
 use slog::info;
+use ssh2::Session;
 
-fn cmp_as_result(actual: &str, expected: &str, error_message: &str) -> Result<()> {
+fn verify_content(ssh_session: &Session, file_path: &str, expected_content: &str) -> Result<()> {
+    // Protobuf files are binary files, and since we deserialize them into UTF-8 strings,
+    // we read their base64 encoding and compare those.
+    let content = execute_bash_command(ssh_session, format!("base64 {} | tr -d '\\n'", file_path))
+        .map_err(|e| anyhow!(e))?;
     ensure!(
-        actual == expected,
-        "{}. Actual: {}. Expected: {}.",
-        error_message,
-        actual,
-        expected
+        content == expected_content,
+        "Unexpected content in {}. Actual: {}. Expected: {}.",
+        file_path,
+        content,
+        expected_content
     );
+    Ok(())
+}
+
+/// Follows permissions defined in /ic/ic-os/components/ic/setup-permissions/setup-permissions.sh
+fn verify_permissions_recursively(
+    ssh_session: &Session,
+    folder_path: &str,
+    expected_owner: &str,
+    expected_group: &str,
+) -> Result<()> {
+    let output = execute_bash_command(
+        ssh_session,
+        format!(
+            // File type | Permissions | Owner | Group | File Name
+            "find {} -exec stat -c '%F|%A|%U|%G|%n' {{}} \\;",
+            folder_path
+        ),
+    )
+    .map_err(|e| anyhow!(e))?;
+    for line in output.lines() {
+        let parts: Vec<&str> = line.split('|').collect();
+        ensure!(
+            parts.len() == 5,
+            "Unexpected output format from stat command: {}",
+            line
+        );
+
+        let file_type = parts[0];
+        let permissions = parts[1];
+        let owner = parts[2];
+        let group = parts[3];
+        let file_name = parts[4];
+
+        ensure!(
+            owner == expected_owner,
+            "Unexpected owner for {}. Actual: {}. Expected: {}.",
+            file_name,
+            owner,
+            expected_owner
+        );
+
+        ensure!(
+            group == expected_group,
+            "Unexpected group for {}. Actual: {}. Expected: {}.",
+            file_name,
+            group,
+            expected_group
+        );
+
+        if file_type == "directory" {
+            ensure!(
+                permissions == "drwxr-s---",
+                "Unexpected permissions for directory {}. Actual: {}. Expected: drwxr-s---.",
+                file_name,
+                permissions
+            );
+        } else {
+            ensure!(
+                permissions == "-rw-r-----",
+                "Unexpected permissions for file {}. Actual: {}. Expected: -rw-r-----.",
+                file_name,
+                permissions
+            );
+        }
+    }
+
     Ok(())
 }
 
@@ -74,66 +145,53 @@ pub fn test(env: TestEnv) {
 
     let ssh_session = node.block_on_ssh_session().unwrap();
 
-    // We retry multiple times because the CUP being overwritten and this read
-    // are racing against each other.
-    retry_with_msg!("verify CUP", log.clone(), secs(30), secs(5), || {
-        // Protobuf files are binary files, and since we deserialize them into UTF-8 strings,
-        // we read their base64 encoding and compare those.
-        let cup_proto = execute_bash_command(
-            &ssh_session,
-            String::from(
-                "base64 /var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb | tr -d '\\n'",
-            ),
-        )
-        .unwrap();
+    //
+    // Verify contents
+    //
 
-        cmp_as_result(
-            &cup_proto,
+    // We retry multiple times the first time because the files being overwritten by the recovery
+    // engine and this read are racing against each other.
+    retry_with_msg!("verify CUP", log.clone(), secs(30), secs(5), || {
+        verify_content(
+            &ssh_session,
+            "/var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb",
             &expected_cup_proto,
-            "Unexpected content in CUP file",
         )
     })
     .unwrap();
 
-    retry_with_msg!(
-        "verify local store 1",
-        log.clone(),
-        secs(30),
-        secs(5),
-        || {
-            let local_store_1 = execute_bash_command(
-                &ssh_session,
-                String::from("base64 /var/lib/ic/data/ic_registry_local_store/0001020304/05/06/07.pb | tr -d '\\n'"),
-            )
-            .expect("ic_registry_local_store has the wrong structure");
+    verify_content(
+        &ssh_session,
+        "/var/lib/ic/data/ic_registry_local_store/0001020304/05/06/07.pb",
+        &expected_local_store_1,
+    )
+    .unwrap();
 
-            cmp_as_result(
-                &local_store_1,
-                &expected_local_store_1,
-                "Unexpected content in local store files",
-            )
-        }
-    ).unwrap();
+    verify_content(
+        &ssh_session,
+        "/var/lib/ic/data/ic_registry_local_store/08090a0b0c/0d/0e/0f.pb",
+        &expected_local_store_2,
+    )
+    .unwrap();
 
-    retry_with_msg!(
-        "verify local store 2",
-        log.clone(),
-        secs(30),
-        secs(5),
-        || {
-            let local_store_2 = execute_bash_command(
-                &ssh_session,
-                String::from("base64 /var/lib/ic/data/ic_registry_local_store/08090a0b0c/0d/0e/0f.pb | tr -d '\\n'"),
-            )
-            .expect("ic_registry_local_store has the wrong structure");
+    //
+    // Verify permissions
+    //
 
-            cmp_as_result(
-                &local_store_2,
-                &expected_local_store_2,
-                "Unexpected content in local store files",
-            )
-        }
-    ).unwrap();
+    verify_permissions_recursively(
+        &ssh_session,
+        "/var/lib/ic/data/cups",
+        "ic-replica",
+        "nonconfidential",
+    )
+    .unwrap();
+    verify_permissions_recursively(
+        &ssh_session,
+        "/var/lib/ic/data/ic_registry_local_store",
+        "ic-replica",
+        "ic-registry-local-store",
+    )
+    .unwrap();
 }
 
 pub fn main() -> Result<()> {

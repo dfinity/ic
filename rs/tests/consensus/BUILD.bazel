@@ -266,6 +266,7 @@ system_test(
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
         "@crate_index//:slog",
+        "@crate_index//:ssh2",
     ],
 )
 
