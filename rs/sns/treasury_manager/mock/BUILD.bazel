@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
