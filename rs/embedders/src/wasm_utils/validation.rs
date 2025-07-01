@@ -1296,7 +1296,7 @@ fn validate_custom_section(
     let mut total_custom_sections_size = NumBytes::from(0);
 
     for custom_section in module.custom_sections.iter() {
-        let payload = custom_section.data;
+        let payload = custom_section.data();
         let section_name = custom_section.name;
 
         // Extract the name.

@@ -17548,7 +17548,7 @@ dependencies = [
 [[package]]
 name = "orca-wasm"
 version = "0.9.1"
-source = "git+https://github.com/adambratschikaye/orca?rev=f179363c086e9c20893730373b85222b8337a132#f179363c086e9c20893730373b85222b8337a132"
+source = "git+https://github.com/adambratschikaye/orca?rev=b0257e38bc7607ef74f906514e87e8d3be07b7a3#b0257e38bc7607ef74f906514e87e8d3be07b7a3"
 dependencies = [
  "gimli 0.31.1",
  "log",
