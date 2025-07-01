@@ -9777,6 +9777,7 @@ dependencies = [
  "reqwest 0.12.15",
  "rosetta-core",
  "serde",
+ "serde_json",
  "tokio",
  "url",
 ]
