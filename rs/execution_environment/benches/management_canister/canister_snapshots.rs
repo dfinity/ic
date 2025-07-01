@@ -42,12 +42,6 @@ fn env_and_canister(canister_size: u64) -> (StateMachine, CanisterId) {
             .build(),
     )
     .expect("Error increasing the canister memory size");
-
-    // Skip a few rounds to avoid `CanisterHeapDeltaRateLimited`.
-    for _ in 0..100 {
-        env.tick();
-    }
-
     (env, canister_id)
 }
 
@@ -57,10 +51,6 @@ fn env_and_canister_snapshot(canister_size: u64) -> (StateMachine, CanisterId, S
         .take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None))
         .expect("Error taking canister snapshot")
         .snapshot_id();
-    // Skip a few rounds to avoid `CanisterHeapDeltaRateLimited`.
-    for _ in 0..100 {
-        env.tick();
-    }
     (env, canister_id, snapshot_id)
 }
 
@@ -93,10 +83,6 @@ fn env_and_writeable_canister_snapshot(
         .unwrap();
     env.upload_snapshot_stable_memory(canister_id, snapshot_id, stable_memory, None, None)
         .unwrap();
-    // Skip a few rounds to avoid `CanisterHeapDeltaRateLimited`.
-    for _ in 0..100 {
-        env.tick();
-    }
     (env, canister_id, snapshot_id)
 }
 
@@ -121,8 +107,7 @@ fn baseline_bench<M: criterion::measurement::Measurement>(
             || env_and_canister(canister_size),
             |(env, _canister_id)| {
                 // Just do the checkpoint.
-                env.set_checkpoints_enabled(true);
-                env.tick();
+                env.checkpointed_tick();
                 env
             },
             BatchSize::SmallInput,
@@ -152,8 +137,7 @@ fn take_canister_snapshot_bench<M: criterion::measurement::Measurement>(
             |(env, canister_id)| {
                 env.take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None))
                     .expect("Error taking canister snapshot");
-                env.set_checkpoints_enabled(true);
-                env.tick();
+                env.checkpointed_tick();
                 env
             },
             BatchSize::SmallInput,
@@ -189,8 +173,7 @@ fn replace_canister_snapshot_bench<M: criterion::measurement::Measurement>(
                     Some(snapshot_id),
                 ))
                 .expect("Error replacing canister snapshot");
-                env.set_checkpoints_enabled(true);
-                env.tick();
+                env.checkpointed_tick();
                 env
             },
             BatchSize::SmallInput,
@@ -228,8 +211,7 @@ fn load_canister_snapshot_bench<M: criterion::measurement::Measurement>(
                     None,
                 ))
                 .expect("Error loading canister snapshot");
-                env.set_checkpoints_enabled(true);
-                env.tick();
+                env.checkpointed_tick();
                 env
             },
             BatchSize::SmallInput,
@@ -275,8 +257,7 @@ fn read_canister_snapshot_data_bench<M: criterion::measurement::Measurement>(
                 let _ = env
                     .read_canister_snapshot_data(&args)
                     .expect("Error reading snapshot data");
-                env.set_checkpoints_enabled(true);
-                env.tick();
+                env.checkpointed_tick();
                 env
             },
             BatchSize::SmallInput,
@@ -322,8 +303,7 @@ fn write_canister_snapshot_data_bench<M: criterion::measurement::Measurement>(
                 );
                 env.upload_canister_snapshot_data(&args)
                     .expect("Error writing snapshot data");
-                env.set_checkpoints_enabled(true);
-                env.tick();
+                env.checkpointed_tick();
                 env
             },
             BatchSize::SmallInput,
