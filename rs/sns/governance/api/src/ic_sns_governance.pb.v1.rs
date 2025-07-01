@@ -1691,6 +1691,7 @@ pub mod get_metrics_response {
     #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
     pub struct Metrics {
         pub num_recently_submitted_proposals: Option<u64>,
+        pub num_recently_executed_proposals: Option<u64>,
         pub last_ledger_block_timestamp: Option<u64>,
     }
 

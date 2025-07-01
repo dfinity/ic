@@ -36,6 +36,7 @@ use ic_types::{
 };
 use reqwest;
 
+use crate::routes::ProxyRouter;
 use crate::{
     cli::Cli,
     core::setup_router,
@@ -320,16 +321,23 @@ pub fn setup_test_router(
 
     let salt: Arc<ArcSwapOption<Vec<u8>>> = Arc::new(ArcSwapOption::empty());
 
-    let router = setup_router(
-        registry_snapshot,
-        routing_table,
+    // Proxy Router
+    let proxy_router = Arc::new(ProxyRouter::new(
         http_client,
+        routing_table,
+        registry_snapshot,
+        cli.health.health_subnets_alive_threshold,
+        cli.health.health_nodes_per_subnet_alive_threshold,
+    ));
+
+    let router = setup_router(
         None,
         None,
         &cli,
         &metrics_registry,
         enable_cache.then(|| Arc::new(CacheState::new(&cli.cache, &Registry::new()).unwrap())),
         salt,
+        proxy_router,
     );
 
     let router = router.layer(axum::middleware::from_fn(add_conninfo));

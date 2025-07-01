@@ -1387,6 +1387,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "tokio-test": crate.spec(
                 version = "^0.4.4",
             ),
+            "tokio-tungstenite": crate.spec(
+                version = "^0.26.0",
+            ),
             "tokio-util": crate.spec(
                 version = "^0.7.13",
                 features = [
@@ -1514,7 +1517,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.228.0",
             ),
             "wasmtime": crate.spec(
-                version = "^33.0.0",
+                version = "^33.0.1",
                 default_features = False,
                 features = [
                     "cranelift",
@@ -1525,7 +1528,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "wasmtime-environ": crate.spec(
-                version = "^33.0.0",
+                version = "^33.0.1",
             ),
             "wast": crate.spec(
                 version = "^228.0.0",
