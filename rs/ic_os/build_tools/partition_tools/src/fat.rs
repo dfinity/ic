@@ -80,38 +80,7 @@ impl Partition for FatPartition {
 
     /// Read a file from a given partition
     async fn read_file(&mut self, input: &Path) -> Result<String> {
-        let mcopy = mcopy().context("mcopy is needed to write files")?;
-        let out = if let Some(offset) = self.offset_bytes {
-            Command::new(mcopy)
-                .args([
-                    "-o",
-                    "-i",
-                    &format!("{}@@{}", self.original.display(), offset),
-                    &format!("::{}", input.display()),
-                    "-",
-                ])
-                .output()
-                .await
-                .context("failed to run mcopy")?
-        } else {
-            Command::new(mcopy)
-                .args([
-                    "-o",
-                    "-i",
-                    &format!("{}", self.original.display()),
-                    &format!("::{}", input.display()),
-                    "-",
-                ])
-                .output()
-                .await
-                .context("failed to run mcopy")?
-        };
-
-        if !out.status.success() {
-            return Err(anyhow!("mcopy failed: {}", String::from_utf8(out.stderr)?));
-        }
-
-        Ok(String::from_utf8(out.stdout)?)
+        self.copy_file_inner(input, Path::new("-")).await
     }
 
     async fn copy_files_to(&mut self, output: &Path) -> Result<()> {
@@ -155,5 +124,71 @@ impl Partition for FatPartition {
         }
 
         Ok(())
+    }
+
+    async fn copy_file_to(&mut self, input: &Path, output: &Path) -> Result<()> {
+        let file_name = input.file_name().expect("input must reference a file");
+
+        // When extracting to a directory, use the input filename.
+        let dest = if output.is_dir() {
+            ensure!(output.exists(), "output directory path must already exist");
+
+            &output.join(file_name)
+        } else {
+            ensure!(
+                output.parent().map(|v| v.exists()).unwrap_or(false),
+                "output directory path must already exist"
+            );
+
+            output
+        };
+
+        ensure!(
+            dest.parent().map(|v| v.exists()).unwrap_or(false),
+            "output directory path must already exist"
+        );
+
+        let _stdout = self.copy_file_inner(input, dest).await?;
+
+        Ok(())
+    }
+}
+
+impl FatPartition {
+    // Capture and return stdout, which may be used to "read" the file directly
+    async fn copy_file_inner(&mut self, input: &Path, output: &Path) -> Result<String> {
+        let mcopy = mcopy().context("mcopy is needed to read files")?;
+
+        let out = if let Some(offset) = self.offset_bytes {
+            Command::new(mcopy)
+                .args([
+                    "-o",
+                    "-i",
+                    &format!("{}@@{}", self.original.display(), offset),
+                    &format!("::{}", input.display()),
+                    &format!("{}", output.display()),
+                ])
+                .output()
+                .await
+                .context("failed to run mcopy")?
+        } else {
+            Command::new(mcopy)
+                .args([
+                    "-o",
+                    "-i",
+                    &format!("{}", self.original.display()),
+                    &format!("::{}", input.display()),
+                    &format!("{}", output.display()),
+                ])
+                .output()
+                .await
+                .context("failed to run mcopy")?
+        };
+
+        if !out.status.success() {
+            return Err(anyhow!("mcopy failed: {}", String::from_utf8(out.stderr)?));
+        }
+
+        Ok(String::from_utf8(out.stdout)?)
     }
 }

@@ -190,6 +190,31 @@ impl Partition for ExtPartition {
 
         Ok(())
     }
+
+    async fn copy_file_to(&mut self, input: &Path, output: &Path) -> Result<()> {
+        let file_name = input.file_name().expect("input must reference a file");
+
+        // When extracting to a directory, use the input filename.
+        let dest = if output.is_dir() {
+            ensure!(output.exists(), "output directory path must already exist");
+
+            &output.join(file_name)
+        } else {
+            ensure!(
+                output.parent().map(|v| v.exists()).unwrap_or(false),
+                "output directory path must already exist"
+            );
+
+            output
+        };
+
+        let out = self.read_file(input).await?;
+
+        let mut output = File::create(&dest).await?;
+        output.write_all(out.as_bytes()).await?;
+
+        Ok(())
+    }
 }
 
 impl ExtPartition {
