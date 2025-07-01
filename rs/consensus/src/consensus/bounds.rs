@@ -39,6 +39,39 @@ pub struct ArtifactCounts {
     equivocation_proofs: usize,
 }
 
+impl ArtifactCounts {
+    /// Computes a sum of all individual artifact counts.
+    pub fn sum(&self) -> usize {
+        // Do not ignore any field, include all of them in the sum
+        let ArtifactCounts {
+            block_proposals,
+            notarizations,
+            finalization,
+            random_beacon,
+            random_tape,
+            notarization_shares,
+            finalization_shares,
+            random_beacon_shares,
+            random_tape_shares,
+            cup_shares,
+            cups,
+            equivocation_proofs,
+        } = self;
+        block_proposals
+            + notarizations
+            + finalization
+            + random_beacon
+            + random_tape
+            + notarization_shares
+            + finalization_shares
+            + random_beacon_shares
+            + random_tape_shares
+            + cup_shares
+            + cups
+            + equivocation_proofs
+    }
+}
+
 /// Returns the upper limit on the artifact counts a validated pool is allowed
 /// to have. NOTE: This bound is tied to the implementation. If we move towards
 /// a more aggressive purging strategy, this bound can be lowered.
@@ -208,6 +241,11 @@ mod tests {
             equivocation_proofs: 980,
         };
         assert_eq!(get_maximum_validated_artifacts(40, 499), max_counts);
+        // Make sure limits.rs is kept in sync
+        assert_eq!(
+            ic_limits::MAX_VALIDATED_CONSENSUS_ARTIFACTS,
+            max_counts.sum()
+        );
 
         // Simple check: advance pool without purging, until we have too many
         // finalized blocks.
