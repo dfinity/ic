@@ -1,6 +1,6 @@
 use candid::{CandidType, Nat, Principal};
 use serde::{Deserialize, Serialize, Serializer};
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, fmt::Display};
 
 #[derive(CandidType, Clone, Debug, Deserialize)]
 pub struct TreasuryManagerInit {
@@ -88,26 +88,98 @@ pub struct WithdrawRequest {
 pub struct AuditTrailRequest {}
 
 #[derive(CandidType, Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
-pub enum TreasuryManagerOperation {
+pub struct Step {
+    index: usize,
+    is_final: bool,
+}
+
+impl Display for Step {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.is_final {
+            write!(f, "{}-fin", self.index)
+        } else {
+            write!(f, "{}", self.index)
+        }
+    }
+}
+
+#[derive(CandidType, Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+pub enum Operation {
     Deposit,
     Balances,
     IssueReward,
     Withdraw,
 }
 
+impl Operation {
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::Deposit => "Deposit",
+            Self::Balances => "Balances",
+            Self::IssueReward => "IssueReward",
+            Self::Withdraw => "Withdraw",
+        }
+    }
+}
+
+#[derive(CandidType, Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+pub struct TreasuryManagerOperation {
+    oper: Operation,
+    step: Step,
+}
+
+impl TreasuryManagerOperation {
+    pub fn new(oper: Operation) -> Self {
+        Self {
+            oper,
+            step: Step {
+                index: 0,
+                is_final: false,
+            },
+        }
+    }
+
+    pub fn new_final(oper: Operation) -> Self {
+        Self {
+            oper,
+            step: Step {
+                index: 0,
+                is_final: false,
+            },
+        }
+    }
+
+    pub fn next(&self) -> Self {
+        let index = self.step.index.saturating_add(1);
+        Self {
+            oper: self.oper,
+            step: Step {
+                index,
+                is_final: false,
+            },
+        }
+    }
+
+    pub fn next_final(&self) -> Self {
+        let index = self.step.index.saturating_add(1);
+        Self {
+            oper: self.oper,
+            step: Step {
+                index,
+                is_final: true,
+            },
+        }
+    }
+}
+
 /// To be used for ledger transaction memos.
 impl From<TreasuryManagerOperation> for Vec<u8> {
-    fn from(op: TreasuryManagerOperation) -> Self {
+    fn from(operation: TreasuryManagerOperation) -> Self {
         const PREFIX: &str = "TreasuryManager";
 
-        let suffix = match op {
-            TreasuryManagerOperation::Deposit => "Deposit",
-            TreasuryManagerOperation::Balances => "Balances",
-            TreasuryManagerOperation::IssueReward => "IssueReward",
-            TreasuryManagerOperation::Withdraw => "Withdraw",
-        };
-
-        format!("{}.{}", PREFIX, suffix).as_bytes().to_vec()
+        format!("{}.{}-{}", PREFIX, operation.oper.name(), operation.step)
+            .as_bytes()
+            .to_vec()
     }
 }
 
@@ -137,6 +209,7 @@ pub struct Transaction {
     // TODO: add low-level traces stored as JSON.
     pub result: Result<TransactionWitness, TransactionError>,
     pub human_readable: String,
+
     pub treasury_manager_operation: TreasuryManagerOperation,
 }
 
