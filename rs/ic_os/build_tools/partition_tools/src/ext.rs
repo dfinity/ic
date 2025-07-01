@@ -594,4 +594,77 @@ mod test {
 
         assert_eq!(actual_file_names, ["input.txt", "input2.txt", "lost+found"]);
     }
+
+    #[tokio::test]
+    async fn copy_file_test() {
+        let dir = tempdir().unwrap();
+        let img_path = dir.path().join("empty_ext4.img");
+        create_empty_partition_img(&img_path)
+            .await
+            .expect("Could not create test partition image");
+
+        let mut partition = ExtPartition::open(img_path.to_path_buf(), None)
+            .await
+            .expect("Could not open partition");
+
+        let input_file_names = ["input.txt", "input2.txt"];
+        for file in input_file_names {
+            let input_path = dir.path().join(file);
+            let output_path = Path::new("/").join(file);
+            fs::write(input_path.clone(), b"").await.unwrap();
+            partition
+                .write_file(&input_path, &output_path)
+                .await
+                .expect("Could not write file in partition");
+        }
+
+        let output_dir = TempDir::new().expect("Could not create temp dir");
+
+        // Copy with assumed name (from input).
+        partition
+            .copy_file_to(Path::new("/input.txt"), output_dir.path())
+            .await
+            .unwrap();
+
+        let mut actual_file_names = std::fs::read_dir(output_dir.path())
+            .expect("read_dir failed")
+            .map(|entry| {
+                entry
+                    .unwrap()
+                    .path()
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect::<Vec<_>>();
+        actual_file_names.sort();
+
+        assert_eq!(actual_file_names, ["input.txt"]);
+
+        // Copy with explicit name (from output).
+        partition
+            .copy_file_to(
+                Path::new("/input2.txt"),
+                &output_dir.path().join("different.txt"),
+            )
+            .await
+            .unwrap();
+
+        let mut actual_file_names = std::fs::read_dir(output_dir.path())
+            .expect("read_dir failed")
+            .map(|entry| {
+                entry
+                    .unwrap()
+                    .path()
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect::<Vec<_>>();
+        actual_file_names.sort();
+
+        assert_eq!(actual_file_names, ["different.txt", "input.txt"]);
+    }
 }
