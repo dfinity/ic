@@ -14,7 +14,6 @@ package(default_visibility = ["//rs:system-tests-pkg"])
             "IC_REF_TEST_BIN": "$(rootpath //hs/spec_compliance:ic-ref-test)",
         },
         tags = ["experimental_system_test_colocation"],
-        target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
         runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + CANISTER_HTTP_RUNTIME_DEPS + [
             ":ic-hs",
             "//hs/spec_compliance:ic-ref-test",

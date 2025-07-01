@@ -27,6 +27,7 @@ num-bigint = { workspace = true }
 reqwest = { workspace = true }
 rosetta-core = { path = "../../common/rosetta_core" }
 serde = { workspace = true }
+serde_json = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }
 

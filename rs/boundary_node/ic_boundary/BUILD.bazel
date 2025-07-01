@@ -99,6 +99,7 @@ DEV_DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:criterion",
     "@crate_index//:tempfile",
+    "@crate_index//:tokio-tungstenite",
 ]
 
 MACRO_DEV_DEPENDENCIES = [
