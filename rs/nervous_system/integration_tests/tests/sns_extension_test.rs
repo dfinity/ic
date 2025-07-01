@@ -34,7 +34,7 @@ use sns_treasury_manager;
 use sns_treasury_manager::Asset;
 use sns_treasury_manager::AuditTrailRequest;
 use sns_treasury_manager::BalancesRequest;
-use sns_treasury_manager::{Accounts, Balance, WithdrawRequest};
+use sns_treasury_manager::{Accounts, Balance, Balances, BalancesForAsset, Party, WithdrawRequest};
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::Duration;
@@ -269,17 +269,55 @@ async fn test_treasury_manager() {
             .unwrap();
 
         assert_eq!(
-            response.balances,
-            btreemap! {
-                sns_token => Balance {
-                    amount_decimals: Nat::from(350 * E8 - 2 * SNS_FEE),
-                    owner_account: treasury_sns_account,
+            response.asset_to_balances,
+            Some(btreemap! {
+                sns_token => BalancesForAsset {
+                    party_to_balance: Some(btreemap! {
+                        Party::TreasuryOwner => Balance {
+                            amount_decimals: Nat::from(350 * E8 - 5 * SNS_FEE),
+                            account: Some(treasury_sns_account),
+                        },
+                        Party::TreasuryManager => Balance {
+                            amount_decimals: Nat::from(0_u8),
+                            account: Some(sns_treasury_manager::Account {
+                                owner: adaptor_canister_id.0,
+                                subaccount: None,
+                            }),
+                        },
+                        Party::External => Balance {
+                            amount_decimals: Nat::from(0_u8),
+                            account: None,
+                        },
+                        Party::LedgerFee => Balance {
+                            amount_decimals: Nat::from(5 * SNS_FEE),
+                            account: None,
+                        },
+                    }),
                 },
-                icp_token => Balance {
-                    amount_decimals: Nat::from(150 * E8 - 2 * ICP_FEE),
-                    owner_account: treasury_icp_account,
+                icp_token => BalancesForAsset {
+                    party_to_balance: Some(btreemap! {
+                        Party::TreasuryOwner => Balance {
+                            amount_decimals: Nat::from(150 * E8 - 5 * ICP_FEE),
+                            account: Some(treasury_sns_account),
+                        },
+                        Party::TreasuryManager => Balance {
+                            amount_decimals: Nat::from(0_u8),
+                            account: Some(sns_treasury_manager::Account {
+                                owner: adaptor_canister_id.0,
+                                subaccount: None,
+                            }),
+                        },
+                        Party::External => Balance {
+                            amount_decimals: Nat::from(0_u8),
+                            account: None,
+                        },
+                        Party::LedgerFee => Balance {
+                            amount_decimals: Nat::from(5 * ICP_FEE),
+                            account: None,
+                        },
+                    }),
                 },
-            },
+            }),
         );
     };
 

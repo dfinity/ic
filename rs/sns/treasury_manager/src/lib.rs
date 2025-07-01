@@ -20,13 +20,26 @@ pub enum TreasuryManagerArg {
 pub struct Balance {
     #[serde(serialize_with = "serialize_nat_as_u64")]
     pub amount_decimals: Nat,
-    pub owner_account: Account,
+    pub account: Option<Account>,
+}
+
+#[derive(CandidType, Clone, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd)]
+pub enum Party {
+    TreasuryOwner,
+    TreasuryManager,
+    External,
+    LedgerFee,
+}
+
+#[derive(CandidType, Clone, Debug, Deserialize, PartialEq)]
+pub struct BalancesForAsset {
+    pub party_to_balance: Option<BTreeMap<Party, Balance>>,
 }
 
 #[derive(CandidType, Clone, Debug, Deserialize, PartialEq)]
 pub struct Balances {
-    pub balances: BTreeMap<Asset, Balance>,
     pub timestamp_ns: u64,
+    pub asset_to_balances: Option<BTreeMap<Asset, BalancesForAsset>>,
 }
 
 pub type TreasuryManagerResult = Result<Balances, Vec<TransactionError>>;
