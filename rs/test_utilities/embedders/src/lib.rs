@@ -41,7 +41,7 @@ pub struct WasmtimeInstanceBuilder {
     subnet_type: SubnetType,
     network_topology: NetworkTopology,
     config: ic_config::embedders::Config,
-    canister_memory_limit: NumBytes,
+    canister_memory_allocation: NumBytes,
     memory_usage: NumBytes,
     environment_variables: BTreeMap<String, String>,
 }
@@ -57,7 +57,7 @@ impl Default for WasmtimeInstanceBuilder {
             subnet_type: SubnetType::Application,
             network_topology: NetworkTopology::default(),
             config: ic_config::embedders::Config::default(),
-            canister_memory_limit: NumBytes::from(4 << 30), // Set to 4 GiB by default
+            canister_memory_allocation: NumBytes::from(4 << 30), // Set to 4 GiB by default
             memory_usage: NumBytes::from(0),
             environment_variables: BTreeMap::new(),
         }
@@ -109,9 +109,9 @@ impl WasmtimeInstanceBuilder {
         }
     }
 
-    pub fn with_canister_memory_limit(self, canister_memory_limit: NumBytes) -> Self {
+    pub fn with_canister_memory_allocation(self, canister_memory_allocation: NumBytes) -> Self {
         Self {
-            canister_memory_limit,
+            canister_memory_allocation,
             ..self
         }
     }
@@ -185,7 +185,7 @@ impl WasmtimeInstanceBuilder {
                     self.num_instructions,
                     self.num_instructions,
                 ),
-                canister_memory_limit: Some(self.canister_memory_limit),
+                canister_memory_allocation: Some(self.canister_memory_allocation),
                 wasm_memory_limit: None,
                 memory_allocation: MemoryAllocation::default(),
                 canister_guaranteed_callback_quota: canister_callback_quota,

@@ -182,7 +182,7 @@ impl InstructionLimits {
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct ExecutionParameters {
     pub instruction_limits: InstructionLimits,
-    pub canister_memory_limit: Option<NumBytes>,
+    pub canister_memory_allocation: Option<NumBytes>,
     // The limit on the Wasm memory set by the developer in canister settings.
     pub wasm_memory_limit: Option<NumBytes>,
     pub memory_allocation: MemoryAllocation,
@@ -1274,7 +1274,7 @@ impl SystemApiImpl {
         let memory_usage = MemoryUsage::new(
             log.clone(),
             sandbox_safe_system_state.canister_id,
-            execution_parameters.canister_memory_limit,
+            execution_parameters.canister_memory_allocation,
             execution_parameters.wasm_memory_limit,
             canister_current_memory_usage,
             stable_memory_usage,

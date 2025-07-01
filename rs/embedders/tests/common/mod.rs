@@ -43,7 +43,7 @@ pub fn execution_parameters(execution_mode: ExecutionMode) -> ExecutionParameter
             NumInstructions::from(5_000_000_000),
             NumInstructions::from(5_000_000_000),
         ),
-        canister_memory_limit: Some(NumBytes::new(4 << 30)),
+        canister_memory_allocation: Some(NumBytes::new(4 << 30)),
         wasm_memory_limit: None,
         memory_allocation: MemoryAllocation::default(),
         canister_guaranteed_callback_quota: 50,

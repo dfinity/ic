@@ -86,7 +86,7 @@ fn test_api_for_update(
         Some(caller),
         api_type.call_context_id(),
     );
-    let canister_memory_limit = Some(NumBytes::from(4 << 30));
+    let canister_memory_allocation = Some(NumBytes::from(4 << 30));
     let canister_current_memory_usage = NumBytes::from(0);
     let canister_current_message_memory_usage = MessageMemoryUsage::ZERO;
 
@@ -101,7 +101,7 @@ fn test_api_for_update(
                 instruction_limit,
                 instruction_limit,
             ),
-            canister_memory_limit,
+            canister_memory_allocation,
             wasm_memory_limit: None,
             memory_allocation: MemoryAllocation::default(),
             canister_guaranteed_callback_quota: HypervisorConfig::default()

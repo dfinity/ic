@@ -544,10 +544,10 @@ impl InstallCodeHelper {
 
         self.canister.execution_state = Some(execution_state);
 
-        self.execution_parameters.canister_memory_limit = self.canister.memory_limit();
+        self.execution_parameters.canister_memory_allocation = self.canister.memory_limit();
 
         let new_memory_usage = self.canister.memory_usage();
-        if let Some(limit) = self.execution_parameters.canister_memory_limit {
+        if let Some(limit) = self.execution_parameters.canister_memory_allocation {
             if new_memory_usage > limit {
                 return Err(CanisterManagerError::NotEnoughMemoryAllocationGiven {
                     memory_allocation_given: memory_allocation,
