@@ -1251,6 +1251,9 @@ pub fn from_proto_bytes<T: ToProto>(msg: Vec<u8>) -> Result<T, String> {
 }
 
 /// The arguments for the `get_allowances` endpoint.
+/// The `prev_spender_id` argument can be used for pagination. If specified
+/// the endpoint returns allowances that are lexicographically greater than
+/// (`from_account_id`, `prev_spender_id`) - start with spender after `prev_spender_id`.
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct GetAllowancesArgs {
     pub from_account_id: AccountIdentifier,
