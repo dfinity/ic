@@ -242,6 +242,7 @@ def system_test(
             name = bin_name,
             testonly = True,
             srcs = original_srcs + [name + ".rs"],
+            target_compatible_with = ["@platforms//os:linux"],
             **kwargs
         )
         test_driver_target = bin_name
@@ -357,7 +358,7 @@ def system_test(
     )
     return struct(test_driver_target = test_driver_target)
 
-def system_test_nns(name, extra_head_nns_tags = ["system_test_nightly"], **kwargs):
+def system_test_nns(name, extra_head_nns_tags = ["system_test_large"], **kwargs):
     """Declares a system-test that uses the mainnet NNS and a variant that use the HEAD NNS.
 
     Declares two system-tests:
@@ -365,7 +366,7 @@ def system_test_nns(name, extra_head_nns_tags = ["system_test_nightly"], **kwarg
     * One with the given name which uses the NNS from mainnet as specified by mainnet-canisters.bzl.
     * One with the given name suffixed with "_head_nns" which uses the NNS from the HEAD of the repo.
 
-    The latter one is additionally tagged with "system_test_nightly" such that it only runs daily and not on PRs.
+    The latter one is additionally tagged with "system_test_large" so that it can be excluded.
     You can override the latter behaviour by specifying different `extra_head_nns_tags`.
     If you set `extra_head_nns_tags` to `[]` the head_nns variant will have the same tags as the default variant.
 

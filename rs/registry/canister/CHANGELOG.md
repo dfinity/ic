@@ -11,6 +11,17 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-06-20: Proposal 137081
+
+https://dashboard.internetcomputer.org/proposal/137081
+
+### Changed
+
+* The `check_routing_table_invariants` method now checks the new canister_ranges_
+  and ensures they match the `routing_table` record. The old invariant check will be
+  removed once `routing_table` is removed.
+
+
 # 2025-06-13: Proposal 136988
 
 http://dashboard.internetcomputer.org/proposal/136988

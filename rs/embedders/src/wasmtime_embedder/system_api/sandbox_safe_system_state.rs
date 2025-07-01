@@ -15,7 +15,8 @@ use ic_logger::{info, ReplicaLogger};
 use ic_management_canister_types_private::{
     CanisterStatusType, CreateCanisterArgs, InstallChunkedCodeArgs, InstallCodeArgsV2,
     LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, UninstallCodeArgs, UpdateSettingsArgs, IC_00,
+    ProvisionalCreateCanisterWithCyclesArgs, RenameCanisterArgs, UninstallCodeArgs,
+    UpdateSettingsArgs, IC_00,
 };
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
@@ -246,6 +247,8 @@ impl SystemStateModifications {
                     .map(|record| record.get_sender_canister_version())
             }
             Ok(Ic00Method::LoadCanisterSnapshot) => LoadCanisterSnapshotArgs::decode(payload)
+                .map(|record| record.get_sender_canister_version()),
+            Ok(Ic00Method::RenameCanister) => RenameCanisterArgs::decode(payload)
                 .map(|record| record.get_sender_canister_version()),
             Ok(Ic00Method::SignWithECDSA)
             | Ok(Ic00Method::CanisterStatus)
@@ -1266,7 +1269,10 @@ impl SandboxSafeSystemState {
 
             ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
-            | ApiType::Cleanup { .. } => {
+            | ApiType::Cleanup { .. }
+            | ApiType::CompositeReplyCallback { .. }
+            | ApiType::CompositeRejectCallback { .. }
+            | ApiType::CompositeCleanup { .. } => {
                 // Response callbacks are specified to not check the freezing
                 // threshold.
                 false
@@ -1375,7 +1381,10 @@ impl SandboxSafeSystemState {
             ApiType::InspectMessage { .. }
             | ApiType::ReplicatedQuery { .. }
             | ApiType::NonReplicatedQuery { .. }
-            | ApiType::CompositeQuery { .. } => {
+            | ApiType::CompositeQuery { .. }
+            | ApiType::CompositeReplyCallback { .. }
+            | ApiType::CompositeRejectCallback { .. }
+            | ApiType::CompositeCleanup { .. } => {
                 // Queries do not reserve storage cycles because the state
                 // changes are discarded anyways.
                 false

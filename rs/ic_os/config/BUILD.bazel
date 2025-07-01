@@ -1,24 +1,15 @@
-load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
 
-cargo_build_script(
-    name = "build_script",
-    srcs = ["build.rs"],
-    data = ["templates/guestos_vm_template.xml"],
-)
-
 DEPENDENCIES = [
     # Keep sorted.
-    ":build_script",
     "//rs/ic_os/config_types",
     "//rs/ic_os/deterministic_ips",
     "//rs/ic_os/network",
     "//rs/ic_os/utils",
     "//rs/types/types",
     "@crate_index//:anyhow",
-    "@crate_index//:askama",
     "@crate_index//:clap",
     "@crate_index//:macaddr",
     "@crate_index//:regex",
@@ -31,10 +22,8 @@ DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
-    "@crate_index//:goldenfile",
     "@crate_index//:once_cell",
     "@crate_index//:tempfile",
-    "@crate_index//:url",
 ]
 
 MACRO_DEPENDENCIES = []

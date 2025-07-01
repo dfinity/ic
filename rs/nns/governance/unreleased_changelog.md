@@ -9,9 +9,8 @@ on the process that this file is part of, see
 
 ## Added
 
-* Neurons can now perform SetFollowing to configure their following on multiple
-  topics at once. Whereas, before, they would have to perform multiple Follow
-  operations, one for each topic. This brings NNS into alignment with SNS.
+* Add a metric for the nubmer of spawning neurons.
+* Use a previous voting power snapshot to create ballots if a voting power spike id detected.
 
 ## Changed
 

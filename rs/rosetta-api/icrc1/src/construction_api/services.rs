@@ -550,6 +550,7 @@ mod tests {
                         let args = match arg_with_caller.arg {
                             LedgerEndpointArg::TransferArg(arg) => Encode!(&arg),
                             LedgerEndpointArg::ApproveArg(arg) => Encode!(&arg),
+                            LedgerEndpointArg::TransferFromArg(arg) => Encode!(&arg),
                         }
                         .unwrap();
 

@@ -6,9 +6,10 @@
 #![forbid(missing_docs)]
 
 pub use ic_crypto_internal_bls12_381_type::{G1Affine, G2Affine, PairingInvalidPoint, Scalar};
-use ic_crypto_internal_bls12_381_type::{G2Prepared, Gt, LagrangeCoefficients};
+use ic_crypto_internal_bls12_381_type::{G2Prepared, Gt, LagrangeCoefficients, NodeIndices};
 
 use rand::{CryptoRng, RngCore};
+use std::collections::BTreeMap;
 
 /// The index of a node
 pub type NodeIndex = u32;
@@ -196,8 +197,6 @@ pub enum EncryptedKeyDeserializationError {
 #[derive(Clone, Debug, Eq, PartialEq)]
 /// Error indicating that combining shares into an encrypted key failed
 pub enum EncryptedKeyCombinationError {
-    /// Two shares had the same node index
-    DuplicateNodeIndex,
     /// There were insufficient shares to perform combination
     InsufficientShares,
     /// Not enough valid shares
@@ -223,15 +222,14 @@ impl EncryptedKey {
     /// Combine, unchecked.
     /// The returned key may be invalid.
     fn combine_unchecked(
-        nodes: &[(NodeIndex, EncryptedKeyShare)],
+        nodes: &BTreeMap<NodeIndex, EncryptedKeyShare>,
         reconstruction_threshold: usize,
     ) -> Result<Self, EncryptedKeyCombinationError> {
         if nodes.len() < reconstruction_threshold {
             return Err(EncryptedKeyCombinationError::InsufficientShares);
         }
 
-        let l = LagrangeCoefficients::at_zero(&nodes.iter().map(|i| i.0).collect::<Vec<_>>())
-            .map_err(|_| EncryptedKeyCombinationError::DuplicateNodeIndex)?;
+        let l = LagrangeCoefficients::at_zero(&NodeIndices::from_map(nodes));
 
         let c1 = l
             .interpolate_g1(&nodes.iter().map(|i| &i.1.c1).collect::<Vec<_>>())
@@ -252,7 +250,7 @@ impl EncryptedKey {
     /// Returns the combined key, if it is valid.
     /// Does not take the nodes' individual public keys as input.
     pub fn combine_all(
-        nodes: &[(NodeIndex, EncryptedKeyShare)],
+        nodes: &BTreeMap<NodeIndex, EncryptedKeyShare>,
         reconstruction_threshold: usize,
         master_pk: &G2Affine,
         tpk: &TransportPublicKey,
@@ -274,7 +272,7 @@ impl EncryptedKey {
     /// must be available: calculating them is comparatively expensive. Note that combine_all does not
     /// take the individual public keys as input.
     pub fn combine_valid_shares(
-        nodes: &[(NodeIndex, G2Affine, EncryptedKeyShare)],
+        nodes: &BTreeMap<NodeIndex, (G2Affine, EncryptedKeyShare)>,
         reconstruction_threshold: usize,
         master_pk: &G2Affine,
         tpk: &TransportPublicKey,
@@ -286,12 +284,14 @@ impl EncryptedKey {
         }
 
         // Take the first reconstruction_threshold shares which pass validity check
-        let mut valid_shares = Vec::with_capacity(reconstruction_threshold);
+        let mut valid_shares = BTreeMap::new();
 
-        for (node_index, node_pk, node_eks) in nodes.iter() {
+        for (node_index, (node_pk, node_eks)) in nodes.iter() {
             if node_eks.is_valid(master_pk, node_pk, context, input, tpk) {
-                valid_shares.push((*node_index, node_eks.clone()));
+                valid_shares.insert(*node_index, node_eks.clone());
 
+                // Have we collected enough shares?
+                // If so stop verifying and proceed with reconstruction
                 if valid_shares.len() >= reconstruction_threshold {
                     break;
                 }
