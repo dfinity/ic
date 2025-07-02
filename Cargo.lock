@@ -11662,12 +11662,16 @@ dependencies = [
 name = "ic-node-rewards-canister"
 version = "0.9.0"
 dependencies = [
+ "async-trait",
  "candid",
  "candid_parser",
+ "futures",
  "futures-util",
+ "ic-base-types",
  "ic-cdk 0.17.2",
  "ic-cdk-timers",
  "ic-interfaces-registry",
+ "ic-management-canister-types",
  "ic-nervous-system-agent",
  "ic-nervous-system-canisters",
  "ic-nervous-system-integration-tests",
@@ -11678,13 +11682,16 @@ dependencies = [
  "ic-registry-canister-client",
  "ic-registry-keys",
  "ic-registry-node-provider-rewards",
- "ic-registry-transport",
  "ic-stable-structures",
  "ic-state-machine-tests",
  "ic-types",
+ "itertools 0.12.1",
  "maplit",
+ "mockall",
  "pocket-ic",
  "prost 0.13.4",
+ "rewards-calculation",
+ "serde",
  "serde_json",
  "tokio",
 ]
@@ -11696,6 +11703,14 @@ dependencies = [
  "candid",
  "ic-cdk 0.17.2",
  "serde",
+]
+
+[[package]]
+name = "ic-node-rewards-protobuf-generator"
+version = "0.9.0"
+dependencies = [
+ "ic-utils-rustfmt",
+ "prost-build 0.13.4",
 ]
 
 [[package]]
