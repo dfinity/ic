@@ -11,7 +11,7 @@ use ic_registry_transport::pb::v1::RegistryDelta;
 use ic_types::registry::RegistryClientError;
 use ic_types::RegistryVersion;
 use std::cmp::Ordering;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::marker::PhantomData;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering as AtomicOrdering;
@@ -27,8 +27,8 @@ pub struct StableCanisterRegistryClient<S: RegistryDataStableMemory> {
     latest_version: AtomicU64,
     // Registry client to interact with the canister
     registry: Arc<dyn Registry>,
-    // A map holding the mapping of timestamps to registry versions.
-    timestamp_to_versions_map: Arc<RwLock<BTreeMap<u64, Vec<RegistryVersion>>>>,
+    // A map holding the mapping between timestamps and registry versions.
+    timestamp_to_versions_map: Arc<RwLock<BTreeMap<u64, HashSet<RegistryVersion>>>>,
 }
 
 impl<S: RegistryDataStableMemory> StableCanisterRegistryClient<S> {
@@ -36,10 +36,10 @@ impl<S: RegistryDataStableMemory> StableCanisterRegistryClient<S> {
         let timestamp_to_versions_map = S::with_registry_map(|local_registry| {
             local_registry.iter().fold(
                 BTreeMap::new(),
-                |mut acc: std::collections::BTreeMap<u64, Vec<RegistryVersion>>, (k, _)| {
+                |mut acc: std::collections::BTreeMap<u64, HashSet<RegistryVersion>>, (k, _)| {
                     acc.entry(k.timestamp_nanoseconds)
                         .or_default()
-                        .push(RegistryVersion::from(k.version));
+                        .insert(RegistryVersion::from(k.version));
                     acc
                 },
             )
@@ -55,7 +55,7 @@ impl<S: RegistryDataStableMemory> StableCanisterRegistryClient<S> {
 
     pub fn timestamp_to_versions_map(
         &self,
-    ) -> RwLockReadGuard<BTreeMap<u64, Vec<RegistryVersion>>> {
+    ) -> RwLockReadGuard<BTreeMap<u64, HashSet<RegistryVersion>>> {
         self.timestamp_to_versions_map.read().unwrap()
     }
 
@@ -88,7 +88,7 @@ impl<S: RegistryDataStableMemory> StableCanisterRegistryClient<S> {
                         .unwrap()
                         .entry(v.timestamp_nanoseconds)
                         .or_default()
-                        .push(registry_version);
+                        .insert(registry_version);
                 }
             });
             // Update the latest version if the inserted version is higher than the current one.
