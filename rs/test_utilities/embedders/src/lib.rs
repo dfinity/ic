@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::{convert::TryFrom, rc::Rc};
 
-use ic_base_types::{NumBytes, NumSeconds};
+use ic_base_types::NumBytes;
 use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_config::{flag_status::FlagStatus, subnet_config::SchedulerConfig};
 use ic_cycles_account_manager::ResourceSaturation;
@@ -43,7 +43,6 @@ pub struct WasmtimeInstanceBuilder {
     config: ic_config::embedders::Config,
     memory_usage: NumBytes,
     environment_variables: BTreeMap<String, String>,
-    freezing_threshold: Option<NumSeconds>,
 }
 
 impl Default for WasmtimeInstanceBuilder {
@@ -59,7 +58,6 @@ impl Default for WasmtimeInstanceBuilder {
             config: ic_config::embedders::Config::default(),
             memory_usage: NumBytes::from(0),
             environment_variables: BTreeMap::new(),
-            freezing_threshold: None,
         }
     }
 }
@@ -126,13 +124,6 @@ impl WasmtimeInstanceBuilder {
         }
     }
 
-    pub fn with_freezing_threshold(self, freezing_threshold: NumSeconds) -> Self {
-        Self {
-            freezing_threshold: Some(freezing_threshold),
-            ..self
-        }
-    }
-
     pub fn try_build(self) -> Result<WasmtimeInstance, (HypervisorError, SystemApiImpl)> {
         let log = no_op_logger();
 
@@ -146,12 +137,9 @@ impl WasmtimeInstanceBuilder {
         let (compiled, _result) = compile(&embedder, &BinaryEncodedWasm::new(wasm));
 
         let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
-        let mut system_state_builder =
-            SystemStateBuilder::default().environment_variables(self.environment_variables);
-        if let Some(freezing_threshold) = self.freezing_threshold {
-            system_state_builder = system_state_builder.freeze_threshold(freezing_threshold);
-        }
-        let system_state = system_state_builder.build();
+        let system_state = SystemStateBuilder::default()
+            .environment_variables(self.environment_variables)
+            .build();
         let dirty_page_overhead = match self.subnet_type {
             SubnetType::Application => SchedulerConfig::application_subnet(),
             SubnetType::VerifiedApplication => SchedulerConfig::verified_application_subnet(),
