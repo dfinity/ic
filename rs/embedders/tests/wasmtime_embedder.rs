@@ -1,4 +1,5 @@
 use assert_matches::assert_matches;
+use ic_base_types::NumSeconds;
 use ic_config::{
     embedders::{Config, StableMemoryPageLimit},
     flag_status::FlagStatus,
@@ -3408,6 +3409,55 @@ fn wasm64_saturate_fun_index() {
             panic!("Expected registration of new calback")
         }
     }
+}
+
+#[test]
+fn large_stable_memory_allocation_test() {
+    // This test checks if maximum stable memory size
+    // is capped to the maximum allowed stable memory size.
+
+    let config = ic_config::embedders::Config::default();
+    let max_stable_size_in_pages = config.max_stable_memory_size.get() / WASM_PAGE_SIZE as u64;
+    let wat = format!(
+        r#"
+    (module
+        (import "ic0" "msg_reply" (func $msg_reply))
+        (import "ic0" "msg_reply_data_append" (func $msg_reply_data_append (param $src i32) (param $size i32)))
+        (import "ic0" "stable64_grow" (func $stable64_grow (param $size i64) (result i64)))
+        (func $test (export "canister_update test")
+            ;; store the result of memory.grow at heap address 0
+            (i64.store (i32.const 0) (call $stable64_grow (i64.const {})))
+            ;; return the result of memory.grow
+            (call $msg_reply_data_append (i32.const 0) (i32.const 1))
+            (call $msg_reply)
+        )
+        (memory 1)
+    )"#,
+        max_stable_size_in_pages + 1
+    );
+
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_config(config)
+        .with_freezing_threshold(NumSeconds::new(0))
+        .with_api_type(ApiType::update(
+            UNIX_EPOCH,
+            vec![],
+            Cycles::zero(),
+            user_test_id(24).get(),
+            call_context_test_id(13),
+        ))
+        .with_wat(&wat)
+        .build();
+
+    let result = instance.run(FuncRef::Method(WasmMethod::Update("test".to_string())));
+    let wasm_res = instance
+        .store_data_mut()
+        .system_api_mut()
+        .unwrap()
+        .take_execution_result(result.as_ref().err());
+
+    // The reply is actually the encoding of -1 (the memory grow failed).
+    assert_eq!(wasm_res, Ok(Some(WasmResult::Reply(vec![255]))));
 }
 
 #[test]
