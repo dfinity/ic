@@ -36,7 +36,7 @@ pub struct BalancesForAsset {
     pub party_to_balance: Option<BTreeMap<Party, Balance>>,
 }
 
-#[derive(CandidType, Clone, Debug, Deserialize, PartialEq)]
+#[derive(CandidType, Clone, Debug, Default, Deserialize, PartialEq)]
 pub struct Balances {
     pub timestamp_ns: u64,
     pub asset_to_balances: Option<BTreeMap<Asset, BalancesForAsset>>,
@@ -102,8 +102,8 @@ pub struct AuditTrailRequest {}
 
 #[derive(CandidType, Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Step {
-    index: usize,
-    is_final: bool,
+    pub index: usize,
+    pub is_final: bool,
 }
 
 impl Display for Step {
@@ -137,14 +137,14 @@ impl Operation {
 
 #[derive(CandidType, Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 pub struct TreasuryManagerOperation {
-    oper: Operation,
-    step: Step,
+    pub operation: Operation,
+    pub step: Step,
 }
 
 impl TreasuryManagerOperation {
-    pub fn new(oper: Operation) -> Self {
+    pub fn new(operation: Operation) -> Self {
         Self {
-            oper,
+            operation,
             step: Step {
                 index: 0,
                 is_final: false,
@@ -152,9 +152,9 @@ impl TreasuryManagerOperation {
         }
     }
 
-    pub fn new_final(oper: Operation) -> Self {
+    pub fn new_final(operation: Operation) -> Self {
         Self {
-            oper,
+            operation,
             step: Step {
                 index: 0,
                 is_final: false,
@@ -165,7 +165,7 @@ impl TreasuryManagerOperation {
     pub fn next(&self) -> Self {
         let index = self.step.index.saturating_add(1);
         Self {
-            oper: self.oper,
+            operation: self.operation,
             step: Step {
                 index,
                 is_final: false,
@@ -176,7 +176,7 @@ impl TreasuryManagerOperation {
     pub fn next_final(&self) -> Self {
         let index = self.step.index.saturating_add(1);
         Self {
-            oper: self.oper,
+            operation: self.operation,
             step: Step {
                 index,
                 is_final: true,
@@ -190,9 +190,14 @@ impl From<TreasuryManagerOperation> for Vec<u8> {
     fn from(operation: TreasuryManagerOperation) -> Self {
         const PREFIX: &str = "TreasuryManager";
 
-        format!("{}.{}-{}", PREFIX, operation.oper.name(), operation.step)
-            .as_bytes()
-            .to_vec()
+        format!(
+            "{}.{}-{}",
+            PREFIX,
+            operation.operation.name(),
+            operation.step,
+        )
+        .as_bytes()
+        .to_vec()
     }
 }
 
@@ -219,7 +224,7 @@ pub enum TransactionError {
 pub struct Transaction {
     pub timestamp_ns: u64,
     pub canister_id: Principal,
-    // TODO: add low-level traces stored as JSON.
+
     pub result: Result<TransactionWitness, TransactionError>,
     pub human_readable: String,
 

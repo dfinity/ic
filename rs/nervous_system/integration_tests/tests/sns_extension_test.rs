@@ -274,11 +274,12 @@ async fn test_treasury_manager() {
                 sns_token => BalancesForAsset {
                     party_to_balance: Some(btreemap! {
                         Party::TreasuryManager => Balance {
-                            amount_decimals: Nat::from(0_u8),
-                            account: Some(sns_treasury_manager::Account {
-                                owner: adaptor_canister_id.0,
-                                subaccount: None,
-                            }),
+                            amount_decimals: Nat::from(350 * E8 - 2 * SNS_FEE),
+                            // account: Some(sns_treasury_manager::Account {
+                            //     owner: adaptor_canister_id.0,
+                            //     subaccount: None,
+                            // }),
+                            account: Some(treasury_sns_account),
                         },
                         // TODO
                         // Party::TreasuryOwner => Balance {
@@ -298,16 +299,17 @@ async fn test_treasury_manager() {
                 icp_token => BalancesForAsset {
                     party_to_balance: Some(btreemap! {
                         Party::TreasuryManager => Balance {
-                            amount_decimals: Nat::from(0_u8),
-                            account: Some(sns_treasury_manager::Account {
-                                owner: adaptor_canister_id.0,
-                                subaccount: None,
-                            }),
+                            amount_decimals: Nat::from(150 * E8 - 2 * ICP_FEE),
+                            // account: Some(sns_treasury_manager::Account {
+                            //     owner: adaptor_canister_id.0,
+                            //     subaccount: None,
+                            // }),
+                            account: Some(treasury_icp_account),
                         },
                         // TODO
                         // Party::TreasuryOwner => Balance {
                         //     amount_decimals: Nat::from(150 * E8 - 5 * ICP_FEE),
-                        //     account: Some(treasury_sns_account),
+                        //     account: Some(treasury_icp_account),
                         // },
                         // Party::External => Balance {
                         //     amount_decimals: Nat::from(0_u8),
