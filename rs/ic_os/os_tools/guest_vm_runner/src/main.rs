@@ -462,9 +462,7 @@ mod tests {
         DeploymentEnvironment, DeterministicIpv6Config, HostOSSettings, ICOSSettings,
         NetworkSettings,
     };
-    use ic_sev::testing::{
-        mock_cert_cache_dir, mock_host_sev_certificate_provider, mock_sev_host_firmware,
-    };
+    use ic_sev::testing::mock_host_sev_certificate_provider;
     use nix::sys::signal::SIGTERM;
     use regex::Regex;
     use std::fs::File;
