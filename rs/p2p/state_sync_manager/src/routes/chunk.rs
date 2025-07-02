@@ -63,6 +63,17 @@ pub(crate) async fn state_sync_chunk_handler<T: 'static>(
                         .metrics
                         .compression_ratio
                         .observe(raw.len() as f64 / compressed.len() as f64);
+
+                    if chunk_id.get() % 1024 == 0 {
+                        eprintln!(
+                            "Chunk {} compressed from {} to {} bytes at ratio {}",
+                            chunk_id.get(),
+                            raw.len(),
+                            compressed.len(),
+                            raw.len() as f64 / compressed.len() as f64
+                        );
+                    }
+
                     Ok(compressed)
                 }
                 None => Err(StatusCode::NO_CONTENT),
