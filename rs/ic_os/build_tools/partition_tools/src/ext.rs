@@ -127,7 +127,7 @@ impl Partition for ExtPartition {
     }
 
     /// Read a file from a given partition
-    async fn read_file(&mut self, input: &Path) -> Result<String> {
+    async fn read_file(&mut self, input: &Path) -> Result<Vec<u8>> {
         // run the underlying debugfs operation
         // debugfs has already been ensured.
         let mut cmd = Command::new(debugfs().context("debugfs is needed to read files")?)
@@ -160,13 +160,17 @@ impl Partition for ExtPartition {
         let out = cmd.wait_with_output().await?;
         Self::check_debugfs_result(&out)?;
 
-        let cleaned_output = std::str::from_utf8(&out.stdout)?
-            .lines()
-            .skip(2)
-            .collect::<Vec<_>>()
-            .join("\n");
+        // Strip the first two lines of stdout, as this contains debugfs info
+        let mut stdout = out.stdout;
+        let output_start = stdout
+            .iter()
+            .enumerate()
+            .filter_map(|(i, v)| (*v == b'\n').then_some(i))
+            .nth(1)
+            .unwrap();
+        stdout.drain(..=output_start);
 
-        Ok(cleaned_output)
+        Ok(stdout)
     }
 
     async fn copy_files_to(&mut self, output: &Path) -> Result<()> {
@@ -211,7 +215,7 @@ impl Partition for ExtPartition {
         let out = self.read_file(input).await?;
 
         let mut output = File::create(&dest).await?;
-        output.write_all(out.as_bytes()).await?;
+        output.write_all(&out).await?;
 
         Ok(())
     }
@@ -529,7 +533,7 @@ mod test {
             .await
             .expect("Could not read file from partition");
 
-        assert_eq!(read, std::str::from_utf8(contents1).unwrap());
+        assert_eq!(read, contents1);
 
         // Overwrite the file that we just created.
         partition
@@ -541,7 +545,7 @@ mod test {
             .await
             .expect("Could not read file from partition");
 
-        assert_eq!(read, std::str::from_utf8(contents2).unwrap());
+        assert_eq!(read, contents2);
 
         // Reading non-existing files should fail.
         assert!(partition

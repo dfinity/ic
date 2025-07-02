@@ -79,7 +79,7 @@ impl Partition for FatPartition {
     }
 
     /// Read a file from a given partition
-    async fn read_file(&mut self, input: &Path) -> Result<String> {
+    async fn read_file(&mut self, input: &Path) -> Result<Vec<u8>> {
         self.copy_file_inner(input, Path::new("-")).await
     }
 
@@ -156,7 +156,7 @@ impl Partition for FatPartition {
 
 impl FatPartition {
     // Capture and return stdout, which may be used to "read" the file directly
-    async fn copy_file_inner(&mut self, input: &Path, output: &Path) -> Result<String> {
+    async fn copy_file_inner(&mut self, input: &Path, output: &Path) -> Result<Vec<u8>> {
         let mcopy = mcopy().context("mcopy is needed to read files")?;
 
         let out = if let Some(offset) = self.offset_bytes {
@@ -189,7 +189,7 @@ impl FatPartition {
             return Err(anyhow!("mcopy failed: {}", String::from_utf8(out.stderr)?));
         }
 
-        Ok(String::from_utf8(out.stdout)?)
+        Ok(out.stdout)
     }
 }
 
@@ -259,7 +259,7 @@ mod test {
             .await
             .expect("Could not read file from partition");
 
-        assert_eq!(read, std::str::from_utf8(contents1).unwrap());
+        assert_eq!(read, contents1);
 
         // Overwrite the file that we just created.
         partition
@@ -271,7 +271,7 @@ mod test {
             .await
             .expect("Could not read file from partition");
 
-        assert_eq!(read, std::str::from_utf8(contents2).unwrap());
+        assert_eq!(read, contents2);
 
         // Reading non-existing files should fail.
         assert!(partition

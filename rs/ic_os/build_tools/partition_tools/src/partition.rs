@@ -22,7 +22,7 @@ pub trait Partition: Sized {
     async fn write_file(&mut self, input: &Path, output: &Path) -> Result<()>;
 
     /// Read a file from a given partition
-    async fn read_file(&mut self, input: &Path) -> Result<String>;
+    async fn read_file(&mut self, input: &Path) -> Result<Vec<u8>>;
 
     /// Copy all files from a partition to the output directory. `output` must point to an existing
     /// directory.
