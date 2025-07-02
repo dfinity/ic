@@ -12,6 +12,7 @@ type Action = variant {
   UpgradeSnsToNextVersion : record {};
   AdvanceSnsTargetVersion : AdvanceSnsTargetVersion;
   RegisterDappCanisters : RegisterDappCanisters;
+  RegisterExtension : RegisterExtension;
   TransferSnsTreasuryFunds : TransferSnsTreasuryFunds;
   UpgradeSnsControlledCanister : UpgradeSnsControlledCanister;
   DeregisterDappCanisters : DeregisterDappCanisters;
@@ -254,6 +255,7 @@ type GetMetricsRequest = record {
 
 type Metrics = record {
   num_recently_submitted_proposals : opt nat64;
+  num_recently_executed_proposals: opt nat64;
   last_ledger_block_timestamp : opt nat64;
 };
 
@@ -661,6 +663,40 @@ type QueryStats = record {
 
 type RegisterDappCanisters = record {
   canister_ids : vec principal;
+};
+
+// This type is equivalant to `ICRC3Value`, but we give it another name since it is used here not
+// in the context of the ICRC-3 ledger standard. The justification is the same: The candid format
+// supports sharing information even when the client and the server involved do not have the same
+// schema (see the Upgrading and subtyping section of the candid spec). While this mechanism allows
+// to evolve services and clients independently without breaking them, it also means that a client
+// may not receive all the information that the server is sending, e.g. in case the client schema
+// lacks some fields that the server schema has.
+//
+// This loss of information is not an option for SNS voters deciding if an extension with particular
+// init args should be installed or if an extension function with particular arguments should be
+// called. The client must receive the same exact data the server sent in order to verify it.
+//
+// Verification of a priorly installed extension is done by hashing the extension's init arg data
+// and checking that the result is consistent with what has been certified by the SNS.
+type PreciseValue = variant {
+  Bool : bool;
+  Blob : blob;
+  Text : text;
+  Nat : nat64;
+  Int : int64;
+  Array : vec PreciseValue;
+  Map : vec record { text; PreciseValue };
+};
+
+type ExtensionInit = record {
+  value : opt PreciseValue;
+};
+
+type RegisterExtension = record {
+  chunked_canister_wasm : opt ChunkedCanisterWasm;
+
+  extension_init : opt ExtensionInit;
 };
 
 type RegisterVote = record {

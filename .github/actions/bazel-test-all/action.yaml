@@ -1,10 +1,10 @@
 name: 'Bazel-Test-All'
-description: 'Run Bazel Test'
+description: 'Run Bazel Test with some optional speed optimizations'
 inputs:
   diff-only:
     required: false
     default: false
-  release-build:
+  stamp-build:
     required: false
     default: true
   upload-artifacts:
@@ -13,14 +13,10 @@ inputs:
   execlogs-artifact-name:
     required: false
     description: "When provided, the execlogs will be uploaded as an artifact with the specified name."
-  BAZEL_COMMAND:
+  extra-bazel-args:
     required: true
-    default: 'test'
-  BAZEL_TARGETS:
-    required: true
+    description: "Extra arguments to pass to 'bazel test'"
   CLOUD_CREDENTIALS_CONTENT:
-    required: false
-  SSH_PRIVATE_KEY_BACKUP_POD:
     required: false
   GPG_PASSPHRASE:
     required: true
@@ -29,22 +25,6 @@ inputs:
 runs:
   using: "composite"
   steps:
-      - name: Set up backup pod access
-        shell: bash
-        if: inputs.SSH_PRIVATE_KEY_BACKUP_POD != ''
-        run: |
-          # The following adds the SSH private key to the ssh-agent such that CI can SSH into the backup pod.
-          if [ -z "${SSH_AUTH_SOCK:-}" ]; then
-            eval "$(ssh-agent -s)"
-            ssh-add - <<< '${{ inputs.SSH_PRIVATE_KEY_BACKUP_POD }}'
-            echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
-          fi
-
-          rm -rf ~/.ssh
-          mkdir -p ~/.ssh
-          chmod 0700 ~/.ssh
-          echo -e "Host *\nUser github-runner\n" > ~/.ssh/config
-
       - name: Run Bazel Commands
         uses: ./.github/actions/bazel
         env:
@@ -55,40 +35,18 @@ runs:
           execlogs-artifact-name: ${{ inputs.execlogs-artifact-name }}
           run: |
             set -euo pipefail
+            echo "::notice::Node Name: ${NODE_NAME}"
 
             diff_only='${{ inputs.diff-only }}'
-            release_build='${{ inputs.release-build }}'
+            stamp_build='${{ inputs.stamp-build }}'
 
             bazel_args=(
-                # default all tests to fail ...
-                #   ... after three attempts for tests marked as flaky
-                #   ... after three attempts for all tests in //rs/tests
-                #   ... after the first attempt for other tests
-                #   see also:
-                #     https://bazel.build/reference/command-line-reference#build-flag--flaky_test_attempts
-                --flaky_test_attempts=default
-                --flaky_test_attempts=//rs/tests/.*@3
+                --config=flaky_retry # auto retry eg systests
             )
 
-            if [[ $release_build == "true" ]]; then
+            if [[ $stamp_build == "true" ]]; then
               # make sure the version is stamped in
               bazel_args+=( --config=stamped )
-            fi
-
-            BAZEL_TARGETS='${{ inputs.BAZEL_TARGETS }}'
-
-            bazel_targets=( )
-            for tgt in $BAZEL_TARGETS; do
-              bazel_targets+=( "$tgt" )
-            done
-
-            # jemalloc -- or rather, the "hermetic" zig toolchain -- has issues when too
-            # many targets are built concurrently (leads to determinism issues & linking
-            # errors).
-            #
-            # To work around this, we build jemalloc separately.
-            if [ $(uname -o) != "Darwin" ]; then
-              bazel build "${bazel_args[@]}" @@jemalloc//:libjemalloc
             fi
 
             if [[ $diff_only == "true" ]]; then
@@ -107,7 +65,7 @@ runs:
                 # the targets that are expected to be built.
                 comm -12 \
                   <("${CI_PROJECT_DIR:-}"/ci/bazel-scripts/diff.sh "$commit_range" | sort) \
-                  <(IFS='+'; bazel query "${bazel_targets[*]} except attr(tags, \"manual\", //...)" | sort; ) > "$target_pattern_file"
+                  <(IFS='+'; bazel query "//... except attr(tags, \"manual\", //...)" | sort; ) > "$target_pattern_file"
 
                 # if bazel targets is empty we don't need to run any tests
                 if [ $(wc <"$target_pattern_file" -l) -eq 0 ]; then
@@ -119,48 +77,21 @@ runs:
                 # complaining about the argument list being too long.
                 bazel_args+=( --target_pattern_file="$target_pattern_file" )
             else
-                bazel_args+=( "${bazel_targets[@]}" )
+                bazel_args+=( //... )
             fi
 
             echo "Building as user: $(whoami)"
             echo "Bazel version: $(bazel version)"
 
-            bazel ${{ inputs.BAZEL_COMMAND }} "${bazel_args[@]}"
+            bazel test ${{ inputs.extra-bazel-args }} "${bazel_args[@]}"
 
       - name: Upload to S3
-        uses: ./.github/actions/bazel
+        uses: ./.github/actions/upload-artifacts
         if: inputs.upload-artifacts == 'true' && inputs.CLOUD_CREDENTIALS_CONTENT != ''
         with:
-          run: |
-            release_build='${{ inputs.release-build }}'
-
-            if [[ $release_build != "true" ]]; then
-              echo "refusing to upload non-release artifacts"
-              exit 1
-            fi
-
-            AWS_CREDS="${HOME}/.aws/credentials"
-            if ! [ -e "$AWS_CREDS" ]; then
-              echo writing remote storage credentials
-              mkdir -p "$(dirname "${AWS_CREDS}")"
-              echo '${{ inputs.CLOUD_CREDENTIALS_CONTENT }}' >"$AWS_CREDS"
-            fi
-
-            echo uploading artifacts to remote storage
-            upload_output=$(mktemp) # used in summary
-
-            # with --check_up_to_date Bazel will error out if the artifacts
-            # to be uploaded were not built in the build step above
-            # (this ensures that the exact artifacts built above are uploaded)
-            bazel run --check_up_to_date //:upload-artifacts >"$upload_output"
-            n_uploaded=$(wc -l <"$upload_output")
-            echo "'$n_uploaded' artifacts uploaded"
-
-            # the upload list can get quite big, so we wrap in details/summary
-            {
-              echo '<details><summary>Uploaded '"$n_uploaded"' Artifacts</summary>';
-              cat "$upload_output"
-              echo '</details>';
-            } >>"$GITHUB_STEP_SUMMARY"
-
-            rm "$upload_output"
+          name: Bazel Test All
+          # with --check_up_to_date Bazel will error out if the artifacts
+          # to be uploaded were not built in the build step above
+          # (this ensures that the exact artifacts built above are uploaded)
+          upload-command: bazel run --check_up_to_date //:upload-artifacts
+          credentials-content: ${{ inputs.CLOUD_CREDENTIALS_CONTENT }}

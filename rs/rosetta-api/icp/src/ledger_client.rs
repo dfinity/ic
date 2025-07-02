@@ -3,7 +3,6 @@ mod handle_change_auto_stake_maturity;
 mod handle_disburse;
 mod handle_follow;
 mod handle_list_neurons;
-mod handle_merge_maturity;
 mod handle_neuron_info;
 mod handle_refresh_voting_power;
 mod handle_register_vote;
@@ -39,7 +38,7 @@ use reqwest::{Client, StatusCode};
 use tracing::{debug, error, warn};
 
 use ic_ledger_canister_blocks_synchronizer::{
-    blocks::{Blocks, RosettaBlocksMode},
+    blocks::{Blocks, IndexOptimization, RosettaBlocksConfig, RosettaBlocksMode, RosettaDbConfig},
     canister_access::{make_agent, CanisterAccess},
     certification::VerificationInfo,
     ledger_blocks_sync::LedgerBlocksSynchronizer,
@@ -59,7 +58,7 @@ use crate::{
         handle_add_hotkey::handle_add_hotkey,
         handle_change_auto_stake_maturity::handle_change_auto_stake_maturity,
         handle_disburse::handle_disburse, handle_follow::handle_follow,
-        handle_merge_maturity::handle_merge_maturity, handle_neuron_info::handle_neuron_info,
+        handle_neuron_info::handle_neuron_info,
         handle_refresh_voting_power::handle_refresh_voting_power,
         handle_register_vote::handle_register_vote, handle_remove_hotkey::handle_remove_hotkey,
         handle_send::handle_send, handle_set_dissolve_timestamp::handle_set_dissolve_timestamp,
@@ -150,6 +149,7 @@ impl LedgerClient {
         offline: bool,
         root_key: Option<ThresholdSigPublicKey>,
         enable_rosetta_blocks: bool,
+        optimize_search_indexes: bool,
     ) -> Result<LedgerClient, ApiError> {
         let canister_access = if offline {
             None
@@ -180,12 +180,25 @@ impl LedgerClient {
             root_key,
             canister_id,
         });
+        let config = RosettaDbConfig::new(
+            if enable_rosetta_blocks {
+                RosettaBlocksConfig::Enabled
+            } else {
+                RosettaBlocksConfig::Disabled
+            },
+            if optimize_search_indexes {
+                IndexOptimization::Enabled
+            } else {
+                IndexOptimization::Disabled
+            },
+        );
+
         let ledger_blocks_synchronizer = LedgerBlocksSynchronizer::new(
             canister_access.clone(),
             store_location,
             store_max_blocks,
             verification_info,
-            enable_rosetta_blocks,
+            config,
         )
         .await?;
 
@@ -774,7 +787,6 @@ impl LedgerClient {
             RequestType::AddHotKey { .. } => handle_add_hotkey(bytes),
             RequestType::Disburse { .. } => handle_disburse(bytes),
             RequestType::Follow { .. } => handle_follow(bytes),
-            RequestType::MergeMaturity { .. } => handle_merge_maturity(bytes),
             RequestType::RegisterVote { .. } => handle_register_vote(bytes),
             RequestType::StakeMaturity { .. } => handle_stake_maturity(bytes),
             RequestType::NeuronInfo { .. } => handle_neuron_info(bytes),

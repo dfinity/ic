@@ -201,13 +201,8 @@ pub const DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS: u64 = 1725148800;
 // leave this here indefinitely, but it will just be clutter after a modest
 // amount of time.
 thread_local! {
-
     static DISABLE_NF_FUND_PROPOSALS: Cell<bool>
         = const { Cell::new(cfg!(not(any(feature = "canbench-rs", feature = "test")))) };
-
-    static IS_DISBURSE_MATURITY_ENABLED: Cell<bool> = const { Cell::new(true) };
-
-    static USE_NODE_PROVIDER_REWARD_CANISTER: Cell<bool> = const { Cell::new(true) };
 }
 
 thread_local! {
@@ -231,36 +226,6 @@ pub fn temporarily_enable_nf_fund_proposals() -> Temporary {
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
 pub fn temporarily_disable_nf_fund_proposals() -> Temporary {
     Temporary::new(&DISABLE_NF_FUND_PROPOSALS, true)
-}
-
-pub fn is_disburse_maturity_enabled() -> bool {
-    IS_DISBURSE_MATURITY_ENABLED.get()
-}
-
-/// Only integration tests should use this.
-#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_enable_disburse_maturity() -> Temporary {
-    Temporary::new(&IS_DISBURSE_MATURITY_ENABLED, true)
-}
-
-/// Only integration tests should use this.
-#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_disable_disburse_maturity() -> Temporary {
-    Temporary::new(&IS_DISBURSE_MATURITY_ENABLED, false)
-}
-
-pub fn use_node_provider_reward_canister() -> bool {
-    USE_NODE_PROVIDER_REWARD_CANISTER.get()
-}
-
-#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_enable_node_provider_reward_canister() -> Temporary {
-    Temporary::new(&USE_NODE_PROVIDER_REWARD_CANISTER, true)
-}
-
-#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_disable_node_provider_reward_canister() -> Temporary {
-    Temporary::new(&USE_NODE_PROVIDER_REWARD_CANISTER, false)
 }
 
 pub fn decoder_config() -> DecoderConfig {
@@ -517,6 +482,18 @@ pub fn encode_metrics(
         "The total amount of potential voting power (in the most recent proposal).",
     )?;
 
+    let proposals_using_previous_voting_power_snapshots = governance
+        .heap_data
+        .proposals
+        .values()
+        .filter(|proposal| proposal.previous_ballots_timestamp_seconds.is_some())
+        .count();
+    w.encode_gauge(
+        "governance_proposals_using_previous_voting_power_snapshots",
+        proposals_using_previous_voting_power_snapshots as f64,
+        "The number of proposals that are using previous voting power snapshots.",
+    )?;
+
     // Neuron Indexes
 
     let neuron_store::NeuronIndexesLens {
@@ -553,13 +530,11 @@ pub fn encode_metrics(
         account_id_index_len as f64,
         "Total number of entries in the account_id index",
     )?;
-    if is_disburse_maturity_enabled() {
-        w.encode_gauge(
-            "governance_maturity_disbursement_index_len",
-            maturity_disbursement_index_len as f64,
-            "Total number of entries in the maturity disbursement index",
-        )?;
-    }
+    w.encode_gauge(
+        "governance_maturity_disbursement_index_len",
+        maturity_disbursement_index_len as f64,
+        "Total number of entries in the maturity disbursement index",
+    )?;
 
     let mut builder = w.gauge_vec(
         "governance_proposal_deadline_timestamp_seconds",
@@ -614,7 +589,7 @@ pub fn encode_metrics(
     });
 
     w.encode_gauge(
-        "voting_power_snapshots_latest_snapshot_is_spike",
+        "governance_voting_power_snapshots_latest_snapshot_is_spike",
         if latest_snapshot_is_spike { 1.0 } else { 0.0 },
         "Indicates whether the latest voting power snapshot is a spike compared to previous snapshots.",
     )?;
@@ -658,6 +633,7 @@ pub fn encode_metrics(
             dissolving_neurons_e8s_buckets_ect,
             not_dissolving_neurons_e8s_buckets_seed,
             not_dissolving_neurons_e8s_buckets_ect,
+            spawning_neurons_count,
 
             // Non-self-authenticating neurons.
             total_voting_power_non_self_authenticating_controller: _,
@@ -920,6 +896,12 @@ pub fn encode_metrics(
                 w,
             )?;
         }
+
+        w.encode_gauge(
+            "governance_spawning_neurons_count",
+            *spawning_neurons_count as f64,
+            "The number of neurons that are in the \"spawning\" state.",
+        )?;
     }
 
     Ok(())

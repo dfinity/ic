@@ -389,6 +389,7 @@ rust_test_suite_with_extra_srcs(
     extra_srcs = glob([
         "tests/*/*.rs",
     ]) + ["tests/fake.rs"],
+    flaky = True,  # the governance test times out in over 2% of runs
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     toolchains = ["@bazel_tools//tools/jdk:current_java_runtime"],
     deps = [":governance--test_feature"] + DEPENDENCIES + DEV_DEPENDENCIES + [

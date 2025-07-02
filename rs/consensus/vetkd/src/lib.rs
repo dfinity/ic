@@ -29,7 +29,7 @@ use ic_replicated_state::{
     metadata_state::subnet_call_context_manager::{SignWithThresholdContext, ThresholdArguments},
     ReplicatedState,
 };
-use ic_types::crypto::vetkd::VetKdKeyShareCombinationError;
+use ic_types::crypto::vetkd::{VetKdKeyShareCombinationError, VetKdKeyVerificationError};
 use ic_types::{
     batch::{
         bytes_to_vetkd_payload, vetkd_payload_to_bytes, ConsensusResponse, ValidationContext,
@@ -165,7 +165,7 @@ impl VetKdPayloadBuilderImpl {
             .into_iter()
             .map(|key_config| key_config.key_id)
             // Skip keys that don't need to run NIDKG protocol
-            .filter(|key_id| !key_id.is_idkg_key())
+            .filter(|key_id| key_id.is_vetkd_key())
             // Skip keys that are disabled
             .filter(|key_id| {
                 enabled_subnets
@@ -374,8 +374,13 @@ impl VetKdPayloadBuilderImpl {
                     invalid_artifact(InvalidVetKdPayloadReason::VetKdKeyVerificationError(err))
                 } else {
                     warn!(self.log, "VetKD payload validation failure: {err:?}");
-                    self.metrics
-                        .payload_errors_inc("validation_failed", &context.key_id());
+                    let label = match err {
+                        VetKdKeyVerificationError::ThresholdSigDataNotFound(_) => {
+                            "validation_failed_nidkg_transcript_not_loaded"
+                        }
+                        _ => "validation_failed",
+                    };
+                    self.metrics.payload_errors_inc(label, &context.key_id());
                     validation_failed(VetKdPayloadValidationFailure::VetKdKeyVerificationError(
                         err,
                     ))

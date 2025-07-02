@@ -574,6 +574,130 @@ pub fn syscalls<
         })
         .unwrap();
 
+    if feature_flags.environment_variables == FlagStatus::Enabled {
+        linker
+            .func_wrap("ic0", "env_var_count", {
+                move |mut caller: Caller<'_, StoreData>| {
+                    charge_for_cpu(&mut caller, overhead::ENV_VAR_COUNT)?;
+
+                    with_system_api(&mut caller, |s| s.ic0_env_var_count()).and_then(|s| {
+                        I::try_from(s).map_err(|e| {
+                            anyhow::Error::msg(format!("ic0::env_var_count failed: {}", e))
+                        })
+                    })
+                }
+            })
+            .unwrap();
+    }
+    if feature_flags.environment_variables == FlagStatus::Enabled {
+        linker
+            .func_wrap("ic0", "env_var_name_size", {
+                move |mut caller: Caller<'_, StoreData>, index: I| {
+                    let index: usize = index.try_into().expect("Failed to convert I to usize");
+                    charge_for_cpu(&mut caller, overhead::ENV_VAR_NAME_SIZE)?;
+                    with_system_api(&mut caller, |s| s.ic0_env_var_name_size(index)).and_then(|s| {
+                        I::try_from(s).map_err(|e| {
+                            anyhow::Error::msg(format!("ic0::env_var_name_size failed: {}", e))
+                        })
+                    })
+                }
+            })
+            .unwrap();
+    }
+
+    if feature_flags.environment_variables == FlagStatus::Enabled {
+        linker
+            .func_wrap("ic0", "env_var_name_copy", {
+                move |mut caller: Caller<'_, StoreData>, index: I, dst: I, offset: I, size: I| {
+                    let index: usize = index.try_into().expect("Failed to convert I to usize");
+                    let dst: usize = dst.try_into().expect("Failed to convert I to usize");
+                    let offset: usize = offset.try_into().expect("Failed to convert I to usize");
+                    let size: usize = size.try_into().expect("Failed to convert I to usize");
+                    charge_for_cpu_and_mem(&mut caller, overhead::ENV_VAR_NAME_COPY, size)?;
+                    with_memory_and_system_api(&mut caller, |system_api, memory| {
+                        system_api.ic0_env_var_name_copy(index, dst, offset, size, memory)
+                    })?;
+                    if feature_flags.write_barrier == FlagStatus::Enabled {
+                        mark_writes_on_bytemap(&mut caller, dst, size)
+                    } else {
+                        Ok(())
+                    }
+                }
+            })
+            .unwrap();
+    }
+
+    if feature_flags.environment_variables == FlagStatus::Enabled {
+        linker
+            .func_wrap("ic0", "env_var_name_exists", {
+                move |mut caller: Caller<'_, StoreData>, name_src: I, name_size: I| {
+                    let name_src: usize =
+                        name_src.try_into().expect("Failed to convert I to usize");
+                    let name_size: usize =
+                        name_size.try_into().expect("Failed to convert I to usize");
+                    charge_for_cpu(&mut caller, overhead::ENV_VAR_NAME_EXISTS)?;
+                    with_memory_and_system_api(&mut caller, |system_api, memory| {
+                        system_api.ic0_env_var_name_exists(name_src, name_size, memory)
+                    })
+                }
+            })
+            .unwrap();
+    }
+
+    if feature_flags.environment_variables == FlagStatus::Enabled {
+        linker
+            .func_wrap("ic0", "env_var_value_size", {
+                move |mut caller: Caller<'_, StoreData>, name_src: I, name_size: I| {
+                    let name_src: usize =
+                        name_src.try_into().expect("Failed to convert I to usize");
+                    let name_size: usize =
+                        name_size.try_into().expect("Failed to convert I to usize");
+                    charge_for_cpu(&mut caller, overhead::ENV_VAR_VALUE_SIZE)?;
+                    with_memory_and_system_api(&mut caller, |system_api, memory| {
+                        system_api.ic0_env_var_value_size(name_src, name_size, memory)
+                    })
+                    .and_then(|s| {
+                        I::try_from(s).map_err(|e| {
+                            anyhow::Error::msg(format!("ic0::env_var_value_size failed: {}", e))
+                        })
+                    })
+                }
+            })
+            .unwrap();
+    }
+
+    if feature_flags.environment_variables == FlagStatus::Enabled {
+        linker
+            .func_wrap("ic0", "env_var_value_copy", {
+                move |mut caller: Caller<'_, StoreData>,
+                      name_src: I,
+                      name_size: I,
+                      dst: I,
+                      offset: I,
+                      size: I| {
+                    let name_src: usize =
+                        name_src.try_into().expect("Failed to convert I to usize");
+                    let name_size: usize =
+                        name_size.try_into().expect("Failed to convert I to usize");
+                    let dst: usize = dst.try_into().expect("Failed to convert I to usize");
+                    let offset: usize = offset.try_into().expect("Failed to convert I to usize");
+                    let size: usize = size.try_into().expect("Failed to convert I to usize");
+                    charge_for_cpu_and_mem(&mut caller, overhead::ENV_VAR_VALUE_COPY, size)?;
+
+                    with_memory_and_system_api(&mut caller, |system_api, memory| {
+                        system_api
+                            .ic0_env_var_value_copy(name_src, name_size, dst, offset, size, memory)
+                    })?;
+                    if feature_flags.write_barrier == FlagStatus::Enabled {
+                        mark_writes_on_bytemap(&mut caller, dst, size)
+                    } else {
+                        Ok(())
+                    }
+                }
+            })
+            .unwrap();
+    }
+
     linker
         .func_wrap("ic0", "debug_print", {
             move |mut caller: Caller<'_, StoreData>, offset: I, length: I| {
@@ -1119,14 +1243,6 @@ pub fn syscalls<
                 } else {
                     Ok(())
                 }
-            }
-        })
-        .unwrap();
-
-    linker
-        .func_wrap("ic0", "mint_cycles", {
-            move |mut caller: Caller<'_, StoreData>, amount: u64| {
-                with_system_api(&mut caller, |s| s.ic0_mint_cycles(amount))
             }
         })
         .unwrap();

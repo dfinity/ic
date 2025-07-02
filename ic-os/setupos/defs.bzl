@@ -41,7 +41,9 @@ def image_deps(mode, _malicious = False):
         "rootfs_size": "1750M",
         "bootfs_size": "100M",
         "grub_config": Label("//ic-os/bootloader:setupos_grub.cfg"),
-        "extra_boot_args": Label("//ic-os/setupos/context:extra_boot_args"),
+        "boot_args_template": Label("//ic-os/bootloader:setupos_boot_args.template"),
+        "extra_boot_args_template": Label("//ic-os/bootloader:setupos_extra_boot_args.template"),
+        "requires_root_signing": False,
 
         # Add any custom partitions to the manifest
         "custom_partitions": _custom_partitions,
@@ -77,19 +79,19 @@ def _custom_partitions(mode):
     if mode == "dev":
         guest_image = Label("//ic-os/guestos/envs/dev:disk-img.tar.zst")
         host_image = Label("//ic-os/hostos/envs/dev:disk-img.tar.zst")
-        nns_url = "https://cloudflare.com/cdn-cgi/trace"
+        nns_urls = '["https://cloudflare.com/cdn-cgi/trace"]'
     elif mode == "local-base-dev":
         guest_image = Label("//ic-os/guestos/envs/local-base-dev:disk-img.tar.zst")
         host_image = Label("//ic-os/hostos/envs/local-base-dev:disk-img.tar.zst")
-        nns_url = "https://cloudflare.com/cdn-cgi/trace"
+        nns_urls = '["https://cloudflare.com/cdn-cgi/trace"]'
     elif mode == "local-base-prod":
         guest_image = Label("//ic-os/guestos/envs/local-base-prod:disk-img.tar.zst")
         host_image = Label("//ic-os/hostos/envs/local-base-prod:disk-img.tar.zst")
-        nns_url = "https://icp-api.io,https://icp0.io,https://ic0.app"
+        nns_urls = '["https://icp-api.io", "https://icp0.io", "https://ic0.app"]'
     elif mode == "prod":
         guest_image = Label("//ic-os/guestos/envs/prod:disk-img.tar.zst")
         host_image = Label("//ic-os/hostos/envs/prod:disk-img.tar.zst")
-        nns_url = "https://icp-api.io,https://icp0.io,https://ic0.app"
+        nns_urls = '["https://icp-api.io", "https://icp0.io", "https://ic0.app"]'
     else:
         fail("Unkown mode detected: " + mode)
 
@@ -141,7 +143,7 @@ def _custom_partitions(mode):
         name = "deployment_json",
         srcs = [Label("//ic-os/setupos:data/deployment.json.template")],
         outs = ["deployment.json"],
-        cmd = "sed -e 's#NNS_URL#{nns_url}#' < $< > $@".format(nns_url = nns_url),
+        cmd = "sed -e 's#NNS_URLS#{nns_urls}#' < $< > $@".format(nns_urls = nns_urls),
         tags = ["manual"],
     )
 

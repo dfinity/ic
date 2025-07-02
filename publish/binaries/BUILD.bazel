@@ -16,7 +16,6 @@ ALL_BINARIES = {
     "ic-backup": "//rs/backup:ic-backup",
     "ic-boundary": "//rs/boundary_node/ic_boundary:ic-boundary",
     "ic-boundary-tls": "//rs/boundary_node/ic_boundary:ic-boundary-tls",
-    "ic-starter": "//rs/starter:ic-starter",
     "ic-https-outcalls-adapter": "//rs/https_outcalls/adapter:ic-outcalls-adapter-with-http",
     "ic-https-outcalls-adapter-https-only": "//rs/https_outcalls/adapter:ic-https-outcalls-adapter",
     "ic-consensus-pool-util": "//rs/artifact_pool:ic-consensus-pool-util",
@@ -52,7 +51,6 @@ TESTONLY_BINARIES = [
     "ic-https-outcalls-adapter",
     "ic-nns-init",
     "ic-prep",
-    "ic-starter",
     "ic-test-state-machine",
     "pocket-ic",
     "replicated-state-test",
@@ -120,7 +118,11 @@ filegroup(
 
 artifact_bundle(
     name = "bundle",
-    inputs = [":binaries"],
+    testonly = True,
+    inputs = [
+        ":binaries",
+        "//rs/sns/testing:sns_testing_bundle",
+    ],
     prefix = "binaries/" + os_info,
     visibility = ["//visibility:public"],
 )
@@ -138,14 +140,6 @@ artifact_bundle(
         "@platforms//os:linux",
         "@platforms//cpu:x86_64",
     ],
-    visibility = ["//visibility:public"],
-)
-
-artifact_bundle(
-    name = "bundle-sns-testing",
-    testonly = True,
-    inputs = ["//rs/sns/testing:sns_testing_bundle"],
-    prefix = "binaries/" + os_info,
     visibility = ["//visibility:public"],
 )
 

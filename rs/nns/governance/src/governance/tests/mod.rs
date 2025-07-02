@@ -220,6 +220,13 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
     use ic_sns_swap::pb::v1::NeuronBasketConstructionParameters;
     use test_data::{CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING, IMAGE_1, IMAGE_2};
 
+    /// This canister ID can be used as `specified_id` in tests on `state_machine_builder_for_nns_tests`.
+    /// Canisters created in those tests without any `specified_id` are assigned to the default range
+    /// from `CanisterId::from_u64(0x0000000)` to `CanisterId::from_u64(0x00FFFFF)` and thus
+    /// canisters created with `specified_id` can only be assigned to the extra range
+    /// from `CanisterId::from_u64(0x2100000)` to `CanisterId::from_u64(0x21FFFFE)`.
+    const SPECIFIED_CANISTER_ID: CanisterId = CanisterId::from_u64(0x2100000);
+
     // Alias types from crate::pb::v1::...
     //
     // This is done within another mod to differentiate against types that have
@@ -350,7 +357,7 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
                 ),
                 dapp_canisters: Some(sns_init_pb::DappCanisters {
                     canisters: vec![pb::Canister {
-                        id: Some(CanisterId::from_u64(1000).get()),
+                        id: Some(SPECIFIED_CANISTER_ID.get())
                     }],
                 }),
                 min_participants: original_swap_parameters.minimum_participants,
@@ -513,6 +520,13 @@ mod convert_create_service_nervous_system_proposal_to_sns_init_payload_tests_wit
     use ic_sns_init::pb::v1::sns_init_payload;
     use ic_sns_swap::pb::v1::NeuronBasketConstructionParameters;
     use test_data::{CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING, IMAGE_1, IMAGE_2};
+
+    /// This canister ID can be used as `specified_id` in tests on `state_machine_builder_for_nns_tests`.
+    /// Canisters created in those tests without any `specified_id` are assigned to the default range
+    /// from `CanisterId::from_u64(0x0000000)` to `CanisterId::from_u64(0x00FFFFF)` and thus
+    /// canisters created with `specified_id` can only be assigned to the extra range
+    /// from `CanisterId::from_u64(0x2100000)` to `CanisterId::from_u64(0x21FFFFE)`.
+    const SPECIFIED_CANISTER_ID: CanisterId = CanisterId::from_u64(0x2100000);
 
     // Alias types from crate::pb::v1::...
     //
@@ -688,7 +702,7 @@ mod convert_create_service_nervous_system_proposal_to_sns_init_payload_tests_wit
                 ),
                 dapp_canisters: Some(sns_init_pb::DappCanisters {
                     canisters: vec![pb::Canister {
-                        id: Some(CanisterId::from_u64(1000).get()),
+                        id: Some(SPECIFIED_CANISTER_ID.get())
                     }],
                 }),
                 min_participants: original_swap_parameters.minimum_participants,
@@ -1623,7 +1637,7 @@ fn test_compute_ballots_for_new_proposal() {
         neuron_id_or_subaccount: None,
         command: None,
     }));
-    let (ballots, tot_potential_voting_power) = governance
+    let (ballots, tot_potential_voting_power, _previous_ballots_timestamp_seconds) = governance
         .compute_ballots_for_new_proposal(&manage_neuron_action, &NeuronId { id: 10 }, now_seconds)
         .expect("Failed computing ballots for new proposal");
 
@@ -1643,7 +1657,7 @@ fn test_compute_ballots_for_new_proposal() {
     );
 
     let motion_action = Action::Motion(Default::default());
-    let (ballots, tot_potential_voting_power) = governance
+    let (ballots, tot_potential_voting_power, _previous_ballots_timestamp_seconds) = governance
         .compute_ballots_for_new_proposal(&motion_action, &NeuronId { id: 10 }, now_seconds)
         .expect("Failed computing ballots for new proposal");
     // Similar to previous; this time though, Action::ManageNeuron, the weird
@@ -1674,7 +1688,7 @@ fn test_compute_ballots_for_new_proposal() {
     // Not affected by refresh.
     let now_seconds = CREATED_TIMESTAMP_SECONDS + 20 * ONE_YEAR_SECONDS;
 
-    let (ballots, tot_potential_voting_power) = governance
+    let (ballots, tot_potential_voting_power, _previous_ballots_timestamp_seconds) = governance
         .compute_ballots_for_new_proposal(&motion_action, &NeuronId { id: 10 }, now_seconds)
         .expect("Failed computing ballots for new proposal");
     let expected: u64 = governance.neuron_store.with_active_neurons_iter(|iter| {

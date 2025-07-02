@@ -42,6 +42,7 @@ pub fn get_subnet_list_record(registry: &Registry) -> SubnetListRecord {
         value: subnet_list_record_vec,
         version: _,
         deletion_marker: _,
+        timestamp_nanoseconds: _,
     } = registry
         .get(
             make_subnet_list_record_key().as_bytes(),
@@ -255,7 +256,8 @@ pub fn node_exists_with_ipv4(registry: &Registry, ipv4_addr: &str) -> bool {
 }
 
 /// Similar to `get_key_family` on the `RegistryClient`, return a list of
-/// tuples, (ID, value).
+/// tuples, (ID, value).  This strips the prefix from the key and returns the
+/// value as a decoded struct.
 pub(crate) fn get_key_family<T: prost::Message + Default>(
     registry: &Registry,
     prefix: &str,

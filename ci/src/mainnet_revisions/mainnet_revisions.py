@@ -3,7 +3,6 @@ import argparse
 import hashlib
 import json
 import logging
-import os
 import pathlib
 import subprocess
 import tempfile
@@ -98,16 +97,14 @@ def commit_and_create_pr(
                     description,
                     "--title",
                     commit_message,
+                    "--label",
+                    "CI_ALL_BAZEL_TARGETS",
                 ],
                 cwd=repo_root,
             )
         pr_number = subprocess.check_output(
             ["gh", "pr", "view", "--json", "number", "-q", ".number"], cwd=repo_root, text=True
         ).strip()
-        subprocess.check_call(
-            ["gh", "pr", "edit", pr_number, "--add-label", "CI_ALL_BAZEL_TARGETS"],
-            cwd=repo_root,
-        )
         if enable_auto_merge:
             subprocess.check_call(["gh", "pr", "merge", pr_number, "--auto"], cwd=repo_root)
 
@@ -223,10 +220,7 @@ def update_mainnet_revisions_canisters_file(repo_root: pathlib.Path, logger: log
     cmd = [
         "bazel",
         "run",
-        "--config=ci",
     ]
-    if os.environ.get("CI"):
-        cmd.append("--repository_cache=/cache/bazel")
     cmd.append("//rs/nervous_system/tools/sync-with-released-nervous-system-wasms")
 
     logger.info("Running command: %s", " ".join(cmd))

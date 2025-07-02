@@ -38,49 +38,48 @@ fn munge(
     defeat_setup_checks: bool,
     defeat_installer: bool,
 ) -> Result<String, ImproperlyQuotedValue> {
-    let extra_boot_args_re = Regex::new(r"(^|\n)EXTRA_BOOT_ARGS=(.*)(\s+#|\n|$)").unwrap();
-    let (left, prevmatch, mut extra_boot_args, postmatch, right) =
-        match extra_boot_args_re.captures(input) {
-            Some(captures) => {
-                let wholematch = captures.get(0).unwrap();
-                let prevmatch = captures.get(1).unwrap();
-                let thematch = captures.get(2).unwrap();
-                let postmatch = captures.get(3).unwrap();
-                (
-                    wholematch.start(),
-                    prevmatch.as_str().to_string(),
-                    KernelCommandLine::try_from(thematch.as_str().trim_matches('"'))?,
-                    postmatch.as_str().to_string(),
-                    wholematch.end(),
-                )
-            }
-            None => (
-                input.len(),
-                "".to_string(),
-                KernelCommandLine::default(),
-                "\n".to_string(),
-                input.len(),
-            ),
-        };
+    let boot_args_re = Regex::new(r"(^|\n)BOOT_ARGS=(.*)(\s+#|\n|$)").unwrap();
+    let (left, prevmatch, mut boot_args, postmatch, right) = match boot_args_re.captures(input) {
+        Some(captures) => {
+            let wholematch = captures.get(0).unwrap();
+            let prevmatch = captures.get(1).unwrap();
+            let thematch = captures.get(2).unwrap();
+            let postmatch = captures.get(3).unwrap();
+            (
+                wholematch.start(),
+                prevmatch.as_str().to_string(),
+                KernelCommandLine::try_from(thematch.as_str().trim().trim_matches('"'))?,
+                postmatch.as_str().to_string(),
+                wholematch.end(),
+            )
+        }
+        None => (
+            input.len(),
+            "".to_string(),
+            KernelCommandLine::default(),
+            "\n".to_string(),
+            input.len(),
+        ),
+    };
 
     for arg in CHECK_DISABLER_CMDLINE_ARGS.iter() {
-        extra_boot_args
+        boot_args
             .ensure_single_argument(arg, defeat_setup_checks.then_some("0"))
             .unwrap();
     }
     for arg in CHECK_INSTALL_DISABLER_CMDLINE_ARGS.iter() {
-        extra_boot_args
+        boot_args
             .ensure_single_argument(arg, defeat_installer.then_some("0"))
             .unwrap();
     }
 
-    let extra_boot_args_str: String = extra_boot_args.into();
+    let boot_args_str: String = boot_args.into();
 
     Ok(format!(
-        "# This file has been modified by setupos-disable-checks.\n{}{}EXTRA_BOOT_ARGS=\"{}\"{}{}",
+        "# This file has been modified by setupos-disable-checks.\n{}{}BOOT_ARGS=\"{}\"{}{}",
         &input[..left],
         prevmatch,
-        extra_boot_args_str,
+        boot_args_str,
         postmatch,
         &input[right..],
     ))
@@ -89,7 +88,7 @@ fn munge(
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     let cli = Cli::parse();
-    let extra_boot_args_path = Path::new("/extra_boot_args");
+    let boot_args_path = Path::new("/boot_args");
 
     // Open boot file system.
     eprintln!("Opening boot file system {}", cli.image_path.display());
@@ -104,24 +103,22 @@ async fn main() -> Result<(), Error> {
         eprintln!("Defeating age, hardware and network checks in SetupOS");
     }
 
-    let temp_extra_boot_args = NamedTempFile::new()?;
+    let temp_boot_args = NamedTempFile::new()?;
     fs::write(
-        temp_extra_boot_args.path(),
+        temp_boot_args.path(),
         munge(
-            bootfs.read_file(extra_boot_args_path).await?.as_str(),
+            bootfs.read_file(boot_args_path).await?.as_str(),
             true,
             cli.defeat_installer,
         )
-        .context(
-            "Could not parse the EXTRA_BOOT_ARGS variable in the existing extra_boot_args file",
-        )?,
+        .context("Could not parse the BOOT_ARGS variable in the existing boot_args file")?,
     )
     .await
-    .context("failed to write temporary extra boot args")?;
-    fs::set_permissions(temp_extra_boot_args.path(), Permissions::from_mode(0o755)).await?;
+    .context("failed to write temporary boot args")?;
+    fs::set_permissions(temp_boot_args.path(), Permissions::from_mode(0o755)).await?;
 
     bootfs
-        .write_file(temp_extra_boot_args.path(), extra_boot_args_path)
+        .write_file(temp_boot_args.path(), boot_args_path)
         .await?;
 
     eprintln!("Closing boot file system");
@@ -145,51 +142,51 @@ mod tests {
                 true,
                 r#"# This file has been modified by setupos-disable-checks.
 # This file contains nothing.
-EXTRA_BOOT_ARGS="ic.setupos.check_hardware=0 ic.setupos.check_network=0 ic.setupos.check_age=0 ic.setupos.perform_installation=0"
+BOOT_ARGS="ic.setupos.check_hardware=0 ic.setupos.check_network=0 ic.setupos.check_age=0 ic.setupos.perform_installation=0"
 "#,
             ),
             (
                 "munges the variable successfully when present",
                 r#"# Hello hello.
-EXTRA_BOOT_ARGS="security=selinux selinux=1 enforcing=0"
+BOOT_ARGS="security=selinux selinux=1 enforcing=0"
 # Postfix.
 "#,
                 true,
                 true,
                 r#"# This file has been modified by setupos-disable-checks.
 # Hello hello.
-EXTRA_BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.check_hardware=0 ic.setupos.check_network=0 ic.setupos.check_age=0 ic.setupos.perform_installation=0"
+BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.check_hardware=0 ic.setupos.check_network=0 ic.setupos.check_age=0 ic.setupos.perform_installation=0"
 # Postfix.
 "#,
             ),
             (
                 "munges the variable even at the beginning of the file",
-                r#"EXTRA_BOOT_ARGS="security=selinux selinux=1 enforcing=0"
+                r#"BOOT_ARGS="security=selinux selinux=1 enforcing=0"
 "#,
                 true,
                 true,
                 r#"# This file has been modified by setupos-disable-checks.
-EXTRA_BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.check_hardware=0 ic.setupos.check_network=0 ic.setupos.check_age=0 ic.setupos.perform_installation=0"
+BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.check_hardware=0 ic.setupos.check_network=0 ic.setupos.check_age=0 ic.setupos.perform_installation=0"
 "#,
             ),
             (
                 "variables for defeat installer are set, and checks are prevented from being defeated",
-                r#"EXTRA_BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.check_hardware=0"
+                r#"BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.check_hardware=0"
 "#,
                 false,
                 true,
                 r#"# This file has been modified by setupos-disable-checks.
-EXTRA_BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.check_hardware ic.setupos.check_network ic.setupos.check_age ic.setupos.perform_installation=0"
+BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.check_hardware ic.setupos.check_network ic.setupos.check_age ic.setupos.perform_installation=0"
 "#,
             ),
             (
                 "variables for defeat checks are set, and installer is prevented from being defeated",
-                r#"EXTRA_BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.check_hardware=0 ic.setupos.check_age"
+                r#"BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.check_hardware=0 ic.setupos.check_age"
 "#,
                 true,
                 false,
                 r#"# This file has been modified by setupos-disable-checks.
-EXTRA_BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.check_hardware=0 ic.setupos.check_age=0 ic.setupos.check_network=0 ic.setupos.perform_installation"
+BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.check_hardware=0 ic.setupos.check_age=0 ic.setupos.check_network=0 ic.setupos.perform_installation"
 "#,
             ),
         ];

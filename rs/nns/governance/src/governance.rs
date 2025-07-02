@@ -8,10 +8,9 @@ use crate::{
         split_neuron::{calculate_split_neuron_effect, SplitNeuronEffect},
     },
     heap_governance_data::{
-        initialize_heap_governance_data, reassemble_governance_proto, split_governance_proto,
+        initialize_governance, reassemble_governance_proto, split_governance_proto,
         HeapGovernanceData, XdrConversionRate,
     },
-    is_disburse_maturity_enabled,
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder, Visibility},
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
     neuron_store::{
@@ -42,10 +41,10 @@ use crate::{
             manage_neuron::{
                 self,
                 claim_or_refresh::{By, MemoAndController},
-                ClaimOrRefresh, Command, NeuronIdOrSubaccount,
+                set_following::FolloweesForTopic,
+                ClaimOrRefresh, Command, NeuronIdOrSubaccount, SetFollowing,
             },
             maturity_disbursement::Destination,
-            neuron::Followees,
             neurons_fund_snapshot::NeuronsFundNeuronPortion as NeuronsFundNeuronPortionPb,
             proposal::Action,
             reward_node_provider::{RewardMode, RewardToAccount},
@@ -54,11 +53,11 @@ use crate::{
                 self, NeuronsFundNeuron as NeuronsFundNeuronPb,
             },
             swap_background_information, ArchivedMonthlyNodeProviderRewards, Ballot,
-            CreateServiceNervousSystem, ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest,
-            GetNeuronsFundAuditInfoResponse, Governance as GovernanceProto, GovernanceError,
-            InstallCode, KnownNeuron, ListKnownNeuronsResponse, ListProposalInfo, ManageNeuron,
-            MonthlyNodeProviderRewards, Motion, NetworkEconomics, NeuronState,
-            NeuronsFundAuditInfo, NeuronsFundData,
+            CreateServiceNervousSystem, ExecuteNnsFunction, Followees,
+            GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
+            Governance as GovernanceProto, GovernanceError, InstallCode, KnownNeuron,
+            ListKnownNeuronsResponse, ListProposalInfo, ManageNeuron, MonthlyNodeProviderRewards,
+            Motion, NetworkEconomics, NeuronState, NeuronsFundAuditInfo, NeuronsFundData,
             NeuronsFundParticipation as NeuronsFundParticipationPb,
             NeuronsFundSnapshot as NeuronsFundSnapshotPb, NnsFunction, NodeProvider, Proposal,
             ProposalData, ProposalRewardStatus, ProposalStatus, RestoreAgingSummary, RewardEvent,
@@ -69,7 +68,7 @@ use crate::{
         },
     },
     proposals::{call_canister::CallCanister, sum_weighted_voting_power},
-    use_node_provider_reward_canister,
+    storage::VOTING_POWER_SNAPSHOTS,
 };
 use async_trait::async_trait;
 use candid::{Decode, Encode};
@@ -118,12 +117,9 @@ use ic_stable_structures::{storable::Bound, Storable};
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens, TOKEN_SUBDIVIDABLE_BY};
 use itertools::Itertools;
 use maplit::hashmap;
-use registry_canister::{
-    mutations::do_add_node_operator::AddNodeOperatorPayload, pb::v1::NodeProvidersMonthlyXdrRewards,
-};
+use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
-use std::str::FromStr;
 use std::sync::Arc;
 use std::{
     borrow::Cow,
@@ -1576,18 +1572,11 @@ impl Governance {
         cmc: Arc<dyn CMC>,
         randomness: Box<dyn RandomnessGenerator>,
     ) -> Self {
-        let (neurons, heap_governance_proto) =
-            initialize_heap_governance_data(initial_governance, env.now());
+        let (neurons, heap_governance_proto) = initialize_governance(initial_governance, env.now());
 
         Self {
             heap_data: heap_governance_proto,
-            neuron_store: NeuronStore::new(
-                // Neurons are converted from API type to internal type.
-                neurons
-                    .into_iter()
-                    .map(|(id, proto)| (id, Neuron::try_from(proto).expect("Invalid neuron")))
-                    .collect(),
-            ),
+            neuron_store: NeuronStore::new(neurons),
             env,
             ledger,
             cmc,
@@ -1609,7 +1598,7 @@ impl Governance {
         cmc: Arc<dyn CMC>,
         mut randomness: Box<dyn RandomnessGenerator>,
     ) -> Self {
-        let (_, heap_governance_proto, maybe_rng_seed) = split_governance_proto(governance_proto);
+        let (heap_governance_proto, maybe_rng_seed) = split_governance_proto(governance_proto);
 
         // Carry over the previous rng seed to avoid race conditions in handling queued ingress
         // messages that may require a functioning RNG.
@@ -1638,14 +1627,7 @@ impl Governance {
     pub fn take_heap_proto(&mut self) -> GovernanceProto {
         let heap_governance_proto = std::mem::take(&mut self.heap_data);
         let rng_seed = self.randomness.get_rng_seed();
-        reassemble_governance_proto(BTreeMap::new(), heap_governance_proto, rng_seed)
-    }
-
-    pub fn __get_state_for_test(&self) -> GovernanceProto {
-        let neurons = self.neuron_store.__get_neurons_for_tests();
-        let heap_governance_proto = self.heap_data.clone();
-        let rng_seed = self.randomness.get_rng_seed();
-        reassemble_governance_proto(neurons, heap_governance_proto, rng_seed)
+        reassemble_governance_proto(heap_governance_proto, rng_seed)
     }
 
     pub fn seed_rng(&mut self, seed: [u8; 32]) {
@@ -3275,13 +3257,6 @@ impl Governance {
         caller: &PrincipalId,
         disburse_maturity: &manage_neuron::DisburseMaturity,
     ) -> Result<u64, GovernanceError> {
-        if !is_disburse_maturity_enabled() {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::InvalidCommand,
-                "DisburseMaturity is not yet supported.",
-            ));
-        }
-
         self.check_heap_can_grow()?;
 
         let now_seconds = self.env.now();
@@ -3303,6 +3278,45 @@ impl Governance {
             now_seconds,
         )
         .map_err(GovernanceError::from)
+    }
+
+    fn set_following(
+        &mut self,
+        id: &NeuronId,
+        caller: &PrincipalId,
+        set_following: &manage_neuron::SetFollowing,
+    ) -> Result<(), GovernanceError> {
+        // Start with original following of the neuron.
+        let mut new_followees = self.with_neuron(
+            id,
+            |neuron| -> Result<HashMap</* topic */ i32, Followees>, GovernanceError> {
+                set_following.validate(caller, neuron)?;
+
+                Ok(neuron.followees.clone())
+            },
+        )??;
+
+        // Modify new_followees according to set_following.
+        let SetFollowing { topic_following } = set_following;
+        for FolloweesForTopic { topic, followees } in topic_following {
+            let topic = topic.unwrap_or_default();
+            let followees = followees.clone();
+
+            if followees.is_empty() {
+                new_followees.remove(&topic);
+            } else {
+                new_followees.insert(topic, Followees { followees });
+            }
+        }
+
+        // Commit new_followees to the neuron.
+        let now_seconds = self.env.now();
+        self.with_neuron_mut(id, |neuron| {
+            neuron.followees = new_followees;
+            neuron.refresh_voting_power(now_seconds);
+        })?;
+
+        Ok(())
     }
 
     /// Set the status of a proposal that is 'being executed' to
@@ -4777,6 +4791,9 @@ impl Governance {
                     ));
                 }
             }
+            Command::SetFollowing(set_following) => {
+                set_following.validate_intrinsically()?;
+            }
             _ => {}
         };
 
@@ -5325,7 +5342,7 @@ impl Governance {
             }
         }
 
-        let (ballots, total_potential_voting_power) =
+        let (ballots, total_potential_voting_power, previous_ballots_timestamp_seconds) =
             self.compute_ballots_for_new_proposal(&action, proposer_id, now_seconds)?;
 
         if ballots.is_empty() {
@@ -5396,6 +5413,7 @@ impl Governance {
             wait_for_quiet_state,
             total_potential_voting_power: Some(total_potential_voting_power),
             topic: Some(topic as i32),
+            previous_ballots_timestamp_seconds,
             ..Default::default()
         };
 
@@ -5453,13 +5471,21 @@ impl Governance {
     /// vote, and they all get 1 voting power, regardless of refresh. Also,
     /// these proposals have no rewards. Therefore, in the case of ManageNeuron,
     /// this returns ballots_len.
+    #[allow(clippy::type_complexity)]
     fn compute_ballots_for_new_proposal(
         &mut self,
         action: &Action,
         proposer_id: &NeuronId,
         now_seconds: u64,
-    ) -> Result<(HashMap<u64, Ballot>, u64 /*potential_voting_power*/), GovernanceError> {
-        let (ballots, potential_voting_power) = match *action {
+    ) -> Result<
+        (
+            HashMap<u64, Ballot>,
+            u64,         /*potential_voting_power*/
+            Option<u64>, /*previous_ballots_timestamp_seconds*/
+        ),
+        GovernanceError,
+    > {
+        match *action {
             // A neuron can be managed only by its followees on the
             // 'manage neuron' topic.
             Action::ManageNeuron(ref manage_neuron) => {
@@ -5507,25 +5533,54 @@ impl Governance {
                     .collect();
                 // Conversion is safe because usize is u32, and in far future perhaps u64
                 let potential_voting_power = ballots.len() as u64;
-                (ballots, potential_voting_power)
+                let previous_ballots_timestamp_seconds = None;
+                Ok((
+                    ballots,
+                    potential_voting_power,
+                    previous_ballots_timestamp_seconds,
+                ))
             }
-            // For normal proposals, every neuron with a
-            // dissolve delay over six months is allowed to
-            // vote, with a voting power determined at the
-            // time of the proposal (i.e., now).
+            // For normal proposals, every neuron with a dissolve delay over six months is allowed
+            // to vote, with a voting power determined at the time of the proposal (i.e., now).
             _ => {
-                let voting_power_snapshot = self
+                let current_voting_power_snapshot = self
                     .neuron_store
                     .compute_voting_power_snapshot_for_standard_proposal(
                         self.voting_power_economics(),
                         now_seconds,
                     )?;
 
-                voting_power_snapshot.create_ballots_and_total_potential_voting_power()
-            }
-        };
+                // Check if there is a voting power spike. If there is, then the return value here
+                // will be `Some(...)`.
+                let maybe_previous_ballots_if_voting_power_spike_detected = VOTING_POWER_SNAPSHOTS
+                    .with_borrow(|snapshots| {
+                        snapshots.previous_ballots_if_voting_power_spike_detected(
+                            current_voting_power_snapshot.total_potential_voting_power(),
+                            now_seconds,
+                        )
+                    });
 
-        Ok((ballots, potential_voting_power))
+                let (voting_power_snapshot, previous_ballots_timestamp_seconds) =
+                    match maybe_previous_ballots_if_voting_power_spike_detected {
+                        // This is the extraordinary case - we have a voting power spike, and we
+                        // need to use the previous snapshot.
+                        Some((previous_snapshot_timestamp, previous_snapshot)) => {
+                            (previous_snapshot, Some(previous_snapshot_timestamp))
+                        }
+                        // This is the normal case - we have no voting power spike, so we use the
+                        // current snapshot.
+                        None => (current_voting_power_snapshot, None),
+                    };
+
+                let (ballots, total_potential_voting_power) =
+                    voting_power_snapshot.create_ballots_and_total_potential_voting_power();
+                Ok((
+                    ballots,
+                    total_potential_voting_power,
+                    previous_ballots_timestamp_seconds,
+                ))
+            }
+        }
     }
 
     /// Calculate the reject_cost_e8s of a proposal. This value is set in `ProposalData` and
@@ -6238,6 +6293,9 @@ impl Governance {
             Some(Command::DisburseMaturity(disburse_maturity)) => self
                 .disburse_maturity(&id, caller, disburse_maturity)
                 .map(ManageNeuronResponse::disburse_maturity_response),
+            Some(Command::SetFollowing(set_following)) => self
+                .set_following(&id, caller, set_following)
+                .map(ManageNeuronResponse::set_following_response),
             None => panic!(),
         }
     }
@@ -6643,15 +6701,18 @@ impl Governance {
         self.heap_data.spawning_neurons = Some(false);
     }
 
-    /// Create a reward event.
-    ///
-    /// This method:
-    /// * collects all proposals in state ReadyToSettle, that is, proposals that
-    ///   can no longer accept votes for the purpose of rewards and that have
-    ///   not yet been considered in a reward event.
-    /// * Associate those proposals to the new reward event
-    pub(crate) fn distribute_rewards(&mut self, supply: Tokens) {
-        println!("{}distribute_rewards. Supply: {:?}", LOG_PREFIX, supply);
+    /// Calculates the voting rewards to distribute and returns the rewards event and the
+    /// distribution per neuron. There are 3 cases for the return value:
+    /// 1. `None`. This is the case when the it's not the time to distribute rewards yet, and it can
+    ///    happen when the distribute_rewards is called several times at almost the same time.
+    /// 2. Some((reward_event, None)). This is the case where there are no proposals to settle, and
+    ///    the rewards will be rolled over.
+    /// 3. Some((reward_event, Some(distribution))). This is the case where there are proposals to
+    ///    settle, and the rewards will be distributed.
+    fn calculate_voting_rewards(
+        &self,
+        supply: Tokens,
+    ) -> Option<(RewardEvent, Option<RewardsDistribution>)> {
         let now = self.env.now();
 
         let latest_reward_event = self.latest_reward_event();
@@ -6668,7 +6729,7 @@ impl Governance {
             // This may happen, in case consider_distributing_rewards was called
             // several times at almost the same time. This is
             // harmless, just abandon.
-            return;
+            return None;
         }
 
         if new_rounds_count > 1 {
@@ -6758,13 +6819,14 @@ impl Governance {
         // are just adding and multiplying, and everything is just integers,
         // except for proposal weights, which are currently (as of Mar, 2023)
         // 20x, 1x, and 0.01x.
-        if total_voting_rights < 0.001 {
+        let reward_distribution = if total_voting_rights < 0.001 {
             println!(
                 "{}WARNING: total_voting_rights == {}, even though considered_proposals \
                  is nonempty (see earlier log). Therefore, we skip incrementing maturity \
                  to avoid dividing by zero (or super small number).",
                 LOG_PREFIX, total_voting_rights,
             );
+            None
         } else {
             let mut reward_distribution = RewardsDistribution::new();
             for (neuron_id, used_voting_rights) in voters_to_used_voting_right {
@@ -6789,13 +6851,70 @@ impl Governance {
                     );
                 }
             }
-            self.schedule_pending_rewards_distribution(day_after_genesis, reward_distribution);
+            Some(reward_distribution)
+        };
+
+        let reward_event = RewardEvent {
+            day_after_genesis,
+            actual_timestamp_seconds: now,
+            settled_proposals: considered_proposals,
+            distributed_e8s_equivalent: actually_distributed_e8s_equivalent,
+            total_available_e8s_equivalent: total_available_e8s_equivalent_float as u64,
+            rounds_since_last_distribution: Some(rounds_since_last_distribution),
+            latest_round_available_e8s_equivalent: Some(
+                latest_round_available_e8s_equivalent_float as u64,
+            ),
+        };
+
+        Some((reward_event, reward_distribution))
+    }
+
+    /// Distributes voting rewards to neurons.
+    ///
+    /// This method:
+    /// * collects all proposals in state ReadyToSettle, that is, proposals that
+    ///   can no longer accept votes for the purpose of rewards and that have
+    ///   not yet been considered in a reward event.
+    /// * calculates the voting rewards to distribute.
+    /// * schedules the rewards distribution.
+    /// * updates the reward event.
+    /// * updates the proposals from ReadyToSettle to Settled.
+    pub(crate) fn distribute_voting_rewards_to_neurons(&mut self, supply: Tokens) {
+        println!(
+            "{}distribute_voting_rewards_to_neurons. Supply: {:?}",
+            LOG_PREFIX, supply
+        );
+
+        let voting_rewards_calculation_result = self.calculate_voting_rewards(supply);
+        let Some((new_reward_event, reward_distribution)) = voting_rewards_calculation_result
+        else {
+            return;
+        };
+
+        // Now the mutations begin. Once any mutation has happened, we cannot exit early without the
+        // rest. Otherwise we could end up in an inconsistent state and break some properties we
+        // would like to hold.
+        //
+        // The properties we would like to hold are:
+        // * The rewards for a given day is only distributed once. This is made sure by updating the
+        //   reward event, in particular the `day_after_genesis` field every time
+        //   `schedule_pending_rewards_distribution` is called. This is also the main reason that
+        //   once mutations begin, we should not exit early before  `latest_reward_event` is
+        //   updated.
+        // * The proposals should only be settled once. This is made sure by updating the proposal
+        //   status from `ReadyToSettle` to `Settled`.
+
+        if let Some(reward_distribution) = reward_distribution {
+            self.schedule_pending_rewards_distribution(
+                new_reward_event.day_after_genesis,
+                reward_distribution,
+            );
         }
 
         // Mark the proposals that we just considered as "rewarded". More
         // formally, causes their reward_status to be Settled; whereas, before,
         // they were in the ReadyToSettle state.
-        for pid in considered_proposals.iter() {
+        for pid in new_reward_event.settled_proposals.iter() {
             // Before considering a proposal for reward, it must be fully processed --
             // because we're about to clear the ballots, so no further processing will be
             // possible.
@@ -6812,21 +6931,21 @@ impl Governance {
                           being open. This code line is expected not to be reachable. We need to \
                           clear the ballots here to avoid a risk of the memory getting too large. \
                           In doubt, reject the proposal", LOG_PREFIX, pid.id);
-                        p.decided_timestamp_seconds = now;
+                        p.decided_timestamp_seconds = new_reward_event.actual_timestamp_seconds;
                         p.latest_tally = Some(Tally {
-                            timestamp_seconds: now,
+                            timestamp_seconds: new_reward_event.actual_timestamp_seconds,
                             yes:0,
                             no:0,
                             total:0,
                        })
                     };
-                    p.reward_event_round = day_after_genesis;
+                    p.reward_event_round = new_reward_event.day_after_genesis;
                     p.ballots.clear();
                 }
             };
         }
 
-        if considered_proposals.is_empty() {
+        if new_reward_event.settled_proposals.is_empty() {
             println!(
                 "{}Voting rewards will roll over, because no there were proposals \
                  that needed rewards (i.e. have reward_status == ReadyToSettle)",
@@ -6834,17 +6953,7 @@ impl Governance {
             );
         };
 
-        self.heap_data.latest_reward_event = Some(RewardEvent {
-            day_after_genesis,
-            actual_timestamp_seconds: now,
-            settled_proposals: considered_proposals,
-            distributed_e8s_equivalent: actually_distributed_e8s_equivalent,
-            total_available_e8s_equivalent: total_available_e8s_equivalent_float as u64,
-            rounds_since_last_distribution: Some(rounds_since_last_distribution),
-            latest_round_available_e8s_equivalent: Some(
-                latest_round_available_e8s_equivalent_float as u64,
-            ),
-        })
+        self.heap_data.latest_reward_event = Some(new_reward_event);
     }
 
     /// Recompute cached metrics once per day
@@ -7602,18 +7711,6 @@ impl Governance {
     async fn get_node_providers_monthly_xdr_rewards(
         &self,
     ) -> Result<(BTreeMap<PrincipalId, u64>, Option<u64>), GovernanceError> {
-        if use_node_provider_reward_canister() {
-            self.get_node_providers_monthly_xdr_rewards_from_node_provider_reward_canister()
-                .await
-        } else {
-            self.get_node_providers_monthly_xdr_rewards_from_registry()
-                .await
-        }
-    }
-
-    async fn get_node_providers_monthly_xdr_rewards_from_node_provider_reward_canister(
-        &self,
-    ) -> Result<(BTreeMap<PrincipalId, u64>, Option<u64>), GovernanceError> {
         let response: Vec<u8> = self.env.call_canister_method(
             NODE_REWARDS_CANISTER_ID,
             "get_node_providers_monthly_xdr_rewards",
@@ -7670,62 +7767,6 @@ impl Governance {
             "get_node_providers_monthly_xdr_rewards returned empty response, \
                 which should be impossible.",
         ))
-    }
-
-    /// A helper to get the node provider rewards from registry (instead of Node Provider Reward Canister)
-    /// This will be removed once the Node Provider Reward Canister is in use.
-    async fn get_node_providers_monthly_xdr_rewards_from_registry(
-        &self,
-    ) -> Result<(BTreeMap<PrincipalId, u64>, Option<u64>), GovernanceError> {
-        let registry_response:
-            Vec<u8> = self
-            .env
-            .call_canister_method(
-                REGISTRY_CANISTER_ID,
-                "get_node_providers_monthly_xdr_rewards",
-                Encode!().unwrap(),
-            )
-            .await
-            .map_err(|(code, msg)| {
-                GovernanceError::new_with_message(
-                    ErrorType::External,
-                    format!(
-                        "Error calling 'get_node_providers_monthly_xdr_rewards': code: {:?}, message: {}",
-                        code, msg
-                    ),
-                )
-            })?;
-
-        Decode!(&registry_response, Result<NodeProvidersMonthlyXdrRewards, String>)
-            .map_err(|err| {
-                GovernanceError::new_with_message(
-                    ErrorType::External,
-                    format!(
-                        "Cannot decode return type from get_node_providers_monthly_xdr_rewards'. Error: {}",
-                        err,
-                    ),
-                )
-            })?
-            .map_err(|msg| GovernanceError::new_with_message(ErrorType::External, msg))
-            .map(|response| {
-                let NodeProvidersMonthlyXdrRewards {
-                    rewards,
-                    registry_version,
-                } = response;
-
-                let rewards = rewards
-                    .into_iter()
-                    .map(|(principal_str, amount)| {
-                        (
-                            PrincipalId::from_str(&principal_str)
-                                .expect("Could not get principal from string"),
-                            amount,
-                        )
-                    })
-                    .collect();
-
-                (rewards, registry_version)
-            })
     }
 
     /// A helper for the CMC's get_average_icp_xdr_conversion_rate method
@@ -7833,6 +7874,7 @@ impl Governance {
             dissolving_neurons_e8s_buckets_ect,
             not_dissolving_neurons_e8s_buckets_seed,
             not_dissolving_neurons_e8s_buckets_ect,
+            spawning_neurons_count,
             non_self_authenticating_controller_neuron_subset_metrics,
             public_neuron_subset_metrics,
             declining_voting_power_neuron_subset_metrics,
@@ -7896,6 +7938,7 @@ impl Governance {
             dissolving_neurons_e8s_buckets_ect,
             not_dissolving_neurons_e8s_buckets_seed,
             not_dissolving_neurons_e8s_buckets_ect,
+            spawning_neurons_count,
             total_staked_e8s_non_self_authenticating_controller,
             total_voting_power_non_self_authenticating_controller,
 

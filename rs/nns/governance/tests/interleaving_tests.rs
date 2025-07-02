@@ -67,7 +67,7 @@ fn test_cant_increase_dissolve_delay_while_disbursing() {
         .add_ledger_transform(Box::new(move |l| {
             Arc::new(InterleavingTestLedger::new(l, tx))
         }))
-        .set_economics_api(NetworkEconomics::default())
+        .set_economics(NetworkEconomics::default())
         .create();
 
     let neuron_1 = nns
@@ -266,7 +266,7 @@ fn test_cant_interleave_calls_to_settle_neurons_fund() {
         .add_ledger_transform(Box::new(move |l| {
             Arc::new(InterleavingTestLedger::new(l, tx))
         }))
-        .set_economics_api(NetworkEconomics::default())
+        .set_economics(NetworkEconomics::default())
         .create();
     let sns_wasm_response = ic_sns_wasm::pb::v1::ListDeployedSnsesResponse {
         instances: vec![DeployedSns {

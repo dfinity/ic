@@ -1,5 +1,5 @@
 [Unit]
-Description=Recovery Upgrader Service
+Description=Recovery Upgrader
 ConditionKernelCommandLine=recovery=1
 After=network-online.target
 Requires=network-online.target

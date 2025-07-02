@@ -56,6 +56,7 @@ pub(crate) struct NeuronMetrics {
     pub(crate) dissolving_neurons_e8s_buckets_ect: HashMap<u64, f64>,
     pub(crate) not_dissolving_neurons_e8s_buckets_seed: HashMap<u64, f64>,
     pub(crate) not_dissolving_neurons_e8s_buckets_ect: HashMap<u64, f64>,
+    pub(crate) spawning_neurons_count: u64,
 
     // Much of the above could also be done like this, but we leave such refactoring as an exercise
     // to the reader.
@@ -330,7 +331,9 @@ impl NeuronStore {
                 let bucket = dissolve_delay_seconds / (6 * ONE_MONTH_SECONDS);
                 match neuron.state(now_seconds) {
                     NeuronState::Unspecified => (),
-                    NeuronState::Spawning => (),
+                    NeuronState::Spawning => {
+                        metrics.spawning_neurons_count += 1;
+                    }
                     NeuronState::Dissolved => {
                         metrics.dissolved_neurons_count += 1;
                         metrics.dissolved_neurons_e8s += neuron.cached_neuron_stake_e8s;

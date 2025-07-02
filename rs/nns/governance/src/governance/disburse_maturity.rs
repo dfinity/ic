@@ -40,7 +40,10 @@ const DISBURSEMENT_DELAY_SECONDS: u64 = ONE_DAY_SECONDS * 7;
 /// The maximum number of disbursements in a neuron. This makes it possible to do daily
 /// disbursements after every reward event (as 10 > 7).
 const MAX_NUM_DISBURSEMENTS: usize = 10;
-/// The minimum amount of ICP to disburse in a single transaction.
+/// The minimum amount of ICP that need to be minted when disbursing maturity. A neuron can only
+/// disburse an amount of maturity that results in minting at least this many ICP (in e8) assuming
+/// the worst case maturity modulation. This limit is set to be consistent with the neuron spawning
+/// behavior (which maturity disbursement is designed to replace).
 pub const MINIMUM_DISBURSEMENT_E8S: u64 = E8;
 // We do not retry the task more frequently than once a minute, so that if there is anything wrong
 // with the task, we don't use too many resources. How this is chosen: assuming the task can max out
@@ -200,12 +203,19 @@ impl Destination {
         }
     }
 
-    /// Returns the account identifier to disburse to. This should normally not fail because all the
-    /// validations happens at `try_new`. Failure can only happen due to data corruption.
+    /// Returns the 32-byte account identifier (with checksum) to disburse to. This should not fail
+    /// because all the validations happens at `try_new`. Failure can only happen due to data
+    /// corruption. Note that even when the user specifies an icrc1 account, the corresponding
+    /// account identifier is still returned.
     pub fn into_account_identifier_proto(&self) -> Option<AccountIdentifierProto> {
-        self.try_into_account_identifier()
-            .ok()
-            .map(AccountIdentifierProto::from)
+        let account_identifer = self.try_into_account_identifier().ok()?;
+        // Note we should not use `AccountIdentifierProto::from` directly here, since it simply
+        // outputs a 28-byte hash without the 4-byte checksum. Instead, we should use the
+        // `AccountIdentifier::to_address` which computes and prepends the checksum.
+        let address = account_identifer.to_address();
+        Some(AccountIdentifierProto {
+            hash: address.to_vec(),
+        })
     }
 }
 

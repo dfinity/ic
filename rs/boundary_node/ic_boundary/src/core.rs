@@ -12,7 +12,7 @@ use axum::{
     extract::Request,
     middleware,
     response::IntoResponse,
-    routing::method_routing::{get, post},
+    routing::method_routing::{any, get, post},
     Router,
 };
 use axum_extra::middleware::option_layer;
@@ -28,6 +28,7 @@ use ic_bn_lib::{
         },
     },
     prometheus::Registry,
+    pubsub::BrokerBuilder,
     tasks::TaskManager,
     tls::verify::NoopServerCertVerifier,
     types::RequestType,
@@ -64,9 +65,10 @@ use crate::{
     errors::ErrorCause,
     firewall::{FirewallGenerator, SystemdReloader},
     http::{
-        handlers::{self},
+        handlers::{self, logs_canister, LogsState},
         middleware::{
             cache::{cache_middleware, CacheState},
+            cors::{self},
             geoip::{self},
             process::{self},
             retry::{retry_request, RetryParams},
@@ -80,7 +82,7 @@ use crate::{
         MetricParamsSnapshot, MetricsCache, MetricsRunner, WithMetricsCheck, WithMetricsPersist,
         WithMetricsSnapshot,
     },
-    persist::{Persist, Persister, Routes},
+    persist::{Persist, Persister},
     rate_limiting::{generic, RateLimit},
     routes::{self, Health, Lookup, Proxy, ProxyRouter, RootKey},
     salt_fetcher::AnonymizationSaltFetcher,
@@ -117,11 +119,12 @@ pub fn decoder_config() -> DecoderConfig {
     config
 }
 
-pub async fn main(cli: Cli) -> Result<(), Error> {
+pub async fn main(mut cli: Cli) -> Result<(), Error> {
     if cli.http_client.http_client_timeout_connect > cli.health.health_check_timeout {
-        return Err(anyhow!(
-            "Health check timeout should be longer than HTTP client connect timeout"
-        ));
+        cli.health.health_check_timeout = cli.http_client.http_client_timeout_connect;
+        warn!(
+            "Health check timeout should be longer than HTTP client connect timeout, capping it to client timeout"
+        );
     }
 
     if !(cli.registry.registry_local_store_path.is_none()
@@ -136,14 +139,14 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         && cli.listen.listen_https_port.is_none()
     {
         return Err(anyhow!(
-            "at least one of --http-port / --https-port / --http-unix-socket must be specified"
+            "at least one of --listen-http-port / --listen-https-port / --listen-http-unix-socket must be specified"
         ));
     }
 
     #[cfg(not(feature = "tls"))]
     if cli.listen.listen_http_port.is_none() && cli.listen.listen_http_unix_socket.is_none() {
         return Err(anyhow!(
-            "at least one of --http-port / --http-unix-socket must be specified"
+            "at least one of --listen-http-port / --listen-http-unix-socket must be specified"
         ));
     }
 
@@ -363,17 +366,24 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     // HTTP Logs Anonymization
     let anonymization_salt = Arc::new(ArcSwapOption::<Vec<u8>>::empty());
 
+    // Proxy Router
+    let proxy_router = Arc::new(ProxyRouter::new(
+        http_client.clone(),
+        routing_table.clone(),
+        registry_snapshot.clone(),
+        cli.health.health_subnets_alive_threshold,
+        cli.health.health_nodes_per_subnet_alive_threshold,
+    ));
+
     // Prepare Axum Router
     let router = setup_router(
-        registry_snapshot.clone(),
-        routing_table.clone(),
-        http_client,
         bouncer,
         generic_limiter.clone(),
         &cli,
         &metrics_registry,
         cache_state.clone(),
         anonymization_salt.clone(),
+        proxy_router.clone(),
     );
 
     // HTTP server metrics
@@ -466,6 +476,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         metrics_registry.clone(),
         cache_state,
         Arc::clone(&registry_snapshot),
+        proxy_router,
     ));
     tasks.add_interval("metrics_runner", metrics_runner, 5 * SECOND);
 
@@ -860,28 +871,16 @@ impl TypeExtractor for RequestTypeExtractor {
 
 /// Creates an Axum router that is ready to be served over HTTP
 pub fn setup_router(
-    registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
-    routing_table: Arc<ArcSwapOption<Routes>>,
-    http_client: Arc<dyn bnhttp::Client>,
     bouncer: Option<Arc<bouncer::Bouncer>>,
     generic_limiter: Option<Arc<generic::GenericLimiter>>,
     cli: &Cli,
     metrics_registry: &Registry,
     cache_state: Option<Arc<CacheState>>,
     anonymization_salt: Arc<ArcSwapOption<Vec<u8>>>,
+    proxy_router: Arc<ProxyRouter>,
 ) -> Router {
     // Init it early to avoid race conditions
     lazy_static::initialize(&UUID_REGEX);
-
-    let proxy_router = ProxyRouter::new(
-        http_client.clone(),
-        Arc::clone(&routing_table),
-        Arc::clone(&registry_snapshot),
-        cli.health.health_subnets_alive_threshold,
-        cli.health.health_nodes_per_subnet_alive_threshold,
-    );
-
-    let proxy_router = Arc::new(proxy_router);
 
     let (proxy, lookup, root_key, health) = (
         proxy_router.clone() as Arc<dyn Proxy>,
@@ -938,6 +937,19 @@ pub fn setup_router(
         )
     }));
 
+    // Create a PubSub broker for the logs subscription
+    let logs_broker = cli.obs.obs_log_websocket.then(|| {
+        Arc::new(
+            BrokerBuilder::new()
+                .with_buffer_size(cli.obs.obs_log_websocket_buffer)
+                .with_idle_timeout(cli.obs.obs_log_websocket_idle_timeout)
+                .with_max_subscribers(cli.obs.obs_log_websocket_max_subscribers_per_topic)
+                .with_max_topics(cli.obs.obs_log_websocket_max_topics)
+                .with_metric_registry(metrics_registry)
+                .build(),
+        )
+    });
+
     let middleware_metrics = option_layer((!cli.obs.obs_disable_request_logging).then_some(
         middleware::from_fn_with_state(
             HttpMetricParams::new(
@@ -945,6 +957,7 @@ pub fn setup_router(
                 "http_request",
                 cli.obs.obs_log_failed_requests_only,
                 anonymization_salt,
+                logs_broker.clone(),
             ),
             metrics::metrics_middleware,
         ),
@@ -1017,7 +1030,8 @@ pub fn setup_router(
 
     let middleware_bouncer =
         option_layer(bouncer.map(|x| middleware::from_fn_with_state(x, bouncer::middleware)));
-    let middleware_subnet_lookup = middleware::from_fn_with_state(lookup, routes::lookup_subnet);
+    let middleware_subnet_lookup =
+        middleware::from_fn_with_state(lookup.clone(), routes::lookup_subnet);
     let middleware_generic_limiter = option_layer(
         generic_limiter.map(|x| middleware::from_fn_with_state(x, generic::middleware)),
     );
@@ -1069,10 +1083,29 @@ pub fn setup_router(
         })
         .layer(service_subnet_read);
 
-    canister_read_call_query_routes
+    let mut router = canister_read_call_query_routes
         .merge(subnet_read_state_route)
         .merge(status_route)
-        .merge(health_route)
+        .merge(health_route);
+
+    if let Some(v) = logs_broker {
+        let state = Arc::new(LogsState::new(
+            v,
+            lookup,
+            cli.obs.obs_log_websocket_max_subscribers_per_topic_per_ip,
+        ));
+
+        let logs_canister_router = Router::new()
+            .route("/canister/{canister_id}", any(logs_canister))
+            .layer(cors::layer());
+        let logs_router = Router::new()
+            .nest("/logs", logs_canister_router)
+            .with_state(state);
+
+        router = router.merge(logs_router);
+    }
+
+    router
 }
 
 // Process error chain trying to find given error type

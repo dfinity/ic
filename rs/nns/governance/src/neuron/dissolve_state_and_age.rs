@@ -2,6 +2,8 @@ use crate::{
     governance::MAX_DISSOLVE_DELAY_SECONDS, neuron::StoredDissolveStateAndAge, pb::v1::NeuronState,
 };
 
+use ic_nns_governance_api::neuron::DissolveState as ApiDissolveState;
+
 /// An enum to represent different combinations of a neurons dissolve_state and
 /// aging_since_timestamp_seconds. Currently, the back-and-forth conversions should make sure the
 /// legacy states remain the same unless some operations performed on the neuron makes the state/age
@@ -22,6 +24,62 @@ pub enum DissolveStateAndAge {
 }
 
 impl DissolveStateAndAge {
+    /// Converts an API dissolve state and aging since timestamp to a local dissolve state and age.
+    /// Returns an error if the API dissolve state is missing or invalid.
+    pub fn from_api(
+        dissolve_state: Option<ApiDissolveState>,
+        aging_since_timestamp_seconds: u64,
+    ) -> Result<Self, String> {
+        let Some(dissolve_state) = dissolve_state else {
+            return Err("Dissolve state is missing".to_string());
+        };
+
+        match dissolve_state {
+            ApiDissolveState::DissolveDelaySeconds(dissolve_delay_seconds) => {
+                if dissolve_delay_seconds > 0 {
+                    Ok(DissolveStateAndAge::NotDissolving {
+                        dissolve_delay_seconds,
+                        aging_since_timestamp_seconds,
+                    })
+                } else {
+                    Err("Dissolve delay must be greater than 0".to_string())
+                }
+            }
+            ApiDissolveState::WhenDissolvedTimestampSeconds(when_dissolved_timestamp_seconds) => {
+                if aging_since_timestamp_seconds == u64::MAX {
+                    Ok(DissolveStateAndAge::DissolvingOrDissolved {
+                        when_dissolved_timestamp_seconds,
+                    })
+                } else {
+                    Err("Aging since timestamp must be u64::MAX for dissolving or dissolved neurons".to_string())
+                }
+            }
+        }
+    }
+
+    /// Converts a local dissolve state and age to an API dissolve state and aging since timestamp.
+    pub fn into_api(self) -> (Option<ApiDissolveState>, u64) {
+        match self {
+            Self::NotDissolving {
+                dissolve_delay_seconds,
+                aging_since_timestamp_seconds,
+            } => (
+                Some(ApiDissolveState::DissolveDelaySeconds(
+                    dissolve_delay_seconds,
+                )),
+                aging_since_timestamp_seconds,
+            ),
+            Self::DissolvingOrDissolved {
+                when_dissolved_timestamp_seconds,
+            } => (
+                Some(ApiDissolveState::WhenDissolvedTimestampSeconds(
+                    when_dissolved_timestamp_seconds,
+                )),
+                u64::MAX,
+            ),
+        }
+    }
+
     pub fn validate(self) -> Result<Self, String> {
         let original = self;
         let stored_dissolve_state_and_age = StoredDissolveStateAndAge::from(self);
@@ -541,6 +599,49 @@ mod tests {
         for test_case in test_cases {
             // The operation should be a no-op.
             assert_eq!(test_case.adjust_age(NOW - 100), test_case);
+        }
+    }
+
+    #[test]
+    fn test_into_api() {
+        let test_cases = vec![
+            (
+                DissolveStateAndAge::NotDissolving {
+                    dissolve_delay_seconds: 1000,
+                    aging_since_timestamp_seconds: NOW - 100,
+                },
+                ApiDissolveState::DissolveDelaySeconds(1000),
+                NOW - 100,
+            ),
+            (
+                DissolveStateAndAge::DissolvingOrDissolved {
+                    when_dissolved_timestamp_seconds: NOW - 1,
+                },
+                ApiDissolveState::WhenDissolvedTimestampSeconds(NOW - 1),
+                u64::MAX,
+            ),
+            (
+                DissolveStateAndAge::DissolvingOrDissolved {
+                    when_dissolved_timestamp_seconds: NOW + 1,
+                },
+                ApiDissolveState::WhenDissolvedTimestampSeconds(NOW + 1),
+                u64::MAX,
+            ),
+        ];
+
+        for (
+            dissolve_state_and_age,
+            expected_api_dissolve_state,
+            expected_aging_since_timestamp_seconds,
+        ) in test_cases
+        {
+            let (api_dissolve_state, aging_since_timestamp_seconds) =
+                dissolve_state_and_age.into_api();
+            assert_eq!(api_dissolve_state, Some(expected_api_dissolve_state));
+            assert_eq!(
+                aging_since_timestamp_seconds,
+                expected_aging_since_timestamp_seconds
+            );
         }
     }
 }

@@ -46,19 +46,15 @@ def icos_build(
       A struct containing the labels of the images that were built.
     """
 
+    # we "declare" lots of different image combinations, though most of
+    # them are not actually used. Because CI jobs make heavy use of '//...'
+    # we make sure that images aren't built unless explicitly depended on.
+    tags = ["manual"] + (tags if tags != None else [])
+
     if mode == None:
         mode = name
 
     image_deps = image_deps_func(mode, malicious)
-
-    # Validate that exactly one of boot_args_template or extra_boot_args is provided
-    has_boot_args_template = "boot_args_template" in image_deps
-    has_extra_boot_args = "extra_boot_args" in image_deps
-
-    if not has_boot_args_template and not has_extra_boot_args:
-        fail("Either 'boot_args_template' or 'extra_boot_args' must be provided in image_deps")
-    elif has_boot_args_template and has_extra_boot_args:
-        fail("Cannot provide both 'boot_args_template' and 'extra_boot_args' in image_deps - they are mutually exclusive")
 
     # -------------------- Version management --------------------
 
@@ -192,29 +188,29 @@ def icos_build(
                 for k, v in (
                     image_deps["bootfs"].items() + [
                         (version_txt, "/version.txt:0644"),
-                    ] + ([(extra_boot_args, "/extra_boot_args:0644")] if "boot_args_template" not in image_deps else []) +
-                    ([(boot_args, "/boot_args:0644")] if "boot_args_template" in image_deps else [])
+                        (boot_args, "/boot_args:0644"),
+                        (extra_boot_args, "/extra_boot_args:0644"),
+                        (image_deps["grub_config"], "/grub.cfg:0644"),
+                    ]
                 )
             },
             tags = ["manual", "no-cache"],
         )
 
-        # The kernel command line (boot args) was previously split into two parts:
-        # 1. Dynamic args calculated at boot time in grub.cfg
-        # 2. Static args stored in EXTRA_BOOT_ARGS on the boot partition
+        # The kernel command line (boot args) is generated from boot_args_template:
+        # - For OS requiring root signing: Template includes ROOT_HASH placeholder that gets substituted with dm-verity hash
+        # - For OS not requiring root signing: Template is used as-is without ROOT_HASH substitution
         #
-        # For stable and predictable measurements with AMD SEV, we now pre-calculate and combine both parts
-        # into a single complete kernel command line that is:
-        # - Generated during image build
-        # - Stored statically on the boot partition
-        # - Measured as part of the SEV launch measurement
-        #
-        # For HostOS and SetupOS, we continue
-        # to support the old way of calculating the dynamic args (see :extra_boot_args) and we derive boot_args
-        # from it.
+        # This provides:
+        # - Consistent boot argument handling across all OS types
+        # - Predictable measurements for AMD SEV (especially important for signed root partitions)
+        # - Static boot arguments stored on the boot partition
 
-        # Sign only for guestos builds (which have boot_args_template)
-        if "boot_args_template" in image_deps:
+        # For backwards compatibility in GuestOS and HostOS,
+        # we continue to support the old way of calculating the dynamic args (see :extra_boot_args).
+
+        if image_deps.get("requires_root_signing", False):
+            # Sign the root partition and substitute ROOT_HASH in boot args
             native.genrule(
                 name = "generate-" + partition_root_signed_tzst,
                 testonly = malicious,
@@ -241,9 +237,27 @@ def icos_build(
                       "< $(location :boot_args_template) > $@",
                 tags = ["manual"],
             )
+            native.genrule(
+                name = "generate-" + extra_boot_args,
+                outs = [extra_boot_args],
+                srcs = [partition_root_hash, ":extra_boot_args_template"],
+                cmd = "sed -e s/ROOT_HASH/$$(cat $(location " + partition_root_hash + "))/ " +
+                      "< $(location :extra_boot_args_template) > $@",
+                tags = ["manual"],
+            )
         else:
+            # No signing required, no ROOT_HASH substitution
             native.alias(name = partition_root_signed_tzst, actual = partition_root_unsigned_tzst, tags = ["manual", "no-cache"])
-            native.alias(name = extra_boot_args, actual = image_deps["extra_boot_args"], tags = ["manual"])
+            native.alias(
+                name = boot_args,
+                actual = ":boot_args_template",
+                tags = ["manual"],
+            )
+            native.alias(
+                name = extra_boot_args,
+                actual = ":extra_boot_args_template",
+                tags = ["manual"],
+            )
 
     component_file_references_test(
         name = name + "_component_file_references_test",
@@ -253,11 +267,15 @@ def icos_build(
         tags = tags,
     )
 
-    if "boot_args_template" in image_deps:
-        native.alias(
-            name = "boot_args_template",
-            actual = image_deps["boot_args_template"],
-        )
+    native.alias(
+        name = "boot_args_template",
+        actual = image_deps["boot_args_template"],
+    )
+
+    native.alias(
+        name = "extra_boot_args_template",
+        actual = image_deps["extra_boot_args_template"],
+    )
 
     # -------------------- Assemble disk partitions ---------------
 
@@ -282,6 +300,21 @@ def icos_build(
         target_compatible_with = ["@platforms//os:linux"],
     )
 
+    disk_image(
+        name = "disk-img-for-tests.tar",
+        layout = image_deps["partition_table"],
+        partitions = partitions,
+        expanded_size = image_deps.get("expanded_size", default = None),
+        populate_b_partitions = True,
+        tags = ["manual", "no-cache"],
+        testonly = True,
+        target_compatible_with = ["@platforms//os:linux"],
+        visibility = [
+            "//ic-os:__subpackages__",
+            "//rs/ic_os:__subpackages__",
+        ],
+    )
+
     # Disk images just for testing.
     disk_image_no_tar(
         name = "disk.img",
@@ -290,6 +323,7 @@ def icos_build(
         expanded_size = image_deps.get("expanded_size", default = None),
         tags = ["manual", "no-cache"],
         target_compatible_with = ["@platforms//os:linux"],
+        visibility = visibility,
     )
 
     zstd_compress(

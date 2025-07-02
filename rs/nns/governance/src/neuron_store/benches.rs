@@ -9,7 +9,7 @@ use crate::{
     neuron_data_validation::NeuronDataValidator,
     neurons_fund::{NeuronsFund, NeuronsFundNeuronPortion, NeuronsFundSnapshot},
     now_seconds,
-    pb::v1::{neuron::Followees, BallotInfo, KnownNeuronData, Vote},
+    pb::v1::{BallotInfo, Followees, KnownNeuronData, Vote},
 };
 use canbench_rs::{bench, bench_fn, BenchResult};
 use ic_nervous_system_common::E8;
