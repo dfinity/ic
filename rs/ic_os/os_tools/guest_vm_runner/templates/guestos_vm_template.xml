@@ -46,7 +46,7 @@
     <kernel>{{direct_boot.kernel.display()}}</kernel>
     <initrd>{{direct_boot.initrd.display()}}</initrd>
     <cmdline>{{direct_boot.kernel_cmdline}}</cmdline>
-    {%- else -%}
+    {%- else %}
     <loader readonly='yes' type='pflash'>/usr/share/OVMF/OVMF_CODE_4M.fd</loader>
     <nvram>/var/lib/libvirt/qemu/nvram/guestos_VARS.fd</nvram>
     {%- endif %}
