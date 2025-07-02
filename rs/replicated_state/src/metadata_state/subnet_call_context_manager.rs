@@ -210,8 +210,8 @@ impl CanisterManagementCalls {
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct PreSignatureStash {
-    key_transcript: Arc<IDkgTranscript>,
-    pre_signatures: BTreeMap<PreSigId, PreSignature>,
+    pub key_transcript: Arc<IDkgTranscript>,
+    pub pre_signatures: BTreeMap<PreSigId, PreSignature>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
