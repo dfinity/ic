@@ -366,8 +366,6 @@ impl CanisterManager {
             canister.system_state.reserved_balance_limit(),
         )?;
 
-        let is_controllers_change = validated_settings.controllers().is_some();
-
         let old_usage = canister.memory_usage();
         let old_mem = canister.memory_allocation().allocated_bytes(old_usage);
         let old_compute_allocation = canister.scheduler_state.compute_allocation.as_percent();
@@ -402,13 +400,37 @@ impl CanisterManager {
         }
 
         canister.system_state.canister_version += 1;
-        if is_controllers_change {
-            let new_controllers = canister.system_state.controllers.iter().copied().collect();
-            canister.system_state.add_canister_change(
-                timestamp_nanos,
-                origin,
-                CanisterChangeDetails::controllers_change(new_controllers),
-            );
+        let is_controllers_change = validated_settings.controllers().is_some();
+        let new_controllers = if is_controllers_change {
+            Some(canister.system_state.controllers.iter().copied().collect())
+        } else {
+            None
+        };
+
+        match self.environment_variables_flag {
+            FlagStatus::Enabled => {
+                let new_environment_variables_hash = validated_settings
+                    .environment_variables()
+                    .map(|environment_variables| environment_variables.hash());
+
+                canister.system_state.add_canister_change(
+                    timestamp_nanos,
+                    origin,
+                    CanisterChangeDetails::settings_change(
+                        new_controllers,
+                        new_environment_variables_hash,
+                    ),
+                );
+            }
+            FlagStatus::Disabled => {
+                if let Some(new_controllers) = new_controllers {
+                    canister.system_state.add_canister_change(
+                        timestamp_nanos,
+                        origin,
+                        CanisterChangeDetails::controllers_change(new_controllers),
+                    );
+                }
+            }
         }
 
         Ok(())
