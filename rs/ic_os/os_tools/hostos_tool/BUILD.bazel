@@ -46,5 +46,5 @@ rust_binary(
 rust_test(
     name = "hostos_tool_test",
     crate = ":hostos_tool",
-    deps = DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
