@@ -20,7 +20,9 @@ use ic_registry_keys::{
 use ic_registry_local_store::{Changelog, ChangelogEntry, KeyMutation, LocalStore};
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
-use ic_types::{crypto::threshold_sig::ThresholdSigPublicKey, NodeId, RegistryVersion, SubnetId};
+use ic_types::{
+    crypto::threshold_sig::ThresholdSigPublicKey, CanisterId, NodeId, RegistryVersion, SubnetId,
+};
 use std::{
     collections::BTreeMap, convert::TryFrom, fmt::Debug, net::IpAddr, str::FromStr, sync::Arc,
     time::Duration,
@@ -281,11 +283,11 @@ impl InternalState {
         use prost::Message;
         let registry_version = RegistryVersion::from(changelog.len() as u64);
 
-        let routing_table_shards = self
+        let routing_table = self
             .registry_client
-            .get_routing_table_shards(registry_version)
-            .expect("Could not query registry for routing table shards")
-            .expect("No routing table shards found in the registry");
+            .get_routing_table(registry_version)
+            .expect("Could not query registry for routing table.")
+            .expect("No routing table configured in registry");
 
         let old_nns_subnet_id = self
             .registry_client
@@ -347,43 +349,41 @@ impl InternalState {
             value: Some(subnet_list_record_bytes),
         });
 
-        // Make routing table shard updates
-        let routing_table_updates: Vec<_> = routing_table_shards
+        // adjust routing table
+        let new_routing_table: BTreeMap<CanisterIdRange, SubnetId> = routing_table
             .into_iter()
-            .flat_map(|(canister_id, pb_rt)| {
-                let mut changed = false;
-                let rt: BTreeMap<CanisterIdRange, SubnetId> = RoutingTable::try_from(pb_rt)
-                    .expect("bug: invalid routing table shard")
-                    .into_iter()
-                    .map(|r, s_id| {
-                        if s_id == old_nns_subnet_id {
-                            changed = true;
-                            (r, new_nns_subnet_id)
-                        } else {
-                            (r, s_id)
-                        }
-                    })
-                    .collect();
-
-                if changed {
-                    Some((
-                        make_canister_ranges_key(canister_id),
-                        PbRoutingTable::from(rt),
-                    ))
+            .filter_map(|(r, s_id)| {
+                if s_id == old_nns_subnet_id {
+                    Some((r, new_nns_subnet_id))
                 } else {
                     None
                 }
             })
             .collect();
 
-        for (key, pb_routing_table) in routing_table_updates {
-            // encode the routing table
-            let bytes = pb_routing_table.encode_to_vec();
-            last.push(KeyMutation {
-                key,
-                value: Some(bytes),
-            });
-        }
+        // Delete all routing table shards except the shard for canister id 0, and put the new routing table there.
+        let mut routing_table_updates: Vec<_> = self
+            .registry_client
+            .get_key_family(CANISTER_RANGES_PREFIX, registry_version)
+            .into_iter()
+            .map(|key| {
+                if key == make_canister_ranges_key(CanisterId::from_u64(0)) {
+                    return KeyMutation {
+                        key: key.to_string(),
+                        value: Some(
+                            PbRoutingTable::from(new_routing_table.clone()).encode_to_vec(),
+                        ),
+                    };
+                } else {
+                    return KeyMutation {
+                        key: key.to_string(),
+                        value: None,
+                    };
+                }
+            })
+            .collect();
+
+        last.append(&mut routing_table_updates);
     }
 
     /// Update the [`RegistryCanister`] API wrapper with the newest API Urls

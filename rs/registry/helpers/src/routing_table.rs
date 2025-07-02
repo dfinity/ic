@@ -1,13 +1,8 @@
 use crate::deserialize_registry_value;
-use ic_base_types::CanisterId;
 use ic_interfaces_registry::{RegistryClient, RegistryClientResult};
 use ic_protobuf::registry::routing_table::v1 as pb;
-use ic_registry_keys::{
-    make_canister_migrations_record_key, maybe_parse_canister_id_from_canister_ranges_key,
-    CANISTER_RANGES_PREFIX,
-};
+use ic_registry_keys::{make_canister_migrations_record_key, CANISTER_RANGES_PREFIX};
 use ic_registry_routing_table::{CanisterIdRange, CanisterMigrations, RoutingTable};
-use ic_types::registry::RegistryClientError;
 use ic_types::{registry::RegistryClientError::DecodeError, RegistryVersion, SubnetId};
 use std::convert::TryFrom;
 
@@ -16,12 +11,6 @@ use std::convert::TryFrom;
 /// that we can simply return the entire struct here.
 pub trait RoutingTableRegistry {
     fn get_routing_table(&self, version: RegistryVersion) -> RegistryClientResult<RoutingTable>;
-
-    fn get_routing_table_shards(
-        &self,
-        version: RegistryVersion,
-    ) -> RegistryClientResult<Vec<(CanisterId, pb::RoutingTable)>>;
-
     fn get_subnet_canister_ranges(
         &self,
         version: RegistryVersion,
@@ -34,40 +23,6 @@ pub trait RoutingTableRegistry {
 }
 
 impl<T: RegistryClient + ?Sized> RoutingTableRegistry for T {
-    fn get_routing_table_shards(
-        &self,
-        version: RegistryVersion,
-    ) -> RegistryClientResult<Vec<(CanisterId, pb::RoutingTable)>> {
-        let mut shards = Vec::new();
-
-        for key in self.get_key_family(CANISTER_RANGES_PREFIX, version)? {
-            // try to parse the start canister ID, error if it fails
-            let canister_id =
-                maybe_parse_canister_id_from_canister_ranges_key(&key).ok_or_else(|| {
-                    RegistryClientError::DecodeError {
-                        error: "Key did not contain a parsable CanisterId".to_string(),
-                    }
-                })?;
-
-            // fetch & decode the optional pb::RoutingTable, error on deserialization
-            let opt_pb_rt =
-                deserialize_registry_value::<pb::RoutingTable>(self.get_value(&key, version))?;
-
-            if let Some(pb_rt) = opt_pb_rt {
-                shards.push((canister_id, pb_rt));
-            }
-        }
-
-        // TODO DO NOT MERGE - should this be an error or just None?
-        if shards.is_empty() {
-            return Err(DecodeError {
-                error: "No routing table shards found".to_string(),
-            });
-        }
-
-        Ok(Some(shards))
-    }
-
     fn get_routing_table(&self, version: RegistryVersion) -> RegistryClientResult<RoutingTable> {
         let canister_ranges_keys = self.get_key_family(CANISTER_RANGES_PREFIX, version)?;
         if canister_ranges_keys.is_empty() {
