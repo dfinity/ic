@@ -177,16 +177,16 @@ fn test_encode_decode_non_empty_history() {
         333,
         5,
         CanisterChangeOrigin::from_canister(canister_test_id(123).get(), None),
-        CanisterChangeDetails::settings_change(
-            Some(vec![canister_test_id(123).into(), user_test_id(666).get()]),
-            None,
-        ),
+        CanisterChangeDetails::controllers_change(vec![
+            canister_test_id(123).into(),
+            user_test_id(666).get(),
+        ]),
     ));
     canister_history.add_canister_change(CanisterChange::new(
         444,
         6,
         CanisterChangeOrigin::from_canister(canister_test_id(123).get(), None),
-        CanisterChangeDetails::settings_change(None, None),
+        CanisterChangeDetails::controllers_change(vec![]),
     ));
     canister_history.add_canister_change(CanisterChange::new(
         555,
