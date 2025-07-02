@@ -73,6 +73,8 @@ DEV_DATA = [
     "@nns_dapp_canister//file",
     "@sns_aggregator//file",
     "//rs/nervous_system/integration_tests:kong_backend.wasm",
+    "//rs/nervous_system/integration_tests:kongswap-adaptor-canister.wasm",
+    "//rs/sns/cli:sns",
 ]
 
 DEV_ENV = {
@@ -99,6 +101,8 @@ DEV_ENV = {
     "INTERNET_IDENTITY_WASM_PATH": "$(rootpath @ii_dev_canister//file)",
     "SNS_TESTING_CANISTER_WASM_PATH": "$(rootpath :sns_testing_canister)",
     "KONG_BACKEND_CANISTER_WASM_PATH": "$(rootpath //rs/nervous_system/integration_tests:kong_backend.wasm)",
+    "KONGSWAP_ADAPTOR_CANISTER_WASM_PATH": "$(rootpath //rs/nervous_system/integration_tests:kongswap-adaptor-canister.wasm)",
+    "SNS_CLI_PATH": "$(rootpath //rs/sns/cli:sns)",
 }
 
 rust_binary(

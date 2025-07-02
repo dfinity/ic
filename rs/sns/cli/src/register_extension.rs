@@ -366,8 +366,8 @@ pub async fn exec<C: CallCanisters>(
             }),
             extension_init: Some(ExtensionInit {
                 value: Some(PreciseValue::Map(btreemap! {
-                    "treasury_allocation_icp_e8s".to_string() => PreciseValue::Nat(treasury_allocation_icp_e8s.unwrap()),
-                    "treasury_allocation_sns_e8s".to_string() => PreciseValue::Nat(treasury_allocation_sns_e8s.unwrap()),
+                    "treasury_allocation_icp_e8s".to_string() => PreciseValue::Nat(treasury_allocation_icp_e8s.unwrap_or(100_00000000)),
+                    "treasury_allocation_sns_e8s".to_string() => PreciseValue::Nat(treasury_allocation_sns_e8s.unwrap_or(150_00000000)),
                 })),
             }),
         })),
