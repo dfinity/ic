@@ -1481,7 +1481,7 @@ version = "0.19.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "db1bcd90f88eabbf0cadbfb87a45bceeaebcd3b4bc9e43da379cd2ef0162590d"
 dependencies = [
-    "bitfield-macros",
+ "bitfield-macros",
 ]
 
 [[package]]
@@ -1490,9 +1490,9 @@ version = "0.19.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3787a07661997bfc05dd3431e379c0188573f78857080cf682e1393ab8e4d64c"
 dependencies = [
-    "proc-macro2",
-    "quote",
-    "syn 2.0.101",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.101",
 ]
 
 [[package]]
@@ -2611,7 +2611,7 @@ dependencies = [
  "config_types",
  "deterministic_ips",
  "ic-types",
-    "ic_sev",
+ "ic_sev",
  "macaddr",
  "network",
  "once_cell",
@@ -3953,7 +3953,7 @@ version = "6.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3e8aa94d75141228480295a7d0e7feb620b1a5ad9f12bc40be62411e38cce4e"
 dependencies = [
-    "dirs-sys",
+ "dirs-sys",
 ]
 
 [[package]]
@@ -3972,10 +3972,10 @@ version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e01a3366d27ee9890022452ee61b2b63a67e6f13f58900b651ff5665f0bb1fab"
 dependencies = [
-    "libc",
-    "option-ext",
-    "redox_users 0.5.0",
-    "windows-sys 0.59.0",
+ "libc",
+ "option-ext",
+ "redox_users 0.5.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -3985,7 +3985,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4ebda144c4fe02d1f7ea1a7d9641b6fc6b580adcfa024ae48797ecdeb6825b4d"
 dependencies = [
  "libc",
-    "redox_users 0.4.6",
+ "redox_users 0.4.6",
  "winapi 0.3.9",
 ]
 
@@ -5260,7 +5260,7 @@ dependencies = [
  "gpt",
  "grub",
  "ic-metrics-tool",
-    "ic_sev",
+ "ic_sev",
  "macaddr",
  "nix 0.29.0",
  "partition_tools",
@@ -15141,14 +15141,14 @@ dependencies = [
 name = "ic_sev"
 version = "0.0.0"
 dependencies = [
-    "anyhow",
-    "der 0.7.9",
-    "mockall",
-    "pem 1.1.1",
-    "rcgen",
-    "reqwest 0.12.15",
-    "sev",
-    "tempfile",
+ "anyhow",
+ "der 0.7.9",
+ "mockall",
+ "pem 1.1.1",
+ "rcgen",
+ "reqwest 0.12.15",
+ "sev",
+ "tempfile",
 ]
 
 [[package]]
@@ -18182,10 +18182,10 @@ version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fe42f1670a52a47d448f14b6a5c61dd78fce51856e68edaa38f7ae3a46b8d6b6"
 dependencies = [
-    "ecdsa 0.16.9",
+ "ecdsa 0.16.9",
  "elliptic-curve 0.13.8",
  "primeorder",
-    "sha2 0.10.9",
+ "sha2 0.10.9",
 ]
 
 [[package]]
@@ -19993,9 +19993,9 @@ version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dd6f9d3d47bdd2ad6945c5015a226ec6155d0bcdfd8f7cd29f86b71f8de99d2b"
 dependencies = [
-    "getrandom 0.2.15",
-    "libredox",
-    "thiserror 2.0.12",
+ "getrandom 0.2.15",
+ "libredox",
+ "thiserror 2.0.12",
 ]
 
 [[package]]
@@ -21371,7 +21371,7 @@ version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "11fc7cc2c76d73e0f27ee52abbd64eec84d46f370c88371120433196934e4b7f"
 dependencies = [
-    "serde",
+ "serde",
 ]
 
 [[package]]
@@ -21688,26 +21688,26 @@ version = "6.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1750ba11a6a6bba3c220da714caa0226aa34e417dce3975d2953062240717dea"
 dependencies = [
-    "base64 0.22.1",
-    "bincode",
-    "bitfield",
-    "bitflags 2.9.0",
-    "byteorder",
-    "codicon",
-    "dirs",
-    "hex",
-    "iocuddle",
-    "lazy_static",
-    "libc",
-    "p384",
-    "rsa",
-    "serde",
-    "serde-big-array",
-    "serde_bytes",
-    "sha2 0.10.9",
-    "static_assertions",
-    "uuid",
-    "x509-cert",
+ "base64 0.22.1",
+ "bincode",
+ "bitfield",
+ "bitflags 2.9.0",
+ "byteorder",
+ "codicon",
+ "dirs",
+ "hex",
+ "iocuddle",
+ "lazy_static",
+ "libc",
+ "p384",
+ "rsa",
+ "serde",
+ "serde-big-array",
+ "serde_bytes",
+ "sha2 0.10.9",
+ "static_assertions",
+ "uuid",
+ "x509-cert",
 ]
 
 [[package]]
