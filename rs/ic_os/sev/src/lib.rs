@@ -255,7 +255,7 @@ mod tests {
     #[test]
     fn test_certificate_chain_with_cache() {
         // Filenames on ext4 must be <= 255 bytes
-        assert!(MOCK_CACHE_FILENAME.bytes().len() <= 255);
+        assert!(MOCK_CACHE_FILENAME.len() <= 255);
 
         let temp_dir = TempDir::new().unwrap();
         let cache_dir = temp_dir.path().to_path_buf();
@@ -367,7 +367,7 @@ mod tests {
 
         // Verify cached data exists and is not empty
         let cached_data =
-            fs::read(&cache_dir.join(MOCK_CACHE_FILENAME)).expect("Could not read cached data");
+            fs::read(cache_dir.join(MOCK_CACHE_FILENAME)).expect("Could not read cached data");
         assert!(!cached_data.is_empty(), "Cached VCEK should not be empty");
     }
 }
