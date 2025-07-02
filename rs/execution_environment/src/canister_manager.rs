@@ -404,9 +404,9 @@ impl CanisterManager {
             Some(_) => Some(canister.system_state.controllers.iter().copied().collect()),
             None => None,
         };
-        let new_environment_variables_hash = match validated_settings.environment_variables() {
-            Some(environment_variavles) => Some(environment_variavles.hash()),
-            None => None,
+        let new_environment_variables_hash = match self.environment_variables_flag {
+            FlagStatus::Enabled => validated_settings.environment_variables().map(|environment_variables| environment_variables.hash()),
+            FlagStatus::Disabled => None,
         };
 
         if new_controllers.is_some() || new_environment_variables_hash.is_some() {
