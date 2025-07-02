@@ -92,9 +92,15 @@ impl IcGatewayVm {
         let api_nodes_urls = self.get_api_nodes_urls(env);
 
         // Handle playnet configuration and DNS records
-        let playnet = self.load_or_create_playnet(env, &vm_ipv6)?;
+        let vm_ipv4 = self
+            .universal_vm
+            .has_ipv4
+            .then(|| deployed_vm.block_on_ipv4().map(|ip| ip.to_string()))
+            .transpose()?;
+
+        let playnet = self.load_or_create_playnet(env, &vm_ipv6, vm_ipv4)?;
         let ic_gateway_fqdn = playnet.playnet_cert.playnet.clone();
-        self.configure_dns_records(&logger, env, &playnet, &ic_gateway_fqdn)?;
+        self.configure_dns_records(env, &playnet, &ic_gateway_fqdn)?;
 
         // Emit log event for AAAA records
         emit_ic_gateway_aaaa_records_event(&logger, &ic_gateway_fqdn, playnet.aaaa_records.clone());
@@ -134,7 +140,12 @@ impl IcGatewayVm {
     }
 
     /// Loads existing playnet configuration or creates a new one.
-    fn load_or_create_playnet(&self, env: &TestEnv, uvm_ipv6: &str) -> Result<Playnet> {
+    fn load_or_create_playnet(
+        &self,
+        env: &TestEnv,
+        uvm_ipv6: &str,
+        uvm_ipv4: Option<String>,
+    ) -> Result<Playnet> {
         let logger = env.logger();
         let playnet_file = env.get_json_path(PLAYNET_FILE);
 
@@ -156,6 +167,9 @@ impl IcGatewayVm {
         };
 
         playnet.aaaa_records.push(uvm_ipv6.to_string());
+        if let Some(ipv4) = uvm_ipv4 {
+            playnet.a_records.push(ipv4);
+        }
 
         // Write/overwrite file
         env.write_json_object(PLAYNET_FILE, &playnet)?;
@@ -166,7 +180,6 @@ impl IcGatewayVm {
     /// Configures DNS records based on infrastructure provider.
     fn configure_dns_records(
         &self,
-        logger: &slog::Logger,
         env: &TestEnv,
         playnet: &Playnet,
         ic_gateway_fqdn: &str,
@@ -190,16 +203,15 @@ impl IcGatewayVm {
                         records: vec![ic_gateway_fqdn.to_string()],
                     },
                 ];
-                if self.universal_vm.has_ipv4 {
-                    let deployed_vm = env.get_deployed_universal_vm(&self.universal_vm.name)?;
-                    let ipv4 = deployed_vm.block_on_ipv4()?.to_string();
-                    info!(logger, "{ic_gateway_fqdn} has ipv4 {ipv4} address");
+
+                if !playnet.a_records.is_empty() {
                     records.push(DnsRecord {
                         name: ic_gateway_fqdn.to_string(),
                         record_type: DnsRecordType::A,
-                        records: vec![ipv4],
+                        records: playnet.a_records.clone(),
                     })
                 }
+
                 records
             }
             _ => vec![
