@@ -236,7 +236,6 @@ system_test(
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],
-    #target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS + [

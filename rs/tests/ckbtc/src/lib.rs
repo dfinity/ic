@@ -122,7 +122,6 @@ pub fn adapter_test_config(env: TestEnv) {
         .add_subnet(
             Subnet::new(SubnetType::System)
                 .with_dkg_interval_length(Height::from(10))
-                // TODO: Setup bitcoin privileges for Universal Canister
                 .add_nodes(1),
         )
         .use_specified_ids_allocation_range()
@@ -206,7 +205,6 @@ pub fn adapter_test_setup(env: TestEnv) {
     // Use the adapter test integration setup.
     adapter_test_config(env.clone());
     check_nodes_health(&env);
-    //install_nns_canisters_at_ids(&env);
 }
 
 pub fn install_nns_canisters_at_ids(env: &TestEnv) {
