@@ -1,18 +1,18 @@
 use crate::firmware::SevHostFirmware;
 use anyhow::{anyhow, Context, Result};
 use der::pem::LineEnding;
-use der::Decode;
+use der::{Decode, Document};
 use reqwest::blocking::Response;
 use reqwest::Proxy;
 use sev::firmware::host::{Identifier, SnpPlatformStatus};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tempfile::NamedTempFile;
 
 mod firmware;
 pub mod testing;
 
-const SOCKS_PROXY: &'static str = "socks5://socks5.ic0.app:1080";
+const SOCKS_PROXY: &str = "socks5://socks5.ic0.app:1080";
 
 pub struct HostSevCertificateProvider {
     implementation: Option<HostSevCertificateProviderImpl>,
@@ -132,6 +132,8 @@ impl HostSevCertificateProviderImpl {
         }
 
         let vcek_der = self.load_vcek_from_amd_key_server(&chip_id, &status)?;
+        // Verify VCEK DER before saving to cache.
+        Document::from_der(&vcek_der).context("Failed to parse downloaded VCEK")?;
 
         if let Err(err) = self.save_to_cache(&cache_path, &vcek_der) {
             eprintln!("Failed to save VCEK to cache: {err}");
@@ -140,7 +142,7 @@ impl HostSevCertificateProviderImpl {
         Ok(vcek_der)
     }
 
-    fn save_to_cache(&mut self, cache_path: &PathBuf, vcek_der: &Vec<u8>) -> Result<()> {
+    fn save_to_cache(&self, cache_path: &Path, vcek_der: &[u8]) -> Result<()> {
         // Ensure cache directory exists
         fs::create_dir_all(&self.certificate_cache_dir)
             .context("Failed to create certificate cache directory")?;
@@ -148,9 +150,9 @@ impl HostSevCertificateProviderImpl {
         // Save to temp file and rename to prevent race conditions
         let temp_file = NamedTempFile::new_in(&self.certificate_cache_dir)
             .context("Failed to create temporary file")?;
-        fs::write(&temp_file, &vcek_der).context("Failed to write VCEK")?;
+        fs::write(&temp_file, vcek_der).context("Failed to write VCEK")?;
         temp_file
-            .persist(&cache_path)
+            .persist(cache_path)
             .context("Failed to rename temporary file")?;
         Ok(())
     }
