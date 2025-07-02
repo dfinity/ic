@@ -14,7 +14,7 @@ use crate::{
         test_env::{TestEnv, TestEnvAttribute},
         test_env_api::{
             get_dependency_path, AcquirePlaynetCertificate, CreatePlaynetDnsRecords,
-            HasTopologySnapshot, SshSession,
+            HasTopologySnapshot, RetrieveIpv4Addr, SshSession,
         },
         test_setup::InfraProvider,
         universal_vm::{DeployedUniversalVm, UniversalVm, UniversalVms},
@@ -66,9 +66,15 @@ impl Default for IcGatewayVm {
 impl IcGatewayVm {
     /// Creates a new IC Gateway VM with the specified name.
     pub fn new(name: &str) -> Self {
-        let universal_vm =
-            UniversalVm::new(name.to_string()).with_config_img(get_dependency_path(IMAGE_PATH));
+        let universal_vm = UniversalVm::new(name.to_string())
+            .with_config_img(get_dependency_path(IMAGE_PATH))
+            .enable_ipv4();
         Self { universal_vm }
+    }
+
+    pub fn disable_ipv4(mut self) -> Self {
+        self.universal_vm.has_ipv4 = false;
+        self
     }
 
     /// Starts the IC Gateway VM, configuring DNS and certificates.
@@ -88,7 +94,7 @@ impl IcGatewayVm {
         // Handle playnet configuration and DNS records
         let playnet = self.load_or_create_playnet(env, &vm_ipv6)?;
         let ic_gateway_fqdn = playnet.playnet_cert.playnet.clone();
-        self.configure_dns_records(env, &playnet, &ic_gateway_fqdn)?;
+        self.configure_dns_records(&logger, env, &playnet, &ic_gateway_fqdn)?;
 
         // Emit log event for AAAA records
         emit_ic_gateway_aaaa_records_event(&logger, &ic_gateway_fqdn, playnet.aaaa_records.clone());
@@ -160,28 +166,42 @@ impl IcGatewayVm {
     /// Configures DNS records based on infrastructure provider.
     fn configure_dns_records(
         &self,
+        logger: &slog::Logger,
         env: &TestEnv,
         playnet: &Playnet,
         ic_gateway_fqdn: &str,
     ) -> Result<()> {
         let records = match InfraProvider::read_attribute(env) {
-            InfraProvider::Farm => vec![
-                DnsRecord {
-                    name: "".to_string(),
-                    record_type: DnsRecordType::AAAA,
-                    records: playnet.aaaa_records.clone(),
-                },
-                DnsRecord {
-                    name: "*".to_string(),
-                    record_type: DnsRecordType::CNAME,
-                    records: vec![ic_gateway_fqdn.to_string()],
-                },
-                DnsRecord {
-                    name: "*.raw".to_string(),
-                    record_type: DnsRecordType::CNAME,
-                    records: vec![ic_gateway_fqdn.to_string()],
-                },
-            ],
+            InfraProvider::Farm => {
+                let mut records = vec![
+                    DnsRecord {
+                        name: "".to_string(),
+                        record_type: DnsRecordType::AAAA,
+                        records: playnet.aaaa_records.clone(),
+                    },
+                    DnsRecord {
+                        name: "*".to_string(),
+                        record_type: DnsRecordType::CNAME,
+                        records: vec![ic_gateway_fqdn.to_string()],
+                    },
+                    DnsRecord {
+                        name: "*.raw".to_string(),
+                        record_type: DnsRecordType::CNAME,
+                        records: vec![ic_gateway_fqdn.to_string()],
+                    },
+                ];
+                if self.universal_vm.has_ipv4 {
+                    let deployed_vm = env.get_deployed_universal_vm(&self.universal_vm.name)?;
+                    let ipv4 = deployed_vm.block_on_ipv4()?.to_string();
+                    info!(logger, "{ic_gateway_fqdn} has ipv4 {ipv4} address");
+                    records.push(DnsRecord {
+                        name: ic_gateway_fqdn.to_string(),
+                        record_type: DnsRecordType::A,
+                        records: vec![ipv4],
+                    })
+                }
+                records
+            }
             _ => vec![
                 DnsRecord {
                     name: ic_gateway_fqdn.to_string(),
