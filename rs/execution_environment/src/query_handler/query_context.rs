@@ -1071,7 +1071,6 @@ impl<'a> QueryContext<'a> {
     ) -> ExecutionParameters {
         ExecutionParameters {
             instruction_limits,
-            canister_memory_allocation: canister.memory_limit(),
             wasm_memory_limit: canister.wasm_memory_limit(),
             memory_allocation: canister.memory_allocation(),
             canister_guaranteed_callback_quota: self.canister_guaranteed_callback_quota,

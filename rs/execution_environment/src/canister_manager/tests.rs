@@ -144,7 +144,6 @@ lazy_static! {
             MAX_NUM_INSTRUCTIONS,
             MAX_NUM_INSTRUCTIONS
         ),
-        canister_memory_allocation: None,
         wasm_memory_limit: None,
         memory_allocation: MemoryAllocation::default(),
         canister_guaranteed_callback_quota: CANISTER_GUARANTEED_CALLBACK_QUOTA as u64,
@@ -398,7 +397,7 @@ fn install_code(
 
     let old_canister = state.take_canister_state(&context.canister_id).unwrap();
     execution_parameters.compute_allocation = old_canister.scheduler_state.compute_allocation;
-    execution_parameters.canister_memory_allocation = old_canister.memory_limit();
+    execution_parameters.memory_allocation = old_canister.memory_allocation();
 
     let dts_result = canister_manager.install_code_dts(
         context,

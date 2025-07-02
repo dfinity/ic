@@ -146,7 +146,6 @@ pub(crate) fn get_execution_parameters() -> ExecutionParameters {
             DEFAULT_NUM_INSTRUCTIONS,
             DEFAULT_NUM_INSTRUCTIONS,
         ),
-        canister_memory_allocation: Some(NumBytes::from(4 << 30)),
         wasm_memory_limit: None,
         memory_allocation: MemoryAllocation::default(),
         canister_guaranteed_callback_quota: HypervisorConfig::default()

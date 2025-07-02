@@ -181,7 +181,6 @@ impl InstructionLimits {
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct ExecutionParameters {
     pub instruction_limits: InstructionLimits,
-    pub canister_memory_allocation: Option<NumBytes>,
     // The limit on the Wasm memory set by the developer in canister settings.
     pub wasm_memory_limit: Option<NumBytes>,
     pub memory_allocation: MemoryAllocation,
@@ -837,9 +836,6 @@ pub enum CostReturnCode {
 /// A struct to gather the relevant fields that correspond to a canister's
 /// memory consumption.
 struct MemoryUsage {
-    /// Upper limit on how much the memory the canister could use.
-    limit: Option<NumBytes>,
-
     /// The Wasm memory limit set by the developer in canister settings.
     wasm_memory_limit: Option<NumBytes>,
 
@@ -872,7 +868,6 @@ struct MemoryUsage {
 
 impl MemoryUsage {
     fn new(
-        limit: Option<NumBytes>,
         wasm_memory_limit: Option<NumBytes>,
         current_usage: NumBytes,
         stable_memory_usage: NumBytes,
@@ -882,7 +877,6 @@ impl MemoryUsage {
         memory_allocation: MemoryAllocation,
     ) -> Self {
         Self {
-            limit,
             wasm_memory_limit,
             current_usage,
             stable_memory_usage,
@@ -969,12 +963,6 @@ impl MemoryUsage {
             .overflowing_add(execution_bytes.get());
         if overflow {
             return Err(HypervisorError::OutOfMemory);
-        }
-
-        if let Some(limit) = self.limit {
-            if new_usage > limit.get() {
-                return Err(HypervisorError::OutOfMemory);
-            }
         }
 
         sandbox_safe_system_state.check_freezing_threshold_for_memory_grow(
@@ -1229,7 +1217,6 @@ impl SystemApiImpl {
             .expect("Wasm memory size is larger than maximal allowed.");
 
         let memory_usage = MemoryUsage::new(
-            execution_parameters.canister_memory_allocation,
             execution_parameters.wasm_memory_limit,
             canister_current_memory_usage,
             stable_memory_usage,

@@ -69,7 +69,6 @@ fn test_wasmtime_system_api() {
         api_type.caller(),
         api_type.call_context_id(),
     );
-    let canister_memory_allocation = Some(NumBytes::from(4 << 30));
     let canister_current_memory_usage = NumBytes::from(0);
     let canister_current_message_memory_usage = MessageMemoryUsage::ZERO;
     let system_api = SystemApiImpl::new(
@@ -83,7 +82,6 @@ fn test_wasmtime_system_api() {
                 MAX_NUM_INSTRUCTIONS,
                 MAX_NUM_INSTRUCTIONS,
             ),
-            canister_memory_allocation,
             wasm_memory_limit: None,
             memory_allocation: MemoryAllocation::default(),
             canister_guaranteed_callback_quota: HypervisorConfig::default()
