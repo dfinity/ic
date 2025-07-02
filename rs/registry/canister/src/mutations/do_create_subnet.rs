@@ -469,9 +469,8 @@ impl TryFrom<KeyConfigRequest> for KeyConfigRequestInternal {
     }
 }
 
-/// How much (in cycles) does it cost a canister to do computation? Examples of
-/// types of computation that canisters do and generally need to pay for in
-/// cycles:
+/// How much (in cycles) does it cost a canister to consume computational
+/// resources? Examples of such resources, which generally require cycles:
 ///
 ///     1. Execute instructions.
 ///     2. Store Data - In normal memory, and stable memory.
@@ -482,18 +481,7 @@ pub enum CanisterCyclesCostSchedule {
     Normal,
 
     /// This is used by rented subnets. This is because rented subnets get paid
-    /// for in a different way: ICP is supplied up front, and converted to
-    /// enough cycles to last for months. Then, those cycles are steadily burned
-    /// down at a constant rate. The "user" of a rented subnet can also "top up"
-    /// along the way. This isn't necessarily a cheaper way to do computation on
-    /// the ICP, but it has a couple of advantages:
-    ///
-    ///     1. The user has the EXCLUSIVE right to create canisters in the subnet.
-    ///
-    ///     2. The user can "recruit" the nodes. This means, that they can, for
-    ///        example, have all the nodes be located in a limited set of
-    ///        jurisdictions (e.g. all nodes are in Switzerland or
-    ///        Liechtenstein).
+    /// for in a different way.
     Free,
 }
 
