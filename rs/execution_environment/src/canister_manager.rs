@@ -1131,7 +1131,7 @@ impl CanisterManager {
                     origin,
                     CanisterChangeDetails::canister_creation(
                         controllers,
-                        environment_variables_hash,
+                        environment_variables_hash.map(|hash| hash.as_slice().try_into().unwrap()),
                     ),
                 );
             }

@@ -1,4 +1,3 @@
-use ic_crypto_sha2::Sha256;
 use ic_base_types::{NumBytes, NumSeconds, EnvironmentVariables};
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_error_types::{ErrorCode, UserError};

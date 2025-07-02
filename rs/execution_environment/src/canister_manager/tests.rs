@@ -1298,6 +1298,33 @@ fn get_canister_status_of_stopping_canister() {
 }
 
 #[test]
+fn get_canister_status_of_canister_with_environment_variables() {
+    let mut test = ExecutionTestBuilder::new().with_environment_variables_flag(FlagStatus::Enabled).build();
+
+    let environment_variables = EnvironmentVariables::new(btreemap![
+        "TEST_VAR".to_string() => "test_value".to_string(),
+        "TEST_VAR2".to_string() => "test_value2".to_string(),
+    ]);
+
+    let settings = CanisterSettingsArgs {
+        environment_variables,
+        ..CanisterSettingsArgs::default()
+    };
+    let canister_id = test.create_canister_with_settings(*INITIAL_CYCLES, settings);
+    let result = test.canister_status(canister_id);
+
+    let canister = state.canister_state_mut(&canister_id).unwrap();
+    let status = canister_manager
+    .get_canister_status(sender, canister, SMALL_APP_SUBNET_MAX_SIZE)
+    .unwrap();
+    assert_eq!(status.status(), CanisterStatusType::Running);
+    assert_eq!(status.settings.environment_variables(), vec![EnvironmentVariable {
+        name: "TEST_VAR".to_string(),
+        value: "test_value".to_string(),
+    }]);
+}
+
+#[test]
 fn set_controller_with_incorrect_controller() {
     let mut test = ExecutionTestBuilder::new().build();
 
