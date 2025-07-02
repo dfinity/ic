@@ -383,6 +383,12 @@ impl InternalState {
             })
             .collect();
 
+        // TODO(NNS1-3781): Remove this once routing_table is no longer used by clients.
+        last.push(KeyMutation {
+            key: make_routing_table_record_key(),
+            value: Some(PbRoutingTable::from(new_routing_table).encode_to_vec()),
+        });
+
         last.append(&mut routing_table_updates);
     }
 
