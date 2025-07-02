@@ -1,7 +1,7 @@
 use crate::deserialize_registry_value;
 use ic_interfaces_registry::{RegistryClient, RegistryClientResult};
 use ic_protobuf::registry::routing_table::v1 as pb;
-use ic_registry_keys::{make_canister_migrations_record_key, make_routing_table_record_key};
+use ic_registry_keys::{make_canister_migrations_record_key, CANISTER_RANGES_PREFIX};
 use ic_registry_routing_table::{CanisterIdRange, CanisterMigrations, RoutingTable};
 use ic_types::{registry::RegistryClientError::DecodeError, RegistryVersion, SubnetId};
 use std::convert::TryFrom;
@@ -24,16 +24,24 @@ pub trait RoutingTableRegistry {
 
 impl<T: RegistryClient + ?Sized> RoutingTableRegistry for T {
     fn get_routing_table(&self, version: RegistryVersion) -> RegistryClientResult<RoutingTable> {
-        let bytes = self.get_value(&make_routing_table_record_key(), version);
-        deserialize_registry_value::<pb::RoutingTable>(bytes).map(|option_pb_routing_table| {
-            option_pb_routing_table
-                .map(|pb_routing_table| {
-                    RoutingTable::try_from(pb_routing_table).map_err(|err| DecodeError {
-                        error: format!("get_routing_table() failed with {}", err),
-                    })
+        let canister_ranges_keys = self.get_key_family(CANISTER_RANGES_PREFIX, version)?;
+        let routing_table_shards = canister_ranges_keys
+            .iter()
+            .map(|key| {
+                let bytes = self.get_value(key, version);
+                deserialize_registry_value::<pb::RoutingTable>(bytes)?.ok_or_else(|| DecodeError {
+                    error: format!(
+                        "canister ranges key {} does not have a routing table shard",
+                        key
+                    ),
                 })
-                .transpose()
-        })?
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        RoutingTable::try_from(routing_table_shards)
+            .map(Some)
+            .map_err(|err| DecodeError {
+                error: format!("get_routing_table() failed with {}", err),
+            })
     }
 
     fn get_subnet_canister_ranges(
