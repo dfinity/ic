@@ -231,7 +231,7 @@ impl IcGatewayVm {
 
         if !playnet.a_records.is_empty() {
             records.push(DnsRecord {
-                name: ic_gateway_fqdn.to_string(),
+                name: "".to_string(),
                 record_type: DnsRecordType::A,
                 records: playnet.a_records.iter().map(|r| r.to_string()).collect(),
             })
