@@ -14,7 +14,7 @@
     <partition>/machine</partition>
   </resource>
   <os>
-    <type arch='x86_64' machine='pc-q35-5.0'>hvm</type>
+    <type arch='x86_64' machine='pc-q35-9.2'>hvm</type>
     <loader readonly='yes' type='pflash'>/usr/share/OVMF/OVMF_CODE_4M.fd</loader>
     <nvram>/var/lib/libvirt/qemu/nvram/guestos_VARS.fd</nvram>
     <boot dev='hd'/>
@@ -39,7 +39,7 @@
     <suspend-to-disk enabled='no'/>
   </pm>
   <devices>
-    <emulator>/usr/local/bin/qemu-system-x86_64</emulator>
+    <emulator>/usr/bin/qemu-system-x86_64</emulator>
     <disk type='block' device='disk'>
       <driver name='qemu' type='raw' cache='none' discard='unmap'/>
       <source dev='/dev/hostlvm/guestos' index='1'/>
