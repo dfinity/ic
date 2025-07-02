@@ -1192,7 +1192,14 @@ pub struct QueryStats {
 
 /// Struct used for encoding/decoding
 /// `(record {
-///     status : variant { running; stopping; stopped };
+///     status : variant {
+///         running;
+///         stopping;
+///         stopped : record {
+///             ready_for_migration : bool;
+///         };
+///     };
+///     version : nat64;
 ///     settings: definite_canister_settings;
 ///     module_hash: opt blob;
 ///     controller: principal;
@@ -1221,6 +1228,7 @@ pub struct QueryStats {
 #[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct CanisterStatusResultV2 {
     status: CanisterStatusType,
+    version: u64,
     module_hash: Option<Vec<u8>>,
     controller: candid::Principal,
     settings: DefiniteCanisterSettingsArgs,
@@ -1251,6 +1259,7 @@ impl CanisterStatusResultV2 {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         status: CanisterStatusType,
+        version: u64,
         module_hash: Option<Vec<u8>>,
         controller: PrincipalId,
         controllers: Vec<PrincipalId>,
@@ -1280,6 +1289,7 @@ impl CanisterStatusResultV2 {
     ) -> Self {
         Self {
             status,
+            version,
             module_hash,
             controller: candid::Principal::from_text(controller.to_string()).unwrap(),
             memory_size: candid::Nat::from(memory_size.get()),
@@ -1322,6 +1332,10 @@ impl CanisterStatusResultV2 {
 
     pub fn status(&self) -> CanisterStatusType {
         self.status.clone()
+    }
+
+    pub fn version(&self) -> u64 {
+        self.version
     }
 
     pub fn module_hash(&self) -> Option<Vec<u8>> {
@@ -1414,8 +1428,6 @@ impl CanisterStatusResultV2 {
 }
 
 /// Indicates whether the canister is running, stopping, or stopped.
-///
-/// Unlike `CanisterStatus`, it contains no additional metadata.
 #[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub enum CanisterStatusType {
     #[serde(rename = "running")]
@@ -1423,7 +1435,12 @@ pub enum CanisterStatusType {
     #[serde(rename = "stopping")]
     Stopping,
     #[serde(rename = "stopped")]
-    Stopped,
+    Stopped(ReadyForMigration),
+}
+
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
+pub struct ReadyForMigration {
+    pub ready_for_migration: bool,
 }
 
 /// These strings are used to generate metrics -- changing any existing entries
@@ -1433,7 +1450,7 @@ impl fmt::Display for CanisterStatusType {
         match self {
             CanisterStatusType::Running => write!(f, "running"),
             CanisterStatusType::Stopping => write!(f, "stopping"),
-            CanisterStatusType::Stopped => write!(f, "stopped"),
+            CanisterStatusType::Stopped(_) => write!(f, "stopped"),
         }
     }
 }
