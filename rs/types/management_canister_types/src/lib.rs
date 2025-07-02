@@ -871,13 +871,17 @@ impl TryFrom<pb_canister_state_bits::canister_change::ChangeDetails> for Caniste
             }
             pb_canister_state_bits::canister_change::ChangeDetails::CanisterControllersChange(
                 canister_controllers_change,
-            ) => Ok(CanisterChangeDetails::controllers_change(
-                canister_controllers_change
+            ) => {
+                let controllers = canister_controllers_change
                     .controllers
                     .into_iter()
                     .map(TryInto::try_into)
-                    .collect::<Result<Vec<PrincipalId>, _>>()?,
-            )),
+                    .collect::<Result<Vec<PrincipalId>, _>>()?;
+                Ok(CanisterChangeDetails::settings_change(
+                    Some(controllers),
+                    None,
+                ))
+            }
             pb_canister_state_bits::canister_change::ChangeDetails::CanisterLoadSnapshot(
                 canister_load_snapshot,
             ) => {

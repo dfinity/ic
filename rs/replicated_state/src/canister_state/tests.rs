@@ -1122,7 +1122,7 @@ fn canister_history_operations() {
             42,
             0,
             CanisterChangeOrigin::from_user(user_test_id(42).get()),
-            CanisterChangeDetails::controllers_change(vec![canister_test_id(i).get()]),
+            CanisterChangeDetails::settings_change(Some(vec![canister_test_id(i).get()]), None),
         );
         canister_history.add_canister_change(c.clone());
         reference_change_entries.push(c);
@@ -1152,7 +1152,7 @@ fn canister_history_operations() {
             42,
             0,
             CanisterChangeOrigin::from_user(user_test_id(42).get()),
-            CanisterChangeDetails::controllers_change(vec![canister_test_id(i).get()]),
+            CanisterChangeDetails::settings_change(Some(vec![canister_test_id(i).get()]), None),
         );
         canister_history.add_canister_change(c.clone());
         reference_change_entries.push(c);
@@ -1182,7 +1182,7 @@ fn canister_history_operations() {
             42,
             0,
             CanisterChangeOrigin::from_user(user_test_id(42).get()),
-            CanisterChangeDetails::controllers_change(vec![canister_test_id(i).get()]),
+            CanisterChangeDetails::settings_change(Some(vec![canister_test_id(i).get()]), None),
         );
         canister_history.add_canister_change(c.clone());
         reference_change_entries.push(c);

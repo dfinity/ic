@@ -366,8 +366,6 @@ impl CanisterManager {
             canister.system_state.reserved_balance_limit(),
         )?;
 
-        let is_controllers_change = validated_settings.controllers().is_some();
-
         let old_usage = canister.memory_usage();
         let old_mem = canister.memory_allocation().allocated_bytes(old_usage);
         let old_compute_allocation = canister.scheduler_state.compute_allocation.as_percent();
@@ -402,12 +400,23 @@ impl CanisterManager {
         }
 
         canister.system_state.canister_version += 1;
-        if is_controllers_change {
-            let new_controllers = canister.system_state.controllers.iter().copied().collect();
+        let new_controllers = match validated_settings.controllers() {
+            Some(_) => Some(canister.system_state.controllers.iter().copied().collect()),
+            None => None,
+        };
+        let new_environment_variables_hash = match validated_settings.environment_variables() {
+            Some(environment_variavles) => Some(environment_variavles.hash()),
+            None => None,
+        };
+
+        if new_controllers.is_some() || new_environment_variables_hash.is_some() {
             canister.system_state.add_canister_change(
                 timestamp_nanos,
                 origin,
-                CanisterChangeDetails::controllers_change(new_controllers),
+                CanisterChangeDetails::settings_change(
+                    new_controllers,
+                    new_environment_variables_hash,
+                ),
             );
         }
 

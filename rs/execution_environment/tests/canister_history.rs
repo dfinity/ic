@@ -493,7 +493,7 @@ fn canister_history_tracks_controllers_change() {
             now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
             i,
             CanisterChangeOrigin::from_user(user_id2),
-            CanisterChangeDetails::controllers_change(new_controllers),
+            CanisterChangeDetails::settings_change(Some(new_controllers), None),
         ));
         let history = get_canister_history(&env, canister_id);
         assert_eq!(history.get_total_num_changes(), i + 1);

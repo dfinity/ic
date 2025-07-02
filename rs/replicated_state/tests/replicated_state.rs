@@ -578,10 +578,10 @@ fn memory_taken_by_canister_history() {
     canister_state.system_state.add_canister_change(
         Time::from_nanos_since_unix_epoch(16),
         CanisterChangeOrigin::from_user(user_test_id(123).get()),
-        CanisterChangeDetails::controllers_change(vec![
-            canister_test_id(0).get(),
-            canister_test_id(1).get(),
-        ]),
+        CanisterChangeDetails::settings_change(
+            Some(vec![canister_test_id(0).get(), canister_test_id(1).get()]),
+            None,
+        ),
     );
     assert_execution_memory_taken(canister_history_memory, &fixture);
     assert_canister_history_memory_taken(canister_history_memory, &fixture);
