@@ -101,7 +101,7 @@ impl Storable for SubnetMetricsKey {
     }
 
     const BOUND: Bound = Bound::Bounded {
-        max_size: MAX_BYTES_NODE_METRICS_STORED_KEY,
+        max_size: 2 * MAX_BYTES_NODE_METRICS_STORED_KEY,
         is_fixed_size: false,
     };
 }
