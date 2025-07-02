@@ -8,6 +8,7 @@ use crate::{
     metrics::MeasurementScope,
     util::process_responses,
 };
+use ic_config::embedders::Config as HypervisorConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_crypto_prng::{Csprng, RandomnessPurpose::ExecutionThread};
@@ -141,6 +142,7 @@ impl SchedulerRoundLimits {
 /// Scheduler Implementation
 pub(crate) struct SchedulerImpl {
     config: SchedulerConfig,
+    hypervisor_config: HypervisorConfig,
     own_subnet_id: SubnetId,
     ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
     exec_env: Arc<ExecutionEnvironment>,
@@ -158,6 +160,7 @@ impl SchedulerImpl {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         config: SchedulerConfig,
+        hypervisor_config: HypervisorConfig,
         own_subnet_id: SubnetId,
         ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
         exec_env: Arc<ExecutionEnvironment>,
@@ -172,6 +175,7 @@ impl SchedulerImpl {
         let scheduler_cores = config.scheduler_cores as u32;
         Self {
             config,
+            hypervisor_config,
             thread_pool: RefCell::new(scoped_threadpool::Pool::new(scheduler_cores)),
             own_subnet_id,
             ingress_history_writer,
@@ -1084,7 +1088,7 @@ impl SchedulerImpl {
         for canister_id in canister_ids {
             let canister = state.canister_states.get(canister_id).unwrap();
 
-            if let Err(err) = canister.check_invariants() {
+            if let Err(err) = canister.check_invariants(&self.hypervisor_config) {
                 let msg = format!(
                     "{}: At Round {} @ time {}, canister {} has invalid state after execution. Invariant check failed with err: {}",
                     CANISTER_INVARIANT_BROKEN,
