@@ -17,7 +17,7 @@ use ic_test_utilities_metrics::{
     fetch_histogram_stats, fetch_histogram_vec_count, fetch_int_counter, fetch_int_counter_vec,
     fetch_int_gauge_vec, metric_vec, nonzero_values, HistogramStats, MetricVec,
 };
-use ic_test_utilities_state::{CanisterStateBuilder, register_callback};
+use ic_test_utilities_state::{register_callback, CanisterStateBuilder};
 use ic_test_utilities_types::ids::{user_test_id, SUBNET_12, SUBNET_23, SUBNET_27};
 use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
 use ic_test_utilities_types::xnet::StreamHeaderBuilder;
