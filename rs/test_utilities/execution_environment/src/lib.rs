@@ -69,7 +69,7 @@ use ic_types::{
     time::UNIX_EPOCH,
     CanisterId, Cycles, Height, NumInstructions, QueryStatsEpoch, Time, UserId,
 };
-use ic_types::{ExecutionRound, ReplicaVersion};
+use ic_types::{ExecutionRound, RegistryVersion, ReplicaVersion};
 use ic_types_test_utils::ids::{node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{UNIVERSAL_CANISTER_SERIALIZED_MODULE, UNIVERSAL_CANISTER_WASM};
 use ic_wasm_types::BinaryEncodedWasm;
@@ -159,6 +159,7 @@ pub fn test_registry_settings() -> RegistryExecutionSettings {
         chain_key_settings: BTreeMap::new(),
         subnet_size: SMALL_APP_SUBNET_MAX_SIZE,
         node_ids: BTreeSet::new(),
+        registry_version: RegistryVersion::default(),
     }
 }
 

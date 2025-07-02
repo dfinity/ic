@@ -669,6 +669,7 @@ fn make_batch_processor<RegistryClient_: RegistryClient + 'static>(
         chain_key_settings: BTreeMap::new(),
         subnet_size: 0,
         node_ids: BTreeSet::new(),
+        registry_version: RegistryVersion::default(),
     }));
     let batch_processor = BatchProcessorImpl {
         state_manager: state_manager.clone(),
