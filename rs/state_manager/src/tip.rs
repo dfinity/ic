@@ -573,7 +573,7 @@ fn switch_to_checkpoint(
     }
 
     for (tip_id, tip_snapshot) in tip.canister_snapshots.iter_mut() {
-        let new_snapshot = Arc::make_mut(tip_snapshot);
+        let new_snapshot = tip_snapshot;
         let snapshot_layout = layout.snapshot(tip_id).unwrap();
 
         new_snapshot

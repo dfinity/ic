@@ -1595,7 +1595,7 @@ impl CanisterManager {
 
         let snapshot_id =
             SnapshotId::from((canister.canister_id(), canister.new_local_snapshot_id()));
-        state.take_snapshot(snapshot_id, Arc::new(new_snapshot));
+        state.take_snapshot(snapshot_id, new_snapshot);
         canister.system_state.snapshots_memory_usage = canister
             .system_state
             .snapshots_memory_usage
@@ -1614,12 +1614,12 @@ impl CanisterManager {
     /// Returns an Arc to the snapshot, if it exists.
     /// Returns an error if the snapshot given by the snapshot ID does not
     /// belong to this canister.
-    fn get_snapshot(
+    fn get_snapshot<'a>(
         &self,
         canister_id: CanisterId,
         snapshot_id: SnapshotId,
-        state: &ReplicatedState,
-    ) -> Result<Arc<CanisterSnapshot>, CanisterManagerError> {
+        state: &'a ReplicatedState,
+    ) -> Result<&'a CanisterSnapshot, CanisterManagerError> {
         // If not found, the operation fails due to invalid parameters.
         let Some(snapshot) = state.canister_snapshots.get(snapshot_id) else {
             return Err(CanisterManagerError::CanisterSnapshotNotFound {
@@ -1634,7 +1634,7 @@ impl CanisterManager {
                 snapshot_id,
             });
         }
-        Ok(Arc::clone(snapshot))
+        Ok(snapshot)
     }
 
     /// Returns a mutable Arc to the snapshot, if it exists.
@@ -1645,7 +1645,7 @@ impl CanisterManager {
         canister_id: CanisterId,
         snapshot_id: SnapshotId,
         state: &'a mut ReplicatedState,
-    ) -> Result<&'a mut Arc<CanisterSnapshot>, CanisterManagerError> {
+    ) -> Result<&'a mut CanisterSnapshot, CanisterManagerError> {
         // If not found, the operation fails due to invalid parameters.
         let Some(snapshot) = state.canister_snapshots.get_mut(snapshot_id) else {
             return Err(CanisterManagerError::CanisterSnapshotNotFound {
@@ -1695,7 +1695,7 @@ impl CanisterManager {
         }
 
         // Check that snapshot ID exists.
-        let snapshot: &Arc<CanisterSnapshot> = match state.canister_snapshots.get(snapshot_id) {
+        let snapshot: &CanisterSnapshot = match state.canister_snapshots.get(snapshot_id) {
             None => {
                 // If not found, the operation fails due to invalid parameters.
                 return (
@@ -2216,7 +2216,7 @@ impl CanisterManager {
 
         let snapshot_id =
             SnapshotId::from((canister.canister_id(), canister.new_local_snapshot_id()));
-        state.create_snapshot_from_metadata(snapshot_id, Arc::new(new_snapshot));
+        state.create_snapshot_from_metadata(snapshot_id, new_snapshot);
         canister.system_state.snapshots_memory_usage = canister
             .system_state
             .snapshots_memory_usage
@@ -2243,7 +2243,7 @@ impl CanisterManager {
         validate_controller(canister, &sender)?;
         let snapshot_id = args.get_snapshot_id();
 
-        let snapshot: &mut Arc<CanisterSnapshot> =
+        let snapshot: &mut CanisterSnapshot =
             self.get_snapshot_mut(canister.canister_id(), snapshot_id, state)?;
 
         // Ensure the snapshot was created via metadata upload, not from the canister.
@@ -2278,7 +2278,7 @@ impl CanisterManager {
             )
             .map_err(CanisterManagerError::CanisterSnapshotNotEnoughCycles)?;
 
-        let snapshot_inner = Arc::make_mut(snapshot);
+        let snapshot_inner = snapshot;
         match args.kind {
             CanisterSnapshotDataOffset::WasmModule { offset } => {
                 let res = snapshot_inner

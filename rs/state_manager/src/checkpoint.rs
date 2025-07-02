@@ -288,17 +288,16 @@ fn strip_page_map_deltas(
     }
 
     for (_id, canister_snapshot) in state.canister_snapshots.iter_mut() {
-        let new_snapshot = Arc::make_mut(canister_snapshot);
-        new_snapshot
+        canister_snapshot
             .chunk_store_mut()
             .page_map_mut()
             .strip_all_deltas(Arc::clone(&fd_factory));
-        new_snapshot
+        canister_snapshot
             .execution_snapshot_mut()
             .wasm_memory
             .page_map
             .strip_all_deltas(Arc::clone(&fd_factory));
-        new_snapshot
+        canister_snapshot
             .execution_snapshot_mut()
             .stable_memory
             .page_map
@@ -392,19 +391,23 @@ pub(crate) fn flush_canister_snapshots_and_page_maps(
                     processed_snapshots.insert(*snapshot_id);
                 }
 
-                let new_snapshot = Arc::make_mut(canister_snapshot);
-
                 add_to_pagemaps_and_strip(
                     PageMapType::SnapshotWasmChunkStore(*snapshot_id),
-                    new_snapshot.chunk_store_mut().page_map_mut(),
+                    canister_snapshot.chunk_store_mut().page_map_mut(),
                 );
                 add_to_pagemaps_and_strip(
                     PageMapType::SnapshotWasmMemory(*snapshot_id),
-                    &mut new_snapshot.execution_snapshot_mut().wasm_memory.page_map,
+                    &mut canister_snapshot
+                        .execution_snapshot_mut()
+                        .wasm_memory
+                        .page_map,
                 );
                 add_to_pagemaps_and_strip(
                     PageMapType::SnapshotStableMemory(*snapshot_id),
-                    &mut new_snapshot.execution_snapshot_mut().stable_memory.page_map,
+                    &mut canister_snapshot
+                        .execution_snapshot_mut()
+                        .stable_memory
+                        .page_map,
                 );
             }
         }
@@ -593,7 +596,7 @@ impl CheckpointLoader {
 
         for (snapshot_id, canister_snapshot) in results.into_iter() {
             let (canister_snapshot, durations) = canister_snapshot?;
-            canister_snapshots.insert(snapshot_id, Arc::new(canister_snapshot));
+            canister_snapshots.insert(snapshot_id, canister_snapshot);
 
             durations.apply(&self.metrics);
         }

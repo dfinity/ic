@@ -1255,7 +1255,7 @@ impl ReplicatedState {
     pub fn take_snapshot(
         &mut self,
         snapshot_id: SnapshotId,
-        snapshot: Arc<CanisterSnapshot>,
+        snapshot: CanisterSnapshot,
     ) -> SnapshotId {
         self.metadata
             .unflushed_checkpoint_ops
@@ -1267,7 +1267,7 @@ impl ReplicatedState {
     pub fn create_snapshot_from_metadata(
         &mut self,
         snapshot_id: SnapshotId,
-        snapshot: Arc<CanisterSnapshot>,
+        snapshot: CanisterSnapshot,
     ) {
         self.metadata
             .unflushed_checkpoint_ops
@@ -1283,7 +1283,7 @@ impl ReplicatedState {
     }
 
     /// Delete a snapshot from the list of snapshots.
-    pub fn delete_snapshot(&mut self, snapshot_id: SnapshotId) -> Option<Arc<CanisterSnapshot>> {
+    pub fn delete_snapshot(&mut self, snapshot_id: SnapshotId) -> Option<CanisterSnapshot> {
         let result = self.canister_snapshots.remove(snapshot_id);
         if result.is_some() {
             self.metadata

@@ -33,7 +33,7 @@ use std::{
 #[derive(Clone, Eq, PartialEq, Debug, Default, ValidateEq)]
 pub struct CanisterSnapshots {
     #[validate_eq(CompareWithValidateEq)]
-    snapshots: BTreeMap<SnapshotId, Arc<CanisterSnapshot>>,
+    snapshots: BTreeMap<SnapshotId, CanisterSnapshot>,
     /// The set of snapshots ids grouped by canisters.
     snapshot_ids: BTreeMap<CanisterId, BTreeSet<SnapshotId>>,
     /// Memory usage of all canister snapshots in bytes.
@@ -45,7 +45,7 @@ pub struct CanisterSnapshots {
 }
 
 impl CanisterSnapshots {
-    pub fn new(snapshots: BTreeMap<SnapshotId, Arc<CanisterSnapshot>>) -> Self {
+    pub fn new(snapshots: BTreeMap<SnapshotId, CanisterSnapshot>) -> Self {
         let mut snapshot_ids = BTreeMap::default();
         let mut memory_usage = NumBytes::from(0);
         for (snapshot_id, snapshot) in snapshots.iter() {
@@ -73,13 +73,10 @@ impl CanisterSnapshots {
         validated_chunk: ValidatedChunk,
     ) -> Result<(), ()> {
         let snapshot = self.get_mut(snapshot_id).ok_or(())?;
-        let snapshot_inner = Arc::make_mut(snapshot);
-        snapshot_inner
-            .chunk_store_mut()
-            .insert_chunk(validated_chunk);
+        snapshot.chunk_store_mut().insert_chunk(validated_chunk);
         // use the maximum chunk size
         let amount = wasm_chunk_store::chunk_size();
-        snapshot_inner.size += amount;
+        snapshot.size += amount;
         self.memory_usage += amount;
         Ok(())
     }
@@ -90,7 +87,7 @@ impl CanisterSnapshots {
     pub(crate) fn push(
         &mut self,
         snapshot_id: SnapshotId,
-        snapshot: Arc<CanisterSnapshot>,
+        snapshot: CanisterSnapshot,
     ) -> SnapshotId {
         let canister_id = snapshot.canister_id();
         self.memory_usage += snapshot.size();
@@ -101,29 +98,29 @@ impl CanisterSnapshots {
     }
 
     /// Returns a reference of the canister snapshot identified by `snapshot_id`.
-    pub fn get(&self, snapshot_id: SnapshotId) -> Option<&Arc<CanisterSnapshot>> {
+    pub fn get(&self, snapshot_id: SnapshotId) -> Option<&CanisterSnapshot> {
         self.snapshots.get(&snapshot_id)
     }
 
     /// Returns a mutable reference of the canister snapshot identified by `snapshot_id`.
-    pub fn get_mut(&mut self, snapshot_id: SnapshotId) -> Option<&mut Arc<CanisterSnapshot>> {
+    pub fn get_mut(&mut self, snapshot_id: SnapshotId) -> Option<&mut CanisterSnapshot> {
         self.snapshots.get_mut(&snapshot_id)
     }
 
     /// Iterate over all snapshots.
-    pub fn iter(&self) -> impl Iterator<Item = (&SnapshotId, &Arc<CanisterSnapshot>)> {
+    pub fn iter(&self) -> impl Iterator<Item = (&SnapshotId, &CanisterSnapshot)> {
         self.snapshots.iter()
     }
 
     /// Mutably iterate over all snapshots.
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = (&SnapshotId, &mut Arc<CanisterSnapshot>)> {
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = (&SnapshotId, &mut CanisterSnapshot)> {
         self.snapshots.iter_mut()
     }
 
     /// Remove snapshot identified by `snapshot_id` from the collection of snapshots.
     ///
     /// External callers should call `ReplicatedState::delete_snapshot` instead.
-    pub(crate) fn remove(&mut self, snapshot_id: SnapshotId) -> Option<Arc<CanisterSnapshot>> {
+    pub(crate) fn remove(&mut self, snapshot_id: SnapshotId) -> Option<CanisterSnapshot> {
         let removed_snapshot = self.snapshots.remove(&snapshot_id);
         match removed_snapshot {
             Some(snapshot) => {
@@ -168,10 +165,7 @@ impl CanisterSnapshots {
 
     /// Selects the snapshots associated with the provided canister ID.
     /// Returns a list of tuples containing the ID and the canister snapshot.
-    pub fn list_snapshots(
-        &self,
-        canister_id: CanisterId,
-    ) -> Vec<(SnapshotId, Arc<CanisterSnapshot>)> {
+    pub fn list_snapshots(&self, canister_id: CanisterId) -> Vec<(SnapshotId, &CanisterSnapshot)> {
         let mut snapshots = vec![];
 
         if let Some(snapshot_ids) = self.snapshot_ids.get(&canister_id) {
@@ -179,7 +173,7 @@ impl CanisterSnapshots {
                 // The snapshot ID if present in the `self.snapshot_ids`,
                 // must also be present in the `self.snapshot`.
                 let snapshot = self.snapshots.get(snapshot_id).unwrap();
-                snapshots.push((*snapshot_id, snapshot.clone()))
+                snapshots.push((*snapshot_id, snapshot))
             }
         }
         snapshots
@@ -749,7 +743,7 @@ mod tests {
         assert_eq!(snapshot_manager.snapshots.len(), 0);
         assert_eq!(snapshot_manager.snapshot_ids.len(), 0);
 
-        snapshot_manager.push(snapshot_id, Arc::<CanisterSnapshot>::new(snapshot));
+        snapshot_manager.push(snapshot_id, snapshot);
         assert_eq!(snapshot_manager.snapshots.len(), 1);
         assert_eq!(snapshot_manager.snapshot_ids.len(), 1);
         assert_eq!(
@@ -777,7 +771,6 @@ mod tests {
             fake_canister_snapshot(canister_test_id(1), 0),
         ]
         .into_iter()
-        .map(|(i, s)| (i, Arc::new(s)))
         .collect();
         let snapshot_manager = CanisterSnapshots::new(snapshots);
 
@@ -799,10 +792,7 @@ mod tests {
         let (first_snapshot_id, first_snapshot) = fake_canister_snapshot(canister_id, 1);
         let snapshot1_size = first_snapshot.size();
         let mut snapshots = BTreeMap::new();
-        snapshots.insert(
-            first_snapshot_id,
-            Arc::<CanisterSnapshot>::new(first_snapshot),
-        );
+        snapshots.insert(first_snapshot_id, first_snapshot);
         let mut snapshot_manager = CanisterSnapshots::new(snapshots);
         assert_eq!(snapshot_manager.snapshots.len(), 1);
         assert_eq!(snapshot_manager.snapshot_ids.len(), 1);
@@ -824,10 +814,7 @@ mod tests {
 
         // Pushing another snapshot updates the `memory_usage`.
         let snapshot2_size = second_snapshot.size();
-        snapshot_manager.push(
-            second_snapshot_id,
-            Arc::<CanisterSnapshot>::new(second_snapshot),
-        );
+        snapshot_manager.push(second_snapshot_id, second_snapshot);
         assert_eq!(
             snapshot_manager.memory_taken(),
             NumBytes::from(snapshot1_size + snapshot2_size)
