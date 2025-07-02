@@ -147,7 +147,7 @@ fn main() -> Result<()> {
                 ))
                 // This section tests the url and ip scenarios
                 .add_test(systest!(test_non_ascii_url_is_accepted))
-                .add_test(systest!(test_invalid_ip))
+                .add_test(systest!(test_invalid_ip_timeout))
                 .add_test(systest!(test_invalid_domain_name))
                 .add_test(systest!(test_max_url_length))
                 .add_test(systest!(test_max_url_length_exceeded))
@@ -1118,7 +1118,7 @@ fn test_invalid_domain_name(env: TestEnv) {
     );
 }
 
-fn test_invalid_ip(env: TestEnv) {
+fn test_invalid_ip_timeout(env: TestEnv) {
     let handlers = Handlers::new(&env);
 
     let (response, refunded_cycles) = block_on(submit_outcall(
@@ -1145,10 +1145,12 @@ fn test_invalid_ip(env: TestEnv) {
 
     assert_matches!(
         response,
-        Err(RejectResponse {
-            reject_code: RejectCode::SysTransient,
+        Err(
+            RejectResponse {
+            reject_code: RejectCode::SysFatal,
+            reject_message,
             ..
-        })
+        }) => assert_eq!(reject_message, "Timeout expired")
     );
     assert_ne!(
         refunded_cycles,
