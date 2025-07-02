@@ -405,7 +405,9 @@ impl CanisterManager {
             None => None,
         };
         let new_environment_variables_hash = match self.environment_variables_flag {
-            FlagStatus::Enabled => validated_settings.environment_variables().map(|environment_variables| environment_variables.hash()),
+            FlagStatus::Enabled => validated_settings
+                .environment_variables()
+                .map(|environment_variables| environment_variables.hash()),
             FlagStatus::Disabled => None,
         };
 

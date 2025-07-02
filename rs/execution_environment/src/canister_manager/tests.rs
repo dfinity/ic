@@ -7225,3 +7225,45 @@ fn only_controllers_can_rename() {
     );
     assert_matches!(wasm_result, WasmResult::Reject(r) if r.contains("Only the controllers of the canister"));
 }
+
+#[test]
+fn update_settings_can_set_environment_variables() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+    let mut test = ExecutionTestBuilder::new()
+        .with_environment_variables_flag(FlagStatus::Enabled)
+        .build();
+
+    // Create new canister with no environment variables.
+    let canister_id = test.create_canister(CYCLES);
+    assert_eq!(
+        test.canister_state(canister_id)
+            .system_state
+            .environment_variables
+            .clone(),
+        BTreeMap::new()
+    );
+
+    // Update settings with new environment variables
+    let new_environment_variables = BTreeMap::from([
+        ("TEST_VAR".to_string(), "test_value".to_string()),
+        ("TEST_VAR2".to_string(), "test_value2".to_string()),
+    ]);
+    let args = UpdateSettingsArgs {
+        canister_id: canister_id.get(),
+        settings: CanisterSettingsArgsBuilder::new()
+            .with_environment_variables(new_environment_variables.clone())
+            .build(),
+        sender_canister_version: None,
+    };
+
+    // Check that the environment variables are set.
+    test.subnet_message(Method::UpdateSettings, args.encode())
+        .unwrap();
+    assert_eq!(
+        test.canister_state(canister_id)
+            .system_state
+            .environment_variables
+            .clone(),
+        new_environment_variables
+    );
+}
