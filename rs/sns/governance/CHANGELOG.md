@@ -11,6 +11,20 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-06-27: Proposal 137172
+
+http://dashboard.internetcomputer.org/proposal/137172
+
+## Added
+
+The `get_metrics` function response now includes the number of *executed* proposal (in addition
+to the number of submitted proposals).
+
+## Fixed
+
+Fixed a bug in the decoder of Candid `Nat` values as `u64`.
+
+
 # 2025-06-20: Proposal 137082
 
 http://dashboard.internetcomputer.org/proposal/137082

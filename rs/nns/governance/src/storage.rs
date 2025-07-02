@@ -282,6 +282,23 @@ pub fn reset_stable_memory() {
             })
         }
     });
+    REWARDS_DISTRIBUTION_STATE_MACHINE.with_borrow_mut(|rewards_distribution_state_machine| {
+        *rewards_distribution_state_machine =
+            RewardsDistributionStateMachine::new(MEMORY_MANAGER.with(|mm| {
+                mm.borrow()
+                    .get(REWARDS_DISTRIBUTION_STATE_MACHINE_MEMORY_ID)
+            }));
+    });
+    VOTING_POWER_SNAPSHOTS.with_borrow_mut(|snapshots| {
+        let (voting_power_maps_memory, voting_power_totals_memory) = MEMORY_MANAGER.with(|mm| {
+            let memory_manager = mm.borrow();
+            (
+                memory_manager.get(VOTING_POWER_MAPS_MEMORY_ID),
+                memory_manager.get(VOTING_POWER_TOTALS_MEMORY_ID),
+            )
+        });
+        *snapshots = VotingPowerSnapshots::new(voting_power_maps_memory, voting_power_totals_memory)
+    });
 }
 
 pub fn grow_upgrades_memory_to(target_pages: u64) {

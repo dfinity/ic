@@ -1,17 +1,21 @@
 use ic_base_types::{NumBytes, NumSeconds};
+use ic_crypto_sha2::Sha256;
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
-use ic_management_canister_types_private::{CanisterSettingsArgs, LogVisibilityV2};
+use ic_management_canister_types_private::{CanisterSettingsArgs, LogVisibilityV2, HASH_LENGTH};
 use ic_replicated_state::MessageMemoryUsage;
 use ic_types::{
     ComputeAllocation, Cycles, InvalidComputeAllocationError, InvalidMemoryAllocationError,
     MemoryAllocation, PrincipalId,
 };
 use num_traits::{cast::ToPrimitive, SaturatingSub};
-use std::convert::TryFrom;
+use std::{collections::BTreeMap, convert::TryFrom};
 
 use crate::canister_manager::types::CanisterManagerError;
+
+#[cfg(test)]
+mod tests;
 
 /// These limit comes from the spec and is not expected to change,
 /// which is why it is not part of the replica config.
@@ -28,6 +32,7 @@ pub(crate) struct CanisterSettings {
     pub(crate) reserved_cycles_limit: Option<Cycles>,
     pub(crate) log_visibility: Option<LogVisibilityV2>,
     pub(crate) wasm_memory_limit: Option<NumBytes>,
+    pub(crate) environment_variables: Option<EnvironmentVariables>,
 }
 
 impl CanisterSettings {
@@ -40,6 +45,7 @@ impl CanisterSettings {
         reserved_cycles_limit: Option<Cycles>,
         log_visibility: Option<LogVisibilityV2>,
         wasm_memory_limit: Option<NumBytes>,
+        environment_variables: Option<EnvironmentVariables>,
     ) -> Self {
         Self {
             controllers,
@@ -50,6 +56,7 @@ impl CanisterSettings {
             reserved_cycles_limit,
             log_visibility,
             wasm_memory_limit,
+            environment_variables,
         }
     }
 
@@ -83,6 +90,10 @@ impl CanisterSettings {
 
     pub fn wasm_memory_limit(&self) -> Option<NumBytes> {
         self.wasm_memory_limit
+    }
+
+    pub fn environment_variables(&self) -> Option<&EnvironmentVariables> {
+        self.environment_variables.as_ref()
     }
 }
 
@@ -147,6 +158,10 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
             None => None,
         };
 
+        let environment_variables = input.environment_variables.map(|env_vars| {
+            EnvironmentVariables::new(env_vars.into_iter().map(|e| (e.name, e.value)).collect())
+        });
+
         Ok(CanisterSettings::new(
             input
                 .controllers
@@ -158,6 +173,7 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
             reserved_cycles_limit,
             input.log_visibility,
             wasm_memory_limit,
+            environment_variables,
         ))
     }
 }
@@ -182,6 +198,7 @@ pub(crate) struct CanisterSettingsBuilder {
     reserved_cycles_limit: Option<Cycles>,
     log_visibility: Option<LogVisibilityV2>,
     wasm_memory_limit: Option<NumBytes>,
+    environment_variables: Option<EnvironmentVariables>,
 }
 
 #[allow(dead_code)]
@@ -196,6 +213,7 @@ impl CanisterSettingsBuilder {
             reserved_cycles_limit: None,
             log_visibility: None,
             wasm_memory_limit: None,
+            environment_variables: None,
         }
     }
 
@@ -209,6 +227,7 @@ impl CanisterSettingsBuilder {
             reserved_cycles_limit: self.reserved_cycles_limit,
             log_visibility: self.log_visibility,
             wasm_memory_limit: self.wasm_memory_limit,
+            environment_variables: self.environment_variables,
         }
     }
 
@@ -264,6 +283,13 @@ impl CanisterSettingsBuilder {
     pub fn with_wasm_memory_limit(self, wasm_memory_limit: NumBytes) -> Self {
         Self {
             wasm_memory_limit: Some(wasm_memory_limit),
+            ..self
+        }
+    }
+
+    pub fn with_environment_variables(self, environment_variables: EnvironmentVariables) -> Self {
+        Self {
+            environment_variables: Some(environment_variables),
             ..self
         }
     }
@@ -351,6 +377,7 @@ pub(crate) struct ValidatedCanisterSettings {
     reservation_cycles: Cycles,
     log_visibility: Option<LogVisibilityV2>,
     wasm_memory_limit: Option<NumBytes>,
+    environment_variables: Option<EnvironmentVariables>,
 }
 
 impl ValidatedCanisterSettings {
@@ -388,6 +415,50 @@ impl ValidatedCanisterSettings {
 
     pub fn wasm_memory_limit(&self) -> Option<NumBytes> {
         self.wasm_memory_limit
+    }
+
+    pub fn environment_variables(&self) -> Option<&EnvironmentVariables> {
+        self.environment_variables.as_ref()
+    }
+}
+
+#[derive(Clone)]
+pub struct EnvironmentVariables {
+    environment_variables: BTreeMap<String, String>,
+}
+
+impl EnvironmentVariables {
+    pub fn new(environment_variables: BTreeMap<String, String>) -> Self {
+        Self {
+            environment_variables,
+        }
+    }
+
+    pub fn hash(&self) -> [u8; HASH_LENGTH] {
+        // Create a vector to store the hashes of key-value pairs
+        let mut hashes: Vec<Vec<u8>> = Vec::new();
+
+        // 1. For each key-value pair, hash the key and value, and concatenate the hashes.
+        for (key, value) in &self.environment_variables {
+            let mut key_hash = Sha256::hash(key.as_bytes()).to_vec();
+            let mut value_hash = Sha256::hash(value.as_bytes()).to_vec();
+            key_hash.append(&mut value_hash);
+            hashes.push(key_hash);
+        }
+        // 2. Sort the concatenated hashes.
+        hashes.sort();
+
+        // 3. Concatenate the sorted hashes, and hash the result.
+        let mut hasher = Sha256::new();
+        for hash in hashes {
+            hasher.write(&hash);
+        }
+
+        hasher.finish()
+    }
+
+    pub fn get_environment_variables(&self) -> BTreeMap<String, String> {
+        self.environment_variables.clone()
     }
 }
 
@@ -581,5 +652,6 @@ pub(crate) fn validate_canister_settings(
         reservation_cycles,
         log_visibility: settings.log_visibility().cloned(),
         wasm_memory_limit: settings.wasm_memory_limit(),
+        environment_variables: settings.environment_variables().cloned(),
     })
 }
