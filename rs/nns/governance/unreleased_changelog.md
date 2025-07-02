@@ -14,6 +14,8 @@ on the process that this file is part of, see
 
 ## Changed
 
+* Rename a metric related to voting power spike according to convention.
+
 ## Deprecated
 
 ## Removed
