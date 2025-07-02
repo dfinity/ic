@@ -4,6 +4,7 @@ pub mod system_state;
 #[cfg(test)]
 mod tests;
 
+use crate::canister_state::execution_state::WasmExecutionMode;
 use crate::canister_state::queues::CanisterOutputQueuesIterator;
 use crate::canister_state::system_state::{ExecutionTask, SystemState};
 use crate::{InputQueueType, MessageMemoryUsage, StateError};
@@ -19,7 +20,10 @@ use ic_types::{
     AccumulatedPriority, CanisterId, CanisterLog, ComputeAllocation, ExecutionRound,
     MemoryAllocation, NumBytes, PrincipalId, Time,
 };
-use ic_types::{LongExecutionMode, NumInstructions};
+use ic_types::{
+    LongExecutionMode, NumInstructions, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM64_MEMORY_IN_BYTES,
+    MAX_WASM_MEMORY_IN_BYTES,
+};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use phantom_newtype::AmountOf;
@@ -353,13 +357,29 @@ impl CanisterState {
             // To avoid subtraction, we check for
             // `memory_used > memory_limit + canister_history_memory_usage` instead.
             if memory_used > memory_limit + canister_history_memory_usage {
-                return Err(format!(
-                "Invariant broken: Memory of canister {} exceeds the limit allowed: used {}, allowed {}, canister history memory usage {}",
-                self.canister_id(),
-                memory_used,
-                memory_limit,
-                canister_history_memory_usage,
-            ));
+                return Err(format!("Invariant broken: Memory of canister {} exceeds the limit allowed: used {}, allowed {}, canister history memory usage {}",
+                    self.canister_id(),
+                    memory_used,
+                    memory_limit,
+                    canister_history_memory_usage,
+                ));
+            }
+        }
+
+        if let Some(execution_state) = &self.execution_state {
+            let wasm_memory_usage = execution_state.wasm_memory_usage();
+            let wasm_memory_limit = match execution_state.wasm_execution_mode() {
+                WasmExecutionMode::Wasm32 => NumBytes::new(MAX_WASM_MEMORY_IN_BYTES),
+                WasmExecutionMode::Wasm64 => NumBytes::new(MAX_WASM64_MEMORY_IN_BYTES),
+            };
+            if wasm_memory_usage > wasm_memory_limit {
+                return Err(format!("Invariant broken: Wasm memory of canister {} exceeds the limit allowed: used {}, allowed {}", self.canister_id(), wasm_memory_usage, wasm_memory_limit));
+            }
+
+            let stable_memory_usage = execution_state.stable_memory_usage();
+            let stable_memory_limit = NumBytes::new(MAX_STABLE_MEMORY_IN_BYTES);
+            if stable_memory_usage > stable_memory_limit {
+                return Err(format!("Invariant broken: Stable memory of canister {} exceeds the limit allowed: used {}, allowed {}", self.canister_id(), stable_memory_usage, stable_memory_limit));
             }
         }
 

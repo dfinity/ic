@@ -27,7 +27,6 @@ use ic_types::{
     methods::{SystemMethod, WasmClosure},
     CanisterId, CanisterLog, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
     NumInstructions, NumOsPages, PrincipalId, SubnetId, Time, MAX_STABLE_MEMORY_IN_BYTES,
-    MAX_WASM64_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES,
 };
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 use ic_wasm_types::doc_ref;
@@ -873,52 +872,15 @@ struct MemoryUsage {
 
 impl MemoryUsage {
     fn new(
-        log: ReplicaLogger,
-        canister_id: CanisterId,
         limit: Option<NumBytes>,
         wasm_memory_limit: Option<NumBytes>,
         current_usage: NumBytes,
         stable_memory_usage: NumBytes,
         wasm_memory_usage: NumBytes,
-        max_wasm_memory: NumBytes,
         current_message_usage: MessageMemoryUsage,
         subnet_available_memory: SubnetAvailableMemory,
         memory_allocation: MemoryAllocation,
     ) -> Self {
-        // A canister's current memory usage should never exceed the following limits. This is
-        // most probably a bug. Panicking here due to this inconsistency has the
-        // danger of putting the entire subnet in a crash loop. Log an error
-        // message to page the on-call team and try to stumble along.
-        if let Some(limit) = limit {
-            if current_usage > limit {
-                error!(
-                    log,
-                    "[EXC-BUG] Canister {}: current_usage {} > limit {}",
-                    canister_id,
-                    current_usage,
-                    limit
-                );
-            }
-        }
-        if wasm_memory_usage > max_wasm_memory {
-            error!(
-                log,
-                "[EXC-BUG] Canister {}: wasm memory current_usage {} > wasm memory limit {}",
-                canister_id,
-                wasm_memory_usage,
-                max_wasm_memory,
-            );
-        }
-        if stable_memory_usage > NumBytes::new(MAX_STABLE_MEMORY_IN_BYTES) {
-            error!(
-                log,
-                "[EXC-BUG] Canister {}: stable memory current_usage {} > stable memory limit {}",
-                canister_id,
-                stable_memory_usage,
-                MAX_STABLE_MEMORY_IN_BYTES,
-            );
-        }
-
         Self {
             limit,
             wasm_memory_limit,
@@ -1266,20 +1228,12 @@ impl SystemApiImpl {
             .map(|v| NumBytes::new(v as u64))
             .expect("Wasm memory size is larger than maximal allowed.");
 
-        let max_wasm_memory = if sandbox_safe_system_state.is_wasm64_execution {
-            MAX_WASM64_MEMORY_IN_BYTES
-        } else {
-            MAX_WASM_MEMORY_IN_BYTES
-        };
         let memory_usage = MemoryUsage::new(
-            log.clone(),
-            sandbox_safe_system_state.canister_id,
             execution_parameters.canister_memory_allocation,
             execution_parameters.wasm_memory_limit,
             canister_current_memory_usage,
             stable_memory_usage,
             wasm_memory_usage,
-            NumBytes::new(max_wasm_memory),
             canister_current_message_memory_usage,
             subnet_available_memory,
             execution_parameters.memory_allocation,
