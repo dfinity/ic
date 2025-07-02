@@ -27,6 +27,7 @@ BASE_DEPENDENCIES = [
     "//rs/nns/constants",
     "//rs/nns/handlers/root/interface",
     "//rs/protobuf",
+    "//rs/registry/canister",
     "//rs/registry/keys",
     "//rs/registry/routing_table",
     "//rs/registry/transport",
