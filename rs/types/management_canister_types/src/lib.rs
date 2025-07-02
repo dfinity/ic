@@ -375,7 +375,7 @@ impl CanisterSettingsChangeRecord {
     }
 
     pub fn environment_variables_hash(&self) -> Option<[u8; HASH_LENGTH]> {
-        self.environment_variables_hash.clone()
+        self.environment_variables_hash
     }
 }
 
