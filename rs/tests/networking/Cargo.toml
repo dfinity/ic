@@ -22,6 +22,7 @@ ic-http-endpoints-test-agent = { path = "../../http_endpoints/test_agent" }
 ic_consensus_system_test_utils = { path = "../consensus/utils" }
 ic-limits = { path = "../../limits" }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
+ic-message = { path = "../test_canisters/message" }
 ic-networking-subnet-update-workload = { path = "./subnet_update_workload" }
 ic-nns-governance-api = { path = "../../nns/governance/api" }
 ic-prep = { path = "../../prep" }
@@ -58,6 +59,10 @@ name = "ic-systest-canister-http-fault-tolerance"
 path = "canister_http_fault_tolerance_test.rs"
 
 [[bin]]
+name = "ic-systest-canister-http-non-replicated"
+path = "canister_http_non_replicated_test.rs"
+
+[[bin]]
 name = "ic-systest-canister-http-socks"
 path = "canister_http_socks_test.rs"
 
@@ -88,7 +93,6 @@ path = "firewall_max_connections_test.rs"
 [[bin]]
 name = "ic-systest-firewall-priority-test"
 path = "firewall_priority_test.rs"
-
 
 [[bin]]
 name = "ic-systest-http-endpoints-public-spec-test"
