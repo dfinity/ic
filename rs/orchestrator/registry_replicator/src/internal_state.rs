@@ -361,6 +361,13 @@ impl InternalState {
             })
             .collect();
 
+        // It's safe to unwrap here because we started from a valid table and
+        // removed entries from it.  Removing entries cannot invalidate the
+        // table.
+        let new_routing_table = PbRoutingTable::from(
+            RoutingTable::try_from(new_routing_table).expect("bug: invalid routing table"),
+        );
+
         // Delete all routing table shards except the shard for canister id 0, and put the new routing table there.
         let mut routing_table_updates: Vec<_> = self
             .registry_client
@@ -370,9 +377,7 @@ impl InternalState {
                 if key == make_canister_ranges_key(CanisterId::from_u64(0)) {
                     return KeyMutation {
                         key: key.to_string(),
-                        value: Some(
-                            PbRoutingTable::from(new_routing_table.clone()).encode_to_vec(),
-                        ),
+                        value: Some(new_routing_table.encode_to_vec()),
                     };
                 } else {
                     return KeyMutation {
@@ -386,7 +391,7 @@ impl InternalState {
         // TODO(NNS1-3781): Remove this once routing_table is no longer used by clients.
         last.push(KeyMutation {
             key: make_routing_table_record_key(),
-            value: Some(PbRoutingTable::from(new_routing_table).encode_to_vec()),
+            value: Some(new_routing_table.encode_to_vec()),
         });
 
         last.append(&mut routing_table_updates);
