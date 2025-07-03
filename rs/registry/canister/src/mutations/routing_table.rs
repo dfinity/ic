@@ -1,5 +1,5 @@
 use crate::mutations::node_management::common::get_key_family_iter_at_version;
-use crate::{common::LOG_PREFIX, pb::v1::SubnetForCanister, registry::Registry};
+use crate::{pb::v1::SubnetForCanister, registry::Registry};
 use dfn_core::CanisterId;
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_protobuf::registry::routing_table::v1 as pb;
@@ -11,7 +11,7 @@ use ic_registry_routing_table::{
     routing_table_insert_subnet, CanisterIdRange, CanisterIdRanges, CanisterMigrations,
     RoutingTable,
 };
-use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation, RegistryValue};
+use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation};
 use ic_registry_transport::{delete, upsert};
 use prost::Message;
 use std::cmp::Ordering;
@@ -241,37 +241,8 @@ fn canister_migrations_into_registry_mutation(
 }
 
 impl Registry {
-    pub fn get_routing_table(&self, version: u64) -> Result<RoutingTable, String> {
-        let RegistryValue {
-            value: routing_table_bytes,
-            version: _,
-            deletion_marker: _,
-            timestamp_nanoseconds: _,
-        } = self
-            .get(make_routing_table_record_key().as_bytes(), version)
-            .ok_or(format!(
-                "{}routing table not found in the registry.",
-                LOG_PREFIX
-            ))?;
-
-        RoutingTable::try_from(pb::RoutingTable::decode(routing_table_bytes.as_slice()).unwrap())
-            .map_err(|e| {
-                format!(
-                    "{}failed to decode the routing table from protobuf: {}",
-                    LOG_PREFIX, e
-                )
-            })
-    }
-    /// Get the routing table or panic on error with a message.
+    /// Gets the routing table or panics with a message.
     pub fn get_routing_table_or_panic(&self, version: u64) -> RoutingTable {
-        self.get_routing_table(version)
-            .unwrap_or_else(|e| panic!("{e}"))
-    }
-
-    pub fn get_routing_table_from_canister_range_records_or_panic(
-        &self,
-        version: u64,
-    ) -> RoutingTable {
         let entries = get_key_family_iter_at_version::<pb::RoutingTable>(
             self,
             CANISTER_RANGES_PREFIX,
@@ -518,8 +489,7 @@ mod tests {
         let mutations = routing_table_into_registry_mutation(&registry, rt.clone());
         registry.maybe_apply_mutation_internal(mutations);
 
-        let recovered = registry
-            .get_routing_table_from_canister_range_records_or_panic(registry.latest_version());
+        let recovered = registry.get_routing_table_or_panic(registry.latest_version());
         assert_eq!(recovered, rt);
 
         // Now we are going to test the mutations delete + update
@@ -529,8 +499,7 @@ mod tests {
             system_subnet.into(),
         ));
 
-        let newly_recovered = registry
-            .get_routing_table_from_canister_range_records_or_panic(registry.latest_version());
+        let newly_recovered = registry.get_routing_table_or_panic(registry.latest_version());
 
         assert_eq!(
             newly_recovered,
@@ -668,8 +637,7 @@ mod tests {
         assert!(mutations.is_empty());
 
         // should not panic, even with nothing written to the registry
-        let _rt = registry
-            .get_routing_table_from_canister_range_records_or_panic(registry.latest_version());
+        let _rt = registry.get_routing_table_or_panic(registry.latest_version());
     }
 
     #[test]
