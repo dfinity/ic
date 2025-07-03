@@ -219,9 +219,14 @@ def rust_bench(name, env = {}, data = [], pin_cpu = False, with_test = False, **
     kwargs.setdefault("testonly", True)
 
     # The initial binary is a regular rust_binary with rustc flags as in the
-    # current build configuration.
+    # current build configuration. It is marked as "manual" because it is not
+    # meant to be built.
     binary_name_initial = "_" + name + "_bin_default"
-    rust_binary(name = binary_name_initial, **kwargs)
+    kwargs_initial = dict(kwargs)
+    tags_initial = kwargs_initial.pop("tags", [])
+    if "manual" not in tags_initial:
+        tags_initial.append("manual")
+    rust_binary(name = binary_name_initial, tags = tags_initial, **kwargs_initial)
 
     # The "publish" binary has the same compiler flags applied as for production build.
     binary_name_publish = "_" + name + "_bin_publish"
