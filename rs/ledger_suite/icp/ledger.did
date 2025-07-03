@@ -126,7 +126,7 @@ type Operation = variant {
     };
 };
 
- 
+
 
 type Block = record {
     parent_hash : opt blob;
@@ -184,7 +184,7 @@ type QueryArchiveFn = func (GetBlocksArgs) -> (QueryArchiveResult) query;
 // not have all the blocks that the caller requested: One or more "archive" canisters might
 // store some of the requested blocks.
 //
-// Note: as of Q4 2021 when this interface is authored, the IC doesn't support making nested 
+// Note: as of Q4 2021 when this interface is authored, the IC doesn't support making nested
 // query calls within a query call.
 type QueryBlocksResponse = record {
     // The total number of blocks in the chain.
@@ -302,6 +302,7 @@ type InitArgs = record {
     token_symbol: opt text;
     token_name: opt text;
     feature_flags : opt FeatureFlags;
+    index_principal : opt principal;
 };
 
 type Icrc1BlockIndex = nat;
@@ -350,6 +351,7 @@ type Value = variant {
 type UpgradeArgs = record {
   icrc1_minting_account : opt Account;
   feature_flags : opt FeatureFlags;
+  index_principal : opt principal;
 };
 
 type LedgerCanisterPayload = variant {
@@ -479,6 +481,21 @@ type icrc21_consent_message_response = variant {
     Err: icrc21_error;
 };
 
+type GetIndexPrincipalResult = variant {
+    Ok : principal;
+    Err : GetIndexPrincipalError;
+};
+
+type GetIndexPrincipalError = variant {
+    IndexPrincipalNotSet;
+
+    // Any error not covered by the above variants.
+    GenericError: record {
+       error_code: nat;
+       description: text;
+   };
+};
+
 service: (LedgerCanisterPayload) -> {
     // Transfers tokens from a subaccount of the caller to the destination address.
     // The source address is computed from the principal of the caller and the specified subaccount.
@@ -499,7 +516,7 @@ service: (LedgerCanisterPayload) -> {
 
     // Queries encoded blocks in the specified range
     query_encoded_blocks : (GetBlocksArgs) -> (QueryEncodedBlocksResponse) query;
-    
+
     // Returns token symbol.
     symbol : () -> (record { symbol: text }) query;
 
@@ -533,6 +550,8 @@ service: (LedgerCanisterPayload) -> {
 
     icrc21_canister_call_consent_message: (icrc21_consent_message_request) -> (icrc21_consent_message_response);
     icrc10_supported_standards : () -> (vec record { name : text; url : text }) query;
+
+    icrc106_get_index_principal: () -> (GetIndexPrincipalResult) query;
 
     is_ledger_ready: () -> (bool) query;
 }

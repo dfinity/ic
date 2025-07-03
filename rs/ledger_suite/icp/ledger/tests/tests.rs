@@ -91,16 +91,18 @@ fn encode_init_args(
         .into_iter()
         .map(|(account, amount)| (account.into(), Tokens::try_from(amount).unwrap()))
         .collect();
-    LedgerCanisterInitPayload::builder()
+    let mut builder = LedgerCanisterInitPayload::builder()
         .initial_values(initial_values)
         .minting_account(args.minting_account.into())
         .icrc1_minting_account(args.minting_account)
         .archive_options(args.archive_options)
         .transfer_fee(Tokens::try_from(args.transfer_fee).unwrap())
         .token_symbol_and_name(&args.token_symbol, &args.token_name)
-        .feature_flags(FeatureFlags { icrc2: true })
-        .build()
-        .unwrap()
+        .feature_flags(FeatureFlags { icrc2: true });
+    if let Some(index_principal) = args.index_principal {
+        builder = builder.index_principal(index_principal);
+    }
+    builder.build().unwrap()
 }
 
 fn encode_upgrade_args() -> LedgerCanisterUpgradePayload {
@@ -509,6 +511,7 @@ fn check_old_init() {
         token_symbol: Some("ICP".into()),
         token_name: Some("Internet Computer".into()),
         feature_flags: None,
+        index_principal: None,
     })
     .unwrap();
     env.install_canister(ledger_wasm(), old_init, None)
@@ -1340,6 +1343,7 @@ fn test_feature_flags() {
         Encode!(&LedgerCanisterPayload::Upgrade(Some(UpgradeArgs {
             icrc1_minting_account: None,
             feature_flags: Some(FeatureFlags { icrc2: false }),
+            index_principal: None,
         })))
         .unwrap(),
     )
@@ -1360,6 +1364,7 @@ fn test_feature_flags() {
         Encode!(&LedgerCanisterPayload::Upgrade(Some(UpgradeArgs {
             icrc1_minting_account: None,
             feature_flags: Some(FeatureFlags { icrc2: true }),
+            index_principal: None,
         })))
         .unwrap(),
     )
@@ -1370,7 +1375,7 @@ fn test_feature_flags() {
         standards.push(standard.name);
     }
     standards.sort();
-    assert_eq!(standards, vec!["ICRC-1", "ICRC-2", "ICRC-21"]);
+    assert_eq!(standards, vec!["ICRC-1", "ICRC-106", "ICRC-2", "ICRC-21"]);
 
     let block_index =
         send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
@@ -1830,6 +1835,48 @@ fn test_archiving_respects_num_blocks_to_archive_upper_limit() {
         ic_ledger_suite_state_machine_tests::archiving::query_encoded_blocks,
         icp_archives,
         ic_ledger_suite_state_machine_tests::archiving::get_encoded_blocks,
+    );
+}
+
+fn encode_icrc106_upgrade_args(index_principal: Option<Principal>) -> LedgerCanisterUpgradePayload {
+    LedgerCanisterUpgradePayload(LedgerCanisterPayload::Upgrade(Some(UpgradeArgs {
+        icrc1_minting_account: None,
+        feature_flags: None,
+        index_principal,
+    })))
+}
+
+#[test]
+fn test_icrc106_supported_even_if_index_not_set() {
+    ic_ledger_suite_state_machine_tests::icrc_106::test_icrc106_supported_even_if_index_not_set(
+        ledger_wasm(),
+        encode_init_args,
+        encode_icrc106_upgrade_args,
+    );
+}
+
+#[test]
+fn test_icrc106_set_index_in_install() {
+    ic_ledger_suite_state_machine_tests::icrc_106::test_icrc106_set_index_in_install(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_icrc106_set_index_in_install_with_mainnet_ledger_wasm() {
+    ic_ledger_suite_state_machine_tests::icrc_106::test_icrc106_set_index_in_install_with_mainnet_ledger_wasm(
+        ledger_wasm_mainnet(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_icrc106_set_index_in_upgrade() {
+    ic_ledger_suite_state_machine_tests::icrc_106::test_icrc106_set_index_in_upgrade(
+        ledger_wasm(),
+        encode_init_args,
+        encode_icrc106_upgrade_args,
     );
 }
 

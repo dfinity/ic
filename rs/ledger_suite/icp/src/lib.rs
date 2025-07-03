@@ -1,4 +1,4 @@
-use candid::CandidType;
+use candid::{CandidType, Principal};
 use dfn_protobuf::ProtoBuf;
 use dfn_protobuf::ToProto;
 use ic_base_types::{CanisterId, PrincipalId};
@@ -460,6 +460,9 @@ pub struct UpgradeArgs {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub feature_flags: Option<FeatureFlags>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub index_principal: Option<Principal>,
 }
 
 // This is how we pass arguments to 'init' in main.rs
@@ -476,6 +479,7 @@ pub struct InitArgs {
     pub token_symbol: Option<String>,
     pub token_name: Option<String>,
     pub feature_flags: Option<FeatureFlags>,
+    pub index_principal: Option<Principal>,
 }
 
 impl LedgerCanisterInitPayload {
@@ -508,6 +512,7 @@ pub struct LedgerCanisterInitPayloadBuilder {
     token_symbol: Option<String>,
     token_name: Option<String>,
     feature_flags: Option<FeatureFlags>,
+    index_principal: Option<Principal>,
 }
 
 impl LedgerCanisterInitPayloadBuilder {
@@ -524,6 +529,7 @@ impl LedgerCanisterInitPayloadBuilder {
             token_symbol: None,
             token_name: None,
             feature_flags: None,
+            index_principal: None,
         }
     }
 
@@ -578,6 +584,11 @@ impl LedgerCanisterInitPayloadBuilder {
         self
     }
 
+    pub fn index_principal(mut self, index_principal: Principal) -> Self {
+        self.index_principal = Some(index_principal);
+        self
+    }
+
     pub fn build(self) -> Result<LedgerCanisterInitPayload, String> {
         let minting_account = self
             .minting_account
@@ -611,6 +622,7 @@ impl LedgerCanisterInitPayloadBuilder {
                 token_symbol: self.token_symbol,
                 token_name: self.token_name,
                 feature_flags: self.feature_flags,
+                index_principal: self.index_principal,
             },
         )))
     }
@@ -619,6 +631,7 @@ impl LedgerCanisterInitPayloadBuilder {
 pub struct LedgerCanisterUpgradePayloadBuilder {
     icrc1_minting_account: Option<Account>,
     feature_flags: Option<FeatureFlags>,
+    index_principal: Option<Principal>,
 }
 
 impl LedgerCanisterUpgradePayloadBuilder {
@@ -626,6 +639,7 @@ impl LedgerCanisterUpgradePayloadBuilder {
         Self {
             icrc1_minting_account: None,
             feature_flags: None,
+            index_principal: None,
         }
     }
 
@@ -634,11 +648,17 @@ impl LedgerCanisterUpgradePayloadBuilder {
         self
     }
 
+    pub fn index_principal(mut self, index_principal: Principal) -> Self {
+        self.index_principal = Some(index_principal);
+        self
+    }
+
     pub fn build(self) -> Result<LedgerCanisterUpgradePayload, String> {
         Ok(LedgerCanisterUpgradePayload(
             LedgerCanisterPayload::Upgrade(Some(UpgradeArgs {
                 icrc1_minting_account: self.icrc1_minting_account,
                 feature_flags: self.feature_flags,
+                index_principal: self.index_principal,
             })),
         ))
     }

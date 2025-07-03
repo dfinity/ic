@@ -52,6 +52,7 @@ use icp_ledger::{
     Transaction, TransferArgs, TransferError, TransferFee, TransferFeeArgs, MEMO_SIZE_BYTES,
 };
 use icrc_ledger_types::icrc1::transfer::TransferError as Icrc1TransferError;
+use icrc_ledger_types::icrc106::errors::Icrc106Error;
 use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::{
@@ -122,6 +123,7 @@ fn init(
     token_symbol: Option<String>,
     token_name: Option<String>,
     feature_flags: Option<FeatureFlags>,
+    index_principal: Option<Principal>,
 ) {
     print(format!(
         "[ledger] init(): minting account is {}",
@@ -138,6 +140,7 @@ fn init(
         token_symbol,
         token_name,
         feature_flags,
+        index_principal,
     );
     match max_message_size_bytes {
         None => {
@@ -653,6 +656,10 @@ fn icrc1_supported_standards() -> Vec<StandardRecord> {
             url: "https://github.com/dfinity/wg-identity-authentication/blob/main/topics/ICRC-21/icrc_21_consent_msg.md".to_string(),
         }
     );
+    standards.push(StandardRecord {
+        name: "ICRC-106".to_string(),
+        url: "https://github.com/dfinity/ICRC/pull/106".to_string(),
+    });
 
     standards
 }
@@ -672,7 +679,7 @@ fn transfer_fee(_: TransferFeeArgs) -> TransferFee {
 #[query]
 #[candid_method(query)]
 fn icrc1_metadata() -> Vec<(String, Value)> {
-    vec![
+    let mut metadata = vec![
         Value::entry("icrc1:decimals", DECIMAL_PLACES as u64),
         Value::entry("icrc1:name", LEDGER.read().unwrap().token_name.to_string()),
         Value::entry(
@@ -680,7 +687,14 @@ fn icrc1_metadata() -> Vec<(String, Value)> {
             LEDGER.read().unwrap().token_symbol.to_string(),
         ),
         Value::entry("icrc1:fee", LEDGER.read().unwrap().transfer_fee.get_e8s()),
-    ]
+    ];
+    if let Some(index_principal) = LEDGER.read().unwrap().index_principal {
+        metadata.push(Value::entry(
+            "icrc106:index_principal",
+            index_principal.to_text(),
+        ));
+    }
+    metadata
 }
 
 #[query]
@@ -758,6 +772,7 @@ fn canister_init(arg: LedgerCanisterPayload) {
             arg.token_symbol,
             arg.token_name,
             arg.feature_flags,
+            arg.index_principal,
         ),
         LedgerCanisterPayload::Upgrade(_) => {
             trap("Cannot initialize the canister with an Upgrade argument. Please provide an Init argument.");
@@ -791,6 +806,7 @@ fn main() {
                         arg.token_symbol,
                         arg.token_name,
                         arg.feature_flags,
+                        arg.index_principal,
                     ),
                     Err(old_err) =>
                     trap(&format!("Unable to decode init argument.\nDecode as new init returned the error {}\nDecode as old init returned the error {}", new_err, old_err))
@@ -1669,6 +1685,15 @@ fn icrc21_canister_call_consent_message(
 #[candid_method(query)]
 fn icrc10_supported_standards() -> Vec<StandardRecord> {
     icrc1_supported_standards()
+}
+
+#[query]
+#[candid_method(query)]
+fn icrc106_get_index_principal() -> Result<Principal, Icrc106Error> {
+    match LEDGER.read().unwrap().index_principal {
+        None => Err(Icrc106Error::IndexPrincipalNotSet),
+        Some(index_principal) => Ok(index_principal),
+    }
 }
 
 #[query]

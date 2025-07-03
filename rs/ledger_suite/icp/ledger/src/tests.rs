@@ -200,6 +200,7 @@ fn serialize() {
         Some("ICP".into()),
         Some("icp".into()),
         None,
+        None,
     );
 
     let txn = Transaction::new(
@@ -610,6 +611,7 @@ fn test_purge() {
         None,
         Some("ICP".into()),
         Some("icp".into()),
+        None,
         None,
     );
     let little_later = genesis + Duration::from_millis(1);

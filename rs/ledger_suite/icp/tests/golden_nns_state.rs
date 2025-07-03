@@ -413,6 +413,7 @@ impl Setup {
             LedgerCanisterPayload::Upgrade(Some(UpgradeArgs {
                 icrc1_minting_account: None,
                 feature_flags: Some(FeatureFlags { icrc2: true }),
+                index_principal: None,
             }));
 
         self.state_machine.upgrade_canister(

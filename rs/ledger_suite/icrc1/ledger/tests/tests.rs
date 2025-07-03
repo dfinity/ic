@@ -598,7 +598,7 @@ fn encode_icrc106_upgrade_args(index_principal: Option<Principal>) -> LedgerArgu
 }
 
 #[test]
-fn test_icrc106_unsupported_if_index_not_set() {
+fn test_icrc106_supported_even_if_index_not_set() {
     ic_ledger_suite_state_machine_tests::icrc_106::test_icrc106_supported_even_if_index_not_set(
         ledger_wasm(),
         encode_init_args,

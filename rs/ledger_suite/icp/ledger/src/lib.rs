@@ -1,3 +1,4 @@
+use candid::Principal;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_cdk::{api::time, trap};
 use ic_ledger_canister_core::archive::ArchiveCanisterWasm;
@@ -229,6 +230,9 @@ pub struct Ledger {
 
     #[serde(default)]
     pub ledger_version: u64,
+
+    #[serde(default)]
+    pub index_principal: Option<Principal>,
 }
 
 impl LedgerContext for Ledger {
@@ -347,6 +351,7 @@ impl Default for Ledger {
             token_name: unknown_token(),
             feature_flags: FeatureFlags::default(),
             ledger_version: LEDGER_VERSION,
+            index_principal: None,
         }
     }
 }
@@ -449,6 +454,7 @@ impl Ledger {
         token_symbol: Option<String>,
         token_name: Option<String>,
         feature_flags: Option<FeatureFlags>,
+        index_principal: Option<Principal>,
     ) {
         self.token_symbol = token_symbol.unwrap_or_else(|| "ICP".to_string());
         self.token_name = token_name.unwrap_or_else(|| "Internet Computer".to_string());
@@ -476,6 +482,7 @@ impl Ledger {
         if let Some(feature_flags) = feature_flags {
             self.feature_flags = feature_flags;
         }
+        self.index_principal = index_principal;
     }
 
     pub fn change_notification_state(
@@ -559,6 +566,9 @@ impl Ledger {
         }
         if let Some(feature_flags) = args.feature_flags {
             self.feature_flags = feature_flags;
+        }
+        if let Some(index_principal) = args.index_principal {
+            self.index_principal = Some(index_principal);
         }
     }
 }
