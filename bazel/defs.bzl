@@ -213,7 +213,7 @@ def rust_bench(name, env = {}, data = [], pin_cpu = False, test_name = None, tes
       data: data dependencies required to run the benchmark.
       pin_cpu: pins the benchmark process to a single CPU if set `True`.
       test_name: generates test with name 'test_name' to test that the benchmark work.
-      test_timeout: timeout to apply when generating a test (default: `moderate`).
+      test_timeout: timeout to apply in the generated test (default: `moderate`).
       **kwargs: see docs for `rust_binary`.
     """
 
