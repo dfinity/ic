@@ -69,7 +69,9 @@ rust_test(
 
 rust_test_suite(
     name = "test",
-    size = "medium",
+    # the test sometimes times out on CI with default timeout
+    # of "moderate" (5 minutes) - 2025-07-03
+    timeout = "long",
     srcs = ["tests/tests.rs"],
     data = [
         "//packages/pocket-ic/test_canister:test_canister.wasm.gz",
