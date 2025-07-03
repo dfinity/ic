@@ -6,7 +6,7 @@ use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_protobuf::registry::subnet::v1::chain_key_initialization::Initialization;
 use ic_protobuf::registry::subnet::v1::ChainKeyInitialization;
 use ic_protobuf::registry::subnet::v1::{
-    CatchUpPackageContents, InitialNiDkgTranscriptRecord, SubnetListRecord, SubnetRecord,
+    CatchUpPackageContents, InitialNiDkgTranscriptRecord, SubnetListRecord, SubnetRecord, CanisterCyclesCostSchedule,
 };
 use ic_protobuf::types::v1::master_public_key_id::KeyId;
 use ic_registry_client_fake::FakeRegistryClient;
@@ -232,6 +232,7 @@ pub fn test_subnet_record() -> SubnetRecord {
         ssh_readonly_access: vec![],
         ssh_backup_access: vec![],
         chain_key_config: None,
+        canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
     }
 }
 

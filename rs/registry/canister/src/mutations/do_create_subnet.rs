@@ -12,7 +12,7 @@ use ic_protobuf::registry::{
     node::v1::NodeRecord,
     subnet::v1::{
         CatchUpPackageContents, ChainKeyConfig as ChainKeyConfigPb,
-        SubnetFeatures as SubnetFeaturesPb, SubnetRecord,
+        SubnetFeatures as SubnetFeaturesPb, SubnetRecord, CanisterCyclesCostSchedule as CanisterCyclesCostSchedulePb,
     },
 };
 use ic_registry_keys::{
@@ -485,6 +485,16 @@ pub enum CanisterCyclesCostSchedule {
     Free,
 }
 
+impl From<CanisterCyclesCostSchedule> for CanisterCyclesCostSchedulePb {
+    fn from(src: CanisterCyclesCostSchedule) -> Self {
+        type Src = CanisterCyclesCostSchedule;
+        match src {
+            Src::Normal => Self::Normal,
+            Src::Free => Self::Free,
+        }
+    }
+}
+
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
 pub struct EcdsaInitialConfig {
     pub quadruples_to_create_in_advance: u32,
@@ -537,6 +547,12 @@ impl From<CreateSubnetPayload> for SubnetRecord {
                         .expect("Invalid InitialChainKeyConfig")
                 })
                 .map(ChainKeyConfigPb::from),
+
+            canister_cycles_cost_schedule: val
+                .canister_cycles_cost_schedule
+                .map(CanisterCyclesCostSchedulePb::from)
+                .unwrap_or(CanisterCyclesCostSchedulePb::Normal)
+                as i32,
         }
     }
 }

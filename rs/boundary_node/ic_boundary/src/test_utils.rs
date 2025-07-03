@@ -19,7 +19,7 @@ use ic_protobuf::registry::{
     crypto::v1::{PublicKey as PublicKeyProto, X509PublicKeyCert},
     node::v1::{ConnectionEndpoint, NodeRecord},
     routing_table::v1::RoutingTable as PbRoutingTable,
-    subnet::v1::{SubnetListRecord, SubnetRecord},
+    subnet::v1::{SubnetListRecord, SubnetRecord, CanisterCyclesCostSchedule},
 };
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::{
@@ -124,6 +124,7 @@ pub fn test_subnet_record() -> SubnetRecord {
         ssh_readonly_access: vec![],
         ssh_backup_access: vec![],
         chain_key_config: None,
+        canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
     }
 }
 
