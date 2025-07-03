@@ -118,13 +118,15 @@ impl Finalize for Acme {
 
         // Poll until Ready (or timeout)
         info!(domain = name, "polling for order ready status");
-        let attempts = poll_order(&mut order, OrderStatus::Ready)
+        poll_order(&mut order, OrderStatus::Ready)
             .await
+            .inspect(|attempts| {
+                info!(
+                    domain = name,
+                    "polling for order succeeded after {attempts} attempts"
+                )
+            })
             .context("order is unable to reach 'Ready' status")?;
-        info!(
-            domain = name,
-            "polling for order succeeded after {attempts} attempts"
-        );
 
         // Generate key pair
         let mut key_pair = KeyPair::generate().context("failed to create key pair")?;
@@ -148,13 +150,15 @@ impl Finalize for Acme {
 
         // Poll until Valid (or timeout)
         info!(domain = name, "polling for order valid status");
-        let attempts = poll_order(&mut order, OrderStatus::Valid)
+        poll_order(&mut order, OrderStatus::Valid)
             .await
+            .inspect(|attempts| {
+                info!(
+                    domain = name,
+                    "polling for order valid status succeeded after {attempts} attempts"
+                )
+            })
             .context("failed to poll order status to Valid")?;
-        info!(
-            domain = name,
-            "polling for order valid status succeeded after {attempts} attempts"
-        );
 
         let cert_chain_pem = match order
             .certificate()
