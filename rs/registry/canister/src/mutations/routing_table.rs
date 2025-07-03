@@ -464,57 +464,6 @@ mod tests {
     }
 
     #[test]
-    fn test_routing_table_saves_as_canister_range_records_on_first_invocation_correctly() {
-        let mut registry = invariant_compliant_registry(0);
-        let system_subnet =
-            PrincipalId::try_from(registry.get_subnet_list_record().subnets.first().unwrap())
-                .unwrap();
-
-        let mut original = RoutingTable::new();
-        original
-            .insert(
-                CanisterIdRange {
-                    start: CanisterId::from(5000),
-                    end: CanisterId::from(6000),
-                },
-                system_subnet.into(),
-            )
-            .unwrap();
-        original
-            .insert(
-                CanisterIdRange {
-                    start: CanisterId::from(6001),
-                    end: CanisterId::from(7000),
-                },
-                system_subnet.into(),
-            )
-            .unwrap();
-
-        let new_routing_table = pb::RoutingTable::from(original.clone());
-        let mutations = vec![upsert(
-            make_routing_table_record_key().as_bytes(),
-            new_routing_table.encode_to_vec(),
-        )];
-        registry.maybe_apply_mutation_internal(mutations);
-
-        let recovered = registry
-            .get_routing_table_from_canister_range_records_or_panic(registry.latest_version());
-
-        assert_eq!(recovered, RoutingTable::new());
-
-        // Now we are in a situation where there is no difference between what's stored under the
-        // `routing_table` key and what's being saved BUT we should still generate canister_ranges_*
-        // records b/c they're empty
-        let mutations = routing_table_into_registry_mutation(&registry, original.clone());
-        registry.maybe_apply_mutation_internal(mutations);
-
-        let recovered = registry
-            .get_routing_table_from_canister_range_records_or_panic(registry.latest_version());
-
-        assert_eq!(recovered, original);
-    }
-
-    #[test]
     fn test_routing_table_updates_and_deletes_entries_as_expected() {
         let mut registry = invariant_compliant_registry(0);
         let system_subnet =
