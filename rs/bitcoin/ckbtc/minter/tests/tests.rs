@@ -2060,10 +2060,8 @@ fn test_retrieve_btc_with_approval() {
 
         assert_eq!(2, tx.output.len());
         assert_eq!(
-            tx.output[0].value,
-            Amount::from_sat(
-                withdrawal_amount - fee_estimate.minter_fee - fee_estimate.bitcoin_fee
-            )
+            tx.output[0].value.to_sat(),
+            withdrawal_amount - fee_estimate.minter_fee - fee_estimate.bitcoin_fee
         );
 
         assert_matches!(
