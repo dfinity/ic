@@ -411,14 +411,16 @@ impl CanisterManager {
                     .environment_variables()
                     .map(|environment_variables| environment_variables.hash());
 
-                canister.system_state.add_canister_change(
-                    timestamp_nanos,
-                    origin,
-                    CanisterChangeDetails::settings_change(
-                        new_controllers,
-                        new_environment_variables_hash,
-                    ),
-                );
+                if new_environment_variables_hash.is_some() || new_controllers.is_some() {
+                    canister.system_state.add_canister_change(
+                        timestamp_nanos,
+                        origin,
+                        CanisterChangeDetails::settings_change(
+                            new_controllers,
+                            new_environment_variables_hash,
+                        ),
+                    );
+                }
             }
             FlagStatus::Disabled => {
                 if let Some(new_controllers) = new_controllers {
