@@ -14,11 +14,12 @@ use crate::{
         resource::{AllocatedVm, HOSTOS_MEMORY_KIB_PER_VM, HOSTOS_VCPUS_PER_VM},
         test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
         test_env_api::{
-            get_dependency_path_from_env, get_elasticsearch_hosts, get_ic_os_update_img_sha256,
-            get_ic_os_update_img_url, get_mainnet_ic_os_update_img_url, get_mainnet_nns_revision,
-            get_malicious_ic_os_update_img_sha256, get_malicious_ic_os_update_img_url,
-            read_dependency_from_env_to_string, HasIcDependencies, HasTopologySnapshot, HasVmName,
-            IcNodeContainer, InitialReplicaVersion, NodesInfo,
+            get_dependency_path_from_env, get_elasticsearch_hosts, get_ic_os_img_version,
+            get_ic_os_initial_update_img_sha256, get_ic_os_initial_update_img_url,
+            get_mainnet_ic_os_update_img_sha256, get_mainnet_ic_os_update_img_url,
+            get_mainnet_nns_revision, get_malicious_ic_os_update_img_sha256,
+            get_malicious_ic_os_update_img_url, get_setupos_img_sha256, get_setupos_img_url,
+            HasTopologySnapshot, HasVmName, IcNodeContainer, InitialReplicaVersion, NodesInfo,
         },
         test_setup::InfraProvider,
     },
@@ -99,7 +100,7 @@ pub fn init_ic(
     let replica_version = if ic.with_mainnet_config {
         get_mainnet_nns_revision()
     } else {
-        read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")?
+        get_ic_os_img_version()?
     };
 
     let replica_version = ReplicaVersion::try_from(replica_version.clone())?;
@@ -199,11 +200,14 @@ pub fn init_ic(
             )
         } else if ic.with_mainnet_config {
             (
-                test_env.get_mainnet_ic_os_update_img_sha256()?,
+                get_mainnet_ic_os_update_img_sha256(test_env)?,
                 get_mainnet_ic_os_update_img_url()?,
             )
         } else {
-            (get_ic_os_update_img_sha256()?, get_ic_os_update_img_url()?)
+            (
+                get_ic_os_initial_update_img_sha256(test_env)?,
+                get_ic_os_initial_update_img_url()?,
+            )
         }
     };
     let mut ic_config = IcConfig::new(
@@ -584,8 +588,8 @@ pub fn setup_nested_vms(
         for node in nodes {
             join_handles.push(s.spawn(|| {
                 let vm_name = &node.name;
-                let url = Url::parse(&std::env::var("ENV_DEPS__SETUPOS_DISK_IMG_URL")?)?;
-                let hash = std::env::var("ENV_DEPS__SETUPOS_DISK_IMG_HASH")?;
+                let url = get_setupos_img_url()?;
+                let hash = get_setupos_img_sha256()?;
                 let setupos_image_spec = AttachImageSpec::via_url(url, hash);
 
                 let config_image =

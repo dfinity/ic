@@ -44,8 +44,7 @@ pub const UP_DOWNGRADE_PER_TEST_TIMEOUT: Duration = Duration::from_secs(20 * 60)
 pub fn bless_branch_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> String {
     let logger = env.logger();
 
-    let original_branch_version = read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")
-        .expect("tip-of-branch IC version");
+    let original_branch_version = get_current_branch_version().expect("tip-of-branch IC version");
     let branch_version = format!("{}-test", original_branch_version);
 
     // Bless branch version
@@ -69,7 +68,7 @@ pub fn bless_mainnet_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> String
     let mainnet_version = get_mainnet_nns_revision();
 
     // Bless mainnet version
-    let sha256 = env.get_mainnet_ic_os_update_img_sha256().unwrap();
+    let sha256 = get_mainnet_ic_os_update_img_sha256(env).unwrap();
     let upgrade_url = get_mainnet_ic_os_update_img_url().unwrap();
     block_on(bless_replica_version(
         nns_node,

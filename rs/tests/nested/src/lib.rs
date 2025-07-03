@@ -1,8 +1,6 @@
 use std::str::FromStr;
 use std::time::Duration;
 
-use url::Url;
-
 use canister_test::PrincipalId;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
@@ -142,18 +140,14 @@ pub fn registration(env: TestEnv) {
 pub fn upgrade_hostos(env: TestEnv) {
     let logger = env.logger();
 
-    let target_version_str = std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION").unwrap();
+    let target_version_str = get_hostos_update_img_version().unwrap();
     let target_version =
         HostosVersion::try_from(target_version_str.trim()).expect("Invalid mainnet hostos version");
 
-    let update_image_url_str = std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_URL").unwrap();
-    info!(
-        logger,
-        "HostOS update image URL: '{}'", update_image_url_str
-    );
     let update_image_url =
-        Url::parse(update_image_url_str.trim()).expect("Invalid mainnet hostos update image URL");
-    let update_image_sha256 = std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_SHA").unwrap();
+        get_hostos_update_img_url().expect("Invalid mainnet hostos update image URL");
+    info!(logger, "HostOS update image URL: '{}'", update_image_url);
+    let update_image_sha256 = get_hostos_update_img_sha256().unwrap();
 
     let initial_topology = env.topology_snapshot();
     start_nested_vm(env.clone());

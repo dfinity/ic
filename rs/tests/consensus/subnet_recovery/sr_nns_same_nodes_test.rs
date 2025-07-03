@@ -60,7 +60,8 @@ pub fn test(env: TestEnv) {
     let logger = env.logger();
     let topo_snapshot = env.topology_snapshot();
 
-    let ic_version = env.get_initial_replica_version().unwrap();
+    let ic_version = get_ic_os_img_version().unwrap();
+    let ic_version = ReplicaVersion::try_from(ic_version).unwrap();
     info!(logger, "IC_VERSION_ID: {:?}", &ic_version);
 
     // identifies the version of the replica after the recovery
