@@ -1,7 +1,7 @@
 use bitcoin::{consensus::encode::deserialize, Address, Amount, Block, BlockHash};
 use bitcoincore_rpc::{bitcoincore_rpc_json::CreateRawTransactionInput, Auth, Client, RpcApi};
 use bitcoind::{BitcoinD, Conf, P2P};
-use ic_btc_adapter::{start_server, Config, IncomingSource, Network as AdapterNetwork};
+use ic_btc_adapter::{start_server, Config, IncomingSource};
 use ic_btc_adapter_client::setup_bitcoin_adapter_clients;
 use ic_btc_interface::Network;
 use ic_btc_replica_types::{
@@ -97,7 +97,7 @@ fn start_adapter(
     network: bitcoin::Network,
 ) {
     let config = Config {
-        network: AdapterNetwork::Bitcoin(network),
+        network: network.into(),
         incoming_source: IncomingSource::Path(uds_path.to_path_buf()),
         nodes,
         ipv6_only: true,
