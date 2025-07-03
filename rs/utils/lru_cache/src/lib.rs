@@ -442,27 +442,28 @@ mod tests {
     #[test]
     fn lru_cache_count_bytes_and_len() {
         let mut lru = LruCache::<Key, MemoryDiskValue>::new(NumBytes::new(10), NumBytes::new(20));
-        assert_eq!(0, lru.memory_bytes());
+        assert_eq!(size_of_val(&lru), lru.memory_bytes());
+        assert_eq!(0, lru.heap_bytes());
         assert_eq!(0, lru.disk_bytes());
         assert_eq!(0, lru.len());
         assert!(lru.is_empty());
         lru.push(Key(0), MemoryDiskValue(0, 4, 10));
-        assert_eq!(4, lru.memory_bytes());
+        assert_eq!(4, lru.heap_bytes());
         assert_eq!(10, lru.disk_bytes());
         assert_eq!(1, lru.len());
         assert!(!lru.is_empty());
         lru.push(Key(1), MemoryDiskValue(1, 6, 2));
-        assert_eq!(10, lru.memory_bytes());
+        assert_eq!(10, lru.heap_bytes());
         assert_eq!(12, lru.disk_bytes());
         assert_eq!(2, lru.len());
         assert!(!lru.is_empty());
         lru.pop(&Key(0));
-        assert_eq!(6, lru.memory_bytes());
+        assert_eq!(6, lru.heap_bytes());
         assert_eq!(2, lru.disk_bytes());
         assert_eq!(1, lru.len());
         assert!(!lru.is_empty());
         lru.pop(&Key(1));
-        assert_eq!(0, lru.memory_bytes());
+        assert_eq!(0, lru.heap_bytes());
         assert_eq!(0, lru.disk_bytes());
         assert_eq!(0, lru.len());
         assert!(lru.is_empty());
@@ -611,7 +612,7 @@ mod tests {
                         update(&mut evicted_memory, &mut evicted_disk, &k, &v);
                     }
 
-                    assert_eq!(total_memory, evicted_memory + lru.memory_bytes());
+                    assert_eq!(size_of_val(&lru) + total_memory, evicted_memory + lru.memory_bytes());
                     assert_eq!(total_disk, evicted_disk + lru.disk_bytes());
                 }
             }
