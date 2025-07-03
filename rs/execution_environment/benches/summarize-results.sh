@@ -8,7 +8,7 @@ set -ue
 ## some benchmarks.
 ##
 
-DEPENDENCIES="awk egrep sed"
+DEPENDENCIES="awk egrep fgrep sed"
 which ${DEPENDENCIES} >/dev/null || (echo "Error checking dependencies: ${DEPENDENCIES}" >&2 && exit 1)
 
 NOISE_THRESHOLD_PCT="${NOISE_THRESHOLD_PCT:-2}"
@@ -66,7 +66,7 @@ while read min_bench; do
     new_result_ns="${new_result_ns% ns/iter*}"
     total_ns=$((total_ns + new_result_ns))
 
-    baseline_bench=$(egrep -F "test ${name} ... bench:" "${BASELINE_FILE}" || true)
+    baseline_bench=$(fgrep "test ${name} ... bench:" "${BASELINE_FILE}" || true)
     baseline_result_ns="${baseline_bench#* ... bench: }"
     baseline_result_ns="${baseline_result_ns% ns/iter*}"
 
