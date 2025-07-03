@@ -55,6 +55,9 @@ pub struct CanisterOutOfCyclesError {
     pub reveal_top_up: bool,
 }
 
+// No heap allocations.
+impl MemoryDiskBytes for CanisterOutOfCyclesError {}
+
 impl std::error::Error for CanisterOutOfCyclesError {}
 
 impl std::fmt::Display for CanisterOutOfCyclesError {
@@ -73,6 +76,13 @@ impl std::fmt::Display for CanisterOutOfCyclesError {
 /// assistance in debugging canisters.
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct CanisterBacktrace(pub Vec<(u32, Option<String>)>);
+
+impl MemoryDiskBytes for CanisterBacktrace {
+    fn heap_bytes(&self) -> usize {
+        // Deep vector size.
+        self.0.iter().map(|(_, o)| o.memory_bytes()).sum()
+    }
+}
 
 impl std::fmt::Display for CanisterBacktrace {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -195,6 +205,57 @@ pub enum HypervisorError {
     EnvironmentVariableNotFound {
         name: String,
     },
+}
+
+impl MemoryDiskBytes for HypervisorError {
+    fn heap_bytes(&self) -> usize {
+        match self {
+            HypervisorError::FunctionNotFound(..) => 0,
+            HypervisorError::MethodNotFound(wasm_method) => wasm_method.heap_bytes(),
+            HypervisorError::ToolchainContractViolation { error } => error.heap_bytes(),
+            HypervisorError::UserContractViolation {
+                error,
+                suggestion,
+                doc_link,
+            } => error.heap_bytes() + suggestion.heap_bytes() + doc_link.heap_bytes(),
+            HypervisorError::InstructionLimitExceeded(_) => 0,
+            HypervisorError::InvalidWasm(wasm_validation_error) => {
+                wasm_validation_error.heap_bytes()
+            }
+            HypervisorError::InstrumentationFailed(wasm_instrumentation_error) => {
+                wasm_instrumentation_error.heap_bytes()
+            }
+            HypervisorError::Trapped { backtrace, .. } => backtrace.heap_bytes(),
+            HypervisorError::CalledTrap { message, backtrace } => {
+                message.heap_bytes() + backtrace.heap_bytes()
+            }
+            HypervisorError::WasmModuleNotFound => 0,
+            HypervisorError::OutOfMemory => 0,
+            HypervisorError::InvalidPrincipalId(_principal_id_error) => 0,
+            HypervisorError::MessageRejected => 0,
+            HypervisorError::InsufficientCyclesBalance(canister_out_of_cycles_error) => {
+                canister_out_of_cycles_error.heap_bytes()
+            }
+            HypervisorError::Cleanup {
+                callback_err,
+                cleanup_err,
+            } => {
+                // Deep size for `Box`ed errors.
+                callback_err.memory_bytes() + cleanup_err.memory_bytes()
+            }
+            HypervisorError::WasmEngineError(wasm_engine_error) => wasm_engine_error.heap_bytes(),
+            HypervisorError::ReservedPagesForOldMotoko => 0,
+            HypervisorError::Aborted => 0,
+            HypervisorError::SliceOverrun { .. } => 0,
+            HypervisorError::MemoryAccessLimitExceeded(s) => s.heap_bytes(),
+            HypervisorError::InsufficientCyclesInMemoryGrow { .. } => 0,
+            HypervisorError::ReservedCyclesLimitExceededInMemoryGrow { .. } => 0,
+            HypervisorError::InsufficientCyclesInMessageMemoryGrow { .. } => 0,
+            HypervisorError::WasmMemoryLimitExceeded { .. } => 0,
+            HypervisorError::EnvironmentVariableIndexOutOfBounds { .. } => 0,
+            HypervisorError::EnvironmentVariableNotFound { name } => name.heap_bytes(),
+        }
+    }
 }
 
 impl From<WasmInstrumentationError> for HypervisorError {
@@ -401,16 +462,6 @@ impl std::fmt::Display for HypervisorError {
                 write!(f, "Environment variable {} not found.", name)
             }
         }
-    }
-}
-
-impl MemoryDiskBytes for HypervisorError {
-    fn memory_bytes(&self) -> usize {
-        std::mem::size_of::<Self>()
-    }
-
-    fn disk_bytes(&self) -> usize {
-        0
     }
 }
 

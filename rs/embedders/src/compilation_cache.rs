@@ -42,8 +42,8 @@ pub struct CompilationCache {
 }
 
 impl MemoryDiskBytes for CompilationCache {
-    fn memory_bytes(&self) -> usize {
-        self.cache.lock().unwrap().memory_bytes()
+    fn heap_bytes(&self) -> usize {
+        self.cache.lock().unwrap().heap_bytes()
     }
 
     fn disk_bytes(&self) -> usize {

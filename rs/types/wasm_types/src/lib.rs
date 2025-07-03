@@ -188,6 +188,9 @@ impl std::hash::Hash for CanisterModule {
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 pub struct WasmHash([u8; WASM_HASH_LENGTH]);
 
+// No heap allocations.
+impl MemoryDiskBytes for WasmHash {}
+
 impl WasmHash {
     pub fn to_slice(&self) -> [u8; WASM_HASH_LENGTH] {
         self.0
@@ -216,16 +219,6 @@ impl TryFrom<Vec<u8>> for WasmHash {
     fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
         let array: [u8; WASM_HASH_LENGTH] = value.try_into()?;
         Ok(Self::from(array))
-    }
-}
-
-impl MemoryDiskBytes for WasmHash {
-    fn memory_bytes(&self) -> usize {
-        self.0.len()
-    }
-
-    fn disk_bytes(&self) -> usize {
-        0
     }
 }
 

@@ -26,7 +26,7 @@ where
     K: MemoryDiskBytes + Eq + Hash,
     V: MemoryDiskBytes,
 {
-    fn memory_bytes(&self) -> usize {
+    fn heap_bytes(&self) -> usize {
         self.memory_size
     }
 

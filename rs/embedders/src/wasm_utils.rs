@@ -10,7 +10,7 @@ use ic_replicated_state::{
     EmbedderCache, NumWasmPages, PageIndex,
 };
 use ic_sys::{PageBytes, PAGE_SIZE};
-use ic_types::{methods::WasmMethod, NumBytes, NumInstructions};
+use ic_types::{methods::WasmMethod, MemoryDiskBytes, NumBytes, NumInstructions};
 use ic_wasm_types::{BinaryEncodedWasm, WasmInstrumentationError};
 use serde::{Deserialize, Serialize};
 
@@ -58,9 +58,22 @@ struct Segment {
     bytes: Vec<u8>,
 }
 
+impl MemoryDiskBytes for Segment {
+    fn heap_bytes(&self) -> usize {
+        self.bytes.heap_bytes()
+    }
+}
+
 /// Vector of heap data chunks with their offsets.
 #[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct Segments(Vec<Segment>);
+
+impl MemoryDiskBytes for Segments {
+    fn heap_bytes(&self) -> usize {
+        // Deep vector size.
+        self.0.iter().map(|seg| seg.memory_bytes()).sum()
+    }
+}
 
 impl FromIterator<(usize, Vec<u8>)> for Segments {
     fn from_iter<T: IntoIterator<Item = (usize, Vec<u8>)>>(iter: T) -> Self {
