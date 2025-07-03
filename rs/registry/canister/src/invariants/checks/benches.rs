@@ -99,8 +99,7 @@ fn measure_routing_table_invariant_checks_shards_and_unsharded() -> BenchResult 
     let _feature = temporarily_enable_chunkifying_large_values();
     let mut registry = setup_registry_with_rt_segments_with_x_entries_each(1000, 20);
 
-    let rt =
-        registry.get_routing_table_from_canister_range_records_or_panic(registry.latest_version());
+    let rt = registry.get_routing_table_or_panic(registry.latest_version());
     let rt_mutation = upsert(
         make_routing_table_record_key(),
         RoutingTable::from(rt).encode_to_vec(),
