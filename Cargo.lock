@@ -7192,7 +7192,7 @@ dependencies = [
  "assert_matches",
  "async-trait",
  "bech32 0.9.1",
- "bitcoin 0.28.2",
+ "bitcoin 0.32.5",
  "bs58 0.5.1",
  "canbench-rs",
  "candid",
