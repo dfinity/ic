@@ -4,6 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//rs/bitcoin/adapter",
     "@crate_index//:bitcoin",
     "@crate_index//:flate2",
     "@crate_index//:hex",
