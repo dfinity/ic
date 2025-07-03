@@ -121,7 +121,6 @@ use ic_types::methods::WasmMethod;
 use ic_types::NumBytes;
 use ic_types::NumInstructions;
 use ic_wasm_types::{BinaryEncodedWasm, WasmError, WasmInstrumentationError};
-use orca_wasm::ir::types::{Body, FuncInstrFlag, InitExpr, InstrumentationFlag};
 use orca_wasm::{
     ir::{
         id::{FunctionID, ImportsID, TypeID},
@@ -131,20 +130,14 @@ use orca_wasm::{
             module_imports::ModuleImports,
             GetID, LocalOrImport,
         },
-        types::{DataSegmentKind, ElementItems},
+        types::{Body, DataSegmentKind, ElementItems, FuncInstrFlag, InitExpr},
     },
     DataType,
 };
-use wasm_encoder::FunctionSection;
 
 use crate::wasmtime_embedder::{
     STABLE_BYTEMAP_MEMORY_NAME, STABLE_MEMORY_NAME, WASM_HEAP_BYTEMAP_MEMORY_NAME,
     WASM_HEAP_MEMORY_NAME,
-};
-use ic_wasm_transform::{self, Global, Module};
-use wasmparser::{
-    BlockType, CompositeInnerType, Export, ExternalKind, FuncType, GlobalType, MemoryType,
-    Operator, TypeRef, ValType,
 };
 
 use std::collections::BTreeMap;
@@ -782,7 +775,7 @@ fn mutate_function_indices(module: &mut orca_wasm::Module, f: impl Fn(u32) -> u3
                     *idx = FunctionID(f(idx.0));
                 }
             }
-            ElementItems::ConstExprs { ty: _, exprs } => {
+            ElementItems::ConstExprs { ty: _, exprs: _ } => {
                 // TODO: parse const expressions in orca.
                 // for const_expr in exprs.iter_mut() {
                 //     for op in const_expr {
@@ -861,7 +854,7 @@ fn inject_helper_functions(
 ) -> orca_wasm::Module {
     // Temporarily clear the import section so that the injected imports come first.
     let mut old_imports = ModuleImports::new(vec![]);
-    let mut imports = std::mem::swap(&mut module.imports, &mut old_imports);
+    std::mem::swap(&mut module.imports, &mut old_imports);
 
     let ooi_type_idx = module.types.add_func_type(&[], &[]);
     module.add_import_func(
@@ -1347,7 +1340,7 @@ fn export_additional_symbols<'a>(
     // push the instructions counter
     module.add_global(
         InitExpr::new(vec![orca_wasm::Instructions::Value(
-            orca_wasm::ir::types::Value::I32(0),
+            orca_wasm::ir::types::Value::I64(0),
         )]),
         DataType::I64,
         true,
@@ -1722,11 +1715,6 @@ fn replace_system_api_functions(
     max_wasm_memory_size: NumBytes,
 ) {
     let api_indexes = calculate_api_indexes(module);
-    let number_of_func_imports = module
-        .imports
-        .iter()
-        .filter(|i| matches!(i.ty, orca_wasm::wasmparser::TypeRef::Func(_)))
-        .count();
 
     // Collect a single map of all the function indexes that need to be
     // replaced.
@@ -1819,6 +1807,10 @@ pub(super) fn instrument(
     let main_memory_type = main_memory_type(&module);
     let stable_memory_index;
     let mut module = inject_helper_functions(module, main_memory_type);
+    println!("Functions");
+    for f in module.functions.iter() {
+        println!("{:?}", f);
+    }
     module = export_table(module);
     (module, stable_memory_index) = update_memories(
         module,
@@ -1886,7 +1878,6 @@ pub(super) fn instrument(
     // The main reason to create this vector of function types is because we can't
     // mix a mutable (to inject instructions) and immutable (to look up the function
     // type) reference to the `code_section`.
-    let mut func_types = module.types.clone();
     // let mut func_types = Vec::new();
     // for i in 0..module.code_sections.len() {
     //     if let CompositeInnerType::Func(t) = &module.types[module.functions[i] as usize]
@@ -1909,7 +1900,7 @@ pub(super) fn instrument(
         .filter(|f| f.is_local())
         .map(|f| f.unwrap_local_mut())
     {
-        let num_params = func_types.get(func_body.ty_id).unwrap().params().len() as u32;
+        let num_params = module.types.get(func_body.ty_id).unwrap().params().len() as u32;
         inject_try_grow_wasm_memory(&mut func_body.body, num_params, main_memory_type);
     }
 
@@ -1921,6 +1912,14 @@ pub(super) fn instrument(
     // }
 
     module = export_additional_symbols(module, &special_indices);
+    println!("Functions");
+    for f in module.functions.iter() {
+        println!("{:?}", f);
+    }
+    println!(
+        "After injecting metering\n\n{}",
+        wasmprinter::print_bytes(module.encode()).unwrap()
+    );
 
     replace_system_api_functions(
         &mut module,
@@ -1966,7 +1965,7 @@ pub(super) fn instrument(
             wasm_instruction_count += function.body.instructions.len() as u64;
         }
     }
-    for global in module.globals.iter() {
+    for _ in module.globals.iter() {
         // // Each global has a single instruction initializer and an `End`
         // // instruction will be added during encoding.
         // // We statically assert this is the case to ensure this calculation is

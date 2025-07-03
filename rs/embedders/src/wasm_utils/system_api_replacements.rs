@@ -19,9 +19,7 @@ use crate::{
 use ic_interfaces::execution_environment::StableMemoryApi;
 use ic_sys::PAGE_SIZE;
 use ic_types::NumInstructions;
-use ic_wasm_transform::Body;
 use orca_wasm::{wasmparser::BlockType, DataType};
-use wasmparser::{FuncType, Operator, ValType};
 
 use ic_types::NumBytes;
 
