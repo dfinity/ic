@@ -113,8 +113,7 @@ pub fn test_upgrade(env: TestEnv) {
     let log = env.logger();
     let nns_node = get_nns_node(&env.topology_snapshot());
     info!(log, "Elect the branch replica version");
-    let original_branch_version = read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")
-        .expect("tip-of-branch IC version");
+    let original_branch_version = get_current_branch_version().expect("tip-of-branch IC version");
     let branch_version = format!("{}-test", original_branch_version);
 
     // Bless branch version

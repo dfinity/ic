@@ -36,8 +36,8 @@ use ic_system_test_driver::driver::pot_dsl::{PotSetupFn, SysTestFn};
 use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    get_ic_os_update_img_test_sha256, get_ic_os_update_img_test_url, get_mainnet_nns_revision,
-    read_dependency_from_env_to_string, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+    get_current_branch_version, get_ic_os_update_img_test_sha256, get_ic_os_update_img_test_url,
+    get_mainnet_nns_revision, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
     IcNodeSnapshot,
 };
 use ic_system_test_driver::systest;
@@ -167,8 +167,7 @@ pub async fn test_async(env: TestEnv) {
 
     let mainnet_version = get_mainnet_nns_revision();
 
-    let original_branch_version = read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")
-        .expect("tip-of-branch IC version");
+    let original_branch_version = get_current_branch_version().expect("tip-of-branch IC version");
 
     let (upgrade_subnet_id, _, upgrade_node) = app_subnets.first().unwrap();
     let upgrade_version = format!("{}-test", original_branch_version);
