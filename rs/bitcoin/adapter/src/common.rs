@@ -45,9 +45,9 @@ impl Network {
     pub fn name(&self) -> String {
         match self {
             Network::Bitcoin(bitcoin::Network::Bitcoin) => "bitcoin".to_string(),
-            Network::Bitcoin(network) => format!("bitcoin::{}", network),
+            Network::Bitcoin(network) => format!("bitcoin::{network}"),
             Network::Dogecoin(bitcoin::dogecoin::Network::Dogecoin) => "dogecoin".to_string(),
-            Network::Dogecoin(network) => format!("bitcoin::{}", network),
+            Network::Dogecoin(network) => format!("bitcoin::{network}"),
         }
     }
 
@@ -88,26 +88,23 @@ impl Serialize for Network {
 }
 
 impl<'de> Deserialize<'de> for Network {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         use std::str::FromStr;
         let s = String::deserialize(deserializer)?;
         if s == "bitcoin" {
             return Ok(bitcoin::Network::Bitcoin.into());
         } else if s == "dogecoin" {
             return Ok(bitcoin::dogecoin::Network::Dogecoin.into());
-        } else if s.starts_with("bitcoin:") {
-            if let Ok(network) = bitcoin::Network::from_str(&s[8..]) {
+        } else if let Some(s) = s.strip_prefix("bitcoin:") {
+            if let Ok(network) = bitcoin::Network::from_str(s) {
                 return Ok(network.into());
             }
-        } else if s.starts_with("dogecoin:") {
-            if let Ok(network) = bitcoin::dogecoin::Network::from_str(&s[9..]) {
+        } else if let Some(s) = s.strip_prefix("dogecoin:") {
+            if let Ok(network) = bitcoin::dogecoin::Network::from_str(s) {
                 return Ok(network.into());
             }
         }
-        Err(serde::de::Error::custom(format!("unknown network {}", s)))
+        Err(serde::de::Error::custom(format!("unknown network {s}")))
     }
 }
 
@@ -128,7 +125,7 @@ impl BlockLike for bitcoin::Block {
         bitcoin::Block::compute_merkle_root(self)
     }
     fn check_merkle_root(&self) -> bool {
-        bitcoin::Block::check_merkle_root(&self)
+        bitcoin::Block::check_merkle_root(self)
     }
     fn header(&self) -> bitcoin::block::Header {
         self.header
@@ -143,7 +140,7 @@ impl BlockLike for bitcoin::dogecoin::Block {
         bitcoin::dogecoin::Block::compute_merkle_root(self)
     }
     fn check_merkle_root(&self) -> bool {
-        bitcoin::dogecoin::Block::check_merkle_root(&self)
+        bitcoin::dogecoin::Block::check_merkle_root(self)
     }
     fn header(&self) -> bitcoin::block::Header {
         self.header
