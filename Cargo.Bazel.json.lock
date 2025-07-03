@@ -1,5 +1,5 @@
 {
-  "checksum": "4d5f1092c2eb39e098897ea01cf418796ba10cf8916b765483f585e487eae2b1",
+  "checksum": "54bd3c039c364bcd6bbbceb7b51b4bbfb2a7d20722ade5fe49a1df6294db0fd2",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -70254,8 +70254,6 @@
         "crate_features": {
           "common": [
             "crypto_nossl",
-            "default",
-            "sev",
             "snp"
           ],
           "selects": {}

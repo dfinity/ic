@@ -457,6 +457,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "der": crate.spec(
                 version = "0.7",
+                default_features = False,
             ),
             "derive-new": crate.spec(
                 version = "^0.7.0",
@@ -959,6 +960,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "pem": crate.spec(
                 version = "^1.0.1",
+                default_features = False,
             ),
             "pin-project-lite": crate.spec(
                 version = "^0.2",
@@ -1215,8 +1217,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "sev": crate.spec(
                 version = "6.2",
+                default_features = False,
                 features = [
                     "crypto_nossl",
+                    "snp",
                 ],
             ),
             "sha2": crate.spec(
