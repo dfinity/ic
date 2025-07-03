@@ -1,0 +1,140 @@
+#!/usr/bin/env bash
+
+# This is a bazel wrapper that tries to infer the bazel command and arguments
+# and potentially injects CI-specific options.
+#
+#
+
+set -euo pipefail
+
+log() {
+    echo "$@" >&2
+}
+
+BUILDBUDDY_LINKS="${BUILDBUDDY_LINKS:-}"
+
+# Remove ourselves from the PATH, in case the bazel command tries to call bazel as well
+PATH="$BAZEL_ACTION_OLDPATH"
+unset BAZEL_ACTION_OLDPATH
+if [ -n "${BAZEL_ACTION_BAZEL_WRAPPED:-}" ]; then
+    log "bazel wrapper is nested"
+    exit 1
+fi
+export BAZEL_ACTION_BAZEL_WRAPPED="1"
+
+# Basic argument parsing, just making sure startup options are not
+# used (because we can't easily parse e.g. `bazel --some_key some-val build :target`
+while [[ $# -gt 0 ]]
+do
+    case $1 in
+        -*)
+            log startup options are not supported
+            exit 1
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
+
+log "Bazel wrapper starting"
+
+# We've asserted there are no startup options, so this must be the command (like "build" or "run")
+bazel_command="$1"
+shift
+
+# Extra args we'll be injecting
+bazel_args=( )
+
+# Setup zig-cache
+mkdir -p /tmp/zig-cache
+
+# Add some options for build-like commands
+if [[ $bazel_command == "build" ]] || [[ $bazel_command == "test" ]]; then
+    command_timestamp=$(date +%s)
+    bazel_args+=(
+
+        # write execlog, mostly for build reproducibility checks
+        --execution_log_compact_file="$BAZEL_ACTION_METRICS_OUT/execlog-$command_timestamp.zst"
+
+        --verbose_failures=true
+
+        # enables BES upload (see config)
+        --config=bes
+        # additionally, upload build events asynchronously
+        --bes_upload_mode=fully_async
+
+        # Upload build results to cache
+        --remote_upload_local_results=true
+
+        --color=yes # Nice CI output
+
+        # Write build events to the dedicated tempdir
+        --build_event_binary_file="$BAZEL_ACTION_METRICS_OUT/bazel-bep-$command_timestamp.pb"
+        --profile="$BAZEL_ACTION_METRICS_OUT/profile-$command_timestamp.json"
+        # Associate each action in the profile with a target label.
+        # This helps analysis tools like https://github.com/EngFlow/bazel_invocation_analyzer
+        # break down bottlenecks.
+        --experimental_profile_include_target_label
+    )
+
+    if [ -n "${BUILDBUDDY_LINKS:-}" ]; then
+        bazel_args+=(
+            --build_metadata=BUILDBUDDY_LINKS="$BUILDBUDDY_LINKS"
+        )
+    fi
+fi
+
+# Wrapper repeating the build metadata URL, useful for long builds with a lot of
+# output
+#
+# NOTE: this assumes --config=bes is enabled
+bazel_bes() {
+    # An awk (mawk) program used to process STDERR to make it easier
+    # to find the build event URL when going through logs.
+    # Finally we record the URL to 'url_out' (passed via variable)
+    url_out=$(mktemp)
+    stream_awk_program='
+      # When seeing the stream info line, grab the url and save it as stream_url
+      match($0, /Streaming build results to/) \
+        { stream_info_line = $0; \
+          match(stream_info_line, /https:\/\/[a-zA-Z0-9\/-.]*/); \
+          stream_url = substr(stream_info_line, RSTART, RLENGTH); \
+      } \
+      # In general, forward every line to the output
+      // { print } \
+      # Every N lines, repeat the stream info line
+      // { if ( stream_info_line != null && NR % 20 == 0 ) print stream_info_line } \
+      # Finally, record the URL
+      END { if (stream_url != null) print stream_url > url_out }'
+
+
+    bazel_exitcode="0"
+    bazel "$@" 2>&1 \
+        | awk -v url_out="$url_out" "$stream_awk_program" || bazel_exitcode="$?"
+
+    # Write the bes link & summary
+    log "Build results uploaded to $(<"$url_out")"
+    if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+        invocation=$(sed <"$url_out" 's;.*/;;') # grab invocation ID (last url part)
+        log "BuildBuddy [$invocation]($(<"$url_out"))" >>"$GITHUB_STEP_SUMMARY"
+    fi
+    rm "$url_out"
+
+    return "$bazel_exitcode"
+}
+
+startup_options=(
+    --output_base=/var/tmp/bazel-output # Output base wiped after run
+)
+
+# Add the original arguments back
+bazel_args+=( "$@" )
+
+log bazel "${startup_options[@]}" "$bazel_command" "${bazel_args[@]}"
+
+if [[ $bazel_command == "build" ]] || [[ $bazel_command == "test" ]]; then
+    bazel_bes "${startup_options[@]}" "$bazel_command" "${bazel_args[@]}"
+else
+    bazel "${startup_options[@]}" "$bazel_command" "${bazel_args[@]}"
+fi

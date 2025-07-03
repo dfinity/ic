@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use candid::CandidType;
 use ic_canister_client::{Agent, Sender};
 use ic_nns_common::types::NeuronId;
-use ic_nns_governance_api::pb::v1::ProposalActionRequest;
+use ic_nns_governance_api::ProposalActionRequest;
 use ic_protobuf::registry::{
     node::v1::IPv4InterfaceConfig,
     provisional_whitelist::v1::ProvisionalWhitelist as ProvisionalWhitelistProto,

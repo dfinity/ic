@@ -7,8 +7,10 @@ DEPENDENCIES = [
     "@crate_index//:backoff",
     "@crate_index//:base64",
     "@crate_index//:candid",
+    "@crate_index//:flate2",
     "@crate_index//:hex",
     "@crate_index//:ic-certification",
+    "@crate_index//:ic-management-canister-types",
     "@crate_index//:ic-transport-types",
     "@crate_index//:reqwest",
     "@crate_index//:schemars",
@@ -19,6 +21,7 @@ DEPENDENCIES = [
     "@crate_index//:sha2",
     "@crate_index//:slog",
     "@crate_index//:strum",
+    "@crate_index//:tempfile",
     "@crate_index//:thiserror",
     "@crate_index//:tokio",
     "@crate_index//:tracing",
@@ -32,13 +35,13 @@ MACRO_DEPENDENCIES = [
 
 TEST_DEPENDENCIES = [
     # Keep sorted.
-    "//rs/types/error_types",
+    "//packages/ic-error-types",
     #TODO: try upgrading this to the latest bitcion crate
     "@crate_index//:bitcoin_0_28",
     "@crate_index//:candid_parser",
     "@crate_index//:ed25519-dalek",
-    "@crate_index//:flate2",
     "@crate_index//:ic-cdk",
+    "@crate_index//:ic-vetkeys",
     "@crate_index//:k256",
     "@crate_index//:lazy_static",
     "@crate_index//:wat",
@@ -48,7 +51,7 @@ rust_library(
     name = "pocket-ic",
     srcs = glob(["src/**/*.rs"]),
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "6.0.0",
+    version = "9.0.2",
     deps = DEPENDENCIES,
 )
 
@@ -64,23 +67,12 @@ rust_test(
     deps = DEPENDENCIES + TEST_DEPENDENCIES,
 )
 
-rust_test(
-    name = "management-canister-test",
-    srcs = ["tests/management_canister.rs"],
-    data = ["@management_canister_did//file"],
-    env = {
-        "IC_DID": "$(rootpath @management_canister_did//file)",
-    },
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = [":pocket-ic"] + DEPENDENCIES + TEST_DEPENDENCIES,
-)
-
 rust_test_suite(
     name = "test",
     size = "medium",
     srcs = ["tests/tests.rs"],
     data = [
-        "//packages/pocket-ic/test_canister:test_canister.wasm",
+        "//packages/pocket-ic/test_canister:test_canister.wasm.gz",
         "//rs/pocket_ic_server:pocket-ic-server",
         "@mozilla_root_ca_store//file",
     ],
@@ -88,9 +80,8 @@ rust_test_suite(
         "RUST_TEST_THREADS": "2",
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
         "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
-        "TEST_WASM": "$(rootpath //packages/pocket-ic/test_canister:test_canister.wasm)",
+        "TEST_WASM": "$(rootpath //packages/pocket-ic/test_canister:test_canister.wasm.gz)",
     },
-    flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "cpu:16",
@@ -114,7 +105,6 @@ rust_test_suite(
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
         "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
     },
-    flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
@@ -130,16 +120,15 @@ rust_test_suite(
     size = "medium",
     srcs = ["tests/slow.rs"],
     data = [
-        "//packages/pocket-ic/test_canister:test_canister.wasm",
+        "//packages/pocket-ic/test_canister:test_canister.wasm.gz",
         "//rs/pocket_ic_server:pocket-ic-server",
         "@mozilla_root_ca_store//file",
     ],
     env = {
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
         "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
-        "TEST_WASM": "$(rootpath //packages/pocket-ic/test_canister:test_canister.wasm)",
+        "TEST_WASM": "$(rootpath //packages/pocket-ic/test_canister:test_canister.wasm.gz)",
     },
-    flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "cpu:16",

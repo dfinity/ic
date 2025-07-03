@@ -10,6 +10,7 @@ DEPENDENCIES = [
     "//rs/ledger_suite/common/ledger_canister_core",
     "//rs/ledger_suite/common/ledger_core",
     "//rs/ledger_suite/icp:icp_ledger",
+    "//rs/rosetta-api/common/rosetta_core:rosetta-core",
     "//rs/rust_canisters/dfn_protobuf",
     "//rs/rust_canisters/on_wire",
     "//rs/types/types",

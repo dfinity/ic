@@ -66,6 +66,20 @@ use std::{
 };
 use strum_macros::AsRefStr;
 
+/// In order to have a bound on the advertised consensus pool, we place a limit on
+/// the notarization/certification gap.
+/// We will not notarize or validate artifacts with a height greater than the given
+/// value above the latest certification. During validation, the only exception to
+/// this are CUPs, which  have no upper bound on the height to be validated.
+pub(crate) const ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP: u64 = 70;
+
+/// In order to have a bound on the advertised consensus pool, we place a limit on
+/// the gap between notarized height and the height of the next pending CUP.
+/// We will not notarize or validate artifacts with a height greater than the given
+/// value above the latest CUP. During validation, the only exception to this are
+/// CUPs, which have no upper bound on the height to be validated.
+pub(crate) const ACCEPTABLE_NOTARIZATION_CUP_GAP: u64 = 130;
+
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, AsRefStr)]
 #[strum(serialize_all = "snake_case")]
 enum ConsensusSubcomponent {
@@ -79,10 +93,6 @@ enum ConsensusSubcomponent {
     Aggregator,
     Purger,
 }
-
-/// When purging consensus or certification artifacts, we always keep a
-/// minimum chain length below the catch-up height.
-pub(crate) const MINIMUM_CHAIN_LENGTH: u64 = 50;
 
 /// Describe expected version and artifact version when there is a mismatch.
 #[derive(Debug)]
@@ -143,6 +153,7 @@ impl ConsensusImpl {
         self_validating_payload_builder: Arc<dyn SelfValidatingPayloadBuilder>,
         canister_http_payload_builder: Arc<dyn BatchPayloadBuilder>,
         query_stats_payload_builder: Arc<dyn BatchPayloadBuilder>,
+        vetkd_payload_builder: Arc<dyn BatchPayloadBuilder>,
         dkg_pool: Arc<RwLock<dyn DkgPool>>,
         idkg_pool: Arc<RwLock<dyn IDkgPool>>,
         dkg_key_manager: Arc<Mutex<DkgKeyManager>>,
@@ -171,6 +182,7 @@ impl ConsensusImpl {
             self_validating_payload_builder,
             canister_http_payload_builder,
             query_stats_payload_builder,
+            vetkd_payload_builder,
             metrics_registry.clone(),
             logger.clone(),
         ));
@@ -681,6 +693,7 @@ mod tests {
             Arc::new(FakeXNetPayloadBuilder::new()),
             Arc::new(FakeSelfValidatingPayloadBuilder::new()),
             Arc::new(FakeCanisterHttpPayloadBuilder::new()),
+            Arc::new(MockBatchPayloadBuilder::new().expect_noop()),
             Arc::new(MockBatchPayloadBuilder::new().expect_noop()),
             dkg_pool,
             idkg_pool,

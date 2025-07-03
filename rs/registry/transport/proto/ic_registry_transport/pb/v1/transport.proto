@@ -24,6 +24,84 @@ syntax = "proto3";
 //
 // Note that registry versions are always strictly >= 0, a -1 value is used
 // to signal that no version was assigned.
+//
+// # Migrating to Large Values/High-Capacity Types
+//
+// Clients need to migrate if they fetch `CatchUpPackageContents`(s) via one (or
+// more) of the following methods:
+//
+//     1. get_certified_changes_since
+//     2. get_value
+//     3. get_changes_since
+//
+// (Such entries have keys of the form `catch_up_package_contents_${subnet_id}`.)
+//
+// Many types here have corresponding "high-capacity" types. E.g. we define both
+// RegistryValue and HighCapacityRegistryValue. We refer to the former as the
+// "legacy" type; whereas, we call the later the "high-capacity" type. We are
+// transitioning to the high-capacity types. Although clients need to do some
+// work, the migration will be "nice and gradual". This section explains what
+// clients can and must do, and when.
+//
+// The key observation is that as long as
+//
+//     1. the `large_value_chunk_keys` field is not populated, and
+//     2. whenever `deletion_marker` is true, `value` is empty
+//
+// then, it is possible to convert from a high-capacity object to a equivalent
+// legacy object by encoding, and then decoding. Furthermore, the other
+// direction also works. This allows a window during which clients can start
+// using high-capacity types at any time.
+//
+// Once the high-capacity type definitions are in the master branch of the ic
+// GitHub repo, the migration window has "opened". An announcement will be sent
+// shortly after this event. This will occur as soon as possible to give clients
+// as much time as possible to migrate.
+//
+// At this point, client CAN migrate. That is, they can (develop and) deploy
+// versions of their application that use high-capacity types instead of legacy
+// types. Once they do that, they will be ready for the Registry canister to
+// start emiting large data.
+//
+// During this time, Registry will also migrate to high-capacity types, but will
+// not actually start emitting large data right away.
+//
+// After clients have had a "reasonable" amount of time to migrate, large data
+// will start appearing in Registry. At that point, the migration window is
+// "closed", and clients will need to have migrated. An announcement will be
+// sent shortly before this event. The appearance of large data might be delayed
+// if clients need more time to migrate.
+//
+// After the migration window, the legacy types will be obsolete. Therefore, it
+// will be a bit silly for "HighCapacity" to be in the name of the types, and it
+// will be confusing for the legacy types to be retained. Therefore, what will
+// happen shortly after the migration window is that the legacy type definitions
+// will be replaced/modified with a copy of the high-capacity type definitions.
+// After a "long" time has passed, the "HighCapacity" names will go away.
+//
+// To ease this secondary/cleanup transition (where "HighCapacity" is deleted),
+// it is recommended that clients create some aliases. E.g. in Rust,
+//
+// ```rust
+// use ic_registry_transport::pb::v1::{
+//     HighCapacityRegistryValue as RegistryValue,
+// };
+// ```
+//
+// Then, when the legacy definitions are replaced, clients can change the above
+// line to this:
+//
+// ```rust
+// use ic_registry_transport::pb::v1::{
+//     RegistryValue,
+// };
+// ```
+//
+// Once all clients have made such changes, it will be possible to delete
+// "HighCapacity" definitions from this file. (Ofc, such clean up is not
+// strictly necessary, and can easily be deferred for a long time.)
+//
+// TODO(NNS1-3679): Delete this section once all the steps here are completed.
 package ic_registry_transport.pb.v1;
 
 import "google/protobuf/wrappers.proto";
@@ -66,6 +144,62 @@ message RegistryError {
   bytes key = 3;
 }
 
+// When a "monolithic" blob is too large to fit in a single response, this is
+// used instead (in the ICP, messages can be at most 2 MiB in size). The
+// `get_chunk` canister method can then be called to fetch the original
+// monolithic blob in chunks (which can then be cancatenated to reconstitute the
+// original monolithic blob).
+message LargeValueChunkKeys {
+  repeated bytes chunk_content_sha256s = 1;
+}
+
+// In the not so distant future, this will be used instead of RegistryValue. See
+// the "Migrating to Large Values/High-Capacity Types" section in the file-level
+// comments.
+message HighCapacityRegistryValue {
+  // The version at which this mutation happened.
+  uint64 version = 2;
+
+  oneof content {
+    // The value that was set in this mutation.
+    bytes value = 1;
+
+    // If true, this change represents a deletion.
+    bool deletion_marker = 3;
+
+    // If the value is too large, this is used instead of the `value` field.
+    LargeValueChunkKeys large_value_chunk_keys = 4;
+  }
+
+  // The timestamp at which the registry mutation happened.
+  uint64 timestamp_nanoseconds = 5;
+}
+
+// In the not so distant future, this will be used instead of RegistryDelta. See
+// the "Migrating to Large Values/High-Capacity Types" section in the file-level
+// comments.
+message HighCapacityRegistryDelta {
+  bytes key = 1;
+  repeated HighCapacityRegistryValue values = 2;
+}
+
+// In the not too distant future, this will be used instead of
+// RegistryGetChangesSinceResponse. See the "Migrating to Large
+// Values/High-Capacity Types" section in the file-level comments.
+message HighCapacityRegistryGetChangesSinceResponse {
+  // If anything went wrong, the registry canister
+  // will set this error.
+  RegistryError error = 1;
+
+  // The last version of the registry.
+  uint64 version = 2;
+
+  // A list of all the keys and all the values that change
+  // and all the intermediate changes since the version
+  // requested.
+  repeated HighCapacityRegistryDelta deltas = 3;
+}
+
 // A single change made to a key in the registry.
 message RegistryValue {
   // The value that was set in this mutation. If the
@@ -77,6 +211,9 @@ message RegistryValue {
 
   // If true, this change represents a deletion.
   bool deletion_marker = 3;
+
+  // The timestamp at which the registry mutation happened.
+  uint64 timestamp_nanoseconds = 4;
 }
 
 // A sequence of changes made to a key in the registry.
@@ -89,6 +226,10 @@ message RegistryDelta {
 // since 'version'.
 message RegistryGetChangesSinceRequest { uint64 version = 1; }
 
+// Deprecated; instead, use HighCapacityRegistryGetChangesSinceResponse. See the
+// "Migrating to Large Values/High-Capacity Types" section in the file-level
+// comments.
+//
 // Message corresponding to the response from the registry
 // canister to a get_latest_version() request.
 message RegistryGetChangesSinceResponse {
@@ -116,6 +257,37 @@ message RegistryGetValueRequest {
   bytes key = 2;
 }
 
+// In the not too distant future, this will be used instead of
+// RegistryGetValueResponse. See the "Migrating to Large Values/High-Capacity
+// Types" section in the file-level comments.
+message HighCapacityRegistryGetValueResponse {
+  // If anything went wrong, the registry canister
+  // will set this error.
+  RegistryError error = 1;
+
+  // the version at which the value corresponding to the queried
+  // key was last mutated (inserted, updated, or deleted)
+  // before at or at the version specified
+  // in the RegistryGetValueRequest.
+  uint64 version = 2;
+
+  oneof content {
+    // The value retrieved from the registry.
+    bytes value = 3;
+
+    // If the value is too large, this will be used instead of the `value`
+    // field.
+    LargeValueChunkKeys large_value_chunk_keys = 4;
+  }
+
+  // The timestamp at which the registry mutation happened.
+  uint64 timestamp_nanoseconds = 5;
+}
+
+// Deprecated; instead, use HighCapacityRegistryGetValueResponse. See the
+// "Migrating to Large Values/High-Capacity Types" section in the file-level
+// comments.
+//
 // Message corresponding to the response from the canister
 // to a get_value() request.
 //
@@ -139,6 +311,49 @@ message RegistryGetValueResponse {
 message RegistryGetLatestVersionResponse {
   // the latest registry version
   uint64 version = 1;
+}
+
+// In the not too distant future, the `get_certified_changes_since` canister
+// method will use this instead of RegistryMutation. However, there is no
+// intention for the `atomic_mutate` canister method to ever use this. See the
+// "Migrating to Large Values/High-Capacity Types" section in the file-level
+// comments.
+message HighCapacityRegistryMutation {
+  // The type of the mutation to apply to the registry.
+  // Always required.
+  RegistryMutation.Type mutation_type = 1;
+
+  // The key of the entry to mutate in the registry.
+  // Always required.
+  bytes key = 2;
+
+  oneof content {
+    // The value to mutate in the registry.
+    // Required for insert, update, but not for delete.
+    bytes value = 3;
+
+    // If the value is too large, this will be used instead of the `value`
+    // field.
+    LargeValueChunkKeys large_value_chunk_keys = 4;
+  }
+}
+
+// In the not too distant future, the `get_certified_changes_since` canister
+// method will use this instead of RegistryAtomicMutateRequest. However, there
+// is no intention for the `atomic_mutate` canister method to ever use this. See
+// the "Migrating to Large Values/High-Capacity Types" section in the file-level
+// comments.
+message HighCapacityRegistryAtomicMutateRequest {
+  // The set of mutations to apply to the registry.
+  repeated HighCapacityRegistryMutation mutations = 1;
+
+  // Preconditions at the key level.
+  repeated Precondition preconditions = 5;
+
+  reserved 4;
+
+  // The timestamp at which the registry atomic mutate request happened.
+  uint64 timestamp_nanoseconds = 6;
 }
 
 // A single mutation in the registry.
@@ -184,6 +399,12 @@ message Precondition {
   uint64 expected_version = 2;
 }
 
+// Deprecated for `get_certified_changes_since` responses; instead, use
+// HighCapacityRegistryAtomicMutateRequest. See the "Migrating to Large
+// Values/High-Capacity Types" section in the file-level comments.
+//
+// This is NOT deprecated for `atomic_mutate` requests though!
+//
 // Message corresponding to a list of mutations to apply, atomically, to the
 // registry canister. If any of the mutations fails, the whole operation will fail.
 message RegistryAtomicMutateRequest {

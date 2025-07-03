@@ -1,13 +1,12 @@
 // TODO: Jira ticket NNS1-3556
 #![allow(static_mut_refs)]
-
 use async_trait::async_trait;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_canister_profiler::{measure_span, measure_span_async};
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::{caller as cdk_caller, init, post_upgrade, pre_upgrade, query, update};
 use ic_cdk_timers::TimerId;
+use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_nervous_system_canisters::{cmc::CMCCanister, ledger::IcpLedgerCanister};
 use ic_nervous_system_clients::{
     canister_status::CanisterStatusResultV2, ledger_client::LedgerCanister,
@@ -26,18 +25,20 @@ use ic_sns_governance::{
         log_prefix, Governance, TimeWarp, ValidGovernanceProto, MATURITY_DISBURSEMENT_DELAY_SECONDS,
     },
     logs::{ERROR, INFO},
-    pb::v1 as sns_gov_pb,
+    pb::v1::{self as sns_gov_pb},
     types::{Environment, HeapGrowthPotential},
     upgrade_journal::serve_journal,
 };
+use ic_sns_governance_api::pb::v1::GovernanceError;
+use ic_sns_governance_api::pb::v1::{get_metrics_response, governance_error::ErrorType};
 use ic_sns_governance_api::pb::v1::{
     get_running_sns_version_response::UpgradeInProgress,
     governance::Version,
     topics::{ListTopicsRequest, ListTopicsResponse},
     ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, FailStuckUpgradeInProgressRequest,
     FailStuckUpgradeInProgressResponse, GetMaturityModulationRequest,
-    GetMaturityModulationResponse, GetMetadataRequest, GetMetadataResponse, GetMode,
-    GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
+    GetMaturityModulationResponse, GetMetadataRequest, GetMetadataResponse, GetMetricsRequest,
+    GetMode, GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
     GetRunningSnsVersionRequest, GetRunningSnsVersionResponse,
     GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
     GetUpgradeJournalRequest, GetUpgradeJournalResponse, Governance as GovernanceApi,
@@ -48,7 +49,7 @@ use ic_sns_governance_api::pb::v1::{
 #[cfg(feature = "test")]
 use ic_sns_governance_api::pb::v1::{
     AddMaturityRequest, AddMaturityResponse, AdvanceTargetVersionRequest,
-    AdvanceTargetVersionResponse, GovernanceError, MintTokensRequest, MintTokensResponse,
+    AdvanceTargetVersionResponse, MintTokensRequest, MintTokensResponse,
     RefreshCachedUpgradeStepsRequest, RefreshCachedUpgradeStepsResponse,
 };
 use prost::Message;
@@ -351,6 +352,39 @@ fn get_metadata(request: GetMetadataRequest) -> GetMetadataResponse {
     )
 }
 
+/// Returns statistics of the SNS
+#[query(composite = true)]
+async fn get_metrics(request: GetMetricsRequest) -> get_metrics_response::GetMetricsResponse {
+    use get_metrics_response::*;
+
+    log!(INFO, "get_metrics");
+
+    let request = sns_gov_pb::GetMetricsRequest::try_from(request);
+
+    if let Err(error_message) = request {
+        return GetMetricsResponse {
+            get_metrics_result: Some(GetMetricsResult::Err(GovernanceError {
+                error_type: i32::from(ErrorType::InvalidCommand),
+                error_message,
+            })),
+        };
+    }
+
+    let result = governance().get_metrics(request.unwrap()).await;
+
+    let get_metrics_result = match result {
+        Ok(metrics) => {
+            let metrics = Metrics::from(metrics);
+            Some(GetMetricsResult::Ok(metrics))
+        }
+        Err(err) => {
+            let err = GovernanceError::from(err);
+            Some(GetMetricsResult::Err(err))
+        }
+    };
+    GetMetricsResponse { get_metrics_result }
+}
+
 /// Returns the initialization parameters used to spawn an SNS
 #[query]
 fn get_sns_initialization_parameters(
@@ -651,7 +685,7 @@ pub fn http_request(request: HttpRequest) -> HttpResponse {
                 .clone()
                 .expect("The upgrade journal is not initialized for this SNS.");
 
-            serve_journal(&journal)
+            serve_journal(journal)
         }
         "/metrics" => serve_metrics(encode_metrics),
         "/logs" => serve_logs_v2(request, &INFO, &ERROR),

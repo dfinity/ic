@@ -65,7 +65,7 @@ mod tests {
     use ic_crypto_tree_hash::Digest;
     use ic_error_types::{ErrorCode, UserError};
     use ic_management_canister_types_private::{
-        EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
+        EcdsaCurve, EcdsaKeyId, Global, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
     };
     use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
     use ic_registry_subnet_type::SubnetType;
@@ -77,7 +77,7 @@ mod tests {
         metadata_state::{ApiBoundaryNodeEntry, Stream, SubnetMetrics},
         page_map::{PageIndex, PAGE_SIZE},
         testing::ReplicatedStateTesting,
-        ExecutionState, ExportedFunctions, Global, Memory, NumWasmPages, PageMap, ReplicatedState,
+        ExecutionState, ExportedFunctions, Memory, NumWasmPages, PageMap, ReplicatedState,
     };
     use ic_test_utilities_state::new_canister_state;
     use ic_test_utilities_types::ids::{
@@ -165,8 +165,9 @@ mod tests {
     #[test]
     fn test_backward_compatibility() {
         fn state_fixture(certification_version: CertificationVersion) -> ReplicatedState {
-            let subnet_id = subnet_test_id(1);
-            let mut state = ReplicatedState::new(subnet_id, SubnetType::Application);
+            let own_subnet_id = subnet_test_id(1);
+            let other_subnet_id = subnet_test_id(5);
+            let mut state = ReplicatedState::new(own_subnet_id, SubnetType::Application);
 
             let canister_id = canister_test_id(2);
             let controller = user_test_id(24);
@@ -240,8 +241,13 @@ mod tests {
                 stream.push_reject_signal(RejectReason::Unknown);
                 stream.push_reject_signal(RejectReason::CanisterStopping);
             }
+            let loopback_stream = Stream::new(
+                StreamIndexedQueue::with_begin(StreamIndex::from(13)),
+                StreamIndex::new(13),
+            );
             state.modify_streams(|streams| {
-                streams.insert(subnet_test_id(5), stream);
+                streams.insert(own_subnet_id, loopback_stream.clone());
+                streams.insert(other_subnet_id, stream);
             });
 
             for i in 1..6 {
@@ -293,11 +299,11 @@ mod tests {
                         start: canister_id,
                         end: canister_id,
                     },
-                    subnet_id,
+                    own_subnet_id,
                 )
                 .unwrap();
             state.metadata.network_topology.subnets = btreemap! {
-                subnet_id => Default::default(),
+                own_subnet_id => Default::default(),
             };
             state.metadata.network_topology.routing_table = Arc::new(routing_table);
             state.metadata.prev_state_hash =
@@ -357,9 +363,10 @@ mod tests {
         // PLEASE INCREMENT THE CERTIFICATION VERSION AND PROVIDE APPROPRIATE
         // BACKWARD COMPATIBILITY CODE FOR OLD CERTIFICATION VERSIONS THAT
         // NEED TO BE SUPPORTED.
-        let expected_hashes: [&str; 3] = [
-            "0BD567305B9828C7BDE2A03E25871C382742A2598308761A47745BAA9E3495FF",
-            "28BCC63FA7C215C8308EE8201CDEBDC06B62AFB2E9F4C2AB31452A4DBBD73B90",
+        let expected_hashes: [&str; 4] = [
+            "2F2CB05EC73A0E96F04982E6DB14FBC1D50CB3662B83F404A0E57BCC75384D91",
+            "587D8CAE032491FB9400989BFFC4F055FA8741936873B95F092953C66268F543",
+            "2941BBB941D41EBB2908B92200A9361646C213CD4E12F61628DF0AA6715F74AB",
             "4677DFA14CC8B349B1F0D88651CD961FE8DF2E905C3C886B9116972D798B1C1E",
         ];
         assert_eq!(expected_hashes.len(), all_supported_versions().count());

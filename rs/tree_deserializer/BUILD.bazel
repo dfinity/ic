@@ -15,13 +15,16 @@ rust_library(
     ],
 )
 
+MACRO_DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:proptest-derive",
+    "@crate_index//:test-strategy",
+]
+
 rust_test(
     name = "tree_deserializer_test",
     crate = ":tree_deserializer",
-    proc_macro_deps = [
-        # Keep sorted.
-        "@crate_index//:proptest-derive",
-    ],
+    proc_macro_deps = MACRO_DEV_DEPENDENCIES,
     deps = [
         # Keep sorted.
         "@crate_index//:maplit",

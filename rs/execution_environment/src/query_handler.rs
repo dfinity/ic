@@ -33,9 +33,9 @@ use ic_types::QueryStatsEpoch;
 use ic_types::{
     ingress::WasmResult,
     messages::{Blob, Certificate, CertificateDelegation, Query},
-    CanisterId, NumInstructions, PrincipalId, SubnetId,
+    CanisterId, NumInstructions, PrincipalId,
 };
-use prometheus::Histogram;
+use prometheus::{histogram_opts, labels, Histogram};
 use serde::Serialize;
 use std::convert::Infallible;
 use std::str::FromStr;
@@ -53,9 +53,6 @@ pub(crate) use self::query_scheduler::{QueryScheduler, QuerySchedulerFlag};
 use ic_management_canister_types_private::{
     FetchCanisterLogsRequest, FetchCanisterLogsResponse, LogVisibilityV2, Payload, QueryMethod,
 };
-
-const DISTRIKT_SUBNET_PRINCIPAL: &str =
-    "shefu-t3kr5-t5q3w-mqmdq-jabyv-vyvtf-cyyey-3kmo4-toyln-emubw-4qe";
 
 /// Convert an object into CBOR binary.
 fn into_cbor<R: Serialize>(r: &R) -> Vec<u8> {
@@ -103,7 +100,6 @@ fn label<T: Into<Label>>(t: T) -> Label {
 pub struct InternalHttpQueryHandler {
     log: ReplicaLogger,
     hypervisor: Arc<Hypervisor>,
-    own_subnet_id: SubnetId,
     own_subnet_type: SubnetType,
     config: Config,
     metrics: QueryHandlerMetrics,
@@ -119,12 +115,15 @@ struct HttpQueryHandlerMetrics {
 }
 
 impl HttpQueryHandlerMetrics {
-    pub fn new(metrics_registry: &MetricsRegistry) -> Self {
+    pub fn new(metrics_registry: &MetricsRegistry, namespace: &str) -> Self {
         Self {
-            height_diff_during_query_scheduling: metrics_registry.histogram(
-                "execution_query_height_diff_during_query_scheduling",
-                "The height difference between the latest certified height before query scheduling and state height used for execution",
-                vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 20.0, 50.0, 100.0],
+            height_diff_during_query_scheduling: metrics_registry.register(
+                Histogram::with_opts(histogram_opts!(
+                    "execution_query_height_diff_during_query_scheduling",
+                    "The height difference between the latest certified height before query scheduling and state height used for execution",
+                    vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 20.0, 50.0, 100.0],
+                    labels! {"query_type".to_string() => namespace.to_string()}
+                )).unwrap(),
             ),
         }
     }
@@ -143,7 +142,6 @@ impl InternalHttpQueryHandler {
     pub fn new(
         log: ReplicaLogger,
         hypervisor: Arc<Hypervisor>,
-        own_subnet_id: SubnetId,
         own_subnet_type: SubnetType,
         config: Config,
         metrics_registry: &MetricsRegistry,
@@ -157,7 +155,6 @@ impl InternalHttpQueryHandler {
         Self {
             log,
             hypervisor,
-            own_subnet_id,
             own_subnet_type,
             config,
             metrics: QueryHandlerMetrics::new(metrics_registry),
@@ -261,7 +258,6 @@ impl InternalHttpQueryHandler {
         let mut context = query_context::QueryContext::new(
             &self.log,
             self.hypervisor.as_ref(),
-            self.own_subnet_id,
             self.own_subnet_type,
             // For composite queries, the set of evaluated canisters is not known in advance,
             // so the whole state is needed to capture later the state of the call graph.
@@ -349,12 +345,13 @@ impl HttpQueryHandler {
         query_scheduler: QueryScheduler,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         metrics_registry: &MetricsRegistry,
+        namespace: &str,
     ) -> QueryExecutionService {
         BoxCloneService::new(Self {
             internal,
             state_reader,
             query_scheduler,
-            metrics: Arc::new(HttpQueryHandlerMetrics::new(metrics_registry)),
+            metrics: Arc::new(HttpQueryHandlerMetrics::new(metrics_registry, namespace)),
         })
     }
 }

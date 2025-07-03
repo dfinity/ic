@@ -9,8 +9,8 @@ rust_library(
     version = "0.1.0",
     deps = [
         # Keep sorted.
+        "//packages/ic-error-types",
         "//rs/protobuf",
-        "//rs/types/error_types",
         "@crate_index//:candid",
         "@crate_index//:ic-btc-interface",
         "@crate_index//:serde",

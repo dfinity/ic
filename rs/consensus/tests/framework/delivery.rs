@@ -2,8 +2,7 @@
 
 use super::types::*;
 use ic_logger::trace;
-use rand::seq::SliceRandom;
-use rand::Rng;
+use rand::{seq::SliceRandom, Rng};
 use std::time::Duration;
 
 fn get_instance_with_least_outgoing_message_timestamp<'a, 'b>(

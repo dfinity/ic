@@ -2,7 +2,7 @@ use crate::{
     governance::{Governance, MockEnvironment, ONE_MONTH_SECONDS},
     pb::v1::{
         governance::{seed_accounts::SeedAccount, SeedAccounts},
-        Governance as GovernanceProto, Neuron, NeuronType,
+        Governance as GovernanceProto, NeuronType,
     },
     seed_accounts::{AccountState, SEED_NEURON_DISTRIBUTION_COUNT},
 };
@@ -10,6 +10,7 @@ use candid::Encode;
 use ic_base_types::PrincipalId;
 use ic_nervous_system_common::{cmc::MockCMC, ledger::MockIcpLedger, E8};
 use ic_nns_common::pb::v1::NeuronId;
+use ic_nns_governance_api as api;
 use icp_ledger::Subaccount;
 use maplit::btreemap;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -30,24 +31,26 @@ fn now_seconds() -> u64 {
 }
 
 fn neuron(id: u64, controller: PrincipalId, cached_neuron_stake_e8s: u64) -> Neuron {
-    Neuron {
-        id: Some(NeuronId { id }),
-        neuron_type: None,
-        controller: Some(controller),
-        cached_neuron_stake_e8s,
-        account: Subaccount::from(&controller).to_vec(),
-        ..Default::default()
-    }
+    NeuronBuilder::new_for_test(
+        id,
+        DissolveStateAndAge::DissolvingOrDissolved {
+            when_dissolved_timestamp_seconds: 0,
+        },
+    )
+    .with_controller(controller)
+    .with_cached_neuron_stake_e8s(cached_neuron_stake_e8s)
+    .build()
 }
 
 #[test]
 fn test_can_tag_seed_neurons_handles_corrupted_state() {
     // Setup
     let mut governance = Governance::new(
-        GovernanceProto::default(),
-        Box::new(create_mock_environment(None)),
-        Box::<MockIcpLedger>::default(),
-        Box::<MockCMC>::default(),
+        Default::default(),
+        Arc::new(create_mock_environment(None)),
+        Arc::<MockIcpLedger>::default(),
+        Arc::<MockCMC>::default(),
+        Box::new(MockRandomness::new()),
     );
 
     // Corrupt the state
@@ -106,10 +109,11 @@ fn test_can_tag_seed_neurons_transitions() {
 
     // Setup
     let mut governance = Governance::new(
-        GovernanceProto::default(),
-        Box::new(create_mock_environment(None)),
-        Box::<MockIcpLedger>::default(),
-        Box::<MockCMC>::default(),
+        Default::default(),
+        Arc::new(create_mock_environment(None)),
+        Arc::<MockIcpLedger>::default(),
+        Arc::<MockCMC>::default(),
+        Box::new(MockRandomness::new()),
     );
 
     // Execute / verify
@@ -136,10 +140,11 @@ fn test_can_tag_seed_neurons_transitions() {
 fn test_can_tag_seed_neurons_exits_early_if_data_is_processed() {
     // Setup
     let mut governance = Governance::new(
-        GovernanceProto::default(),
-        Box::new(create_mock_environment(None)),
-        Box::<MockIcpLedger>::default(),
-        Box::<MockCMC>::default(),
+        Default::default(),
+        Arc::new(create_mock_environment(None)),
+        Arc::<MockIcpLedger>::default(),
+        Arc::<MockCMC>::default(),
+        Box::new(MockRandomness::new()),
     );
 
     // Execute / Verify
@@ -186,19 +191,25 @@ async fn test_tag_seed_neurons_happy() {
         .unwrap()));
 
     let mut governance = Governance::new(
-        GovernanceProto {
-            neurons: btreemap! {
-                1 =>  neuron(1, seed_neuron_controller, 10 * E8),
-                2 =>  neuron(2, seed_neuron_controller, E8),
-                3 =>  neuron(3, non_seed_neuron_controller, E8),
-            },
+        api::Governance {
             genesis_timestamp_seconds: now_timestamp_seconds - ONE_MONTH_SECONDS,
             ..Default::default()
         },
-        Box::new(environment),
-        Box::<MockIcpLedger>::default(),
-        Box::<MockCMC>::default(),
+        Arc::new(environment),
+        Arc::<MockIcpLedger>::default(),
+        Arc::<MockCMC>::default(),
+        Box::new(MockRandomness::new()),
     );
+
+    governance
+        .add_neuron(1, neuron(1, seed_neuron_controller, 10 * E8), false)
+        .unwrap();
+    governance
+        .add_neuron(2, neuron(2, seed_neuron_controller, E8), false)
+        .unwrap();
+    governance
+        .add_neuron(3, neuron(3, non_seed_neuron_controller, E8), false)
+        .unwrap();
 
     let expected_seed_account = SeedAccount {
         account_id: account_id.clone(),
@@ -272,19 +283,25 @@ async fn test_tag_neuron_sad() {
         .return_const(Err((Some(1), "Error from the replica".to_string())));
 
     let mut governance = Governance::new(
-        GovernanceProto {
-            neurons: btreemap! {
-                1 =>  neuron(1, seed_neuron_controller, 10 * E8),
-                2 =>  neuron(2, seed_neuron_controller, E8),
-                3 =>  neuron(3, non_seed_neuron_controller, E8),
-            },
+        api::Governance {
             genesis_timestamp_seconds: now_timestamp_seconds - ONE_MONTH_SECONDS,
             ..Default::default()
         },
-        Box::new(environment),
-        Box::<MockIcpLedger>::default(),
-        Box::<MockCMC>::default(),
+        Arc::new(environment),
+        Arc::<MockIcpLedger>::default(),
+        Arc::<MockCMC>::default(),
+        Box::new(MockRandomness::new()),
     );
+
+    governance
+        .add_neuron(1, neuron(1, seed_neuron_controller, 10 * E8), false)
+        .unwrap();
+    governance
+        .add_neuron(2, neuron(2, seed_neuron_controller, E8), false)
+        .unwrap();
+    governance
+        .add_neuron(3, neuron(3, non_seed_neuron_controller, E8), false)
+        .unwrap();
 
     let expected_seed_account = SeedAccount {
         account_id: account_id.clone(),
@@ -364,20 +381,24 @@ async fn test_tag_seed_neurons_handles_neuron_splits() {
         .unwrap()));
 
     let mut governance = Governance::new(
-        GovernanceProto {
-            neurons: btreemap! {
-                1 =>  neuron(1, split_seed_neuron_controller, 10 * E8),
-                2 =>  neuron(2, split_seed_neuron_controller, E8),
-            },
+        api::Governance {
             // This indicates that no stake should have been vested and all
             // funds should be in the neurons
             genesis_timestamp_seconds: now_timestamp_seconds,
             ..Default::default()
         },
-        Box::new(environment),
-        Box::<MockIcpLedger>::default(),
-        Box::<MockCMC>::default(),
+        Arc::new(environment),
+        Arc::<MockIcpLedger>::default(),
+        Arc::<MockCMC>::default(),
+        Box::new(MockRandomness::new()),
     );
+
+    governance
+        .add_neuron(1, neuron(1, split_seed_neuron_controller, 10 * E8), false)
+        .unwrap();
+    governance
+        .add_neuron(2, neuron(2, split_seed_neuron_controller, E8), false)
+        .unwrap();
 
     // Execute
 
@@ -431,18 +452,21 @@ async fn test_tag_seed_neurons_doesnt_over_tag_seed_neurons() {
         .unwrap()));
 
     let mut governance = Governance::new(
-        GovernanceProto {
-            neurons: btreemap! {
-                1 =>  neuron(1, split_seed_neuron_controller, 10 * E8),
-                2 =>  neuron(2, split_seed_neuron_controller, E8),
-            },
+        api::Governance {
             genesis_timestamp_seconds,
             ..Default::default()
         },
-        Box::new(environment),
-        Box::<MockIcpLedger>::default(),
-        Box::<MockCMC>::default(),
+        Arc::new(environment),
+        Arc::<MockIcpLedger>::default(),
+        Arc::<MockCMC>::default(),
+        Box::new(MockRandomness::new()),
     );
+    governance
+        .add_neuron(1, neuron(1, split_seed_neuron_controller, 10 * E8), false)
+        .unwrap();
+    governance
+        .add_neuron(2, neuron(2, split_seed_neuron_controller, E8), false)
+        .unwrap();
 
     // Execute
 
@@ -480,13 +504,14 @@ fn test_calculate_genesis_account_expected_stake_e8s() {
     let genesis_timestamp_seconds = 1;
 
     let governance = Governance::new(
-        GovernanceProto {
+        api::Governance {
             genesis_timestamp_seconds,
             ..Default::default()
         },
-        Box::new(create_mock_environment(None)),
-        Box::<MockIcpLedger>::default(),
-        Box::<MockCMC>::default(),
+        Arc::new(create_mock_environment(None)),
+        Arc::<MockIcpLedger>::default(),
+        Arc::<MockCMC>::default(),
+        Box::new(MockRandomness::new()),
     );
 
     // At genesis_timestamp_seconds, expected stake e8s should

@@ -5,11 +5,7 @@ use async_trait::async_trait;
 use candid::Principal;
 use certificate_orchestrator_interface::IcCertificate;
 use ic_agent::{hash_tree::HashTree, Certificate};
-use opentelemetry::{
-    baggage::BaggageExt,
-    metrics::{Counter, Histogram, Meter},
-    Context, KeyValue,
-};
+use prometheus::{CounterVec, HistogramVec, Registry};
 use tracing::info;
 use trust_dns_resolver::{error::ResolveError, lookup::Lookup, proto::rr::RecordType};
 
@@ -32,22 +28,37 @@ use crate::{
 #[derive(Clone)]
 pub struct MetricParams {
     pub action: String,
-    pub counter: Counter<u64>,
-    pub recorder: Histogram<f64>,
+    pub counter: CounterVec,
+    pub recorder: HistogramVec,
 }
 
 impl MetricParams {
-    pub fn new(meter: &Meter, namespace: &str, action: &str) -> Self {
+    pub fn new(registry: &Registry, namespace: &str, action: &str, labels: &[&str]) -> Self {
+        let counter = CounterVec::new(
+            prometheus::Opts::new(
+                format!("{namespace}_{action}_total"),
+                format!("Counts occurrences of {action} calls"),
+            ),
+            labels,
+        )
+        .unwrap();
+
+        let recorder = HistogramVec::new(
+            prometheus::HistogramOpts::new(
+                format!("{namespace}_{action}_duration_sec"),
+                format!("Records the duration of {action} calls in sec"),
+            ),
+            labels,
+        )
+        .unwrap();
+
+        registry.register(Box::new(counter.clone())).unwrap();
+        registry.register(Box::new(recorder.clone())).unwrap();
+
         Self {
             action: action.to_string(),
-            counter: meter
-                .u64_counter(format!("{namespace}.{action}"))
-                .with_description(format!("Counts occurrences of {action} calls"))
-                .init(),
-            recorder: meter
-                .f64_histogram(format!("{namespace}.{action}.duration_sec"))
-                .with_description(format!("Records the duration of {action} calls in sec"))
-                .init(),
+            counter,
+            recorder,
         }
     }
 }
@@ -73,16 +84,14 @@ impl<T: Create> Create for WithMetrics<T> {
 
         let duration = start_time.elapsed().as_secs_f64();
 
-        let labels = &[KeyValue::new("status", status)];
-
         let MetricParams {
             action,
             counter,
             recorder,
         } = &self.1;
 
-        counter.add(1, labels);
-        recorder.record(duration, labels);
+        counter.with_label_values(&[status]).inc();
+        recorder.with_label_values(&[status]).observe(duration);
 
         info!(action = action.as_str(), name, status, duration, error = ?out.as_ref().err());
 
@@ -107,16 +116,10 @@ impl<T: Update> Update for WithMetrics<T> {
 
         let duration = start_time.elapsed().as_secs_f64();
 
-        let labels = &[
-            KeyValue::new("status", status),
-            KeyValue::new(
-                "type",
-                match typ {
-                    UpdateType::Canister(_) => "update_canister".into(), // ignore canister id as it's unbounded
-                    UpdateType::State(state) => state.to_string(),
-                },
-            ),
-        ];
+        let type_str = match typ {
+            UpdateType::Canister(_) => "update_canister".to_string(),
+            UpdateType::State(state) => state.to_string(),
+        };
 
         let MetricParams {
             action,
@@ -124,8 +127,10 @@ impl<T: Update> Update for WithMetrics<T> {
             recorder,
         } = &self.1;
 
-        counter.add(1, labels);
-        recorder.record(duration, labels);
+        counter.with_label_values(&[status, &type_str]).inc();
+        recorder
+            .with_label_values(&[status, &type_str])
+            .observe(duration);
 
         info!(action = action.as_str(), %id, typ = ?typ, status, duration, error = ?out.as_ref().err());
 
@@ -150,16 +155,14 @@ impl<T: Remove> Remove for WithMetrics<T> {
 
         let duration = start_time.elapsed().as_secs_f64();
 
-        let labels = &[KeyValue::new("status", status)];
-
         let MetricParams {
             action,
             counter,
             recorder,
         } = &self.1;
 
-        counter.add(1, labels);
-        recorder.record(duration, labels);
+        counter.with_label_values(&[status]).inc();
+        recorder.with_label_values(&[status]).observe(duration);
 
         info!(action = action.as_str(), %id, status, duration, error = ?out.as_ref().err());
 
@@ -184,16 +187,14 @@ impl<T: Get> Get for WithMetrics<T> {
 
         let duration = start_time.elapsed().as_secs_f64();
 
-        let labels = &[KeyValue::new("status", status)];
-
         let MetricParams {
             action,
             counter,
             recorder,
         } = &self.1;
 
-        counter.add(1, labels);
-        recorder.record(duration, labels);
+        counter.with_label_values(&[status]).inc();
+        recorder.with_label_values(&[status]).observe(duration);
 
         info!(action = action.as_str(), %id, status, duration, error = ?out.as_ref().err());
 
@@ -218,16 +219,14 @@ impl<T: GetCert> GetCert for WithMetrics<T> {
 
         let duration = start_time.elapsed().as_secs_f64();
 
-        let labels = &[KeyValue::new("status", status)];
-
         let MetricParams {
             action,
             counter,
             recorder,
         } = &self.1;
 
-        counter.add(1, labels);
-        recorder.record(duration, labels);
+        counter.with_label_values(&[status]).inc();
+        recorder.with_label_values(&[status]).observe(duration);
 
         info!(action = action.as_str(), %id, status, duration, error = ?out.as_ref().err());
 
@@ -252,16 +251,14 @@ impl<T: Queue> Queue for WithMetrics<T> {
 
         let duration = start_time.elapsed().as_secs_f64();
 
-        let labels = &[KeyValue::new("status", status)];
-
         let MetricParams {
             action,
             counter,
             recorder,
         } = &self.1;
 
-        counter.add(1, labels);
-        recorder.record(duration, labels);
+        counter.with_label_values(&[status]).inc();
+        recorder.with_label_values(&[status]).observe(duration);
 
         info!(action = action.as_str(), %id, t, status, duration, error = ?out.as_ref().err());
 
@@ -286,16 +283,14 @@ impl<T: Peek> Peek for WithMetrics<T> {
 
         let duration = start_time.elapsed().as_secs_f64();
 
-        let labels = &[KeyValue::new("status", status)];
-
         let MetricParams {
             action,
             counter,
             recorder,
         } = &self.1;
 
-        counter.add(1, labels);
-        recorder.record(duration, labels);
+        counter.with_label_values(&[status]).inc();
+        recorder.with_label_values(&[status]).observe(duration);
 
         info!(action = action.as_str(), status, duration, error = ?out.as_ref().err());
 
@@ -320,16 +315,14 @@ impl<T: Dispense> Dispense for WithMetrics<T> {
 
         let duration = start_time.elapsed().as_secs_f64();
 
-        let labels = &[KeyValue::new("status", status)];
-
         let MetricParams {
             action,
             counter,
             recorder,
         } = &self.1;
 
-        counter.add(1, labels);
-        recorder.record(duration, labels);
+        counter.with_label_values(&[status]).inc();
+        recorder.with_label_values(&[status]).observe(duration);
 
         info!(action = action.as_str(), status, duration, error = ?out.as_ref().err());
 
@@ -349,7 +342,7 @@ impl<T: Process> Process for WithMetrics<T> {
             Err(err) => match err {
                 ProcessError::AwaitingAcmeOrderCreation => "awaiting-acme-order-creation",
                 ProcessError::AwaitingDnsPropagation => "awaiting-dns-propagation",
-                ProcessError::AwaitingAcmeOrderReady => "awaiting-acme-order-ready",
+                ProcessError::AwaitingAcmeOrderReady(_) => "awaiting-acme-order-ready",
                 ProcessError::FailedUserConfigurationCheck => "failed-user-configuration-check",
                 ProcessError::UnexpectedError(_) => "fail",
             },
@@ -357,23 +350,13 @@ impl<T: Process> Process for WithMetrics<T> {
 
         let duration = start_time.elapsed().as_secs_f64();
 
-        let cx = Context::current();
-        let bgg = cx.baggage();
-        let is_renewal = bgg.get("is_renewal").unwrap().to_string();
-        let is_important = bgg.get("is_important").unwrap().to_string();
+        let is_renewal = self.0.get_renewal().await as u32;
+        let is_important = self.0.get_importance().await as u32;
 
-        let apex_domain = match is_important.as_str() {
-            "1" => extract_domain(&task.name),
+        let apex_domain = match is_important {
+            1 => extract_domain(&task.name),
             _ => "N/A",
         };
-
-        let labels = &[
-            KeyValue::new("status", status),
-            KeyValue::new("task", task.action.to_string()),
-            KeyValue::new("is_renewal", is_renewal.clone()),
-            KeyValue::new("is_important", is_important.clone()),
-            KeyValue::new("apex_domain", apex_domain.to_string()),
-        ];
 
         let MetricParams {
             action,
@@ -381,12 +364,44 @@ impl<T: Process> Process for WithMetrics<T> {
             recorder,
         } = &self.1;
 
-        counter.add(1, labels);
-        recorder.record(duration, labels);
+        counter
+            .with_label_values(&[
+                status,
+                &task.action.to_string(),
+                &is_renewal.to_string(),
+                &is_important.to_string(),
+                apex_domain,
+            ])
+            .inc();
+        recorder
+            .with_label_values(&[
+                status,
+                &task.action.to_string(),
+                &is_renewal.to_string(),
+                &is_important.to_string(),
+                apex_domain,
+            ])
+            .observe(duration);
 
         info!(action = action.as_str(), id, name = task.name, task = task.action.to_string(), is_renewal, is_important, status, duration, error = ?out.as_ref().err());
 
         out
+    }
+
+    async fn set_importance(&self, value: bool) {
+        self.0.set_importance(value).await;
+    }
+
+    async fn set_renewal(&self, value: bool) {
+        self.0.set_renewal(value).await;
+    }
+
+    async fn get_importance(&self) -> bool {
+        self.0.get_importance().await
+    }
+
+    async fn get_renewal(&self) -> bool {
+        self.0.get_renewal().await
     }
 }
 
@@ -400,19 +415,18 @@ impl<T: Resolve> Resolve for WithMetrics<T> {
         let status = if out.is_ok() { "ok" } else { "fail" };
         let duration = start_time.elapsed().as_secs_f64();
 
-        let labels = &[
-            KeyValue::new("status", status),
-            KeyValue::new("record_type", record_type.to_string()),
-        ];
-
         let MetricParams {
             action,
             counter,
             recorder,
         } = &self.1;
 
-        counter.add(1, labels);
-        recorder.record(duration, labels);
+        counter
+            .with_label_values(&[status, &record_type.to_string()])
+            .inc();
+        recorder
+            .with_label_values(&[status, &record_type.to_string()])
+            .observe(duration);
 
         info!(action = action.as_str(), name, record_type = record_type.to_string(), status, duration, error = ?out.as_ref().err());
 
@@ -430,16 +444,14 @@ impl<T: dns::Create> dns::Create for WithMetrics<T> {
         let status = if out.is_ok() { "ok" } else { "fail" };
         let duration = start_time.elapsed().as_secs_f64();
 
-        let labels = &[KeyValue::new("status", status)];
-
         let MetricParams {
             action,
             counter,
             recorder,
         } = &self.1;
 
-        counter.add(1, labels);
-        recorder.record(duration, labels);
+        counter.with_label_values(&[status]).inc();
+        recorder.with_label_values(&[status]).observe(duration);
 
         info!(action = action.as_str(), zone, name, status, duration, error = ?out.as_ref().err());
 
@@ -457,16 +469,14 @@ impl<T: dns::Delete> dns::Delete for WithMetrics<T> {
         let status = if out.is_ok() { "ok" } else { "fail" };
         let duration = start_time.elapsed().as_secs_f64();
 
-        let labels = &[KeyValue::new("status", status)];
-
         let MetricParams {
             action,
             counter,
             recorder,
         } = &self.1;
 
-        counter.add(1, labels);
-        recorder.record(duration, labels);
+        counter.with_label_values(&[status]).inc();
+        recorder.with_label_values(&[status]).observe(duration);
 
         info!(action = action.as_str(), zone, name, status, duration, error = ?out.as_ref().err());
 
@@ -484,16 +494,14 @@ impl<T: acme::Order> acme::Order for WithMetrics<T> {
         let status = if out.is_ok() { "ok" } else { "fail" };
         let duration = start_time.elapsed().as_secs_f64();
 
-        let labels = &[KeyValue::new("status", status)];
-
         let MetricParams {
             action,
             counter,
             recorder,
         } = &self.1;
 
-        counter.add(1, labels);
-        recorder.record(duration, labels);
+        counter.with_label_values(&[status]).inc();
+        recorder.with_label_values(&[status]).observe(duration);
 
         info!(action = action.as_str(), name, status, duration, error = ?out.as_ref().err());
 
@@ -511,16 +519,14 @@ impl<T: acme::Ready> acme::Ready for WithMetrics<T> {
         let status = if out.is_ok() { "ok" } else { "fail" };
         let duration = start_time.elapsed().as_secs_f64();
 
-        let labels = &[KeyValue::new("status", status)];
-
         let MetricParams {
             action,
             counter,
             recorder,
         } = &self.1;
 
-        counter.add(1, labels);
-        recorder.record(duration, labels);
+        counter.with_label_values(&[status]).inc();
+        recorder.with_label_values(&[status]).observe(duration);
 
         info!(action = action.as_str(), name, status, duration, error = ?out.as_ref().err());
 
@@ -538,16 +544,14 @@ impl<T: acme::Finalize> acme::Finalize for WithMetrics<T> {
         let status = if out.is_ok() { "ok" } else { "fail" };
         let duration = start_time.elapsed().as_secs_f64();
 
-        let labels = &[KeyValue::new("status", status)];
-
         let MetricParams {
             action,
             counter,
             recorder,
         } = &self.1;
 
-        counter.add(1, labels);
-        recorder.record(duration, labels);
+        counter.with_label_values(&[status]).inc();
+        recorder.with_label_values(&[status]).observe(duration);
 
         info!(action = action.as_str(), name, status, duration, error = ?out.as_ref().err());
 
@@ -572,16 +576,14 @@ impl<T: certificate::Upload> certificate::Upload for WithMetrics<T> {
 
         let duration = start_time.elapsed().as_secs_f64();
 
-        let labels = &[KeyValue::new("status", status)];
-
         let MetricParams {
             action,
             counter,
             recorder,
         } = &self.1;
 
-        counter.add(1, labels);
-        recorder.record(duration, labels);
+        counter.with_label_values(&[status]).inc();
+        recorder.with_label_values(&[status]).observe(duration);
 
         info!(action = action.as_str(), %id, status, duration, error = ?out.as_ref().err());
 
@@ -606,16 +608,14 @@ impl<T: Verify> Verify for WithMetrics<T> {
         let status = if out.is_ok() { "ok" } else { "fail" };
         let duration = start_time.elapsed().as_secs_f64();
 
-        let labels = &[KeyValue::new("status", status)];
-
         let MetricParams {
             action,
             counter,
             recorder,
         } = &self.1;
 
-        counter.add(1, labels);
-        recorder.record(duration, labels);
+        counter.with_label_values(&[status]).inc();
+        recorder.with_label_values(&[status]).observe(duration);
 
         info!(action = action.as_str(), ?key, limit, status, duration, error = ?out.as_ref().err());
 
@@ -637,16 +637,14 @@ impl<T: certificate::Export> certificate::Export for WithMetrics<T> {
         let status = if out.is_ok() { "ok" } else { "fail" };
         let duration = start_time.elapsed().as_secs_f64();
 
-        let labels = &[KeyValue::new("status", status)];
-
         let MetricParams {
             action,
             counter,
             recorder,
         } = &self.1;
 
-        counter.add(1, labels);
-        recorder.record(duration, labels);
+        counter.with_label_values(&[status]).inc();
+        recorder.with_label_values(&[status]).observe(duration);
 
         info!(action = action.as_str(), ?key, limit, status, duration, error = ?out.as_ref().err());
 
@@ -677,16 +675,14 @@ impl<T: Check> Check for WithMetrics<T> {
 
         let duration = start_time.elapsed().as_secs_f64();
 
-        let labels = &[KeyValue::new("status", status)];
-
         let MetricParams {
             action,
             counter,
             recorder,
         } = &self.1;
 
-        counter.add(1, labels);
-        recorder.record(duration, labels);
+        counter.with_label_values(&[status]).inc();
+        recorder.with_label_values(&[status]).observe(duration);
 
         info!(action = action.as_str(), name, status, duration, error = ?out.as_ref().err());
 

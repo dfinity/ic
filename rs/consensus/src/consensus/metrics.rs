@@ -1,3 +1,7 @@
+use ic_consensus_idkg::metrics::{
+    count_by_master_public_key_id, expected_keys, key_id_label, CounterPerMasterPublicKeyId,
+    KEY_ID_LABEL,
+};
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpBatchStats;
 use ic_metrics::{
@@ -16,11 +20,6 @@ use prometheus::{
     GaugeVec, Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec,
 };
 use std::sync::RwLock;
-
-use crate::idkg::metrics::{
-    count_by_master_public_key_id, expected_keys, key_id_label, CounterPerMasterPublicKeyId,
-    KEY_ID_LABEL,
-};
 
 // For certain metrics, we record metrics based on block's rank.
 // Since we can only record limited number of them, the follow is
@@ -158,6 +157,7 @@ impl BatchStats {
         self.xnet_bytes_delivered += payload.xnet.size_bytes();
         self.ingress_ids
             .extend(payload.ingress.message_ids().cloned());
+        self.canister_http.payload_bytes = payload.canister_http.len();
     }
 }
 
@@ -239,9 +239,10 @@ pub struct FinalizerMetrics {
     pub idkg_ongoing_xnet_reshares: IntGaugeVec,
     pub idkg_xnet_reshare_agreements: IntCounterVec,
     // canister http payload metrics
-    pub canister_http_success_delivered: IntCounter,
+    pub canister_http_success_delivered: IntCounterVec,
     pub canister_http_timeouts_delivered: IntCounter,
     pub canister_http_divergences_delivered: IntCounter,
+    pub canister_http_payload_bytes_delivered: Histogram,
 }
 
 impl FinalizerMetrics {
@@ -321,9 +322,10 @@ impl FinalizerMetrics {
                 &[KEY_ID_LABEL],
             ),
             // canister http payload metrics
-            canister_http_success_delivered: metrics_registry.int_counter(
+            canister_http_success_delivered: metrics_registry.int_counter_vec(
                 "canister_http_success_delivered",
                 "Total number of canister http messages successfully delivered",
+                &["REPLICATION"],
             ),
             canister_http_timeouts_delivered: metrics_registry.int_counter(
                 "canister_http_timeouts_delivered",
@@ -332,6 +334,13 @@ impl FinalizerMetrics {
             canister_http_divergences_delivered: metrics_registry.int_counter(
                 "canister_http_divergences_delivered",
                 "Total number of canister http messages delivered as divergences",
+            ),
+            canister_http_payload_bytes_delivered: metrics_registry.histogram(
+                "canister_http_payload_bytes_delivered", 
+                "Total number of bytes in the canister http payload",
+                // This will create 16 buckets starting from 0, 100, 200, 500, 1000  
+                // up to 5 * 10^6 ~= 5MB
+                decimal_buckets_with_zero(2, 6),
             ),
         }
     }
@@ -349,11 +358,17 @@ impl FinalizerMetrics {
             block_stats.block_height as i64 - block_stats.block_context_certified_height as i64,
         );
         self.canister_http_success_delivered
+            .with_label_values(&["fully_replicated"])
             .inc_by(batch_stats.canister_http.responses as u64);
+        self.canister_http_success_delivered
+            .with_label_values(&["non_replicated"])
+            .inc_by(batch_stats.canister_http.single_signature_responses as u64);
         self.canister_http_timeouts_delivered
             .inc_by(batch_stats.canister_http.timeouts as u64);
         self.canister_http_divergences_delivered
             .inc_by(batch_stats.canister_http.divergence_responses as u64);
+        self.canister_http_payload_bytes_delivered
+            .observe(batch_stats.canister_http.payload_bytes as f64);
 
         if let Some(idkg) = &block_stats.idkg_stats {
             let set = |metric: &IntGaugeVec, counts: &CounterPerMasterPublicKeyId| {

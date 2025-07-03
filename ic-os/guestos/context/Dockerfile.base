@@ -32,24 +32,14 @@ RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommend
 # Download and verify filebeat
 RUN cd /tmp/ && \
     curl -L -O https://artifacts.elastic.co/downloads/beats/filebeat/filebeat-oss-8.9.1-linux-x86_64.tar.gz && \
-    echo "6c7efc9968ba224f44afb2f66bd21f45d29232e5bd2dc8b7631f52f552d882da95644c13c75cda44ed1ee81d4d5ee367247af8346cdcc330d01e6a45b22f9893  filebeat-oss-8.9.1-linux-x86_64.tar.gz" > filebeat.sha512 && \
-    shasum -c filebeat.sha512
+    echo "ce199f350704c21dbb23dc72ce2a4ecd2e6acb9ed7d4cc338489d72ddea5f3d7  filebeat-oss-8.9.1-linux-x86_64.tar.gz" > filebeat.sha256 && \
+    sha256sum -c filebeat.sha256
 
 # Download and verify node_exporter
 RUN cd /tmp/ && \
     curl -L -O https://github.com/prometheus/node_exporter/releases/download/v1.8.1/node_exporter-1.8.1.linux-amd64.tar.gz && \
     echo "fbadb376afa7c883f87f70795700a8a200f7fd45412532cc1938a24d41078011  node_exporter-1.8.1.linux-amd64.tar.gz" > node_exporter.sha256 && \
-    shasum -c node_exporter.sha256
-
-# Download >=6.11 kernel and modules
-RUN cd /tmp/ && \
-    curl -L -O http://mirrors.kernel.org/ubuntu/pool/main/l/linux/linux-modules-6.11.0-8-generic_6.11.0-8.8_amd64.deb && \
-    curl -L -O http://mirrors.kernel.org/ubuntu/pool/main/l/linux-signed/linux-image-6.11.0-8-generic_6.11.0-8.8_amd64.deb && \
-    curl -L -O http://mirrors.kernel.org/ubuntu/pool/main/l/linux-meta/linux-image-virtual-hwe-24.04_6.11.0-8.8_amd64.deb && \
-    echo "d4cd2d97fcca81b57bec947b0e8ca004d556afce1d13f5cebe5d677c0445c6a2  linux-modules-6.11.0-8-generic_6.11.0-8.8_amd64.deb" >> kernel.sha256 && \
-    echo "241811191691c68e0874519ee71bda9de39e23510dee5e5512150db874f5b285  linux-image-6.11.0-8-generic_6.11.0-8.8_amd64.deb" >> kernel.sha256 && \
-    echo "5c31c7e0d996ebc0928c5e1ad3b80fea047b56dfbbdaa759f7e7a70b1c42f10e  linux-image-virtual-hwe-24.04_6.11.0-8.8_amd64.deb" >> kernel.sha256 && \
-    shasum -c kernel.sha256
+    sha256sum -c node_exporter.sha256
 
 #
 # Second build stage:
@@ -69,11 +59,17 @@ ENV TZ=UTC
 # For the dev image, use both "packages.common" and "packages.dev" -- this can
 # be set via docker build args (see above).
 ARG PACKAGE_FILES=packages.common
+# The kernel is installed here to keep the extra modules in sync.
+# Unfortunately, there is no metapackage to track the extra modules that does
+# not also include firmware.
+ARG _KERNEL_PACKAGE=linux-image-virtual-hwe-24.04
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 COPY packages.* /tmp/
 RUN apt-get -y update && \
     apt-get -y upgrade && \
-    apt-get -y --no-install-recommends install $(for P in ${PACKAGE_FILES}; do cat /tmp/$P | sed -e "s/#.*//" ; done) && \
+    apt-get -y --no-install-recommends install $(for P in ${PACKAGE_FILES}; do cat /tmp/$P | sed -e "s/#.*//" ; done) \
+        ${_KERNEL_PACKAGE} \
+        linux-modules-extra-$(apt-cache depends ${_KERNEL_PACKAGE} | sed -n -e 's/  Depends: linux-image-\(.*\)-generic/\1/p')-generic && \
     rm /tmp/packages.*
 
 # Install filebeat
@@ -90,16 +86,3 @@ RUN cd /tmp/ && \
     mkdir -p /etc/node_exporter && \
     tar --strip-components=1 -C /usr/local/bin/ -zvxf node_exporter-1.8.1.linux-amd64.tar.gz node_exporter-1.8.1.linux-amd64/node_exporter && \
     rm /tmp/node_exporter-1.8.1.linux-amd64.tar.gz
-
-# Install >=6.11 kernel
-COPY --from=download /tmp/linux-modules-6.11.0-8-generic_6.11.0-8.8_amd64.deb /tmp/linux-modules-6.11.0-8-generic_6.11.0-8.8_amd64.deb
-COPY --from=download /tmp/linux-image-6.11.0-8-generic_6.11.0-8.8_amd64.deb /tmp/linux-image-6.11.0-8-generic_6.11.0-8.8_amd64.deb
-COPY --from=download /tmp/linux-image-virtual-hwe-24.04_6.11.0-8.8_amd64.deb /tmp/linux-image-virtual-hwe-24.04_6.11.0-8.8_amd64.deb
-
-RUN apt-get install -y --no-install-recommends \
-    /tmp/linux-modules-6.11.0-8-generic_6.11.0-8.8_amd64.deb \
-    /tmp/linux-image-6.11.0-8-generic_6.11.0-8.8_amd64.deb \
-    /tmp/linux-image-virtual-hwe-24.04_6.11.0-8.8_amd64.deb && \
-    rm /tmp/linux-modules-6.11.0-8-generic_6.11.0-8.8_amd64.deb && \
-    rm /tmp/linux-image-6.11.0-8-generic_6.11.0-8.8_amd64.deb && \
-    rm /tmp/linux-image-virtual-hwe-24.04_6.11.0-8.8_amd64.deb

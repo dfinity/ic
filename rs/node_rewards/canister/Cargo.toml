@@ -1,0 +1,54 @@
+[package]
+name = "ic-node-rewards-canister"
+version.workspace = true
+authors.workspace = true
+description.workspace = true
+documentation.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "node-rewards-canister"
+path = "src/main.rs"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+async-trait = { workspace = true }
+candid = { workspace = true }
+futures = { workspace = true }
+ic-cdk = { workspace = true }
+ic-cdk-timers = { workspace = true }
+ic-interfaces-registry = { path = "../../interfaces/registry" }
+ic-management-canister-types = { workspace = true }
+ic-nervous-system-canisters = { path = "../../nervous_system/canisters" }
+ic-nns-constants = { path = "../../nns/constants" }
+ic-node-rewards-canister-api = { path = "./api" }
+ic-registry-canister-client = { path = "../../registry/canister-client" }
+ic-registry-keys = { path = "../../registry/keys" }
+ic-registry-node-provider-rewards = { path = "../../registry/node_provider_rewards" }
+ic-stable-structures = { workspace = true }
+ic-base-types = { path = "../../types/base_types" }
+ic-types = { path = "../../types/types" }
+ic-protobuf = { path = "../../protobuf" }
+mockall = { workspace = true }
+prost = { workspace = true }
+rewards-calculation = { path = "../rewards_calculation" }
+serde = { workspace = true }
+itertools = { workspace = true }
+
+[dev-dependencies]
+candid_parser = { workspace = true }
+futures-util = { workspace = true }
+ic-state-machine-tests = { path = "../../state_machine_tests" }
+ic-nervous-system-agent = { path = "../../nervous_system/agent", features = ["test"] }
+ic-nervous-system-integration-tests = { path = "../../nervous_system/integration_tests" }
+ic-nns-test-utils = { path = "../../nns/test_utils" }
+maplit = "1.0.2"
+pocket-ic = { path = "../../../packages/pocket-ic" }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+
+
+[features]
+test = []

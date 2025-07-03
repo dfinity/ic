@@ -5,9 +5,7 @@ package(default_visibility = ["//rs:system-tests-pkg"])
 
 system_test_nns(
     name = "rosetta_test",
-    flaky = True,
     tags = ["experimental_system_test_colocation"],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "long",
     runtime_deps =
         GUESTOS_RUNTIME_DEPS + [
@@ -39,12 +37,10 @@ system_test_nns(
 system_test_nns(
     name = "rosetta_neuron_follow_test",
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
-    flaky = True,
     tags = [
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS + [

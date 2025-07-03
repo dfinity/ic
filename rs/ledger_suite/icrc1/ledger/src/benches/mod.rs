@@ -1,4 +1,4 @@
-use crate::{balances_len, execute_transfer_not_async, post_upgrade, pre_upgrade, Tokens};
+use crate::{balances_len, execute_transfer_not_async, post_upgrade_internal, pre_upgrade, Tokens};
 use assert_matches::assert_matches;
 use candid::{Nat, Principal};
 use ic_canister_log::Sink;
@@ -14,11 +14,12 @@ mod benches_u64;
 
 pub const NUM_OPERATIONS: u32 = 10_000;
 pub const NUM_GET_BLOCKS: u32 = 100;
+pub const MAX_LIST_ALLOWANCES: usize = 500;
 
 pub fn upgrade() {
     let _p = canbench_rs::bench_scope("upgrade");
     pre_upgrade();
-    post_upgrade(None);
+    post_upgrade_internal(None);
 }
 
 pub fn icrc_transfer(

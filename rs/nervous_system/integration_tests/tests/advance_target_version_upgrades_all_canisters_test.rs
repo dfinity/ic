@@ -1,9 +1,15 @@
+use ic_nervous_system_agent::helpers::await_with_timeout;
+use ic_nervous_system_integration_tests::pocket_ic_helpers::NnsInstaller;
 use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
     pocket_ic_helpers::{
-        add_wasms_to_sns_wasm, await_with_timeout, hash_sns_wasms, install_nns_canisters, nns, sns,
-        sns::governance::{
-            EXPECTED_UPGRADE_DURATION_MAX_SECONDS, EXPECTED_UPGRADE_STEPS_REFRESH_MAX_SECONDS,
+        add_wasms_to_sns_wasm, hash_sns_wasms, nns,
+        sns::{
+            self,
+            governance::{
+                set_automatically_advance_target_version_flag,
+                EXPECTED_UPGRADE_DURATION_MAX_SECONDS, EXPECTED_UPGRADE_STEPS_REFRESH_MAX_SECONDS,
+            },
         },
     },
 };
@@ -14,7 +20,20 @@ use pocket_ic::PocketIcBuilder;
 use std::collections::BTreeMap;
 
 #[tokio::test]
-async fn test_advance_target_version_upgrades_all_canisters() {
+async fn test_advance_target_version_upgrades_all_canisters_auto() {
+    let automatically_advance_target_version = true;
+    test_advance_target_version_upgrades_all_canisters(automatically_advance_target_version).await
+}
+
+#[tokio::test]
+async fn test_advance_target_version_upgrades_all_canisters_no_auto() {
+    let automatically_advance_target_version = false;
+    test_advance_target_version_upgrades_all_canisters(automatically_advance_target_version).await
+}
+
+async fn test_advance_target_version_upgrades_all_canisters(
+    automatically_advance_target_version: bool,
+) {
     eprintln!("Step 0: Setup the test environment ...");
     let pocket_ic = PocketIcBuilder::new()
         .with_nns_subnet()
@@ -23,8 +42,9 @@ async fn test_advance_target_version_upgrades_all_canisters() {
         .await;
 
     eprintln!("Install the (master) NNS canisters ...");
-    let with_mainnet_nns_canisters = false;
-    install_nns_canisters(&pocket_ic, vec![], with_mainnet_nns_canisters, None, vec![]).await;
+    let mut nns_installer = NnsInstaller::default();
+    nns_installer.with_current_nns_canister_versions();
+    nns_installer.install(&pocket_ic).await;
 
     eprintln!("Step 0.1: Publish (master) SNS Wasms to SNS-W ...");
     let with_mainnet_sns_canisters = false;
@@ -42,6 +62,7 @@ async fn test_advance_target_version_upgrades_all_canisters() {
     eprintln!("Step 0.2: Deploy an SNS instance via proposal ...");
     let sns = {
         let create_service_nervous_system = CreateServiceNervousSystemBuilder::default().build();
+
         let swap_parameters = create_service_nervous_system
             .swap_parameters
             .clone()
@@ -74,6 +95,15 @@ async fn test_advance_target_version_upgrades_all_canisters() {
         sns.ledger.canister_id,
     )
     .await;
+
+    eprintln!("Step 0.4: Ensure the value of automatically_advance_target_version is correct ...");
+    set_automatically_advance_target_version_flag(
+        &pocket_ic,
+        sns.governance.canister_id,
+        automatically_advance_target_version,
+    )
+    .await
+    .unwrap();
 
     eprintln!("Step 2: Publish new SNS versions ...");
     let latest_sns_version = {
@@ -118,12 +148,15 @@ async fn test_advance_target_version_upgrades_all_canisters() {
 
     eprintln!("Step 4: advance the target version to the latest version. ...");
     let latest_sns_version_hash = hash_sns_wasms(&latest_sns_version);
-    sns::governance::advance_target_version(
-        &pocket_ic,
-        sns.governance.canister_id,
-        latest_sns_version_hash.clone(),
-    )
-    .await;
+
+    if !automatically_advance_target_version {
+        sns::governance::advance_target_version(
+            &pocket_ic,
+            sns.governance.canister_id,
+            latest_sns_version_hash.clone(),
+        )
+        .await;
+    }
 
     eprintln!("Step 5: Wait for the upgrade to happen ...");
     await_with_timeout(

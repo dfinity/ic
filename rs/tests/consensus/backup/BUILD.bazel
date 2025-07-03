@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "MAINNET_REVISION_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "MAINNET_ENV", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -46,20 +46,17 @@ BACKUP_ENV = UNIVERSAL_CANISTER_ENV | {
 
 system_test_nns(
     name = "backup_manager_downgrade_test",
-    env = BACKUP_ENV,
+    env = BACKUP_ENV | MAINNET_ENV,
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
-    flaky = True,
     tags = [
         "experimental_system_test_colocation",
         "long_test",  # since it takes longer than 5 minutes.
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",  # this test often times out with the default 15 minute timeout so we allow more time
     uses_guestos_dev_test = True,
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
-        MAINNET_REVISION_RUNTIME_DEPS +
         BACKUP_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -71,20 +68,17 @@ system_test_nns(
 
 system_test_nns(
     name = "backup_manager_upgrade_test",
-    env = BACKUP_ENV,
+    env = BACKUP_ENV | MAINNET_ENV,
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
-    flaky = True,
     tags = [
         "experimental_system_test_colocation",
         "long_test",  # since it takes longer than 5 minutes.
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",  # this test often times out with the default 15 minute timeout so we allow more time
     uses_guestos_dev_test = True,
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
-        MAINNET_REVISION_RUNTIME_DEPS +
         BACKUP_RUNTIME_DEPS,
     deps = [
         # Keep sorted.

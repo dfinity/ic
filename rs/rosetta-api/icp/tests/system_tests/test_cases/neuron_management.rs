@@ -15,8 +15,7 @@ use ic_icp_rosetta_client::{
     RosettaStakeMaturityArgs,
 };
 use ic_icrc1_test_utils::basic_identity_strategy;
-use ic_nns_governance_api::pb::v1::neuron::DissolveState;
-use ic_nns_governance_api::pb::v1::KnownNeuronData;
+use ic_nns_governance_api::{neuron::DissolveState, KnownNeuronData};
 use ic_rosetta_api::ledger_client::list_known_neurons_response::ListKnownNeuronsResponse;
 use ic_rosetta_api::ledger_client::list_neurons_response::ListNeuronsResponse;
 use ic_rosetta_api::ledger_client::neuron_response::NeuronResponse;
@@ -28,6 +27,7 @@ use lazy_static::lazy_static;
 use proptest::strategy::Strategy;
 use proptest::test_runner::Config as TestRunnerConfig;
 use proptest::test_runner::TestRunner;
+use rosetta_core::models::RosettaSupportedKeyPair;
 use rosetta_core::objects::ObjectMap;
 use rosetta_core::request_types::CallRequest;
 use std::{
@@ -355,7 +355,9 @@ fn test_start_and_stop_neuron_dissolve() {
         // The neuron should now be in DISSOLVING state
         assert_eq!(
             start_dissolving_response.operations.first().unwrap().status,
-            Some("COMPLETED".to_owned())
+            Some("COMPLETED".to_owned()),
+            "Expected the operation to be completed but got: {:?}",
+            start_dissolving_response
         );
         let neuron = list_neurons(&agent).await.full_neurons[0].to_owned();
         match neuron.dissolve_state.unwrap() {
@@ -609,7 +611,8 @@ fn test_disburse_neuron() {
         .value.parse::<u64>().unwrap();
 
         // We now update the neuron so it is in state DISSOLVED
-        let now = env.pocket_ic.get_time().await.duration_since(UNIX_EPOCH).unwrap().as_secs();
+        let now_system_time: SystemTime = env.pocket_ic.get_time().await.try_into().unwrap();
+        let now = now_system_time.duration_since(UNIX_EPOCH).unwrap().as_secs();
         neuron.dissolve_state = Some(DissolveState::WhenDissolvedTimestampSeconds(now - 1));
         update_neuron(&agent, neuron).await;
 
@@ -1371,60 +1374,122 @@ fn test_list_neurons() {
 
 #[test]
 fn test_refresh_voting_power() {
-    let rt = Runtime::new().unwrap();
-    rt.block_on(async {
-        let env = RosettaTestingEnvironment::builder()
-            .with_initial_balances(
-                vec![(
-                    AccountIdentifier::from(TEST_IDENTITY.sender().unwrap()),
-                    // A hundred million ICP should be enough
-                    icp_ledger::Tokens::from_tokens(100_000_000).unwrap(),
-                )]
-                .into_iter()
-                .collect(),
-            )
-            .with_governance_canister()
-            .build()
-            .await;
+    let mut runner = TestRunner::new(TestRunnerConfig {
+        max_shrink_iters: 0,
+        cases: *NUM_TEST_CASES,
+        ..Default::default()
+    });
 
-        // Stake the minimum amount 100 million e8s
-        let staked_amount = 100_000_000u64;
-        let neuron_index = 0;
-        let from_subaccount = [0; 32];
+    runner
+        .run(
+            &(basic_identity_strategy().no_shrink()),
+            |hot_key_identity| {
+                let rt = Runtime::new().unwrap();
+                rt.block_on(async {
+                    let env = RosettaTestingEnvironment::builder()
+                        .with_initial_balances(
+                            vec![(
+                                AccountIdentifier::from(TEST_IDENTITY.sender().unwrap()),
+                                // A hundred million ICP should be enough
+                                icp_ledger::Tokens::from_tokens(100_000_000).unwrap(),
+                            )]
+                            .into_iter()
+                            .collect(),
+                        )
+                        .with_governance_canister()
+                        .build()
+                        .await;
 
-        env.rosetta_client
-            .create_neuron(
-                env.network_identifier.clone(),
-                &(*TEST_IDENTITY).clone(),
-                RosettaCreateNeuronArgs::builder(staked_amount.into())
-                    .with_from_subaccount(from_subaccount)
-                    .with_neuron_index(neuron_index)
-                    .build(),
-            )
-            .await
-            .unwrap();
+                    // Stake the minimum amount 100 million e8s
+                    let staked_amount = 100_000_000u64;
+                    let neuron_index = 0;
+                    let from_subaccount = [0; 32];
 
-        let agent = get_test_agent(env.pocket_ic.url().unwrap().port().unwrap()).await;
-        let neuron = list_neurons(&agent).await.full_neurons[0].to_owned();
-        let refresh_timestamp = neuron.voting_power_refreshed_timestamp_seconds.unwrap();
+                    env.rosetta_client
+                        .create_neuron(
+                            env.network_identifier.clone(),
+                            &(*TEST_IDENTITY).clone(),
+                            RosettaCreateNeuronArgs::builder(staked_amount.into())
+                                .with_from_subaccount(from_subaccount)
+                                .with_neuron_index(neuron_index)
+                                .build(),
+                        )
+                        .await
+                        .unwrap();
 
-        // Wait for a second before updating the voting power. This is done so the timestamp is sure to have a different value when refreshed
-        std::thread::sleep(std::time::Duration::from_secs(1));
-        TransactionOperationResults::try_from(
-            env.rosetta_client
-                .refresh_voting_power(
-                    env.network_identifier.clone(),
-                    &(*TEST_IDENTITY).clone(),
-                    neuron_index,
-                )
-                .await
-                .unwrap()
-                .metadata,
+                    // Add a hot key to the neuron
+                    env.rosetta_client
+                        .add_hot_key(
+                            env.network_identifier.clone(),
+                            &(*TEST_IDENTITY).clone(),
+                            RosettaHotKeyArgs::builder(neuron_index)
+                                .with_principal_id(hot_key_identity.sender().unwrap().into())
+                                .build(),
+                        )
+                        .await
+                        .unwrap();
+
+                    let agent = get_test_agent(env.pocket_ic.url().unwrap().port().unwrap()).await;
+
+                    // Test with hot key identity.
+                    let neuron = list_neurons(&agent).await.full_neurons[0].to_owned();
+                    let refresh_timestamp =
+                        neuron.voting_power_refreshed_timestamp_seconds.unwrap();
+
+                    // Wait for a second before updating the voting power. This is done so the timestamp is sure to have a different value when refreshed
+                    std::thread::sleep(std::time::Duration::from_secs(1));
+
+                    let hotkey_caller_identity = Arc::new(hot_key_identity);
+                    TransactionOperationResults::try_from(
+                        env.rosetta_client
+                            .refresh_voting_power(
+                                env.network_identifier.clone(),
+                                &hotkey_caller_identity.clone(),
+                                neuron_index,
+                                (*TEST_IDENTITY).clone().generate_principal_id().ok(),
+                            )
+                            .await
+                            .unwrap()
+                            .metadata,
+                    )
+                    .unwrap();
+
+                    let neuron = list_neurons(&agent).await.full_neurons[0].to_owned();
+                    // The voting power should have been refreshed
+                    assert!(
+                        neuron.voting_power_refreshed_timestamp_seconds.unwrap()
+                            > refresh_timestamp
+                    );
+
+                    // Test with neuron owner's identity, without specifying a controller.
+                    let refresh_timestamp =
+                        neuron.voting_power_refreshed_timestamp_seconds.unwrap();
+
+                    // Wait for a second before updating the voting power. This is done so the timestamp is sure to have a different value when refreshed
+                    std::thread::sleep(std::time::Duration::from_secs(1));
+                    TransactionOperationResults::try_from(
+                        env.rosetta_client
+                            .refresh_voting_power(
+                                env.network_identifier.clone(),
+                                &(*TEST_IDENTITY).clone(),
+                                neuron_index,
+                                /*controller=*/ None,
+                            )
+                            .await
+                            .unwrap()
+                            .metadata,
+                    )
+                    .unwrap();
+
+                    let neuron = list_neurons(&agent).await.full_neurons[0].to_owned();
+                    // The voting power should have been refreshed
+                    assert!(
+                        neuron.voting_power_refreshed_timestamp_seconds.unwrap()
+                            > refresh_timestamp
+                    );
+                });
+                Ok(())
+            },
         )
         .unwrap();
-
-        let neuron = list_neurons(&agent).await.full_neurons[0].to_owned();
-        // The voting power should have been refreshed
-        assert!(neuron.voting_power_refreshed_timestamp_seconds.unwrap() > refresh_timestamp);
-    });
 }

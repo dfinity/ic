@@ -2,89 +2,62 @@
 Rules to manipulate with artifacts: download, upload etc.
 """
 
-load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
-load("//bazel:status.bzl", "FAKE_IC_VERSION")
-
 def _upload_artifact_impl(ctx):
     """
-    Uploads an artifact to s3 and returns download link to it
+    Uploads artifacts to s3.
+
+    Will upload bundles passed a `inputs` as well as any other bundle paths specified on
+    the command line.
     """
 
-    rclone_config = ctx.file.rclone_config
-    rclone_endpoint = ctx.attr._s3_endpoint[BuildSettingInfo].value
-    if rclone_endpoint != "":
-        rclone_config = ctx.file.rclone_anon_config
+    version_file = ctx.file._version_txt
+    rclone = ctx.file._rclone
 
-    s3_upload = ctx.attr._s3_upload[BuildSettingInfo].value
+    uploader = ctx.file._artifacts_uploader
+    exe = ctx.actions.declare_file("run-upload-" + ctx.attr.name)
+    cmds = ["$UPLOADER " + bundle.short_path for bundle in ctx.files.inputs]
+    ctx.actions.write(
+        output = exe,
+        content = """
+        #!/usr/bin/env bash
 
-    out = []
+        set -euo pipefail
 
-    for f in ctx.files.inputs:
-        filesum = ctx.actions.declare_file(ctx.label.name + "/" + f.basename + ".SHA256SUM")
-        ctx.actions.run_shell(
-            command = "(cd {path} && shasum --algorithm 256 --binary {src}) > {out}".format(path = f.dirname, src = f.basename, out = filesum.path),
-            inputs = [f],
-            outputs = [filesum],
-        )
-        out.append(filesum)
+        UPLOADER={uploader}
+        VERSION_FILE={version_file}
+        export RCLONE={rclone}
+        export VERSION=$(cat $VERSION_FILE)
 
-    checksum = ctx.actions.declare_file(ctx.label.name + "/SHA256SUMS")
-    ctx.actions.run_shell(
-        command = "cat " + " ".join([f.path for f in out]) + " | sort -k 2 >" + checksum.path,
-        inputs = out,
-        outputs = [checksum],
+        # upload any artifacts specified on the command line
+        while [[ $# -gt 0 ]]
+        do
+            p=$(cd "$BUILD_WORKSPACE_DIRECTORY"; realpath "$1")
+            shift
+            $UPLOADER "$p"
+        done
+
+        # upload any artifacts baked into the uploader (for local bazel targets)
+        {cmds}
+
+        """.format(uploader = uploader.path, cmds = "\n".join(cmds), version_file = version_file.short_path, rclone = rclone.short_path),
+        is_executable = True,
     )
 
-    fileurl = []
-    allinputs = ctx.files.inputs + [checksum] if s3_upload else [checksum]
-    for f in allinputs:
-        filename = ctx.label.name + "_" + f.basename
-        url = ctx.actions.declare_file(filename + ".url")
-        ctx.actions.run(
-            executable = ctx.file._artifacts_uploader,
-            arguments = [f.path, url.path],
-            env = {
-                "RCLONE_S3_ENDPOINT": rclone_endpoint,
-                "RCLONE": ctx.file._rclone.path,
-                "RCLONE_CONFIG": rclone_config.path,
-                "REMOTE_SUBDIR": ctx.attr.remote_subdir,
-                "VERSION_FILE": ctx.version_file.path,
-                "VERSION_TXT": ctx.file._version_txt.path,
-                "FAKE_IC_VERSION": FAKE_IC_VERSION,
-            },
-            inputs = [f, ctx.version_file, rclone_config, ctx.file._version_txt],
-            outputs = [url],
-            tools = [ctx.file._rclone],
-        )
-        fileurl.extend([url])
+    deps = depset(ctx.files.inputs + [version_file, rclone])
+    runfiles = ctx.runfiles(files = [uploader, version_file, rclone] + ctx.files.inputs)
 
-    urls = ctx.actions.declare_file(ctx.label.name + ".urls")
-    ctx.actions.run_shell(
-        command = "cat " + " ".join([url.path for url in fileurl]) + " >" + urls.path,
-        inputs = fileurl,
-        outputs = [urls],
-    )
-    out.append(urls)
-    out.extend(fileurl)
-
-    executable = ctx.actions.declare_file(ctx.label.name + ".bin")
-    ctx.actions.write(output = executable, content = "#!/bin/sh\necho;exec cat " + urls.short_path, is_executable = True)
-
-    return [DefaultInfo(files = depset(out), runfiles = ctx.runfiles(files = out), executable = executable)]
+    return [
+        DefaultInfo(executable = exe, files = deps, runfiles = runfiles),
+    ]
 
 _upload_artifacts = rule(
     implementation = _upload_artifact_impl,
     executable = True,
     attrs = {
-        "inputs": attr.label_list(allow_files = True),
-        "remote_subdir": attr.string(mandatory = True),
-        "rclone_config": attr.label(allow_single_file = True, default = "//:.rclone.conf"),
-        "rclone_anon_config": attr.label(allow_single_file = True, default = "//:.rclone-anon.conf"),
+        "inputs": attr.label_list(allow_files = True, default = []),
         "_rclone": attr.label(allow_single_file = True, default = "@rclone//:rclone"),
         "_artifacts_uploader": attr.label(allow_single_file = True, default = ":upload.sh"),
         "_version_txt": attr.label(allow_single_file = True, default = "//bazel:version.txt"),
-        "_s3_endpoint": attr.label(default = ":s3_endpoint"),
-        "_s3_upload": attr.label(default = ":s3_upload"),
     },
 )
 
@@ -100,9 +73,4 @@ def upload_artifacts(**kwargs):
       **kwargs: all arguments to pass to _upload_artifacts
     """
 
-    tags = kwargs.get("tags", [])
-    for tag in ["requires-network", "upload"]:
-        if tag not in tags:
-            tags.append(tag)
-    kwargs["tags"] = tags
     _upload_artifacts(**kwargs)

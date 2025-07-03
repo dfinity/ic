@@ -30,7 +30,9 @@ end::catalog[] */
 
 use anyhow::bail;
 use anyhow::Result;
-use ic_consensus_system_test_utils::node::await_node_certified_height;
+use ic_consensus_system_test_utils::node::{
+    await_node_certified_height, get_node_certified_height,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
@@ -75,8 +77,15 @@ pub fn ic_crypto_csp_umask_test(env: TestEnv) {
     info!(logger, "current sks metadata: {:?}", current_sks_metadata);
     assert_is_correct(&current_sks_metadata);
 
-    info!(logger, "waiting for a DKG interval to pass");
-    await_node_certified_height(&node, Height::from(SHORT_DKG_INTERVAL), logger.clone());
+    let node_certified_height = get_node_certified_height(&node, logger.clone()).get();
+    let node_target_height = SHORT_DKG_INTERVAL * (1 + node_certified_height / SHORT_DKG_INTERVAL);
+    info!(
+        logger,
+        "waiting for a DKG interval to pass. Node current certified height: {}, target height: {}",
+        node_certified_height,
+        node_target_height
+    );
+    await_node_certified_height(&node, Height::from(node_target_height), logger.clone());
 
     info!(logger, "waiting for the secret key store to be updated");
     let updated_sks_metadata =
@@ -129,8 +138,10 @@ impl From<String> for SecretKeyStoreMetadata {
 }
 
 impl SecretKeyStoreMetadata {
+    /// Treats the metadata to have been updated if either the timestamp or the inode number has
+    /// changed.
     fn has_been_updated(&self, previous: &SecretKeyStoreMetadata) -> bool {
-        self.timestamp > previous.timestamp && self.inode != previous.inode
+        self.timestamp != previous.timestamp || self.inode != previous.inode
     }
 
     fn has_correct_permissions(&self) -> bool {

@@ -6,6 +6,7 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "//packages/ic-ed25519",
+    "//packages/ic-error-types",
     "//packages/ic-secp256k1",
     "//rs/artifact_pool",
     "//rs/bitcoin/client",
@@ -15,6 +16,7 @@ DEPENDENCIES = [
     "//rs/consensus/utils",
     "//rs/crypto/interfaces/sig_verification",
     "//rs/crypto/test_utils/ni-dkg",
+    "//rs/crypto/test_utils/vetkd",
     "//rs/crypto/tree_hash",
     "//rs/crypto/utils/threshold_sig_der",
     "//rs/cycles_account_manager",
@@ -48,11 +50,11 @@ DEPENDENCIES = [
     "//rs/test_utilities/registry",
     "//rs/test_utilities/time",
     "//rs/test_utilities/types",
-    "//rs/types/error_types",
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "//rs/xnet/payload_builder",
     "@crate_index//:candid",
+    "@crate_index//:ed25519-dalek",
     "@crate_index//:hex",
     "@crate_index//:maplit",
     "@crate_index//:rand",
@@ -108,6 +110,11 @@ DEV_DEPENDENCIES = [
 
 MACRO_DEPENDENCIES = []
 
+MACRO_DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:test-strategy",
+]
+
 rust_binary(
     name = "ic-test-state-machine",
     testonly = True,
@@ -155,6 +162,7 @@ rust_ic_test(
 rust_ic_test(
     name = "state_machine_unit_test",
     crate = ":state_machine_tests",
+    proc_macro_deps = MACRO_DEV_DEPENDENCIES,
     deps = [
         # Keep sorted.
         "@crate_index//:proptest",

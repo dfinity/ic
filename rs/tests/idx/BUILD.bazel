@@ -27,12 +27,11 @@ rust_binary(
 system_test(
     name = "basic_health_test",
     env = UNIVERSAL_CANISTER_ENV,
-    flaky = True,
+    flaky = True,  # flakiness rate of 1.22% over the month from 2025-02-11 till 2025-03-11
     tags = [
         "k8s",
         "long_test",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -48,11 +47,9 @@ system_test(
     env = UNIVERSAL_CANISTER_ENV | {
         "II_WASM_PATH": "$(rootpath @ii_dev_canister//file)",
     },
-    flaky = True,
     tags = [
         "long_test",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS + [
         "@ii_dev_canister//file",
     ],
@@ -74,7 +71,6 @@ system_test(
     tags = [
         "manual",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -95,7 +91,6 @@ system_test(
     tags = [
         "manual",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = UNIVERSAL_VM_RUNTIME_DEPS + [":replicable_mock_test_uvm_config_image"],
     deps = [
         # Keep sorted.
@@ -114,7 +109,6 @@ system_test(
 # 3. docker run -it bazel/rs/tests:replicable_mock_test_image
 system_test(
     name = "replicable_mock_test",
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     deps = [
         # Keep sorted.
         "//rs/tests/driver:ic-system-test-driver",

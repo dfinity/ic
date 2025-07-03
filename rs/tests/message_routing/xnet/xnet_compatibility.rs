@@ -36,9 +36,9 @@ use ic_system_test_driver::driver::pot_dsl::{PotSetupFn, SysTestFn};
 use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    get_ic_os_update_img_test_sha256, get_ic_os_update_img_test_url,
-    read_dependency_from_env_to_string, read_dependency_to_string, HasPublicApiUrl,
-    HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
+    get_ic_os_update_img_test_sha256, get_ic_os_update_img_test_url, get_mainnet_nns_revision,
+    read_dependency_from_env_to_string, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+    IcNodeSnapshot,
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{block_on, runtime_from_url, MetricsFetcher};
@@ -146,11 +146,7 @@ pub async fn test_async(env: TestEnv) {
         .map(|(_, _, node)| node)
         .map(|node| runtime_from_url(node.get_public_url(), node.effective_canister_id()));
 
-    // Only guaranteed response calls, for now.
-    // TODO(MR-638): Also enable best-effort calls, when supported on mainnet.
-    let call_timeouts = [None];
-    let xnet_config = xnet_slo_test_lib::Config::new(2, 1, Duration::from_secs(30), 10)
-        .with_call_timeouts(&call_timeouts);
+    let xnet_config = xnet_slo_test_lib::Config::new(2, 1, Duration::from_secs(30), 10);
     let long_xnet_config = xnet_slo_test_lib::Config::new_with_custom_thresholds(
         2,
         1,
@@ -166,11 +162,10 @@ pub async fn test_async(env: TestEnv) {
         // while the long running test is running we are generous
         // with error thresholds.
         75.0,
-        60,
-    )
-    .with_call_timeouts(&call_timeouts);
+        120,
+    );
 
-    let mainnet_version = read_dependency_to_string("mainnet_nns_subnet_revision.txt").unwrap();
+    let mainnet_version = get_mainnet_nns_revision();
 
     let original_branch_version = read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")
         .expect("tip-of-branch IC version");

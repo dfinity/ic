@@ -9,18 +9,17 @@ use dfn_core::call;
 use ic_base_types::{
     subnet_id_into_protobuf, CanisterId, NodeId, PrincipalId, RegistryVersion, SubnetId,
 };
+use ic_cdk::println;
 use ic_management_canister_types_private::{
-    ComputeInitialIDkgDealingsArgs, ComputeInitialIDkgDealingsResponse, MasterPublicKeyId,
+    MasterPublicKeyId, ReshareChainKeyArgs, ReshareChainKeyResponse,
 };
+use ic_protobuf::registry::subnet::v1::chain_key_initialization::Initialization;
 use ic_protobuf::registry::{
-    crypto::v1::ChainKeySigningSubnetList,
-    subnet::v1::{
-        chain_key_initialization, CatchUpPackageContents, ChainKeyInitialization, SubnetListRecord,
-        SubnetRecord,
-    },
+    crypto::v1::ChainKeyEnabledSubnetList,
+    subnet::v1::{CatchUpPackageContents, ChainKeyInitialization, SubnetListRecord, SubnetRecord},
 };
 use ic_registry_keys::{
-    make_catch_up_package_contents_key, make_chain_key_signing_subnet_list_key,
+    make_catch_up_package_contents_key, make_chain_key_enabled_subnet_list_key,
     make_subnet_list_record_key, make_subnet_record_key,
 };
 use ic_registry_subnet_features::ChainKeyConfig;
@@ -54,6 +53,7 @@ impl Registry {
             value: subnet_record_vec,
             version: _,
             deletion_marker: _,
+            timestamp_nanoseconds: _,
         } = self
             .get(&make_subnet_record_key(subnet_id).into_bytes(), version)
             .ok_or_else(|| {
@@ -75,6 +75,7 @@ impl Registry {
                 value,
                 version: _,
                 deletion_marker: _,
+                timestamp_nanoseconds: _,
             }) => SubnetListRecord::decode(value.as_slice()).unwrap(),
             None => panic!(
                 "{}set_subnet_membership_mutation: subnet list record not found in the registry.",
@@ -182,36 +183,36 @@ impl Registry {
         key_map
     }
 
-    /// Get the initial iDKG dealings via a call to IC00 for a given InitialChainKeyConfig
-    /// and a set of nodes to receive them.
-    pub(crate) async fn get_all_initial_i_dkg_dealings_from_ic00(
+    /// Get the initial key material (IDKG dealings or DKG transcripts)
+    /// via a call to IC00 for a given InitialChainKeyConfig and a set of nodes to receive them.
+    pub(crate) async fn get_all_chain_key_reshares_from_ic00(
         &self,
         initial_chain_key_config: &Option<InitialChainKeyConfigInternal>,
         receiver_nodes: Vec<NodeId>,
     ) -> Vec<ChainKeyInitialization> {
-        let initial_i_dkg_dealings_futures = initial_chain_key_config
+        let reshare_chain_key_futures = initial_chain_key_config
             .as_ref()
             .map(|initial_chain_key_config| {
-                self.get_compute_i_dkg_args_from_initial_config(
+                self.get_reshare_chain_key_args_from_initial_config(
                     initial_chain_key_config,
                     receiver_nodes,
                 )
                 .into_iter()
-                .map(|dealing_request| self.get_i_dkg_initializations_from_ic00(dealing_request))
+                .map(|reshare_request| self.get_chain_key_resharing_from_ic00(reshare_request))
                 .collect::<Vec<_>>()
             })
             .unwrap_or_default();
 
-        futures::future::join_all(initial_i_dkg_dealings_futures).await
+        futures::future::join_all(reshare_chain_key_futures).await
     }
 
     /// Helper function to build the request objects to send to IC00 for
-    /// `compute_initial_i_dkg_dealings`
-    fn get_compute_i_dkg_args_from_initial_config(
+    /// `reshare_chain_key`
+    fn get_reshare_chain_key_args_from_initial_config(
         &self,
         initial_chain_key_config: &InitialChainKeyConfigInternal,
         receiver_nodes: Vec<NodeId>,
-    ) -> Vec<ComputeInitialIDkgDealingsArgs> {
+    ) -> Vec<ReshareChainKeyArgs> {
         let latest_version = self.latest_version();
         let registry_version = RegistryVersion::new(latest_version);
         initial_chain_key_config
@@ -227,70 +228,74 @@ impl Registry {
                     let key_id = key_config.key_id.clone();
                     let subnet_id = SubnetId::new(*subnet_id);
                     let nodes = receiver_nodes.iter().copied().collect();
-                    ComputeInitialIDkgDealingsArgs::new(key_id, subnet_id, nodes, registry_version)
+                    ReshareChainKeyArgs::new(key_id, subnet_id, nodes, registry_version)
                 },
             )
             .collect()
     }
 
     /// Helper function to make the request and decode the response for
-    /// `compute_initial_i_dkg_dealings`.
-    async fn get_i_dkg_initializations_from_ic00(
+    /// `reshare_chain_key`.
+    async fn get_chain_key_resharing_from_ic00(
         &self,
-        dealing_request: ComputeInitialIDkgDealingsArgs,
+        reshare_request: ReshareChainKeyArgs,
     ) -> ChainKeyInitialization {
         let response_bytes = call(
             CanisterId::ic_00(),
-            "compute_initial_i_dkg_dealings",
+            "reshare_chain_key",
             bytes,
-            Encode!(&dealing_request).unwrap(),
+            Encode!(&reshare_request).unwrap(),
         )
         .await
         .unwrap();
 
-        let response = ComputeInitialIDkgDealingsResponse::decode(&response_bytes).unwrap();
+        let response = ReshareChainKeyResponse::decode(&response_bytes).unwrap();
         println!(
-            "{}response from compute_initial_i_dkg_dealings successfully received",
+            "{}response from reshare_chain_key successfully received",
             LOG_PREFIX
         );
 
+        let initialization = match response {
+            ReshareChainKeyResponse::IDkg(dealings) => Initialization::Dealings(dealings),
+            ReshareChainKeyResponse::NiDkg(transcript_record) => {
+                Initialization::TranscriptRecord(transcript_record)
+            }
+        };
+
         ChainKeyInitialization {
-            key_id: Some((&dealing_request.key_id).into()),
-            initialization: Some(chain_key_initialization::Initialization::Dealings(
-                response.initial_dkg_dealings,
-            )),
+            key_id: Some((&reshare_request.key_id).into()),
+            initialization: Some(initialization),
         }
     }
 
-    /// Get the list of subnets that can sign for a given MasterPublicKeyId.
-    pub fn get_chain_key_signing_subnet_list(
+    /// Get the list of subnets that are enabled for a given MasterPublicKeyId.
+    pub fn get_chain_key_enabled_subnet_list(
         &self,
         key_id: &MasterPublicKeyId,
-    ) -> Option<ChainKeySigningSubnetList> {
-        let chain_key_signing_subnet_list_key_id = make_chain_key_signing_subnet_list_key(key_id);
+    ) -> Option<ChainKeyEnabledSubnetList> {
+        let chain_key_enabled_subnet_list_key_id = make_chain_key_enabled_subnet_list_key(key_id);
         self.get(
-            chain_key_signing_subnet_list_key_id.as_bytes(),
+            chain_key_enabled_subnet_list_key_id.as_bytes(),
             self.latest_version(),
         )
         .map(|registry_value| {
-            ChainKeySigningSubnetList::decode(registry_value.value.as_slice()).unwrap()
+            ChainKeyEnabledSubnetList::decode(registry_value.value.as_slice()).unwrap()
         })
     }
 
-    /// Create the mutations that disable subnet signing for a single subnet
-    /// and set of MasterPublicKeyId's.
-    pub fn mutations_to_disable_subnet_signing(
+    /// Create the mutations that disable set of chain keys for a single subnet.
+    pub fn mutations_to_disable_subnet_chain_key(
         &self,
         subnet_id: SubnetId,
-        chain_key_signing_disable: &Vec<MasterPublicKeyId>,
+        chain_key_disable: &Vec<MasterPublicKeyId>,
     ) -> Vec<RegistryMutation> {
         let mut mutations = vec![];
-        for chain_key_id in chain_key_signing_disable {
+        for chain_key_id in chain_key_disable {
             let mut chain_key_signing_list_for_key = self
-                .get_chain_key_signing_subnet_list(chain_key_id)
+                .get_chain_key_enabled_subnet_list(chain_key_id)
                 .unwrap_or_default();
 
-            // If this subnet does not sign for that key, do nothing.
+            // If that key is already disabled on this subnet, do nothing.
             if !chain_key_signing_list_for_key
                 .subnets
                 .contains(&subnet_id_into_protobuf(subnet_id))
@@ -305,7 +310,7 @@ impl Registry {
                 .retain(|subnet| subnet != &protobuf_subnet_id);
 
             mutations.push(upsert(
-                make_chain_key_signing_subnet_list_key(chain_key_id),
+                make_chain_key_enabled_subnet_list_key(chain_key_id),
                 chain_key_signing_list_for_key.encode_to_vec(),
             ));
         }

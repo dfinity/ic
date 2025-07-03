@@ -12,12 +12,12 @@ use ic_test_utilities_types::{
         canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id, SUBNET_0,
         SUBNET_1, SUBNET_2,
     },
-    messages::RequestBuilder,
+    messages::{RequestBuilder, ResponseBuilder},
     xnet::{StreamHeaderBuilder, StreamSliceBuilder},
 };
 use ic_types::{
     batch::BlockmakerMetrics,
-    canister_http::{CanisterHttpMethod, CanisterHttpRequestContext},
+    canister_http::{CanisterHttpMethod, CanisterHttpRequestContext, Replication},
     ingress::WasmResult,
     messages::{CallbackId, CanisterCall, Payload, Request, RequestMetadata},
     time::CoarseTime,
@@ -582,6 +582,7 @@ fn subnet_call_contexts_deserialization() {
         http_method: CanisterHttpMethod::GET,
         transform: Some(transform.clone()),
         time: UNIX_EPOCH,
+        replication: Replication::FullyReplicated,
     };
     subnet_call_context_manager.push_context(SubnetCallContext::CanisterHttpRequest(
         canister_http_request,
@@ -1572,6 +1573,82 @@ fn compatibility_for_reject_reason() {
 }
 
 #[test]
+fn stream_responses_tracking() {
+    let mut stream = Stream::new(StreamIndexedQueue::with_begin(0.into()), 0.into());
+    assert!(stream.guaranteed_response_counts().is_empty());
+
+    let response = ResponseBuilder::default()
+        .respondent(*LOCAL_CANISTER)
+        .originator(*REMOTE_CANISTER)
+        .build();
+    stream.push(response.into());
+    assert_eq!(
+        stream.guaranteed_response_counts(),
+        &btreemap! { *LOCAL_CANISTER => 1 }
+    );
+
+    // Best-effort responses don't count.
+    let response = ResponseBuilder::default()
+        .respondent(*LOCAL_CANISTER)
+        .originator(*REMOTE_CANISTER)
+        .deadline(CoarseTime::from_secs_since_unix_epoch(1))
+        .build();
+    stream.push(response.into());
+    assert_eq!(
+        stream.guaranteed_response_counts(),
+        &btreemap! { *LOCAL_CANISTER => 1 }
+    );
+
+    let response = ResponseBuilder::default()
+        .respondent(*LOCAL_CANISTER)
+        .originator(*REMOTE_CANISTER)
+        .build();
+    stream.push(response.into());
+    assert_eq!(
+        stream.guaranteed_response_counts(),
+        &btreemap! { *LOCAL_CANISTER => 2 }
+    );
+
+    // Response from a different respondent.
+    let response = ResponseBuilder::default()
+        .respondent(*REMOTE_CANISTER)
+        .originator(*LOCAL_CANISTER)
+        .build();
+    stream.push(response.into());
+    assert_eq!(
+        stream.guaranteed_response_counts(),
+        &btreemap! { *LOCAL_CANISTER => 2, *REMOTE_CANISTER => 1 }
+    );
+
+    // Requests don't count.
+    let request = RequestBuilder::default()
+        .sender(*LOCAL_CANISTER)
+        .receiver(*REMOTE_CANISTER)
+        .build();
+    stream.push(request.into());
+    assert_eq!(
+        stream.guaranteed_response_counts(),
+        &btreemap! { *LOCAL_CANISTER => 2, *REMOTE_CANISTER => 1 }
+    );
+
+    // Discard everything in the same order.
+    stream.discard_messages_before(StreamIndex::new(1), &vec![].into());
+    assert_eq!(
+        stream.guaranteed_response_counts(),
+        &btreemap! { *LOCAL_CANISTER => 1, *REMOTE_CANISTER => 1 }
+    );
+    stream.discard_messages_before(StreamIndex::new(2), &vec![].into());
+    assert_eq!(
+        stream.guaranteed_response_counts(),
+        &btreemap! { *LOCAL_CANISTER => 1, *REMOTE_CANISTER => 1 }
+    );
+    stream.discard_messages_before(StreamIndex::new(4), &vec![].into());
+    assert!(stream.guaranteed_response_counts().is_empty());
+    stream.discard_messages_before(StreamIndex::new(5), &vec![].into());
+    assert!(stream.guaranteed_response_counts().is_empty());
+}
+
+#[test]
 fn consumed_cycles_total_calculates_the_right_amount() {
     let mut consumed_cycles_by_use_case = BTreeMap::new();
     consumed_cycles_by_use_case.insert(CyclesUseCase::DeletedCanisters, NominalCycles::from(5));
@@ -1977,7 +2054,7 @@ fn do_roundtrip_and_check_error(metrics: &BlockmakerMetricsTimeSeries, expected_
     let test_metrics = TestMetrics(Arc::new(Mutex::new("".to_string())));
 
     // Currently the String stored in `TestMetrics` is still empty
-    assert!(test_metrics.0.lock().unwrap().len() == 0);
+    assert!(test_metrics.0.lock().unwrap().is_empty());
 
     let pb_stats = pb_metadata::BlockmakerMetricsTimeSeries::from(metrics);
     let deserialized_stats = BlockmakerMetricsTimeSeries::try_from((
@@ -2028,7 +2105,7 @@ fn compatibility_for_cycles_use_case() {
         CyclesUseCase::iter()
             .map(|x| x as i32)
             .collect::<Vec<i32>>(),
-        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
     );
 }
 

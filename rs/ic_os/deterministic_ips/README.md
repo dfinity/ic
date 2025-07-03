@@ -1,6 +1,6 @@
 # Deterministic IPs
 
-Each IC-OS node must have a unique but deterministic MAC address derived from its BMC MAC address, deployment type (mainnet vs testnet), and variant type (SetupOS, HostOS, GuestOS, BoundaryGuestOS). This MAC address is then utilized to generate the node’s network configuration. To solve this, a schema has been devised.
+Each IC-OS node must have a unique but deterministic MAC address derived from its BMC MAC address, deployment type (mainnet vs testnet), and variant type (SetupOS, HostOS, GuestOS. This MAC address is then utilized to generate the node’s network configuration. To solve this, a schema has been devised.
 
 ## MAC Address Schema
 
@@ -13,7 +13,6 @@ Each IC-OS node must have a unique but deterministic MAC address derived from it
     - SetupOS: `0f`
     - HostOS: `00`
     - GuestOS: `01`
-    - Boundary-GuestOS: `02`
 
 - **The remaining 32-bits:**
   - Deterministically generated.
@@ -23,7 +22,6 @@ Each IC-OS node must have a unique but deterministic MAC address derived from it
 - SetupOS: `6a:0f:<deterministically-generated-part>`
 - HostOS: `6a:00:<deterministically-generated-part>`
 - GuestOS: `6a:01:<deterministically-generated-part>`
-- BoundaryOS: `6a:02:<deterministically-generated-part>`
 
 ## Deterministically Generated Part
 

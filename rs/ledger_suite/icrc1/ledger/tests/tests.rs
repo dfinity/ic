@@ -1,22 +1,23 @@
-use candid::{CandidType, Decode, Encode, Nat};
+use candid::{CandidType, Decode, Encode, Nat, Principal};
 use ic_agent::identity::Identity;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1::{Block, Operation, Transaction};
 use ic_icrc1_ledger::{
     ChangeFeeCollector, FeatureFlags, InitArgs, InitArgsBuilder as LedgerInitArgsBuilder,
-    LedgerArgument,
+    LedgerArgument, UpgradeArgs,
 };
 use ic_icrc1_test_utils::minter_identity;
 use ic_ledger_canister_core::archive::ArchiveOptions;
-use ic_ledger_core::block::{BlockIndex, BlockType};
+use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_ledger_hash_of::{HashOf, HASH_LENGTH};
+use ic_ledger_suite_state_machine_tests::archiving::icrc_archives;
 use ic_ledger_suite_state_machine_tests::fee_collector::BlockRetrieval;
 use ic_ledger_suite_state_machine_tests::in_memory_ledger::verify_ledger_state;
 use ic_ledger_suite_state_machine_tests::{
-    send_approval, send_transfer_from, AllowanceProvider, ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY,
-    BLOB_META_VALUE, DECIMAL_PLACES, FEE, INT_META_KEY, INT_META_VALUE, MINTER, NAT_META_KEY,
-    NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE, TEXT_META_KEY, TEXT_META_VALUE, TOKEN_NAME,
-    TOKEN_SYMBOL,
+    get_all_ledger_and_archive_blocks, send_approval, send_transfer_from, AllowanceProvider,
+    ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY, BLOB_META_VALUE, DECIMAL_PLACES, FEE, INT_META_KEY,
+    INT_META_VALUE, MINTER, NAT_META_KEY, NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE, TEXT_META_KEY,
+    TEXT_META_VALUE, TOKEN_NAME, TOKEN_SYMBOL,
 };
 use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
@@ -177,18 +178,6 @@ fn ledger_wasm_lowupgradeinstructionlimits() -> Vec<u8> {
     std::fs::read(std::env::var("IC_ICRC1_LEDGER_WASM_INSTR_LIMITS_PATH").unwrap()).unwrap()
 }
 
-pub fn icrc_ledger_new_icrc3_certificate_wasm() -> Vec<u8> {
-    let ledger_wasm_path = std::env::var("IC_ICRC1_LEDGER_ICRC3_COMPATIBLE_DATA_CERTIFICATE_WASM_PATH").expect(
-        "The Ledger wasm path must be set using the env variable IC_ICRC1_LEDGER_ICRC3_COMPATIBLE_DATA_CERTIFICATE_WASM_PATH",
-    );
-    std::fs::read(&ledger_wasm_path).unwrap_or_else(|e| {
-        panic!(
-            "failed to load Wasm file from path {} (env var IC_ICRC1_LEDGER_ICRC3_COMPATIBLE_DATA_CERTIFICATE_WASM_PATH): {}",
-            ledger_wasm_path, e
-        )
-    })
-}
-
 fn ledger_wasm_nextledgerversion() -> Vec<u8> {
     std::fs::read(std::env::var("IC_ICRC1_LEDGER_NEXT_VERSION_WASM_PATH").unwrap()).unwrap()
 }
@@ -209,7 +198,7 @@ fn encode_init_args(args: ic_ledger_suite_state_machine_tests::InitArgs) -> Ledg
         minting_account: MINTER,
         fee_collector_account: args.fee_collector_account,
         initial_balances: args.initial_balances,
-        transfer_fee: FEE.into(),
+        transfer_fee: args.transfer_fee,
         token_name: TOKEN_NAME.to_string(),
         decimals: Some(DECIMAL_PLACES),
         token_symbol: TOKEN_SYMBOL.to_string(),
@@ -219,18 +208,10 @@ fn encode_init_args(args: ic_ledger_suite_state_machine_tests::InitArgs) -> Ledg
             MetadataValue::entry(TEXT_META_KEY, TEXT_META_VALUE),
             MetadataValue::entry(BLOB_META_KEY, BLOB_META_VALUE),
         ],
-        archive_options: ArchiveOptions {
-            trigger_threshold: ARCHIVE_TRIGGER_THRESHOLD as usize,
-            num_blocks_to_archive: NUM_BLOCKS_TO_ARCHIVE as usize,
-            node_max_memory_size_bytes: None,
-            max_message_size_bytes: None,
-            controller_id: PrincipalId::new_user_test_id(100),
-            more_controller_ids: None,
-            cycles_for_archive_creation: None,
-            max_transactions_per_response: None,
-        },
+        archive_options: args.archive_options,
         max_memo_length: None,
         feature_flags: args.feature_flags,
+        index_principal: args.index_principal,
     })
 }
 
@@ -248,6 +229,34 @@ fn encode_init_args_with_small_sized_archive(
     }
 }
 
+fn encode_init_args_no_archiving(
+    args: ic_ledger_suite_state_machine_tests::InitArgs,
+) -> LedgerArgument {
+    match encode_init_args(args) {
+        LedgerArgument::Init(mut init_args) => {
+            init_args.archive_options.trigger_threshold = 1_000_000_000;
+            LedgerArgument::Init(init_args)
+        }
+        LedgerArgument::Upgrade(_) => {
+            panic!("BUG: Expected Init argument")
+        }
+    }
+}
+
+fn encode_init_args_with_provided_metadata(
+    args: ic_ledger_suite_state_machine_tests::InitArgs,
+) -> LedgerArgument {
+    match encode_init_args(args.clone()) {
+        LedgerArgument::Init(mut init_args) => {
+            init_args.metadata = args.metadata;
+            LedgerArgument::Init(init_args)
+        }
+        LedgerArgument::Upgrade(_) => {
+            panic!("BUG: Expected Init argument")
+        }
+    }
+}
+
 fn encode_upgrade_args() -> LedgerArgument {
     LedgerArgument::Upgrade(None)
 }
@@ -255,6 +264,14 @@ fn encode_upgrade_args() -> LedgerArgument {
 #[test]
 fn test_metadata() {
     ic_ledger_suite_state_machine_tests::test_metadata(ledger_wasm(), encode_init_args)
+}
+
+#[test]
+fn test_icrc3_supported_block_types() {
+    ic_ledger_suite_state_machine_tests::test_icrc3_supported_block_types(
+        ledger_wasm(),
+        encode_init_args,
+    );
 }
 
 #[test]
@@ -447,6 +464,38 @@ fn test_approve_from_minter() {
 }
 
 #[test]
+fn test_allowance_listing_sequences() {
+    ic_ledger_suite_state_machine_tests::test_allowance_listing_sequences(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_allowance_listing_values() {
+    ic_ledger_suite_state_machine_tests::test_allowance_listing_values(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_allowance_listing_subaccount() {
+    ic_ledger_suite_state_machine_tests::test_allowance_listing_subaccount(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_allowance_listing_take() {
+    ic_ledger_suite_state_machine_tests::test_allowance_listing_take(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
 fn test_transfer_from_smoke() {
     ic_ledger_suite_state_machine_tests::test_transfer_from_smoke(ledger_wasm(), encode_init_args);
 }
@@ -482,14 +531,130 @@ fn test_archive_duplicate_controllers() {
 }
 
 #[test]
+fn test_setting_fee_collector_to_minting_account() {
+    ic_ledger_suite_state_machine_tests::test_setting_fee_collector_to_minting_account(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
 fn test_icrc21_standard() {
     ic_ledger_suite_state_machine_tests::test_icrc21_standard(ledger_wasm(), encode_init_args);
 }
 
-// #[test]
-// fn test_icrc1_test_suite() {
-//     ic_ledger_suite_state_machine_tests::test_icrc1_test_suite(ledger_wasm(), encode_init_args);
-// }
+#[test]
+fn test_archiving_lots_of_blocks_after_enabling_archiving() {
+    ic_ledger_suite_state_machine_tests::archiving::test_archiving_lots_of_blocks_after_enabling_archiving(
+        ledger_wasm(), encode_init_args,
+        icrc_archives,
+        ic_ledger_suite_state_machine_tests::archiving::query_icrc3_get_blocks,
+        ic_ledger_suite_state_machine_tests::archiving::query_icrc3_get_blocks,
+    );
+}
+
+#[test]
+fn test_archiving_in_chunks_returns_disjoint_block_range_locations() {
+    ic_ledger_suite_state_machine_tests::archiving::test_archiving_in_chunks_returns_disjoint_block_range_locations(
+        ledger_wasm(), encode_init_args,
+        icrc_archives,
+        ic_ledger_suite_state_machine_tests::archiving::query_icrc3_get_blocks,
+        ic_ledger_suite_state_machine_tests::archiving::query_icrc3_get_blocks,
+    );
+}
+
+#[test]
+fn test_archiving_respects_num_blocks_to_archive_upper_limit() {
+    ic_ledger_suite_state_machine_tests::archiving::test_archiving_respects_num_blocks_to_archive_upper_limit(
+        ledger_wasm(), encode_init_args, 250_000,
+        ic_ledger_suite_state_machine_tests::archiving::query_icrc3_get_blocks,
+        icrc_archives,
+        ic_ledger_suite_state_machine_tests::archiving::query_icrc3_get_blocks,
+    );
+}
+
+#[test]
+fn test_get_blocks_returns_multiple_archive_callbacks() {
+    ic_ledger_suite_state_machine_tests::archiving::test_get_blocks_returns_multiple_archive_callbacks(
+        ledger_wasm(),
+        encode_init_args,
+        icrc_archives,
+        ic_ledger_suite_state_machine_tests::archiving::query_icrc3_get_blocks,
+    );
+}
+
+fn encode_icrc106_upgrade_args(index_principal: Option<Principal>) -> LedgerArgument {
+    LedgerArgument::Upgrade(Some(UpgradeArgs {
+        metadata: None,
+        token_name: None,
+        token_symbol: None,
+        transfer_fee: None,
+        change_fee_collector: None,
+        max_memo_length: None,
+        feature_flags: None,
+        change_archive_options: None,
+        index_principal,
+    }))
+}
+
+#[test]
+fn test_icrc106_unsupported_if_index_not_set() {
+    ic_ledger_suite_state_machine_tests::icrc_106::test_icrc106_supported_even_if_index_not_set(
+        ledger_wasm(),
+        encode_init_args,
+        encode_icrc106_upgrade_args,
+    );
+}
+
+#[test]
+fn test_icrc106_set_index_in_install() {
+    ic_ledger_suite_state_machine_tests::icrc_106::test_icrc106_set_index_in_install(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_icrc106_set_index_in_install_with_mainnet_ledger_wasm() {
+    ic_ledger_suite_state_machine_tests::icrc_106::test_icrc106_set_index_in_install_with_mainnet_ledger_wasm(
+        ledger_mainnet_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_icrc106_set_index_in_upgrade() {
+    ic_ledger_suite_state_machine_tests::icrc_106::test_icrc106_set_index_in_upgrade(
+        ledger_wasm(),
+        encode_init_args,
+        encode_icrc106_upgrade_args,
+    );
+}
+
+#[test]
+fn test_icrc106_set_hardcoded_index_in_upgrade() {
+    ic_ledger_suite_state_machine_tests::icrc_106::test_icrc106_set_hardcoded_index_in_upgrade(
+        ledger_wasm(),
+        encode_init_args,
+        encode_icrc106_upgrade_args,
+    );
+}
+
+#[test]
+fn test_upgrade_from_mainnet_ledger_version() {
+    ic_ledger_suite_state_machine_tests::icrc_106::test_upgrade_downgrade_with_mainnet_ledger(
+        ledger_mainnet_wasm(),
+        ledger_wasm(),
+        encode_init_args,
+        encode_upgrade_args,
+        encode_icrc106_upgrade_args,
+    );
+}
+
+#[test]
+fn test_icrc1_test_suite() {
+    ic_ledger_suite_state_machine_tests::test_icrc1_test_suite(ledger_wasm(), encode_init_args);
+}
 
 #[test]
 fn test_ledger_http_request_decoding_quota() {
@@ -506,11 +671,6 @@ fn test_block_transformation() {
         ledger_wasm(),
         encode_init_args,
     );
-}
-
-#[test]
-fn icrc1_test_upgrade_serialization_from_mainnet() {
-    icrc1_test_upgrade_serialization(ledger_mainnet_wasm(), false);
 }
 
 #[test]
@@ -538,7 +698,13 @@ fn icrc1_test_upgrade_serialization(ledger_mainnet_wasm: Vec<u8>, mainnet_on_pre
         minter,
         true,
         mainnet_on_prev_version,
+        true,
     );
+}
+
+fn get_all_blocks(state_machine: &StateMachine, ledger_id: CanisterId) -> Vec<EncodedBlock> {
+    let blocks = get_all_ledger_and_archive_blocks::<Tokens>(state_machine, ledger_id, None, None);
+    blocks.into_iter().map(|b| b.encode()).collect()
 }
 
 #[test]
@@ -547,6 +713,7 @@ fn icrc1_test_multi_step_migration_from_v3() {
         ledger_mainnet_v3_wasm(),
         ledger_wasm_lowupgradeinstructionlimits(),
         encode_init_args,
+        get_all_blocks,
     );
 }
 
@@ -556,6 +723,7 @@ fn icrc1_test_multi_step_migration_from_v2() {
         ledger_mainnet_v2_wasm(),
         ledger_wasm_lowupgradeinstructionlimits(),
         encode_init_args,
+        get_all_blocks,
     );
 }
 
@@ -565,6 +733,7 @@ fn icrc1_test_multi_step_migration_from_v2_noledgerversion() {
         ledger_mainnet_v2_noledgerversion_wasm(),
         ledger_wasm_lowupgradeinstructionlimits(),
         encode_init_args,
+        get_all_blocks,
     );
 }
 
@@ -581,21 +750,33 @@ fn icrc1_test_downgrade_from_incompatible_version() {
 
 #[test]
 fn icrc1_test_stable_migration_endpoints_disabled_from_v3() {
-    ic_ledger_suite_state_machine_tests::icrc1_test_stable_migration_endpoints_disabled(
-        ledger_mainnet_v3_wasm(),
-        ledger_wasm_lowupgradeinstructionlimits(),
-        encode_init_args,
-        vec![],
-    );
+    test_stable_migration_endpoints_disabled(ledger_mainnet_v3_wasm());
 }
 
 #[test]
 fn icrc1_test_stable_migration_endpoints_disabled_from_v2() {
+    test_stable_migration_endpoints_disabled(ledger_mainnet_v2_wasm());
+}
+
+fn test_stable_migration_endpoints_disabled(ledger_wasm_mainnet: Vec<u8>) {
+    let get_blocks_arg = Encode!(&GetBlocksRequest {
+        start: Nat::from(0u64),
+        length: Nat::from(1u64),
+    })
+    .unwrap();
+    let args: Vec<GetBlocksRequest> = vec![];
+    let icrc3_get_blocks_arg = Encode!(&args).unwrap();
     ic_ledger_suite_state_machine_tests::icrc1_test_stable_migration_endpoints_disabled(
-        ledger_mainnet_v2_wasm(),
+        ledger_wasm_mainnet,
         ledger_wasm_lowupgradeinstructionlimits(),
-        encode_init_args,
-        vec![],
+        encode_init_args_no_archiving,
+        vec![
+            ("get_blocks", get_blocks_arg.clone()),
+            ("get_transactions", get_blocks_arg),
+            ("icrc3_get_blocks", icrc3_get_blocks_arg),
+            ("get_data_certificate", Encode!().unwrap()),
+            ("icrc3_get_tip_certificate", Encode!().unwrap()),
+        ],
     );
 }
 
@@ -691,8 +872,42 @@ fn icrc1_test_metrics_while_migrating_from_v2() {
 
 #[test]
 fn icrc1_test_upgrade_from_v1_not_possible() {
-    ic_ledger_suite_state_machine_tests::test_upgrade_from_v1_not_possible(
+    ic_ledger_suite_state_machine_tests::test_upgrade_not_possible(
         ledger_mainnet_v1_wasm(),
+        ledger_wasm(),
+        "Cannot upgrade from scratch stable memory, please upgrade to memory manager first.",
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_setting_forbidden_metadata_in_init_works_in_v3_ledger() {
+    ic_ledger_suite_state_machine_tests::metadata::test_setting_forbidden_metadata_works_in_v3_ledger(
+        ledger_mainnet_v3_wasm(),
+        encode_init_args_with_provided_metadata,
+    );
+}
+
+#[test]
+fn test_setting_forbidden_metadata_not_possible() {
+    ic_ledger_suite_state_machine_tests::metadata::test_setting_forbidden_metadata_not_possible(
+        ledger_wasm(),
+        encode_init_args_with_provided_metadata,
+    );
+}
+
+#[test]
+fn test_cycles_for_archive_creation_no_overwrite_of_none_in_upgrade() {
+    ic_ledger_suite_state_machine_tests::test_cycles_for_archive_creation_no_overwrite_of_none_in_upgrade(
+        ledger_mainnet_v2_wasm(),
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_cycles_for_archive_creation_default_spawns_archive() {
+    ic_ledger_suite_state_machine_tests::test_cycles_for_archive_creation_default_spawns_archive(
         ledger_wasm(),
         encode_init_args,
     );
@@ -733,6 +948,14 @@ mod metrics {
             ledger_wasm(),
             encode_init_args,
             encode_upgrade_args,
+        );
+    }
+
+    #[test]
+    fn should_compute_and_export_total_volume_metric() {
+        ic_ledger_suite_state_machine_tests::metrics::should_compute_and_export_total_volume_metric(
+            ledger_wasm(),
+            encode_init_args,
         );
     }
 }
@@ -804,11 +1027,12 @@ fn test_icrc2_feature_flag_doesnt_disable_icrc2_endpoints() {
             max_message_size_bytes: None,
             controller_id: PrincipalId::new_user_test_id(100),
             more_controller_ids: None,
-            cycles_for_archive_creation: None,
+            cycles_for_archive_creation: Some(0),
             max_transactions_per_response: None,
         },
         max_memo_length: None,
         feature_flags: Some(FeatureFlags { icrc2: false }),
+        index_principal: None,
     }))
     .unwrap();
     let ledger_id = env
@@ -978,11 +1202,12 @@ fn test_icrc3_get_archives() {
             max_message_size_bytes: None,
             controller_id: PrincipalId(minting_account.owner),
             more_controller_ids: None,
-            cycles_for_archive_creation: None,
+            cycles_for_archive_creation: Some(0),
             max_transactions_per_response: None,
         },
         max_memo_length: None,
         feature_flags: None,
+        index_principal: None,
     });
     let args = Encode!(&args).unwrap();
     let ledger_id = env
@@ -1053,11 +1278,12 @@ fn test_icrc3_get_blocks() {
             max_message_size_bytes: None,
             controller_id: PrincipalId(minting_account.owner),
             more_controller_ids: None,
-            cycles_for_archive_creation: None,
+            cycles_for_archive_creation: Some(0),
             max_transactions_per_response: None,
         },
         max_memo_length: None,
         feature_flags: None,
+        index_principal: None,
     });
     let args = Encode!(&args).unwrap();
     let ledger_id = env
@@ -1327,11 +1553,12 @@ fn test_icrc3_get_blocks_number_of_blocks_limit() {
             max_message_size_bytes: None,
             controller_id: PrincipalId(minting_account.owner),
             more_controller_ids: None,
-            cycles_for_archive_creation: None,
+            cycles_for_archive_creation: Some(0),
             max_transactions_per_response: None,
         },
         max_memo_length: None,
         feature_flags: None,
+        index_principal: None,
     });
 
     let args = Encode!(&args).unwrap();
@@ -1368,35 +1595,60 @@ fn test_icrc3_get_blocks_number_of_blocks_limit() {
     check_icrc3_get_block_limit(vec![(0, 1), (0, 100)]);
 }
 
-#[cfg(not(feature = "u256-tokens"))]
 #[test]
-fn test_icrc3_upgrade() {
+fn test_icrc3_certificate_ledger_upgrade() {
+    use ic_cbor::CertificateToCbor;
+    use ic_certification::hash_tree::{HashTreeNode, SubtreeLookupResult};
+    use ic_certification::{Certificate, HashTree};
+    use ic_ledger_suite_state_machine_tests::send_transfer;
+    use icrc_ledger_types::icrc3::blocks::ICRC3DataCertificate;
+
+    const NUM_BLOCKS: u64 = 10;
+
     let env = StateMachine::new();
     let minting_account = account(111);
 
     let init_args = ic_icrc1_ledger::InitArgsBuilder::for_tests()
         .with_minting_account(minting_account)
-        .with_transfer_fee(FEE)
         // We need an initial balance so the block certificate is not None
         .with_initial_balance(account(1), 1_000_000u64)
+        .with_transfer_fee(FEE)
         .build();
 
+    // Install the ledger with a version serving the non-compliant ICRC-3 certificate.
     let ledger_id = env
         .install_canister(
-            ledger_wasm(),
+            ledger_mainnet_v3_wasm(),
             Encode!(&(LedgerArgument::Init(init_args.clone()))).unwrap(),
             None,
         )
         .expect("Unable to install the ledger");
+    // Add some transactions
+    for _ in 0..NUM_BLOCKS {
+        send_transfer(
+            &env,
+            ledger_id,
+            minting_account.owner,
+            &TransferArg {
+                from_subaccount: None,
+                to: account(1),
+                fee: None,
+                created_at_time: None,
+                memo: None,
+                amount: 1_000_000u64.into(),
+            },
+        )
+        .expect("mint should succeed");
+    }
 
-    let legacy_certificate = Decode!(
+    let old_legacy_certificate = Decode!(
         &env.query(ledger_id, "get_data_certificate", Encode!(&()).unwrap())
             .unwrap()
             .bytes(),
         icrc_ledger_types::icrc3::blocks::DataCertificate
     )
     .unwrap();
-    let icrc3_certificate = Decode!(
+    let old_icrc3_certificate = Decode!(
         &env.query(
             ledger_id,
             "icrc3_get_tip_certificate",
@@ -1404,24 +1656,59 @@ fn test_icrc3_upgrade() {
         )
         .unwrap()
         .bytes(),
-        Option<icrc_ledger_types::icrc3::blocks::ICRC3DataCertificate>
+        Option<ICRC3DataCertificate>
     )
     .unwrap()
     .unwrap();
     assert_eq!(
-        legacy_certificate.certificate.clone().unwrap(),
-        icrc3_certificate.certificate
+        old_legacy_certificate.certificate.clone().unwrap(),
+        old_icrc3_certificate.certificate
     );
-    assert_eq!(icrc3_certificate.hash_tree, icrc3_certificate.hash_tree);
+    assert_eq!(
+        old_legacy_certificate.hash_tree,
+        old_icrc3_certificate.hash_tree
+    );
 
-    // Now we use the new ledger version
-    let upgrade_args = Encode!(&LedgerArgument::Upgrade(None)).unwrap();
-    env.upgrade_canister(
-        ledger_id,
-        icrc_ledger_new_icrc3_certificate_wasm(),
-        upgrade_args,
+    fn lookup_hashtree(
+        hash_tree: serde_bytes::ByteBuf,
+        leaf_name: &str,
+    ) -> Result<Vec<u8>, String> {
+        let hash_tree: HashTree = ciborium::de::from_reader(hash_tree.as_slice()).unwrap();
+        match hash_tree.lookup_subtree([leaf_name.as_bytes()]) {
+            SubtreeLookupResult::Found(tree) => match tree.as_ref() {
+                HashTreeNode::Leaf(result) => Ok(result.clone()),
+                _ => Err("Expected a leaf node".to_string()),
+            },
+            _ => Err(format!(
+                "Expected to find a leaf node: Hash tree: {:?}, leaf_name: {}",
+                hash_tree, leaf_name
+            )
+            .to_string()),
+        }
+    }
+
+    // Verify that the new label for the last block hash is not present in the old hash tree.
+    assert!(lookup_hashtree(old_icrc3_certificate.hash_tree.clone(), "last_block_hash").is_err());
+
+    // Verify that the legacy label is present in the old hash tree.
+    icrc_ledger_types::icrc::generic_value::Hash::try_from(
+        lookup_hashtree(old_icrc3_certificate.hash_tree.clone(), "tip_hash").unwrap(),
     )
-    .expect("Unable to upgrade the ledger canister");
+    .unwrap();
+
+    // Verify that the label for the last block index is incorrectly encoded in the old hash tree.
+    let old_last_block_index = u64::from_be_bytes(
+        lookup_hashtree(old_icrc3_certificate.hash_tree.clone(), "last_block_index")
+            .unwrap()
+            .try_into()
+            .unwrap(),
+    );
+    assert_eq!(NUM_BLOCKS, old_last_block_index);
+
+    // Upgrade to the ledger that serves the correct ICRC-3 certificate.
+    let upgrade_args = Encode!(&LedgerArgument::Upgrade(None)).unwrap();
+    env.upgrade_canister(ledger_id, ledger_wasm(), upgrade_args)
+        .expect("Unable to upgrade the ledger canister");
 
     let new_legacy_certificate = Decode!(
         &env.query(ledger_id, "get_data_certificate", Encode!(&()).unwrap())
@@ -1438,7 +1725,7 @@ fn test_icrc3_upgrade() {
         )
         .unwrap()
         .bytes(),
-        Option<icrc_ledger_types::icrc3::blocks::ICRC3DataCertificate>
+        Option<ICRC3DataCertificate>
     )
     .unwrap()
     .unwrap();
@@ -1447,64 +1734,130 @@ fn test_icrc3_upgrade() {
         new_icrc3_certificate.certificate
     );
 
-    fn lookup_hashtree(hash_tree: serde_bytes::ByteBuf, leaf_name: &str) -> Vec<u8> {
-        let hash_tree: ic_certification::HashTree =
-            ciborium::de::from_reader(hash_tree.as_slice()).unwrap();
-        match hash_tree.lookup_subtree([leaf_name.as_bytes()]) {
-            ic_certification::hash_tree::SubtreeLookupResult::Found(tree) => match tree.as_ref() {
-                ic_certification::hash_tree::HashTreeNode::Leaf(result) => result.clone(),
-                _ => panic!("Expected a leaf node"),
-            },
-            _ => panic!(
-                "Expected to find a leaf node: Hash tree: {:?}, leaf_name {}",
-                hash_tree, leaf_name
-            ),
-        }
-    }
+    // Verify that the legacy label is not present in the hash tree.
+    assert!(lookup_hashtree(new_icrc3_certificate.hash_tree.clone(), "tip_hash").is_err());
 
-    assert_eq!(
-        new_legacy_certificate.hash_tree,
+    // Verify that the new label for the last block hash is present in the hash tree.
+    icrc_ledger_types::icrc::generic_value::Hash::try_from(
+        lookup_hashtree(new_icrc3_certificate.hash_tree.clone(), "last_block_hash").unwrap(),
+    )
+    .unwrap();
+
+    // Verify that the label for the last block index is correctly encoded in the hash tree.
+    let new_last_block_index = leb128::read::unsigned(&mut std::io::Cursor::new(
+        lookup_hashtree(new_icrc3_certificate.hash_tree.clone(), "last_block_index").unwrap(),
+    ))
+    .unwrap();
+    assert_eq!(NUM_BLOCKS, new_last_block_index);
+
+    // Verify that the hash tree is different after the ledger was upgraded.
+    assert_ne!(
+        old_icrc3_certificate.hash_tree,
         new_icrc3_certificate.hash_tree
     );
-    assert_eq!(
-        new_legacy_certificate.certificate.clone().unwrap(),
-        new_icrc3_certificate.certificate
+
+    let old_certificate = Certificate::from_cbor(old_icrc3_certificate.certificate.as_slice())
+        .expect("Unable to deserialize CBOR encoded Certificate");
+    let old_hash_tree: HashTree =
+        ciborium::de::from_reader(old_icrc3_certificate.hash_tree.as_slice())
+            .expect("Unable to deserialize CBOR encoded hash_tree");
+    let new_certificate = Certificate::from_cbor(new_icrc3_certificate.certificate.as_slice())
+        .expect("Unable to deserialize CBOR encoded Certificate");
+    let new_hash_tree: HashTree =
+        ciborium::de::from_reader(new_icrc3_certificate.hash_tree.as_slice())
+            .expect("Unable to deserialize CBOR encoded hash_tree");
+    assert!(
+        is_valid_root_hash(&old_certificate, &old_hash_tree.digest(), ledger_id),
+        "Certified data does not match root hash for old certificate before transaction"
     );
 
-    // Also check against the old WASM version
-    let last_block_hash: icrc_ledger_types::icrc::generic_value::Hash =
-        lookup_hashtree(icrc3_certificate.hash_tree.clone(), "tip_hash")
-            .try_into()
-            .unwrap();
-    let new_last_block_hash: icrc_ledger_types::icrc::generic_value::Hash =
-        lookup_hashtree(new_icrc3_certificate.hash_tree.clone(), "last_block_hash")
-            .try_into()
-            .unwrap();
-    assert_eq!(
-        last_block_hash,
-        new_last_block_hash,
-        "Hash trees do not match: Old certificate hash tree: {:?}, New certificate hash tree: {:?}",
-        ciborium::de::from_reader::<ic_certification::HashTree, &[u8]>(
-            icrc3_certificate.hash_tree.as_slice()
-        )
-        .unwrap(),
-        ciborium::de::from_reader::<ic_certification::HashTree, &[u8]>(
-            new_icrc3_certificate.hash_tree.as_slice()
+    // Compare the certified data of the new certificate with the digest of the old hash tree.
+    // These should be different, since the new certified data uses the new labels, which are not
+    // present in the old hash tree.
+    assert!(
+        !is_valid_root_hash(&new_certificate, &old_hash_tree.digest(), ledger_id),
+        "New certified data matches old root hash after upgrade before transaction"
+    );
+    // Compare the certified data of the new certificate with the digest of the new hash tree.
+    // These should be the same, since the new certified data, as well as the new hash tree, both
+    // use the new labels.
+    assert!(
+        is_valid_root_hash(&new_certificate, &new_hash_tree.digest(), ledger_id),
+        "New certified data does not match new root hash after upgrade before transaction"
+    );
+
+    // Send a transaction, which will update the certified data.
+    send_transfer(
+        &env,
+        ledger_id,
+        minting_account.owner,
+        &TransferArg {
+            from_subaccount: None,
+            to: account(1),
+            fee: None,
+            created_at_time: None,
+            memo: None,
+            amount: 1_000_000u64.into(),
+        },
+    )
+    .expect("mint should succeed");
+
+    let new_icrc3_certificate = Decode!(
+        &env.query(
+            ledger_id,
+            "icrc3_get_tip_certificate",
+            Encode!(&()).unwrap()
         )
         .unwrap()
-    );
-
-    let last_block_index = u64::from_be_bytes(
-        lookup_hashtree(icrc3_certificate.hash_tree.clone(), "last_block_index")
-            .try_into()
-            .unwrap(),
-    );
-    let new_last_block_index = leb128::read::unsigned(&mut std::io::Cursor::new(lookup_hashtree(
-        new_icrc3_certificate.hash_tree.clone(),
-        "last_block_index",
-    )))
+        .bytes(),
+        Option<ICRC3DataCertificate>
+    )
+    .unwrap()
     .unwrap();
-    assert_eq!(last_block_index, new_last_block_index);
+
+    // Verify that the label for the last block index is correctly encoded in the hash tree.
+    let new_last_block_index = leb128::read::unsigned(&mut std::io::Cursor::new(
+        lookup_hashtree(new_icrc3_certificate.hash_tree.clone(), "last_block_index").unwrap(),
+    ))
+    .unwrap();
+    assert_eq!(NUM_BLOCKS + 1, new_last_block_index);
+
+    let new_certificate = Certificate::from_cbor(new_icrc3_certificate.certificate.as_slice())
+        .expect("Unable to deserialize CBOR encoded Certificate");
+    let new_hash_tree: HashTree =
+        ciborium::de::from_reader(new_icrc3_certificate.hash_tree.as_slice())
+            .expect("Unable to deserialize CBOR encoded hash_tree");
+    assert!(
+        is_valid_root_hash(&new_certificate, &new_hash_tree.digest(), ledger_id),
+        "Certified data does not match root hash "
+    );
+}
+
+/// Check whether the certified data at path ["canister", ledger_canister_id, "certified_data"] is equal to root_hash.
+fn is_valid_root_hash(
+    certificate: &ic_certification::Certificate,
+    root_hash: &icrc_ledger_types::icrc::generic_value::Hash,
+    ledger_canister_id: CanisterId,
+) -> bool {
+    use ic_certification::LookupResult;
+
+    let certified_data_path: [ic_certification::hash_tree::Label<Vec<u8>>; 3] = [
+        "canister".into(),
+        ledger_canister_id.get().0.as_slice().into(),
+        "certified_data".into(),
+    ];
+
+    let cert_hash = match certificate.tree.lookup_path(&certified_data_path) {
+        LookupResult::Found(v) => v,
+        _ => {
+            panic!(
+                "could not find certified_data for canister: {}",
+                ledger_canister_id
+            )
+        }
+    };
+
+    cert_hash == root_hash
 }
 
 mod verify_written_blocks {
@@ -1761,11 +2114,12 @@ mod verify_written_blocks {
                     max_message_size_bytes: None,
                     controller_id: PrincipalId::new_user_test_id(100),
                     more_controller_ids: None,
-                    cycles_for_archive_creation: None,
+                    cycles_for_archive_creation: Some(0),
                     max_transactions_per_response: None,
                 },
                 max_memo_length: None,
                 feature_flags: Some(FeatureFlags { icrc2: true }),
+                index_principal: None,
             });
 
             let args = Encode!(&ledger_arg_init).unwrap();
@@ -1977,11 +2331,12 @@ mod incompatible_token_type_upgrade {
                 max_message_size_bytes: None,
                 controller_id: PrincipalId::new_user_test_id(100),
                 more_controller_ids: None,
-                cycles_for_archive_creation: None,
+                cycles_for_archive_creation: Some(0),
                 max_transactions_per_response: None,
             },
             max_memo_length: None,
             feature_flags: Some(FeatureFlags { icrc2: false }),
+            index_principal: None,
         }))
         .unwrap()
     }

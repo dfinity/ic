@@ -2,9 +2,10 @@ use crate::logs::{P0, P1};
 use crate::memo::MintMemo;
 use crate::state::{mutate_state, read_state, SuspendedReason, UtxoCheckStatus};
 use crate::tasks::{schedule_now, TaskType};
+use crate::GetUtxosResponse;
 use candid::{CandidType, Deserialize, Nat, Principal};
 use ic_btc_checker::CheckTransactionResponse;
-use ic_btc_interface::{GetUtxosError, GetUtxosResponse, OutPoint, Utxo};
+use ic_btc_interface::{GetUtxosError, OutPoint, Utxo};
 use ic_canister_log::log;
 use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
@@ -22,7 +23,7 @@ use super::get_btc_address::init_ecdsa_public_key;
 use crate::{
     guard::{balance_update_guard, GuardError},
     management::{get_utxos, CallError, CallSource},
-    metrics::observe_latency,
+    metrics::observe_update_call_latency,
     state,
     tx::{DisplayAmount, DisplayOutpoint},
     updates::get_btc_address,
@@ -232,7 +233,7 @@ pub async fn update_balance<R: CanisterRuntime>(
 
         let current_confirmations = pending_utxos.iter().map(|u| u.confirmations).max();
 
-        observe_latency(0, start_time, runtime.time());
+        observe_update_call_latency(0, start_time, runtime.time());
 
         return Err(UpdateBalanceError::NoNewUtxos {
             current_confirmations,
@@ -243,7 +244,7 @@ pub async fn update_balance<R: CanisterRuntime>(
     }
 
     let token_name = match btc_network {
-        ic_management_canister_types_private::BitcoinNetwork::Mainnet => "ckBTC",
+        crate::Network::Mainnet => "ckBTC",
         _ => "ckTESTBTC",
     };
 
@@ -345,7 +346,7 @@ pub async fn update_balance<R: CanisterRuntime>(
 
     schedule_now(TaskType::ProcessLogic, runtime);
 
-    observe_latency(utxo_statuses.len(), start_time, runtime.time());
+    observe_update_call_latency(utxo_statuses.len(), start_time, runtime.time());
 
     Ok(utxo_statuses)
 }

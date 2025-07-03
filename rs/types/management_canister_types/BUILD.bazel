@@ -1,32 +1,46 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
 
-# This library is private to the execution environment.
+# This library is private to the replica and other guestOS processes.
 # These crates are considered direct users of the management
-# types and may always depend on this crate directly.
+# types and may depend on this crate directly.
 permanent_whitelist = [
-    "//rs/execution_environment:__subpackages__",
+    "//rs/canister_client:__subpackages__",
+    "//rs/canister_sandbox:__subpackages__",
+    "//rs/canonical_state:__subpackages__",
+    "//rs/consensus:__subpackages__",
+    "//rs/crypto:__subpackages__",
     "//rs/cycles_account_manager:__subpackages__",
+    "//rs/embedders:__subpackages__",
+    "//rs/execution_environment:__subpackages__",
+    "//rs/https_outcalls:__subpackages__",
+    "//rs/ingress_manager:__subpackages__",
+    "//rs/interfaces:__subpackages__",
     "//rs/messaging:__subpackages__",
     "//rs/management_canister_types/fuzz:__subpackages__",
+    "//rs/orchestrator:__subpackages__",
+    "//rs/pocket_ic_server:__subpackages__",
+    "//rs/prep:__subpackages__",
+    "//rs/recovery:__subpackages__",
+    "//rs/replica:__subpackages__",
+    "//rs/replica_tests:__subpackages__",
+    "//rs/replicated_state:__subpackages__",
+    "//rs/state_layout:__subpackages__",
+    "//rs/state_machine_tests:__subpackages__",
+    "//rs/state_manager:__subpackages__",
+    "//rs/system_api:__subpackages__",
+    "//rs/test_utilities:__subpackages__",
+    "//rs/tests:__subpackages__",  # some subpackages should migrate (canister tests)
+    "//rs/types:__subpackages__",
 ]
 
 # These crates depend on this library directly for historical reasons
 # and must move to the published version of this library on crates.io.
 temporary_whitelist = [
-    "//rs/artifact_pool:__subpackages__",
     "//rs/bitcoin:__subpackages__",
-    "//rs/canister_client:__subpackages__",
-    "//rs/canister_sandbox:__subpackages__",  # permanent?
-    "//rs/canonical_state:__subpackages__",  # permanent?
-    "//rs/consensus:__subpackages__",
-    "//rs/crypto:__subpackages__",
-    "//rs/determinism_test:__subpackages__",  # permanent?
+    "//rs/determinism_test:__subpackages__",
     "//rs/drun:__subpackages__",
     "//rs/ethereum:__subpackages__",
-    "//rs/https_outcalls:__subpackages__",  # permanent?
-    "//rs/ingress_manager:__subpackages__",  # permanent?
-    "//rs/interfaces:__subpackages__",
     "//rs/ledger_suite:__subpackages__",
     "//rs/nervous_system:__subpackages__",
     "//rs/nns/cmc:__subpackages__",
@@ -35,26 +49,9 @@ temporary_whitelist = [
     "//rs/nns/integration_tests:__subpackages__",
     "//rs/nns/sns-wasm:__subpackages__",
     "//rs/nns/test_utils:__subpackages__",
-    "//rs/orchestrator:__subpackages__",
-    "//rs/pocket_ic_server:__subpackages__",
-    "//rs/prep:__subpackages__",
-    "//rs/recovery:__subpackages__",
     "//rs/registry:__subpackages__",
-    "//rs/replica:__subpackages__",
-    "//rs/replica_tests:__subpackages__",
-    "//rs/replicated_state:__subpackages__",  # permanent?
     "//rs/rust_canisters:__subpackages__",
-    "//rs/artifact_pool:__subpackages__",
     "//rs/sns:__subpackages__",
-    "//rs/starter:__subpackages__",
-    "//rs/state_layout:__subpackages__",  # permanent?
-    "//rs/state_machine_tests:__subpackages__",  # permanent?
-    "//rs/state_manager:__subpackages__",  # permanent?
-    "//rs/system_api:__subpackages__",  # permanent?
-    "//rs/test_utilities:__subpackages__",  # some subpackages permanent?
-    "//rs/tests:__subpackages__",  # some subpackages permanent?
-    "//rs/types:__subpackages__",
-    "//rs/workload_generator:__subpackages__",
 ]
 
 package(default_visibility = permanent_whitelist + temporary_whitelist)
@@ -78,10 +75,10 @@ rust_library(
     version = "0.9.0",
     deps = [
         # Keep sorted.
+        "//packages/ic-error-types",
         "//rs/bitcoin/replica_types",
         "//rs/protobuf",
         "//rs/types/base_types",
-        "//rs/types/error_types",
         "//rs/utils",
         "@crate_index//:candid",
         "@crate_index//:ic-btc-interface",
@@ -99,4 +96,17 @@ rust_library(
 rust_test(
     name = "management_canister_types_test",
     crate = ":management_canister_types",
+)
+
+rust_test(
+    name = "candid_equality",
+    srcs = ["tests/candid_equality.rs"],
+    data = ["tests/ic.did"],
+    env = {"IC_DID": "$(rootpath :tests/ic.did)"},
+    deps = [
+        # Keep sorted.
+        ":management_canister_types",
+        "@crate_index//:candid",
+        "@crate_index//:candid_parser",
+    ],
 )

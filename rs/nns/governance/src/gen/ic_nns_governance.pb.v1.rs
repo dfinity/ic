@@ -90,233 +90,20 @@ pub struct NeuronStakeTransfer {
     #[prost(uint64, tag = "7")]
     pub memo: u64,
 }
-/// This structure represents a neuron "at rest" in governance system of
-/// the Internet Computer IC.
-#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
-#[compare_default]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct Neuron {
-    /// The id of the neuron.
-    ///
-    /// This is stored here temporarily, since its also stored on the map
-    /// that contains neurons.
-    ///
-    /// Initialization uses ids for the following graph. We need neurons
-    /// to come into existence at genesis with pre-chosen ids, so a
-    /// neuron needs to have an id. We could alternatively choose a
-    /// unique naming scheme instead and chose the ids on the
-    /// initialization of the canister.
-    #[prost(message, optional, tag = "1")]
-    pub id: ::core::option::Option<::ic_nns_common::pb::v1::NeuronId>,
-    /// The principal of the ICP ledger account where the locked ICP
-    /// balance resides. This principal is indistinguishable from one
-    /// identifying a public key pair, such that those browsing the ICP
-    /// ledger cannot tell which balances belong to neurons.
-    #[prost(bytes = "vec", tag = "2")]
-    #[serde(with = "serde_bytes")]
-    pub account: ::prost::alloc::vec::Vec<u8>,
-    /// The principal that actually controls the neuron. The principal
-    /// must identify a public key pair, which acts as a “master key”,
-    /// such that the corresponding secret key should be kept very
-    /// secure. The principal may control many neurons.
-    #[prost(message, optional, tag = "3")]
-    pub controller: ::core::option::Option<::ic_base_types::PrincipalId>,
-    /// Keys that can be used to perform actions with limited privileges
-    /// without exposing the secret key corresponding to the principal
-    /// e.g. could be a WebAuthn key.
-    #[prost(message, repeated, tag = "4")]
-    pub hot_keys: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
-    /// The amount of staked ICP tokens, measured in fractions of 10E-8
-    /// of an ICP.
-    ///
-    /// Cached record of the locked ICP balance on the ICP ledger.
-    ///
-    /// For neuron creation: has to contain some minimum amount. A
-    /// spawned neuron with less stake cannot increase its dissolve
-    /// delay.
-    #[prost(uint64, tag = "5")]
-    pub cached_neuron_stake_e8s: u64,
-    /// The amount of ICP that this neuron has forfeited due to making
-    /// proposals that were subsequently rejected or from using the
-    /// 'manage neurons through proposals' functionality. Must be smaller
-    /// than 'neuron_stake_e8s'. When a neuron is disbursed, these ICP
-    /// will be burned.
-    #[prost(uint64, tag = "6")]
-    pub neuron_fees_e8s: u64,
-    /// When the Neuron was created. A neuron can only vote on proposals
-    /// submitted after its creation date.
-    #[prost(uint64, tag = "7")]
-    pub created_timestamp_seconds: u64,
-    /// The timestamp, in seconds from the Unix epoch, corresponding to
-    /// the time this neuron has started aging. This is either the
-    /// creation time or the last time at which the neuron has stopped
-    /// dissolving.
-    ///
-    /// This value is meaningless when the neuron is dissolving, since a
-    /// dissolving neurons always has age zero. The canonical value of
-    /// this field for a dissolving neuron is `u64::MAX`.
-    #[prost(uint64, tag = "8")]
-    pub aging_since_timestamp_seconds: u64,
-    /// The timestamp, in seconds from the Unix epoch, at which this
-    /// neuron should be spawned and its maturity converted to ICP
-    /// according to <https://wiki.internetcomputer.org/wiki/Maturity_modulation.>
-    #[prost(uint64, optional, tag = "19")]
-    pub spawn_at_timestamp_seconds: ::core::option::Option<u64>,
-    /// Map `Topic` to followees. The key is represented by an integer as
-    /// Protobuf does not support enum keys in maps.
-    #[prost(map = "int32, message", tag = "11")]
-    pub followees: ::std::collections::HashMap<i32, neuron::Followees>,
-    /// Information about how this neuron voted in the recent past. It
-    /// only contains proposals that the neuron voted yes or no on.
-    #[prost(message, repeated, tag = "12")]
-    pub recent_ballots: ::prost::alloc::vec::Vec<BallotInfo>,
-    /// `true` if this neuron has passed KYC, `false` otherwise
-    #[prost(bool, tag = "13")]
-    pub kyc_verified: bool,
-    /// The record of the transfer that was made to create this neuron.
-    #[prost(message, optional, tag = "14")]
-    pub transfer: ::core::option::Option<NeuronStakeTransfer>,
-    /// The accumulated unstaked maturity of the neuron, in "e8s equivalent".
-    ///
-    /// The unit is "e8s equivalent" to insist that, while this quantity is on
-    /// the same scale as ICPs, maturity is not directly convertible to ICPs:
-    /// conversion requires a minting event and the conversion rate is variable.
-    #[prost(uint64, tag = "15")]
-    pub maturity_e8s_equivalent: u64,
-    /// The accumulated staked maturity of the neuron, in "e8s equivalent" (see
-    /// "maturity_e8s_equivalent"). Staked maturity becomes regular maturity once
-    /// the neuron is dissolved.
-    ///
-    /// Contrary to `maturity_e8s_equivalent` this maturity is staked and thus
-    /// locked until the neuron is dissolved and contributes to voting power
-    /// and rewards. Once the neuron is dissolved, this maturity will be "moved"
-    /// to 'maturity_e8s_equivalent' and will be able to be spawned (with maturity
-    /// modulation).
-    #[prost(uint64, optional, tag = "20")]
-    pub staked_maturity_e8s_equivalent: ::core::option::Option<u64>,
-    /// If set and true the maturity rewarded to this neuron for voting will be
-    /// automatically staked and will contribute to the neuron's voting power.
-    #[prost(bool, optional, tag = "21")]
-    pub auto_stake_maturity: ::core::option::Option<bool>,
-    /// Whether this neuron is "Not for profit", making it dissolvable
-    /// by voting.
-    #[prost(bool, tag = "16")]
-    pub not_for_profit: bool,
-    /// If set, this neuron is a member of the Community Fund. This means that when
-    /// a proposal to open an SNS token swap is executed, maturity from this neuron
-    /// will be used to participate in the SNS token swap.
-    #[prost(uint64, optional, tag = "17")]
-    pub joined_community_fund_timestamp_seconds: ::core::option::Option<u64>,
-    /// If set, the neuron belongs to the "known neurons". It has been given a name and maybe a description.
-    #[prost(message, optional, tag = "18")]
-    pub known_neuron_data: ::core::option::Option<KnownNeuronData>,
-    /// The type of the Neuron. See \[NeuronType\] for a description
-    /// of the different states.
-    #[prost(enumeration = "NeuronType", optional, tag = "22")]
-    pub neuron_type: ::core::option::Option<i32>,
-    /// See the Visibility enum.
-    #[prost(enumeration = "Visibility", optional, tag = "23")]
-    pub visibility: ::core::option::Option<i32>,
-    /// The last time that voting power was "refreshed". There are two ways to
-    /// refresh the voting power of a neuron: set following, or vote directly. In
-    /// the future, there will be a dedicated API for refreshing. Note that direct
-    /// voting implies that refresh also occurs when a proposal is created, because
-    /// direct voting is part of proposal creation.
-    ///
-    /// Effect: When this becomes > 6 months ago, the amount of voting power that
-    /// this neuron can exercise decreases linearly down to 0 over the course of 1
-    /// month. After that, following is cleared, except for ManageNeuron proposals.
-    ///
-    /// This will always be populated. If the underlying neuron was never
-    /// refreshed, this will be set to 2024-11-05T00:00:01 UTC (1730764801 seconds
-    /// after the UNIX epoch).
-    #[prost(uint64, optional, tag = "24")]
-    pub voting_power_refreshed_timestamp_seconds: ::core::option::Option<u64>,
-    /// The index of the next entry in the recent_ballots list that will be
-    /// used for the circular buffer. This is used to determine which entry
-    /// to overwrite next.
-    #[prost(uint32, optional, tag = "25")]
-    pub recent_ballots_next_entry_index: ::core::option::Option<u32>,
-    /// At any time, at most one of `when_dissolved` and
-    /// `dissolve_delay` are specified.
-    ///
-    /// `NotDissolving`. This is represented by `dissolve_delay` being
-    /// set to a non zero value.
-    ///
-    /// `Dissolving`. This is represented by `when_dissolved` being
-    /// set, and this value is in the future.
-    ///
-    /// `Dissolved`. All other states represent the dissolved
-    /// state. That is, (a) `when_dissolved` is set and in the past,
-    /// (b) `dissolve_delay` is set to zero, (c) neither value is set.
-    ///
-    /// Cf. \[Neuron::stop_dissolving\] and \[Neuron::start_dissolving\].
-    #[prost(oneof = "neuron::DissolveState", tags = "9, 10")]
-    pub dissolve_state: ::core::option::Option<neuron::DissolveState>,
-}
-/// Nested message and enum types in `Neuron`.
-pub mod neuron {
-    /// Protobuf representing a list of followees of a neuron for a
-    /// specific topic.
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        PartialEq,
-        ::prost::Message,
-    )]
-    pub struct Followees {
-        #[prost(message, repeated, tag = "1")]
-        pub followees: ::prost::alloc::vec::Vec<::ic_nns_common::pb::v1::NeuronId>,
-    }
-    /// At any time, at most one of `when_dissolved` and
-    /// `dissolve_delay` are specified.
-    ///
-    /// `NotDissolving`. This is represented by `dissolve_delay` being
-    /// set to a non zero value.
-    ///
-    /// `Dissolving`. This is represented by `when_dissolved` being
-    /// set, and this value is in the future.
-    ///
-    /// `Dissolved`. All other states represent the dissolved
-    /// state. That is, (a) `when_dissolved` is set and in the past,
-    /// (b) `dissolve_delay` is set to zero, (c) neither value is set.
-    ///
-    /// Cf. \[Neuron::stop_dissolving\] and \[Neuron::start_dissolving\].
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        Copy,
-        PartialEq,
-        ::prost::Oneof,
-    )]
-    pub enum DissolveState {
-        /// When the dissolve timer is running, this stores the timestamp,
-        /// in seconds from the Unix epoch, at which the neuron becomes
-        /// dissolved.
-        ///
-        /// At any time while the neuron is dissolving, the neuron owner
-        /// may pause dissolving, in which case `dissolve_delay_seconds`
-        /// will get assigned to: `when_dissolved_timestamp_seconds -
-        /// <timestamp when the action is taken>`.
-        #[prost(uint64, tag = "9")]
-        WhenDissolvedTimestampSeconds(u64),
-        /// When the dissolve timer is stopped, this stores how much time,
-        /// in seconds, the dissolve timer will be started with. Can be at
-        /// most 8 years.
-        ///
-        /// At any time while in this state, the neuron owner may (re)start
-        /// dissolving, in which case `when_dissolved_timestamp_seconds`
-        /// will get assigned to: `<timestamp when the action is taken> +
-        /// dissolve_delay_seconds`.
-        #[prost(uint64, tag = "10")]
-        DissolveDelaySeconds(u64),
-    }
+/// Protobuf representing a list of followees of a neuron for a
+/// specific topic.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct Followees {
+    #[prost(message, repeated, tag = "1")]
+    pub followees: ::prost::alloc::vec::Vec<::ic_nns_common::pb::v1::NeuronId>,
 }
 /// Subset of Neuron that has no collections or big fields that might not exist in most neurons, and
 /// the goal is to keep the size of the struct consistent and can be easily stored in a
@@ -591,7 +378,7 @@ pub struct RewardNodeProviders {
 )]
 pub struct SetDefaultFollowees {
     #[prost(map = "int32, message", tag = "1")]
-    pub default_followees: ::std::collections::HashMap<i32, neuron::Followees>,
+    pub default_followees: ::std::collections::HashMap<i32, Followees>,
 }
 /// Obsolete. Superseded by OpenSnsTokenSwap.
 #[derive(
@@ -780,7 +567,7 @@ pub struct ManageNeuron {
     pub neuron_id_or_subaccount: ::core::option::Option<manage_neuron::NeuronIdOrSubaccount>,
     #[prost(
         oneof = "manage_neuron::Command",
-        tags = "2, 3, 4, 5, 6, 7, 8, 9, 10, 13, 14, 15, 16"
+        tags = "2, 3, 4, 5, 6, 7, 8, 9, 10, 13, 14, 15, 16, 17, 18"
     )]
     pub command: ::core::option::Option<manage_neuron::Command>,
 }
@@ -1270,6 +1057,66 @@ pub mod manage_neuron {
         ::prost::Message,
     )]
     pub struct RefreshVotingPower {}
+    /// Disburse the maturity of a neuron to any ledger account. If an account is not specified, the
+    /// controller's account will be used. The controller can choose a percentage of the current
+    /// maturity to disburse to the ledger account. The resulting amount to disburse must be at least 1
+    /// ICP. The disbursement has a 7-day delay before it is finalized. At the finalization time, the
+    /// maturity modulation will be applied to the amount, which can make the amount \[95%, 105%\] of the
+    /// original amount.
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct DisburseMaturity {
+        /// The percentage to disburse, from 1 to 100
+        #[prost(uint32, tag = "1")]
+        pub percentage_to_disburse: u32,
+        /// The (optional) principal to which to transfer the stake. It should not be set if
+        /// `to_account_identifier` is set.
+        #[prost(message, optional, tag = "2")]
+        pub to_account: ::core::option::Option<super::Account>,
+        /// The (optional) account identifier to which to transfer the stake. It should not be set if
+        /// `to_account` is set.
+        #[prost(message, optional, tag = "3")]
+        pub to_account_identifier:
+            ::core::option::Option<::icp_ledger::protobuf::AccountIdentifier>,
+    }
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct SetFollowing {
+        #[prost(message, repeated, tag = "1")]
+        pub topic_following: ::prost::alloc::vec::Vec<set_following::FolloweesForTopic>,
+    }
+    /// Nested message and enum types in `SetFollowing`.
+    pub mod set_following {
+        #[derive(
+            candid::CandidType,
+            candid::Deserialize,
+            serde::Serialize,
+            comparable::Comparable,
+            Clone,
+            PartialEq,
+            ::prost::Message,
+        )]
+        pub struct FolloweesForTopic {
+            #[prost(message, repeated, tag = "1")]
+            pub followees: ::prost::alloc::vec::Vec<::ic_nns_common::pb::v1::NeuronId>,
+            #[prost(enumeration = "super::super::Topic", optional, tag = "2")]
+            pub topic: ::core::option::Option<i32>,
+        }
+    }
     /// The ID of the neuron to manage. This can either be a subaccount or a neuron ID.
     #[derive(
         candid::CandidType,
@@ -1323,6 +1170,10 @@ pub mod manage_neuron {
         StakeMaturity(StakeMaturity),
         #[prost(message, tag = "16")]
         RefreshVotingPower(RefreshVotingPower),
+        #[prost(message, tag = "17")]
+        DisburseMaturity(DisburseMaturity),
+        #[prost(message, tag = "18")]
+        SetFollowing(SetFollowing),
     }
 }
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
@@ -1591,6 +1442,15 @@ pub struct ProposalData {
     /// power) in proportion to this.
     #[prost(uint64, optional, tag = "22")]
     pub total_potential_voting_power: ::core::option::Option<u64>,
+    /// The topic of the proposal.
+    #[prost(enumeration = "Topic", optional, tag = "23")]
+    pub topic: ::core::option::Option<i32>,
+    /// When a voting power spike is detected, ballots are created using a previous snapshot of the
+    /// voting power, and this field indicates the timestamp at which the snapshot was taken. This
+    /// field should not be set in normal circumstances, and if it is set, it is an indicator that a
+    /// bug might have caused the voting power spike.
+    #[prost(uint64, optional, tag = "24")]
+    pub previous_ballots_timestamp_seconds: ::core::option::Option<u64>,
 }
 /// This structure contains data for settling the Neurons' Fund participation in an SNS token swap.
 #[derive(
@@ -2124,6 +1984,15 @@ pub struct VotingPowerEconomics {
     /// Initially, set to 1/12 years.
     #[prost(uint64, optional, tag = "2")]
     pub clear_following_after_seconds: ::core::option::Option<u64>,
+    /// The minimum dissolve delay a neuron must have in order to be eligible to vote.
+    ///
+    /// Neurons with a dissolve delay lower than this threshold will not have
+    /// voting power, even if they are otherwise active.
+    ///
+    /// This value is an essential part of the staking mechanism, promoting
+    /// long-term alignment with the network's governance.
+    #[prost(uint64, optional, tag = "3")]
+    pub neuron_minimum_dissolve_delay_to_vote_seconds: ::core::option::Option<u64>,
 }
 /// The thresholds specify the shape of the ideal matching function used by the Neurons' Fund to
 /// determine how much to contribute for a given direct participation amount. Note that the actual
@@ -2871,9 +2740,6 @@ pub mod update_canister_settings {
 #[compare_default]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Governance {
-    /// Current set of neurons.
-    #[prost(btree_map = "fixed64, message", tag = "1")]
-    pub neurons: ::prost::alloc::collections::BTreeMap<u64, Neuron>,
     /// Proposals.
     #[prost(btree_map = "uint64, message", tag = "2")]
     pub proposals: ::prost::alloc::collections::BTreeMap<u64, ProposalData>,
@@ -2936,7 +2802,7 @@ pub struct Governance {
     ///
     /// Default following can be changed via proposal.
     #[prost(map = "int32, message", tag = "13")]
-    pub default_followees: ::std::collections::HashMap<i32, neuron::Followees>,
+    pub default_followees: ::std::collections::HashMap<i32, Followees>,
     /// The maximum time a proposal of a topic with *short voting period*
     /// is open for voting. If a proposal on a topic with short voting
     /// period has not been decided (adopted or rejected) within this
@@ -2975,13 +2841,6 @@ pub struct Governance {
     pub spawning_neurons: ::core::option::Option<bool>,
     #[prost(message, optional, tag = "20")]
     pub making_sns_proposal: ::core::option::Option<governance::MakingSnsProposal>,
-    /// Migration related data.
-    #[prost(message, optional, tag = "21")]
-    pub migrations: ::core::option::Option<governance::Migrations>,
-    /// A Structure used during upgrade to store the index of topics for neurons to their followers.
-    /// This is the inverse of what is stored in a Neuron (its followees).
-    #[prost(map = "int32, message", tag = "22")]
-    pub topic_followee_index: ::std::collections::HashMap<i32, governance::FollowersMap>,
     /// Local cache for XDR-related conversion rates (the source of truth is in the CMC canister).
     #[prost(message, optional, tag = "26")]
     pub xdr_conversion_rate: ::core::option::Option<XdrConversionRate>,
@@ -3012,7 +2871,7 @@ pub mod governance {
         pub timestamp: u64,
         #[prost(
             oneof = "neuron_in_flight_command::Command",
-            tags = "2, 3, 5, 7, 8, 9, 10, 20, 21"
+            tags = "2, 3, 5, 7, 8, 9, 10, 20, 21, 22"
         )]
         pub command: ::core::option::Option<neuron_in_flight_command::Command>,
     }
@@ -3060,10 +2919,14 @@ pub mod governance {
             Configure(super::super::manage_neuron::Configure),
             #[prost(message, tag = "10")]
             Merge(super::super::manage_neuron::Merge),
+            /// Below are not really `ManageNeuron` commands but determined by the context of where the
+            /// neuron lock is needed. Ideally, we'd like to rename from `command` to `lock`
             #[prost(message, tag = "20")]
             Spawn(::ic_nns_common::pb::v1::NeuronId),
             #[prost(message, tag = "21")]
             SyncCommand(SyncCommand),
+            #[prost(message, tag = "22")]
+            FinalizeDisburseMaturity(super::super::FinalizeDisburseMaturity),
         }
     }
     /// Stores metrics that are too costly to compute each time metrics are
@@ -3145,6 +3008,8 @@ pub mod governance {
         pub not_dissolving_neurons_e8s_buckets_seed: ::std::collections::HashMap<u64, f64>,
         #[prost(map = "uint64, double", tag = "35")]
         pub not_dissolving_neurons_e8s_buckets_ect: ::std::collections::HashMap<u64, f64>,
+        #[prost(uint64, tag = "42")]
+        pub spawning_neurons_count: u64,
         /// Deprecated. Use non_self_authenticating_controller_neuron_subset_metrics instead.
         #[prost(uint64, optional, tag = "36")]
         pub total_voting_power_non_self_authenticating_controller: ::core::option::Option<u64>,
@@ -3243,152 +3108,6 @@ pub mod governance {
         pub caller: ::core::option::Option<::ic_base_types::PrincipalId>,
         #[prost(message, optional, tag = "3")]
         pub proposal: ::core::option::Option<super::Proposal>,
-    }
-    /// Progress of a migration that (potentially) is performed over the course of more than one heartbeat call.
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        PartialEq,
-        ::prost::Message,
-    )]
-    pub struct Migration {
-        /// Migration status.
-        #[prost(enumeration = "migration::MigrationStatus", optional, tag = "1")]
-        pub status: ::core::option::Option<i32>,
-        /// The reason why it failed. Should only be present when the status is FAILED.
-        /// This is only for debugging and it should not be used programmatically (other than its presence).
-        #[prost(string, optional, tag = "2")]
-        pub failure_reason: ::core::option::Option<::prost::alloc::string::String>,
-        /// Migration progress (cursor).
-        #[prost(oneof = "migration::Progress", tags = "3")]
-        pub progress: ::core::option::Option<migration::Progress>,
-    }
-    /// Nested message and enum types in `Migration`.
-    pub mod migration {
-        #[derive(
-            candid::CandidType,
-            candid::Deserialize,
-            serde::Serialize,
-            comparable::Comparable,
-            Clone,
-            Copy,
-            Debug,
-            PartialEq,
-            Eq,
-            Hash,
-            PartialOrd,
-            Ord,
-            ::prost::Enumeration,
-        )]
-        #[repr(i32)]
-        pub enum MigrationStatus {
-            /// Unspecified.
-            Unspecified = 0,
-            /// Migration is in progress.
-            InProgress = 1,
-            /// Migration succeeded.
-            Succeeded = 2,
-            /// Migration failed.
-            Failed = 3,
-        }
-        impl MigrationStatus {
-            /// String value of the enum field names used in the ProtoBuf definition.
-            ///
-            /// The values are not transformed in any way and thus are considered stable
-            /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-            pub fn as_str_name(&self) -> &'static str {
-                match self {
-                    Self::Unspecified => "MIGRATION_STATUS_UNSPECIFIED",
-                    Self::InProgress => "MIGRATION_STATUS_IN_PROGRESS",
-                    Self::Succeeded => "MIGRATION_STATUS_SUCCEEDED",
-                    Self::Failed => "MIGRATION_STATUS_FAILED",
-                }
-            }
-            /// Creates an enum from field names used in the ProtoBuf definition.
-            pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
-                match value {
-                    "MIGRATION_STATUS_UNSPECIFIED" => Some(Self::Unspecified),
-                    "MIGRATION_STATUS_IN_PROGRESS" => Some(Self::InProgress),
-                    "MIGRATION_STATUS_SUCCEEDED" => Some(Self::Succeeded),
-                    "MIGRATION_STATUS_FAILED" => Some(Self::Failed),
-                    _ => None,
-                }
-            }
-        }
-        /// Migration progress (cursor).
-        #[derive(
-            candid::CandidType,
-            candid::Deserialize,
-            serde::Serialize,
-            comparable::Comparable,
-            Clone,
-            Copy,
-            PartialEq,
-            ::prost::Oneof,
-        )]
-        pub enum Progress {
-            /// Last neuron id migrated.
-            #[prost(message, tag = "3")]
-            LastNeuronId(::ic_nns_common::pb::v1::NeuronId),
-        }
-    }
-    /// The status of all on-going (and recently completed) migrations (that take
-    /// place over the course of multiple heartbeat calls).
-    ///
-    /// Each Migration field corresponds to one (ongoing or recently completed) migration.
-    ///
-    /// After a migration is finished, it should be OK to reserve the tag and lose the data.
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        PartialEq,
-        ::prost::Message,
-    )]
-    pub struct Migrations {
-        /// Migrates neuron indexes to stable storage.
-        #[prost(message, optional, tag = "1")]
-        pub neuron_indexes_migration: ::core::option::Option<Migration>,
-        #[prost(message, optional, tag = "2")]
-        pub copy_inactive_neurons_to_stable_memory_migration: ::core::option::Option<Migration>,
-    }
-    /// A map of followees to their followers.
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        PartialEq,
-        ::prost::Message,
-    )]
-    pub struct FollowersMap {
-        /// The key is the neuron ID of the followee.
-        #[prost(map = "fixed64, message", tag = "1")]
-        pub followers_map: ::std::collections::HashMap<u64, followers_map::Followers>,
-    }
-    /// Nested message and enum types in `FollowersMap`.
-    pub mod followers_map {
-        #[derive(
-            candid::CandidType,
-            candid::Deserialize,
-            serde::Serialize,
-            comparable::Comparable,
-            Clone,
-            PartialEq,
-            ::prost::Message,
-        )]
-        pub struct Followers {
-            /// The followers of the neuron with the given ID.
-            /// These values will be non-repeating, and order does not matter.
-            #[prost(message, repeated, tag = "1")]
-            pub followers: ::prost::alloc::vec::Vec<::ic_nns_common::pb::v1::NeuronId>,
-        }
     }
 }
 #[derive(
@@ -4213,6 +3932,162 @@ pub struct ProposalVotingStateMachine {
     pub followers_to_check: ::prost::alloc::vec::Vec<::ic_nns_common::pb::v1::NeuronId>,
     #[prost(map = "uint64, enumeration(Vote)", tag = "5")]
     pub recent_neuron_ballots_to_record: ::std::collections::HashMap<u64, i32>,
+}
+/// A Ledger subaccount.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct Subaccount {
+    #[prost(bytes = "vec", tag = "1")]
+    pub subaccount: ::prost::alloc::vec::Vec<u8>,
+}
+/// A Ledger account identified by the owner of the account `of` and
+/// the `subaccount`. If the `subaccount` is not specified then the default
+/// one is used.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct Account {
+    /// The owner of the account.
+    #[prost(message, optional, tag = "1")]
+    pub owner: ::core::option::Option<::ic_base_types::PrincipalId>,
+    /// The subaccount of the account. If not set then the default
+    /// subaccount (all bytes set to 0) is used.
+    #[prost(message, optional, tag = "2")]
+    pub subaccount: ::core::option::Option<Subaccount>,
+}
+/// A reward disbribution that has been calculated but not fully disbursed.
+/// This supports large reward distributions that may need to be split into multiple
+/// messages.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct RewardsDistributionInProgress {
+    #[prost(map = "uint64, uint64", tag = "1")]
+    pub neuron_ids_to_e8_amounts: ::std::collections::HashMap<u64, u64>,
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct MaturityDisbursement {
+    /// The amount of maturity being disbursed in e8s.
+    #[prost(uint64, tag = "1")]
+    pub amount_e8s: u64,
+    /// The timestamp at which the maturity was disbursed.
+    #[prost(uint64, tag = "2")]
+    pub timestamp_of_disbursement_seconds: u64,
+    /// The timestamp at which the maturity disbursement should be finalized.
+    #[prost(uint64, tag = "4")]
+    pub finalize_disbursement_timestamp_seconds: u64,
+    #[prost(oneof = "maturity_disbursement::Destination", tags = "3, 5")]
+    pub destination: ::core::option::Option<maturity_disbursement::Destination>,
+}
+/// Nested message and enum types in `MaturityDisbursement`.
+pub mod maturity_disbursement {
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Oneof,
+    )]
+    pub enum Destination {
+        /// The icrc1 account to disburse the maturity to.
+        #[prost(message, tag = "3")]
+        AccountToDisburseTo(super::Account),
+        /// The account identifier to disburse the maturity to.
+        #[prost(message, tag = "5")]
+        AccountIdentifierToDisburseTo(::icp_ledger::protobuf::AccountIdentifier),
+    }
+}
+/// A map of neuron voting powers at a certain point in time. It can be used to initialize ballots of
+/// a proposal.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct NeuronIdToVotingPowerMap {
+    /// Map from neuron id to the voting power of the neuron.
+    #[prost(map = "fixed64, uint64", tag = "1")]
+    pub voting_power_map: ::std::collections::HashMap<u64, u64>,
+}
+/// Total voting power (deciding and potential) at a certain point in time. A history of the totals
+/// can be used to detect voting power spikes. See `Neuron::deciding_voting_power` and
+/// `Neuron::potential_voting_power` for more information.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct VotingPowerTotal {
+    /// The total deciding voting power.
+    #[prost(uint64, tag = "1")]
+    pub total_deciding_voting_power: u64,
+    /// The total potential voting power.
+    #[prost(uint64, tag = "2")]
+    pub total_potential_voting_power: u64,
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct FinalizeDisburseMaturity {
+    /// The finalization timestamp of the disbursement.
+    #[prost(uint64, tag = "1")]
+    pub finalize_disbursement_timestamp_seconds: u64,
+    /// The amount of ICPs to be disbursed in e8s.
+    #[prost(uint64, tag = "2")]
+    pub amount_to_mint_e8s: u64,
+    /// The account to which to transfer the ICPs.
+    #[prost(message, optional, tag = "3")]
+    pub to_account: ::core::option::Option<Account>,
+    /// The original amount of maturity to be disbursed (before maturity modulation).
+    #[prost(uint64, tag = "4")]
+    pub original_maturity_e8s_equivalent: u64,
+    /// The account identifer to which to transfer the ICPs.
+    #[prost(message, optional, tag = "5")]
+    pub to_account_identifier: ::core::option::Option<::icp_ledger::protobuf::AccountIdentifier>,
 }
 /// Proposal types are organized into topics. Neurons can automatically
 /// vote based on following other neurons, and these follow

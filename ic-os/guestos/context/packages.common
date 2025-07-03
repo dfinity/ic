@@ -4,14 +4,14 @@
 # utilities into packages.dev, these will then be available on the dev
 # image only.
 
-# Need kernel to boot anything
-initramfs-tools
+# The kernel packages are handled in Dockerfile.base for extra required logic
 
 # Need systemd for boot process
 systemd
 systemd-sysv
 systemd-journal-remote
 systemd-resolved
+initramfs-tools
 
 # Third-party services we will be running
 chrony

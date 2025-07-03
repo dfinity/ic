@@ -1,126 +1,19 @@
 import logging
 
+from config.npm_periodic import REPOS_TO_SCAN
 from data_source.jira_finding_data_source import JiraFindingDataSource
-from model.ic import get_ic_repo_ci_pipeline_base_url, get_ic_repo_merge_request_base_url, is_env_for_periodic_job
-from model.project import Project
-from model.repository import Repository
-from model.team import Team
+from integration.github.github_app import GithubApp
+from model.ic import get_ic_repo_ci_pipeline_base_url, get_ic_repo_merge_request_base_url
+from model.log_level import get_log_level
 from notification.notification_config import NotificationConfig
 from notification.notification_creator import NotificationCreator
 from scanner.dependency_scanner import DependencyScanner
 from scanner.manager.npm_dependency_manager import NPMDependencyManager
 from scanner.scanner_job_type import ScannerJobType
 
-# node version used by default
-DEFAULT_NODE_VERSION = "20"
-
-REPOS_TO_SCAN = [
-    Repository(
-        "nns-dapp",
-        "https://github.com/dfinity/nns-dapp",
-        [
-            Project(
-                name="frontend",
-                path="nns-dapp/frontend",
-                owner=Team.NNS_TEAM,
-            )
-        ],
-        "18.17.1",
-    ),
-    Repository(
-        "internet-identity",
-        "https://github.com/dfinity/internet-identity",
-        [
-            Project(
-                name="internet-identity",
-                path="internet-identity",
-                owner=Team.IDENTITY_TEAM,
-            )
-        ],
-        DEFAULT_NODE_VERSION,
-    ),
-    Repository(
-        "ic-js",
-        "https://github.com/dfinity/ic-js",
-        [
-            Project(
-                name="ic-js",
-                path="ic-js",
-                owner=Team.GIX_TEAM,
-            )
-        ],
-        DEFAULT_NODE_VERSION,
-    ),
-    Repository(
-        "agent-js",
-        "https://github.com/dfinity/agent-js",
-        [
-            Project(
-                name="agent-js",
-                path="agent-js",
-                owner=Team.SDK_TEAM,
-            )
-        ],
-        DEFAULT_NODE_VERSION,
-    ),
-    Repository(
-        "hardware-wallet-cli",
-        "https://github.com/dfinity/hardware-wallet-cli",
-        [
-            Project(
-                name="hardware-wallet-cli",
-                path="hardware-wallet-cli",
-                owner=Team.GIX_TEAM,
-            )
-        ],
-        DEFAULT_NODE_VERSION,
-    ),
-    Repository(
-        "gix-components",
-        "https://github.com/dfinity/gix-components",
-        [
-            Project(
-                name="gix-components",
-                path="gix-components",
-                owner=Team.GIX_TEAM,
-            )
-        ],
-        "18.17.1",
-    ),
-    Repository(
-        "oisy-wallet",
-        "https://github.com/dfinity/oisy-wallet",
-        [
-            Project(
-                name="oisy-wallet",
-                path="oisy-wallet",
-                owner=Team.GIX_TEAM,
-            )
-        ],
-        "22.11.0",
-    ),
-    # Removing ic-docutrack temporarily since it supports
-    # only pnpm and not npm
-    # Repository(
-    #     "ic-docutrack",
-    #     "https://github.com/dfinity/ic-docutrack",
-    #     [
-    #         Project(
-    #             name="frontend",
-    #             path="ic-docutrack/frontend",
-    #             owner=Team.EXECUTION_TEAM,
-    #         )
-    #     ],
-    #     DEFAULT_NODE_VERSION,
-    # ),
-]
-
 
 def main():
-    logging.basicConfig(level=logging.WARNING)
-    if not is_env_for_periodic_job():
-        logging.warning("skipping periodic NPM job because it is run in the wrong environment")
-        return
+    logging.basicConfig(level=get_log_level())
 
     scanner_job = ScannerJobType.PERIODIC_SCAN
     notify_on_scan_job_succeeded, notify_on_scan_job_failed = {}, {}
@@ -148,6 +41,7 @@ def main():
         NPMDependencyManager(),
         JiraFindingDataSource(finding_data_source_subscribers, app_owner_msg_subscriber=notifier),
         scanner_subscribers,
+        github_app=GithubApp(REPOS_TO_SCAN),
     )
     scanner_job.do_periodic_scan(REPOS_TO_SCAN)
 

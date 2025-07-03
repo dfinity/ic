@@ -31,7 +31,7 @@ use ic_consensus_threshold_sig_system_test_utils::{
 };
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_nns_governance_api::pb::v1::NnsFunction;
+use ic_nns_governance_api::NnsFunction;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
@@ -119,9 +119,11 @@ fn test(env: TestEnv) {
                 .await
                 .unwrap();
             public_keys.insert(key_id.clone(), public_key);
-            info!(log, "Asserting initial metric state of key {}", key_id);
-            // Initially, the sum of key creations should be equal to the number of nodes
-            assert_metric_sum(&nns, key_id, NODES_COUNT, &log).await;
+            if key_id.is_idkg_key() {
+                info!(log, "Asserting initial metric state of key {}", key_id);
+                // Initially, the sum of key creations should be equal to the number of nodes
+                assert_metric_sum(&nns, key_id, NODES_COUNT, &log).await;
+            }
         });
     }
     info!(
@@ -159,6 +161,9 @@ fn test(env: TestEnv) {
         assert_eq!(nns.nodes().count(), UNASSIGNED_NODES_COUNT + NODES_COUNT);
 
         for key_id in &key_ids {
+            if !key_id.is_idkg_key() {
+                continue;
+            }
             info!(log, "Make sure key {} was rotated.", key_id);
             // All nodes (old and new) should have increased their metric by one.
             assert_metric_sum(&nns, key_id, 2 * NODES_COUNT + UNASSIGNED_NODES_COUNT, &log).await;

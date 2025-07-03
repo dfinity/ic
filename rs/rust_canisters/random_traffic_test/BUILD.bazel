@@ -4,19 +4,19 @@ load("//bazel:canisters.bzl", "rust_canister")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted
+    "//packages/ic-error-types",
     "//rs/types/base_types",
-    "//rs/types/error_types",
     "//rs/types/types",
     "@crate_index//:candid",
-    "@crate_index//:ic_cdk_next",
     "@crate_index//:futures",
+    "@crate_index//:ic_cdk_next",
     "@crate_index//:rand",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
 ]
 
 MACRO_DEPENDENCIES = [
-    "@crate_index//:ic_cdk_macros_next",
 ]
 
 rust_library(

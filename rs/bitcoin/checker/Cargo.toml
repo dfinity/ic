@@ -20,8 +20,9 @@ futures = { workspace = true }
 hex = { workspace = true }
 ic-btc-interface = { workspace = true }
 ic-canister-log = { path = "../../rust_canisters/canister_log" }
-ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
+ic-http-types = { path = "../../../packages/ic-http-types" }
 ic-cdk = { workspace = true }
+ic-management-canister-types = { workspace = true }
 ic-metrics-encoder = "1.1"
 ic-stable-structures = { workspace = true }
 serde = { workspace = true }
@@ -32,7 +33,9 @@ url = { workspace = true }
 [dev-dependencies]
 candid_parser = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
-ic-metrics-assert = { path = "../../../packages/ic-metrics-assert", features = ["pocket_ic"] }
+ic-metrics-assert = { path = "../../../packages/ic-metrics-assert", features = [
+    "pocket_ic",
+] }
 ic-types = { path = "../../types/types" }
 ic-test-utilities-load-wasm = { path = "../../test_utilities/load_wasm" }
 ic-universal-canister = { path = "../../universal_canister/lib" }

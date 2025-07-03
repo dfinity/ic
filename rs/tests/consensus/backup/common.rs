@@ -56,8 +56,8 @@ use ic_types::{Height, ReplicaVersion};
 use slog::{debug, error, info, Logger};
 use std::{
     ffi::OsStr,
-    fs::{self, OpenOptions},
-    io::{Read, Seek, SeekFrom, Write},
+    fs,
+    io::Write,
     net::IpAddr,
     path::{Path, PathBuf},
     process::{Command, Stdio},
@@ -77,7 +77,11 @@ fn setup_common() -> InternetComputer {
                     .into_iter()
                     .map(|key_id| KeyConfig {
                         max_queue_size: 20,
-                        pre_signatures_to_create_in_advance: 7,
+                        pre_signatures_to_create_in_advance: if key_id.requires_pre_signatures() {
+                            7
+                        } else {
+                            0
+                        },
                         key_id,
                     })
                     .collect(),
@@ -133,15 +137,12 @@ pub fn test_downgrade(env: TestEnv) {
     let nns_node = get_nns_node(&env.topology_snapshot());
     let initial_version =
         get_assigned_replica_version(&nns_node).expect("There should be assigned replica version");
-    let mainnet_version = read_dependency_to_string("mainnet_nns_subnet_revision.txt")
-        .expect("could not read mainnet version!");
+    let mainnet_version = get_mainnet_nns_revision();
     info!(log, "Elect the mainnet replica version");
     info!(log, "TARGET_VERSION: {}", mainnet_version);
     block_on(bless_public_replica_version(
         &nns_node,
         &mainnet_version,
-        UpdateImageType::Image,
-        UpdateImageType::Image,
         &log,
     ));
     test(env, initial_version, mainnet_version);
@@ -278,8 +279,8 @@ fn test(env: TestEnv, binary_version: String, target_version: String) {
         versions_hot: 1,
     });
     let config = Config {
-        push_metrics: false,
-        metrics_urls: vec![],
+        push_metrics: true,
+        metrics_urls: vec!["https://127.0.0.1:8080".try_into().unwrap()],
         network_name: "testnet".to_string(),
         backup_instance: "backup_test_node".to_string(),
         nns_url: Some(nns_node.get_public_url()),
@@ -397,8 +398,9 @@ fn test(env: TestEnv, binary_version: String, target_version: String) {
         .expect("Should find file");
 
     assert!(memory_artifact_path.exists());
-    info!(log, "Modify memory file: {:?}", memory_artifact_path);
-    modify_byte_in_file(memory_artifact_path).expect("Modifying a byte failed");
+    info!(log, "Removing memory file: {:?}", memory_artifact_path);
+    fs::remove_file(&memory_artifact_path).unwrap();
+    assert!(!memory_artifact_path.exists());
 
     info!(log, "Start again the backup process in a separate thread");
     let mut command = Command::new(ic_backup_path);
@@ -473,25 +475,6 @@ fn some_checkpoint_dir(backup_dir: &Path, subnet_id: &SubnetId) -> Option<PathBu
         return None;
     }
     Some(dir.join(format!("checkpoints/{:016x}", lcp)))
-}
-
-fn modify_byte_in_file(file_path: PathBuf) -> std::io::Result<()> {
-    let mut perms = fs::metadata(&file_path)?.permissions();
-    #[allow(clippy::permissions_set_readonly_false)]
-    perms.set_readonly(false);
-    fs::set_permissions(&file_path, perms)?;
-    let mut file = OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(true)
-        .truncate(false)
-        .open(file_path)?;
-    file.seek(SeekFrom::Start(0))?;
-    let mut byte: [u8; 1] = [0];
-    assert!(file.read(&mut byte)? == 1);
-    byte[0] ^= 0x01;
-    file.seek(SeekFrom::Start(0))?;
-    file.write_all(&byte)
 }
 
 fn cold_storage_exists(log: &Logger, cold_storage_dir: PathBuf) -> bool {

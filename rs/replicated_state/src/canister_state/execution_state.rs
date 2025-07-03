@@ -1,9 +1,7 @@
 use crate::hash::ic_hashtree_leaf_hash;
 use crate::{canister_state::WASM_PAGE_SIZE_IN_BYTES, num_bytes_try_from, NumWasmPages, PageMap};
-use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
-    state::canister_state_bits::v1 as pb,
-};
+use ic_management_canister_types_private::Global;
+use ic_protobuf::{proxy::ProxyDecodeError, state::canister_state_bits::v1 as pb};
 use ic_sys::PAGE_SIZE;
 use ic_types::{
     methods::{SystemMethod, WasmMethod},
@@ -15,7 +13,6 @@ use ic_wasm_types::CanisterModule;
 use maplit::btreemap;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::hash::{Hash, Hasher};
 use std::mem::size_of_val;
 use std::{
     collections::BTreeSet,
@@ -54,93 +51,6 @@ impl EmbedderCache {
 impl std::fmt::Debug for EmbedderCache {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "EmbedderCache")
-    }
-}
-
-/// An enum representing the possible values of a global variable.
-#[derive(Copy, Clone, Debug, Deserialize, Serialize)]
-pub enum Global {
-    I32(i32),
-    I64(i64),
-    F32(f32),
-    F64(f64),
-    V128(u128),
-}
-
-impl Global {
-    pub fn type_name(&self) -> &'static str {
-        match self {
-            Global::I32(_) => "i32",
-            Global::I64(_) => "i64",
-            Global::F32(_) => "f32",
-            Global::F64(_) => "f64",
-            Global::V128(_) => "v128",
-        }
-    }
-}
-
-impl Hash for Global {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        let bytes = match self {
-            Global::I32(val) => val.to_le_bytes().to_vec(),
-            Global::I64(val) => val.to_le_bytes().to_vec(),
-            Global::F32(val) => val.to_le_bytes().to_vec(),
-            Global::F64(val) => val.to_le_bytes().to_vec(),
-            Global::V128(val) => val.to_le_bytes().to_vec(),
-        };
-        bytes.hash(state)
-    }
-}
-
-impl PartialEq<Global> for Global {
-    fn eq(&self, other: &Global) -> bool {
-        match (self, other) {
-            (Global::I32(val), Global::I32(other_val)) => val == other_val,
-            (Global::I64(val), Global::I64(other_val)) => val == other_val,
-            (Global::F32(val), Global::F32(other_val)) => val == other_val,
-            (Global::F64(val), Global::F64(other_val)) => val == other_val,
-            (Global::V128(val), Global::V128(other_val)) => val == other_val,
-            _ => false,
-        }
-    }
-}
-
-impl Eq for Global {}
-
-impl From<&Global> for pb::Global {
-    fn from(item: &Global) -> Self {
-        match item {
-            Global::I32(value) => Self {
-                global: Some(pb::global::Global::I32(*value)),
-            },
-            Global::I64(value) => Self {
-                global: Some(pb::global::Global::I64(*value)),
-            },
-            Global::F32(value) => Self {
-                global: Some(pb::global::Global::F32(*value)),
-            },
-            Global::F64(value) => Self {
-                global: Some(pb::global::Global::F64(*value)),
-            },
-            Global::V128(value) => Self {
-                global: Some(pb::global::Global::V128(value.to_le_bytes().to_vec())),
-            },
-        }
-    }
-}
-
-impl TryFrom<pb::Global> for Global {
-    type Error = ProxyDecodeError;
-    fn try_from(value: pb::Global) -> Result<Self, Self::Error> {
-        match try_from_option_field(value.global, "Global::global")? {
-            pb::global::Global::I32(value) => Ok(Self::I32(value)),
-            pb::global::Global::I64(value) => Ok(Self::I64(value)),
-            pb::global::Global::F32(value) => Ok(Self::F32(value)),
-            pb::global::Global::F64(value) => Ok(Self::F64(value)),
-            pb::global::Global::V128(value) => Ok(Self::V128(u128::from_le_bytes(
-                value.as_slice().try_into().unwrap(),
-            ))),
-        }
     }
 }
 
@@ -567,17 +477,49 @@ impl ExecutionState {
             .expect("could not convert from wasm memory number of pages to bytes")
     }
 
-    /// Returns the memory currently used by the `ExecutionState`.
-    pub fn memory_usage(&self) -> NumBytes {
+    /// Returns the stable memory currently used by the `ExecutionState`.
+    pub fn stable_memory_usage(&self) -> NumBytes {
+        num_bytes_try_from(self.stable_memory.size)
+            .expect("could not convert from stable memory number of pages to bytes")
+    }
+
+    // Returns the global memory currently used by the `ExecutionState`.
+    pub fn global_memory_usage(&self) -> NumBytes {
         // We use 8 bytes per global.
         let globals_size_bytes = 8 * self.exported_globals.len() as u64;
+        NumBytes::from(globals_size_bytes)
+    }
+
+    // Returns the memory size of the Wasm binary currently used by the `ExecutionState`.
+    pub fn wasm_binary_memory_usage(&self) -> NumBytes {
         let wasm_binary_size_bytes = self.wasm_binary.binary.len() as u64;
+        NumBytes::from(wasm_binary_size_bytes)
+    }
+
+    // Returns the memory size of the custom sections currently used by the `ExecutionState`.
+    pub fn custom_sections_memory_size(&self) -> NumBytes {
+        self.metadata.memory_usage()
+    }
+
+    /// Returns the memory currently used by the `ExecutionState`.
+    pub fn memory_usage(&self) -> NumBytes {
         self.wasm_memory_usage()
-            + num_bytes_try_from(self.stable_memory.size)
-                .expect("could not convert from stable memory number of pages to bytes")
-            + NumBytes::from(globals_size_bytes)
-            + NumBytes::from(wasm_binary_size_bytes)
-            + self.metadata.memory_usage()
+            + self.stable_memory_usage()
+            + self.global_memory_usage()
+            + self.wasm_binary_memory_usage()
+            + self.custom_sections_memory_size()
+    }
+
+    /// Returns the `ExecutionState`'s contribution to the memory of a snapshot.
+    /// The difference to `memory_usage` is that the custom wasm section is not
+    /// stored explicitly in a snapshot, only implicitly in the wasm module,
+    /// whereas for the running canister, it's explicit and takes additional
+    /// memory.
+    pub fn memory_usage_in_snapshot(&self) -> NumBytes {
+        self.wasm_memory_usage()
+            + self.stable_memory_usage()
+            + self.global_memory_usage()
+            + self.wasm_binary_memory_usage()
     }
 
     /// Returns the number of global variables in the Wasm module.
@@ -832,6 +774,13 @@ mod tests {
     use ic_protobuf::state::canister_state_bits::v1 as pb;
     use std::collections::BTreeSet;
     use strum::IntoEnumIterator;
+
+    #[test]
+    fn global_exhaustive() {
+        for global in ic_management_canister_types_private::Global::iter() {
+            let _other: Global = global;
+        }
+    }
 
     #[test]
     fn test_next_scheduled_method() {

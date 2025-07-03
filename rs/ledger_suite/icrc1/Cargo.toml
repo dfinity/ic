@@ -40,6 +40,7 @@ lazy_static = { workspace = true }
 leb128 = { workspace = true }
 proptest = { workspace = true }
 rand = { workspace = true }
+test-strategy = "0.4.0"
 
 [features]
 default = []

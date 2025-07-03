@@ -10,10 +10,8 @@ use futures::{
     },
     StreamExt,
 };
-use ic_nervous_system_common::{
-    ledger::{ICRC1Ledger, IcpLedger},
-    NervousSystemError,
-};
+use ic_nervous_system_canisters::ledger::{ICRC1Ledger, IcpLedger};
+use ic_nervous_system_common::NervousSystemError;
 use icp_ledger::{AccountIdentifier, Tokens};
 use icrc_ledger_types::icrc1::account::Account;
 use std::sync::{atomic, atomic::Ordering as AtomicOrdering, Arc, Mutex};
@@ -125,6 +123,15 @@ impl ICRC1Ledger for InterleavingTestLedger {
 
     fn canister_id(&self) -> CanisterId {
         CanisterId::from_u64(1)
+    }
+
+    async fn icrc3_get_blocks(
+        &self,
+        _args: Vec<icrc_ledger_types::icrc3::blocks::GetBlocksRequest>,
+    ) -> Result<icrc_ledger_types::icrc3::blocks::GetBlocksResult, NervousSystemError> {
+        Err(NervousSystemError {
+            error_message: "Not Implemented".to_string(),
+        })
     }
 }
 
@@ -260,6 +267,15 @@ impl ICRC1Ledger for SpyLedger {
     fn canister_id(&self) -> CanisterId {
         CanisterId::from_u64(1)
     }
+
+    async fn icrc3_get_blocks(
+        &self,
+        _args: Vec<icrc_ledger_types::icrc3::blocks::GetBlocksRequest>,
+    ) -> Result<icrc_ledger_types::icrc3::blocks::GetBlocksResult, NervousSystemError> {
+        Err(NervousSystemError {
+            error_message: "Not Implemented".to_string(),
+        })
+    }
 }
 
 #[async_trait]
@@ -329,6 +345,13 @@ impl IcpLedger for SpyLedger {
     }
 
     fn canister_id(&self) -> CanisterId {
+        unimplemented!()
+    }
+
+    async fn icrc3_get_blocks(
+        &self,
+        _args: Vec<icrc_ledger_types::icrc3::blocks::GetBlocksRequest>,
+    ) -> Result<icrc_ledger_types::icrc3::blocks::GetBlocksResult, NervousSystemError> {
         unimplemented!()
     }
 }

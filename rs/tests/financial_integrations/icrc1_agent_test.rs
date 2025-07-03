@@ -228,6 +228,8 @@ pub fn test(env: TestEnv) {
             Value::entry("icrc1:symbol", init_args.token_symbol),
             Value::entry("icrc1:fee", init_args.transfer_fee.clone()),
             Value::entry("icrc1:max_memo_length", 32u64),
+            Value::entry("icrc103:public_allowances", "true"),
+            Value::entry("icrc103:max_take_value", 500u64),
         ];
         assert_eq!(
             expected_metadata,
@@ -298,13 +300,19 @@ pub fn test(env: TestEnv) {
         use LookupStatus::Found;
         let hash_tree: MixedHashTree = serde_cbor::from_slice(&data_certificate.hash_tree).unwrap();
 
+        let mut index_bytes = Vec::with_capacity(10);
+        leb128::write::unsigned(&mut index_bytes, 1_u64).unwrap();
+
         assert_eq!(
             hash_tree.lookup(&[b"last_block_index"]),
-            Found(&mleaf((1_u64).to_be_bytes()))
+            Found(&mleaf(&index_bytes)),
+            "The last_block_index bytes do not match an LEB128-encoded value '1': {:?} vs {:?}",
+            hash_tree.lookup(&[b"last_block_index"]),
+            index_bytes
         );
 
         assert_eq!(
-            hash_tree.lookup(&[b"tip_hash"]),
+            hash_tree.lookup(&[b"last_block_hash"]),
             Found(&mleaf(archived_blocks.blocks[1].hash()))
         );
 

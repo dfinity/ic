@@ -62,14 +62,20 @@ fn test(env: TestEnv) {
             )
             .await
             .unwrap_err();
-            assert_eq!(
-                error,
-                AgentError::CertifiedReject(RejectResponse {
-                    reject_code: RejectCode::CanisterReject,
-                    reject_message: "Signature request expired".to_string(),
-                    error_code: Some("IC0406".to_string())
-                })
-            )
+            let expected_message = if key_id.is_idkg_key() {
+                "Signature request expired"
+            } else {
+                "VetKD request expired"
+            };
+            let expected_reject = RejectResponse {
+                reject_code: RejectCode::CanisterReject,
+                reject_message: expected_message.to_string(),
+                error_code: Some("IC0406".to_string()),
+            };
+            match error {
+                AgentError::CertifiedReject { reject, .. } => assert_eq!(reject, expected_reject),
+                _ => panic!("Unexpected error: {:?}", error),
+            };
         }
     });
 }

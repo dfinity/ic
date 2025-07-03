@@ -1,5 +1,5 @@
 use candid::{CandidType, Deserialize};
-use ic_cdk::api::management_canister::provisional::CanisterId;
+use ic_management_canister_types::CanisterId;
 use serde::Serialize;
 use std::time::Duration;
 

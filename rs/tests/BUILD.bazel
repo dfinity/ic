@@ -21,25 +21,27 @@ bool_flag(
 # Packages we install into the image; see base image definition and its
 # 'manifest = ...' field for more information
 PACKAGES = [
-    "@focal//ca-certificates/amd64",
-    "@focal//bash/amd64",
-    "@focal//coreutils/amd64",
-    "@focal//gawk/amd64",
-    "@focal//dosfstools/amd64",
-    "@focal//libssl1.1/amd64",
-    "@focal//libunwind8/amd64",
-    "@focal//mtools/amd64",
-    "@focal//openssh-client/amd64",
-    "@focal//rsync/amd64",
-    "@focal//gzip/amd64",
-    "@focal//zstd/amd64",
+    "@noble//bash/amd64",
+    "@noble//ca-certificates/amd64",
+    "@noble//coreutils/amd64",
+    "@noble//dosfstools/amd64",
+    "@noble//gawk/amd64",
+    "@noble//gzip/amd64",
+    "@noble//libssl3t64/amd64",
+    "@noble//libunwind8/amd64",
+    "@noble//mtools/amd64",
+    "@noble//openssh-client/amd64",
+    "@noble//rsync/amd64",
+    "@noble//tar/amd64",
+    "@noble//xz-utils/amd64",
+    "@noble//zstd/amd64",
 ]
 
 tar(
     name = "sh",
     mtree = [
         # needed as dpkg assumes sh is installed in a typical debian installation.
-        "./bin/sh type=link link=/bin/bash",
+        "./usr/bin/sh type=link link=/bin/bash",
     ],
 )
 
@@ -47,7 +49,7 @@ tar(
     name = "mkfsvfat",
     mtree = [
         # symlink instead of updating the PATH
-        "./bin/mkfs.vfat type=link link=/sbin/mkfs.vfat",
+        "./usr/bin/mkfs.vfat type=link link=/sbin/mkfs.vfat",
     ],
 )
 
@@ -55,7 +57,7 @@ tar(
     name = "awk",
     mtree = [
         # we install the GNU variant but call 'awk' so we symlink
-        "./bin/awk type=link link=/usr/bin/gawk",
+        "./usr/bin/awk type=link link=/usr/bin/gawk",
     ],
 )
 
@@ -65,6 +67,9 @@ dpkg_status(
     controls = [
         "%s:control" % package
         for package in PACKAGES
+    ],
+    target_compatible_with = [
+        "@platforms//os:linux",
     ],
 )
 
@@ -110,110 +115,6 @@ uvm_config_image(
     name = "colocate_uvm_config_image",
     srcs = [
         ":ubuntu_test_runtime.tar",
-        "//rs/tests:activate-systest-uvm-config",
-    ],
-    remap_paths = {
-        "activate-systest-uvm-config": "activate",
-    },
-    tags = ["manual"],  # this target will be built if required as a dependency of another target
-)
-
-# Packages we install into the image; see base image definition and its
-# 'manifest = ...' field for more information
-PACKAGES_NOBLE = [
-    "@noble//bash/amd64",
-    "@noble//ca-certificates/amd64",
-    "@noble//coreutils/amd64",
-    "@noble//dosfstools/amd64",
-    "@noble//gawk/amd64",
-    "@noble//gzip/amd64",
-    "@noble//libssl3t64/amd64",
-    "@noble//libunwind8/amd64",
-    "@noble//mtools/amd64",
-    "@noble//openssh-client/amd64",
-    "@noble//rsync/amd64",
-    "@noble//tar/amd64",
-    "@noble//zstd/amd64",
-]
-
-tar(
-    name = "sh_noble",
-    mtree = [
-        # needed as dpkg assumes sh is installed in a typical debian installation.
-        "./usr/bin/sh type=link link=/bin/bash",
-    ],
-)
-
-tar(
-    name = "mkfsvfat_noble",
-    mtree = [
-        # symlink instead of updating the PATH
-        "./usr/bin/mkfs.vfat type=link link=/sbin/mkfs.vfat",
-    ],
-)
-
-tar(
-    name = "awk_noble",
-    mtree = [
-        # we install the GNU variant but call 'awk' so we symlink
-        "./usr/bin/awk type=link link=/usr/bin/gawk",
-    ],
-)
-
-# Creates /var/lib/dpkg/status with installed package information.
-dpkg_status(
-    name = "dpkg_status_noble",
-    controls = [
-        "%s:control" % package
-        for package in PACKAGES_NOBLE
-    ],
-    target_compatible_with = [
-        "@platforms//os:linux",
-    ],
-)
-
-passwd(
-    name = "passwd_noble",
-    entries = [
-        dict(
-            gecos = ["root"],
-            gid = 0,
-            home = "/root",
-            shell = "/usr/bin/bash",
-            uid = 0,
-            username = "root",
-        ),
-    ],
-)
-
-oci_image(
-    name = "ubuntu_noble_test_runtime_image_src",
-    architecture = "amd64",
-    os = "linux",
-    target_compatible_with = [
-        "@platforms//os:linux",
-    ],
-    tars = [
-        ":dpkg_status_noble",
-        ":passwd_noble",  # needed because we ssh in
-
-        # symlinks
-        ":awk_noble",
-        ":mkfsvfat_noble",
-        ":sh_noble",
-    ] + PACKAGES_NOBLE,
-)
-
-oci_tar(
-    name = "ubuntu_noble_test_runtime.tar",
-    image = ":ubuntu_noble_test_runtime_image_src",
-    repo_tags = ["ubuntu_noble_test_runtime:image"],
-)
-
-uvm_config_image(
-    name = "colocate_uvm_noble_config_image",
-    srcs = [
-        ":ubuntu_noble_test_runtime.tar",
         "//rs/tests:activate-systest-uvm-config",
     ],
     remap_paths = {
@@ -351,6 +252,12 @@ oci_tar(
 )
 
 oci_tar(
+    name = "ic_gatewayd.tar",
+    image = "@ic_gatewayd",
+    repo_tags = ["ic_gatewayd:image"],
+)
+
+oci_tar(
     name = "nginx-proxy.tar",
     image = "@nginx-proxy",
     repo_tags = ["nginx-proxy:image"],
@@ -370,5 +277,13 @@ uvm_config_image(
         "canister_http_test_ca.cert": "cert.pem",
         "canister_http_test_ca.key": "key.pem",
     },
+    tags = ["manual"],  # this target will be built if required as a dependency of another target
+)
+
+uvm_config_image(
+    name = "ic_gateway_uvm_config_image",
+    srcs = [
+        ":ic_gatewayd.tar",
+    ],
     tags = ["manual"],  # this target will be built if required as a dependency of another target
 )

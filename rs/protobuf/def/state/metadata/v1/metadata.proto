@@ -2,6 +2,7 @@ syntax = "proto3";
 package state.metadata.v1;
 
 import "bitcoin/v1/bitcoin.proto";
+import "google/protobuf/empty.proto";
 import "google/protobuf/wrappers.proto";
 import "registry/routing_table/v1/routing_table.proto";
 import "registry/subnet/v1/subnet.proto";
@@ -81,8 +82,8 @@ message SchnorrArguments {
 
 message VetKdArguments {
   types.v1.VetKdKeyId key_id = 1;
-  bytes derivation_id = 2;
-  bytes encryption_public_key = 3;
+  bytes input = 2;
+  bytes transport_public_key = 3;
   types.v1.NiDkgId ni_dkg_id = 4;
   uint64 height = 5;
 }
@@ -133,7 +134,15 @@ message CanisterHttpRequestContext {
   repeated HttpHeader headers = 7;
   optional uint64 max_response_bytes = 9;
   google.protobuf.BytesValue transform_context = 10;
+  optional Replication replication = 11;
   reserved 5;
+}
+
+message Replication {
+  oneof replication_type {
+    google.protobuf.Empty fully_replicated = 1;
+    types.v1.NodeId non_replicated = 2;
+  }
 }
 
 message CanisterHttpRequestContextTree {
@@ -141,17 +150,18 @@ message CanisterHttpRequestContextTree {
   CanisterHttpRequestContext context = 2;
 }
 
-message IDkgDealingsContext {
+message ReshareChainKeyContext {
   state.queues.v1.Request request = 1;
   types.v1.MasterPublicKeyId key_id = 2;
   repeated types.v1.NodeId nodes = 3;
   uint64 registry_version = 4;
   Time time = 5;
+  bytes target_id = 6;
 }
 
-message IDkgDealingsContextTree {
+message ReshareChainKeyContextTree {
   uint64 callback_id = 1;
-  IDkgDealingsContext context = 2;
+  ReshareChainKeyContext context = 2;
 }
 
 message BitcoinGetSuccessorsContext {
@@ -246,7 +256,7 @@ message SubnetCallContextManager {
   uint64 next_stop_canister_call_id = 14;
   repeated StopCanisterCallTree stop_canister_calls = 15;
   repeated RawRandContext raw_rand_contexts = 16;
-  repeated IDkgDealingsContextTree idkg_dealings_contexts = 17;
+  repeated ReshareChainKeyContextTree reshare_chain_key_contexts = 17;
   repeated SignWithThresholdContextTree sign_with_threshold_contexts = 18;
 }
 

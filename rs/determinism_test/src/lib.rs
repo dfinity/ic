@@ -34,6 +34,7 @@ fn build_batch(message_routing: &dyn MessageRouting, msgs: Vec<SignedIngress>) -
         randomness: Randomness::from([0; 32]),
         chain_key_subnet_public_keys: BTreeMap::new(),
         idkg_pre_signature_ids: BTreeMap::new(),
+        ni_dkg_ids: BTreeMap::new(),
         registry_version: RegistryVersion::from(1),
         time: UNIX_EPOCH,
         consensus_responses: vec![],
@@ -51,6 +52,7 @@ fn build_batch_with_full_state_hash(message_routing: &dyn MessageRouting) -> Bat
         randomness: Randomness::from([0; 32]),
         chain_key_subnet_public_keys: BTreeMap::new(),
         idkg_pre_signature_ids: BTreeMap::new(),
+        ni_dkg_ids: BTreeMap::new(),
         registry_version: RegistryVersion::from(1),
         time: UNIX_EPOCH,
         consensus_responses: vec![],
@@ -184,8 +186,6 @@ fn install_canister(
                 canister_id,
                 wasm,
                 vec![],
-                None,
-                None,
             )
             .encode(),
         )

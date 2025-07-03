@@ -17,10 +17,9 @@ use crate::{
     },
     request_types::{
         ChangeAutoStakeMaturityMetadata, DisburseMetadata, FollowMetadata, KeyMetadata,
-        ListNeuronsMetadata, MergeMaturityMetadata, NeuronIdentifierMetadata, NeuronInfoMetadata,
-        PublicKeyOrPrincipal, RegisterVoteMetadata, RequestResultMetadata,
-        SetDissolveTimestampMetadata, SpawnMetadata, StakeMaturityMetadata, Status,
-        STATUS_COMPLETED,
+        ListNeuronsMetadata, NeuronIdentifierMetadata, NeuronInfoMetadata, PublicKeyOrPrincipal,
+        RegisterVoteMetadata, RequestResultMetadata, SetDissolveTimestampMetadata, SpawnMetadata,
+        StakeMaturityMetadata, Status, STATUS_COMPLETED,
     },
     transaction_id::TransactionIdentifier,
 };
@@ -160,7 +159,8 @@ pub fn operations_to_requests(
             }
             OperationType::Stake => {
                 validate_neuron_management_op()?;
-                let NeuronIdentifierMetadata { neuron_index } = o.metadata.clone().try_into()?;
+                let NeuronIdentifierMetadata { neuron_index, .. } =
+                    o.metadata.clone().try_into()?;
                 state.stake(account, neuron_index)?;
             }
             OperationType::SetDissolveTimestamp => {
@@ -186,12 +186,14 @@ pub fn operations_to_requests(
 
             OperationType::StartDissolving => {
                 validate_neuron_management_op()?;
-                let NeuronIdentifierMetadata { neuron_index } = o.metadata.clone().try_into()?;
+                let NeuronIdentifierMetadata { neuron_index, .. } =
+                    o.metadata.clone().try_into()?;
                 state.start_dissolve(account, neuron_index)?;
             }
             OperationType::StopDissolving => {
                 validate_neuron_management_op()?;
-                let NeuronIdentifierMetadata { neuron_index } = o.metadata.clone().try_into()?;
+                let NeuronIdentifierMetadata { neuron_index, .. } =
+                    o.metadata.clone().try_into()?;
                 state.stop_dissolve(account, neuron_index)?;
             }
             OperationType::AddHotkey => {
@@ -236,14 +238,6 @@ pub fn operations_to_requests(
                         .map(principal_id_from_public_key_or_principal)
                         .transpose()?,
                 )?;
-            }
-            OperationType::MergeMaturity => {
-                let MergeMaturityMetadata {
-                    neuron_index,
-                    percentage_to_merge,
-                } = o.metadata.clone().try_into()?;
-                validate_neuron_management_op()?;
-                state.merge_maturity(account, neuron_index, percentage_to_merge)?;
             }
             OperationType::RegisterVote => {
                 let RegisterVoteMetadata {
@@ -301,9 +295,17 @@ pub fn operations_to_requests(
                 state.follow(account, pid, neuron_index, topic, followees)?;
             }
             OperationType::RefreshVotingPower => {
-                let NeuronIdentifierMetadata { neuron_index } = o.metadata.clone().try_into()?;
+                let NeuronIdentifierMetadata {
+                    neuron_index,
+                    controller,
+                } = o.metadata.clone().try_into()?;
                 validate_neuron_management_op()?;
-                state.refresh_voting_power(account, neuron_index)?;
+                // convert from pkp in operation to principal in request.
+                let pid = match controller {
+                    None => None,
+                    Some(p) => Some(principal_id_from_public_key_or_principal(p)?),
+                };
+                state.refresh_voting_power(account, neuron_index, pid)?;
             }
         }
     }

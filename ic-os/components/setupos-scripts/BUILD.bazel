@@ -73,3 +73,16 @@ sh_test(
     srcs = ["test-kernel-cmdline-function-runner"],
     data = [":functions.sh"],
 )
+
+sh_test(
+    name = "test_setupos",
+    srcs = ["test-setupos.sh"],
+    args = [
+        "$(execpath check-network.sh)",
+        "$(execpath check-hardware.sh)",
+    ],
+    data = [
+        "check-hardware.sh",
+        "check-network.sh",
+    ],
+)

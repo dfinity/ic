@@ -3,7 +3,6 @@ mod handle_change_auto_stake_maturity;
 mod handle_disburse;
 mod handle_follow;
 mod handle_list_neurons;
-mod handle_merge_maturity;
 mod handle_neuron_info;
 mod handle_refresh_voting_power;
 mod handle_register_vote;
@@ -23,8 +22,9 @@ pub mod proposal_info_response;
 
 use candid::{Decode, Encode};
 use core::ops::Deref;
-use ic_agent::agent::{RejectCode, RejectResponse};
-use ic_nns_governance_api::pb::v1::{KnownNeuron, ListKnownNeuronsResponse, ProposalInfo};
+use ic_agent::agent::{RejectCode, RejectResponse, RequestStatusResponse};
+use ic_agent::{Agent, RequestId};
+use ic_nns_governance_api::{KnownNeuron, ListKnownNeuronsResponse, ProposalInfo};
 use std::{
     convert::TryFrom,
     sync::{atomic::AtomicBool, Arc},
@@ -37,23 +37,19 @@ use async_trait::async_trait;
 use reqwest::{Client, StatusCode};
 use tracing::{debug, error, warn};
 
-use dfn_candid::CandidOne;
 use ic_ledger_canister_blocks_synchronizer::{
-    blocks::{Blocks, RosettaBlocksMode},
-    canister_access::CanisterAccess,
+    blocks::{Blocks, IndexOptimization, RosettaBlocksConfig, RosettaBlocksMode, RosettaDbConfig},
+    canister_access::{make_agent, CanisterAccess},
     certification::VerificationInfo,
-    ledger_blocks_sync::{LedgerBlocksSynchronizer, LedgerBlocksSynchronizerMetrics},
+    ledger_blocks_sync::LedgerBlocksSynchronizer,
 };
-use ic_nns_governance_api::pb::v1::{
-    manage_neuron::NeuronIdOrSubaccount, GovernanceError, NeuronInfo,
-};
+use ic_nns_governance_api::{manage_neuron::NeuronIdOrSubaccount, GovernanceError, NeuronInfo};
 use ic_types::{
     crypto::threshold_sig::ThresholdSigPublicKey,
     messages::{HttpCallContent, MessageId, SignedRequestBytes},
     CanisterId,
 };
 use icp_ledger::{BlockIndex, Symbol, TransferFee, TransferFeeArgs, DEFAULT_TRANSFER_FEE};
-use on_wire::{FromWire, IntoWire};
 
 use crate::{
     convert,
@@ -62,7 +58,7 @@ use crate::{
         handle_add_hotkey::handle_add_hotkey,
         handle_change_auto_stake_maturity::handle_change_auto_stake_maturity,
         handle_disburse::handle_disburse, handle_follow::handle_follow,
-        handle_merge_maturity::handle_merge_maturity, handle_neuron_info::handle_neuron_info,
+        handle_neuron_info::handle_neuron_info,
         handle_refresh_voting_power::handle_refresh_voting_power,
         handle_register_vote::handle_register_vote, handle_remove_hotkey::handle_remove_hotkey,
         handle_send::handle_send, handle_set_dissolve_timestamp::handle_set_dissolve_timestamp,
@@ -81,22 +77,6 @@ use self::{
     handle_list_neurons::handle_list_neurons, list_neurons_response::ListNeuronsResponse,
     proposal_info_response::ProposalInfoResponse,
 };
-
-struct LedgerBlocksSynchronizerMetricsImpl {}
-
-impl LedgerBlocksSynchronizerMetrics for LedgerBlocksSynchronizerMetricsImpl {
-    fn set_target_height(&self, height: u64) {
-        crate::rosetta_server::TARGET_HEIGHT.set(height as i64);
-    }
-
-    fn set_synced_height(&self, height: u64) {
-        crate::rosetta_server::SYNCED_HEIGHT.set(height as i64);
-    }
-
-    fn set_verified_height(&self, height: u64) {
-        crate::rosetta_server::VERIFIED_HEIGHT.set(height as i64);
-    }
-}
 
 #[async_trait]
 pub trait LedgerAccess {
@@ -123,12 +103,12 @@ pub trait LedgerAccess {
 pub struct LedgerClient {
     ledger_blocks_synchronizer: LedgerBlocksSynchronizer<CanisterAccess>,
     canister_id: CanisterId,
-    root_key: Option<ThresholdSigPublicKey>,
     governance_canister_id: CanisterId,
     canister_access: Option<Arc<CanisterAccess>>,
     ic_url: Url,
     token_symbol: String,
     offline: bool,
+    agent_with_timeout: Option<Agent>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -169,6 +149,7 @@ impl LedgerClient {
         offline: bool,
         root_key: Option<ThresholdSigPublicKey>,
         enable_rosetta_blocks: bool,
+        optimize_search_indexes: bool,
     ) -> Result<LedgerClient, ApiError> {
         let canister_access = if offline {
             None
@@ -183,29 +164,53 @@ impl LedgerClient {
             LedgerClient::check_ledger_symbol(&token_symbol, &canister_access).await?;
             Some(Arc::new(canister_access))
         };
+        let agent_with_timeout = if offline {
+            None
+        } else {
+            let agent = make_agent(
+                ic_url.clone(),
+                Some(Self::TIMEOUT),
+                root_key.map(public_key_to_der).transpose()?,
+            )
+            .await
+            .map_err(|e| ApiError::internal_error(format!("{}", e)))?;
+            Some(agent)
+        };
         let verification_info = root_key.map(|root_key| VerificationInfo {
             root_key,
             canister_id,
         });
+        let config = RosettaDbConfig::new(
+            if enable_rosetta_blocks {
+                RosettaBlocksConfig::Enabled
+            } else {
+                RosettaBlocksConfig::Disabled
+            },
+            if optimize_search_indexes {
+                IndexOptimization::Enabled
+            } else {
+                IndexOptimization::Disabled
+            },
+        );
+
         let ledger_blocks_synchronizer = LedgerBlocksSynchronizer::new(
             canister_access.clone(),
             store_location,
             store_max_blocks,
             verification_info,
-            Box::new(LedgerBlocksSynchronizerMetricsImpl {}),
-            enable_rosetta_blocks,
+            config,
         )
         .await?;
 
         Ok(Self {
             ledger_blocks_synchronizer,
             canister_id,
-            root_key,
             token_symbol,
             governance_canister_id,
             canister_access,
             ic_url,
             offline,
+            agent_with_timeout,
         })
     }
 
@@ -213,8 +218,7 @@ impl LedgerClient {
         token_symbol: &str,
         canister_access: &CanisterAccess,
     ) -> Result<(), ApiError> {
-        let arg = CandidOne(())
-            .into_bytes()
+        let arg = Encode!(&())
             .map_err(|e| ApiError::internal_error(format!("Serialization failed: {:?}", e)))?;
 
         let symbol_res: Result<Symbol, String> = canister_access
@@ -224,7 +228,7 @@ impl LedgerClient {
             .call()
             .await
             .map_err(|e| format!("{}", e))
-            .and_then(|bytes| CandidOne::from_bytes(bytes).map(|c| c.0));
+            .and_then(|bytes| Decode!(&bytes, Symbol).map_err(|e| e.to_string()));
 
         match symbol_res {
             Ok(Symbol { symbol }) => {
@@ -336,8 +340,7 @@ impl LedgerAccess for LedgerClient {
         }
         let agent = &self.canister_access.as_ref().unwrap().agent;
 
-        let arg = CandidOne(proposal_id)
-            .into_bytes()
+        let arg = Encode!(&proposal_id)
             .map_err(|e| ApiError::internal_error(format!("Serialization failed: {:?}", e)))?;
         let bytes = agent
             .query(&self.governance_canister_id.get().0, "get_proposal_info")
@@ -422,8 +425,7 @@ impl LedgerAccess for LedgerClient {
 
         let agent = &self.canister_access.as_ref().unwrap().agent;
 
-        let arg = CandidOne(acc_id)
-            .into_bytes()
+        let arg = Encode!(&acc_id)
             .map_err(|e| ApiError::internal_error(format!("Serialization failed: {:?}", e)))?;
         let bytes = if verified {
             agent
@@ -446,7 +448,7 @@ impl LedgerAccess for LedgerClient {
         }
         .map_err(|e| ApiError::invalid_request(format!("{}", e)))?;
         let ninfo: Result<Result<NeuronInfo, GovernanceError>, _> =
-            CandidOne::from_bytes(bytes).map(|c| c.0);
+            Decode!(&bytes, Result<NeuronInfo, GovernanceError>);
         let ninfo = ninfo.map_err(|e| {
             ApiError::internal_error(format!(
                 "Deserialization of get_neuron_info response failed: {:?}",
@@ -471,8 +473,7 @@ impl LedgerAccess for LedgerClient {
 
     async fn transfer_fee(&self) -> Result<TransferFee, ApiError> {
         let agent = &self.canister_access.as_ref().unwrap().agent;
-        let arg = CandidOne(TransferFeeArgs {})
-            .into_bytes()
+        let arg = Encode!(&TransferFeeArgs {})
             .map_err(|e| ApiError::internal_error(format!("Serialization failed: {:?}", e)))?;
 
         let res = agent
@@ -500,7 +501,7 @@ impl LedgerAccess for LedgerClient {
                     transfer_fee: DEFAULT_TRANSFER_FEE,
                 })
             }
-            Ok(bytes) => CandidOne::from_bytes(bytes).map(|c| c.0).map_err(|e| {
+            Ok(bytes) => Decode!(&bytes, TransferFee).map_err(|e| {
                 ApiError::internal_error(format!("Error querying transfer_fee: {}", e))
             }),
         }
@@ -515,10 +516,6 @@ impl LedgerAccess for LedgerClient {
 /// The HTTP path for update calls on the replica.
 fn update_path(cid: CanisterId) -> String {
     format!("api/v2/canister/{}/call", cid)
-}
-
-fn read_state_path(cid: CanisterId) -> String {
-    format!("api/v2/canister/{}/read_state", cid)
 }
 
 impl LedgerClient {
@@ -671,9 +668,7 @@ impl LedgerClient {
                 canister_id,
                 request_id,
                 request_type,
-                start_time,
                 deadline,
-                http_client,
                 read_state_http_body,
             )
             .await
@@ -724,9 +719,7 @@ impl LedgerClient {
         canister_id: CanisterId,
         request_id: MessageId,
         request_type: RequestType,
-        start_time: Instant,
         deadline: Instant,
-        http_client: &Client,
         read_state_http_body: SignedRequestBytes,
     ) -> Result<Result<Option<OperationOutput>, ApiError>, String> {
         // Cut&paste from canister_client Agent.
@@ -734,87 +727,40 @@ impl LedgerClient {
         while Instant::now() + poll_interval < deadline {
             debug!("Waiting {} ms for response", poll_interval.as_millis());
             actix_rt::time::sleep(poll_interval).await;
-            let wait_timeout = Self::TIMEOUT - start_time.elapsed();
-            let url = self
-                .ic_url
-                .join(&read_state_path(canister_id))
-                .expect("URL join failed");
 
-            match send_post_request(
-                http_client,
-                url.as_str(),
-                read_state_http_body.clone().into(),
-                wait_timeout,
-            )
-            .await
-            {
-                Err(err) => {
-                    // Retry client-side errors.
-                    error!("Error while reading the IC state: {}.", err);
+            let agent = self.agent_with_timeout.as_ref().unwrap();
+            let status = agent
+                .request_status_signed(
+                    &RequestId::new(request_id.as_bytes()),
+                    canister_id.get().0,
+                    read_state_http_body.clone().into(),
+                )
+                .await
+                .map_err(|err| format!("While parsing the read state response: {}", err))?
+                .0;
+
+            debug!("Read state response: {:?}", status);
+
+            match status {
+                RequestStatusResponse::Replied(reply_response) => {
+                    return self.handle_reply(&request_type, reply_response.arg);
                 }
-                Ok((body, status)) => {
-                    if status.is_success() {
-                        let cbor: serde_cbor::Value = serde_cbor::from_slice(&body)
-                            .map_err(|err| format!("While parsing the status body: {}", err))?;
-
-                        let status = ic_read_state_response_parser::parse_read_state_response(
-                            &request_id,
-                            &canister_id,
-                            self.root_key.as_ref(),
-                            cbor,
-                        )
-                        .map_err(|err| format!("While parsing the read state response: {}", err))?;
-
-                        debug!("Read state response: {:?}", status);
-
-                        match status.status.as_ref() {
-                            "replied" => match status.reply {
-                                Some(bytes) => {
-                                    return self.handle_reply(&request_type, bytes);
-                                }
-                                None => {
-                                    return Err("Send returned with no result.".to_owned());
-                                }
-                            },
-                            "unknown" | "received" | "processing" => {}
-                            "rejected" => {
-                                return Ok(Err(ApiError::TransactionRejected(
-                                    false,
-                                    status
-                                        .reject_message
-                                        .unwrap_or_else(|| "(no message)".to_owned())
-                                        .into(),
-                                )));
-                            }
-                            "done" => {
-                                return Err(
-                                        "The call has completed but the reply/reject data has been pruned."
-                                            .to_string(),
-                                    );
-                            }
-                            _ => {
-                                return Err(format!(
-                                    "Send returned unexpected result: {:?} - {:?}",
-                                    status.status, status.reject_message
-                                ))
-                            }
-                        }
-                    } else {
-                        let body =
-                            String::from_utf8(body).unwrap_or_else(|_| "<undecodable>".to_owned());
-                        let err = format!(
-                            "HTTP error {} while reading the IC state: {}.",
-                            status, body
-                        );
-                        if status.is_server_error() {
-                            // Retry on 5xx errors.
-                            error!("{}", err);
-                        } else {
-                            return Err(err);
-                        }
-                    }
+                RequestStatusResponse::Unknown
+                | RequestStatusResponse::Received
+                | RequestStatusResponse::Processing => {}
+                RequestStatusResponse::Rejected(reject_response) => {
+                    return Ok(Err(ApiError::TransactionRejected(
+                        false,
+                        reject_response.reject_message.into(),
+                    )));
                 }
-            };
+                RequestStatusResponse::Done => {
+                    return Err(
+                        "The call has completed but the reply/reject data has been pruned."
+                            .to_string(),
+                    );
+                }
+            }
 
             // Bump the poll interval and compute the next poll time (based on current
             // wall time, so we don't spin without delay after a
@@ -841,7 +787,6 @@ impl LedgerClient {
             RequestType::AddHotKey { .. } => handle_add_hotkey(bytes),
             RequestType::Disburse { .. } => handle_disburse(bytes),
             RequestType::Follow { .. } => handle_follow(bytes),
-            RequestType::MergeMaturity { .. } => handle_merge_maturity(bytes),
             RequestType::RegisterVote { .. } => handle_register_vote(bytes),
             RequestType::StakeMaturity { .. } => handle_stake_maturity(bytes),
             RequestType::NeuronInfo { .. } => handle_neuron_info(bytes),

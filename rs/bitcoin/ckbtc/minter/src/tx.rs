@@ -407,7 +407,7 @@ impl SignedTransaction {
         let base_tx_size = self.base_serialized_len();
         let total_tx_size = self.serialized_len();
         let tx_weight = base_tx_size * 3 + total_tx_size;
-        (tx_weight + 3) / 4
+        tx_weight.div_ceil(4)
     }
 }
 

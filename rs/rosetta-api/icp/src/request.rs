@@ -2,11 +2,10 @@ use crate::{
     convert, convert::principal_id_from_public_key_or_principal, errors::ApiError, models,
     models::seconds::Seconds, request_types::*,
 };
-use dfn_candid::CandidOne;
-use ic_nns_governance_api::pb::v1::manage_neuron::{self, configure, Command, Configure};
+use candid::Decode;
+use ic_nns_governance_api::manage_neuron::{self, configure, Command, Configure};
 use ic_types::PrincipalId;
 use icp_ledger::Tokens;
-use on_wire::FromWire;
 use std::convert::{TryFrom, TryInto};
 
 use crate::models::Operation;
@@ -49,8 +48,6 @@ pub enum Request {
     Spawn(Spawn),
     #[serde(rename = "REGISTER_VOTE")]
     RegisterVote(RegisterVote),
-    #[serde(rename = "MERGE_MATURITY")]
-    MergeMaturity(MergeMaturity),
     #[serde(rename = "STAKE_MATURITY")]
     StakeMaturity(StakeMaturity),
     #[serde(rename = "NEURON_INFO")]
@@ -126,11 +123,6 @@ impl Request {
                     neuron_index: *neuron_index,
                 })
             }
-            Request::MergeMaturity(MergeMaturity { neuron_index, .. }) => {
-                Ok(RequestType::MergeMaturity {
-                    neuron_index: *neuron_index,
-                })
-            }
             Request::StakeMaturity(StakeMaturity { neuron_index, .. }) => {
                 Ok(RequestType::StakeMaturity {
                     neuron_index: *neuron_index,
@@ -155,11 +147,14 @@ impl Request {
                 neuron_index: *neuron_index,
                 controller: controller.map(PublicKeyOrPrincipal::Principal),
             }),
-            Request::RefreshVotingPower(RefreshVotingPower { neuron_index, .. }) => {
-                Ok(RequestType::RefreshVotingPower {
-                    neuron_index: *neuron_index,
-                })
-            }
+            Request::RefreshVotingPower(RefreshVotingPower {
+                neuron_index,
+                controller,
+                ..
+            }) => Ok(RequestType::RefreshVotingPower {
+                neuron_index: *neuron_index,
+                controller: controller.map(PublicKeyOrPrincipal::Principal),
+            }),
         }
     }
 
@@ -184,7 +179,6 @@ impl Request {
                 Request::AddHotKey(o) => builder.add_hot_key(o),
                 Request::RemoveHotKey(o) => builder.remove_hotkey(o),
                 Request::Spawn(o) => builder.spawn(o),
-                Request::MergeMaturity(o) => builder.merge_maturity(o),
                 Request::RegisterVote(o) => builder.register_vote(o),
                 Request::StakeMaturity(o) => builder.stake_maturity(o),
                 Request::NeuronInfo(o) => builder.neuron_info(o),
@@ -213,7 +207,6 @@ impl Request {
                 | Request::RemoveHotKey(_)
                 | Request::Spawn(_)
                 | Request::RegisterVote(_)
-                | Request::MergeMaturity(_)
                 | Request::StakeMaturity(_)
                 | Request::ListNeurons(_) // not neuron management but we need it signed.
                 | Request::NeuronInfo(_) // not neuron management but we need it signed.
@@ -245,14 +238,15 @@ impl TryFrom<&models::Request> for Request {
 
         let manage_neuron = || {
             {
-                CandidOne::<ic_nns_governance_api::pb::v1::ManageNeuron>::from_bytes(
-                    payload.update_content().arg.0.clone(),
+                Decode!(
+                    &payload.update_content().arg.0,
+                    ic_nns_governance_api::ManageNeuron
                 )
                 .map_err(|e| {
                     ApiError::invalid_request(format!("Could not parse manage_neuron: {}", e))
                 })
             }
-            .map(|m| m.0.command)
+            .map(|m| m.command)
         };
 
         match request_type {
@@ -430,20 +424,6 @@ impl TryFrom<&models::Request> for Request {
                     Err(ApiError::invalid_request("Invalid register vote request."))
                 }
             }
-            RequestType::MergeMaturity { neuron_index } => {
-                if let Some(Command::MergeMaturity(manage_neuron::MergeMaturity {
-                    percentage_to_merge,
-                })) = manage_neuron()?
-                {
-                    Ok(Request::MergeMaturity(MergeMaturity {
-                        account,
-                        percentage_to_merge,
-                        neuron_index: *neuron_index,
-                    }))
-                } else {
-                    Err(ApiError::invalid_request("Invalid merge maturity request."))
-                }
-            }
             RequestType::StakeMaturity { neuron_index } => {
                 if let Some(Command::StakeMaturity(manage_neuron::StakeMaturity {
                     percentage_to_stake,
@@ -516,13 +496,25 @@ impl TryFrom<&models::Request> for Request {
                     Err(ApiError::invalid_request("Invalid follow request."))
                 }
             }
-            RequestType::RefreshVotingPower { neuron_index } => {
+            RequestType::RefreshVotingPower {
+                neuron_index,
+                controller,
+            } => {
                 if let Some(Command::RefreshVotingPower(manage_neuron::RefreshVotingPower {})) =
                     manage_neuron()?
                 {
+                    let pid = match controller
+                        .clone()
+                        .map(principal_id_from_public_key_or_principal)
+                    {
+                        None => None,
+                        Some(Ok(pid)) => Some(pid),
+                        Some(Err(e)) => return Err(e),
+                    };
                     Ok(Request::RefreshVotingPower(RefreshVotingPower {
                         neuron_index: *neuron_index,
                         account,
+                        controller: pid,
                     }))
                 } else {
                     Err(ApiError::invalid_request(

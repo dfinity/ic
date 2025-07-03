@@ -41,6 +41,7 @@ once_cell = "1.13.1"
 rustls = { workspace = true }
 rustls-pemfile = "2.1.2"
 rstest = { workspace = true }
+socks5-impl = { version = "0.6", features = ["tokio"] }
 tempfile = { workspace = true }
 tokio-rustls = { workspace = true }
 uuid = { workspace = true }

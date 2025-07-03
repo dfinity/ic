@@ -1,11 +1,10 @@
-use dfn_candid::CandidOne;
+use candid::Encode;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_types::{
     messages::{Blob, HttpCanisterUpdate, MessageId},
     PrincipalId,
 };
 use icp_ledger::{Memo, Operation, SendArgs, Tokens};
-use on_wire::IntoWire;
 use rand::Rng;
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
@@ -23,13 +22,12 @@ use crate::{
     request::Request,
     request_handler::{make_sig_data, verify_network_id, RosettaRequestHandler},
     request_types::{
-        AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, ListNeurons, MergeMaturity,
-        NeuronInfo, PublicKeyOrPrincipal, RefreshVotingPower, RegisterVote, RemoveHotKey,
-        RequestType, SetDissolveTimestamp, Spawn, Stake, StakeMaturity, StartDissolve,
-        StopDissolve,
+        AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, ListNeurons, NeuronInfo,
+        PublicKeyOrPrincipal, RefreshVotingPower, RegisterVote, RemoveHotKey, RequestType,
+        SetDissolveTimestamp, Spawn, Stake, StakeMaturity, StartDissolve, StopDissolve,
     },
 };
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     manage_neuron::{self, configure, Command, NeuronIdOrSubaccount},
     ClaimOrRefreshNeuronFromAccount, ManageNeuron,
 };
@@ -208,13 +206,6 @@ impl RosettaRequestHandler {
                     &pks_map,
                     &ingress_expiries,
                 )?,
-                Request::MergeMaturity(req) => handle_merge_maturity(
-                    req,
-                    &mut payloads,
-                    &mut updates,
-                    &pks_map,
-                    &ingress_expiries,
-                )?,
                 Request::StakeMaturity(req) => handle_stake_maturity(
                     req,
                     &mut payloads,
@@ -386,7 +377,7 @@ fn handle_neuron_info(
     let update = HttpCanisterUpdate {
         canister_id: Blob(ic_nns_constants::GOVERNANCE_CANISTER_ID.get().to_vec()),
         method_name: "get_full_neuron_by_id_or_subaccount".to_string(),
-        arg: Blob(CandidOne(args).into_bytes().expect("Serialization failed")),
+        arg: Blob(Encode!(&args).expect("Serialization failed")),
         nonce: None,
         sender: Blob(sender.into_vec()), // Sender is controller or hotkey.
         ingress_expiry: 0,
@@ -430,7 +421,7 @@ fn handle_list_neurons(
         .map_err(|err| ApiError::InvalidPublicKey(false, err.into()))?;
 
     // Argument for the method called on the governance canister.
-    let args = ic_nns_governance_api::pb::v1::ListNeurons {
+    let args = ic_nns_governance_api::ListNeurons {
         neuron_ids: vec![],
         include_neurons_readable_by_caller: true,
         include_empty_neurons_readable_by_caller: None,
@@ -442,7 +433,7 @@ fn handle_list_neurons(
     let update = HttpCanisterUpdate {
         canister_id: Blob(ic_nns_constants::GOVERNANCE_CANISTER_ID.get().to_vec()),
         method_name: "list_neurons".to_string(),
-        arg: Blob(CandidOne(args).into_bytes().expect("Serialization failed")),
+        arg: Blob(Encode!(&args).expect("Serialization failed")),
         nonce: None,
         sender: Blob(sender.into_vec()), // Sender is controller or hotkey.
         ingress_expiry: 0,
@@ -521,7 +512,7 @@ fn handle_stake(
     let update = HttpCanisterUpdate {
         canister_id: Blob(ic_nns_constants::GOVERNANCE_CANISTER_ID.get().to_vec()),
         method_name: "claim_or_refresh_neuron_from_account".to_string(),
-        arg: Blob(CandidOne(args).into_bytes().expect("Serialization failed")),
+        arg: Blob(Encode!(&args).expect("Serialization failed")),
         // TODO work out whether Rosetta will accept us generating a nonce here
         // If we don't have a nonce it could cause one of those nasty bugs that
         // doesn't show it's face until you try to do two
@@ -532,9 +523,7 @@ fn handle_stake(
         // If we also need a real nonce, we'll concatenate it to the
         // neuron_index.
         nonce: Some(Blob(
-            CandidOne(neuron_index)
-                .into_bytes()
-                .expect("Serialization of neuron_index failed"),
+            Encode!(&neuron_index).expect("Serialization of neuron_index failed"),
         )),
         sender: Blob(
             principal_id_from_public_key(pk)
@@ -805,34 +794,6 @@ fn handle_register_vote(
     Ok(())
 }
 
-/// Handle MERGE_MATURITY.
-fn handle_merge_maturity(
-    req: MergeMaturity,
-    payloads: &mut Vec<SigningPayload>,
-    updates: &mut Vec<(RequestType, HttpCanisterUpdate)>,
-    pks_map: &HashMap<icp_ledger::AccountIdentifier, &PublicKey>,
-    ingress_expiries: &[u64],
-) -> Result<(), ApiError> {
-    let account = req.account;
-    let neuron_index = req.neuron_index;
-    let percentage_to_merge = req.percentage_to_merge;
-    let command = Command::MergeMaturity(manage_neuron::MergeMaturity {
-        percentage_to_merge,
-    });
-    add_neuron_management_payload(
-        RequestType::MergeMaturity { neuron_index },
-        account,
-        None,
-        neuron_index,
-        command,
-        payloads,
-        updates,
-        pks_map,
-        ingress_expiries,
-    )?;
-    Ok(())
-}
-
 fn handle_stake_maturity(
     req: StakeMaturity,
     payloads: &mut Vec<SigningPayload>,
@@ -907,11 +868,15 @@ fn handle_refresh_voting_power(
 ) -> Result<(), ApiError> {
     let account = req.account;
     let neuron_index = req.neuron_index;
+    let controller = req.controller;
     let command = Command::RefreshVotingPower(manage_neuron::RefreshVotingPower {});
     add_neuron_management_payload(
-        RequestType::RefreshVotingPower { neuron_index },
+        RequestType::RefreshVotingPower {
+            neuron_index,
+            controller: controller.map(PublicKeyOrPrincipal::Principal),
+        },
         account,
-        None,
+        controller,
         neuron_index,
         command,
         payloads,
@@ -926,7 +891,7 @@ fn add_neuron_management_payload(
     account: icp_ledger::AccountIdentifier,
     controller: Option<PrincipalId>, // specify with hotkey.
     neuron_index: u64,
-    command: ic_nns_governance_api::pb::v1::manage_neuron::Command,
+    command: ic_nns_governance_api::manage_neuron::Command,
     payloads: &mut Vec<SigningPayload>,
     updates: &mut Vec<(RequestType, HttpCanisterUpdate)>,
     pks_map: &HashMap<icp_ledger::AccountIdentifier, &PublicKey>,
@@ -954,15 +919,9 @@ fn add_neuron_management_payload(
     let update = HttpCanisterUpdate {
         canister_id: Blob(ic_nns_constants::GOVERNANCE_CANISTER_ID.get().to_vec()),
         method_name: "manage_neuron".to_string(),
-        arg: Blob(
-            CandidOne(manage_neuron)
-                .into_bytes()
-                .expect("Serialization failed"),
-        ),
+        arg: Blob(Encode!(&manage_neuron).expect("Serialization failed")),
         nonce: Some(Blob(
-            CandidOne(neuron_index)
-                .into_bytes()
-                .expect("Serialization of neuron_index failed"),
+            Encode!(&neuron_index).expect("Serialization of neuron_index failed"),
         )),
         sender: Blob(
             principal_id_from_public_key(pk)

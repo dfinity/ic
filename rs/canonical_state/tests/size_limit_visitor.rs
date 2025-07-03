@@ -68,46 +68,53 @@ prop_compose! {
     }
 }
 
-proptest! {
-    #[test]
-    fn size_limit_proptest(fixture in arb_fixture(10)) {
-        let Fixture{ state, end, slice_begin, size_limit, .. } = fixture;
+#[test_strategy::proptest]
+fn size_limit_proptest(#[strategy(arb_fixture(10))] fixture: Fixture) {
+    let Fixture {
+        state,
+        end,
+        slice_begin,
+        size_limit,
+        ..
+    } = fixture;
 
-        // Produce a size-limited slice starting from `slice_begin`.
-        let pattern = vec![
-            Label(b"streams".to_vec()),
-            Any,
-            Label(b"messages".to_vec()),
-            Any,
-        ];
-        let subtree_pattern = make_slice_pattern(slice_begin, end);
-        let visitor = SizeLimitVisitor::new(
-            pattern,
-            size_limit,
-            SubtreeVisitor::new(&subtree_pattern, MessageSpyVisitor::default()),
+    // Produce a size-limited slice starting from `slice_begin`.
+    let pattern = vec![
+        Label(b"streams".to_vec()),
+        Any,
+        Label(b"messages".to_vec()),
+        Any,
+    ];
+    let subtree_pattern = make_slice_pattern(slice_begin, end);
+    let visitor = SizeLimitVisitor::new(
+        pattern,
+        size_limit,
+        SubtreeVisitor::new(&subtree_pattern, MessageSpyVisitor::default()),
+    );
+    let (actual_size, actual_begin, actual_end) = traverse(&state, visitor);
+
+    if let (Some(actual_begin), Some(actual_end)) = (actual_begin, actual_end) {
+        // Non-empty slice.
+        assert_eq!(slice_begin, actual_begin);
+        assert!(actual_end <= end);
+
+        // Size is below the limit or the slice consists of a single message.
+        assert!(actual_size <= size_limit || actual_end - actual_begin == 1);
+        // And must match the computed slice size.
+        assert_eq!(
+            compute_message_sizes(&state, actual_begin, actual_end),
+            actual_size
         );
-        let (actual_size, actual_begin, actual_end) = traverse(&state, visitor);
 
-        if let (Some(actual_begin), Some(actual_end)) = (actual_begin, actual_end) {
-            // Non-empty slice.
-            assert_eq!(slice_begin, actual_begin);
-            assert!(actual_end <= end);
-
-            // Size is below the limit or the slice consists of a single message.
-            assert!(actual_size <= size_limit || actual_end - actual_begin == 1);
-            // And must match the computed slice size.
-            assert_eq!(compute_message_sizes(&state, actual_begin, actual_end), actual_size);
-
-            if actual_end < end {
-                // Including one more message should exceed `size_limit`.
-                assert!(compute_message_sizes(&state, actual_begin, actual_end + 1) > size_limit);
-            }
-        } else {
-            // Empty slice.
-            assert_eq!(0, actual_size);
-            // May only happen if `slice_begin == stream.messages.end`.
-            assert_eq!(slice_begin, end);
+        if actual_end < end {
+            // Including one more message should exceed `size_limit`.
+            assert!(compute_message_sizes(&state, actual_begin, actual_end + 1) > size_limit);
         }
+    } else {
+        // Empty slice.
+        assert_eq!(0, actual_size);
+        // May only happen if `slice_begin == stream.messages.end`.
+        assert_eq!(slice_begin, end);
     }
 }
 

@@ -1,5 +1,5 @@
 // Set up a small high performance testnet containing:
-//   one 1-node System and one 1-node Application subnets, single boundary node, and a p8s (with grafana) VM.
+//   one 1-node System and one 1-node Application subnets, single API boundary node, single ic-gateway and a p8s (with grafana) VM.
 // The single system subnet node uses the default: 6 vCPUs, 24 GiB of RAM, and 50 GiB disk,
 // while the single application subnet node uses: 64 vCPUs, 512 GiB of RAM, and 500 GiB disk.
 //
@@ -40,15 +40,13 @@ use anyhow::Result;
 use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
-    boundary_node::BoundaryNode,
     group::SystemTestGroup,
     ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
+    ic_gateway_vm::{HasIcGatewayVm, IcGatewayVm, IC_GATEWAY_VM_NAME},
     prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
-    test_env_api::{await_boundary_node_healthy, HasTopologySnapshot, NnsCustomizations},
+    test_env_api::{HasTopologySnapshot, NnsCustomizations},
 };
-
-const BOUNDARY_NODE_NAME: &str = "boundary-node-1";
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
@@ -72,19 +70,18 @@ pub fn setup(env: TestEnv) {
                 })
                 .add_nodes(1),
         )
+        .with_api_boundary_nodes(1)
         .setup_and_start(&env)
         .expect("Failed to setup IC under test");
     install_nns_with_customizations_and_check_progress(
         env.topology_snapshot(),
         NnsCustomizations::default(),
     );
-    BoundaryNode::new(String::from(BOUNDARY_NODE_NAME))
-        .allocate_vm(&env)
-        .expect("Allocation of BoundaryNode failed.")
-        .for_ic(&env, "")
-        .use_real_certs_and_dns()
+    IcGatewayVm::new(IC_GATEWAY_VM_NAME)
         .start(&env)
-        .expect("failed to setup BoundaryNode VM");
-    env.sync_with_prometheus_by_name("", env.get_playnet_url(BOUNDARY_NODE_NAME));
-    await_boundary_node_healthy(&env, BOUNDARY_NODE_NAME);
+        .expect("failed to setup ic-gateway");
+    let ic_gateway = env.get_deployed_ic_gateway(IC_GATEWAY_VM_NAME).unwrap();
+    let ic_gateway_url = ic_gateway.get_public_url();
+    let ic_gateway_domain = ic_gateway_url.domain().unwrap();
+    env.sync_with_prometheus_by_name("", Some(ic_gateway_domain.to_string()));
 }

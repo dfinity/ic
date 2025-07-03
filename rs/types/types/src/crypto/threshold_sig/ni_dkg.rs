@@ -45,6 +45,21 @@ impl From<NiDkgMasterPublicKeyId> for MasterPublicKeyId {
     }
 }
 
+impl TryFrom<MasterPublicKeyId> for NiDkgMasterPublicKeyId {
+    type Error = &'static str;
+
+    fn try_from(value: MasterPublicKeyId) -> Result<Self, Self::Error> {
+        match value {
+            MasterPublicKeyId::VetKd(vet_kd_key_id) => {
+                Ok(NiDkgMasterPublicKeyId::VetKd(vet_kd_key_id))
+            }
+            MasterPublicKeyId::Ecdsa(_) | MasterPublicKeyId::Schnorr(_) => {
+                Err("This is not a NiDkg key")
+            }
+        }
+    }
+}
+
 impl From<&NiDkgMasterPublicKeyId> for pb::MasterPublicKeyId {
     fn from(item: &NiDkgMasterPublicKeyId) -> Self {
         Self {

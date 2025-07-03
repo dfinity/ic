@@ -11,9 +11,11 @@ async-trait = { workspace = true }
 candid = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
 ic-canister-log = { path = "../../../rust_canisters/canister_log" }
+ic-cdk = { workspace = true }
 ic-limits = { path = "../../../limits" }
 ic-ledger-core = { path = "../ledger_core" }
 ic-ledger-hash-of = { path = "../../../../packages/ic-ledger-hash-of" }
 ic-management-canister-types-private = { path = "../../../types/management_canister_types" }
+ic-stable-structures = { workspace = true }
 ic-utils = { path = "../../../utils" }
 serde = { workspace = true }

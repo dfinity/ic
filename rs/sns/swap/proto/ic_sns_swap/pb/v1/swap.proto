@@ -769,8 +769,7 @@ message SnsNeuronRecipe {
     CLAIMED_STATUS_FAILED = 3;
 
     // The Neuron is invalid and was not created in SNS Governance. This neuron
-    // cannot be retried without manual intervention to update its
-    // `NeuronParameters`.
+    // cannot be retried without manual intervention to update its `NeuronRecipe`.
     CLAIMED_STATUS_INVALID = 4;
   }
 }

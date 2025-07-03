@@ -12,16 +12,15 @@ use ic_interfaces_registry::RegistryValue;
 use ic_interfaces_state_manager::StateReader;
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_management_canister_types_private::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId};
-use ic_protobuf::registry::crypto::v1::{ChainKeySigningSubnetList, PublicKey as PublicKeyProto};
+use ic_protobuf::registry::crypto::v1::{ChainKeyEnabledSubnetList, PublicKey as PublicKeyProto};
 use ic_protobuf::registry::subnet::v1::SubnetRecord as SubnetRecordProto;
 use ic_protobuf::registry::{
     api_boundary_node::v1::ApiBoundaryNodeRecord, node::v1::IPv4InterfaceConfig,
     node::v1::NodeRecord,
 };
 use ic_registry_client_fake::FakeRegistryClient;
-use ic_registry_keys::make_chain_key_signing_subnet_list_key;
+use ic_registry_keys::make_chain_key_enabled_subnet_list_key;
 use ic_registry_local_registry::LocalRegistry;
-use ic_registry_local_store::{compact_delta_to_changelog, LocalStoreImpl, LocalStoreWriter};
 use ic_registry_proto_data_provider::{ProtoRegistryDataProvider, ProtoRegistryDataProviderError};
 use ic_registry_routing_table::{routing_table_insert_subnet, CanisterMigrations, RoutingTable};
 use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
@@ -29,7 +28,7 @@ use ic_replicated_state::Stream;
 use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{fetch_int_counter_vec, fetch_int_gauge_vec, metric_vec};
-use ic_test_utilities_registry::SubnetRecordBuilder;
+use ic_test_utilities_registry::{get_mainnet_delta_00_6d_c1, SubnetRecordBuilder};
 use ic_test_utilities_state::CanisterStateBuilder;
 use ic_test_utilities_types::{
     batch::BatchBuilder,
@@ -47,7 +46,6 @@ use ic_types::{
 };
 use maplit::{btreemap, btreeset};
 use std::{fmt::Debug, str::FromStr, sync::Arc, time::Duration};
-use tempfile::TempDir;
 
 /// Helper function for testing the values of the
 /// `METRIC_DELIVER_BATCH_COUNT` metric.
@@ -477,10 +475,10 @@ impl RegistryFixture {
 
         for (key_id, subnet_ids) in chain_key_enabled_subnets.iter() {
             self.write_record(
-                &make_chain_key_signing_subnet_list_key(key_id),
+                &make_chain_key_enabled_subnet_list_key(key_id),
                 subnet_ids
                     .as_ref()
-                    .map(|subnet_ids| ChainKeySigningSubnetList {
+                    .map(|subnet_ids| ChainKeyEnabledSubnetList {
                         subnets: subnet_ids
                             .iter()
                             .map(|subnet_id| subnet_id_into_protobuf(*subnet_id))
@@ -654,11 +652,11 @@ impl StateMachine for FakeStateMachine {
 /// Generates an instance of `BatchProcessorImpl` along with an `Arc` to its metrics;
 /// an `Arc` to the underlying state manager; and an `Arc` to the registry settings
 /// which are stored by the fake state machine.
-fn make_batch_processor(
-    registry: Arc<impl RegistryClient + 'static>,
+fn make_batch_processor<RegistryClient_: RegistryClient + 'static>(
+    registry: Arc<RegistryClient_>,
     log: ReplicaLogger,
 ) -> (
-    BatchProcessorImpl,
+    BatchProcessorImpl<RegistryClient_>,
     MessageRoutingMetrics,
     Arc<FakeStateManager>,
     Arc<Mutex<RegistryExecutionSettings>>,
@@ -670,6 +668,7 @@ fn make_batch_processor(
         provisional_whitelist: ProvisionalWhitelist::All,
         chain_key_settings: BTreeMap::new(),
         subnet_size: 0,
+        node_ids: BTreeSet::new(),
     }));
     let batch_processor = BatchProcessorImpl {
         state_manager: state_manager.clone(),
@@ -1035,6 +1034,7 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             randomness: Randomness::new([123; 32]),
             chain_key_subnet_public_keys: BTreeMap::default(),
             idkg_pre_signature_ids: BTreeMap::new(),
+            ni_dkg_ids: BTreeMap::new(),
             registry_version: fixture.registry.get_latest_version(),
             time: Time::from_nanos_since_unix_epoch(0),
             consensus_responses: Vec::new(),
@@ -1642,22 +1642,6 @@ fn check_critical_error_counter_is_not_incremented_for_transient_error() {
     });
 }
 
-/// Get protobuf-encoded snapshot of the mainnet registry state (around jan. 2022)
-fn get_mainnet_delta_00_6d_c1() -> (TempDir, LocalStoreImpl) {
-    let tempdir = TempDir::new().unwrap();
-    let store = LocalStoreImpl::new(tempdir.path());
-    let changelog =
-        compact_delta_to_changelog(ic_registry_local_store_artifacts::MAINNET_DELTA_00_6D_C1)
-            .expect("")
-            .1;
-
-    for (v, changelog_entry) in changelog.into_iter().enumerate() {
-        let v = RegistryVersion::from((v + 1) as u64);
-        store.store(v, changelog_entry).unwrap();
-    }
-    (tempdir, store)
-}
-
 pub fn mainnet_nns_subnet() -> SubnetId {
     SubnetId::new(
         PrincipalId::from_str("tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe")
@@ -1839,6 +1823,7 @@ fn process_batch_updates_subnet_metrics() {
             randomness: Randomness::new([123; 32]),
             chain_key_subnet_public_keys: BTreeMap::default(),
             idkg_pre_signature_ids: BTreeMap::new(),
+            ni_dkg_ids: BTreeMap::new(),
             registry_version: fixture.registry.get_latest_version(),
             time: Time::from_nanos_since_unix_epoch(0),
             consensus_responses: Vec::new(),

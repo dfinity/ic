@@ -1,17 +1,16 @@
 use ic_protobuf::types::v1 as pb;
 use ic_sys::fs::write_protobuf_using_tmp_file;
-use ic_test_utilities_consensus::{fake::*, make_genesis};
-use ic_types::consensus::catchup::*;
-use ic_types::consensus::dkg;
-use ic_types::consensus::hashed::Hashed;
-use ic_types::crypto::Signable;
-use ic_types::crypto::{CryptoHash, CryptoHashOf};
+use ic_test_utilities_consensus::{fake::Fake, make_genesis};
+use ic_types::{
+    consensus::{catchup::*, dkg::DkgSummary, hashed::Hashed},
+    crypto::{CryptoHash, CryptoHashOf, Signable},
+};
 use std::convert::TryFrom;
 use tempfile::Builder;
 
 #[test]
 fn ensure_equality_of_signed_bytes_of_catch_up_package_wrappers() {
-    let cup = make_genesis(dkg::Summary::fake());
+    let cup = make_genesis(DkgSummary::fake());
     let protobuf = pb::CatchUpPackage::from(&cup);
 
     assert_eq!(
@@ -37,7 +36,7 @@ fn ensure_equality_of_signed_bytes_of_catch_up_package_wrappers() {
 
 #[test]
 fn check_cup_integrity_from_protobuf() {
-    let summary = dkg::Summary::fake();
+    let summary = DkgSummary::fake();
     let mut cup = make_genesis(summary);
     let value = cup.content.block.get_value().clone();
     // Corrupt the hash value.

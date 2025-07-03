@@ -1,13 +1,16 @@
 use crate::{
+    logs::ERROR,
     pb::v1::{
-        governance_error::ErrorType, manage_neuron, neuron::DissolveState, proposal::Action,
+        governance_error::ErrorType,
+        manage_neuron,
+        neuron::{DissolveState, FolloweesForTopic, TopicFollowees},
+        proposal::Action,
         Ballot, Empty, GovernanceError, Neuron, NeuronId, NeuronPermission, NeuronPermissionList,
-        NeuronPermissionType, Vote,
+        NeuronPermissionType, ProposalId, Topic, Vote,
     },
-    types::function_id_to_proposal_criticality,
 };
 use ic_base_types::PrincipalId;
-use ic_sns_governance_proposal_criticality::ProposalCriticality;
+use ic_canister_log::log;
 use icrc_ledger_types::icrc1::account::Subaccount;
 use std::{
     cmp::Ordering,
@@ -246,63 +249,128 @@ impl Neuron {
         std::cmp::min(vad_stake, u64::MAX as u128) as u64
     }
 
-    /// Given the specified `ballots`, determine how the neuron would
-    /// vote on a proposal of `action` based on which neurons this
-    /// neuron follows on this action (or on the default action if this
-    /// neuron doesn't specify any followees for `action`).
-    pub(crate) fn would_follow_ballots(
+    fn get_followee_neuron_ids_for_topic(&self, topic: Topic) -> Vec<NeuronId> {
+        let Some(TopicFollowees {
+            topic_id_to_followees,
+        }) = &self.topic_followees
+        else {
+            // This neuron does not follow any topics.
+            return vec![];
+        };
+
+        let Some(FolloweesForTopic { followees, .. }) =
+            topic_id_to_followees.get(&i32::from(topic))
+        else {
+            // This neuron does not follow on this topic.
+            return vec![];
+        };
+
+        followees
+            .iter()
+            .filter_map(|followee| {
+                let Some(neuron_id) = followee.neuron_id.clone() else {
+                    log!(
+                        ERROR,
+                        "Topic followee of a neuron does not have a neuron ID: {:?}",
+                        self
+                    );
+                    return None;
+                };
+
+                Some(neuron_id)
+            })
+            .collect()
+    }
+
+    fn get_followee_neuron_ids_for_function(&self, function_id: u64) -> Vec<NeuronId> {
+        self.followees
+            .get(&function_id)
+            .map(|followees_message| followees_message.followees.clone())
+            .unwrap_or_default()
+    }
+
+    fn get_followee_neuron_ids(&self, function_id: u64, topic: Topic) -> Vec<NeuronId> {
+        // Try to get relevant followees from topic following, if available.
+        let mut followees = self.get_followee_neuron_ids_for_topic(topic);
+
+        if !followees.is_empty() {
+            return followees;
+        }
+
+        // If no followees for the topic, try to get legacy, function-based followees.
+        followees = self.get_followee_neuron_ids_for_function(function_id);
+
+        if !followees.is_empty() {
+            return followees;
+        }
+
+        // If the function is not critical, and this neuron does not have followees
+        // specifically for the function, then fall back to the "catch-all" following.
+        //
+        // Despite the fact that this branch handles legacy following, the criticality
+        // of individual functions is determined based on the topic.
+        if !topic.is_critical() {
+            let catchall_function_id = u64::from(&Action::Unspecified(Empty {}));
+            followees = self.get_followee_neuron_ids_for_function(catchall_function_id);
+        }
+
+        followees
+    }
+
+    /// Given the specified `ballots` and `topic`, determine how the neuron would vote on a proposal
+    /// of `action` based on which neurons this neuron follows on this action
+    /// (or on the default action if this neuron doesn't specify any followees for `action`).
+    ///
+    /// This function handles the case `topic == Topic::Unspecified` by falling back to legacy
+    /// non-critical following (for which the legacy catch-all mechanism applies if no specific
+    /// following rules were set for this neuron and `proposal_id`).
+    pub(crate) fn vote_from_ballots_following(
         &self,
         function_id: u64,
+        topic: Topic,
         ballots: &BTreeMap<String, Ballot>,
+        proposal_id: &ProposalId,
     ) -> Vote {
         // Step 1: Who are the relevant followees?
 
-        let empty = vec![];
-        let get_followee_neuron_ids = |function_id| -> &Vec<NeuronId> {
-            self.followees
-                .get(&function_id)
-                .map(|followees_message| &followees_message.followees)
-                // If there was no Followees object, then result is empty Vec. Therefore, we treat
-                // None the same as Some(Followees { followees: vec![] }).
-                .unwrap_or(&empty)
-        };
+        // Step 1.1. Try to get relevant followees from topic following, if available.
+        let followees = self.get_followee_neuron_ids(function_id, topic);
 
-        let mut followee_neuron_ids = get_followee_neuron_ids(function_id);
-
-        // If the function is not critical, and this Neuron does not have followees specifically for
-        // the function, then fall back to the "catch-all" following.
-        if followee_neuron_ids.is_empty() {
-            use ProposalCriticality::{Critical, Normal};
-            match function_id_to_proposal_criticality(function_id) {
-                Normal => {
-                    let fallback_pseudo_function_id = u64::from(&Action::Unspecified(Empty {}));
-                    followee_neuron_ids = get_followee_neuron_ids(fallback_pseudo_function_id);
-                }
-                Critical => (),
-            }
-        }
-
-        // This is needed to avoid returning No in Step 3 due to no followees.
-        if followee_neuron_ids.is_empty() {
+        if followees.is_empty() {
             return Vote::Unspecified;
         }
 
         // Step 2: Count followee votes.
+
         let mut yes: usize = 0;
         let mut no: usize = 0;
-        for followee_neuron_id in followee_neuron_ids {
-            let followee_vote = match ballots.get(&followee_neuron_id.to_string()) {
-                Some(ballot) => ballot.vote,
-                None => {
-                    // We are following someone who doesn't even have an empty
-                    // ballot. Maybe this followee should be removed?
-                    continue;
-                }
+        for neuron_id in &followees {
+            let Some(ballot) = ballots.get(&neuron_id.to_string()) else {
+                continue;
             };
 
-            if followee_vote == Vote::Yes as i32 {
+            let followee_vote = Vote::try_from(ballot.vote);
+
+            debug_assert!(
+                followee_vote.is_ok(),
+                "Cannot convert ballot vote to Vote for {:?}",
+                ballot
+            );
+
+            let Ok(followee_vote) = Vote::try_from(ballot.vote) else {
+                log!(
+                    ERROR,
+                    "Skipping followee neuron {} with an invalid vote {} for proposal {}",
+                    neuron_id,
+                    ballot.vote,
+                    proposal_id.id,
+                );
+                continue;
+            };
+
+            if followee_vote == Vote::Yes {
                 yes += 1;
-            } else if followee_vote == Vote::No as i32 {
+            } else if followee_vote == Vote::No {
                 no += 1;
             }
         }
@@ -310,11 +378,11 @@ impl Neuron {
         // Step 3: Use vote counts to decide which Vote option to return.
 
         // If a majority of followees voted Yes, return Yes.
-        if 2 * yes > followee_neuron_ids.len() {
+        if yes.saturating_mul(2) > followees.len() {
             return Vote::Yes;
         }
         // If a majority for Yes can never be achieved, return No.
-        if 2 * no >= followee_neuron_ids.len() {
+        if no.saturating_mul(2) >= followees.len() {
             return Vote::No;
         }
         // Otherwise, we are still open to going either way.

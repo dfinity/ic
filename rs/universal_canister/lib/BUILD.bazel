@@ -4,18 +4,15 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/crypto/sha2",
-    "//rs/embedders",
-    "//rs/types/types",
     "//rs/universal_canister/impl:lib",
     "@crate_index//:candid",
     "@crate_index//:lazy_static",
     "@crate_index//:serde",
+    "@crate_index//:sha2",
 ]
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
-    "//rs/types/types",
 ]
 
 rust_library(
@@ -32,8 +29,6 @@ rust_doc_test(
     crate = ":lib",
     deps = [
         # Keep sorted.
-        "//rs/crypto/sha2",
-        "//rs/types/types",
     ],
 )
 

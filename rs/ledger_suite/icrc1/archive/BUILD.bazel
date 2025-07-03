@@ -14,7 +14,6 @@ package(default_visibility = ["//visibility:public"])
         opt = "z",
         proc_macro_deps = [
             # Keep sorted.
-            "@crate_index//:ic-cdk-macros",
         ],
         rustc_env = {
             "ARCHIVE_DID_PATH": "$(execpath :archive.did)",
@@ -23,11 +22,11 @@ package(default_visibility = ["//visibility:public"])
         version = "0.9.0",
         deps = [
             # Keep sorted.
+            "//packages/ic-http-types",
             "//packages/icrc-ledger-types:icrc_ledger_types",
             "//rs/ledger_suite/common/ledger_canister_core",
             "//rs/ledger_suite/common/ledger_core",
             "//rs/ledger_suite/icrc1",
-            "//rs/rust_canisters/http_types",
             "//rs/types/base_types",
             "@crate_index//:candid",
             "@crate_index//:ciborium",

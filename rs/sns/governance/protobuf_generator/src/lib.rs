@@ -56,7 +56,12 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     };
     apply_attribute(
         "#[derive(strum_macros::EnumIter)]",
-        vec!["Governance.Mode", "NeuronPermissionType", "Proposal.action"],
+        vec![
+            "Governance.Mode",
+            "NeuronPermissionType",
+            "Proposal.action",
+            "Topic",
+        ],
     );
     apply_attribute(
         "#[derive(serde::Serialize)]",

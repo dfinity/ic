@@ -1,5 +1,8 @@
-use dfn_core::api::caller;
 use ic_base_types::PrincipalId;
+
+fn caller() -> PrincipalId {
+    PrincipalId::from(ic_cdk::caller())
+}
 
 pub fn check_caller_is_root() {
     if caller() != PrincipalId::from(ic_nns_constants::ROOT_CANISTER_ID) {

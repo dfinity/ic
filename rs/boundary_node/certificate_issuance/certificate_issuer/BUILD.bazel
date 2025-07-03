@@ -20,8 +20,6 @@ DEPENDENCIES = [
     "@crate_index//:instant-acme",
     "@crate_index//:leb128",
     "@crate_index//:mockall",
-    "@crate_index//:opentelemetry-prometheus",
-    "@crate_index//:opentelemetry_0_20_0",
     "@crate_index//:pem",
     "@crate_index//:prometheus",
     "@crate_index//:rcgen",

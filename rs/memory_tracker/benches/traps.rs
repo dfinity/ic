@@ -1,4 +1,5 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use ic_types::NumBytes;
 use memory_tracker::*;
 
 use libc::{self, c_void};
@@ -49,7 +50,7 @@ fn criterion_fault_handler_sim_read(criterion: &mut Criterion) {
                     ptr,
                     tracker: SigsegvMemoryTracker::new(
                         ptr,
-                        PAGE_SIZE,
+                        NumBytes::new(PAGE_SIZE as u64),
                         no_op_logger(),
                         DirtyPageTracking::Track,
                         page_map.clone(),
@@ -97,7 +98,7 @@ fn criterion_fault_handler_sim_write(criterion: &mut Criterion) {
                     ptr,
                     tracker: SigsegvMemoryTracker::new(
                         ptr,
-                        PAGE_SIZE,
+                        NumBytes::new(PAGE_SIZE as u64),
                         no_op_logger(),
                         DirtyPageTracking::Track,
                         page_map.clone(),

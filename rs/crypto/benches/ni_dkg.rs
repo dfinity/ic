@@ -26,7 +26,7 @@ criterion_group!(benches, crypto_nidkg_benchmarks,);
 
 fn crypto_nidkg_benchmarks(criterion: &mut Criterion) {
     let rng = &mut reproducible_rng();
-    let test_cases = test_cases(&[13, 28, 40]);
+    let test_cases = test_cases(&[13, 34, 40]);
 
     for test_case in test_cases {
         let group = &mut criterion.benchmark_group(test_case.name().to_string());

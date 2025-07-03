@@ -28,13 +28,22 @@ pub mod overhead {
     pub const CYCLES_BURN128: NumInstructions = NumInstructions::new(500);
     pub const CANISTER_CYCLE_BALANCE: NumInstructions = NumInstructions::new(500);
     pub const CANISTER_CYCLE_BALANCE128: NumInstructions = NumInstructions::new(500);
+    pub const CANISTER_LIQUID_CYCLE_BALANCE128: NumInstructions = NumInstructions::new(500);
     pub const CANISTER_SELF_COPY: NumInstructions = NumInstructions::new(500);
     pub const CANISTER_SELF_SIZE: NumInstructions = NumInstructions::new(500);
     pub const CANISTER_STATUS: NumInstructions = NumInstructions::new(500);
     pub const CANISTER_VERSION: NumInstructions = NumInstructions::new(500);
+    pub const ROOT_KEY_SIZE: NumInstructions = NumInstructions::new(500);
+    pub const ROOT_KEY_COPY: NumInstructions = NumInstructions::new(500);
     pub const CERTIFIED_DATA_SET: NumInstructions = NumInstructions::new(500);
     pub const CONTROLLER_COPY: NumInstructions = NumInstructions::new(500);
     pub const CONTROLLER_SIZE: NumInstructions = NumInstructions::new(500);
+    pub const COST_CALL: NumInstructions = NumInstructions::new(500);
+    pub const COST_CREATE_CANISTER: NumInstructions = NumInstructions::new(500);
+    pub const COST_HTTP_REQUEST: NumInstructions = NumInstructions::new(500);
+    pub const COST_ECDSA: NumInstructions = NumInstructions::new(500);
+    pub const COST_SCHNORR: NumInstructions = NumInstructions::new(500);
+    pub const COST_VETKD: NumInstructions = NumInstructions::new(500);
     pub const DATA_CERTIFICATE_COPY: NumInstructions = NumInstructions::new(500);
     pub const DATA_CERTIFICATE_PRESENT: NumInstructions = NumInstructions::new(500);
     pub const DATA_CERTIFICATE_SIZE: NumInstructions = NumInstructions::new(500);
@@ -72,6 +81,12 @@ pub mod overhead {
     pub const STABLE64_READ: NumInstructions = NumInstructions::new(20);
     pub const STABLE64_SIZE: NumInstructions = NumInstructions::new(20);
     pub const STABLE64_WRITE: NumInstructions = NumInstructions::new(20);
+    pub const ENV_VAR_COUNT: NumInstructions = NumInstructions::new(500);
+    pub const ENV_VAR_NAME_SIZE: NumInstructions = NumInstructions::new(500);
+    pub const ENV_VAR_NAME_COPY: NumInstructions = NumInstructions::new(500);
+    pub const ENV_VAR_NAME_EXISTS: NumInstructions = NumInstructions::new(500);
+    pub const ENV_VAR_VALUE_SIZE: NumInstructions = NumInstructions::new(500);
+    pub const ENV_VAR_VALUE_COPY: NumInstructions = NumInstructions::new(500);
     pub const TIME: NumInstructions = NumInstructions::new(500);
     pub const TRAP: NumInstructions = NumInstructions::new(500);
 }

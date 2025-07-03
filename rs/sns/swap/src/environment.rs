@@ -1,5 +1,5 @@
 use crate::clients::{NnsGovernanceClient, SnsGovernanceClient, SnsRootClient};
-use ic_nervous_system_common::ledger::ICRC1Ledger;
+use ic_nervous_system_canisters::ledger::ICRC1Ledger;
 
 pub trait CanisterEnvironment {
     type SnsRootClientT: SnsRootClient;

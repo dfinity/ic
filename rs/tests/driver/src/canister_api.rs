@@ -2,7 +2,7 @@ use candid::{CandidType, Decode, Encode, Nat, Principal};
 use ic_base_types::PrincipalId;
 use ic_ledger_core::Tokens;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     ListNeurons as ListNnsNeuronsReq, ListNeuronsResponse as ListNnsNeuronsRes,
 };
 use ic_nns_gtc::pb::v1::AccountState;
@@ -97,7 +97,6 @@ pub trait Request<T: Response> {
 /// via an appropriate `Request<ResponseType>`, for which `ResponseType` <: `Response` is a Candid type that can be decoded.
 ///
 /// Some examples of when this type is appropriate:
-/// - Counter Canister (//rs/workload_generator:counter.wat)
 /// - Universal Canister (//rs/universal_canister/lib)
 #[derive(Clone)]
 pub struct GenericRequest {

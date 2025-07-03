@@ -67,7 +67,7 @@ function join_by {
 export BUILD_BIN=false
 export BUILD_CAN=false
 export BUILD_IMG=false
-export RELEASE=true
+release_build=true
 
 if [ "$#" == 0 ]; then
     echo_red "ERROR: Please specify one of '-b', '-c' or '-i'" >&2
@@ -86,7 +86,7 @@ while getopts ':bcinh-:' OPT; do
         b | binaries) BUILD_BIN=true ;;
         c | canisters) BUILD_CAN=true ;;
         i | icos) BUILD_IMG=true ;;
-        n | non-release | no-release | norelease) RELEASE=false ;;
+        n | non-release | no-release | norelease) release_build=false ;;
         ??*) echo_red "Invalid option --$OPT" && usage && exit 1 ;;
         ?) echo_red "Invalid command option." && usage && exit 1 ;;
     esac
@@ -107,11 +107,17 @@ fi
 
 export VERSION="$(git rev-parse HEAD)"
 
-if "$RELEASE"; then
-    export IC_VERSION_RC_ONLY="$VERSION"
+BAZEL_TARGETS=()
+
+BAZEL_COMMON_ARGS=(
+    --config=local
+    --color=yes
+)
+
+if [[ $release_build == true ]]; then
     echo_red "Building release revision (master or rc--*)! Use '--no-release' for non-release revision!" && sleep 2
+    BAZEL_COMMON_ARGS+=(--config=stamped)
 else
-    export IC_VERSION_RC_ONLY="0000000000000000000000000000000000000000"
     echo_red "Building non-release revision!" && sleep 2
 fi
 
@@ -127,21 +133,12 @@ rm -rf "$BINARIES_DIR_FULL"
 rm -rf "$CANISTERS_DIR_FULL"
 rm -rf "$DISK_DIR_FULL"
 
-BAZEL_TARGETS=()
-
-BAZEL_COMMON_ARGS=(
-    --config=local
-    --ic_version="$VERSION"
-    --ic_version_rc_only="$IC_VERSION_RC_ONLY"
-    --release_build="$RELEASE"
-)
-
-if "$BUILD_BIN"; then BAZEL_TARGETS+=("//publish/binaries:compute_checksums"); fi
-if "$BUILD_CAN"; then BAZEL_TARGETS+=("//publish/canisters:compute_checksums"); fi
+if "$BUILD_BIN"; then BAZEL_TARGETS+=("//publish/binaries:bundle"); fi
+if "$BUILD_CAN"; then BAZEL_TARGETS+=("//publish/canisters:bundle"); fi
 if "$BUILD_IMG"; then BAZEL_TARGETS+=(
-    "//ic-os/guestos/envs/prod:compute_checksums"
-    "//ic-os/hostos/envs/prod:compute_checksums"
-    "//ic-os/setupos/envs/prod:compute_checksums"
+    "//ic-os/guestos/envs/prod:bundle-update"
+    "//ic-os/hostos/envs/prod:bundle-update"
+    "//ic-os/setupos/envs/prod:bundle"
 ); fi
 
 echo_blue "Bazel targets: ${BAZEL_TARGETS[*]}"
@@ -153,11 +150,17 @@ query="$(join_by "+" "${BAZEL_TARGETS[@]}")"
 for artifact in $(bazel cquery "${BAZEL_COMMON_ARGS[@]}" --output=files "$query"); do
     target_dir=
     case "$artifact" in
-        *guestos*)
-            target_dir="$DISK_DIR/guestos"
+        *guestos*disk)
+            target_dir="$DISK_DIR/guestos/disk"
             ;;
-        *hostos*)
-            target_dir="$DISK_DIR/hostos"
+        *guestos*update)
+            target_dir="$DISK_DIR/guestos/update"
+            ;;
+        *hostos*disk)
+            target_dir="$DISK_DIR/hostos/disk"
+            ;;
+        *hostos*update)
+            target_dir="$DISK_DIR/hostos/update"
             ;;
         *setupos*)
             target_dir="$DISK_DIR/setupos"
@@ -175,7 +178,10 @@ for artifact in $(bazel cquery "${BAZEL_COMMON_ARGS[@]}" --output=files "$query"
     esac
 
     mkdir -p "$target_dir"
-    cp "$artifact" "$target_dir"
+
+    # We use -L so that find dereferences symlinks (artifacts are not
+    # necessarily duplicated in the build)
+    find -L "$artifact" -type f -exec cp {} "$target_dir" \;
 done
 
 if "$BUILD_BIN"; then
@@ -194,11 +200,11 @@ fi
 
 if "$BUILD_IMG"; then
     echo_green "##### GUESTOS SHA256SUMS #####"
-    pushd "$DISK_DIR_FULL/guestos" >/dev/null
+    pushd "$DISK_DIR_FULL/guestos/update" >/dev/null
     cat SHA256SUMS
     popd >/dev/null
     echo_green "##### HOSTOS SHA256SUMS #####"
-    pushd "$DISK_DIR_FULL/hostos" >/dev/null
+    pushd "$DISK_DIR_FULL/hostos/update" >/dev/null
     cat SHA256SUMS
     popd >/dev/null
     echo_green "##### SETUPOS SHA256SUMS #####"

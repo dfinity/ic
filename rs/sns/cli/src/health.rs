@@ -5,6 +5,7 @@ use clap::Parser;
 use futures::{stream, StreamExt};
 use ic_agent::Agent;
 use ic_nervous_system_agent::nns::sns_wasm;
+use ic_sns_governance_api::pb::v1::topics::ListTopicsResponse;
 use ic_sns_root::types::SnsCanisterType;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
@@ -32,11 +33,20 @@ struct SnsHealthInfo {
     memory_consumption: Vec<(u64, SnsCanisterType)>,
     cycles: Vec<(Cycles, SnsCanisterType)>,
     num_remaining_upgrade_steps: usize,
+    automatic_target_version_advancement: Option<bool>,
+    /// Information about this SNS's proposal topics. Emitted only if --json is selected.
+    proposal_topics: Option<ListTopicsResponse>,
 }
 
 impl TableRow for SnsHealthInfo {
     fn column_names() -> Vec<&'static str> {
-        vec!["Name", "Memory", "Cycles", "Upgrades Remaining"]
+        vec![
+            "Name",
+            "Memory",
+            "Cycles",
+            "Upgrades Remaining",
+            "Auto Upgrades",
+        ]
     }
 
     fn column_values(&self) -> Vec<String> {
@@ -87,11 +97,19 @@ impl TableRow for SnsHealthInfo {
             "👍".to_string()
         };
 
+        let automatic_target_version_advancement_sign =
+            match self.automatic_target_version_advancement {
+                Some(true) => "🐇",
+                Some(false) => "💪",
+                None => "🦕",
+            };
+
         vec![
             self.name.clone(),
             high_memory_consumption,
             low_cycles,
             format!("{}", self.num_remaining_upgrade_steps),
+            automatic_target_version_advancement_sign.to_string(),
         ]
     }
 }
@@ -165,11 +183,26 @@ pub async fn exec(args: HealthArgs, agent: &Agent) -> Result<()> {
                 .len()
                 .saturating_sub(1);
 
+            let automatic_target_version_advancement = sns
+                .governance
+                .get_nervous_system_parameters(agent)
+                .await?
+                .automatically_advance_target_version;
+
+            let proposal_topics = if args.json {
+                let topics = sns.governance.list_topics(agent).await?;
+                Some(topics)
+            } else {
+                None
+            };
+
             Result::<SnsHealthInfo, anyhow::Error>::Ok(SnsHealthInfo {
                 name,
                 memory_consumption,
                 cycles,
                 num_remaining_upgrade_steps,
+                automatic_target_version_advancement,
+                proposal_topics,
             })
         })
         .buffer_unordered(10)

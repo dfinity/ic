@@ -5,6 +5,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-error-types",
     "//rs/bitcoin/replica_types",
     "//rs/canonical_state/certification_version",
     "//rs/config",
@@ -20,7 +21,6 @@ DEPENDENCIES = [
     "//rs/registry/subnet_type",
     "//rs/sys",
     "//rs/types/base_types",
-    "//rs/types/error_types",
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "//rs/types/wasm_types",
@@ -41,6 +41,7 @@ DEPENDENCIES = [
     "@crate_index//:rand_chacha",
     "@crate_index//:rayon",
     "@crate_index//:serde",
+    "@crate_index//:serde_bytes",
     "@crate_index//:slog",
     "@crate_index//:static_assertions",
     "@crate_index//:strum",

@@ -67,6 +67,7 @@ message Block {
   reserved 14;
   bytes canister_http_payload_bytes = 15;
   bytes query_stats_payload_bytes = 16;
+  bytes vetkd_payload_bytes = 17;
   bytes payload_hash = 11;
 }
 

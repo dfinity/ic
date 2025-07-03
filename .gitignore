@@ -88,7 +88,7 @@ cpp/**/infogetty.o
 cpp/**/network_info.o
 
 # Various build artifacts
-artifacts
+/artifacts
 **/build
 **/build-tmp
 **/build-out
@@ -113,7 +113,6 @@ artifacts
 bazel-build-log.json
 bazel-bep.pb
 bazel-bep.txt
-bazel-timestamp.txt
 user.bazelrc
 
 # Bazel profile

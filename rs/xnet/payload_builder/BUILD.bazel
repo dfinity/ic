@@ -6,6 +6,7 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/canonical_state",
+    "//rs/config",
     "//rs/crypto/tls_interfaces",
     "//rs/crypto/tree_hash",
     "//rs/interfaces",
@@ -41,7 +42,6 @@ MACRO_DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
-    "//rs/config",
     "//rs/crypto/tls_interfaces/mocks",
     "//rs/interfaces/certified_stream_store/mocks",
     "//rs/interfaces/state_manager/mocks",
@@ -69,6 +69,7 @@ DEV_DEPENDENCIES = [
 
 MACRO_DEV_DEPENDENCIES = [
     # Keep sorted.
+    "@crate_index//:test-strategy",
 ]
 
 rust_library(

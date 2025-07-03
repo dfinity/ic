@@ -1,7 +1,11 @@
 use candid::Decode;
 use ic_base_types::CanisterId;
+use ic_config::subnet_config::SubnetConfig;
+use ic_config::{execution_environment::Config as HypervisorConfig, flag_status::FlagStatus};
 use ic_registry_subnet_type::SubnetType;
-use ic_state_machine_tests::{ErrorCode, StateMachine, StateMachineBuilder, UserError, WasmResult};
+use ic_state_machine_tests::{
+    ErrorCode, StateMachine, StateMachineBuilder, StateMachineConfig, UserError, WasmResult,
+};
 use ic_types::Cycles;
 use serde::Deserialize;
 
@@ -19,9 +23,19 @@ pub fn test_canister_wasm() -> Vec<u8> {
 }
 
 pub fn env() -> StateMachine {
+    let hypervisor_config = HypervisorConfig {
+        rate_limiting_of_heap_delta: FlagStatus::Disabled,
+        ..Default::default()
+    };
     StateMachineBuilder::new()
+        .with_config(Some(StateMachineConfig::new(
+            SubnetConfig::new(SubnetType::Application),
+            hypervisor_config,
+        )))
         .with_checkpoints_enabled(false)
         .with_subnet_type(SubnetType::Application)
+        .with_snapshot_download_enabled(true)
+        .with_snapshot_upload_enabled(true)
         .build()
 }
 

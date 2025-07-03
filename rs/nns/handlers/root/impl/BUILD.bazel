@@ -16,6 +16,7 @@ filegroup(
 # See rs/nervous_system/feature_test.md
 BASE_DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-http-types",
     "//rs/crypto/sha2",
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
@@ -29,8 +30,6 @@ BASE_DEPENDENCIES = [
     "//rs/registry/keys",
     "//rs/registry/routing_table",
     "//rs/registry/transport",
-    "//rs/rust_canisters/dfn_candid",
-    "//rs/rust_canisters/http_types",
     "//rs/rust_canisters/on_wire",
     "//rs/types/base_types",
     "//rs/types/management_canister_types",
@@ -54,7 +53,6 @@ DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES
 MACRO_DEPENDENCIES = [
     # Keep sorted.
     "//rs/nervous_system/common/build_metadata",
-    "@crate_index//:ic-cdk-macros",
 ]
 
 BUILD_DEPENDENCIES = [
@@ -66,6 +64,7 @@ ALIASES = {}
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
+    "//rs/rust_canisters/dfn_candid",
     "//rs/state_machine_tests",
     "@crate_index//:candid_parser",
     "@crate_index//:pretty_assertions",
@@ -198,6 +197,7 @@ rust_ic_test_suite(
     ),
     aliases = ALIASES,
     data = [
+        # Keep sorted.
         ":root-canister",
         ":upgrade-test-canister",
         "//rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method",
@@ -206,7 +206,9 @@ rust_ic_test_suite(
         "//rs/nns/gtc:genesis-token-canister",
         "//rs/nns/handlers/lifeline/impl:lifeline_canister",
         "//rs/nns/sns-wasm:sns-wasm-canister",
+        "//rs/node_rewards/canister:node-rewards-canister",
         "//rs/registry/canister:registry-canister",
+        "//rs/registry/canister:registry-canister-test",
         "//rs/universal_canister/impl:universal_canister.wasm.gz",
     ],
     env = {
@@ -216,7 +218,9 @@ rust_ic_test_suite(
         "GOVERNANCE_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister-test)",
         "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method)",
         "LIFELINE_WASM_PATH": "$(rootpath //rs/nns/handlers/lifeline/impl:lifeline_canister)",
+        "NODE_REWARDS_CANISTER_WASM_PATH": "$(rootpath //rs/node_rewards/canister:node-rewards-canister)",
         "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
+        "REGISTRY_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister-test)",
         "ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root/impl:root-canister)",
         "SNS_WASM_CANISTER_WASM_PATH": "$(rootpath //rs/nns/sns-wasm:sns-wasm-canister)",
         "UPGRADE_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root/impl:upgrade-test-canister)",

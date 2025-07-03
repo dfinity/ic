@@ -5,7 +5,7 @@ use strum::IntoEnumIterator;
 #[test]
 fn should_correctly_convert_i32_to_algorithm_id() {
     // ensure _all_ algorithm IDs are compared (i.e., no algorithm was forgotten)
-    assert_eq!(AlgorithmId::iter().count(), 20);
+    assert_eq!(AlgorithmId::iter().count(), 21);
 
     assert_eq!(AlgorithmId::from(0), AlgorithmId::Placeholder);
     assert_eq!(AlgorithmId::from(1), AlgorithmId::MultiBls12_381);
@@ -27,6 +27,7 @@ fn should_correctly_convert_i32_to_algorithm_id() {
     assert_eq!(AlgorithmId::from(17), AlgorithmId::ThresholdEcdsaSecp256r1);
     assert_eq!(AlgorithmId::from(18), AlgorithmId::ThresholdSchnorrBip340);
     assert_eq!(AlgorithmId::from(19), AlgorithmId::ThresholdEd25519);
+    assert_eq!(AlgorithmId::from(20), AlgorithmId::VetKD);
 
     // Verify that an unknown i32 maps onto Placeholder
     assert_eq!(AlgorithmId::from(42), AlgorithmId::Placeholder);
@@ -38,7 +39,7 @@ fn should_correctly_convert_i32_to_algorithm_id() {
 #[test]
 fn should_correctly_convert_algorithm_id_to_i32() {
     // ensure _all_ algorithm IDs are compared (i.e., no algorithm was forgotten)
-    assert_eq!(AlgorithmId::iter().count(), 20);
+    assert_eq!(AlgorithmId::iter().count(), 21);
 
     assert_eq!(AlgorithmId::Placeholder as i32, 0);
     assert_eq!(AlgorithmId::MultiBls12_381 as i32, 1);
@@ -60,12 +61,13 @@ fn should_correctly_convert_algorithm_id_to_i32() {
     assert_eq!(AlgorithmId::ThresholdEcdsaSecp256r1 as i32, 17);
     assert_eq!(AlgorithmId::ThresholdSchnorrBip340 as i32, 18);
     assert_eq!(AlgorithmId::ThresholdEd25519 as i32, 19);
+    assert_eq!(AlgorithmId::VetKD as i32, 20);
 }
 
 #[test]
 fn should_correctly_convert_algorithm_id_to_u8() {
     // ensure _all_ algorithm IDs are compared (i.e., no algorithm was forgotten)
-    assert_eq!(AlgorithmId::iter().count(), 20);
+    assert_eq!(AlgorithmId::iter().count(), 21);
 
     let tests: Vec<(AlgorithmId, u8)> = vec![
         (AlgorithmId::Placeholder, 0),
@@ -88,6 +90,7 @@ fn should_correctly_convert_algorithm_id_to_u8() {
         (AlgorithmId::ThresholdEcdsaSecp256r1, 17),
         (AlgorithmId::ThresholdSchnorrBip340, 18),
         (AlgorithmId::ThresholdEd25519, 19),
+        (AlgorithmId::VetKD, 20),
     ];
 
     for (algorithm_id, expected_discriminant) in tests {

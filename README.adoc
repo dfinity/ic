@@ -94,26 +94,53 @@ To build only the binaries and canisters, use the `-b` and/or `-c` flags:
 
 All built artifacts will be located in the top-level artifacts/ directory.
 
-== Verifying releases
+== Verifying Releases
 
-Each https://dashboard.internetcomputer.org/releases[release proposal] includes instructions on how to verify the build reproducibility of IC-OS update images.
+=== Overview
 
-To verify the build reproducibility of a specific `IC OS Version Election` proposal, you can just copy the one liner below to a fresh Ubuntu VM 22.04 or higher:
+The Internet Computer provides a robust system for verifying the build reproducibility of IC-OS update images. Each https://dashboard.internetcomputer.org/releases[release proposal] includes detailed verification instructions.
 
-    $ sudo apt-get install -y curl && curl --proto '=https' --tlsv1.2 -sSLO https://raw.githubusercontent.com/dfinity/ic/master/ci/tools/repro-check.sh && chmod +x repro-check.sh && ./repro-check.sh -p <proposal>
+=== Prerequisites
 
-If you have the repository already cloned, you can just run:
+* Ubuntu 22.04 or higher
+* Python 3.x
+* curl (`sudo apt install curl`)
+* About 100 GB of free disk space in `$HOME` (or another volume, specifed via
+  option `--cache-dir`)
 
-    $ ./ci/tools/repro-check.sh -c <git revision>
+=== Quick Start
 
-You can also verify only specific components, by specifying --guestos, --hostos, or --setupos flags:
+To verify an IC OS Version Election proposal:
 
-    $ ./ci/tools/repro-check.sh -c <git revision> --guestos
+[source,bash]
+----
+# Verify by proposal number
+curl -fsSL https://raw.githubusercontent.com/dfinity/ic/master/ci/tools/repro-check | \
+    python3 - -p <proposal_number>
 
-Verifying build reproducibility of GuestOS is sufficient for the `Revise Elected GuestOS Versions` NNS proposals.
+# Verify by git commit
+curl -fsSL https://raw.githubusercontent.com/dfinity/ic/master/ci/tools/repro-check | \
+    python3 - -c <git-commit>
+----
 
-For the `Revise Elected HostOS Versions` NNS proposals, you should verify the build reproducibility of HostOS images.
-The default behavior of the script is to verify the build reproducibility of all components.
+=== Component-Specific Verification
+
+You can verify specific components individually:
+
+[source,bash]
+----
+# Verify GuestOS only
+curl -fsSL https://raw.githubusercontent.com/dfinity/ic/master/ci/tools/repro-check | \
+    python3 - -c <git-commit> --guestos
+
+# Verify HostOS only
+curl -fsSL https://raw.githubusercontent.com/dfinity/ic/master/ci/tools/repro-check | \
+    python3 - -c <git-commit> --hostos
+
+# Verify SetupOS only
+curl -fsSL https://raw.githubusercontent.com/dfinity/ic/master/ci/tools/repro-check | \
+    python3 - -c <git-commit> --setupos
+----
 
 == Contributing
 

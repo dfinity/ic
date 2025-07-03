@@ -2,14 +2,59 @@ use super::storage_operations;
 use crate::common::storage::types::{MetadataEntry, RosettaBlock};
 use anyhow::{bail, Result};
 use candid::Nat;
+use ic_base_types::CanisterId;
 use icrc_ledger_types::icrc1::account::Account;
-use rusqlite::Connection;
+use rosetta_core::metrics::RosettaMetrics;
+use rusqlite::{Connection, OpenFlags};
 use serde_bytes::ByteBuf;
+use std::cmp::Ordering;
 use std::{path::Path, sync::Mutex};
+use tracing::warn;
+
+#[derive(Debug, Clone)]
+pub struct TokenInfo {
+    pub symbol: String,
+    pub decimals: u8,
+    pub ledger_id: CanisterId,
+    pub rosetta_metrics: RosettaMetrics,
+}
+
+// We use format "[symbol]-[canisterId[:5]]" so that it covers cases in which
+// we track tokens with the same symbols while keeping it short by only showing
+// the first 5 characters of the canister ID.
+fn display_name(symbol: String, ledger_id: CanisterId) -> String {
+    format!(
+        "{}-{}",
+        symbol,
+        ledger_id
+            .to_string()
+            .as_str()
+            .chars()
+            .take(5)
+            .collect::<String>()
+    )
+}
+
+impl TokenInfo {
+    pub fn new(symbol: String, decimals: u8, ledger_id: CanisterId) -> Self {
+        let canister_id_str = ledger_id.to_string();
+        Self {
+            symbol: symbol.clone(),
+            decimals,
+            ledger_id,
+            rosetta_metrics: RosettaMetrics::new(display_name(symbol, ledger_id), canister_id_str),
+        }
+    }
+
+    pub fn display_name(&self) -> String {
+        display_name(self.symbol.clone(), self.ledger_id)
+    }
+}
 
 #[derive(Debug)]
 pub struct StorageClient {
     storage_connection: Mutex<Connection>,
+    token_info: Option<TokenInfo>,
 }
 
 impl StorageClient {
@@ -26,9 +71,35 @@ impl StorageClient {
         Self::new(connection)
     }
 
+    /// Constructs a new SQLite in-memory store with a named DB that can be shared across instances.
+    pub fn new_named_in_memory(name: &str) -> anyhow::Result<Self> {
+        let connection = Connection::open_with_flags(
+            format!("'file:{}?mode=memory&cache=shared', uri=True", name),
+            OpenFlags::default(),
+        )?;
+        Self::new(connection)
+    }
+
+    pub fn get_token_display_name(&self) -> String {
+        if let Some(token_info) = &self.token_info {
+            token_info.display_name()
+        } else {
+            "unkown".to_string()
+        }
+    }
+
+    pub fn get_metrics(&self) -> RosettaMetrics {
+        if let Some(token_info) = &self.token_info {
+            token_info.rosetta_metrics.clone()
+        } else {
+            RosettaMetrics::new("unknown".to_string(), "unknown".to_string())
+        }
+    }
+
     fn new(connection: rusqlite::Connection) -> anyhow::Result<Self> {
         let storage_client = Self {
             storage_connection: Mutex::new(connection),
+            token_info: None,
         };
         storage_client
             .storage_connection
@@ -36,7 +107,44 @@ impl StorageClient {
             .unwrap()
             .execute("PRAGMA foreign_keys = 1", [])?;
         storage_client.create_tables()?;
+
+        // Run the fee collector balances repair if needed
+        tracing::info!(
+            "Storage initialization: Checking if fee collector balance repair is needed"
+        );
+        storage_client.repair_fee_collector_balances()?;
+
         Ok(storage_client)
+    }
+
+    pub fn initialize(&mut self, token_info: TokenInfo) {
+        self.token_info = Some(token_info);
+    }
+
+    pub fn does_blockchain_have_gaps(&self) -> anyhow::Result<bool> {
+        let Some(highest_block_idx) = self.get_highest_block_idx()? else {
+            // If the blockchain is empty, there are no gaps.
+            return Ok(false);
+        };
+        let block_count = self.get_block_count()?;
+        match block_count.cmp(&highest_block_idx.saturating_add(1)) {
+            Ordering::Equal => Ok(false),
+            Ordering::Less => {
+                warn!(
+                "block_count ({}) is less than highest_block_idx.saturating_add(1) ({}), indicating one of more gaps in the blockchain.",
+                block_count,
+                highest_block_idx.saturating_add(1)
+            );
+                Ok(true)
+            }
+            Ordering::Greater => {
+                panic!(
+                    "block_count ({}) is larger than highest_block_idx.saturating_add(1) ({}) -> invalid state!",
+                    block_count,
+                    highest_block_idx.saturating_add(1)
+                );
+            }
+        }
     }
 
     // Gets a block with a certain index. Returns `None` if no block exists in the database with that index. Returns an error if multiple blocks with that index exist.
@@ -81,6 +189,11 @@ impl StorageClient {
     pub fn get_blockchain_gaps(&self) -> anyhow::Result<Vec<(RosettaBlock, RosettaBlock)>> {
         let open_connection = self.storage_connection.lock().unwrap();
         storage_operations::get_blockchain_gaps(&open_connection)
+    }
+
+    pub fn get_highest_block_idx(&self) -> Result<Option<u64>> {
+        let open_connection = self.storage_connection.lock().unwrap();
+        storage_operations::get_highest_block_idx_in_blocks_table(&open_connection)
     }
 
     // Gets a transaction with a certain hash. Returns [] if no transaction exists in the database with that hash. Returns a vector with multiple entries if more than one transaction
@@ -136,81 +249,14 @@ impl StorageClient {
         storage_operations::store_metadata(&mut open_connection, metadata)
     }
 
+    pub fn reset_blocks_counter(&self) -> Result<()> {
+        let open_connection = self.storage_connection.lock().unwrap();
+        storage_operations::reset_blocks_counter(&open_connection)
+    }
+
     fn create_tables(&self) -> Result<(), rusqlite::Error> {
         let open_connection = self.storage_connection.lock().unwrap();
-        open_connection.execute(
-            r#"
-            CREATE TABLE IF NOT EXISTS metadata (
-                key TEXT PRIMARY KEY,
-                value BLOB NOT NULL
-            );
-            "#,
-            [],
-        )?;
-        open_connection.execute(
-            r#"
-            CREATE TABLE IF NOT EXISTS blocks (
-                idx INTEGER NOT NULL PRIMARY KEY,
-                hash BLOB NOT NULL,
-                serialized_block BLOB NOT NULL,
-                parent_hash BLOB,
-                timestamp INTEGER,
-                verified BOOLEAN,
-                tx_hash BLOB NOT NULL,
-                operation_type VARCHAR(255) NOT NULL,
-                from_principal BLOB,
-                from_subaccount BLOB,
-                to_principal BLOB,
-                to_subaccount BLOB,
-                spender_principal BLOB,
-                spender_subaccount BLOB,
-                memo BLOB,
-                amount TEXT,
-                expected_allowance TEXT,
-                fee TEXT,
-                transaction_created_at_time INTEGER,
-                approval_expires_at INTEGER
-            )
-            "#,
-            [],
-        )?;
-        open_connection.execute(
-            r#"
-            CREATE TABLE IF NOT EXISTS account_balances (
-                block_idx INTEGER NOT NULL,
-                principal BLOB NOT NULL,
-                subaccount BLOB NOT NULL,
-                amount TEXT NOT NULL,
-                PRIMARY KEY(principal,subaccount,block_idx)
-            )
-            "#,
-            [],
-        )?;
-        open_connection.execute(
-            r#"
-            CREATE INDEX IF NOT EXISTS block_idx_account_balances 
-            ON account_balances(block_idx)
-            "#,
-            [],
-        )?;
-
-        open_connection.execute(
-            r#"
-        CREATE INDEX IF NOT EXISTS tx_hash_index 
-        ON blocks(tx_hash)
-        "#,
-            [],
-        )?;
-
-        open_connection.execute(
-            r#"
-        CREATE INDEX IF NOT EXISTS block_hash_index 
-        ON blocks(hash)
-        "#,
-            [],
-        )?;
-
-        Ok(())
+        super::schema::create_tables(&open_connection)
     }
 
     // Populates the blocks and transactions table by the Rosettablocks provided
@@ -223,7 +269,7 @@ impl StorageClient {
     // Extracts the information from the transaction and blocks table and fills the account balance table with that information
     // Throws an error if there are gaps in the transaction or blocks table.
     pub fn update_account_balances(&self) -> anyhow::Result<()> {
-        if !self.get_blockchain_gaps()?.is_empty() {
+        if self.does_blockchain_have_gaps()? {
             bail!("Tried to update account balances but there exist gaps in the database.",);
         }
         let mut open_connection = self.storage_connection.lock().unwrap();
@@ -255,9 +301,37 @@ impl StorageClient {
         storage_operations::get_account_balance_at_highest_block_idx(&open_connection, account)
     }
 
+    // Retrieves the aggregated balance of all subaccounts for a given principal at a specific block height
+    pub fn get_aggregated_balance_for_principal_at_block_idx(
+        &self,
+        principal: &ic_base_types::PrincipalId,
+        block_idx: u64,
+    ) -> anyhow::Result<Nat> {
+        let open_connection = self.storage_connection.lock().unwrap();
+        storage_operations::get_aggregated_balance_for_principal_at_block_idx(
+            &open_connection,
+            principal,
+            block_idx,
+        )
+    }
+
     pub fn get_block_count(&self) -> anyhow::Result<u64> {
         let open_connection = self.storage_connection.lock().unwrap();
         storage_operations::get_block_count(&open_connection)
+    }
+
+    /// Repairs account balances for databases created before the fee collector block index fix.
+    /// This function identifies Transfer operations that used fee_collector_block_index but didn't
+    /// properly credit the fee collector, and adds the missing fee credits.
+    ///
+    /// This is safe to run multiple times - it will only add missing credits and won't duplicate them.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` if the repair was successful, or an error if the repair failed.
+    pub fn repair_fee_collector_balances(&self) -> anyhow::Result<()> {
+        let mut open_connection = self.storage_connection.lock().unwrap();
+        storage_operations::repair_fee_collector_balances(&mut open_connection)
     }
 }
 
@@ -404,7 +478,7 @@ mod tests {
            }
 
           #[test]
-          fn test_deriving_gaps_from_storage(blockchain in valid_blockchain_with_gaps_strategy::<U256>(1000)){
+          fn test_deriving_gaps_from_storage(blockchain in valid_blockchain_with_gaps_strategy::<U256>(1000).no_shrink()){
               let storage_client_memory = StorageClient::new_in_memory().unwrap();
               let mut rosetta_blocks = vec![];
               for i in 0..blockchain.0.len() {
@@ -429,6 +503,8 @@ mod tests {
 
               // Fetch the database gaps and map them to indices tuples.
               let derived_gaps = storage_client_memory.get_blockchain_gaps().unwrap().into_iter().map(|(a,b)| (a.index,b.index)).collect::<Vec<(u64,u64)>>();
+              // Does the blockchain have gaps?
+              let has_gaps = storage_client_memory.does_blockchain_have_gaps().unwrap();
 
               // If the database is empty the returned gaps vector should simply be empty.
               if rosetta_blocks.last().is_some(){
@@ -436,9 +512,13 @@ mod tests {
 
                   // Compare the storage with the test function.
                   assert_eq!(gaps,derived_gaps);
+
+                  assert!(has_gaps);
               }
               else{
-                  assert!(derived_gaps.is_empty())
+                  assert!(derived_gaps.is_empty());
+
+                  assert!(!has_gaps);
               }
            }
 

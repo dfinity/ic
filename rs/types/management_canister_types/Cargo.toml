@@ -12,7 +12,7 @@ candid = { workspace = true }
 ic-base-types = { path = "../base_types" }
 ic-btc-interface = { workspace = true }
 ic-btc-replica-types = { path = "../../bitcoin/replica_types" }
-ic-error-types = { path = "../error_types" }
+ic-error-types = { path = "../../../packages/ic-error-types" }
 ic-protobuf = { path = "../../protobuf" }
 ic-utils = { path = "../../utils" }
 num-traits = { workspace = true }
@@ -21,6 +21,9 @@ serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
+
+[dev-dependencies]
+candid_parser = { workspace = true }
 
 [features]
 fuzzing_code = ["dep:arbitrary"]

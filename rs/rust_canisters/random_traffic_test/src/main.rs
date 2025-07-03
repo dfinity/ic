@@ -3,10 +3,9 @@ use futures::future::select_all;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_cdk::{
     api,
-    call::{Call, CallError, CallResult, ConfigurableCall, SendableCall},
-    setup,
+    call::{Call, CallFailed, CallFuture, Response as CallResponse},
 };
-use ic_cdk_macros::{heartbeat, init, query, update};
+use ic_cdk::{heartbeat, init, query, update};
 use rand::{
     distributions::{Distribution, WeightedIndex},
     rngs::StdRng,
@@ -17,7 +16,7 @@ use random_traffic_test::*;
 use serde::{Deserialize, Serialize};
 use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
-use std::future::Future;
+use std::future::IntoFuture;
 use std::hash::{DefaultHasher, Hasher};
 use std::time::Duration;
 
@@ -34,6 +33,9 @@ thread_local! {
     /// A collection of timestamps and records; one record for each call. Keeps track of whether it was
     /// rejected or not and how many bytes were sent and received.
     static RECORDS: RefCell<BTreeMap<u32, (u64, Record)>> = RefCell::default();
+    /// Counter incremented at the end of the heartbeat to indicate successful invocations (as
+    /// opposed to silent abortions).
+    static SUCCESSFUL_HEARTBEAT_INVOCATIONS: Cell<u32> = Cell::default();
     /// A counter for synchronous rejections.
     static SYNCHRONOUS_REJECTIONS_COUNT: Cell<u32> = Cell::default();
     /// A `COIN` that can be 'flipped' to determine whether to make a downstream call or not.
@@ -183,6 +185,12 @@ fn synchronous_rejections_count() -> u32 {
     SYNCHRONOUS_REJECTIONS_COUNT.get()
 }
 
+/// Returns the number of successful heartbeat invocations.
+#[query]
+fn successful_heartbeat_invocations() -> u32 {
+    SUCCESSFUL_HEARTBEAT_INVOCATIONS.get()
+}
+
 /// Flip the `DOWNSTREAM_CALL_COIN` to determine whether we should make a downstream call or reply
 /// instead.
 fn should_make_downstream_call() -> bool {
@@ -198,10 +206,7 @@ fn should_make_best_effort_call() -> bool {
 /// Generates a future for a randomized call that can be awaited; inserts a new record at `index`
 /// that must be updated (or removed) after awaiting the call. For each call, the call index is
 /// incremented by 1, such that successive calls have adjacent indices.
-fn setup_call(
-    call_tree_id: u32,
-    call_depth: u32,
-) -> (impl Future<Output = CallResult<Reply>>, u32) {
+fn setup_call(call_tree_id: u32, call_depth: u32) -> (CallFuture<'static, 'static>, u32) {
     let msg = Message::new(call_tree_id, call_depth, gen_call_bytes());
     let sent_bytes = msg.count_bytes() as u32;
     let receiver = receiver();
@@ -210,12 +215,13 @@ fn setup_call(
     )));
     let timeout_secs = should_make_best_effort_call().then_some(gen_timeout_secs());
 
-    let call = Call::new(receiver.into(), "handle_call");
-    let call = call.with_arg(msg);
     let call = match timeout_secs {
-        Some(timeout_secs) => call.change_timeout(timeout_secs),
-        None => call.with_guaranteed_response(),
-    };
+        Some(timeout_secs) => {
+            Call::bounded_wait(receiver.into(), "handle_call").change_timeout(timeout_secs)
+        }
+        None => Call::unbounded_wait(receiver.into(), "handle_call"),
+    }
+    .with_arg(msg);
 
     // Once the call was successfully generated, insert a call timestamp and record at `index`.
     let index = next_call_index();
@@ -237,7 +243,7 @@ fn setup_call(
         )
     });
 
-    (call.call(), index)
+    (call.into_future(), index)
 }
 
 /// Updates the record at `index` using the `result` of the corresponding call.
@@ -246,7 +252,7 @@ fn setup_call(
 /// subnet is at its limits. Note that since the call `index` is part of the records, removing
 /// the records for synchronous rejections will result in gaps in these numbers thus they are
 /// still included indirectly.
-fn update_record(result: &CallResult<Reply>, index: u32) {
+fn update_record(result: &Result<CallResponse, CallFailed>, index: u32) {
     // Updates the `Response` at `index` in `RECORDS`.
     let set_reply_in_call_record = move |response: Response| {
         RECORDS.with_borrow_mut(|records| {
@@ -267,7 +273,18 @@ fn update_record(result: &CallResult<Reply>, index: u32) {
     };
 
     match result {
-        Err(CallError::CallRejected(rejection)) if rejection.is_sync() => {
+        Ok(response) => {
+            let bytes_received = response
+                .candid::<Reply>()
+                .expect("candid decode failed")
+                .0
+                .len() as u32;
+            set_reply_in_call_record(Response::Reply(bytes_received));
+        }
+        Err(CallFailed::InsufficientLiquidCycleBalance(_)) => {
+            unreachable!("not doing anything with cycles for now");
+        }
+        Err(CallFailed::CallPerformFailed(_)) => {
             // Remove the record for synchronous rejections.
             SYNCHRONOUS_REJECTIONS_COUNT.set(SYNCHRONOUS_REJECTIONS_COUNT.get() + 1);
             RECORDS.with_borrow_mut(|records| {
@@ -279,42 +296,55 @@ fn update_record(result: &CallResult<Reply>, index: u32) {
                     .is_none())
             });
         }
-        Err(CallError::CallRejected(rejection)) => {
+        Err(CallFailed::CallRejected(rejection)) => {
             set_reply_in_call_record(Response::Reject(
-                rejection.reject_code().into(),
+                rejection.raw_reject_code(),
                 rejection.reject_message().to_string(),
             ));
-        }
-        Err(CallError::CandidDecodeFailed(error)) => {
-            unreachable!("{error}");
-        }
-
-        Ok(reply) => {
-            set_reply_in_call_record(Response::Reply(reply.0.len() as u32));
         }
     }
 }
 
 /// Generates `calls_per_heartbeat` call futures. They are awaited; whenever a call concludes
 /// its record is updated (or removed in case of a synchronous rejection).
-#[heartbeat]
-async fn heartbeat() {
+///
+/// Returns the number of successful calls (i.e. calls that got a reply).
+#[update]
+async fn pulse(calls_count: u32) -> u32 {
     let (mut futures, mut record_indices) = (Vec::new(), Vec::new());
-    for _ in 0..CONFIG.with_borrow(|config| config.calls_per_heartbeat) {
+    for _ in 0..calls_count {
         let (future, index) = setup_call(next_call_tree_id(), 0);
         futures.push(Box::pin(future));
         record_indices.push(index);
     }
 
+    let mut calls_success_counter = 0;
     while !futures.is_empty() {
         // Wait for any call to conclude.
         let (result, index, remaining_futures) = select_all(futures).await;
+        if result.is_ok() {
+            calls_success_counter += 1;
+        }
 
         // Update records.
         update_record(&result, record_indices.remove(index));
 
         // Continue awaiting the remaining futures.
         futures = remaining_futures;
+    }
+
+    calls_success_counter
+}
+
+/// Calls `pulse(calls_per_heartbeat)` each round; increments `SUCCESSFUL_HEARTBEAT_INVOCATIONS`
+/// for heartbeats that try to make at least 1 call.
+#[heartbeat]
+async fn heartbeat() {
+    let calls_count = CONFIG.with_borrow(|config| config.calls_per_heartbeat);
+    if calls_count > 0 {
+        pulse(calls_count).await;
+        SUCCESSFUL_HEARTBEAT_INVOCATIONS
+            .replace(SUCCESSFUL_HEARTBEAT_INVOCATIONS.get() + calls_count);
     }
 }
 
@@ -354,6 +384,4 @@ fn initialize_hasher() {
     HASHER.with_borrow_mut(|hasher| hasher.write(api::canister_self().as_slice()));
 }
 
-fn main() {
-    setup();
-}
+fn main() {}

@@ -75,9 +75,9 @@ else
     print_red "(In particular, unable to determine which canister and commit.)" >&2
     exit 1
 fi
-SECONDS_AGO=$(($(date +%s) - "${PROPOSED_TIMESTAMP_SECONDS}"))
+SECONDS_AGO=$(($(gdate +%s) - ${PROPOSED_TIMESTAMP_SECONDS}))
 PROPOSED_ON=$(
-    date --utc \
+    gdate --utc \
         --date=@"${PROPOSED_TIMESTAMP_SECONDS}" \
         --iso-8601
 )

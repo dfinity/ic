@@ -48,6 +48,18 @@ impl OperationBuilder {
         })
     }
 
+    fn neuron_controller(self, controller: Option<PublicKeyOrPrincipal>) -> Self {
+        let mut metadata = self.0.metadata.unwrap_or_default();
+        metadata.insert(
+            "controller".to_owned(),
+            serde_json::to_value(controller).unwrap(),
+        );
+        Self(Operation {
+            metadata: Some(metadata),
+            ..self.0
+        })
+    }
+
     fn build(self) -> Operation {
         self.0
     }
@@ -124,6 +136,7 @@ fn test_transfer_and_stake_requests_to_operations() {
             OperationBuilder::new(3, OperationType::Stake)
                 .account(test_account(2))
                 .neuron_index(1)
+                .neuron_controller(None)
                 .build(),
         ])
     );

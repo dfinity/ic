@@ -1,0 +1,433 @@
+use anyhow::{anyhow, bail, Context, Result};
+use http::{Method, StatusCode};
+use reqwest::{Client, Request};
+use serde::{Deserialize, Serialize};
+use slog::{error, info, Logger};
+use std::{
+    fs,
+    net::{Ipv4Addr, Ipv6Addr},
+    path::Path,
+    time::Duration,
+};
+use url::Url;
+
+use crate::{
+    driver::{
+        farm::{DnsRecord, DnsRecordType, PlaynetCertificate},
+        log_events,
+        resource::AllocatedVm,
+        test_env::{TestEnv, TestEnvAttribute},
+        test_env_api::{
+            get_dependency_path, AcquirePlaynetCertificate, CreatePlaynetDnsRecords,
+            HasTopologySnapshot, RetrieveIpv4Addr, SshSession,
+        },
+        test_setup::InfraProvider,
+        universal_vm::{DeployedUniversalVm, UniversalVm, UniversalVms},
+    },
+    retry_with_msg_async,
+    util::block_on,
+};
+
+// Constants
+pub const IC_GATEWAY_VM_NAME: &str = "ic-gateway";
+const IC_GATEWAY_VM_FILE: &str = "vm.json";
+const IMAGE_PATH: &str = "rs/tests/ic_gateway_uvm_config_image.zst";
+const IC_GATEWAY_VMS_DIR: &str = "ic_gateway_vms";
+const PLAYNET_FILE: &str = "playnet.json";
+const IC_GATEWAY_AAAA_RECORDS_CREATED_EVENT_NAME: &str = "ic_gateway_aaaa_records_created_event";
+const IC_GATEWAY_A_RECORDS_CREATED_EVENT_NAME: &str = "ic_gateway_a_records_created_event";
+const READY_TIMEOUT: Duration = Duration::from_secs(60);
+const RETRY_INTERVAL: Duration = Duration::from_secs(5);
+
+/// Represents an IC HTTP Gateway VM, it is a wrapper around Farm's Universal VM.
+#[derive(Debug)]
+pub struct IcGatewayVm {
+    universal_vm: UniversalVm,
+}
+
+/// Represents a deployed IC HTTP Gateway VM.
+#[derive(Debug)]
+pub struct DeployedIcGatewayVm {
+    vm: AllocatedVm,
+    https_url: Url,
+}
+
+impl DeployedIcGatewayVm {
+    pub fn get_public_url(&self) -> Url {
+        self.https_url.clone()
+    }
+
+    /// Retrieves the underlying VM.
+    pub fn get_vm(&self) -> AllocatedVm {
+        self.vm.clone()
+    }
+}
+
+impl Default for IcGatewayVm {
+    fn default() -> Self {
+        Self::new(IC_GATEWAY_VM_NAME)
+    }
+}
+
+impl IcGatewayVm {
+    /// Creates a new IC Gateway VM with the specified name.
+    pub fn new(name: &str) -> Self {
+        let universal_vm = UniversalVm::new(name.to_string())
+            .with_config_img(get_dependency_path(IMAGE_PATH))
+            .enable_ipv4();
+        Self { universal_vm }
+    }
+
+    pub fn disable_ipv4(mut self) -> Self {
+        self.universal_vm.has_ipv4 = false;
+        self
+    }
+
+    /// Starts the IC Gateway VM, configuring DNS and certificates.
+    pub fn start(&self, env: &TestEnv) -> Result<()> {
+        let logger = env.logger();
+        info!(logger, "Starting IC Gateway VM: {}", self.universal_vm.name);
+
+        // Start the underlying universal VM
+        self.universal_vm.start(env)?;
+        let deployed_vm = env.get_deployed_universal_vm(&self.universal_vm.name)?;
+        let allocated_vm = deployed_vm.get_vm()?;
+
+        // Get IPv6 address and API node URLs
+        let vm_ipv6: Ipv6Addr = allocated_vm.ipv6;
+        let api_nodes_urls = self.get_api_nodes_urls(env);
+
+        // Handle playnet configuration and DNS records
+        let vm_ipv4: Option<Ipv4Addr> = self
+            .universal_vm
+            .has_ipv4
+            .then(|| deployed_vm.block_on_ipv4())
+            .transpose()?;
+
+        let playnet = self.load_or_create_playnet(env, vm_ipv6, vm_ipv4)?;
+        let ic_gateway_fqdn = playnet.playnet_cert.playnet.clone();
+        self.configure_dns_records(env, &playnet, &ic_gateway_fqdn)?;
+
+        // Emit log events for A and AAAA records
+        emit_ic_gateway_records_event(&logger, &ic_gateway_fqdn, &playnet);
+
+        // Save playnet configuration and start the gateway
+        let playnet_url = Url::parse(&format!("https://{}", ic_gateway_fqdn))?;
+        env.write_deployed_ic_gateway(&self.universal_vm.name, &playnet_url, &allocated_vm)?;
+        self.start_gateway_container(&deployed_vm, &playnet, api_nodes_urls)?;
+
+        // Wait for the service to become ready.
+        // Readiness is defined when some API boundary node used by ic-gateway responds with HTTP 200 to /api/v2/status.
+        let health_url = playnet_url.join("/api/v2/status")?;
+        let msg = format!(
+            "await_status_is_healthy of {} with url {}",
+            self.universal_vm.name,
+            health_url.as_str()
+        );
+        let result = block_on(await_status_is_healthy(&env.logger(), health_url, msg));
+        match result {
+            Ok(()) => info!(
+                logger,
+                "IC Gateway started successfully with URL: {}",
+                playnet_url.as_str()
+            ),
+            Err(err) => error!(logger, "IC Gateway didn't come up healthy: {err}"),
+        }
+
+        Ok(())
+    }
+
+    /// Retrieves API boundary node URLs from the topology.
+    fn get_api_nodes_urls(&self, env: &TestEnv) -> Vec<String> {
+        env.topology_snapshot()
+            .api_boundary_nodes()
+            .map(|node| format!("https://[{}]", node.get_ip_addr()))
+            .collect()
+    }
+
+    /// Loads existing playnet configuration or creates a new one.
+    fn load_or_create_playnet(
+        &self,
+        env: &TestEnv,
+        uvm_ipv6: Ipv6Addr,
+        uvm_ipv4: Option<Ipv4Addr>,
+    ) -> Result<Playnet> {
+        let logger = env.logger();
+        let playnet_file = env.get_json_path(PLAYNET_FILE);
+
+        let mut playnet = if playnet_file.exists() {
+            let playnet: Playnet = env.read_json_object(PLAYNET_FILE)?;
+            info!(
+                logger,
+                "Using existing playnet: {}", playnet.playnet_cert.playnet
+            );
+            playnet
+        } else {
+            let playnet_cert = env.acquire_playnet_certificate();
+            info!(logger, "Acquired new playnet: {}", playnet_cert.playnet);
+            Playnet {
+                playnet_cert,
+                aaaa_records: vec![],
+                a_records: vec![],
+            }
+        };
+
+        playnet.aaaa_records.push(uvm_ipv6);
+        if let Some(ipv4) = uvm_ipv4 {
+            playnet.a_records.push(ipv4);
+        }
+
+        // Write/overwrite file
+        env.write_json_object(PLAYNET_FILE, &playnet)?;
+
+        Ok(playnet)
+    }
+
+    /// Configures DNS records based on infrastructure provider.
+    fn configure_dns_records(
+        &self,
+        env: &TestEnv,
+        playnet: &Playnet,
+        ic_gateway_fqdn: &str,
+    ) -> Result<()> {
+        let mut records = match InfraProvider::read_attribute(env) {
+            InfraProvider::Farm => {
+                vec![
+                    DnsRecord {
+                        name: "".to_string(),
+                        record_type: DnsRecordType::AAAA,
+                        records: playnet.aaaa_records.iter().map(|r| r.to_string()).collect(),
+                    },
+                    DnsRecord {
+                        name: "*".to_string(),
+                        record_type: DnsRecordType::CNAME,
+                        records: vec![ic_gateway_fqdn.to_string()],
+                    },
+                    DnsRecord {
+                        name: "*.raw".to_string(),
+                        record_type: DnsRecordType::CNAME,
+                        records: vec![ic_gateway_fqdn.to_string()],
+                    },
+                ]
+            }
+            _ => vec![
+                DnsRecord {
+                    name: ic_gateway_fqdn.to_string(),
+                    record_type: DnsRecordType::AAAA,
+                    records: playnet.aaaa_records.iter().map(|r| r.to_string()).collect(),
+                },
+                DnsRecord {
+                    name: format!("{}.{}", "*", ic_gateway_fqdn),
+                    record_type: DnsRecordType::CNAME,
+                    records: vec![ic_gateway_fqdn.to_string()],
+                },
+                DnsRecord {
+                    name: format!("{}.{}", "*.raw", ic_gateway_fqdn),
+                    record_type: DnsRecordType::CNAME,
+                    records: vec![ic_gateway_fqdn.to_string()],
+                },
+            ],
+        };
+
+        if !playnet.a_records.is_empty() {
+            records.push(DnsRecord {
+                name: "".to_string(),
+                record_type: DnsRecordType::A,
+                records: playnet.a_records.iter().map(|r| r.to_string()).collect(),
+            })
+        }
+
+        env.create_playnet_dns_records(records);
+
+        Ok(())
+    }
+
+    /// Starts the IC Gateway docker container.
+    fn start_gateway_container(
+        &self,
+        deployed_universal_vm: &DeployedUniversalVm,
+        playnet: &Playnet,
+        api_nodes_urls: Vec<String>,
+    ) -> Result<()> {
+        let api_nodes_urls = (!api_nodes_urls.is_empty())
+            .then(|| api_nodes_urls.join(","))
+            .ok_or_else(|| anyhow!("IC Gateway can't start without API boundary nodes"))?;
+
+        let bash_script = format!(
+            r#"
+# Prepare certificates and private key
+mkdir /tmp/certs
+cd /tmp/certs
+printf "%b" "{cert}" > cert.pem
+printf "%b" "{cert_chain}" >> cert.pem
+printf "%b" "{key}" > cert.key
+
+# Prepare config file
+cat <<EOF > ic-gateway.env
+IC_URL={ic_url}
+DOMAIN={domain}
+NETWORK_HTTP_CLIENT_INSECURE_BYPASS_TLS_VERIFICATION=true
+IC_UNSAFE_ROOT_KEY_FETCH=true
+LISTEN_TLS=[::]:443
+CERT_PROVIDER_DIR=/certs
+METRICS_LISTEN=[::]:9325
+EOF
+
+# Load the docker image from the tarball
+docker load -i /config/ic_gatewayd.tar
+
+# Start ic-gateway service in the background
+docker run --name=ic-gateway -d \
+  -v /tmp/certs:/certs \
+  --network host \
+  --env-file ic-gateway.env \
+  ic_gatewayd:image
+"#,
+            key = playnet.playnet_cert.cert.priv_key_pem,
+            cert = playnet.playnet_cert.cert.cert_pem,
+            cert_chain = playnet.playnet_cert.cert.chain_pem,
+            ic_url = api_nodes_urls,
+            domain = playnet.playnet_cert.playnet
+        );
+
+        deployed_universal_vm.block_on_bash_script(&bash_script)?;
+        Ok(())
+    }
+}
+
+/// Playnet configuration structure.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct Playnet {
+    playnet_cert: PlaynetCertificate,
+    aaaa_records: Vec<Ipv6Addr>,
+    a_records: Vec<Ipv4Addr>,
+}
+
+/// Emits log events for IC gateway A and AAAA records.
+fn emit_ic_gateway_records_event(log: &slog::Logger, ic_gateway_fqdn: &str, playnet: &Playnet) {
+    #[derive(Deserialize, Serialize)]
+    struct IcGatewayARecords {
+        url: String,
+        a_records: Vec<Ipv4Addr>,
+    }
+
+    #[derive(Deserialize, Serialize)]
+    struct IcGatewayAAAARecords {
+        url: String,
+        aaaa_records: Vec<Ipv6Addr>,
+    }
+
+    let event_a_record = log_events::LogEvent::new(
+        IC_GATEWAY_A_RECORDS_CREATED_EVENT_NAME.to_string(),
+        IcGatewayARecords {
+            url: ic_gateway_fqdn.to_string(),
+            a_records: playnet.a_records.clone(),
+        },
+    );
+    event_a_record.emit_log(log);
+
+    let event_aaaa_record = log_events::LogEvent::new(
+        IC_GATEWAY_AAAA_RECORDS_CREATED_EVENT_NAME.to_string(),
+        IcGatewayAAAARecords {
+            url: ic_gateway_fqdn.to_string(),
+            aaaa_records: playnet.aaaa_records.clone(),
+        },
+    );
+    event_aaaa_record.emit_log(log);
+}
+
+/// Trait for interacting with IC Gateway VMs in a test environment.
+pub trait HasIcGatewayVm {
+    fn get_deployed_ic_gateway(&self, name: &str) -> Result<DeployedIcGatewayVm>;
+    fn get_deployed_ic_gateways(&self) -> Result<Vec<DeployedIcGatewayVm>>;
+    fn write_deployed_ic_gateway(
+        &self,
+        name: &str,
+        playnet: &Url,
+        allocated_vm: &AllocatedVm,
+    ) -> Result<()>;
+}
+
+impl HasIcGatewayVm for TestEnv {
+    fn get_deployed_ic_gateway(&self, name: &str) -> Result<DeployedIcGatewayVm> {
+        let ic_gateway_dir = Path::new(IC_GATEWAY_VMS_DIR).join(name);
+        let ic_gateway_abs_dir = self.get_path(&ic_gateway_dir);
+
+        if !ic_gateway_abs_dir.is_dir() {
+            bail!(
+                "Deployed IC Gateway VM '{}' not found at {}",
+                name,
+                ic_gateway_abs_dir.display()
+            );
+        }
+
+        let playnet_path = ic_gateway_abs_dir.join(PLAYNET_FILE);
+        let playnet: Url = self
+            .read_json_object(&playnet_path)
+            .with_context(|| format!("Failed to read playnet file: {}", playnet_path.display()))?;
+
+        let https_url = playnet
+            .scheme()
+            .eq("https")
+            .then(|| playnet.clone())
+            .context("Expected a TLS URL")?;
+
+        let vm = self
+            .get_deployed_universal_vm(name)
+            .context("Failed to retrieve deployed universal VM")?
+            .get_vm()?;
+
+        Ok(DeployedIcGatewayVm { vm, https_url })
+    }
+
+    fn get_deployed_ic_gateways(&self) -> Result<Vec<DeployedIcGatewayVm>> {
+        let path = self.get_path(IC_GATEWAY_VMS_DIR);
+
+        // no deployed vms
+        if !path.exists() {
+            return Ok(Vec::new());
+        }
+
+        let entries = fs::read_dir(&path)?;
+
+        let mut gateways = Vec::new();
+
+        for entry_result in entries {
+            let entry = entry_result?;
+            if entry.path().is_dir() {
+                let dir_name = entry.file_name().to_string_lossy().to_string();
+                let vm = self.get_deployed_ic_gateway(&dir_name)?;
+                gateways.push(vm);
+            }
+        }
+
+        Ok(gateways)
+    }
+
+    fn write_deployed_ic_gateway(
+        &self,
+        name: &str,
+        playnet: &Url,
+        allocated_vm: &AllocatedVm,
+    ) -> Result<()> {
+        let path = Path::new(IC_GATEWAY_VMS_DIR).join(name);
+        self.write_json_object(path.join(PLAYNET_FILE), playnet)?;
+        self.write_json_object(path.join(IC_GATEWAY_VM_FILE), allocated_vm)
+    }
+}
+
+async fn await_status_is_healthy(logger: &Logger, url: Url, msg: String) -> Result<()> {
+    let client = Client::builder().build()?;
+    let request = Request::new(Method::GET, url);
+    retry_with_msg_async!(&msg, logger, READY_TIMEOUT, RETRY_INTERVAL, || async {
+        let response = client
+            .execute(request.try_clone().unwrap())
+            .await
+            .context("failed to execute request")?;
+        if response.status() == StatusCode::OK {
+            return Ok(());
+        }
+        bail!("ic-gateway not ready yet ...")
+    })
+    .await
+}

@@ -14,8 +14,8 @@ pub struct DateRangeFilter {
 }
 
 // Conversion from API type
-impl From<ic_nns_governance_api::pb::v1::DateRangeFilter> for DateRangeFilter {
-    fn from(filter: ic_nns_governance_api::pb::v1::DateRangeFilter) -> Self {
+impl From<ic_nns_governance_api::DateRangeFilter> for DateRangeFilter {
+    fn from(filter: ic_nns_governance_api::DateRangeFilter) -> Self {
         Self {
             start: filter.start_timestamp_seconds,
             end: filter.end_timestamp_seconds,

@@ -1,0 +1,46 @@
+name: Auto Approve PR
+
+on: 
+  pull_request_target:
+    paths:
+      - "mainnet-canister-revisions.json"
+      - "mainnet-icos-revisions.json"
+
+jobs:
+  auto-approve-canister:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    if: github.actor == 'pr-creation-bot-dfinity-ic[bot]'
+    steps:
+      - name: Check file
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
+        id: filter
+        with:
+          filters: |
+            canister:
+              - "mainnet-canister-revisions.json"
+      - name: Auto-approve
+        uses: hmarr/auto-approve-action@93c80b3919aae15c0da0d3ca49c70f57e3c4a58f #v4.0.0
+        if: steps.filter.outputs.canister == 'true'
+        with:
+          review-message: "Auto approving mainnet-canister-revisions.json changes."
+
+  auto-approve-icos:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    if: github.actor == 'pr-creation-bot-dfinity-ic[bot]'
+    steps:
+      - name: Check file
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
+        id: filter
+        with:
+          filters: |
+            icos:
+              - "mainnet-icos-revisions.json"
+      - name: Auto-approve
+        uses: hmarr/auto-approve-action@93c80b3919aae15c0da0d3ca49c70f57e3c4a58f #v4.0.0
+        if: steps.filter.outputs.icos == 'true'
+        with:
+          review-message: "Auto approving mainnet-icos-revisions.json changes."

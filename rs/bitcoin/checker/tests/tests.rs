@@ -9,13 +9,13 @@ use ic_btc_checker::{
     INITIAL_MAX_RESPONSE_BYTES,
 };
 use ic_btc_interface::Txid;
-use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_cdk::api::call::RejectionCode;
+use ic_http_types::{HttpRequest, HttpResponse};
+use ic_management_canister_types::CanisterId;
 use ic_metrics_assert::{MetricsAssert, PocketIcHttpQuery};
 use ic_test_utilities_load_wasm::load_wasm;
 use ic_types::Cycles;
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
-use pocket_ic::management_canister::CanisterId;
 use pocket_ic::{
     common::rest::{
         CanisterHttpHeader, CanisterHttpReject, CanisterHttpReply, CanisterHttpRequest,
@@ -419,6 +419,18 @@ fn test_check_transaction_passed() {
             ..UpgradeArg::default()
         })))
         .unwrap(),
+        Some(setup.controller),
+    )
+    .unwrap();
+
+    test_normal_operation("check_transaction_str", check_transaction_str_args.clone());
+
+    // Test empty argument upgrade
+    env.tick();
+    env.upgrade_canister(
+        setup.btc_checker_canister,
+        btc_checker_wasm(),
+        Encode!().unwrap(),
         Some(setup.controller),
     )
     .unwrap();

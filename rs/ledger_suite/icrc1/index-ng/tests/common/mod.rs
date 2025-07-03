@@ -1,6 +1,6 @@
 use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_canisters_http_types::{HttpRequest, HttpResponse};
+use ic_http_types::{HttpRequest, HttpResponse};
 use ic_icrc1_index_ng::{GetBlocksResponse, IndexArg, InitArg as IndexInitArg, Log, Status};
 use ic_icrc1_ledger::{FeatureFlags, InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
 use ic_ledger_canister_core::archive::ArchiveOptions;
@@ -52,7 +52,7 @@ pub fn default_archive_options() -> ArchiveOptions {
         max_message_size_bytes: None,
         controller_id: PrincipalId::new_user_test_id(100),
         more_controller_ids: None,
-        cycles_for_archive_creation: None,
+        cycles_for_archive_creation: Some(0),
         max_transactions_per_response: Some(MAX_BLOCKS_FROM_ARCHIVE),
     }
 }

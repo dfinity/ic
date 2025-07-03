@@ -16,12 +16,16 @@ use ic_embedders::{
         CanisterStateChanges, ExecutionStateChanges, PausedWasmExecution, SliceExecutionOutput,
         WasmExecutionResult, WasmExecutor,
     },
+    wasmtime_embedder::system_api::{
+        sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateModifications},
+        ApiType, ExecutionParameters,
+    },
     CompilationCache, CompilationResult, WasmExecutionInput,
 };
 use ic_error_types::UserError;
 use ic_interfaces::execution_environment::{
-    ChainKeySettings, ExecutionRoundSummary, ExecutionRoundType, HypervisorError, HypervisorResult,
-    IngressHistoryWriter, InstanceStats, RegistryExecutionSettings, Scheduler,
+    ChainKeyData, ChainKeySettings, ExecutionRoundSummary, ExecutionRoundType, HypervisorError,
+    HypervisorResult, IngressHistoryWriter, InstanceStats, RegistryExecutionSettings, Scheduler,
     SystemApiCallCounters, WasmExecutionOutput,
 };
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
@@ -36,11 +40,8 @@ use ic_replicated_state::{
     canister_state::execution_state::{self, WasmExecutionMode, WasmMetadata},
     page_map::TestPageAllocatorFileDescriptorImpl,
     testing::{CanisterQueuesTesting, ReplicatedStateTesting},
-    CanisterState, ExecutionState, ExportedFunctions, InputQueueType, Memory, ReplicatedState,
-};
-use ic_system_api::{
-    sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateModifications},
-    ApiType, ExecutionParameters,
+    CanisterState, ExecutionState, ExportedFunctions, InputQueueType, Memory, MessageMemoryUsage,
+    ReplicatedState,
 };
 use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_execution_environment::{generate_subnets, test_registry_settings};
@@ -440,8 +441,6 @@ impl SchedulerTest {
             canister_id: target.get(),
             wasm_module,
             arg: encode_message_id_as_payload(message_id),
-            compute_allocation: None,
-            memory_allocation: None,
             sender_canister_version: None,
         };
 
@@ -518,8 +517,11 @@ impl SchedulerTest {
         let state = self.scheduler.execute_round(
             state,
             Randomness::from([0; 32]),
-            self.chain_key_subnet_public_keys.clone(),
-            self.idkg_pre_signature_ids.clone(),
+            ChainKeyData {
+                master_public_keys: self.chain_key_subnet_public_keys.clone(),
+                idkg_pre_signature_ids: self.idkg_pre_signature_ids.clone(),
+                nidkg_ids: BTreeMap::new(),
+            },
             &self.replica_version,
             self.round,
             self.round_summary.clone(),
@@ -567,11 +569,12 @@ impl SchedulerTest {
         self.scheduler.drain_subnet_queues(
             state,
             &mut csprng,
+            self.round,
             &mut round_limits,
             &measurements,
             self.registry_settings(),
             &self.replica_version,
-            &BTreeMap::new(),
+            &ChainKeyData::default(),
         )
     }
 
@@ -660,7 +663,7 @@ pub(crate) struct SchedulerTestBuilder {
     batch_time: Time,
     scheduler_config: SchedulerConfig,
     initial_canister_cycles: Cycles,
-    subnet_message_memory: u64,
+    subnet_guaranteed_response_message_memory: u64,
     subnet_callback_soft_limit: usize,
     canister_guaranteed_callback_quota: usize,
     registry_settings: RegistryExecutionSettings,
@@ -687,7 +690,9 @@ impl Default for SchedulerTestBuilder {
             batch_time: UNIX_EPOCH,
             scheduler_config,
             initial_canister_cycles: Cycles::new(1_000_000_000_000_000_000),
-            subnet_message_memory: config.subnet_message_memory_capacity.get(),
+            subnet_guaranteed_response_message_memory: config
+                .guaranteed_response_message_memory_capacity
+                .get(),
             subnet_callback_soft_limit: config.subnet_callback_soft_limit,
             canister_guaranteed_callback_quota: config.canister_guaranteed_callback_quota,
             registry_settings: test_registry_settings(),
@@ -718,9 +723,12 @@ impl SchedulerTestBuilder {
         }
     }
 
-    pub fn with_subnet_message_memory(self, subnet_message_memory: u64) -> Self {
+    pub fn with_subnet_guaranteed_response_message_memory(
+        self,
+        subnet_guaranteed_response_message_memory: u64,
+    ) -> Self {
         Self {
-            subnet_message_memory,
+            subnet_guaranteed_response_message_memory,
             ..self
         }
     }
@@ -810,6 +818,8 @@ impl SchedulerTestBuilder {
 
         state.metadata.network_topology.subnets = generate_subnets(
             vec![self.own_subnet_id, self.nns_subnet_id],
+            self.nns_subnet_id,
+            None,
             self.own_subnet_id,
             self.subnet_type,
             registry_settings.subnet_size,
@@ -880,7 +890,9 @@ impl SchedulerTestBuilder {
         };
         let config = ic_config::execution_environment::Config {
             allocatable_compute_capacity_in_percent: self.allocatable_compute_capacity_in_percent,
-            subnet_message_memory_capacity: NumBytes::from(self.subnet_message_memory),
+            guaranteed_response_message_memory_capacity: NumBytes::from(
+                self.subnet_guaranteed_response_message_memory,
+            ),
             subnet_callback_soft_limit: self.subnet_callback_soft_limit,
             canister_guaranteed_callback_quota: self.canister_guaranteed_callback_quota,
             rate_limiting_of_instructions,
@@ -895,7 +907,6 @@ impl SchedulerTestBuilder {
         let hypervisor = Hypervisor::new_for_testing(
             &self.metrics_registry,
             self.own_subnet_id,
-            self.subnet_type,
             self.log.clone(),
             Arc::clone(&cycles_account_manager),
             Arc::<TestWasmExecutor>::clone(&wasm_executor),
@@ -933,6 +944,8 @@ impl SchedulerTestBuilder {
             self.scheduler_config.upload_wasm_chunk_instructions,
             self.scheduler_config
                 .canister_snapshot_baseline_instructions,
+            self.scheduler_config
+                .canister_snapshot_data_baseline_instructions,
         );
         let scheduler = SchedulerImpl::new(
             self.scheduler_config,
@@ -975,11 +988,11 @@ impl SchedulerTestBuilder {
 /// A test message can be constructed using the helper functions defined below:
 /// - `ingress(5)`: a message that uses 5 instructions.
 /// - `ingress(5).dirty_pages(1): a message that uses 5 instructions and
-///    modifies one page.
+///   modifies one page.
 /// - `ingress(5).call(other_side(callee, 3), on_response(8))`: a message
-///    that uses 5 instructions and calls a canister with id `callee`.
-///    The called message uses 3 instructions. The response handler  uses
-///    8 instructions.
+///   that uses 5 instructions and calls a canister with id `callee`.
+///   The called message uses 3 instructions. The response handler  uses
+///   8 instructions.
 #[derive(Clone, Debug)]
 pub(crate) struct TestMessage {
     // The canister id is optional and is inferred from the context if not
@@ -1197,7 +1210,7 @@ impl TestWasmExecutorCore {
                 wasm_result: Err(HypervisorError::InstructionLimitExceeded(message_limit)),
                 num_instructions_left: NumInstructions::from(0),
                 allocated_bytes: NumBytes::from(0),
-                allocated_message_bytes: NumBytes::from(0),
+                allocated_guaranteed_response_message_bytes: NumBytes::from(0),
                 instance_stats: InstanceStats::default(),
                 system_api_call_counters: SystemApiCallCounters::default(),
             };
@@ -1243,7 +1256,7 @@ impl TestWasmExecutorCore {
         let output = WasmExecutionOutput {
             wasm_result: Ok(None),
             allocated_bytes: NumBytes::from(0),
-            allocated_message_bytes: NumBytes::from(0),
+            allocated_guaranteed_response_message_bytes: NumBytes::from(0),
             num_instructions_left: instructions_left,
             instance_stats,
             system_api_call_counters: SystemApiCallCounters::default(),
@@ -1300,7 +1313,7 @@ impl TestWasmExecutorCore {
         calls: Vec<TestCall>,
         call_context_id: Option<CallContextId>,
         canister_current_memory_usage: NumBytes,
-        canister_current_message_memory_usage: NumBytes,
+        canister_current_message_memory_usage: MessageMemoryUsage,
     ) -> SystemStateModifications {
         for call in calls.into_iter() {
             if let Err(error) = self.perform_call(
@@ -1323,7 +1336,7 @@ impl TestWasmExecutorCore {
         call: TestCall,
         call_context_id: CallContextId,
         canister_current_memory_usage: NumBytes,
-        canister_current_message_memory_usage: NumBytes,
+        canister_current_message_memory_usage: MessageMemoryUsage,
     ) -> Result<(), String> {
         let sender = system_state.canister_id();
         let receiver = call.other_side.canister.unwrap();
@@ -1432,9 +1445,13 @@ impl TestWasmExecutorCore {
             ApiType::PreUpgrade { .. }
             | ApiType::ReplicatedQuery { .. }
             | ApiType::NonReplicatedQuery { .. }
+            | ApiType::CompositeQuery { .. }
+            | ApiType::CompositeReplyCallback { .. }
+            | ApiType::CompositeRejectCallback { .. }
             | ApiType::InspectMessage { .. }
             | ApiType::Start { .. }
-            | ApiType::Cleanup { .. } => {
+            | ApiType::Cleanup { .. }
+            | ApiType::CompositeCleanup { .. } => {
                 unreachable!("The test Wasm executor does not support {}", input.api_type)
             }
         }
@@ -1491,7 +1508,7 @@ struct TestPausedWasmExecution {
     sandbox_safe_system_state: SandboxSafeSystemState,
     execution_parameters: ExecutionParameters,
     canister_current_memory_usage: NumBytes,
-    canister_current_message_memory_usage: NumBytes,
+    canister_current_message_memory_usage: MessageMemoryUsage,
     call_context_id: Option<CallContextId>,
     instructions_executed: NumInstructions,
     executor: Arc<TestWasmExecutor>,

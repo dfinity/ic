@@ -45,7 +45,6 @@ rust_library(
     crate_name = "ic_cketh_minter",
     proc_macro_deps = [
         # Keep sorted.
-        "@crate_index//:ic-cdk-macros",
         "@crate_index//:strum_macros",
     ],
     version = "0.1.0",
@@ -150,17 +149,16 @@ rust_test(
     crate_name = "ic_cketh_minter_canister",
     proc_macro_deps = [
         # Keep sorted.
-        "@crate_index//:ic-cdk-macros",
     ],
     service_file = "cketh_minter.did",
     deps = [
         # Keep sorted.
         ":minter",
         "//packages/ic-ethereum-types",
+        "//packages/ic-http-types",
         "//packages/ic-secp256k1",
         "//packages/icrc-ledger-client-cdk:icrc_ledger_client_cdk",
         "//packages/icrc-ledger-types:icrc_ledger_types",
-        "//rs/rust_canisters/http_types",
         "@crate_index//:askama",
         "@crate_index//:candid",
         "@crate_index//:futures",
@@ -191,61 +189,48 @@ rust_binary(
     ],
 )
 
-[
-    rust_ic_test_suite(
-        name = "integration_tests" + name_suffix,
-        srcs = glob(["tests/**/*.rs"]),
-        data = [
-            ":cketh_minter_debug.wasm",
-            "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm",
-            "//rs/ledger_suite/icrc1/archive:archive_canister_u256.wasm.gz",
-            "//rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256.wasm.gz",
-            "//rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz",
-        ] + extra_data,
-        env = {
-            "CARGO_MANIFEST_DIR": "rs/ethereum/cketh/minter",
-            "CKETH_MINTER_WASM_PATH": "$(rootpath :cketh_minter_debug.wasm)",
-            "LEDGER_SUITE_ORCHESTRATOR_WASM_PATH": "$(rootpath //rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm)",
-            "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz)",
-            "INDEX_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256.wasm.gz)",
-            "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/archive:archive_canister_u256.wasm.gz)",
-        } | extra_env,
-        proc_macro_deps = [],
-        deps = [
-            # Keep sorted.
-            ":minter",
-            "//packages/ic-ethereum-types",
-            "//packages/icrc-ledger-types:icrc_ledger_types",
-            "//rs/ethereum/ledger-suite-orchestrator/test_utils",
-            "//rs/state_machine_tests",
-            "//rs/types/base_types",
-            "//rs/types/management_canister_types",
-            "@crate_index//:assert_matches",
-            "@crate_index//:candid",
-            "@crate_index//:ethers-core",
-            "@crate_index//:hex",
-            "@crate_index//:num-bigint",
-            "@crate_index//:num-traits",
-            "@crate_index//:serde",
-            "@crate_index//:serde_bytes",
-            "@crate_index//:serde_json",
-        ] + extra_deps,
-    )
-    for (name_suffix, extra_data, extra_env, extra_deps) in [
-        (
-            "",
-            [],
-            {},
-            ["//rs/ethereum/cketh/test_utils"],
-        ),
-        (
-            "_evm_rpc",
-            ["@evm_rpc.wasm.gz//file"],
-            {"EVM_RPC_CANISTER_WASM_PATH": "$(rootpath @evm_rpc.wasm.gz//file)"},
-            ["//rs/ethereum/cketh/test_utils:test_utils_evm_rpc"],
-        ),
-    ]
-]
+rust_ic_test_suite(
+    name = "integration_tests",
+    srcs = glob(["tests/**/*.rs"]),
+    data = [
+        ":cketh_minter_debug.wasm.gz",
+        "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm.gz",
+        "//rs/ledger_suite/icrc1/archive:archive_canister_u256.wasm.gz",
+        "//rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256.wasm.gz",
+        "//rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz",
+        "@evm_rpc.wasm.gz//file",
+    ],
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/ethereum/cketh/minter",
+        "CKETH_MINTER_WASM_PATH": "$(rootpath :cketh_minter_debug.wasm.gz)",
+        "LEDGER_SUITE_ORCHESTRATOR_WASM_PATH": "$(rootpath //rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm.gz)",
+        "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz)",
+        "INDEX_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256.wasm.gz)",
+        "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/archive:archive_canister_u256.wasm.gz)",
+        "EVM_RPC_CANISTER_WASM_PATH": "$(rootpath @evm_rpc.wasm.gz//file)",
+    },
+    proc_macro_deps = [],
+    deps = [
+        # Keep sorted.
+        ":minter",
+        "//packages/ic-ethereum-types",
+        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//rs/ethereum/cketh/test_utils",
+        "//rs/ethereum/ledger-suite-orchestrator/test_utils",
+        "//rs/state_machine_tests",
+        "//rs/types/base_types",
+        "//rs/types/management_canister_types",
+        "@crate_index//:assert_matches",
+        "@crate_index//:candid",
+        "@crate_index//:ethers-core",
+        "@crate_index//:hex",
+        "@crate_index//:num-bigint",
+        "@crate_index//:num-traits",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+        "@crate_index//:serde_json",
+    ],
+)
 
 closure_js_library(
     name = "principal_to_bytes",

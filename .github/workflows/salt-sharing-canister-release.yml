@@ -1,0 +1,110 @@
+name: salt-sharing-canister-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      title:
+        description: 'Title for the release'
+        required: true
+        type: string
+
+      description:
+        description: 'Human-readable description of the release'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  NAME: salt-sharing-canister
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build-and-release:
+    name: Build and release the salt-sharing canister
+
+    runs-on:
+      labels: dind-large
+
+    container:
+      image: ghcr.io/dfinity/ic-build@sha256:02165696a5201b1a347a28e548c32dc9590d60975c22be26ac1ea7e72573523d
+      options: >-
+        -e NODE_NAME --privileged --cgroupns host -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: build
+        run: |
+          TARGET='//rs/boundary_node/salt_sharing:salt_sharing_canister'
+          bazel build ${TARGET}
+
+          OUTPUT='bazel-bin/rs/boundary_node/salt_sharing/salt_sharing_canister.wasm.gz'
+          mv ${OUTPUT} salt_sharing_canister.wasm.gz
+
+      - name: artifacts
+        run: |
+          ARTIFACTS=(
+            salt_sharing_canister.wasm.gz
+          )
+
+          echo "ARTIFACTS<<EOF"                                >> $GITHUB_ENV
+          for ARTIFACT in ${ARTIFACTS[@]}; do echo ${ARTIFACT} >> $GITHUB_ENV; done
+          echo "EOF"                                           >> $GITHUB_ENV
+
+      - name: checksums
+        run: |
+          CHECKSUMS=$(mktemp)
+
+          for ARTIFACT in ${ARTIFACTS}; do
+              shasum -a256 ${ARTIFACT} >> ${CHECKSUMS}
+          done
+
+          echo "CHECKSUMS=${CHECKSUMS}" >> "${GITHUB_ENV}"
+
+      - name: tag
+        run: |
+          COMMIT_SHORT=$(git rev-parse --short HEAD)
+          RELEASE_TAG="${{ env.NAME }}-${COMMIT_SHORT}"
+
+          echo "RELEASE_TAG=${RELEASE_TAG}" >> "${GITHUB_ENV}"
+
+      - name: release notes
+        run: |
+          NOTES=$(mktemp)
+
+          CODE_BLOCK='```'
+
+          cat > ${NOTES} <<EOF
+          ${{ inputs.description }}
+
+          ## Verification
+
+          To reproduce the artifacts of this release:
+
+          ${CODE_BLOCK}
+          bazel build --config=local //rs/boundary_node/salt_sharing:salt_sharing_canister
+          ${CODE_BLOCK}
+
+          ## Checksums
+
+          ${CODE_BLOCK}
+          $(cat ${CHECKSUMS})
+          ${CODE_BLOCK}
+          EOF
+
+          echo "NOTES=${NOTES}" >> "${GITHUB_ENV}"
+
+      - name: release
+        uses: softprops/action-gh-release@e7a8f85e1c67a31e6ed99a94b41bd0b71bbee6b8
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: ${{ inputs.title }}
+          make_latest: false
+          body_path: ${{ env.NOTES }}
+          files: ${{ env.ARTIFACTS }}

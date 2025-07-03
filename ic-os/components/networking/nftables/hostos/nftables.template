@@ -1,4 +1,11 @@
 table ip filter {
+  define icmp_v4_types_accept = {
+    destination-unreachable,
+    time-exceeded,
+    echo-request,
+    echo-reply,
+  }
+
   set rate_limit {
     type ipv4_addr
     size 65535
@@ -14,13 +21,13 @@ table ip filter {
   set local_networks {
     type ipv4_addr
     flags interval
-    elements = { 
-      10.0.0.0/8, 
+    elements = {
+      10.0.0.0/8,
       172.16.0.0/12,
       192.168.0.0/16
     }
   }
-  
+
   chain metrics_proxy {
     ct state { new } add @rate_limit { ip saddr limit rate over 100/minute } drop comment "Maximum 100 connections per minute"
     ct state { new } add @connection_limit { ip saddr ct count over 2 } drop comment "No more than 2 connections per source at a time"
@@ -32,12 +39,7 @@ table ip filter {
     iif "lo" accept
     ct state { invalid } drop
     ct state { established, related } accept
-    icmp type destination-unreachable accept
-    icmp type source-quench accept
-    icmp type time-exceeded accept
-    icmp type parameter-problem accept
-    icmp type echo-request accept
-    icmp type echo-reply accept
+    icmp type $icmp_v4_types_accept accept
     ip saddr @local_networks ct state { new } tcp dport { 22 } accept
     ip saddr @local_networks ct state { new } udp dport { 67 } accept
     tcp dport { 42372 } goto metrics_proxy
@@ -52,20 +54,23 @@ table ip filter {
     oif "lo" accept
     ct state { invalid } drop
     ct state { established, related } accept
-    icmp type destination-unreachable accept
-    icmp type source-quench accept
-    icmp type time-exceeded accept
-    icmp type parameter-problem accept
-    icmp type echo-request accept
-    icmp type echo-reply accept
-    ip daddr { 0.0.0.0/0 } ct state { new } tcp dport { 53 } accept
-    ip daddr { 0.0.0.0/0 } ct state { new } udp dport { 53 } accept
-    ip daddr { 0.0.0.0/0 } ct state { new } udp dport { 123 } accept
+    icmp type $icmp_v4_types_accept accept
     ip daddr { 0.0.0.0/0 } ct state { new } tcp dport { 80, 443 } accept
   }
 }
 
 table ip6 filter {
+  define icmp_v6_types_accept = {
+    destination-unreachable,
+    packet-too-big,
+    time-exceeded,
+    echo-request,
+    echo-reply,
+    nd-router-advert,
+    nd-neighbor-solicit,
+    nd-neighbor-advert,
+  }
+
   set rate_limit {
     type ipv6_addr
     size 65535
@@ -98,6 +103,7 @@ table ip6 filter {
       2604:1380:4641:6100::/56,       # DA11 Equinix boundary
       2600:3000:6100:200::/64,        # DL1
       2604:6800:258:1::/64,           # DM1 InfraDC annex
+      2602:fb2b:100::/48,             # DM1
       2600:3000:1300:1300::/64,       # DN1
       2001:470:1:c76::/64,            # FM1
       2602:fb2b:110::/48,             # FR1 InfraDC prefix
@@ -157,14 +163,14 @@ table ip6 filter {
       2602:fb2b:120::/48,             # CH1 InfraDC prefix
       2001:4d78:40d::/48,             # FR1-old
       2602:fb2b:110::/48,             # FR1 InfraDC prefix
-      2602:fb2b:100::/48              # SF1 InfraDC prefix
+      2602:fb2b:100::/48              # DM1
     } # comment "Telemetry infrastructure"
   }
 
   set node_providers { # comment "Node provider allowlist. Filled out dynamically."
     type ipv6_addr
     flags interval
-  } 
+  }
 
   chain metrics_proxy {
     ct state { new } add @rate_limit { ip6 saddr limit rate over 100/minute } drop comment "Maximum 100 connections per minute"
@@ -186,15 +192,7 @@ table ip6 filter {
     iif "lo" accept
     ct state { invalid } drop
     ct state { established, related } accept
-    icmpv6 type destination-unreachable accept
-    icmpv6 type packet-too-big accept
-    icmpv6 type time-exceeded accept
-    icmpv6 type parameter-problem accept
-    icmpv6 type echo-request accept
-    icmpv6 type echo-reply accept
-    icmpv6 type nd-router-advert accept
-    icmpv6 type nd-neighbor-solicit accept
-    icmpv6 type nd-neighbor-advert accept
+    icmpv6 type $icmp_v6_types_accept accept
     ip6 saddr @dfinity_dcs ct state { new } tcp dport { 22, 9100, 19531, 19100 } accept
     ip6 saddr @telemetry_clients ct state { new } tcp dport { 9100, 19531, 19100 } accept
     ip6 saddr @node_providers ct state { new } tcp dport { 22, 9100, 19531 } accept
@@ -211,15 +209,7 @@ table ip6 filter {
     oif "lo" accept
     ct state { invalid } drop
     ct state { established, related } accept
-    icmpv6 type destination-unreachable accept
-    icmpv6 type packet-too-big accept
-    icmpv6 type time-exceeded accept
-    icmpv6 type parameter-problem accept
-    icmpv6 type echo-request accept
-    icmpv6 type echo-reply accept
-    icmpv6 type nd-router-solicit accept
-    icmpv6 type nd-neighbor-solicit accept
-    icmpv6 type nd-neighbor-advert accept
+    icmpv6 type $icmp_v6_types_accept accept
     ip6 daddr { ::/0 } ct state { new } tcp dport { 53 } accept
     ip6 daddr { ::/0 } ct state { new } udp dport { 53 } accept
     ip6 daddr { ::/0 } ct state { new } udp dport { 123 } accept

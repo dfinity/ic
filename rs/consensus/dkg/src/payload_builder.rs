@@ -5,7 +5,7 @@ use crate::{
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
 use ic_interfaces::{crypto::ErrorReproducibility, dkg::DkgPool};
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::{StateManager, StateManagerError};
+use ic_interfaces_state_manager::StateManager;
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_protobuf::registry::subnet::v1::{
     chain_key_initialization::Initialization, CatchUpPackageContents,
@@ -17,39 +17,22 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::ValidationContext,
     consensus::{
-        dkg::{self, Summary},
+        dkg::{DkgDataPayload, DkgPayload, DkgPayloadCreationError, DkgSummary},
         get_faults_tolerated, Block,
     },
-    crypto::{
-        threshold_sig::ni_dkg::{
-            config::{errors::NiDkgConfigValidationError, NiDkgConfig, NiDkgConfigData},
-            errors::create_transcript_error::DkgCreateTranscriptError,
-            NiDkgDealing, NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetId,
-            NiDkgTargetSubnet, NiDkgTranscript,
-        },
-        CryptoError,
+    crypto::threshold_sig::ni_dkg::{
+        config::{errors::NiDkgConfigValidationError, NiDkgConfig, NiDkgConfigData},
+        errors::create_transcript_error::DkgCreateTranscriptError,
+        NiDkgDealing, NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
+        NiDkgTranscript,
     },
     messages::CallbackId,
-    registry::RegistryClientError,
     Height, NodeId, NumberOfNodes, RegistryVersion, SubnetId,
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
     sync::{Arc, RwLock},
 };
-
-/// Errors which could occur when creating a Dkg payload.
-#[allow(missing_docs)]
-#[derive(PartialEq, Debug)]
-pub enum PayloadCreationError {
-    CryptoError(CryptoError),
-    StateManagerError(StateManagerError),
-    DkgCreateTranscriptError(DkgCreateTranscriptError),
-    FailedToGetDkgIntervalSettingFromRegistry(RegistryClientError),
-    FailedToGetSubnetMemberListFromRegistry(RegistryClientError),
-    FailedToGetVetKdKeyList(RegistryClientError),
-    MissingDkgStartBlock,
-}
 
 /// Creates the DKG payload for a new block proposal with the given parent. If
 /// the new height corresponds to a new DKG start interval, creates a summary,
@@ -67,12 +50,12 @@ pub fn create_payload(
     validation_context: &ValidationContext,
     logger: ReplicaLogger,
     max_dealings_per_block: usize,
-) -> Result<dkg::Payload, PayloadCreationError> {
+) -> Result<DkgPayload, DkgPayloadCreationError> {
     let height = parent.height.increment();
     // Get the last summary from the chain.
     let last_summary_block = pool_reader
         .dkg_summary_block(parent)
-        .ok_or(PayloadCreationError::MissingDkgStartBlock)?;
+        .ok_or(DkgPayloadCreationError::MissingDkgStartBlock)?;
     let last_dkg_summary = &last_summary_block.payload.as_ref().as_summary().dkg;
 
     if last_dkg_summary.get_next_start_height() == height {
@@ -90,7 +73,7 @@ pub fn create_payload(
             validation_context,
             logger,
         )
-        .map(dkg::Payload::Summary)
+        .map(DkgPayload::Summary)
     } else {
         // If the height is not a start height, create a payload with new dealings.
         create_data_payload(
@@ -101,7 +84,7 @@ pub fn create_payload(
             &last_summary_block,
             last_dkg_summary,
         )
-        .map(dkg::Payload::Data)
+        .map(DkgPayload::Data)
     }
 }
 
@@ -111,8 +94,8 @@ fn create_data_payload(
     parent: &Block,
     max_dealings_per_block: usize,
     last_summary_block: &Block,
-    last_dkg_summary: &Summary,
-) -> Result<dkg::DkgDataPayload, PayloadCreationError> {
+    last_dkg_summary: &DkgSummary,
+) -> Result<DkgDataPayload, DkgPayloadCreationError> {
     // Get all dealer ids from the chain.
     let dealers_from_chain = utils::get_dealers_from_chain(pool_reader, parent);
     // Filter from the validated pool all dealings whose dealer has no dealing on
@@ -130,7 +113,7 @@ fn create_data_payload(
         .take(max_dealings_per_block)
         .cloned()
         .collect();
-    Ok(dkg::DkgDataPayload::new(
+    Ok(DkgDataPayload::new(
         last_summary_block.height,
         new_validated_dealings,
     ))
@@ -167,13 +150,13 @@ pub(super) fn create_summary_payload(
     registry_client: &dyn RegistryClient,
     crypto: &dyn ConsensusCrypto,
     pool_reader: &PoolReader<'_>,
-    last_summary: &Summary,
+    last_summary: &DkgSummary,
     parent: &Block,
     registry_version: RegistryVersion,
     state_manager: &dyn StateManager<State = ReplicatedState>,
     validation_context: &ValidationContext,
     logger: ReplicaLogger,
-) -> Result<dkg::Summary, PayloadCreationError> {
+) -> Result<DkgSummary, DkgPayloadCreationError> {
     let all_dealings = utils::get_dkg_dealings(pool_reader, parent);
     let mut transcripts_for_remote_subnets = BTreeMap::new();
     let mut next_transcripts = BTreeMap::new();
@@ -204,36 +187,13 @@ pub(super) fn create_summary_payload(
                 );
             }
             Err(err) => {
-                return Err(PayloadCreationError::DkgCreateTranscriptError(err));
+                return Err(DkgPayloadCreationError::DkgCreateTranscriptError(err));
             }
         };
     }
 
     let height = parent.height.increment();
 
-    let (mut configs, transcripts_for_remote_subnets, initial_dkg_attempts) =
-        compute_remote_dkg_data(
-            subnet_id,
-            height,
-            registry_client,
-            state_manager,
-            validation_context,
-            transcripts_for_remote_subnets,
-            &last_summary
-                .transcripts_for_remote_subnets
-                .iter()
-                .map(|(id, _, result)| (id.clone(), result.clone()))
-                .collect(),
-            &last_summary.initial_dkg_attempts,
-            &logger,
-        )?;
-
-    let interval_length = last_summary.next_interval_length;
-    let next_interval_length = get_dkg_interval_length(
-        registry_client,
-        validation_context.registry_version,
-        subnet_id,
-    )?;
     // Current transcripts come from next transcripts of the last_summary.
     let current_transcripts = as_next_transcripts(last_summary, &logger);
 
@@ -267,6 +227,33 @@ pub(super) fn create_summary_payload(
         })
         .collect::<BTreeMap<_, _>>();
 
+    let previous_transcripts = last_summary
+        .transcripts_for_remote_subnets
+        .iter()
+        .map(|(id, _, result)| (id.clone(), result.clone()))
+        .collect();
+
+    let (mut configs, transcripts_for_remote_subnets, initial_dkg_attempts) =
+        compute_remote_dkg_data(
+            subnet_id,
+            height,
+            registry_client,
+            state_manager,
+            validation_context,
+            transcripts_for_remote_subnets,
+            &previous_transcripts,
+            &reshared_transcripts,
+            &last_summary.initial_dkg_attempts,
+            &logger,
+        )?;
+
+    let interval_length = last_summary.next_interval_length;
+    let next_interval_length = get_dkg_interval_length(
+        registry_client,
+        validation_context.registry_version,
+        subnet_id,
+    )?;
+
     // New configs are created using the new stable registry version proposed by this
     // block, which determines receivers of the dealings.
     configs.append(&mut get_configs_for_local_transcripts(
@@ -282,7 +269,7 @@ pub(super) fn create_summary_payload(
         &vet_key_ids,
     )?);
 
-    Ok(Summary::new(
+    Ok(DkgSummary::new(
         configs,
         current_transcripts,
         next_transcripts,
@@ -310,7 +297,7 @@ fn create_transcript(
 /// Return the set of next transcripts for all tags. If for some tag
 /// the next transcript is not available, the current transcript is used.
 fn as_next_transcripts(
-    summary: &Summary,
+    summary: &DkgSummary,
     logger: &ReplicaLogger,
 ) -> BTreeMap<NiDkgTag, NiDkgTranscript> {
     let mut next_transcripts = summary.next_transcripts().clone();
@@ -335,6 +322,7 @@ fn compute_remote_dkg_data(
     validation_context: &ValidationContext,
     mut new_transcripts: BTreeMap<NiDkgId, Result<NiDkgTranscript, String>>,
     previous_transcripts: &BTreeMap<NiDkgId, Result<NiDkgTranscript, String>>,
+    reshared_transcripts: &BTreeMap<NiDkgTag, NiDkgTranscript>,
     previous_attempts: &BTreeMap<NiDkgTargetId, u32>,
     logger: &ReplicaLogger,
 ) -> Result<
@@ -343,17 +331,18 @@ fn compute_remote_dkg_data(
         Vec<(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)>,
         BTreeMap<NiDkgTargetId, u32>,
     ),
-    PayloadCreationError,
+    DkgPayloadCreationError,
 > {
     let state = state_manager
         .get_state_at(validation_context.certified_height)
-        .map_err(PayloadCreationError::StateManagerError)?;
+        .map_err(DkgPayloadCreationError::StateManagerError)?;
     let (context_configs, errors, valid_target_ids) = process_subnet_call_context(
         subnet_id,
         height,
         registry_client,
         state.get_ref(),
         validation_context,
+        reshared_transcripts,
         logger,
     )?;
 
@@ -463,7 +452,7 @@ pub fn get_dkg_summary_from_cup_contents(
     subnet_id: SubnetId,
     registry: &dyn RegistryClient,
     registry_version: RegistryVersion,
-) -> Result<Summary, String> {
+) -> Result<DkgSummary, String> {
     // If we're in a NNS subnet recovery case with failover nodes, we extract the registry of the
     // NNS we're recovering.
     let registry_version_of_original_registry = cup_contents
@@ -556,7 +545,7 @@ pub fn get_dkg_summary_from_cup_contents(
             format!("Could not retrieve the interval length for the genesis summary: {err:?}")
         })?;
     let next_interval_length = interval_length;
-    Ok(Summary::new(
+    Ok(DkgSummary::new(
         configs,
         transcripts,
         BTreeMap::new(), // next transcripts
@@ -579,7 +568,7 @@ pub(crate) fn get_configs_for_local_transcripts(
     mut reshared_transcripts: BTreeMap<NiDkgTag, NiDkgTranscript>,
     registry_version: RegistryVersion,
     vet_key_ids: &[NiDkgMasterPublicKeyId],
-) -> Result<Vec<NiDkgConfig>, PayloadCreationError> {
+) -> Result<Vec<NiDkgConfig>, DkgPayloadCreationError> {
     let mut new_configs = Vec::new();
 
     for tag in tags_iter(vet_key_ids) {
@@ -628,10 +617,10 @@ fn get_dkg_interval_length(
     registry_client: &dyn RegistryClient,
     version: RegistryVersion,
     subnet_id: SubnetId,
-) -> Result<Height, PayloadCreationError> {
+) -> Result<Height, DkgPayloadCreationError> {
     registry_client
         .get_dkg_interval_length(subnet_id, version)
-        .map_err(PayloadCreationError::FailedToGetDkgIntervalSettingFromRegistry)?
+        .map_err(DkgPayloadCreationError::FailedToGetDkgIntervalSettingFromRegistry)?
         .ok_or_else(|| {
             panic!(
                 "No subnet record found for registry version={:?} and subnet_id={:?}",
@@ -640,12 +629,125 @@ fn get_dkg_interval_length(
         })
 }
 
-// Reads the SubnetCallContext and attempts to create DKG configs for new
-// subnets for the next round. An Ok return value contains:
-// * configs grouped by subnet (low and high threshold configs per subnet)
-// * errors produced while generating the configs.
+/// Reads the SubnetCallContext and attempts to create DKG configs for remote subnets for the next round
+///
+/// An Ok return value contains:
+/// - configs grouped by subnet, either low and high threshold configs for `setup_initial_dkg` or
+///   a high threshold for a vetkey for `reshare_chain_key`
+/// - errors produced while generating the configs
 #[allow(clippy::type_complexity)]
 fn process_subnet_call_context(
+    this_subnet_id: SubnetId,
+    start_block_height: Height,
+    registry_client: &dyn RegistryClient,
+    state: &ReplicatedState,
+    validation_context: &ValidationContext,
+    reshared_transcripts: &BTreeMap<NiDkgTag, NiDkgTranscript>,
+    logger: &ReplicaLogger,
+) -> Result<
+    (
+        Vec<Vec<NiDkgConfig>>,
+        Vec<(NiDkgId, String)>,
+        Vec<NiDkgTargetId>,
+    ),
+    DkgPayloadCreationError,
+> {
+    let (init_dkg_configs, init_dkg_errors, init_dkg_valid_target_ids) =
+        process_setup_initial_dkg_contexts(
+            this_subnet_id,
+            start_block_height,
+            registry_client,
+            state,
+            validation_context,
+            logger,
+        )?;
+
+    let (reshare_key_configs, reshare_key_errors, reshare_key_valid_target_ids) =
+        process_reshare_chain_key_contexts(
+            this_subnet_id,
+            start_block_height,
+            registry_client,
+            state,
+            validation_context,
+            reshared_transcripts,
+        )?;
+
+    let dkg_configs = init_dkg_configs
+        .into_iter()
+        .chain(reshare_key_configs)
+        .collect();
+    let dkg_errors = init_dkg_errors
+        .into_iter()
+        .chain(reshare_key_errors)
+        .collect();
+    let dkg_valid_target_ids = init_dkg_valid_target_ids
+        .into_iter()
+        .chain(reshare_key_valid_target_ids)
+        .collect();
+
+    Ok((dkg_configs, dkg_errors, dkg_valid_target_ids))
+}
+
+#[allow(clippy::type_complexity)]
+fn process_reshare_chain_key_contexts(
+    this_subnet_id: SubnetId,
+    start_block_height: Height,
+    registry_client: &dyn RegistryClient,
+    state: &ReplicatedState,
+    validation_context: &ValidationContext,
+    reshared_transcripts: &BTreeMap<NiDkgTag, NiDkgTranscript>,
+) -> Result<
+    (
+        Vec<Vec<NiDkgConfig>>,
+        Vec<(NiDkgId, String)>,
+        Vec<NiDkgTargetId>,
+    ),
+    DkgPayloadCreationError,
+> {
+    let mut new_configs = Vec::new();
+    let mut errors = Vec::new();
+    let mut valid_target_ids = Vec::new();
+    let contexts = &state
+        .metadata
+        .subnet_call_context_manager
+        .reshare_chain_key_contexts;
+
+    for (_callback_id, context) in contexts.iter() {
+        // if we haven't reached the required registry version yet, skip this context
+        if context.registry_version > validation_context.registry_version {
+            continue;
+        }
+
+        // Only process NiDkgMasterPublicKeyId
+        let Ok(key_id) = NiDkgMasterPublicKeyId::try_from(context.key_id.clone()) else {
+            continue;
+        };
+
+        // Dealers must be in the same registry_version.
+        let dealers = get_node_list(this_subnet_id, registry_client, context.registry_version)?;
+
+        match create_remote_dkg_config_for_key_id(
+            key_id,
+            start_block_height,
+            this_subnet_id,
+            context.target_id,
+            &dealers,
+            &context.nodes,
+            reshared_transcripts,
+            &context.registry_version,
+        ) {
+            Ok(config) => {
+                new_configs.push(vec![config]);
+                valid_target_ids.push(context.target_id);
+            }
+            Err(err) => errors.push(*err),
+        }
+    }
+    Ok((new_configs, errors, valid_target_ids))
+}
+
+#[allow(clippy::type_complexity)]
+fn process_setup_initial_dkg_contexts(
     this_subnet_id: SubnetId,
     start_block_height: Height,
     registry_client: &dyn RegistryClient,
@@ -658,7 +760,7 @@ fn process_subnet_call_context(
         Vec<(NiDkgId, String)>,
         Vec<NiDkgTargetId>,
     ),
-    PayloadCreationError,
+    DkgPayloadCreationError,
 > {
     let mut new_configs = Vec::new();
     let mut errors = Vec::new();
@@ -668,36 +770,26 @@ fn process_subnet_call_context(
         .subnet_call_context_manager
         .setup_initial_dkg_contexts;
     for (_callback_id, context) in contexts.iter() {
-        use ic_replicated_state::metadata_state::subnet_call_context_manager::SetupInitialDkgContext;
-
-        let SetupInitialDkgContext {
-            request: _,
-            nodes_in_target_subnet,
-            target_id,
-            registry_version,
-            time: _,
-        } = context;
-
         // if we haven't reached the required registry version yet, skip this context
-        if registry_version > &validation_context.registry_version {
+        if context.registry_version > validation_context.registry_version {
             continue;
         }
 
         // Dealers must be in the same registry_version.
-        let dealers = get_node_list(this_subnet_id, registry_client, *registry_version)?;
+        let dealers = get_node_list(this_subnet_id, registry_client, context.registry_version)?;
 
-        match create_remote_dkg_configs(
+        match create_low_high_remote_dkg_configs(
             start_block_height,
             this_subnet_id,
-            NiDkgTargetSubnet::Remote(*target_id),
+            context.target_id,
             &dealers,
-            nodes_in_target_subnet,
-            registry_version,
+            &context.nodes_in_target_subnet,
+            &context.registry_version,
             logger,
         ) {
             Ok((config0, config1)) => {
                 new_configs.push(vec![config0, config1]);
-                valid_target_ids.push(*target_id);
+                valid_target_ids.push(context.target_id);
             }
             Err(mut err_vec) => errors.append(&mut err_vec),
         };
@@ -709,10 +801,10 @@ fn get_node_list(
     subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
     registry_version: RegistryVersion,
-) -> Result<BTreeSet<NodeId>, PayloadCreationError> {
+) -> Result<BTreeSet<NodeId>, DkgPayloadCreationError> {
     Ok(registry_client
         .get_node_ids_on_subnet(subnet_id, registry_version)
-        .map_err(PayloadCreationError::FailedToGetSubnetMemberListFromRegistry)?
+        .map_err(DkgPayloadCreationError::FailedToGetSubnetMemberListFromRegistry)?
         .unwrap_or_else(|| {
             panic!(
                 "No subnet record found for registry version={:?} and subnet_id={:?}",
@@ -737,45 +829,47 @@ fn add_callback_ids_to_transcript_results(
     state: &ReplicatedState,
     log: &ReplicaLogger,
 ) -> Vec<(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)> {
-    let setup_initial_dkg_contexts = &state
-        .metadata
-        .subnet_call_context_manager
-        .setup_initial_dkg_contexts;
+    // Build a map from target id to callback id
+    let call_contexts = &state.metadata.subnet_call_context_manager;
+    let callback_id_map = call_contexts
+        .setup_initial_dkg_contexts
+        .iter()
+        .map(|(&callback_id, context)| (context.target_id, callback_id))
+        .chain(
+            call_contexts
+                .reshare_chain_key_contexts
+                .iter()
+                .map(|(&callback_id, context)| (context.target_id, callback_id)),
+        )
+        .collect::<BTreeMap<NiDkgTargetId, CallbackId>>();
 
     new_transcripts
         .into_iter()
-        .filter_map(|(id, result)| {
-            if let Some(callback_id) = setup_initial_dkg_contexts
-                .iter()
-                .filter_map(|(callback_id, context)| {
-                    if NiDkgTargetSubnet::Remote(context.target_id) == id.target_subnet {
-                        Some(*callback_id)
-                    } else {
-                        None
-                    }
-                })
-                .last()
-            {
-                Some((id, callback_id, result))
-            } else {
-                error!(
-                    log,
-                    "Unable to find callback id associated with remote dkg id {}, this should not happen",
-                    id
-                );
-                None
-            }
+        .filter_map(|(id, result)| match id.target_subnet {
+            NiDkgTargetSubnet::Local => None,
+            NiDkgTargetSubnet::Remote(target_id) => match callback_id_map.get(&target_id) {
+                Some(&callback_id) => Some((id, callback_id, result)),
+                None => {
+                    error!(
+                        log,
+                        "Unable to find callback id associated with remote dkg id {},\
+                            this should not happen",
+                        id
+                    );
+                    None
+                }
+            },
         })
         .collect()
 }
 
-// This function is called for each entry on the SubnetCallContext. It returns
-// either the created high and low configs for the entry or returns two errors
-// identified by the NiDkgId.
-fn create_remote_dkg_configs(
+/// This function is called on each entry on the SetupInitialDkgContext. It returns
+/// either the created high and low configs for the entry or returns two errors
+/// identified by the NiDkgId.
+fn create_low_high_remote_dkg_configs(
     start_block_height: Height,
     dealer_subnet: SubnetId,
-    target_subnet: NiDkgTargetSubnet,
+    target_subnet: NiDkgTargetId,
     dealers: &BTreeSet<NodeId>,
     receivers: &BTreeSet<NodeId>,
     registry_version: &RegistryVersion,
@@ -785,24 +879,31 @@ fn create_remote_dkg_configs(
         start_block_height,
         dealer_subnet,
         dkg_tag: NiDkgTag::LowThreshold,
-        target_subnet,
+        target_subnet: NiDkgTargetSubnet::Remote(target_subnet),
     };
 
     let high_thr_dkg_id = NiDkgId {
         start_block_height,
         dealer_subnet,
         dkg_tag: NiDkgTag::HighThreshold,
-        target_subnet,
+        target_subnet: NiDkgTargetSubnet::Remote(target_subnet),
     };
 
-    let low_thr_config =
-        do_create_remote_dkg_config(low_thr_dkg_id.clone(), dealers, receivers, registry_version);
-    let high_thr_config = do_create_remote_dkg_config(
+    let low_thr_config = create_remote_dkg_config(
+        low_thr_dkg_id.clone(),
+        dealers,
+        receivers,
+        registry_version,
+        None,
+    );
+    let high_thr_config = create_remote_dkg_config(
         high_thr_dkg_id.clone(),
         dealers,
         receivers,
         registry_version,
+        None,
     );
+
     let sibl_err = String::from("Failed to create the sibling config");
     match (low_thr_config, high_thr_config) {
         (Ok(config0), Ok(config1)) => Ok((config0, config1)),
@@ -831,11 +932,48 @@ fn create_remote_dkg_configs(
     }
 }
 
-fn do_create_remote_dkg_config(
+fn create_remote_dkg_config_for_key_id(
+    key_id: NiDkgMasterPublicKeyId,
+    start_block_height: Height,
+    dealer_subnet: SubnetId,
+    target_id: NiDkgTargetId,
+    dealers: &BTreeSet<NodeId>,
+    receivers: &BTreeSet<NodeId>,
+    reshared_transcripts: &BTreeMap<NiDkgTag, NiDkgTranscript>,
+    registry_version: &RegistryVersion,
+) -> Result<NiDkgConfig, Box<(NiDkgId, String)>> {
+    let dkg_id = NiDkgId {
+        start_block_height,
+        dealer_subnet,
+        dkg_tag: NiDkgTag::HighThresholdForKey(key_id),
+        target_subnet: NiDkgTargetSubnet::Remote(target_id),
+    };
+
+    // Find the resharing transcript corresponding to the remote dkg id
+    let Some(resharing_transcript) = reshared_transcripts.get(&dkg_id.dkg_tag) else {
+        let err = format!(
+            "Failed to find resharing transcript for a remote dkg for tag {:?}",
+            &dkg_id.dkg_tag
+        );
+        return Err(Box::new((dkg_id, err)));
+    };
+
+    create_remote_dkg_config(
+        dkg_id.clone(),
+        dealers,
+        receivers,
+        registry_version,
+        Some(resharing_transcript.clone()),
+    )
+    .map_err(|err| Box::new((dkg_id, format!("{:?}", err))))
+}
+
+fn create_remote_dkg_config(
     dkg_id: NiDkgId,
     dealers: &BTreeSet<NodeId>,
     receivers: &BTreeSet<NodeId>,
     registry_version: &RegistryVersion,
+    resharing_transcript: Option<NiDkgTranscript>,
 ) -> Result<NiDkgConfig, NiDkgConfigValidationError> {
     NiDkgConfig::new(NiDkgConfigData {
         threshold: NumberOfNodes::from(
@@ -847,7 +985,7 @@ fn do_create_remote_dkg_config(
         dealers: dealers.clone(),
         receivers: receivers.clone(),
         registry_version: *registry_version,
-        resharing_transcript: None,
+        resharing_transcript,
     })
 }
 
@@ -855,7 +993,7 @@ fn do_create_remote_dkg_config(
 mod tests {
     use crate::tests::test_vet_key_config;
 
-    use super::{super::test_utils::complement_state_manager_with_remote_dkg_requests, *};
+    use super::{super::test_utils::complement_state_manager_with_setup_initial_dkg_request, *};
     use ic_consensus_mocks::{
         dependencies_with_subnet_params, dependencies_with_subnet_records_with_raw_state_manager,
         Dependencies,
@@ -1021,7 +1159,7 @@ mod tests {
                 let target_id = NiDkgTargetId::new([0u8; 32]);
                 // The first two times, the context will have a request for the given target and
                 // not afterwards.
-                complement_state_manager_with_remote_dkg_requests(
+                complement_state_manager_with_setup_initial_dkg_request(
                     state_manager.clone(),
                     registry.get_latest_version(),
                     vec![10, 11, 12],
@@ -1031,7 +1169,7 @@ mod tests {
                     Some(2),
                     Some(target_id),
                 );
-                complement_state_manager_with_remote_dkg_requests(
+                complement_state_manager_with_setup_initial_dkg_request(
                     state_manager.clone(),
                     registry.get_latest_version(),
                     vec![],
@@ -1055,6 +1193,7 @@ mod tests {
                     state_manager.as_ref(),
                     &validation_context,
                     BTreeMap::new(),
+                    &BTreeMap::new(),
                     &BTreeMap::new(),
                     &BTreeMap::new(),
                     &logger,
@@ -1089,6 +1228,7 @@ mod tests {
                         state_manager.as_ref(),
                         &validation_context,
                         BTreeMap::new(),
+                        &BTreeMap::new(),
                         &BTreeMap::new(),
                         &initial_dkg_attempts,
                         &logger,
@@ -1132,6 +1272,7 @@ mod tests {
                         state_manager.as_ref(),
                         &validation_context,
                         BTreeMap::new(),
+                        &BTreeMap::new(),
                         &BTreeMap::new(),
                         &initial_dkg_attempts,
                         &logger,
@@ -1192,7 +1333,7 @@ mod tests {
             }
 
             let latest_block = pool.get_cache().finalized_block();
-            let create_summary_payload = |last_summary: &Summary| {
+            let create_summary_payload = |last_summary: &DkgSummary| {
                 create_summary_payload(
                     subnet_test_id(222),
                     registry.as_ref(),

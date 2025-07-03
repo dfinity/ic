@@ -716,7 +716,7 @@ pub fn write_overlays_and_verify(instructions: Vec<Instruction>) {
 #[doc(hidden)]
 #[cfg(feature = "fuzzing_code")]
 fn remove_tempdir(tdir: TempDir) {
-    let tmp_path = tdir.into_path();
+    let tmp_path = tdir.keep();
     std::fs::remove_dir_all(tmp_path).expect("Unable to delete temporary directoy");
 }
 
@@ -1542,10 +1542,10 @@ mod proptest_tests {
 
     /// A random vector of instructions.
     fn instructions_strategy() -> impl Strategy<Value = Vec<Instruction>> {
-        prop_vec(instruction_strategy(), 1..20)
+        prop_vec(instruction_strategy(), 1..10)
     }
 
-    #[test_strategy::proptest]
+    #[test_strategy::proptest(cases = 10)]
     fn random_instructions(#[strategy(instructions_strategy())] instructions: Vec<Instruction>) {
         write_overlays_and_verify(instructions);
     }

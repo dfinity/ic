@@ -18,14 +18,13 @@ use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_replicator::RegistryReplicator;
 use ic_types::{PrincipalId, ReplicaVersion, SubnetId};
 use slog::{error, info, o, Logger};
-use tokio::runtime::Handle;
 
 use crate::{
     backup_helper::{retrieve_replica_version_last_replayed, BackupHelper},
     cmd::BackupArgs,
     config::{ColdStorage, Config, SubnetConfig},
     notification_client::NotificationClient,
-    util::{block_on, sleep_secs},
+    util::sleep_secs,
 };
 
 const DEFAULT_SYNC_NODES: usize = 5;
@@ -52,7 +51,7 @@ pub struct BackupManager {
 }
 
 impl BackupManager {
-    pub fn new(log: Logger, args: BackupArgs, rt: &Handle) -> Self {
+    pub async fn new(log: Logger, args: BackupArgs) -> Self {
         let config = Config::load_config(args.config_file).expect("Config file can't be loaded");
         // verification that all is initialized with the init command
         if config.subnets.is_empty() {
@@ -85,25 +84,19 @@ impl BackupManager {
         let nns_public_key =
             parse_threshold_sig_key(&config.nns_pem).expect("Missing NNS public key");
         let nns_urls = vec![config.nns_url.expect("Missing NNS Url")];
-        let reg_replicator2 = registry_replicator.clone();
 
-        info!(log.clone(), "Starting the registry replicator");
-        block_on(async {
-            rt.spawn(async move {
-                reg_replicator2
-                    .start_polling(nns_urls, Some(nns_public_key))
-                    .await
-                    .expect("Failed to start registry replicator");
-            })
+        info!(log, "Starting the registry replicator");
+        let registry_replicator_future = registry_replicator
+            .start_polling(nns_urls, Some(nns_public_key))
             .await
-            .expect("Task spawned in Tokio executor panicked")
-        });
-        info!(log.clone(), "Fetch and start polling");
+            .expect("Failed to start registry replicator");
+
+        info!(log, "Spawning the registry replicator background thread.");
+        tokio::spawn(registry_replicator_future);
+
+        info!(log, "Fetch and start polling");
         if let Err(err) = registry_client.fetch_and_start_polling() {
-            error!(
-                log.clone(),
-                "Error fetching registry by the client: {}", err
-            );
+            error!(log, "Error fetching registry by the client: {err}");
         }
 
         let mut backups = Vec::new();
@@ -148,7 +141,6 @@ impl BackupManager {
                 blacklisted_nodes: blacklisted.clone(),
                 log: subnet_log.clone(),
             };
-            backup_helper.notification_client.push_metrics_version();
 
             backups.push(SubnetBackup {
                 nodes_syncing: subnet_config.nodes_syncing,
@@ -361,8 +353,17 @@ impl BackupManager {
         }
     }
 
+    /// Note: this method does some blocking operations so be careful when running it
+    /// in an async context.
     pub fn do_backups(self: Arc<BackupManager>) {
         let size = self.subnet_backups.len();
+
+        if let Some(backup) = self.subnet_backups.first() {
+            backup
+                .backup_helper
+                .notification_client
+                .push_metrics_version();
+        }
 
         for i in 0..size {
             // should we sync the subnet

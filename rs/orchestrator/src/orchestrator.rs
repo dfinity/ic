@@ -27,17 +27,16 @@ use ic_sys::utility_command::UtilityCommand;
 use ic_types::{hostos_version::HostosVersion, ReplicaVersion, SubnetId};
 use slog_async::AsyncGuard;
 use std::{
+    collections::HashMap,
     convert::TryFrom,
+    future::Future,
     net::SocketAddr,
     path::{Path, PathBuf},
     sync::{Arc, Mutex, RwLock},
     thread,
     time::Duration,
 };
-use tokio::{
-    sync::watch::{self, Receiver, Sender},
-    task::JoinHandle,
-};
+use tokio::{sync::watch::Receiver, task::JoinSet};
 
 const CHECK_INTERVAL_SECS: Duration = Duration::from_secs(10);
 
@@ -52,14 +51,10 @@ pub struct Orchestrator {
     ssh_access_manager: Option<SshAccessManager>,
     orchestrator_dashboard: Option<OrchestratorDashboard>,
     registration: Option<NodeRegistration>,
-    // A flag used to communicate to async tasks, that their job is done.
-    exit_sender: Sender<bool>,
-    exit_signal: Receiver<bool>,
     // The subnet id of the node.
     subnet_id: Arc<RwLock<Option<SubnetId>>>,
-    // Handles of async tasks used to wait for their completion
-    task_handles: Vec<JoinHandle<()>>,
     ipv4_configurator: Option<Ipv4Configurator>,
+    task_tracker: TaskTracker,
 }
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
@@ -144,6 +139,12 @@ impl Orchestrator {
             UtilityCommand::notify_host(&message, 1);
         });
 
+        let slog_logger = logger.inner_logger.root.clone();
+        let (metrics, _metrics_runtime) =
+            Self::get_metrics(metrics_addr, &slog_logger, &metrics_registry);
+        let metrics = Arc::new(metrics);
+        let mut task_tracker = TaskTracker::new(metrics.clone(), logger.clone());
+
         let registry_replicator = Arc::new(RegistryReplicator::new_from_config(
             logger.clone(),
             Some(node_id),
@@ -152,11 +153,22 @@ impl Orchestrator {
 
         let (nns_urls, nns_pub_key) =
             registry_replicator.parse_registry_access_info_from_config(&config);
-        if let Err(err) = registry_replicator
+
+        match registry_replicator
             .start_polling(nns_urls, nns_pub_key)
             .await
         {
-            warn!(logger, "{}", err);
+            Ok(future) => task_tracker.spawn("registry_replicator", future),
+            Err(err) => {
+                metrics
+                    .critical_error_task_failed
+                    .with_label_values(&["registry_replicator", "failed_to_start"])
+                    .inc();
+                error!(
+                    logger,
+                    "Failed to start the registry replicator task: {err}"
+                )
+            }
         }
 
         // Filesystem API to local registry copy
@@ -185,11 +197,6 @@ impl Orchestrator {
         })
         .await
         .unwrap();
-
-        let slog_logger = logger.inner_logger.root.clone();
-        let (metrics, _metrics_runtime) =
-            Self::get_metrics(metrics_addr, &slog_logger, &metrics_registry);
-        let metrics = Arc::new(metrics);
 
         metrics
             .orchestrator_info
@@ -321,8 +328,6 @@ impl Orchestrator {
             logger.clone(),
         ));
 
-        let (exit_sender, exit_signal) = watch::channel(false);
-
         Ok(Self {
             logger,
             _async_log_guard,
@@ -334,16 +339,16 @@ impl Orchestrator {
             ssh_access_manager: Some(ssh_access_manager),
             orchestrator_dashboard,
             registration: Some(registration),
-            exit_sender,
-            exit_signal,
             subnet_id,
-            task_handles: Default::default(),
             ipv4_configurator: Some(ipv4_configurator),
+            task_tracker,
         })
     }
 
-    /// Starts four asynchronous tasks:
+    /// Starts asynchronous tasks and waits until they all complete. The tasks can be
+    /// cancelled at any time by setting `exit_signal` to `true`.
     ///
+    /// The following tasks are started:
     /// 1. One that constantly monitors for a new CUP pointing to a newer
     ///    replica version and executes the upgrade to this version if such a
     ///    CUP was found.
@@ -361,7 +366,7 @@ impl Orchestrator {
     /// 4. Fourth task checks if this node is part of a threshold signing subnet. If so,
     ///    and it is also time to rotate the iDKG encryption key, instruct crypto
     ///    to do the rotation and attempt to register the rotated key.
-    pub fn spawn_tasks(&mut self) {
+    pub async fn start_tasks(&mut self, exit_signal: Receiver<bool>) {
         async fn upgrade_checks(
             maybe_subnet_id: Arc<RwLock<Option<SubnetId>>>,
             mut upgrade: Upgrade,
@@ -393,11 +398,7 @@ impl Orchestrator {
             info!(log, "Shut down the replica process");
         }
 
-        async fn hostos_upgrade_checks(
-            mut upgrade: HostosUpgrader,
-            exit_signal: Receiver<bool>,
-            log: ReplicaLogger,
-        ) {
+        async fn hostos_upgrade_checks(mut upgrade: HostosUpgrader, exit_signal: Receiver<bool>) {
             // Wait for a minute before starting the first loop, to allow the
             // registry some time to catch up, after starting.
             tokio::time::sleep(Duration::from_secs(60)).await;
@@ -423,13 +424,11 @@ impl Orchestrator {
             upgrade
                 .upgrade_loop(exit_signal, backoff, liveness_timeout)
                 .await;
-            info!(log, "Shut down the HostOS upgrade loop");
         }
 
         async fn boundary_node_check(
             mut boundary_node_manager: BoundaryNodeManager,
             mut exit_signal: Receiver<bool>,
-            log: ReplicaLogger,
         ) {
             while !*exit_signal.borrow() {
                 boundary_node_manager.check().await;
@@ -439,14 +438,12 @@ impl Orchestrator {
                     _ = exit_signal.changed() => {}
                 }
             }
-            info!(log, "Shut down the boundary node management loop");
         }
 
         async fn key_rotation_check(
             maybe_subnet_id: Arc<RwLock<Option<SubnetId>>>,
             registration: NodeRegistration,
             mut exit_signal: Receiver<bool>,
-            log: ReplicaLogger,
         ) {
             while !*exit_signal.borrow() {
                 let maybe_subnet_id = *maybe_subnet_id.read().unwrap();
@@ -461,7 +458,6 @@ impl Orchestrator {
                     _ = exit_signal.changed() => {}
                 }
             }
-            info!(log, "Shut down the key rotation loop");
         }
 
         async fn ssh_key_and_firewall_rules_and_ipv4_config_checks(
@@ -470,7 +466,6 @@ impl Orchestrator {
             mut firewall: Firewall,
             mut ipv4_configurator: Ipv4Configurator,
             mut exit_signal: Receiver<bool>,
-            log: ReplicaLogger,
         ) {
             while !*exit_signal.borrow() {
                 // Check if new SSH keys need to be deployed
@@ -484,47 +479,36 @@ impl Orchestrator {
                     _ = exit_signal.changed() => {}
                 }
             }
-            info!(
-                log,
-                "Shut down the ssh keys, firewall, and IPv4 config monitoring loop"
-            );
         }
 
-        async fn serve_dashboard(
-            dashboard: OrchestratorDashboard,
-            exit_signal: Receiver<bool>,
-            logger: ReplicaLogger,
-        ) {
+        async fn serve_dashboard(dashboard: OrchestratorDashboard, exit_signal: Receiver<bool>) {
             dashboard.run(exit_signal).await;
-            info!(logger, "Shut down the orchestrator dashboard");
         }
 
         if let Some(upgrade) = self.upgrade.take() {
-            info!(self.logger, "Spawning the upgrade loop");
-            self.task_handles.push(tokio::spawn(upgrade_checks(
-                Arc::clone(&self.subnet_id),
-                upgrade,
-                self.exit_signal.clone(),
-                self.logger.clone(),
-            )));
+            self.task_tracker.spawn(
+                "upgrade",
+                upgrade_checks(
+                    Arc::clone(&self.subnet_id),
+                    upgrade,
+                    exit_signal.clone(),
+                    self.logger.clone(),
+                ),
+            );
         }
 
         if let Some(hostos_upgrade) = self.hostos_upgrade.take() {
-            info!(self.logger, "Spawning the HostOS upgrade loop");
-            self.task_handles.push(tokio::spawn(hostos_upgrade_checks(
-                hostos_upgrade,
-                self.exit_signal.clone(),
-                self.logger.clone(),
-            )));
+            self.task_tracker.spawn(
+                "HostOS_upgrade",
+                hostos_upgrade_checks(hostos_upgrade, exit_signal.clone()),
+            );
         }
 
         if let Some(boundary_node) = self.boundary_node_manager.take() {
-            info!(self.logger, "Spawning boundary node management loop");
-            self.task_handles.push(tokio::spawn(boundary_node_check(
-                boundary_node,
-                self.exit_signal.clone(),
-                self.logger.clone(),
-            )));
+            self.task_tracker.spawn(
+                "boundary_node_management",
+                boundary_node_check(boundary_node, exit_signal.clone()),
+            );
         }
 
         if let (Some(ssh), Some(firewall), Some(ipv4_configurator)) = (
@@ -532,52 +516,35 @@ impl Orchestrator {
             self.firewall.take(),
             self.ipv4_configurator.take(),
         ) {
-            info!(
-                self.logger,
-                "Spawning the ssh-key and firewall rules check loop"
-            );
-            self.task_handles.push(tokio::spawn(
+            self.task_tracker.spawn(
+                "ssh_key_firewall_rules_ipv4_config",
                 ssh_key_and_firewall_rules_and_ipv4_config_checks(
                     Arc::clone(&self.subnet_id),
                     ssh,
                     firewall,
                     ipv4_configurator,
-                    self.exit_signal.clone(),
-                    self.logger.clone(),
+                    exit_signal.clone(),
                 ),
-            ));
+            );
         }
-        if let Some(dashboard) = self.orchestrator_dashboard.take() {
-            info!(self.logger, "Spawning the orchestrator dashboard");
-            self.task_handles.push(tokio::spawn(serve_dashboard(
-                dashboard,
-                self.exit_signal.clone(),
-                self.logger.clone(),
-            )));
-        }
-        if let Some(registration) = self.registration.take() {
-            info!(self.logger, "Spawning the key rotation loop");
-            self.task_handles.push(tokio::spawn(key_rotation_check(
-                Arc::clone(&self.subnet_id),
-                registration,
-                self.exit_signal.clone(),
-                self.logger.clone(),
-            )));
-        }
-    }
 
-    /// Shuts down the orchestrator: stops async tasks and the replica process
-    pub async fn shutdown(self) {
-        info!(self.logger, "Shutting down orchestrator...");
-        // Communicate to async tasks that they should exit.
-        self.exit_sender
-            .send(true)
-            .expect("Failed to send exit signal");
-        // Wait until tasks are done.
-        for handle in self.task_handles {
-            let _ = handle.await;
+        if let Some(dashboard) = self.orchestrator_dashboard.take() {
+            self.task_tracker
+                .spawn("dashboard", serve_dashboard(dashboard, exit_signal.clone()));
         }
-        info!(self.logger, "Orchestrator shut down");
+
+        if let Some(registration) = self.registration.take() {
+            self.task_tracker.spawn(
+                "key_rotation",
+                key_rotation_check(
+                    Arc::clone(&self.subnet_id),
+                    registration,
+                    exit_signal.clone(),
+                ),
+            );
+        }
+
+        self.task_tracker.join_all().await
     }
 
     // Construct a `OrchestratorMetrics` and its `MetricsHttpEndpoint`. If this
@@ -629,5 +596,121 @@ impl Orchestrator {
             .unwrap_or_else(|| "none configured".to_string());
 
         (ipv4, ipv6)
+    }
+}
+
+/// A structure which keeps track of the tasks spawned by the Orchestrator and monitors
+/// the completions of the tasks.
+struct TaskTracker {
+    tasks: JoinSet<()>,
+    task_names: HashMap<tokio::task::Id, String>,
+    logger: ReplicaLogger,
+    metrics: Arc<OrchestratorMetrics>,
+}
+
+impl TaskTracker {
+    /// Creates an empty [`TaskTracker`] without spawning any tasks.
+    fn new(metrics: Arc<OrchestratorMetrics>, logger: ReplicaLogger) -> Self {
+        Self {
+            tasks: JoinSet::new(),
+            task_names: HashMap::new(),
+            logger,
+            metrics,
+        }
+    }
+
+    /// Spawns the provided task on the [`JoinSet`] and updates the [`Self::task_names`] field.
+    /// The task will immediately start running in the background when this method is called.
+    fn spawn(&mut self, task_name: &str, task: impl Future<Output = ()> + Send + 'static) {
+        info!(self.logger, "Spawning the task `{task_name}`");
+        let id = self.tasks.spawn(task).id();
+        self.task_names.insert(id, task_name.to_string());
+        info!(self.logger, "Task `{task_name}` spawned");
+    }
+
+    /// Waits until all the tasks complete.
+    ///
+    /// If any of the tracked tasks panics it will be caught here and
+    /// [`OrchestratorMetrics::critical_error_task_panicked`] will be incremented.
+    /// TODO(CON-1488): consider restarting a task if it panics.
+    ///
+    /// # Cancel Safety
+    ///
+    /// This method is cancel safe. If `join_all` is used as an event in a `tokio::select!`
+    /// statement and some other branch completes first, it is guaranteed that no non-completed
+    /// tasks were removed from this [`TaskTracker`].
+    async fn join_all(&mut self) {
+        while let Some(join_result) = self.tasks.join_next_with_id().await {
+            match join_result {
+                Ok((id, ())) => {
+                    let task_name = self.take_task_name(&id);
+                    info!(self.logger, "Task `{task_name}` finished gracefully");
+                }
+                Err(err) => {
+                    let task_name = self.take_task_name(&err.id());
+
+                    if err.is_panic() {
+                        error!(self.logger, "Task `{task_name}` panicked: {err}");
+                        self.metrics
+                            .critical_error_task_failed
+                            .with_label_values(&[&task_name, "panic"])
+                            .inc();
+                    } else {
+                        info!(self.logger, "Task `{task_name}` was cancelled");
+                    }
+                }
+            }
+        }
+    }
+
+    /// Removes the `id` from the  [`Self::task_names`] and returns the removed task name.
+    /// If there is no task with the given `id` in the map, returns "unknown".
+    fn take_task_name(&mut self, id: &tokio::task::Id) -> String {
+        self.task_names
+            .remove(id)
+            .unwrap_or_else(|| String::from("unknown"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use ic_logger::no_op_logger;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn task_tracker_panics_are_tracked_test() {
+        let metrics = Arc::new(OrchestratorMetrics::new(&MetricsRegistry::new()));
+        let mut task_tracker = TaskTracker::new(metrics.clone(), no_op_logger());
+
+        task_tracker.spawn("panicky", async { panic!("Oh no...") });
+        task_tracker.join_all().await;
+
+        assert_eq!(
+            metrics
+                .critical_error_task_failed
+                .get_metric_with_label_values(&["panicky", "panic"])
+                .unwrap()
+                .get(),
+            1
+        );
+    }
+
+    #[tokio::test]
+    async fn task_tracker_graceful_completions_are_ignored_test() {
+        let metrics = Arc::new(OrchestratorMetrics::new(&MetricsRegistry::new()));
+        let mut task_tracker = TaskTracker::new(metrics.clone(), no_op_logger());
+
+        task_tracker.spawn("graceful", async { println!(":)") });
+        task_tracker.join_all().await;
+
+        assert_eq!(
+            metrics
+                .critical_error_task_failed
+                .get_metric_with_label_values(&["graceful", "panic"])
+                .unwrap()
+                .get(),
+            0
+        );
     }
 }

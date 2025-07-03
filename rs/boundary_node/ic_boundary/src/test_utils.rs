@@ -10,6 +10,7 @@ use clap::Parser;
 use http;
 use ic_base_types::NodeId;
 use ic_bn_lib::http::{Client as HttpClient, ConnInfo};
+use ic_bn_lib::prometheus::Registry;
 use ic_certification_test_utils::CertificateBuilder;
 use ic_certification_test_utils::CertificateData::*;
 use ic_crypto_tree_hash::Digest;
@@ -33,29 +34,19 @@ use ic_types::{
     crypto::threshold_sig::ThresholdSigPublicKey, replica_version::ReplicaVersion, time::Time,
     CanisterId, RegistryVersion, SubnetId,
 };
-use prometheus::Registry;
-use rand::Rng;
 use reqwest;
 
+use crate::routes::ProxyRouter;
 use crate::{
-    cache::Cache,
     cli::Cli,
     core::setup_router,
+    http::middleware::cache::CacheState,
     persist::{Persist, Persister, Routes},
     snapshot::{node_test_id, subnet_test_id, RegistrySnapshot, Snapshot, Snapshotter, Subnet},
 };
 
-#[macro_export]
-macro_rules! principal {
-    ($id:expr) => {{
-        candid::Principal::from_text($id).unwrap()
-    }};
-}
-
-pub use principal;
-
 #[derive(Debug)]
-struct TestHttpClient(usize);
+pub struct TestHttpClient(pub usize);
 
 #[async_trait]
 impl HttpClient for TestHttpClient {
@@ -74,10 +65,9 @@ impl HttpClient for TestHttpClient {
     }
 }
 
-fn new_random_certified_data() -> Digest {
-    let mut random_certified_data: [u8; 32] = [0; 32];
-    rand::thread_rng().fill(&mut random_certified_data);
-    Digest(random_certified_data)
+fn new_certified_data() -> Digest {
+    let data: [u8; 32] = [0; 32];
+    Digest(data)
 }
 
 pub fn valid_tls_certificate_and_validation_time() -> (X509PublicKeyCert, Time) {
@@ -107,7 +97,7 @@ pub fn valid_tls_certificate_and_validation_time() -> (X509PublicKeyCert, Time) 
 pub fn new_threshold_key() -> ThresholdSigPublicKey {
     let (_, pk, _) = CertificateBuilder::new(CanisterData {
         canister_id: CanisterId::from_u64(1),
-        certified_data: new_random_certified_data(),
+        certified_data: new_certified_data(),
     })
     .build();
 
@@ -284,6 +274,7 @@ pub fn setup_test_router(
         "--obs-log-null",
         "--retry-update-call",
     ];
+
     if !enable_logging {
         args.push("--obs-disable-request-logging");
     }
@@ -293,6 +284,11 @@ pub fn setup_test_router(
     if rate_limit_subnet != "0" {
         args.push("--rate-limit-per-second-per-subnet");
         args.push(rate_limit_subnet.as_str());
+    }
+
+    if enable_cache {
+        args.push("--cache-size");
+        args.push("104857600");
     }
 
     #[cfg(not(feature = "tls"))]
@@ -311,7 +307,7 @@ pub fn setup_test_router(
 
     let (registry_client, _, _) = create_fake_registry_client(subnet_count, nodes_per_subnet, None);
     let (channel_send, _) = tokio::sync::watch::channel(None);
-    let mut snapshotter = Snapshotter::new(
+    let snapshotter = Snapshotter::new(
         registry_snapshot.clone(),
         channel_send,
         Arc::new(registry_client),
@@ -325,18 +321,23 @@ pub fn setup_test_router(
 
     let salt: Arc<ArcSwapOption<Vec<u8>>> = Arc::new(ArcSwapOption::empty());
 
-    let router = setup_router(
-        registry_snapshot,
-        routing_table,
+    // Proxy Router
+    let proxy_router = Arc::new(ProxyRouter::new(
         http_client,
+        routing_table,
+        registry_snapshot,
+        cli.health.health_subnets_alive_threshold,
+        cli.health.health_nodes_per_subnet_alive_threshold,
+    ));
+
+    let router = setup_router(
         None,
         None,
         &cli,
         &metrics_registry,
-        enable_cache.then_some(Arc::new(
-            Cache::new(10485760, 262144, Duration::from_secs(1), false).unwrap(),
-        )),
+        enable_cache.then(|| Arc::new(CacheState::new(&cli.cache, &Registry::new()).unwrap())),
         salt,
+        proxy_router,
     );
 
     let router = router.layer(axum::middleware::from_fn(add_conninfo));

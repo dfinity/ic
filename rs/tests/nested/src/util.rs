@@ -4,7 +4,16 @@ use ic_canister_client::Sender;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::NeuronId;
 use ic_system_test_driver::{
-    driver::{nested::NestedVm, test_env_api::*},
+    driver::{
+        bootstrap::{setup_nested_vms, start_nested_vms},
+        farm::Farm,
+        ic_gateway_vm::{HasIcGatewayVm, IC_GATEWAY_VM_NAME},
+        nested::{NestedNode, NestedVm, NestedVms},
+        resource::{allocate_resources, get_resource_request_for_nested_nodes},
+        test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
+        test_env_api::*,
+        test_setup::GroupSetup,
+    },
     nns::{
         get_governance_canister, submit_update_elected_hostos_versions_proposal,
         submit_update_nodes_hostos_version_proposal, vote_execute_proposal_assert_executed,
@@ -12,6 +21,8 @@ use ic_system_test_driver::{
     util::runtime_from_url,
 };
 use ic_types::{hostos_version::HostosVersion, NodeId};
+
+use slog::info;
 
 /// Use an SSH channel to check the version on the running HostOS.
 pub(crate) fn check_hostos_version(node: &NestedVm) -> String {
@@ -79,4 +90,56 @@ pub(crate) async fn update_nodes_hostos_version(
     )
     .await;
     vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;
+}
+
+pub(crate) fn setup_nested_vm(env: TestEnv, name: &str) {
+    let logger = env.logger();
+    info!(logger, "Setup nested VMs ...");
+
+    let farm_url = env.get_farm_url().expect("Unable to get Farm url.");
+    let farm = Farm::new(farm_url, logger.clone());
+    let group_setup = GroupSetup::read_attribute(&env);
+    let group_name: String = group_setup.infra_group_name;
+
+    let nodes = vec![NestedNode::new(name.to_owned())];
+
+    let res_request = get_resource_request_for_nested_nodes(&nodes, &env, &group_name)
+        .expect("Failed to build resource request for nested test.");
+    let res_group = allocate_resources(&farm, &res_request, &env)
+        .expect("Failed to allocate resources for nested test.");
+
+    for (name, vm) in res_group.vms.iter() {
+        env.write_nested_vm(name, vm)
+            .expect("Unable to write nested VM.");
+    }
+
+    let ic_gateway = env
+        .get_deployed_ic_gateway(IC_GATEWAY_VM_NAME)
+        .expect("No HTTP gateway found");
+    let ic_gateway_url = ic_gateway.get_public_url();
+
+    let nns_public_key =
+        std::fs::read_to_string(env.prep_dir("").unwrap().root_public_key_path()).unwrap();
+
+    setup_nested_vms(
+        &nodes,
+        &env,
+        &farm,
+        &group_name,
+        &ic_gateway_url,
+        &nns_public_key,
+    )
+    .expect("Unable to setup nested VMs.");
+}
+
+pub(crate) fn start_nested_vm(env: TestEnv) {
+    let logger = env.logger();
+    info!(logger, "Setup nested VMs ...");
+
+    let farm_url = env.get_farm_url().expect("Unable to get Farm url.");
+    let farm = Farm::new(farm_url, logger.clone());
+    let group_setup = GroupSetup::read_attribute(&env);
+    let group_name: String = group_setup.infra_group_name;
+
+    start_nested_vms(&env, &farm, &group_name).expect("Unable to start nested VMs.");
 }

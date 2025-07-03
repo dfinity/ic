@@ -5,13 +5,14 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-http-types",
     "//rs/boundary_node/salt_sharing/api:salt_sharing_api",
     "//rs/nervous_system/integration_tests:nervous_system_integration_tests",
-    "//rs/rust_canisters/http_types",
     "//rs/types/base_types",
     "@crate_index//:assert_matches",
     "@crate_index//:candid",
     "@crate_index//:chrono",
+    "@crate_index//:ic-management-canister-types",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
     "@crate_index//:tokio",
@@ -62,7 +63,6 @@ rust_test_suite_with_extra_srcs(
     data = DEV_DATA,
     env = DEV_ENV,
     extra_srcs = [],
-    flaky = False,
     proc_macro_deps = [],
     tags = [],
     deps = [":salt_sharing_canister_integration_tests"] + DEPENDENCIES,

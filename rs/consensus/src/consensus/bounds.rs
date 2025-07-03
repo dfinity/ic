@@ -2,12 +2,16 @@
 //! be always bounded in size. This module contains checks for invariants that we
 //! want to uphold at all times.
 
-use ic_consensus_utils::{pool_reader::PoolReader, registry_version_at_height};
+use ic_consensus_utils::{
+    pool_reader::PoolReader, registry_version_at_height, MINIMUM_CHAIN_LENGTH,
+};
 use ic_interfaces_registry::RegistryClient;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{consensus::get_faults_tolerated, replica_config::ReplicaConfig};
 
-use super::{notary::ACCEPTABLE_NOTARIZATION_CUP_GAP, MINIMUM_CHAIN_LENGTH};
+use crate::consensus::{
+    ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP, ACCEPTABLE_NOTARIZATION_CUP_GAP,
+};
 
 /// Summary of when the consensus pool exceeds certain bounds.
 #[derive(Eq, PartialEq, Debug)]
@@ -42,37 +46,39 @@ fn get_maximum_validated_artifacts(node_count: usize, dkg_interval: usize) -> Ar
     let n = node_count;
     let k = dkg_interval + 1;
     let f = get_faults_tolerated(node_count);
-    let d = ACCEPTABLE_NOTARIZATION_CUP_GAP as usize;
+    let g = ACCEPTABLE_NOTARIZATION_CUP_GAP as usize;
+    let d = ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP as usize;
     let e = MINIMUM_CHAIN_LENGTH as usize;
     /*
      * To derive our bounds, we consider a worst-case scenario in which we have
-     * notarizations (or finalizations) for d rounds above the i-th summary
-     * height, without having a CUP for it yet. That means we have artifacts from
-     * potentially three consecutive DKG intervals. The below diagram shows a
-     * section of the blockchain for such a scenario.
+     * notarizations (or finalizations) for d rounds above the latest certified
+     * height, without having a CUP for the i-th summary yet. That means we have
+     * artifacts from potentially three consecutive DKG intervals. The below
+     * diagram shows a section of the blockchain for such a scenario.
      *
-     *       [B] Ordinary blocks          [h0...h3] Labeled heights
-     *       [S] Summary blocks
+     *       [B] Ordinary blocks          [C] Latest certified block
+     *       [S] Summary blocks           [h0...h4] Labeled heights
      *
      *  <--  interval i-2 --|---  interval i-1  ---|-- interval i  --->
      *
-     *      h0              h1                      h2              h3
-     *  ..-[B]-[B]-...-[B]-[S]-[B]-[B]-...-[B]-[B]-[S]-[B]-...-[B]-[B] <- chain tip
-     *      |           |   |                   |   |               |
-     *      +- minimum -+   +-- DKG interval ---+   +- d+1 heights -+
-     *       chain length           (k)
+     *      h0              h1                      h2      h3              h4
+     *  ..-[B]-[B]-...-[B]-[S]-[B]-[B]-...-[B]-[B]-[S]-[B]-[C]-...-[B]-[B]-[B] <- chain tip
+     *      |           |   |                   |   |       |               |
+     *      +- minimum -+   +-- DKG interval ---+   |       +-- d heights --+
+     *       chain length           (k)             +----- g+1 heights -----+
      *           (e)
      *
      *   h0 = lowest height at which we may still retain artifacts
      *   h1 = highest CUP height we have locally (worst-case)
      *   h2 = pending CUP height
-     *   h3 = notarized or finalized height
+     *   h3 = certified height
+     *   h4 = notarized or finalized height
      *
-     * In the above scenario, assuming `d` is equal to the maximum notarization/CUP
+     * In the above scenario, assuming `g` is equal to the maximum notarization/CUP
      * gap, nodes will refuse to notarize any further blocks. So `l` is the maximum
      * number of rounds we need to consider for placing a bound on the artifact counts.
      */
-    let l = k + e + (d + 1);
+    let l = k + e + (g + 1);
     // The aggregator/validator may produce one CUP in addition to the current CUP.
     // Additionally, if the DKG interval is smaller than the minimum chain length,
     // we can have one CUP for every time a full DKG interval fits into e.
@@ -83,8 +89,8 @@ fn get_maximum_validated_artifacts(node_count: usize, dkg_interval: usize) -> Ar
         // of the noisiest ones. Remove this after the validator is fixed.
         + 1;
     ArtifactCounts {
-        // We keep (f + 1) blocks for every height in range (h2, h3] (=d), and
-        // one finalized block per height in range [h0, h2] (=l-d). The block
+        // We keep (f + 1) blocks for every height in range (h3, h4] (=d), and
+        // one finalized block per height in range [h0, h3] (=l-d). The block
         // maker component may additionally produce a single block above the
         // notarized height.
         block_proposals: (f + 1) * d + (l - d) + 1,
@@ -188,15 +194,15 @@ mod tests {
     fn test_pool_bounds() {
         // Example for 40-node subnet w/ 499 DKG interval, assuming e=50 and d=70
         let max_counts = ArtifactCounts {
-            block_proposals: 1532,
-            notarizations: 1531,
-            finalization: 621,
-            random_beacon: 622,
-            random_tape: 622,
+            block_proposals: 1592,
+            notarizations: 1591,
+            finalization: 681,
+            random_beacon: 682,
+            random_tape: 682,
             notarization_shares: 39200,
             finalization_shares: 2800,
-            random_beacon_shares: 24880,
-            random_tape_shares: 24880,
+            random_beacon_shares: 27280,
+            random_tape_shares: 27280,
             cup_shares: 120,
             cups: 3,
             equivocation_proofs: 980,

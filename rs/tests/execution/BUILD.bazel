@@ -6,11 +6,9 @@ package(default_visibility = ["//rs:system-tests-pkg"])
 system_test(
     name = "compute_allocation_test",
     env = UNIVERSAL_CANISTER_ENV,
-    flaky = True,
     tags = [
         "k8s",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/config",
@@ -29,11 +27,9 @@ system_test(
 system_test(
     name = "cycles_restrictions_test",
     env = UNIVERSAL_CANISTER_ENV,
-    flaky = True,
     tags = [
         "k8s",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/registry/subnet_type",
@@ -50,11 +46,9 @@ system_test(
     srcs = glob(["general_execution_tests/*.rs"]),
     crate_root = "general_execution_test.rs",
     env = UNIVERSAL_CANISTER_ENV,
-    flaky = True,
     tags = [
         "k8s",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/config",
@@ -90,11 +84,9 @@ system_test(
     srcs = glob(["inter_canister_queries_tests/*.rs"]),
     crate_root = "inter_canister_queries_test.rs",
     env = UNIVERSAL_CANISTER_ENV,
-    flaky = True,
     tags = [
         "k8s",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/registry/subnet_type",
@@ -111,11 +103,9 @@ system_test(
 system_test(
     name = "max_number_of_canisters_test",
     env = UNIVERSAL_CANISTER_ENV,
-    flaky = True,
     tags = [
         "k8s",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/registry/subnet_type",
@@ -130,11 +120,9 @@ system_test(
 
 system_test(
     name = "system_api_security_test",
-    flaky = True,
     tags = [
         "k8s",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
         "//rs/registry/subnet_type",
@@ -151,11 +139,9 @@ system_test(
 system_test(
     name = "system_subnets_test",
     env = UNIVERSAL_CANISTER_ENV,
-    flaky = True,
     tags = [
         "k8s",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/registry/subnet_type",
@@ -169,11 +155,9 @@ system_test(
 
 system_test(
     name = "fill_execution_rounds_workload",
-    flaky = True,
     tags = [
         "manual",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + [
         "//rs/tests:jaeger_uvm_config_image",
@@ -224,12 +208,10 @@ system_test_nns(
     env = UNIVERSAL_CANISTER_ENV | {
         "BTC_WASM_PATH": "$(rootpath @btc_canister//file)",
     },
-    flaky = True,
-    # TODO: enable when k8s test is functional again
-    #tags = [
-    #    "k8s",
-    #],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    flaky = True,  # flakiness rate of over 3% over the month from 2025-02-11 till 2025-03-11 only for the //rs/tests/execution:btc_get_balance_test_head_nns variant.
+    tags = [
+        "k8s",
+    ],
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +

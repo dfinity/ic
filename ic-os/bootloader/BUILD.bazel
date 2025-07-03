@@ -4,7 +4,15 @@ package(default_visibility = ["//rs:ic-os-pkg"])
 
 exports_files([
     "grubenv",
-    "grub.cfg",
+    "guestos_grub.cfg",
+    "hostos_grub.cfg",
+    "setupos_grub.cfg",
+    "guestos_boot_args.template",
+    "hostos_boot_args.template",
+    "setupos_boot_args.template",
+    "guestos_extra_boot_args.template",
+    "hostos_extra_boot_args.template",
+    "setupos_extra_boot_args.template",
 ])
 
 genrule(

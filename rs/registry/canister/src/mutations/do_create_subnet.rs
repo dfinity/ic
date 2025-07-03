@@ -80,7 +80,7 @@ impl Registry {
             LOG_PREFIX, payload, subnet_id
         );
 
-        // 2b. Invoke compute_initial_i_dkg_dealings on ic_00
+        // 2b. Invoke reshare_chain_key on ic_00
 
         let initial_chain_key_config =
             payload
@@ -93,7 +93,7 @@ impl Registry {
 
         let receiver_nodes = payload.node_ids.clone();
         let chain_key_initializations = self
-            .get_all_initial_i_dkg_dealings_from_ic00(&initial_chain_key_config, receiver_nodes)
+            .get_all_chain_key_reshares_from_ic00(&initial_chain_key_config, receiver_nodes)
             .await;
 
         let payload = CreateSubnetPayload {
@@ -157,16 +157,16 @@ impl Registry {
             value: subnet_record.encode_to_vec(),
         };
 
-        let routing_table_mutation =
+        let mut routing_table_mutations =
             self.add_subnet_to_routing_table(self.latest_version(), subnet_id);
 
-        let mutations = vec![
+        let mut mutations = vec![
             subnet_list_mutation,
             new_subnet,
             new_subnet_dkg,
             new_subnet_threshold_signing_pubkey,
-            routing_table_mutation,
         ];
+        mutations.append(&mut routing_table_mutations);
 
         // Check invariants before applying mutations
         self.maybe_apply_mutation_internal(mutations);
@@ -189,6 +189,7 @@ impl Registry {
                     value,
                     version: _,
                     deletion_marker: _,
+                    timestamp_nanoseconds: _,
                 }) => assert_ne!(
                     NodeRecord::decode(value.as_slice()).unwrap(),
                     NodeRecord::default()
@@ -281,6 +282,10 @@ pub struct CreateSubnetPayload {
     pub ssh_backup_access: Vec<String>,
 
     pub chain_key_config: Option<InitialChainKeyConfig>,
+
+    /// None is treated the same as Some(Normal). Some(Normal) should be
+    /// preferred over None though, because explicit is better than implicit.
+    pub canister_cycles_cost_schedule: Option<CanisterCyclesCostSchedule>,
 
     // TODO(NNS1-2444): The fields below are deprecated and they are not read anywhere.
     pub ingress_bytes_per_block_soft_cap: u64,
@@ -462,6 +467,22 @@ impl TryFrom<KeyConfigRequest> for KeyConfigRequestInternal {
             subnet_id,
         })
     }
+}
+
+/// How much (in cycles) does it cost a canister to consume computational
+/// resources? Examples of such resources, which generally require cycles:
+///
+///     1. Execute instructions.
+///     2. Store Data - In normal memory, and stable memory.
+#[derive(Clone, Copy, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
+pub enum CanisterCyclesCostSchedule {
+    /// Use the cost schedule associate with the subnet's type.
+    #[default]
+    Normal,
+
+    /// This is used by rented subnets. This is because rented subnets get paid
+    /// for in a different way.
+    Free,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]

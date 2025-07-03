@@ -7,6 +7,7 @@ use ic_embedders::{
     WasmtimeEmbedder,
 };
 use ic_logger::replica_logger::no_op_logger;
+use ic_management_canister_types_private::Global;
 use ic_sys::{PageIndex, PAGE_SIZE};
 use ic_wasm_transform::Module;
 use ic_wasm_types::BinaryEncodedWasm;
@@ -18,7 +19,6 @@ use ic_embedders::wasm_utils::instrumentation::WasmMemoryType;
 use ic_embedders::wasmtime_embedder::{system_api_complexity, WasmtimeInstance};
 use ic_interfaces::execution_environment::HypervisorError;
 use ic_interfaces::execution_environment::SystemApi;
-use ic_replicated_state::Global;
 use ic_test_utilities_embedders::WasmtimeInstanceBuilder;
 use ic_types::{
     methods::{FuncRef, WasmMethod},
@@ -297,15 +297,10 @@ fn new_instance(
 }
 
 #[allow(clippy::field_reassign_with_default)]
-fn new_instance_for_stable_write(
-    wat: &str,
-    instruction_limit: u64,
-    native_stable: FlagStatus,
-) -> WasmtimeInstance {
+fn new_instance_for_stable_write(wat: &str, instruction_limit: u64) -> WasmtimeInstance {
     let mut config = EmbeddersConfig::default();
     config.metering_type = MeteringType::New;
     config.dirty_page_overhead = SchedulerConfig::application_subnet().dirty_page_overhead;
-    config.feature_flags.wasm_native_stable_memory = native_stable;
     WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -828,7 +823,7 @@ fn charge_for_dirty_heap_wasm64() {
     run_charge_for_dirty_heap(WasmMemoryType::Wasm64);
 }
 
-fn run_charge_for_dirty_stable64_test(native_stable: FlagStatus) {
+fn run_charge_for_dirty_stable64_test() {
     let wat = r#"
         (module
             (import "ic0" "stable64_grow"
@@ -851,7 +846,7 @@ fn run_charge_for_dirty_stable64_test(native_stable: FlagStatus) {
             (memory (export "memory") 10)
         )"#;
 
-    let mut instance = new_instance_for_stable_write(wat, 10000, native_stable);
+    let mut instance = new_instance_for_stable_write(wat, 10000);
     let res = instance.run(func_ref("test")).unwrap();
 
     let g = &res.exported_globals;
@@ -899,34 +894,16 @@ fn run_charge_for_dirty_stable64_test(native_stable: FlagStatus) {
     let cd = SchedulerConfig::application_subnet()
         .dirty_page_overhead
         .get();
-    let csg;
-    let csw;
-    let csr;
 
-    match native_stable {
-        FlagStatus::Enabled => {
-            csg = system_api_complexity::overhead_native::STABLE_GROW.get();
-            csw = system_api_complexity::overhead_native::STABLE64_WRITE.get()
-                + system_api
-                    .get_num_instructions_from_bytes(NumBytes::from(1))
-                    .get();
-            csr = system_api_complexity::overhead_native::STABLE64_READ.get()
-                + system_api
-                    .get_num_instructions_from_bytes(NumBytes::from(1))
-                    .get();
-        }
-        FlagStatus::Disabled => {
-            csg = system_api_complexity::overhead::STABLE_GROW.get();
-            csw = system_api_complexity::overhead::STABLE64_WRITE.get()
-                + system_api
-                    .get_num_instructions_from_bytes(NumBytes::from(1))
-                    .get();
-            csr = system_api_complexity::overhead::STABLE64_READ.get()
-                + system_api
-                    .get_num_instructions_from_bytes(NumBytes::from(1))
-                    .get();
-        }
-    }
+    let csg = system_api_complexity::overhead_native::STABLE_GROW.get();
+    let csw = system_api_complexity::overhead_native::STABLE64_WRITE.get()
+        + system_api
+            .get_num_instructions_from_bytes(NumBytes::from(1))
+            .get();
+    let csr = system_api_complexity::overhead_native::STABLE64_READ.get()
+        + system_api
+            .get_num_instructions_from_bytes(NumBytes::from(1))
+            .get();
 
     let instructions_used = instr_used(&mut instance);
     // 2 dirty stable pages and one heap
@@ -939,22 +916,17 @@ fn run_charge_for_dirty_stable64_test(native_stable: FlagStatus) {
     // Now run the same with insufficient instructions
     // We should still succeed (to avoid potentially failing pre-upgrades
     // of canisters that did not adjust their code to new metering)
-    let mut instance = new_instance_for_stable_write(wat, instructions_used - 1, native_stable);
+    let mut instance = new_instance_for_stable_write(wat, instructions_used - 1);
 
     instance.run(func_ref("test")).unwrap();
 }
 
 #[test]
 fn charge_for_dirty_stable64_native() {
-    run_charge_for_dirty_stable64_test(FlagStatus::Enabled);
+    run_charge_for_dirty_stable64_test();
 }
 
-#[test]
-fn charge_for_dirty_stable64() {
-    run_charge_for_dirty_stable64_test(FlagStatus::Disabled);
-}
-
-fn run_charge_for_dirty_stable_test(native_stable: FlagStatus) {
+fn run_charge_for_dirty_stable_test() {
     let wat = r#"
         (module
             (import "ic0" "stable_grow"
@@ -977,7 +949,7 @@ fn run_charge_for_dirty_stable_test(native_stable: FlagStatus) {
             (memory (export "memory") 10)
         )"#;
 
-    let mut instance = new_instance_for_stable_write(wat, 10000, native_stable);
+    let mut instance = new_instance_for_stable_write(wat, 10000);
     let res = instance.run(func_ref("test")).unwrap();
 
     let g = &res.exported_globals;
@@ -1025,34 +997,16 @@ fn run_charge_for_dirty_stable_test(native_stable: FlagStatus) {
     let cd = SchedulerConfig::application_subnet()
         .dirty_page_overhead
         .get();
-    let csg;
-    let csw;
-    let csr;
 
-    match native_stable {
-        FlagStatus::Enabled => {
-            csg = system_api_complexity::overhead_native::STABLE_GROW.get();
-            csw = system_api_complexity::overhead_native::STABLE_WRITE.get()
-                + system_api
-                    .get_num_instructions_from_bytes(NumBytes::from(1))
-                    .get();
-            csr = system_api_complexity::overhead_native::STABLE_READ.get()
-                + system_api
-                    .get_num_instructions_from_bytes(NumBytes::from(1))
-                    .get();
-        }
-        FlagStatus::Disabled => {
-            csg = system_api_complexity::overhead::STABLE_GROW.get();
-            csw = system_api_complexity::overhead::STABLE_WRITE.get()
-                + system_api
-                    .get_num_instructions_from_bytes(NumBytes::from(1))
-                    .get();
-            csr = system_api_complexity::overhead::STABLE_READ.get()
-                + system_api
-                    .get_num_instructions_from_bytes(NumBytes::from(1))
-                    .get();
-        }
-    }
+    let csg = system_api_complexity::overhead_native::STABLE_GROW.get();
+    let csw = system_api_complexity::overhead_native::STABLE_WRITE.get()
+        + system_api
+            .get_num_instructions_from_bytes(NumBytes::from(1))
+            .get();
+    let csr = system_api_complexity::overhead_native::STABLE_READ.get()
+        + system_api
+            .get_num_instructions_from_bytes(NumBytes::from(1))
+            .get();
 
     let instructions_used = instr_used(&mut instance);
     // 2 dirty stable pages and one heap
@@ -1065,19 +1019,14 @@ fn run_charge_for_dirty_stable_test(native_stable: FlagStatus) {
     // Now run the same with insufficient instructions
     // We should still succeed (to avoid potentially failing pre-upgrades
     // of canisters that did not adjust their code to new metering)
-    let mut instance = new_instance_for_stable_write(wat, instructions_used - 1, native_stable);
+    let mut instance = new_instance_for_stable_write(wat, instructions_used - 1);
 
     instance.run(func_ref("test")).unwrap();
 }
 
 #[test]
 fn charge_for_dirty_stable_native() {
-    run_charge_for_dirty_stable_test(FlagStatus::Enabled);
-}
-
-#[test]
-fn charge_for_dirty_stable() {
-    run_charge_for_dirty_stable_test(FlagStatus::Disabled);
+    run_charge_for_dirty_stable_test();
 }
 
 /// Helper method to generate a wasm module with tables in both

@@ -1,10 +1,16 @@
 //!
 //! Benchmark Wasm instructions using `execute_update()`.
 //!
+//! This benchmark runs nightly in CI, and the results are available in Grafana.
+//! See: `schedule-rust-bench.yml`
+//!
 //! To run a specific benchmark:
 //!
-//!     bazel run //rs/execution_environment:wasm_instructions_bench -- --sample-size 10 i32.div
-//!
+//! ```shell
+//! bazel run //rs/execution_environment:wasm_instructions_bench -- --sample-size 10 i32.div
+//! ```
+
+use std::time::Duration;
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use execution_environment_bench::common;
@@ -32,7 +38,7 @@ pub fn wasm_instructions_bench(c: &mut Criterion) {
     // Benchmark function.
     common::run_benchmarks(
         c,
-        "wasm_instructions",
+        "execution_environment:wasm_instructions",
         &benchmarks,
         |_id: &str,
          exec_env: &ExecutionEnvironment,
@@ -87,5 +93,12 @@ pub fn wasm_instructions_bench(c: &mut Criterion) {
     );
 }
 
-criterion_group!(benchmarks, wasm_instructions_bench);
+criterion_group! {
+    name = benchmarks;
+    config = Criterion::default()
+        .warm_up_time(Duration::from_secs(1))
+        .measurement_time(Duration::from_secs(1))
+        .sample_size(10);
+    targets = wasm_instructions_bench
+}
 criterion_main!(benchmarks);

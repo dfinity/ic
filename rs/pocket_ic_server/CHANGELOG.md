@@ -12,9 +12,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 ### Added
+- The endpoint `/instances/<instance_id>/update/await_ingress_message` (execute rounds on the PocketIc instance until the message is executed):
+  to fix a performance regression when using the two endpoints `/instances/<instance_id>/update/tick` and `/instances/<instance_id>/read/ingress_status` in a loop.
+- The argument of the endpoint `/instances/` takes an additional optional field `icp_features` specifying ICP features (implemented by system canisters) when creating a PocketIC instance.
+  For now, only bootstrapping the registry (canister) and keeping its content in sync with the PocketIC topology is supported.
+
+
+
+## 9.0.3 - 2025-06-06
+
+### Changed
+- The endpoint `/instances/<instance_id>/auto_progress` sets the (certified) time of the PocketIC instance
+  to the current system time before starting to execute rounds automatically.
+
+### Removed
+- The endpoint `/instances/<instance_id>/update/await_ingress_message`:
+  use the two endpoints `/instances/<instance_id>/update/tick` and `/instances/<instance_id>/read/ingress_status`
+  to execute a round and fetch the status of the update call instead.
+
+
+
+## 9.0.2 - 2025-05-27
+
+### Fixed
+- Crash when creating a canister with a specified id on a PocketIC instance created from an existing PocketIC state.
+
+
+
+## 9.0.1 - 2025-04-30
+
+### Fixed
+- Crash when creating multiple instances with the same subnet state directory simultaneously.
+
+
+
+## 9.0.0 - 2025-04-23
+
+### Added
+- The `GET` endpoint `/instances/<instance_id>/auto_progress` that returns whether the automatic progress was enabled for the PocketIC instance.
+- Support for VetKd if nonmainnet features are enabled on a PocketIC instance.
+
+### Changed
+- The II canister always belongs to the dedicated II subnet (the II canister used to belong to the NNS subnet if no II subnet was specified).
+- The II subnet size to be 34 nodes as on the ICP mainnet.
+
+
+
+## 8.0.0 - 2025-02-26
+
+### Added
 - New endpoint `/instances/<instance_id>/read/ingress_status` to fetch the status of an update call submitted through an ingress message.
   If an optional caller is provided, the status of the update call is known, but the update call was submitted by a different caller, then an error is returned.
 - New endpoint `/instances/<instance_id>/update/set_certified_time` to set the current certified time on all subnets of the PocketIC instance.
+- The endpoint `/instances/<instance_id>/update/tick` takes an argument optionally containing the blockmaker and failed blockmakers
+  for every subnet used by the endpoint `node_metrics_history` of the management canister.
 
 ### Fixed
 - Canisters created via `provisional_create_canister_with_cycles` with the management canister ID as the effective canister ID

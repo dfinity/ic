@@ -1,0 +1,90 @@
+load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//packages/ic-error-types",
+    "//rs/config",
+    "//rs/consensus/utils",
+    "//rs/crypto",
+    "//rs/interfaces",
+    "//rs/interfaces/registry",
+    "//rs/interfaces/state_manager",
+    "//rs/monitoring/logger",
+    "//rs/monitoring/metrics",
+    "//rs/phantom_newtype",
+    "//rs/protobuf",
+    "//rs/registry/helpers",
+    "//rs/registry/subnet_features",
+    "//rs/replicated_state",
+    "//rs/types/management_canister_types",
+    "//rs/types/types",
+    "@crate_index//:prometheus",
+    "@crate_index//:rand",
+    "@crate_index//:slog",
+]
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/artifact_pool",
+    "//rs/consensus/mocks",
+    "//rs/crypto/temp_crypto",
+    "//rs/crypto/test_utils/reproducible_rng",
+    "//rs/registry/fake",
+    "//rs/test_utilities",
+    "//rs/test_utilities/artifact_pool",
+    "//rs/test_utilities/consensus",
+    "//rs/test_utilities/logger",
+    "//rs/test_utilities/registry",
+    "//rs/test_utilities/state",
+    "//rs/test_utilities/types",
+    "//rs/types/types_test_utils",
+    "@crate_index//:assert_matches",
+    "@crate_index//:strum",
+]
+
+MALICIOUS_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/crypto/test_utils/canister_threshold_sigs",
+]
+
+MACRO_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:strum_macros",
+]
+
+rust_library(
+    name = "idkg",
+    srcs = glob(["src/**/*.rs"]),
+    crate_name = "ic_consensus_idkg",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.9.0",
+    deps = DEPENDENCIES,
+)
+
+rust_library(
+    name = "malicious_idkg",
+    testonly = True,
+    srcs = glob(["src/**/*.rs"]),
+    crate_features = ["malicious_code"],
+    crate_name = "ic_consensus_idkg",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.9.0",
+    deps = DEPENDENCIES + MALICIOUS_DEPENDENCIES,
+)
+
+rust_doc(
+    name = "idkg_doc",
+    crate = ":idkg",
+)
+
+rust_test(
+    name = "idkg_test",
+    crate = ":malicious_idkg",
+    crate_features = [
+        "malicious_code",
+        "proptest",
+    ],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + MALICIOUS_DEPENDENCIES,
+)

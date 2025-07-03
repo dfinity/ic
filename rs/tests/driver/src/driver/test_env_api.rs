@@ -139,7 +139,6 @@ use super::{
 };
 use crate::{
     driver::{
-        boundary_node::BoundaryNodeVm,
         constants::{self, kibana_link, GROUP_TTL, SSH_USERNAME},
         farm::{Farm, GroupSpec},
         log_events,
@@ -163,7 +162,7 @@ use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID,
 };
-use ic_nns_governance_api::pb::v1::Neuron;
+use ic_nns_governance_api::Neuron;
 use ic_nns_init::read_initial_mutations_from_local_store_dir;
 use ic_nns_test_utils::{common::NnsInitPayloadsBuilder, itest_helpers::NnsCanisters};
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
@@ -203,7 +202,7 @@ use std::{
     fs,
     future::Future,
     io::{Read, Write},
-    net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpStream},
     path::{Path, PathBuf},
     str::FromStr,
     sync::Arc,
@@ -871,6 +870,14 @@ impl IcNodeSnapshot {
             })
     }
 
+    pub fn is_api_boundary_node(&self) -> bool {
+        let registry_version = self.registry_version;
+        self.local_registry
+            .get_api_boundary_node_ids(registry_version)
+            .unwrap()
+            .contains(&self.node_id)
+    }
+
     pub fn effective_canister_id(&self) -> PrincipalId {
         match self.subnet_id() {
             Some(subnet_id) => {
@@ -930,6 +937,30 @@ impl IcNodeSnapshot {
         arg: Option<Vec<u8>>,
     ) -> Principal {
         self.create_and_install_canister_with_arg_and_cycles(name, arg, None)
+    }
+
+    pub fn install_canister_with_arg(
+        &self,
+        canister_id: Principal,
+        name: &str,
+        arg: Option<Vec<u8>>,
+    ) {
+        let canister_bytes = load_wasm(name);
+        self.with_default_agent(move |agent| async move {
+            // Create a canister.
+            let mgr = ManagementCanister::create(&agent);
+
+            let mut install_code = mgr.install_code(&canister_id, &canister_bytes);
+            if let Some(arg) = arg {
+                install_code = install_code.with_raw_arg(arg)
+            }
+            install_code
+                .call_and_wait()
+                .await
+                .map_err(|err| format!("Couldn't install canister: {}", err))?;
+            Ok::<_, String>(canister_id)
+        })
+        .expect("Could not install canister");
     }
 
     pub fn create_and_install_canister_with_arg_and_cycles(
@@ -1128,12 +1159,12 @@ impl<T: HasTestEnv> HasIcDependencies for T {
     }
 
     fn get_mainnet_ic_os_img_sha256(&self) -> Result<String> {
-        let mainnet_version: String = read_dependency_to_string("mainnet_nns_subnet_revision.txt")?;
+        let mainnet_version = get_mainnet_nns_revision();
         fetch_sha256(format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/disk-img"), "disk-img.tar.zst", self.test_env().logger())
     }
 
     fn get_mainnet_ic_os_update_img_sha256(&self) -> Result<String> {
-        let mainnet_version: String = read_dependency_to_string("mainnet_nns_subnet_revision.txt")?;
+        let mainnet_version = get_mainnet_nns_revision();
         fetch_sha256(format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/update-img"), "update-img.tar.zst", self.test_env().logger())
     }
 }
@@ -1141,104 +1172,104 @@ impl<T: HasTestEnv> HasIcDependencies for T {
 pub fn get_elasticsearch_hosts() -> Result<Vec<String>> {
     let dep_rel_path = "elasticsearch_hosts";
     let hosts = read_dependency_to_string(dep_rel_path)
-        .unwrap_or_else(|_| "elasticsearch.ch1-obsdev1.dfinity.network:443".to_string());
+        .unwrap_or_else(|_| "elasticsearch.testnet.dfinity.network:443".to_string());
     parse_elasticsearch_hosts(Some(hosts))
 }
 
-/// Helper function to figure out SHA256 from a CAS url
-pub fn get_sha256_from_cas_url(img_name: &str, url: &Url) -> Result<String> {
-    // Since this is a CAS url, we assume the last URL path part is the sha256.
-    let (_prefix, sha256) = url
-        .path()
-        .rsplit_once('/')
-        .ok_or(anyhow!("failed to extract sha256 from CAS url '{url}'"))?;
-    let sha256 = sha256.to_string();
-    bail_if_sha256_invalid(&sha256, img_name)?;
-    Ok(sha256.to_string())
-}
-
 pub fn get_ic_os_img_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__DEV_DISK_IMG_TAR_ZST_CAS_URL")?;
+    let url = std::env::var("ENV_DEPS__GUESTOS_DISK_IMG_URL")?;
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_ic_os_img_sha256() -> Result<String> {
-    get_sha256_from_cas_url("ic_os_img_sha256", &get_ic_os_img_url()?)
+    Ok(std::env::var("ENV_DEPS__GUESTOS_DISK_IMG_HASH")?)
 }
 
 pub fn get_malicious_ic_os_img_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__DEV_MALICIOUS_DISK_IMG_TAR_ZST_CAS_URL")?;
+    let url = std::env::var("ENV_DEPS__GUESTOS_MALICIOUS_DISK_IMG_URL")?;
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_malicious_ic_os_img_sha256() -> Result<String> {
-    get_sha256_from_cas_url("ic_os_img_sha256", &get_malicious_ic_os_img_url()?)
+    Ok(std::env::var("ENV_DEPS__GUESTOS_MALICIOUS_DISK_IMG_HASH")?)
 }
 
 pub fn get_ic_os_update_img_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__DEV_UPDATE_IMG_TAR_ZST_CAS_URL")?;
+    let url = std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_URL")?;
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_ic_os_update_img_sha256() -> Result<String> {
-    get_sha256_from_cas_url("ic_os_update_img_sha256", &get_ic_os_update_img_url()?)
+    Ok(std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_HASH")?)
 }
 
 pub fn get_ic_os_update_img_test_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__DEV_UPDATE_IMG_TEST_TAR_ZST_CAS_URL")?;
+    let url = std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_TEST_URL")?;
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_ic_os_update_img_test_sha256() -> Result<String> {
-    get_sha256_from_cas_url("ic_os_update_img_sha256", &get_ic_os_update_img_test_url()?)
+    Ok(std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_TEST_HASH")?)
 }
 
 pub fn get_malicious_ic_os_update_img_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__DEV_MALICIOUS_UPDATE_IMG_TAR_ZST_CAS_URL")?;
+    let url = std::env::var("ENV_DEPS__GUESTOS_MALICIOUS_UPDATE_IMG_URL")?;
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_malicious_ic_os_update_img_sha256() -> Result<String> {
-    get_sha256_from_cas_url(
-        "ic_os_update_img_sha256",
-        &get_malicious_ic_os_update_img_url()?,
-    )
+    Ok(std::env::var(
+        "ENV_DEPS__GUESTOS_MALICIOUS_UPDATE_IMG_HASH",
+    )?)
 }
 
 pub fn get_boundary_node_img_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__BOUNDARY_GUESTOS_DISK_IMG_TAR_ZST_CAS_URL")?;
+    let url = std::env::var("ENV_DEPS__BOUNDARY_GUESTOS_DISK_IMG_URL")?;
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_boundary_node_img_sha256() -> Result<String> {
-    get_sha256_from_cas_url(
-        "ic_os_boudndary_guestos_img_sha256",
-        &get_boundary_node_img_url()?,
-    )
+    Ok(std::env::var("ENV_DEPS__BOUNDARY_GUESTOS_DISK_IMG_HASH")?)
+}
+
+pub fn get_mainnet_nns_revision() -> String {
+    std::env::var("MAINNET_NNS_SUBNET_REVISION_ENV")
+        .expect("could not read mainnet nns version from environment")
+}
+
+pub fn get_mainnet_application_subnet_revision() -> String {
+    std::env::var("MAINNET_APPLICATION_SUBNET_REVISION_ENV")
+        .expect("could not read mainnet application subnet version from environment")
 }
 
 pub fn get_mainnet_ic_os_img_url() -> Result<Url> {
-    let mainnet_version: String = read_dependency_to_string("mainnet_nns_subnet_revision.txt")?;
+    let mainnet_version = get_mainnet_nns_revision();
     let url = format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/disk-img/disk-img.tar.zst");
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_mainnet_ic_os_update_img_url() -> Result<Url> {
-    let mainnet_version = read_dependency_to_string("mainnet_nns_subnet_revision.txt")?;
+    let mainnet_version = get_mainnet_nns_revision();
     let url = format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/update-img/update-img.tar.zst");
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_hostos_update_img_test_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__DEV_HOSTOS_UPDATE_IMG_TEST_TAR_ZST_CAS_URL")?;
+    let url = std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_TEST_URL")?;
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_hostos_update_img_test_sha256() -> Result<String> {
-    get_sha256_from_cas_url(
-        "hostos_update_img_sha256",
-        &get_hostos_update_img_test_url()?,
-    )
+    Ok(std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_TEST_HASH")?)
+}
+
+pub fn get_empty_disk_img_url() -> Result<Url> {
+    let url = std::env::var("ENV_DEPS__EMPTY_DISK_IMG_URL")?;
+    Ok(Url::parse(&url)?)
+}
+
+pub fn get_empty_disk_img_sha256() -> Result<String> {
+    Ok(std::env::var("ENV_DEPS__EMPTY_DISK_IMG_HASH")?)
 }
 
 pub const FETCH_SHA256SUMS_RETRY_TIMEOUT: Duration = Duration::from_secs(120);
@@ -1532,9 +1563,14 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
     }
 
     fn status(&self) -> Result<HttpStatusResponse> {
+        block_on(self.status_async())
+    }
+
+    async fn status_async(&self) -> Result<HttpStatusResponse> {
         let url = self.get_public_url();
         let addr = self.get_public_addr();
-        let client = reqwest::blocking::Client::builder()
+
+        let client = reqwest::Client::builder()
             .danger_accept_invalid_certs(self.uses_snake_oil_certs())
             .timeout(READY_RESPONSE_TIMEOUT);
         let client = match (self.uses_dns(), url.domain()) {
@@ -1545,11 +1581,13 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
             .build()
             .expect("cannot build a reqwest client")
             .get(url.join("api/v2/status").expect("failed to join URLs"))
-            .send()?;
+            .send()
+            .await?;
 
         let status = response.status();
         let body = response
             .bytes()
+            .await
             .expect("failed to convert a response to bytes")
             .to_vec();
         if status.is_client_error() || status.is_server_error() {
@@ -1568,7 +1606,11 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
 
     /// The status-endpoint reports `healthy`.
     fn status_is_healthy(&self) -> Result<bool> {
-        match self.status() {
+        block_on(self.status_is_healthy_async())
+    }
+
+    async fn status_is_healthy_async(&self) -> Result<bool> {
+        match self.status_async().await {
             Ok(s) if s.replica_health_status.is_some() => {
                 let healthy = Some(ReplicaHealthStatus::Healthy) == s.replica_health_status;
                 if !healthy {
@@ -1595,16 +1637,54 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
 
     /// Waits until the is_healthy() returns true
     fn await_status_is_healthy(&self) -> Result<()> {
-        retry_with_msg!(
+        block_on(self.await_status_is_healthy_async())
+    }
+
+    async fn await_status_is_healthy_async(&self) -> Result<()> {
+        retry_with_msg_async!(
             &format!("await_status_is_healthy of {}", self.get_public_url()),
-            self.test_env().logger(),
+            &self.test_env().logger(),
             READY_WAIT_TIMEOUT,
             RETRY_BACKOFF,
-            || {
-                self.status_is_healthy()
-                    .and_then(|s| if !s { bail!("Not ready!") } else { Ok(()) })
+            || async {
+                self.status_is_healthy_async().await.and_then(|s| {
+                    if !s {
+                        bail!("Not ready!")
+                    } else {
+                        Ok(())
+                    }
+                })
             }
         )
+        .await
+    }
+
+    /// Checks if the Orchestrator dashboard endpoint is accessible
+    fn is_orchestrator_dashboard_accessible(ip: Ipv6Addr, timeout_secs: u64) -> bool {
+        let dashboard_endpoint = format!("http://[{}]:7070", ip);
+
+        let client = reqwest::blocking::Client::builder()
+            .timeout(Duration::from_secs(timeout_secs))
+            .build()
+            .expect("Failed to build HTTP client");
+
+        let resp = match client.get(&dashboard_endpoint).send() {
+            Ok(resp) => resp,
+            Err(e) => {
+                eprintln!("Failed to send request: {}", e);
+                return false;
+            }
+        };
+
+        if !resp.status().is_success() {
+            eprintln!(
+                "Orchestrator dashboard returned non-success status: {}",
+                resp.status()
+            );
+            return false;
+        }
+
+        resp.text().is_ok()
     }
 
     /// Waits until the is_healthy() returns an error three times in a row
@@ -1627,6 +1707,34 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
                 Ok(_) => {
                     count = 0;
                     Err(anyhow!("Status is still available"))
+                }
+            }
+        )
+    }
+
+    /// Waits until the Orchestrator dashboard endpoint is accessible
+    fn await_orchestrator_dashboard_accessible(&self) -> anyhow::Result<()> {
+        let mut count = 0;
+        retry_with_msg!(
+            &format!(
+                "await_orchestrator_dashboard_accessible for {}",
+                self.get_public_addr().ip()
+            ),
+            self.test_env().logger(),
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || {
+                let ip = match self.get_public_addr().ip() {
+                    IpAddr::V6(ip) => ip,
+                    IpAddr::V4(_) => panic!("Expected IPv6 address"),
+                };
+                if Self::is_orchestrator_dashboard_accessible(ip, 5) {
+                    Ok(())
+                } else {
+                    count += 1;
+                    Err(anyhow::anyhow!(
+                        "Orchestrator dashboard not available, attempt {count}"
+                    ))
                 }
             }
         )
@@ -1662,7 +1770,16 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
 impl HasPublicApiUrl for IcNodeSnapshot {
     fn get_public_url(&self) -> Url {
         let node_record = self.raw_node_record();
-        IcNodeSnapshot::http_endpoint_to_url(&node_record.http.expect("Node doesn't have URL"))
+
+        // API boundary nodes listen on port 443, while replicas listen on port 8080
+        if self.is_api_boundary_node() {
+            match self.get_ip_addr() {
+                IpAddr::V4(ipv4) => Url::parse(&format!("https://{}", ipv4)).unwrap(),
+                IpAddr::V6(ipv6) => Url::parse(&format!("https://[{}]", ipv6)).unwrap(),
+            }
+        } else {
+            IcNodeSnapshot::http_endpoint_to_url(&node_record.http.expect("Node doesn't have URL"))
+        }
     }
 
     fn get_public_addr(&self) -> SocketAddr {
@@ -1670,8 +1787,13 @@ impl HasPublicApiUrl for IcNodeSnapshot {
         let connection_endpoint = node_record.http.expect("Node doesn't have URL");
         SocketAddr::new(
             IpAddr::from_str(&connection_endpoint.ip_addr).expect("Missing IP address in the node"),
-            connection_endpoint.port as u16,
+            0,
         )
+    }
+
+    fn uses_snake_oil_certs(&self) -> bool {
+        let node_record = self.raw_node_record();
+        node_record.domain.is_some()
     }
 
     async fn try_build_default_agent_async(&self) -> Result<Agent, AgentError> {
@@ -2326,17 +2448,6 @@ impl TestEnvAttribute for InitialReplicaVersion {
     fn attribute_name() -> String {
         "initial_replica_version".to_string()
     }
-}
-
-pub fn await_boundary_node_healthy(env: &TestEnv, boundary_node_name: &str) {
-    let boundary_node = env
-        .get_deployed_boundary_node(boundary_node_name)
-        .unwrap()
-        .get_snapshot()
-        .unwrap();
-    boundary_node
-        .await_status_is_healthy()
-        .expect("BN did not come up!");
 }
 
 pub fn emit_group_event(log: &slog::Logger, group: &str) {

@@ -1,5 +1,10 @@
 name: Schedule Rust Benchmarks
 
+# This workflow is designed to execute a list of Rust benchmarks.
+# It runs on a dedicated runner machine labeled 'rust-benchmarks'.
+# Since there's only one machine available, the CI jobs will run one after the other.
+# The dedicated machine is identified as fr1-spm15.
+
 on:
   schedule:
     - cron: "0 1 * * *"
@@ -20,13 +25,13 @@ jobs:
       # see linux-x86-64 runner group
       labels: rust-benchmarks
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2e8185171700872d48fdfb4b08e175fca5be27b3fbbc4d7bed681ec8486f8b1d
+      image: ghcr.io/dfinity/ic-build@sha256:02165696a5201b1a347a28e548c32dc9590d60975c22be26ac1ea7e72573523d
       # running on bare metal machine using ubuntu user
-      options: --user ubuntu -v /cache:/cache
+      options: --user ubuntu
     timeout-minutes: 720 # 12 hours
     strategy:
       matrix:
-        targets:
+        target:
           - "//rs/crypto/..."
           - "//rs/state_manager/..."
           - "//rs/certification/..."
@@ -34,16 +39,47 @@ jobs:
           - "//rs/artifact_pool/..."
           - "//rs/consensus/..."
           - "//rs/ingress_manager/..."
+          - "//rs/embedders:compilation_bench"
+          - "//rs/embedders:heap_bench"
+          - "//rs/embedders:stable_memory_bench"
+          - "//rs/execution_environment:execute_inspect_message_bench"
+          - "//rs/execution_environment:execute_query_bench"
+          - "//rs/execution_environment:execute_update_bench"
+          - "//rs/execution_environment:wasm_instructions_bench"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Run Rust Benchmarks
-        id: rust-benchmarks
-        shell: bash
-        run: |
-          BAZEL_CI_CONFIG="--config=ci" ./ci/scripts/rust-benchmarks.sh
+        uses: ./.github/actions/bazel
         env:
-          CI_JOB_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           RUST_BACKTRACE: "full"
-          TARGETS: ${{ matrix.targets }}
+        with:
+          run: |
+            echo -e "\e[34mRunning rust benchmarks on dedicated machine fr1-spm15!\e[0m"
+
+            while IFS= read -r tgt; do
+                bazel run "$tgt"
+            done < <(bazel query "attr(tags, 'rust_bench', ${{ matrix.target }})")
+
+            while IFS= read -r bench_dir; do
+                echo "bench dir: $bench_dir"
+                echo '{}' | jq -cMr \
+                    --slurpfile benchmark "$bench_dir/benchmark.json" \
+                    --slurpfile estimates "$bench_dir/estimates.json" \
+                    --arg system x86_64-linux \
+                    --arg timestamp "$(date --utc --iso-8601=seconds)" \
+                    --arg rev "$CI_COMMIT_SHA" \
+                    '.benchmark = $benchmark[] |
+                .estimates = $estimates[] |
+                .package = "replica-benchmarks" |
+                .system = $system |
+                .timestamp = $timestamp |
+                .rev = $rev |
+                .revCount = 1' \
+                    >report.json
+                curl --fail --retry 2 -sS -o /dev/null -X POST -H 'Content-Type: application/json' --data @report.json \
+                    "https://elasticsearch.testnet.dfinity.network/ci-performance-test/_doc"
+            done < <(find -L ./bazel-out -type d -path '*/new')
+
+            echo -e "\e[34mRust benchmarks on dedicated machine fr1-spm15 finished.\e[0m"

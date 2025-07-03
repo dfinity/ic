@@ -1,0 +1,55 @@
+load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/consensus/utils",
+    "//rs/interfaces",
+    "//rs/interfaces/registry",
+    "//rs/interfaces/state_manager",
+    "//rs/monitoring/logger",
+    "//rs/monitoring/metrics",
+    "//rs/replicated_state",
+    "//rs/types/types",
+    "@crate_index//:prometheus",
+    "@crate_index//:slog",
+    "@crate_index//:tokio",
+]
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/artifact_pool",
+    "//rs/consensus/mocks",
+    "//rs/test_utilities",
+    "//rs/test_utilities/consensus",
+    "//rs/test_utilities/logger",
+    "//rs/test_utilities/types",
+    "//rs/types/types_test_utils",
+    "@crate_index//:assert_matches",
+]
+
+MACRO_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:strum_macros",
+]
+
+rust_library(
+    name = "certification",
+    srcs = glob(["src/**/*.rs"]),
+    crate_name = "ic_consensus_certification",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.9.0",
+    deps = DEPENDENCIES,
+)
+
+rust_doc(
+    name = "consensus_certification_doc",
+    crate = ":certification",
+)
+
+rust_test(
+    name = "consensus_certification_test",
+    crate = ":certification",
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)

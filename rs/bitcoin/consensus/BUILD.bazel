@@ -4,6 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-error-types",
     "//rs/bitcoin/replica_types",
     "//rs/config",
     "//rs/interfaces",
@@ -16,7 +17,6 @@ DEPENDENCIES = [
     "//rs/registry/helpers",
     "//rs/registry/subnet_features",
     "//rs/replicated_state",
-    "//rs/types/error_types",
     "//rs/types/types",
     "@crate_index//:ic-btc-interface",
     "@crate_index//:prometheus",

@@ -1,4 +1,5 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("//bazel:canbench.bzl", "rust_canbench")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_ic_test")
 
@@ -25,6 +26,7 @@ LIB_DEPS = [
     "@crate_index//:hex",
     "@crate_index//:ic-btc-interface",
     "@crate_index//:ic-cdk",
+    "@crate_index//:ic-management-canister-types",
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:ic-stable-structures",
     "@crate_index//:ic0",
@@ -40,21 +42,35 @@ LIB_DEPS = [
 LIB_PROC_MACRO_DEPS = [
     # Keep sorted.
     "@crate_index//:async-trait",
-    "@crate_index//:ic-cdk-macros",
     "@crate_index//:minicbor-derive",
 ]
 
-rust_library(
-    name = "ckbtc_minter_lib",
-    srcs = glob(
-        ["src/**"],
-        exclude = ["src/main.rs"],
-    ),
-    crate_name = "ic_ckbtc_minter",
-    proc_macro_deps = LIB_PROC_MACRO_DEPS,
-    version = "0.1.0",
-    deps = LIB_DEPS,
-)
+[
+    rust_library(
+        name = name,
+        srcs = glob(
+            ["src/**"],
+            exclude = ["src/main.rs"],
+        ),
+        crate_features = features,
+        crate_name = "ic_ckbtc_minter",
+        proc_macro_deps = LIB_PROC_MACRO_DEPS,
+        version = "0.1.0",
+        deps = LIB_DEPS + extra_deps,
+    )
+    for (name, features, extra_deps) in [
+        (
+            "ckbtc_minter_lib",
+            [],
+            [],
+        ),
+        (
+            "ckbtc_minter_lib-canbench",
+            ["canbench-rs"],
+            ["@crate_index//:canbench-rs"],
+        ),
+    ]
+]
 
 alias(
     name = "minter",
@@ -70,7 +86,6 @@ alias(
         crate_name = "ic_ckbtc_minter_canister",
         proc_macro_deps = [
             # Keep sorted.
-            "@crate_index//:ic-cdk-macros",
         ],
         rustc_env = {
             "CKBTC_MINTER_DID_PATH": "$(execpath :ckbtc_minter.did)",
@@ -80,9 +95,9 @@ alias(
             # Keep sorted.
             ":ckbtc_minter_lib",
             "//packages/ic-dummy-getrandom-for-wasm",
+            "//packages/ic-http-types",
             "//packages/icrc-ledger-types:icrc_ledger_types",
             "//rs/rust_canisters/canister_log",
-            "//rs/rust_canisters/http_types",
             "@crate_index//:candid",
             "@crate_index//:ic-btc-interface",
             "@crate_index//:ic-cdk",
@@ -109,6 +124,7 @@ rust_test(
     crate = ":ckbtc_minter_lib",
     deps = [
         # Keep sorted.
+        "@crate_index//:assert_matches",
         "@crate_index//:bitcoin",
         "@crate_index//:maplit",
         "@crate_index//:mockall",
@@ -128,6 +144,24 @@ rust_test(
     deps = [
         # Keep sorted.
         "@crate_index//:candid_parser",
+    ],
+)
+
+rust_binary(
+    name = "ckbtc_minter_dump_stable_memory",
+    testonly = True,
+    srcs = ["tests/dump_stable_memory.rs"],
+    deps = [
+        # Keep sorted.
+        ":ckbtc_minter_lib",
+        "//packages/pocket-ic",
+        "//rs/config",
+        "//rs/test_utilities/load_wasm",
+        "//rs/types/base_types",
+        "@crate_index//:candid",
+        "@crate_index//:flate2",
+        "@crate_index//:ic-btc-interface",
+        "@crate_index//:serde",
     ],
 )
 
@@ -156,14 +190,14 @@ rust_ic_test(
     name = "ckbtc_minter_tests",
     srcs = ["tests/tests.rs"],
     data = [
-        ":ckbtc_minter_debug.wasm",
+        ":ckbtc_minter_debug.wasm.gz",
         "//rs/bitcoin/checker:btc_checker_canister",
         "//rs/bitcoin/mock:bitcoin_canister_mock",
         "//rs/ledger_suite/icrc1/ledger:ledger_canister",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/bitcoin/ckbtc/minter",
-        "IC_CKBTC_MINTER_WASM_PATH": "$(rootpath :ckbtc_minter_debug.wasm)",
+        "IC_CKBTC_MINTER_WASM_PATH": "$(rootpath :ckbtc_minter_debug.wasm.gz)",
         "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
         "IC_BTC_CHECKER_WASM_PATH": "$(rootpath //rs/bitcoin/checker:btc_checker_canister)",
         "IC_BITCOIN_CANISTER_MOCK_WASM_PATH": "$(rootpath //rs/bitcoin/mock:bitcoin_canister_mock)",
@@ -171,6 +205,7 @@ rust_ic_test(
     deps = [
         # Keep sorted.
         ":ckbtc_minter_lib",
+        "//packages/ic-http-types",
         "//packages/ic-metrics-assert",
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/bitcoin/checker:btc_checker_lib",
@@ -179,7 +214,6 @@ rust_ic_test(
         "//rs/ledger_suite/icrc1",
         "//rs/ledger_suite/icrc1/ledger",
         "//rs/rust_canisters/canister_test",
-        "//rs/rust_canisters/http_types",
         "//rs/state_machine_tests",
         "//rs/test_utilities/load_wasm",
         "//rs/types/base_types",
@@ -188,9 +222,84 @@ rust_ic_test(
         "@crate_index//:bitcoin",
         "@crate_index//:candid",
         "@crate_index//:ic-btc-interface",
+        "@crate_index//:ic-cdk",
         "@crate_index//:minicbor",
         "@crate_index//:regex",
         "@crate_index//:serde_bytes",
+        "@crate_index//:serde_json",
+    ],
+)
+
+genrule(
+    name = "mainnet_events.mem.gz",
+    testonly = True,
+    srcs = [
+        ":ckbtc_minter_dump_stable_memory",
+        "test_resources/mainnet_events.gz",
+        ":ckbtc_minter_debug.wasm.gz",
+        "//:pocket-ic-server",
+        "//rs/bitcoin/mock:bitcoin_canister_mock",
+    ],
+    outs = ["test_resources/mainnet_events.mem.gz"],
+    cmd_bash = """
+    export CARGO_MANIFEST_DIR=rs/bitcoin/ckbtc/minter
+    export IC_BITCOIN_CANISTER_MOCK_WASM_PATH="$(location //rs/bitcoin/mock:bitcoin_canister_mock)"
+    export IC_CKBTC_MINTER_WASM_PATH="$(location :ckbtc_minter_debug.wasm.gz)"
+    export POCKET_IC_BIN="$(location //:pocket-ic-server)"
+
+    $(location :ckbtc_minter_dump_stable_memory) $(location test_resources/mainnet_events.gz) $@
+""",
+    # For some unknown reason this target can take well over an hour to run on MacOS x86_64 so we exclude that platform:
+    target_compatible_with = select({
+        "@platforms//os:osx": ["@platforms//cpu:arm"],
+        "//conditions:default": [],
+    }),
+    visibility = ["//visibility:private"],
+)
+
+rust_canbench(
+    name = "ckbtc_minter_canbench",
+    srcs = ["src/main.rs"],
+    compile_data = [":ckbtc_minter.did"],
+    data = ["mainnet_events.mem.gz"],
+    env = {
+        "CANBENCH_STABLE_MEMORY_FILE": "$(location mainnet_events.mem.gz)",
+        # the following hex arg was produced by command:
+        #
+        #   didc encode -d ./ckbtc_minter.did -t '(MinterArg)' '(
+        #     variant {
+        #       Init = record {
+        #         ecdsa_key_name = "master_ecdsa_public_key";
+        #         mode = variant { GeneralAvailability };
+        #         retrieve_btc_min_amount = 100_000 : nat64;
+        #         ledger_id = principal "lxzze-o7777-77777-aaaaa-cai";
+        #         max_time_in_queue_nanos = 100 : nat64;
+        #         btc_network = variant { Mainnet };
+        #         check_fee = opt (100 : nat64);
+        #         btc_checker_principal = opt principal "lz3um-vp777-77777-aaaba-cai";
+        #         min_confirmations = opt (6 : nat32);
+        #       }
+        #     }
+        #   )'
+        "CANBENCH_INIT_ARGS_HEX": "4449444c0b6b02fcb88b840301b0ced18403096e026c08f5d19a6b03e3a683c30404b6b8ba8405078ebdcfc608078fc0fec00a07b682e7c90b03f18c92d50b08cdb2eee10c076e686e056b0496bab03c068b98eaed020682b8f0da047f8390999e057f6d686e786e796c0bf5d19a6b03b6a9f6dc0271e3a683c30405b6b8ba840578f1f7fcf706688ebdcfc6087880b3d0ed090a8fc0fec00a07b682e7c90b03f18c92d50b08cdb2eee10c076b03a4d3bb457f8687acf9047fabdeaed9087f01000100176d61737465725f65636473615f7075626c69635f6b657903a086010000000000010affffffffffe00000010164000000000000000001640000000000000001010affffffffffe000020101010600000000",
+    },
+    proc_macro_deps = LIB_PROC_MACRO_DEPS,
+    results_file = "canbench/results.yml",
+    rustc_env = {
+        "CKBTC_MINTER_DID_PATH": "$(execpath :ckbtc_minter.did)",
+    },
+    visibility = ["//visibility:private"],
+    deps = [
+        # Keep sorted.
+        ":ckbtc_minter_lib-canbench",
+        "//packages/ic-dummy-getrandom-for-wasm",
+        "//packages/ic-http-types",
+        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//rs/rust_canisters/canister_log",
+        "@crate_index//:candid",
+        "@crate_index//:ic-btc-interface",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:ic-metrics-encoder",
         "@crate_index//:serde_json",
     ],
 )

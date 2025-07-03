@@ -1,16 +1,18 @@
 {
   "deployment": {
-    "name": "mainnet",
+    "deployment_environment": "mainnet",
     "mgmt_mac": null
   },
   "logging": {
-    "hosts": ""
+    "elasticsearch_hosts": null,
+    "elasticsearch_tags": null
   },
   "nns": {
-    "url": "NNS_URL"
+    "urls": NNS_URLS
   },
-  "resources": {
+  "vm_resources": {
     "memory": "490",
-    "cpu": "kvm"
+    "cpu": "kvm",
+    "nr_of_vcpus": 64
   }
 }

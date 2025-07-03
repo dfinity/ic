@@ -1,8 +1,13 @@
 //! Fluent assertions for metrics.
 
+#![forbid(unsafe_code)]
 #![forbid(missing_docs)]
 
-use candid::{CandidType, Decode, Deserialize, Encode};
+use async_trait::async_trait;
+use candid::{Decode, Encode};
+use ic_http_types::{HttpRequest, HttpResponse};
+#[cfg(feature = "pocket_ic")]
+pub use pocket_ic_query_call::{PocketIcAsyncHttpQuery, PocketIcHttpQuery};
 use regex::Regex;
 use std::fmt::Debug;
 
@@ -12,7 +17,8 @@ use std::fmt::Debug;
 ///
 /// ```rust
 /// use ic_metrics_assert::{MetricsAssert, PocketIcHttpQuery};
-/// use pocket_ic::{management_canister::CanisterId, PocketIc};
+/// use pocket_ic::PocketIc;
+/// use ic_management_canister_types::CanisterId;
 ///
 /// struct Setup {
 ///     env: PocketIc,
@@ -49,39 +55,35 @@ use std::fmt::Debug;
 ///         .assert_contains_metric_matching("completed action 1")
 ///         .assert_does_not_contain_metric_matching(".*trap.*");
 /// }
+/// ```
 pub struct MetricsAssert<T> {
     actual: T,
     metrics: Vec<String>,
 }
 
 impl<T> MetricsAssert<T> {
-    /// Initializes an instance of [MetricsAssert] by querying the metrics from the `/metrics`
-    /// endpoint of a canister via the [CanisterHttpQuery::http_query] method.
+    /// Initializes an instance of [`MetricsAssert`] by querying the metrics from the `/metrics`
+    /// endpoint of a canister via the [`CanisterHttpQuery::http_query`] method.
     pub fn from_http_query<E>(actual: T) -> Self
     where
         T: CanisterHttpQuery<E>,
         E: Debug,
     {
-        let request = http::HttpRequest {
-            method: "GET".to_string(),
-            url: "/metrics".to_string(),
-            headers: Default::default(),
-            body: Default::default(),
-        };
-        let response = Decode!(
-            &actual
-                .http_query(Encode!(&request).expect("failed to encode HTTP request"))
-                .expect("failed to retrieve metrics"),
-            http::HttpResponse
-        )
-        .unwrap();
-        assert_eq!(response.status_code, 200_u16);
-        let metrics = String::from_utf8_lossy(response.body.as_slice())
-            .trim()
-            .split('\n')
-            .map(|line| line.to_string())
-            .collect::<Vec<_>>();
-        Self { metrics, actual }
+        let metrics =
+            decode_metrics_response_or_unwrap(actual.http_query(encoded_metrics_request()));
+        Self { actual, metrics }
+    }
+
+    /// Initializes an instance of [`MetricsAssert`] by querying the metrics from the `/metrics`
+    /// endpoint of a canister via the [`AsyncCanisterHttpQuery::http_query`] method.
+    pub async fn from_async_http_query<E>(actual: T) -> Self
+    where
+        T: AsyncCanisterHttpQuery<E>,
+        E: Debug,
+    {
+        let metrics =
+            decode_metrics_response_or_unwrap(actual.http_query(encoded_metrics_request()).await);
+        Self { actual, metrics }
     }
 
     /// Returns the internal instance being tested.
@@ -122,25 +124,51 @@ impl<T> MetricsAssert<T> {
     }
 }
 
+fn encoded_metrics_request() -> Vec<u8> {
+    let request = HttpRequest {
+        method: "GET".to_string(),
+        url: "/metrics".to_string(),
+        headers: Default::default(),
+        body: Default::default(),
+    };
+    Encode!(&request).expect("failed to encode HTTP request")
+}
+
+fn decode_metrics_response_or_unwrap<E: Debug>(response: Result<Vec<u8>, E>) -> Vec<String> {
+    let response = Decode!(&response.expect("failed to retrieve metrics"), HttpResponse)
+        .expect("failed to decode HTTP response");
+    assert_eq!(response.status_code, 200_u16);
+    String::from_utf8_lossy(response.body.as_slice())
+        .trim()
+        .split('\n')
+        .map(|line| line.to_string())
+        .collect()
+}
+
 /// Trait providing the ability to perform an HTTP request to a canister.
 pub trait CanisterHttpQuery<E: Debug> {
     /// Sends a serialized HTTP request to a canister and returns the serialized HTTP response.
     fn http_query(&self, request: Vec<u8>) -> Result<Vec<u8>, E>;
 }
 
-#[cfg(feature = "pocket_ic")]
-pub use pocket_ic_query_call::PocketIcHttpQuery;
+/// Trait providing the ability to perform an async HTTP request to a canister.
+#[async_trait]
+pub trait AsyncCanisterHttpQuery<E: Debug> {
+    /// Sends a serialized HTTP request to a canister and returns the serialized HTTP response.
+    async fn http_query(&self, request: Vec<u8>) -> Result<Vec<u8>, E>;
+}
 
 #[cfg(feature = "pocket_ic")]
 mod pocket_ic_query_call {
     use super::*;
     use candid::Principal;
-    use pocket_ic::{management_canister::CanisterId, PocketIc, RejectResponse};
+    use ic_management_canister_types::CanisterId;
+    use pocket_ic::{nonblocking, PocketIc, RejectResponse};
 
-    /// Provides an implementation of the [CanisterHttpQuery] trait in the case where the canister
-    /// HTTP requests are made through an instance of [PocketIc].
+    /// Provides an implementation of the [`CanisterHttpQuery`] trait in the case where the canister
+    /// HTTP requests are made through an instance of [`PocketIc`].
     pub trait PocketIcHttpQuery {
-        /// Returns a reference to the instance of [PocketIc] through which the HTTP requests are made.
+        /// Returns a reference to the instance of [`PocketIc`] through which the HTTP requests are made.
         fn get_pocket_ic(&self) -> &PocketIc;
 
         /// Returns the ID of the canister to which HTTP requests will be made.
@@ -157,24 +185,29 @@ mod pocket_ic_query_call {
             )
         }
     }
-}
 
-mod http {
-    use super::*;
-    use serde_bytes::ByteBuf;
+    /// Provides an implementation of the [`AsyncCanisterHttpQuery`] trait in the case where the
+    /// canister HTTP requests are made through an instance of [`nonblocking::PocketIc`].
+    pub trait PocketIcAsyncHttpQuery {
+        /// Returns a reference to the instance of [`nonblocking::PocketIc`] through which the HTTP
+        /// requests are made.
+        fn get_pocket_ic(&self) -> &nonblocking::PocketIc;
 
-    #[derive(Clone, Debug, CandidType, Deserialize)]
-    pub struct HttpRequest {
-        pub method: String,
-        pub url: String,
-        pub headers: Vec<(String, String)>,
-        pub body: ByteBuf,
+        /// Returns the ID of the canister to which HTTP requests will be made.
+        fn get_canister_id(&self) -> CanisterId;
     }
 
-    #[derive(Clone, Debug, CandidType, Deserialize)]
-    pub struct HttpResponse {
-        pub status_code: u16,
-        pub headers: Vec<(String, String)>,
-        pub body: ByteBuf,
+    #[async_trait]
+    impl<T: PocketIcAsyncHttpQuery + Send + Sync> AsyncCanisterHttpQuery<RejectResponse> for T {
+        async fn http_query(&self, request: Vec<u8>) -> Result<Vec<u8>, RejectResponse> {
+            self.get_pocket_ic()
+                .query_call(
+                    self.get_canister_id(),
+                    Principal::anonymous(),
+                    "http_request",
+                    request,
+                )
+                .await
+        }
     }
 }

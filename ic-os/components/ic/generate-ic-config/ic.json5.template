@@ -24,7 +24,7 @@
     // ============================================
     // Configuration of the domain name
     // ============================================
-    domain: "{{ domain }}",
+    domain: "{{ domain_name }}",
 
     // ============================================
     // Configuration of registry client
@@ -176,6 +176,13 @@
     firewall: {
         config_file: "/run/ic-node/nftables-ruleset/nftables.conf",
         file_template: "table filter {\n\
+  define icmp_v4_types_accept = {\n\
+    destination-unreachable,\n\
+    time-exceeded,\n\
+    echo-request,\n\
+    echo-reply,\n\
+  }\n\
+\n\
   set rate_limit {\n\
     type ipv4_addr\n\
     size 65535\n\
@@ -199,9 +206,7 @@
     #   - The rule allows a maximum of <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> persistent connections to any ip address.\n\
     #   - The rule drops all new connections that goes over the configured limit.\n\
     ct state new add @connection_limit { ip saddr ct count over <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> } counter name connection_limit_v4_counter drop\n\
-    icmp type parameter-problem accept\n\
-    icmp type echo-request accept\n\
-    icmp type echo-reply accept\n\
+    icmp type $icmp_v4_types_accept accept\n\
     <<IPv4_TCP_RULES>>\n\
     <<IPv4_UDP_RULES>>\n\
     ct state { invalid } drop\n\
@@ -222,6 +227,17 @@
 }\n\
 \n\
 table ip6 filter {\n\
+  define icmp_v6_types_accept = {\n\
+    destination-unreachable,\n\
+    packet-too-big,\n\
+    time-exceeded,\n\
+    echo-request,\n\
+    echo-reply,\n\
+    nd-router-advert,\n\
+    nd-neighbor-solicit,\n\
+    nd-neighbor-advert,\n\
+  }\n\
+\n\
   set rate_limit {\n\
     type ipv6_addr\n\
     size 65535\n\
@@ -247,15 +263,7 @@ table ip6 filter {\n\
     #   - The rule allows a maximum of <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> persistent connections to any ip6 address.\n\
     #   - The rule drops all new connections that goes over the configured limit.\n\
     ct state new add @connection_limit { ip6 saddr ct count over <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> } counter name connection_limit_v6_counter drop\n\
-    icmpv6 type destination-unreachable accept\n\
-    icmpv6 type packet-too-big accept\n\
-    icmpv6 type time-exceeded accept\n\
-    icmpv6 type parameter-problem accept\n\
-    icmpv6 type echo-request accept\n\
-    icmpv6 type echo-reply accept\n\
-    icmpv6 type nd-router-advert accept\n\
-    icmpv6 type nd-neighbor-solicit accept\n\
-    icmpv6 type nd-neighbor-advert accept\n\
+    icmpv6 type $icmp_v6_types_accept accept\n\
     ip6 saddr { {{ ipv6_prefix }} } ct state { new } tcp dport { 7070, 9090, 9091, 9100, 19531, 19100 } accept\n\
     ip6 saddr { hostos } ct state { new } tcp dport { 42372 } accept # Allow access from HostOS metrics-proxy so GuestOS metrics-proxy can proxy certain metrics to HostOS.\n\
     <<IPv6_TCP_RULES>>\n\
@@ -270,7 +278,7 @@ table ip6 filter {\n\
   chain OUTPUT {\n\
     type filter hook output priority 0; policy accept;\n\
     meta skuid ic-http-adapter ip6 daddr { ::1/128 } ct state { new } tcp dport { 1-19999 } reject # Block restricted localhost ic-http-adapter HTTPS access\n\
-    meta skuid ic-http-adapter ip6 daddr { 2a00:fb01:400:42::/64, 2001:4d78:40d::/48, 2602:fb2b:110::/48, 2607:fb58:9005::/48, 2602:fb2b:100::/48, 2607:f6f0:3004::/48, 2602:fb2b:120::/48, 2a05:d01c:d9:2b00::/56, 2a05:d01c:e2c:a700::/56 } ct state { new } tcp dport { 1-19999 } reject # Block restricted outbound ic-http-adapter HTTPS access\n\
+    meta skuid ic-http-adapter ip6 daddr { 2a00:fb01:400:42::/64, 2602:fb2b:110::/48, 2602:fb2b:100::/48, 2602:fb2b:120::/48 } ct state { new } tcp dport { 1-19999 } reject # Block restricted outbound ic-http-adapter HTTPS access\n\
     <<IPv6_OUTBOUND_RULES>>\n\
   }\n\
 }\n",
@@ -285,8 +293,6 @@ table ip6 filter {\n\
           ipv6_prefixes: [
             "2001:438:fffd:11c::/64",
             "2001:470:1:c76::/64",
-            "2001:4d78:400:10a::/64",
-            "2001:4d78:40d::/48",
             "2602:fb2b:110::/48",
             "2001:920:401a:1706::/64",
             "2001:920:401a:1708::/64",
@@ -328,11 +334,9 @@ table ip6 filter {\n\
             "2604:7e00:50::/64",
             "2604:b900:4001:76::/64",
             "2607:f1d0:10:1::/64",
-            "2607:f6f0:3004::/48",
             "2602:fb2b:120::/48",
             "2607:f758:1220::/64",
             "2607:f758:c300::/64",
-            "2607:fb58:9005::/48",
             "2602:fb2b:100::/48",
             "2607:ff70:3:2::/64",
             "2610:190:6000:1::/64",
@@ -488,11 +492,8 @@ table ip6 filter {\n\
             ipv6_prefixes: [
                 "2a00:fb01:400::/56",
                 "2602:fb2b:120::/48",
-                "2607:f6f0:3004::/48",
                 "2602:fb2b:110::/48",
-                "2001:4d78:40d::/48",
                 "2602:fb2b:100::/48",
-                "2607:fb58:9005::/48",
                 "2a0b:21c0:4006:100::/56",
                 "fda6:8d22:43e1::/48",
             ],

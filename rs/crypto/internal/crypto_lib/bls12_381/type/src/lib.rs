@@ -22,7 +22,7 @@
 mod interpolation;
 mod poly;
 
-pub use interpolation::{InterpolationError, LagrangeCoefficients};
+pub use interpolation::{InterpolationError, LagrangeCoefficients, NodeIndices};
 pub use poly::Polynomial;
 
 /// The index of a node.
@@ -326,7 +326,7 @@ impl Scalar {
     ///
     /// Note that
     /// * If `num_bits` overflows 254 (the floored [`Scalar`] bit length), then
-    ///    internally the `num_bits` is set to 254.
+    ///   internally the `num_bits` is set to 254.
     /// * The MSB of the returned [`Scalar`] is always 0.
     pub fn random_sparse(rng: &mut (impl Rng + CryptoRng), num_bits: u8) -> Scalar {
         let set_bit = |bytes: &mut [u8], i: u8| {
@@ -386,7 +386,7 @@ impl Scalar {
 
         let t_bits = std::mem::size_of::<u64>() * 8;
         let n_bits = std::cmp::min(255, t_bits - n.leading_zeros() as usize);
-        let n_bytes = (n_bits + 7) / 8;
+        let n_bytes = n_bits.div_ceil(8);
         let n_mask = if n_bits % 8 == 0 {
             0xFF
         } else {

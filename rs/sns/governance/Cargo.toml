@@ -36,12 +36,11 @@ hex = { workspace = true }
 futures = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-cdk = { workspace = true }
-ic-cdk-macros = { workspace = true }
 ic-cdk-timers = { workspace = true }
-ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
 ic-canister-log = { path = "../../rust_canisters/canister_log" }
 ic-canister-profiler = { path = "../../rust_canisters/canister_profiler" }
 ic-crypto-sha2 = { path = "../../crypto/sha2/" }
+ic-http-types = { path = "../../../packages/ic-http-types" }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 icrc-ledger-client = { path = "../../../packages/icrc-ledger-client" }
 ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
@@ -84,6 +83,7 @@ serde_json = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 canbench-rs = { version = "0.1.7", optional = true }
+thiserror = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 ic-types = { path = "../../types/types" }

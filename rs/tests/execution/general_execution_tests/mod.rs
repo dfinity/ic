@@ -7,4 +7,5 @@ pub mod ingress_rate_limiting;
 pub mod malicious_input;
 pub mod nns_shielding;
 pub mod queries;
+pub mod security;
 pub mod wasm_chunk_store;

@@ -1,19 +1,26 @@
-use super::{decode_certified_deltas, CertificationError};
+use super::*;
+use futures_util::FutureExt;
 use ic_certification_test_utils::{CertificateBuilder, CertificateData};
+use ic_crypto_sha2::Sha256;
 use ic_crypto_tree_hash::{
     flatmap, Digest, FlatMap, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree,
     WitnessGenerator,
 };
-use ic_interfaces_registry::RegistryTransportRecord;
+use ic_interfaces_registry::RegistryRecord;
 use ic_registry_transport::{
     delete,
-    pb::v1::{CertifiedResponse, RegistryAtomicMutateRequest, RegistryMutation},
-    upsert,
+    pb::v1::{
+        high_capacity_registry_mutation, registry_mutation, CertifiedResponse,
+        HighCapacityRegistryMutation, LargeValueChunkKeys, RegistryAtomicMutateRequest,
+        RegistryMutation,
+    },
+    upsert, MockGetChunk,
 };
 use ic_types::{
     crypto::threshold_sig::ThresholdSigPublicKey, crypto::CombinedThresholdSig, CanisterId,
     RegistryVersion, Time,
 };
+use pretty_assertions::assert_eq;
 use prost::Message;
 use std::string::ToString;
 
@@ -35,11 +42,32 @@ impl GarbleResponse {
 
 type EncodedResponse = Vec<u8>;
 
-fn make_certified_delta(
-    deltas: Vec<RegistryAtomicMutateRequest>,
+fn decode_certified_deltas_no_chunks(
+    since_version: u64,
+    canister_id: &CanisterId,
+    nns_pk: &ThresholdSigPublicKey,
+    payload: &[u8],
+) -> Result<(Vec<RegistryRecord>, RegistryVersion, Time), CertificationError> {
+    decode_certified_deltas(
+        since_version,
+        canister_id,
+        nns_pk,
+        payload,
+        &MockGetChunk::new(),
+    )
+    .now_or_never()
+    .unwrap()
+}
+
+fn make_certified_delta<AtomicMutation>(
+    deltas: Vec<AtomicMutation>,
     selection: impl std::ops::RangeBounds<u64>,
     garble_response: GarbleResponse,
-) -> (CanisterId, ThresholdSigPublicKey, EncodedResponse) {
+) -> (CanisterId, ThresholdSigPublicKey, EncodedResponse)
+where
+    // TODO(NNS1-3679): No generic; just HighCapacityRegistryAtomicMutateRequest.
+    AtomicMutation: prost::Message,
+{
     let cid = CanisterId::from_u64(1);
 
     let mut encoded_version = vec![];
@@ -117,16 +145,16 @@ fn make_certified_delta(
     (cid, pk, encoded_response)
 }
 
-fn set_key(version: u64, k: impl ToString, v: impl AsRef<[u8]>) -> RegistryTransportRecord {
-    RegistryTransportRecord {
+fn set_key(version: u64, k: impl ToString, v: impl AsRef<[u8]>) -> RegistryRecord {
+    RegistryRecord {
         version: RegistryVersion::from(version),
         key: k.to_string(),
         value: Some(v.as_ref().to_vec()),
     }
 }
 
-fn rem_key(version: u64, k: impl ToString) -> RegistryTransportRecord {
-    RegistryTransportRecord {
+fn rem_key(version: u64, k: impl ToString) -> RegistryRecord {
+    RegistryRecord {
         version: RegistryVersion::from(version),
         key: k.to_string(),
         value: None,
@@ -148,7 +176,7 @@ fn test_decode_no_update() {
         GarbleResponse::LeaveAsIs,
     );
     assert_eq!(
-        decode_certified_deltas(1, &cid, &pk, &payload[..]).unwrap(),
+        decode_certified_deltas_no_chunks(1, &cid, &pk, &payload[..]).unwrap(),
         (
             vec![],
             RegistryVersion::from(1u64),
@@ -165,7 +193,7 @@ fn test_decode_single_delta() {
         GarbleResponse::LeaveAsIs,
     );
     assert_eq!(
-        decode_certified_deltas(0, &cid, &pk, &payload[..]).unwrap(),
+        decode_certified_deltas_no_chunks(0, &cid, &pk, &payload[..]).unwrap(),
         (
             vec![set_key(1, "key", "value")],
             RegistryVersion::from(1u64),
@@ -187,7 +215,7 @@ fn test_decode_prefix() {
     );
 
     assert_eq!(
-        decode_certified_deltas(0, &cid, &pk, &payload[..]).unwrap(),
+        decode_certified_deltas_no_chunks(0, &cid, &pk, &payload[..]).unwrap(),
         (
             vec![
                 set_key(1, "key1", "value1"),
@@ -210,7 +238,7 @@ fn test_decode_bad_root_hash() {
         1..=1,
         GarbleResponse::OverrideCertifiedData(bad_digest.clone()),
     );
-    match decode_certified_deltas(0, &cid, &pk, &payload[..]) {
+    match decode_certified_deltas_no_chunks(0, &cid, &pk, &payload[..]) {
         Err(CertificationError::CertifiedDataMismatch { certified, .. })
             if &certified[..] == bad_digest.as_bytes() => {}
         other => panic!(
@@ -229,7 +257,7 @@ fn test_decode_bad_sig() {
         1..=1,
         GarbleResponse::OverrideSignature(bad_sig),
     );
-    match decode_certified_deltas(0, &cid, &pk, &payload[..]) {
+    match decode_certified_deltas_no_chunks(0, &cid, &pk, &payload[..]) {
         Err(CertificationError::InvalidSignature(_)) => (),
         other => panic!("Expected InvalidSignature error, got {:?}", other),
     }
@@ -248,7 +276,7 @@ fn test_missing_tail_is_ok() {
         GarbleResponse::DropVersion(4),
     );
     assert_eq!(
-        decode_certified_deltas(0, &cid, &pk, &payload[..]).unwrap(),
+        decode_certified_deltas_no_chunks(0, &cid, &pk, &payload[..]).unwrap(),
         (
             vec![
                 set_key(1, "key1", "value1"),
@@ -271,7 +299,7 @@ fn test_decode_missing_version() {
         1..=2,
         GarbleResponse::DropVersion(1),
     );
-    match decode_certified_deltas(0, &cid, &pk, &payload[..]) {
+    match decode_certified_deltas_no_chunks(0, &cid, &pk, &payload[..]) {
         Err(CertificationError::InvalidDeltas(_)) => (),
         other => panic!("Expected InvalidDeltas error, got {:?}", other),
     }
@@ -288,7 +316,7 @@ fn test_decode_missing_middle_version() {
         1..=3,
         GarbleResponse::DropVersion(2),
     );
-    match decode_certified_deltas(0, &cid, &pk, &payload[..]) {
+    match decode_certified_deltas_no_chunks(0, &cid, &pk, &payload[..]) {
         Err(CertificationError::InvalidDeltas(_)) => (),
         other => panic!("Expected InvalidDeltas error, got {:?}", other),
     }
@@ -305,8 +333,131 @@ fn test_decode_empty_prefix() {
         1..1,
         GarbleResponse::LeaveAsIs,
     );
-    match decode_certified_deltas(0, &cid, &pk, &payload[..]) {
+    match decode_certified_deltas_no_chunks(0, &cid, &pk, &payload[..]) {
         Err(CertificationError::InvalidDeltas(_)) => (),
         other => panic!("Expected InvalidDeltas error, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_honest_chunked() {
+    // Step 1: Prepare the world.
+
+    let chunk_contents = vec![
+        b"It was the best of times.\n".to_vec(),
+        b"It was the worst of times.\n".to_vec(),
+        b"It was the age of foolishness.\n".to_vec(),
+        b"It was the epoch of belief.\n".to_vec(),
+    ];
+
+    let chunk_content_sha256s = chunk_contents
+        .iter()
+        .map(|chunk_content| Sha256::hash(chunk_content).to_vec())
+        .collect::<Vec<Vec<u8>>>();
+
+    let mut get_chunk = MockGetChunk::new();
+    for (content, content_sha256) in chunk_contents.iter().zip(chunk_content_sha256s.iter()) {
+        get_chunk
+            .expect_get_chunk_without_validation()
+            .with(mockall::predicate::eq(content_sha256.clone()))
+            .times(1)
+            .return_const(Ok(content.clone()));
+    }
+
+    let (cid, pk, payload) = make_certified_delta(
+        vec![HighCapacityRegistryAtomicMutateRequest {
+            mutations: vec![HighCapacityRegistryMutation {
+                key: b"giant_blob".to_vec(),
+                mutation_type: registry_mutation::Type::Insert as i32,
+                content: Some(
+                    high_capacity_registry_mutation::Content::LargeValueChunkKeys(
+                        LargeValueChunkKeys {
+                            chunk_content_sha256s,
+                        },
+                    ),
+                ),
+            }],
+            preconditions: vec![],
+            timestamp_nanoseconds: 1735689600000000000, // Jan 1, 2025 midnight UTC
+        }],
+        1..=1,
+        GarbleResponse::LeaveAsIs,
+    );
+
+    // Step 2: Call the code under test.
+    let result = decode_certified_deltas(0, &cid, &pk, &payload[..], &get_chunk)
+        .now_or_never()
+        .unwrap()
+        .unwrap();
+
+    // Step 3: Verify result(s).
+    let monolithic_blob = chunk_contents
+        .clone()
+        .into_iter()
+        .flatten()
+        .collect::<Vec<u8>>();
+    assert_eq!(
+        result,
+        (
+            vec![set_key(1, "giant_blob", monolithic_blob)],
+            RegistryVersion::from(1u64),
+            Time::from_nanos_since_unix_epoch(REPLICA_TIME),
+        ),
+    );
+}
+
+#[test]
+fn test_evil_chunked() {
+    // Step 1: Prepare the world.
+
+    let chunk_content = b"response from an honest node".to_vec();
+
+    let chunk_content_sha256 = Sha256::hash(&chunk_content).to_vec();
+
+    let mut get_chunk = MockGetChunk::new();
+    get_chunk
+        .expect_get_chunk_without_validation()
+        .with(mockall::predicate::eq(chunk_content_sha256.clone()))
+        .times(1)
+        .return_const(Ok(b"DO NOT BELIEVE THE LIES OF THIS EVIL NODE".to_vec()));
+
+    // Same as test_honest_chunked.
+    let (cid, pk, payload) = make_certified_delta(
+        vec![HighCapacityRegistryAtomicMutateRequest {
+            mutations: vec![HighCapacityRegistryMutation {
+                key: b"giant_blob".to_vec(),
+                mutation_type: registry_mutation::Type::Insert as i32,
+                content: Some(
+                    high_capacity_registry_mutation::Content::LargeValueChunkKeys(
+                        LargeValueChunkKeys {
+                            chunk_content_sha256s: vec![chunk_content_sha256],
+                        },
+                    ),
+                ),
+            }],
+            preconditions: vec![],
+            timestamp_nanoseconds: 1735689600000000000, // Jan 1, 2025 midnight UTC
+        }],
+        1..=1,
+        GarbleResponse::LeaveAsIs,
+    );
+
+    // Step 2: Call the code under test.
+    let result = decode_certified_deltas(0, &cid, &pk, &payload[..], &get_chunk)
+        .now_or_never()
+        .unwrap();
+
+    // Step 3: Verify result(s).
+    match result {
+        Err(CertificationError::DechunkifyingFailed(
+            ic_registry_transport::Error::UnknownError(err),
+        )) => {
+            let message = err.to_lowercase();
+            for key_word in ["chunk", "hash", "match"] {
+                assert!(message.contains(key_word), "{} not in {}", key_word, err);
+            }
+        }
+
+        _ => panic!("{:?}", result),
     }
 }

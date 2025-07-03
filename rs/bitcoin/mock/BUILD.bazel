@@ -8,7 +8,6 @@ rust_library(
     name = "mock",
     srcs = ["src/lib.rs"],
     crate_name = "ic_bitcoin_canister_mock",
-    proc_macro_deps = ["@crate_index//:ic-cdk-macros"],
     deps = [
         # Keep sorted.
         "@crate_index//:candid",
@@ -21,13 +20,11 @@ rust_canister(
     name = "bitcoin_canister_mock",
     srcs = ["src/main.rs"],
     crate_name = "ic_bitcoin_canister_mock",
-    proc_macro_deps = ["@crate_index//:ic-cdk-macros"],
     service_file = "bitcoin_mock.did",
     version = "0.1.0",
     deps = [
         # Keep sorted.
         ":mock",
-        "//rs/bitcoin/ckbtc/minter",
         "@crate_index//:bech32",
         "@crate_index//:byteorder",
         "@crate_index//:candid",
@@ -40,11 +37,14 @@ rust_canister(
 
 rust_test(
     name = "mock_tests",
-    crate = ":mock",
+    crate = ":_wasm_bitcoin_canister_mock",
     data = ["bitcoin_mock.did"],
     env = {
         "CARGO_MANIFEST_DIR": "rs/bitcoin/mock",
     },
+    deps = [
+        "@crate_index//:candid_parser",
+    ],
 )
 
 rust_ic_test(
@@ -59,7 +59,6 @@ rust_ic_test(
         "IC_BITCOIN_CANISTER_MOCK_WASM_PATH": "$(rootpath :bitcoin_canister_mock)",
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
     },
-    proc_macro_deps = ["@crate_index//:ic-cdk-macros"],
     deps = [
         # Keep sorted.
         ":mock",

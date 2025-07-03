@@ -298,7 +298,7 @@ where
         let data_provider = Arc::new(data_provider);
         let fake_registry_client = Arc::new(FakeRegistryClient::new(data_provider.clone()));
         fake_registry_client.update_to_latest_version();
-        let registry = fake_registry_client.clone() as Arc<dyn RegistryClient + Send + Sync>;
+        let registry = fake_registry_client.clone();
         let crypto = setup_crypto_provider(
             &config.crypto,
             rt.handle().clone(),
@@ -406,8 +406,6 @@ impl LocalTestRuntime {
             *canister_id,
             wat::parse_str(wat).expect("couldn't convert wat -> wasm"),
             payload,
-            None,
-            None,
         ))
     }
 
@@ -464,8 +462,6 @@ impl LocalTestRuntime {
             canister_id,
             wat::parse_str(wat).expect("couldn't convert wat -> wasm"),
             payload,
-            None,
-            None,
         )
     }
 
@@ -475,17 +471,8 @@ impl LocalTestRuntime {
         canister_id: &CanisterId,
         wasm: Vec<u8>,
         payload: Vec<u8>,
-        compute_allocation: Option<u64>,
-        memory_allocation: Option<u64>,
     ) -> Result<WasmResult, UserError> {
-        let args = InstallCodeArgs::new(
-            CanisterInstallMode::Install,
-            *canister_id,
-            wasm,
-            payload,
-            compute_allocation,
-            memory_allocation,
-        );
+        let args = InstallCodeArgs::new(CanisterInstallMode::Install, *canister_id, wasm, payload);
 
         self.install_canister_helper(args)
     }
@@ -503,8 +490,6 @@ impl LocalTestRuntime {
         let (canister_id, res) = self.create_and_install_canister_wasm(
             UNIVERSAL_CANISTER_WASM.to_vec(),
             payload.into(),
-            None,
-            None,
             num_cycles,
         );
         res.unwrap();
@@ -528,20 +513,12 @@ impl LocalTestRuntime {
         &self,
         wasm: Vec<u8>,
         payload: Vec<u8>,
-        compute_allocation: Option<u64>,
-        memory_allocation: Option<u64>,
         num_cycles: u128,
     ) -> (CanisterId, Result<WasmResult, UserError>) {
         let canister_id = self.create_canister_with_cycles(num_cycles).unwrap();
         (
             canister_id,
-            self.install_canister_wasm(
-                &canister_id,
-                wasm,
-                payload,
-                compute_allocation,
-                memory_allocation,
-            ),
+            self.install_canister_wasm(&canister_id, wasm, payload),
         )
     }
 

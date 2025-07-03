@@ -5,12 +5,13 @@ use crate::routing::demux::Demux;
 use crate::routing::stream_builder::StreamBuilder;
 use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_interfaces::execution_environment::{
-    ExecutionRoundSummary, ExecutionRoundType, RegistryExecutionSettings, Scheduler,
+    ChainKeyData, ExecutionRoundSummary, ExecutionRoundType, RegistryExecutionSettings, Scheduler,
 };
 use ic_interfaces::time_source::system_time_now;
 use ic_logger::{error, fatal, ReplicaLogger};
 use ic_query_stats::deliver_query_stats;
 use ic_registry_subnet_features::SubnetFeatures;
+use ic_replicated_state::canister_state::system_state::CyclesUseCase::DroppedMessages;
 use ic_replicated_state::{NetworkTopology, ReplicatedState};
 use ic_types::batch::Batch;
 use ic_types::{ExecutionRound, NumBytes};
@@ -122,10 +123,11 @@ impl StateMachine for StateMachineImpl {
         }
 
         // Time out expired messages.
-        let timed_out_messages = state.time_out_messages();
-        self.metrics
-            .timed_out_messages_total
-            .inc_by(timed_out_messages as u64);
+        let lost_cycles = state.time_out_messages(&self.metrics);
+        state
+            .metadata
+            .subnet_metrics
+            .observe_consumed_cycles_with_use_case(DroppedMessages, lost_cycles.into());
         self.observe_phase_duration(PHASE_TIME_OUT_MESSAGES, &since);
 
         // Time out expired callbacks.
@@ -179,8 +181,11 @@ impl StateMachine for StateMachineImpl {
         let state_after_execution = self.scheduler.execute_round(
             state_with_messages,
             batch.randomness,
-            batch.chain_key_subnet_public_keys,
-            batch.idkg_pre_signature_ids,
+            ChainKeyData {
+                master_public_keys: batch.chain_key_subnet_public_keys,
+                idkg_pre_signature_ids: batch.idkg_pre_signature_ids,
+                nidkg_ids: batch.ni_dkg_ids,
+            },
             &batch.replica_version,
             ExecutionRound::from(batch.batch_number.get()),
             round_summary,
@@ -206,12 +211,14 @@ impl StateMachine for StateMachineImpl {
 
         let since = Instant::now();
         // Shed enough messages to stay below the best-effort message memory limit.
-        let (shed_messages, shed_message_bytes) = state_after_stream_builder
-            .enforce_best_effort_message_limit(self.best_effort_message_memory_capacity);
-        self.metrics.shed_messages_total.inc_by(shed_messages);
-        self.metrics
-            .shed_message_bytes_total
-            .inc_by(shed_message_bytes.get());
+        let lost_cycles = state_after_stream_builder.enforce_best_effort_message_limit(
+            self.best_effort_message_memory_capacity,
+            &self.metrics,
+        );
+        state_after_stream_builder
+            .metadata
+            .subnet_metrics
+            .observe_consumed_cycles_with_use_case(DroppedMessages, lost_cycles.into());
         self.observe_phase_duration(PHASE_SHED_MESSAGES, &since);
 
         state_after_stream_builder

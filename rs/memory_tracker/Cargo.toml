@@ -13,6 +13,7 @@ bit-vec = "0.6.3"
 ic-logger = { path = "../monitoring/logger" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-sys = { path = "../sys" }
+ic-types = { path = "../types/types" }
 lazy_static = { workspace = true }
 libc = { workspace = true }
 nix = { workspace = true }
@@ -24,7 +25,6 @@ sigsegv_handler_checksum = []
 
 [dev-dependencies]
 criterion = { workspace = true }
-ic-types = { path = "../types/types" }
 memmap2 = { workspace = true }
 proptest = { workspace = true }
 rayon = { workspace = true }
@@ -37,3 +37,7 @@ name = "traps"
 [[bench]]
 harness = false
 name = "memory_ops"
+
+[[bench]]
+harness = false
+name = "bit_vec"

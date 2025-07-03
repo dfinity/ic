@@ -6,7 +6,7 @@ use ic_nns_constants::{
     EXCHANGE_RATE_CANISTER_ID, EXCHANGE_RATE_CANISTER_INDEX, LEDGER_CANISTER_ID,
     SUBNET_RENTAL_CANISTER_ID,
 };
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     manage_neuron_response::{Command as CommandResponse, RegisterVoteResponse},
     ExecuteNnsFunction, MakeProposalRequest, NnsFunction, ProposalActionRequest, Vote,
 };
@@ -14,7 +14,7 @@ use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     neuron_helpers::{get_neuron_1, get_neuron_2},
     state_test_helpers::{
-        create_canister_at_specified_id, ledger_account_balance, nns_cast_vote,
+        create_canister_at_specified_id, ledger_account_balance, nns_cast_vote_or_panic,
         nns_governance_get_proposal_info_as_anonymous, nns_governance_make_proposal,
         nns_wait_for_proposal_execution, nns_wait_for_proposal_failure, setup_nns_canisters,
         setup_subnet_rental_canister_with_correct_canister_id, state_machine_builder_for_nns_tests,
@@ -292,7 +292,7 @@ fn subnet_rental_request_lifecycle() {
     assert_eq!(proposal_info.decided_timestamp_seconds, 0);
 
     // large neuron votes and thus the proposal should be executed now
-    let response = nns_cast_vote(
+    let response = nns_cast_vote_or_panic(
         &state_machine,
         large_neuron.principal_id,
         large_neuron.neuron_id,

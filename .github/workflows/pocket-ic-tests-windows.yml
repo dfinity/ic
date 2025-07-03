@@ -1,0 +1,93 @@
+name: PocketIC Windows
+on:
+  pull_request:
+    paths:
+      - packages/pocket-ic/**
+      - rs/pocket_ic_server/**
+  schedule:
+    - cron: "0 1 * * *"
+
+# runs for the same workflow are cancelled on PRs but not on master
+# explanation: on push to master head_ref is not set, so we want it to fall back to run_id so it is not cancelled
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  bazel-build-pocket-ic:
+    name: Bazel Build PocketIC
+    container:
+      image: ghcr.io/dfinity/ic-build@sha256:02165696a5201b1a347a28e548c32dc9590d60975c22be26ac1ea7e72573523d
+      options: >-
+        -e NODE_NAME --privileged --cgroupns host
+    timeout-minutes: 90
+    runs-on:
+      labels: dind-large
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
+      - name: Build PocketIC server
+        run: |
+          bazel build //rs/pocket_ic_server:pocket-ic-server
+      - name: Compute PocketIC server path
+        id: pocket-ic-server-path
+        run: echo "pocket_ic_server_path=$(bazel cquery //rs/pocket_ic_server:pocket-ic-server --output=files)" >> $GITHUB_OUTPUT
+      - name: Upload PocketIC server
+        uses: actions/upload-artifact@v4
+        with:
+          name: pocket-ic-server
+          path: ${{ steps.pocket-ic-server-path.outputs.pocket_ic_server_path }}
+      - name: Build PocketIC test canister
+        run: |
+          bazel build //packages/pocket-ic/test_canister:test_canister
+      - name: Compute PocketIC test canister path
+        id: pocket-ic-test-canister-path
+        run: echo "pocket_ic_test_canister_path=$(bazel cquery //packages/pocket-ic/test_canister:test_canister --output=files)" >> $GITHUB_OUTPUT
+      - name: Upload PocketIC test canister
+        uses: actions/upload-artifact@v4
+        with:
+          name: pocket-ic-test-canister
+          path: ${{ steps.pocket-ic-test-canister-path.outputs.pocket_ic_test_canister_path }}
+
+  pocket-ic-lint-on-windows:
+    name: PocketIC Lint on Windows
+    runs-on: windows-2022
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
+      - name: Linting
+        run: |
+          cargo clippy -p pocket-ic --locked --all-features --all-targets -- -D warnings -D clippy::all -D clippy::mem_forget -C debug-assertions=off
+
+  pocket-ic-tests-on-windows:
+    name: PocketIC Tests on Windows
+    needs: [bazel-build-pocket-ic]
+    runs-on: windows-2022
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
+      - name: Download PocketIC server
+        uses: actions/download-artifact@v4
+        with:
+          name: pocket-ic-server
+      - name: Download PocketIC test canister
+        uses: actions/download-artifact@v4
+        with:
+          name: pocket-ic-test-canister
+      - name: Setup WSLv2
+        uses: vedantmgoyal9/setup-wsl2@bf0f19100f71267dd1345180b8a678864793e53f
+        with:
+          distro: Ubuntu-20.04
+      - name: Tests
+        run: |
+          $env:WORKDIR=(Get-Location).Path
+          $env:RUST_TEST_THREADS=2
+          $env:POCKET_IC_BIN="$env:WORKDIR\pocket-ic-server"
+          $env:TEST_WASM="$env:WORKDIR\test_canister.wasm.gz"
+          cargo test --locked -p pocket-ic

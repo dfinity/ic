@@ -2,8 +2,10 @@ use ic_base_types::PrincipalId;
 use ic_nervous_system_common::ONE_MONTH_SECONDS;
 use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
-    pocket_ic_helpers,
-    pocket_ic_helpers::{add_wasm_via_nns_proposal, nns, sns},
+    pocket_ic_helpers::{
+        self, add_wasm_via_nns_proposal, nns,
+        sns::{self, governance::set_automatically_advance_target_version_flag},
+    },
 };
 use ic_nns_test_utils::sns_wasm::{
     build_archive_sns_wasm, build_governance_sns_wasm, build_index_ng_sns_wasm,
@@ -41,6 +43,31 @@ pub async fn test_sns_upgrade_legacy(sns_canisters_to_upgrade: Vec<SnsCanisterTy
         sns_instance_label,
     )
     .await;
+
+    eprintln!("Await the swap lifecycle ...");
+    sns::swap::await_swap_lifecycle(&pocket_ic, sns.swap.canister_id, Lifecycle::Open)
+        .await
+        .unwrap();
+
+    eprintln!("smoke_test_participate_and_finalize ...");
+    sns::swap::smoke_test_participate_and_finalize(
+        &pocket_ic,
+        sns.swap.canister_id,
+        swap_parameters,
+    )
+    .await;
+
+    eprintln!(
+        "Disabling automatic upgrades to have full control over when an upgrade is triggered ..."
+    );
+    let automatically_advance_target_version = false;
+    set_automatically_advance_target_version_flag(
+        &pocket_ic,
+        sns.governance.canister_id,
+        automatically_advance_target_version,
+    )
+    .await
+    .unwrap();
 
     eprintln!("Adding all WASMs ...");
     for canister_type in &sns_canisters_to_upgrade {
@@ -97,19 +124,6 @@ pub async fn test_sns_upgrade_legacy(sns_canisters_to_upgrade: Vec<SnsCanisterTy
         )
         .await;
     }
-
-    eprintln!("Await the swap lifecycle ...");
-    sns::swap::await_swap_lifecycle(&pocket_ic, sns.swap.canister_id, Lifecycle::Open)
-        .await
-        .unwrap();
-
-    eprintln!("smoke_test_participate_and_finalize ...");
-    sns::swap::smoke_test_participate_and_finalize(
-        &pocket_ic,
-        sns.swap.canister_id,
-        swap_parameters,
-    )
-    .await;
 
     // Every canister we are testing has two upgrades.  We are just making sure the counts match
     for canister_type in &sns_canisters_to_upgrade {

@@ -13,165 +13,92 @@ pub(crate) struct Ic00MethodPermissions {
     allow_remote_subnet_sender: bool,
     /// Call initiated only by the NNS subnet.
     allow_only_nns_subnet_sender: bool,
+    /// Due to the substantial complexity of this call, it must be counted toward the round limit.
+    counts_toward_round_limit: bool,
+    /// As this call modifies the canister state, it must not be executed on an aborted canister.
+    does_not_run_on_aborted_canister: bool,
+    /// The call installs a new canister code.
+    installs_code: bool,
 }
 
 impl Ic00MethodPermissions {
     pub fn new(method: Ic00Method) -> Self {
         match method {
-            Ic00Method::SignWithECDSA => Self {
+            Ic00Method::CanisterStatus
+            | Ic00Method::CanisterInfo
+            | Ic00Method::DepositCycles
+            | Ic00Method::ECDSAPublicKey
+            | Ic00Method::SignWithECDSA
+            | Ic00Method::StartCanister
+            | Ic00Method::UninstallCode
+            | Ic00Method::UpdateSettings
+            | Ic00Method::SchnorrPublicKey
+            | Ic00Method::SignWithSchnorr
+            | Ic00Method::VetKdPublicKey
+            | Ic00Method::VetKdDeriveKey
+            | Ic00Method::BitcoinGetBalance
+            | Ic00Method::BitcoinGetUtxos
+            | Ic00Method::BitcoinGetBlockHeaders
+            | Ic00Method::BitcoinSendTransaction
+            | Ic00Method::BitcoinGetCurrentFeePercentiles
+            | Ic00Method::BitcoinSendTransactionInternal
+            | Ic00Method::BitcoinGetSuccessors
+            | Ic00Method::NodeMetricsHistory
+            | Ic00Method::SubnetInfo
+            | Ic00Method::ProvisionalCreateCanisterWithCycles
+            | Ic00Method::ProvisionalTopUpCanister
+            | Ic00Method::StoredChunks
+            | Ic00Method::ClearChunkStore
+            | Ic00Method::ListCanisterSnapshots
+            | Ic00Method::DeleteCanisterSnapshot
+            | Ic00Method::ReadCanisterSnapshotMetadata
+            | Ic00Method::ReadCanisterSnapshotData
+            | Ic00Method::UploadCanisterSnapshotMetadata
+            | Ic00Method::UploadCanisterSnapshotData => Self {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
+                counts_toward_round_limit: false,
+                does_not_run_on_aborted_canister: false,
+                installs_code: false,
             },
-            Ic00Method::CanisterStatus => Self {
-                method,
-                allow_remote_subnet_sender: true,
-                allow_only_nns_subnet_sender: false,
-            },
-            Ic00Method::CanisterInfo => Self {
-                method,
-                allow_remote_subnet_sender: true,
-                allow_only_nns_subnet_sender: false,
-            },
-            Ic00Method::CreateCanister => Self {
+            Ic00Method::CreateCanister | Ic00Method::HttpRequest | Ic00Method::RawRand => Self {
                 method,
                 allow_remote_subnet_sender: false,
                 allow_only_nns_subnet_sender: false,
+                counts_toward_round_limit: false,
+                does_not_run_on_aborted_canister: false,
+                installs_code: false,
             },
-            Ic00Method::DeleteCanister => Self {
+            Ic00Method::DeleteCanister | Ic00Method::StopCanister => Self {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
+                counts_toward_round_limit: false,
+                // Deleting an aborted canister requires to stop it first.
+                // Stopping an aborted canister does not generate a reply.
+                does_not_run_on_aborted_canister: true,
+                installs_code: false,
             },
-            Ic00Method::DepositCycles => Self {
+            Ic00Method::InstallCode | Ic00Method::InstallChunkedCode => Self {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
+                counts_toward_round_limit: true,
+                does_not_run_on_aborted_canister: true,
+                // Only one install code message allowed at a time.
+                installs_code: true,
             },
-            Ic00Method::HttpRequest => Self {
-                method,
-                allow_remote_subnet_sender: false,
-                allow_only_nns_subnet_sender: false,
-            },
-            Ic00Method::ECDSAPublicKey => Self {
-                method,
-                allow_remote_subnet_sender: true,
-                allow_only_nns_subnet_sender: false,
-            },
-            Ic00Method::InstallCode => Self {
-                method,
-                allow_remote_subnet_sender: true,
-                allow_only_nns_subnet_sender: false,
-            },
-            Ic00Method::InstallChunkedCode => Self {
-                method,
-                allow_remote_subnet_sender: true,
-                allow_only_nns_subnet_sender: false,
-            },
-            Ic00Method::RawRand => Self {
-                method,
-                allow_remote_subnet_sender: false,
-                allow_only_nns_subnet_sender: false,
-            },
-            Ic00Method::SetupInitialDKG => Self {
+            Ic00Method::SetupInitialDKG
+            | Ic00Method::ComputeInitialIDkgDealings
+            | Ic00Method::ReshareChainKey
+            | Ic00Method::RenameCanister => Self {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: true,
-            },
-            Ic00Method::StartCanister => Self {
-                method,
-                allow_remote_subnet_sender: true,
-                allow_only_nns_subnet_sender: false,
-            },
-            Ic00Method::StopCanister => Self {
-                method,
-                allow_remote_subnet_sender: true,
-                allow_only_nns_subnet_sender: false,
-            },
-            Ic00Method::UninstallCode => Self {
-                method,
-                allow_remote_subnet_sender: true,
-                allow_only_nns_subnet_sender: false,
-            },
-            Ic00Method::UpdateSettings => Self {
-                method,
-                allow_remote_subnet_sender: true,
-                allow_only_nns_subnet_sender: false,
-            },
-            Ic00Method::ComputeInitialIDkgDealings => Self {
-                method,
-                allow_remote_subnet_sender: true,
-                allow_only_nns_subnet_sender: true,
-            },
-            Ic00Method::ReshareChainKey => Self {
-                method,
-                allow_remote_subnet_sender: true,
-                allow_only_nns_subnet_sender: true,
-            },
-            Ic00Method::SchnorrPublicKey => Self {
-                method,
-                allow_remote_subnet_sender: true,
-                allow_only_nns_subnet_sender: false,
-            },
-            Ic00Method::SignWithSchnorr => Self {
-                method,
-                allow_remote_subnet_sender: true,
-                allow_only_nns_subnet_sender: false,
-            },
-            Ic00Method::VetKdPublicKey => Self {
-                method,
-                allow_remote_subnet_sender: true,
-                allow_only_nns_subnet_sender: false,
-            },
-            Ic00Method::VetKdDeriveEncryptedKey => Self {
-                method,
-                allow_remote_subnet_sender: true,
-                allow_only_nns_subnet_sender: false,
-            },
-            Ic00Method::BitcoinGetBalance => Self {
-                method,
-                allow_remote_subnet_sender: true,
-                allow_only_nns_subnet_sender: false,
-            },
-            Ic00Method::BitcoinGetUtxos => Self {
-                method,
-                allow_remote_subnet_sender: true,
-                allow_only_nns_subnet_sender: false,
-            },
-            Ic00Method::BitcoinGetBlockHeaders => Self {
-                method,
-                allow_remote_subnet_sender: true,
-                allow_only_nns_subnet_sender: false,
-            },
-            Ic00Method::BitcoinSendTransaction => Self {
-                method,
-                allow_remote_subnet_sender: true,
-                allow_only_nns_subnet_sender: false,
-            },
-            Ic00Method::BitcoinGetCurrentFeePercentiles => Self {
-                method,
-                allow_remote_subnet_sender: true,
-                allow_only_nns_subnet_sender: false,
-            },
-            Ic00Method::BitcoinSendTransactionInternal => Self {
-                method,
-                allow_remote_subnet_sender: true,
-                allow_only_nns_subnet_sender: false,
-            },
-            Ic00Method::BitcoinGetSuccessors => Self {
-                method,
-                allow_remote_subnet_sender: true,
-                allow_only_nns_subnet_sender: false,
-            },
-            Ic00Method::NodeMetricsHistory => Self {
-                method,
-                allow_remote_subnet_sender: true,
-                allow_only_nns_subnet_sender: false,
-            },
-            Ic00Method::SubnetInfo => Self {
-                method,
-                allow_remote_subnet_sender: true,
-                allow_only_nns_subnet_sender: false,
+                counts_toward_round_limit: false,
+                does_not_run_on_aborted_canister: false,
+                installs_code: false,
             },
             Ic00Method::FetchCanisterLogs => Self {
                 method,
@@ -179,31 +106,26 @@ impl Ic00MethodPermissions {
                 // all inter-canister call permissions are irrelevant and therefore set to false.
                 allow_remote_subnet_sender: false,
                 allow_only_nns_subnet_sender: false,
+                counts_toward_round_limit: false,
+                does_not_run_on_aborted_canister: false,
+                installs_code: false,
             },
-            Ic00Method::ProvisionalCreateCanisterWithCycles => Self {
+            Ic00Method::UploadChunk | Ic00Method::TakeCanisterSnapshot => Self {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
+                counts_toward_round_limit: true,
+                does_not_run_on_aborted_canister: false,
+                installs_code: false,
             },
-            Ic00Method::ProvisionalTopUpCanister => Self {
+            Ic00Method::LoadCanisterSnapshot => Self {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
-            },
-            Ic00Method::UploadChunk | Ic00Method::StoredChunks | Ic00Method::ClearChunkStore => {
-                Self {
-                    method,
-                    allow_remote_subnet_sender: true,
-                    allow_only_nns_subnet_sender: false,
-                }
-            }
-            Ic00Method::TakeCanisterSnapshot
-            | Ic00Method::LoadCanisterSnapshot
-            | Ic00Method::ListCanisterSnapshots
-            | Ic00Method::DeleteCanisterSnapshot => Self {
-                method,
-                allow_remote_subnet_sender: true,
-                allow_only_nns_subnet_sender: false,
+                // Loading a snapshot is similar to the install code.
+                counts_toward_round_limit: true,
+                does_not_run_on_aborted_canister: true,
+                installs_code: false,
             },
         }
     }
@@ -265,5 +187,16 @@ impl Ic00MethodPermissions {
             ));
         }
         Ok(())
+    }
+
+    pub(crate) fn can_be_executed(
+        &self,
+        instructions_reached: bool,
+        ongoing_long_install_code: bool,
+        effective_canister_is_aborted: bool,
+    ) -> bool {
+        !(self.counts_toward_round_limit && instructions_reached
+            || self.does_not_run_on_aborted_canister && effective_canister_is_aborted
+            || self.installs_code && ongoing_long_install_code)
     }
 }

@@ -5,7 +5,7 @@ use crate::sign::BasicSignerInternal;
 use crate::sign::ThresholdSigDataStore;
 use crate::{CryptoComponentImpl, LockableThresholdSigDataStore};
 use ic_crypto_internal_bls12_381_vetkd::{
-    DerivationPath, EncryptedKeyCombinationError, EncryptedKeyShare,
+    DerivationContext, EncryptedKeyCombinationError, EncryptedKeyShare,
     EncryptedKeyShareDeserializationError, G2Affine, NodeIndex, PairingInvalidPoint,
     TransportPublicKey, TransportPublicKeyDeserializationError,
 };
@@ -238,9 +238,9 @@ fn create_encrypted_key_share_internal<S: CspSigner>(
         .create_encrypted_vetkd_key_share(
             key_id,
             master_public_key.as_bytes().to_vec(),
-            args.encryption_public_key,
-            args.derivation_path,
-            args.derivation_id,
+            args.transport_public_key,
+            args.context,
+            args.input,
         )
         .map_err(vetkd_key_share_creation_error_from_vault_error)?;
 
@@ -350,7 +350,7 @@ fn combine_encrypted_key_shares_internal<C: ThresholdSignatureCspClient>(
                 VetKdKeyShareCombinationError::InvalidArgumentMasterPublicKey
             }
         })?;
-    let transport_public_key = TransportPublicKey::deserialize(&args.encryption_public_key)
+    let transport_public_key = TransportPublicKey::deserialize(&args.transport_public_key)
         .map_err(|e| match e {
             TransportPublicKeyDeserializationError::InvalidPublicKey => {
                 VetKdKeyShareCombinationError::InvalidArgumentEncryptionPublicKey
@@ -376,22 +376,19 @@ fn combine_encrypted_key_shares_internal<C: ThresholdSignatureCspClient>(
             Ok((node_id, *node_index, clib_share))
         })
         .collect::<Result<_, _>>()?;
-    let clib_shares_for_combine_all: Vec<(NodeIndex, EncryptedKeyShare)> = clib_shares
+    let clib_shares_for_combine_all: BTreeMap<NodeIndex, EncryptedKeyShare> = clib_shares
         .iter()
         .map(|(_node_id, node_index, clib_share)| (*node_index, clib_share.clone()))
         .collect();
-    let derivation_path = DerivationPath::new(
-        args.derivation_path.caller.as_slice(),
-        &args.derivation_path.derivation_path,
-    );
+    let context = DerivationContext::new(args.context.caller.as_slice(), &args.context.context);
 
     match ic_crypto_internal_bls12_381_vetkd::EncryptedKey::combine_all(
-        &clib_shares_for_combine_all[..],
+        &clib_shares_for_combine_all,
         reconstruction_threshold,
         &master_public_key,
         &transport_public_key,
-        &derivation_path,
-        &args.derivation_id,
+        &context,
+        &args.input,
     ) {
         Ok(encrypted_key) => Ok(encrypted_key),
         Err(EncryptedKeyCombinationError::InsufficientShares) => {
@@ -405,14 +402,14 @@ fn combine_encrypted_key_shares_internal<C: ThresholdSignatureCspClient>(
                 falling back to EncryptedKey::combine_valid_shares"
             );
 
-            let clib_shares_for_combine_valid: Vec<(NodeIndex, G2Affine, EncryptedKeyShare)> = clib_shares
-                .iter()
+            let clib_shares_for_combine_valid: BTreeMap<NodeIndex, (G2Affine, EncryptedKeyShare)> = clib_shares
+                .into_iter()
                 .map(|(node_id, node_index, clib_share)| {
                     let node_public_key = lazily_calculated_public_key_from_store(
                         lockable_threshold_sig_data_store,
                         threshold_sig_csp_client,
                         &args.ni_dkg_id,
-                        *node_id,
+                        node_id,
                     )
                     .map_err(|e| {
                         VetKdKeyShareCombinationError::IndividualPublicKeyComputationError(e)
@@ -425,17 +422,17 @@ fn combine_encrypted_key_shares_internal<C: ThresholdSignatureCspClient>(
                             ))
                         }
                     }?;
-                    Ok((*node_index, node_public_key_g2affine, clib_share.clone()))
+                    Ok((node_index, (node_public_key_g2affine, clib_share.clone())))
                 })
                 .collect::<Result<_, _>>()?;
 
             ic_crypto_internal_bls12_381_vetkd::EncryptedKey::combine_valid_shares(
-                &clib_shares_for_combine_valid[..],
+                &clib_shares_for_combine_valid,
                 reconstruction_threshold,
                 &master_public_key,
                 &transport_public_key,
-                &derivation_path,
-                &args.derivation_id,
+                &context,
+                &args.input,
             )
             .map_err(|e| {
                 VetKdKeyShareCombinationError::CombinationError(format!(
@@ -492,7 +489,7 @@ fn verify_encrypted_key_internal(
         }
     };
 
-    let transport_public_key = TransportPublicKey::deserialize(&args.encryption_public_key)
+    let transport_public_key = TransportPublicKey::deserialize(&args.transport_public_key)
         .map_err(|e| match e {
             TransportPublicKeyDeserializationError::InvalidPublicKey => {
                 VetKdKeyVerificationError::InvalidArgumentEncryptionPublicKey
@@ -501,11 +498,8 @@ fn verify_encrypted_key_internal(
 
     match encrypted_key.is_valid(
         &master_public_key,
-        &DerivationPath::new(
-            args.derivation_path.caller.as_slice(),
-            &args.derivation_path.derivation_path,
-        ),
-        &args.derivation_id,
+        &DerivationContext::new(args.context.caller.as_slice(), &args.context.context),
+        &args.input,
         &transport_public_key,
     ) {
         true => Ok(()),

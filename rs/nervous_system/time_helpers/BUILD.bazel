@@ -1,0 +1,21 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:ic-cdk",
+]
+
+LIB_SRCS = glob(
+    ["src/**"],
+    exclude = ["**/*tests.rs"],
+)
+
+rust_library(
+    name = "time_helpers",
+    srcs = LIB_SRCS,
+    crate_name = "ic_nervous_system_time_helpers",
+    version = "0.0.1",
+    deps = DEPENDENCIES,
+)

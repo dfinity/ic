@@ -2,16 +2,15 @@ use async_trait::async_trait;
 use candid::Nat;
 use dfn_core::CanisterId;
 use ic_ledger_core::block::BlockIndex;
-use ic_nervous_system_common::{
-    ledger::{ICRC1Ledger, IcpLedger},
-    NervousSystemError,
-};
+use ic_nervous_system_common::NervousSystemError;
 use ic_nervous_system_runtime::Runtime;
 use icp_ledger::{
     AccountIdentifier, BinaryAccountBalanceArgs, Memo, Subaccount as IcpSubaccount, Tokens,
     TransferArgs, TransferError,
 };
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
+use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
+use mockall::automock;
 use std::marker::PhantomData;
 
 pub struct IcpLedgerCanister<Rt: Runtime> {
@@ -63,6 +62,15 @@ impl<Rt: Runtime + Send + Sync> ICRC1Ledger for IcpLedgerCanister<Rt> {
 
     fn canister_id(&self) -> CanisterId {
         self.canister_id
+    }
+
+    async fn icrc3_get_blocks(
+        &self,
+        _args: Vec<GetBlocksRequest>,
+    ) -> Result<GetBlocksResult, NervousSystemError> {
+        Err(NervousSystemError {
+            error_message: "Not Implemented".to_string(),
+        })
     }
 }
 
@@ -157,8 +165,88 @@ impl<Rt: Runtime + Send + Sync> IcpLedger for IcpLedgerCanister<Rt> {
     fn canister_id(&self) -> CanisterId {
         self.canister_id
     }
+
+    async fn icrc3_get_blocks(
+        &self,
+        _args: Vec<GetBlocksRequest>,
+    ) -> Result<GetBlocksResult, NervousSystemError> {
+        Err(NervousSystemError {
+            error_message: "Not Implemented".to_string(),
+        })
+    }
 }
 
 fn icrc1_account_to_icp_accountidentifier(account: Account) -> AccountIdentifier {
     AccountIdentifier::new(account.owner.into(), account.subaccount.map(IcpSubaccount))
+}
+
+/// A trait defining common patterns for accessing the ICRC1 Ledger canister.
+#[automock]
+#[async_trait]
+pub trait ICRC1Ledger: Send + Sync {
+    /// Transfers funds from one of this canister's subaccount to
+    /// the provided account.
+    ///
+    /// Returns the block height at which the transfer was recorded.
+    async fn transfer_funds(
+        &self,
+        amount_e8s: u64,
+        fee_e8s: u64,
+        from_subaccount: Option<Subaccount>,
+        to: Account,
+        memo: u64,
+    ) -> Result<BlockIndex, NervousSystemError>;
+
+    /// Gets the total supply of tokens from the sum of all accounts except for the
+    /// minting canister's.
+    async fn total_supply(&self) -> Result<Tokens, NervousSystemError>;
+
+    /// Gets the account balance in Tokens of the given AccountIdentifier in the Ledger.
+    async fn account_balance(&self, account: Account) -> Result<Tokens, NervousSystemError>;
+
+    /// Returns the CanisterId of the Ledger being accessed.
+    fn canister_id(&self) -> CanisterId;
+
+    /// Returns an array of blocks for the ranges specified in args.
+    async fn icrc3_get_blocks(
+        &self,
+        args: Vec<GetBlocksRequest>,
+    ) -> Result<GetBlocksResult, NervousSystemError>;
+}
+
+/// A trait defining common patterns for accessing the Ledger canister.
+#[automock]
+#[async_trait]
+pub trait IcpLedger: Send + Sync {
+    /// Transfers funds from one of this canister's subaccount to
+    /// the provided account.
+    ///
+    /// Returns the block height at which the transfer was recorded.
+    async fn transfer_funds(
+        &self,
+        amount_e8s: u64,
+        fee_e8s: u64,
+        from_subaccount: Option<IcpSubaccount>,
+        to: AccountIdentifier,
+        memo: u64,
+    ) -> Result<u64, NervousSystemError>;
+
+    /// Gets the total supply of tokens from the sum of all accounts except for the
+    /// minting canister's.
+    async fn total_supply(&self) -> Result<Tokens, NervousSystemError>;
+
+    /// Gets the account balance in Tokens of the given AccountIdentifier in the Ledger.
+    async fn account_balance(
+        &self,
+        account: AccountIdentifier,
+    ) -> Result<Tokens, NervousSystemError>;
+
+    /// Returns the CanisterId of the Ledger being accessed.
+    fn canister_id(&self) -> CanisterId;
+
+    /// Returns an array of blocks for the ranges specified in args.
+    async fn icrc3_get_blocks(
+        &self,
+        args: Vec<GetBlocksRequest>,
+    ) -> Result<GetBlocksResult, NervousSystemError>;
 }

@@ -34,24 +34,25 @@ PREFIX = "{https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/ex
 # Handlers for different blocklists.
 class BitcoinBlocklistHandler:
     def preamble(self):
-        return """#[cfg(test)]
-    mod tests;
+        return """//! The script to generate this file, including information about the source data, can be found here:
+//! /rs/cross-chain/scripts/generate_blocklist.py
 
-    use bitcoin::Address;
+#[cfg(test)]
+mod tests;
 
-    /// The script to generate this file, including information about the source data, can be found here:
-    /// /rs/cross-chain/scripts/generate_blocklist.py
+use bitcoin::Address;
 
-    /// BTC is not accepted from nor sent to addresses on this list.
-    /// NOTE: Keep it sorted!
-    pub const BTC_ADDRESS_BLOCKLIST: &[&str] = &[\n"""
+/// BTC is not accepted from nor sent to addresses on this list.
+/// NOTE: Keep it sorted!
+pub const BTC_ADDRESS_BLOCKLIST: &[&str] = &[\n"""
 
     def postamble(self):
         return """pub fn is_blocked(address: &Address) -> bool {
     BTC_ADDRESS_BLOCKLIST
         .binary_search(&address.to_string().as_ref())
         .is_ok()
-}"""
+}
+"""
 
     def format_address(self, address):
         return f'"{address}"'
@@ -65,28 +66,31 @@ class BitcoinBlocklistHandler:
 
 class EthereumBlocklistHandler:
     def preamble(self):
-        return """#[cfg(test)]
-    mod tests;
+        return """//! The script to generate this file, including information about the source data, can be found here:
+//! /rs/cross-chain/scripts/generate_blocklist.py
 
-    use ic_ethereum_types::Address;
+#[cfg(test)]
+mod tests;
 
-    macro_rules! ethereum_address {
-        ($address:expr) => {
-            Address::new(hex_literal::hex!($address))
-        };
-    }
+use ic_ethereum_types::Address;
 
-    /// The script to generate this file, including information about the source data, can be found here:
-    /// /rs/cross-chain/scripts/generate_blocklist.py
+macro_rules! ethereum_address {
+    ($address:expr) => {
+        Address::new(hex_literal::hex!($address))
+    };
+}
 
-    /// ETH is not accepted from nor sent to addresses on this list.
-    /// NOTE: Keep it sorted!
-    const ETH_ADDRESS_BLOCKLIST: &[Address] = &[\n"""
+/// ETH is not accepted from nor sent to addresses on this list.
+/// NOTE: Keep it sorted!
+const ETH_ADDRESS_BLOCKLIST: &[Address] = &[\n"""
 
     def postamble(self):
         return """pub fn is_blocked(address: &Address) -> bool {
     ETH_ADDRESS_BLOCKLIST.binary_search(address).is_ok()
-}"""
+}
+
+pub const SAMPLE_BLOCKED_ADDRESS: Address = ETH_ADDRESS_BLOCKLIST[0];
+"""
 
     def format_address(self, address):
         return f'ethereum_address!("{address[2:]}")'

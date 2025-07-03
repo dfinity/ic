@@ -123,6 +123,33 @@ type RefreshVotingPowerResponse = record {
   // minimal until we discover there is a "real need". YAGNI.
 };
 
+type DisburseMaturity = record {
+  percentage_to_disburse : nat32;
+  to_account : opt Account;
+  to_account_identifier: opt AccountIdentifier;
+};
+
+type Account = record {
+  owner: opt principal;
+  subaccount: opt blob;
+};
+
+type DisburseMaturityResponse = record {
+  amount_disbursed_e8s : opt nat64;
+};
+
+type SetFollowing = record {
+  topic_following : opt vec FolloweesForTopic;
+};
+
+type FolloweesForTopic = record {
+  followees : opt vec NeuronId;
+  topic : opt int32;
+};
+
+type SetFollowingResponse = record {
+};
+
 // KEEP THIS IN SYNC WITH ManageNeuronCommandRequest!
 type Command = variant {
   Spawn : Spawn;
@@ -138,6 +165,8 @@ type Command = variant {
   MergeMaturity : MergeMaturity;
   Disburse : Disburse;
   RefreshVotingPower : RefreshVotingPower;
+  DisburseMaturity : DisburseMaturity;
+  SetFollowing : SetFollowing;
 
   // KEEP THIS IN SYNC WITH ManageNeuronCommandRequest!
 };
@@ -157,6 +186,8 @@ type Command_1 = variant {
   MergeMaturity : MergeMaturityResponse;
   Disburse : DisburseResponse;
   RefreshVotingPower : RefreshVotingPowerResponse;
+  DisburseMaturity : DisburseMaturityResponse;
+  SetFollowing : SetFollowingResponse;
 };
 
 type Command_2 = variant {
@@ -265,14 +296,6 @@ type Followees = record {
   followees : vec NeuronId;
 };
 
-type Followers = record {
-  followers : vec NeuronId;
-};
-
-type FollowersMap = record {
-  followers_map : vec record { nat64; Followers };
-};
-
 type GetNeuronsFundAuditInfoRequest = record {
   nns_proposal_id : opt ProposalId;
 };
@@ -301,8 +324,6 @@ type Governance = record {
   latest_reward_event : opt RewardEvent;
   to_claim_transfers : vec NeuronStakeTransfer;
   short_voting_period_seconds : nat64;
-  topic_followee_index : vec record { int32; FollowersMap };
-  migrations : opt Migrations;
   proposals : vec record { nat64; ProposalData };
   xdr_conversion_rate : opt XdrConversionRate;
   in_flight_commands : vec record { nat64; NeuronInFlightCommand };
@@ -354,6 +375,7 @@ type GovernanceCachedMetrics = record {
   not_dissolving_neurons_e8s_buckets_seed : vec record { nat64; float64 };
   timestamp_seconds : nat64;
   seed_neuron_count : nat64;
+  spawning_neurons_count : nat64;
 
   non_self_authenticating_controller_neuron_subset_metrics : opt NeuronSubsetMetrics;
   public_neuron_subset_metrics : opt NeuronSubsetMetrics;
@@ -540,6 +562,8 @@ type ManageNeuronCommandRequest = variant {
   MergeMaturity : MergeMaturity;
   Disburse : Disburse;
   RefreshVotingPower : RefreshVotingPower;
+  DisburseMaturity : DisburseMaturity;
+  SetFollowing : SetFollowing;
 
   // KEEP THIS IN SYNC WITH COMMAND!
 };
@@ -581,17 +605,6 @@ type MergeResponse = record {
   source_neuron : opt Neuron;
   target_neuron_info : opt NeuronInfo;
   source_neuron_info : opt NeuronInfo;
-};
-
-type Migration = record {
-  status : opt int32;
-  failure_reason : opt text;
-  progress : opt Progress;
-};
-
-type Migrations = record {
-  neuron_indexes_migration : opt Migration;
-  copy_inactive_neurons_to_stable_memory_migration : opt Migration;
 };
 
 type MonthlyNodeProviderRewards = record {
@@ -644,6 +657,15 @@ type VotingPowerEconomics = record {
   //
   // Initially, set to 1/12 years.
   clear_following_after_seconds : opt nat64;
+
+  // The minimum dissolve delay a neuron must have in order to be eligible to vote.
+  //
+  // Neurons with a dissolve delay lower than this threshold will not have 
+  // voting power, even if they are otherwise active.
+  //
+  // This value is an essential part of the staking mechanism, promoting
+  // long-term alignment with the network's governance.
+  neuron_minimum_dissolve_delay_to_vote_seconds : opt nat64;
 };
 
 type Neuron = record {
@@ -727,6 +749,10 @@ type Neuron = record {
   //
   // Per NNS policy, this is opt. Nevertheless, it will never be null.
   potential_voting_power : opt nat64;
+
+  // The maturity disbursements in progress, i.e. the disbursements that are initiated but not
+  // finalized. The finalization happens 7 days after the disbursement is initiated.
+  maturity_disbursements_in_progress : opt vec MaturityDisbursement;
 };
 
 type NeuronBasketConstructionParameters = record {
@@ -948,10 +974,6 @@ type Principals = record {
   principals : vec principal;
 };
 
-type Progress = variant {
-  LastNeuronId : NeuronId;
-};
-
 type Proposal = record {
   url : text;
   title : opt text;
@@ -994,6 +1016,7 @@ type ProposalData = record {
   executed_timestamp_seconds : nat64;
   original_total_community_fund_maturity_e8s_equivalent : opt nat64;
   total_potential_voting_power : opt nat64;
+  topic: opt int32;
 };
 
 type ProposalInfo = record {
@@ -1265,6 +1288,14 @@ type WaitForQuietState = record {
 type XdrConversionRate = record {
   xdr_permyriad_per_icp : opt nat64;
   timestamp_seconds : opt nat64;
+};
+
+type MaturityDisbursement = record {
+  amount_e8s : opt nat64;
+  timestamp_of_disbursement_seconds : opt nat64;
+  finalize_disbursement_timestamp_seconds : opt nat64;
+  account_to_disburse_to : opt Account;
+  account_identifier_to_disburse_to : opt AccountIdentifier;
 };
 
 service : (Governance) -> {

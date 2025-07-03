@@ -2,8 +2,14 @@ use ic_nervous_system_proto::pb::v1::{Duration, Percentage};
 
 /// It is more difficult to pass critical proposals. This controls voting power thresholds and
 /// voting duration parameters on proposals.
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Default)]
 pub enum ProposalCriticality {
+    /// Proposal criticality is mainly determined by the topic to which a proposal belongs.
+    ///
+    /// However, since some custom proposals might not have a topic yet, *this* proposal criticality
+    /// should be used for those proposals, to ensure backward compatibility (before proposal
+    /// topics were introduced to the SNS, all custom proposals had this criticality).
+    #[default]
     Normal,
     Critical,
 }

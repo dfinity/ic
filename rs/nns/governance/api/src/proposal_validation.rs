@@ -1,4 +1,4 @@
-use crate::pb::v1::Proposal;
+use crate::types::Proposal;
 
 // The limits on NNS proposal title len (in bytes).
 const PROPOSAL_TITLE_BYTES_MIN: usize = 5;

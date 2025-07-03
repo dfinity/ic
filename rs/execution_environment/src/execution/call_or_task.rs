@@ -12,18 +12,19 @@ use crate::execution_environment::{
 use crate::metrics::CallTreeMetrics;
 use ic_base_types::CanisterId;
 use ic_config::flag_status::FlagStatus;
-use ic_embedders::wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult};
+use ic_embedders::{
+    wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult},
+    wasmtime_embedder::system_api::{ApiType, ExecutionParameters},
+};
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, WasmExecutionOutput,
 };
 use ic_logger::{info, ReplicaLogger};
-use ic_management_canister_types_private::IC_00;
 use ic_replicated_state::{
     canister_state::execution_state::WasmExecutionMode, num_bytes_try_from, CallContextAction,
     CallOrigin, CanisterState,
 };
-use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::messages::{
     CallContextId, CanisterCall, CanisterCallOrTask, CanisterMessage, CanisterMessageOrTask,
     CanisterTask, RequestMetadata,
@@ -85,7 +86,7 @@ pub fn execute_call_or_task(
                     Err(err) => {
                         if call_or_task == CanisterCallOrTask::Task(CanisterTask::OnLowWasmMemory) {
                             //`OnLowWasmMemoryHook` is taken from task_queue (i.e. `OnLowWasmMemoryHookStatus` is `Executed`),
-                            // but its was not executed due to the freezing of the canister. To ensure that the hook is executed
+                            // but it was not executed due to the freezing of the canister. To ensure that the hook is executed
                             // when the canister is unfrozen we need to set `OnLowWasmMemoryHookStatus` to `Ready`. Because of
                             // the way `OnLowWasmMemoryHookStatus::update` is implemented we first need to remove it from the
                             // task_queue (which calls `OnLowWasmMemoryHookStatus::update(false)`) followed with `enqueue`
@@ -176,19 +177,16 @@ pub fn execute_call_or_task(
             helper.call_context_id(),
         ),
         CanisterCallOrTask::Task(CanisterTask::Heartbeat) => ApiType::system_task(
-            IC_00.get(),
             SystemMethod::CanisterHeartbeat,
             time,
             helper.call_context_id(),
         ),
         CanisterCallOrTask::Task(CanisterTask::GlobalTimer) => ApiType::system_task(
-            IC_00.get(),
             SystemMethod::CanisterGlobalTimer,
             time,
             helper.call_context_id(),
         ),
         CanisterCallOrTask::Task(CanisterTask::OnLowWasmMemory) => ApiType::system_task(
-            IC_00.get(),
             SystemMethod::CanisterOnLowWasmMemory,
             time,
             helper.call_context_id(),

@@ -43,7 +43,7 @@ criterion_main!(benches);
 criterion_group!(benches, crypto_idkg_benchmarks);
 
 fn crypto_idkg_benchmarks(criterion: &mut Criterion) {
-    let nums_of_nodes = [1, 4, 13, 28, 40];
+    let nums_of_nodes = [1, 4, 13, 34, 40];
     let test_cases = generate_test_cases(&nums_of_nodes);
 
     let rng = &mut ReproducibleRng::new();

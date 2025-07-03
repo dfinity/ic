@@ -47,7 +47,7 @@ canister-test = { path = "../../rust_canisters/canister_test" }
 criterion = { workspace = true }
 dfn_candid = { path = "../dfn_candid" }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
-ic-error-types = { path = "../../types/error_types" }
+ic-error-types = { path = "../../../packages/ic-error-types" }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-test-identity = { path = "../../test_utilities/identity" }
 ic-test-utilities = { path = "../../test_utilities" }

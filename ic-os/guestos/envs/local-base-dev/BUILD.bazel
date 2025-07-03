@@ -8,12 +8,10 @@ load("//ic-os/guestos:defs.bzl", "image_deps")
 icos_build(
     name = "local-base-dev",
     build_local_base_image = True,
-    ic_version = "//bazel:rc_only_version.txt",
     image_deps_func = image_deps,
     tags = [
         "manual",
         "no-cache",
     ],
-    upload_prefix = None,  # Do not upload locally built base images
     visibility = ["//rs:ic-os-pkg"],
 )

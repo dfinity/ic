@@ -1,14 +1,13 @@
 use rand::seq::SliceRandom;
 use regex::Regex;
 use slog::Logger;
+use std::cmp::min;
 use std::collections::BTreeMap;
 use std::net::{Ipv4Addr, Ipv6Addr};
-use std::path::Path;
-use std::process::Command;
 use std::str::FromStr;
 use url::Url;
 
-use anyhow::{bail, Result};
+use anyhow::Result;
 use backon::Retryable;
 use backon::{ConstantBuilder, ExponentialBuilder};
 use k8s_openapi::api::core::v1::{ConfigMap, PersistentVolumeClaim, Pod, Secret, Service};
@@ -28,9 +27,10 @@ use serde::{Deserialize, Serialize};
 use tokio;
 use tracing::*;
 
+use crate::driver::farm::ImageLocation;
 use crate::driver::farm::{
-    Certificate, CreateVmRequest, DnsRecord, DnsRecordType, ImageLocation, PlaynetCertificate,
-    VMCreateResponse, VmSpec,
+    Certificate, CreateVmRequest, DnsRecord, DnsRecordType, PlaynetCertificate, VMCreateResponse,
+    VmSpec,
 };
 use crate::driver::resource::ImageType;
 use crate::driver::test_env::{TestEnv, TestEnvAttribute};
@@ -114,42 +114,6 @@ impl TNode {
             uid: self.owner.metadata.uid.clone().expect("should have uid"),
             ..Default::default()
         }
-    }
-
-    pub async fn build_oci_config_image(&self, file_path: &Path, tag: &str) -> Result<()> {
-        // https://kubevirt.io/user-guide/storage/disks_and_volumes/#containerdisk
-        // build ctr disk that holds config fat disk for guestos & push it to local ctr registry
-        // uncompress zst disk (the case with boundary node image)
-        let command = format!(
-            "set -xe; \
-            mkdir -p /var/sysimage/tnet; \
-            if echo {0} | grep -q '.zst'; then \
-                uncompressed_file=$(echo {0} | sed 's/.zst$//'); \
-                rm -f $uncompressed_file; \
-                unzstd -o $uncompressed_file {0}; \
-                file_to_copy=$uncompressed_file; \
-            else \
-                file_to_copy={0}; \
-            fi; \
-            ctr=$(sudo buildah --root /var/sysimage/tnet from scratch); \
-            sudo buildah --root /var/sysimage/tnet copy --chown=107:107 $ctr $file_to_copy /disk/; \
-            sudo buildah --root /var/sysimage/tnet commit $ctr harbor-core.harbor.svc.cluster.local/tnet/config:{1}; \
-            sudo buildah --root /var/sysimage/tnet push --tls-verify=false --creds 'robot$tnet+tnet:TestingPOC1' harbor-core.harbor.svc.cluster.local/tnet/config:{1}",
-            file_path.display(), tag
-        );
-        let output = Command::new("bash")
-            .arg("-c")
-            .arg(command)
-            .output()
-            .expect("Failed to execute command");
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            bail!(
-                "Error building and pushing config container config image: {}",
-                stderr
-            );
-        }
-        Ok(())
     }
 
     pub async fn deploy_config_image(
@@ -391,57 +355,107 @@ impl TNet {
             "{}-{}",
             self.unique_name.clone().expect("no unique name"),
             match vm_type {
-                ImageType::IcOsImage => self.nodes.len().to_string(),
                 ImageType::UniversalImage | ImageType::PrometheusImage =>
                     format!("{}-{}", self.nodes.len(), vm_req.name),
+                _ => self.nodes.len().to_string(),
             }
         );
 
+        // We make reservation for 45 vcpus only if VM uses 64 vcpus because there are
+        // already other k8s resources having resource requests that prevents reservation to succeeds.
+        // Note that VM still gets 64 vcpus.
+        let vcpus = min(45, vm_req.vcpus.get()).to_string();
+        // Same as above, we make reservation for less memory if VM uses more then memory then specified below
+        // because there are already other k8s resources with resource requests that prevent this reservation to succeeds.
+        let mem = min(422142680, vm_req.memory_kibibytes.get()).to_string();
         let node = create_reservation(
             vm_name.clone(),
             vm_name.clone(),
             self.unique_name.clone().expect("missing unique name"),
             "1h".to_string().into(),
-            Some((
-                vm_req.vcpus.to_string(),
-                vm_req.memory_kibibytes.to_string() + "Ki",
-            )),
+            Some((vcpus, mem + "Ki")),
         )
         .await?;
 
-        // create a job to download the image and extract it
-        let image_url = format!(
-            "http://server.bazel-remote.svc.cluster.local:8080/cas/{}",
-            match vm_req.primary_image {
-                ImageLocation::IcOsImageViaUrl { url: _, sha256 } => sha256,
-                _ => self.image_sha.clone(),
-            }
-        );
-        // TODO: only download it once and copy it if it's already downloaded
-        let args = format!(
-            "set -e; \
-            mkdir -p /tnet/{vm_name}; \
-            wget -O /tnet/{vm_name}/img.tar.zst {image_url}; \
-            tar -x --zstd -vf /tnet/{vm_name}/img.tar.zst -C /tnet/{vm_name}; \
-            chmod -R 777 /tnet/{vm_name}; \
-            rm -f /tnet/{vm_name}/img.tar.zst /tnet/{vm_name}/img.tar",
-            vm_name = vm_name,
-            image_url = image_url,
-        );
-        create_job(
-            &vm_name.clone(),
-            "dfinity/util:0.1",
-            vec!["/bin/sh", "-c"],
-            vec![&args],
-            "/srv/tnet".into(),
-            self.owner_reference(),
-            Some(vec![(
-                "tnet.internetcomputer.org/name".to_string(),
-                self.unique_name.clone().expect("missing unique name"),
-            )]),
-            Some(node.clone()),
-        )
-        .await?;
+        if vm_type == ImageType::IcOsImage {
+            // create a job to download the image and extract it
+            let image_url = match vm_req.primary_image {
+                ImageLocation::IcOsImageViaUrl { url, .. } => url.to_string(),
+                ImageLocation::ImageViaUrl { url, .. } => url.to_string(),
+                _ => self.image_url.clone(),
+            };
+            //ImageLocation::IcOsImageViaUrl { url, sha256 }
+            let config_image_url = format!(
+                "{}/{}/config_disk.img.zst",
+                self.config_url.clone().unwrap(),
+                vm_name.clone()
+            )
+            .to_string();
+            // TODO: only download it once and copy it if it's already downloaded
+            let args = format!(
+                "set -xe; \
+                mkdir -p /tnet/{vm_name}; \
+                curl --user-agent curl-k8s-test --retry 10 --retry-delay 1 -o /tnet/{vm_name}/img.tar.zst {image_url}; \
+                file /tnet/{vm_name}/img.tar.zst | grep -i 'zstandard' || exit 1; \
+                tar -x --zstd -vf /tnet/{vm_name}/img.tar.zst -C /tnet/{vm_name}; \
+                file /tnet/{vm_name}/disk.img | grep -q 'DOS/MBR boot sector' || exit 1; \
+                for i in $(seq 1 12); do \
+                    curl --user-agent curl-k8s-test --retry 3 --retry-delay 3 -o /tnet/{vm_name}/config_disk.img.zst {config_image_url}; \
+                    if ! file /tnet/{vm_name}/config_disk.img.zst | grep -i 'zstandard'; then \
+                        sleep 20; \
+                        continue; \
+                    fi; \
+                    unzstd -o /tnet/{vm_name}/config_disk.img /tnet/{vm_name}/config_disk.img.zst; \
+                    break; \
+                done; \
+                test -f /tnet/{vm_name}/config_disk.img || exit 1; \
+                chmod -R 777 /tnet/{vm_name}; \
+                rm -f /tnet/{vm_name}/img.tar.zst /tnet/{vm_name}/img.tar",
+                vm_name = vm_name,
+                image_url = image_url,
+                config_image_url = config_image_url,
+            );
+            create_job(
+                &vm_name.clone(),
+                "dfinity/util:0.2",
+                vec!["/bin/sh", "-c"],
+                vec![&args],
+                "/srv/tnet".into(),
+                self.owner_reference(),
+                Some(vec![(
+                    "tnet.internetcomputer.org/name".to_string(),
+                    self.unique_name.clone().expect("missing unique name"),
+                )]),
+                Some(node.clone()),
+            )
+            .await?;
+        } else {
+            let args = format!(
+                "set -e; \
+                 mkdir -p /tnet/{vm_name}; \
+                 cp /tnet/{image} /tnet/{vm_name}/disk.img; \
+                 chmod -R 777 /tnet/{vm_name}",
+                vm_name = vm_name,
+                image = match vm_type {
+                    ImageType::PrometheusImage => "pvm.img".to_string(),
+                    _ => "uvm.img".to_string(),
+                },
+            );
+            create_job(
+                &vm_name.clone(),
+                "dfinity/util:0.2",
+                vec!["/bin/sh", "-c"],
+                vec![&args],
+                "/srv/tnet".into(),
+                self.owner_reference(),
+                Some(vec![(
+                    "tnet.internetcomputer.org/name".to_string(),
+                    self.unique_name.clone().expect("missing unique name"),
+                )]),
+                Some(node.clone()),
+            )
+            .await?;
+        }
 
         let mut ipam_pod: Pod = serde_yaml::from_str(&format!(
             r#"

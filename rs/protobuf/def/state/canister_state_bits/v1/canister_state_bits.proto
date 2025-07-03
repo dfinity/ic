@@ -142,7 +142,7 @@ message ExecutionStateBits {
   repeated WasmMethod exports = 3;
   uint64 last_executed_round = 4;
   WasmMetadata metadata = 5;
-  optional bytes binary_hash = 6;
+  bytes binary_hash = 6;
   optional NextScheduledMethod next_scheduled_method = 7;
   bool is_wasm64 = 8;
 }
@@ -235,6 +235,7 @@ enum CyclesUseCase {
   CYCLES_USE_CASE_BURNED_CYCLES = 12;
   CYCLES_USE_CASE_SCHNORR_OUTCALLS = 13;
   CYCLES_USE_CASE_VET_KD = 14;
+  CYCLES_USE_CASE_DROPPED_MESSAGES = 15;
 }
 
 message ConsumedCyclesByUseCase {
@@ -253,6 +254,7 @@ message CanisterChangeFromCanister {
 
 message CanisterCreation {
   repeated types.v1.PrincipalId controllers = 1;
+  optional bytes environment_variables_hash = 2;
 }
 
 message CanisterCodeUninstall {}
@@ -272,6 +274,27 @@ message CanisterLoadSnapshot {
   bytes snapshot_id = 3;
 }
 
+message CanisterControllers {
+  repeated types.v1.PrincipalId controllers = 1;
+}
+
+message CanisterSettingsChange {
+  optional CanisterControllers controllers = 1;
+  optional bytes environment_variables_hash = 2;
+}
+
+message CanisterRename {
+  types.v1.PrincipalId canister_id = 1;
+  uint64 total_num_changes = 2;
+  RenameTo rename_to = 3;
+}
+
+message RenameTo {
+  types.v1.PrincipalId canister_id = 1;
+  uint64 version = 2;
+  uint64 total_num_changes = 3;
+}
+
 message CanisterChange {
   uint64 timestamp_nanos = 1;
   uint64 canister_version = 2;
@@ -285,6 +308,8 @@ message CanisterChange {
     CanisterCodeDeployment canister_code_deployment = 7;
     CanisterControllersChange canister_controllers_change = 8;
     CanisterLoadSnapshot canister_load_snapshot = 9;
+    CanisterSettingsChange canister_settings_change = 10;
+    CanisterRename canister_rename = 11;
   }
 }
 
@@ -350,6 +375,16 @@ enum OnLowWasmMemoryHookStatus {
   ON_LOW_WASM_MEMORY_HOOK_STATUS_EXECUTED = 3;
 }
 
+message TaskQueue {
+  // Keeps `PausedExecution`, or `PausedInstallCode`, or `AbortedExecution`,
+  // or `AbortedInstallCode` task if there is one.
+  optional ExecutionTask paused_or_aborted_task = 1;
+  // Status of on_low_wasm_memory hook execution.
+  OnLowWasmMemoryHookStatus on_low_wasm_memory_hook_status = 2;
+  // Queue of `Heartbeat` and `GlobalTimer` tasks.
+  repeated ExecutionTask queue = 3;
+}
+
 message CanisterStateBits {
   reserved 1;
   reserved "controller";
@@ -398,7 +433,7 @@ message CanisterStateBits {
   uint64 install_code_debit = 29;
   // Contains tasks that need to be executed before processing any input of the
   // canister.
-  repeated ExecutionTask task_queue = 30;
+  reserved 30;
   // Time of last charge for resource allocations.
   google.protobuf.UInt64Value time_of_last_allocation_charge_nanos = 31;
   // Postponed charges that are not applied to `cycles_balance` yet.
@@ -439,5 +474,10 @@ message CanisterStateBits {
   int64 priority_credit = 48;
   LongExecutionMode long_execution_mode = 49;
   optional uint64 wasm_memory_threshold = 50;
-  optional OnLowWasmMemoryHookStatus on_low_wasm_memory_hook_status = 53;
+  reserved 53;
+  // Contains tasks that need to be executed before processing any input of the
+  // canister.
+  TaskQueue tasks = 54;
+  // A map of environment variable names to their values
+  map<string, string> environment_variables = 55;
 }

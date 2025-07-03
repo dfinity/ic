@@ -5,7 +5,8 @@ use assert_matches::assert_matches;
 use common::{increase_dissolve_delay_raw, set_dissolve_delay_raw};
 use fixtures::{principal, NNSBuilder, NeuronBuilder, NNS};
 use futures::{channel::mpsc, future::FutureExt, StreamExt};
-use ic_nervous_system_common::{ledger::IcpLedger, E8};
+use ic_nervous_system_canisters::ledger::IcpLedger;
+use ic_nervous_system_common::E8;
 use ic_neurons_fund::{
     NeuronsFundParticipationLimits, PolynomialMatchingFunction, SerializableFunction,
 };
@@ -13,19 +14,23 @@ use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_governance::{
     governance::{Environment, Governance},
     pb::v1::{
-        manage_neuron::Disburse, neuron::DissolveState,
-        neurons_fund_snapshot::NeuronsFundNeuronPortion, proposal::Action,
-        settle_neurons_fund_participation_request, CreateServiceNervousSystem,
-        IdealMatchedParticipationFunction, NetworkEconomics, NeuronsFundData,
-        NeuronsFundParticipation, NeuronsFundSnapshot, Proposal, ProposalData,
-        SettleNeuronsFundParticipationRequest, SwapParticipationLimits,
+        manage_neuron::Disburse, settle_neurons_fund_participation_request,
+        NeuronsFundParticipation as NeuronsFundParticipationPb,
+        SettleNeuronsFundParticipationRequest,
     },
+};
+use ic_nns_governance_api::{
+    neuron::DissolveState, neurons_fund_snapshot::NeuronsFundNeuronPortion, proposal::Action,
+    CreateServiceNervousSystem, IdealMatchedParticipationFunction, NetworkEconomics,
+    NeuronsFundData, NeuronsFundParticipation, NeuronsFundSnapshot, Proposal, ProposalData,
+    SwapParticipationLimits,
 };
 use ic_sns_swap::pb::v1::Lifecycle;
 use ic_sns_wasm::pb::v1::DeployedSns;
 use icp_ledger::AccountIdentifier;
 use interleaving::{InterleavingTestLedger, LedgerControlMessage};
 use rust_decimal_macros::dec;
+use std::sync::Arc;
 use std::{
     pin::Pin,
     sync::{atomic, atomic::Ordering as AOrdering},
@@ -60,7 +65,7 @@ fn test_cant_increase_dissolve_delay_while_disbursing() {
                 .set_kyc_verified(true),
         )
         .add_ledger_transform(Box::new(move |l| {
-            Box::new(InterleavingTestLedger::new(l, tx))
+            Arc::new(InterleavingTestLedger::new(l, tx))
         }))
         .set_economics(NetworkEconomics::default())
         .create();
@@ -226,7 +231,10 @@ fn test_cant_interleave_calls_to_settle_neurons_fund() {
         allocated_neurons_fund_participation_icp_e8s: Some(max_direct_participation_icp_e8s),
     };
 
-    assert_matches!(initial_neurons_fund_participation.validate(), Ok(_));
+    assert_matches!(
+        NeuronsFundParticipationPb::from(initial_neurons_fund_participation.clone()).validate(),
+        Ok(_)
+    );
 
     let mut nns = NNSBuilder::new()
         // Add the proposal that will be used in `settle_neurons_fund_participation`.
@@ -256,7 +264,7 @@ fn test_cant_interleave_calls_to_settle_neurons_fund() {
         )
         .add_account_for(sns_governance_canister_id, 0) // Setup the treasury account
         .add_ledger_transform(Box::new(move |l| {
-            Box::new(InterleavingTestLedger::new(l, tx))
+            Arc::new(InterleavingTestLedger::new(l, tx))
         }))
         .set_economics(NetworkEconomics::default())
         .create();

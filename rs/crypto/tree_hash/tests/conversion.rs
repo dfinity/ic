@@ -5,7 +5,6 @@ use ic_crypto_tree_hash::{
 use ic_crypto_tree_hash_test_utils::{
     arbitrary::arbitrary_well_formed_mixed_hash_tree, MAX_HASH_TREE_DEPTH,
 };
-use proptest::prelude::*;
 use std::convert::TryInto;
 
 type TreeOfBlobs = LabeledTree<Vec<u8>>;
@@ -22,12 +21,17 @@ fn labeled(s: &str, b: &[u8]) -> MixedHashTree {
     MixedHashTree::Labeled(s.into(), Box::new(MixedHashTree::Leaf(b.to_vec())))
 }
 
-proptest! {
-    #[test]
-    fn prop_well_formed_trees_are_convertible(t in arbitrary_well_formed_mixed_hash_tree()) {
-        let r: Result<TreeOfBlobs, _> = t.clone().try_into();
-        assert!(r.is_ok(), "Failed to convert a well-formed mixed hash tree {:?} into a labeled tree: {:?}", t, r);
-    }
+#[test_strategy::proptest]
+fn prop_well_formed_trees_are_convertible(
+    #[strategy(arbitrary_well_formed_mixed_hash_tree())] t: MixedHashTree,
+) {
+    let r: Result<TreeOfBlobs, _> = t.clone().try_into();
+    assert!(
+        r.is_ok(),
+        "Failed to convert a well-formed mixed hash tree {:?} into a labeled tree: {:?}",
+        t,
+        r
+    );
 }
 
 type T = TreeOfBlobs;

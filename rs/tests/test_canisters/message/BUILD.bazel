@@ -5,8 +5,6 @@ package(default_visibility = ["//rs:system-tests-pkg"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/rust_canisters/dfn_candid",
-    "//rs/rust_canisters/dfn_core",
     "@crate_index//:candid",
     "@crate_index//:ic-cdk",
     "@crate_index//:serde",
@@ -14,7 +12,6 @@ DEPENDENCIES = [
 
 MACRO_DEPENDENCIES = [
     # Keep sorted.
-    "@crate_index//:ic-cdk-macros",
 ]
 
 ALIASES = {}

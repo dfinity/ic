@@ -5,7 +5,6 @@ use ic_backup::{
 };
 use slog::{o, Drain};
 use std::{io::stdin, sync::Arc};
-use tokio::{runtime::Handle, task::spawn_blocking};
 
 // Here is an example config file:
 //
@@ -70,22 +69,17 @@ async fn main() {
     let drain = slog_async::Async::new(filter).build().fuse();
     let log = slog::Logger::root(drain, o!());
 
-    let rt = Handle::current();
-    spawn_blocking(move || {
-        match args.subcmd {
-            Some(SubCommand::Init) => {
-                BackupManager::init(&mut stdin().lock(), log, args.config_file)
-            }
-            Some(SubCommand::Upgrade) => BackupManager::upgrade(log, args.config_file),
-            Some(SubCommand::GetReplicaVersion { subnet_id }) => {
-                BackupManager::get_version(log, args.config_file, subnet_id.0)
-            }
-            _ => {
-                let bm = BackupManager::new(log, args, &rt);
-                Arc::new(bm).do_backups();
-            }
-        };
-    })
-    .await
-    .expect("Blocking task panicked")
+    match args.subcmd {
+        Some(SubCommand::Init) => BackupManager::init(&mut stdin().lock(), log, args.config_file),
+        Some(SubCommand::Upgrade) => BackupManager::upgrade(log, args.config_file),
+        Some(SubCommand::GetReplicaVersion { subnet_id }) => {
+            BackupManager::get_version(log, args.config_file, subnet_id.0)
+        }
+        _ => {
+            let bm = BackupManager::new(log, args).await;
+            tokio::task::spawn_blocking(|| Arc::new(bm).do_backups())
+                .await
+                .expect("Backup task failed");
+        }
+    }
 }

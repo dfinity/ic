@@ -20,12 +20,10 @@ path = "src/lib.rs"
 [dependencies]
 build-info = { workspace = true }
 candid = { workspace = true }
-dfn_candid = { path = "../../../../rust_canisters/dfn_candid" }
 ic-base-types = { path = "../../../../types/base_types" }
-ic-canisters-http-types = { path = "../../../../rust_canisters/http_types" }
 ic-cdk = { workspace = true }
-ic-cdk-macros = { workspace = true }
 ic-crypto-sha2 = { path = "../../../../crypto/sha2" }
+ic-http-types = { path = "../../../../../packages/ic-http-types" }
 ic-management-canister-types-private = { path = "../../../../types/management_canister_types" }
 ic-metrics-encoder = "1"
 ic-nervous-system-clients = { path = "../../../../nervous_system/clients" }
@@ -67,6 +65,7 @@ build-info-build = { workspace = true }
 
 [dev-dependencies]
 candid_parser = { workspace = true }
+dfn_candid = { path = "../../../../rust_canisters/dfn_candid" }
 ic-state-machine-tests = { path = "../../../../state_machine_tests" }
 pretty_assertions = { workspace = true }
 tokio = { workspace = true }

@@ -123,6 +123,11 @@ impl CallContext {
         self.responded = true;
     }
 
+    /// Takes the available cycles out of the call context and returns them.
+    fn take_available_cycles(&mut self) -> Cycles {
+        self.available_cycles.take()
+    }
+
     /// The point in time at which the call context was created.
     pub fn time(&self) -> Time {
         self.time
@@ -690,18 +695,18 @@ impl CallContextManager {
 
             (Ok(None), Responded::No, OutstandingCalls::No) => {
                 self.stats.on_call_context_response(&context.call_origin);
-                let refund = context.available_cycles;
+                let refund = context.take_available_cycles();
                 (CallContextAction::NoResponse { refund }, Some(context))
             }
 
             (Ok(Some(WasmResult::Reply(payload))), Responded::No, OutstandingCalls::No) => {
                 self.stats.on_call_context_response(&context.call_origin);
-                let refund = context.available_cycles;
+                let refund = context.take_available_cycles();
                 (CallContextAction::Reply { payload, refund }, Some(context))
             }
             (Ok(Some(WasmResult::Reply(payload))), Responded::No, OutstandingCalls::Yes) => {
                 self.stats.on_call_context_response(&context.call_origin);
-                let refund = context.available_cycles;
+                let refund = context.take_available_cycles();
                 context.mark_responded();
                 self.call_contexts.insert(call_context_id, context);
                 (CallContextAction::Reply { payload, refund }, None)
@@ -709,12 +714,12 @@ impl CallContextManager {
 
             (Ok(Some(WasmResult::Reject(payload))), Responded::No, OutstandingCalls::No) => {
                 self.stats.on_call_context_response(&context.call_origin);
-                let refund = context.available_cycles;
+                let refund = context.take_available_cycles();
                 (CallContextAction::Reject { payload, refund }, Some(context))
             }
             (Ok(Some(WasmResult::Reject(payload))), Responded::No, OutstandingCalls::Yes) => {
                 self.stats.on_call_context_response(&context.call_origin);
-                let refund = context.available_cycles;
+                let refund = context.take_available_cycles();
                 context.mark_responded();
                 self.call_contexts.insert(call_context_id, context);
                 (CallContextAction::Reject { payload, refund }, None)
@@ -722,7 +727,7 @@ impl CallContextManager {
 
             (Err(error), Responded::No, OutstandingCalls::No) => {
                 self.stats.on_call_context_response(&context.call_origin);
-                let refund = context.available_cycles;
+                let refund = context.take_available_cycles();
                 (CallContextAction::Fail { error, refund }, Some(context))
             }
 
@@ -1180,7 +1185,7 @@ impl AsInt for (CoarseTime, CallbackId) {
 
     #[inline]
     fn as_int(&self) -> u128 {
-        (self.0.as_secs_since_unix_epoch() as u128) << 64 | self.1.get() as u128
+        ((self.0.as_secs_since_unix_epoch() as u128) << 64) | self.1.get() as u128
     }
 }
 

@@ -1,0 +1,31 @@
+[package]
+name = "ic-consensus-certification"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+ic-consensus-utils = { path = "../utils" }
+ic-interfaces = { path = "../../interfaces" }
+ic-interfaces-registry = { path = "../../interfaces/registry" }
+ic-interfaces-state-manager = { path = "../../interfaces/state_manager" }
+ic-logger = { path = "../../monitoring/logger" }
+ic-metrics = { path = "../../monitoring/metrics" }
+ic-replicated-state = { path = "../../replicated_state" }
+ic-types = { path = "../../types/types" }
+prometheus = { workspace = true }
+slog = { workspace = true }
+strum_macros = { workspace = true }
+tokio = { workspace = true }
+
+[dev-dependencies]
+assert_matches = { workspace = true }
+ic-artifact-pool = { path = "../../artifact_pool" }
+ic-consensus-mocks = { path = "../mocks" }
+ic-test-utilities = { path = "../../test_utilities" }
+ic-test-utilities-consensus = { path = "../../test_utilities/consensus" }
+ic-test-utilities-logger = { path = "../../test_utilities/logger" }
+ic-test-utilities-types = { path = "../../test_utilities/types" }
+ic-types-test-utils = { path = "../../types/types_test_utils" }

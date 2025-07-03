@@ -23,6 +23,7 @@ use ic_types::{
     messages::{HttpRequest, HttpRequestContent},
     RegistryVersion, SubnetId, Time,
 };
+use ic_utils::str::StrEllipsize;
 use ic_validator::{
     CanisterIdSet, HttpRequestVerifier, HttpRequestVerifierImpl, RequestValidationError,
 };
@@ -156,7 +157,6 @@ fn cbor_content_type(headers: &HeaderMap) -> bool {
     content_type.to_lowercase() == CONTENT_TYPE_CBOR
 }
 
-#[async_trait::async_trait]
 impl<T, S> FromRequest<S> for Cbor<T>
 where
     T: for<'a> Deserialize<'a>,
@@ -186,7 +186,6 @@ where
 
 pub(crate) struct WithTimeout<E>(pub E);
 
-#[async_trait::async_trait]
 impl<S, E> FromRequest<S> for WithTimeout<E>
 where
     S: Send + Sync,
@@ -252,10 +251,12 @@ pub(crate) fn validation_error_to_http_error<C: std::fmt::Debug + HttpRequestCon
 ) -> HttpError {
     let message_id = request.id();
     match err {
-        RequestValidationError::InvalidSignature(_) => {
+        RequestValidationError::InvalidRequestExpiry(_)
+        | RequestValidationError::InvalidSignature(_) => {
+            let request_ellipsized = format!("{:?}", request).ellipsize(1024, 90);
             info!(
                 log,
-                "msg_id: {}, err: {}, request: {:?}", message_id, err, request
+                "msg_id: {}, err: {}, request: {}", message_id, err, request_ellipsized,
             )
         }
         _ => info!(log, "msg_id: {}, err: {}", message_id, err),

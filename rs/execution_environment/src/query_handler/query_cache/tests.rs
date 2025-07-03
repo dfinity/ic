@@ -88,9 +88,7 @@ fn query_cache_metrics(test: &ExecutionTest) -> &QueryCacheMetrics {
 /// Return `ExecutionTestBuilder` with query caching, composite queries
 /// and query stats enabled.
 fn builder_with_query_caching() -> ExecutionTestBuilder {
-    ExecutionTestBuilder::new()
-        .with_composite_queries()
-        .with_query_stats()
+    ExecutionTestBuilder::new().with_query_stats()
 }
 
 /// Return `ExecutionTestBuilder` with specified query cache `capacity`.
@@ -1474,11 +1472,20 @@ fn query_cache_future_proof_test() {
         | SystemApiCallId::CallWithBestEffortResponse
         | SystemApiCallId::CanisterCycleBalance
         | SystemApiCallId::CanisterCycleBalance128
+        | SystemApiCallId::CanisterLiquidCycleBalance128
         | SystemApiCallId::CanisterSelfCopy
         | SystemApiCallId::CanisterSelfSize
         | SystemApiCallId::CanisterStatus
         | SystemApiCallId::CanisterVersion
+        | SystemApiCallId::RootKeySize
+        | SystemApiCallId::RootKeyCopy
         | SystemApiCallId::CertifiedDataSet
+        | SystemApiCallId::CostCall
+        | SystemApiCallId::CostCreateCanister
+        | SystemApiCallId::CostHttpRequest
+        | SystemApiCallId::CostSignWithEcdsa
+        | SystemApiCallId::CostSignWithSchnorr
+        | SystemApiCallId::CostVetkdDeriveKey
         | SystemApiCallId::CyclesBurn128
         | SystemApiCallId::DataCertificateCopy
         | SystemApiCallId::DataCertificatePresent
@@ -1487,7 +1494,6 @@ fn query_cache_future_proof_test() {
         | SystemApiCallId::GlobalTimerSet
         | SystemApiCallId::InReplicatedExecution
         | SystemApiCallId::IsController
-        | SystemApiCallId::MintCycles
         | SystemApiCallId::MintCycles128
         | SystemApiCallId::MsgArgDataCopy
         | SystemApiCallId::MsgArgDataSize
@@ -1520,6 +1526,12 @@ fn query_cache_future_proof_test() {
         | SystemApiCallId::StableRead
         | SystemApiCallId::StableSize
         | SystemApiCallId::StableWrite
+        | SystemApiCallId::EnvVarCount
+        | SystemApiCallId::EnvVarNameSize
+        | SystemApiCallId::EnvVarNameCopy
+        | SystemApiCallId::EnvVarNameExists
+        | SystemApiCallId::EnvVarValueSize
+        | SystemApiCallId::EnvVarValueCopy
         | SystemApiCallId::Time
         | SystemApiCallId::Trap
         | SystemApiCallId::TryGrowWasmMemory => {

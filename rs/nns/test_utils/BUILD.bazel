@@ -31,6 +31,7 @@ BASE_DEPENDENCIES = [
     "//rs/nns/handlers/lifeline/impl:lifeline",
     "//rs/nns/handlers/lifeline/interface",
     "//rs/nns/sns-wasm",
+    "//rs/node_rewards/canister/api",
     "//rs/protobuf",
     "//rs/registry/canister",
     "//rs/registry/canister/api",
@@ -41,7 +42,6 @@ BASE_DEPENDENCIES = [
     "//rs/rust_canisters/canister_test",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_http",
-    "//rs/rust_canisters/dfn_json",
     "//rs/rust_canisters/dfn_protobuf",
     "//rs/rust_canisters/on_wire",
     "//rs/sns/governance",
@@ -72,16 +72,21 @@ BASE_DEPENDENCIES = [
 # Each target declared in this file may choose either these (release-ready)
 # dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
 DEPENDENCIES = BASE_DEPENDENCIES + [
+    # Keep sorted.
     "//rs/nns/gtc",
     "//rs/nns/handlers/root/impl:root",
 ]
 
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
+    # Keep sorted.
     "//rs/nns/gtc:gtc--test_feature",
     "//rs/nns/handlers/root/impl:root--test_feature",
 ]
 
-MACRO_DEPENDENCIES = []
+MACRO_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:async-trait",
+]
 
 ALIASES = {}
 

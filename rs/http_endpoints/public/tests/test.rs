@@ -5,13 +5,10 @@ pub mod common;
 
 use crate::common::{
     create_conn_and_send_request, default_get_latest_state, default_latest_certified_height,
-    default_read_certified_state, get_free_localhost_socket_addr,
-    test_agent::{self, wait_for_status_healthy, IngressMessage},
-    HttpEndpointBuilder,
+    default_read_certified_state, get_free_localhost_socket_addr, HttpEndpointBuilder,
 };
 use axum::body::{to_bytes, Body};
 use bytes::Bytes;
-use common::test_agent::APPLICATION_CBOR;
 use futures_util::{future::BoxFuture, FutureExt, StreamExt};
 use http_body::Frame;
 use http_body_util::StreamBody;
@@ -27,6 +24,9 @@ use ic_config::http_handler::Config;
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
 use ic_crypto_tree_hash::{flatmap, Label, LabeledTree, MixedHashTree, Path};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
+use ic_http_endpoints_test_agent::{
+    self, wait_for_status_healthy, Call, CanisterReadState, IngressMessage, Query, APPLICATION_CBOR,
+};
 use ic_interfaces::execution_environment::QueryExecutionError;
 use ic_interfaces_mocks::consensus_pool::MockConsensusPoolCache;
 use ic_interfaces_registry_mocks::MockRegistryClient;
@@ -137,7 +137,7 @@ fn test_healthy_behind() {
 
         let response = reqwest::Client::new()
             .get(url)
-            .header(CONTENT_TYPE, test_agent::APPLICATION_CBOR)
+            .header(CONTENT_TYPE, APPLICATION_CBOR)
             .send()
             .await
             .unwrap();
@@ -193,7 +193,7 @@ fn test_unauthorized_controller() {
     rt.block_on(async {
         wait_for_status_healthy(&addr).await.unwrap();
 
-        let response = test_agent::CanisterReadState::new(vec![path], canister1)
+        let response = CanisterReadState::new(vec![path], canister1)
             .read_state(addr)
             .await;
 
@@ -243,18 +243,14 @@ fn test_unauthorized_query() {
 
     // Valid query call with canister_id = effective_canister_id
     rt.block_on(async move {
-        let response = test_agent::Query::new(canister1, canister1)
-            .query(addr)
-            .await;
+        let response = Query::new(canister1, canister1).query(addr).await;
 
         assert_eq!(StatusCode::OK, response.status());
     });
 
     // Invalid query call with canister_id != effective_canister_id
     rt.block_on(async move {
-        let response = test_agent::Query::new(canister1, canister2)
-            .query(addr)
-            .await;
+        let response = Query::new(canister1, canister2).query(addr).await;
 
         assert_eq!(StatusCode::BAD_REQUEST, response.status());
 
@@ -279,7 +275,7 @@ fn test_unauthorized_query() {
 /// regardless of the effective canister id.
 #[rstest]
 fn test_update_call_to_management_canister(
-    #[values(test_agent::Call::V2, test_agent::Call::V3)] endpoint: test_agent::Call,
+    #[values(Call::V2, Call::V3)] endpoint: Call,
     #[values(PrincipalId::default(), "224lq-3aaaa-aaaaf-ase7a-cai")]
     effective_canister_id: PrincipalId,
 ) {
@@ -321,9 +317,7 @@ fn test_update_call_to_management_canister(
 
 // Test that that http endpoint rejects calls with mismatch between canister id an effective canister id.
 #[rstest]
-fn test_unauthorized_call(
-    #[values(test_agent::Call::V2, test_agent::Call::V3)] endpoint: test_agent::Call,
-) {
+fn test_unauthorized_call(#[values(Call::V2, Call::V3)] endpoint: Call) {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
     let config = Config {
@@ -437,7 +431,7 @@ fn test_request_timeout() {
 
     rt.block_on(async {
         wait_for_status_healthy(&addr).await.unwrap();
-        let response = test_agent::Query::default().query(addr).await;
+        let response = Query::default().query(addr).await;
         assert_eq!(StatusCode::GATEWAY_TIMEOUT, response.status());
     });
 }
@@ -520,7 +514,7 @@ fn test_request_too_slow() {
 }
 
 #[rstest]
-#[case(test_agent::Call::V2, CBOR::Map(BTreeMap::from([
+#[case(Call::V2, CBOR::Map(BTreeMap::from([
             (
                 CBOR::Text("error_code".to_string()),
                 CBOR::Text("IC0204".to_string()),
@@ -534,7 +528,7 @@ fn test_request_too_slow() {
                 CBOR::Integer(RejectCode::SysTransient as i128),
             ),
         ])))]
-#[case(test_agent::Call::V3, CBOR::Map(BTreeMap::from([
+#[case(Call::V3, CBOR::Map(BTreeMap::from([
             (
                 CBOR::Text("status".to_string()),
                 CBOR::Text("non_replicated_rejection".to_string()),
@@ -553,7 +547,7 @@ fn test_request_too_slow() {
             ),
         ])))]
 fn test_status_code_when_ingress_filter_fails(
-    #[case] endpoint: test_agent::Call,
+    #[case] endpoint: Call,
     #[case] expected_response: CBOR,
 ) {
     let rt = Runtime::new().unwrap();
@@ -650,7 +644,7 @@ fn test_too_long_paths_are_rejected() {
     rt.block_on(async move {
         wait_for_status_healthy(&addr).await.unwrap();
 
-        let response = test_agent::CanisterReadState::new(vec![long_path], PrincipalId::default())
+        let response = CanisterReadState::new(vec![long_path], PrincipalId::default())
             .read_state(addr)
             .await;
 
@@ -686,7 +680,7 @@ fn test_query_endpoint_returns_service_unavailable_on_missing_state() {
     rt.block_on(async {
         wait_for_status_healthy(&addr).await.unwrap();
 
-        let response = test_agent::Query::default().query(addr).await;
+        let response = Query::default().query(addr).await;
         let expected_status_code = StatusCode::SERVICE_UNAVAILABLE;
 
         assert_eq!(expected_status_code, response.status());
@@ -1192,7 +1186,7 @@ fn test_call_handler_returns_early_for_ingress_message_already_in_certified_stat
 
         let message = IngressMessage::default();
 
-        let response = test_agent::Call::V3.call(addr, message).await;
+        let response = Call::V3.call(addr, message).await;
 
         assert_eq!(
             StatusCode::OK,
@@ -1279,10 +1273,10 @@ fn test_duplicate_concurrent_requests_return_early() {
     rt.block_on(async {
         wait_for_status_healthy(&addr).await.unwrap();
 
-        let first_request_join_handle = rt.spawn(test_agent::Call::V3.call(addr, message.clone()));
+        let first_request_join_handle = rt.spawn(Call::V3.call(addr, message.clone()));
         first_request_submitted_to_ingress.notified().await;
 
-        let second_request = test_agent::Call::V3.call(addr, message.clone()).await;
+        let second_request = Call::V3.call(addr, message.clone()).await;
         handlers
             .certified_height_watcher
             .send(Height::from(1))
@@ -1374,7 +1368,7 @@ fn test_sync_call_endpoint_responds_with_certificate(
 
     rt.block_on(async {
         wait_for_status_healthy(&addr).await.unwrap();
-        let response = test_agent::Call::V3.call(addr, message).await;
+        let response = Call::V3.call(addr, message).await;
 
         assert_eq!(
             StatusCode::OK,
@@ -1453,7 +1447,7 @@ fn test_synchronous_call_endpoint_no_certification() {
 
     rt.block_on(async {
         wait_for_status_healthy(&addr).await.unwrap();
-        let response = test_agent::Call::V3.call(addr, message).await;
+        let response = Call::V3.call(addr, message).await;
 
         assert_eq!(
             StatusCode::ACCEPTED,
@@ -1556,7 +1550,7 @@ fn test_call_v3_response_when_state_reader_fails(
 
     rt.block_on(async {
         wait_for_status_healthy(&addr).await.unwrap();
-        let response = test_agent::Call::V3.call(addr, message).await;
+        let response = Call::V3.call(addr, message).await;
         let status = response.status();
         let text = response.text().await;
         assert_eq!(StatusCode::ACCEPTED, status, "{:?}", text.unwrap());
@@ -1572,9 +1566,7 @@ fn test_call_v3_response_when_state_reader_fails(
 /// if the call handler is unable to submit the ingress message to
 /// P2P.
 #[rstest]
-fn test_call_response_when_p2p_not_running(
-    #[values(test_agent::Call::V2, test_agent::Call::V3)] call_agent: test_agent::Call,
-) {
+fn test_call_response_when_p2p_not_running(#[values(Call::V2, Call::V3)] call_agent: Call) {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
     let config = Config {

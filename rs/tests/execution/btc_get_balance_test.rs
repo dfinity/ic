@@ -1,6 +1,4 @@
-#[rustfmt::skip]
-
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
 use bitcoincore_rpc::{Auth, Client, RpcApi};
 use candid::Decode;
 use ic_registry_subnet_type::SubnetType;

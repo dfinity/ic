@@ -1,22 +1,21 @@
 //! This defines the RPC service methods offered by the sandbox process
 //! (used by the controller) as well as the expected replies.
 
-use std::{os::fd::RawFd, sync::Arc, time::Duration};
+use std::{os::fd::RawFd, time::Duration};
 
 use crate::fdenum::EnumerateInnerFileDescriptors;
 use crate::protocol::structs;
-use ic_embedders::{SerializedModule, SerializedModuleBytes};
 use ic_interfaces::execution_environment::HypervisorResult;
+use ic_management_canister_types_private::Global;
 use ic_replicated_state::{
     page_map::{
         BaseFileSerialization, CheckpointSerialization, MappingSerialization,
         OverlayFileSerialization, PageAllocatorSerialization, PageMapSerialization,
         StorageSerialization,
     },
-    Global, NumWasmPages,
+    NumWasmPages,
 };
 use ic_types::CanisterId;
-use ic_utils;
 use serde::{Deserialize, Serialize};
 
 use super::{
@@ -42,26 +41,7 @@ pub struct TerminateReply {}
 /// support multiple code states e.g. during upgrades). A single wasm
 /// instance can be used concurrently for multiple executions.
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
-pub struct OpenWasmSerializedRequest {
-    /// Id used to later refer to this canister runner. Must be unique
-    /// per sandbox instance.
-    pub wasm_id: WasmId,
-
-    /// The serialization of a previously compiled `wasmtime::Module`.
-    /// This types in just an `Arc` reference to a vector of bytes and the only
-    /// reason it is `Arc` is so that we can cheaply create the
-    /// `OpenWasmSerializedRequest` before sending it to the sandbox.
-    #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
-    #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
-    pub serialized_module: Arc<SerializedModuleBytes>,
-}
-
-/// Reply to an `OpenWasmRequest`.
-#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
-pub struct OpenWasmSerializedReply(pub HypervisorResult<()>);
-
-#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
-pub struct OpenWasmViaFileRequest {
+pub struct OpenWasmRequest {
     /// Id used to later refer to this canister runner. Must be unique
     /// per sandbox instance.
     pub wasm_id: WasmId,
@@ -70,7 +50,11 @@ pub struct OpenWasmViaFileRequest {
     pub serialized_module: RawFd,
 }
 
-impl EnumerateInnerFileDescriptors for OpenWasmViaFileRequest {
+/// Reply to an `OpenWasmRequest`.
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
+pub struct OpenWasmReply(pub HypervisorResult<()>);
+
+impl EnumerateInnerFileDescriptors for OpenWasmRequest {
     fn enumerate_fds<'a>(&'a mut self, fds: &mut Vec<&'a mut std::os::unix::io::RawFd>) {
         fds.push(&mut self.serialized_module);
     }
@@ -247,43 +231,7 @@ pub struct AbortExecutionReply {
 }
 
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
-pub struct CreateExecutionStateSerializedRequest {
-    pub wasm_id: WasmId,
-    /// The serialization of a previously compiled `wasmtime::Module`.
-    /// This types in just an `Arc` reference to a vector of bytes and the only
-    /// reason it is `Arc` is so that we can cheaply create the
-    /// `CreateExecutionStateSerializedRequest` before sending it to the sandbox.
-    #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
-    #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
-    pub serialized_module: Arc<SerializedModule>,
-    pub wasm_page_map: PageMapSerialization,
-    pub next_wasm_memory_id: MemoryId,
-    pub canister_id: CanisterId,
-    pub stable_memory_page_map: PageMapSerialization,
-}
-
-impl EnumerateInnerFileDescriptors for CreateExecutionStateSerializedRequest {
-    fn enumerate_fds<'a>(&'a mut self, fds: &mut Vec<&'a mut std::os::unix::io::RawFd>) {
-        self.wasm_page_map.enumerate_fds(fds);
-        self.stable_memory_page_map.enumerate_fds(fds);
-    }
-}
-
-#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
-pub struct CreateExecutionStateSerializedSuccessReply {
-    pub wasm_memory_modifications: MemoryModifications,
-    pub exported_globals: Vec<Global>,
-    pub deserialization_time: Duration,
-    pub total_sandbox_time: Duration,
-}
-
-#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
-pub struct CreateExecutionStateSerializedReply(
-    pub HypervisorResult<CreateExecutionStateSerializedSuccessReply>,
-);
-
-#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
-pub struct CreateExecutionStateViaFileRequest {
+pub struct CreateExecutionStateRequest {
     pub wasm_id: WasmId,
     pub bytes: RawFd,
     pub initial_state_data: RawFd,
@@ -293,7 +241,18 @@ pub struct CreateExecutionStateViaFileRequest {
     pub stable_memory_page_map: PageMapSerialization,
 }
 
-impl EnumerateInnerFileDescriptors for CreateExecutionStateViaFileRequest {
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
+pub struct CreateExecutionStateSuccessReply {
+    pub wasm_memory_modifications: MemoryModifications,
+    pub exported_globals: Vec<Global>,
+    pub deserialization_time: Duration,
+    pub total_sandbox_time: Duration,
+}
+
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
+pub struct CreateExecutionStateReply(pub HypervisorResult<CreateExecutionStateSuccessReply>);
+
+impl EnumerateInnerFileDescriptors for CreateExecutionStateRequest {
     fn enumerate_fds<'a>(&'a mut self, fds: &mut Vec<&'a mut std::os::unix::io::RawFd>) {
         fds.push(&mut self.bytes);
         fds.push(&mut self.initial_state_data);
@@ -307,27 +266,23 @@ impl EnumerateInnerFileDescriptors for CreateExecutionStateViaFileRequest {
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub enum Request {
     Terminate(TerminateRequest),
-    OpenWasmSerialized(OpenWasmSerializedRequest),
-    OpenWasmViaFile(OpenWasmViaFileRequest),
+    OpenWasm(OpenWasmRequest),
     CloseWasm(CloseWasmRequest),
     OpenMemory(OpenMemoryRequest),
     CloseMemory(CloseMemoryRequest),
     StartExecution(StartExecutionRequest),
     ResumeExecution(ResumeExecutionRequest),
     AbortExecution(AbortExecutionRequest),
-    CreateExecutionStateSerialized(CreateExecutionStateSerializedRequest),
-    CreateExecutionStateViaFile(CreateExecutionStateViaFileRequest),
+    CreateExecutionState(CreateExecutionStateRequest),
 }
 
 impl EnumerateInnerFileDescriptors for Request {
     fn enumerate_fds<'a>(&'a mut self, fds: &mut Vec<&'a mut std::os::unix::io::RawFd>) {
         match self {
             Request::OpenMemory(request) => request.enumerate_fds(fds),
-            Request::CreateExecutionStateSerialized(request) => request.enumerate_fds(fds),
-            Request::OpenWasmViaFile(request) => request.enumerate_fds(fds),
-            Request::CreateExecutionStateViaFile(request) => request.enumerate_fds(fds),
+            Request::OpenWasm(request) => request.enumerate_fds(fds),
+            Request::CreateExecutionState(request) => request.enumerate_fds(fds),
             Request::Terminate(_)
-            | Request::OpenWasmSerialized(_)
             | Request::CloseWasm(_)
             | Request::CloseMemory(_)
             | Request::StartExecution(_)
@@ -342,18 +297,14 @@ impl EnumerateInnerFileDescriptors for Request {
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub enum Reply {
     Terminate(TerminateReply),
-    OpenWasmSerialized(OpenWasmSerializedReply),
-    /// Reuse the same reply as for Serialized requests.
-    OpenWasmViaFile(OpenWasmSerializedReply),
+    OpenWasm(OpenWasmReply),
     CloseWasm(CloseWasmReply),
     OpenMemory(OpenMemoryReply),
     CloseMemory(CloseMemoryReply),
     StartExecution(StartExecutionReply),
     ResumeExecution(ResumeExecutionReply),
     AbortExecution(AbortExecutionReply),
-    CreateExecutionStateSerialized(CreateExecutionStateSerializedReply),
-    /// Reuse the same reply as for Serialized requests.
-    CreateExecutionStateViaFile(CreateExecutionStateSerializedReply),
+    CreateExecutionState(CreateExecutionStateReply),
 }
 
 impl EnumerateInnerFileDescriptors for Reply {
@@ -364,23 +315,19 @@ impl EnumerateInnerFileDescriptors for Reply {
 mod tests {
     use super::*;
 
-    use std::{sync::Arc, time::Duration};
+    use std::time::Duration;
 
     use ic_base_types::NumSeconds;
-    use ic_config::{
-        embedders::Config as EmbeddersConfig, flag_status::FlagStatus,
-        subnet_config::CyclesAccountManagerConfig,
-    };
+    use ic_config::{flag_status::FlagStatus, subnet_config::CyclesAccountManagerConfig};
     use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
-    use ic_embedders::{wasm_utils, CompilationResult, SerializedModule, WasmtimeEmbedder};
+    use ic_embedders::wasmtime_embedder::system_api::{
+        sandbox_safe_system_state::SandboxSafeSystemState, ApiType, ExecutionParameters,
+        InstructionLimits,
+    };
     use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
-    use ic_logger::no_op_logger;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
-        Global, Memory, NetworkTopology, NumWasmPages, PageMap, SystemState,
-    };
-    use ic_system_api::{
-        sandbox_safe_system_state::SandboxSafeSystemState, ExecutionParameters, InstructionLimits,
+        Memory, MessageMemoryUsage, NetworkTopology, NumWasmPages, PageMap, SystemState,
     };
     use ic_test_utilities_types::ids::canister_test_id;
     use ic_types::{
@@ -388,7 +335,6 @@ mod tests {
         methods::{FuncRef, WasmMethod},
         ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions, SubnetId, Time,
     };
-    use ic_wasm_types::BinaryEncodedWasm;
 
     use crate::protocol::{
         id::{ExecId, MemoryId, WasmId},
@@ -396,22 +342,6 @@ mod tests {
     };
 
     const IS_WASM64_EXECUTION: bool = false;
-
-    fn wasm_module() -> (CompilationResult, SerializedModule) {
-        let wat = r#"
-            (module
-                (func (export "canister_init")
-                    (drop (memory.grow (i32.const 160)))
-                )
-                (memory 1)
-            )"#;
-        let embedder = WasmtimeEmbedder::new(EmbeddersConfig::default(), no_op_logger());
-        let wasm = wat::parse_str(wat).unwrap();
-
-        wasm_utils::compile(&embedder, &BinaryEncodedWasm::new(wasm))
-            .1
-            .unwrap()
-    }
 
     fn round_trip_request(msg: &Request) -> Request {
         let ser = bincode::serialize(&msg).unwrap();
@@ -436,17 +366,8 @@ mod tests {
     }
 
     #[test]
-    fn round_trip_open_wasm_serialized_request() {
-        let msg = Request::OpenWasmSerialized(OpenWasmSerializedRequest {
-            wasm_id: WasmId::new(),
-            serialized_module: wasm_module().1.bytes,
-        });
-        assert_eq!(round_trip_request(&msg), msg);
-    }
-
-    #[test]
-    fn round_trip_open_wasm_via_file_request() {
-        let msg = Request::OpenWasmViaFile(OpenWasmViaFileRequest {
+    fn round_trip_open_wasm_request() {
+        let msg = Request::OpenWasm(OpenWasmRequest {
             wasm_id: WasmId::new(),
             serialized_module: RawFd::from(35),
         });
@@ -454,8 +375,8 @@ mod tests {
     }
 
     #[test]
-    fn round_trip_open_wasm_serialized_reply() {
-        let msg = Reply::OpenWasmSerialized(OpenWasmSerializedReply(Ok(())));
+    fn round_trip_open_wasm_reply() {
+        let msg = Reply::OpenWasm(OpenWasmReply(Ok(())));
         assert_eq!(round_trip_reply(&msg), msg);
     }
 
@@ -521,7 +442,7 @@ mod tests {
             stable_memory_id: MemoryId::new(),
             exec_input: SandboxExecInput {
                 func_ref: FuncRef::Method(WasmMethod::Update("test".into())),
-                api_type: ic_system_api::ApiType::update(
+                api_type: ApiType::update(
                     Time::from_nanos_since_unix_epoch(10),
                     vec![1, 2, 3],
                     Cycles::new(100),
@@ -536,7 +457,10 @@ mod tests {
                     Global::V128(123),
                 ],
                 canister_current_memory_usage: NumBytes::new(100),
-                canister_current_message_memory_usage: NumBytes::new(123),
+                canister_current_message_memory_usage: MessageMemoryUsage {
+                    guaranteed_response: NumBytes::new(123),
+                    best_effort: NumBytes::new(123),
+                },
                 execution_parameters: ExecutionParameters {
                     instruction_limits: InstructionLimits::new(
                         FlagStatus::Enabled,
@@ -613,21 +537,8 @@ mod tests {
     }
 
     #[test]
-    fn round_trip_create_execution_state_serialized_request() {
-        let msg = Request::CreateExecutionStateSerialized(CreateExecutionStateSerializedRequest {
-            wasm_id: WasmId::new(),
-            serialized_module: Arc::new(wasm_module().1),
-            wasm_page_map: PageMap::new_for_testing().serialize(),
-            next_wasm_memory_id: MemoryId::new(),
-            canister_id: canister_test_id(1),
-            stable_memory_page_map: PageMap::new_for_testing().serialize(),
-        });
-        assert_eq!(round_trip_request(&msg), msg);
-    }
-
-    #[test]
-    fn round_trip_create_execution_state_via_file_request() {
-        let msg = Request::CreateExecutionStateViaFile(CreateExecutionStateViaFileRequest {
+    fn round_trip_create_execution_state_request() {
+        let msg = Request::CreateExecutionState(CreateExecutionStateRequest {
             wasm_id: WasmId::new(),
             bytes: RawFd::from(10),
             initial_state_data: RawFd::from(11),
@@ -640,8 +551,8 @@ mod tests {
     }
 
     #[test]
-    fn round_trip_create_execution_state_serialized_reply() {
-        let reply = CreateExecutionStateSerializedSuccessReply {
+    fn round_trip_create_execution_state_reply() {
+        let reply = CreateExecutionStateSuccessReply {
             wasm_memory_modifications: MemoryModifications {
                 page_delta: PageMap::new_for_testing().serialize_delta(&[]),
                 size: NumWasmPages::new(10),
@@ -656,8 +567,7 @@ mod tests {
             deserialization_time: Duration::from_secs(1),
             total_sandbox_time: Duration::from_secs(2),
         };
-        let msg =
-            Reply::CreateExecutionStateSerialized(CreateExecutionStateSerializedReply(Ok(reply)));
+        let msg = Reply::CreateExecutionState(CreateExecutionStateReply(Ok(reply)));
         assert_eq!(round_trip_reply(&msg), msg);
     }
 }

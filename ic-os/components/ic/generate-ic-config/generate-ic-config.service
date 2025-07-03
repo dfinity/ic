@@ -14,14 +14,14 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=/opt/ic/bin/generate-ic-config.sh -n /boot/config/network.conf -c /boot/config/nns.conf -b /boot/config/backup.conf -m /boot/config/malicious_behavior.conf -q /boot/config/query_stats.conf -t /boot/config/jaeger_addr.conf -i /opt/ic/share/ic.json5.template -o /run/ic-node/config/ic.json5
+ExecStart=/opt/ic/bin/generate-ic-config.sh -i /opt/ic/share/ic.json5.template -o /run/ic-node/config/ic.json5
 Restart=on-failure
 RestartSec=10
 
-[Install]
-WantedBy=multi-user.target
-
-# All guestos services that networking depends on log their outputs to the 
+# All guestos services that networking depends on log their outputs to the
 # console to be piped to the host terminal if the verbose flag is enabled.
 StandardOutput=journal+console
 StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target

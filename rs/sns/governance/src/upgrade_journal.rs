@@ -5,6 +5,7 @@ use crate::pb::v1::{
     Empty, GetUpgradeJournalRequest, GetUpgradeJournalResponse, ProposalId, UpgradeJournal,
     UpgradeJournalEntry,
 };
+use ic_sns_governance_api::serialize_journal_entries;
 
 impl upgrade_journal_entry::UpgradeStepsRefreshed {
     /// Creates a new UpgradeStepsRefreshed event with the given versions
@@ -216,10 +217,12 @@ impl From<upgrade_journal_entry::TargetVersionReset> for upgrade_journal_entry::
     }
 }
 
-pub fn serve_journal(journal: &UpgradeJournal) -> ic_canisters_http_types::HttpResponse {
-    use ic_canisters_http_types::HttpResponseBuilder;
-    let journal = ic_sns_governance_api::pb::v1::UpgradeJournal::from(journal.clone());
-    match serde_json::to_string(&journal.entries) {
+pub fn serve_journal(journal: UpgradeJournal) -> ic_http_types::HttpResponse {
+    use ic_http_types::HttpResponseBuilder;
+
+    let journal = ic_sns_governance_api::pb::v1::UpgradeJournal::from(journal);
+
+    match serialize_journal_entries(&journal) {
         Err(err) => {
             HttpResponseBuilder::server_error(format!("Failed to encode journal: {}", err)).build()
         }

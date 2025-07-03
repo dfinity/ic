@@ -18,16 +18,14 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
-permissions:
-  pull-requests: write
-  packages: write
-  contents: write
-
 jobs:
   build-base-image:
     name: Build Base Container Image
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    permissions:
+      packages: write
+      contents: write
     strategy:
       matrix:
         include:
@@ -39,10 +37,6 @@ jobs:
             CONTEXT: "ic-os/guestos/context"
             REFFILE: "ic-os/guestos/context/docker-base.dev"
             BUILD_ARGS: "PACKAGE_FILES=packages.common packages.dev"
-          - IMAGE: "boundaryos-base"
-            CONTEXT: "ic-os/boundary-guestos/context"
-            REFFILE: "ic-os/boundary-guestos/context/docker-base.prod"
-            BUILD_ARGS: ""
           - IMAGE: "hostos-base"
             CONTEXT: "ic-os/hostos/context"
             REFFILE: "ic-os/hostos/context/docker-base.prod"
@@ -106,6 +100,7 @@ jobs:
     name: Update Reference Files PR
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    environment: CREATE_PR
     needs: [build-base-image]
     if: ${{ github.ref_name == 'master' }}
     steps:
@@ -113,11 +108,13 @@ jobs:
         uses: actions/create-github-app-token@v1
         id: app-token
         with:
-          app-id: ${{ vars.PR_AUTOMATION_BOT_PUBLIC_APP_ID }}
-          private-key: ${{ secrets.PR_AUTOMATION_BOT_PUBLIC_PRIVATE_KEY }}
+          app-id: ${{ vars.PR_CREATION_BOT_APP_ID }}
+          private-key: ${{ secrets.PR_CREATION_BOT_PRIVATE_KEY }}
 
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Get Current Date
         id: date

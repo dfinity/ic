@@ -6,13 +6,17 @@ use ic_config::{
 use ic_embedders::{
     wasm_utils::instrumentation::instruction_to_cost,
     wasm_utils::instrumentation::WasmMemoryType,
-    wasmtime_embedder::{system_api_complexity, CanisterMemoryType},
+    wasmtime_embedder::{
+        system_api::{sandbox_safe_system_state::CallbackUpdate, ApiType},
+        system_api_complexity, CanisterMemoryType,
+    },
 };
 use ic_interfaces::execution_environment::{
-    CanisterBacktrace, ExecutionMode, HypervisorError, SystemApi, TrapCode,
+    CanisterBacktrace, HypervisorError, SystemApi, TrapCode,
 };
+use ic_management_canister_types_private::Global;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{canister_state::WASM_PAGE_SIZE_IN_BYTES, Global};
+use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
 use ic_test_utilities_embedders::{WasmtimeInstanceBuilder, DEFAULT_NUM_INSTRUCTIONS};
 use ic_test_utilities_types::ids::{call_context_test_id, user_test_id};
 use ic_types::{
@@ -20,13 +24,10 @@ use ic_types::{
     messages::RejectContext,
     methods::{FuncRef, WasmClosure, WasmMethod},
     time::UNIX_EPOCH,
-    Cycles, NumBytes, NumInstructions,
+    Cycles, NumBytes, NumInstructions, PrincipalId,
 };
 
 const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
-
-#[cfg(target_os = "linux")]
-use ic_types::PrincipalId;
 
 /// Ensures that attempts to execute messages on wasm modules that do not
 /// define memory fails.
@@ -84,7 +85,7 @@ fn correctly_count_instructions() {
             )
             .as_str(),
         )
-        .with_api_type(ic_system_api::ApiType::init(
+        .with_api_type(ApiType::init(
             UNIX_EPOCH,
             vec![0; 1024],
             user_test_id(24).get(),
@@ -140,7 +141,7 @@ fn instruction_limit_traps() {
             )
             .as_str(),
         )
-        .with_api_type(ic_system_api::ApiType::init(
+        .with_api_type(ApiType::init(
             UNIX_EPOCH,
             vec![0; 1024],
             user_test_id(24).get(),
@@ -250,7 +251,7 @@ fn correctly_report_performance_counter() {
             )
             .as_str(),
         )
-        .with_api_type(ic_system_api::ApiType::init(
+        .with_api_type(ApiType::init(
             UNIX_EPOCH,
             vec![0; 1024],
             user_test_id(24).get(),
@@ -596,7 +597,7 @@ fn read_before_write_stats() {
             )"#;
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_wat(direct_wat)
-        .with_api_type(ic_system_api::ApiType::update(
+        .with_api_type(ApiType::update(
             UNIX_EPOCH,
             vec![],
             Cycles::zero(),
@@ -624,7 +625,7 @@ fn read_before_write_stats() {
             )"#;
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_wat(read_then_write_wat)
-        .with_api_type(ic_system_api::ApiType::update(
+        .with_api_type(ApiType::update(
             UNIX_EPOCH,
             vec![],
             Cycles::zero(),
@@ -668,8 +669,7 @@ fn stable_write_and_read() {
                 )
                 (memory (export "memory") 1)
             )"#;
-    let mut config = Config::default();
-    config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
+    let config = Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -712,8 +712,7 @@ fn stable64_write_and_read() {
                 (table funcref (elem $test))
                 (memory (export "memory") 1)
             )"#;
-    let mut config = Config::default();
-    config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
+    let config = Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -786,7 +785,7 @@ fn stable_read_accessed_pages_allowance() {
 
     use HypervisorError::*;
 
-    let mut config = Config {
+    let config = Config {
         stable_memory_accessed_page_limit: StableMemoryPageLimit {
             message: ic_types::NumOsPages::new(3),
             upgrade: ic_types::NumOsPages::new(3),
@@ -794,7 +793,6 @@ fn stable_read_accessed_pages_allowance() {
         },
         ..Default::default()
     };
-    config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config.clone())
         .with_wat(wat)
@@ -881,7 +879,7 @@ fn stable64_read_accessed_pages_allowance() {
 
     use HypervisorError::*;
 
-    let mut config = Config {
+    let config = Config {
         stable_memory_accessed_page_limit: StableMemoryPageLimit {
             message: ic_types::NumOsPages::new(3),
             upgrade: ic_types::NumOsPages::new(3),
@@ -889,7 +887,6 @@ fn stable64_read_accessed_pages_allowance() {
         },
         ..Default::default()
     };
-    config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config.clone())
         .with_wat(wat)
@@ -952,8 +949,7 @@ fn multiple_stable_write() {
                 (table funcref (elem $test))
                 (memory (export "memory") 5)
             )"#;
-    let mut config = Config::default();
-    config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
+    let config = Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -1000,8 +996,7 @@ fn multiple_stable64_write() {
                 (table funcref (elem $test))
                 (memory (export "memory") 5)
             )"#;
-    let mut config = Config::default();
-    config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
+    let config = Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -1096,10 +1091,7 @@ fn stable_read_out_of_bounds() {
     };
     assert_eq!(trap_code, StableMemoryOutOfBounds);
 
-    // native stable memory
-    let mut config = Config::default();
-    config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
-
+    let config = Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config.clone())
         .with_wat(wat)
@@ -1248,10 +1240,7 @@ fn stable64_read_out_of_bounds() {
     };
     assert_eq!(trap_code, StableMemoryOutOfBounds);
 
-    // Native stable memory
-    let mut config = Config::default();
-    config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
-
+    let config = Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config.clone())
         .with_wat(wat)
@@ -1396,10 +1385,7 @@ fn stable_write_out_of_bounds() {
     };
     assert_eq!(trap_code, StableMemoryOutOfBounds);
 
-    // native stable memory
-    let mut config = Config::default();
-    config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
-
+    let config = Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config.clone())
         .with_wat(wat)
@@ -1548,9 +1534,7 @@ fn stable64_write_out_of_bounds() {
     };
     assert_eq!(trap_code, StableMemoryOutOfBounds);
 
-    // native stable memory
-    let mut config = Config::default();
-    config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
+    let config = Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config.clone())
         .with_wat(wat)
@@ -2165,6 +2149,8 @@ fn wasm64_import_system_api_functions() {
 
       (import "ic0" "canister_cycle_balance128"
         (func $ic0_canister_cycle_balance128 (param i64)))
+      (import "ic0" "canister_liquid_cycle_balance128"
+        (func $ic0_canister_liquid_cycle_balance128 (param i64)))
       (import "ic0" "msg_cycles_available128"
         (func $ic0_msg_cycles_available128 (param i64)))
       (import "ic0" "msg_cycles_refunded128"
@@ -2173,6 +2159,11 @@ fn wasm64_import_system_api_functions() {
         (func $ic0_msg_cycles_accept128 (param i64) (param i64) (param i64)))
       (import "ic0" "cycles_burn128"
         (func $ic0_cycles_burn128 (param i64) (param i64) (param i64)))
+
+      (import "ic0" "root_key_size"
+        (func $ic0_root_key_size (result i64)))
+      (import "ic0" "root_key_copy"
+        (func $ic0_root_key_copy (param i64) (param i64) (param i64)))
 
       (import "ic0" "certified_data_set"
         (func $ic0_certified_data_set (param i64) (param i64)))
@@ -2209,6 +2200,7 @@ fn wasm64_import_system_api_functions() {
             (call $ic0_msg_reject (i64.const 0) (i64.const 5))
             (call $ic0_msg_reject_msg_copy (i64.const 4096) (i64.const 0) (call $ic0_msg_reject_msg_size))
             (call $ic0_canister_cycle_balance128 (i64.const 4096))
+            (call $ic0_canister_liquid_cycle_balance128 (i64.const 4096))
             (call $ic0_debug_print (i64.const 0) (i64.const 5))
             (call $ic0_trap (i64.const 0) (i64.const 5))
             (call $ic0_call_new
@@ -2269,7 +2261,7 @@ fn wasm64_msg_caller_copy() {
 
     let caller = user_test_id(24).get();
     let payload = vec![0u8; 32];
-    let api = ic_system_api::ApiType::update(
+    let api = ApiType::update(
         UNIX_EPOCH,
         payload,
         Cycles::zero(),
@@ -2339,7 +2331,7 @@ fn wasm64_msg_arg_data_copy() {
 
     let caller = user_test_id(24).get();
     let payload: Vec<u8> = vec![1, 3, 5, 7];
-    let api = ic_system_api::ApiType::update(
+    let api = ApiType::update(
         UNIX_EPOCH,
         payload.clone(),
         Cycles::zero(),
@@ -2406,8 +2398,7 @@ fn wasm64_msg_method_name_copy() {
     let caller = user_test_id(24).get();
     let payload: Vec<u8> = vec![1, 3, 5, 7];
     let msg_name = "test".to_string();
-    let api =
-        ic_system_api::ApiType::inspect_message(caller, msg_name.clone(), payload, UNIX_EPOCH);
+    let api = ApiType::inspect_message(caller, msg_name.clone(), payload, UNIX_EPOCH);
 
     let mut config = ic_config::embedders::Config::default();
     config.feature_flags.wasm64 = FlagStatus::Enabled;
@@ -2472,7 +2463,7 @@ fn wasm64_msg_reply_data_append() {
 
     let caller = user_test_id(24).get();
     let payload: Vec<u8> = vec![1, 3, 5, 7];
-    let api = ic_system_api::ApiType::update(
+    let api = ApiType::update(
         UNIX_EPOCH,
         payload,
         Cycles::zero(),
@@ -2523,7 +2514,7 @@ fn wasm64_msg_reject() {
 
     let caller = user_test_id(24).get();
     let payload: Vec<u8> = vec![1, 3, 5, 7];
-    let api = ic_system_api::ApiType::update(
+    let api = ApiType::update(
         UNIX_EPOCH,
         payload,
         Cycles::zero(),
@@ -2569,7 +2560,7 @@ fn wasm64_reject_msg_copy() {
 
     let caller = user_test_id(24).get();
     let reject_msg = "go away".to_string();
-    let api = ic_system_api::ApiType::reject_callback(
+    let api = ApiType::reject_callback(
         UNIX_EPOCH,
         caller,
         RejectContext::new(
@@ -2579,7 +2570,6 @@ fn wasm64_reject_msg_copy() {
         Cycles::zero(),
         call_context_test_id(13),
         false,
-        ExecutionMode::Replicated,
         NumInstructions::new(700),
     );
 
@@ -2624,6 +2614,77 @@ fn wasm64_reject_msg_copy() {
 }
 
 #[test]
+fn wasm64_root_key() {
+    let wat = r#"
+    (module
+      (import "ic0" "root_key_copy"
+        (func $ic0_root_key_copy (param i64) (param i64) (param i64)))
+      (import "ic0" "root_key_size"
+        (func $ic0_root_key_size (result i64)))
+
+      (global $g1 (export "g1") (mut i64) (i64.const 0))
+      (func $test (export "canister_update test")
+        (call $ic0_root_key_size)
+        global.set $g1
+        (call $ic0_root_key_copy (i64.const 0) (i64.const 0) (global.get $g1))
+      )
+
+      (memory (export "memory") i64 1)
+    )"#;
+
+    let api = ic_embedders::wasmtime_embedder::system_api::ApiType::update(
+        UNIX_EPOCH,
+        vec![],
+        Cycles::zero(),
+        user_test_id(24).get(),
+        call_context_test_id(13),
+    );
+
+    let mut config = ic_config::embedders::Config::default();
+    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_config(config)
+        .with_wat(wat)
+        .with_api_type(api)
+        .build();
+    let res = instance
+        .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
+        .unwrap();
+
+    // After this call, we expect the instance to have a memory with size of 1 wasm page
+    // of which the first OS page was touched and contains relevant data at offset 0
+    assert_eq!(res.wasm_dirty_pages, vec![ic_sys::PageIndex::new(0)]);
+    let dirty_heap_size = ic_sys::PAGE_SIZE;
+    let wasm_heap: &[u8] = unsafe {
+        let addr = instance.heap_addr(CanisterMemoryType::Heap);
+        let size_in_bytes =
+            instance.heap_size(CanisterMemoryType::Heap).get() * WASM_PAGE_SIZE_IN_BYTES;
+        assert!(size_in_bytes >= dirty_heap_size);
+        std::slice::from_raw_parts_mut(addr as *mut _, dirty_heap_size)
+    };
+
+    let expected_size = instance
+        .store_data()
+        .system_api()
+        .unwrap()
+        .ic0_root_key_size()
+        .unwrap();
+    assert_eq!(
+        res.exported_globals[0],
+        Global::I64(expected_size.try_into().unwrap())
+    );
+
+    let mut expected_heap = vec![0; dirty_heap_size];
+    instance
+        .store_data_mut()
+        .system_api_mut()
+        .unwrap()
+        .ic0_root_key_copy(0, 0, expected_size, &mut expected_heap)
+        .unwrap();
+    assert_eq!(wasm_heap, expected_heap);
+}
+
+#[test]
 fn wasm64_canister_self_copy() {
     let wat = r#"
     (module
@@ -2644,7 +2705,7 @@ fn wasm64_canister_self_copy() {
 
     let caller = user_test_id(24).get();
     let payload: Vec<u8> = vec![1, 3, 5, 7];
-    let api = ic_system_api::ApiType::update(
+    let api = ApiType::update(
         UNIX_EPOCH,
         payload.clone(),
         Cycles::zero(),
@@ -2715,7 +2776,7 @@ fn wasm64_subnet_self_size() {
 
     let caller = user_test_id(24).get();
     let payload: Vec<u8> = vec![1, 3, 5, 7];
-    let api = ic_system_api::ApiType::update(
+    let api = ApiType::update(
         UNIX_EPOCH,
         payload.clone(),
         Cycles::zero(),
@@ -2769,7 +2830,7 @@ fn wasm64_subnet_self_copy() {
 
     let caller = user_test_id(24).get();
     let payload: Vec<u8> = vec![1, 3, 5, 7];
-    let api = ic_system_api::ApiType::update(
+    let api = ApiType::update(
         UNIX_EPOCH,
         payload.clone(),
         Cycles::zero(),
@@ -2844,7 +2905,7 @@ fn wasm64_trap() {
       (memory (export "memory") i64 1)
     )"#;
 
-    let api = ic_system_api::ApiType::update(
+    let api = ApiType::update(
         UNIX_EPOCH,
         Vec::new(),
         Cycles::zero(),
@@ -2885,7 +2946,7 @@ fn wasm64_canister_cycle_balance128() {
       (memory (export "memory") i64 1)
     )"#;
 
-    let api = ic_system_api::ApiType::update(
+    let api = ApiType::update(
         UNIX_EPOCH,
         vec![],
         Cycles::zero(),
@@ -2937,6 +2998,72 @@ fn wasm64_canister_cycle_balance128() {
 }
 
 #[test]
+fn wasm64_canister_liquid_cycle_balance128() {
+    let wat = r#"
+    (module
+      (import "ic0" "canister_liquid_cycle_balance128"
+        (func $ic0_canister_liquid_cycle_balance128 (param i64)))
+
+      (global $g1 (export "g1") (mut i64) (i64.const 0))
+      (func $test (export "canister_update test")
+        (call $ic0_canister_liquid_cycle_balance128 (i64.const 0))
+      )
+
+      (memory (export "memory") i64 1)
+    )"#;
+
+    let api = ApiType::update(
+        UNIX_EPOCH,
+        vec![],
+        Cycles::zero(),
+        user_test_id(24).get(),
+        call_context_test_id(13),
+    );
+
+    let mut config = ic_config::embedders::Config::default();
+    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_config(config)
+        .with_wat(wat)
+        .with_api_type(api)
+        .with_memory_usage(NumBytes::from(ic_sys::PAGE_SIZE as u64))
+        .build();
+    let res = instance
+        .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
+        .unwrap();
+
+    // After this call, we expect the instance to have a memory with size of 1 wasm page
+    // of which the first OS page was touched and contains relevant data at offset 0
+    assert_eq!(res.wasm_dirty_pages, vec![ic_sys::PageIndex::new(0)]);
+    let dirty_heap_size = ic_sys::PAGE_SIZE;
+    let wasm_heap: &[u8] = unsafe {
+        let addr = instance.heap_addr(CanisterMemoryType::Heap);
+        let size_in_bytes =
+            instance.heap_size(CanisterMemoryType::Heap).get() * WASM_PAGE_SIZE_IN_BYTES;
+        assert!(size_in_bytes >= dirty_heap_size);
+        std::slice::from_raw_parts_mut(addr as *mut _, dirty_heap_size)
+    };
+
+    let mut expected_heap = vec![0; dirty_heap_size];
+    instance
+        .store_data_mut()
+        .system_api_mut()
+        .unwrap()
+        .ic0_canister_liquid_cycle_balance128(0, &mut expected_heap)
+        .unwrap();
+    assert_eq!(wasm_heap, expected_heap);
+
+    let balance = instance
+        .store_data_mut()
+        .system_api_mut()
+        .unwrap()
+        .ic0_canister_cycle_balance()
+        .unwrap() as u128;
+    let liquid_balance = u128::from_le_bytes(expected_heap[0..16].try_into().unwrap());
+    assert!(0 < liquid_balance && liquid_balance < balance);
+}
+
+#[test]
 fn wasm64_msg_cycles_refunded128() {
     let wat = r#"
     (module
@@ -2955,7 +3082,7 @@ fn wasm64_msg_cycles_refunded128() {
 
     let caller = user_test_id(24).get();
     let reject_msg = "go away".to_string();
-    let api = ic_system_api::ApiType::reject_callback(
+    let api = ApiType::reject_callback(
         UNIX_EPOCH,
         caller,
         RejectContext::new(
@@ -2965,7 +3092,6 @@ fn wasm64_msg_cycles_refunded128() {
         Cycles::new(777),
         call_context_test_id(13),
         false,
-        ExecutionMode::Replicated,
         NumInstructions::new(700),
     );
 
@@ -3024,7 +3150,7 @@ fn wasm64_cycles_burn128() {
       (memory (export "memory") i64 1)
     )"#;
 
-    let api = ic_system_api::ApiType::update(
+    let api = ApiType::update(
         UNIX_EPOCH,
         vec![],
         Cycles::zero(),
@@ -3099,7 +3225,7 @@ fn large_wasm64_memory_allocation_test() {
 
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
-        .with_api_type(ic_system_api::ApiType::update(
+        .with_api_type(ApiType::update(
             UNIX_EPOCH,
             vec![],
             Cycles::zero(),
@@ -3159,13 +3285,12 @@ fn large_wasm64_stable_read_write_test() {
 
     let mut config = ic_config::embedders::Config::default();
     config.feature_flags.wasm64 = FlagStatus::Enabled;
-    config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
     // Declare a large heap.
     config.max_wasm64_memory_size = NumBytes::from(10 * gb);
 
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
-        .with_api_type(ic_system_api::ApiType::update(
+        .with_api_type(ApiType::update(
             UNIX_EPOCH,
             vec![],
             Cycles::zero(),
@@ -3230,7 +3355,7 @@ fn wasm64_saturate_fun_index() {
             (data (i64.const 100) "\09\03\00\00\00\00\00\00\ff\01")
         )"#;
 
-    let api = ic_system_api::ApiType::update(
+    let api = ApiType::update(
         UNIX_EPOCH,
         vec![],
         Cycles::zero(),
@@ -3260,7 +3385,7 @@ fn wasm64_saturate_fun_index() {
         .unwrap()
         .clone();
     match callback_update {
-        ic_system_api::sandbox_safe_system_state::CallbackUpdate::Register(_id, callback) => {
+        CallbackUpdate::Register(_id, callback) => {
             assert_eq!(
                 callback.on_reply,
                 WasmClosure {
@@ -3283,8 +3408,178 @@ fn wasm64_saturate_fun_index() {
                 })
             );
         }
-        ic_system_api::sandbox_safe_system_state::CallbackUpdate::Unregister(_) => {
+        CallbackUpdate::Unregister(_) => {
             panic!("Expected registration of new calback")
         }
     }
+}
+
+#[test]
+fn test_environment_variable_system_api() {
+    let wat = r#"
+(module
+      (import "ic0" "msg_reply" (func $msg_reply))
+      (import "ic0" "msg_reply_data_append"
+            (func $msg_reply_data_append (param i32 i32)))
+      (import "ic0" "env_var_count" (func $ic0_env_var_count (result i32)))
+      (import "ic0" "env_var_name_size" (func $env_var_name_size (param i32) (result i32)))
+      (import "ic0" "env_var_name_copy" (func $env_var_name_copy (param i32 i32 i32 i32)))
+      (import "ic0" "env_var_name_exists" (func $env_var_name_exists (param i32 i32) (result i32)))
+      (import "ic0" "env_var_value_size" (func $env_var_value_size (param i32 i32) (result i32)))
+      (import "ic0" "env_var_value_copy" (func $env_var_value_copy (param i32 i32 i32 i32 i32)))
+      (import "ic0" "trap" (func $trap (param i32 i32)))
+
+      (func (export "canister_update go")
+        (local $name_dst i32)
+        (local $output_dst i32)
+        (local $var_count i32)
+        (local $index i32)
+        (local $name_size i32)
+        (local $value_size i32)
+
+        (local.set $name_dst (i32.const 0))
+        (local.set $output_dst (i32.const 1000)) ;; output buffer starting after enough slack for the name buffer
+
+        ;; Assert that the number of environment variables is 2:
+        ;; this update call traps with an empty error message if this is not the case
+        (local.set $var_count (call $ic0_env_var_count))
+        (if (i32.ne (local.get $var_count) (i32.const 2))
+          (then
+            (call $trap (i32.const 0) (i32.const 0))
+          )
+        )
+       
+        ;; Copy first name to memory
+        (local.set $index (i32.const 0))
+        (local.set $name_size (call $env_var_name_size (local.get $index)))
+        (call $env_var_name_copy
+            (local.get $index)     ;; index
+            (local.get $name_dst)  ;; dst
+            (i32.const 0)          ;; offset
+            (local.get $name_size) ;; (name) size
+        )
+        
+        ;; Assert that the first name exists:
+        (if (i32.ne (call $env_var_name_exists (local.get $name_dst) (local.get $name_size)) (i32.const 1))
+          (then
+            (call $trap (i32.const 0) (i32.const 0))
+          )
+        )
+
+        ;; Copy first value to memory
+        (local.set $value_size (call $env_var_value_size (local.get $name_dst) (local.get $name_size)))
+        (call $env_var_value_copy
+            (local.get $name_dst)   ;; name_src
+            (local.get $name_size)  ;; name_size
+            (local.get $output_dst) ;; dst
+            (i32.const 0)           ;; offset
+            (local.get $value_size) ;; (value) size
+        )
+
+        ;; Append first value to reply
+        (call $msg_reply_data_append (local.get $output_dst) (local.get $value_size))
+
+        ;; Copy second name to memory
+        (local.set $index (i32.const 1))
+        (local.set $name_size (call $env_var_name_size (local.get $index)))
+        (call $env_var_name_copy
+            (local.get $index)     ;; index
+            (local.get $name_dst)  ;; dst
+            (i32.const 0)          ;; offset
+            (local.get $name_size) ;; (name) size
+        )
+
+        ;; Assert that the second name exists:
+        (if (i32.ne (call $env_var_name_exists (local.get $name_dst) (local.get $name_size)) (i32.const 1))
+          (then
+            (call $trap (i32.const 0) (i32.const 0))
+          )
+        )
+
+        ;; Copy second value to memory
+        (local.set $value_size (call $env_var_value_size (local.get $name_dst) (local.get $name_size)))
+        (call $env_var_value_copy
+            (local.get $name_dst)   ;; name_src
+            (local.get $name_size)  ;; name_size
+            (local.get $output_dst) ;; dst
+            (i32.const 0)           ;; offset
+            (local.get $value_size) ;; (value) size
+        )
+
+        ;; Append second value to reply
+        (call $msg_reply_data_append (local.get $output_dst) (local.get $value_size))
+
+        ;; Finish the reply
+        (call $msg_reply)
+      )
+
+      (memory (export "memory") 10)
+)"#;
+
+    // Add test environment variables
+    let mut env_vars = std::collections::BTreeMap::new();
+    env_vars.insert("TEST_VAR_1".to_string(), "Hello World".to_string());
+    env_vars.insert("TEST_VAR_2".to_string(), "Test Value".to_string());
+
+    let mut config = ic_config::embedders::Config::default();
+    config.feature_flags.environment_variables = FlagStatus::Enabled;
+
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_api_type(ApiType::update(
+            UNIX_EPOCH,
+            vec![],
+            Cycles::zero(),
+            PrincipalId::new_user_test_id(0),
+            0.into(),
+        ))
+        .with_config(config)
+        .with_environment_variables(env_vars)
+        .with_wat(wat)
+        .build();
+    let run_result = instance.run(FuncRef::Method(WasmMethod::Update("go".to_string())));
+    let result = instance
+        .store_data_mut()
+        .system_api_mut()
+        .unwrap()
+        .take_execution_result(run_result.as_ref().err());
+
+    assert_eq!(
+        result,
+        Ok(Some(WasmResult::Reply(b"Hello WorldTest Value".to_vec())))
+    );
+}
+
+// TODO(EXC-2071): Delete test when feature flag is removed.
+#[test]
+fn test_environment_variable_system_api_not_enabled() {
+    let wat = r#"
+    (module
+        (import "ic0" "env_var_count" (func $ic0_env_var_count (result i32)))
+
+        (func (export "canister_update go")
+            (call $ic0_env_var_count)
+            drop
+        )
+    )"#;
+
+    let mut config = ic_config::embedders::Config::default();
+    config.feature_flags.environment_variables = FlagStatus::Disabled;
+
+    let builder = WasmtimeInstanceBuilder::new()
+        .with_wat(wat)
+        .with_config(config)
+        .with_api_type(ApiType::update(
+            UNIX_EPOCH,
+            vec![],
+            Cycles::zero(),
+            PrincipalId::new_user_test_id(0),
+            0.into(),
+        ));
+
+    let instance = builder.try_build();
+    assert!(instance.is_err());
+    assert_matches!(
+        instance.err().unwrap().0,
+        HypervisorError::WasmEngineError { .. }
+    );
 }

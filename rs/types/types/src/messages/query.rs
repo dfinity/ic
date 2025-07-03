@@ -12,13 +12,23 @@ use std::convert::TryFrom;
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum QuerySource {
     /// A query sent by the IC to itself.
-    Anonymous,
+    System,
     /// A query sent by an end user.
     User {
         user_id: UserId,
         ingress_expiry: u64,
         nonce: Option<Vec<u8>>,
     },
+}
+
+impl QuerySource {
+    pub fn user_id(&self) -> UserId {
+        let principal_id = match self {
+            QuerySource::User { user_id, .. } => user_id.get(),
+            QuerySource::System => IC_00.get(),
+        };
+        UserId::from(principal_id)
+    }
 }
 
 /// Represents a Query that is sent by an end user to a canister.
@@ -32,10 +42,7 @@ pub struct Query {
 
 impl Query {
     pub fn source(&self) -> PrincipalId {
-        match &self.source {
-            QuerySource::User { user_id, .. } => user_id.get(),
-            QuerySource::Anonymous => IC_00.get(),
-        }
+        self.source.user_id().get()
     }
 
     pub fn id(&self) -> MessageId {
@@ -53,17 +60,15 @@ impl Query {
                 user_id.get().into_vec(),
                 nonce.as_deref(),
             )),
-            QuerySource::Anonymous => {
-                MessageId::from(representation_independent_hash_call_or_query(
-                    CallOrQuery::Query,
-                    self.receiver.get().into_vec(),
-                    &self.method_name,
-                    self.method_payload.clone(),
-                    0,
-                    IC_00.get().into_vec(),
-                    None,
-                ))
-            }
+            QuerySource::System => MessageId::from(representation_independent_hash_call_or_query(
+                CallOrQuery::Query,
+                self.receiver.get().into_vec(),
+                &self.method_name,
+                self.method_payload.clone(),
+                0,
+                IC_00.get().into_vec(),
+                None,
+            )),
         }
     }
 }

@@ -19,8 +19,8 @@ use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::{
     self as ic00, BoundedHttpHeaders, CanisterHttpResponsePayload, CanisterIdRecord,
-    CanisterStatusType, DerivationPath, EcdsaKeyId, EmptyBlob, Method, Payload as _, SchnorrKeyId,
-    SignWithSchnorrArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs,
+    CanisterStatusType, DerivationPath, EcdsaKeyId, EmptyBlob, MasterPublicKeyId, Method,
+    Payload as _, SchnorrKeyId, SignWithSchnorrArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs,
 };
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
@@ -28,20 +28,21 @@ use ic_replicated_state::canister_state::system_state::{CyclesUseCase, PausedExe
 use ic_replicated_state::testing::{CanisterQueuesTesting, SystemStateTesting};
 use ic_state_machine_tests::{PayloadBuilder, StateMachineBuilder};
 use ic_test_utilities_metrics::{
-    fetch_counter, fetch_gauge, fetch_gauge_vec, fetch_histogram_stats, fetch_int_gauge,
-    fetch_int_gauge_vec, metric_vec, HistogramStats,
+    fetch_counter, fetch_gauge, fetch_gauge_vec, fetch_histogram_stats, fetch_histogram_vec_stats,
+    fetch_int_gauge, fetch_int_gauge_vec, metric_vec, HistogramStats,
 };
 use ic_test_utilities_state::{get_running_canister, get_stopped_canister, get_stopping_canister};
 use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::{
     batch::ConsensusResponse,
+    consensus::idkg::PreSigId,
     ingress::IngressStatus,
     messages::{
         CallbackId, CanisterMessageOrTask, CanisterTask, Payload, RejectContext,
         StopCanisterCallId, StopCanisterContext, MAX_RESPONSE_COUNT_BYTES,
     },
     methods::SystemMethod,
-    time::{expiry_time_from_now, UNIX_EPOCH},
+    time::{expiry_time_from_now, CoarseTime, UNIX_EPOCH},
     ComputeAllocation, Cycles, Height, LongExecutionMode, NumBytes,
 };
 use ic_types_test_utils::ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id};
@@ -52,6 +53,8 @@ use std::{convert::TryFrom, time::Duration};
 
 const M: usize = 1_000_000;
 const B: usize = 1_000 * M;
+
+const SOME_DEADLINE: CoarseTime = CoarseTime::from_secs_since_unix_epoch(1);
 
 fn assert_floats_are_equal(val0: f64, val1: f64) {
     if val0 > val1 {
@@ -748,12 +751,13 @@ fn induct_messages_to_self_works() {
     assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 1);
 }
 
-/// Creates state with two canisters. Source canister has two requests for
-/// itself and two requests for destination canister in its output queues.
-/// Subnet only has enough message memory for two requests.
+/// Creates state with two canisters. Source canister has two guaranteed response
+/// requests for itself and two requests for destination canister in its output
+/// queues (as well as a couple of best-effort requests). Subnet only has enough
+/// guaranteed response message memory for two requests.
 ///
-/// Ensures that `induct_messages_on_same_subnet()` respects memory limits
-/// on application subnets and ignores them on system subnets.
+/// Ensures that `induct_messages_on_same_subnet()` respects guaranteed response
+/// memory limits on application subnets and ignores them on system subnets.
 #[test]
 fn induct_messages_on_same_subnet_respects_memory_limits() {
     // Runs a test with the given `available_memory` (expected to be limited to 2
@@ -771,33 +775,42 @@ fn induct_messages_on_same_subnet_respects_memory_limits() {
                 instruction_overhead_per_canister: NumInstructions::from(0),
                 ..SchedulerConfig::application_subnet()
             })
-            .with_subnet_message_memory(subnet_available_memory.get_message_memory() as u64)
+            .with_subnet_guaranteed_response_message_memory(
+                subnet_available_memory.get_guaranteed_response_message_memory() as u64,
+            )
             .with_subnet_type(subnet_type)
             .build();
 
         let source = test.create_canister();
         let dest = test.create_canister();
+        let request_to = |canister: CanisterId, deadline: CoarseTime| {
+            RequestBuilder::default()
+                .sender(source)
+                .receiver(canister)
+                .deadline(deadline)
+                .build()
+        };
 
         let source_canister = test.canister_state_mut(source);
-        let self_request = RequestBuilder::default()
-            .sender(source)
-            .receiver(source)
-            .build();
+        // First, best-effort messages to `source` and `dest`.
         source_canister
-            .push_output_request(self_request.clone().into(), UNIX_EPOCH)
+            .push_output_request(request_to(source, SOME_DEADLINE).into(), UNIX_EPOCH)
             .unwrap();
         source_canister
-            .push_output_request(self_request.into(), UNIX_EPOCH)
+            .push_output_request(request_to(dest, SOME_DEADLINE).into(), UNIX_EPOCH)
             .unwrap();
-        let other_request = RequestBuilder::default()
-            .sender(source)
-            .receiver(dest)
-            .build();
+        // Then a couple of guaranteed response messages to each of `source` and `dest`.
         source_canister
-            .push_output_request(other_request.clone().into(), UNIX_EPOCH)
+            .push_output_request(request_to(source, NO_DEADLINE).into(), UNIX_EPOCH)
             .unwrap();
         source_canister
-            .push_output_request(other_request.into(), UNIX_EPOCH)
+            .push_output_request(request_to(source, NO_DEADLINE).into(), UNIX_EPOCH)
+            .unwrap();
+        source_canister
+            .push_output_request(request_to(dest, NO_DEADLINE).into(), UNIX_EPOCH)
+            .unwrap();
+        source_canister
+            .push_output_request(request_to(dest, NO_DEADLINE).into(), UNIX_EPOCH)
             .unwrap();
         test.induct_messages_on_same_subnet();
 
@@ -806,24 +819,25 @@ fn induct_messages_on_same_subnet_respects_memory_limits() {
         let source_canister_queues = source_canister.system_state.queues();
         let dest_canister_queues = dest_canister.system_state.queues();
         if subnet_type == SubnetType::Application {
-            // Only two messages should have been inducted. After two self-inductions on the
-            // source canister, the subnet message memory is exhausted.
-            assert_eq!(1, source_canister_queues.output_queues_message_count());
-            assert_eq!(2, source_canister_queues.input_queues_message_count());
+            // Only the two best-effort messages and the first two guaranteed response
+            // messages should have been inducted. After two self-inductions on the source
+            // canister, the subnet message memory is exhausted.
+            assert_eq!(2, source_canister_queues.output_queues_message_count());
+            assert_eq!(3, source_canister_queues.input_queues_message_count());
             assert_eq!(1, dest_canister_queues.input_queues_message_count());
         } else {
             // On a system subnet, with no message memory limits, all messages should have
             // been inducted.
             assert_eq!(0, source_canister_queues.output_queues_message_count());
-            assert_eq!(2, source_canister_queues.input_queues_message_count());
-            assert_eq!(2, dest_canister_queues.input_queues_message_count());
+            assert_eq!(3, source_canister_queues.input_queues_message_count());
+            assert_eq!(3, dest_canister_queues.input_queues_message_count());
         }
     };
 
-    // Subnet has memory for 4 initial requests and 2 additional requests (plus
+    // Subnet has memory for 4 outbound requests and 2 inbound requests (plus
     // epsilon, for small responses).
     run_test(
-        SubnetAvailableMemory::new(0, MAX_RESPONSE_COUNT_BYTES as i64 * 75 / 10, 0),
+        SubnetAvailableMemory::new(0, MAX_RESPONSE_COUNT_BYTES as i64 * 65 / 10, 0),
         SubnetType::Application,
     );
 
@@ -1154,7 +1168,7 @@ fn charging_for_message_memory_works() {
         test.canister_state(canister).system_state.balance(),
         balance_before
             - test.memory_cost(
-                test.canister_state(canister).message_memory_usage(),
+                test.canister_state(canister).message_memory_usage().total(),
                 charge_duration,
             ),
     );
@@ -3018,6 +3032,7 @@ fn canister_is_stopped_if_timeout_occurs_and_ready_to_stop() {
             body: None,
             transform: None,
             max_response_bytes: None,
+            is_replicated: None,
         })
         .unwrap();
 
@@ -3802,6 +3817,13 @@ fn threshold_signature_agreements_metric_is_updated() {
     );
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
+    // Metrics are observed at the beginning of the round, so there should be no in flight contexts yet
+    let in_flight_contexts_metric = fetch_histogram_vec_stats(
+        test.metrics_registry(),
+        "execution_in_flight_signature_request_contexts",
+    );
+    assert!(in_flight_contexts_metric.is_empty());
+
     // Check that the SubnetCallContextManager contains all requests.
     let sign_with_ecdsa_contexts = &test
         .state()
@@ -3826,12 +3848,50 @@ fn threshold_signature_agreements_metric_is_updated() {
     test.state_mut().consensus_queue.push(response);
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
+    // At the beginning of the next round, the in flight contexts should have been observed
+    let in_flight_contexts_metric = fetch_histogram_vec_stats(
+        test.metrics_registry(),
+        "execution_in_flight_signature_request_contexts",
+    );
+    assert_eq!(
+        metric_vec(&[
+            (
+                &[("key_id", &master_ecdsa_key_id.to_string())],
+                HistogramStats { count: 1, sum: 2.0 }
+            ),
+            (
+                &[("key_id", &master_schnorr_key_id.to_string())],
+                HistogramStats { count: 1, sum: 1.0 }
+            ),
+        ]),
+        in_flight_contexts_metric,
+    );
+
     observe_replicated_state_metrics(
         test.scheduler().own_subnet_id,
         test.state(),
         1.into(),
         &test.scheduler().metrics,
         &no_op_logger(),
+    );
+
+    // After the round, the rejected context should be observed
+    let in_flight_contexts_metric = fetch_histogram_vec_stats(
+        test.metrics_registry(),
+        "execution_in_flight_signature_request_contexts",
+    );
+    assert_eq!(
+        metric_vec(&[
+            (
+                &[("key_id", &master_ecdsa_key_id.to_string())],
+                HistogramStats { count: 2, sum: 3.0 }
+            ),
+            (
+                &[("key_id", &master_schnorr_key_id.to_string())],
+                HistogramStats { count: 2, sum: 2.0 }
+            ),
+        ]),
+        in_flight_contexts_metric,
     );
 
     let threshold_signature_agreements_before = &test
@@ -4045,6 +4105,7 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
             }),
             context: transform_context,
         }),
+        is_replicated: None,
     };
 
     // Create request to `HttpRequest` method.

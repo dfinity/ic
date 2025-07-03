@@ -1,6 +1,7 @@
 use assert_matches::assert_matches;
 use candid::{Nat, Principal};
 use ic_base_types::CanisterId;
+use ic_cketh_minter::blocklist::SAMPLE_BLOCKED_ADDRESS;
 use ic_cketh_minter::endpoints::events::{EventPayload, EventSource};
 use ic_cketh_minter::endpoints::CandidBlockTag::Finalized;
 use ic_cketh_minter::endpoints::{
@@ -147,6 +148,7 @@ fn should_mint_with_ckerc20_setup() {
 mod withdraw_erc20 {
     use super::*;
     use ic_base_types::PrincipalId;
+    use ic_cketh_minter::blocklist::SAMPLE_BLOCKED_ADDRESS;
     use ic_cketh_minter::endpoints::ckerc20::{
         LedgerError, RetrieveErc20Request, WithdrawErc20Arg, WithdrawErc20Error,
     };
@@ -228,7 +230,7 @@ mod withdraw_erc20 {
 
     #[test]
     fn should_error_when_address_blocked() {
-        let blocked_address = "0x01e2919679362dFBC9ee1644Ba9C6da6D6245BB1";
+        let blocked_address = SAMPLE_BLOCKED_ADDRESS.to_string();
         let ckerc20 = CkErc20Setup::default();
         let caller = ckerc20.caller();
         ckerc20
@@ -236,11 +238,11 @@ mod withdraw_erc20 {
                 caller,
                 0_u8,
                 NOT_SUPPORTED_CKERC20_LEDGER_ID,
-                blocked_address,
+                blocked_address.as_str(),
             )
             .expect_no_refresh_gas_fee_estimate()
             .expect_error(WithdrawErc20Error::RecipientAddressBlocked {
-                address: blocked_address.to_string(),
+                address: blocked_address,
             });
     }
 
@@ -1571,9 +1573,7 @@ fn should_deposit_cketh_and_ckerc20_when_ledger_temporary_offline() {
 fn should_block_deposit_from_blocked_address() {
     let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
     let ckusdc = ckerc20.find_ckerc20_token("ckUSDC");
-    let from_address_blocked: Address = "0x01e2919679362dFBC9ee1644Ba9C6da6D6245BB1"
-        .parse()
-        .unwrap();
+    let from_address_blocked: Address = SAMPLE_BLOCKED_ADDRESS;
 
     ckerc20
         .deposit(DepositCkErc20Params {
@@ -1696,7 +1696,7 @@ fn should_retrieve_minter_info() {
                 LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()
             ),
             cketh_ledger_id: Some(ckerc20.cketh_ledger_id()),
-            evm_rpc_id: ckerc20.cketh.evm_rpc_id.map(Principal::from),
+            evm_rpc_id: Some(ckerc20.cketh.evm_rpc_id.into()),
         }
     );
 }

@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "STATESYNC_TEST_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS", "XNET_TEST_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MAINNET_ENV", "STATESYNC_TEST_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS", "XNET_TEST_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -16,7 +16,6 @@ system_test_nns(
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + XNET_TEST_CANISTER_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/registry/subnet_type",
@@ -26,7 +25,7 @@ system_test_nns(
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
         "@crate_index//:candid",
-        "@crate_index//:ic_cdk_next",
+        "@crate_index//:ic-management-canister-types",
         "@crate_index//:itertools",
         "@crate_index//:slog",
         "@crate_index//:tokio",
@@ -42,7 +41,6 @@ system_test(
         "k8s",
         "long_test",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
         "//rs/registry/subnet_type",
@@ -67,7 +65,6 @@ system_test_nns(
         "k8s",
         "long_test",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         GRAFANA_RUNTIME_DEPS +
@@ -88,9 +85,8 @@ system_test_nns(
     },
     extra_head_nns_tags = ["manual"],  # only run this test with the mainnet NNS canisters.
     tags = [
-        "system_test_hotfix",
+        "system_test_large",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
@@ -115,13 +111,10 @@ system_test_nns(
     malicious = True,
     tags = [
         "k8s",
-        "system_test_nightly",
+        "system_test_large",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
-    runtime_deps = GRAFANA_RUNTIME_DEPS + STATESYNC_TEST_CANISTER_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS + [
-        "//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh",
-    ],
+    runtime_deps = GRAFANA_RUNTIME_DEPS + STATESYNC_TEST_CANISTER_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",
@@ -134,9 +127,8 @@ system_test_nns(
 
 system_test(
     name = "queues_compatibility_test",
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    env = MAINNET_ENV,
     runtime_deps = [
-        "//:mainnet_subnet_revisions",
         "//rs/replicated_state:replicated_state_test_binary",
     ],
     deps = [

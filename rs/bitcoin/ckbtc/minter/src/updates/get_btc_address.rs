@@ -28,6 +28,11 @@ pub fn account_to_p2wpkh_address_from_state(s: &CkBtcMinterState, account: &Acco
 
 pub async fn get_btc_address(args: GetBtcAddressArgs) -> String {
     let owner = args.owner.unwrap_or_else(ic_cdk::caller);
+    assert_ne!(
+        owner,
+        Principal::anonymous(),
+        "the owner must be non-anonymous"
+    );
 
     init_ecdsa_public_key().await;
 
@@ -68,9 +73,8 @@ pub async fn init_ecdsa_public_key() -> ECDSAPublicKey {
 
 #[cfg(test)]
 mod tests {
-    use ic_btc_interface::Network;
-
     use crate::address::network_and_public_key_to_p2wpkh;
+    use crate::Network;
 
     fn check_network_and_public_key_result(network: Network, pk_hex: &str, expected: &str) {
         assert_eq!(

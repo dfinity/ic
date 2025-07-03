@@ -11,7 +11,7 @@ fn should_encode_default_upgrade_args() {
         let path = repository_root().join(canister.candid_file());
         let expected = "4449444c0000";
 
-        let upgrade_args = encode_upgrade_args(&path, canister.default_upgrade_args());
+        let upgrade_args = encode_upgrade_args(&canister, &path, canister.default_upgrade_args());
 
         assert_eq!(
             hex::encode(upgrade_args.upgrade_args_bin()),
@@ -27,7 +27,7 @@ fn should_encode_non_empty_ledger_upgrade_args() {
     let canister = TargetCanister::CkEthLedger;
     let path = repository_root().join(canister.candid_file());
 
-    let upgrade_args = encode_upgrade_args(&path, "(variant {Upgrade})");
+    let upgrade_args = encode_upgrade_args(&canister, &path, "(variant {Upgrade})");
 
     assert!(hex::encode(upgrade_args.upgrade_args_bin()).starts_with("4449444c"));
 }
@@ -38,10 +38,12 @@ fn should_parse_constructor_parameters() {
         if canister == TargetCanister::IcpArchive1
             || canister == TargetCanister::IcpArchive2
             || canister == TargetCanister::IcpArchive3
+            || canister == TargetCanister::IcpArchive4
             //canister lives outside the monorepo
             || canister == TargetCanister::EvmRpc
             || canister == TargetCanister::CyclesLedger
             || canister == TargetCanister::ExchangeRateCanister
+            || canister == TargetCanister::SolRpc
         {
             continue;
         }
@@ -77,13 +79,13 @@ fn should_parse_constructor_parameters() {
 fn should_render_correct_didc_encode_command() {
     let canister = TargetCanister::CkEthMinter;
     let path = repository_root().join(canister.candid_file());
-    let upgrade_args = encode_upgrade_args(&path, "(variant {UpgradeArg = record {} })");
+    let upgrade_args = encode_upgrade_args(&canister, &path, "(variant {UpgradeArg = record {} })");
 
     let didc_encode_cmd = upgrade_args.didc_encode_cmd();
 
     assert_eq!(
         didc_encode_cmd,
-        "didc encode -d cketh_minter.did -t '(MinterArg)' '(variant {UpgradeArg = record {} })'"
+        "didc encode -d rs/ethereum/cketh/minter/cketh_minter.did -t '(MinterArg)' '(variant {UpgradeArg = record {} })'"
     );
 }
 

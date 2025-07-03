@@ -15,6 +15,7 @@ use ic_crypto_sha2::Sha256;
 use reqwest::blocking::{multipart, Client, RequestBuilder};
 use serde::de::Error;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use slog::info;
 use slog::{error, warn, Logger};
 use std::fmt;
 use std::io::Write;
@@ -161,6 +162,11 @@ impl Farm {
         path: P,
         filename: &str,
     ) -> FarmResult<FileId> {
+        let size = std::fs::metadata(&path).map_err(FarmError::IoError)?.len();
+        info!(
+            self.logger,
+            "Uploading file: {} of size {} bytes ...", filename, size
+        );
         let rb = self
             .post(&format!("group/{}/file", group_name))
             .timeout(TIMEOUT_SETTINGS_LONG.max_http_timeout);
@@ -628,7 +634,6 @@ impl CreateVmRequest {
 #[serde(rename_all = "camelCase")]
 pub enum VmType {
     Production,
-    Nested,
     Test,
     Sev,
 }
@@ -641,7 +646,6 @@ pub enum ImageLocation {
     ImageViaUrl { url: Url, sha256: String },
     IcOsImageViaId { id: FileId },
     IcOsImageViaUrl { url: Url, sha256: String },
-    PersistentVolumeClaim { name: String },
 }
 
 #[derive(Debug, Error)]

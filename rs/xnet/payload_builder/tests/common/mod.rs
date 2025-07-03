@@ -43,13 +43,18 @@ pub struct StateManagerFixture {
 }
 
 impl StateManagerFixture {
-    /// Creates a new `Fixture` around an empty state.
-    pub fn new(log: ReplicaLogger) -> Self {
-        Self::with_subnet_type(SubnetType::Application, log)
+    /// Creates a new `StateManagerFixture` for `OWN_SUBNET`.
+    pub fn local(log: ReplicaLogger) -> Self {
+        Self::for_subnet(OWN_SUBNET, SubnetType::Application, log)
+    }
+
+    /// Creates a new `StateManagerFixture` for `REMOTE_SUBNET`.
+    pub fn remote(log: ReplicaLogger) -> Self {
+        Self::for_subnet(REMOTE_SUBNET, SubnetType::Application, log)
     }
 
     /// Creates a new `Fixture` around an empty state.
-    pub fn with_subnet_type(subnet_type: SubnetType, log: ReplicaLogger) -> Self {
+    pub fn for_subnet(subnet_id: SubnetId, subnet_type: SubnetType, log: ReplicaLogger) -> Self {
         let temp_dir = Builder::new().prefix("test").tempdir().unwrap();
         let config = Config::new(temp_dir.path().into());
         let metrics = MetricsRegistry::new();
@@ -57,7 +62,7 @@ impl StateManagerFixture {
 
         let state_manager = StateManagerImpl::new(
             verifier,
-            OWN_SUBNET,
+            subnet_id,
             subnet_type,
             log.clone(),
             &metrics,

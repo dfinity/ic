@@ -6,11 +6,13 @@ type Account = record {
 type Action = variant {
   ManageNervousSystemParameters : NervousSystemParameters;
   AddGenericNervousSystemFunction : NervousSystemFunction;
+  SetTopicsForCustomProposals : SetTopicsForCustomProposals;
   ManageDappCanisterSettings : ManageDappCanisterSettings;
   RemoveGenericNervousSystemFunction : nat64;
   UpgradeSnsToNextVersion : record {};
   AdvanceSnsTargetVersion : AdvanceSnsTargetVersion;
   RegisterDappCanisters : RegisterDappCanisters;
+  RegisterExtension : RegisterExtension;
   TransferSnsTreasuryFunds : TransferSnsTreasuryFunds;
   UpgradeSnsControlledCanister : UpgradeSnsControlledCanister;
   DeregisterDappCanisters : DeregisterDappCanisters;
@@ -96,6 +98,7 @@ type ClaimedSwapNeurons = record {
 type Command = variant {
   Split : Split;
   Follow : Follow;
+  SetFollowing : SetFollowing;
   DisburseMaturity : DisburseMaturity;
   ClaimOrRefresh : ClaimOrRefresh;
   Configure : Configure;
@@ -112,6 +115,7 @@ type Command_1 = variant {
   Error : GovernanceError;
   Split : SplitResponse;
   Follow : record {};
+  SetFollowing : record {};
   DisburseMaturity : DisburseMaturityResponse;
   ClaimOrRefresh : ClaimOrRefreshResponse;
   Configure : record {};
@@ -127,6 +131,7 @@ type Command_1 = variant {
 type Command_2 = variant {
   Split : Split;
   Follow : Follow;
+  SetFollowing : SetFollowing;
   DisburseMaturity : DisburseMaturity;
   Configure : Configure;
   RegisterVote : RegisterVote;
@@ -212,6 +217,10 @@ type Follow = record {
   followees : vec NeuronId;
 };
 
+type SetFollowing = record {
+  topic_following : vec FolloweesForTopic;
+};
+
 type Followees = record {
   followees : vec NeuronId;
 };
@@ -226,7 +235,7 @@ type GenericNervousSystemFunction = record {
   target_canister_id : opt principal;
   validator_method_name : opt text;
   target_method_name : opt text;
-  topic: opt Topic;
+  topic : opt Topic;
 };
 
 type GetMaturityModulationResponse = record {
@@ -238,6 +247,25 @@ type GetMetadataResponse = record {
   logo : opt text;
   name : opt text;
   description : opt text;
+};
+
+type GetMetricsRequest = record {
+  time_window_seconds : opt nat64;
+};
+
+type Metrics = record {
+  num_recently_submitted_proposals : opt nat64;
+  num_recently_executed_proposals: opt nat64;
+  last_ledger_block_timestamp : opt nat64;
+};
+
+type GetMetricsResult = variant {
+  Ok : Metrics;
+  Err : GovernanceError;
+};
+
+type GetMetricsResponse = record {
+  get_metrics_result : opt GetMetricsResult;
 };
 
 type GetModeResponse = record {
@@ -363,10 +391,16 @@ type ListProposals = record {
   limit : nat32;
   exclude_type : vec nat64;
   include_status : vec int32;
+  include_topics : opt vec TopicSelector;
+};
+
+type TopicSelector = record {
+  topic : opt Topic;
 };
 
 type ListProposalsResponse = record {
   include_ballots_by_caller : opt bool;
+  include_topic_filtering : opt bool;
   proposals : vec ProposalData;
 };
 
@@ -392,6 +426,10 @@ type SnsVersion = record {
 
 type AdvanceSnsTargetVersion = record {
   new_target : opt SnsVersion;
+};
+
+type SetTopicsForCustomProposals = record {
+  custom_function_id_to_topic : vec record { nat64; Topic };
 };
 
 type ManageLedgerParameters = record {
@@ -486,6 +524,11 @@ type NervousSystemParameters = record {
   automatically_advance_target_version : opt bool;
 };
 
+type FolloweesForTopic = record {
+  followees : vec Followee;
+  topic : opt Topic;
+};
+
 type Neuron = record {
   id : opt NeuronId;
   staked_maturity_e8s_equivalent : opt nat64;
@@ -501,11 +544,19 @@ type Neuron = record {
   vesting_period_seconds : opt nat64;
   disburse_maturity_in_progress : vec DisburseMaturityInProgress;
   followees : vec record { nat64; Followees };
+  topic_followees : opt record {
+    topic_id_to_followees : vec record { int32; FolloweesForTopic };
+  };
   neuron_fees_e8s : nat64;
 };
 
 type NeuronId = record {
   id : blob;
+};
+
+type Followee = record {
+  neuron_id : opt NeuronId;
+  alias : opt text;
 };
 
 type NeuronIds = record {
@@ -515,16 +566,6 @@ type NeuronIds = record {
 type NeuronInFlightCommand = record {
   command : opt Command_2;
   timestamp : nat64;
-};
-
-type NeuronParameters = record {
-  controller : opt principal;
-  dissolve_delay_seconds : opt nat64;
-  source_nns_neuron_id : opt nat64;
-  stake_e8s : opt nat64;
-  followees : vec NeuronId;
-  hotkey : opt principal;
-  neuron_id : opt NeuronId;
 };
 
 type NeuronPermission = record {
@@ -606,6 +647,7 @@ type ProposalData = record {
   minimum_yes_proportion_of_exercised : opt Percentage;
   is_eligible_for_rewards : bool;
   executed_timestamp_seconds : nat64;
+  topic : opt Topic;
 };
 
 type ProposalId = record {
@@ -621,6 +663,40 @@ type QueryStats = record {
 
 type RegisterDappCanisters = record {
   canister_ids : vec principal;
+};
+
+// This type is equivalant to `ICRC3Value`, but we give it another name since it is used here not
+// in the context of the ICRC-3 ledger standard. The justification is the same: The candid format
+// supports sharing information even when the client and the server involved do not have the same
+// schema (see the Upgrading and subtyping section of the candid spec). While this mechanism allows
+// to evolve services and clients independently without breaking them, it also means that a client
+// may not receive all the information that the server is sending, e.g. in case the client schema
+// lacks some fields that the server schema has.
+//
+// This loss of information is not an option for SNS voters deciding if an extension with particular
+// init args should be installed or if an extension function with particular arguments should be
+// called. The client must receive the same exact data the server sent in order to verify it.
+//
+// Verification of a priorly installed extension is done by hashing the extension's init arg data
+// and checking that the result is consistent with what has been certified by the SNS.
+type PreciseValue = variant {
+  Bool : bool;
+  Blob : blob;
+  Text : text;
+  Nat : nat64;
+  Int : int64;
+  Array : vec PreciseValue;
+  Map : vec record { text; PreciseValue };
+};
+
+type ExtensionInit = record {
+  value : opt PreciseValue;
+};
+
+type RegisterExtension = record {
+  chunked_canister_wasm : opt ChunkedCanisterWasm;
+
+  extension_init : opt ExtensionInit;
 };
 
 type RegisterVote = record {
@@ -872,6 +948,7 @@ service : (Governance) -> {
   get_latest_reward_event : () -> (RewardEvent) query;
   get_maturity_modulation : (record {}) -> (GetMaturityModulationResponse);
   get_metadata : (record {}) -> (GetMetadataResponse) query;
+  get_metrics : (GetMetricsRequest) -> (GetMetricsResponse) composite_query;
   get_mode : (record {}) -> (GetModeResponse) query;
   get_nervous_system_parameters : (null) -> (NervousSystemParameters) query;
   get_neuron : (GetNeuron) -> (GetNeuronResponse) query;

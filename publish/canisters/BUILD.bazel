@@ -1,6 +1,6 @@
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
-load("//ci/src/artifacts:upload.bzl", "upload_artifacts")
-load("//publish:defs.bzl", "checksum_rule")
+load("//bazel:defs.bzl", "file_size_check")
+load("//publish:defs.bzl", "artifact_bundle")
 load("//rs/nns:nns.bzl", NNS_CANISTER_NAME_TO_MAX_COMPRESSED_WASM_SIZE_E5_BYTES = "CANISTER_NAME_TO_MAX_COMPRESSED_WASM_SIZE_E5_BYTES")
 load("//rs/sns:sns.bzl", SNS_CANISTER_NAME_TO_MAX_COMPRESSED_WASM_SIZE_E5_BYTES = "CANISTER_NAME_TO_MAX_COMPRESSED_WASM_SIZE_E5_BYTES")
 
@@ -19,7 +19,6 @@ CANISTERS = {
     "ic-btc-checker.wasm.gz": "//rs/bitcoin/checker:btc_checker_canister",
     "ic-ckbtc-minter.wasm.gz": "//rs/bitcoin/ckbtc/minter:ckbtc_minter",
     "ic-ckbtc-minter_debug.wasm.gz": "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
-    "ic-ckbtc-kyt.wasm.gz": "//rs/bitcoin/ckbtc/kyt:kyt_canister",
     "ic-cketh-minter.wasm.gz": "//rs/ethereum/cketh/minter:cketh_minter",
     "ic-icrc1-index-ng.wasm.gz": "//rs/ledger_suite/icrc1/index-ng:index_ng_canister",
     "ic-icrc1-index-ng-u256.wasm.gz": "//rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256",
@@ -35,12 +34,12 @@ CANISTERS = {
     "rate-limit-canister.wasm.gz": "//rs/boundary_node/rate_limits:rate_limit_canister",
     "registry-canister.wasm.gz": "//rs/registry/canister:registry-canister",
     "root-canister.wasm.gz": "//rs/nns/handlers/root/impl:root-canister",
+    "salt-sharing-canister.wasm.gz": "//rs/boundary_node/salt_sharing:salt_sharing_canister",
     "sns-governance-canister.wasm.gz": "//rs/sns/governance:sns-governance-canister",
     "sns-governance-canister_test.wasm.gz": "//rs/sns/governance:sns-governance-canister-test",
     "sns-root-canister.wasm.gz": "//rs/sns/root:sns-root-canister",
     "sns-swap-canister.wasm.gz": "//rs/sns/swap:sns-swap-canister",
     "sns-wasm-canister.wasm.gz": "//rs/nns/sns-wasm:sns-wasm-canister",
-    "wasm.wasm.gz": "//rs/rust_canisters/dfn_core:wasm",
     # Needed by DRE team for qualification
     "xnet-test-canister.wasm.gz": "//rs/rust_canisters/xnet_test:xnet-test-canister",
     # Used in snsdemo repo for NNS dapp test environment
@@ -48,6 +47,10 @@ CANISTERS = {
 
     # Boundary Nodes
     "certificate-orchestrator.wasm.gz": "//rs/boundary_node/certificate_issuance/certificate_orchestrator:certificate_orchestrator",
+
+    # Node Rewards
+    "node-rewards-canister.wasm.gz": "//rs/node_rewards/canister:node-rewards-canister",
+    "node-rewards-canister-test.wasm.gz": "//rs/node_rewards/canister:node-rewards-canister-test",
 }
 
 COMPRESSED_CANISTERS = {
@@ -57,36 +60,40 @@ COMPRESSED_CANISTERS = {
     "ledger-archive-node-canister.wasm.gz": "//rs/ledger_suite/icp/archive:ledger-archive-node-canister-wasm.wasm.gz",
 }
 
-DEFAULT_CANISTERS_MAX_SIZE_E5_BYTES = "21"
+DEFAULT_CANISTERS_MAX_SIZE_E5_BYTES = 21
 
 CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES = {
     # -- FI team --
-    # The compressed version of these two canisters should be ~600kb,
-    # we are setting the check to 7 to leave some space for growth
+    # The compressed version of these two canisters should be ~700kb,
+    # we are setting the check to 8 to leave some space for growth
     # but enough to get an alert in case of a spike in size.
-    "ic-icrc1-ledger.wasm.gz": "7",
-    "ic-icrc1-ledger-u256.wasm.gz": "7",
+    # The size is currently at 701737 bytes.
+    "ic-icrc1-ledger.wasm.gz": 8,
+    # The size is currently at 704585 bytes.
+    "ic-icrc1-ledger-u256.wasm.gz": 8,
     # Size when constraint addded: 841_234 bytes
-    "ledger-canister.wasm.gz": "9",
+    "ledger-canister.wasm.gz": 9,
     # Size when constraint addded: 906_940 bytes
-    "ledger-canister_notify-method.wasm.gz": "10",
+    "ledger-canister_notify-method.wasm.gz": 10,
 
     # -- XC team --
     # Size when constraint addded: 447_593 bytes
-    "ic-btc-checker.wasm.gz": "6",
+    "ic-btc-checker.wasm.gz": 6,
     # Size when constraint addded: 696_633 bytes
-    "ic-ckbtc-minter.wasm.gz": "8",
+    "ic-ckbtc-minter.wasm.gz": 8,
     # Size when constraint addded: 1_230_630 bytes
-    "ic-cketh-minter.wasm.gz": "13",
+    "ic-cketh-minter.wasm.gz": 13,
     # The orchestrator needs to embed 3 wasms at compile time
     # (ICRC1 index, ICRC1 ledger, and ICRC1 archive) and size is
     # therefore strictly controlled.
     # Size when constraint addded: 1_704_979 bytes
-    "ic-ledger-suite-orchestrator-canister.wasm.gz": "18",
+    "ic-ledger-suite-orchestrator-canister.wasm.gz": 18,
 
     # -- BN team --
     # Size when constraint addded: 540_349 bytes
-    "rate-limit-canister.wasm.gz": "7",
+    "rate-limit-canister.wasm.gz": 7,
+    # Size when constraint addded: 452_227 bytes
+    "salt-sharing-canister.wasm.gz": 6,
 }
 
 CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES.update(NNS_CANISTER_NAME_TO_MAX_COMPRESSED_WASM_SIZE_E5_BYTES)
@@ -94,19 +101,15 @@ CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES.update(NNS_CANISTER_NAME_TO_MAX_COMPRESSE
 CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES.update(SNS_CANISTER_NAME_TO_MAX_COMPRESSED_WASM_SIZE_E5_BYTES)
 
 [
-    sh_test(
-        name = name + "_compressed_size_test",
-        srcs = ["file_size_test.sh"],
-        data = [name],
-        env = {
-            "FILE": "$(rootpath " + name + ")",
-            "MAX_SIZE": CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES.get(
-                name,
-                DEFAULT_CANISTERS_MAX_SIZE_E5_BYTES,
-            ) + "0" * 5,
-        },
+    file_size_check(
+        name = file + "_size_check",
+        file = file,
+        max_file_size = CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES.get(
+            file,
+            DEFAULT_CANISTERS_MAX_SIZE_E5_BYTES,
+        ) * 100000,
     )
-    for (name, size) in CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES.items()
+    for (file, size) in CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES.items()
 ]
 
 # `bazel cquery --output=files` that is used by build-ic script does not show external sources of `filegroup` targets.
@@ -127,9 +130,12 @@ filegroup(
 )
 
 # Export checksums & build artifacts
-checksum_rule(
-    name = "compute_checksums",
-    inputs = [":canisters"],
+artifact_bundle(
+    name = "bundle",
+    testonly = True,
+    inputs = [":canisters"] + [":canisters.did"],
+    prefix = "canisters",
+    visibility = ["//visibility:public"],
 )
 
 # the further targets are all testonly for simplicity because if a target was
@@ -159,11 +165,4 @@ filegroup(
             n.endswith(".wasm.gz")
         )
     ],
-)
-
-upload_artifacts(
-    name = "upload",
-    testonly = True,
-    inputs = [":canisters"] + [":canisters.did"],
-    remote_subdir = "canisters",
 )

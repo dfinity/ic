@@ -23,6 +23,7 @@ use crate::mutations::node_management::{
     do_remove_node_directly::RemoveNodeDirectlyPayload,
 };
 use ic_registry_canister_api::AddNodePayload;
+use ic_registry_keys::NODE_REWARDS_TABLE_KEY;
 use ic_types::{crypto::CurrentNodePublicKeys, time::Time};
 use prost::Message;
 
@@ -116,6 +117,14 @@ impl Registry {
             .transpose()?
             .map(|node_reward_type| node_reward_type as i32);
 
+        // 4a.  Conditionally enforce node_reward_type presence if node rewards are enabled
+        if self.are_node_rewards_enabled() && node_reward_type.is_none() {
+            return Err(format!(
+                "{}do_add_node: Node reward type is required.",
+                LOG_PREFIX
+            ));
+        }
+
         // 5. Validate the domain
         let domain: Option<String> = payload
             .domain
@@ -182,6 +191,13 @@ impl Registry {
         println!("{}do_add_node finished: {:?}", LOG_PREFIX, payload);
 
         Ok(node_id)
+    }
+
+    /// Currently, we know that node rewards are enabled based on the presence of the table in the
+    /// registry.
+    fn are_node_rewards_enabled(&self) -> bool {
+        self.get(NODE_REWARDS_TABLE_KEY.as_bytes(), self.latest_version())
+            .is_some()
     }
 }
 
@@ -320,6 +336,7 @@ mod tests {
     use ic_base_types::{NodeId, PrincipalId};
     use ic_config::crypto::CryptoConfig;
     use ic_crypto_node_key_generation::generate_node_keys_once;
+    use ic_protobuf::registry::node_rewards::v2::NodeRewardsTable;
     use ic_protobuf::registry::{
         api_boundary_node::v1::ApiBoundaryNodeRecord, node_operator::v1::NodeOperatorRecord,
     };
@@ -331,6 +348,7 @@ mod tests {
     use ic_types::ReplicaVersion;
     use itertools::Itertools;
     use lazy_static::lazy_static;
+    use maplit::btreemap;
     use prost::Message;
     use std::str::FromStr;
 
@@ -594,6 +612,7 @@ mod tests {
         // Add node operator record first
         let node_operator_record = NodeOperatorRecord {
             node_allowance: 1, // Should be > 0 to add a new node
+            rewardable_nodes: btreemap! { "type0".to_string() => 0, "type1".to_string() => 28 },
             ..Default::default()
         };
         let node_operator_id = PrincipalId::from_str(TEST_NODE_ID).unwrap();
@@ -616,10 +635,15 @@ mod tests {
         };
         let node_record = registry.get_node_or_panic(node_id);
         assert_eq!(node_record, node_record_expected);
-        // Assert node allowance counter has decremented
+
+        // Assert the node operator record is correct
+        let node_operator_record_expected = NodeOperatorRecord {
+            node_allowance: 0,
+            ..node_operator_record
+        };
         let node_operator_record = get_node_operator_record(&registry, node_operator_id)
             .expect("failed to get node operator");
-        assert_eq!(node_operator_record.node_allowance, 0);
+        assert_eq!(node_operator_record, node_operator_record_expected);
     }
 
     #[test]
@@ -961,5 +985,89 @@ mod tests {
         // Verify node operator allowance is decremented
         let updated_operator = get_node_operator_record(&registry, node_operator_id).unwrap();
         assert_eq!(updated_operator.node_allowance, 0);
+    }
+
+    #[test]
+    fn test_node_reward_type_is_required() {
+        let mut registry = invariant_compliant_registry(0);
+        // Add node operator record first
+        let node_operator_record = NodeOperatorRecord {
+            node_allowance: 1, // Should be > 0 to add a new node
+            ..Default::default()
+        };
+        let node_operator_id = PrincipalId::new_user_test_id(10001);
+
+        registry.maybe_apply_mutation_internal(vec![insert(
+            NODE_REWARDS_TABLE_KEY,
+            NodeRewardsTable::default().encode_to_vec(),
+        )]);
+
+        registry.maybe_apply_mutation_internal(vec![insert(
+            make_node_operator_record_key(node_operator_id),
+            node_operator_record.encode_to_vec(),
+        )]);
+        let (mut payload, _) = prepare_add_node_payload(1);
+        payload.node_reward_type = None;
+        // Code under test
+        let result = registry.do_add_node_(payload.clone(), node_operator_id);
+
+        // Assert
+        assert_eq!(
+            result.unwrap_err(),
+            "[Registry] do_add_node: Node reward type is required."
+        );
+    }
+
+    #[test]
+    fn test_node_reward_type_is_not_required_if_no_node_rewards_table_present() {
+        let mut registry = invariant_compliant_registry(0);
+        // Add node operator record first
+        let node_operator_record = NodeOperatorRecord {
+            node_allowance: 1, // Should be > 0 to add a new node
+            ..Default::default()
+        };
+        let node_operator_id = PrincipalId::new_user_test_id(10001);
+
+        registry.maybe_apply_mutation_internal(vec![insert(
+            make_node_operator_record_key(node_operator_id),
+            node_operator_record.encode_to_vec(),
+        )]);
+        let (mut payload, _) = prepare_add_node_payload(1);
+        payload.node_reward_type = None;
+        // Code under test
+        let result = registry.do_add_node_(payload.clone(), node_operator_id);
+
+        // Assert
+        assert!(
+            result.is_ok(),
+            "Could not create node with no node reward type: {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_invalid_node_types_return_error() {
+        let mut registry = invariant_compliant_registry(0);
+        // Add node operator record first
+        let node_operator_record = NodeOperatorRecord {
+            node_allowance: 1, // Should be > 0 to add a new node
+            ..Default::default()
+        };
+        let node_operator_id = PrincipalId::new_user_test_id(10001);
+
+        registry.maybe_apply_mutation_internal(vec![insert(
+            make_node_operator_record_key(node_operator_id),
+            node_operator_record.encode_to_vec(),
+        )]);
+        let (mut payload, _) = prepare_add_node_payload(1);
+        payload.node_reward_type = Some("invalid_type".to_string());
+        // Code under test
+        let result = registry.do_add_node_(payload.clone(), node_operator_id);
+
+        // Assert
+        assert_eq!(
+            result.unwrap_err(),
+            "[Registry] do_add_node: Error parsing node type from payload: Invalid node type: invalid_type"
+        );
     }
 }

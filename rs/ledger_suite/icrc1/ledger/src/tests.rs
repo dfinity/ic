@@ -9,7 +9,7 @@ use ic_ledger_core::timestamp::TimeStamp;
 use ic_stable_structures::Storable;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
 use icrc_ledger_types::icrc1::account::Account;
-use proptest::prelude::{any, prop_assert_eq, proptest};
+use proptest::prelude::*;
 use proptest::strategy::Strategy;
 
 use ic_ledger_suite_state_machine_tests::{
@@ -80,11 +80,12 @@ fn default_init_args() -> InitArgs {
             max_message_size_bytes: None,
             controller_id: PrincipalId::new_user_test_id(100),
             more_controller_ids: None,
-            cycles_for_archive_creation: None,
+            cycles_for_archive_creation: Some(0),
             max_transactions_per_response: None,
         },
         max_memo_length: None,
         feature_flags: None,
+        index_principal: None,
     }
 }
 
@@ -642,31 +643,31 @@ fn arb_token() -> impl Strategy<Value = Tokens> {
     (any::<u128>(), any::<u128>()).prop_map(|(hi, lo)| Tokens::from_words(hi, lo))
 }
 
-#[test]
-fn allowance_serialization() {
-    fn arb_timestamp() -> impl Strategy<Value = TimeStamp> {
-        any::<u64>().prop_map(TimeStamp::from_nanos_since_unix_epoch)
-    }
-    fn arb_opt_expiration() -> impl Strategy<Value = Option<TimeStamp>> {
-        proptest::option::of(any::<u64>().prop_map(TimeStamp::from_nanos_since_unix_epoch))
-    }
-    fn arb_allowance() -> impl Strategy<Value = Allowance<Tokens>> {
-        (arb_token(), arb_opt_expiration(), arb_timestamp()).prop_map(
-            |(amount, expires_at, arrived_at)| Allowance {
-                amount,
-                expires_at,
-                arrived_at,
-            },
-        )
-    }
-    proptest!(|(allowance in arb_allowance())| {
-        let storable_allowance: StorableAllowance = allowance.clone().into();
-        let new_allowance: Allowance<Tokens> = StorableAllowance::from_bytes(storable_allowance.to_bytes()).into();
-        prop_assert_eq!(new_allowance.amount, allowance.amount);
-        prop_assert_eq!(new_allowance.expires_at, allowance.expires_at);
-        prop_assert_eq!(
-            new_allowance.arrived_at,
-            TimeStamp::from_nanos_since_unix_epoch(0)
-        );
-    })
+#[test_strategy::proptest]
+fn allowance_serialization(#[strategy(arb_allowance())] allowance: Allowance<Tokens>) {
+    let storable_allowance: StorableAllowance = allowance.clone().into();
+    let new_allowance: Allowance<Tokens> =
+        StorableAllowance::from_bytes(storable_allowance.to_bytes()).into();
+    prop_assert_eq!(new_allowance.amount, allowance.amount);
+    prop_assert_eq!(new_allowance.expires_at, allowance.expires_at);
+    prop_assert_eq!(
+        new_allowance.arrived_at,
+        TimeStamp::from_nanos_since_unix_epoch(0)
+    );
+}
+
+fn arb_timestamp() -> impl Strategy<Value = TimeStamp> {
+    any::<u64>().prop_map(TimeStamp::from_nanos_since_unix_epoch)
+}
+fn arb_opt_expiration() -> impl Strategy<Value = Option<TimeStamp>> {
+    proptest::option::of(any::<u64>().prop_map(TimeStamp::from_nanos_since_unix_epoch))
+}
+fn arb_allowance() -> impl Strategy<Value = Allowance<Tokens>> {
+    (arb_token(), arb_opt_expiration(), arb_timestamp()).prop_map(
+        |(amount, expires_at, arrived_at)| Allowance {
+            amount,
+            expires_at,
+            arrived_at,
+        },
+    )
 }

@@ -32,7 +32,7 @@ use ic_ledger_canister_blocks_synchronizer::{
 };
 use ic_ledger_core::block::BlockType;
 use ic_nns_common::pb::v1::NeuronId;
-use ic_nns_governance_api::pb::v1::manage_neuron::NeuronIdOrSubaccount;
+use ic_nns_governance_api::manage_neuron::NeuronIdOrSubaccount;
 use ic_types::{crypto::DOMAIN_IC_REQUEST, messages::MessageId, CanisterId};
 use icp_ledger::{Block, BlockIndex};
 use rosetta_core::{
@@ -46,6 +46,8 @@ use std::{
 };
 use strum::IntoEnumIterator;
 
+use rosetta_core::metrics::RosettaMetrics;
+
 /// The maximum amount of blocks to retrieve in a single search.
 const MAX_SEARCH_LIMIT: usize = 10_000;
 
@@ -53,6 +55,7 @@ const MAX_SEARCH_LIMIT: usize = 10_000;
 pub struct RosettaRequestHandler {
     blockchain: String,
     ledger: Arc<dyn LedgerAccess + Send + Sync>,
+    rosetta_metrics: RosettaMetrics,
 }
 
 // construction requests are implemented in their own module.
@@ -60,20 +63,35 @@ impl RosettaRequestHandler {
     pub fn new<T: 'static + LedgerAccess + Send + Sync>(
         blockchain: String,
         ledger: Arc<T>,
+        rosetta_metrics: RosettaMetrics,
     ) -> Self {
-        Self { blockchain, ledger }
+        Self {
+            blockchain,
+            ledger,
+            rosetta_metrics,
+        }
     }
 
     pub fn new_with_default_blockchain<T: 'static + LedgerAccess + Send + Sync>(
         ledger: Arc<T>,
     ) -> Self {
-        Self::new(crate::DEFAULT_BLOCKCHAIN.to_string(), ledger)
+        let canister_id = ledger.ledger_canister_id();
+        let canister_id_str = hex::encode(canister_id.get().into_vec());
+        Self::new(
+            crate::DEFAULT_BLOCKCHAIN.to_string(),
+            ledger,
+            RosettaMetrics::new(crate::DEFAULT_TOKEN_SYMBOL.to_string(), canister_id_str),
+        )
     }
 
     pub fn network_id(&self) -> NetworkIdentifier {
         let canister_id = self.ledger.ledger_canister_id();
         let net_id = hex::encode(canister_id.get().into_vec());
         NetworkIdentifier::new(self.blockchain.clone(), net_id)
+    }
+
+    pub fn rosetta_metrics(&self) -> RosettaMetrics {
+        self.rosetta_metrics.clone()
     }
 
     /// Get an Account Balance
@@ -327,8 +345,10 @@ impl RosettaRequestHandler {
             }
             _ => {
                 if self.is_rosetta_blocks_mode_enabled().await {
-                    let blocks = self.ledger.read_blocks().await;
-                    let highest_block_index = blocks
+                    let highest_block_index = self
+                        .ledger
+                        .read_blocks()
+                        .await
                         .get_highest_rosetta_block_index()
                         .map_err(ApiError::from)?
                         .ok_or_else(|| ApiError::BlockchainEmpty(false, Default::default()))?;
@@ -559,10 +579,11 @@ impl RosettaRequestHandler {
         msg: models::NetworkRequest,
     ) -> Result<NetworkStatusResponse, ApiError> {
         verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
-        let blocks = self.ledger.read_blocks().await;
-        let network_status = match blocks.rosetta_blocks_mode {
+        let rosetta_blocks_mode = self.ledger.read_blocks().await.rosetta_blocks_mode;
+        let network_status = match rosetta_blocks_mode {
             // If rosetta mode is not enabled we simply fetched the latest verified block
             RosettaBlocksMode::Disabled => {
+                let blocks = self.ledger.read_blocks().await;
                 let tip_verified_block = blocks.get_latest_verified_hashed_block()?;
                 let genesis_block = blocks.get_hashed_block(&0)?;
                 let first_verified_block = blocks.get_first_verified_hashed_block()?;
@@ -596,8 +617,13 @@ impl RosettaRequestHandler {
             RosettaBlocksMode::Enabled {
                 first_rosetta_block_index,
             } => {
+                let highest_rosetta_block_index = self
+                    .ledger
+                    .read_blocks()
+                    .await
+                    .get_highest_rosetta_block_index()?;
                 // If rosetta blocks mode is enabled we have to check whether the rosetta blocks table has been populated
-                match blocks.get_highest_rosetta_block_index()? {
+                match highest_rosetta_block_index {
                     // If it has been populated we can return the highest rosetta block
                     Some(highest_rosetta_block_index) => {
                         let highest_rosetta_block = self
@@ -605,7 +631,9 @@ impl RosettaRequestHandler {
                             .await?;
                         // If Rosetta Blocks started only after a certain index then the genesis block as well as the first verified block will be the first icp block
                         let genesis_block_id = if first_rosetta_block_index > 0 {
-                            self.hashed_block_to_rosetta_core_block(blocks.get_hashed_block(&0)?)
+                            let hashed_block =
+                                self.ledger.read_blocks().await.get_hashed_block(&0)?;
+                            self.hashed_block_to_rosetta_core_block(hashed_block)
                                 .await?
                                 .block_identifier
                         } else {
@@ -628,6 +656,18 @@ impl RosettaRequestHandler {
         };
 
         Ok(network_status)
+    }
+
+    pub fn assert_has_indexed_field(
+        &self,
+        request: &models::SearchTransactionsRequest,
+    ) -> Result<(), ApiError> {
+        let has_indexed_field =
+            request.transaction_identifier.is_some() || request.account_identifier.is_some();
+        if !has_indexed_field {
+            return Err(ApiError::invalid_request("At least one of transaction_identifier, type_, or account_identifier must be provided to perform an efficient search".to_owned()));
+        }
+        Ok(())
     }
 
     /// Search for a transaction given its hash
@@ -675,7 +715,6 @@ impl RosettaRequestHandler {
                 "Currency not supported in search/transactions endpoint".to_owned(),
             ));
         }
-
         let block_storage = self.ledger.read_blocks().await;
 
         let block_with_highest_block_index = block_storage
@@ -838,13 +877,13 @@ impl RosettaRequestHandler {
     ) -> Result<NeuronInfoResponse, ApiError> {
         let res = self.ledger.neuron_info(neuron_id, verified).await?;
 
-        use ic_nns_governance_api::pb::v1::NeuronState as PbNeuronState;
-        let state = match PbNeuronState::try_from(res.state).ok() {
-            Some(PbNeuronState::NotDissolving) => NeuronState::NotDissolving,
-            Some(PbNeuronState::Spawning) => NeuronState::Spawning,
-            Some(PbNeuronState::Dissolving) => NeuronState::Dissolving,
-            Some(PbNeuronState::Dissolved) => NeuronState::Dissolved,
-            Some(PbNeuronState::Unspecified) | None => {
+        use ic_nns_governance_api::NeuronState as GovernanceNeuronState;
+        let state = match GovernanceNeuronState::from_repr(res.state) {
+            Some(GovernanceNeuronState::NotDissolving) => NeuronState::NotDissolving,
+            Some(GovernanceNeuronState::Spawning) => NeuronState::Spawning,
+            Some(GovernanceNeuronState::Dissolving) => NeuronState::Dissolving,
+            Some(GovernanceNeuronState::Dissolved) => NeuronState::Dissolved,
+            Some(GovernanceNeuronState::Unspecified) | None => {
                 return Err(ApiError::internal_error(format!(
                     "unsupported neuron state code: {}",
                     res.state

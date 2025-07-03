@@ -21,10 +21,6 @@ path = "tests/governance.rs"
 name = "governance-interleaving-test"
 path = "tests/interleaving_tests.rs"
 
-[[bench]]
-name = "scale"
-harness = false
-
 [dependencies]
 build-info = { workspace = true }
 
@@ -35,12 +31,11 @@ cycles-minting-canister = { path = "../cmc" }
 dyn-clone = "1.0.14"
 futures = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
-ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
 ic-cdk = { workspace = true }
-ic-cdk-macros = { workspace = true }
 ic-cdk-timers = { workspace = true }
 ic-crypto-sha2 = { path = "../../crypto/sha2/" }
 ic-dummy-getrandom-for-wasm = { path = "../../../packages/ic-dummy-getrandom-for-wasm" }
+ic-http-types = { path = "../../../packages/ic-http-types" }
 ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-metrics-encoder = "1"
@@ -51,10 +46,13 @@ ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/
 ic-nervous-system-governance = { path = "../../nervous_system/governance" }
 ic-nervous-system-linear-map = { path = "../../nervous_system/linear_map" }
 ic-nervous-system-long-message = { path = "../../nervous_system/long_message" }
+ic-nervous-system-timer-task = { path = "../../nervous_system/timer_task" }
 ic-nervous-system-root = { path = "../../nervous_system/root" }
 ic-nervous-system-runtime = { path = "../../nervous_system/runtime" }
 ic-nervous-system-proto = { path = "../../nervous_system/proto" }
 ic-nervous-system-temporary = { path = "../../nervous_system/temporary" }
+ic-nervous-system-time-helpers = { path = "../../nervous_system/time_helpers" }
+ic-nervous-system-timers = { path = "../../nervous_system/timers" }
 ic-neurons-fund = { path = "../../nervous_system/neurons_fund" }
 ic-nns-common = { path = "../common" }
 ic-nns-constants = { path = "../constants" }
@@ -62,6 +60,7 @@ ic-nns-gtc-accounts = { path = "../gtc_accounts" }
 ic-nns-governance-api = { path = "./api" }
 ic-nns-governance-init = { path = "./init" }
 ic-nns-handler-root-interface = { path = "../handlers/root/interface" }
+ic-node-rewards-canister-api = { path = "../../node_rewards/canister/api" }
 ic-protobuf = { path = "../../protobuf" }
 ic-sns-init = { path = "../../sns/init" }                                                         # This is just for a couple of PB definitions.
 ic-sns-root = { path = "../../sns/root" }                                                         # This is just for a couple of PB definitions.
@@ -71,6 +70,7 @@ ic-stable-structures = { workspace = true }
 ic-types = { path = "../../types/types" }
 ic-utils = { path = "../../utils" }
 icp-ledger = { path = "../../ledger_suite/icp" }
+icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 itertools = { workspace = true }
 lazy_static = { workspace = true }
 maplit = "1.0.2"

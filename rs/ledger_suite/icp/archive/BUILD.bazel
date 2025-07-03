@@ -1,8 +1,21 @@
-load("@rules_rust//rust:defs.bzl", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_ic_test")
 
 package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "ic-icp-archive",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/main.rs"],
+    ),
+    crate_name = "ic_icp_archive",
+    deps = [
+        "@crate_index//:candid",
+        "@crate_index//:serde",
+    ],
+)
 
 rust_canister(
     name = "ledger-archive-node-canister-wasm",
@@ -18,19 +31,18 @@ rust_canister(
     version = "0.9.0",
     deps = [
         # Keep sorted.
+        ":ic-icp-archive",
+        "//packages/ic-http-types",
         "//rs/ledger_suite/common/ledger_canister_core",
         "//rs/ledger_suite/common/ledger_core",
         "//rs/ledger_suite/icp:icp_ledger",
         "//rs/nns/constants",
-        "//rs/rust_canisters/dfn_candid",
-        "//rs/rust_canisters/dfn_core",
-        "//rs/rust_canisters/dfn_http_metrics",
-        "//rs/rust_canisters/dfn_protobuf",
         "//rs/types/base_types",
         "@crate_index//:candid",
         "@crate_index//:ciborium",
         "@crate_index//:ic-cdk",
         "@crate_index//:ic-metrics-encoder",
+        "@crate_index//:ic-stable-structures",
         "@crate_index//:lazy_static",
         "@crate_index//:serde",
     ],
@@ -62,11 +74,12 @@ rust_ic_test(
     },
     deps = [
         # Keep sorted.
+        ":ic-icp-archive",
+        "//packages/ic-http-types",
         "//packages/pocket-ic",
         "//rs/ledger_suite/common/ledger_core",
         "//rs/ledger_suite/icp:icp_ledger",
         "//rs/ledger_suite/icp/test_utils",
-        "//rs/rust_canisters/http_types",
         "//rs/types/base_types",
         "@crate_index//:candid",
         "@crate_index//:serde_bytes",

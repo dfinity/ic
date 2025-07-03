@@ -2,13 +2,22 @@
 
 set -euo pipefail
 
-# Used by ic_version_or_git_sha
-commit_sha=$(git rev-parse HEAD)
-echo "COMMIT_SHA $commit_sha"
-
-# Used by ic_version_or_git_sha
-git_tree_status=$(git diff-index --quiet HEAD -- && echo 'Clean' || echo 'Modified')
-echo "GIT_TREE_STATUS $git_tree_status"
+# By default, we set a hardcoded, constant version to avoid rebuilds. Only when
+# --stamp is provided do we write a meaningful version.
+if [ "$#" == "0" ]; then
+    echo "STABLE_VERSION 0000000000000000000000000000000000000000"
+    echo "STABLE_COMMIT_TIMESTAMP 4000000000" # arbitrary (constant) timestamp
+elif [ "$#" == "1" ] && [ "$1" == "--stamp" ]; then
+    version="$(git rev-parse HEAD)"
+    # If the checkout is not clean, mark the version as dirty
+    if [ -n "$(git status --porcelain)" ]; then
+        version="$version-dirty"
+    fi
+    echo "STABLE_VERSION $version"
+    echo "STABLE_COMMIT_TIMESTAMP $(git show -s --format=%ct)"
+else
+    exit 1
+fi
 
 # Used to read credentials for S3 upload
 echo "HOME ${HOME}"
@@ -20,7 +29,3 @@ if [[ -n "${USER:-}" ]]; then
 elif [[ -n "${HOSTUSER:-}" ]]; then
     echo "STABLE_FARM_USER ${HOSTUSER}"
 fi
-
-# Generate a file that changes every time bazel runs. It can be used as dependency for targets we want to always rebuild.
-workspace_root="$(git rev-parse --show-toplevel)"
-date '+%s' >"$workspace_root/bazel-timestamp.txt"

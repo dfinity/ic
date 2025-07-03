@@ -8,6 +8,7 @@ load("//bazel:prost.bzl", "generated_files_check")
 package(default_visibility = ["//visibility:public"])
 
 exports_files([
+    "canister_ids.json",
     "ledger.did",
     "ledger_archive.did",
 ])
@@ -36,7 +37,6 @@ rust_library(
         "//rs/crypto/sha2",
         "//rs/ledger_suite/common/ledger_canister_core",
         "//rs/ledger_suite/common/ledger_core",
-        "//rs/rust_canisters/dfn_core",
         "//rs/rust_canisters/dfn_protobuf",
         "//rs/rust_canisters/on_wire",
         "//rs/types/base_types",
@@ -127,6 +127,7 @@ rust_ic_test_suite(
     deps = [
         # Keep sorted.
         ":icp_ledger",
+        "//packages/ic-http-types",
         "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//packages/pocket-ic",
@@ -138,9 +139,7 @@ rust_ic_test_suite(
         "//rs/ledger_suite/icp/test_utils",
         "//rs/nns/constants",
         "//rs/rust_canisters/canister_test",
-        "//rs/rust_canisters/dfn_candid",
         "//rs/rust_canisters/dfn_protobuf",
-        "//rs/rust_canisters/http_types",
         "//rs/rust_canisters/on_wire",
         "//rs/types/base_types",
         "@crate_index//:candid",
@@ -209,6 +208,7 @@ rust_ic_test_suite(
         ":icp_ledger",
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/ledger_suite/common/ledger_core",
+        "//rs/ledger_suite/icp/archive:ic-icp-archive",
         "//rs/ledger_suite/icp/index:ic-icp-index",
         "//rs/ledger_suite/icp/test_utils",
         "//rs/ledger_suite/tests/sm-tests:ic-ledger-suite-state-machine-tests",

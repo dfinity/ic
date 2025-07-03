@@ -15,6 +15,7 @@ ic-btc-adapter-client = { path = "../bitcoin/client" }
 ic-btc-consensus = { path = "../bitcoin/consensus" }
 ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
+ic-consensus-certification = { path = "../consensus/certification" }
 ic-consensus-dkg = { path = "../consensus/dkg" }
 ic-crypto = { path = "../crypto" }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
@@ -55,9 +56,10 @@ rand = { workspace = true }
 regex = { workspace = true }
 slog = { workspace = true }
 tempfile = { workspace = true }
-tikv-jemalloc-ctl = "0.5"
-tikv-jemallocator = "0.5"
+tikv-jemalloc-ctl = { workspace = true }
+tikv-jemallocator = { workspace = true }
 tokio = { workspace = true }
+tokio-util = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 

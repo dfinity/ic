@@ -2,6 +2,7 @@ use crate::message_routing::MessageRoutingMetrics;
 
 use super::*;
 use ic_base_types::NumSeconds;
+use ic_config::message_routing::{MAX_STREAM_MESSAGES, TARGET_STREAM_SIZE_BYTES};
 use ic_error_types::RejectCode;
 use ic_management_canister_types_private::Method;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
@@ -336,9 +337,22 @@ fn build_streams_local_canisters() {
 }
 
 #[test]
-fn build_streams_impl_at_limit_leaves_state_untouched() {
+fn build_streams_impl_at_message_limit_leaves_state_untouched() {
+    build_streams_impl_at_limit_leaves_state_untouched_impl(0, usize::MAX);
+}
+
+#[test]
+fn build_streams_impl_at_memory_limit_leaves_state_untouched() {
+    build_streams_impl_at_limit_leaves_state_untouched_impl(usize::MAX, 0);
+}
+
+fn build_streams_impl_at_limit_leaves_state_untouched_impl(
+    max_stream_messages: usize,
+    target_stream_size_bytes: usize,
+) {
     with_test_replica_logger(|log| {
-        let (stream_builder, mut provided_state, metrics_registry) = new_fixture(&log);
+        let (stream_builder, mut provided_state, metrics_registry) =
+            new_fixture_with_limits(&log, max_stream_messages, target_stream_size_bytes);
         provided_state.metadata.network_topology.routing_table = Arc::new(RoutingTable::try_from(
             btreemap! {
                 CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xfff) } => REMOTE_SUBNET,
@@ -360,10 +374,7 @@ fn build_streams_impl_at_limit_leaves_state_untouched() {
         let expected_state = provided_state.clone();
 
         // Act.
-        let result_state = stream_builder.build_streams_impl(provided_state.clone(), usize::MAX, 0);
-        assert_eq!(result_state, expected_state);
-
-        let result_state = stream_builder.build_streams_impl(provided_state, 0, usize::MAX);
+        let result_state = stream_builder.build_streams_impl(provided_state.clone());
         assert_eq!(result_state, expected_state);
 
         assert_eq!(
@@ -413,17 +424,25 @@ fn build_streams_impl_respects_limits(
     expected_messages: u64,
 ) {
     with_test_replica_logger(|log| {
-        let (stream_builder, mut provided_state, metrics_registry) = new_fixture(&log);
+        let msgs = generate_messages_for_test(/* senders = */ 2, /* receivers = */ 2);
+        let msg_count = msgs.len();
+        // All messages returned by `generate_messages_for_test` are of the same size
+        let msg_size = msgs.first().unwrap().count_bytes() as u64;
+
+        // Target stream size: stream struct plus `max_stream_messages_by_byte_size - 1`
+        // messages plus 1 byte. Since this is a target / soft limit, it should ensure
+        // that exactly `max_stream_messages_by_byte_size` messages (or
+        // `max_stream_messages_by_byte_size * msg_size` bytes) are routed.
+        let target_stream_size_bytes =
+            size_of::<Stream>() + (max_stream_messages_by_byte_size - 1) * msg_size as usize + 1;
+
+        let (stream_builder, mut provided_state, metrics_registry) =
+            new_fixture_with_limits(&log, max_stream_messages, target_stream_size_bytes);
         provided_state.metadata.network_topology.routing_table = Arc::new(RoutingTable::try_from(
             btreemap! {
                 CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xfff) } => REMOTE_SUBNET,
             },
         ).unwrap());
-
-        let msgs = generate_messages_for_test(/* senders = */ 2, /* receivers = */ 2);
-        let msg_count = msgs.len();
-        // All messages returned by `generate_messages_for_test` are of the same size
-        let msg_size = msgs.first().unwrap().count_bytes() as u64;
 
         assert!(
             msg_count > expected_messages as usize,
@@ -459,19 +478,8 @@ fn build_streams_impl_respects_limits(
             streams.insert(REMOTE_SUBNET, expected_stream);
         });
 
-        // Target stream size: stream struct plus `max_stream_messages_by_byte_size - 1`
-        // messages plus 1 byte. Since this is a target / soft limit, it should ensure
-        // that exactly `max_stream_messages_by_byte_size` messages (or
-        // `max_stream_messages_by_byte_size * msg_size` bytes) are routed.
-        let target_stream_size_bytes =
-            size_of::<Stream>() + (max_stream_messages_by_byte_size - 1) * msg_size as usize + 1;
-
         // Act.
-        let result_state = stream_builder.build_streams_impl(
-            provided_state,
-            max_stream_messages,
-            target_stream_size_bytes,
-        );
+        let result_state = stream_builder.build_streams_impl(provided_state);
 
         assert_eq!(expected_state.canister_states, result_state.canister_states);
         assert_eq!(expected_state.metadata, result_state.metadata);
@@ -654,7 +662,6 @@ fn build_streams_with_messages_targeted_to_other_subnets() {
 }
 
 fn build_streams_with_best_effort_messages_impl(
-    best_effort_responses: &BestEffortResponsesFeature,
     local_subnet_type: SubnetType,
     remote_subnet_type: SubnetType,
 ) {
@@ -677,8 +684,7 @@ fn build_streams_with_best_effort_messages_impl(
                 .build(),
         ];
 
-        let (mut stream_builder, mut provided_state, _) = new_fixture(&log);
-        stream_builder.best_effort_responses = best_effort_responses.clone();
+        let (stream_builder, mut provided_state, _) = new_fixture(&log);
 
         // Set the subnet types of the local and remote subnets.
         provided_state.metadata.network_topology.subnets = btreemap! {
@@ -699,7 +705,7 @@ fn build_streams_with_best_effort_messages_impl(
 
         let result_state = stream_builder.build_streams(provided_state);
 
-        // Local best-effort requests are always routed, regardless.
+        // Local best-effort request was routed.
         assert!(
             !result_state
                 .streams()
@@ -707,85 +713,52 @@ fn build_streams_with_best_effort_messages_impl(
                 .unwrap()
                 .messages()
                 .is_empty(),
-            "Best-effort responses feature: {:?}, Local subnet type: {:?}, Remote subnet type: {:?}",
-            best_effort_responses,
+            "Local subnet type: {:?}, Remote subnet type: {:?}",
             local_subnet_type,
             remote_subnet_type,
         );
 
-        // Remote best-effort requests are only routed when enabled for the respective
-        // remote subnet type.
-        let remote_request_routed =
-            best_effort_responses.is_enabled_on(&REMOTE_SUBNET, remote_subnet_type);
-        assert_eq!(
-            remote_request_routed,
-            result_state.streams().contains_key(&REMOTE_SUBNET),
-            "Best-effort responses feature: {:?}, Local subnet type: {:?}, Remote subnet type: {:?}",
-            best_effort_responses,
+        // Remote best-effort request was routed.
+        assert!(
+            !result_state
+                .streams()
+                .get(&REMOTE_SUBNET)
+                .unwrap()
+                .messages()
+                .is_empty(),
+            "Local subnet type: {:?}, Remote subnet type: {:?}",
             local_subnet_type,
             remote_subnet_type,
         );
 
+        // No reject response was enqueued.
         let maybe_reject_response = result_state
             .canister_state(&local_canister_id)
             .unwrap()
             .clone()
             .pop_input();
-        // If the remote request was not routed, a reject response was enqueued.
-        assert_eq!(
-            !remote_request_routed,
-            maybe_reject_response.is_some(),
-            "Best-effort responses feature: {:?}, Local subnet type: {:?}, Remote subnet type: {:?}",
-            best_effort_responses,
+        assert!(
+            maybe_reject_response.is_none(),
+            "Local subnet type: {:?}, Remote subnet type: {:?}",
             local_subnet_type,
             remote_subnet_type,
         );
-        if let Some(reject_respomse) = maybe_reject_response {
-            let expected_reject_response: RequestOrResponse = Response {
-                originator: local_canister_id,
-                respondent: remote_canister_id,
-                originator_reply_callback: CallbackId::from(2),
-                refund: Cycles::zero(),
-                response_payload: Payload::Reject(RejectContext::new(
-                    RejectCode::DestinationInvalid,
-                    format!(
-                        "Best-effort call to unsupported subnet: {} -> {}",
-                        local_canister_id, remote_canister_id
-                    ),
-                )),
-                deadline: SOME_DEADLINE,
-            }
-            .into();
-            assert_eq!(reject_respomse, expected_reject_response.into());
-        }
     });
 }
 
 #[test]
 fn build_streams_with_best_effort_messages() {
-    for best_effort_responses in &[
-        BestEffortResponsesFeature::SpecificSubnets(vec![]),
-        BestEffortResponsesFeature::SpecificSubnets(vec![REMOTE_SUBNET]),
-        BestEffortResponsesFeature::SpecificSubnets(vec![LOCAL_SUBNET, REMOTE_SUBNET]),
-        BestEffortResponsesFeature::ApplicationSubnetsOnly,
-        BestEffortResponsesFeature::Enabled,
+    for local_subnet_type in &[
+        SubnetType::Application,
+        SubnetType::System,
+        SubnetType::VerifiedApplication,
     ] {
-        for local_subnet_type in &[
+        for remote_subnet_type in &[
             SubnetType::Application,
             SubnetType::System,
             SubnetType::VerifiedApplication,
         ] {
-            for remote_subnet_type in &[
-                SubnetType::Application,
-                SubnetType::System,
-                SubnetType::VerifiedApplication,
-            ] {
-                build_streams_with_best_effort_messages_impl(
-                    best_effort_responses,
-                    *local_subnet_type,
-                    *remote_subnet_type,
-                );
-            }
+            build_streams_with_best_effort_messages_impl(*local_subnet_type, *remote_subnet_type);
         }
     }
 }
@@ -794,19 +767,20 @@ fn build_streams_with_best_effort_messages() {
 #[test]
 fn build_streams_with_oversized_payloads() {
     with_test_replica_logger(|log| {
-        use std::iter::repeat;
         let local_canister = canister_test_id(0);
         let remote_canister = canister_test_id(1);
         let method_name: String = ['a'; 13].iter().collect();
 
         // Payloads/error message that result in `get_payload_size()` returning exactly
         // `MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 + 1`.
-        let oversized_request_payload: Vec<u8> = repeat(0u8)
-            .take(MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize - method_name.len() + 1)
-            .collect();
-        let oversized_response_payload: Vec<u8> = repeat(0u8)
-            .take(MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize + 1)
-            .collect();
+        let oversized_request_payload: Vec<u8> = std::iter::repeat_n(
+            0u8,
+            MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize - method_name.len() + 1,
+        )
+        .collect();
+        let oversized_response_payload: Vec<u8> =
+            std::iter::repeat_n(0u8, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize + 1)
+                .collect();
         let oversized_error_message: String =
             "x".repeat(MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize);
 
@@ -998,23 +972,34 @@ fn build_streams_with_oversized_payloads() {
 }
 
 /// Sets up the `StreamHandlerImpl`, `ReplicatedState` and `MetricsRegistry` to
-/// be used by a test.
-fn new_fixture(log: &ReplicaLogger) -> (StreamBuilderImpl, ReplicatedState, MetricsRegistry) {
+/// be used by a test using specific stream limits.
+fn new_fixture_with_limits(
+    log: &ReplicaLogger,
+    max_stream_messages: usize,
+    target_stream_size_bytes: usize,
+) -> (StreamBuilderImpl, ReplicatedState, MetricsRegistry) {
     let mut state = ReplicatedState::new(LOCAL_SUBNET, SubnetType::Application);
     state.metadata.batch_time = Time::from_nanos_since_unix_epoch(5);
     let metrics_registry = MetricsRegistry::new();
     let stream_builder = StreamBuilderImpl::new(
         LOCAL_SUBNET,
+        max_stream_messages,
+        target_stream_size_bytes,
         &metrics_registry,
         &MessageRoutingMetrics::new(&metrics_registry),
         Arc::new(Mutex::new(LatencyMetrics::new_time_in_stream(
             &metrics_registry,
         ))),
-        BestEffortResponsesFeature::Enabled,
         log.clone(),
     );
 
     (stream_builder, state, metrics_registry)
+}
+
+/// Sets up the `StreamHandlerImpl`, `ReplicatedState` and `MetricsRegistry` to
+/// be used by a test using default stream limits.
+fn new_fixture(log: &ReplicaLogger) -> (StreamBuilderImpl, ReplicatedState, MetricsRegistry) {
+    new_fixture_with_limits(log, MAX_STREAM_MESSAGES, TARGET_STREAM_SIZE_BYTES)
 }
 
 /// Simulates routing the given requests into a `StreamIndexedQueue` with the

@@ -1,5 +1,5 @@
 use candid::candid_method;
-use ic_cdk_macros::init;
+use ic_cdk::init;
 use ic_xrc_types::{
     Asset, AssetClass, ExchangeRate, ExchangeRateMetadata, GetExchangeRateRequest,
     GetExchangeRateResult,
@@ -10,7 +10,7 @@ use xrc_mock::{SetExchangeRate, XrcMockInitPayload};
 
 fn main() {}
 
-#[ic_cdk_macros::update]
+#[ic_cdk::update]
 #[candid_method(update)]
 async fn get_exchange_rate(request: GetExchangeRateRequest) -> GetExchangeRateResult {
     if let Some(rate) = RATES.with(|rates| {
@@ -69,7 +69,7 @@ async fn get_exchange_rate(request: GetExchangeRateRequest) -> GetExchangeRateRe
     )
 }
 
-#[ic_cdk_macros::update]
+#[ic_cdk::update]
 #[candid_method(update)]
 async fn set_exchange_rate(req: SetExchangeRate) {
     RATES.with(|rates| {

@@ -11,9 +11,9 @@ path = "src/main.rs"
 anyhow = { workspace = true }
 clap = { workspace = true }
 config = { path = "../../config" }
+config_types = { path = "../../config_types" }
 indoc = "1.0.9"
 itertools = { workspace = true }
 network = { path = "../../network" }
 regex = { workspace = true }
 utils = { path = "../../utils" }
-

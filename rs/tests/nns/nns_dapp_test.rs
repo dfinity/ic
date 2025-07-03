@@ -19,9 +19,9 @@ use candid::Principal;
 use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
-    boundary_node::{BoundaryNode, BoundaryNodeVm},
     group::SystemTestGroup,
     ic::{InternetComputer, Subnet},
+    ic_gateway_vm::{HasIcGatewayVm, IcGatewayVm, IC_GATEWAY_VM_NAME},
     test_env::TestEnv,
     test_env_api::{secs, HasTopologySnapshot},
 };
@@ -32,8 +32,7 @@ use nns_dapp::{
     install_ii_nns_dapp_and_subnet_rental, nns_dapp_customizations, set_authorized_subnets,
 };
 use std::io::Read;
-
-const BOUNDARY_NODE_NAME: &str = "boundary-node-1";
+use url::Url;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
@@ -46,6 +45,7 @@ fn main() -> Result<()> {
 pub fn setup(env: TestEnv) {
     InternetComputer::new()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
+        .with_api_boundary_nodes(1)
         .add_subnet(Subnet::new(SubnetType::Application).add_nodes(1))
         .setup_and_start(&env)
         .expect("Failed to setup IC under test");
@@ -53,26 +53,24 @@ pub fn setup(env: TestEnv) {
         env.topology_snapshot(),
         nns_dapp_customizations(),
     );
-    BoundaryNode::new(String::from(BOUNDARY_NODE_NAME))
-        .allocate_vm(&env)
-        .expect("Allocation of BoundaryNode failed.")
-        .for_ic(&env, "")
-        .use_real_certs_and_dns()
+    IcGatewayVm::new(IC_GATEWAY_VM_NAME)
         .start(&env)
-        .expect("failed to setup BoundaryNode VM");
+        .expect("failed to setup ic-gateway");
     set_authorized_subnets(&env);
 }
 
-fn get_html(env: &TestEnv, farm_url: &str, canister_id: Principal, dapp_anchor: &str) {
+fn get_html(env: &TestEnv, ic_gateway_url: Url, canister_id: Principal, dapp_anchor: &str) {
+    // prepend canister_id to url
+    let ic_gateway_domain = ic_gateway_url.domain().unwrap();
+    let dapp_url = format!("https://{canister_id}.{ic_gateway_domain}");
     let log = env.logger();
-    let dapp_url = &format!("https://{}.{}", canister_id, farm_url);
-    ic_system_test_driver::retry_with_msg!(
-        format!("get html from {}", dapp_url),
-        log.clone(),
-        secs(600),
-        secs(30),
-        || {
-            block_on(async {
+    block_on(async {
+        ic_system_test_driver::retry_with_msg_async!(
+            format!("get html from {}", dapp_url),
+            &log,
+            secs(600),
+            secs(30),
+            async || {
                 let client = reqwest::Client::builder()
                     .use_rustls_tls()
                     .https_only(true)
@@ -80,11 +78,20 @@ fn get_html(env: &TestEnv, farm_url: &str, canister_id: Principal, dapp_anchor: 
                     .build()?;
 
                 let resp = client
-                    .get(dapp_url)
+                    .get(dapp_url.clone())
                     .header("Accept-Encoding", "gzip")
                     .header("User-Agent", "systest") // to prevent getting the service worker
                     .send()
                     .await?;
+
+                let status = resp.status();
+                if !status.is_success() {
+                    bail!(
+                        "Failed to get HTML from {}: status code {:?}",
+                        dapp_url,
+                        status
+                    );
+                }
 
                 let body_bytes = resp.bytes().await?.to_vec();
                 if let Ok(body) = String::from_utf8(body_bytes.clone()) {
@@ -105,24 +112,20 @@ fn get_html(env: &TestEnv, farm_url: &str, canister_id: Principal, dapp_anchor: 
                 assert!(body.contains(dapp_anchor));
 
                 Ok(())
-            })
-        }
-    )
-    .unwrap_or_else(|_| panic!("{} should deliver a proper HTML page!", canister_id));
+            }
+        )
+        .await
+    })
+    .unwrap_or_else(|_| panic!("{} should deliver a proper HTML page!", dapp_url.as_str()));
 }
 
 pub fn test(env: TestEnv) {
+    let ic_gateway = env.get_deployed_ic_gateway(IC_GATEWAY_VM_NAME).unwrap();
+    let ic_gateway_url = ic_gateway.get_public_url();
     let (ii_canister_id, nns_dapp_canister_id) =
-        install_ii_nns_dapp_and_subnet_rental(&env, BOUNDARY_NODE_NAME, None);
-    let boundary_node = env
-        .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
-        .unwrap()
-        .get_snapshot()
-        .unwrap();
-    let farm_url = boundary_node.get_playnet().unwrap();
-
+        install_ii_nns_dapp_and_subnet_rental(&env, &ic_gateway_url, None);
     let ii_anchor = "<title>Internet Identity</title>";
     let nns_dapp_anchor = "<title>NNS Dapp</title>";
-    get_html(&env, &farm_url, ii_canister_id, ii_anchor);
-    get_html(&env, &farm_url, nns_dapp_canister_id, nns_dapp_anchor);
+    get_html(&env, ic_gateway_url.clone(), ii_canister_id, ii_anchor);
+    get_html(&env, ic_gateway_url, nns_dapp_canister_id, nns_dapp_anchor);
 }

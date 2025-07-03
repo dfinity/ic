@@ -1,10 +1,11 @@
-use dfn_core::api::{now, trap_with};
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_cdk::{api::time, trap};
 use ic_ledger_canister_core::archive::ArchiveCanisterWasm;
-use ic_ledger_canister_core::blockchain::Blockchain;
+use ic_ledger_canister_core::blockchain::{BlockDataContainer, Blockchain};
 use ic_ledger_canister_core::ledger::{
     self as core_ledger, LedgerContext, LedgerData, TransactionInfo,
 };
+use ic_ledger_canister_core::runtime::CdkRuntime;
 use ic_ledger_core::balances::BalancesStore;
 use ic_ledger_core::{
     approvals::{Allowance, AllowanceTable, AllowancesData},
@@ -31,8 +32,6 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::sync::RwLock;
 use std::time::Duration;
-
-mod dfn_runtime;
 
 #[cfg(test)]
 mod tests;
@@ -69,14 +68,11 @@ fn unknown_token() -> String {
     "???".to_string()
 }
 
-fn default_ledger_version() -> u64 {
-    LEDGER_VERSION
-}
-
 const UPGRADES_MEMORY_ID: MemoryId = MemoryId::new(0);
 const ALLOWANCES_MEMORY_ID: MemoryId = MemoryId::new(1);
 const ALLOWANCES_EXPIRATIONS_MEMORY_ID: MemoryId = MemoryId::new(2);
 const BALANCES_MEMORY_ID: MemoryId = MemoryId::new(3);
+const BLOCKS_MEMORY_ID: MemoryId = MemoryId::new(4);
 
 #[derive(Clone, Debug, Encode, Decode)]
 struct StorableAllowance {
@@ -133,8 +129,6 @@ thread_local! {
     pub static UPGRADES_MEMORY: RefCell<VirtualMemory<DefaultMemoryImpl>> = MEMORY_MANAGER.with(|memory_manager|
         RefCell::new(memory_manager.borrow().get(UPGRADES_MEMORY_ID)));
 
-    pub static LEDGER_STATE: RefCell<LedgerState> = const { RefCell::new(LedgerState::Ready) };
-
     // (from, spender) -> allowance - map storing ledger allowances.
     #[allow(clippy::type_complexity)]
     pub static ALLOWANCES_MEMORY: RefCell<StableBTreeMap<(AccountIdentifier, AccountIdentifier), StorableAllowance, VirtualMemory<DefaultMemoryImpl>>> =
@@ -148,6 +142,10 @@ thread_local! {
     // account -> tokens - map storing ledger balances.
     pub static BALANCES_MEMORY: RefCell<StableBTreeMap<AccountIdentifier, Tokens, VirtualMemory<DefaultMemoryImpl>>> =
         MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableBTreeMap::init(memory_manager.borrow().get(BALANCES_MEMORY_ID))));
+
+    // block_index -> block
+    pub static BLOCKS_MEMORY: RefCell<StableBTreeMap<u64, Vec<u8>, VirtualMemory<DefaultMemoryImpl>>> =
+        MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableBTreeMap::init(memory_manager.borrow().get(BLOCKS_MEMORY_ID))));
 }
 
 #[derive(Copy, Clone, Serialize, Deserialize, Debug)]
@@ -155,18 +153,7 @@ pub enum LedgerField {
     Allowances,
     AllowancesExpirations,
     Balances,
-}
-
-#[derive(Copy, Clone, Serialize, Deserialize, Debug)]
-pub enum LedgerState {
-    Migrating(LedgerField),
-    Ready,
-}
-
-impl Default for LedgerState {
-    fn default() -> Self {
-        Self::Ready
-    }
+    Blocks,
 }
 
 /// The ledger versions represent backwards incompatible versions of the ledger.
@@ -176,11 +163,18 @@ impl Default for LedgerState {
 ///   * 0 - the whole ledger state is stored on the heap.
 ///   * 1 - the allowances are stored in stable structures.
 ///   * 2 - the balances are stored in stable structures.
-#[cfg(not(feature = "next-ledger-version"))]
-pub const LEDGER_VERSION: u64 = 2;
-
-#[cfg(feature = "next-ledger-version")]
+///   * 3 - the blocks are stored in stable structures.
+#[cfg(not(any(feature = "next-ledger-version", feature = "prev-ledger-version")))]
 pub const LEDGER_VERSION: u64 = 3;
+
+#[cfg(any(
+    feature = "next-ledger-version",
+    all(feature = "next-ledger-version", feature = "prev-ledger-version")
+))]
+pub const LEDGER_VERSION: u64 = 4;
+
+#[cfg(all(feature = "prev-ledger-version", not(feature = "next-ledger-version")))]
+pub const LEDGER_VERSION: u64 = 2;
 
 type StableLedgerBalances = Balances<StableBalances>;
 
@@ -193,7 +187,7 @@ pub struct Ledger {
     approvals: LedgerAllowances,
     #[serde(default)]
     stable_approvals: AllowanceTable<StableAllowancesData>,
-    pub blockchain: Blockchain<dfn_runtime::DfnRuntime, IcpLedgerArchiveWasm>,
+    pub blockchain: Blockchain<CdkRuntime, IcpLedgerArchiveWasm, StableBlockDataContainer>,
     // DEPRECATED
     pub maximum_number_of_accounts: usize,
     // DEPRECATED
@@ -233,7 +227,7 @@ pub struct Ledger {
     #[serde(default)]
     pub feature_flags: FeatureFlags,
 
-    #[serde(default = "default_ledger_version")]
+    #[serde(default)]
     pub ledger_version: u64,
 }
 
@@ -244,22 +238,18 @@ impl LedgerContext for Ledger {
     type Tokens = Tokens;
 
     fn balances(&self) -> &Balances<Self::BalancesStore> {
-        panic_if_not_ready();
         &self.stable_balances
     }
 
     fn balances_mut(&mut self) -> &mut Balances<Self::BalancesStore> {
-        panic_if_not_ready();
         &mut self.stable_balances
     }
 
     fn approvals(&self) -> &AllowanceTable<Self::AllowancesData> {
-        panic_if_not_ready();
         &self.stable_approvals
     }
 
     fn approvals_mut(&mut self) -> &mut AllowanceTable<Self::AllowancesData> {
-        panic_if_not_ready();
         &mut self.stable_approvals
     }
 
@@ -269,10 +259,11 @@ impl LedgerContext for Ledger {
 }
 
 impl LedgerData for Ledger {
-    type Runtime = dfn_runtime::DfnRuntime;
+    type Runtime = CdkRuntime;
     type ArchiveWasm = IcpLedgerArchiveWasm;
     type Transaction = Transaction;
     type Block = Block;
+    type BlockDataContainer = StableBlockDataContainer;
 
     fn transaction_window(&self) -> Duration {
         self.transaction_window
@@ -294,11 +285,15 @@ impl LedgerData for Ledger {
         &self.token_symbol
     }
 
-    fn blockchain(&self) -> &Blockchain<Self::Runtime, Self::ArchiveWasm> {
+    fn blockchain(
+        &self,
+    ) -> &Blockchain<Self::Runtime, Self::ArchiveWasm, Self::BlockDataContainer> {
         &self.blockchain
     }
 
-    fn blockchain_mut(&mut self) -> &mut Blockchain<Self::Runtime, Self::ArchiveWasm> {
+    fn blockchain_mut(
+        &mut self,
+    ) -> &mut Blockchain<Self::Runtime, Self::ArchiveWasm, Self::BlockDataContainer> {
         &mut self.blockchain
     }
 
@@ -373,7 +368,7 @@ impl Ledger {
         operation: Operation,
         created_at_time: Option<TimeStamp>,
     ) -> Result<(BlockIndex, HashOf<EncodedBlock>), PaymentError> {
-        let now = TimeStamp::from(dfn_core::api::now());
+        let now = TimeStamp::from_nanos_since_unix_epoch(time());
         self.add_payment_with_timestamp(memo, operation, created_at_time, now)
     }
 
@@ -427,7 +422,7 @@ impl Ledger {
                     .to_string(),
                 ),
                 CTE::AllowanceChanged { .. } => todo!(),
-                CTE::SelfApproval { .. } => todo!(),
+                CTE::SelfApproval => todo!(),
                 CTE::BadBurn { .. } => todo!(),
             }
         })
@@ -528,6 +523,8 @@ impl Ledger {
     }
 
     pub fn can_send(&self, principal_id: &PrincipalId) -> bool {
+        // If we include more principals here, we need to update the trap message
+        // in `icrc1_transfer` and similar functions.
         !principal_id.is_anonymous()
     }
 
@@ -554,7 +551,7 @@ impl Ledger {
     pub fn upgrade(&mut self, args: UpgradeArgs) {
         if let Some(icrc1_minting_account) = args.icrc1_minting_account {
             if Some(AccountIdentifier::from(icrc1_minting_account)) != self.minting_account_id {
-                trap_with(
+                trap(
                     "The icrc1 minting account is not the same as the minting account set during initialization",
                 );
             }
@@ -563,48 +560,6 @@ impl Ledger {
         if let Some(feature_flags) = args.feature_flags {
             self.feature_flags = feature_flags;
         }
-    }
-
-    pub fn migrate_one_allowance(&mut self) -> bool {
-        match self.approvals.allowances_data.pop_first_allowance() {
-            Some((account_spender, allowance)) => {
-                self.stable_approvals
-                    .allowances_data
-                    .set_allowance(account_spender, allowance);
-                true
-            }
-            None => false,
-        }
-    }
-
-    pub fn migrate_one_expiration(&mut self) -> bool {
-        match self.approvals.allowances_data.pop_first_expiry() {
-            Some((timestamp, account_spender)) => {
-                self.stable_approvals
-                    .allowances_data
-                    .insert_expiry(timestamp, account_spender);
-                true
-            }
-            None => false,
-        }
-    }
-
-    pub fn migrate_one_balance(&mut self) -> bool {
-        match self.balances.store.pop_first() {
-            Some((account, tokens)) => {
-                self.stable_balances.credit(&account, tokens);
-                true
-            }
-            None => false,
-        }
-    }
-
-    pub fn clear_arrivals(&mut self) {
-        self.approvals.allowances_data.clear_arrivals();
-    }
-
-    pub fn copy_token_pool(&mut self) {
-        self.stable_balances.token_pool = self.balances.token_pool;
     }
 }
 
@@ -629,41 +584,8 @@ pub fn change_notification_state(
         height,
         block_timestamp,
         new_state,
-        TimeStamp::from(now()),
+        TimeStamp::from_nanos_since_unix_epoch(time()),
     )
-}
-
-pub fn is_ready() -> bool {
-    LEDGER_STATE.with(|s| matches!(*s.borrow(), LedgerState::Ready))
-}
-
-pub fn panic_if_not_ready() {
-    if !is_ready() {
-        ic_cdk::trap("The Ledger is not ready");
-    }
-}
-
-pub fn ledger_state() -> LedgerState {
-    LEDGER_STATE.with(|s| *s.borrow())
-}
-
-pub fn set_ledger_state(ledger_state: LedgerState) {
-    LEDGER_STATE.with(|s| *s.borrow_mut() = ledger_state);
-}
-
-pub fn clear_stable_allowance_data() {
-    ALLOWANCES_MEMORY.with_borrow_mut(|allowances| {
-        allowances.clear_new();
-    });
-    ALLOWANCES_EXPIRATIONS_MEMORY.with_borrow_mut(|expirations| {
-        expirations.clear_new();
-    });
-}
-
-pub fn clear_stable_balances_data() {
-    BALANCES_MEMORY.with_borrow_mut(|balances| {
-        balances.clear_new();
-    });
 }
 
 pub fn balances_len() -> u64 {
@@ -788,5 +710,22 @@ impl BalancesStore for StableBalances {
                 Ok(new_v)
             }
         }
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize, Default)]
+pub struct StableBlockDataContainer {}
+
+impl BlockDataContainer for StableBlockDataContainer {
+    fn with_blocks<R>(
+        f: impl FnOnce(&StableBTreeMap<u64, Vec<u8>, VirtualMemory<DefaultMemoryImpl>>) -> R,
+    ) -> R {
+        BLOCKS_MEMORY.with(|cell| f(&cell.borrow()))
+    }
+
+    fn with_blocks_mut<R>(
+        f: impl FnOnce(&mut StableBTreeMap<u64, Vec<u8>, VirtualMemory<DefaultMemoryImpl>>) -> R,
+    ) -> R {
+        BLOCKS_MEMORY.with(|cell| f(&mut cell.borrow_mut()))
     }
 }

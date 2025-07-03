@@ -20,10 +20,10 @@ use crate::{
     sns_upgrade::{ListUpgradeStep, ListUpgradeStepsRequest, ListUpgradeStepsResponse, SnsVersion},
     types::test_helpers::NativeEnvironment,
 };
+use ic_nervous_system_canisters::cmc::FakeCmc;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord, canister_status::CanisterStatusType,
 };
-use ic_nervous_system_common::cmc::FakeCmc;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
 use maplit::btreemap;
 use pretty_assertions::assert_eq;
@@ -1103,8 +1103,6 @@ fn add_environment_mock_calls_for_initiate_upgrade(
                     canister_id: canister_id.get(),
                     wasm_module: vec![9, 8, 7, 6, 5, 4, 3, 2],
                     arg: Encode!().unwrap(),
-                    compute_allocation: None,
-                    memory_allocation: None,
                     sender_canister_version: None,
                 })
                 .unwrap(),

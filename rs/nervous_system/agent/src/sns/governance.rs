@@ -1,10 +1,16 @@
 use crate::{null_request::NullRequest, CallCanisters};
 use ic_base_types::PrincipalId;
 use ic_sns_governance_api::pb::v1::{
-    manage_neuron, manage_neuron_response, GetMetadataRequest, GetMetadataResponse, GetMode,
-    GetModeResponse, GetProposal, GetProposalResponse, GetRunningSnsVersionRequest,
-    GetRunningSnsVersionResponse, GovernanceError, ManageNeuron, ManageNeuronResponse,
-    NervousSystemParameters, NeuronId, Proposal, ProposalId,
+    governance::Version,
+    manage_neuron::{self, RegisterVote},
+    manage_neuron_response,
+    topics::{ListTopicsRequest, ListTopicsResponse},
+    AdvanceTargetVersionRequest, AdvanceTargetVersionResponse, GetMetadataRequest,
+    GetMetadataResponse, GetMode, GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal,
+    GetProposalResponse, GetRunningSnsVersionRequest, GetRunningSnsVersionResponse,
+    GetUpgradeJournalRequest, GetUpgradeJournalResponse, GovernanceError, ListNeurons,
+    ListNeuronsResponse, ManageNeuron, ManageNeuronResponse, NervousSystemParameters, NeuronId,
+    Proposal, ProposalId,
 };
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -110,15 +116,130 @@ impl GovernanceCanister {
         Ok(response)
     }
 
+    pub async fn follow<C: CallCanisters>(
+        &self,
+        agent: &C,
+        neuron_id: NeuronId,
+        follow: manage_neuron::Follow,
+    ) -> Result<ManageNeuronResponse, C::Error> {
+        self.manage_neuron(agent, neuron_id, manage_neuron::Command::Follow(follow))
+            .await
+    }
+
+    pub async fn set_following<C: CallCanisters>(
+        &self,
+        agent: &C,
+        neuron_id: NeuronId,
+        set_following: manage_neuron::SetFollowing,
+    ) -> Result<ManageNeuronResponse, C::Error> {
+        self.manage_neuron(
+            agent,
+            neuron_id,
+            manage_neuron::Command::SetFollowing(set_following),
+        )
+        .await
+    }
+
+    pub async fn increase_dissolve_delay<C: CallCanisters>(
+        &self,
+        agent: &C,
+        neuron_id: NeuronId,
+        additional_dissolve_delay_seconds: u32,
+    ) -> Result<ManageNeuronResponse, C::Error> {
+        let request = manage_neuron::Command::Configure(manage_neuron::Configure {
+            operation: Some(manage_neuron::configure::Operation::IncreaseDissolveDelay(
+                manage_neuron::IncreaseDissolveDelay {
+                    additional_dissolve_delay_seconds,
+                },
+            )),
+        });
+        self.manage_neuron(agent, neuron_id, request).await
+    }
+
+    pub async fn register_vote<C: CallCanisters>(
+        &self,
+        agent: &C,
+        neuron_id: NeuronId,
+        proposal: ProposalId,
+        vote: i32,
+    ) -> Result<ManageNeuronResponse, C::Error> {
+        self.manage_neuron(
+            agent,
+            neuron_id,
+            manage_neuron::Command::RegisterVote(RegisterVote {
+                proposal: Some(proposal),
+                vote,
+            }),
+        )
+        .await
+    }
+
     pub async fn get_proposal<C: CallCanisters>(
         &self,
         agent: &C,
         proposal_id: ProposalId,
     ) -> Result<GetProposalResponse, C::Error> {
-        let request = GetProposal {
-            proposal_id: Some(proposal_id),
-        };
+        agent
+            .call(
+                self.canister_id,
+                GetProposal {
+                    proposal_id: Some(proposal_id),
+                },
+            )
+            .await
+    }
+
+    pub async fn list_neurons<C: CallCanisters>(
+        &self,
+        agent: &C,
+        request: ListNeurons,
+    ) -> Result<ListNeuronsResponse, C::Error> {
         agent.call(self.canister_id, request).await
+    }
+
+    pub async fn get_neuron<C: CallCanisters>(
+        &self,
+        agent: &C,
+        neuron_id: NeuronId,
+    ) -> Result<GetNeuronResponse, C::Error> {
+        agent
+            .call(
+                self.canister_id,
+                GetNeuron {
+                    neuron_id: Some(neuron_id),
+                },
+            )
+            .await
+    }
+
+    pub async fn get_upgrade_journal<C: CallCanisters>(
+        &self,
+        agent: &C,
+        request: GetUpgradeJournalRequest,
+    ) -> Result<GetUpgradeJournalResponse, C::Error> {
+        agent.call(self.canister_id, request).await
+    }
+
+    pub async fn advance_target_version<C: CallCanisters>(
+        &self,
+        agent: &C,
+        target_version: Version,
+    ) -> Result<AdvanceTargetVersionResponse, C::Error> {
+        agent
+            .call(
+                self.canister_id,
+                AdvanceTargetVersionRequest {
+                    target_version: Some(target_version),
+                },
+            )
+            .await
+    }
+
+    pub async fn list_topics<C: CallCanisters>(
+        &self,
+        agent: &C,
+    ) -> Result<ListTopicsResponse, C::Error> {
+        agent.call(self.canister_id, ListTopicsRequest {}).await
     }
 }
 

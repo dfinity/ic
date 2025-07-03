@@ -12,18 +12,19 @@ path = "src/main.rs"
 
 [dependencies]
 async-trait = { workspace = true }
+canbench-rs = { version = "0.1.7", optional = true }
 candid = { workspace = true }
 candid_parser = { workspace = true }
 ciborium = { workspace = true }
 dfn_candid = { path = "../../../rust_canisters/dfn_candid" }
 dfn_core = { path = "../../../rust_canisters/dfn_core" }
-dfn_http_metrics = { path = "../../../rust_canisters/dfn_http_metrics" }
 dfn_protobuf = { path = "../../../rust_canisters/dfn_protobuf" }
 hex = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
 ic-canister-log = { path = "../../../rust_canisters/canister_log" }
 ic-cdk = { workspace = true }
 ic-cdk-timers = { workspace = true }
+ic-http-types = { path = "../../../../packages/ic-http-types" }
 ic-limits = { path = "../../../limits" }
 ic-icrc1 = { path = "../../icrc1" }
 ic-ledger-canister-core = { path = "../../common/ledger_canister_core" }
@@ -45,7 +46,7 @@ serde_cbor = { workspace = true }
 [dev-dependencies]
 candid_parser = { workspace = true }
 ic-agent = { workspace = true }
-ic-error-types = { path = "../../../types/error_types" }
+ic-error-types = { path = "../../../../packages/ic-error-types" }
 ic-ledger-suite-state-machine-tests = { path = "../../tests/sm-tests" }
 ic-icrc1-test-utils = { path = "../../icrc1/test_utils" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
@@ -56,4 +57,5 @@ proptest = { workspace = true }
 notify-method = []
 icp-allowance-getter = []
 next-ledger-version = []
-low-upgrade-instruction-limits = []
+prev-ledger-version = []
+canbench-rs = ["dep:canbench-rs"]

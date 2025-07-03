@@ -18,6 +18,7 @@ use ic_icrc1_test_utils::LedgerEndpointArg;
 use ic_icrc1_tokens_u256::U256;
 use ic_ledger_test_utils::build_ledger_wasm;
 use ic_ledger_test_utils::pocket_ic_helpers::ledger::LEDGER_CANISTER_ID;
+use ic_management_canister_types::CanisterSettings;
 use ic_nns_common::init::LifelineCanisterInitPayloadBuilder;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_constants::LIFELINE_CANISTER_ID;
@@ -35,8 +36,7 @@ use icp_ledger::{AccountIdentifier, LedgerCanisterInitPayload};
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::account::Account;
 use num_traits::cast::ToPrimitive;
-use pocket_ic::{management_canister::CanisterSettings, nonblocking::PocketIc, PocketIcBuilder};
-use prost::Message;
+use pocket_ic::{nonblocking::PocketIc, PocketIcBuilder};
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 use rosetta_core::identifiers::NetworkIdentifier;
 use std::collections::HashMap;
@@ -75,13 +75,19 @@ impl RosettaTestingEnvironment {
                     approve_arg.spender.subaccount = None;
                     arg_with_caller.arg = LedgerEndpointArg::ApproveArg(approve_arg);
                 }
+                LedgerEndpointArg::TransferFromArg(mut transfer_from_arg) => {
+                    transfer_from_arg.spender_subaccount = None;
+                    transfer_from_arg.from.subaccount = None;
+                    transfer_from_arg.to.subaccount = None;
+                    arg_with_caller.arg = LedgerEndpointArg::TransferFromArg(transfer_from_arg);
+                }
             };
 
-            // Rosetta does not support mint, burn or approve operations
+            // Rosetta does not support mint, burn, approve, or transfer_from operations
             // To keep the balances in sync we need to call the ledger agent directly and then go to the next iteration of args with caller
             if !matches!(
                 icrc1_transaction.operation,
-                ic_icrc1::Operation::Transfer { .. }
+                ic_icrc1::Operation::Transfer { spender: None, .. }
             ) {
                 let caller_agent = Icrc1Agent {
                     agent: get_custom_agent(arg_with_caller.caller.clone(), replica_port).await,
@@ -98,6 +104,14 @@ impl RosettaTestingEnvironment {
                         .unwrap(),
                     LedgerEndpointArg::TransferArg(transfer_arg) => caller_agent
                         .transfer(transfer_arg.clone())
+                        .await
+                        .unwrap()
+                        .unwrap()
+                        .0
+                        .to_u64()
+                        .unwrap(),
+                    LedgerEndpointArg::TransferFromArg(transfer_from_arg) => caller_agent
+                        .transfer_from(transfer_from_arg.clone())
                         .await
                         .unwrap()
                         .unwrap()
@@ -300,9 +314,7 @@ impl RosettaTestingEnvironmentBuilder {
                 .install_canister(
                     governance_canister,
                     governance_canister_wasm.bytes().to_vec(),
-                    GovernanceCanisterInitPayloadBuilder::new()
-                        .build()
-                        .encode_to_vec(),
+                    Encode!(&GovernanceCanisterInitPayloadBuilder::new().build()).unwrap(),
                     Some(governance_canister_controller),
                 )
                 .await;
@@ -400,6 +412,14 @@ impl RosettaTestingEnvironmentBuilder {
                         .unwrap(),
                     LedgerEndpointArg::TransferArg(transfer_arg) => caller_agent
                         .transfer(transfer_arg.clone())
+                        .await
+                        .unwrap()
+                        .unwrap()
+                        .0
+                        .to_u64()
+                        .unwrap(),
+                    LedgerEndpointArg::TransferFromArg(transfer_from_arg) => caller_agent
+                        .transfer_from(transfer_from_arg.clone())
                         .await
                         .unwrap()
                         .unwrap()

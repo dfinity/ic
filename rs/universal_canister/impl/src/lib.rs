@@ -102,7 +102,6 @@ try_from_u8!(
         StableFill64 = 72,
         CanisterVersion = 73,
         TrapIfNeq = 74,
-        MintCycles = 75,
         OneWayCallNew = 76,
         IsController = 77,
         CyclesBurn128 = 78,
@@ -113,5 +112,14 @@ try_from_u8!(
         MsgDeadline = 83,
         MemorySizeIsAtLeast = 84,
         MintCycles128 = 85,
+        CostCall = 86,
+        CostCreateCanister = 87,
+        CostHttpRequest = 88,
+        CostSignWithEcdsa = 89,
+        CostSignWithSchnorr = 90,
+        CostVetkdDeriveKey = 91,
+        LiquidCyclesBalance128 = 92,
+        CallDataAppendCyclesAddMax = 93,
+        RootKey = 94,
     }
 );

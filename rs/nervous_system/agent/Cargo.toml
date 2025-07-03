@@ -12,20 +12,31 @@ anyhow = { workspace = true }
 candid = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
+ic-error-types = { path = "../../../packages/ic-error-types" }
+ic-management-canister-types = { workspace = true }
 ic-nns-common = { path = "../../nns/common" }
 ic-nervous-system-clients = { path = "../clients" }
 ic-nns-governance-api = { path = "../../nns/governance/api" }
+ic-node-rewards-canister-api = { path = "../../node_rewards/canister/api" }
 cycles-minting-canister = { path = "../../nns/cmc" }
 ic-nns-constants = { path = "../../nns/constants" }
+ic-registry-canister-api = { path = "../../registry/canister/api" }
 ic-sns-wasm = { path = "../../nns/sns-wasm" }
 ic-sns-governance-api = { path = "../../sns/governance/api" }
 pocket-ic = { path = "../../../packages/pocket-ic" }
+pretty_assertions = { workspace = true }
 registry-canister = { path = "../../registry/canister" }
 ic-sns-root = { path = "../../sns/root" }
 ic-sns-swap = { path = "../../sns/swap" }
+ic-state-machine-tests = { path = "../../state_machine_tests" }
+icp-ledger = { path = "../../ledger_suite/icp" }
+icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 itertools = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
+
+[features]
+test = []

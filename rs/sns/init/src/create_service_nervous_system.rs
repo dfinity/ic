@@ -1,9 +1,8 @@
 use crate::pb::v1::{
-    sns_init_payload, AirdropDistribution, DappCanisters, DeveloperDistribution,
-    FractionalDeveloperVotingPower, NeuronDistribution, SnsInitPayload, SwapDistribution,
-    TreasuryDistribution,
+    sns_init_payload, DappCanisters, DeveloperDistribution, FractionalDeveloperVotingPower,
+    NeuronDistribution, SnsInitPayload, SwapDistribution, TreasuryDistribution,
 };
-use ic_nns_governance_api::pb::v1::{create_service_nervous_system, CreateServiceNervousSystem};
+use ic_nns_governance_api::{create_service_nervous_system, CreateServiceNervousSystem};
 
 fn divide_perfectly(field_name: &str, dividend: u64, divisor: u64) -> Result<u64, String> {
     match dividend.checked_rem(divisor) {
@@ -321,8 +320,6 @@ impl TryFrom<create_service_nervous_system::InitialTokenDistribution>
                 }
             };
 
-        let airdrop_distribution = Some(AirdropDistribution::default());
-
         if !defects.is_empty() {
             return Err(format!(
                 "Failed to convert to InitialTokenDistribution for the following reasons:\n{}",
@@ -335,7 +332,6 @@ impl TryFrom<create_service_nervous_system::InitialTokenDistribution>
                 developer_distribution,
                 treasury_distribution,
                 swap_distribution,
-                airdrop_distribution,
             },
         ))
     }

@@ -61,8 +61,9 @@ spec:
       - name: default
         pod: {}
       volumes:
-        - dataVolume:
-            name: "{name}-guestos"
+        - hostDisk:
+            type: Disk
+            path: /srv/tnet/{name}/disk.img
           name: disk0
         - name: cloudinitdisk
           cloudInitNoCloud:
@@ -157,8 +158,9 @@ spec:
             type: Disk
             path: /srv/tnet/{name}/disk.img
           name: disk0
-        - containerDisk:
-            image: "harbor.ln1-idx1.dfinity.network/tnet/config:{name}"
+        - hostDisk:
+            type: Disk
+            path: /srv/tnet/{name}/config_disk.img
           name: disk1
 "#;
 

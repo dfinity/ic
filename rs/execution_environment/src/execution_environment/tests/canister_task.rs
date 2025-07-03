@@ -2,10 +2,11 @@ use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;
 use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
 use ic_error_types::RejectCode;
-use ic_management_canister_types_private::{CanisterSettingsArgsBuilder, CanisterStatusType};
+use ic_management_canister_types_private::{
+    CanisterSettingsArgsBuilder, CanisterStatusType, OnLowWasmMemoryHookStatus,
+};
 use ic_management_canister_types_private::{CanisterUpgradeOptions, WasmMemoryPersistence};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::system_state::OnLowWasmMemoryHookStatus;
 use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
 use ic_replicated_state::page_map::PAGE_SIZE;

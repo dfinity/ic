@@ -4,14 +4,19 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-error-types",
+    "//packages/icrc-ledger-types:icrc_ledger_types",
     "//packages/pocket-ic",
+    "//rs/ledger_suite/icp:icp_ledger",
     "//rs/nervous_system/clients",
     "//rs/nns/cmc",
     "//rs/nns/common",
     "//rs/nns/constants",
     "//rs/nns/governance/api",
     "//rs/nns/sns-wasm",
+    "//rs/node_rewards/canister/api",
     "//rs/registry/canister",
+    "//rs/registry/canister/api",
     "//rs/sns/governance/api",
     "//rs/sns/root",
     "//rs/sns/swap",
@@ -19,7 +24,9 @@ DEPENDENCIES = [
     "@crate_index//:anyhow",
     "@crate_index//:candid",
     "@crate_index//:ic-agent",
+    "@crate_index//:ic-management-canister-types",
     "@crate_index//:itertools",
+    "@crate_index//:pretty_assertions",
     "@crate_index//:serde",
     "@crate_index//:serde_cbor",
     "@crate_index//:tempfile",
@@ -40,6 +47,19 @@ rust_library(
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.0.1",
     deps = DEPENDENCIES,
+)
+
+rust_library(
+    name = "test_agent",
+    testonly = True,
+    srcs = glob(["src/**/*.rs"]),
+    crate_features = ["test"],
+    crate_name = "ic_nervous_system_agent",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.0.1",
+    deps = DEPENDENCIES + [
+        "//rs/state_machine_tests",
+    ],
 )
 
 rust_test(

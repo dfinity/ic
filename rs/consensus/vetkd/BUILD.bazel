@@ -4,6 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-error-types",
     "//rs/consensus/utils",
     "//rs/crypto",
     "//rs/interfaces",
@@ -16,9 +17,9 @@ DEPENDENCIES = [
     "//rs/registry/helpers",
     "//rs/registry/subnet_features",
     "//rs/replicated_state",
-    "//rs/types/error_types",
     "//rs/types/management_canister_types",
     "//rs/types/types",
+    "@crate_index//:num-traits",
     "@crate_index//:prometheus",
     "@crate_index//:slog",
 ]
@@ -28,6 +29,7 @@ DEV_DEPENDENCIES = [
     "//rs/artifact_pool",
     "//rs/consensus/mocks",
     "//rs/registry/fake",
+    "//rs/registry/keys",
     "//rs/test_utilities",
     "//rs/test_utilities/registry",
     "//rs/test_utilities/state",

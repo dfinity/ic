@@ -68,6 +68,9 @@ pub const MAX_FALLBACK_CONTROLLER_PRINCIPAL_IDS_COUNT: usize = 15;
 /// Aka, the ceiling for the value `max_direct_participation_icp_e8s`.
 pub const MAX_DIRECT_ICP_CONTRIBUTION_TO_SWAP: u64 = 1_000_000_000 * E8;
 
+/// The lower bound on `min_participant_icp_e8s`.
+pub const MIN_PARTICIPANT_ICP_LOWER_BOUND_E8S: u64 = 1_000_000;
+
 /// Minimum allowed number of SNS neurons per neuron basket.
 pub const MIN_SNS_NEURONS_PER_BASKET: u64 = 2;
 
@@ -573,7 +576,7 @@ impl SnsInitPayload {
         Ok(governance)
     }
 
-    /// Construct the params used to initialize a SNS Ledger canister.
+    /// Construct the params used to initialize an SNS Ledger canister.
     fn ledger_init_args(
         &self,
         sns_canister_ids: &SnsCanisterIds,
@@ -610,7 +613,8 @@ impl SnsInitPayload {
                     // 10 Trillion cycles
                     cycles_for_archive_creation: Some(10_000_000_000_000),
                     max_transactions_per_response: None,
-                });
+                })
+                .with_index_principal(Principal::from(sns_canister_ids.index));
 
         if let Some(token_logo) = &self.token_logo {
             payload_builder = payload_builder.with_metadata_entry(
@@ -633,7 +637,7 @@ impl SnsInitPayload {
         }))
     }
 
-    /// Construct the params used to initialize a SNS Root canister.
+    /// Construct the params used to initialize an SNS Root canister.
     fn root_init_args(
         &self,
         sns_canister_ids: &SnsCanisterIds,
@@ -914,6 +918,7 @@ impl SnsInitPayload {
         self.join_validation_results(&validation_fns)
     }
 
+    #[allow(clippy::manual_ok_err)]
     fn join_validation_results(
         &self,
         validation_fns: &[Result<(), String>],
@@ -1011,11 +1016,6 @@ impl SnsInitPayload {
                     .as_ref()
                     .ok_or_else(|| "Error: developer_distribution must be specified".to_string())?;
 
-                let airdrop_distribution = f
-                    .airdrop_distribution
-                    .as_ref()
-                    .ok_or_else(|| "Error: airdrop_distribution must be specified".to_string())?;
-
                 let min_stake_infringing_developer_neurons: Vec<(PrincipalId, u64)> =
                     developer_distribution
                         .developer_neurons
@@ -1039,32 +1039,6 @@ impl SnsInitPayload {
                         min_stake_infringing_developer_neurons.len(),
                         neuron_minimum_stake_e8s,
                         min_stake_infringing_developer_neurons,
-                    ));
-                }
-
-                let min_stake_infringing_airdrop_neurons: Vec<(PrincipalId, u64)> =
-                    airdrop_distribution
-                        .airdrop_neurons
-                        .iter()
-                        .filter_map(|neuron_distribution| {
-                            if neuron_distribution.stake_e8s < neuron_minimum_stake_e8s {
-                                // Safe to unwrap due to the checks done above
-                                Some((
-                                    neuron_distribution.controller.unwrap(),
-                                    neuron_distribution.stake_e8s,
-                                ))
-                            } else {
-                                None
-                            }
-                        })
-                        .collect();
-
-                if !min_stake_infringing_airdrop_neurons.is_empty() {
-                    return Err(format!(
-                        "Error: {} airdrop neurons have a stake below the minimum stake ({} e8s):  \n {:?}",
-                        min_stake_infringing_airdrop_neurons.len(),
-                        neuron_minimum_stake_e8s,
-                        min_stake_infringing_airdrop_neurons,
                     ));
                 }
             }
@@ -1533,27 +1507,26 @@ impl SnsInitPayload {
     ///     participants.
     /// (6) If the minimum required number of participants participate each with the minimum
     ///     required amount of ICP, the maximum ICP amount that the swap can obtain is not exceeded.
-    /// (7) Determines the smallest SNS neuron size is greated than the SNS ledger transaction fee.
+    /// (7) Determines the smallest SNS neuron size is greater than the SNS ledger transaction fee.
     /// (8) Required ICP participation amount is big enough to ensure that all participants will
     ///     end up with enough SNS tokens to form the right number of SNS neurons (after paying for
     ///     the SNS ledger transaction fee to create each such SNS neuron).
+    ///
+    /// (9) min_participant_icp_e8s is at least as big as `MIN_PARTICIPANT_ICP_LOWER_BOUND_E8S`.
+    ///     This ensures, that users upon calling `swap.refresh_buyer_token()` must participate
+    ///     at least `MIN_PARTICIPANT_ICP_LOWER_BOUND_E8S` Hence, no malicious user can overflow
+    ///     node's memory by participating with very low amounts.\
     ///
     /// * -- In the context of this function, swap participation-related parameters include:
     /// - `min_direct_participation_icp_e8s` - Required ICP amount for the swap to succeed.
     /// - `max_direct_participation_icp_e8s` - Maximum ICP amount that the swap can obtain.
     /// - `min_participant_icp_e8s`          - Required ICP participation amount.
     /// - `max_participant_icp_e8s`          - Maximum ICP amount from one participant.
-    /// - `min_participants`                 - Required number of *direct* participants for the swap
-    ///                                        to succeed. This does not restrict the number of
-    ///                                        *Neurons' Fund* participants.
-    /// - `initial_token_distribution.swap_distribution.initial_swap_amount_e8s`
-    ///                                      - How many SNS tokens will be distributed amoung all
-    ///                                        the swap participants if the swap succeeds.
-    /// - `neuron_basket_construction_parameters`
-    ///                                      - How many SNS neurons will be created per participant.
+    /// - `min_participants`                 - Required number of *direct* participants for the swap to succeed. This does not restrict the number of *Neurons' Fund* participants.
+    /// - `initial_token_distribution.swap_distribution.initial_swap_amount_e8s` - How many SNS tokens will be distributed amoung all the swap participants if the swap succeeds.
+    /// - `neuron_basket_construction_parameters` - How many SNS neurons will be created per participant.
     /// - `neuron_minimum_stake_e8s`         - Determines the smallest SNS neuron size.
-    /// - `sns_transaction_fee_e8s`          - SNS ledger transaction fee, in particular, charged
-    ///                                        for SNS neuron creation at swap finalization.
+    /// - `sns_transaction_fee_e8s`          - SNS ledger transaction fee, in particular, charged for SNS neuron creation at swap finalization.
     fn validate_participation_constraints(&self) -> Result<(), String> {
         // (1)
         let min_direct_participation_icp_e8s = self
@@ -1659,7 +1632,7 @@ impl SnsInitPayload {
         // (7)
         if neuron_minimum_stake_e8s <= sns_transaction_fee_e8s {
             return Err(format!(
-                "Error: neuron_minimum_stake_e8s={} is too small. It needs to be \
+                "Error: neuron_minimum_stake_e8s ({}) is too small. It needs to be \
                  greater than the transaction fee ({} e8s)",
                 neuron_minimum_stake_e8s, sns_transaction_fee_e8s
             ));
@@ -1676,7 +1649,7 @@ impl SnsInitPayload {
 
         if !min_participant_icp_e8s_big_enough {
             return Err(format!(
-                "Error: min_participant_icp_e8s={} is too small. It needs to be \
+                "Error: min_participant_icp_e8s ({}) is too small. It needs to be \
                  large enough to ensure that participants will end up with \
                  enough SNS tokens to form {} SNS neurons, each of which \
                  require at least {} SNS e8s, plus {} e8s in transaction \
@@ -1688,6 +1661,14 @@ impl SnsInitPayload {
                 neuron_basket_construction_parameters_count,
                 neuron_minimum_stake_e8s,
                 sns_transaction_fee_e8s,
+            ));
+        }
+
+        // (9)
+        if min_participant_icp_e8s < MIN_PARTICIPANT_ICP_LOWER_BOUND_E8S {
+            return Err(format!(
+                "Error: min_participant_icp_e8s ({}) is too small. It must be at least as large as {}",
+                min_participant_icp_e8s, MIN_PARTICIPANT_ICP_LOWER_BOUND_E8S
             ));
         }
 
@@ -1963,8 +1944,8 @@ impl SnsInitPayload {
 mod test {
     use crate::{
         pb::v1::{
-            AirdropDistribution, DappCanisters, DeveloperDistribution,
-            FractionalDeveloperVotingPower as FractionalDVP, NeuronDistribution, SwapDistribution,
+            DappCanisters, DeveloperDistribution, FractionalDeveloperVotingPower as FractionalDVP,
+            NeuronDistribution, SwapDistribution,
         },
         FractionalDeveloperVotingPower, MaxNeuronsFundParticipationValidationError,
         MinDirectParticipationThresholdValidationError,
@@ -1972,7 +1953,7 @@ mod test {
         NeuronsFundParticipationConstraintsValidationError, RestrictedCountriesValidationError,
         SnsCanisterIds, SnsInitPayload, ICRC1_TOKEN_LOGO_KEY, MAX_CONFIRMATION_TEXT_LENGTH,
         MAX_DAPP_CANISTERS_COUNT, MAX_DIRECT_ICP_CONTRIBUTION_TO_SWAP,
-        MAX_FALLBACK_CONTROLLER_PRINCIPAL_IDS_COUNT,
+        MAX_FALLBACK_CONTROLLER_PRINCIPAL_IDS_COUNT, MIN_PARTICIPANT_ICP_LOWER_BOUND_E8S,
     };
     use ic_base_types::{CanisterId, PrincipalId};
     use ic_icrc1_ledger::LedgerArgument;
@@ -1994,6 +1975,7 @@ mod test {
     };
     use icrc_ledger_types::{icrc::generic_metadata_value::MetadataValue, icrc1::account::Account};
     use isocountry::CountryCode;
+    use pretty_assertions::assert_eq;
     use std::{
         collections::{BTreeMap, HashSet},
         convert::TryInto,
@@ -2271,8 +2253,6 @@ initial_token_distribution: !FractionalDeveloperVotingPower
   swap_distribution:
     total_e8s: 10000000000
     initial_swap_amount_e8s: 10000000000
-  airdrop_distribution:
-    airdrop_neurons: []
 ".to_string();
 
         assert_eq!(observed, Ok(expected));
@@ -2805,39 +2785,19 @@ initial_token_distribution: !FractionalDeveloperVotingPower
     fn test_build_canister_payloads_creates_neurons_with_correct_ledger_accounts() {
         use num_traits::ToPrimitive;
 
-        let controller1 = PrincipalId::new_user_test_id(2209);
-        let airdrop_neuron1 = NeuronDistribution {
-            controller: Some(controller1),
-            stake_e8s: 100_000_000,
-            memo: 5,
-            dissolve_delay_seconds: 0,
-            vesting_period_seconds: None,
-        };
-        let controller2 = PrincipalId::new_user_test_id(7184);
-        let airdrop_neuron2 = NeuronDistribution {
-            controller: Some(controller2),
-            stake_e8s: 770_000_000,
-            memo: 1644,
-            dissolve_delay_seconds: 9053,
-            vesting_period_seconds: None,
-        };
-        let airdrop_neurons = AirdropDistribution {
-            airdrop_neurons: vec![airdrop_neuron1, airdrop_neuron2],
-        };
-        let controller3 = PrincipalId::new_user_test_id(3209);
-        let developer_neuron1 = NeuronDistribution {
-            controller: Some(controller3),
+        let controller = PrincipalId::new_user_test_id(3209);
+        let developer_neuron = NeuronDistribution {
+            controller: Some(controller),
             stake_e8s: 330_000_000,
             memo: 8721,
             dissolve_delay_seconds: ONE_MONTH_SECONDS * 6,
             vesting_period_seconds: None,
         };
         let developer_neurons = DeveloperDistribution {
-            developer_neurons: vec![developer_neuron1],
+            developer_neurons: vec![developer_neuron],
         };
 
         let mut fdvp = FractionalDVP::with_valid_values_for_testing();
-        fdvp.airdrop_distribution = Some(airdrop_neurons);
         fdvp.developer_distribution = Some(developer_neurons);
 
         // Build an sns_init_payload with defaults for non-governance related configuration.
@@ -3485,7 +3445,6 @@ initial_token_distribution: !FractionalDeveloperVotingPower
             // Not used in this test.
             developer_distribution: None,
             treasury_distribution: None,
-            airdrop_distribution: None,
         };
         let sns_init_payload = SnsInitPayload {
             max_direct_participation_icp_e8s: Some(MAX_DIRECT_ICP_CONTRIBUTION_TO_SWAP),
@@ -3527,7 +3486,7 @@ initial_token_distribution: !FractionalDeveloperVotingPower
                 .validate_participation_constraints()
                 .unwrap_err();
             {
-                let expected_error_fragment_a = "min_participant_icp_e8s=1 is too small.";
+                let expected_error_fragment_a = "min_participant_icp_e8s (1) is too small.";
                 assert!(
                     error.contains(expected_error_fragment_a),
                     "Unexpected error: `{}`\nExpected `{}`",
@@ -3547,5 +3506,49 @@ initial_token_distribution: !FractionalDeveloperVotingPower
                 );
             }
         }
+    }
+
+    #[test]
+    fn test_validate_participation_constraints_panics_on_low_min_participant_icp_e8s() {
+        let fdvp = FractionalDVP {
+            swap_distribution: Some(SwapDistribution {
+                initial_swap_amount_e8s: MAX_DIRECT_ICP_CONTRIBUTION_TO_SWAP,
+                // Not used in this test.
+                total_e8s: 0,
+            }),
+            // Not used in this test.
+            developer_distribution: None,
+            treasury_distribution: None,
+        };
+        let mut sns_init_payload = SnsInitPayload {
+            max_direct_participation_icp_e8s: Some(MAX_DIRECT_ICP_CONTRIBUTION_TO_SWAP),
+            min_direct_participation_icp_e8s: Some(1),
+            max_participant_icp_e8s: Some(MAX_DIRECT_ICP_CONTRIBUTION_TO_SWAP),
+            min_participants: Some(40_000),
+            initial_token_distribution: Some(FractionalDeveloperVotingPower(fdvp)),
+            neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
+                count: 2,
+                // Not used in this test.
+                dissolve_delay_interval_seconds: 0,
+            }),
+            neuron_minimum_stake_e8s: Some(1),
+            transaction_fee_e8s: Some(0),
+            ..SnsInitPayload::with_valid_values_for_testing_pre_execution()
+        };
+
+        // user's participations should at least be equal to `MIN_PARTICIPANT_ICP_LOWER_BOUND_E8S`
+        sns_init_payload.min_participant_icp_e8s = Some(MIN_PARTICIPANT_ICP_LOWER_BOUND_E8S - 1);
+
+        let error = sns_init_payload
+            .validate_participation_constraints()
+            .unwrap_err();
+
+        let expected_error_prefix = "Error: min_participant_icp_e8s (999999) is too small.";
+        assert!(
+            error.contains(expected_error_prefix),
+            "Unexpected error `{}`\n Expected `{}`",
+            error,
+            expected_error_prefix
+        );
     }
 }

@@ -5,6 +5,52 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## Unreleased
 
+### Removed
+- Removed deprecated `MERGE_MATURITY` neuron management operation.
+
+## [2.1.6] - 2025-06-27
+### Added
+- Enhanced transaction search capabilities with database indexing optimizations for improved performance ([#5739](https://github.com/dfinity/ic/pull/5739))
+- Extended search_transactions method in Rosetta client to support filtering by transaction_hash and operation_type ([#5739](https://github.com/dfinity/ic/pull/5739))
+- Optional CLI flag --optimize-search-indexes to enable database indexing optimizations for transaction search ([#5739](https://github.com/dfinity/ic/pull/5739))
+
+### Changed
+- Enhanced test framework to support transfer_from transactions in valid_transactions_strategy ([#5592](https://github.com/dfinity/ic/pull/5592))
+- Marked ICP Rosetta system tests as flaky to address test stability issues ([#5746](https://github.com/dfinity/ic/pull/5746))
+
+## [2.1.5] - 2025-06-13
+### Fixed
+- Fixed heartbeat during initial sync to prevent premature watchdog timeouts ([#5293](https://github.com/dfinity/ic/pull/5293))
+- Fixed integer overflow for balances when storing values higher than INT64_MAX ([#5401](https://github.com/dfinity/ic/pull/5401))
+
+## [2.1.4] - 2025-05-10
+### Added
+- Token-specific metrics for better monitoring in multi-token environments ([#4790](https://github.com/dfinity/ic/pull/4790))
+- New PocketIC Time type for improved testing ([#4864](https://github.com/dfinity/ic/pull/4864))
+
+### Changed
+- Replaced imports from ic_canisters_http_types to new ic_http_types crate ([#4866](https://github.com/dfinity/ic/pull/4866))
+- Increased the sync thread watchdog timeout from 10 to 60 seconds to better handle IC instability ([#4863](https://github.com/dfinity/ic/pull/4863))
+- Refactored and augmented Rosetta ICP metrics for better observability ([#3642](https://github.com/dfinity/ic/pull/3642))
+- Migrated from dfn to cdk architecture ([#4436](https://github.com/dfinity/ic/pull/4436))
+
+### Fixed
+- Write ICP Rosetta port file atomically to fix flaky test issues ([#4760](https://github.com/dfinity/ic/pull/4760))
+- Removed canister client library dependency for better architecture ([#4530](https://github.com/dfinity/ic/pull/4530))
+
+## [2.1.3] - 2025-03-12
+### Fixes
+- Potential source of deadlock when accessing the database client. [#4147](https://github.com/dfinity/ic/pull/4147)
+- Added retries when fetching the tip block. [#4301](https://github.com/dfinity/ic/pull/4301)
+- Added a watchdog thread to restart the sync thread when it's stale. [#4317](https://github.com/dfinity/ic/pull/4317)
+
+### Added
+- Additional error logs for when requests fail with an `InternalError`. [#4338](https://github.com/dfinity/ic/pull/4338)
+
+## [2.1.2] - 2025-02-21
+### Fixes
+- fixed refresh voting power request so now the neuron controller can be specified.
+
 ## [2.1.1] - 2024-12-13
 ### Added
 - added functionality to refresh voting power on the governance canister

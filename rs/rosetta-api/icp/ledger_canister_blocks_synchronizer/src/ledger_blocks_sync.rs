@@ -10,13 +10,15 @@ use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_ledger_hash_of::HashOf;
 use icp_ledger::{Block, TipOfChainRes};
 use tokio::sync::RwLock;
-use tracing::{debug, error, info, trace, warn};
+use tokio::time::Duration;
+use tracing::{debug, error, info, trace};
 
 use crate::blocks::BlockStoreError;
-use crate::blocks::{Blocks, HashedBlock};
+use crate::blocks::{Blocks, HashedBlock, RosettaDbConfig};
 use crate::blocks_access::BlocksAccess;
 use crate::certification::{verify_block_hash, VerificationInfo};
 use crate::errors::Error;
+use rosetta_core::metrics::RosettaMetrics;
 
 // If pruning is enabled, instead of pruning after each new block
 // we'll wait for PRUNE_DELAY blocks to accumulate and prune them in one go
@@ -28,17 +30,12 @@ const DATABASE_WRITE_BLOCKS_BATCH_SIZE: u64 = 500000;
 // Max number of retry in case of query failure while retrieving blocks.
 const MAX_RETRY: u8 = 5;
 
+const MAX_RETRIES_QUERY_TIP_BLOCK: u8 = 5;
+const RETRY_DELAY_QUERY_TIP_BLOCK: Duration = Duration::from_millis(500);
+
 struct BlockWithIndex {
     block: Block,
     index: BlockIndex,
-}
-
-/// The LedgerBlocksSynchronizer will use this to output the metrics while
-/// synchronizing with the Ledger
-pub trait LedgerBlocksSynchronizerMetrics {
-    fn set_target_height(&self, height: u64);
-    fn set_synced_height(&self, height: u64);
-    fn set_verified_height(&self, height: u64);
 }
 
 /// Downloads the blocks of the Ledger to either an in-memory store or to
@@ -49,10 +46,9 @@ where
 {
     pub blockchain: RwLock<Blocks>,
     blocks_access: Option<Arc<B>>,
-    // TODO: move store_max_blocks in sync or move up_to_block here
     store_max_blocks: Option<u64>,
     verification_info: Option<VerificationInfo>,
-    metrics: Box<dyn LedgerBlocksSynchronizerMetrics + Send + Sync>,
+    rosetta_metrics: RosettaMetrics,
 }
 
 impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
@@ -61,12 +57,13 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
         store_location: Option<&std::path::Path>,
         store_max_blocks: Option<u64>,
         verification_info: Option<VerificationInfo>,
-        metrics: Box<dyn LedgerBlocksSynchronizerMetrics + Send + Sync>,
-        enable_rosetta_blocks: bool,
+        config: RosettaDbConfig,
     ) -> Result<LedgerBlocksSynchronizer<B>, Error> {
+        let rosetta_metrics =
+            RosettaMetrics::new("ICP".to_string(), "ryjl3-tyaaa-aaaaa-aaaba-cai".to_string());
         let mut blocks = match store_location {
-            Some(loc) => Blocks::new_persistent(loc, enable_rosetta_blocks)?,
-            None => Blocks::new_in_memory(enable_rosetta_blocks)?,
+            Some(loc) => Blocks::new_persistent(loc, config)?,
+            None => Blocks::new_in_memory(config)?,
         };
 
         if let Some(blocks_access) = &blocks_access {
@@ -96,10 +93,10 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
         }
 
         if let Ok(x) = last_block {
-            metrics.set_synced_height(x.index);
+            rosetta_metrics.set_synced_height(x.index);
         }
         if let Ok(x) = blocks.get_latest_verified_hashed_block() {
-            metrics.set_verified_height(x.index);
+            rosetta_metrics.set_verified_height(x.index);
         }
 
         blocks.try_prune(&store_max_blocks, PRUNE_DELAY)?;
@@ -109,7 +106,7 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
             blocks_access,
             store_max_blocks,
             verification_info,
-            metrics,
+            rosetta_metrics,
         })
     }
 
@@ -223,10 +220,23 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
             tip_index,
             certification,
         } = canister.query_tip().await?;
-        let encoded_block = canister.query_raw_block(tip_index).await?.ok_or(format!(
-            "Tip of the chain has index {} but no block found at that index!",
-            tip_index
-        ))?;
+        // Gets tip block with retries
+        let mut retry = 0;
+        let encoded_block = loop {
+            let tip_block = canister.query_raw_block(tip_index).await?;
+            if tip_block.is_some() {
+                break Ok(tip_block.unwrap());
+            }
+            if retry == MAX_RETRIES_QUERY_TIP_BLOCK {
+                break Err(format!(
+                    "Failed to retrieve tip block after {} retries",
+                    MAX_RETRIES_QUERY_TIP_BLOCK
+                ));
+            }
+            retry += 1;
+            tokio::time::sleep(RETRY_DELAY_QUERY_TIP_BLOCK).await;
+        }?;
+
         let block = Block::decode(encoded_block.clone())?;
         if let Some(info) = &self.verification_info {
             let hash = HashedBlock::hash_block(
@@ -259,7 +269,7 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
                 "Received tip_index == u64::MAX".to_string(),
             ));
         }
-        self.metrics.set_target_height(tip.index);
+        self.rosetta_metrics.set_target_height(tip.index);
 
         let mut blockchain = self.blockchain.write().await;
 
@@ -354,7 +364,7 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
             }
 
             debug!("Asking for blocks [{},{})", i, range.end);
-            let retry = 0;
+            let mut retry = 0;
             let batch = loop {
                 let batch = canister
                     .clone()
@@ -365,16 +375,20 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
                     .await
                     .map_err(Error::InternalError);
                 if batch.is_ok() || retry == MAX_RETRY {
+                    self.rosetta_metrics
+                        .add_blocks_fetched(batch.as_ref().unwrap().len() as u64);
                     break batch;
                 }
-                let retry = retry + 1;
-                warn!(
-                    "Failed query while retrieving blocks, retry {}/{} (error: {:?})",
-                    retry,
-                    MAX_RETRY,
-                    batch.unwrap_err()
+                self.rosetta_metrics.inc_fetch_retries();
+                retry += 1;
+            }
+            .map_err(|e| {
+                error!(
+                    "Failed to fetch blocks [{},{}] after {} attempts: {:?}",
+                    i, range.end, MAX_RETRY, e
                 );
-            }?;
+                e
+            })?;
 
             debug!("Got batch of len: {}", batch.len());
             if batch.is_empty() {
@@ -402,7 +416,7 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
                 block_batch.push(hb);
                 i += 1;
             }
-            self.metrics.set_synced_height(i - 1);
+            self.rosetta_metrics.set_synced_height(i - 1);
             if (i - range.start) % DATABASE_WRITE_BLOCKS_BATCH_SIZE == 0 {
                 blockchain.push_batch(block_batch)?;
                 if print_progress {
@@ -414,7 +428,7 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
         blockchain.push_batch(block_batch)?;
         info!("Synced took {} seconds", t_total.elapsed().as_secs_f64());
         blockchain.set_hashed_block_to_verified(&(range.end - 1))?;
-        self.metrics.set_verified_height(range.end - 1);
+        self.rosetta_metrics.set_verified_height(range.end - 1);
         Ok(())
     }
 }
@@ -436,18 +450,9 @@ mod test {
         AccountIdentifier, Block, BlockIndex, Memo, TipOfChainRes, DEFAULT_TRANSFER_FEE,
     };
 
+    use crate::blocks::RosettaDbConfig;
     use crate::blocks_access::BlocksAccess;
     use crate::ledger_blocks_sync::LedgerBlocksSynchronizer;
-
-    use super::LedgerBlocksSynchronizerMetrics;
-
-    struct NopMetrics {}
-
-    impl LedgerBlocksSynchronizerMetrics for NopMetrics {
-        fn set_target_height(&self, _height: u64) {}
-        fn set_synced_height(&self, _height: u64) {}
-        fn set_verified_height(&self, _height: u64) {}
-    }
 
     struct RangeOfBlocks {
         pub blocks: Vec<EncodedBlock>,
@@ -495,8 +500,7 @@ mod test {
             /* store_location = */ None,
             /* store_max_blocks = */ None,
             /* verification_info = */ None,
-            Box::new(NopMetrics {}),
-            false,
+            RosettaDbConfig::default_disabled(),
         )
         .await
         .unwrap()

@@ -1,7 +1,6 @@
 use crate::message_routing::{
     LatencyMetrics, MessageRoutingMetrics, CRITICAL_ERROR_INDUCT_RESPONSE_FAILED,
 };
-use ic_config::embedders::BestEffortResponsesFeature;
 use ic_error_types::RejectCode;
 use ic_limits::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
 use ic_logger::{error, warn, ReplicaLogger};
@@ -16,7 +15,7 @@ use ic_replicated_state::{
 use ic_types::{
     messages::{
         Payload, RejectContext, Request, RequestOrResponse, Response,
-        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, MAX_REJECT_MESSAGE_LEN_BYTES, NO_DEADLINE,
+        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, MAX_REJECT_MESSAGE_LEN_BYTES,
     },
     CountBytes, SubnetId,
 };
@@ -52,18 +51,6 @@ struct StreamBuilderMetrics {
     /// failures to induct responses.
     pub critical_error_induct_response_failed: IntCounter,
 }
-
-/// Desired byte size of an outgoing stream.
-///
-/// At most `MAX_STREAM_MESSAGES` are enqueued into a stream; but only until its
-/// `count_bytes()` is greater than or equal to `TARGET_STREAM_SIZE_BYTES`.
-const TARGET_STREAM_SIZE_BYTES: usize = 10 * 1024 * 1024;
-
-/// Maximum number of messages in a stream.
-///
-/// At most `MAX_STREAM_MESSAGES` are enqueued into a stream; but only until its
-/// `count_bytes()` is greater than or equal to `TARGET_STREAM_SIZE_BYTES`.
-const MAX_STREAM_MESSAGES: usize = 10_000;
 
 const METRIC_STREAM_MESSAGES: &str = "mr_stream_messages";
 const METRIC_STREAM_BYTES: &str = "mr_stream_bytes";
@@ -173,31 +160,35 @@ pub(crate) trait StreamBuilder: Send {
     fn build_streams(&self, state: ReplicatedState) -> ReplicatedState;
 }
 
+/// Routes messages from canister output queues into streams, up to the specified limits.
+///
+/// At most `max_stream_messages` are enqueued into a stream; but only until its
+/// `count_bytes()` is greater than or equal to `target_stream_size_bytes`.
 pub(crate) struct StreamBuilderImpl {
     subnet_id: SubnetId,
+    max_stream_messages: usize,
+    target_stream_size_bytes: usize,
     metrics: StreamBuilderMetrics,
     time_in_stream_metrics: Arc<Mutex<LatencyMetrics>>,
-
-    /// Rollout stage of the best-effort responses feature.
-    best_effort_responses: BestEffortResponsesFeature,
-
     log: ReplicaLogger,
 }
 
 impl StreamBuilderImpl {
     pub(crate) fn new(
         subnet_id: SubnetId,
+        max_stream_messages: usize,
+        target_stream_size_bytes: usize,
         metrics_registry: &MetricsRegistry,
         message_routing_metrics: &MessageRoutingMetrics,
         time_in_stream_metrics: Arc<Mutex<LatencyMetrics>>,
-        best_effort_responses: BestEffortResponsesFeature,
         log: ReplicaLogger,
     ) -> Self {
         Self {
             subnet_id,
+            max_stream_messages,
+            target_stream_size_bytes,
             metrics: StreamBuilderMetrics::new(metrics_registry, message_routing_metrics),
             time_in_stream_metrics,
-            best_effort_responses,
             log,
         }
     }
@@ -270,15 +261,8 @@ impl StreamBuilderImpl {
             .observe(msg.payload_size_bytes().get() as f64);
     }
 
-    /// Implementation of `StreamBuilder::build_streams()` that takes a
-    /// `target_stream_size_bytes` argument to limit how many messages will be
-    /// routed into each stream.
-    fn build_streams_impl(
-        &self,
-        mut state: ReplicatedState,
-        max_stream_messages: usize,
-        target_stream_size_bytes: usize,
-    ) -> ReplicatedState {
+    /// Implementation of `StreamBuilder::build_streams()`.
+    fn build_streams_impl(&self, mut state: ReplicatedState) -> ReplicatedState {
         /// Pops the previously peeked message.
         ///
         /// Panics:
@@ -294,23 +278,19 @@ impl StreamBuilderImpl {
             message
         }
 
-        /// Tests whether a stream is over the message count limit, byte limit or (if
-        /// directed at a system subnet) over `2 * SYSTEM_SUBNET_STREAM_MSG_LIMIT`.
-        fn is_at_limit(
-            stream: &btree_map::Entry<SubnetId, Stream>,
-            max_stream_messages: usize,
-            target_stream_size_bytes: usize,
-            is_local_message: bool,
-            destination_subnet_type: SubnetType,
-        ) -> bool {
+        // Tests whether a stream is over the message count limit, byte limit or (if
+        // directed at a system subnet) over `2 * SYSTEM_SUBNET_STREAM_MSG_LIMIT`.
+        let is_at_limit = |stream: &btree_map::Entry<SubnetId, Stream>,
+                           destination_subnet_type: SubnetType|
+         -> bool {
             let stream = match stream {
                 btree_map::Entry::Occupied(occupied_entry) => occupied_entry.get(),
                 btree_map::Entry::Vacant(_) => return false,
             };
             let stream_messages_len = stream.messages().len();
 
-            if stream_messages_len >= max_stream_messages
-                || stream.count_bytes() >= target_stream_size_bytes
+            if stream_messages_len >= self.max_stream_messages
+                || stream.count_bytes() >= self.target_stream_size_bytes
             {
                 // At limit if message count or byte size limits (enforced across all outgoing
                 // streams) are hit.
@@ -320,10 +300,9 @@ impl StreamBuilderImpl {
             // At limit if system subnet limit is hit. This is only enforced for non-local
             // streams to system subnets (i.e., excluding the loopback stream on system
             // subnets).
-            !is_local_message
-                && destination_subnet_type == SubnetType::System
+            destination_subnet_type == SubnetType::System
                 && stream_messages_len >= 2 * SYSTEM_SUBNET_STREAM_MSG_LIMIT
-        }
+        };
 
         let mut streams = state.take_streams();
         let routing_table = state.routing_table();
@@ -336,7 +315,6 @@ impl StreamBuilderImpl {
             .collect();
 
         let mut requests_to_reject = Vec::new();
-        let mut best_effort_requests_to_unsupported_subnets = Vec::new();
         let mut oversized_requests = Vec::new();
 
         let mut output_iter = state.output_into_iter();
@@ -367,17 +345,16 @@ impl StreamBuilderImpl {
             match routing_table.route(msg.receiver().get()) {
                 // Destination subnet found.
                 Some(dst_subnet_id) => {
-                    let destination_subnet_type = *subnet_types
-                        .get(&dst_subnet_id)
-                        .unwrap_or(&SubnetType::Application);
                     let dst_stream_entry = streams.entry(dst_subnet_id);
-                    if is_at_limit(
-                        &dst_stream_entry,
-                        max_stream_messages,
-                        target_stream_size_bytes,
-                        self.subnet_id == dst_subnet_id,
-                        destination_subnet_type,
-                    ) {
+                    let is_loopback_stream = self.subnet_id == dst_subnet_id;
+                    if !is_loopback_stream
+                        && is_at_limit(
+                            &dst_stream_entry,
+                            *subnet_types
+                                .get(&dst_subnet_id)
+                                .unwrap_or(&SubnetType::Application),
+                        )
+                    {
                         // Stream full, skip all other messages to this destination.
                         output_iter.exclude_queue();
                         continue;
@@ -386,8 +363,8 @@ impl StreamBuilderImpl {
                     // We will route (or reject) the message, pop it.
                     let mut msg = validated_next(&mut output_iter, &msg);
 
-                    // Reject messages with oversized payloads, as they may cause streams to
-                    // permanently stall. Also reject best-effort requests to unsupported subnets.
+                    // Reject messages with oversized payloads, as they may
+                    // cause streams to permanently stall.
                     match msg {
                         // Remote request above the payload size limit.
                         RequestOrResponse::Request(req)
@@ -406,24 +383,6 @@ impl StreamBuilderImpl {
                                 LABEL_VALUE_STATUS_PAYLOAD_TOO_LARGE,
                             );
                             oversized_requests.push(req);
-                        }
-
-                        // Best-effort request to unsupported subnet. Always route subnet-local requests
-                        // for consistency with scheduler routing.
-                        //
-                        // TODO(MR-649): Drop this once best-effort calls are fully deployed.
-                        RequestOrResponse::Request(req)
-                            if req.deadline != NO_DEADLINE
-                                && dst_subnet_id != self.subnet_id
-                                && !self
-                                    .best_effort_responses
-                                    .is_enabled_on(&dst_subnet_id, destination_subnet_type) =>
-                        {
-                            warn!(
-                                self.log,
-                                "Best-effort request to unsupported subnet from {}", req.sender
-                            );
-                            best_effort_requests_to_unsupported_subnets.push(req);
                         }
 
                         // Response above the payload size limit.
@@ -510,18 +469,6 @@ impl StreamBuilderImpl {
             );
         }
 
-        for req in best_effort_requests_to_unsupported_subnets {
-            self.reject_local_request(
-                &mut state,
-                &req,
-                RejectCode::DestinationInvalid,
-                format!(
-                    "Best-effort call to unsupported subnet: {} -> {}",
-                    req.sender, req.receiver
-                ),
-            );
-        }
-
         for req in oversized_requests {
             let sender = req.sender;
             self.reject_local_request(
@@ -588,6 +535,6 @@ impl StreamBuilderImpl {
 
 impl StreamBuilder for StreamBuilderImpl {
     fn build_streams(&self, state: ReplicatedState) -> ReplicatedState {
-        self.build_streams_impl(state, MAX_STREAM_MESSAGES, TARGET_STREAM_SIZE_BYTES)
+        self.build_streams_impl(state)
     }
 }

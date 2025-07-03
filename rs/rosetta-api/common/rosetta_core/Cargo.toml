@@ -10,7 +10,10 @@ documentation.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+actix-web-prom = { workspace = true }
 anyhow = { workspace = true }
+axum = { workspace = true }
+bytes = { workspace = true }
 candid = { workspace = true }
 hex = { workspace = true }
 ic-agent = { workspace = true }
@@ -18,11 +21,17 @@ ic-ed25519 = { path = "../../../../packages/ic-ed25519" }
 ic-secp256k1 = { path = "../../../../packages/ic-secp256k1" }
 ic-types = { path = "../../../types/types" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
+lazy_static = { workspace = true }
 num-bigint = { workspace = true }
+prometheus = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_json = { workspace = true }
 serde_with = { workspace = true }
+tokio = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+tracing = { workspace = true }
 icp-ledger = { path = "../../../ledger_suite/icp" }
 
 [dev-dependencies]

@@ -10,17 +10,31 @@ filegroup(
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//rs/crypto/sha2",
     "//rs/protobuf",
     "//rs/types/base_types",
     "@crate_index//:candid",
+    "@crate_index//:mockall",
     "@crate_index//:prost",
     "@crate_index//:serde",
+]
+
+MACRO_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:async-trait",
 ]
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/nervous_system/common/test_keys",
     "//rs/registry/keys",
+    "@crate_index//:lazy_static",
+    "@crate_index//:pretty_assertions",
+    "@crate_index//:tokio",
+]
+
+MACRO_DEV_DEPENDENCIES = [
+    # Keep sorted.
 ]
 
 rust_library(
@@ -30,8 +44,7 @@ rust_library(
         "gen/**",
     ]),
     crate_name = "ic_registry_transport",
-    proc_macro_deps = [
-    ],
+    proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
     deps = DEPENDENCIES,
 )
@@ -39,6 +52,7 @@ rust_library(
 rust_test(
     name = "lib_tests",
     crate = ":transport",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEV_DEPENDENCIES + DEPENDENCIES,
 )
 

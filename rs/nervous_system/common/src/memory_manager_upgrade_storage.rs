@@ -403,21 +403,18 @@ mod test {
         },
     };
     use bytes::{Buf, BufMut};
-    use ic_nns_governance_api::pb::v1::{Governance, NetworkEconomics, Neuron};
+    use ic_nns_gtc::pb::v1::{AccountState, Gtc};
     use ic_stable_structures::{vec_mem::VectorMemory, Memory};
     use prost::Message;
 
-    fn allocate_governance(num_neurons: u64) -> Governance {
-        let mut gov = Governance {
-            economics: Some(NetworkEconomics::with_default_values()),
-            ..Default::default()
-        };
+    fn allocate_gtc(num_accounts: u64) -> Gtc {
+        let mut gtc = Gtc::default();
 
-        for i in 0..num_neurons {
-            gov.neurons.insert(i, Neuron::default());
+        for i in 0..num_accounts {
+            gtc.accounts.insert(i.to_string(), AccountState::default());
         }
 
-        gov
+        gtc
     }
 
     #[test]
@@ -477,10 +474,10 @@ mod test {
     fn test_size_aware_reader() {
         let memory = VectorMemory::default();
 
-        let gov = allocate_governance(10);
+        let gtc = allocate_gtc(10);
         let mut vec = vec![];
 
-        gov.encode(&mut vec).expect("encoding failed");
+        gtc.encode(&mut vec).expect("encoding failed");
         let mut size = vec.len().to_le_bytes().to_vec();
 
         // Make memory with 1 page of memory.
@@ -488,8 +485,8 @@ mod test {
         memory.borrow_mut().append(&mut vec);
 
         let mut reader = SizeAwareReader::new(&memory, 100, 0);
-        let decoded = Governance::decode(&mut reader).expect("Decode failed");
-        assert_eq!(gov, decoded);
+        let decoded = Gtc::decode(&mut reader).expect("Decode failed");
+        assert_eq!(gtc, decoded);
     }
 
     #[test]
@@ -535,51 +532,51 @@ mod test {
     fn tiny_buffer_value() {
         let memory = VectorMemory::default();
 
-        let gov1 = allocate_governance(1_893);
+        let gtc1 = allocate_gtc(1_893);
         {
             let mut writer = SizeAwareWriter::new(&memory, 1, 100);
-            gov1.encode(&mut writer).unwrap();
+            gtc1.encode(&mut writer).unwrap();
         }
 
         let reader = SizeAwareReader::new(&memory, 1, 100);
-        let decoded: Governance = Governance::decode(reader).unwrap();
-        assert_eq!(gov1, decoded);
+        let decoded: Gtc = Gtc::decode(reader).unwrap();
+        assert_eq!(gtc1, decoded);
     }
 
     #[test]
     fn test_size_recording_writer_and_size_aware_reader() {
         let memory = VectorMemory::default();
 
-        let gov1 = allocate_governance(1_893);
+        let gtc1 = allocate_gtc(1_893);
         {
             let mut writer = SizeAwareWriter::new(&memory, 40, 0);
-            gov1.encode(&mut writer).unwrap();
+            gtc1.encode(&mut writer).unwrap();
         }
 
         let reader = SizeAwareReader::new(&memory, 1_000, 0);
-        let decoded: Governance = Governance::decode(reader).unwrap();
-        assert_eq!(gov1, decoded);
+        let decoded: Gtc = Gtc::decode(reader).unwrap();
+        assert_eq!(gtc1, decoded);
 
-        let gov2 = allocate_governance(397);
+        let gtc2 = allocate_gtc(397);
         {
             let mut writer = SizeAwareWriter::new(&memory, 40, 0);
-            gov2.encode(&mut writer).unwrap();
+            gtc2.encode(&mut writer).unwrap();
         }
 
         let reader = SizeAwareReader::new(&memory, 1_000, 0);
-        let decoded: Governance = Governance::decode(reader).unwrap();
-        assert_eq!(gov2, decoded);
+        let decoded: Gtc = Gtc::decode(reader).unwrap();
+        assert_eq!(gtc2, decoded);
     }
 
     #[test]
     fn test_store_and_load_protobuf() {
-        let gov = allocate_governance(1);
+        let gtc = allocate_gtc(1);
         let memory = VectorMemory::default();
 
-        store_protobuf(&memory, &gov).expect("Storing failed in test");
-        let decoded: Governance = load_protobuf(&memory).expect("Loading failed in test");
+        store_protobuf(&memory, &gtc).expect("Storing failed in test");
+        let decoded: Gtc = load_protobuf(&memory).expect("Loading failed in test");
 
-        assert_eq!(gov, decoded);
+        assert_eq!(gtc, decoded);
     }
 
     #[derive(::prost::Message)]
@@ -620,44 +617,44 @@ mod test {
 
     #[test]
     fn test_multiple_writes_results_in_safe_read() {
-        let gov1 = allocate_governance(3);
+        let gtc1 = allocate_gtc(3);
         let memory = VectorMemory::default();
 
-        store_protobuf(&memory, &gov1).expect("Storing failed in test");
-        store_protobuf(&memory, &gov1).expect("Storing failed in test");
+        store_protobuf(&memory, &gtc1).expect("Storing failed in test");
+        store_protobuf(&memory, &gtc1).expect("Storing failed in test");
 
-        let decoded: Governance = load_protobuf(&memory).expect("Loading failed in test");
+        let decoded: Gtc = load_protobuf(&memory).expect("Loading failed in test");
 
-        assert_eq!(gov1, decoded);
+        assert_eq!(gtc1, decoded);
 
-        let gov2 = allocate_governance(1);
-        store_protobuf(&memory, &gov2).expect("Storing failed in test");
+        let gtc2 = allocate_gtc(1);
+        store_protobuf(&memory, &gtc2).expect("Storing failed in test");
 
-        let decoded: Governance = load_protobuf(&memory).expect("Loading failed in test");
+        let decoded: Gtc = load_protobuf(&memory).expect("Loading failed in test");
 
-        assert_eq!(gov2, decoded);
+        assert_eq!(gtc2, decoded);
 
         let size = read_size_bytes(&memory, STORAGE_ENCODING_BYTES_RESERVED as u64);
         let reserved = (OBJECT_SIZE_BYTES_RESERVED + STORAGE_ENCODING_BYTES_RESERVED) as usize;
         let decoded =
-            Governance::decode(&memory.borrow().as_slice()[reserved..(reserved + size as usize)])
+            Gtc::decode(&memory.borrow().as_slice()[reserved..(reserved + size as usize)])
                 .expect("Loading failed in test");
 
-        assert_eq!(gov2, decoded);
+        assert_eq!(gtc2, decoded);
     }
 
     #[test]
     fn test_read_fails_with_unknown_magic_byte() {
         let memory = VectorMemory::default();
 
-        let gov = allocate_governance(1_893);
+        let gtc = allocate_gtc(1_893);
 
-        store_protobuf(&memory, &gov).expect("Storing failed in test");
+        store_protobuf(&memory, &gtc).expect("Storing failed in test");
 
         // Currently this is an unknown value for StorageEncoding
         memory.write(0, &[254]);
 
-        assert_is_err!(load_protobuf::<_, Governance>(&memory));
+        assert_is_err!(load_protobuf::<_, Gtc>(&memory));
     }
 
     #[test]

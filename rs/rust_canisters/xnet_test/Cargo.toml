@@ -13,8 +13,8 @@ path = "src/main.rs"
 [dependencies]
 candid = { workspace = true }
 futures = { workspace = true }
-ic-cdk = { git = "https://github.com/dfinity/cdk-rs", rev = "4e287ce51636b0e70768c193da38d2fc5324ea15" }
-ic-cdk-macros = { git = "https://github.com/dfinity/cdk-rs", rev = "4e287ce51636b0e70768c193da38d2fc5324ea15" }
+ic-cdk = "^0.18.0-alpha.2"
+ic-management-canister-types = { workspace = true }
 rand = { workspace = true }
 rand_pcg = "0.3"
 serde = { workspace = true }

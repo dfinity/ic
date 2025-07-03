@@ -1,11 +1,17 @@
+use crate::null_request::NullRequest;
 use crate::sns::Sns;
 use crate::CallCanisters;
 use anyhow::anyhow;
 use ic_agent::Agent;
+use ic_base_types::PrincipalId;
+use ic_nns_common::pb::v1::ProposalId;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
 use ic_sns_wasm::pb::v1::{
-    GetWasmRequest, GetWasmResponse, ListDeployedSnsesRequest, ListUpgradeStepsRequest,
-    ListUpgradeStepsResponse,
+    GetDeployedSnsByProposalIdRequest, GetDeployedSnsByProposalIdResponse, GetWasmRequest,
+    GetWasmResponse, ListDeployedSnsesRequest, ListUpgradeStepsRequest, ListUpgradeStepsResponse,
+};
+use ic_sns_wasm::pb::v1::{
+    GetNextSnsVersionRequest, GetSnsSubnetIdsRequest, GetSnsSubnetIdsResponse, SnsVersion,
 };
 use std::path::{Path, PathBuf};
 use tempfile::tempdir;
@@ -13,6 +19,7 @@ use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
 use tokio::io::BufWriter;
 use tokio::process::Command;
+
 pub mod requests;
 
 pub async fn query_mainline_sns_upgrade_steps<C: CallCanisters>(
@@ -24,6 +31,44 @@ pub async fn query_mainline_sns_upgrade_steps<C: CallCanisters>(
         starting_at: None,
     };
     agent.call(SNS_WASM_CANISTER_ID, request).await
+}
+
+pub async fn get_deployed_sns_by_proposal_id<C: CallCanisters>(
+    agent: &C,
+    proposal_id: ProposalId,
+) -> Result<GetDeployedSnsByProposalIdResponse, C::Error> {
+    let request = GetDeployedSnsByProposalIdRequest {
+        proposal_id: proposal_id.id,
+    };
+    agent.call(SNS_WASM_CANISTER_ID, request).await
+}
+
+pub async fn get_wasm<C: CallCanisters>(
+    agent: &C,
+    sns_canister_wasm_hash: Vec<u8>,
+) -> Result<GetWasmResponse, C::Error> {
+    let request = GetWasmRequest {
+        hash: sns_canister_wasm_hash,
+    };
+    agent.call(SNS_WASM_CANISTER_ID, request).await
+}
+
+pub async fn list_upgrade_steps<C: CallCanisters>(
+    agent: &C,
+    starting_at: Option<SnsVersion>,
+    sns_governance_canister_id: Option<PrincipalId>,
+    limit: u32,
+) -> Result<ListUpgradeStepsResponse, C::Error> {
+    agent
+        .call(
+            SNS_WASM_CANISTER_ID,
+            ListUpgradeStepsRequest {
+                starting_at,
+                sns_governance_canister_id,
+                limit,
+            },
+        )
+        .await
 }
 
 /// Queries SNS-W to get the deployed SNSes. The returned SNSes are not guaranteed to be
@@ -39,6 +84,14 @@ pub async fn list_deployed_snses<C: CallCanisters>(agent: &C) -> Result<Vec<Sns>
         .filter_map(|deployed_sns| crate::sns::Sns::try_from(deployed_sns).ok())
         .collect::<Vec<_>>();
     Ok(snses)
+}
+
+pub async fn get_sns_subnet_ids<C: CallCanisters>(
+    agent: &C,
+) -> Result<GetSnsSubnetIdsResponse, C::Error> {
+    agent
+        .call(SNS_WASM_CANISTER_ID, GetSnsSubnetIdsRequest {})
+        .await
 }
 
 pub async fn get_git_version_for_sns_hash(
@@ -112,4 +165,26 @@ async fn extract_git_commit_id(
 
     let git_commit_id = String::from_utf8(output.stdout)?.trim().to_string();
     Ok(git_commit_id)
+}
+
+pub async fn get_next_sns_version<C: CallCanisters>(
+    agent: &C,
+    current_version: SnsVersion,
+    governance_canister_id: Option<PrincipalId>,
+) -> Result<Option<SnsVersion>, C::Error> {
+    let request = GetNextSnsVersionRequest {
+        current_version: Some(current_version),
+        governance_canister_id,
+    };
+
+    let response = agent.call(SNS_WASM_CANISTER_ID, request).await?;
+
+    Ok(response.next_version)
+}
+
+pub async fn get_latest_sns_version_pretty<C: CallCanisters>(
+    agent: &C,
+) -> Result<Vec<(String, String)>, C::Error> {
+    let request = NullRequest::new("get_latest_sns_version_pretty", false);
+    agent.call(SNS_WASM_CANISTER_ID, request).await
 }

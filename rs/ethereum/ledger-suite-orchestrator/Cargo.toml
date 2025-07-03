@@ -19,13 +19,13 @@ futures = { workspace = true }
 hex = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-canister-log = "0.2.0"
-ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
 ic-cdk = { workspace = true }
-ic-cdk-macros = { workspace = true }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-ethereum-types = { path = "../../../packages/ic-ethereum-types" }
+ic-http-types = { path = "../../../packages/ic-http-types" }
 ic-icrc1-index-ng = { path = "../../ledger_suite/icrc1/index-ng" }
 ic-icrc1-ledger = { path = "../../ledger_suite/icrc1/ledger" }
+ic-management-canister-types = { workspace = true }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-metrics-encoder = "1"
 ic-stable-structures = { workspace = true }

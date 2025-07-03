@@ -22,7 +22,6 @@ rust_library(
 rust_canister(
     name = "stable_memory_integrity_canister",
     srcs = ["bin/main.rs"],
-    proc_macro_deps = ["@crate_index//:ic-cdk-macros"],
     service_file = ":stable_memory_integrity.did",
     deps = [
         # Keep sorted.
@@ -38,10 +37,10 @@ rust_ic_test(
     aliases = {},
     crate_root = "tests/stable_memory_integrity.rs",
     data = [
-        ":stable_memory_integrity_canister.wasm",
+        ":stable_memory_integrity_canister.wasm.gz",
     ],
     env = {
-        "STABLE_MEMORY_INTEGRITY_CANISTER_WASM_PATH": "$(rootpath :stable_memory_integrity_canister.wasm)",
+        "STABLE_MEMORY_INTEGRITY_CANISTER_WASM_PATH": "$(rootpath :stable_memory_integrity_canister.wasm.gz)",
     },
     proc_macro_deps = [],
     deps = [

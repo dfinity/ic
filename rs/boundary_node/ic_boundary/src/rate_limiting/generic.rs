@@ -19,19 +19,20 @@ use axum::{
     response::IntoResponse,
 };
 use candid::Principal;
-use ic_bn_lib::http::ConnInfo;
-use ic_canister_client::Agent;
-use ic_types::CanisterId;
-use ipnet::IpNet;
-use prometheus::{
+use ic_agent::Agent;
+use ic_bn_lib::prometheus::{
     register_int_counter_vec_with_registry, register_int_gauge_with_registry, IntCounterVec,
     IntGauge, Registry,
 };
+use ic_bn_lib::{http::ConnInfo, tasks::Run};
+use ic_types::CanisterId;
+use ipnet::IpNet;
 use rate_limits_api::v1::{Action, IpPrefixes, RateLimitRule, RequestType as RequestTypeRule};
 use ratelimit::Ratelimiter;
 use strum::{Display, IntoStaticStr};
 #[allow(clippy::disallowed_types)]
 use tokio::sync::{watch, Mutex};
+use tokio_util::sync::CancellationToken;
 use tracing::warn;
 
 use super::{
@@ -43,9 +44,9 @@ use super::{
 };
 
 use crate::{
-    core::Run,
+    errors::{ErrorCause, RateLimitCause},
     persist::RouteSubnet,
-    routes::{ErrorCause, RateLimitCause, RequestContext, RequestType},
+    routes::{RequestContext, RequestType},
     snapshot::RegistrySnapshot,
 };
 
@@ -418,8 +419,8 @@ impl GenericLimiter {
 }
 
 #[async_trait]
-impl Run for Arc<GenericLimiter> {
-    async fn run(&mut self) -> Result<(), Error> {
+impl Run for GenericLimiter {
+    async fn run(&self, token: CancellationToken) -> Result<(), Error> {
         let mut interval = tokio::time::interval(self.opts.poll_interval);
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
@@ -428,6 +429,10 @@ impl Run for Arc<GenericLimiter> {
         loop {
             tokio::select! {
                 biased;
+
+                _ = token.cancelled() => {
+                    return Ok(());
+                }
 
                 Ok(()) = channel.changed(), if self.opts.autoscale => {
                     let snapshot = channel.borrow_and_update().clone();
@@ -465,13 +470,14 @@ pub async fn middleware(
     Extension(ctx): Extension<Arc<RequestContext>>,
     Extension(subnet): Extension<Arc<RouteSubnet>>,
     Extension(conn_info): Extension<Arc<ConnInfo>>,
-    canister_id: Option<Extension<CanisterId>>,
     request: Request<Body>,
     next: Next,
 ) -> Result<impl IntoResponse, ErrorCause> {
+    let canister_id = request.extensions().get::<CanisterId>().copied();
+
     let ctx = Context {
         subnet_id: subnet.id,
-        canister_id: canister_id.map(|x| x.0.get().into()),
+        canister_id: canister_id.map(|x| x.get().into()),
         method: ctx.method_name.as_deref(),
         request_type: ctx.request_type,
         ip: conn_info.remote_addr.ip(),
@@ -496,13 +502,11 @@ pub async fn middleware(
 #[cfg(test)]
 mod test {
     use super::*;
+    use ic_bn_lib::principal;
     use indoc::indoc;
     use std::str::FromStr;
 
-    use crate::{
-        principal,
-        snapshot::{generate_stub_snapshot, ApiBoundaryNode},
-    };
+    use crate::snapshot::{generate_stub_snapshot, ApiBoundaryNode};
 
     struct BrokenFetcher;
 
@@ -631,9 +635,9 @@ mod test {
             &Registry::new(),
         ));
 
-        let mut runner = limiter.clone();
+        let limiter_clone = limiter.clone();
         tokio::spawn(async move {
-            let _ = runner.run().await;
+            let _ = limiter_clone.run(CancellationToken::new()).await;
         });
 
         limiter.apply_rules(rules.clone(), 1);
@@ -641,14 +645,14 @@ mod test {
         let mut snapshot = generate_stub_snapshot(vec![]);
         snapshot.api_bns = vec![
             ApiBoundaryNode {
-                id: principal!("3hhby-wmtmw-umt4t-7ieyg-bbiig-xiylg-sblrt-voxgt-bqckd-a75bf-rqe"),
-                addr: ip1,
-                port: 31337,
+                _id: principal!("3hhby-wmtmw-umt4t-7ieyg-bbiig-xiylg-sblrt-voxgt-bqckd-a75bf-rqe"),
+                _addr: ip1,
+                _port: 31337,
             },
             ApiBoundaryNode {
-                id: principal!("3hhby-wmtmw-umt4t-7ieyg-bbiig-xiylg-sblrt-voxgt-bqckd-a75bf-rqe"),
-                addr: ip2,
-                port: 31337,
+                _id: principal!("3hhby-wmtmw-umt4t-7ieyg-bbiig-xiylg-sblrt-voxgt-bqckd-a75bf-rqe"),
+                _addr: ip2,
+                _port: 31337,
             },
         ];
 

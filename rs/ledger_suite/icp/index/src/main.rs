@@ -1,9 +1,10 @@
 use candid::{candid_method, Principal};
-use dfn_core::api::caller;
+use ic_base_types::PrincipalId;
 use ic_canister_log::{export as export_logs, log};
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_cdk_macros::{init, post_upgrade, query};
+use ic_cdk::api::caller;
+use ic_cdk::{init, post_upgrade, query};
 use ic_cdk_timers::TimerId;
+use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_icp_index::logs::{P0, P1};
 use ic_icp_index::{
     GetAccountIdentifierTransactionsArgs, GetAccountIdentifierTransactionsResponse,
@@ -492,7 +493,8 @@ fn get_block_range_from_stable_memory(
     start: u64,
     length: u64,
 ) -> Result<Vec<EncodedBlock>, String> {
-    let length = length.min(icp_ledger::max_blocks_per_request(&caller()) as u64);
+    let length =
+        length.min(icp_ledger::max_blocks_per_request(&PrincipalId::from(caller())) as u64);
     with_blocks(|blocks| {
         let limit = blocks.len().min(start.saturating_add(length));
         let mut res = vec![];
@@ -595,7 +597,7 @@ fn get_account_identifier_transactions(
 ) -> GetAccountIdentifierTransactionsResult {
     let length = arg
         .max_results
-        .min(icp_ledger::max_blocks_per_request(&caller()) as u64)
+        .min(icp_ledger::max_blocks_per_request(&PrincipalId::from(caller())) as u64)
         .min(usize::MAX as u64) as usize;
     // TODO: deal with the user setting start to u64::MAX
     let start = arg.start.map_or(u64::MAX, |n| n);
@@ -667,6 +669,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
         match encode_metrics(&mut writer) {
             Ok(()) => HttpResponseBuilder::ok()
                 .header("Content-Type", "text/plain; version=0.0.4")
+                .header("Cache-Control", "no-store")
                 .with_body_and_content_length(writer.into_inner())
                 .build(),
             Err(err) => {

@@ -20,5 +20,4 @@ tokio = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]
-ic-registry-local-store-artifacts = { path = "../local_store/artifacts" }
-tempfile = { workspace = true }
+ic-test-utilities-registry = { path = "../../test_utilities/registry" }

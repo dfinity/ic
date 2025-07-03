@@ -1,6 +1,5 @@
 use anyhow::Result;
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
-use ic_registry_local_store::{compact_delta_to_changelog, Changelog};
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env::TestEnvAttribute;
 use ic_system_test_driver::driver::test_env_api::{HasPublicApiUrl, HasRegistryLocalStore};
@@ -26,12 +25,6 @@ fn main() -> Result<()> {
         .add_test(systest!(mainnet_basic_test))
         .execute_from_args()?;
     Ok(())
-}
-
-pub fn get_mainnet_delta_6d_c1() -> Changelog {
-    compact_delta_to_changelog(ic_registry_local_store_artifacts::MAINNET_DELTA_00_6D_C1)
-        .expect("Could not read mainnet delta 00-6d-c1")
-        .1
 }
 
 pub fn mainnet_config(env: TestEnv) {

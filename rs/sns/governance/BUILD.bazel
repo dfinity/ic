@@ -14,12 +14,14 @@ filegroup(
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-http-types",
     "//packages/icrc-ledger-client:icrc_ledger_client",
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/crypto/sha2",
     "//rs/ledger_suite/common/ledger_core",
     "//rs/ledger_suite/icp:icp_ledger",
     "//rs/ledger_suite/icrc1/ledger",
+    "//rs/nervous_system/canisters",
     "//rs/nervous_system/clients",
     "//rs/nervous_system/collections/union_multi_map",
     "//rs/nervous_system/common",
@@ -35,7 +37,6 @@ DEPENDENCIES = [
     "//rs/protobuf",
     "//rs/rust_canisters/canister_log",
     "//rs/rust_canisters/canister_profiler",
-    "//rs/rust_canisters/http_types",
     "//rs/sns/governance/api",
     "//rs/sns/governance/proposal_criticality",
     "//rs/sns/governance/proposals_amount_total_limit",
@@ -65,13 +66,13 @@ DEPENDENCIES = [
     "@crate_index//:serde_bytes",
     "@crate_index//:serde_json",
     "@crate_index//:strum",
+    "@crate_index//:thiserror",
 ]
 
 MACRO_DEPENDENCIES = [
     # Keep sorted.
     "//rs/nervous_system/common/build_metadata",
     "@crate_index//:async-trait",
-    "@crate_index//:ic-cdk-macros",
     "@crate_index//:rust_decimal_macros",
     "@crate_index//:strum_macros",
 ]
@@ -155,7 +156,6 @@ rust_canister(
     deps = DEPENDENCIES + [
         ":build_script",
         ":governance",
-        "//rs/nervous_system/canisters",
     ],
 )
 
@@ -170,7 +170,6 @@ rust_canister(
     deps = DEPENDENCIES + [
         ":build_script",
         ":governance",
-        "//rs/nervous_system/canisters",
     ],
 )
 
@@ -200,7 +199,6 @@ rust_test(
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [
         ":build_script",
         ":governance",
-        "//rs/nervous_system/canisters",
     ],
 )
 
@@ -214,7 +212,6 @@ rust_test(
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [
         ":build_script",
         ":governance",
-        "//rs/nervous_system/canisters",
     ],
 )
 

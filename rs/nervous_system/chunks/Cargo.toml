@@ -1,0 +1,13 @@
+[package]
+name = "ic-nervous-system-chunks"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+ic-crypto-sha2 = { path = "../../crypto/sha2" }
+ic-stable-structures = { workspace = true }
+lazy_static = { workspace = true }
+prost = { workspace = true }

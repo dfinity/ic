@@ -64,3 +64,28 @@ pub(super) fn parse_past_payload_ids(
         .map(|msg| CallbackId::new(msg.callback_id))
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use core::{convert::From, iter::Iterator};
+    use ic_logger::no_op_logger;
+
+    use super::*;
+    use crate::test_utils::*;
+
+    #[test]
+    fn test_parse_past_payload_ids() {
+        let payloads = [
+            as_bytes(make_vetkd_agreements(0, 1, 2)),
+            as_bytes(make_vetkd_agreements(2, 3, 4)),
+            as_bytes(make_vetkd_agreements(4, 4, 5)),
+        ];
+        let past_payloads = payloads
+            .iter()
+            .map(|p| as_past_payload(p))
+            .collect::<Vec<_>>();
+        let past_payload_ids = parse_past_payload_ids(&past_payloads, &no_op_logger());
+        let expected = HashSet::from_iter((0..=5).map(CallbackId::from));
+        assert_eq!(past_payload_ids, expected);
+    }
+}

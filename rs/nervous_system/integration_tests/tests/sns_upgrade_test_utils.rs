@@ -1,12 +1,13 @@
 use ic_base_types::PrincipalId;
+use ic_nervous_system_agent::helpers::await_with_timeout;
 use ic_nervous_system_common::ONE_MONTH_SECONDS;
 use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
-    pocket_ic_helpers,
     pocket_ic_helpers::{
-        await_with_timeout, hash_sns_wasms, nns, sns,
+        self, hash_sns_wasms, nns, sns,
         sns::governance::{
-            EXPECTED_UPGRADE_DURATION_MAX_SECONDS, EXPECTED_UPGRADE_STEPS_REFRESH_MAX_SECONDS,
+            set_automatically_advance_target_version_flag, EXPECTED_UPGRADE_DURATION_MAX_SECONDS,
+            EXPECTED_UPGRADE_STEPS_REFRESH_MAX_SECONDS,
         },
     },
     SectionTimer,
@@ -16,7 +17,10 @@ use ic_sns_governance_api::pb::v1::upgrade_journal_entry;
 use ic_sns_swap::pb::v1::Lifecycle;
 use ic_sns_wasm::pb::v1::SnsCanisterType;
 
-pub async fn test_sns_upgrade(sns_canisters_to_upgrade: Vec<SnsCanisterType>) {
+pub async fn test_sns_upgrade(
+    sns_canisters_to_upgrade: Vec<SnsCanisterType>,
+    automatically_advance_target_version: bool,
+) {
     let _timer = SectionTimer::new("Testing the upgrade process");
 
     let (pocket_ic, initial_sns_version) =
@@ -80,6 +84,20 @@ pub async fn test_sns_upgrade(sns_canisters_to_upgrade: Vec<SnsCanisterType>) {
         .await;
     }
 
+    {
+        eprintln!(
+            "Set automatically_advance_target_version to {}",
+            automatically_advance_target_version
+        );
+        set_automatically_advance_target_version_flag(
+            &pocket_ic,
+            sns.governance.canister_id,
+            automatically_advance_target_version,
+        )
+        .await
+        .unwrap();
+    }
+
     let mut latest_sns_version = initial_sns_version;
 
     for upgrade_pass in 0..2 {
@@ -134,7 +152,7 @@ pub async fn test_sns_upgrade(sns_canisters_to_upgrade: Vec<SnsCanisterType>) {
             );
         }
 
-        {
+        if !automatically_advance_target_version {
             let _timer = SectionTimer::new("advance the target version to the latest version.");
             sns::governance::propose_to_advance_sns_target_version(
                 &pocket_ic,

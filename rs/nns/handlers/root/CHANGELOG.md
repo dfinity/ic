@@ -11,6 +11,28 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-06-06: Proposal 136891
+
+http://dashboard.internetcomputer.org/proposal/136891
+
+* This ensures that this canister will be ready for chunked registry records/mutations.
+
+
+# 2025-05-16: Proposal 136694
+
+http://dashboard.internetcomputer.org/proposal/136694
+
+## Removed
+- The fields `compute_allocation` and `memory_allocation` in the input type `ChangeCanisterRequest`
+  of the endpoint `change_nns_canister`.
+
+
+# 2025-05-02: Proposal 136429
+
+No behavior change.
+
+Code for new behavior is inactive (behind a flag).
+
 # 2025-02-14: Proposal 135313
 
 http://dashboard.internetcomputer.org/proposal/135313

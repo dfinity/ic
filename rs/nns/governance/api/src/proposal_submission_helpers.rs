@@ -1,4 +1,4 @@
-use crate::pb::v1::{
+use crate::types::{
     manage_neuron::Command, manage_neuron_response::Command as CommandResponse, proposal::Action,
     ExecuteNnsFunction, InstallCode, InstallCodeRequest, MakeProposalRequest, ManageNeuron,
     ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse, NnsFunction, Proposal,
@@ -139,6 +139,8 @@ impl From<ManageNeuronCommandRequest> for Command {
             ManageNeuronCommandRequest::Merge(v) => Command::Merge(v),
             ManageNeuronCommandRequest::StakeMaturity(v) => Command::StakeMaturity(v),
             ManageNeuronCommandRequest::RefreshVotingPower(v) => Command::RefreshVotingPower(v),
+            ManageNeuronCommandRequest::DisburseMaturity(v) => Command::DisburseMaturity(v),
+            ManageNeuronCommandRequest::SetFollowing(v) => Command::SetFollowing(v),
         }
     }
 }

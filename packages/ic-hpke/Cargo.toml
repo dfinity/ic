@@ -1,0 +1,19 @@
+[package]
+name = "ic-hpke"
+version = "0.1.0"
+description = "A package created for the Internet Computer Protocol for Hybrid Public Key Encryption"
+license = "Apache-2.0"
+readme = "README.md"
+include = ["src", "Cargo.toml", "CHANGELOG.md", "LICENSE", "README.md"]
+repository = "https://github.com/dfinity/ic"
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
+
+[dependencies]
+hpke = { version = "0.12", default-features = false, features = [ "p384", "alloc" ] }
+
+[dev-dependencies]
+hex = "0.4"
+rand = { version = "0.8", default-features = false, features = ["getrandom"] }
+rand_chacha = { version = "0.3", default-features = false }

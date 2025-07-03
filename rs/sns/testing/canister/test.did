@@ -1,3 +1,7 @@
-service : {
+type Init = record {
+    greeting : opt text;
+}
+
+service : (Init) -> {
     "greet": (text) -> (text);
 }

@@ -9,7 +9,7 @@ use crate::{
     retry_with_msg, retry_with_msg_async,
     types::*,
 };
-use anyhow::bail;
+use anyhow::{anyhow, bail};
 use candid::{Decode, Encode};
 use canister_test::{Canister, RemoteTestRuntime, Runtime, Wasm};
 use dfn_protobuf::{protobuf, ProtoBuf};
@@ -27,13 +27,17 @@ use ic_agent::{
     Agent, AgentError, Identity, Signature,
 };
 use ic_canister_client::{Agent as DeprecatedAgent, Sender};
+use ic_cdk::api::management_canister::{
+    ecdsa::SignWithEcdsaResponse, schnorr::SignWithSchnorrResponse,
+};
 use ic_config::ConfigOptional;
 use ic_limits::MAX_INGRESS_TTL;
+use ic_management_canister_types::VetKDDeriveKeyResult;
 use ic_management_canister_types_private::{CanisterStatusResultV2, EmptyBlob, Payload};
 use ic_message::ForwardParams;
 use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     create_service_nervous_system::{
         swap_parameters::NeuronBasketConstructionParameters as GovApiNeuronBasketConstructionParameters,
         SwapParameters,
@@ -43,7 +47,9 @@ use ic_nns_governance_api::pb::v1::{
 use ic_nns_test_utils::governance::upgrade_nns_canister_with_args_by_proposal;
 use ic_registry_subnet_type::SubnetType;
 use ic_rosetta_api::convert::to_arg;
+use ic_signer::{GenEcdsaParams, GenSchnorrParams, GenVetkdParams};
 use ic_sns_swap::pb::v1::{NeuronBasketConstructionParameters, Params};
+use ic_test_identity::TEST_IDENTITY_KEYPAIR;
 use ic_types::{
     messages::{HttpCallContent, HttpQueryContent},
     CanisterId, Cycles, PrincipalId,
@@ -70,6 +76,7 @@ use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Lines},
     net::{TcpSocket, TcpStream},
     runtime::{Builder, Handle as THandle},
+    time::timeout,
 };
 use url::Url;
 
@@ -78,7 +85,7 @@ pub mod delegations;
 pub const CANISTER_FREEZE_BALANCE_RESERVE: Cycles = Cycles::new(5_000_000_000_000);
 pub const CYCLES_LIMIT_PER_CANISTER: Cycles = Cycles::new(100_000_000_000_000);
 pub const AGENT_REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
-pub const IDENTITY_PEM:&str = "-----BEGIN PRIVATE KEY-----\nMFMCAQEwBQYDK2VwBCIEILhMGpmYuJ0JEhDwocj6pxxOmIpGAXZd40AjkNhuae6q\noSMDIQBeXC6ae2dkJ8QC50bBjlyLqsFQFsMsIThWB21H6t6JRA==\n-----END PRIVATE KEY-----";
+pub const CANISTER_CREATE_TIMEOUT: Duration = Duration::from_secs(30);
 /// A short wasm module that is a legal canister binary.
 pub const _EMPTY_WASM: &[u8] = &[0, 97, 115, 109, 1, 0, 0, 0];
 /// The following definition is a temporary work-around. Please do not copy!
@@ -93,8 +100,10 @@ pub const MAX_CONCURRENT_REQUESTS: usize = 10_000;
 pub const MAX_TCP_ERROR_RETRIES: usize = 5;
 
 pub fn get_identity() -> ic_agent::identity::BasicIdentity {
-    ic_agent::identity::BasicIdentity::from_pem(IDENTITY_PEM.as_bytes())
-        .expect("Invalid secret key.")
+    ic_agent::identity::BasicIdentity::from_pem(std::io::Cursor::new(
+        TEST_IDENTITY_KEYPAIR.to_pem(),
+    ))
+    .expect("Invalid secret key.")
 }
 
 /// Initializes a testing [Runtime] from a node's url. You should really
@@ -121,15 +130,19 @@ pub fn runtime_from_url(url: Url, effective_canister_id: PrincipalId) -> Runtime
 lazy_static! {
     /// The WASM of the Universal Canister.
     pub static ref UNIVERSAL_CANISTER_WASM: &'static [u8] = {
-        let vec = get_universal_canister_wasm();
+        let vec = get_canister_wasm("UNIVERSAL_CANISTER_WASM_PATH");
+        Box::leak(vec.into_boxed_slice())
+    };
+
+    pub static ref SIGNER_CANISTER_WASM: &'static [u8] = {
+        let vec = get_canister_wasm("SIGNER_CANISTER_WASM_PATH");
         Box::leak(vec.into_boxed_slice())
     };
 }
 
-fn get_universal_canister_wasm() -> Vec<u8> {
+fn get_canister_wasm(env_var: &str) -> Vec<u8> {
     let uc_wasm_path = get_dependency_path(
-        std::env::var("UNIVERSAL_CANISTER_WASM_PATH")
-            .expect("UNIVERSAL_CANISTER_WASM_PATH not set"),
+        std::env::var(env_var).unwrap_or_else(|e| panic!("{:?} not set: {e:?}", env_var)),
     );
     std::fs::read(&uc_wasm_path)
         .unwrap_or_else(|e| panic!("Could not read WASM from {:?}: {e:?}", uc_wasm_path))
@@ -149,7 +162,7 @@ impl<'a> UniversalCanister<'a> {
         agent: &'a Agent,
         effective_canister_id: PrincipalId,
     ) -> UniversalCanister<'a> {
-        Self::new_with_params(agent, effective_canister_id, None, None, None)
+        Self::new_with_params_with_timeout(agent, effective_canister_id, None, None, None)
             .await
             .expect("Could not create universal canister.")
     }
@@ -158,7 +171,7 @@ impl<'a> UniversalCanister<'a> {
         agent: &'a Agent,
         effective_canister_id: PrincipalId,
     ) -> Result<UniversalCanister<'a>, String> {
-        Self::new_with_params(agent, effective_canister_id, None, None, None).await
+        Self::new_with_params_with_timeout(agent, effective_canister_id, None, None, None).await
     }
 
     pub async fn new_with_retries(
@@ -175,10 +188,9 @@ impl<'a> UniversalCanister<'a> {
             READY_WAIT_TIMEOUT,
             RETRY_BACKOFF,
             || async {
-                match Self::new_with_params(agent, effective_canister_id, None, None, None).await {
-                    Ok(c) => Ok(c),
-                    Err(e) => anyhow::bail!(e),
-                }
+                Self::new_with_params_with_timeout(agent, effective_canister_id, None, None, None)
+                    .await
+                    .map_err(|e| anyhow!(e))
             }
         )
         .await
@@ -201,10 +213,9 @@ impl<'a> UniversalCanister<'a> {
             READY_WAIT_TIMEOUT,
             RETRY_BACKOFF,
             || async {
-                match Self::new_with_cycles(agent, effective_canister_id, c).await {
-                    Ok(c) => Ok(c),
-                    Err(e) => anyhow::bail!(e),
-                }
+                Self::new_with_cycles(agent, effective_canister_id, c)
+                    .await
+                    .map_err(|e| anyhow!(e))
             }
         )
         .await
@@ -228,7 +239,7 @@ impl<'a> UniversalCanister<'a> {
             READY_WAIT_TIMEOUT,
             RETRY_BACKOFF,
             || async {
-                match Self::new_with_params(
+                Self::new_with_params_with_timeout(
                     agent,
                     effective_canister_id,
                     compute_allocation,
@@ -236,14 +247,36 @@ impl<'a> UniversalCanister<'a> {
                     pages,
                 )
                 .await
-                {
-                    Ok(c) => Ok(c),
-                    Err(e) => anyhow::bail!(e),
-                }
+                .map_err(|e| anyhow!(e))
             }
         )
         .await
         .expect("Could not create universal canister with params.")
+    }
+
+    pub async fn new_with_params_with_timeout(
+        agent: &'a Agent,
+        effective_canister_id: PrincipalId,
+        compute_allocation: Option<u64>,
+        cycles: Option<u128>,
+        pages: Option<u32>,
+    ) -> Result<UniversalCanister<'a>, String> {
+        match timeout(
+            CANISTER_CREATE_TIMEOUT,
+            Self::new_with_params(
+                agent,
+                effective_canister_id,
+                compute_allocation,
+                cycles,
+                pages,
+            ),
+        )
+        .await
+        {
+            Ok(Ok(canister)) => Ok(canister),
+            Ok(Err(err)) => Err(format!("Could not create universal canister: {:?}", err)),
+            Err(_elasped) => Err("Timeout while creating universal canister".to_string()),
+        }
     }
 
     pub async fn new_with_params(
@@ -400,16 +433,12 @@ impl<'a> UniversalCanister<'a> {
 
     /// Try to store `msg` in stable memory starting at `offset` bytes.
     pub async fn try_store_to_stable(&self, offset: u32, msg: &[u8]) -> Result<(), AgentError> {
-        let res = self
-            .agent
+        self.agent
             .update(&self.canister_id, "update")
             .with_arg(Self::stable_writer(offset, msg))
             .call_and_wait()
-            .await;
-        match res {
-            Ok(_) => Ok(()),
-            Err(err) => Err(err),
-        }
+            .await
+            .map(|_| ())
     }
 
     /// Stores `msg` in stable memory starting at `offset` bytes.
@@ -574,7 +603,7 @@ pub struct MessageCanister<'a> {
 impl<'a> MessageCanister<'a> {
     /// Initializes a [MessageCanister] using the provided [Agent].
     pub async fn new(agent: &'a Agent, effective_canister_id: PrincipalId) -> MessageCanister<'a> {
-        Self::new_with_params(agent, effective_canister_id, None, None)
+        Self::new_with_params_with_timeout(agent, effective_canister_id, None, None)
             .await
             .expect("Could not create message canister.")
     }
@@ -583,7 +612,7 @@ impl<'a> MessageCanister<'a> {
         agent: &'a Agent,
         effective_canister_id: PrincipalId,
     ) -> Result<MessageCanister<'a>, String> {
-        Self::new_with_params(agent, effective_canister_id, None, None).await
+        Self::new_with_params_with_timeout(agent, effective_canister_id, None, None).await
     }
 
     pub async fn new_with_retries(
@@ -595,24 +624,41 @@ impl<'a> MessageCanister<'a> {
     ) -> MessageCanister<'a> {
         retry_with_msg_async!(
             format!(
-                "install UniversalCanister {}",
+                "install MessageCanister {}",
                 effective_canister_id.to_string()
             ),
             log,
             timeout,
             backoff,
             || async {
-                match Self::new_with_params(agent, effective_canister_id, None, None).await {
-                    Ok(c) => Ok(c),
-                    Err(e) => anyhow::bail!(e),
-                }
+                Self::new_with_params_with_timeout(agent, effective_canister_id, None, None)
+                    .await
+                    .map_err(|e| anyhow!(e))
             }
         )
         .await
         .expect("Could not create message canister.")
     }
 
-    pub async fn new_with_params(
+    async fn new_with_params_with_timeout(
+        agent: &'a Agent,
+        effective_canister_id: PrincipalId,
+        compute_allocation: Option<u64>,
+        cycles: Option<u128>,
+    ) -> Result<MessageCanister<'a>, String> {
+        match timeout(
+            CANISTER_CREATE_TIMEOUT,
+            Self::new_with_params(agent, effective_canister_id, compute_allocation, cycles),
+        )
+        .await
+        {
+            Ok(Ok(canister)) => Ok(canister),
+            Ok(Err(err)) => Err(format!("Could not create message canister: {:?}", err)),
+            Err(_elasped) => Err("Timeout while creating message canister".to_string()),
+        }
+    }
+
+    async fn new_with_params(
         agent: &'a Agent,
         effective_canister_id: PrincipalId,
         compute_allocation: Option<u64>,
@@ -643,24 +689,9 @@ impl<'a> MessageCanister<'a> {
         effective_canister_id: PrincipalId,
         cycles: C,
     ) -> MessageCanister<'a> {
-        // Create a canister.
-        let mgr = ManagementCanister::create(agent);
-        let canister_id = mgr
-            .create_canister()
-            .as_provisional_create_with_amount(Some(cycles.into()))
-            .with_effective_canister_id(effective_canister_id)
-            .call_and_wait()
+        Self::new_with_params(agent, effective_canister_id, None, Some(cycles.into()))
             .await
-            .unwrap_or_else(|err| panic!("Couldn't create canister with provisional API: {}", err))
-            .0;
-
-        // Install the universal canister.
-        mgr.install_code(&canister_id, MESSAGE_CANISTER_WASM)
-            .call_and_wait()
-            .await
-            .unwrap_or_else(|err| panic!("Couldn't install message canister: {}", err));
-
-        Self { agent, canister_id }
+            .unwrap()
     }
 
     pub fn canister_id(&self) -> Principal {
@@ -744,6 +775,109 @@ impl<'a> MessageCanister<'a> {
         self.try_read_msg()
             .await
             .unwrap_or_else(|err| panic!("Could not read message: {}", err))
+    }
+}
+
+/// Provides an abstraction to the signer canister.
+#[derive(Clone)]
+pub struct SignerCanister<'a> {
+    agent: &'a Agent,
+    canister_id: Principal,
+}
+
+impl<'a> SignerCanister<'a> {
+    /// Initializes a [SignerCanister] using the provided [Agent].
+    pub async fn new(agent: &'a Agent, effective_canister_id: PrincipalId) -> SignerCanister<'a> {
+        timeout(
+            CANISTER_CREATE_TIMEOUT,
+            Self::new_with_params(agent, effective_canister_id, None, None),
+        )
+        .await
+        .expect("Timeout while creating signer canister")
+    }
+
+    pub async fn new_with_cycles<C: Into<u128>>(
+        agent: &'a Agent,
+        effective_canister_id: PrincipalId,
+        cycles: C,
+    ) -> SignerCanister<'a> {
+        Self::new_with_params(agent, effective_canister_id, None, Some(cycles.into())).await
+    }
+
+    async fn new_with_params(
+        agent: &'a Agent,
+        effective_canister_id: PrincipalId,
+        compute_allocation: Option<u64>,
+        cycles: Option<u128>,
+    ) -> SignerCanister<'a> {
+        // Create a canister.
+        let mgr = ManagementCanister::create(agent);
+        let canister_id = mgr
+            .create_canister()
+            .with_optional_compute_allocation(compute_allocation)
+            .as_provisional_create_with_amount(cycles)
+            .with_effective_canister_id(effective_canister_id)
+            .call_and_wait()
+            .await
+            .unwrap_or_else(|err| panic!("Couldn't create canister with provisional API: {}", err))
+            .0;
+
+        // Install the signer canister.
+        mgr.install_code(&canister_id, &SIGNER_CANISTER_WASM)
+            .call_and_wait()
+            .await
+            .unwrap_or_else(|err| panic!("Couldn't install signer canister: {}", err));
+
+        Self { agent, canister_id }
+    }
+
+    pub fn canister_id(&self) -> Principal {
+        self.canister_id
+    }
+
+    pub async fn gen_ecdsa_sig(
+        &self,
+        params: GenEcdsaParams,
+    ) -> Result<SignWithEcdsaResponse, String> {
+        let bytes = self
+            .agent
+            .update(&self.canister_id, "gen_ecdsa_sig")
+            .with_arg(Encode!(&params).unwrap())
+            .call_and_wait()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        Decode!(&bytes, Result<SignWithEcdsaResponse, String>).unwrap()
+    }
+
+    pub async fn gen_schnorr_sig(
+        &self,
+        params: GenSchnorrParams,
+    ) -> Result<SignWithSchnorrResponse, String> {
+        let bytes = self
+            .agent
+            .update(&self.canister_id, "gen_schnorr_sig")
+            .with_arg(Encode!(&params).unwrap())
+            .call_and_wait()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        Decode!(&bytes, Result<SignWithSchnorrResponse, String>).unwrap()
+    }
+
+    pub async fn gen_vetkd_key(
+        &self,
+        params: GenVetkdParams,
+    ) -> Result<VetKDDeriveKeyResult, String> {
+        let bytes = self
+            .agent
+            .update(&self.canister_id, "gen_vetkd_key")
+            .with_arg(Encode!(&params).unwrap())
+            .call_and_wait()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        Decode!(&bytes, Result<VetKDDeriveKeyResult, String>).unwrap()
     }
 }
 
@@ -898,20 +1032,28 @@ pub fn assert_reject<T: std::fmt::Debug>(res: Result<T, AgentError>, code: Rejec
     match res {
         Ok(val) => panic!("Expected call to fail but it succeeded with {:?}", val),
         Err(agent_error) => match agent_error {
-            AgentError::UncertifiedReject(RejectResponse {
-                reject_code,
-                reject_message,
+            AgentError::UncertifiedReject {
+                reject:
+                    RejectResponse {
+                        reject_code,
+                        reject_message,
+                        ..
+                    },
                 ..
-            }) => assert_eq!(
+            } => assert_eq!(
                 code, reject_code,
                 "Expect code {:?} did not match {:?}. Reject message: {}",
                 code, reject_code, reject_message
             ),
-            AgentError::CertifiedReject(RejectResponse {
-                reject_code,
-                reject_message,
+            AgentError::CertifiedReject {
+                reject:
+                    RejectResponse {
+                        reject_code,
+                        reject_message,
+                        ..
+                    },
                 ..
-            }) => assert_eq!(
+            } => assert_eq!(
                 code, reject_code,
                 "Expect code {:?} did not match {:?}. Reject message: {}",
                 code, reject_code, reject_message
@@ -932,11 +1074,15 @@ pub fn assert_reject_msg<T: std::fmt::Debug>(
     match res {
         Ok(val) => panic!("Expected call to fail but it succeeded with {:?}", val),
         Err(agent_error) => match agent_error {
-            AgentError::CertifiedReject(RejectResponse {
-                reject_code,
-                reject_message,
+            AgentError::CertifiedReject {
+                reject:
+                    RejectResponse {
+                        reject_code,
+                        reject_message,
+                        ..
+                    },
                 ..
-            }) => {
+            } => {
                 assert_eq!(
                     code, reject_code,
                     "Expect code {:?} did not match {:?}. Reject message: {}",
@@ -948,11 +1094,15 @@ pub fn assert_reject_msg<T: std::fmt::Debug>(
                     reject_message
                 );
             }
-            AgentError::UncertifiedReject(RejectResponse {
-                reject_code,
-                reject_message,
+            AgentError::UncertifiedReject {
+                reject:
+                    RejectResponse {
+                        reject_code,
+                        reject_message,
+                        ..
+                    },
                 ..
-            }) => {
+            } => {
                 assert_eq!(
                     code, reject_code,
                     "Expect code {:?} did not match {:?}. Reject message: {}",
@@ -1026,7 +1176,7 @@ pub fn assert_http_submit_fails<Output>(
     match result {
         Ok(val) => panic!("Expected call to fail but it succeeded with {:?}.", val),
         Err(agent_error) => match agent_error {
-            AgentError::UncertifiedReject(RejectResponse{reject_code, ..}) => assert_eq!(
+            AgentError::UncertifiedReject { reject: RejectResponse{reject_code, ..}, .. } => assert_eq!(
                 expected_reject_code, reject_code,
                 "Unexpected reject_code: `{:?}`.",
                 reject_code
@@ -1314,14 +1464,11 @@ pub fn to_principal_id(principal: &Principal) -> PrincipalId {
 }
 
 pub async fn agent_observes_canister_module(agent: &Agent, canister_id: &Principal) -> bool {
-    let status = ManagementCanister::create(agent)
+    ManagementCanister::create(agent)
         .canister_status(canister_id)
         .call_and_wait()
-        .await;
-    match status {
-        Ok(s) => s.0.module_hash.is_some(),
-        Err(_) => false,
-    }
+        .await
+        .is_ok_and(|s| s.0.module_hash.is_some())
 }
 
 pub async fn assert_canister_counter_with_retries(
@@ -1618,10 +1765,10 @@ async fn assert_nodes_malicious_parallel(
                 .await
         });
     }
-    let result = join_all(futures).await.iter().all(|x| x.is_ok());
-    match result {
-        true => Ok(()),
-        false => Err("Not all malicious nodes produced logs containing the malicious signal."),
+    if join_all(futures).await.iter().all(|x| x.is_ok()) {
+        Ok(())
+    } else {
+        Err("Not all malicious nodes produced logs containing the malicious signal.")
     }
 }
 

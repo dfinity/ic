@@ -15,7 +15,7 @@ Using a value of the `PocketIc` struct, you interact with the IC itself, e.g. vi
 ```rust
 // IC interface excerpt
 fn root_key(&self) -> Option<Vec<u8>>
-fn set_time(&self, time: SystemTime)
+fn set_time(&self, time: Time)
 fn create_canister(&self) -> CanisterId
 fn install_canister(&self, canister_id: CanisterId, wasm_module: Vec<u8>, ...)  
 ...
@@ -42,48 +42,93 @@ See the [examples](README.md#examples) for more.
 
 ## Live Mode
 
-Since version 4.0.0, the PocketIC server also exposes the IC's HTTP interface, just like the IC mainnet and the replica launched by dfx. This means that PocketIC instances can now be targeted by agent-based tools (agent.rs, agent.js, IC-Repl, etc). Note that PocketIC instances, if launched in the regular way, do not "make progress" by themselves, i.e., the state machines that represent the IC do not execute any messages without a call to `tick()` and their timestamps do not advance without a call to `advance_time(...)`. But the agent-based tools expect their target to make progress automatically (as the IC mainnet and the replica launched by dfx do) and use the current time as the IC time, since they dispatch asynchronous requests and poll for the result, checking for its freshness with respect to the current time.
+The PocketIC server exposes the ICP's HTTP interface (as defined in the [Interface Specification](https://internetcomputer.org/docs/references/ic-interface-spec#http-interface)) used by the ICP mainnet. This means that PocketIC instances can also be targeted by agent-based tools, e.g., the [Rust](https://crates.io/crates/ic-agent) and [JavaScript](https://www.npmjs.com/package/@dfinity/agent) agents.
 
-For that reason, you need to explicitly make an instance "live" by calling `make_live()` on it. This will do three things: 
+Note that PocketIC instances do not "make progress" by default, i.e., they do not execute any messages and time does not advance unless dedicated operations are triggered by separate HTTP requests. The "live" mode enabled by calling the function `PocketIc::make_live()` automates those steps by launching a background thread that
 
-- It launches a thread that calls `tick()` and `advance_time(...)` on the instance regularly - several times per second. 
-- It creates a gateway which points to this live instance.
-- It returns a gateway URL which can then be passed to agent-like tools.
+- sets the current time as the PocketIC instance time;
+- advances time on the PocketIC instance regularly;
+- executes messages on the PocketIC instance;
+- executes canister HTTP outcalls of the PocketIC instance.
 
-Of course, other instances on the same PocketIC server remain unchanged - neither do they receive `tick`s nor can the gateway route requests to them. 
+The function `PocketIc::make_live()` also creates an HTTP gateway serving
+  - the ICP's HTTP interface (as defined in the [Interface Specification](https://internetcomputer.org/docs/references/ic-interface-spec#http-interface))
+  - and the ICP's HTTP gateway interface (as defined in the [HTTP Gateway Protocol Specification](https://internetcomputer.org/docs/references/http-gateway-protocol-spec))
+and returns its URL.
 
-**Attention**: Enabling auto-progress makes instances non-deterministic! There is no way to guarantee message order when agents dispatch async requests, which may interleave with each other and with the `tick`s from the auto-progress thread. If you need determinism, use the old, manually-`tick`ed API. 
+**Attention**: Enabling the "live" mode makes the PocketIC instance non-deterministic! For instance, there is no way to tell in which order messages are going to be executed.
+The function `PocketIc::stop_live` can be used to disable the "live" mode: it stops the HTTP gateway and the background thread ensuring progress on the PocketIC instance.
+However, the non-deterministic state changes during the "live" mode (e.g., time changes) could affect the PocketIC instance even after disabling the "live" mode.
 
-**Attention**: It is strongly discouraged to use the PocketIC library for interacting with a live instance.
-Live instances can be made non-live again by disabling auto-progress and disabling the gateway.
-This is done by calling `stop_live()` on the instance.
-Once this call returns, you can use the PocketIC library for testing again.
-The instance will only make progress when you call `tick()` - but the state in which the instance halts is not deterministic.
-So be extra careful with tests which are setup with a live phase and which then transition to non-live for the test section. 
+**Attention**: The "live" mode requires the PocketIC instance to have an NNS subnet.
 
-Here is a sketch on how to use the live mode: 
+**Attention**: It is strongly discouraged to override time of a "live" PocketIC instance.
+
+Here is a sketch on how to use the PocketIC library to make an update call in the "live" mode:
 
 ```rust
+// We create a PocketIC instance with an NNS subnet
+// (the "live" mode requires the NNS subnet).
 let mut pic = PocketIcBuilder::new()
     .with_nns_subnet()
     .with_application_subnet()
     .build();
+
+// Enable the "live" mode.
+let _ = pic.make_live(None);
+
+// Create and install a test canister.
+// ...
+
+// Submit an update call to the test canister making a canister http outcall.
+let call_id = pic
+    .submit_call(
+        canister_id,
+        Principal::anonymous(),
+        "canister_http",
+        encode_one(()).unwrap(),
+    )
+    .unwrap();
+
+// Await the update call without making additional progress (the PocketIC instance
+// is already in the "live" mode making progress automatically).
+let reply = pic.await_call_no_ticks(call_id).unwrap();
+
+// Process the reply.
+// ...
+```
+
+Here is a sketch on how to use the IC agent in the "live" mode:
+
+```rust
+// We create a PocketIC instance with an NNS subnet
+// (the "live" mode requires the NNS subnet).
+let mut pic = PocketIcBuilder::new()
+    .with_nns_subnet()
+    .with_application_subnet()
+    .build();
+
+// Enable the "live" mode.
 let endpoint = pic.make_live(None);
-// the local agent needs a runtime
-let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
-let res = rt.block_on(async {
+
+// We use a tokio runtime to run the asynchronous IC agent.
+let rt = tokio::runtime::Builder::new_current_thread()
+    .enable_all()
+    .build()
+    .unwrap();
+rt.block_on(async {
+    // We create an IC agent.
     let agent = ic_agent::Agent::builder()
-            .with_url(endpoint.clone())
-            .build()
-            .unwrap();
-    // proof that the agent can communicate with the instance
+        .with_url(endpoint)
+        .build()
+        .unwrap();
+
+    // We fetch the PocketIC (i.e., non-mainnet) root key to successfully verify responses.
     agent.fetch_root_key().await.unwrap();
-    // do something useful with the agent
-    let res = agent.[...]
-    res
+
+    // Finally, we use the IC agent in tests.
+    // ...
 });
-// stop the HTTP gateway and auto progress
-pic.stop_live();
 ```
 
 ## Concurrent update calls
@@ -388,6 +433,9 @@ async fn test_canister_http_live() {
         .unwrap();
     let http_response = Decode!(&res, HttpResponse).unwrap();
     assert_eq!(http_response.body, b"...");
+
+    // Explicitly drop async instance.
+    pic.drop().await;
 }
 ```
 
@@ -534,7 +582,7 @@ Now we create a PocketIC instance configured with the Bitcoin subnet and the `bi
 Because the `bitcoind` process uses the real time, we set the time of the PocketIC instance to be the current time:
 
 ```rust
-    pic.set_time(SystemTime::now());
+    pic.set_time(SystemTime::now().into());
 ```
 
 Next we deploy the bitcoin testnet canister (canister ID `g4xu7-jiaaa-aaaan-aaaaq-cai`) on the bitcoin subnet and configure it with `Network::Regtest`
@@ -603,3 +651,113 @@ To mine blocks with rewards credited to a given `bitcoin_address: String`, you c
 
 For an example of a test canister that can be deployed to an application subnet of the PocketIC instance,
 we refer to the basic bitcoin example canister in DFINITY's [examples](https://github.com/dfinity/examples/tree/master/rust/basic_bitcoin).
+
+## VetKd
+
+To test the VetKd feature, you need to create a PocketIC instance with II or fiduciary subnet and enable nonmainnet features:
+
+```rust
+    // We create a PocketIC instance consisting of the II and one application subnet.
+    let pic = PocketIcBuilder::new()
+        .with_ii_subnet()               // this subnet has threshold keys
+        .with_application_subnet()      // we deploy the dapp canister here
+        .with_nonmainnet_features(true) // the VetKd feature is not available on mainnet yet
+        .build();
+```
+
+## Running multiple tests from the same state
+
+To speed up running a test suite, it is possible to run multiple tests from the same state
+that is only created once at the very beginning and then reused by the individual tests
+without interference between the individual tests.
+An example of a such setup:
+
+```rust
+use std::sync::OnceLock;
+
+const MAINNET_CANISTER_ID: Principal =
+    Principal::from_slice(&[0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x01]);
+
+static POCKET_IC_STATE: OnceLock<PocketIcState> = OnceLock::new();
+
+fn init_state() -> &'static PocketIcState {
+    POCKET_IC_STATE.get_or_init(|| {
+        // create an empty PocketIC state to be set up later
+        let state = PocketIcState::new();
+        // create a PocketIC instance used to set up the state
+        let pic = PocketIcBuilder::new()
+            .with_nns_subnet()
+            .with_state(state)
+            .build();
+
+        // set up the state to be used in multiple tests later
+        pic.create_canister_with_id(None, None, MAINNET_CANISTER_ID)
+            .unwrap();
+
+        // serialize and expose the state
+        pic.drop_and_take_state().unwrap()
+    })
+}
+
+#[test]
+fn pocket_ic_init_state_1() {
+    // mount the state set up before
+    let pic1 = PocketIcBuilder::new()
+        .with_read_only_state(init_state())
+        .build();
+
+    // assert that the state is properly set up
+    assert!(pic1.canister_exists(MAINNET_CANISTER_ID));
+}
+
+#[test]
+fn pocket_ic_init_state_2() {
+    // mount the state set up before
+    let pic2 = PocketIcBuilder::new()
+        .with_read_only_state(init_state())
+        .build();
+
+    // assert that the state is properly set up
+    assert!(pic2.canister_exists(MAINNET_CANISTER_ID));
+}
+```
+
+## Time
+
+The `pocket-ic` crate defines the type `Time` to represent the time of a PocketIC instance
+with nanosecond precision on all supported platforms (Windows, MacOS, Linux).
+The PocketIC time is used in the functions `PocketIc::get_time`, `PocketIc::set_time`, and `PocketIc::set_certified_time`.
+
+A PocketIC time can be created from a UNIX timestamp in nanoseconds using
+the function `Time::from_nanos_since_unix_epoch` and converted back to
+a UNIX timestamp in nanoseconds using the function `Time::as_nanos_since_unix_epoch`.
+
+A `system_time: SystemTime` can be converted into `Time` using `system_into.into()`.
+A `time: Time` can be converted into `SystemTime` using `time.try_into()`
+which fails with an error if the conversion would lead to loss of precision (e.g., on Windows).
+
+Finally, PocketIC times can be compared (for both equality and ordering)
+and a `Duration` can be added to a PocketIC time.
+
+## Nonmainnet features
+
+To test a new feature that has not (yet) been rolled out to the ICP mainnet,
+the `PocketIcBuilder::with_nonmainnet_features` pattern should be used when creating a new PocketIC instance.
+
+```rust
+    // We create a PocketIC instance with features enabled that are not yet available on the ICP mainnet.
+    let pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_nonmainnet_features(true)
+        .build();
+```
+
+To use a new management canister endpoint that is not yet supported by a dedicated (Rust) PocketIC library function,
+the generic PocketIC library API, e.g., `PocketIc::update_call_with_effective_principal` should be used:
+- the `canister_id` argument should be the management canister principal (`aaaaa-aa`),
+- the `effective_principal` argument should be the actual canister or subnet to which the call is targetted
+  (e.g., `RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec())` for a `canister_id` of type `Principal`;
+  in particular, `RawEffectivePrincipal::None` must not be used),
+- and the `payload` argument should be the Candid-encoded binary input to the new management canister endpoint
+  (the type of the `payload` argument can either be obtained from a corresponding branch of the public `ic-management-canister-types` crate
+  or be defined manually).

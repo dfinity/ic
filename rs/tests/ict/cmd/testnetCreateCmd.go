@@ -43,7 +43,8 @@ const MAX_TOKEN_CAPACITY = 1024 * 1024
 const INFRA_GROUP_NAME_CREATED_EVENT = "infra_group_name_created_event"
 const KIBANA_URL_CREATED_EVENT = "kibana_url_created_event"
 const FARM_VM_CREATED_EVENT = "farm_vm_created_event"
-const BN_AAAA_RECORDS_CREATED_EVENT = "bn_aaaa_records_created_event"
+const IC_GATEWAY_AAAA_RECORDS_CREATED_EVENT = "ic_gateway_aaaa_records_created_event"
+const IC_GATEWAY_A_RECORDS_CREATED_EVENT = "ic_gateway_a_records_created_event"
 const PROMETHEUS_VM_CREATED_EVENT = "prometheus_vm_created_event"
 const GRAFANA_INSTANCE_CREATED_EVENT = "grafana_instance_created_event"
 const IC_PROGRESS_CLOCK_CREATED_EVENT = "ic_progress_clock_created_event"
@@ -92,7 +93,8 @@ type Summary struct {
 	KibanaUrl       interface{}   `json:"kibana_url"`
 	IcTopology      interface{}   `json:"ic_topology"`
 	VmConsoleLinks  []interface{} `json:"vm_console_links"`
-	BnAAAARecords   interface{}   `json:"bn_aaaa_records"`
+	IcGatewayARecords   interface{}   `json:"ic_gateway_a_records"`
+	IcGatewayAAAARecords   interface{}   `json:"ic_gateway_aaaa_records"`
 	PrometheusVm    interface{}   `json:"prometheus"`
 	GrafanaLink     interface{}   `json:"grafana"`
 	IcProgressClock interface{}   `json:"progress_clock"`
@@ -104,8 +106,10 @@ func (summary *Summary) add_event(event *TestDriverEvent) {
 		summary.IcTopology = event.Body
 	} else if event.EventName == VM_CONSOLE_LINK_CREATED_EVENT {
 		summary.VmConsoleLinks = append(summary.VmConsoleLinks, event.Body)
-	} else if event.EventName == BN_AAAA_RECORDS_CREATED_EVENT {
-		summary.BnAAAARecords = event.Body
+	} else if event.EventName == IC_GATEWAY_A_RECORDS_CREATED_EVENT {
+		summary.IcGatewayARecords = event.Body	
+	} else if event.EventName == IC_GATEWAY_AAAA_RECORDS_CREATED_EVENT {
+		summary.IcGatewayAAAARecords = event.Body
 	} else if event.EventName == PROMETHEUS_VM_CREATED_EVENT {
 		summary.PrometheusVm = event.Body
 	} else if event.EventName == GRAFANA_INSTANCE_CREATED_EVENT {

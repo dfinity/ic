@@ -18,6 +18,7 @@ impl Registry {
             value: api_boundary_node_record_vec,
             version: _,
             deletion_marker: _,
+            timestamp_nanoseconds: _,
         } = self.get(
             &make_api_boundary_node_record_key(node_id).into_bytes(),
             self.latest_version(),
@@ -71,7 +72,7 @@ mod tests {
     use ic_registry_keys::{
         make_api_boundary_node_record_key, API_BOUNDARY_NODE_RECORD_KEY_PREFIX,
     };
-    use ic_registry_transport::pb::v1::RegistryValue;
+    use ic_registry_transport::pb::v1::HighCapacityRegistryValue;
     use ic_types_test_utils::ids::node_test_id;
 
     use crate::registry::Registry;
@@ -84,7 +85,7 @@ mod tests {
         let key_2 = make_api_boundary_node_record_key(node_test_id(2)).into_bytes();
 
         let mut value = VecDeque::new();
-        value.push_back(RegistryValue {
+        value.push_back(HighCapacityRegistryValue {
             ..Default::default()
         });
 
@@ -115,7 +116,7 @@ mod tests {
         .into_bytes();
 
         let mut value = VecDeque::new();
-        value.push_back(RegistryValue {
+        value.push_back(HighCapacityRegistryValue {
             ..Default::default()
         });
 

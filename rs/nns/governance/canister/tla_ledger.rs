@@ -1,16 +1,21 @@
 use async_trait::async_trait;
 use ic_base_types::CanisterId;
+use ic_nervous_system_canisters::ledger::IcpLedger;
 use ic_nervous_system_canisters::ledger::IcpLedgerCanister;
-use ic_nervous_system_common::ledger::IcpLedger;
 use ic_nervous_system_common::NervousSystemError;
 use ic_nervous_system_runtime::Runtime;
 use icp_ledger::{AccountIdentifier, Subaccount as IcpSubaccount, Tokens};
+use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
 
 #[cfg(feature = "tla")]
 use ic_nns_governance::governance::tla::{
     self as tla, account_to_tla, opt_subaccount_to_tla, Destination, ToTla,
     TLA_INSTRUMENTATION_STATE,
 };
+
+#[cfg(feature = "tla")]
+use tla_instrumentation_proc_macros::tla_function;
+
 use ic_nns_governance::{tla_log_request, tla_log_response};
 use std::collections::BTreeMap;
 
@@ -24,6 +29,7 @@ impl<Rt: Runtime + Send + Sync> LoggingIcpLedgerCanister<Rt> {
 
 #[async_trait]
 impl<Rt: Runtime + Send + Sync> IcpLedger for LoggingIcpLedgerCanister<Rt> {
+    #[cfg_attr(feature = "tla", tla_function(force_async_fn = true))]
     async fn transfer_funds(
         &self,
         amount_e8s: u64,
@@ -106,5 +112,14 @@ impl<Rt: Runtime + Send + Sync> IcpLedger for LoggingIcpLedgerCanister<Rt> {
 
     fn canister_id(&self) -> CanisterId {
         self.0.canister_id()
+    }
+
+    async fn icrc3_get_blocks(
+        &self,
+        _args: Vec<GetBlocksRequest>,
+    ) -> Result<GetBlocksResult, NervousSystemError> {
+        Err(NervousSystemError {
+            error_message: "Not Implemented".to_string(),
+        })
     }
 }

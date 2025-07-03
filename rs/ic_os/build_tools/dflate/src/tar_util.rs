@@ -28,8 +28,7 @@ fn octal_into<T: fmt::Octal>(dst: &mut [u8], val: T) {
 fn numeric_extended_into(dst: &mut [u8], src: u64) {
     let len: usize = dst.len();
     for (slot, val) in dst.iter_mut().zip(
-        repeat(0)
-            .take(len - 8) // to zero init extra bytes
+        std::iter::repeat_n(0, len - 8) // to zero init extra bytes
             .chain((0..8).rev().map(|x| ((src >> (8 * x)) & 0xff) as u8)),
     ) {
         *slot = val;

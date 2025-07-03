@@ -4,33 +4,36 @@ use cycles_minting_canister::{IcpXdrConversionRate, IcpXdrConversionRateCertifie
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::tokens::CheckedSub;
-use ic_nervous_system_common::{cmc::CMC, ledger::IcpLedger, NervousSystemError};
+use ic_nervous_system_canisters::cmc::CMC;
+use ic_nervous_system_canisters::ledger::IcpLedger;
+use ic_nervous_system_common::NervousSystemError;
+use ic_nervous_system_timers::test::{advance_time_for_timers, set_time_for_timers};
 use ic_nns_common::{
     pb::v1::{NeuronId, ProposalId},
     types::UpdateIcpXdrConversionRatePayload,
 };
 use ic_nns_constants::{
-    CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, REGISTRY_CANISTER_ID,
-    SNS_WASM_CANISTER_ID,
+    CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID,
+    NODE_REWARDS_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
 use ic_nns_governance::{
     governance::{Environment, Governance, HeapGrowthPotential, RngError},
     pb::v1::{
         manage_neuron, manage_neuron::NeuronIdOrSubaccount, proposal, ExecuteNnsFunction,
-        GovernanceError, ManageNeuron, Motion, NetworkEconomics, Neuron, NnsFunction, Proposal,
-        Vote,
+        GovernanceError, ManageNeuron, Motion, NetworkEconomics, NnsFunction, Proposal, Vote,
     },
 };
-use ic_nns_governance_api::pb::v1::{manage_neuron_response, ManageNeuronResponse};
+use ic_nns_governance_api::Neuron;
+use ic_nns_governance_api::{manage_neuron_response, ManageNeuronResponse};
 use ic_sns_root::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
 use ic_sns_swap::pb::v1 as sns_swap_pb;
 use ic_sns_wasm::pb::v1::{DeployedSns, ListDeployedSnsesRequest, ListDeployedSnsesResponse};
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
+use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
 use lazy_static::lazy_static;
-use maplit::hashmap;
+use maplit::btreemap;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
-use registry_canister::pb::v1::NodeProvidersMonthlyXdrRewards;
 use std::{
     collections::{hash_map::Entry, BTreeMap, HashMap},
     convert::{TryFrom, TryInto},
@@ -45,7 +48,9 @@ pub const NODE_PROVIDER_REWARD: u64 = 10_000;
 use ic_nns_governance::governance::tla::{
     self, account_to_tla, tla_function, Destination, ToTla, TLA_INSTRUMENTATION_STATE,
 };
+use ic_nns_governance::governance::RandomnessGenerator;
 use ic_nns_governance::{tla_log_request, tla_log_response};
+use ic_node_rewards_canister_api::monthly_rewards::GetNodeProvidersMonthlyXdrRewardsResponse;
 
 lazy_static! {
     pub(crate) static ref SNS_ROOT_CANISTER_ID: PrincipalId = PrincipalId::new_user_test_id(213599);
@@ -112,10 +117,14 @@ pub struct FakeDriver {
 /// Create a default mock driver.
 impl Default for FakeDriver {
     fn default() -> Self {
-        Self {
+        let ret = Self {
             state: Arc::new(Mutex::new(Default::default())),
             error_on_next_ledger_call: Arc::new(Mutex::new(None)),
-        }
+        };
+        set_time_for_timers(std::time::Duration::from_secs(
+            ret.state.try_lock().unwrap().now,
+        ));
+        ret
     }
 }
 
@@ -129,6 +138,7 @@ impl FakeDriver {
 
     /// Constructs a mock driver that starts at the given timestamp.
     pub fn at(self, timestamp: u64) -> FakeDriver {
+        set_time_for_timers(std::time::Duration::from_secs(timestamp));
         self.state.lock().unwrap().now = timestamp;
         self
     }
@@ -177,26 +187,34 @@ impl FakeDriver {
 
     /// Increases the time by the given amount.
     pub fn advance_time_by(&mut self, delta_seconds: u64) {
+        advance_time_for_timers(std::time::Duration::from_secs(delta_seconds));
         self.state.lock().unwrap().now += delta_seconds;
     }
 
     /// Constructs an `Environment` that interacts with this driver.
-    pub fn get_fake_env(&self) -> Box<dyn Environment> {
-        Box::new(FakeDriver {
+    pub fn get_fake_env(&self) -> Arc<dyn Environment> {
+        Arc::new(FakeDriver {
             state: Arc::clone(&self.state),
             error_on_next_ledger_call: Arc::clone(&self.error_on_next_ledger_call),
         })
     }
 
     /// Constructs a `Ledger` that interacts with this driver.
-    pub fn get_fake_ledger(&self) -> Box<dyn IcpLedger> {
-        Box::new(FakeDriver {
+    pub fn get_fake_ledger(&self) -> Arc<dyn IcpLedger> {
+        Arc::new(FakeDriver {
             state: Arc::clone(&self.state),
             error_on_next_ledger_call: Arc::clone(&self.error_on_next_ledger_call),
         })
     }
 
-    pub fn get_fake_cmc(&self) -> Box<dyn CMC> {
+    pub fn get_fake_cmc(&self) -> Arc<dyn CMC> {
+        Arc::new(FakeDriver {
+            state: Arc::clone(&self.state),
+            error_on_next_ledger_call: Arc::clone(&self.error_on_next_ledger_call),
+        })
+    }
+
+    pub fn get_fake_randomness_generator(&self) -> Box<dyn RandomnessGenerator> {
         Box::new(FakeDriver {
             state: Arc::clone(&self.state),
             error_on_next_ledger_call: Arc::clone(&self.error_on_next_ledger_call),
@@ -258,7 +276,7 @@ impl FakeDriver {
 
 #[async_trait]
 impl IcpLedger for FakeDriver {
-    #[cfg_attr(feature = "tla", tla_function(async_trait_fn = true))]
+    #[cfg_attr(feature = "tla", tla_function(force_async_fn = true))]
     async fn transfer_funds(
         &self,
         amount_e8s: u64,
@@ -388,21 +406,25 @@ impl IcpLedger for FakeDriver {
     fn canister_id(&self) -> CanisterId {
         LEDGER_CANISTER_ID
     }
+
+    async fn icrc3_get_blocks(
+        &self,
+        _args: Vec<GetBlocksRequest>,
+    ) -> Result<GetBlocksResult, NervousSystemError> {
+        Err(NervousSystemError {
+            error_message: "Not Implemented".to_string(),
+        })
+    }
 }
 
 #[async_trait]
 impl CMC for FakeDriver {
-    async fn neuron_maturity_modulation(&mut self) -> Result<i32, String> {
+    async fn neuron_maturity_modulation(&self) -> Result<i32, String> {
         Ok(100)
     }
 }
 
-#[async_trait]
-impl Environment for FakeDriver {
-    fn now(&self) -> u64 {
-        self.state.try_lock().unwrap().now
-    }
-
+impl RandomnessGenerator for FakeDriver {
     fn random_u64(&mut self) -> Result<u64, RngError> {
         Ok(self.state.try_lock().unwrap().rng.next_u64())
     }
@@ -413,12 +435,19 @@ impl Environment for FakeDriver {
         Ok(bytes)
     }
 
-    fn seed_rng(&mut self, _seed: [u8; 32]) {
-        todo!()
+    fn seed_rng(&mut self, seed: [u8; 32]) {
+        self.state.try_lock().unwrap().rng = ChaCha20Rng::from_seed(seed);
     }
 
     fn get_rng_seed(&self) -> Option<[u8; 32]> {
-        todo!()
+        Some(self.state.try_lock().unwrap().rng.get_seed())
+    }
+}
+
+#[async_trait]
+impl Environment for FakeDriver {
+    fn now(&self) -> u64 {
+        self.state.try_lock().unwrap().now
     }
 
     fn execute_nns_function(
@@ -547,16 +576,19 @@ impl Environment for FakeDriver {
         }
 
         if method_name == "get_node_providers_monthly_xdr_rewards" {
-            assert_eq!(PrincipalId::from(target), REGISTRY_CANISTER_ID.get());
+            assert_eq!(PrincipalId::from(target), NODE_REWARDS_CANISTER_ID.get());
 
-            return Ok(Encode!(&Ok::<NodeProvidersMonthlyXdrRewards, String>(
-                NodeProvidersMonthlyXdrRewards {
-                    rewards: hashmap! {
-                        PrincipalId::new_user_test_id(1).to_string() => NODE_PROVIDER_REWARD,
-                    },
-                    registry_version: Some(5)
-                }
-            ))
+            return Ok(Encode!(&GetNodeProvidersMonthlyXdrRewardsResponse {
+                rewards: Some(
+                    ic_node_rewards_canister_api::monthly_rewards::NodeProvidersMonthlyXdrRewards {
+                        rewards: btreemap! {
+                            PrincipalId::new_user_test_id(1).0 => NODE_PROVIDER_REWARD,
+                        },
+                        registry_version: Some(5)
+                    }
+                ),
+                error: None
+            })
             .unwrap());
         }
 
@@ -575,6 +607,12 @@ impl Environment for FakeDriver {
                 certificate: vec![],
             })
             .unwrap());
+        }
+
+        if method_name == "raw_rand" {
+            let mut bytes = [0u8; 32];
+            self.state.try_lock().unwrap().rng.fill_bytes(&mut bytes);
+            return Ok(Encode!(&bytes).unwrap());
         }
 
         println!(

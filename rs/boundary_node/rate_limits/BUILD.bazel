@@ -5,10 +5,10 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-http-types",
     "//rs/boundary_node/rate_limits/api:rate_limits_api",
     "//rs/nns/constants",
     "//rs/rust_canisters/canister_log",
-    "//rs/rust_canisters/http_types",
     "@crate_index//:anyhow",
     "@crate_index//:candid",
     "@crate_index//:getrandom",
@@ -28,7 +28,6 @@ DEPENDENCIES = [
 
 MACRO_DEPENDENCIES = [
     # Keep sorted.
-    "@crate_index//:ic-cdk-macros",
 ]
 
 rust_canister(

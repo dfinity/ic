@@ -1,9 +1,11 @@
+use crate::test_utils::MockRandomness;
 use crate::{
     governance::Governance,
     node_provider_rewards::DateRangeFilter,
-    pb::v1::{Governance as GovernanceProto, MonthlyNodeProviderRewards},
+    pb::v1::MonthlyNodeProviderRewards,
     test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
 };
+use std::sync::Arc;
 
 #[test]
 fn test_node_provider_rewards_read_from_correct_sources() {
@@ -26,16 +28,17 @@ fn test_node_provider_rewards_read_from_correct_sources() {
         registry_version: None,
         node_providers: vec![],
     };
-
     let mut governance = Governance::new(
-        GovernanceProto {
-            most_recent_monthly_node_provider_rewards: Some(rewards_1.clone()),
-            ..Default::default()
-        },
-        Box::new(MockEnvironment::new(vec![], 100)),
-        Box::new(StubIcpLedger {}),
-        Box::new(StubCMC {}),
+        Default::default(),
+        Arc::new(MockEnvironment::new(vec![], 100)),
+        Arc::new(StubIcpLedger {}),
+        Arc::new(StubCMC {}),
+        Box::new(MockRandomness::new()),
     );
+
+    governance
+        .heap_data
+        .most_recent_monthly_node_provider_rewards = Some(rewards_1.clone());
 
     let result_1 = governance.get_most_recent_monthly_node_provider_rewards();
 
@@ -77,12 +80,11 @@ fn test_list_node_provider_rewards_api() {
     };
 
     let mut governance = Governance::new(
-        GovernanceProto {
-            ..Default::default()
-        },
-        Box::new(MockEnvironment::new(vec![], 100)),
-        Box::new(StubIcpLedger {}),
-        Box::new(StubCMC {}),
+        Default::default(),
+        Arc::new(MockEnvironment::new(vec![], 100)),
+        Arc::new(StubIcpLedger {}),
+        Arc::new(StubCMC {}),
+        Box::new(MockRandomness::new()),
     );
 
     governance.update_most_recent_monthly_node_provider_rewards(rewards_1.clone());
@@ -97,12 +99,11 @@ fn test_list_node_provider_rewards_api() {
 #[test]
 fn test_list_node_provider_rewards_api_with_paging_and_filters() {
     let mut governance = Governance::new(
-        GovernanceProto {
-            ..Default::default()
-        },
-        Box::new(MockEnvironment::new(vec![], 100)),
-        Box::new(StubIcpLedger {}),
-        Box::new(StubCMC {}),
+        Default::default(),
+        Arc::new(MockEnvironment::new(vec![], 100)),
+        Arc::new(StubIcpLedger {}),
+        Arc::new(StubCMC {}),
+        Box::new(MockRandomness::new()),
     );
 
     let mut rewards_minted = vec![];

@@ -109,7 +109,7 @@ rpcauth=ic-btc-integration:cdf2741387f3a12438f69092f0fdad8e$62081498c98bee09a0dc
             18444,
         ))
         .build();
-    pic.set_time(SystemTime::now());
+    pic.set_time(SystemTime::now().into());
 
     deploy_btc_canister(&pic);
 

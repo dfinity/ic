@@ -7,16 +7,23 @@ module(
 )
 
 # General Bazel helpers
-
 bazel_dep(name = "bazel_skylib", version = "1.7.1")
 bazel_dep(name = "aspect_bazel_lib", version = "2.9.0")
 
 # CC dependencies (for C libs like miracl-core, etc)
 bazel_dep(name = "rules_cc", version = "0.0.13")
-bazel_dep(name = "platforms", version = "0.0.10")
+bazel_dep(name = "platforms", version = "0.0.11")
+bazel_dep(name = "hermetic_cc_toolchain", version = "3.1.1")
+archive_override(
+    module_name = "hermetic_cc_toolchain",
+    integrity = "sha256-kHdFv5FVX3foI0wLlTNx5srFunFdHPEv9kFJbdG86dE=",
+    patch_strip = 1,
+    patches = ["//bazel:hermetic_cc_toolchain.patch"],
+    urls = ["https://github.com/uber/hermetic_cc_toolchain/releases/download/v3.1.1/hermetic_cc_toolchain-v3.1.1.tar.gz"],
+)
 
 # configure/make dependencies
-bazel_dep(name = "rules_foreign_cc", version = "0.12.0")
+bazel_dep(name = "rules_foreign_cc", version = "0.14.0")
 
 register_toolchains(
     "@rules_foreign_cc//toolchains:preinstalled_pkgconfig_toolchain",
@@ -86,62 +93,17 @@ go_deps.module(
     version = "v1.13.0",
 )
 go_deps.module(
-    path = "github.com/golang/protobuf",
-    sum = "h1:ROPKBNFfQgOUMifHyP+KYbvpjbdoFNs+aK7DXlji0Tw=",
-    version = "v1.5.2",
-)
-go_deps.module(
-    path = "github.com/google/go-cmp",
-    sum = "h1:O2Tfq5qg4qc4AmwVlvv0oLiVAGB7enBSJ2x2DqQFi38=",
-    version = "v0.5.9",
-)
-go_deps.module(
-    path = "github.com/honeycombio/beeline-go",
-    sum = "h1:cyrfwgxM32DKzUhZFJ0KLbPkoyf5lHOyn+7GISwEVZQ=",
-    version = "v1.11.1",
-)
-go_deps.module(
-    path = "github.com/schollz/closestmatch",
-    sum = "h1:Uel2GXEpJqOWBrlyI+oY9LTiyyjYS17cCYRqP13/SHk=",
-    version = "v2.1.0+incompatible",
-)
-go_deps.module(
     path = "github.com/spf13/cobra",
     sum = "h1:o94oiPyS4KD1mPy2fmcYYHHfCxLqYjJOhGsCHFZtEzA=",
     version = "v1.6.1",
 )
-go_deps.module(
-    path = "github.com/stretchr/testify",
-    sum = "h1:w7B6lhMri9wdJUVmEZPGGhZzrYTPvgJArz7wNPgYKsk=",
-    version = "v1.8.1",
-)
-go_deps.module(
-    path = "google.golang.org/genproto",
-    sum = "h1:wtujag7C+4D6KMoulW9YauvK2lgdvCMS260jsqqBXr0=",
-    version = "v0.0.0-20210602131652-f16073e35f0c",
-)
-go_deps.module(
-    path = "google.golang.org/grpc",
-    sum = "h1:WTLtQzmQori5FUH25Pq4WT22oCsv8USpQ+F6rqtsmxw=",
-    version = "v1.49.0",
-)
-go_deps.module(
-    path = "google.golang.org/protobuf",
-    sum = "h1:d0NfwRgPtno5B1Wa6L2DAG+KivqkdutMf1UhdNx175w=",
-    version = "v1.28.1",
-)
 use_repo(
     go_deps,
     "com_github_fatih_color",
-    "com_github_golang_protobuf",
     "com_github_google_go_cmp",
-    "com_github_honeycombio_beeline_go",
     "com_github_schollz_closestmatch",
     "com_github_spf13_cobra",
     "com_github_stretchr_testify",
-    "org_golang_google_genproto",
-    "org_golang_google_grpc",
-    "org_golang_google_protobuf",
 )
 
 # Docker/OCI & archive rules with image definitions
@@ -174,10 +136,20 @@ oci.pull(
 )
 use_repo(oci, "bitcoind", "bitcoind_linux_amd64")
 
+# IC HTTP Gateway container used in tests
+oci.pull(
+    name = "ic_gatewayd",
+    image = "ghcr.io/dfinity/ic-gateway@sha256:0a25e9da712202966447919dfce145f9af5df62e282f2dfe8a7ea226a44b077a",
+    platforms = [
+        "linux/amd64",
+    ],
+)
+use_repo(oci, "ic_gatewayd", "ic_gatewayd_linux_amd64")
+
 # foundry container used in test
 oci.pull(
     name = "foundry",
-    image = "ghcr.io/foundry-rs/foundry@sha256:d2d6a8064db8659ab4d835bd36ee4ba19a781cbe62a9729a261d7cedf3774cdd",
+    image = "ghcr.io/foundry-rs/foundry@sha256:8f9dd6d4c498538b3aa3999758520bca24a41273163b0c7295ed53b1a6062f30",  # v0.3.0 https://github.com/foundry-rs/foundry/pkgs/container/foundry/391862899?tag=v0.3.0
     platforms = [
         "linux/amd64",
     ],
@@ -215,7 +187,7 @@ use_repo(oci, "minica", "minica_linux_amd64")
 # used by rosetta image
 oci.pull(
     name = "rust_base",
-    image = "gcr.io/distroless/cc-debian11@sha256:8e94f031353596c3fc9db6a2499bcc82dacc40cb71e0703476f9fad41677efdf",
+    image = "gcr.io/distroless/cc-debian12@sha256:3310655aac0d85eb9d579792387af1ff3eb7a1667823478be58020ab0e0d97a8",
     platforms = ["linux/amd64"],
 )
 use_repo(oci, "rust_base", "rust_base_linux_amd64")
@@ -223,7 +195,7 @@ use_repo(oci, "rust_base", "rust_base_linux_amd64")
 # used in various places as base
 oci.pull(
     name = "ubuntu_base",
-    image = "ghcr.io/dfinity/ubuntu@sha256:965fbcae990b0467ed5657caceaec165018ef44a4d2d46c7cdea80a9dff0d1ea",
+    image = "ghcr.io/dfinity/ubuntu@sha256:6015f66923d7afbc53558d7ccffd325d43b4e249f41a6e93eef074c9505d2233",
     platforms = ["linux/amd64"],
 )
 use_repo(oci, "ubuntu_base", "ubuntu_base_linux_amd64")
@@ -261,17 +233,6 @@ use_repo(oci, "alpine_openssl", "alpine_openssl_linux_amd64")
 bazel_dep(name = "rules_distroless", version = "0.3.8")
 
 apt = use_extension("@rules_distroless//apt:extensions.bzl", "apt")
-
-## Packageset based on an Ubuntu focal snapshot, see manifest file
-## for details
-## To update, comment out the `lock` field below and run:
-##   bazel run @focal//:lock
-apt.install(
-    name = "focal",
-    lock = "//bazel:focal.lock.json",
-    manifest = "//bazel:focal.yaml",
-)
-use_repo(apt, "focal")
 
 # Packageset based on an Ubuntu noble snapshot, see manifest file
 # for details
@@ -622,8 +583,9 @@ http_file(
 
 http_file(
     name = "cycles-ledger.wasm.gz",
-    sha256 = "4f26aae9edef5b4e2c785c1dc6f312163af055f22954dd99d515d8a862bd59bd",
-    url = "https://github.com/dfinity/cycles-ledger/releases/download/cycles-ledger-v0.2.3/cycles-ledger.wasm.gz",
+    downloaded_file_path = "cycles-ledger.wasm.gz",
+    sha256 = "d2aacbd214f20d752fd1696c2e36d7eceaafe07b932b3ae9e7e5564d1bda0178",
+    url = "https://github.com/dfinity/cycles-ledger/releases/download/cycles-ledger-v1.0.3/cycles-ledger.wasm.gz",
 )
 
 # Subnet Rental Canister
@@ -656,8 +618,8 @@ http_file(
 
 http_file(
     name = "evm_rpc.wasm.gz",
-    sha256 = "636442e4349a007316dcc1452d9a256d22203186181d2534f33bd264162305b3",
-    url = "https://github.com/internet-computer-protocol/evm-rpc-canister/releases/download/v2.2.0/evm_rpc.wasm.gz",
+    sha256 = "53ff4625ad3990f22ab8ee1cee85b6ab43cb623e0ca28d3162c41cfac55bd1a6",
+    url = "https://github.com/internet-computer-protocol/evm-rpc-canister/releases/download/v2.4.0/evm_rpc.wasm.gz",
 )
 
 http_archive(
@@ -851,16 +813,8 @@ http_file(
     # ci/container/container-run.sh
     # bazel build //publish/binaries:pocket-ic.gz
     # sha256sum bazel-bin/publish/binaries/pocket-ic.gz
-    sha256 = "0935ee6ece312719aae4eabddec2dfc6af34d5edbddf4d3af53bccd1b3636044",
-    url = "https://download.dfinity.systems/ic/172f8c78653c93ad101af75b94251439b4ccf098/binaries/x86_64-linux/pocket-ic.gz",
-)
-
-# Patches
-
-http_file(
-    name = "rustix-patch",
-    sha256 = "ffe807170f06b579098f948eca42ba1ea1fd2cb7b8290c9d41101efe976337f7",
-    url = "https://github.com/nmattia/rustix/commit/330bcc07796f4b8e6443987fbb1b9be79c446bd2.diff",
+    sha256 = "399596330c40a76effbbd20660ce8e892d5d74f3de6380cad4aac1598b9d6394",
+    url = "https://download.dfinity.systems/ic/c36a05a9d367bb6ba9068444e6d6f53e7911f1b0/binaries/x86_64-linux/pocket-ic.gz",
 )
 
 # Management canister candid interface
@@ -878,4 +832,40 @@ http_file(
     downloaded_file_path = "cacert.pem",
     sha256 = "bb1782d281fe60d4a2dcf41bc229abe3e46c280212597d4abcc25bddf667739b",
     url = "https://curl.se/ca/cacert-2024-11-26.pem",
+)
+
+mainnet_icos_versions = use_repo_rule("//bazel:mainnet-icos-versions.bzl", "mainnet_icos_versions")
+
+mainnet_icos_versions(
+    name = "mainnet_icos_versions",
+    path = "//:mainnet-icos-revisions.json",
+)
+
+os_info = use_repo_rule("//bazel:os_info.bzl", "os_info")
+
+os_info(name = "os_info")
+
+# Set up hermetic cc toolchains for binaries and canisters
+toolchains = use_extension("@hermetic_cc_toolchain//toolchain:ext.bzl", "toolchains")
+
+# The use_hermetic_cc setting is added to each toolchain to allow us to opt out
+# in favor of system toolchains, when needed.
+toolchains.extra_settings(settings = ["//bazel:use_hermetic_cc"])
+use_repo(toolchains, "zig_sdk")
+
+register_toolchains(
+    # Linux toolchains
+    "@zig_sdk//toolchain:linux_amd64_gnu.2.28",
+
+    # macOS toolchains
+    # Do not use hermetic toolchains for macOS until we have had a chance to
+    # wrap the various system libraries.
+    # "@zig_sdk//toolchain:darwin_amd64",
+    # "@zig_sdk//toolchain:darwin_arm64",
+
+    # wasm toolchains
+    "@zig_sdk//toolchain:none_wasm",
+
+    # These toolchains are only registered locally.
+    dev_dependency = True,
 )

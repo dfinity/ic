@@ -15,7 +15,6 @@ ic-adapter-metrics-server = { path = "../monitoring/adapter_metrics/server" }
 ic-http-endpoints-async-utils = { path = "../http_endpoints/async_utils" }
 ic-base-types = { path = "../types/base_types" }
 ic-config = { path = "../config" }
-ic-crypto-ecdsa-secp256r1 = { path = "ecdsa_secp256r1" }
 ic-crypto-interfaces-sig-verification = { path = "interfaces/sig_verification" }
 ic-crypto-internal-basic-sig-ed25519 = { path = "internal/crypto_lib/basic_sig/ed25519" }
 ic-crypto-internal-csp = { path = "internal/crypto_service_provider" }
@@ -38,10 +37,11 @@ ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-protobuf = { path = "../protobuf" }
 ic-secp256k1 = { path = "../../packages/ic-secp256k1" }
+ic-secp256r1 = { path = "../../packages/ic-secp256r1" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-keys = { path = "../registry/keys" }
 ic-types = { path = "../types/types" }
-ic-vetkd-utils = { path = "../../packages/ic-vetkd-utils" }
+ic-vetkeys = { workspace = true }
 parking_lot = { workspace = true }
 rustls = { workspace = true }
 serde = { workspace = true }
@@ -137,4 +137,8 @@ harness = false
 
 [[bench]]
 name = "tschnorr"
+harness = false
+
+[[bench]]
+name = "vetkd"
 harness = false

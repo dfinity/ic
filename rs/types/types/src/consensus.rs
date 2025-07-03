@@ -1,7 +1,9 @@
 //! Defines types used internally by consensus components.
+
 use crate::{
     artifact::ConsensusMessageId,
     batch::{BatchPayload, ValidationContext},
+    consensus::dkg::DkgPayload,
     crypto::threshold_sig::ni_dkg::NiDkgId,
     crypto::*,
     replica_version::ReplicaVersion,
@@ -1295,6 +1297,7 @@ impl From<&Block> for pb::Block {
             self_validating_payload,
             canister_http_payload_bytes,
             query_stats_payload_bytes,
+            vetkd_payload_bytes,
             idkg_payload,
         ) = if payload.is_summary() {
             (
@@ -1302,6 +1305,7 @@ impl From<&Block> for pb::Block {
                 None,
                 None,
                 None,
+                vec![],
                 vec![],
                 vec![],
                 payload.as_summary().idkg.as_ref().map(|idkg| idkg.into()),
@@ -1315,6 +1319,7 @@ impl From<&Block> for pb::Block {
                 Some(pb::SelfValidatingPayload::from(&batch.self_validating)),
                 batch.canister_http.clone(),
                 batch.query_stats.clone(),
+                batch.vetkd.clone(),
                 payload.as_data().idkg.as_ref().map(|idkg| idkg.into()),
             )
         };
@@ -1332,6 +1337,7 @@ impl From<&Block> for pb::Block {
             self_validating_payload,
             canister_http_payload_bytes,
             query_stats_payload_bytes,
+            vetkd_payload_bytes,
             idkg_payload,
             payload_hash: block.payload.get_hash().clone().get().0,
         }
@@ -1362,10 +1368,11 @@ impl TryFrom<pb::Block> for Block {
                 .unwrap_or_default(),
             canister_http: block.canister_http_payload_bytes,
             query_stats: block.query_stats_payload_bytes,
+            vetkd: block.vetkd_payload_bytes,
         };
 
         let payload = match dkg_payload {
-            dkg::Payload::Summary(summary) => {
+            DkgPayload::Summary(summary) => {
                 if !batch.is_empty() {
                     return Err(ProxyDecodeError::Other(String::from(
                         "Summary block has non-empty batch payload.",
@@ -1388,7 +1395,7 @@ impl TryFrom<pb::Block> for Block {
 
                 BlockPayload::Summary(SummaryPayload { dkg: summary, idkg })
             }
-            dkg::Payload::Data(dkg) => {
+            DkgPayload::Data(dkg) => {
                 let idkg = block
                     .idkg_payload
                     .as_ref()

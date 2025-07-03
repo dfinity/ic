@@ -2,7 +2,7 @@ use ic_base_types::NumSeconds;
 use ic_btc_replica_types::BitcoinAdapterRequestWrapper;
 use ic_management_canister_types_private::{
     CanisterStatusType, EcdsaCurve, EcdsaKeyId, LogVisibilityV2, MasterPublicKeyId,
-    SchnorrAlgorithm, SchnorrKeyId,
+    OnLowWasmMemoryHookStatus, SchnorrAlgorithm, SchnorrKeyId,
 };
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_features::SubnetFeatures;
@@ -10,7 +10,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::{
         execution_state::{CustomSection, CustomSectionType, WasmBinary, WasmMetadata},
-        system_state::{CyclesUseCase, OnLowWasmMemoryHookStatus, TaskQueue},
+        system_state::{CyclesUseCase, TaskQueue},
         testing::new_canister_output_queues_for_test,
     },
     metadata_state::{
@@ -46,6 +46,7 @@ use proptest::prelude::*;
 use std::convert::TryFrom;
 use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
+    ops::RangeInclusive,
     sync::Arc,
 };
 use strum::IntoEnumIterator;
@@ -466,15 +467,38 @@ impl SystemStateBuilder {
         self
     }
 
-    pub fn on_low_wasm_memory_hook_status(
+    pub fn environment_variables(
+        mut self,
+        environment_variables: BTreeMap<String, String>,
+    ) -> Self {
+        self.system_state.environment_variables = environment_variables;
+        self
+    }
+
+    pub fn empty_task_queue_with_on_low_wasm_memory_hook_status(
         mut self,
         on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
     ) -> Self {
-        self.system_state.task_queue = TaskQueue::from_checkpoint(
-            VecDeque::new(),
-            on_low_wasm_memory_hook_status,
-            &self.system_state.canister_id,
-        );
+        self.system_state.task_queue = TaskQueue::default();
+        match on_low_wasm_memory_hook_status {
+            // Default hook status is `ConditionNotSatisfied`.
+            OnLowWasmMemoryHookStatus::ConditionNotSatisfied => (),
+            // To make hook status `Ready`, we should enqueue `ExecutionTask::OnLowWasmMemory`.
+            OnLowWasmMemoryHookStatus::Ready => self
+                .system_state
+                .task_queue
+                .enqueue(ic_replicated_state::ExecutionTask::OnLowWasmMemory),
+            // To make hook status `Executed`, we should enqueue `ExecutionTask::OnLowWasmMemory`,
+            // followed by `pop_front()`, which from the standpoint of `TaskQueue` is equivalent to
+            // executing task.
+            OnLowWasmMemoryHookStatus::Executed => {
+                self.system_state
+                    .task_queue
+                    .enqueue(ic_replicated_state::ExecutionTask::OnLowWasmMemory);
+                self.system_state.task_queue.pop_front();
+            }
+        };
+
         self
     }
 
@@ -848,26 +872,36 @@ pub fn insert_dummy_canister(
 }
 
 prop_compose! {
-    /// Produces a strategy that generates an arbitrary `signals_end` and between
-    /// `[min_signal_count, max_signal_count]` reject signals.
-    pub fn arb_reject_signals(min_signal_count: usize, max_signal_count: usize, reject_reasons: Vec<RejectReason>)(
-        sig_start in 0..10000_u64,
-        reject_signals_map in prop::collection::btree_map(
-            0..(100 + max_signal_count),
-            proptest::sample::select(reject_reasons),
-            min_signal_count..=max_signal_count,
-        ),
-        signals_end_delta in 0..10u64,
+    /// Produces a strategy that generates arbitrary stream signals.
+    ///
+    /// Signals start at `signal_start` from which there are `signal_count` signals.
+    /// Of these signals, `ceil(sqrt(signal_count))` are randomly distributed reject signals.
+    ///
+    /// `signals_end` comes after the signal range, i.e. `signal_start + signal_count + 1`.
+    pub fn arb_stream_signals(
+        signal_start_range: RangeInclusive<u64>,
+        signal_count_range: RangeInclusive<usize>,
+        with_reject_reasons: Vec<RejectReason>
+    )(
+        signal_start in signal_start_range,
+        (signal_count, reject_signals_map) in signal_count_range
+            .prop_flat_map(move |signal_count| {
+                let reject_signals_count = (signal_count as f64).sqrt().ceil() as usize;
+                (
+                    Just(signal_count),
+                    prop::collection::btree_map(
+                        0..=signal_count,
+                        proptest::sample::select(with_reject_reasons.clone()),
+                        reject_signals_count,
+                    ),
+                )
+            })
     ) -> (StreamIndex, VecDeque<RejectSignal>) {
         let reject_signals = reject_signals_map
-            .iter()
-            .map(|(index, reason)| RejectSignal::new(*reason, (*index as u64 + sig_start).into()))
+            .into_iter()
+            .map(|(index, reason)| RejectSignal::new(reason, (index as u64 + signal_start).into()))
             .collect::<VecDeque<RejectSignal>>();
-        let signals_end = reject_signals
-            .back()
-            .map(|signal| signal.index)
-            .unwrap_or(0.into())
-            .increment() + signals_end_delta.into();
+        let signals_end = (signal_start + signal_count as u64 + 1).into();
         (signals_end, reject_signals)
     }
 }
@@ -878,20 +912,20 @@ prop_compose! {
     /// `[min_signal_count, max_signal_count]` reject signals using `with_reject_reasons` to
     /// determine the type of reject signal.
     pub fn arb_stream_with_config(
-        min_size: usize,
-        max_size: usize,
-        min_signal_count: usize,
-        max_signal_count: usize,
+        msg_start_range: RangeInclusive<u64>,
+        size_range: RangeInclusive<usize>,
+        signal_start_range: RangeInclusive<u64>,
+        signal_count_range: RangeInclusive<usize>,
         with_reject_reasons: Vec<RejectReason>,
     )(
-        msg_start in 0..10000u64,
+        msg_start in msg_start_range,
         msgs in prop::collection::vec(
             arbitrary::request_or_response_with_config(true),
-            min_size..=max_size
+            size_range,
         ),
-        (signals_end, reject_signals) in arb_reject_signals(
-            min_signal_count,
-            max_signal_count,
+        (signals_end, reject_signals) in arb_stream_signals(
+            signal_start_range,
+            signal_count_range,
             with_reject_reasons,
         ),
         responses_only_flag in any::<bool>(),
@@ -915,11 +949,11 @@ prop_compose! {
     /// `[min_signal_count, max_signal_count]` reject signals.
     pub fn arb_stream(min_size: usize, max_size: usize, min_signal_count: usize, max_signal_count: usize)(
         stream in arb_stream_with_config(
-            min_size,
-            max_size,
-            min_signal_count,
-            max_signal_count,
-            RejectReason::iter().collect(),
+            0..=10000,
+            min_size..=max_size,
+            0..=10000,
+            min_signal_count..=max_signal_count,
+            RejectReason::all(),
         )
     ) -> Stream {
         stream
@@ -953,7 +987,11 @@ prop_compose! {
     )(
         msg_start in 0..10000u64,
         msg_len in 0..10000u64,
-        (signals_end, reject_signals) in arb_reject_signals(min_signal_count, max_signal_count, with_reject_reasons),
+        (signals_end, reject_signals) in arb_stream_signals(
+            0..=10000,
+            min_signal_count..=max_signal_count,
+            with_reject_reasons
+        ),
         responses_only in any::<bool>(),
     ) -> StreamHeader {
         let begin = StreamIndex::from(msg_start);

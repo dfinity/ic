@@ -19,15 +19,16 @@ http-body-util = { workspace = true }
 hyper = { workspace = true }
 hyper-util = { workspace = true }
 hyper-rustls = { workspace = true }
-ic-http-endpoints-async-utils = { path = "../http_endpoints/async_utils" }
-ic-canister-client = { path = "../canister_client" }
-ic-canister-client-sender = { path = "../canister_client/sender" }
+ic-agent = { workspace = true }
 ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
+ic-consensus-dkg = { path = "../consensus/dkg" }
 ic-crypto = { path = "../crypto" }
 ic-crypto-node-key-generation = { path = "../crypto/node_key_generation" }
 ic-crypto-tls-interfaces = { path = "../crypto/tls_interfaces" }
 ic-dashboard = { path = "./dashboard" }
+ic-ed25519 = { path = "../../packages/ic-ed25519" }
+ic-http-endpoints-async-utils = { path = "../http_endpoints/async_utils" }
 ic-http-endpoints-metrics = { path = "../http_endpoints/metrics" }
 ic-http-utils = { path = "../http_utils" }
 ic-image-upgrader = { path = "./image_upgrader" }
@@ -65,6 +66,7 @@ url = { workspace = true }
 [dev-dependencies]
 ic-crypto-temp-crypto = { path = "../crypto/temp_crypto" }
 ic-crypto-test-utils-canister-threshold-sigs = { path = "../crypto/test_utils/canister_threshold_sigs" }
+ic-crypto-test-utils-ni-dkg = { path = "../crypto/test_utils/ni-dkg" }
 ic-crypto-test-utils-reproducible-rng = { path = "../crypto/test_utils/reproducible_rng" }
 ic-crypto-test-utils-tls = { path = "../crypto/test_utils/tls" }
 ic-registry-client-fake = { path = "../registry/fake" }

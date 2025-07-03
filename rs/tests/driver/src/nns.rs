@@ -23,7 +23,7 @@ use ic_canister_client::Sender;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID, SNS_WASM_CANISTER_ID};
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     manage_neuron::{Command, NeuronIdOrSubaccount, RegisterVote},
     ManageNeuron, ManageNeuronResponse, NnsFunction, ProposalInfo, ProposalStatus, Vote,
 };
@@ -41,11 +41,12 @@ use ic_types::{CanisterId, PrincipalId, ReplicaVersion, SubnetId};
 use registry_canister::mutations::{
     do_add_nodes_to_subnet::AddNodesToSubnetPayload,
     do_change_subnet_membership::ChangeSubnetMembershipPayload,
-    do_create_subnet::CreateSubnetPayload,
+    do_create_subnet::{CanisterCyclesCostSchedule, CreateSubnetPayload},
     do_deploy_guestos_to_all_subnet_nodes::DeployGuestosToAllSubnetNodesPayload,
     do_deploy_guestos_to_all_unassigned_nodes::DeployGuestosToAllUnassignedNodesPayload,
     do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
     do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload,
+    do_update_api_boundary_nodes_version::UpdateApiBoundaryNodesVersionPayload,
 };
 use slog::{info, Logger};
 use std::{convert::TryFrom, time::Duration};
@@ -89,7 +90,7 @@ pub async fn await_proposal_execution(
             .await
             .unwrap_or_else(|| panic!("could not obtain proposal status"));
 
-        match ProposalStatus::try_from(proposal_info.status).unwrap() {
+        match ProposalStatus::from_repr(proposal_info.status).unwrap() {
             ProposalStatus::Open => {
                 // This proposal is still open
                 info!(log, "{:?} is open...", proposal_id,)
@@ -595,6 +596,8 @@ pub async fn submit_create_application_subnet_proposal(
         ssh_readonly_access: vec![],
         ssh_backup_access: vec![],
         chain_key_config: None,
+        canister_cycles_cost_schedule: Some(CanisterCyclesCostSchedule::Normal),
+
         // Unused section follows
         ingress_bytes_per_block_soft_cap: Default::default(),
         gossip_max_artifact_streams_per_peer: Default::default(),
@@ -744,4 +747,44 @@ pub async fn submit_update_nodes_hostos_version_proposal(
     )
     .await
     .expect("submit_update_nodes_hostos_version_proposal failed")
+}
+
+/// Submits a proposal for updating replica software version of the specified
+/// API boundary nodes.
+///
+/// # Arguments
+///
+/// * `governance`          - Governance canister
+/// * `sender`              - Sender of the proposal
+/// * `neuron_id`           - ID of the proposing neuron. This neuron will
+///   automatically vote in favor of the proposal.
+/// * `node_ids`            - Node IDs of the API BNs that should be upgraded.
+/// * `version`             - Replica software version
+///
+/// Eventually returns the identifier of the newly submitted proposal.
+pub async fn submit_update_api_boundary_node_version_proposal(
+    governance: &Canister<'_>,
+    sender: Sender,
+    neuron_id: NeuronId,
+    node_ids: Vec<NodeId>,
+    version: String,
+) -> ProposalId {
+    submit_external_update_proposal_allowing_error(
+        governance,
+        sender,
+        neuron_id,
+        NnsFunction::DeployGuestosToSomeApiBoundaryNodes,
+        UpdateApiBoundaryNodesVersionPayload {
+            node_ids: node_ids.clone(),
+            version: version.clone(),
+        },
+        format!(
+            "Update API boundary nodes ({}) to version {}",
+            node_ids.into_iter().join(", "),
+            version.clone()
+        ),
+        "".to_string(),
+    )
+    .await
+    .expect("submit_update_api_boundary_node_version_proposal failed")
 }

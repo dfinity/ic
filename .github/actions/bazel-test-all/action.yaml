@@ -1,74 +1,97 @@
 name: 'Bazel-Test-All'
-description: 'Run Bazel Test'
+description: 'Run Bazel Test with some optional speed optimizations'
 inputs:
-  BAZEL_COMMAND:
-    required: true
-    default: 'test'
-  BAZEL_TARGETS:
-    required: true
-  BUILDEVENT_APIKEY:
+  diff-only:
     required: false
-  SSH_PRIVATE_KEY_BACKUP_POD:
+    default: false
+  stamp-build:
+    required: false
+    default: true
+  upload-artifacts:
+    required: false
+    default: false
+  execlogs-artifact-name:
+    required: false
+    description: "When provided, the execlogs will be uploaded as an artifact with the specified name."
+  extra-bazel-args:
+    required: true
+    description: "Extra arguments to pass to 'bazel test'"
+  CLOUD_CREDENTIALS_CONTENT:
     required: false
   GPG_PASSPHRASE:
-    required: false
+    required: true
+    description: "GPG key to encrypt build events. Upload can be disabled by explicitly setting the input to an empty string."
 
 runs:
   using: "composite"
   steps:
-      - name: Run Bazel Test All
-        id: bazel-test-all
-        shell: bash
-        run: |
-          set +e # manual error handling to ensure we can run some post-build commands
-
-          # freshly deployed k8s machines require ownership correctly set
-          if [ -e /cache ]; then
-            sudo chown -RL 1001:1001 /cache
-          fi
-
-          if [ -n "$SSH_PRIVATE_KEY_BACKUP_POD" ]; then
-            # The following adds the SSH private key to the ssh-agent such that CI can SSH into the backup pod.
-            test -z "${SSH_AUTH_SOCK:-}" && { eval "$(ssh-agent -s)"; ssh-add - <<< "${SSH_PRIVATE_KEY_BACKUP_POD}"; }
-            rm -rf ~/.ssh
-            mkdir -p ~/.ssh
-            chmod 0700 ~/.ssh
-            echo -e "Host *\nUser github-runner\n" > ~/.ssh/config
-          fi
-
-          # unset honeycomb api key but use it later for exporter
-          # TODO: remove exporter when users can use superset
-          env -u BUILDEVENT_APIKEY ${GITHUB_WORKSPACE}/ci/bazel-scripts/main.sh
-          BAZEL_EXIT_CODE="$?"
-
-          if [ -n "$BUILDEVENT_APIKEY" ] && [ -f ./bazel-bep.pb ]; then
-              # avoid output unless an error occurs during bes export. This ensures
-              # only the (more relevant) output from the main bazel command is shown.
-              exportout=$(mktemp)
-              if ! bazel run //bazel/exporter:exporter --build_event_binary_file= -- -f "$(pwd)/bazel-bep.pb" 2> "$exportout" >&2; then
-                echo "bes export failed:"
-                cat "$exportout"
-              fi
-              rm "$exportout"
-              echo "BEP events exported to honeycomb!"
-          fi
-          if [ -n "$GPG_PASSPHRASE" ] && [ -f ./bazel-bep.pb ]; then
-              gpg --symmetric --cipher-algo AES256 -o bazel-bep.pb.gpg \
-                  --passphrase "$GPG_PASSPHRASE" --batch --yes bazel-bep.pb
-          fi
-          rm -f bazel-bep.pb
-
-          # output node name to gihub step summary
-          [ -n "${NODE_NAME:-}" ] && echo "Run on node: $NODE_NAME" >>$GITHUB_STEP_SUMMARY
-
-          exit "$BAZEL_EXIT_CODE"
+      - name: Run Bazel Commands
+        uses: ./.github/actions/bazel
         env:
-          BAZEL_COMMAND: ${{ inputs.BAZEL_COMMAND }}
-          BAZEL_TARGETS: ${{ inputs.BAZEL_TARGETS }}
-          BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          BUILDEVENT_APIKEY: ${{ inputs.BUILDEVENT_APIKEY }}
-          CI_EVENT_NAME: ${{ github.event_name }}
-          CI_JOB_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          SSH_PRIVATE_KEY_BACKUP_POD: ${{ inputs.SSH_PRIVATE_KEY_BACKUP_POD }}
+          BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        with:
           GPG_PASSPHRASE: ${{ inputs.GPG_PASSPHRASE }}
+          execlogs-artifact-name: ${{ inputs.execlogs-artifact-name }}
+          run: |
+            set -euo pipefail
+            echo "::notice::Node Name: ${NODE_NAME}"
+
+            diff_only='${{ inputs.diff-only }}'
+            stamp_build='${{ inputs.stamp-build }}'
+
+            bazel_args=(
+                --config=flaky_retry # auto retry eg systests
+            )
+
+            if [[ $stamp_build == "true" ]]; then
+              # make sure the version is stamped in
+              bazel_args+=( --config=stamped )
+            fi
+
+            if [[ $diff_only == "true" ]]; then
+                target_pattern_file=$(mktemp)
+                trap "rm $target_pattern_file" INT TERM EXIT
+
+                merge_base_sha='${{ github.event.pull_request.base.sha }}'
+                branch_head_sha='${{ github.event.pull_request.head.sha }}'
+
+                # we can't use HEAD as a fallback for branch_head_sha because that is
+                # the merge commit which contains the changes of the current HEAD of master
+                # XXX: the logic was ported from a legacy script though ranges like `HEAD..`
+                # may not make much sense
+                commit_range="${merge_base_sha:-HEAD}..${branch_head_sha:-}"
+                # get bazel targets that changed in the commit range and take the union with
+                # the targets that are expected to be built.
+                comm -12 \
+                  <("${CI_PROJECT_DIR:-}"/ci/bazel-scripts/diff.sh "$commit_range" | sort) \
+                  <(IFS='+'; bazel query "//... except attr(tags, \"manual\", //...)" | sort; ) > "$target_pattern_file"
+
+                # if bazel targets is empty we don't need to run any tests
+                if [ $(wc <"$target_pattern_file" -l) -eq 0 ]; then
+                  echo "No bazel targets to build"
+                  exit 0
+                fi
+
+                # If there are targets to build, pass them as a file to avoid bash & the OS
+                # complaining about the argument list being too long.
+                bazel_args+=( --target_pattern_file="$target_pattern_file" )
+            else
+                bazel_args+=( //... )
+            fi
+
+            echo "Building as user: $(whoami)"
+            echo "Bazel version: $(bazel version)"
+
+            bazel test ${{ inputs.extra-bazel-args }} "${bazel_args[@]}"
+
+      - name: Upload to S3
+        uses: ./.github/actions/upload-artifacts
+        if: inputs.upload-artifacts == 'true' && inputs.CLOUD_CREDENTIALS_CONTENT != ''
+        with:
+          name: Bazel Test All
+          # with --check_up_to_date Bazel will error out if the artifacts
+          # to be uploaded were not built in the build step above
+          # (this ensures that the exact artifacts built above are uploaded)
+          upload-command: bazel run --check_up_to_date //:upload-artifacts
+          credentials-content: ${{ inputs.CLOUD_CREDENTIALS_CONTENT }}

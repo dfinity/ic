@@ -67,21 +67,22 @@ fn test(env: TestEnv) {
             let method_name = match key_id {
                 MasterPublicKeyId::Ecdsa(_) => "sign_with_ecdsa",
                 MasterPublicKeyId::Schnorr(_) => "sign_with_schnorr",
-                MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
+                MasterPublicKeyId::VetKd(_) => "vetkd_derive_key",
             };
-            assert_eq!(
-                error,
-                AgentError::CertifiedReject(RejectResponse {
-                    reject_code: RejectCode::CanisterReject,
-                    reject_message: format!(
-                        "{} request sent with {} cycles, but {} cycles are required.",
-                        method_name,
-                        scale_cycles(ECDSA_SIGNATURE_FEE) - Cycles::from(1u64),
-                        scale_cycles(ECDSA_SIGNATURE_FEE),
-                    ),
-                    error_code: Some("IC0406".to_string())
-                })
-            )
+            let expected_reject = RejectResponse {
+                reject_code: RejectCode::CanisterReject,
+                reject_message: format!(
+                    "{} request sent with {} cycles, but {} cycles are required.",
+                    method_name,
+                    scale_cycles(ECDSA_SIGNATURE_FEE) - Cycles::from(1u64),
+                    scale_cycles(ECDSA_SIGNATURE_FEE),
+                ),
+                error_code: Some("IC0406".to_string()),
+            };
+            match error {
+                AgentError::CertifiedReject { reject, .. } => assert_eq!(reject, expected_reject),
+                _ => panic!("Unexpected error: {:?}", error),
+            };
         }
     });
 }

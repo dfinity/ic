@@ -107,8 +107,10 @@ pub(crate) trait ValidSetRule: Send {
     fn induct_messages(&self, state: &mut ReplicatedState, msgs: Vec<SignedIngressContent>);
 }
 
-pub(crate) struct ValidSetRuleImpl {
-    ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
+pub(crate) struct ValidSetRuleImpl<
+    IngressHistoryWriter_: IngressHistoryWriter<State = ReplicatedState>,
+> {
+    ingress_history_writer: Arc<IngressHistoryWriter_>,
     ingress_history_max_messages: usize,
     cycles_account_manager: Arc<CyclesAccountManager>,
     own_subnet_id: SubnetId,
@@ -116,9 +118,11 @@ pub(crate) struct ValidSetRuleImpl {
     log: ReplicaLogger,
 }
 
-impl ValidSetRuleImpl {
+impl<IngressHistoryWriter_: IngressHistoryWriter<State = ReplicatedState>>
+    ValidSetRuleImpl<IngressHistoryWriter_>
+{
     pub(crate) fn new(
-        ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
+        ingress_history_writer: Arc<IngressHistoryWriter_>,
         cycles_account_manager: Arc<CyclesAccountManager>,
         metrics_registry: &MetricsRegistry,
         own_subnet_id: SubnetId,
@@ -327,7 +331,9 @@ impl ValidSetRuleImpl {
     }
 }
 
-impl ValidSetRule for ValidSetRuleImpl {
+impl<IngressHistoryWriter_: IngressHistoryWriter<State = ReplicatedState>> ValidSetRule
+    for ValidSetRuleImpl<IngressHistoryWriter_>
+{
     fn induct_messages(&self, state: &mut ReplicatedState, msgs: Vec<SignedIngressContent>) {
         let subnet_size = state
             .metadata

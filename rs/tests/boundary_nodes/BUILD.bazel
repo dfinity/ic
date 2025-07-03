@@ -1,32 +1,17 @@
-load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
 CERTIFICATE_ORCHESTRATOR_RUNTIME_DEPS = ["//rs/boundary_node/certificate_issuance/certificate_orchestrator:certificate_orchestrator"]
 
-TEST_CANISTERS_RUNTIME_DEPS = [
-    # Keep sorted.
-    "//rs/tests/test_canisters/http_counter",
-    "//rs/tests/test_canisters/kv_store",
-    "@asset_canister//file",
-    "@long_asset_canister//file",
-]
-
 system_test_nns(
-    name = "bn_integration_test",
-    env = {
-        "KV_STORE_WASM_PATH": "$(rootpath //rs/tests/test_canisters/kv_store)",
-        "HTTP_COUNTER_WASM_PATH": "$(rootpath //rs/tests/test_canisters/http_counter)",
-        "ASSET_CANISTER_WASM_PATH": "$(rootpath @asset_canister//file)",
-        "LONG_ASSET_CANISTER_WASM_PATH": "$(rootpath @long_asset_canister//file)",
-    },
+    name = "api_bn_integration_test",
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
         "k8s",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + TEST_CANISTERS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/tests/boundary_nodes/integration_test_common",
@@ -38,56 +23,12 @@ system_test_nns(
 )
 
 system_test_nns(
-    name = "bn_reboot_test",
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
+    name = "api_bn_update_workload_test",
     tags = [
-        "k8s",
+        "long_test",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + TEST_CANISTERS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
-    deps = [
-        # Keep sorted.
-        "//rs/tests/boundary_nodes/integration_test_common",
-        "//rs/tests/boundary_nodes/utils",
-        "//rs/tests/driver:ic-system-test-driver",
-        "//rs/types/types",
-        "@crate_index//:anyhow",
-    ],
-)
-
-system_test_nns(
-    name = "bn_integration_on_playnet_test",
-    env = {
-        "KV_STORE_WASM_PATH": "$(rootpath //rs/tests/test_canisters/kv_store)",
-        "HTTP_COUNTER_WASM_PATH": "$(rootpath //rs/tests/test_canisters/http_counter)",
-        "ASSET_CANISTER_WASM_PATH": "$(rootpath @asset_canister//file)",
-        "LONG_ASSET_CANISTER_WASM_PATH": "$(rootpath @long_asset_canister//file)",
-    },
-    flaky = True,
-    tags = [
-        "system_test_hourly",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + TEST_CANISTERS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
-    deps = [
-        # Keep sorted.
-        "//rs/tests/boundary_nodes/integration_test_common",
-        "//rs/tests/boundary_nodes/utils",
-        "//rs/tests/driver:ic-system-test-driver",
-        "//rs/types/types",
-        "@crate_index//:anyhow",
-    ],
-)
-
-system_test_nns(
-    name = "bn_update_workload_test",
-    flaky = True,
-    tags = [
-        "manual",  # TODO(BOUN-1039): remove "manual" and add back "long_test" when the test is not flaky anymore
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "long",
-    runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/networking/subnet_update_workload",
@@ -103,9 +44,7 @@ system_test_nns(
     tags = [
         "k8s",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS +
-                   GUESTOS_RUNTIME_DEPS +
+    runtime_deps = GUESTOS_RUNTIME_DEPS +
                    UNIVERSAL_VM_RUNTIME_DEPS +
                    CERTIFICATE_ORCHESTRATOR_RUNTIME_DEPS,
     deps = [
@@ -134,7 +73,6 @@ system_test_nns(
     tags = [
         "k8s",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + [
         "//rs/boundary_node/salt_sharing:salt_sharing_canister",
     ],
@@ -167,7 +105,6 @@ system_test_nns(
     tags = [
         "k8s",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + [
         "//rs/boundary_node/rate_limits:rate_limit_canister",
     ],
@@ -196,7 +133,7 @@ system_test_nns(
 )
 
 system_test_nns(
-    name = "bn_performance_test",
+    name = "api_bn_performance_test",
     colocated_test_driver_vm_required_host_features = ["performance"],
     colocated_test_driver_vm_resources = {
         "vcpus": 64,
@@ -204,8 +141,7 @@ system_test_nns(
         "boot_image_minimal_size_gibibytes": 500,
     },
     tags = ["manual"],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/tests/boundary_nodes/performance_test_common",
@@ -228,8 +164,7 @@ system_test(
         "k8s",
         "manual",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/tests/boundary_nodes/performance_test_common",
@@ -251,8 +186,7 @@ system_test(
         "k8s",
         "manual",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/tests/boundary_nodes/performance_test_common",
@@ -268,8 +202,7 @@ system_test_nns(
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/canister_client",

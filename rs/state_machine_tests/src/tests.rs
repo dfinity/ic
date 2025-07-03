@@ -1,31 +1,29 @@
 use ic_secp256k1::{DerivationIndex, DerivationPath, PrivateKey, PublicKey};
-use proptest::{collection::vec as pvec, prelude::*, prop_assert, proptest};
+use proptest::{collection::vec as pvec, prelude::*, prop_assert};
 
-proptest! {
-    #[test]
-    fn test_derivation_prop(
-        derivation_path_bytes in pvec(pvec(any::<u8>(), 1..10), 1..10),
-        message_hash in pvec(any::<u8>(), 32),
-    ) {
-        let private_key_bytes =
-            hex::decode("fb7d1f5b82336bb65b82bf4f27776da4db71c1ef632c6a7c171c0cbfa2ea4920").unwrap();
+#[test_strategy::proptest]
+fn test_derivation_prop(
+    #[strategy(pvec(pvec(any::<u8>(), 1..10), 1..10))] derivation_path_bytes: Vec<Vec<u8>>,
+    #[strategy(pvec(any::<u8>(), 32))] message_hash: Vec<u8>,
+) {
+    let private_key_bytes =
+        hex::decode("fb7d1f5b82336bb65b82bf4f27776da4db71c1ef632c6a7c171c0cbfa2ea4920").unwrap();
 
-        let ecdsa_secret_key: PrivateKey =
-            PrivateKey::deserialize_sec1(private_key_bytes.as_slice()).unwrap();
+    let ecdsa_secret_key: PrivateKey =
+        PrivateKey::deserialize_sec1(private_key_bytes.as_slice()).unwrap();
 
-        let derivation_path = DerivationPath::new(
-            derivation_path_bytes
-                .into_iter()
-                .map(DerivationIndex)
-                .collect(),
-        );
+    let derivation_path = DerivationPath::new(
+        derivation_path_bytes
+            .into_iter()
+            .map(DerivationIndex)
+            .collect(),
+    );
 
-        let derived_secret_key = ecdsa_secret_key.derive_subkey(&derivation_path).0;
-        let signature = derived_secret_key.sign_message_with_ecdsa(&message_hash);
+    let derived_secret_key = ecdsa_secret_key.derive_subkey(&derivation_path).0;
+    let signature = derived_secret_key.sign_message_with_ecdsa(&message_hash);
 
-        let derived_public_key = derived_secret_key.public_key();
-        prop_assert!(derived_public_key.verify_ecdsa_signature(&message_hash, &signature));
-    }
+    let derived_public_key = derived_secret_key.public_key();
+    prop_assert!(derived_public_key.verify_ecdsa_signature(&message_hash, &signature));
 }
 
 #[test]

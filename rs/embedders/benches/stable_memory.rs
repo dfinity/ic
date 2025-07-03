@@ -1,6 +1,15 @@
+//! This benchmark runs nightly in CI, and the results are available in Grafana.
+//! See: `schedule-rust-bench.yml`
+//!
+//! To run the benchmark locally:
+//!
+//! ```shell
+//! bazel run //rs/embedders:stable_memory_bench
+//! ```
+
 use candid::Encode;
 use criterion::{criterion_group, criterion_main, Criterion};
-use embedders_bench::PostSetupAction;
+use embedders_bench::SetupAction;
 use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
 use ic_sys::PAGE_SIZE;
 
@@ -136,13 +145,14 @@ fn query_bench(
 ) {
     embedders_bench::query_bench(
         c,
+        "embedders:stable_memory/query",
         name,
         wasm,
         &Encode!(&structure, &initial_count).unwrap(),
         method,
         payload,
         None,
-        PostSetupAction::PerformCheckpoint,
+        SetupAction::PerformCheckpoint,
     )
 }
 
@@ -157,13 +167,14 @@ fn update_bench(
 ) {
     embedders_bench::update_bench(
         c,
+        "embedders:stable_memory/update",
         name,
         wasm,
         &Encode!(&structure, &initial_count).unwrap(),
         method,
         payload,
         None,
-        PostSetupAction::PerformCheckpoint,
+        SetupAction::PerformCheckpoint,
     )
 }
 

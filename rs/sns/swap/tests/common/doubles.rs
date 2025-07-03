@@ -1,7 +1,8 @@
 use async_trait::async_trait;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::Tokens;
-use ic_nervous_system_common::{ledger::ICRC1Ledger, NervousSystemError};
+use ic_nervous_system_canisters::ledger::ICRC1Ledger;
+use ic_nervous_system_common::NervousSystemError;
 use ic_nervous_system_common_test_utils::SpyLedger;
 use ic_sns_governance::pb::v1::{
     manage_neuron_response, manage_neuron_response::ClaimOrRefreshResponse,
@@ -18,6 +19,7 @@ use ic_sns_swap::{
     },
 };
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
+use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
 use std::{
     collections::VecDeque,
     sync::{Arc, Mutex},
@@ -321,6 +323,15 @@ impl ICRC1Ledger for MockLedger {
 
     fn canister_id(&self) -> CanisterId {
         CanisterId::from_u64(1)
+    }
+
+    async fn icrc3_get_blocks(
+        &self,
+        _args: Vec<GetBlocksRequest>,
+    ) -> Result<GetBlocksResult, NervousSystemError> {
+        Err(NervousSystemError {
+            error_message: "Not Implemented".to_string(),
+        })
     }
 }
 

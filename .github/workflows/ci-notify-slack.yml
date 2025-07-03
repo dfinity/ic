@@ -27,7 +27,7 @@ jobs:
           echo "channel=${CHANNEL}" >> $GITHUB_OUTPUT
           echo "message=${MESSAGE}" >> $GITHUB_OUTPUT
         env:
-          MESSAGE: ":github: <${{ github.event.pull_request.html_url }}|${{ github.event.pull_request.title }}>"
+          MESSAGE: ":github: `${{ github.repository }}` <${{ github.event.pull_request.html_url }}|${{ github.event.pull_request.title }}>"
       - name: Post to a Slack channel
         if: steps.get-reviewers.outputs.result != '""' && steps.lookup.outputs.channel != 'null'
         id: slack

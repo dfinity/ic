@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
-load("//bazel:defs.bzl", "rust_bench", "rust_ic_bench", "rust_ic_test_suite_with_extra_srcs")
+load("//bazel:defs.bzl", "rust_ic_bench", "rust_ic_test_suite_with_extra_srcs")
 load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
 load("//rs/tests:common.bzl", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
 
@@ -7,16 +7,20 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-error-types",
     "//rs/config",
     "//rs/cycles_account_manager",
     "//rs/interfaces",
+    "//rs/limits",
     "//rs/memory_tracker",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
+    "//rs/nns/constants",
     "//rs/registry/subnet_type",
     "//rs/replicated_state",
     "//rs/sys",
-    "//rs/system_api",
+    "//rs/types/base_types",
+    "//rs/types/management_canister_types",
     "//rs/types/types",
     "//rs/types/wasm_types",
     "//rs/utils",
@@ -24,6 +28,8 @@ DEPENDENCIES = [
     "//rs/wasm_transform",
     "@crate_index//:anyhow",
     "@crate_index//:bincode",
+    "@crate_index//:ic-btc-interface",
+    "@crate_index//:itertools",
     "@crate_index//:libc",
     "@crate_index//:libflate",
     "@crate_index//:nix",
@@ -31,6 +37,7 @@ DEPENDENCIES = [
     "@crate_index//:prometheus",
     "@crate_index//:rayon",
     "@crate_index//:rustc-demangle",
+    "@crate_index//:scopeguard",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
     "@crate_index//:slog",
@@ -56,29 +63,34 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities/state",
     "//rs/test_utilities/time",
     "//rs/test_utilities/types",
-    "//rs/types/base_types",
-    "//rs/types/error_types",
     "@crate_index//:assert_matches",
+    "@crate_index//:candid",
     "@crate_index//:criterion",
     "@crate_index//:insta",
     "@crate_index//:lazy_static",
     "@crate_index//:maplit",
+    "@crate_index//:more-asserts",
     "@crate_index//:pretty_assertions",
     "@crate_index//:proptest",
+    "@crate_index//:strum",
     "@crate_index//:wast",
     "@crate_index//:wat",
 ]
 
-MACRO_DEV_DEPENDENCIES = []
+MACRO_DEV_DEPENDENCIES = [
+    "@crate_index//:strum_macros",
+]
 
 ALIASES = {}
 
 DATA = [
     "//rs/rust_canisters/stable_structures:stable_structures_canister",
+    "//rs/nns/governance:governance-bench-canister",
 ]
 
 ENV = {
     "STABLE_STRUCTURES_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/stable_structures:stable_structures_canister)",
+    "GOVERNANCE_BENCH_CANISTER_WASM_PATH": "$(rootpath //rs/nns/governance:governance-bench-canister)",
 }
 
 rust_library(
@@ -141,6 +153,8 @@ rust_ic_test_suite_with_extra_srcs(
         exclude = [
             "tests/wasmtime_simple.rs",
             "tests/instrumentation.rs",
+            "tests/system_api.rs",
+            "tests/sandbox_safe_system_state.rs",
         ],
     ),
     aliases = ALIASES,
@@ -172,11 +186,23 @@ rust_ic_test_suite_with_extra_srcs(
     deps = [":embedders"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
-rust_bench(
-    name = "compilation_bench",
-    srcs = ["benches/compilation.rs"],
-    compile_data = glob(["benches/test-data/*"]),
-    with_test = True,
+rust_test(
+    name = "system_api_integration_test",
+    srcs = [
+        "tests/common/mod.rs",
+        "tests/system_api.rs",
+    ],
+    crate_root = "tests/system_api.rs",
+    deps = [":embedders"] + DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test(
+    name = "sandbox_safe_system_state_test",
+    srcs = [
+        "tests/common/mod.rs",
+        "tests/sandbox_safe_system_state.rs",
+    ],
+    crate_root = "tests/sandbox_safe_system_state.rs",
     deps = [":embedders"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
@@ -189,10 +215,7 @@ rust_library(
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
-    deps = [
-        # Keep sorted.
-        "@crate_index//:candid",
-    ] + DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
 UNIVERSAL_CANISTER_TEST_DEPS = UNIVERSAL_CANISTER_RUNTIME_DEPS + [
@@ -204,6 +227,20 @@ UNIVERSAL_CANISTER_TEST_ENV = UNIVERSAL_CANISTER_ENV | {
 }
 
 rust_ic_bench(
+    name = "compilation_bench",
+    testonly = True,
+    srcs = ["benches/compilation.rs"],
+    compile_data = glob(["benches/test-data/*"]),
+    data = DATA + UNIVERSAL_CANISTER_TEST_DEPS,
+    env = ENV | UNIVERSAL_CANISTER_TEST_ENV,
+    with_test = True,
+    deps = [
+        ":embedders",
+        ":embedders_bench",
+    ] + DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_ic_bench(
     name = "stable_memory_bench",
     testonly = True,
     srcs = ["benches/stable_memory.rs"],
@@ -212,7 +249,6 @@ rust_ic_bench(
     deps = [
         # Keep sorted.
         ":embedders_bench",
-        "@crate_index//:candid",
     ] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
@@ -223,9 +259,9 @@ rust_ic_bench(
     compile_data = glob(["benches/test-data/*"]),
     data = DATA + UNIVERSAL_CANISTER_TEST_DEPS,
     env = ENV | UNIVERSAL_CANISTER_TEST_ENV,
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = [
         # Keep sorted.
         ":embedders_bench",
-        "@crate_index//:candid",
     ] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

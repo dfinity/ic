@@ -1,10 +1,9 @@
 ---- MODULE Disburse_To_Neuron ----
 
-EXTENDS TLC, Integers, FiniteSets, Sequences, Variants
+EXTENDS TLC, Integers, FiniteSets, Sequences, Variants, Common
 
 CONSTANTS
-    Governance_Account_Ids,
-    Neuron_Ids
+    Governance_Account_Ids
 
 CONSTANTS
     Disburse_To_Neuron_Process_Ids
@@ -17,18 +16,6 @@ CONSTANTS
 
 CONSTANT
     FRESH_NEURON_ID(_)
-
-\* Initial value used for uninitialized accounts
-DUMMY_ACCOUNT == ""
-
-\* @type: (a -> b, Set(a)) => a -> b;
-Remove_Arguments(f, S) == [ x \in (DOMAIN f \ S) |-> f[x]]
-Max(x, y) == IF x < y THEN y ELSE x
-
-request(caller, request_args) == [caller |-> caller, method_and_args |-> request_args]
-transfer(from, to, amount, fee) == Variant("Transfer", [from |-> from, to |-> to, amount |-> amount, fee |-> fee])
-
-o_deduct(disb_amount) == disb_amount + TRANSACTION_FEE
 
 (* --algorithm Governance_Ledger_Disburse_To_Neuron {
 
@@ -77,7 +64,7 @@ process (Disburse_To_Neuron \in Disburse_To_Neuron_Process_Ids)
                 child_account_id := c_acc_id;
                 child_neuron_id := FRESH_NEURON_ID(DOMAIN(neuron));
                 neuron_id_by_account := child_account_id :> child_neuron_id @@ neuron_id_by_account;
-                neuron := child_neuron_id :> [ cached_stake |-> 0, account |-> child_account_id, fees |-> 0, maturity |-> 0 ] @@ neuron;
+                neuron := child_neuron_id :> [ cached_stake |-> 0, account |-> child_account_id, fees |-> 0, maturity |-> 0, state |-> NOT_SPAWNING, maturity_disbursements_in_progress |-> <<>> ] @@ neuron;
                 \* The Rust code throws an error here if the parent neuron is locked. Instead, we prevent the Disburse_To_Neuron process from running.
                 \* This is OK since the Rust code doesn't change the canister's state before obtaining the parant lock (if it
                 \* did, the model wouldn't capture this state and we could miss behaviors).
@@ -109,13 +96,13 @@ process (Disburse_To_Neuron \in Disburse_To_Neuron_Process_Ids)
     }
 }
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "d03e80ed" /\ chksum(tla) = "b79d8d63")
-VARIABLES pc, neuron, neuron_id_by_account, locks, governance_to_ledger,
-          ledger_to_governance, spawning_neurons, parent_neuron_id,
+\* BEGIN TRANSLATION (chksum(pcal) = "717fe13c" /\ chksum(tla) = "85decfae")
+VARIABLES pc, neuron, neuron_id_by_account, locks, governance_to_ledger, 
+          ledger_to_governance, spawning_neurons, parent_neuron_id, 
           disburse_amount, child_account_id, child_neuron_id
 
-vars == << pc, neuron, neuron_id_by_account, locks, governance_to_ledger,
-           ledger_to_governance, spawning_neurons, parent_neuron_id,
+vars == << pc, neuron, neuron_id_by_account, locks, governance_to_ledger, 
+           ledger_to_governance, spawning_neurons, parent_neuron_id, 
            disburse_amount, child_account_id, child_neuron_id >>
 
 ProcSet == (Disburse_To_Neuron_Process_Ids)
@@ -147,13 +134,13 @@ DisburseToNeuron(self) == /\ pc[self] = "DisburseToNeuron"
                                            /\ child_account_id' = [child_account_id EXCEPT ![self] = c_acc_id]
                                            /\ child_neuron_id' = [child_neuron_id EXCEPT ![self] = FRESH_NEURON_ID(DOMAIN(neuron))]
                                            /\ neuron_id_by_account' = (child_account_id'[self] :> child_neuron_id'[self] @@ neuron_id_by_account)
-                                           /\ neuron' = (child_neuron_id'[self] :> [ cached_stake |-> 0, account |-> child_account_id'[self], fees |-> 0, maturity |-> 0 ] @@ neuron)
-                                           /\ Assert(child_neuron_id'[self] \notin locks,
-                                                     "Failure of assertion at line 84, column 17.")
+                                           /\ neuron' = (child_neuron_id'[self] :> [ cached_stake |-> 0, account |-> child_account_id'[self], fees |-> 0, maturity |-> 0, state |-> NOT_SPAWNING, maturity_disbursements_in_progress |-> <<>> ] @@ neuron)
+                                           /\ Assert(child_neuron_id'[self] \notin locks, 
+                                                     "Failure of assertion at line 71, column 17.")
                                            /\ locks' = (locks \union {parent_neuron_id'[self], child_neuron_id'[self]})
                                            /\ governance_to_ledger' = Append(governance_to_ledger, request(self, (transfer(parent_neuron.account, child_account_id'[self], disburse_amount'[self] - TRANSACTION_FEE, TRANSACTION_FEE))))
                                 /\ pc' = [pc EXCEPT ![self] = "DisburseToNeuron_WaitForTransfer"]
-                          /\ UNCHANGED << ledger_to_governance,
+                          /\ UNCHANGED << ledger_to_governance, 
                                           spawning_neurons >>
 
 DisburseToNeuron_WaitForTransfer(self) == /\ pc[self] = "DisburseToNeuron_WaitForTransfer"
@@ -171,7 +158,7 @@ DisburseToNeuron_WaitForTransfer(self) == /\ pc[self] = "DisburseToNeuron_WaitFo
                                                /\ child_account_id' = [child_account_id EXCEPT ![self] = DUMMY_ACCOUNT]
                                                /\ child_neuron_id' = [child_neuron_id EXCEPT ![self] = 0]
                                           /\ pc' = [pc EXCEPT ![self] = "Done"]
-                                          /\ UNCHANGED << governance_to_ledger,
+                                          /\ UNCHANGED << governance_to_ledger, 
                                                           spawning_neurons >>
 
 Disburse_To_Neuron(self) == DisburseToNeuron(self)

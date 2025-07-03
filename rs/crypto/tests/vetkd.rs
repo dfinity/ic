@@ -7,15 +7,13 @@ use ic_crypto_test_utils_ni_dkg::{
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_interfaces::crypto::VetKdProtocol;
 use ic_interfaces::crypto::{LoadTranscriptResult, NiDkgAlgorithm};
-use ic_types::crypto::canister_threshold_sig::MasterPublicKey;
 use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgConfig;
 use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTranscript};
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::crypto::vetkd::VetKdArgs;
+use ic_types::crypto::vetkd::VetKdDerivationContext;
 use ic_types::crypto::vetkd::VetKdEncryptedKey;
 use ic_types::crypto::vetkd::VetKdEncryptedKeyShare;
-use ic_types::crypto::AlgorithmId;
-use ic_types::crypto::ExtendedDerivationPath;
 use ic_types::{NodeId, NumberOfNodes};
 use ic_types_test_utils::ids::canister_test_id;
 use rand::prelude::*;
@@ -31,29 +29,32 @@ fn should_consistently_derive_the_same_vetkey_given_sufficient_shares() {
 
     let transcript = run_ni_dkg_and_load_transcript_for_receivers(&config, &crypto_components);
 
-    let derivation_path = ExtendedDerivationPath {
-        caller: canister_test_id(234).get(),
-        derivation_path: vec![b"some".to_vec(), b"derivation".to_vec(), b"path".to_vec()],
-    };
-    let derived_public_key = ic_crypto_utils_canister_threshold_sig::derive_vetkd_public_key(
-        &MasterPublicKey {
-            algorithm_id: AlgorithmId::ThresBls12_381,
-            public_key: ThresholdSigPublicKey::try_from(&transcript)
-                .expect("invalid transcript")
-                .into_bytes()
-                .to_vec(),
-        },
-        &derivation_path,
-    )
-    .expect("failed to compute derived public key");
+    let caller = canister_test_id(234).get();
+    let context = b"context-123";
+
+    let transcript_key = ThresholdSigPublicKey::try_from(&transcript)
+        .expect("invalid transcript")
+        .into_bytes();
+
+    let transcript_key = ic_vetkeys::MasterPublicKey::deserialize(&transcript_key)
+        .expect("failed to deserialize transcript public key");
+
+    let derived_public_key = transcript_key
+        .derive_canister_key(caller.as_slice())
+        .derive_sub_key(context)
+        .serialize();
+
     let transport_secret_key =
-        ic_vetkd_utils::TransportSecretKey::from_seed(rng.gen::<[u8; 32]>().to_vec())
+        ic_vetkeys::TransportSecretKey::from_seed(rng.gen::<[u8; 32]>().to_vec())
             .expect("failed to create transport secret key");
     let vetkd_args = VetKdArgs {
         ni_dkg_id: dkg_id,
-        derivation_path,
-        derivation_id: b"some-derivation-id".to_vec(),
-        encryption_public_key: transport_secret_key.public_key(),
+        context: VetKdDerivationContext {
+            caller,
+            context: context.to_vec(),
+        },
+        input: b"some-input".to_vec(),
+        transport_public_key: transport_secret_key.public_key(),
     };
 
     let mut expected_decrypted_key: Option<Vec<u8>> = None;
@@ -78,13 +79,20 @@ fn should_consistently_derive_the_same_vetkey_given_sufficient_shares() {
             Ok(())
         );
 
-        let decrypted_key = transport_secret_key
-            .decrypt(
-                &encrypted_key.encrypted_key,
+        let encrypted_key = ic_vetkeys::EncryptedVetKey::deserialize(&encrypted_key.encrypted_key)
+            .expect("failed to deserialize encrypted VetKey");
+
+        let derived_public_key = ic_vetkeys::DerivedPublicKey::deserialize(&derived_public_key)
+            .expect("failed to deserialize derived public key");
+        let decrypted_key = encrypted_key
+            .decrypt_and_verify(
+                &transport_secret_key,
                 &derived_public_key,
-                &vetkd_args.derivation_id,
+                &vetkd_args.input,
             )
-            .expect("failed to decrypt vetKey");
+            .expect("failed to decrypt vetKey")
+            .signature_bytes()
+            .to_vec();
 
         if let Some(expected_decrypted_key) = &expected_decrypted_key {
             assert_eq!(&decrypted_key, expected_decrypted_key);

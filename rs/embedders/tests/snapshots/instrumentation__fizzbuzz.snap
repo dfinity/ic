@@ -1,6 +1,6 @@
 ---
 source: rs/embedders/tests/instrumentation.rs
-assertion_line: 62
+assertion_line: 63
 expression: out
 ---
 (module
@@ -18,6 +18,19 @@ expression: out
   (import "__" "internal_trap" (func (;3;) (type 1)))
   (import "__" "stable_read_first_access" (func (;4;) (type 5)))
   (import "ic0" "debug_print" (func $println (;5;) (type 0)))
+  (memory (;0;) 1)
+  (memory (;1;) i64 0 8192000)
+  (memory (;2;) 2000 2000)
+  (global (;0;) (mut i64) i64.const 0)
+  (global (;1;) (mut i64) i64.const 0)
+  (global (;2;) (mut i64) i64.const 0)
+  (export "fizzbuzz" (func 6))
+  (export "memory" (memory 0))
+  (export "stable_memory" (memory 1))
+  (export "stable_bytemap_memory" (memory 2))
+  (export "canister counter_instructions" (global 0))
+  (export "canister counter_dirty_pages" (global 1))
+  (export "canister counter_accessed_pages" (global 2))
   (func (;6;) (type 1) (param $max i32)
     (local $c i32) (local $tmp i32) (local $adr i32)
     global.get 0
@@ -225,18 +238,5 @@ expression: out
     local.get 5
     i32.sub
   )
-  (memory (;0;) 1)
-  (memory (;1;) i64 0 8192000)
-  (memory (;2;) 2000 2000)
-  (global (;0;) (mut i64) i64.const 0)
-  (global (;1;) (mut i64) i64.const 0)
-  (global (;2;) (mut i64) i64.const 0)
-  (export "fizzbuzz" (func 6))
-  (export "memory" (memory 0))
-  (export "stable_memory" (memory 1))
-  (export "stable_bytemap_memory" (memory 2))
-  (export "canister counter_instructions" (global 0))
-  (export "canister counter_dirty_pages" (global 1))
-  (export "canister counter_accessed_pages" (global 2))
 )
 

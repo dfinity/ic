@@ -2,19 +2,17 @@ mod call_context_manager;
 mod task_queue;
 pub mod wasm_chunk_store;
 
-pub use self::task_queue::{
-    is_low_wasm_memory_hook_condition_satisfied, OnLowWasmMemoryHookStatus, TaskQueue,
-};
+pub use self::task_queue::{is_low_wasm_memory_hook_condition_satisfied, TaskQueue};
 
 use self::wasm_chunk_store::{WasmChunkStore, WasmChunkStoreMetadata};
-pub use super::queues::memory_required_to_push_request;
 use super::queues::{can_push, CanisterInput};
-pub use crate::canister_state::queues::CanisterOutputQueuesIterator;
+pub use super::queues::{memory_usage_of_request, CanisterOutputQueuesIterator};
 use crate::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use crate::page_map::PageAllocatorFileDescriptor;
 use crate::replicated_state::MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN;
 use crate::{
-    CanisterQueues, CanisterState, CheckpointLoadingMetrics, InputQueueType, PageMap, StateError,
+    CanisterQueues, CanisterState, CheckpointLoadingMetrics, DroppedMessageMetrics, InputQueueType,
+    PageMap, StateError,
 };
 pub use call_context_manager::{CallContext, CallContextAction, CallContextManager, CallOrigin};
 use ic_base_types::NumSeconds;
@@ -80,6 +78,7 @@ pub enum CyclesUseCase {
     BurnedCycles = 12,
     SchnorrOutcalls = 13,
     VetKd = 14,
+    DroppedMessages = 15,
 }
 
 impl CyclesUseCase {
@@ -101,6 +100,7 @@ impl CyclesUseCase {
             Self::BurnedCycles => "BurnedCycles",
             Self::SchnorrOutcalls => "SchnorrOutcalls",
             Self::VetKd => "VetKd",
+            Self::DroppedMessages => "DroppedMessages",
         }
     }
 }
@@ -124,6 +124,7 @@ impl From<CyclesUseCase> for pb::CyclesUseCase {
             CyclesUseCase::BurnedCycles => pb::CyclesUseCase::BurnedCycles,
             CyclesUseCase::SchnorrOutcalls => pb::CyclesUseCase::SchnorrOutcalls,
             CyclesUseCase::VetKd => pb::CyclesUseCase::VetKd,
+            CyclesUseCase::DroppedMessages => pb::CyclesUseCase::DroppedMessages,
         }
     }
 }
@@ -152,6 +153,7 @@ impl TryFrom<pb::CyclesUseCase> for CyclesUseCase {
             pb::CyclesUseCase::BurnedCycles => Ok(Self::BurnedCycles),
             pb::CyclesUseCase::SchnorrOutcalls => Ok(Self::SchnorrOutcalls),
             pb::CyclesUseCase::VetKd => Ok(Self::VetKd),
+            pb::CyclesUseCase::DroppedMessages => Ok(Self::DroppedMessages),
         }
     }
 }
@@ -229,7 +231,7 @@ impl CanisterHistory {
     /// but keeps the total number of changes recorded.
     pub fn clear(&mut self) {
         self.changes = Arc::new(Default::default());
-        self.canister_history_memory_usage = NumBytes::from(0);
+        self.canister_history_memory_usage = NumBytes::new(0);
 
         debug_assert_eq!(
             self.get_memory_usage(),
@@ -276,6 +278,11 @@ impl CanisterHistory {
 
     pub fn get_total_num_changes(&self) -> u64 {
         self.total_num_changes
+    }
+
+    /// Overwrites the `total_num_changes`, which can happen in the context of canister migration.
+    pub fn set_total_num_changes(&mut self, total_num_changes: u64) {
+        self.total_num_changes = total_num_changes;
     }
 
     pub fn get_memory_usage(&self) -> NumBytes {
@@ -396,6 +403,9 @@ pub struct SystemState {
     /// This amount contributes to the total `memory_usage` of the canister as
     /// reported by `CanisterState::memory_usage`.
     pub snapshots_memory_usage: NumBytes,
+
+    /// Environment variables.
+    pub environment_variables: BTreeMap<String, String>,
 }
 
 /// A wrapper around the different canister statuses.
@@ -764,6 +774,7 @@ impl SystemState {
             reserved_balance: Cycles::zero(),
             reserved_balance_limit: None,
             memory_allocation: MemoryAllocation::BestEffort,
+            environment_variables: Default::default(),
             wasm_memory_threshold: NumBytes::new(0),
             freeze_threshold,
             status,
@@ -778,7 +789,7 @@ impl SystemState {
             canister_log: Default::default(),
             wasm_memory_limit: None,
             next_snapshot_id: 0,
-            snapshots_memory_usage: NumBytes::from(0),
+            snapshots_memory_usage: NumBytes::new(0),
         }
     }
 
@@ -797,7 +808,7 @@ impl SystemState {
         ingress_induction_cycles_debit: Cycles,
         reserved_balance: Cycles,
         reserved_balance_limit: Option<Cycles>,
-        task_queue: VecDeque<ExecutionTask>,
+        task_queue: TaskQueue,
         global_timer: CanisterTimer,
         canister_version: u64,
         canister_history: CanisterHistory,
@@ -808,8 +819,8 @@ impl SystemState {
         wasm_memory_limit: Option<NumBytes>,
         next_snapshot_id: u64,
         snapshots_memory_usage: NumBytes,
+        environment_variables: BTreeMap<String, String>,
         metrics: &dyn CheckpointLoadingMetrics,
-        on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
     ) -> Self {
         let system_state = Self {
             controllers,
@@ -825,11 +836,7 @@ impl SystemState {
             ingress_induction_cycles_debit,
             reserved_balance,
             reserved_balance_limit,
-            task_queue: TaskQueue::from_checkpoint(
-                task_queue,
-                on_low_wasm_memory_hook_status,
-                &canister_id,
-            ),
+            task_queue,
             global_timer,
             canister_version,
             canister_history,
@@ -842,6 +849,7 @@ impl SystemState {
             wasm_memory_limit,
             next_snapshot_id,
             snapshots_memory_usage,
+            environment_variables,
         };
         system_state.check_invariants().unwrap_or_else(|msg| {
             metrics.observe_broken_soft_invariant(msg);
@@ -1257,7 +1265,8 @@ impl SystemState {
     /// cycles cost for sending the `Response` back. If it is a `Response`,
     /// the protocol should have already reserved a slot and memory for it.
     ///
-    /// Updates `subnet_available_memory` to reflect any change in memory usage.
+    /// Updates `subnet_available_guaranteed_response_memory` to reflect any change
+    /// in memory usage.
     ///
     /// # Notes
     ///  * `Running` system states accept requests and responses.
@@ -1276,7 +1285,7 @@ impl SystemState {
     ///    full when pushing a `Request`;
     ///  * `CanisterOutOfCycles` if the canister does not have enough cycles.
     ///  * `OutOfMemory` if the necessary guaranteed response memory reservation
-    ///    is larger than `subnet_available_memory`.
+    ///    is larger than `subnet_available_guaranteed_response_memory`.
     ///  * `CanisterStopping` if the canister is stopping and inducting a
     ///    `Request` was attempted.
     ///  * `CanisterStopped` if the canister is stopped.
@@ -1286,7 +1295,7 @@ impl SystemState {
     pub(crate) fn push_input(
         &mut self,
         msg: RequestOrResponse,
-        subnet_available_memory: &mut i64,
+        subnet_available_guaranteed_response_memory: &mut i64,
         own_subnet_type: SubnetType,
         input_queue_type: InputQueueType,
     ) -> Result<bool, (StateError, RequestOrResponse)> {
@@ -1300,14 +1309,14 @@ impl SystemState {
 
         match (&msg, &self.status) {
             // Best-effort responses are silently dropped when stopped.
-            (RequestOrResponse::Response(response), CanisterStatus::Stopped { .. })
+            (RequestOrResponse::Response(response), CanisterStatus::Stopped)
                 if response.is_best_effort() =>
             {
                 Ok(false)
             }
 
             // Requests and guaranteed responses are both rejected when stopped.
-            (_, CanisterStatus::Stopped { .. }) => {
+            (_, CanisterStatus::Stopped) => {
                 Err((StateError::CanisterStopped(self.canister_id()), msg))
             }
 
@@ -1345,7 +1354,7 @@ impl SystemState {
                 push_input(
                     &mut self.queues,
                     msg,
-                    subnet_available_memory,
+                    subnet_available_guaranteed_response_memory,
                     own_subnet_type,
                     input_queue_type,
                 )
@@ -1516,7 +1525,7 @@ impl SystemState {
         match self.status {
             CanisterStatus::Running { .. } => CanisterStatusType::Running,
             CanisterStatus::Stopping { .. } => CanisterStatusType::Stopping,
-            CanisterStatus::Stopped { .. } => CanisterStatusType::Stopped,
+            CanisterStatus::Stopped => CanisterStatusType::Stopped,
         }
     }
 
@@ -1605,15 +1614,14 @@ impl SystemState {
     /// from `self` while respecting queue capacity and the provided subnet
     /// available guaranteed response message memory.
     ///
-    /// `subnet_available_memory` (the subnet's available guaranteed response
-    /// message memory) is updated to reflect the change in `self.queues` guaranteed
-    /// response message memory usage.
+    /// `subnet_available_guaranteed_response_memory` is updated to reflect the
+    /// change in `self.queues` guaranteed response message memory usage.
     ///
     /// Available memory is ignored (but updated) for system subnets, since we
     /// don't want to DoS system canisters due to lots of incoming requests.
     pub fn induct_messages_to_self(
         &mut self,
-        subnet_available_memory: &mut i64,
+        subnet_available_guaranteed_response_memory: &mut i64,
         own_subnet_type: SubnetType,
     ) {
         // Bail out if the canister is not running.
@@ -1624,12 +1632,13 @@ impl SystemState {
             CanisterStatus::Stopped | CanisterStatus::Stopping { .. } => return,
         };
 
-        let mut memory_usage = self.queues.guaranteed_response_memory_usage() as i64;
+        let mut guaranteed_response_memory_usage =
+            self.queues.guaranteed_response_memory_usage() as i64;
 
         while let Some(msg) = self.queues.peek_output(&self.canister_id) {
             // Ensure that enough memory is available for inducting `msg`.
             if own_subnet_type != SubnetType::System
-                && can_push(msg, *subnet_available_memory).is_err()
+                && can_push(msg, *subnet_available_guaranteed_response_memory).is_err()
             {
                 return;
             }
@@ -1669,11 +1678,13 @@ impl SystemState {
                 return;
             }
 
-            // Adjust `subnet_available_memory` by `memory_usage_before - memory_usage_after`.
-            // Defer the accounting to `CanisterQueues`, to avoid duplication or divergence.
-            *subnet_available_memory += memory_usage;
-            memory_usage = self.queues.guaranteed_response_memory_usage() as i64;
-            *subnet_available_memory -= memory_usage;
+            // Adjust `subnet_available_guaranteed_response_memory` by `memory_usage_before
+            // - memory_usage_after`. Defer the accounting to `CanisterQueues`, to avoid
+            // duplication or divergence.
+            *subnet_available_guaranteed_response_memory += guaranteed_response_memory_usage;
+            guaranteed_response_memory_usage =
+                self.queues.guaranteed_response_memory_usage() as i64;
+            *subnet_available_guaranteed_response_memory -= guaranteed_response_memory_usage;
         }
     }
 
@@ -1688,8 +1699,8 @@ impl SystemState {
         self.queues.has_expired_deadlines(current_time)
     }
 
-    /// Drops expired messages given a current time. Returns the number of messages
-    /// that were timed out.
+    /// Drops expired messages given a current time. Returns the total amount of
+    /// attached cycles that was lost.
     ///
     /// See [`CanisterQueues::time_out_messages`] for further details.
     pub fn time_out_messages(
@@ -1697,9 +1708,10 @@ impl SystemState {
         current_time: Time,
         own_canister_id: &CanisterId,
         local_canisters: &BTreeMap<CanisterId, CanisterState>,
-    ) -> usize {
+        metrics: &impl DroppedMessageMetrics,
+    ) -> Cycles {
         self.queues
-            .time_out_messages(current_time, own_canister_id, local_canisters)
+            .time_out_messages(current_time, own_canister_id, local_canisters, metrics)
     }
 
     /// Queries whether the `CallContextManager` in `self.state` holds any not
@@ -1778,16 +1790,18 @@ impl SystemState {
     }
 
     /// Removes the largest best-effort message in the underlying pool. Returns
-    /// `true` if a message was removed; `false` otherwise.
+    /// `true` if a message was removed; `false` otherwise; along with any attached
+    /// cycles that were lost (if a reject response with a refund was not enqueued).
     ///
     /// Time complexity: `O(log(n))`.
     pub fn shed_largest_message(
         &mut self,
         own_canister_id: &CanisterId,
         local_canisters: &BTreeMap<CanisterId, CanisterState>,
-    ) -> bool {
+        metrics: &impl DroppedMessageMetrics,
+    ) -> (bool, Cycles) {
         self.queues
-            .shed_largest_message(own_canister_id, local_canisters)
+            .shed_largest_message(own_canister_id, local_canisters, metrics)
     }
 
     /// Re-partitions the local and remote input schedules of `self.queues`
@@ -1830,7 +1844,8 @@ impl SystemState {
             | CyclesUseCase::HTTPOutcalls
             | CyclesUseCase::DeletedCanisters
             | CyclesUseCase::NonConsumed
-            | CyclesUseCase::BurnedCycles => requested_amount,
+            | CyclesUseCase::BurnedCycles
+            | CyclesUseCase::DroppedMessages => requested_amount,
         };
         self.cycles_balance -= remaining_amount;
         self.observe_consumed_cycles_with_use_case(
@@ -1840,9 +1855,9 @@ impl SystemState {
         );
     }
 
-    /// Moves the given amount of cycles from the main balance to the reserved balance.
+    /// Checks if the given amount of cycles from the main balance can be moved to the reserved balance.
     /// Returns an error if the main balance is lower than the requested amount.
-    pub fn reserve_cycles(&mut self, amount: Cycles) -> Result<(), ReservationError> {
+    pub fn can_reserve_cycles(&self, amount: Cycles) -> Result<(), ReservationError> {
         if amount == Cycles::zero() {
             return Ok(());
         }
@@ -1860,10 +1875,17 @@ impl SystemState {
                 available: self.cycles_balance,
             })
         } else {
-            self.cycles_balance -= amount;
-            self.reserved_balance += amount;
             Ok(())
         }
+    }
+
+    /// Moves the given amount of cycles from the main balance to the reserved balance.
+    /// Returns an error if the main balance is lower than the requested amount.
+    pub fn reserve_cycles(&mut self, amount: Cycles) -> Result<(), ReservationError> {
+        self.can_reserve_cycles(amount)?;
+        self.cycles_balance -= amount;
+        self.reserved_balance += amount;
+        Ok(())
     }
 
     /// Removes all cycles from `cycles_balance` and `reserved_balance` as part
@@ -1879,11 +1901,12 @@ impl SystemState {
         use_case: CyclesUseCase,
         consuming_cycles: ConsumingCycles,
     ) {
-        // The three CyclesUseCase below are not valid on the canister
+        // The use cases below are not valid on the canister
         // level, they should only appear on the subnet level.
         debug_assert_ne!(use_case, CyclesUseCase::ECDSAOutcalls);
         debug_assert_ne!(use_case, CyclesUseCase::HTTPOutcalls);
         debug_assert_ne!(use_case, CyclesUseCase::DeletedCanisters);
+        debug_assert_ne!(use_case, CyclesUseCase::DroppedMessages);
 
         if use_case == CyclesUseCase::NonConsumed || amount == Cycles::from(0u128) {
             return;
@@ -1932,6 +1955,12 @@ impl SystemState {
             change_details,
         );
         self.canister_history.add_canister_change(new_change);
+    }
+
+    /// Overwrite the `total_num_changes` of the canister history. This can happen in the context of canister migration.
+    pub fn set_canister_history_total_num_changes(&mut self, total_num_changes: u64) {
+        self.canister_history
+            .set_total_num_changes(total_num_changes);
     }
 
     pub fn get_canister_history(&self) -> &CanisterHistory {
@@ -2016,9 +2045,9 @@ impl SystemState {
     /// depending if the condition for `OnLowWasmMemoryHook` is satisfied:
     ///
     /// 1. In the case of `memory_allocation`
-    ///     `wasm_memory_threshold >= min(memory_allocation - memory_usage_without_wasm_memory, wasm_memory_limit) - wasm_memory_usage`
+    ///    `wasm_memory_threshold >= min(memory_allocation - memory_usage_without_wasm_memory, wasm_memory_limit) - wasm_memory_usage`
     /// 2. Without memory allocation
-    ///     `wasm_memory_threshold >= wasm_memory_limit - wasm_memory_usage`
+    ///    `wasm_memory_threshold >= wasm_memory_limit - wasm_memory_usage`
     ///
     /// Note: if `wasm_memory_limit` is not set, its default value is 4 GiB.
     pub fn update_on_low_wasm_memory_hook_status(
@@ -2026,6 +2055,19 @@ impl SystemState {
         memory_usage: NumBytes,
         wasm_memory_usage: NumBytes,
     ) {
+        if self.is_low_wasm_memory_hook_condition_satisfied(memory_usage, wasm_memory_usage) {
+            self.task_queue.enqueue(ExecutionTask::OnLowWasmMemory);
+        } else {
+            self.task_queue.remove(ExecutionTask::OnLowWasmMemory);
+        }
+    }
+
+    /// Returns the `OnLowWasmMemory` hook status without updating the `task_queue`.
+    pub fn is_low_wasm_memory_hook_condition_satisfied(
+        &self,
+        memory_usage: NumBytes,
+        wasm_memory_usage: NumBytes,
+    ) -> bool {
         let memory_allocation = match self.memory_allocation {
             MemoryAllocation::Reserved(bytes) => Some(bytes),
             MemoryAllocation::BestEffort => None,
@@ -2034,17 +2076,13 @@ impl SystemState {
         let wasm_memory_limit = self.wasm_memory_limit;
         let wasm_memory_threshold = self.wasm_memory_threshold;
 
-        if is_low_wasm_memory_hook_condition_satisfied(
+        is_low_wasm_memory_hook_condition_satisfied(
             memory_usage,
             wasm_memory_usage,
             memory_allocation,
             wasm_memory_limit,
             wasm_memory_threshold,
-        ) {
-            self.task_queue.enqueue(ExecutionTask::OnLowWasmMemory);
-        } else {
-            self.task_queue.remove(ExecutionTask::OnLowWasmMemory);
-        }
+        )
     }
 }
 
@@ -2052,39 +2090,41 @@ impl SystemState {
 /// message into the induction pool of `queues`.
 ///
 /// Returns `StateError::OutOfMemory` if pushing the message would require more
-/// memory than `subnet_available_memory`.
+/// memory than `subnet_available_guaranteed_response_memory`.
 ///
-/// `subnet_available_memory` (the subnet's available guaranteed response
-/// message memory) is updated to reflect the change in memory usage after a
-/// successful push; and left unmodified if the push failed.
+/// `subnet_available_guaranteed_response_memory` is updated to reflect the change
+/// in guaranteed response message memory usage after a successful push; and left
+/// unmodified if the push failed.
 ///
 /// See `CanisterQueues::push_input()` for further details.
 pub(crate) fn push_input(
     queues: &mut CanisterQueues,
     msg: RequestOrResponse,
-    subnet_available_memory: &mut i64,
+    subnet_available_guaranteed_response_memory: &mut i64,
     own_subnet_type: SubnetType,
     input_queue_type: InputQueueType,
 ) -> Result<bool, (StateError, RequestOrResponse)> {
     // Do not enforce limits for local messages on system subnets.
     if own_subnet_type != SubnetType::System || input_queue_type != InputQueueType::LocalSubnet {
-        if let Err(required_memory) = can_push(&msg, *subnet_available_memory) {
+        if let Err(required_memory) = can_push(&msg, *subnet_available_guaranteed_response_memory) {
             return Err((
                 StateError::OutOfMemory {
                     requested: NumBytes::new(required_memory as u64),
-                    available: *subnet_available_memory,
+                    available: *subnet_available_guaranteed_response_memory,
                 },
                 msg,
             ));
         }
     }
 
-    // But always adjust `subnet_available_memory` by `memory_usage_before -
-    // memory_usage_after`. Defer the accounting to `CanisterQueues`, to avoid
-    // duplication (and the possibility of divergence).
-    *subnet_available_memory += queues.guaranteed_response_memory_usage() as i64;
+    // But always adjust `subnet_available_guaranteed_response_memory` by
+    // `memory_usage_before - memory_usage_after`. Defer the accounting to
+    // `CanisterQueues`, to avoid duplication (and the possibility of divergence).
+    *subnet_available_guaranteed_response_memory +=
+        queues.guaranteed_response_memory_usage() as i64;
     let res = queues.push_input(msg, input_queue_type);
-    *subnet_available_memory -= queues.guaranteed_response_memory_usage() as i64;
+    *subnet_available_guaranteed_response_memory -=
+        queues.guaranteed_response_memory_usage() as i64;
     res
 }
 
@@ -2315,6 +2355,7 @@ pub mod testing {
             wasm_memory_limit: Default::default(),
             next_snapshot_id: Default::default(),
             snapshots_memory_usage: Default::default(),
+            environment_variables: Default::default(),
         };
     }
 }

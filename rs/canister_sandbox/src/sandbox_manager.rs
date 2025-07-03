@@ -19,7 +19,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use crate::protocol::id::{ExecId, MemoryId, WasmId};
-use crate::protocol::sbxsvc::{CreateExecutionStateSerializedSuccessReply, OpenMemoryRequest};
+use crate::protocol::sbxsvc::{CreateExecutionStateSuccessReply, OpenMemoryRequest};
 use crate::protocol::structs::{
     ExecutionStateModifications, MemoryModifications, SandboxExecInput, SandboxExecOutput,
     StateModifications,
@@ -27,16 +27,17 @@ use crate::protocol::structs::{
 use crate::{controller_service::ControllerService, protocol};
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::{
-    wasm_executor::WasmStateChanges, wasm_utils::Segments, InitialStateData, SerializedModule,
-    SerializedModuleBytes, WasmtimeEmbedder,
+    wasm_executor::WasmStateChanges, wasm_utils::Segments, InitialStateData, SerializedModuleBytes,
+    WasmtimeEmbedder,
 };
 use ic_interfaces::execution_environment::{
     ExecutionMode, HypervisorError, HypervisorResult, SystemApi, WasmExecutionOutput,
 };
 use ic_logger::ReplicaLogger;
+use ic_management_canister_types_private::Global;
 use ic_replicated_state::{
     page_map::{PageAllocatorRegistry, PageMapSerialization},
-    EmbedderCache, Global, Memory, PageMap,
+    EmbedderCache, Memory, PageMap,
 };
 use ic_types::CanisterId;
 
@@ -132,7 +133,7 @@ impl Execution {
                 wasm_result,
                 num_instructions_left,
                 allocated_bytes,
-                allocated_message_bytes,
+                allocated_guaranteed_response_message_bytes,
                 instance_stats,
                 system_api_call_counters,
             },
@@ -203,7 +204,7 @@ impl Execution {
                 let wasm_output = WasmExecutionOutput {
                     wasm_result,
                     allocated_bytes,
-                    allocated_message_bytes,
+                    allocated_guaranteed_response_message_bytes,
                     num_instructions_left,
                     instance_stats,
                     system_api_call_counters,
@@ -235,7 +236,7 @@ impl Execution {
                     wasm_result: Err(err),
                     num_instructions_left,
                     allocated_bytes,
-                    allocated_message_bytes,
+                    allocated_guaranteed_response_message_bytes,
                     instance_stats,
                     system_api_call_counters,
                 };
@@ -477,37 +478,8 @@ impl SandboxManager {
         paused_execution.abort();
     }
 
-    pub fn create_execution_state_serialized(
-        &self,
-        wasm_id: WasmId,
-        serialized_module: Arc<SerializedModule>,
-        wasm_page_map: PageMapSerialization,
-        next_wasm_memory_id: MemoryId,
-        canister_id: CanisterId,
-        stable_memory_page_map: PageMapSerialization,
-    ) -> HypervisorResult<CreateExecutionStateSerializedSuccessReply> {
-        let timer = Instant::now();
-        let (embedder_cache, deserialization_time) =
-            self.open_wasm_serialized(wasm_id, &serialized_module.bytes)?;
-        let (wasm_memory_modifications, exported_globals) = self
-            .create_initial_memory_and_globals(
-                &embedder_cache,
-                &serialized_module.data_segments,
-                wasm_page_map,
-                next_wasm_memory_id,
-                canister_id,
-                stable_memory_page_map,
-            )?;
-        Ok(CreateExecutionStateSerializedSuccessReply {
-            wasm_memory_modifications,
-            exported_globals,
-            deserialization_time,
-            total_sandbox_time: timer.elapsed(),
-        })
-    }
-
     /// Takes ownership of the passed in file descriptors.
-    pub fn create_execution_state_via_file(
+    pub fn create_execution_state(
         &self,
         wasm_id: WasmId,
         bytes: File,
@@ -516,7 +488,7 @@ impl SandboxManager {
         next_wasm_memory_id: MemoryId,
         canister_id: CanisterId,
         stable_memory_page_map: PageMapSerialization,
-    ) -> HypervisorResult<CreateExecutionStateSerializedSuccessReply> {
+    ) -> HypervisorResult<CreateExecutionStateSuccessReply> {
         let timer = Instant::now();
         let (embedder_cache, deserialization_time) = self.open_wasm_via_file(wasm_id, bytes)?;
 
@@ -563,7 +535,7 @@ impl SandboxManager {
                 canister_id,
                 stable_memory_page_map,
             )?;
-        Ok(CreateExecutionStateSerializedSuccessReply {
+        Ok(CreateExecutionStateSuccessReply {
             wasm_memory_modifications,
             exported_globals,
             deserialization_time,

@@ -1,29 +1,30 @@
 /* tag::catalog[]
 
-Title:: Subnet Recovery Test (App subnet, same nodes + failover nodes, with and without ECDSA, with and without version upgrade)
+Title:: Subnet Recovery Test (App subnet, same nodes + failover nodes, with and without chain keys, with and without version upgrade)
 
 Goal::
 Ensure that the subnet recovery of an app subnet works on the same nodes and on failover nodes.
 
 
 Runbook::
-. Deploy an IC with one app subnet (and some unassigned nodes in case of recovery on failover nodes).
-. In case of ECDSA: enable signing on NNS, create the app subnet with the key, then disable signing
-  on NNS and enable it on the app subnet instead.
+. Deploy an IC with one "source" app subnet and one "app" app subnet (and some unassigned nodes
+  in case of recovery on failover nodes).
+. In case of chain keys: enable signing on the "source", create the "app" with the key, then disable
+  signing on "source" and enable it on the "app" instead.
 . Break (halt in case of no upgrade) the subnet.
 . Make sure the subnet stalls.
 . Propose readonly key and confirm ssh access.
 . Download IC state of a node with max finalization height.
 . Execute ic-replay to generate a recovery CUP.
 . Optionally upgrade the subnet to a working replica.
-. Submit a recovery CUP (using failover nodes and/or ECDSA, if configured).
+. Submit a recovery CUP (using failover nodes and/or chain keys, if configured).
 . Upload replayed state to a node.
 . Unhalt the subnet.
 . Ensure the subnet resumes.
-. In case of ECDSA: ensure that signing on the app subnet is possible, and the key hasn't changed.
+. In case of chain keys: ensure that signing on the "app" is possible, and the key hasn't changed.
 
 Success::
-. App subnet is functional after the recovery.
+. "App" subnet is functional after the recovery.
 
 end::catalog[] */
 
@@ -74,56 +75,59 @@ use std::{io::Read, time::Duration};
 use std::{io::Write, path::Path};
 use url::Url;
 
-const DKG_INTERVAL: u64 = 9;
-const APP_NODES: usize = 3;
-const UNASSIGNED_NODES: usize = 3;
+const DKG_INTERVAL: u64 = 14;
+const NNS_NODES: usize = 4;
+const APP_NODES: usize = 4;
+const UNASSIGNED_NODES: usize = 4;
 
-const DKG_INTERVAL_LARGE: u64 = 99;
 const NNS_NODES_LARGE: usize = 40;
 const APP_NODES_LARGE: usize = 37;
+/// 40 dealings * 3 transcripts being reshared (high/local, high/remote, low/remote)
+/// plus 4 to make checkpoint heights more predictable
+const DKG_INTERVAL_LARGE: u64 = 124;
 
 pub const CHAIN_KEY_SUBNET_RECOVERY_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 
 /// Setup an IC with the given number of unassigned nodes and
 /// an app subnet with the given number of nodes
-pub fn setup(
-    nns_nodes: Option<usize>,
-    app_nodes: usize,
-    unassigned_nodes: usize,
-    dkg_interval: u64,
-    env: TestEnv,
-) {
-    let mut nns = if let Some(nns_nodes) = nns_nodes {
-        Subnet::new(SubnetType::System)
-            .with_dkg_interval_length(Height::from(dkg_interval))
-            .add_nodes(nns_nodes)
-    } else {
-        Subnet::fast_single_node(SubnetType::System)
-            .with_dkg_interval_length(Height::from(dkg_interval))
-    };
+fn setup(env: TestEnv, cfg: SetupConfig) {
     let key_ids = make_key_ids_for_all_schemes();
+
     let key_configs = key_ids
         .into_iter()
         .map(|key_id| KeyConfig {
-            key_id,
             max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
-            pre_signatures_to_create_in_advance: 3,
+            pre_signatures_to_create_in_advance: if key_id.requires_pre_signatures() {
+                3
+            } else {
+                0
+            },
+            key_id,
         })
         .collect();
-    nns = nns.with_chain_key_config(ChainKeyConfig {
-        key_configs,
-        signature_request_timeout_ns: None,
-        idkg_key_rotation_period_ms: None,
-    });
 
     let mut ic = InternetComputer::new()
-        .add_subnet(nns)
-        .with_unassigned_nodes(unassigned_nodes);
-    if app_nodes > 0 {
+        .add_subnet(
+            Subnet::new(SubnetType::System)
+                .with_dkg_interval_length(Height::from(cfg.dkg_interval))
+                .add_nodes(cfg.nns_nodes),
+        )
+        .add_subnet(
+            Subnet::new(SubnetType::Application)
+                .with_dkg_interval_length(Height::from(cfg.dkg_interval))
+                .add_nodes(cfg.source_nodes)
+                .with_chain_key_config(ChainKeyConfig {
+                    key_configs,
+                    signature_request_timeout_ns: None,
+                    idkg_key_rotation_period_ms: None,
+                }),
+        )
+        .with_unassigned_nodes(cfg.unassigned_nodes);
+    if cfg.app_nodes > 0 {
         ic = ic.add_subnet(
             Subnet::new(SubnetType::Application)
-                .with_dkg_interval_length(Height::from(dkg_interval))
-                .add_nodes(app_nodes),
+                .with_dkg_interval_length(Height::from(cfg.dkg_interval))
+                .add_nodes(cfg.app_nodes),
         );
     }
 
@@ -132,33 +136,80 @@ pub fn setup(
     install_nns_and_check_progress(env.topology_snapshot());
 }
 
-pub fn setup_large_tecdsa(env: TestEnv) {
+struct SetupConfig {
+    nns_nodes: usize,
+    source_nodes: usize,
+    app_nodes: usize,
+    unassigned_nodes: usize,
+    dkg_interval: u64,
+}
+
+pub fn setup_large_chain_keys(env: TestEnv) {
     setup(
-        Some(NNS_NODES_LARGE),
-        0,
-        APP_NODES_LARGE,
-        DKG_INTERVAL_LARGE,
         env,
+        SetupConfig {
+            nns_nodes: NNS_NODES_LARGE,
+            source_nodes: APP_NODES_LARGE,
+            app_nodes: 0,
+            unassigned_nodes: APP_NODES_LARGE,
+            dkg_interval: DKG_INTERVAL_LARGE,
+        },
     );
 }
 
-pub fn setup_same_nodes_tecdsa(env: TestEnv) {
-    setup(None, 0, APP_NODES, DKG_INTERVAL, env);
+pub fn setup_same_nodes_chain_keys(env: TestEnv) {
+    setup(
+        env,
+        SetupConfig {
+            nns_nodes: NNS_NODES,
+            source_nodes: APP_NODES,
+            app_nodes: 0,
+            unassigned_nodes: APP_NODES,
+            dkg_interval: DKG_INTERVAL,
+        },
+    );
 }
 
-pub fn setup_failover_nodes_tecdsa(env: TestEnv) {
-    setup(None, 0, APP_NODES + UNASSIGNED_NODES, DKG_INTERVAL, env);
+pub fn setup_failover_nodes_chain_keys(env: TestEnv) {
+    setup(
+        env,
+        SetupConfig {
+            nns_nodes: NNS_NODES,
+            source_nodes: APP_NODES,
+            app_nodes: 0,
+            unassigned_nodes: APP_NODES + UNASSIGNED_NODES,
+            dkg_interval: DKG_INTERVAL,
+        },
+    );
 }
 
 pub fn setup_same_nodes(env: TestEnv) {
-    setup(None, APP_NODES, 0, DKG_INTERVAL, env);
+    setup(
+        env,
+        SetupConfig {
+            nns_nodes: NNS_NODES,
+            source_nodes: APP_NODES,
+            app_nodes: APP_NODES,
+            unassigned_nodes: 0,
+            dkg_interval: DKG_INTERVAL,
+        },
+    );
 }
 
 pub fn setup_failover_nodes(env: TestEnv) {
-    setup(None, APP_NODES, UNASSIGNED_NODES, DKG_INTERVAL, env);
+    setup(
+        env,
+        SetupConfig {
+            nns_nodes: NNS_NODES,
+            source_nodes: APP_NODES,
+            app_nodes: APP_NODES,
+            unassigned_nodes: UNASSIGNED_NODES,
+            dkg_interval: DKG_INTERVAL,
+        },
+    );
 }
 
-struct Config {
+struct TestConfig {
     subnet_size: usize,
     upgrade: bool,
     chain_key: bool,
@@ -166,10 +217,10 @@ struct Config {
     local_recovery: bool,
 }
 
-pub fn test_with_tecdsa(env: TestEnv) {
+pub fn test_with_chain_keys(env: TestEnv) {
     app_subnet_recovery_test(
         env,
-        Config {
+        TestConfig {
             subnet_size: APP_NODES,
             upgrade: true,
             chain_key: true,
@@ -179,10 +230,10 @@ pub fn test_with_tecdsa(env: TestEnv) {
     );
 }
 
-pub fn test_without_tecdsa(env: TestEnv) {
+pub fn test_without_chain_keys(env: TestEnv) {
     app_subnet_recovery_test(
         env,
-        Config {
+        TestConfig {
             subnet_size: APP_NODES,
             upgrade: true,
             chain_key: false,
@@ -192,12 +243,12 @@ pub fn test_without_tecdsa(env: TestEnv) {
     );
 }
 
-pub fn test_no_upgrade_with_tecdsa(env: TestEnv) {
-    // Test the corrupt CUP case only when recovering an app subnet with tECDSA without upgrade
+pub fn test_no_upgrade_with_chain_keys(env: TestEnv) {
+    // Test the corrupt CUP case only when recovering an app subnet with chain keys without upgrade
     let corrupt_cup = env.topology_snapshot().unassigned_nodes().count() > 0;
     app_subnet_recovery_test(
         env,
-        Config {
+        TestConfig {
             subnet_size: APP_NODES,
             upgrade: false,
             chain_key: true,
@@ -207,10 +258,10 @@ pub fn test_no_upgrade_with_tecdsa(env: TestEnv) {
     );
 }
 
-pub fn test_large_with_tecdsa(env: TestEnv) {
+pub fn test_large_with_chain_keys(env: TestEnv) {
     app_subnet_recovery_test(
         env,
-        Config {
+        TestConfig {
             subnet_size: APP_NODES_LARGE,
             upgrade: false,
             chain_key: true,
@@ -220,10 +271,10 @@ pub fn test_large_with_tecdsa(env: TestEnv) {
     );
 }
 
-pub fn test_no_upgrade_without_tecdsa(env: TestEnv) {
+pub fn test_no_upgrade_without_chain_keys(env: TestEnv) {
     app_subnet_recovery_test(
         env,
-        Config {
+        TestConfig {
             subnet_size: APP_NODES,
             upgrade: false,
             chain_key: false,
@@ -233,10 +284,10 @@ pub fn test_no_upgrade_without_tecdsa(env: TestEnv) {
     );
 }
 
-pub fn test_no_upgrade_without_tecdsa_local(env: TestEnv) {
+pub fn test_no_upgrade_without_chain_keys_local(env: TestEnv) {
     app_subnet_recovery_test(
         env,
-        Config {
+        TestConfig {
             subnet_size: APP_NODES,
             upgrade: false,
             chain_key: false,
@@ -246,14 +297,14 @@ pub fn test_no_upgrade_without_tecdsa_local(env: TestEnv) {
     );
 }
 
-fn app_subnet_recovery_test(env: TestEnv, cfg: Config) {
+fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     let logger = env.logger();
 
     let master_version = env.get_initial_replica_version().unwrap();
     info!(logger, "IC_VERSION_ID: {master_version:?}");
     let topology_snapshot = env.topology_snapshot();
 
-    // choose a node from the nns subnet
+    // Choose a node from the nns subnet
     let nns_node = get_nns_node(&topology_snapshot);
     info!(
         logger,
@@ -268,16 +319,25 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: Config) {
         nns_node.effective_canister_id(),
     ));
 
-    let root_subnet_id = topology_snapshot.root_subnet_id();
+    // The first application subnet encountered during iteration is the source subnet because it was inserted first.
+    let source_subnet_id = env
+        .topology_snapshot()
+        .subnets()
+        .find(|subnet| subnet.subnet_type() == SubnetType::Application)
+        .expect("there is no source subnet")
+        .subnet_id;
 
     let create_new_subnet = !topology_snapshot
         .subnets()
-        .any(|s| s.subnet_type() == SubnetType::Application);
+        .any(|s| s.subnet_type() == SubnetType::Application && s.subnet_id != source_subnet_id);
     assert!(cfg.chain_key >= create_new_subnet);
 
     let key_ids = make_key_ids_for_all_schemes();
     let chain_key_pub_keys = cfg.chain_key.then(|| {
-        info!(logger, "Chain key flag set, creating key on NNS.");
+        info!(
+            logger,
+            "Chain key flag set, creating key on the source subnet."
+        );
         if create_new_subnet {
             info!(
                 logger,
@@ -287,6 +347,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: Config) {
                 &env,
                 &nns_node,
                 &nns_canister,
+                source_subnet_id,
                 cfg.subnet_size,
                 master_version.clone(),
                 key_ids.clone(),
@@ -296,7 +357,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: Config) {
             enable_chain_key_signing_on_subnet(
                 &nns_node,
                 &nns_canister,
-                root_subnet_id,
+                source_subnet_id,
                 key_ids.clone(),
                 &logger,
             )
@@ -306,7 +367,9 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: Config) {
     let app_subnet = env
         .topology_snapshot()
         .subnets()
-        .find(|subnet| subnet.subnet_type() == SubnetType::Application)
+        .find(|subnet| {
+            subnet.subnet_type() == SubnetType::Application && subnet.subnet_id != source_subnet_id
+        })
         .expect("there is no application subnet");
     let mut app_nodes = app_subnet.nodes();
     let app_node = app_nodes.next().expect("there is no application node");
@@ -369,7 +432,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: Config) {
         app_nodes.next().unwrap()
     };
 
-    print_app_and_unassigned_nodes(&env, &logger);
+    print_source_and_app_and_unassigned_nodes(&env, &logger, source_subnet_id);
 
     let unassigned_nodes_ids = env
         .topology_snapshot()
@@ -392,13 +455,13 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: Config) {
         upgrade_image_url: get_ic_os_update_img_test_url().ok(),
         upgrade_image_hash: get_ic_os_update_img_test_sha256().ok(),
         replacement_nodes: Some(unassigned_nodes_ids.clone()),
-        replay_until_height: None,
+        replay_until_height: None, // We will set this after breaking/halting the subnet, see below
         // If the latest CUP is corrupted we can't deploy read-only access
         pub_key: (!cfg.corrupt_cup).then_some(pub_key),
-        download_method: None,
+        download_method: None, // We will set this after breaking/halting the subnet, see below
         upload_method: Some(DataLocation::Remote(upload_node.get_ip_addr())),
         wait_for_cup_node: Some(upload_node.get_ip_addr()),
-        chain_key_subnet_id: cfg.chain_key.then_some(root_subnet_id),
+        chain_key_subnet_id: cfg.chain_key.then_some(source_subnet_id),
         next_step: None,
         skip: None,
     };
@@ -443,6 +506,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: Config) {
 
     subnet_recovery.params.download_method =
         Some(DataLocation::Remote(download_node.0.get_ip_addr()));
+    subnet_recovery.params.replay_until_height = Some(download_node.1.certification_height.get());
 
     if cfg.local_recovery {
         info!(logger, "Performing a local node recovery");
@@ -456,11 +520,13 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: Config) {
     let topology_snapshot = block_on(env.topology_snapshot().block_for_newer_registry_version())
         .expect("Could not block for newer registry version");
 
-    print_app_and_unassigned_nodes(&env, &logger);
+    print_source_and_app_and_unassigned_nodes(&env, &logger, source_subnet_id);
 
     let all_app_nodes: Vec<IcNodeSnapshot> = topology_snapshot
         .subnets()
-        .find(|subnet| subnet.subnet_type() == SubnetType::Application)
+        .find(|subnet| {
+            subnet.subnet_type() == SubnetType::Application && subnet.subnet_id != source_subnet_id
+        })
         .expect("there is no application subnet")
         .nodes()
         .collect();
@@ -493,7 +559,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: Config) {
         if !create_new_subnet {
             disable_chain_key_on_subnet(
                 &nns_node,
-                root_subnet_id,
+                source_subnet_id,
                 &nns_canister,
                 key_ids.clone(),
                 &logger,
@@ -522,7 +588,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: Config) {
         .for_each(|n| assert_node_is_unassigned(&n, &logger));
 }
 
-fn remote_recovery(cfg: &Config, subnet_recovery: AppSubnetRecovery, logger: &Logger) {
+fn remote_recovery(cfg: &TestConfig, subnet_recovery: AppSubnetRecovery, logger: &Logger) {
     for (step_type, step) in subnet_recovery {
         info!(logger, "Next step: {:?}", step_type);
 
@@ -541,6 +607,11 @@ fn remote_recovery(cfg: &Config, subnet_recovery: AppSubnetRecovery, logger: &Lo
 fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, logger: &Logger) {
     let nns_url = subnet_recovery.recovery_args.nns_url;
     let subnet_id = subnet_recovery.params.subnet_id;
+    let maybe_replay_until_height = subnet_recovery
+        .params
+        .replay_until_height
+        .map(|h| format!("--replay-until-height {h} "))
+        .unwrap_or_default();
     let pub_key = subnet_recovery.params.pub_key.unwrap();
     let pub_key = pub_key.trim();
     let node_ip = node.get_ip_addr();
@@ -551,6 +622,7 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, log
         --test --skip-prompts --use-local-binaries \
         app-subnet-recovery \
         --subnet-id {subnet_id} \
+        {maybe_replay_until_height}\
         --pub-key "{pub_key}" \
         --download-method local \
         --upload-method local \
@@ -765,30 +837,47 @@ fn assert_subnet_is_broken(
     );
 }
 
-/// Select a node with highest finalization height in the given subnet snapshot
+/// Select a node with highest certification height in the given subnet snapshot
 fn select_download_node(subnet: &SubnetSnapshot, logger: &Logger) -> (IcNodeSnapshot, NodeMetrics) {
     let node = subnet
         .nodes()
         .filter_map(|n| block_on(get_node_metrics(logger, &n.get_ip_addr())).map(|m| (n, m)))
-        .max_by_key(|(_, metric)| metric.finalization_height)
+        .max_by_key(|(_, metric)| metric.certification_height)
         .expect("No download node found");
     info!(
         logger,
         "Selected download node: ({}, {})",
         node.0.get_ip_addr(),
-        node.1.finalization_height
+        node.1.certification_height
     );
     node
 }
 
-/// Print ID and IP of all unassigned nodes and the first app subnet found.
-fn print_app_and_unassigned_nodes(env: &TestEnv, logger: &Logger) {
+/// Print ID and IP of the source subnet, the first app subnet found that is not the source, and all
+/// unassigned nodes.
+fn print_source_and_app_and_unassigned_nodes(
+    env: &TestEnv,
+    logger: &Logger,
+    source_subnet_id: SubnetId,
+) {
     let topology_snapshot = env.topology_snapshot();
+
+    info!(logger, "Source nodes:");
+    topology_snapshot
+        .subnets()
+        .find(|subnet| subnet.subnet_id == source_subnet_id)
+        .unwrap()
+        .nodes()
+        .for_each(|n| {
+            info!(logger, "S: {}, ip: {}", n.node_id, n.get_ip_addr());
+        });
 
     info!(logger, "App nodes:");
     topology_snapshot
         .subnets()
-        .find(|subnet| subnet.subnet_type() == SubnetType::Application)
+        .find(|subnet| {
+            subnet.subnet_type() == SubnetType::Application && subnet.subnet_id != source_subnet_id
+        })
         .unwrap()
         .nodes()
         .for_each(|n| {
@@ -801,15 +890,17 @@ fn print_app_and_unassigned_nodes(env: &TestEnv, logger: &Logger) {
     });
 }
 
-/// Create a chain key on the root subnet using the given NNS node, then
+/// Create a chain key on the source subnet using the given NNS node, then
 /// create a new subnet of the given size initialized with the chain key.
-/// Disable signing on NNS and enable it on the new app subnet.
+/// Disable signing on the source subnet and enable it on the new one.
 /// Assert that the key stays the same regardless of whether signing
-/// is enabled on NNS or the app subnet. Return the public key for the given canister.
+/// is enabled on the source subnet or the new one.
+/// Return the public key for the given canister.
 fn enable_chain_key_on_new_subnet(
     env: &TestEnv,
     nns_node: &IcNodeSnapshot,
     canister: &MessageCanister,
+    source_subnet_id: SubnetId,
     subnet_size: usize,
     replica_version: ReplicaVersion,
     key_ids: Vec<MasterPublicKeyId>,
@@ -818,14 +909,13 @@ fn enable_chain_key_on_new_subnet(
     let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     let governance = Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
     let snapshot = env.topology_snapshot();
-    let root_subnet_id = snapshot.root_subnet_id();
     let registry_version = snapshot.get_registry_version();
 
-    info!(logger, "Enabling signing on NNS.");
-    let nns_keys = enable_chain_key_signing_on_subnet(
+    info!(logger, "Enabling signing on the source subnet.");
+    let source_keys = enable_chain_key_signing_on_subnet(
         nns_node,
         canister,
-        root_subnet_id,
+        source_subnet_id,
         key_ids.clone(),
         logger,
     );
@@ -846,7 +936,7 @@ fn enable_chain_key_on_new_subnet(
         key_ids
             .iter()
             .cloned()
-            .map(|key_id| (key_id, root_subnet_id.get()))
+            .map(|key_id| (key_id, source_subnet_id.get()))
             .collect(),
         replica_version,
         logger,
@@ -857,7 +947,9 @@ fn enable_chain_key_on_new_subnet(
 
     let app_subnet = snapshot
         .subnets()
-        .find(|subnet| subnet.subnet_type() == SubnetType::Application)
+        .find(|subnet| {
+            subnet.subnet_type() == SubnetType::Application && subnet.subnet_id != source_subnet_id
+        })
         .expect("there is no application subnet");
 
     app_subnet.nodes().for_each(|n| {
@@ -865,8 +957,14 @@ fn enable_chain_key_on_new_subnet(
             .expect("Timeout while waiting for all nodes to be healthy");
     });
 
-    info!(logger, "Disabling signing on NNS.");
-    disable_chain_key_on_subnet(nns_node, root_subnet_id, canister, key_ids.clone(), logger);
+    info!(logger, "Disabling signing on the source subnet.");
+    disable_chain_key_on_subnet(
+        nns_node,
+        source_subnet_id,
+        canister,
+        key_ids.clone(),
+        logger,
+    );
     let app_keys = enable_chain_key_signing_on_subnet(
         nns_node,
         canister,
@@ -875,6 +973,6 @@ fn enable_chain_key_on_new_subnet(
         logger,
     );
 
-    assert_eq!(app_keys, nns_keys);
+    assert_eq!(app_keys, source_keys);
     app_keys
 }

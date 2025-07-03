@@ -1,21 +1,40 @@
+load("//bazel:defs.bzl", "file_size_check")
 load("//ic-os:defs.bzl", "icos_build")
 load("//ic-os/hostos:defs.bzl", "image_deps")
-load("//publish:defs.bzl", "checksum_rule")
+load("//publish:defs.bzl", "artifact_bundle")
 
 # The macro contains several targets.
 # Check
 #       //ic-os/hostos/BUILD.bazel for examples
 #    or //ic-os/defs.bzl for the full list of targets.
-icos_build(
+icos_images = icos_build(
     name = "prod",
     image_deps_func = image_deps,
-    upload_prefix = "host-os",
     visibility = ["//rs:ic-os-pkg"],
     vuln_scan = False,
 )
 
+file_size_check(
+    name = "update_img_size_check",
+    file = icos_images.update_image,
+    max_file_size = 900 * 1000 * 1000,  # 835 MB on 2025-03-21
+)
+
+file_size_check(
+    name = "disk_img_size_check",
+    file = icos_images.disk_image,
+    max_file_size = 900 * 1000 * 1000,  # 837 MB on 2025-03-21
+)
+
 # Export checksums & build artifacts
-checksum_rule(
-    name = "compute_checksums",
-    inputs = [":prod"],
+# (image is used for HostOS upgrades)
+artifact_bundle(
+    name = "bundle-update",
+    testonly = True,
+    inputs = [
+        icos_images.update_image,
+        icos_images.update_image_test,
+    ],
+    prefix = "host-os/update-img",
+    visibility = ["//visibility:public"],
 )

@@ -9,7 +9,6 @@ use serde_cbor::{from_slice, to_vec};
 use std::{borrow::Cow, cell::RefCell, collections::HashSet};
 
 pub type Timestamp = u64;
-pub const SALT_SIZE: usize = 64;
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
 pub type StableMap<K, V> = StableBTreeMap<K, V, Memory>;

@@ -7,13 +7,13 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
+async-trait =  { workspace = true }
 assert_matches = { workspace = true }
 candid = { workspace = true }
 canister-test = { path = "../../rust_canisters/canister_test" }
 cycles-minting-canister = { path = "../../nns/cmc" }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_http = { path = "../../rust_canisters/dfn_http" }
-dfn_json = { path = "../../rust_canisters/dfn_json" }
 dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
 flate2 = { workspace = true }
 futures = { workspace = true }
@@ -44,6 +44,7 @@ ic-nns-gtc = { path = "../gtc" }
 ic-nns-gtc-accounts = { path = "../gtc_accounts" }
 ic-nns-handler-lifeline-interface = { path = "../handlers/lifeline/interface" }
 ic-nns-handler-root = { path = "../handlers/root/impl" }
+ic-node-rewards-canister-api = { path = "../../node_rewards/canister/api" }
 ic-protobuf = { path = "../../protobuf" }
 ic-registry-canister-api = { path = "../../registry/canister/api" }
 ic-registry-keys = { path = "../../registry/keys" }

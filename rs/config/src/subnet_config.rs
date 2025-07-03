@@ -165,6 +165,11 @@ pub const DEFAULT_UPLOAD_CHUNK_INSTRUCTIONS: NumInstructions = NumInstructions::
 pub const DEFAULT_CANISTERS_SNAPSHOT_BASELINE_INSTRUCTIONS: NumInstructions =
     NumInstructions::new(2_000_000_000);
 
+/// Baseline cost for up/downloading binary snapshot data (5M instructions).
+/// The cost is based on the benchmarks: rs/execution_environment/benches/management_canister/
+pub const DEFAULT_CANISTERS_SNAPSHOT_DATA_BASELINE_INSTRUCTIONS: NumInstructions =
+    NumInstructions::new(5_000_000);
+
 /// The cycle cost overhead of executing canister instructions when running in Wasm64 mode.
 /// This overhead is a multiplier over the cost of executing the same instructions
 /// in Wasm32 mode. The overhead comes from the bound checks performed in Wasm64 mode
@@ -272,6 +277,9 @@ pub struct SchedulerConfig {
 
     /// Number of instructions to count when creating or loading a canister snapshot.
     pub canister_snapshot_baseline_instructions: NumInstructions,
+
+    /// Number of instructions to count when uploading or downloading binary snapshot data.
+    pub canister_snapshot_data_baseline_instructions: NumInstructions,
 }
 
 impl SchedulerConfig {
@@ -301,6 +309,8 @@ impl SchedulerConfig {
             upload_wasm_chunk_instructions: DEFAULT_UPLOAD_CHUNK_INSTRUCTIONS,
             canister_snapshot_baseline_instructions:
                 DEFAULT_CANISTERS_SNAPSHOT_BASELINE_INSTRUCTIONS,
+            canister_snapshot_data_baseline_instructions:
+                DEFAULT_CANISTERS_SNAPSHOT_DATA_BASELINE_INSTRUCTIONS,
         }
     }
 
@@ -344,6 +354,7 @@ impl SchedulerConfig {
             accumulated_priority_reset_interval: ACCUMULATED_PRIORITY_RESET_INTERVAL,
             upload_wasm_chunk_instructions: NumInstructions::from(0),
             canister_snapshot_baseline_instructions: NumInstructions::from(0),
+            canister_snapshot_data_baseline_instructions: NumInstructions::from(0),
         }
     }
 
@@ -511,6 +522,32 @@ impl CyclesAccountManagerConfig {
             // This effectively disables the storage reservation mechanism on system subnets.
             max_storage_reservation_period: Duration::from_secs(0),
             default_reserved_balance_limit: DEFAULT_RESERVED_BALANCE_LIMIT,
+        }
+    }
+
+    pub fn zero_cost(subnet_size: usize) -> Self {
+        Self {
+            reference_subnet_size: subnet_size,
+            canister_creation_fee: Cycles::zero(),
+            update_message_execution_fee: Cycles::zero(),
+            ten_update_instructions_execution_fee: Cycles::zero(),
+            ten_update_instructions_execution_fee_wasm64: Cycles::zero(),
+            xnet_call_fee: Cycles::zero(),
+            xnet_byte_transmission_fee: Cycles::zero(),
+            ingress_message_reception_fee: Cycles::zero(),
+            ingress_byte_reception_fee: Cycles::zero(),
+            gib_storage_per_second_fee: Cycles::zero(),
+            compute_percent_allocated_per_second_fee: Cycles::zero(),
+            duration_between_allocation_charges: Duration::from_secs(u64::MAX),
+            ecdsa_signature_fee: Cycles::zero(),
+            schnorr_signature_fee: Cycles::zero(),
+            vetkd_fee: Cycles::zero(),
+            http_request_linear_baseline_fee: Cycles::zero(),
+            http_request_quadratic_baseline_fee: Cycles::zero(),
+            http_request_per_byte_fee: Cycles::zero(),
+            http_response_per_byte_fee: Cycles::zero(),
+            max_storage_reservation_period: Duration::from_secs(u64::MAX),
+            default_reserved_balance_limit: Cycles::zero(),
         }
     }
 }

@@ -530,7 +530,7 @@ impl Subnet {
         Self::new(subnet_type)
             // Shorter block time.
             .with_unit_delay(Duration::from_millis(200))
-            .with_initial_notary_delay(Duration::from_millis(500))
+            .with_initial_notary_delay(Duration::from_millis(200))
             .add_nodes(no_of_nodes)
     }
 

@@ -1,8 +1,8 @@
-use crate::{crypto_validate_dealing, payload_builder, utils, PayloadCreationError};
+use crate::{crypto_validate_dealing, payload_builder, utils};
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
 use ic_interfaces::{
-    dkg::DkgPool,
-    validation::{ValidationError, ValidationResult},
+    dkg::{DkgPayloadValidationError, DkgPool},
+    validation::ValidationResult,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
@@ -12,103 +12,13 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::ValidationContext,
     consensus::{
-        dkg::{self, DkgDataPayload, Summary},
+        dkg::{DkgDataPayload, DkgPayloadValidationFailure, DkgSummary, InvalidDkgPayloadReason},
         Block, BlockPayload,
     },
-    crypto::{
-        threshold_sig::ni_dkg::errors::verify_dealing_error::DkgVerifyDealingError, CryptoError,
-    },
-    registry::RegistryClientError,
-    Height, NodeId, SubnetId,
+    SubnetId,
 };
 use prometheus::IntCounterVec;
 use std::collections::HashSet;
-
-/// Reasons for why a dkg payload might be invalid.
-// The `Debug` implementation is ignored during the dead code analysis and we are getting a `field
-// is never used` warning on this enum even though we are implicitly reading them when we log the
-// enum. See https://github.com/rust-lang/rust/issues/88900
-#[allow(dead_code)]
-#[derive(PartialEq, Debug)]
-pub enum InvalidDkgPayloadReason {
-    CryptoError(CryptoError),
-    DkgVerifyDealingError(DkgVerifyDealingError),
-    MismatchedDkgSummary(dkg::Summary, dkg::Summary),
-    MissingDkgConfigForDealing,
-    DkgStartHeightDoesNotMatchParentBlock,
-    DkgSummaryAtNonStartHeight(Height),
-    DkgDealingAtStartHeight(Height),
-    InvalidDealer(NodeId),
-    DealerAlreadyDealt(NodeId),
-    /// There are multiple dealings from the same dealer in the payload.
-    DuplicateDealers,
-    /// The number of dealings in the payload exceeds the maximum allowed number of dealings.
-    TooManyDealings {
-        limit: usize,
-        actual: usize,
-    },
-}
-
-/// Possible failures which could occur while validating a dkg payload. They don't imply that the
-/// payload is invalid.
-#[allow(dead_code)]
-#[derive(PartialEq, Debug)]
-pub enum DkgPayloadValidationFailure {
-    PayloadCreationFailed(PayloadCreationError),
-    /// Crypto related errors.
-    CryptoError(CryptoError),
-    DkgVerifyDealingError(DkgVerifyDealingError),
-    FailedToGetMaxDealingsPerBlock(RegistryClientError),
-    FailedToGetRegistryVersion,
-}
-
-/// Dkg errors.
-pub(crate) type PayloadValidationError =
-    ValidationError<InvalidDkgPayloadReason, DkgPayloadValidationFailure>;
-
-impl From<DkgVerifyDealingError> for InvalidDkgPayloadReason {
-    fn from(err: DkgVerifyDealingError) -> Self {
-        InvalidDkgPayloadReason::DkgVerifyDealingError(err)
-    }
-}
-
-impl From<DkgVerifyDealingError> for DkgPayloadValidationFailure {
-    fn from(err: DkgVerifyDealingError) -> Self {
-        DkgPayloadValidationFailure::DkgVerifyDealingError(err)
-    }
-}
-
-impl From<CryptoError> for InvalidDkgPayloadReason {
-    fn from(err: CryptoError) -> Self {
-        InvalidDkgPayloadReason::CryptoError(err)
-    }
-}
-
-impl From<CryptoError> for DkgPayloadValidationFailure {
-    fn from(err: CryptoError) -> Self {
-        DkgPayloadValidationFailure::CryptoError(err)
-    }
-}
-
-impl From<InvalidDkgPayloadReason> for PayloadValidationError {
-    fn from(err: InvalidDkgPayloadReason) -> Self {
-        PayloadValidationError::InvalidArtifact(err)
-    }
-}
-
-impl From<DkgPayloadValidationFailure> for PayloadValidationError {
-    fn from(err: DkgPayloadValidationFailure) -> Self {
-        PayloadValidationError::ValidationFailed(err)
-    }
-}
-
-impl From<PayloadCreationError> for PayloadValidationError {
-    fn from(err: PayloadCreationError) -> Self {
-        PayloadValidationError::ValidationFailed(
-            DkgPayloadValidationFailure::PayloadCreationFailed(err),
-        )
-    }
-}
 
 /// Validates the DKG payload. The parent block is expected to be a valid block.
 #[allow(clippy::too_many_arguments)]
@@ -124,7 +34,7 @@ pub fn validate_payload(
     validation_context: &ValidationContext,
     metrics: &IntCounterVec,
     log: &ReplicaLogger,
-) -> ValidationResult<PayloadValidationError> {
+) -> ValidationResult<DkgPayloadValidationError> {
     let current_height = parent.height.increment();
     let registry_version = pool_reader
         .registry_version(current_height)
@@ -224,12 +134,12 @@ fn validate_dealings_payload(
     crypto: &dyn ConsensusCrypto,
     pool_reader: &PoolReader<'_>,
     dkg_pool: &dyn DkgPool,
-    last_summary: &Summary,
+    last_summary: &DkgSummary,
     dealings: &DkgDataPayload,
     max_dealings_per_payload: usize,
     parent: &Block,
     metrics: &IntCounterVec,
-) -> ValidationResult<PayloadValidationError> {
+) -> ValidationResult<DkgPayloadValidationError> {
     if dealings.start_height != parent.payload.as_ref().dkg_interval_start_height() {
         return Err(InvalidDkgPayloadReason::DkgStartHeightDoesNotMatchParentBlock.into());
     }
@@ -287,15 +197,16 @@ fn validate_dealings_payload(
 
 #[cfg(test)]
 mod tests {
-    use crate::{DkgImpl, DkgKeyManager};
-
     use super::*;
+    use crate::{DkgImpl, DkgKeyManager};
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
     use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
     use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
-    use ic_interfaces::consensus_pool::ConsensusPool;
-    use ic_interfaces::p2p::consensus::MutablePool;
-    use ic_interfaces::{dkg::ChangeAction, p2p::consensus::PoolMutationsProducer};
+    use ic_interfaces::{
+        consensus_pool::ConsensusPool,
+        dkg::ChangeAction,
+        p2p::consensus::{MutablePool, PoolMutationsProducer},
+    };
     use ic_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_registry_keys::make_subnet_record_key;
@@ -304,7 +215,6 @@ mod tests {
     use ic_test_utilities_types::ids::{
         node_test_id, subnet_test_id, NODE_1, NODE_2, NODE_3, SUBNET_1, SUBNET_2,
     };
-    use ic_types::time::UNIX_EPOCH;
     use ic_types::{
         batch::BatchPayload,
         consensus::{
@@ -312,10 +222,13 @@ mod tests {
             idkg, DataPayload, Payload,
         },
         crypto::threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetSubnet},
-        RegistryVersion,
+        time::UNIX_EPOCH,
+        Height, NodeId, RegistryVersion,
     };
-    use std::sync::Arc;
-    use std::{ops::Deref, sync::Mutex};
+    use std::{
+        ops::Deref,
+        sync::{Arc, Mutex},
+    };
 
     /// This tests the `validate_payload` function.
     /// It sets up a subnet with 4 nodes and a dkg interval of 4.
@@ -431,7 +344,7 @@ mod tests {
                 SUBNET_1,
                 /*committee=*/ &[NODE_1],
             ),
-            Err(PayloadValidationError::InvalidArtifact(
+            Err(DkgPayloadValidationError::InvalidArtifact(
                 InvalidDkgPayloadReason::MissingDkgConfigForDealing
             ))
         );
@@ -447,7 +360,7 @@ mod tests {
                 SUBNET_1,
                 /*committee=*/ &[NODE_1],
             ),
-            Err(PayloadValidationError::InvalidArtifact(
+            Err(DkgPayloadValidationError::InvalidArtifact(
                 InvalidDkgPayloadReason::InvalidDealer(NODE_2)
             ))
         );
@@ -471,7 +384,7 @@ mod tests {
                 SUBNET_1,
                 /*committee=*/ &[NODE_1, NODE_2, NODE_3],
             ),
-            Err(PayloadValidationError::InvalidArtifact(
+            Err(DkgPayloadValidationError::InvalidArtifact(
                 InvalidDkgPayloadReason::DealerAlreadyDealt(NODE_2)
             ))
         );
@@ -492,7 +405,7 @@ mod tests {
                 SUBNET_1,
                 /*committee=*/ &[NODE_1, NODE_2, NODE_3],
             ),
-            Err(PayloadValidationError::InvalidArtifact(
+            Err(DkgPayloadValidationError::InvalidArtifact(
                 InvalidDkgPayloadReason::DuplicateDealers
             ))
         );
@@ -514,7 +427,7 @@ mod tests {
                 SUBNET_1,
                 /*committee=*/ &[NODE_1, NODE_2, NODE_3],
             ),
-            Err(PayloadValidationError::InvalidArtifact(
+            Err(DkgPayloadValidationError::InvalidArtifact(
                 InvalidDkgPayloadReason::TooManyDealings {
                     limit: 2,
                     actual: 3
@@ -531,7 +444,7 @@ mod tests {
         max_dealings_per_payload: u64,
         subnet_id: SubnetId,
         committee: &[NodeId],
-    ) -> ValidationResult<PayloadValidationError> {
+    ) -> ValidationResult<DkgPayloadValidationError> {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let registry_version = 1;
 
@@ -623,7 +536,7 @@ mod tests {
         )
     }
 
-    /// Test that dealings are created aand validated using the same registry version
+    /// Test that dealings are created and validated using the same registry version
     #[test]
     fn test_validate_payload_dealings_registry_version() {
         let registry_version_start = RegistryVersion::new(1);

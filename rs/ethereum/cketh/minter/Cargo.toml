@@ -23,10 +23,9 @@ futures = { workspace = true }
 hex = { workspace = true }
 hex-literal = "0.4.1"
 ic-canister-log = "0.2.0"
-ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
 ic-cdk = { workspace = true }
-ic-cdk-macros = { workspace = true }
 ic-cdk-timers = { workspace = true }
+ic-http-types = { path = "../../../../packages/ic-http-types" }
 ic-ethereum-types = { path = "../../../../packages/ic-ethereum-types" }
 ic-management-canister-types-private = { path = "../../../types/management_canister_types" }
 ic-metrics-encoder = "1"

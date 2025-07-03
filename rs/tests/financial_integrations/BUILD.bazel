@@ -13,11 +13,9 @@ system_test(
     env = {
         "LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
     },
-    flaky = True,
     tags = [
         "k8s",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS + LEDGER_CANISTER_RUNTIME_DEPS,
     deps = [
@@ -35,6 +33,7 @@ system_test(
         "@crate_index//:anyhow",
         "@crate_index//:assert_matches",
         "@crate_index//:candid",
+        "@crate_index//:leb128",
         "@crate_index//:serde_cbor",
     ],
 )
@@ -44,14 +43,12 @@ system_test_nns(
     compile_data = [
         "transaction_ledger_correctness.wasm",
     ],
-    flaky = True,
     proc_macro_deps = [
         "@crate_index//:async-recursion",
     ],
     tags = [
         "k8s",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
         "//rs/canister_client/sender",

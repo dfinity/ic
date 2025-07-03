@@ -29,7 +29,7 @@ ic-crypto-interfaces-sig-verification = { path = "../../crypto/interfaces/sig_ve
 ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
 ic-crypto-utils-threshold-sig-der = { path = "../../crypto/utils/threshold_sig_der" }
-ic-error-types = { path = "../../types/error_types" }
+ic-error-types = { path = "../../../packages/ic-error-types" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../../interfaces/state_manager" }
@@ -42,6 +42,7 @@ ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-replicated-state = { path = "../../replicated_state" }
 ic-tracing = { path = "../../monitoring/tracing" }
 ic-types = { path = "../../types/types" }
+ic-utils = { path = "../../utils" }
 ic-validator = { path = "../../validator" }
 inferno = { workspace = true }
 prometheus = { workspace = true }
@@ -61,20 +62,26 @@ tracing-flame = { workspace = true }
 tracing-subscriber = { workspace = true }
 
 [dev-dependencies]
+assert_matches = { workspace = true }
+axum-server = { workspace = true }
 ic-canister-client = { path = "../../canister_client" }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-canonical-state = { path = "../../canonical_state" }
 ic-certification-test-utils = { path = "../../certification/test-utils" }
 ic-crypto-temp-crypto = { path = "../../crypto/temp_crypto" }
 ic-crypto-tls-interfaces-mocks = { path = "../../crypto/tls_interfaces/mocks" }
+ic-http-endpoints-test-agent = { path = "../test_agent" }
 ic-interfaces-mocks = { path = "../../interfaces/mocks" }
 ic-interfaces-registry-mocks = { path = "../../interfaces/registry/mocks" }
 ic-interfaces-state-manager-mocks = { path = "../../interfaces/state_manager/mocks" }
 ic-protobuf = { path = "../../protobuf" }
 ic-read-state-response-parser = { path = "../../canister_client/read_state_response_parser" }
+ic-registry-client-fake = { path = "../../registry/fake" }
 ic-registry-keys = { path = "../../registry/keys" }
+ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
 ic-registry-routing-table = { path = "../../registry/routing_table" }
 ic-test-utilities = { path = "../../test_utilities" }
+ic-test-utilities-registry = { path = "../../test_utilities/registry" }
 ic-test-utilities-state = { path = "../../test_utilities/state" }
 ic-test-utilities-time = { path = "../../test_utilities/time" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
@@ -82,6 +89,7 @@ maplit = "1.0.2"
 mockall = { workspace = true }
 pretty_assertions = { workspace = true }
 proptest = { workspace = true }
+rcgen = { workspace = true }
 reqwest = { workspace = true }
 rstest = { workspace = true }
 rustls = { workspace = true }

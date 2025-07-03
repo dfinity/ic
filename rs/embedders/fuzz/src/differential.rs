@@ -2,7 +2,7 @@ use crate::ic_wasm::{ic_embedders_config, ICWasmModule};
 use ic_embedders::InstanceRunResult;
 use ic_interfaces::execution_environment::HypervisorResult;
 use ic_interfaces::execution_environment::SystemApi;
-use ic_replicated_state::Global;
+use ic_management_canister_types_private::Global;
 use ic_test_utilities_embedders::WasmtimeInstanceBuilder;
 use ic_types::ingress::WasmResult;
 use ic_types::methods::{FuncRef, WasmMethod};

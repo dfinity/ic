@@ -9,7 +9,7 @@ documentation.workspace = true
 [dependencies]
 hex = { workspace = true }
 ic-consensus-utils = { path = "../../consensus/utils" }
-ic-error-types = { path = "../../types/error_types" }
+ic-error-types = { path = "../../../packages/ic-error-types" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-adapter-client = { path = "../../interfaces/adapter_client" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
@@ -27,7 +27,7 @@ slog = { workspace = true }
 [dev-dependencies]
 ic-artifact-pool = { path = "../../artifact_pool" }
 ic-consensus-mocks = { path = "../../consensus/mocks" }
-ic-error-types = { path = "../../types/error_types" }
+ic-error-types = { path = "../../../packages/ic-error-types" }
 ic-registry-subnet-features = { path = "../../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-test-utilities = { path = "../../test_utilities" }

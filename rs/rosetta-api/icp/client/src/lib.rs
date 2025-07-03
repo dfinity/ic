@@ -3,7 +3,7 @@ use anyhow::Context;
 use candid::Nat;
 use candid::Principal;
 use ic_base_types::PrincipalId;
-use ic_nns_governance_api::pb::v1::Proposal;
+use ic_nns_governance_api::Proposal;
 use ic_rosetta_api::ledger_client::pending_proposals_response::PendingProposalsResponse;
 use ic_rosetta_api::models::seconds::Seconds;
 use ic_rosetta_api::models::AccountType;
@@ -214,9 +214,12 @@ impl RosettaClient {
             amount: None,
             coin_change: None,
             metadata: Some(
-                NeuronIdentifierMetadata { neuron_index }
-                    .try_into()
-                    .map_err(|e| anyhow::anyhow!("Failed to convert metadata: {:?}", e))?,
+                NeuronIdentifierMetadata {
+                    neuron_index,
+                    controller: None,
+                }
+                .try_into()
+                .map_err(|e| anyhow::anyhow!("Failed to convert metadata: {:?}", e))?,
             ),
         }])
     }
@@ -275,9 +278,12 @@ impl RosettaClient {
             amount: None,
             coin_change: None,
             metadata: Some(
-                NeuronIdentifierMetadata { neuron_index }
-                    .try_into()
-                    .map_err(|e| anyhow::anyhow!("Failed to convert metadata: {:?}", e))?,
+                NeuronIdentifierMetadata {
+                    neuron_index,
+                    controller: None,
+                }
+                .try_into()
+                .map_err(|e| anyhow::anyhow!("Failed to convert metadata: {:?}", e))?,
             ),
         }])
     }
@@ -300,9 +306,12 @@ impl RosettaClient {
             amount: None,
             coin_change: None,
             metadata: Some(
-                NeuronIdentifierMetadata { neuron_index }
-                    .try_into()
-                    .map_err(|e| anyhow::anyhow!("Failed to convert metadata: {:?}", e))?,
+                NeuronIdentifierMetadata {
+                    neuron_index,
+                    controller: None,
+                }
+                .try_into()
+                .map_err(|e| anyhow::anyhow!("Failed to convert metadata: {:?}", e))?,
             ),
         }])
     }
@@ -596,6 +605,7 @@ impl RosettaClient {
     pub fn build_refresh_voting_power_operations(
         signer_principal: Principal,
         neuron_index: u64,
+        principal_id: Option<PrincipalId>,
     ) -> anyhow::Result<Vec<Operation>> {
         Ok(vec![Operation {
             operation_identifier: OperationIdentifier {
@@ -611,9 +621,12 @@ impl RosettaClient {
             amount: None,
             coin_change: None,
             metadata: Some(
-                NeuronIdentifierMetadata { neuron_index }
-                    .try_into()
-                    .map_err(|e| anyhow::anyhow!("Failed to convert metadata: {:?}", e))?,
+                NeuronIdentifierMetadata {
+                    neuron_index,
+                    controller: principal_id.map(PublicKeyOrPrincipal::Principal),
+                }
+                .try_into()
+                .map_err(|e| anyhow::anyhow!("Failed to convert metadata: {:?}", e))?,
             ),
         }])
     }
@@ -1433,6 +1446,7 @@ impl RosettaClient {
         network_identifier: NetworkIdentifier,
         signer_keypair: &T,
         neuron_index: u64,
+        controller_principal_id: Option<PrincipalId>,
     ) -> anyhow::Result<ConstructionSubmitResponse>
     where
         T: RosettaSupportedKeyPair,
@@ -1440,6 +1454,7 @@ impl RosettaClient {
         let refresh_voting_power_operations = RosettaClient::build_refresh_voting_power_operations(
             signer_keypair.generate_principal_id()?.0,
             neuron_index,
+            controller_principal_id,
         )?;
         self.make_submit_and_wait_for_transaction(
             signer_keypair,

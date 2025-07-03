@@ -1,0 +1,17 @@
+[package]
+name = "ic-registry-canister-chunkify"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+ic-cdk = { workspace = true }
+ic-nervous-system-chunks = { path = "../../../nervous_system/chunks" }
+ic-registry-transport = { path = "../../transport" }
+ic-stable-structures = { workspace = true }
+prost = { workspace = true }
+
+[dev-dependencies]
+lazy_static = { workspace = true }

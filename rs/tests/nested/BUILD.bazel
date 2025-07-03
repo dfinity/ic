@@ -1,5 +1,5 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
+load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "IC_GATEWAY_RUNTIME_DEPS", "MAINNET_ENV")
 load("//rs/tests:system_tests.bzl", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -36,31 +36,92 @@ rust_library(
     deps = DEPENDENCIES,
 )
 
-system_test_nns(
-    name = "registration",
-    flaky = True,
-    tags = [
-        "system_test_hourly",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    test_timeout = "eternal",
-    uses_guestos_dev = True,
-    uses_setupos_dev = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS,
-    deps = RUNNER_DEPENDENCIES,
+genrule(
+    name = "empty-disk-img-tar-zst",
+    outs = ["empty-disk-img.tar.zst"],
+    cmd = """
+        truncate -s 101G disk.img
+        tar --zstd -Scf $@ disk.img
+    """,
+    tags = ["manual"],
+    target_compatible_with = ["@platforms//os:linux"],
+    visibility = ["//visibility:public"],
 )
 
 system_test_nns(
-    name = "upgrade",
-    flaky = True,
-    tags = [
-        "system_test_hourly",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    name = "registration",
+    env = MAINNET_ENV,
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
+    flaky = True,  # flakiness rate of over 2% over the month from 2025-02-11 till 2025-03-11.
+    tags = ["long_test"],  # since it takes longer than 5 minutes.
     test_timeout = "eternal",
+    use_empty_image = True,
+    uses_guestos_dev = True,
+    uses_setupos_dev = True,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + IC_GATEWAY_RUNTIME_DEPS,
+    deps = RUNNER_DEPENDENCIES,
+)
+
+rust_binary(
+    name = "upgrade_test_bin",
+    testonly = True,
+    srcs = ["upgrade.rs"],
+    deps = DEPENDENCIES + [":nested"],
+)
+
+# Tests if current commit is "upgradeable" and can be used as an upgrade image
+system_test_nns(
+    name = "hostos_upgrade_smoke_test",
+    env = MAINNET_ENV,
+    extra_head_nns_tags = [],
+    flaky = True,
+    tags = ["long_test"],
+    test_driver_target = ":upgrade_test_bin",
+    test_timeout = "eternal",
+    use_empty_image = True,
     uses_guestos_dev = True,
     uses_hostos_dev_test = True,
     uses_setupos_dev = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + IC_GATEWAY_RUNTIME_DEPS,
+    deps = RUNNER_DEPENDENCIES,
+)
+
+# Tests if "latest_release" in mainnet-icos-revisions.json can successfully upgrade to current commit
+system_test_nns(
+    name = "hostos_upgrade_from_latest_release_to_current",
+    env = MAINNET_ENV | {
+        "NODE_OPERATOR_PRIV_KEY_PATH": "$(rootpath //ic-os/setupos:config/node_operator_private_key.pem)",
+    },
+    extra_head_nns_tags = [],
+    flaky = True,  # flakiness rate of 5% over the month from 2025-02-11 till 2025-03-11.
+    tags = ["manual"],  # TODO: remove after next release that includes the deployment.json changes
+    test_driver_target = ":upgrade_test_bin",
+    test_timeout = "eternal",
+    use_empty_image = True,
+    uses_guestos_dev = True,
+    uses_hostos_dev_test = True,
+    uses_setupos_mainnet = True,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + IC_GATEWAY_RUNTIME_DEPS + ["//ic-os/setupos:config/node_operator_private_key.pem"],
+    deps = RUNNER_DEPENDENCIES,
+)
+
+# Used to manually test if can upgrade
+# *from* an arbitrary mainnet version (mainnet_setupos_disk_image target)
+# *to* an arbitrary mainnet version ("latest_release" in mainnet-icos-revisions.json)
+system_test_nns(
+    name = "hostos_upgrade_from_mainnet_to_mainnet",
+    env = MAINNET_ENV | {
+        "NODE_OPERATOR_PRIV_KEY_PATH": "$(rootpath //ic-os/setupos:config/node_operator_private_key.pem)",
+    },
+    extra_head_nns_tags = [],
+    flaky = True,
+    tags = ["manual"],
+    test_driver_target = ":upgrade_test_bin",
+    test_timeout = "eternal",
+    use_empty_image = True,
+    uses_guestos_dev = True,
+    uses_hostos_mainnet_update_img = True,
+    uses_setupos_mainnet = True,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + IC_GATEWAY_RUNTIME_DEPS + ["//ic-os/setupos:config/node_operator_private_key.pem"],
     deps = RUNNER_DEPENDENCIES,
 )

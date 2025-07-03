@@ -4,57 +4,37 @@ use assert_matches::assert_matches;
 use candid::Encode;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_config::{
-    embedders::{Config as EmbeddersConfig, MeteringType},
+    embedders::Config as EmbeddersConfig,
     execution_environment::Config as HypervisorConfig,
     flag_status::FlagStatus,
     subnet_config::{SchedulerConfig, SubnetConfig},
 };
+use ic_cycles_account_manager::IngressInductionCost;
+use ic_error_types::UserError;
 use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInfoRequest, CanisterInstallMode, CanisterInstallModeV2,
-    CanisterSettingsArgsBuilder, ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, EmptyBlob,
+    CanisterSettingsArgsBuilder, CanisterSnapshotDataKind, CanisterSnapshotDataOffset,
+    ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, EmptyBlob, GlobalTimer,
     InstallChunkedCodeArgs, InstallCodeArgs, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
-    Method, Payload, StoredChunksArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs,
-    UpdateSettingsArgs, UploadChunkArgs, IC_00,
+    Method, OnLowWasmMemoryHookStatus, Payload, ReadCanisterSnapshotDataArgs,
+    ReadCanisterSnapshotMetadataArgs, StoredChunksArgs, TakeCanisterSnapshotArgs,
+    UninstallCodeArgs, UpdateSettingsArgs, UploadCanisterSnapshotDataArgs,
+    UploadCanisterSnapshotMetadataArgs, UploadChunkArgs, IC_00,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::{execution_state::NextScheduledMethod, NextExecution};
 use ic_state_machine_tests::{ErrorCode, StateMachine, StateMachineConfig};
-use ic_types::ingress::{IngressState, IngressStatus};
+use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
 use ic_types::messages::MessageId;
-use ic_types::{ingress::WasmResult, CryptoHashOfState, Cycles, NumInstructions};
-use ic_universal_canister::{call_args, wasm, CallArgs, UNIVERSAL_CANISTER_WASM};
+use ic_types::{CryptoHashOfState, Cycles, NumInstructions};
+use ic_universal_canister::{
+    call_args, wasm, CallArgs, UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM, UNIVERSAL_CANISTER_WASM,
+};
 use more_asserts::assert_ge;
+use std::sync::OnceLock;
 use strum::IntoEnumIterator;
 
 const INITIAL_CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
-
-const DTS_INSTALL_WAT: &str = r#"
-        (module
-            (import "ic0" "msg_reply" (func $msg_reply))
-            (import "ic0" "msg_reply_data_append"
-                (func $msg_reply_data_append (param i32 i32))
-            )
-            (func (export "canister_query read")
-                (call $msg_reply_data_append
-                    (i32.const 0) ;; the counter from heap[0]
-                    (i32.const 10)) ;; length
-                (call $msg_reply)
-            )
-            (func $start
-                (drop (memory.grow (i32.const 1)))
-                (memory.fill (i32.const 0) (i32.const 34) (i32.const 1000))
-                (memory.fill (i32.const 0) (i32.const 45) (i32.const 1000))
-            )
-            (func (export "canister_init")
-                (drop (memory.grow (i32.const 1)))
-                (memory.fill (i32.const 0) (i32.const 34) (i32.const 1000))
-                (memory.fill (i32.const 0) (i32.const 45) (i32.const 1000))
-                (memory.fill (i32.const 0) (i32.const 45) (i32.const 1000))
-                (memory.fill (i32.const 0) (i32.const 45) (i32.const 1000))
-            )
-            (start $start)
-            (memory 0 20)
-        )"#;
 
 const DTS_WAT: &str = r#"
         (module
@@ -121,27 +101,6 @@ fn wat2wasm(wat: &str) -> Vec<u8> {
     wat::parse_str(wat).unwrap()
 }
 
-/// This is a tentative workaround for the issue that `StateMachine` disables DTS
-/// and sandboxing if it cannot find the sandboxing binaries, which happens in
-/// local builds with `cargo`.
-fn should_skip_test_due_to_disabled_dts() -> bool {
-    if !(std::env::var("SANDBOX_BINARY").is_ok()
-        && std::env::var("LAUNCHER_BINARY").is_ok()
-        && std::env::var("COMPILER_BINARY").is_ok())
-    {
-        eprintln!(
-            "Skipping the test because DTS is not supported without \
-             canister sandboxing binaries.\n\
-             To fix this:\n\
-             - either run the test with `bazel test`\n\
-             - or define the SANDBOX_BINARY and LAUNCHER_BINARY and COMPILER_BINARY environment variables \
-             with the paths to the corresponding binaries."
-        );
-        return true;
-    }
-    false
-}
-
 fn dts_subnet_config(
     message_instruction_limit: NumInstructions,
     slice_instruction_limit: NumInstructions,
@@ -188,44 +147,43 @@ fn dts_env(
             slice_instruction_limit,
         ))))
         .with_subnet_type(SubnetType::Application)
+        .with_snapshot_download_enabled(true)
+        .with_snapshot_upload_enabled(true)
         .build()
 }
 
 fn dts_install_code_env(
     message_instruction_limit: NumInstructions,
     slice_instruction_limit: NumInstructions,
-) -> (StateMachine, DtsEnvConfig) {
-    let subnet_config = SubnetConfig::new(SubnetType::Application);
-    let config = DtsEnvConfig::new(
-        SubnetConfig {
-            scheduler_config: SchedulerConfig {
-                max_instructions_per_install_code: message_instruction_limit,
-                max_instructions_per_install_code_slice: slice_instruction_limit,
-                max_instructions_per_round: message_instruction_limit + message_instruction_limit,
-                max_instructions_per_message: message_instruction_limit,
-                max_instructions_per_message_without_dts: slice_instruction_limit,
-                max_instructions_per_slice: message_instruction_limit,
-                instruction_overhead_per_execution: NumInstructions::from(0),
-                instruction_overhead_per_canister: NumInstructions::from(0),
-                ..subnet_config.scheduler_config
-            },
-            ..subnet_config
+) -> (StateMachine, SubnetConfig) {
+    let default_app_subnet_config = SubnetConfig::new(SubnetType::Application);
+    let subnet_config = SubnetConfig {
+        scheduler_config: SchedulerConfig {
+            max_instructions_per_install_code: message_instruction_limit,
+            max_instructions_per_install_code_slice: slice_instruction_limit,
+            max_instructions_per_round: message_instruction_limit + message_instruction_limit,
+            max_instructions_per_message: message_instruction_limit,
+            max_instructions_per_message_without_dts: slice_instruction_limit,
+            max_instructions_per_slice: message_instruction_limit,
+            instruction_overhead_per_execution: NumInstructions::from(0),
+            instruction_overhead_per_canister: NumInstructions::from(0),
+            install_code_rate_limit: message_instruction_limit,
+            ..default_app_subnet_config.scheduler_config
         },
-        HypervisorConfig {
-            deterministic_time_slicing: FlagStatus::Enabled,
-            ..Default::default()
-        },
-    );
-    (
-        ic_state_machine_tests::StateMachineBuilder::new()
-            .with_config(Some(StateMachineConfig::new(
-                config.subnet_config.clone(),
-                config.hypervisor_config.clone(),
-            )))
-            .with_subnet_type(SubnetType::Application)
-            .build(),
-        config,
-    )
+        ..default_app_subnet_config
+    };
+    let hypervisor_config = HypervisorConfig {
+        deterministic_time_slicing: FlagStatus::Enabled,
+        ..Default::default()
+    };
+    let state_machine = ic_state_machine_tests::StateMachineBuilder::new()
+        .with_config(Some(StateMachineConfig::new(
+            subnet_config.clone(),
+            hypervisor_config,
+        )))
+        .with_subnet_type(SubnetType::Application)
+        .build();
+    (state_machine, subnet_config)
 }
 
 /// Extracts the ingress state from the ingress status.
@@ -248,132 +206,197 @@ fn ingress_time(ingress_status: IngressStatus) -> Option<SystemTime> {
     }
 }
 
-struct DtsEnvConfig {
-    subnet_config: SubnetConfig,
-    hypervisor_config: HypervisorConfig,
-}
+// The following constant was chosen so that the universal canister can be successfully deployed
+// using at most `MAX_INSTRUCTIONS`.
+const MAX_INSTRUCTIONS: u64 = 10_000_000_000;
 
-impl DtsEnvConfig {
-    pub fn new(subnet_config: SubnetConfig, hypervisor_config: HypervisorConfig) -> Self {
-        Self {
-            subnet_config,
-            hypervisor_config,
-        }
-    }
+// The following constant was chosen as an arbitrary fraction of `MAX_INSTRUCTIONS`
+// high enough that exceeding `MAX_INSTRUCTIONS` does not take too many slices.
+const MAX_SLICE_INSTRUCTIONS: u64 = 100_000_000;
 
-    fn dirty_page_overhead_cycles(&self, num_pages: u64) -> Cycles {
-        match self.hypervisor_config.embedders_config.metering_type {
-            MeteringType::New => {
-                let dirty_page_overhead = self
-                    .subnet_config
-                    .scheduler_config
-                    .dirty_page_overhead
-                    .get();
+// The following constant was chosen arbitrarily between `MAX_SLICE_INSTRUCTIONS` and `MAX_INSTRUCTIONS`
+// so that executing that many instructions results in multiple slices
+// and stays within the limit of `MAX_INSTRUCTIONS`.
+const TEST_INSTALL_CODE_INSTRUCTIONS: u64 = 10 * MAX_SLICE_INSTRUCTIONS;
 
-                self.subnet_config
-                    .cycles_account_manager_config
-                    .ten_update_instructions_execution_fee
-                    * (num_pages * dirty_page_overhead / 10)
-            }
-            MeteringType::None => Cycles::new(0),
-        }
-    }
-}
-
-struct DtsInstallCode {
-    env: StateMachine,
-    canister_id: CanisterId,
-    install_code_ingress_id: MessageId,
-    config: DtsEnvConfig,
-}
-
-/// A helper that:
-/// 1) Creates a `StateMachine` with DTS enabled.
-/// 2) Creates a canister.
-/// 3) Sends an `install_code` ingress message that will take multiple rounds to
-///    complete.
-fn setup_dts_install_code(
-    initial_balance: Cycles,
-    freezing_threshold_in_seconds: usize,
-) -> DtsInstallCode {
-    let (env, config) = dts_install_code_env(
-        NumInstructions::from(1_000_000),
-        NumInstructions::from(1000),
-    );
-
-    let canister_id = env.create_canister_with_cycles(
+// Creates an empty canister with high cycles balance, a compute allocation of 1%, and no freezing threshold.
+fn create_canister(env: &StateMachine) -> CanisterId {
+    env.create_canister_with_cycles(
         None,
-        initial_balance,
+        INITIAL_CYCLES_BALANCE,
         Some(
             CanisterSettingsArgsBuilder::new()
                 .with_compute_allocation(1)
-                .with_freezing_threshold(freezing_threshold_in_seconds as u64)
+                .with_freezing_threshold(0)
                 .build(),
         ),
-    );
+    )
+}
 
-    let install_code_ingress_id = env.send_ingress(
+// Installs the universal canister (without heartbeat to avoid unexpected cycles consumption) executing at least the given number of instructions.
+fn install_code(
+    env: &StateMachine,
+    canister_id: CanisterId,
+    mode: CanisterInstallMode,
+    instructions: u64,
+) -> Result<WasmResult, UserError> {
+    env.execute_ingress_as(
         PrincipalId::new_anonymous(),
         IC_00,
         Method::InstallCode,
         InstallCodeArgs::new(
-            CanisterInstallMode::Install,
+            mode,
             canister_id,
-            wat::parse_str(DTS_INSTALL_WAT).unwrap(),
-            vec![],
-            None,
-            None,
+            UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM.to_vec(),
+            wasm().instruction_counter_is_at_least(instructions).build(),
         )
         .encode(),
-    );
+    )
+}
 
-    DtsInstallCode {
-        env,
+// Executes an update call on the universal canister executing at least the given number of instructions.
+fn update_call(
+    env: &StateMachine,
+    canister_id: CanisterId,
+    instructions: u64,
+) -> Result<MessageId, UserError> {
+    env.send_ingress_safe(
+        PrincipalId::new_anonymous(),
         canister_id,
-        install_code_ingress_id,
-        config,
-    }
+        "update",
+        wasm().instruction_counter_is_at_least(instructions).build(),
+    )
 }
 
-// These numbers were obtained by running the test and printing the costs.
-// They need to be adjusted if we change fees or the Wasm source code.
-const INSTALL_CODE_INGRESS_COST: u128 = 1_952_000;
-const INSTALL_CODE_EXECUTION_COST: u128 = 5_986_224;
-const NORMAL_INGRESS_COST: u128 = 1_224_000;
-const MAX_EXECUTION_COST: u128 = 6_000_000;
+// The number of cycles used for instruction limit exceeded when installing the universal canister.
+static MAX_INSTALL_CODE_COST: OnceLock<Cycles> = OnceLock::new();
 
-fn actual_execution_cost() -> Cycles {
-    match EmbeddersConfig::new()
-        .feature_flags
-        .wasm_native_stable_memory
-    {
-        FlagStatus::Enabled => Cycles::new(5_985_224),
-        FlagStatus::Disabled => Cycles::new(5_685_230),
-    }
+fn max_install_code_cost() -> Cycles {
+    *MAX_INSTALL_CODE_COST.get_or_init(|| {
+        let (env, _) = dts_install_code_env(
+            NumInstructions::from(MAX_INSTRUCTIONS),
+            NumInstructions::from(MAX_SLICE_INSTRUCTIONS),
+        );
+
+        let canister_id = create_canister(&env);
+
+        let initial_balance = env.cycle_balance(canister_id);
+        let err = install_code(
+            &env,
+            canister_id,
+            CanisterInstallMode::Install,
+            MAX_INSTRUCTIONS,
+        )
+        .unwrap_err();
+        assert_eq!(err.code(), ErrorCode::CanisterInstructionLimitExceeded);
+        let balance = env.cycle_balance(canister_id);
+        Cycles::new(initial_balance - balance)
+    })
 }
 
+// The number of cycles used for instruction limit exceeded when reinstalling the universal canister.
+static MAX_REINSTALL_CODE_COST: OnceLock<Cycles> = OnceLock::new();
+
+fn max_reinstall_code_cost() -> Cycles {
+    *MAX_REINSTALL_CODE_COST.get_or_init(|| {
+        let (env, _) = dts_install_code_env(
+            NumInstructions::from(MAX_INSTRUCTIONS),
+            NumInstructions::from(MAX_SLICE_INSTRUCTIONS),
+        );
+
+        let canister_id = create_canister(&env);
+        install_code(
+            &env,
+            canister_id,
+            CanisterInstallMode::Install,
+            TEST_INSTALL_CODE_INSTRUCTIONS,
+        )
+        .unwrap();
+
+        let initial_balance = env.cycle_balance(canister_id);
+        let err = install_code(
+            &env,
+            canister_id,
+            CanisterInstallMode::Reinstall,
+            MAX_INSTRUCTIONS,
+        )
+        .unwrap_err();
+        assert_eq!(err.code(), ErrorCode::CanisterInstructionLimitExceeded);
+        let balance = env.cycle_balance(canister_id);
+        Cycles::new(initial_balance - balance)
+    })
+}
+
+// The number of cycles used for installing the universal canister using multiple slices.
+static INSTALL_CODE_COST: OnceLock<Cycles> = OnceLock::new();
+
+fn install_code_cost() -> Cycles {
+    *INSTALL_CODE_COST.get_or_init(|| {
+        let (env, _) = dts_install_code_env(
+            NumInstructions::from(MAX_INSTRUCTIONS),
+            NumInstructions::from(MAX_SLICE_INSTRUCTIONS),
+        );
+
+        let canister_id = create_canister(&env);
+
+        let initial_balance = env.cycle_balance(canister_id);
+        install_code(
+            &env,
+            canister_id,
+            CanisterInstallMode::Install,
+            TEST_INSTALL_CODE_INSTRUCTIONS,
+        )
+        .unwrap();
+        let balance = env.cycle_balance(canister_id);
+        Cycles::new(initial_balance - balance)
+    })
+}
+
+// The number of cycles used for instruction limit exceeded when executing an update call on the universal canister.
+static MAX_UPDATE_CALL_COST: OnceLock<Cycles> = OnceLock::new();
+
+fn max_update_call_cost() -> Cycles {
+    *MAX_UPDATE_CALL_COST.get_or_init(|| {
+        let (env, _) = dts_install_code_env(
+            NumInstructions::from(MAX_INSTRUCTIONS),
+            NumInstructions::from(MAX_SLICE_INSTRUCTIONS),
+        );
+
+        let canister_id = create_canister(&env);
+        install_code(
+            &env,
+            canister_id,
+            CanisterInstallMode::Install,
+            TEST_INSTALL_CODE_INSTRUCTIONS,
+        )
+        .unwrap();
+
+        let initial_balance = env.cycle_balance(canister_id);
+        let msg_id = update_call(&env, canister_id, MAX_INSTRUCTIONS).unwrap();
+        // We are awaiting the ingress message for up to 100 rounds (arbitrary value high enough for the message to complete).
+        let err = env.await_ingress(msg_id, 100).unwrap_err();
+        assert_eq!(err.code(), ErrorCode::CanisterInstructionLimitExceeded);
+        let balance = env.cycle_balance(canister_id);
+        Cycles::new(initial_balance - balance)
+    })
+}
+
+// The following test executes the following scenario:
+// - successfully install the universal canister using multiple slices;
+// - start reinstalling the universal canister (exceeding the instruction limit eventually);
+// - submit an ingress message to the universal canister (exceeding the instruction limit eventually)
+//   while it is being reinstalled.
+// All messages complete eventually since the canister has enough cycles for all of them.
 #[test]
 fn dts_install_code_with_concurrent_ingress_sufficient_cycles() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-    let install_code_ingress_cost = Cycles::new(INSTALL_CODE_INGRESS_COST);
-    let install_code_execution_cost = Cycles::new(INSTALL_CODE_EXECUTION_COST);
-    let normal_ingress_cost = Cycles::new(NORMAL_INGRESS_COST);
-    let max_execution_cost = Cycles::new(MAX_EXECUTION_COST);
+    // The initial balance is sufficient to run `install_code` twice
+    // (a successful install code and then one exceeding the instruction limit)
+    // and to execute an ingress message concurrently.
+    let initial_balance = install_code_cost() + max_reinstall_code_cost() + max_update_call_cost();
 
-    // The initial balance is sufficient to run `install_code` and to send an
-    // ingress message concurrently.
-    let initial_balance = install_code_ingress_cost
-        + install_code_execution_cost
-        + install_code_ingress_cost
-        + normal_ingress_cost
-        + max_execution_cost;
-
-    let (env, config) = dts_install_code_env(
-        NumInstructions::from(1_000_000),
-        NumInstructions::from(1000),
+    let (env, _) = dts_install_code_env(
+        NumInstructions::from(MAX_INSTRUCTIONS),
+        NumInstructions::from(MAX_SLICE_INSTRUCTIONS),
     );
 
     let canister_id = env.create_canister_with_cycles(
@@ -387,19 +410,11 @@ fn dts_install_code_with_concurrent_ingress_sufficient_cycles() {
         ),
     );
 
-    env.execute_ingress_as(
-        PrincipalId::new_anonymous(),
-        IC_00,
-        Method::InstallCode,
-        InstallCodeArgs::new(
-            CanisterInstallMode::Install,
-            canister_id,
-            wat::parse_str(DTS_INSTALL_WAT).unwrap(),
-            vec![],
-            None,
-            None,
-        )
-        .encode(),
+    install_code(
+        &env,
+        canister_id,
+        CanisterInstallMode::Install,
+        TEST_INSTALL_CODE_INSTRUCTIONS,
     )
     .unwrap();
 
@@ -410,10 +425,10 @@ fn dts_install_code_with_concurrent_ingress_sufficient_cycles() {
         InstallCodeArgs::new(
             CanisterInstallMode::Reinstall,
             canister_id,
-            wat::parse_str(DTS_INSTALL_WAT).unwrap(),
-            vec![],
-            None,
-            None,
+            UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM.to_vec(),
+            wasm()
+                .instruction_counter_is_at_least(MAX_INSTRUCTIONS)
+                .build(),
         )
         .encode(),
     );
@@ -421,138 +436,124 @@ fn dts_install_code_with_concurrent_ingress_sufficient_cycles() {
     // Start execution of `install_code`.
     env.tick();
 
-    // Send a normal ingress message while the execution is paused.
-    env.send_ingress(PrincipalId::new_anonymous(), canister_id, "read", vec![]);
+    // Send a normal ingress message while the canister is being reinstalled.
+    let update_call_id = update_call(&env, canister_id, MAX_INSTRUCTIONS).unwrap();
 
-    let result = env.await_ingress(install_code_ingress_id, 100).unwrap();
+    // We are awaiting the ingress message for up to 100 rounds (arbitrary value high enough for the message to complete).
+    let err = env.await_ingress(install_code_ingress_id, 100).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterInstructionLimitExceeded);
 
-    assert_eq!(result, WasmResult::Reply(EmptyBlob.encode()));
-    assert_eq!(
-        env.cycle_balance(canister_id),
-        (initial_balance
-            - install_code_ingress_cost
-            - install_code_execution_cost
-            - install_code_ingress_cost
-            - normal_ingress_cost
-            - actual_execution_cost()
-            - config.dirty_page_overhead_cycles(1))
-        .get()
-    );
+    // We are awaiting the ingress message for up to 100 rounds (arbitrary value high enough for the message to complete).
+    let err = env.await_ingress(update_call_id, 100).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterInstructionLimitExceeded);
+
+    // No cycles are left at the end.
+    assert_eq!(env.cycle_balance(canister_id), 0);
 }
 
 #[test]
 fn dts_install_code_with_concurrent_ingress_insufficient_cycles() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-    let install_code_ingress_cost = Cycles::new(INSTALL_CODE_INGRESS_COST);
-    let normal_ingress_cost = Cycles::new(NORMAL_INGRESS_COST);
-    let max_execution_cost = Cycles::new(MAX_EXECUTION_COST);
-
-    // The initial balance is not sufficient for both execution and concurrent ingress message.
-    let initial_balance = install_code_ingress_cost + normal_ingress_cost.max(max_execution_cost);
-
-    let DtsInstallCode {
-        env,
-        canister_id,
-        install_code_ingress_id,
-        config,
-    } = setup_dts_install_code(initial_balance, 0);
-
-    // Start execution of `install_code`.
-    env.tick();
-
-    // Send a normal ingress message while the execution is paused.
-    let err = env
-        .send_ingress_safe(PrincipalId::new_anonymous(), canister_id, "read", vec![])
-        .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::CanisterOutOfCycles);
-    assert_eq!(
-        err.description(),
-        format!(
-            "Canister {} is out of cycles: \
-             please top up the canister with at least {} additional cycles",
-            canister_id,
-            normal_ingress_cost
-                - (initial_balance - install_code_ingress_cost - max_execution_cost),
-        )
-    );
-
-    let result = env.await_ingress(install_code_ingress_id, 100).unwrap();
-
-    assert_eq!(result, WasmResult::Reply(EmptyBlob.encode()));
-    assert_eq!(
-        env.cycle_balance(canister_id),
-        (initial_balance
-            - install_code_ingress_cost
-            - actual_execution_cost()
-            - config.dirty_page_overhead_cycles(1))
-        .get()
-    );
+    dts_install_code_with_concurrent_ingress_insufficient_cycles_and_freezing_threshold(0);
 }
 
 #[test]
-fn dts_install_code_with_concurrent_ingress_and_freezing_threshold_insufficient_cycles() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-    let install_code_ingress_cost = Cycles::new(INSTALL_CODE_INGRESS_COST);
-    let normal_ingress_cost = Cycles::new(NORMAL_INGRESS_COST);
-    let max_execution_cost = Cycles::new(MAX_EXECUTION_COST);
-    let freezing_threshold = Cycles::new(10000000);
+fn dts_install_code_with_concurrent_ingress_insufficient_cycles_and_nonzero_freezing_threshold() {
+    dts_install_code_with_concurrent_ingress_insufficient_cycles_and_freezing_threshold(1);
+}
 
-    // The initial balance is not sufficient for both execution and concurrent ingress message.
-    let initial_balance = freezing_threshold
-        + install_code_ingress_cost
-        + normal_ingress_cost.max(max_execution_cost);
+// The following test executes the following scenario:
+// - start installing the universal canister (exceeding the instruction limit eventually);
+// - submit an ingress message to the universal canister (exceeding the instruction limit eventually)
+//   while it is being installed: this fails because the canister has no cycles left at this point.
+// Multiple values of the freezing threshold affecting the cycles balance are tested.
+fn dts_install_code_with_concurrent_ingress_insufficient_cycles_and_freezing_threshold(
+    freezing_threshold: u64,
+) {
+    let (env, config) = dts_install_code_env(
+        NumInstructions::from(MAX_INSTRUCTIONS),
+        NumInstructions::from(MAX_SLICE_INSTRUCTIONS),
+    );
 
-    let DtsInstallCode {
-        env,
-        canister_id,
-        install_code_ingress_id,
-        config,
-    } = setup_dts_install_code(initial_balance, 1);
+    let compute_allocation_cycles = config
+        .cycles_account_manager_config
+        .compute_percent_allocated_per_second_fee
+        * freezing_threshold;
+
+    // The initial balance is sufficient to only pay the reservation for installing code
+    // and the compute allocation during the freezing threshold.
+    let initial_balance = max_install_code_cost() + compute_allocation_cycles;
+
+    let canister_id = env.create_canister_with_cycles(
+        None,
+        initial_balance,
+        Some(
+            CanisterSettingsArgsBuilder::new()
+                .with_compute_allocation(1)
+                .with_freezing_threshold(freezing_threshold)
+                .build(),
+        ),
+    );
+
+    let install_code_ingress_id = env.send_ingress(
+        PrincipalId::new_anonymous(),
+        IC_00,
+        Method::InstallCode,
+        InstallCodeArgs::new(
+            CanisterInstallMode::Install,
+            canister_id,
+            UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM.to_vec(),
+            wasm()
+                .instruction_counter_is_at_least(MAX_INSTRUCTIONS)
+                .build(),
+        )
+        .encode(),
+    );
 
     // Start execution of `install_code`.
     env.tick();
 
-    // Send a normal ingress message while the execution is paused.
+    // Send a normal ingress message while the canister is being installed:
+    // this fails because the canister has no more liquid cycles left at this point,
+    // i.e., consuming any cycles would make the canister frozen.
+    assert_eq!(
+        env.cycle_balance(canister_id),
+        compute_allocation_cycles.get()
+    );
+    let sender = PrincipalId::new_anonymous();
+    let method = "update";
+    let payload = wasm()
+        .instruction_counter_is_at_least(MAX_INSTRUCTIONS)
+        .build();
     let err = env
-        .send_ingress_safe(PrincipalId::new_anonymous(), canister_id, "read", vec![])
+        .send_ingress_safe(sender, canister_id, method, payload.clone())
         .unwrap_err();
     assert_eq!(err.code(), ErrorCode::CanisterOutOfCycles);
+    let ingress_induction_cost =
+        match env.ingress_message_cost(sender, canister_id, method, payload) {
+            IngressInductionCost::Fee { payer: _, cost } => cost,
+            cost => panic!("Unexpected ingress induction cost: {:?}", cost),
+        };
     assert_eq!(
         err.description(),
         format!(
             "Canister {} is out of cycles: \
              please top up the canister with at least {} additional cycles",
-            canister_id,
-            (freezing_threshold + normal_ingress_cost)
-                - (initial_balance - install_code_ingress_cost - max_execution_cost),
+            canister_id, ingress_induction_cost,
         )
     );
 
-    let result = env.await_ingress(install_code_ingress_id, 100).unwrap();
-    assert_eq!(result, WasmResult::Reply(EmptyBlob.encode()));
-    assert_eq!(
-        env.cycle_balance(canister_id),
-        (initial_balance
-            - install_code_ingress_cost
-            - actual_execution_cost()
-            - config.dirty_page_overhead_cycles(1))
-        .get()
-    );
+    // We are awaiting the ingress message for up to 100 rounds (arbitrary value high enough for the message to complete).
+    let err = env.await_ingress(install_code_ingress_id, 100).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterInstructionLimitExceeded);
+
+    // The cycles to cover the compute allocation during the freezing threshold are only needed to keep the canister unfrozen
+    // and are not actually used.
+    let unused_cycles = compute_allocation_cycles;
+    assert_eq!(env.cycle_balance(canister_id), unused_cycles.get());
 }
 
 #[test]
 fn dts_pending_upgrade_with_heartbeat() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(30_000),
@@ -586,14 +587,7 @@ fn dts_pending_upgrade_with_heartbeat() {
     env.set_checkpoints_enabled(true);
 
     let upgrade = {
-        let args = InstallCodeArgs::new(
-            CanisterInstallMode::Upgrade,
-            canister,
-            binary,
-            vec![],
-            None,
-            None,
-        );
+        let args = InstallCodeArgs::new(CanisterInstallMode::Upgrade, canister, binary, vec![]);
         let payload = wasm()
             .call_simple(
                 IC_00,
@@ -645,11 +639,6 @@ fn dts_pending_upgrade_with_heartbeat() {
 ///   for the canister on which the code install is running.
 #[test]
 fn dts_scheduling_of_install_code() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let (env, _) = dts_install_code_env(
         NumInstructions::from(5_000_000_000),
         NumInstructions::from(10_000),
@@ -689,14 +678,7 @@ fn dts_scheduling_of_install_code() {
 
     let mut ingress = vec![];
     for c in canister.iter() {
-        let args = InstallCodeArgs::new(
-            CanisterInstallMode::Install,
-            *c,
-            binary.clone(),
-            vec![],
-            None,
-            None,
-        );
+        let args = InstallCodeArgs::new(CanisterInstallMode::Install, *c, binary.clone(), vec![]);
         let install = wasm()
             .call_simple(
                 IC_00,
@@ -807,11 +789,6 @@ fn dts_scheduling_of_install_code() {
 /// long-running install code messages.
 #[test]
 fn dts_pending_install_code_does_not_block_subnet_messages_of_other_canisters() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let (env, _) = dts_install_code_env(
         NumInstructions::from(5_000_000_000),
         NumInstructions::from(10_000),
@@ -860,8 +837,6 @@ fn dts_pending_install_code_does_not_block_subnet_messages_of_other_canisters() 
             canister[i],
             binary.clone(),
             vec![],
-            None,
-            None,
         );
         let payload = wasm()
             .call_simple(
@@ -938,11 +913,6 @@ fn dts_pending_install_code_does_not_block_subnet_messages_of_other_canisters() 
 /// long-running update message.
 #[test]
 fn dts_pending_execution_blocks_subnet_messages_to_the_same_canister() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(10_000),
@@ -980,14 +950,7 @@ fn dts_pending_execution_blocks_subnet_messages_to_the_same_canister() {
     };
 
     let upgrade = {
-        let args = InstallCodeArgs::new(
-            CanisterInstallMode::Upgrade,
-            canister,
-            binary,
-            vec![],
-            None,
-            None,
-        );
+        let args = InstallCodeArgs::new(CanisterInstallMode::Upgrade, canister, binary, vec![]);
         env.send_ingress(user_id, IC_00, Method::InstallCode, args.encode())
     };
 
@@ -1069,9 +1032,27 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
         }
 
         let (method, args) = f(aborted_canister_id);
-        if method == Method::DeleteCanisterSnapshot {
+        if method == Method::DeleteCanisterSnapshot
+            || method == Method::ReadCanisterSnapshotMetadata
+            || method == Method::ReadCanisterSnapshotData
+        {
             env.take_canister_snapshot(TakeCanisterSnapshotArgs::new(aborted_canister_id, None))
                 .unwrap();
+        }
+
+        if method == Method::UploadCanisterSnapshotData {
+            env.upload_canister_snapshot_metadata(&UploadCanisterSnapshotMetadataArgs {
+                canister_id: aborted_canister_id.into(),
+                replace_snapshot: None,
+                wasm_module_size: 1024,
+                exported_globals: vec![],
+                wasm_memory_size: 1 << 16,
+                stable_memory_size: 1 << 16,
+                certified_data: vec![],
+                global_timer: None,
+                on_low_wasm_memory_hook_status: None,
+            })
+            .unwrap();
         }
 
         let args = args
@@ -1079,7 +1060,7 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
             .on_reply(wasm().reply_data(&[43]));
 
         let subnet_message = wasm()
-            .call_with_cycles(IC_00, method, args, 100_000_000_000_u128.into())
+            .call_with_cycles(IC_00, method, args, 100_000_000_000_u128)
             .build();
 
         let subnet_message_id =
@@ -1158,7 +1139,7 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
             | Method::SchnorrPublicKey
             | Method::SignWithSchnorr
             | Method::VetKdPublicKey
-            | Method::VetKdDeriveEncryptedKey
+            | Method::VetKdDeriveKey
             | Method::BitcoinGetBalance
             | Method::BitcoinGetUtxos
             | Method::BitcoinGetBlockHeaders
@@ -1169,7 +1150,8 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
             | Method::NodeMetricsHistory
             | Method::SubnetInfo
             | Method::ProvisionalCreateCanisterWithCycles
-            | Method::ProvisionalTopUpCanister => {}
+            | Method::ProvisionalTopUpCanister
+            | Method::RenameCanister => {}
             // Unsupported methods accepting just one argument.
             // Deleting an aborted canister requires to stop it first.
             // Stopping an aborted canister does not generate a reply.
@@ -1186,8 +1168,6 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
                     mode: CanisterInstallMode::Install,
                     wasm_module: UNIVERSAL_CANISTER_WASM.to_vec(),
                     arg: vec![],
-                    compute_allocation: None,
-                    memory_allocation: None,
                     sender_canister_version: None,
                 }
                 .encode();
@@ -1270,6 +1250,48 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
                 .encode();
                 (method, call_args().other_side(args))
             }),
+            Method::ReadCanisterSnapshotMetadata => test_supported(|aborted_canister_id| {
+                let args = ReadCanisterSnapshotMetadataArgs::new(
+                    aborted_canister_id,
+                    (aborted_canister_id, 0).into(),
+                )
+                .encode();
+                (method, call_args().other_side(args))
+            }),
+            Method::ReadCanisterSnapshotData => test_supported(|aborted_canister_id| {
+                let args = ReadCanisterSnapshotDataArgs::new(
+                    aborted_canister_id,
+                    (aborted_canister_id, 0).into(),
+                    CanisterSnapshotDataKind::WasmModule { size: 0, offset: 0 },
+                )
+                .encode();
+                (method, call_args().other_side(args))
+            }),
+            Method::UploadCanisterSnapshotMetadata => test_supported(|aborted_canister_id| {
+                let args = UploadCanisterSnapshotMetadataArgs::new(
+                    aborted_canister_id,
+                    None,
+                    1024,
+                    vec![],
+                    1 << 16,
+                    1 << 16,
+                    vec![],
+                    Some(GlobalTimer::Inactive),
+                    Some(OnLowWasmMemoryHookStatus::ConditionNotSatisfied),
+                )
+                .encode();
+                (method, call_args().other_side(args))
+            }),
+            Method::UploadCanisterSnapshotData => test_supported(|aborted_canister_id| {
+                let args = UploadCanisterSnapshotDataArgs::new(
+                    aborted_canister_id,
+                    (aborted_canister_id, 0).into(),
+                    CanisterSnapshotDataOffset::WasmModule { offset: 0 },
+                    vec![42; 42],
+                )
+                .encode();
+                (method, call_args().other_side(args))
+            }),
         }
     }
 }
@@ -1319,7 +1341,7 @@ fn dts_paused_execution_blocks_deposit_cycles() {
                 .other_side(args)
                 .on_reject(wasm().reject_message().reject())
                 .on_reply(wasm().reply_data(&[43])),
-            1_u128.into(),
+            1_u128,
         )
         .build();
 
@@ -1358,11 +1380,6 @@ fn dts_paused_execution_blocks_deposit_cycles() {
 /// The expectation is that the update message is blocked.
 #[test]
 fn dts_pending_install_code_blocks_update_messages_to_the_same_canister() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(10_000),
@@ -1385,8 +1402,6 @@ fn dts_pending_install_code_blocks_update_messages_to_the_same_canister() {
         canister,
         binary.clone(),
         vec![],
-        None,
-        None,
     );
     env.execute_ingress_as(user_id, IC_00, Method::InstallCode, payload.encode())
         .unwrap();
@@ -1396,14 +1411,8 @@ fn dts_pending_install_code_blocks_update_messages_to_the_same_canister() {
     env.set_checkpoints_enabled(true);
 
     let install = {
-        let payload = InstallCodeArgs::new(
-            CanisterInstallMode::Reinstall,
-            canister,
-            binary,
-            vec![],
-            None,
-            None,
-        );
+        let payload =
+            InstallCodeArgs::new(CanisterInstallMode::Reinstall, canister, binary, vec![]);
         env.send_ingress(user_id, IC_00, Method::InstallCode, payload.encode())
     };
 
@@ -1436,11 +1445,6 @@ fn dts_pending_install_code_blocks_update_messages_to_the_same_canister() {
 /// The expectation that all messages eventually complete.
 #[test]
 fn dts_long_running_install_and_update() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let slice_instruction_limit = 15_000_000;
     let env = dts_env(
         NumInstructions::from(100_000_000),
@@ -1500,8 +1504,6 @@ fn dts_long_running_install_and_update() {
             canister[i],
             UNIVERSAL_CANISTER_WASM.to_vec(),
             vec![],
-            None,
-            None,
         );
         let payload = wasm()
             .call_simple(
@@ -1569,11 +1571,6 @@ fn dts_long_running_install_and_update() {
 /// The expectation that all messages eventually complete.
 #[test]
 fn dts_long_running_calls() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(100_000_000),
         NumInstructions::from(1_000_000),
@@ -1657,11 +1654,6 @@ fn dts_long_running_calls() {
 
 #[test]
 fn dts_unrelated_subnet_messages_make_progress() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(10_000),
@@ -1695,14 +1687,7 @@ fn dts_unrelated_subnet_messages_make_progress() {
     env.set_checkpoints_enabled(true);
 
     let upgrade = {
-        let args = InstallCodeArgs::new(
-            CanisterInstallMode::Upgrade,
-            canister,
-            binary,
-            vec![],
-            None,
-            None,
-        );
+        let args = InstallCodeArgs::new(CanisterInstallMode::Upgrade, canister, binary, vec![]);
         env.send_ingress(user_id, IC_00, Method::InstallCode, args.encode())
     };
 
@@ -1731,11 +1716,6 @@ fn dts_unrelated_subnet_messages_make_progress() {
 
 #[test]
 fn dts_ingress_status_of_update_is_correct() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(10_000),
@@ -1803,11 +1783,6 @@ fn dts_ingress_status_of_update_is_correct() {
 
 #[test]
 fn dts_ingress_status_of_install_is_correct() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(10_000),
@@ -1826,14 +1801,7 @@ fn dts_ingress_status_of_install_is_correct() {
     let original_time = env.time();
 
     let install = {
-        let args = InstallCodeArgs::new(
-            CanisterInstallMode::Reinstall,
-            canister,
-            binary,
-            vec![],
-            None,
-            None,
-        );
+        let args = InstallCodeArgs::new(CanisterInstallMode::Reinstall, canister, binary, vec![]);
         env.send_ingress(user_id, IC_00, Method::InstallCode, args.encode())
     };
 
@@ -1886,11 +1854,6 @@ fn dts_ingress_status_of_install_is_correct() {
 
 #[test]
 fn dts_ingress_status_of_upgrade_is_correct() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(10_000),
@@ -1909,14 +1872,7 @@ fn dts_ingress_status_of_upgrade_is_correct() {
     let original_time = env.time();
 
     let install = {
-        let args = InstallCodeArgs::new(
-            CanisterInstallMode::Upgrade,
-            canister,
-            binary,
-            vec![],
-            None,
-            None,
-        );
+        let args = InstallCodeArgs::new(CanisterInstallMode::Upgrade, canister, binary, vec![]);
         env.send_ingress(user_id, IC_00, Method::InstallCode, args.encode())
     };
 
@@ -1969,11 +1925,6 @@ fn dts_ingress_status_of_upgrade_is_correct() {
 
 #[test]
 fn dts_ingress_status_of_update_with_call_is_correct() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(10_000),
@@ -2068,11 +2019,6 @@ fn dts_ingress_status_of_update_with_call_is_correct() {
 
 #[test]
 fn dts_canister_uninstalled_due_to_resource_charges_with_aborted_updrade() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(10_000),
@@ -2096,14 +2042,7 @@ fn dts_canister_uninstalled_due_to_resource_charges_with_aborted_updrade() {
     env.set_checkpoints_enabled(true);
 
     let upgrade = {
-        let args = InstallCodeArgs::new(
-            CanisterInstallMode::Upgrade,
-            canister,
-            binary,
-            vec![],
-            None,
-            None,
-        );
+        let args = InstallCodeArgs::new(CanisterInstallMode::Upgrade, canister, binary, vec![]);
         env.send_ingress(user_id, IC_00, Method::InstallCode, args.encode())
     };
 
@@ -2128,11 +2067,6 @@ fn dts_canister_uninstalled_due_to_resource_charges_with_aborted_updrade() {
 
 #[test]
 fn dts_canister_uninstalled_due_resource_charges_with_aborted_update() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(10_000),
@@ -2210,11 +2144,6 @@ fn dts_canister_uninstalled_due_resource_charges_with_aborted_update() {
 
 #[test]
 fn dts_serialized_and_runtime_states_are_equal() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     fn run(restart_node: bool) -> CryptoHashOfState {
         let subnet_config = dts_subnet_config(
             NumInstructions::from(1_000_000_000),
@@ -2287,11 +2216,6 @@ fn get_canister_version(env: &StateMachine, canister_id: CanisterId) -> u64 {
 
 #[test]
 fn dts_heartbeat_works() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(50_000),
@@ -2340,11 +2264,6 @@ fn dts_heartbeat_works() {
 
 #[test]
 fn dts_heartbeat_resume_after_abort() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(50_000),
@@ -2406,11 +2325,6 @@ fn dts_heartbeat_resume_after_abort() {
 
 #[test]
 fn dts_heartbeat_with_trap() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(50_000),
@@ -2459,11 +2373,6 @@ fn dts_heartbeat_with_trap() {
 
 #[test]
 fn dts_heartbeat_does_not_prevent_canister_from_stopping() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(50_000),
@@ -2508,11 +2417,6 @@ fn dts_heartbeat_does_not_prevent_canister_from_stopping() {
 
 #[test]
 fn dts_heartbeat_does_not_prevent_upgrade() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(50_000),
@@ -2556,11 +2460,6 @@ fn dts_heartbeat_does_not_prevent_upgrade() {
 
 #[test]
 fn dts_global_timer_one_shot_works() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(50_000),
@@ -2625,11 +2524,6 @@ fn dts_global_timer_one_shot_works() {
 
 #[test]
 fn dts_heartbeat_does_not_starve_when_global_timer_is_long() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(75_000),
@@ -2713,11 +2607,6 @@ fn dts_heartbeat_does_not_starve_when_global_timer_is_long() {
 
 #[test]
 fn dts_global_timer_resume_after_abort() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(60_000),
@@ -2768,11 +2657,6 @@ fn dts_global_timer_resume_after_abort() {
 
 #[test]
 fn dts_global_timer_does_not_prevent_canister_from_stopping() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(60_000),
@@ -2821,11 +2705,6 @@ fn dts_global_timer_does_not_prevent_canister_from_stopping() {
 
 #[test]
 fn dts_global_timer_with_trap() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(50_000),
@@ -2881,11 +2760,6 @@ fn dts_global_timer_with_trap() {
 
 #[test]
 fn dts_global_timer_does_not_prevent_upgrade() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(60_000),
@@ -2933,11 +2807,6 @@ fn dts_global_timer_does_not_prevent_upgrade() {
 
 #[test]
 fn dts_abort_paused_execution_on_state_switch() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(50_000),
@@ -2986,11 +2855,6 @@ fn dts_abort_paused_execution_on_state_switch() {
 
 #[test]
 fn dts_abort_after_dropping_memory_on_state_switch() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(100_000_000),
@@ -3062,4 +2926,291 @@ fn dts_abort_after_dropping_memory_on_state_switch() {
     // doesn't try to access a dropped page.
     let result = env.execute_ingress(canister_id, "update", vec![]).unwrap();
     assert_eq!(result, WasmResult::Reply(vec![]));
+}
+
+const WRITE_MORE_THAN_1G_WAT: &str = r#"
+(module
+    (import "ic0" "msg_reply" (func $msg_reply))
+    (func (export "canister_update write")
+        (local $i i32)
+        (local.set $i (i32.const 1073745920)) ;; 1GiB + 4096
+        (loop $loop
+            (i32.store (local.get $i) (i32.const 1))
+            (br_if $loop (local.tee $i (i32.sub (local.get $i) (i32.const 4096))))
+        )
+        (call $msg_reply)
+    )
+    (memory 16385) ;; 1GiB + 65536
+)"#;
+
+#[test]
+fn yield_for_dirty_pages_copy_works() {
+    let env = ic_state_machine_tests::StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+
+    let wasm = wat::parse_str(WRITE_MORE_THAN_1G_WAT).unwrap();
+    let canister_id = env
+        .install_canister_with_cycles(wasm, vec![], None, INITIAL_CYCLES_BALANCE)
+        .unwrap();
+
+    let mut payload = ic_state_machine_tests::PayloadBuilder::new().with_nonce(0);
+    // Send two ingress messages to the same canister.
+    for _ in 0..2 {
+        payload = payload.ingress(PrincipalId::new_anonymous(), canister_id, "write", vec![]);
+    }
+    let message_ids = payload.ingress_ids();
+    env.execute_payload(payload);
+
+    // Neither of messages should be completed after the first round.
+    assert_matches!(
+        ingress_state(env.ingress_status(&message_ids[0])),
+        Some(IngressState::Processing)
+    );
+    assert_matches!(
+        ingress_state(env.ingress_status(&message_ids[1])),
+        Some(IngressState::Received)
+    );
+
+    env.tick();
+
+    // Only the first message must be completed after two rounds.
+    assert_matches!(
+        ingress_state(env.ingress_status(&message_ids[0])),
+        Some(IngressState::Completed(_))
+    );
+    assert_matches!(
+        ingress_state(env.ingress_status(&message_ids[1])),
+        Some(IngressState::Received)
+    );
+}
+
+#[test]
+fn yield_for_dirty_pages_copy_works_for_many_canisters() {
+    let scheduler_cores = 4;
+    let num_canisters = scheduler_cores;
+    let num_messages = 2;
+    let env = ic_state_machine_tests::StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+
+    let wasm = wat::parse_str(WRITE_MORE_THAN_1G_WAT).unwrap();
+    let mut canister_ids = vec![];
+    let mut payload = ic_state_machine_tests::PayloadBuilder::new().with_nonce(0);
+    for _ in 0..num_canisters {
+        let canister_id = env
+            .install_canister_with_cycles(wasm.clone(), vec![], None, INITIAL_CYCLES_BALANCE)
+            .unwrap();
+        canister_ids.push(canister_id);
+
+        for _ in 0..num_messages {
+            payload = payload.ingress(PrincipalId::new_anonymous(), canister_id, "write", vec![]);
+        }
+    }
+    let message_ids = payload.ingress_ids();
+    env.execute_payload(payload);
+
+    let num_completed = || {
+        message_ids
+            .iter()
+            .filter_map(|id| match ingress_state(env.ingress_status(id)) {
+                Some(IngressState::Completed(_)) => Some(()),
+                Some(IngressState::Received) | Some(IngressState::Processing) => None,
+                _ => panic!("Unexpected ingress state"),
+            })
+            .count()
+    };
+
+    // Neither of messages should be completed after the first round.
+    assert_eq!(num_completed(), 0);
+
+    env.tick();
+
+    // Only the first message per scheduler core must be completed after two rounds.
+    assert_eq!(num_completed(), scheduler_cores);
+}
+
+#[test]
+fn heavy_install_code_prevents_another_install_code_to_start_in_the_same_round() {
+    let env = ic_state_machine_tests::StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+
+    let canister_id = env.create_canister_with_cycles(None, INITIAL_CYCLES_BALANCE, None);
+
+    let mut payload = ic_state_machine_tests::PayloadBuilder::new().with_nonce(0);
+    // Send two install code messages to the same canister.
+    for _ in 0..2 {
+        let canister_init = wasm()
+            // The instruction limit for subnet messages is 7 billion / 16 = ~438M
+            .instruction_counter_is_at_least(2_438_000_000)
+            .build();
+        payload = payload.ingress(
+            PrincipalId::new_anonymous(),
+            CanisterId::ic_00(),
+            Method::InstallCode,
+            InstallCodeArgs::new(
+                CanisterInstallMode::Reinstall,
+                canister_id,
+                UNIVERSAL_CANISTER_WASM.to_vec(),
+                canister_init,
+            )
+            .encode(),
+        );
+    }
+    let message_ids = payload.ingress_ids();
+    env.execute_payload(payload);
+
+    // Neither of messages should be completed after the first round.
+    assert_matches!(
+        ingress_state(env.ingress_status(&message_ids[0])),
+        Some(IngressState::Processing)
+    );
+    assert_matches!(
+        ingress_state(env.ingress_status(&message_ids[1])),
+        Some(IngressState::Received)
+    );
+
+    env.tick();
+
+    // Only the first message must be completed after two rounds.
+    assert_matches!(
+        ingress_state(env.ingress_status(&message_ids[0])),
+        Some(IngressState::Completed(_))
+    );
+    assert_matches!(
+        ingress_state(env.ingress_status(&message_ids[1])),
+        Some(IngressState::Received)
+    );
+}
+
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
+const WRITE_MORE_THAN_1G_ON_INIT_WAT: &str = r#"
+(module
+    (func (export "canister_init")
+        (local $i i32)
+        (local.set $i (i32.const 1073745920)) ;; 1GiB + 4096
+        (loop $loop
+            (i32.store (local.get $i) (i32.const 1))
+            (br_if $loop (local.tee $i (i32.sub (local.get $i) (i32.const 4096))))
+        )
+    )
+    (memory 16385) ;; 1GiB + 65536
+)"#;
+
+#[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
+fn yield_for_dirty_pages_copy_works_for_install_code() {
+    let env = ic_state_machine_tests::StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+
+    let wasm = wat::parse_str(WRITE_MORE_THAN_1G_ON_INIT_WAT).unwrap();
+    let canister_id = env.create_canister_with_cycles(None, INITIAL_CYCLES_BALANCE, None);
+
+    let mut payload = ic_state_machine_tests::PayloadBuilder::new().with_nonce(0);
+    // Send two install code messages to the same canister.
+    for _ in 0..2 {
+        payload = payload.ingress(
+            PrincipalId::new_anonymous(),
+            CanisterId::ic_00(),
+            Method::InstallCode,
+            InstallCodeArgs::new(
+                CanisterInstallMode::Reinstall,
+                canister_id,
+                wasm.clone(),
+                vec![],
+            )
+            .encode(),
+        );
+    }
+    let message_ids = payload.ingress_ids();
+    env.execute_payload(payload);
+
+    // Neither of messages should be completed after the first round.
+    assert_matches!(
+        ingress_state(env.ingress_status(&message_ids[0])),
+        Some(IngressState::Processing)
+    );
+    assert_matches!(
+        ingress_state(env.ingress_status(&message_ids[1])),
+        Some(IngressState::Received)
+    );
+
+    env.tick();
+
+    // Only the first message must be completed after two rounds.
+    assert_matches!(
+        ingress_state(env.ingress_status(&message_ids[0])),
+        Some(IngressState::Completed(_))
+    );
+    assert_matches!(
+        ingress_state(env.ingress_status(&message_ids[1])),
+        Some(IngressState::Received)
+    );
+}
+
+#[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
+fn yield_for_dirty_pages_copy_works_for_install_code_and_many_canisters() {
+    let scheduler_cores = 4;
+    let num_canisters = scheduler_cores;
+    let num_messages = 2;
+    let env = ic_state_machine_tests::StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+
+    let wasm = wat::parse_str(WRITE_MORE_THAN_1G_ON_INIT_WAT).unwrap();
+    let mut canister_ids = vec![];
+    let mut payload = ic_state_machine_tests::PayloadBuilder::new().with_nonce(0);
+    for _ in 0..num_canisters {
+        let canister_id = env.create_canister_with_cycles(None, INITIAL_CYCLES_BALANCE, None);
+        canister_ids.push(canister_id);
+
+        for _ in 0..num_messages {
+            payload = payload.ingress(
+                PrincipalId::new_anonymous(),
+                CanisterId::ic_00(),
+                Method::InstallCode,
+                InstallCodeArgs::new(
+                    CanisterInstallMode::Reinstall,
+                    canister_id,
+                    wasm.clone(),
+                    vec![],
+                )
+                .encode(),
+            );
+        }
+    }
+    let message_ids = payload.ingress_ids();
+    env.execute_payload(payload);
+
+    let num_completed = || {
+        message_ids
+            .iter()
+            .filter_map(|id| match ingress_state(env.ingress_status(id)) {
+                Some(IngressState::Completed(_)) => Some(()),
+                Some(IngressState::Received) | Some(IngressState::Processing) => None,
+                _ => panic!("Unexpected ingress state"),
+            })
+            .count()
+    };
+
+    // Neither of messages should be completed after the first round.
+    assert_eq!(num_completed(), 0);
+
+    env.tick();
+
+    // Only the first message must be completed after two rounds.
+    assert_eq!(num_completed(), 1);
+
+    env.tick();
+
+    // Only the first message must be completed after three rounds.
+    assert_eq!(num_completed(), 1);
+
+    env.tick();
+
+    // Two heavy install code messages must be completed in four rounds.
+    assert_eq!(num_completed(), 2);
 }

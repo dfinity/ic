@@ -599,24 +599,33 @@ fn deterministic_manifest_hash() {
     );
 }
 
-proptest! {
-    #[test]
-    fn chunk_info_deterministic_encoding(chunk_info in arbitrary_chunk_info()) {
-        assert_eq!(encode_chunk_info(&chunk_info), encode_chunk_info_expected(&chunk_info));
-    }
+#[test_strategy::proptest]
+fn chunk_info_deterministic_encoding(#[strategy(arbitrary_chunk_info())] chunk_info: ChunkInfo) {
+    assert_eq!(
+        encode_chunk_info(&chunk_info),
+        encode_chunk_info_expected(&chunk_info)
+    );
+}
 
-    #[test]
-    fn file_info_deterministic_encoding(file_info in arbitrary_file_info()) {
-        assert_eq!(encode_file_info(&file_info), encode_file_info_expected(&file_info));
-    }
+#[test_strategy::proptest]
+fn file_info_deterministic_encoding(#[strategy(arbitrary_file_info())] file_info: FileInfo) {
+    assert_eq!(
+        encode_file_info(&file_info),
+        encode_file_info_expected(&file_info)
+    );
+}
 
-    #[test]
-    fn manifest_deterministic_encoding(
-        version in 0..=(MAX_SUPPORTED_STATE_SYNC_VERSION as u32),
-        file_table in prop::collection::vec(arbitrary_file_info(), 0..=1000),
-        chunk_table in prop::collection::vec(arbitrary_chunk_info(), 0..=1000)
-    ) {
-        let manifest = Manifest::new(version.try_into().unwrap(), file_table, chunk_table);
-        assert_eq!(encode_manifest(&manifest), encode_manifest_expected(&manifest));
-    }
+#[test_strategy::proptest]
+fn manifest_deterministic_encoding(
+    #[strategy(0..=MAX_SUPPORTED_STATE_SYNC_VERSION as u32)] version: u32,
+    #[strategy(prop::collection::vec(arbitrary_file_info(), 0..=1000))] file_table: Vec<FileInfo>,
+    #[strategy(prop::collection::vec(arbitrary_chunk_info(), 0..=1000))] chunk_table: Vec<
+        ChunkInfo,
+    >,
+) {
+    let manifest = Manifest::new(version.try_into().unwrap(), file_table, chunk_table);
+    assert_eq!(
+        encode_manifest(&manifest),
+        encode_manifest_expected(&manifest)
+    );
 }

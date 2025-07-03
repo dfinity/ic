@@ -17,6 +17,7 @@ package(default_visibility = ["//visibility:public"])
         proc_macro_deps = [
             # Keep sorted.
             "@crate_index//:async-trait",
+            "@crate_index//:test-strategy",
         ],
         rustc_env = {
             "IC_ICRC1_ARCHIVE_WASM_PATH": "$(execpath //rs/ledger_suite/icrc1/archive:archive_canister" + archive_name_suffix + ")",
@@ -101,16 +102,6 @@ package(default_visibility = ["//visibility:public"])
                 "//rs/ledger_suite/icrc1/tokens_u256",
             ],
         ),
-        (
-            "_icrc3_compatible_data_certificate",
-            "",
-            [
-                "icrc3-compatible-data-certificate",
-            ],
-            [
-                "//rs/ledger_suite/icrc1/tokens_u64",
-            ],
-        ),
     ]
 ]
 
@@ -123,17 +114,16 @@ package(default_visibility = ["//visibility:public"])
         opt = "z",
         proc_macro_deps = [
             # Keep sorted.
-            "@crate_index//:ic-cdk-macros",
         ],
         service_file = ":ledger.did",
         deps = [
             # Keep sorted.
+            "//packages/ic-http-types",
             "//packages/icrc-ledger-types:icrc_ledger_types",
             "//rs/ledger_suite/common/ledger_canister_core",
             "//rs/ledger_suite/common/ledger_core",
             "//rs/ledger_suite/icrc1",
             "//rs/rust_canisters/canister_log",
-            "//rs/rust_canisters/http_types",
             "//rs/types/base_types",
             "@crate_index//:candid",
             "@crate_index//:ciborium",
@@ -242,41 +232,52 @@ package(default_visibility = ["//visibility:public"])
                 "//rs/ledger_suite/icrc1/tokens_u256",
             ],
         ),
+    ]
+]
+
+[
+    rust_test(
+        name = "ledger_canister_test" + name_suffix,
+        crate = ":_wasm_ledger_canister" + name_suffix,
+        crate_features = features,
+        data = [
+            ":ledger.did",
+        ],
+        env = {
+            "CARGO_MANIFEST_DIR": "rs/ledger_suite/icrc1/ledger",
+        },
+        deps = ["@crate_index//:candid_parser"] + extra_deps,
+    )
+    for (name_suffix, features, extra_deps) in [
         (
-            "_icrc3_compatible_data_certificate",
-            ["icrc3-compatible-data-certificate"],
+            "",
+            [],
             [
-                ":ledger_icrc3_compatible_data_certificate",
                 "//rs/ledger_suite/icrc1/tokens_u64",
+            ],
+        ),
+        (
+            "_u256",
+            ["u256-tokens"],
+            [
+                "//rs/ledger_suite/icrc1/tokens_u256",
             ],
         ),
     ]
 ]
 
-rust_test(
-    name = "ledger_canister_test",
-    crate = ":_wasm_ledger_canister",
-    data = [
-        ":ledger.did",
-    ],
-    env = {
-        "CARGO_MANIFEST_DIR": "rs/ledger_suite/icrc1/ledger",
-    },
-    deps = ["@crate_index//:candid_parser"],
-)
-
 [
     rust_ic_test(
         name = "ledger_test" + name_suffix,
+        timeout = "long",
         srcs = ["tests/tests.rs"],
         crate_features = features,
         data = [
             ":block.cddl",
-            ":ledger_canister" + name_suffix + ".wasm",
-            ":ledger_canister" + name_suffix + "_lowupgradeinstructionlimits.wasm",
-            ":ledger_canister" + name_suffix + "_nextledgerversion.wasm",
+            ":ledger_canister" + name_suffix + ".wasm.gz",
+            ":ledger_canister" + name_suffix + "_lowupgradeinstructionlimits.wasm.gz",
+            ":ledger_canister" + name_suffix + "_nextledgerversion.wasm.gz",
             "//rs/ledger_suite/icrc1/archive:archive_canister" + name_suffix + ".wasm.gz",
-            "//rs/ledger_suite/icrc1/ledger:ledger_canister_icrc3_compatible_data_certificate",
             "//rs/universal_canister/impl:universal_canister.wasm.gz",
             "@mainnet_ckbtc_ic-icrc1-ledger-v1//file",
             "@mainnet_ckbtc_ic-icrc1-ledger-v2-noledgerversion//file",
@@ -304,10 +305,9 @@ rust_test(
             "CKETH_IC_ICRC1_LEDGER_V3_VERSION_WASM_PATH": "$(rootpath @mainnet_cketh_ic-icrc1-ledger-u256-v3//file)",
             "IC_ICRC1_ARCHIVE_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/archive:archive_canister" + name_suffix + ".wasm.gz)",
             "IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_ic-icrc1-ledger//file)",
-            "IC_ICRC1_LEDGER_ICRC3_COMPATIBLE_DATA_CERTIFICATE_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister_icrc3_compatible_data_certificate)",
-            "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath :ledger_canister" + name_suffix + ".wasm)",
-            "IC_ICRC1_LEDGER_WASM_INSTR_LIMITS_PATH": "$(rootpath :ledger_canister" + name_suffix + "_lowupgradeinstructionlimits.wasm)",
-            "IC_ICRC1_LEDGER_NEXT_VERSION_WASM_PATH": "$(rootpath :ledger_canister" + name_suffix + "_nextledgerversion.wasm)",
+            "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath :ledger_canister" + name_suffix + ".wasm.gz)",
+            "IC_ICRC1_LEDGER_WASM_INSTR_LIMITS_PATH": "$(rootpath :ledger_canister" + name_suffix + "_lowupgradeinstructionlimits.wasm.gz)",
+            "IC_ICRC1_LEDGER_NEXT_VERSION_WASM_PATH": "$(rootpath :ledger_canister" + name_suffix + "_nextledgerversion.wasm.gz)",
             "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
         },
         deps = [
@@ -320,7 +320,6 @@ rust_test(
             "//rs/ledger_suite/common/ledger_canister_core",
             "//rs/ledger_suite/common/ledger_core",
             "//rs/ledger_suite/icrc1/test_utils",
-            "//rs/rust_canisters/dfn_http_metrics",
             "//rs/state_machine_tests",
             "//rs/test_utilities/load_wasm",
             "//rs/types/base_types",
@@ -330,6 +329,7 @@ rust_test(
             "@crate_index//:ciborium",
             "@crate_index//:hex",
             "@crate_index//:ic-agent",
+            "@crate_index//:ic-cbor",
             "@crate_index//:ic-certification",
             "@crate_index//:ic-metrics-encoder",
             "@crate_index//:leb128",
@@ -407,17 +407,16 @@ rust_test(
         crate_features = features,
         proc_macro_deps = [
             # Keep sorted.
-            "@crate_index//:ic-cdk-macros",
         ],
         results_file = "canbench_results/canbench" + name_suffix + ".yml",
         deps = [
             # Keep sorted.
+            "//packages/ic-http-types",
             "//packages/icrc-ledger-types:icrc_ledger_types",
             "//rs/ledger_suite/common/ledger_canister_core",
             "//rs/ledger_suite/common/ledger_core",
             "//rs/ledger_suite/icrc1",
             "//rs/rust_canisters/canister_log",
-            "//rs/rust_canisters/http_types",
             "//rs/types/base_types",
             "@crate_index//:assert_matches",
             "@crate_index//:candid",

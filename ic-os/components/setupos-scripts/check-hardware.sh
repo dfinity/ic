@@ -10,6 +10,7 @@ set -o pipefail
 SHELL="/bin/bash"
 PATH="/sbin:/bin:/usr/sbin:/usr/bin"
 
+source /opt/ic/bin/config.sh
 source /opt/ic/bin/functions.sh
 
 HARDWARE_GENERATION=
@@ -250,6 +251,36 @@ function verify_disks() {
 }
 
 ###############################################################################
+# Drive Health Verification
+###############################################################################
+
+function verify_drive_health() {
+    echo "* Verifying drive health..."
+
+    local drives=($(get_large_drives))
+    local warning_triggered=0
+
+    for drive in "${drives[@]}"; do
+        echo "* Checking drive /dev/${drive} health..."
+        local smartctl_output
+        if ! smartctl_output=$(smartctl -H /dev/${drive} 2>&1); then
+            echo -e "\033[1;31mWARNING: Failed to run smartctl on /dev/${drive}.\033[0m"
+            warning_triggered=1
+        elif ! echo "${smartctl_output}" | grep -qi "PASSED"; then
+            echo -e "\033[1;31mWARNING: Drive /dev/${drive} did not pass the SMART health check.\033[0m"
+            warning_triggered=1
+        else
+            echo "Drive /dev/${drive} health is OK."
+        fi
+    done
+
+    if [ "${warning_triggered}" -eq 1 ]; then
+        echo "Pausing for 5 minutes before continuing installation..."
+        sleep 300
+    fi
+}
+
+###############################################################################
 # Deployment Path Verification
 ###############################################################################
 
@@ -268,6 +299,19 @@ function verify_deployment_path() {
     fi
 }
 
+function verify_sev_snp() {
+    local enabled=$(get_config_value '.hostos_settings.enable_trusted_execution_environment')
+    if [[ "${enabled}" == "true" ]]; then
+        if [[ "${HARDWARE_GENERATION}" != "2" ]]; then
+            log_and_halt_installation_on_error "1" "Trusted execution is enabled but hardware generation is not Gen2."
+        else
+            echo "Trusted execution is enabled and Gen2 hardware detected."
+        fi
+    else
+        echo "Trusted execution is disabled. Skipping verification."
+    fi
+}
+
 ###############################################################################
 # Main
 ###############################################################################
@@ -279,7 +323,9 @@ main() {
         verify_cpu
         verify_memory
         verify_disks
+        verify_drive_health
         verify_deployment_path
+        verify_sev_snp
     else
         echo "* Hardware checks skipped by request via kernel command line"
     fi

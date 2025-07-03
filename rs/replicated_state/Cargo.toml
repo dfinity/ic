@@ -16,7 +16,7 @@ ic-certification-version = { path = "../canonical_state/certification_version" }
 ic-config = { path = "../config" }
 ic-limits = { path = "../limits" }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
-ic-error-types = { path = "../types/error_types" }
+ic-error-types = { path = "../../packages/ic-error-types" }
 ic-interfaces = { path = "../interfaces" }
 ic-logger = { path = "../monitoring/logger" }
 ic-management-canister-types-private = { path = "../types/management_canister_types" }
@@ -44,6 +44,7 @@ rand = { workspace = true }
 rand_chacha = { workspace = true }
 rayon = { workspace = true }
 serde = { workspace = true }
+serde_bytes = { workspace = true }
 slog = { workspace = true }
 static_assertions = { workspace = true }
 strum = { workspace = true }

@@ -1,11 +1,10 @@
 //! This module contains functions for constructing CUPs from registry
 
-use crate::idkg::{
-    make_bootstrap_summary,
-    payload_builder::make_bootstrap_summary_with_initial_dealings,
+use ic_consensus_dkg::payload_builder::get_dkg_summary_from_cup_contents;
+use ic_consensus_idkg::{
+    make_bootstrap_summary, make_bootstrap_summary_with_initial_dealings,
     utils::{get_idkg_chain_key_config_if_enabled, inspect_idkg_chain_key_initializations},
 };
-use ic_consensus_dkg::payload_builder::get_dkg_summary_from_cup_contents;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{warn, ReplicaLogger};
 use ic_protobuf::registry::subnet::v1::CatchUpPackageContents;
@@ -82,16 +81,25 @@ pub fn make_registry_cup_from_cup_contents(
         }
     };
 
-    let low_dkg_id = dkg_summary
-        .current_transcript(&NiDkgTag::LowThreshold)
-        .expect("No current low threshold transcript available")
-        .dkg_id
-        .clone();
-    let high_dkg_id = dkg_summary
-        .current_transcript(&NiDkgTag::HighThreshold)
-        .expect("No current high threshold transcript available")
-        .dkg_id
-        .clone();
+    let Some(low_threshold_transcript) = dkg_summary.current_transcript(&NiDkgTag::LowThreshold)
+    else {
+        warn!(
+            logger,
+            "No current low threshold transcript in registry CUP contents"
+        );
+        return None;
+    };
+    let low_dkg_id = low_threshold_transcript.dkg_id.clone();
+
+    let Some(high_threshold_transcript) = dkg_summary.current_transcript(&NiDkgTag::HighThreshold)
+    else {
+        warn!(
+            logger,
+            "No current high threshold transcript in registry CUP contents"
+        );
+        return None;
+    };
+    let high_dkg_id = high_threshold_transcript.dkg_id.clone();
 
     // In a NNS subnet recovery case the block validation context needs to reference a registry
     // version of the NNS to be recovered. Otherwise the validation context points to a registry
@@ -164,7 +172,14 @@ pub fn make_registry_cup(
         }
     };
 
-    let cup_contents = versioned_record.value.expect("Missing CUP contents");
+    let Some(cup_contents) = versioned_record.value else {
+        warn!(
+            logger,
+            "Missing registry CUP contents at version {}", versioned_record.version
+        );
+        return None;
+    };
+
     make_registry_cup_from_cup_contents(
         registry,
         subnet_id,

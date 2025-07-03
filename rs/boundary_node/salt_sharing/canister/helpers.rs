@@ -3,7 +3,7 @@ use std::{collections::HashSet, time::Duration};
 use crate::{
     logs::P0,
     metrics::METRICS,
-    storage::{StorableSalt, API_BOUNDARY_NODE_PRINCIPALS, SALT, SALT_SIZE},
+    storage::{StorableSalt, API_BOUNDARY_NODE_PRINCIPALS, SALT},
     time::delay_till_next_month,
 };
 use candid::Principal;
@@ -13,6 +13,7 @@ use ic_cdk_timers::{set_timer, set_timer_interval};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use salt_sharing_api::{
     ApiBoundaryNodeIdRecord, GetApiBoundaryNodeIdsRequest, InitArg, SaltGenerationStrategy,
+    SALT_SIZE,
 };
 
 const REGISTRY_CANISTER_METHOD: &str = "get_api_boundary_node_ids";
@@ -51,29 +52,20 @@ pub fn is_salt_init() -> bool {
 }
 
 // Regenerate salt and store it in the stable memory
-// Can only fail, if the calls to management canister fail.
+// Can only fail, if the call to management canister fails.
 pub async fn try_regenerate_salt() -> Result<(), String> {
-    // Closure for getting random bytes from the IC.
-    let rnd_call = |attempt: u32| async move {
+    let (salt,): ([u8; SALT_SIZE],) =
         ic_cdk::call(Principal::management_canister(), "raw_rand", ())
             .await
             .map_err(|err| {
                 format!(
-                    "Call {attempt} to raw_rand failed: code={:?}, err={}",
+                    "Call to `raw_rand` of management canister failed: code={:?}, err={}",
                     err.0, err.1
                 )
-            })
-    };
-
-    let (rnd_bytes_1,): ([u8; 32],) = rnd_call(1).await?;
-    let (rnd_bytes_2,): ([u8; 32],) = rnd_call(2).await?;
-
-    // Concatenate arrays to form an array of 64 random bytes.
-    let mut salt = [rnd_bytes_1, rnd_bytes_2].concat();
-    salt.truncate(SALT_SIZE);
+            })?;
 
     let stored_salt = StorableSalt {
-        salt,
+        salt: salt.to_vec(),
         salt_id: time(),
     };
 

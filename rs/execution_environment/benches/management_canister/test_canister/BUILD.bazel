@@ -6,7 +6,6 @@ rust_canister(
     name = "test_canister",
     srcs = ["src/main.rs"],
     crate_name = "ic_test_canister",
-    proc_macro_deps = ["@crate_index//:ic-cdk-macros"],
     service_file = "candid.did",
     version = "0.1.0",
     deps = [

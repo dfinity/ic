@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use strum_macros::EnumIter;
 
 pub type InstanceId = usize;
 
@@ -435,7 +436,18 @@ pub mod base64 {
 // ================================================================================================================= //
 
 #[derive(
-    Debug, Clone, Copy, Eq, Hash, PartialEq, Ord, PartialOrd, Serialize, Deserialize, JsonSchema,
+    Debug,
+    Clone,
+    Copy,
+    Eq,
+    Hash,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+    EnumIter,
 )]
 pub enum SubnetKind {
     Application,
@@ -525,6 +537,14 @@ impl From<SubnetConfigSet> for ExtendedSubnetConfigSet {
     }
 }
 
+/// Specifies ICP features enabled by deploying their corresponding system canisters
+/// when creating a PocketIC instance and keeping them up to date
+/// during the PocketIC instance lifetime.
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
+pub struct IcpFeatures {
+    pub registry: bool,
+}
+
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
 pub struct InstanceConfig {
     pub subnet_config_set: ExtendedSubnetConfigSet,
@@ -532,6 +552,7 @@ pub struct InstanceConfig {
     pub nonmainnet_features: bool,
     pub log_level: Option<String>,
     pub bitcoind_addr: Option<Vec<SocketAddr>>,
+    pub icp_features: Option<IcpFeatures>,
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
@@ -554,8 +575,8 @@ pub struct SubnetSpec {
 }
 
 impl SubnetSpec {
-    pub fn with_state_dir(mut self, path: PathBuf, subnet_id: SubnetId) -> SubnetSpec {
-        self.state_config = SubnetStateConfig::FromPath(path, RawSubnetId::from(subnet_id));
+    pub fn with_state_dir(mut self, path: PathBuf) -> SubnetSpec {
+        self.state_config = SubnetStateConfig::FromPath(path);
         self
     }
 
@@ -566,14 +587,6 @@ impl SubnetSpec {
 
     pub fn get_state_path(&self) -> Option<PathBuf> {
         self.state_config.get_path()
-    }
-
-    pub fn get_subnet_id(&self) -> Option<RawSubnetId> {
-        match &self.state_config {
-            SubnetStateConfig::New => None,
-            SubnetStateConfig::FromPath(_, subnet_id) => Some(subnet_id.clone()),
-            SubnetStateConfig::FromBlobStore(_, subnet_id) => Some(subnet_id.clone()),
-        }
     }
 
     pub fn get_instruction_config(&self) -> SubnetInstructionConfig {
@@ -617,24 +630,17 @@ pub enum SubnetStateConfig {
     New,
     /// Load existing subnet state from the given path.
     /// The path must be on a filesystem accessible to the server process.
-    FromPath(PathBuf, RawSubnetId),
+    FromPath(PathBuf),
     /// Load existing subnet state from blobstore. Needs to be uploaded first!
     /// Not implemented!
-    FromBlobStore(BlobId, RawSubnetId),
+    FromBlobStore(BlobId),
 }
 
 impl SubnetStateConfig {
     pub fn get_path(&self) -> Option<PathBuf> {
         match self {
-            SubnetStateConfig::FromPath(path, _) => Some(path.clone()),
-            SubnetStateConfig::FromBlobStore(_, _) => None,
-            SubnetStateConfig::New => None,
-        }
-    }
-    pub fn get_subnet_id(&self) -> Option<RawSubnetId> {
-        match self {
-            SubnetStateConfig::FromPath(_, id) => Some(id.clone()),
-            SubnetStateConfig::FromBlobStore(_, id) => Some(id.clone()),
+            SubnetStateConfig::FromPath(path) => Some(path.clone()),
+            SubnetStateConfig::FromBlobStore(_) => None,
             SubnetStateConfig::New => None,
         }
     }
@@ -643,14 +649,7 @@ impl SubnetStateConfig {
 impl ExtendedSubnetConfigSet {
     // Return the configured named subnets in order.
     #[allow(clippy::type_complexity)]
-    pub fn get_named(
-        &self,
-    ) -> Vec<(
-        SubnetKind,
-        Option<PathBuf>,
-        Option<RawSubnetId>,
-        SubnetInstructionConfig,
-    )> {
+    pub fn get_named(&self) -> Vec<(SubnetKind, Option<PathBuf>, SubnetInstructionConfig)> {
         use SubnetKind::*;
         vec![
             (self.nns.clone(), NNS),
@@ -663,12 +662,7 @@ impl ExtendedSubnetConfigSet {
         .filter(|(mb, _)| mb.is_some())
         .map(|(mb, kind)| {
             let spec = mb.unwrap();
-            (
-                kind,
-                spec.get_state_path(),
-                spec.get_subnet_id(),
-                spec.get_instruction_config(),
-            )
+            (kind, spec.get_state_path(), spec.get_instruction_config())
         })
         .collect()
     }
@@ -686,6 +680,25 @@ impl ExtendedSubnetConfigSet {
             return Ok(());
         }
         Err("ExtendedSubnetConfigSet must contain at least one subnet".to_owned())
+    }
+
+    pub fn try_with_icp_features(mut self, icp_features: &IcpFeatures) -> Result<Self, String> {
+        let check_empty_subnet = |subnet: &Option<SubnetSpec>, subnet_desc, icp_feature| {
+            if let Some(config) = subnet {
+                if !matches!(config.state_config, SubnetStateConfig::New) {
+                    return Err(format!(
+                        "The {} subnet must be empty when specifying the `{}` ICP feature.",
+                        subnet_desc, icp_feature
+                    ));
+                }
+            }
+            Ok(())
+        };
+        if icp_features.registry {
+            check_empty_subnet(&self.nns, "NNS", "registry")?;
+            self.nns = Some(self.nns.unwrap_or_default());
+        }
+        Ok(self)
     }
 }
 

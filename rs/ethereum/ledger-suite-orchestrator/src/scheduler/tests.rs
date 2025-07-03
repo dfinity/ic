@@ -189,10 +189,72 @@ async fn should_not_retry_successful_operation_after_failing_one() {
     let mut runtime = MockCanisterRuntime::new();
 
     runtime.expect_id().return_const(ORCHESTRATOR_PRINCIPAL);
+    let expected_error = CallError {
+        method: "create_canister".to_string(),
+        reason: Reason::OutOfCycles,
+    };
     expect_create_canister_returning(
         &mut runtime,
         vec![ORCHESTRATOR_PRINCIPAL],
-        vec![Ok(LEDGER_PRINCIPAL)],
+        vec![Err(expected_error.clone())],
+    );
+
+    let task = TaskExecution {
+        task_type: Task::InstallLedgerSuite(usdc_install_args()),
+        execute_at_ns: 0,
+    };
+    assert_eq!(
+        task.execute(&runtime).await,
+        Err(TaskError::CanisterCreationError(expected_error))
+    );
+    assert_eq!(
+        read_state(|s| s.managed_canisters(&usdc_token_id()).cloned()),
+        Some(Canisters {
+            ledger: None,
+            index: None,
+            archives: vec![],
+            metadata: usdc_metadata(),
+        })
+    );
+
+    runtime.checkpoint();
+    runtime.expect_id().return_const(ORCHESTRATOR_PRINCIPAL);
+    let expected_error = CallError {
+        method: "create_canister".to_string(),
+        reason: Reason::OutOfCycles,
+    };
+    expect_create_canister_returning(
+        &mut runtime,
+        vec![ORCHESTRATOR_PRINCIPAL],
+        vec![Ok(LEDGER_PRINCIPAL), Err(expected_error.clone())],
+    );
+
+    let task = TaskExecution {
+        task_type: Task::InstallLedgerSuite(usdc_install_args()),
+        execute_at_ns: 0,
+    };
+    assert_eq!(
+        task.execute(&runtime).await,
+        Err(TaskError::CanisterCreationError(expected_error))
+    );
+    assert_eq!(
+        read_state(|s| s.managed_canisters(&usdc_token_id()).cloned()),
+        Some(Canisters {
+            ledger: Some(LedgerCanister::new(ManagedCanisterStatus::Created {
+                canister_id: LEDGER_PRINCIPAL
+            })),
+            index: None,
+            archives: vec![],
+            metadata: usdc_metadata(),
+        })
+    );
+
+    runtime.checkpoint();
+    runtime.expect_id().return_const(ORCHESTRATOR_PRINCIPAL);
+    expect_create_canister_returning(
+        &mut runtime,
+        vec![ORCHESTRATOR_PRINCIPAL],
+        vec![Ok(INDEX_PRINCIPAL)],
     );
     let expected_error = CallError {
         method: "install_code".to_string(),
@@ -217,37 +279,9 @@ async fn should_not_retry_successful_operation_after_failing_one() {
             ledger: Some(LedgerCanister::new(ManagedCanisterStatus::Created {
                 canister_id: LEDGER_PRINCIPAL
             })),
-            index: None,
-            archives: vec![],
-            metadata: usdc_metadata(),
-        })
-    );
-
-    runtime.checkpoint();
-    runtime.expect_id().return_const(ORCHESTRATOR_PRINCIPAL);
-    let expected_error = CallError {
-        method: "create_canister".to_string(),
-        reason: Reason::OutOfCycles,
-    };
-    runtime.expect_install_code().times(1).return_const(Ok(()));
-    expect_create_canister_returning(
-        &mut runtime,
-        vec![ORCHESTRATOR_PRINCIPAL],
-        vec![Err(expected_error.clone())],
-    );
-
-    assert_eq!(
-        task.execute(&runtime).await,
-        Err(TaskError::CanisterCreationError(expected_error))
-    );
-    assert_eq!(
-        read_state(|s| s.managed_canisters(&usdc_token_id()).cloned()),
-        Some(Canisters {
-            ledger: Some(LedgerCanister::new(ManagedCanisterStatus::Installed {
-                canister_id: LEDGER_PRINCIPAL,
-                installed_wasm_hash: read_ledger_wasm_hash(),
+            index: Some(IndexCanister::new(ManagedCanisterStatus::Created {
+                canister_id: INDEX_PRINCIPAL
             })),
-            index: None,
             archives: vec![],
             metadata: usdc_metadata(),
         })
@@ -255,19 +289,11 @@ async fn should_not_retry_successful_operation_after_failing_one() {
 
     runtime.checkpoint();
     runtime.expect_id().return_const(ORCHESTRATOR_PRINCIPAL);
-    expect_create_canister_returning(
-        &mut runtime,
-        vec![ORCHESTRATOR_PRINCIPAL],
-        vec![Ok(INDEX_PRINCIPAL)],
-    );
     let expected_error = CallError {
         method: "install_code".to_string(),
         reason: Reason::OutOfCycles,
     };
-    runtime
-        .expect_install_code()
-        .times(1)
-        .return_const(Err(expected_error.clone()));
+    expect_install_code_returning(&mut runtime, vec![Ok(()), Err(expected_error.clone())]);
 
     assert_eq!(
         task.execute(&runtime).await,
@@ -325,7 +351,7 @@ async fn should_discard_add_erc20_task_when_ledger_wasm_not_found() {
     expect_create_canister_returning(
         &mut runtime,
         vec![ORCHESTRATOR_PRINCIPAL],
-        vec![Ok(LEDGER_PRINCIPAL)],
+        vec![Ok(LEDGER_PRINCIPAL), Ok(INDEX_PRINCIPAL)],
     );
 
     assert_eq!(
@@ -340,7 +366,9 @@ async fn should_discard_add_erc20_task_when_ledger_wasm_not_found() {
             ledger: Some(LedgerCanister::new(ManagedCanisterStatus::Created {
                 canister_id: LEDGER_PRINCIPAL
             })),
-            index: None,
+            index: Some(IndexCanister::new(ManagedCanisterStatus::Created {
+                canister_id: INDEX_PRINCIPAL
+            })),
             archives: vec![],
             metadata: usdc_metadata(),
         })
@@ -1484,6 +1512,25 @@ fn expect_create_canister_returning(
             }
             let result = results[create_canister_call_counter].clone();
             create_canister_call_counter += 1;
+            result
+        });
+}
+
+fn expect_install_code_returning(
+    runtime: &mut MockCanisterRuntime,
+    results: Vec<Result<(), CallError>>,
+) {
+    assert!(!results.is_empty(), "must return at least one result");
+    let mut install_code_call_counter = 0_usize;
+    runtime
+        .expect_install_code()
+        .times(results.len())
+        .returning(move |_canister_id, _wasm, _args| {
+            if install_code_call_counter >= results.len() {
+                panic!("install_code called too many times!");
+            }
+            let result = results[install_code_call_counter].clone();
+            install_code_call_counter += 1;
             result
         });
 }

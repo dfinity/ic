@@ -69,9 +69,14 @@ IMAGE="$IMAGE:$IMAGE_TAG"
 if ! sudo podman "${PODMAN_ARGS[@]}" image exists $IMAGE; then
     if ! sudo podman "${PODMAN_ARGS[@]}" pull $IMAGE; then
         # fallback to building the image
-        docker() { sudo podman "${PODMAN_ARGS[@]}" "$@" --network=host; }
+        docker() {
+            # Preserve "${PODMAN_ARGS[@]}" in the exported function by passing
+            # them through a single variable, and unpacking them here.
+            PODMAN_ARGS=(${PODMAN_ARGS})
+            sudo podman "${PODMAN_ARGS[@]}" "$@" --network=host
+        }
         export -f docker
-        "$REPO_ROOT"/ci/container/build-image.sh "${BUILD_ARGS[@]}"
+        PODMAN_ARGS="${PODMAN_ARGS[@]}" "$REPO_ROOT"/ci/container/build-image.sh "${BUILD_ARGS[@]}"
         unset -f docker
     fi
 fi
@@ -109,13 +114,18 @@ else
     CTR_HOME="/ic"
 fi
 
+CACHE_DIR="${CACHE_DIR:-${HOME}/.cache}"
+
+ZIG_CACHE="${CACHE_DIR}/zig-cache"
+mkdir -p "${ZIG_CACHE}"
+
 PODMAN_RUN_ARGS+=(
     --mount type=bind,source="${REPO_ROOT}",target="${WORKDIR}"
-    --mount type=bind,source="${CACHE_DIR:-${HOME}/.cache}",target="${CTR_HOME}/.cache"
+    --mount type=bind,source="${CACHE_DIR}",target="${CTR_HOME}/.cache"
+    --mount type=bind,source="${ZIG_CACHE}",target="/tmp/zig-cache"
     --mount type=bind,source="${HOME}/.ssh",target="${CTR_HOME}/.ssh"
     --mount type=bind,source="${HOME}/.aws",target="${CTR_HOME}/.aws"
     --mount type=bind,source="/var/lib/containers",target="/var/lib/containers"
-    --mount type=bind,source="/tmp",target="/tmp"
     --mount type=tmpfs,destination=/var/sysimage
 )
 

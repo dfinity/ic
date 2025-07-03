@@ -18,6 +18,7 @@ DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:cargo_metadata",
     "@crate_index//:escargot",
+    "@crate_index//:ic-management-canister-types",
     "@crate_index//:rand",
     "@crate_index//:tokio",
     "@crate_index//:wasmprinter",

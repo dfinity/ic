@@ -13,7 +13,7 @@ use ic_nns_constants::{
     ALL_NNS_CANISTER_IDS, CYCLES_LEDGER_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID,
     ROOT_CANISTER_ID,
 };
-use ic_nns_governance_api::pb::v1::{Governance, NetworkEconomics, Neuron};
+use ic_nns_governance_api::{Governance, NetworkEconomics, Neuron};
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use ic_nns_gtc::pb::v1::Gtc;
 use ic_nns_gtc_accounts::{ECT_ACCOUNTS, SEED_ROUND_ACCOUNTS};
@@ -225,14 +225,6 @@ impl NnsInitPayloadsBuilder {
         self
     }
 
-    pub fn with_sns_wasm_allowed_principals(
-        &mut self,
-        allowed_principals: Vec<PrincipalId>,
-    ) -> &mut Self {
-        self.sns_wasms.with_allowed_principals(allowed_principals);
-        self
-    }
-
     pub fn with_exchange_rate_canister(
         &mut self,
         exchange_rate_canister_id: CanisterId,
@@ -310,41 +302,86 @@ pub fn modify_wasm_bytes(wasm_bytes: &[u8], modify_with: u32) -> Vec<u8> {
     new_wasm_bytes
 }
 
+// NOTE, keep the functions for building wasms in the same order as the constants in
+// rs/nns/constants/src/lib.rs.  Only the first ledger archive is represented in the ordering.
+
+// REGISTRY
+
+/// Build Wasm for NNS Registry canister
+pub fn build_registry_wasm_with_features(features: &[&str]) -> Wasm {
+    Project::cargo_bin_maybe_from_env("registry-canister", features)
+}
+
+/// Build Wasm for NNS Registry canister
+pub fn build_registry_wasm() -> Wasm {
+    build_registry_wasm_with_features(&[])
+}
+
+/// Build Wasm for NNS Registry canister
+pub fn build_test_registry_wasm() -> Wasm {
+    build_registry_wasm_with_features(&["test"])
+}
+
+/// Build mainnet Wasm for NNS Registry canister
+pub fn build_mainnet_registry_wasm() -> Wasm {
+    let features = [];
+    Project::cargo_bin_maybe_from_env("mainnet-registry-canister", &features)
+}
+
+// GOVERNANCE
+
+/// Build Wasm for NNS Governance canister
+pub fn build_governance_wasm_with_features(features: &[&str]) -> Wasm {
+    Project::cargo_bin_maybe_from_env("governance-canister", features)
+}
+
 /// Build Wasm for NNS Governance canister
 pub fn build_test_governance_wasm() -> Wasm {
     let features = ["test"];
     build_governance_wasm_with_features(&features)
 }
+
 /// Build Wasm for NNS Governance canister with no features
 pub fn build_governance_wasm() -> Wasm {
     let features = [];
     build_governance_wasm_with_features(&features)
 }
 
-/// Build Wasm for NNS Governance canister
-pub fn build_governance_wasm_with_features(features: &[&str]) -> Wasm {
-    Project::cargo_bin_maybe_from_env("governance-canister", features)
-}
-/// Build Wasm for NNS Root canister
-pub fn build_root_wasm() -> Wasm {
+/// Build mainnet Wasm for NNS Governance Canister
+pub fn build_mainnet_governance_wasm() -> Wasm {
     let features = [];
-    Project::cargo_bin_maybe_from_env("root-canister", &features)
+    Project::cargo_bin_maybe_from_env("mainnet-governance-canister", &features)
 }
-/// Build Wasm for NNS Registry canister
-pub fn build_registry_wasm() -> Wasm {
-    let features = [];
-    Project::cargo_bin_maybe_from_env("registry-canister", &features)
-}
-/// Build mainnet Wasm for NNS Registry canister
-pub fn build_mainnet_registry_wasm() -> Wasm {
-    let features = [];
-    Project::cargo_bin_maybe_from_env("mainnet-registry-canister", &features)
-}
+
+// LEDGER
+
 /// Build Wasm for NNS Ledger canister
 pub fn build_ledger_wasm() -> Wasm {
     let features = ["notify-method"];
     Project::cargo_bin_maybe_from_env("ledger-canister", &features)
 }
+
+/// Build mainnet Wasm for NNS Ledger Canister
+pub fn build_mainnet_ledger_wasm() -> Wasm {
+    Project::cargo_bin_maybe_from_env("mainnet-icp-ledger-canister", &[])
+}
+
+// ROOT
+
+/// Build Wasm for NNS Root canister
+pub fn build_root_wasm() -> Wasm {
+    let features = [];
+    Project::cargo_bin_maybe_from_env("root-canister", &features)
+}
+
+/// Build mainnet Wasm for NNS Root Canister
+pub fn build_mainnet_root_wasm() -> Wasm {
+    let features = [];
+    Project::cargo_bin_maybe_from_env("mainnet-root-canister", &features)
+}
+
+// CYCLES-MINTING
+
 /// Build Wasm for NNS CMC
 pub fn build_cmc_wasm() -> Wasm {
     let features = [];
@@ -355,6 +392,9 @@ pub fn build_mainnet_cmc_wasm() -> Wasm {
     let features = [];
     Project::cargo_bin_maybe_from_env("mainnet-cycles-minting-canister", &features)
 }
+
+// LIFELINE
+
 /// Build Wasm for NNS Lifeline canister
 pub fn build_lifeline_wasm() -> Wasm {
     Wasm::from_location_specified_by_env_var("lifeline_canister", &[])
@@ -367,21 +407,26 @@ pub fn build_mainnet_lifeline_wasm() -> Wasm {
     Project::cargo_bin_maybe_from_env("mainnet-lifeline-canister", &features)
 }
 
+// GENESIS TOKEN
+
 /// Build Wasm for NNS Genesis Token canister
 pub fn build_genesis_token_wasm() -> Wasm {
     let features = [];
     Project::cargo_bin_maybe_from_env("genesis-token-canister", &features)
 }
+
+// IDENTITY (not used in tests yet)
+
+// NNS UI (not used in tests yet)
+
+// LEDGER ARCHIVE (not used in tests yet)
+
+// SNS WASM
+
 /// Build Wasm for NNS SnsWasm canister
 pub fn build_sns_wasms_wasm() -> Wasm {
     let features = [];
     Project::cargo_bin_maybe_from_env("sns-wasm-canister", &features)
-}
-
-/// Build Wasm for Index canister for the ICP Ledger
-pub fn build_index_wasm() -> Wasm {
-    let features = [];
-    Project::cargo_bin_maybe_from_env("ic-icp-index", &features)
 }
 
 /// Build mainnet Wasm for NNS SnsWasm canister
@@ -390,25 +435,42 @@ pub fn build_mainnet_sns_wasms_wasm() -> Wasm {
     Project::cargo_bin_maybe_from_env("mainnet-sns-wasm-canister", &features)
 }
 
-/// Build mainnet Wasm for NNS Root Canister
-pub fn build_mainnet_root_wasm() -> Wasm {
-    let features = [];
-    Project::cargo_bin_maybe_from_env("mainnet-root-canister", &features)
-}
+// LEDGER INDEX
 
-/// Build mainnet Wasm for NNS Ledger Canister
-pub fn build_mainnet_ledger_wasm() -> Wasm {
-    Project::cargo_bin_maybe_from_env("mainnet-icp-ledger-canister", &[])
-}
-
-/// Build mainnet Wasm for NNS Governance Canister
-pub fn build_mainnet_governance_wasm() -> Wasm {
+/// Build Wasm for Index canister for the ICP Ledger
+pub fn build_index_wasm() -> Wasm {
     let features = [];
-    Project::cargo_bin_maybe_from_env("mainnet-governance-canister", &features)
+    Project::cargo_bin_maybe_from_env("ic-icp-index", &features)
 }
 
 /// Build mainnet Wasm for Index canister for the ICP Ledger
 pub fn build_mainnet_index_wasm() -> Wasm {
     let features = [];
     Project::cargo_bin_maybe_from_env("mainnet-ic-icp-index-canister", &features)
+}
+
+// SUBNET RENTAL (not used in tests yet)
+
+// NODE REWARDS CANISTER
+
+/// Build Wasm for NNS Node Rewards canister
+pub fn build_node_rewards_wasm() -> Wasm {
+    let features = [];
+    Project::cargo_bin_maybe_from_env("node-rewards-canister", &features)
+}
+
+pub fn build_node_rewards_test_wasm() -> Wasm {
+    let features = ["test"];
+    Project::cargo_bin_maybe_from_env("node-rewards-canister", &features)
+}
+
+/// Build mainnet Wasm for NNS Node Rewards canister
+pub fn build_mainnet_node_rewards_wasm() -> Wasm {
+    panic!(
+        "NRC has not yet been released to mainnet.  Please update this function when it is.\
+        Additionally, tests using NNS canisters will need to build this canister when testing \
+        node provider rewards.  See sync-with-released-nervous-system-wasms/src/main.rs"
+    );
+    // let features = [];
+    // Project::cargo_bin_maybe_from_env("mainnet-node-rewards-canister", &features)
 }

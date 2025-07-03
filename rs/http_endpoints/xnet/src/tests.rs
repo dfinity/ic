@@ -32,7 +32,7 @@ pub(crate) struct EndpointTestFixture {
     pub state_manager: Arc<FakeStateManager>,
     pub registry_client: Arc<MockRegistryClient>,
     pub metrics: MetricsRegistry,
-    pub tls_handshake: Arc<dyn TlsConfig + Send + Sync>,
+    pub tls_handshake: Arc<MockTlsConfig>,
 }
 
 impl EndpointTestFixture {

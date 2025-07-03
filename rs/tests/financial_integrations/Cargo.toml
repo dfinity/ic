@@ -20,6 +20,7 @@ ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-system-test-driver = { path = "../driver" }
 icrc-ledger-agent = { path = "../../../packages/icrc-ledger-agent" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
+leb128 = { workspace = true }
 on_wire = { path = "../../rust_canisters/on_wire" }
 serde_cbor = { workspace = true }
 

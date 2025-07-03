@@ -51,7 +51,9 @@ fn call_counter_can(pic: &PocketIc, canister_id: Principal, method: &str) -> Vec
 
 ### Quickstart
 * Download the latest **PocketIC server** from the [PocketIC repo](https://github.com/dfinity/pocketic) that is [compatible](https://docs.google.com/document/d/1VYmHUTjrgbzRHtsAyRrI5cj-gWGs7ktTnutPvUMJioU) with the library version you're using.
-* Leave the binary in your current working directory, or specify the path to the binary by setting the `POCKET_IC_BIN` environment variable before running your tests.
+* Ungzip the downloaded file.
+* On UNIX: make the downloaded file executable.
+* Specify the path to the binary by using the function `PocketIcBuilder::with_server_binary` or the environment variable `POCKET_IC_BIN`.
 * Add PocketIC Rust to your project with `cargo add pocket-ic`.
 * Import PocketIC with `use pocket_ic::PocketIc`, and create a new PocketIC instance with `let pic = PocketIc::new()` in your Rust code and start testing!
 

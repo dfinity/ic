@@ -17,9 +17,9 @@
 //!  - Constructor also takes a Router. Incoming requests are routed to a handler
 //!    based on the URI specified in the request.
 //!  - `get_conn_handle`: Can be used to get a `ConnectionHandle` to a peer.
-//!     The connection handle is small wrapper around the actual quic connection
-//!     with an rpc/push interface. Passed in requests need to specify an URI to get
-//!     routed to the correct handler.
+//!    The connection handle is small wrapper around the actual quic connection
+//!    with an rpc/push interface. Passed in requests need to specify an URI to get
+//!    routed to the correct handler.
 //!
 //! GUARANTEES:
 //!  - If a peer is reachable, part of the topology and well-behaving transport will eventually
@@ -225,7 +225,7 @@ impl Transport for QuicTransport {
             .ok_or(anyhow!("Currently not connected to this peer"))?
             .clone();
         peer.rpc(request).await.inspect_err(|err| {
-            info!(self.log, "{:#?}", err);
+            info!(every_n_seconds => 5, self.log, "Error sending rpc request to {}: {:?}", peer_id, err);
         })
     }
 

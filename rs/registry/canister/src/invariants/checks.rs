@@ -15,12 +15,16 @@ use crate::{
         unassigned_nodes_config::check_unassigned_nodes_config_invariants,
     },
     registry::Registry,
+    storage::with_chunks,
 };
 
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_nervous_system_string::clamp_debug_len;
-use ic_registry_transport::pb::v1::{registry_mutation::Type, RegistryMutation};
+use ic_registry_canister_chunkify::dechunkify;
+use ic_registry_transport::pb::v1::{
+    high_capacity_registry_value, registry_mutation::Type, RegistryMutation,
+};
 
 impl Registry {
     pub fn check_changelog_version_invariants(&self) {
@@ -143,10 +147,31 @@ impl Registry {
 
         for (key, values) in self.store.iter() {
             let registry_value = values.back().unwrap();
-            if !registry_value.deletion_marker {
-                snapshot.insert(key.to_vec(), registry_value.value.clone());
-            }
+
+            let content = match registry_value.content.clone() {
+                Some(ok) => ok,
+                None => high_capacity_registry_value::Content::Value(vec![]),
+            };
+
+            let value: Vec<u8> = match content {
+                high_capacity_registry_value::Content::DeletionMarker(deletion_marker) => {
+                    if deletion_marker {
+                        continue;
+                    }
+                    // Treat deletion_marker = false the same as Value(vec![]).
+                    vec![]
+                }
+
+                high_capacity_registry_value::Content::Value(value) => value,
+
+                high_capacity_registry_value::Content::LargeValueChunkKeys(
+                    large_value_chunk_keys,
+                ) => with_chunks(|chunks| dechunkify(&large_value_chunk_keys, chunks)),
+            };
+
+            snapshot.insert(key.to_vec(), value);
         }
+
         snapshot
     }
 }
@@ -258,6 +283,7 @@ mod tests {
             dc_id: "".into(),
             rewardable_nodes: BTreeMap::new(),
             ipv6: None,
+            max_rewardable_nodes: BTreeMap::new(),
         }
         .encode_to_vec();
         let registry = Registry::new();
@@ -309,6 +335,7 @@ mod tests {
             dc_id: "".into(),
             rewardable_nodes: BTreeMap::new(),
             ipv6: None,
+            max_rewardable_nodes: BTreeMap::new(),
         }
         .encode_to_vec();
 
@@ -337,6 +364,7 @@ mod tests {
             dc_id: "".into(),
             rewardable_nodes: BTreeMap::new(),
             ipv6: None,
+            max_rewardable_nodes: BTreeMap::new(),
         }
         .encode_to_vec();
         let mut mutations = vec![insert(key.as_bytes(), &value)];
@@ -354,3 +382,6 @@ mod tests {
         assert!(snapshot_data.is_none());
     }
 }
+
+#[cfg(feature = "canbench-rs")]
+mod benches;

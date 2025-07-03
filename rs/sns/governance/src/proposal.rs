@@ -1,5 +1,5 @@
 use crate::cached_upgrade_steps::render_two_versions_as_markdown_table;
-use crate::pb::v1::AdvanceSnsTargetVersion;
+use crate::pb::v1::{AdvanceSnsTargetVersion, SetTopicsForCustomProposals, Topic};
 use crate::types::Wasm;
 use crate::{
     canister_control::perform_execute_generic_nervous_system_function_validate_and_render_call,
@@ -448,6 +448,9 @@ pub(crate) async fn validate_and_render_action(
                 &disallowed_target_canister_ids,
             )
         }
+        proposal::Action::RegisterExtension(_) => {
+            Err("RegisterExtension proposals are not supported yet.".to_string())
+        }
         proposal::Action::DeregisterDappCanisters(deregister_dapp_canisters) => {
             validate_and_render_deregister_dapp_canisters(
                 deregister_dapp_canisters,
@@ -492,6 +495,12 @@ pub(crate) async fn validate_and_render_action(
                 advance_sns_target_version,
             );
         }
+        proposal::Action::SetTopicsForCustomProposals(set_topics_for_custom_proposals) => {
+            validate_and_render_set_topics_for_custom_proposals(
+                set_topics_for_custom_proposals,
+                &governance_proto.custom_functions_to_topics(),
+            )
+        }
     }
     .map(|rendering| (rendering, ActionAuxiliary::None))
 }
@@ -519,6 +528,10 @@ fn validate_and_render_manage_nervous_system_parameters(
     new_parameters: &NervousSystemParameters,
     current_parameters: &NervousSystemParameters,
 ) -> Result<String, String> {
+    if new_parameters == &NervousSystemParameters::default() {
+        return Err("NervousSystemParameters: at least one field must be set.".to_string());
+    }
+
     new_parameters.inherit_from(current_parameters).validate()?;
 
     Ok(format!(
@@ -1341,23 +1354,6 @@ impl TryFrom<&NervousSystemFunction> for ValidGenericNervousSystemFunction {
                     }
                 };
 
-                // TODO(NNS1-3625): Remove this once proposal criticality is determined by the topic
-                match topic {
-                    Some(pb_api::topics::Topic::CriticalDappOperations) => {
-                        defects.push(
-                            "CriticalDappOperations is not yet supported for custom functions"
-                                .to_string(),
-                        );
-                    }
-                    Some(pb_api::topics::Topic::TreasuryAssetManagement) => {
-                        defects.push(
-                            "CriticalDappOperations is not yet supported for custom functions"
-                                .to_string(),
-                        );
-                    }
-                    _ => {}
-                }
-
                 if !defects.is_empty() {
                     return Err(format!(
                         "ExecuteNervousSystemFunction was invalid for the following reason(s):\n{}",
@@ -1822,6 +1818,103 @@ fn validate_and_render_advance_sns_target_version_proposal(
     ))
 }
 
+pub(crate) fn validate_and_render_set_topics_for_custom_proposals(
+    set_topics_for_custom_proposals: &SetTopicsForCustomProposals,
+    existing_custom_functions: &BTreeMap<u64, (String, Option<Topic>)>,
+) -> Result<String, String> {
+    let SetTopicsForCustomProposals {
+        custom_function_id_to_topic,
+    } = set_topics_for_custom_proposals;
+
+    if custom_function_id_to_topic.is_empty() {
+        return Err(
+            "SetTopicsForCustomProposals.custom_function_id_to_topic must not be empty."
+                .to_string(),
+        );
+    }
+
+    let mut table = vec!["".to_string()]; // "" ensures joining this string works well.
+    let mut functions_with_unknown_topics = vec![];
+    let mut functions_with_unspecified_topics = vec![];
+    let mut not_registered_as_custom_functions = vec![];
+
+    for (custom_function_id, proposed_topic) in custom_function_id_to_topic.iter() {
+        let Ok(proposed_topic) = Topic::try_from(*proposed_topic) else {
+            functions_with_unknown_topics.push(format!(
+                "function ID: {custom_function_id}, invalid topic: {proposed_topic}"
+            ));
+            continue;
+        };
+
+        if matches!(proposed_topic, Topic::Unspecified) {
+            functions_with_unspecified_topics.push(format!("{custom_function_id}"));
+            continue;
+        }
+
+        let Some((function_name, current_topic)) =
+            existing_custom_functions.get(custom_function_id)
+        else {
+            not_registered_as_custom_functions.push(format!("{custom_function_id}"));
+            continue;
+        };
+
+        let topic_change_str = if let Some(current_topic) = current_topic {
+            // Is this proposal trying to modify a previously set topic?
+
+            if proposed_topic == *current_topic {
+                format!("{proposed_topic} (keeping unchanged)")
+            } else {
+                format!("{proposed_topic} (changing from {current_topic})")
+            }
+        } else {
+            format!("{proposed_topic} (topic not currently set)")
+        };
+
+        table.push(format!("{function_name} under topic {topic_change_str}"));
+    }
+
+    if !functions_with_unknown_topics.is_empty() {
+        return Err(format!(
+            "Invalid topics detected: {}.\
+                 To list available topics, please query `SnsGovernance.list_topics`.",
+            functions_with_unspecified_topics.join("; "),
+        ));
+    }
+
+    if !functions_with_unspecified_topics.is_empty() {
+        return Err(format!(
+            "Cannot set the unspecified topic ({}) for proposal(s) with ID(s) {}.\
+                 To list available topics, please query `SnsGovernance.list_topics`.",
+            Topic::Unspecified as i32,
+            functions_with_unspecified_topics.join(", "),
+        ));
+    }
+
+    if !not_registered_as_custom_functions.is_empty() {
+        return Err(format!(
+            "Cannot set topic for proposal(s) with ID(s) {} since they have not been registered \
+             as custom proposals in this SNS yet. Please use `AddGenericNervousSystemFunction` \
+             proposals to register new custom SNS proposals.",
+            not_registered_as_custom_functions.join(", "),
+        ));
+    }
+
+    let render = table.join("\n  - ");
+
+    let render = format!(
+        "### If adopted, the following proposals will be categorized under \
+         the specified topics:\n\
+         {render}"
+    );
+
+    let render = format!(
+        "# Set topics for custom SNS proposal types\n\n\
+         {render}"
+    );
+
+    Ok(render)
+}
+
 impl ProposalData {
     /// Returns the proposal's decision status. See [ProposalDecisionStatus] in the SNS's
     /// proto for more information.
@@ -1933,7 +2026,7 @@ impl ProposalData {
         // no only needs a tie.
         let current_deadline = wait_for_quiet_state.current_deadline_timestamp_seconds;
         let deciding_amount_yes = new_tally.total / 2 + 1;
-        let deciding_amount_no = (new_tally.total + 1) / 2;
+        let deciding_amount_no = new_tally.total.div_ceil(2);
         if new_tally.yes >= deciding_amount_yes
             || new_tally.no >= deciding_amount_no
             || now_seconds > current_deadline
@@ -2315,6 +2408,7 @@ impl ProposalData {
             minimum_yes_proportion_of_total,
             minimum_yes_proportion_of_exercised,
             action_auxiliary,
+            topic,
         } = self;
 
         let limited_ballots: BTreeMap<_, _> = ballots
@@ -2344,6 +2438,7 @@ impl ProposalData {
             minimum_yes_proportion_of_total: *minimum_yes_proportion_of_total,
             minimum_yes_proportion_of_exercised: *minimum_yes_proportion_of_exercised,
             action_auxiliary: action_auxiliary.clone(),
+            topic: *topic,
 
             // The following fields are truncated:
             payload_text_rendering: None,
@@ -2602,13 +2697,16 @@ mod minting_tests;
 mod advance_sns_target_version;
 
 #[cfg(test)]
+mod set_topics_for_custom_proposals;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::{
         pb::v1::{
             governance::{self, Version},
             Ballot, ChunkedCanisterWasm, Empty, Governance as GovernanceProto, NeuronId, Proposal,
-            ProposalId, Subaccount, WaitForQuietState,
+            ProposalId, Subaccount, Topic, WaitForQuietState,
         },
         sns_upgrade::{
             CanisterSummary, GetNextSnsVersionRequest, GetNextSnsVersionResponse,
@@ -4654,6 +4752,7 @@ Version {
             // This is because the proposal was rejected (see the latest_tally field).
             executed_timestamp_seconds: 0,
             action_auxiliary: None,
+            topic: Some(Topic::Governance as i32),
         };
     }
 
@@ -5314,5 +5413,75 @@ Payload rendering here"#
                 ..Default::default()
             }
         );
+    }
+
+    #[test]
+    fn test_manage_nervous_system_parameters_must_set_some_fields() {
+        let current_parameters = NervousSystemParameters::with_default_values();
+
+        // Probably the same as `NervousSystemParameters::default()`, but more verbose.
+        let new_parameters = NervousSystemParameters {
+            reject_cost_e8s: None,
+            neuron_minimum_stake_e8s: None,
+            transaction_fee_e8s: None,
+            max_proposals_to_keep_per_action: None,
+            initial_voting_period_seconds: None,
+            wait_for_quiet_deadline_increase_seconds: None,
+            default_followees: None,
+            max_number_of_neurons: None,
+            neuron_minimum_dissolve_delay_to_vote_seconds: None,
+            max_followees_per_function: None,
+            max_dissolve_delay_seconds: None,
+            max_neuron_age_for_age_bonus: None,
+            max_number_of_proposals_with_ballots: None,
+            neuron_claimer_permissions: None,
+            neuron_grantable_permissions: None,
+            max_number_of_principals_per_neuron: None,
+            voting_rewards_parameters: None,
+            max_dissolve_delay_bonus_percentage: None,
+            max_age_bonus_percentage: None,
+            maturity_modulation_disabled: None,
+            automatically_advance_target_version: None,
+        };
+
+        let result = validate_and_render_manage_nervous_system_parameters(
+            &new_parameters,
+            &current_parameters,
+        );
+
+        assert_eq!(
+            result,
+            Err("NervousSystemParameters: at least one field must be set.".to_string())
+        );
+    }
+
+    #[test]
+    fn test_manage_nervous_system_parameters_happy() {
+        let current_parameters = NervousSystemParameters::with_default_values();
+
+        // At least one field must be set. Which one - doesn't matter for this test.
+        let new_parameters = NervousSystemParameters {
+            automatically_advance_target_version: Some(false),
+            ..Default::default()
+        };
+
+        let render = validate_and_render_manage_nervous_system_parameters(
+            &new_parameters,
+            &current_parameters,
+        )
+        .unwrap();
+
+        for keyword in [
+            "change nervous system parameters",
+            "automatically_advance_target_version: Some(\n        true,\n    )",
+            "automatically_advance_target_version: Some(\n        false,\n    )",
+        ] {
+            assert!(
+                render.contains(keyword),
+                "Proposal render:\n{}\n does not contain expected keyword {}",
+                render,
+                keyword
+            );
+        }
     }
 }

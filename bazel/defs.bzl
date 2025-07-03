@@ -380,3 +380,46 @@ symlink_dirs = rule(
         "targets": attr.label_keyed_string_dict(allow_files = True),
     },
 )
+
+def _write_info_file_var_impl(ctx):
+    """Helper rule that creates a file with the content of the provided var from the info file."""
+
+    output = ctx.actions.declare_file(ctx.label.name)
+    ctx.actions.run_shell(
+        command = """
+            grep <{info_file} -e '{varname}' \\
+                    | cut -d' ' -f2 > {out}""".format(varname = ctx.attr.varname, info_file = ctx.info_file.path, out = output.path),
+        inputs = [ctx.info_file],
+        outputs = [output],
+    )
+    return [DefaultInfo(files = depset([output]))]
+
+write_info_file_var = rule(
+    implementation = _write_info_file_var_impl,
+    attrs = {
+        "varname": attr.string(mandatory = True),
+    },
+)
+
+def file_size_check(
+        name,
+        file,
+        max_file_size):
+    """
+    A check to make sure the given file is below the specified size.
+
+    Args:
+      name: Name of the test.
+      file: File to check (label).
+      max_file_size: Max accepted size in bytes.
+    """
+
+    native.sh_test(
+        name = name,
+        srcs = ["//bazel:file_size_test.sh"],
+        data = [file],
+        env = {
+            "FILE": "$(rootpath %s)" % file,
+            "MAX_SIZE": str(max_file_size),
+        },
+    )

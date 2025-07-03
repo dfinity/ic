@@ -4,10 +4,8 @@ use ic_artifact_pool::{
     consensus_pool::ConsensusPoolImpl, dkg_pool, idkg_pool,
 };
 use ic_config::artifact_pool::ArtifactPoolConfig;
-use ic_consensus::{
-    consensus::{ConsensusBouncer, ConsensusImpl},
-    idkg,
-};
+use ic_consensus::consensus::{ConsensusBouncer, ConsensusImpl};
+use ic_consensus_idkg::IDkgImpl;
 use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
 use ic_interfaces::{
     batch_payload::BatchPayloadBuilder,
@@ -44,13 +42,15 @@ use ic_types::{
     NodeId, SubnetId,
 };
 use rand_chacha::ChaChaRng;
-use std::cell::{RefCell, RefMut};
-use std::cmp::Ordering;
-use std::collections::BinaryHeap;
-use std::fmt;
-use std::rc::Rc;
-use std::sync::{Arc, RwLock};
-use std::time::Duration;
+use std::{
+    cell::{RefCell, RefMut},
+    cmp::Ordering,
+    collections::BinaryHeap,
+    fmt,
+    rc::Rc,
+    sync::{Arc, RwLock},
+    time::Duration,
+};
 
 /// We use priority queues for input/output messages.
 pub type Queue<T> = Rc<RefCell<BinaryHeap<T>>>;
@@ -170,6 +170,7 @@ pub struct ConsensusDependencies {
     pub(crate) self_validating_payload_builder: Arc<dyn SelfValidatingPayloadBuilder>,
     pub(crate) canister_http_payload_builder: Arc<dyn BatchPayloadBuilder>,
     pub(crate) query_stats_payload_builder: Arc<dyn BatchPayloadBuilder>,
+    pub(crate) vetkd_payload_builder: Arc<dyn BatchPayloadBuilder>,
     pub consensus_pool: Arc<RwLock<ConsensusPoolImpl>>,
     pub dkg_pool: Arc<RwLock<dkg_pool::DkgPoolImpl>>,
     pub idkg_pool: Arc<RwLock<idkg_pool::IDkgPoolImpl>>,
@@ -228,6 +229,7 @@ impl ConsensusDependencies {
             self_validating_payload_builder: Arc::new(FakeSelfValidatingPayloadBuilder::new()),
             canister_http_payload_builder: Arc::new(FakeCanisterHttpPayloadBuilder::new()),
             query_stats_payload_builder: Arc::new(MockBatchPayloadBuilder::new().expect_noop()),
+            vetkd_payload_builder: Arc::new(MockBatchPayloadBuilder::new().expect_noop()),
             state_manager,
             metrics_registry,
             replica_config,
@@ -307,7 +309,7 @@ pub struct ComponentModifier {
     >,
     pub(crate) idkg: Box<
         dyn Fn(
-            idkg::IDkgImpl,
+            IDkgImpl,
         ) -> Box<
             dyn PoolMutationsProducer<idkg_pool::IDkgPoolImpl, Mutations = IDkgChangeSet>,
         >,
@@ -318,7 +320,7 @@ impl Default for ComponentModifier {
     fn default() -> Self {
         Self {
             consensus: Box::new(|x: ConsensusImpl| Box::new(x)),
-            idkg: Box::new(|x: idkg::IDkgImpl| Box::new(x)),
+            idkg: Box::new(|x: IDkgImpl| Box::new(x)),
         }
     }
 }
@@ -335,7 +337,7 @@ pub fn apply_modifier_consensus(
 
 pub fn apply_modifier_idkg(
     modifier: &Option<ComponentModifier>,
-    idkg: idkg::IDkgImpl,
+    idkg: IDkgImpl,
 ) -> Box<dyn PoolMutationsProducer<idkg_pool::IDkgPoolImpl, Mutations = IDkgChangeSet>> {
     match modifier {
         Some(f) => (f.idkg)(idkg),

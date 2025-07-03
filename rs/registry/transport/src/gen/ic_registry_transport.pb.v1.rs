@@ -69,6 +69,73 @@ pub mod registry_error {
         }
     }
 }
+/// When a "monolithic" blob is too large to fit in a single response, this is
+/// used instead (in the ICP, messages can be at most 2 MiB in size). The
+/// `get_chunk` canister method can then be called to fetch the original
+/// monolithic blob in chunks (which can then be cancatenated to reconstitute the
+/// original monolithic blob).
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct LargeValueChunkKeys {
+    #[prost(bytes = "vec", repeated, tag = "1")]
+    pub chunk_content_sha256s: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
+}
+/// In the not so distant future, this will be used instead of RegistryValue. See
+/// the "Migrating to Large Values/High-Capacity Types" section in the file-level
+/// comments.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct HighCapacityRegistryValue {
+    /// The version at which this mutation happened.
+    #[prost(uint64, tag = "2")]
+    pub version: u64,
+    /// The timestamp at which the registry mutation happened.
+    #[prost(uint64, tag = "5")]
+    pub timestamp_nanoseconds: u64,
+    #[prost(oneof = "high_capacity_registry_value::Content", tags = "1, 3, 4")]
+    pub content: ::core::option::Option<high_capacity_registry_value::Content>,
+}
+/// Nested message and enum types in `HighCapacityRegistryValue`.
+pub mod high_capacity_registry_value {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Content {
+        /// The value that was set in this mutation.
+        #[prost(bytes, tag = "1")]
+        Value(::prost::alloc::vec::Vec<u8>),
+        /// If true, this change represents a deletion.
+        #[prost(bool, tag = "3")]
+        DeletionMarker(bool),
+        /// If the value is too large, this is used instead of the `value` field.
+        #[prost(message, tag = "4")]
+        LargeValueChunkKeys(super::LargeValueChunkKeys),
+    }
+}
+/// In the not so distant future, this will be used instead of RegistryDelta. See
+/// the "Migrating to Large Values/High-Capacity Types" section in the file-level
+/// comments.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct HighCapacityRegistryDelta {
+    #[prost(bytes = "vec", tag = "1")]
+    pub key: ::prost::alloc::vec::Vec<u8>,
+    #[prost(message, repeated, tag = "2")]
+    pub values: ::prost::alloc::vec::Vec<HighCapacityRegistryValue>,
+}
+/// In the not too distant future, this will be used instead of
+/// RegistryGetChangesSinceResponse. See the "Migrating to Large
+/// Values/High-Capacity Types" section in the file-level comments.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct HighCapacityRegistryGetChangesSinceResponse {
+    /// If anything went wrong, the registry canister
+    /// will set this error.
+    #[prost(message, optional, tag = "1")]
+    pub error: ::core::option::Option<RegistryError>,
+    /// The last version of the registry.
+    #[prost(uint64, tag = "2")]
+    pub version: u64,
+    /// A list of all the keys and all the values that change
+    /// and all the intermediate changes since the version
+    /// requested.
+    #[prost(message, repeated, tag = "3")]
+    pub deltas: ::prost::alloc::vec::Vec<HighCapacityRegistryDelta>,
+}
 /// A single change made to a key in the registry.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RegistryValue {
@@ -82,6 +149,9 @@ pub struct RegistryValue {
     /// If true, this change represents a deletion.
     #[prost(bool, tag = "3")]
     pub deletion_marker: bool,
+    /// The timestamp at which the registry mutation happened.
+    #[prost(uint64, tag = "4")]
+    pub timestamp_nanoseconds: u64,
 }
 /// A sequence of changes made to a key in the registry.
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -98,6 +168,10 @@ pub struct RegistryGetChangesSinceRequest {
     #[prost(uint64, tag = "1")]
     pub version: u64,
 }
+/// Deprecated; instead, use HighCapacityRegistryGetChangesSinceResponse. See the
+/// "Migrating to Large Values/High-Capacity Types" section in the file-level
+/// comments.
+///
 /// Message corresponding to the response from the registry
 /// canister to a get_latest_version() request.
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -130,6 +204,47 @@ pub struct RegistryGetValueRequest {
     #[prost(bytes = "vec", tag = "2")]
     pub key: ::prost::alloc::vec::Vec<u8>,
 }
+/// In the not too distant future, this will be used instead of
+/// RegistryGetValueResponse. See the "Migrating to Large Values/High-Capacity
+/// Types" section in the file-level comments.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct HighCapacityRegistryGetValueResponse {
+    /// If anything went wrong, the registry canister
+    /// will set this error.
+    #[prost(message, optional, tag = "1")]
+    pub error: ::core::option::Option<RegistryError>,
+    /// the version at which the value corresponding to the queried
+    /// key was last mutated (inserted, updated, or deleted)
+    /// before at or at the version specified
+    /// in the RegistryGetValueRequest.
+    #[prost(uint64, tag = "2")]
+    pub version: u64,
+    /// The timestamp at which the registry mutation happened.
+    #[prost(uint64, tag = "5")]
+    pub timestamp_nanoseconds: u64,
+    #[prost(
+        oneof = "high_capacity_registry_get_value_response::Content",
+        tags = "3, 4"
+    )]
+    pub content: ::core::option::Option<high_capacity_registry_get_value_response::Content>,
+}
+/// Nested message and enum types in `HighCapacityRegistryGetValueResponse`.
+pub mod high_capacity_registry_get_value_response {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Content {
+        /// The value retrieved from the registry.
+        #[prost(bytes, tag = "3")]
+        Value(::prost::alloc::vec::Vec<u8>),
+        /// If the value is too large, this will be used instead of the `value`
+        /// field.
+        #[prost(message, tag = "4")]
+        LargeValueChunkKeys(super::LargeValueChunkKeys),
+    }
+}
+/// Deprecated; instead, use HighCapacityRegistryGetValueResponse. See the
+/// "Migrating to Large Values/High-Capacity Types" section in the file-level
+/// comments.
+///
 /// Message corresponding to the response from the canister
 /// to a get_value() request.
 ///
@@ -158,6 +273,55 @@ pub struct RegistryGetLatestVersionResponse {
     /// the latest registry version
     #[prost(uint64, tag = "1")]
     pub version: u64,
+}
+/// In the not too distant future, the `get_certified_changes_since` canister
+/// method will use this instead of RegistryMutation. However, there is no
+/// intention for the `atomic_mutate` canister method to ever use this. See the
+/// "Migrating to Large Values/High-Capacity Types" section in the file-level
+/// comments.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct HighCapacityRegistryMutation {
+    /// The type of the mutation to apply to the registry.
+    /// Always required.
+    #[prost(enumeration = "registry_mutation::Type", tag = "1")]
+    pub mutation_type: i32,
+    /// The key of the entry to mutate in the registry.
+    /// Always required.
+    #[prost(bytes = "vec", tag = "2")]
+    pub key: ::prost::alloc::vec::Vec<u8>,
+    #[prost(oneof = "high_capacity_registry_mutation::Content", tags = "3, 4")]
+    pub content: ::core::option::Option<high_capacity_registry_mutation::Content>,
+}
+/// Nested message and enum types in `HighCapacityRegistryMutation`.
+pub mod high_capacity_registry_mutation {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Content {
+        /// The value to mutate in the registry.
+        /// Required for insert, update, but not for delete.
+        #[prost(bytes, tag = "3")]
+        Value(::prost::alloc::vec::Vec<u8>),
+        /// If the value is too large, this will be used instead of the `value`
+        /// field.
+        #[prost(message, tag = "4")]
+        LargeValueChunkKeys(super::LargeValueChunkKeys),
+    }
+}
+/// In the not too distant future, the `get_certified_changes_since` canister
+/// method will use this instead of RegistryAtomicMutateRequest. However, there
+/// is no intention for the `atomic_mutate` canister method to ever use this. See
+/// the "Migrating to Large Values/High-Capacity Types" section in the file-level
+/// comments.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct HighCapacityRegistryAtomicMutateRequest {
+    /// The set of mutations to apply to the registry.
+    #[prost(message, repeated, tag = "1")]
+    pub mutations: ::prost::alloc::vec::Vec<HighCapacityRegistryMutation>,
+    /// Preconditions at the key level.
+    #[prost(message, repeated, tag = "5")]
+    pub preconditions: ::prost::alloc::vec::Vec<Precondition>,
+    /// The timestamp at which the registry atomic mutate request happened.
+    #[prost(uint64, tag = "6")]
+    pub timestamp_nanoseconds: u64,
 }
 /// A single mutation in the registry.
 #[derive(candid::CandidType, candid::Deserialize, Eq, Clone, PartialEq, ::prost::Message)]
@@ -232,6 +396,12 @@ pub struct Precondition {
     #[prost(uint64, tag = "2")]
     pub expected_version: u64,
 }
+/// Deprecated for `get_certified_changes_since` responses; instead, use
+/// HighCapacityRegistryAtomicMutateRequest. See the "Migrating to Large
+/// Values/High-Capacity Types" section in the file-level comments.
+///
+/// This is NOT deprecated for `atomic_mutate` requests though!
+///
 /// Message corresponding to a list of mutations to apply, atomically, to the
 /// registry canister. If any of the mutations fails, the whole operation will fail.
 #[derive(candid::CandidType, candid::Deserialize, Eq, Clone, PartialEq, ::prost::Message)]

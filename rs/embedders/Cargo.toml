@@ -10,20 +10,26 @@ version.workspace = true
 anyhow = { workspace = true }
 bincode = { workspace = true }
 clap = { workspace = true }
+ic-btc-interface = { workspace = true }
 ic-config = { path = "../config" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
+ic-error-types = { path = "../../packages/ic-error-types" }
 ic-interfaces = { path = "../interfaces" }
 ic-logger = { path = "../monitoring/logger" }
+ic-management-canister-types-private = { path = "../types/management_canister_types" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-sys = { path = "../sys" }
-ic-system-api = { path = "../system_api" }
+ic-base-types = { path = "../types/base_types" }
+ic-limits = { path = "../limits" }
+ic-nns-constants = { path = "../nns/constants" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 ic-utils-lru-cache = { path = "../utils/lru_cache" }
 ic-wasm-transform = { path = "../wasm_transform" }
 ic-wasm-types = { path = "../types/wasm_types" }
+itertools = { workspace = true }
 libc = { workspace = true }
 libflate = { workspace = true }
 memory_tracker = { path = "../memory_tracker" }
@@ -32,6 +38,7 @@ num-traits = { workspace = true }
 prometheus = { workspace = true }
 rayon = { workspace = true }
 rustc-demangle = { workspace = true }
+scopeguard = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 slog = { workspace = true }
@@ -39,14 +46,14 @@ slog-term = { workspace = true }
 tempfile = { workspace = true }
 wasm-encoder = { workspace = true }
 wasmparser = { workspace = true }
-wasmtime = { version = "29.0.0", default-features = false, features = [
+wasmtime = { version = "33.0.1", default-features = false, features = [
     'cranelift',
     'gc',
     'gc-null',
     'parallel-compilation',
     'runtime',
 ] }
-wasmtime-environ = "29.0.0"
+wasmtime-environ = "33.0.1"
 
 # Wasmtime depends on 0.4.2 but specifies 0.4.1 in the toml file.
 # Enforce 0.4.2 using a dummy dependency until the upstream issue
@@ -61,9 +68,7 @@ canister-test = { path = "../rust_canisters/canister_test" }
 criterion = { workspace = true }
 embedders_bench = { path = "benches/embedders_bench" }
 ic-base-types = { path = "../types/base_types" }
-ic-error-types = { path = "../types/error_types" }
 ic-registry-routing-table = { path = "../registry/routing_table" }
-ic-system-api = { path = "../system_api" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-embedders = { path = "../test_utilities/embedders" }
 ic-test-utilities-execution-environment = { path = "../test_utilities/execution_environment" }
@@ -74,9 +79,12 @@ ic-test-utilities-types = { path = "../test_utilities/types" }
 insta = "1.8.0"
 lazy_static = { workspace = true }
 maplit = "1.0.2"
+more-asserts = "0.3.1"
 pretty_assertions = { workspace = true }
 proptest = { workspace = true }
 slog = { workspace = true }
+strum = { workspace = true }
+strum_macros = { workspace = true }
 wasmprinter = { workspace = true }
 wast = { workspace = true }
 wat = { workspace = true }

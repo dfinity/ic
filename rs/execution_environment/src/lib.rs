@@ -15,6 +15,7 @@ mod types;
 pub mod util;
 
 use crate::ingress_filter::IngressFilterServiceImpl;
+pub use canister_settings::EnvironmentVariables;
 pub use execution_environment::{
     as_num_instructions, as_round_instructions, execute_canister, CompilationCostHandling,
     ExecuteMessageResult, ExecutionEnvironment, ExecutionResponse, RoundInstructions, RoundLimits,
@@ -25,8 +26,7 @@ use ic_base_types::PrincipalId;
 use ic_config::{execution_environment::Config, subnet_config::SchedulerConfig};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_interfaces::execution_environment::{
-    IngressFilterService, IngressHistoryReader, IngressHistoryWriter, QueryExecutionService,
-    Scheduler,
+    IngressFilterService, IngressHistoryReader, QueryExecutionService, Scheduler,
 };
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
@@ -81,9 +81,10 @@ pub enum NonReplicatedQueryKind {
 // This struct holds public facing components that are created by Execution.
 pub struct ExecutionServices {
     pub ingress_filter: IngressFilterService,
-    pub ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
+    pub ingress_history_writer: Arc<IngressHistoryWriterImpl>,
     pub ingress_history_reader: Box<dyn IngressHistoryReader>,
     pub query_execution_service: QueryExecutionService,
+    pub https_outcalls_service: QueryExecutionService,
     pub scheduler: Box<dyn Scheduler<State = ReplicatedState>>,
     pub query_stats_payload_builder: QueryStatsPayloadBuilderParams,
 }
@@ -109,7 +110,6 @@ impl ExecutionServices {
             config.clone(),
             metrics_registry,
             own_subnet_id,
-            own_subnet_type,
             logger.clone(),
             Arc::clone(&cycles_account_manager),
             scheduler_config.dirty_page_overhead,
@@ -146,11 +146,11 @@ impl ExecutionServices {
             scheduler_config.heap_delta_rate_limit,
             scheduler_config.upload_wasm_chunk_instructions,
             scheduler_config.canister_snapshot_baseline_instructions,
+            scheduler_config.canister_snapshot_data_baseline_instructions,
         ));
         let sync_query_handler = Arc::new(InternalHttpQueryHandler::new(
             logger.clone(),
             hypervisor,
-            own_subnet_id,
             own_subnet_type,
             config.clone(),
             metrics_registry,
@@ -176,6 +176,14 @@ impl ExecutionServices {
             query_scheduler.clone(),
             Arc::clone(&state_reader),
             metrics_registry,
+            "regular",
+        );
+        let https_outcalls_service = HttpQueryHandler::new_service(
+            Arc::clone(&sync_query_handler) as Arc<_>,
+            query_scheduler.clone(),
+            Arc::clone(&state_reader),
+            metrics_registry,
+            "https_outcall",
         );
         let ingress_filter = IngressFilterServiceImpl::new_service(
             query_scheduler.clone(),
@@ -203,6 +211,7 @@ impl ExecutionServices {
             ingress_history_writer,
             ingress_history_reader,
             query_execution_service,
+            https_outcalls_service,
             scheduler,
             query_stats_payload_builder,
         }
@@ -213,7 +222,7 @@ impl ExecutionServices {
         self,
     ) -> (
         IngressFilterService,
-        Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
+        Arc<IngressHistoryWriterImpl>,
         Box<dyn IngressHistoryReader>,
         QueryExecutionService,
         Box<dyn Scheduler<State = ReplicatedState>>,

@@ -10,10 +10,7 @@ use ic_icp_rosetta_client::{
 };
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_nns_governance_api::pb::v1::Motion;
-use ic_nns_governance_api::pb::v1::ProposalInfo;
-use ic_nns_governance_api::pb::v1::Vote;
-use ic_nns_governance_api::pb::v1::{proposal::Action, Proposal};
+use ic_nns_governance_api::{proposal::Action, Motion, Proposal, ProposalInfo, Vote};
 use ic_rosetta_api::models::ConstructionSubmitResponse;
 use icp_ledger::AccountIdentifier;
 use lazy_static::lazy_static;

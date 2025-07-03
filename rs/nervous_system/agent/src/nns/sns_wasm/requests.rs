@@ -3,11 +3,11 @@ use ic_sns_wasm::pb::v1::{
     AddWasmRequest, AddWasmResponse, DeployNewSnsRequest, DeployNewSnsResponse,
     GetDeployedSnsByProposalIdRequest, GetDeployedSnsByProposalIdResponse,
     GetNextSnsVersionRequest, GetNextSnsVersionResponse, GetProposalIdThatAddedWasmRequest,
-    GetProposalIdThatAddedWasmResponse, GetWasmMetadataRequest, GetWasmMetadataResponse,
-    GetWasmRequest, GetWasmResponse, InsertUpgradePathEntriesRequest,
-    InsertUpgradePathEntriesResponse, ListDeployedSnsesRequest, ListDeployedSnsesResponse,
-    ListUpgradeStepsRequest, ListUpgradeStepsResponse, UpdateSnsSubnetListRequest,
-    UpdateSnsSubnetListResponse,
+    GetProposalIdThatAddedWasmResponse, GetSnsSubnetIdsRequest, GetSnsSubnetIdsResponse,
+    GetWasmMetadataRequest, GetWasmMetadataResponse, GetWasmRequest, GetWasmResponse,
+    InsertUpgradePathEntriesRequest, InsertUpgradePathEntriesResponse, ListDeployedSnsesRequest,
+    ListDeployedSnsesResponse, ListUpgradeStepsRequest, ListUpgradeStepsResponse,
+    UpdateSnsSubnetListRequest, UpdateSnsSubnetListResponse,
 };
 
 impl Request for ListDeployedSnsesRequest {
@@ -166,7 +166,6 @@ impl Request for InsertUpgradePathEntriesRequest {
     fn payload(&self) -> Result<Vec<u8>, candid::Error> {
         candid::encode_one(self)
     }
-
     type Response = InsertUpgradePathEntriesResponse;
 }
 
@@ -184,4 +183,20 @@ impl Request for UpdateSnsSubnetListRequest {
     }
 
     type Response = UpdateSnsSubnetListResponse;
+}
+
+impl Request for GetSnsSubnetIdsRequest {
+    fn method(&self) -> &'static str {
+        "get_sns_subnet_ids"
+    }
+
+    fn update(&self) -> bool {
+        false
+    }
+
+    fn payload(&self) -> Result<Vec<u8>, candid::Error> {
+        candid::encode_one(self)
+    }
+
+    type Response = GetSnsSubnetIdsResponse;
 }

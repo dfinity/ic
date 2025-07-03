@@ -162,8 +162,9 @@ impl OrchestratorDashboard {
     }
 
     fn get_local_cup_info(&self) -> String {
-        let (height, signed, hash) = match self.cup_provider.get_local_cup() {
+        let (height, signed, hash, timestamp) = match self.cup_provider.get_local_cup() {
             None => (
+                String::from("None"),
                 String::from("None"),
                 String::from("None"),
                 String::from("None"),
@@ -172,12 +173,21 @@ impl OrchestratorDashboard {
                 let height = cup.height().to_string();
                 let signed = cup.is_signed();
                 let hash = cup.content.state_hash.get().0;
-                (height, signed.to_string(), hex::encode(hash))
+
+                let unix_timestamp = cup.content.block.get_value().context.time;
+                // UNIX timestamp in nanoseconds followed by the human-readable representation
+                let timestamp_str = format!(
+                    "{} ({})",
+                    unix_timestamp.as_nanos_since_unix_epoch(),
+                    unix_timestamp
+                );
+
+                (height, signed.to_string(), hex::encode(hash), timestamp_str)
             }
         };
         format!(
-            "cup height: {}\ncup signed: {}\ncup state hash: {}",
-            height, signed, hash
+            "cup height: {}\ncup signed: {}\ncup state hash: {}\ncup timestamp: {}",
+            height, signed, hash, timestamp
         )
     }
 }

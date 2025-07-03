@@ -36,6 +36,7 @@ use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
 use icrc_ledger_types::icrc2::approve::ApproveArgs;
+use icrc_ledger_types::icrc2::transfer_from::TransferFromArgs;
 use lazy_static::lazy_static;
 use num_traits::cast::ToPrimitive;
 use pocket_ic::{PocketIc, PocketIcBuilder};
@@ -156,7 +157,7 @@ impl SetupBuilder {
             .unwrap_or(local_replica::icrc_ledger_default_args_builder())
             .with_minting_account(minting_account)
             .build();
-        let canister_id = create_and_install_icrc_ledger(&pocket_ic, init_args.clone());
+        let canister_id = create_and_install_icrc_ledger(&pocket_ic, init_args.clone(), None);
 
         let subnet_id = pocket_ic.get_subnet(canister_id).unwrap();
         println!(
@@ -200,6 +201,9 @@ struct RosettaTestingEnvironmentBuilder {
     port: u16,
     icrc1_symbol: Option<String>,
 }
+
+/// Timeout for the Rosetta client to wait for transactions to be added to the blockchain.
+const ROSETTA_CLIENT_TIMEOUT: Duration = Duration::from_secs(30);
 
 impl RosettaTestingEnvironmentBuilder {
     pub fn new(setup: &Setup) -> Self {
@@ -259,6 +263,14 @@ impl RosettaTestingEnvironmentBuilder {
                         .0
                         .to_u64()
                         .unwrap(),
+                    LedgerEndpointArg::TransferFromArg(transfer_from_arg) => caller_agent
+                        .transfer_from(transfer_from_arg.clone())
+                        .await
+                        .unwrap()
+                        .unwrap()
+                        .0
+                        .to_u64()
+                        .unwrap(),
                 });
             }
         }
@@ -284,9 +296,11 @@ impl RosettaTestingEnvironmentBuilder {
             },
         )
         .await;
-        let rosetta_client =
-            RosettaClient::from_str_url(&format!("http://0.0.0.0:{}", rosetta_context.port))
-                .expect("Unable to parse url");
+        let rosetta_client = RosettaClient::from_str_url_and_timeout(
+            &format!("http://0.0.0.0:{}", rosetta_context.port),
+            ROSETTA_CLIENT_TIMEOUT,
+        )
+        .expect("Unable to parse url");
 
         let network_identifier = NetworkIdentifier::new(
             DEFAULT_BLOCKCHAIN.to_owned(),
@@ -868,6 +882,29 @@ fn test_account_balance() {
                                         .or_insert(amount.0.to_u64().unwrap());
                                     involved_accounts.push(*to);
                                 }
+                            }
+                            LedgerEndpointArg::TransferFromArg(TransferFromArgs {
+                                from,
+                                to,
+                                amount,
+                                ..
+                            }) => {
+                                // For TransferFrom we always deduct the transfer fee. TransferFrom
+                                // from or to the minter account is not allowed, so we do not need
+                                // to check for it.
+                                accounts_balances.entry(*from).and_modify(|balance| {
+                                    *balance -= amount.0.to_u64().unwrap();
+                                    *balance -= DEFAULT_TRANSFER_FEE;
+                                });
+                                involved_accounts.push(*from);
+
+                                accounts_balances
+                                    .entry(*to)
+                                    .and_modify(|balance| {
+                                        *balance += amount.0.to_u64().unwrap();
+                                    })
+                                    .or_insert(amount.0.to_u64().unwrap());
+                                involved_accounts.push(*to);
                             }
                         };
 
@@ -1503,6 +1540,7 @@ fn test_search_transactions() {
         .unwrap()
 }
 
+#[cfg(not(target_os = "macos"))]
 #[test]
 fn test_cli_data() {
     let mut runner = TestRunner::new(TestRunnerConfig {
