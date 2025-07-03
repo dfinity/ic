@@ -1404,24 +1404,6 @@ dependencies = [
 
 [[package]]
 name = "bitcoin"
-version = "0.32.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ce6bc65742dea50536e35ad42492b234c27904a27f0abdcbce605015cb4ea026"
-dependencies = [
- "base58ck",
- "bech32 0.11.0",
- "bitcoin-internals",
- "bitcoin-io",
- "bitcoin-units",
- "bitcoin_hashes 0.14.0",
- "hex-conservative",
- "hex_lit",
- "secp256k1 0.29.0",
- "serde",
-]
-
-[[package]]
-name = "bitcoin"
 version = "0.32.99"
 source = "git+https://github.com/dfinity/rust-dogecoin?rev=f1f900da0b193c43fd16f4598e614ed3eafbfd8f#f1f900da0b193c43fd16f4598e614ed3eafbfd8f"
 dependencies = [
@@ -1518,7 +1500,7 @@ version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d8909583c5fab98508e80ef73e5592a651c954993dc6b7739963257d19f0e71a"
 dependencies = [
- "bitcoin 0.32.5",
+ "bitcoin 0.32.99",
  "serde",
  "serde_json",
 ]
