@@ -297,12 +297,12 @@ pub fn initial_routing_table_mutations(rt: &RoutingTable) -> Vec<RegistryMutatio
     let mut buf = vec![];
     rt_pb.encode(&mut buf).unwrap();
     vec![
+        // TODO(NNS1-3781): Remove this once routing_table is no longer used by clients.
         RegistryMutation {
             mutation_type: Type::Upsert as i32,
             key: make_routing_table_record_key().into_bytes(),
             value: buf.clone(),
         },
-        // TODO(NNS1-3781): Remove this once routing_table is no longer used by clients.
         RegistryMutation {
             mutation_type: Type::Upsert as i32,
             key: make_canister_ranges_key(CanisterId::from(0)).into_bytes(),
