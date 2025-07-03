@@ -1260,10 +1260,11 @@ fn check_environment_variables_for_create_canister_history(
 #[test]
 fn canister_history_tracking_env_vars_update_settings() {
     let user_id = user_test_id(7).get();
-    let env_vars = BTreeMap::from([
+    let initial_env_vars = BTreeMap::from([
         ("NODE_ENV".to_string(), "production".to_string()),
         ("LOG_LEVEL".to_string(), "info".to_string()),
     ]);
+    let initial_env_vars_hash = EnvironmentVariables::new(initial_env_vars.clone()).hash();
 
     // Set up StateMachine.
     let env = setup_state_machine(FlagStatus::Enabled);
@@ -1277,7 +1278,7 @@ fn canister_history_tracking_env_vars_update_settings() {
         Some(
             CanisterSettingsArgsBuilder::new()
                 .with_controllers(vec![user_id])
-                .with_environment_variables(env_vars.clone())
+                .with_environment_variables(initial_env_vars)
                 .build(),
         ),
     );
@@ -1320,6 +1321,10 @@ fn canister_history_tracking_env_vars_update_settings() {
         .get_changes(history.get_total_num_changes() as usize)
         .map(|c| (**c).clone())
         .collect::<Vec<CanisterChange>>();
+    assert_eq!(
+        changes[0].details(),
+        &CanisterChangeDetails::canister_creation(vec![user_id], Some(initial_env_vars_hash))
+    );
     assert_eq!(changes[1], reference_change);
 
     // Verify the environment variables of the canister state.
