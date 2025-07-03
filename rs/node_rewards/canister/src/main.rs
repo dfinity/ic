@@ -56,8 +56,6 @@ fn post_upgrade() {
 }
 
 fn schedule_timers() {
-    let _metrics_manager = METRICS_MANAGER.with(|m| m.clone());
-
     schedule_registry_sync();
 }
 
