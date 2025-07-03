@@ -29,7 +29,8 @@ pub struct GuestOSTemplateProps {{
     pub vm_memory: u32,
     pub nr_of_vcpus: u32,
     pub mac_address: macaddr::MacAddr6,
-    pub config_media: String,
+    pub config_media_path: PathBuf,
+    pub ovmf_path: PathBuf,
     pub enable_sev: bool,
     pub direct_boot: Option<DirectBootConfig>
 }}

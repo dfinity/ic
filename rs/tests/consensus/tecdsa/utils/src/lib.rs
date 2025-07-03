@@ -43,7 +43,8 @@ use ic_vetkeys::{DerivedPublicKey, EncryptedVetKey, TransportSecretKey};
 use k256::ecdsa::{signature::hazmat::PrehashVerifier, Signature, VerifyingKey};
 use registry_canister::mutations::{
     do_create_subnet::{
-        CreateSubnetPayload, InitialChainKeyConfig, KeyConfig as KeyConfigCreate, KeyConfigRequest,
+        CanisterCyclesCostSchedule, CreateSubnetPayload, InitialChainKeyConfig,
+        KeyConfig as KeyConfigCreate, KeyConfigRequest,
     },
     do_recover_subnet::RecoverSubnetPayload,
     do_update_subnet::{ChainKeyConfig, KeyConfig as KeyConfigUpdate, UpdateSubnetPayload},
@@ -1097,6 +1098,8 @@ pub async fn create_new_subnet_with_keys(
         ssh_readonly_access: vec![],
         ssh_backup_access: vec![],
         chain_key_config: Some(chain_key_config),
+        canister_cycles_cost_schedule: Some(CanisterCyclesCostSchedule::Normal),
+
         // Unused section follows
         ingress_bytes_per_block_soft_cap: Default::default(),
         gossip_max_artifact_streams_per_peer: Default::default(),
