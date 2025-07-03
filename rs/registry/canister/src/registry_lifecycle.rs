@@ -253,7 +253,7 @@ mod test {
         }
 
         let nodes_expected = node_additions.len();
-        assert_eq!(nodes_expected, 1418);
+        assert_eq!(nodes_expected, 485);
 
         registry.apply_mutations_for_test(node_additions);
 
