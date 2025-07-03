@@ -419,6 +419,7 @@ type subnet_info_args = record {
 
 type subnet_info_result = record {
     replica_version : text;
+    registry_version : nat64;
 };
 
 type provisional_create_canister_with_cycles_args = record {
