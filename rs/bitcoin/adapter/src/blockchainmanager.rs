@@ -1,6 +1,6 @@
 use crate::{
     blockchainstate::{AddHeaderError, BlockchainState},
-    common::{BlockHeight, MINIMUM_VERSION_NUMBER},
+    common::{BlockHeight, BlockLike, MINIMUM_VERSION_NUMBER},
     metrics::RouterMetrics,
     Channel, Command, ProcessBitcoinNetworkMessageError,
 };
@@ -11,7 +11,7 @@ use bitcoin::{
         message::{NetworkMessage, MAX_INV_SIZE},
         message_blockdata::{GetHeadersMessage, Inventory},
     },
-    Block, BlockHash,
+    BlockHash,
 };
 use hashlink::{LinkedHashMap, LinkedHashSet};
 use ic_btc_validation::ValidateHeaderError;
@@ -212,9 +212,9 @@ impl BlockchainManager {
     /// This method sends `getheaders` command to the adapter.
     /// The adapter then sends the `getheaders` request to the Bitcoin node.
     /// https://en.bitcoin.it/wiki/Protocol_documentation#getheaders
-    fn send_getheaders(
+    fn send_getheaders<Block>(
         &mut self,
-        channel: &mut impl Channel,
+        channel: &mut impl Channel<Block>,
         addr: &SocketAddr,
         locators: Locators,
     ) {
@@ -242,9 +242,9 @@ impl BlockchainManager {
 
     /// This function processes "inv" messages received from Bitcoin nodes.
     /// Given a block_hash, this method sends the corresponding "getheaders" message to the Bitcoin node.
-    fn received_inv_message(
+    fn received_inv_message<Block>(
         &mut self,
-        channel: &mut impl Channel,
+        channel: &mut impl Channel<Block>,
         addr: &SocketAddr,
         inventory: &[Inventory],
     ) -> Result<(), ReceivedInvMessageError> {
@@ -298,9 +298,9 @@ impl BlockchainManager {
         Ok(())
     }
 
-    fn received_headers_message(
+    fn received_headers_message<Block>(
         &mut self,
-        channel: &mut impl Channel,
+        channel: &mut impl Channel<Block>,
         addr: &SocketAddr,
         headers: &[BlockHeader],
     ) -> Result<(), ReceivedHeadersMessageError> {
@@ -406,7 +406,7 @@ impl BlockchainManager {
     }
 
     /// This function processes "block" messages received from Bitcoin nodes
-    fn received_block_message(
+    fn received_block_message<Block: BlockLike>(
         &mut self,
         addr: &SocketAddr,
         block: &Block,
@@ -447,7 +447,7 @@ impl BlockchainManager {
 
     /// This function adds a new peer to `peer_info`
     /// and initiates sync with the peer by sending `getheaders` message.
-    fn add_peer(&mut self, channel: &mut impl Channel, addr: &SocketAddr) {
+    fn add_peer<Block>(&mut self, channel: &mut impl Channel<Block>, addr: &SocketAddr) {
         if self.peer_info.contains_key(addr) {
             return;
         }
@@ -494,7 +494,7 @@ impl BlockchainManager {
 
     /// Cleans up `getheaders` requests that have timed out and disconnects from the
     /// BTC node as it is likely responding too slowly.
-    fn handle_getheaders_timeouts(&mut self, channel: &mut impl Channel) {
+    fn handle_getheaders_timeouts<Block>(&mut self, channel: &mut impl Channel<Block>) {
         let expired_getheaders_requests = self
             .getheaders_requests
             .iter()
@@ -514,7 +514,7 @@ impl BlockchainManager {
         }
     }
 
-    fn sync_blocks(&mut self, channel: &mut impl Channel) {
+    fn sync_blocks<Block>(&mut self, channel: &mut impl Channel<Block>) {
         // Timeout requests so they may be retried again.
         let mut retry_queue: LinkedHashSet<BlockHash> = LinkedHashSet::new();
         for (block_hash, request) in self.getdata_request_info.iter_mut() {
@@ -623,11 +623,11 @@ impl BlockchainManager {
     /// This function is called by the adapter when a new event takes place.
     /// The event could be receiving "getheaders", "getdata", "inv" messages from bitcoin peers.
     /// The event could be change in connection status with a bitcoin peer.
-    pub fn process_bitcoin_network_message(
+    pub fn process_bitcoin_network_message<Block: BlockLike>(
         &mut self,
-        channel: &mut impl Channel,
+        channel: &mut impl Channel<Block>,
         addr: SocketAddr,
-        message: &NetworkMessage,
+        message: &NetworkMessage<Block>,
     ) -> Result<(), ProcessBitcoinNetworkMessageError> {
         match message {
             NetworkMessage::Inv(inventory) => {
@@ -661,7 +661,7 @@ impl BlockchainManager {
 
     /// This heartbeat method is called periodically by the adapter.
     /// This method is used to send messages to Bitcoin peers.
-    pub fn tick(&mut self, channel: &mut impl Channel) {
+    pub fn tick<Block>(&mut self, channel: &mut impl Channel<Block>) {
         // Update the list of peers.
         let active_connections = channel.available_connections();
         // Removing inactive peers.
@@ -762,13 +762,13 @@ fn get_next_block_hash_to_sync(
 pub mod test {
     use super::*;
     use crate::{
-        common::test_common::{TestChannel, TestState},
+        common::test_common::TestState,
         config::{test::ConfigBuilder, Config},
     };
     use bitcoin::blockdata::constants::genesis_block;
     use bitcoin::consensus::deserialize;
-    use bitcoin::Network;
     use bitcoin::{p2p::message::NetworkMessage, BlockHash};
+    use bitcoin::{Block, Network};
     use hex::FromHex;
     use ic_btc_adapter_test_utils::{
         generate_headers, generate_large_block_blockchain, BLOCK_1_ENCODED, BLOCK_2_ENCODED,
@@ -777,6 +777,8 @@ pub mod test {
     use ic_metrics::MetricsRegistry;
     use std::net::SocketAddr;
     use std::str::FromStr;
+
+    type TestChannel = crate::common::test_common::TestChannel<Block>;
 
     fn create_blockchain_manager(config: &Config) -> (BlockHeader, BlockchainManager) {
         let blockchain_state = BlockchainState::new(config, &MetricsRegistry::default());
@@ -813,10 +815,10 @@ pub mod test {
         let command = channel.pop_front().expect("command not found");
         assert!(matches!(command.address, Some(address) if address == addr));
         assert!(
-            matches!(&command.message, NetworkMessage::GetHeaders(GetHeadersMessage { version: _, locator_hashes: _, stop_hash }) if *stop_hash == BlockHash::all_zeros())
+            matches!(&command.message, NetworkMessage::GetHeaders(GetHeadersMessage { version: _, locator_hashes: _, stop_hash }) if stop_hash == &BlockHash::all_zeros())
         );
         assert!(
-            matches!(&command.message, NetworkMessage::GetHeaders(GetHeadersMessage { version, locator_hashes: _, stop_hash: _ }) if *version == MINIMUM_VERSION_NUMBER)
+            matches!(&command.message, NetworkMessage::GetHeaders(GetHeadersMessage { version, locator_hashes: _, stop_hash: _ }) if version == &MINIMUM_VERSION_NUMBER)
         );
         assert!(
             matches!(&command.message, NetworkMessage::GetHeaders(GetHeadersMessage { version: _, locator_hashes, stop_hash: _ }) if locator_hashes[0] == genesis_hash)
@@ -849,7 +851,9 @@ pub mod test {
         let addr2 = SocketAddr::from_str("127.0.0.1:8444").expect("bad address format");
         let sockets = vec![addr1, addr2];
         let mut channel = TestChannel::new(sockets.clone());
-        let config = ConfigBuilder::new().with_network(Network::Regtest).build();
+        let config = ConfigBuilder::new()
+            .with_network(Network::Regtest.into())
+            .build();
         let (genesis, mut blockchain_manager) = create_blockchain_manager(&config);
         let genesis_hash = genesis.block_hash();
 
@@ -942,7 +946,9 @@ pub mod test {
     fn test_received_inv() {
         let sockets = vec![SocketAddr::from_str("127.0.0.1:8333").expect("bad address format")];
         let mut channel = TestChannel::new(sockets.clone());
-        let config = ConfigBuilder::new().with_network(Network::Regtest).build();
+        let config = ConfigBuilder::new()
+            .with_network(Network::Regtest.into())
+            .build();
         let (genesis, mut blockchain_manager) = create_blockchain_manager(&config);
         let genesis_hash = genesis.block_hash();
 
@@ -1115,7 +1121,9 @@ pub mod test {
         let addr = SocketAddr::from_str("127.0.0.1:8333").expect("bad address format");
         let sockets = vec![addr];
         let mut channel = TestChannel::new(sockets.clone());
-        let config = ConfigBuilder::new().with_network(Network::Regtest).build();
+        let config = ConfigBuilder::new()
+            .with_network(Network::Regtest.into())
+            .build();
         let (genesis, mut blockchain_manager) = create_blockchain_manager(&config);
 
         let test_state = TestState::setup();
@@ -1255,7 +1263,9 @@ pub mod test {
         let addr = SocketAddr::from_str("127.0.0.1:8333").expect("bad address format");
         let sockets = vec![addr];
         let mut channel = TestChannel::new(sockets.clone());
-        let config = ConfigBuilder::new().with_network(Network::Regtest).build();
+        let config = ConfigBuilder::new()
+            .with_network(Network::Regtest.into())
+            .build();
         let (genesis, mut blockchain_manager) = create_blockchain_manager(&config);
         blockchain_manager.add_peer(&mut channel, &addr);
 
@@ -1367,7 +1377,9 @@ pub mod test {
 
     #[test]
     fn test_enqueue_new_blocks_to_download() {
-        let config = ConfigBuilder::new().with_network(Network::Regtest).build();
+        let config = ConfigBuilder::new()
+            .with_network(Network::Regtest.into())
+            .build();
         let (genesis, mut blockchain_manager) = create_blockchain_manager(&config);
 
         let next_headers = generate_headers(genesis.block_hash(), genesis.time, 5, &[]);
@@ -1393,7 +1405,9 @@ pub mod test {
 
     #[test]
     fn test_enqueue_new_blocks_to_download_no_duplicates() {
-        let config = ConfigBuilder::new().with_network(Network::Regtest).build();
+        let config = ConfigBuilder::new()
+            .with_network(Network::Regtest.into())
+            .build();
         let (genesis, mut blockchain_manager) = create_blockchain_manager(&config);
 
         let next_headers = generate_headers(genesis.block_hash(), genesis.time, 5, &[]);
@@ -1440,7 +1454,9 @@ pub mod test {
 
     #[test]
     fn test_pruning_blocks_based_on_the_anchor_hash_and_processed_hashes() {
-        let config = ConfigBuilder::new().with_network(Network::Regtest).build();
+        let config = ConfigBuilder::new()
+            .with_network(Network::Regtest.into())
+            .build();
         let (genesis, mut blockchain_manager) = create_blockchain_manager(&config);
         let addr = SocketAddr::from_str("127.0.0.1:8333").expect("invalid address");
         let mut channel = TestChannel::new(vec![addr]);
@@ -1497,7 +1513,9 @@ pub mod test {
 
     #[test]
     fn test_pruning_blocks_to_ensure_it_does_not_prune_anchor_adjacent_blocks() {
-        let config = ConfigBuilder::new().with_network(Network::Regtest).build();
+        let config = ConfigBuilder::new()
+            .with_network(Network::Regtest.into())
+            .build();
         let (genesis, mut blockchain_manager) = create_blockchain_manager(&config);
         let genesis_hash = genesis.block_hash();
         let addr = SocketAddr::from_str("127.0.0.1:8333").expect("invalid address");

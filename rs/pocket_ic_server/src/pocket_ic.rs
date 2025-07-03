@@ -254,7 +254,7 @@ impl BitcoinAdapterParts {
         runtime: Arc<Runtime>,
     ) -> Self {
         let bitcoin_adapter_config = BitcoinAdapterConfig {
-            network: Network::Regtest,
+            network: Network::Regtest.into(),
             nodes: bitcoind_addr,
             socks_proxy: None,
             ipv6_only: false,

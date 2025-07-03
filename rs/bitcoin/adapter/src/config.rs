@@ -1,4 +1,4 @@
-use bitcoin::Network;
+use crate::common::Network;
 use ic_config::logger::Config as LoggerConfig;
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
@@ -59,13 +59,27 @@ fn default_idle_seconds() -> u64 {
 /// based on the provided `Network`.
 pub fn address_limits(network: Network) -> (usize, usize) {
     match network {
-        Network::Bitcoin => (500, 2000),
-        Network::Testnet => (100, 1000),
-        //TODO(mihailjianu): revisit these values
-        Network::Testnet4 => (100, 1000),
-        Network::Signet => (1, 1),
-        Network::Regtest => (1, 1),
-        _ => (1, 1),
+        Network::Bitcoin(network) => {
+            use bitcoin::Network::*;
+            match network {
+                Bitcoin => (500, 2000),
+                Testnet => (100, 1000),
+                //TODO(mihailjianu): revisit these values
+                Testnet4 => (100, 1000),
+                Signet => (1, 1),
+                Regtest => (1, 1),
+                _ => (1, 1),
+            }
+        }
+        Network::Dogecoin(network) => {
+            use bitcoin::dogecoin::Network::*;
+            match network {
+                Dogecoin => (200, 1000),
+                Testnet => (20, 100),
+                Regtest => (1, 1),
+                _ => (1, 1),
+            }
+        }
     }
 }
 
@@ -73,10 +87,23 @@ impl Config {
     /// This function returns the port to use based on the Bitcoin network provided.
     pub fn network_port(&self) -> u16 {
         match self.network {
-            Network::Bitcoin => 8333,
-            Network::Testnet => 18333,
-            Network::Testnet4 => 48333,
-            _ => 8333,
+            Network::Bitcoin(network) => {
+                use bitcoin::Network::*;
+                match network {
+                    Bitcoin => 8333,
+                    Testnet => 18333,
+                    Testnet4 => 48333,
+                    _ => 8333,
+                }
+            }
+            Network::Dogecoin(network) => {
+                use bitcoin::dogecoin::Network::*;
+                match network {
+                    Dogecoin => 22556,
+                    Testnet => 44556,
+                    _ => 18444,
+                }
+            }
         }
     }
 }
@@ -85,14 +112,14 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             dns_seeds: Default::default(),
-            network: Network::Bitcoin,
+            network: bitcoin::Network::Bitcoin.into(),
             socks_proxy: Default::default(),
             nodes: vec![],
             idle_seconds: default_idle_seconds(),
             ipv6_only: false,
             logger: LoggerConfig::default(),
             incoming_source: Default::default(),
-            address_limits: address_limits(Network::Bitcoin), // Address limits used for Bitcoin mainnet
+            address_limits: address_limits(bitcoin::Network::Bitcoin.into()), // Address limits used for Bitcoin mainnet
         }
     }
 }

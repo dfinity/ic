@@ -1,5 +1,4 @@
 use crate::addressbook::AddressEntry;
-use bitcoin::p2p::message::NetworkMessage;
 use std::time::{Duration, SystemTime};
 use thiserror::Error;
 use tokio::{sync::mpsc::UnboundedSender, task::JoinHandle};
@@ -25,7 +24,7 @@ pub enum ConnectionError {
 pub type ConnectionResult<T> = Result<T, ConnectionError>;
 
 /// This struct is used to initialize a [Connection](crate::connection::Connection).
-pub struct ConnectionConfig {
+pub struct ConnectionConfig<NetworkMessage> {
     /// This field contains the address of the connection.
     pub address_entry: AddressEntry,
     /// This field contains the handle to the task that is used for managing the
@@ -79,7 +78,7 @@ pub enum PingState {
 
 /// This struct is used to manage a connection with a Bitcoin node.
 #[derive(Debug)]
-pub struct Connection {
+pub struct Connection<NetworkMessage> {
     /// This field is to store the BTC node address that is accessed by
     /// this connection.
     address_entry: AddressEntry,
@@ -94,10 +93,10 @@ pub struct Connection {
     ping_state: PingState,
 }
 
-impl Connection {
+impl<NetworkMessage> Connection<NetworkMessage> {
     /// This function creates a new connection that will be used to manage a
     /// connection to the BTC network.
-    pub fn new(config: ConnectionConfig) -> Self {
+    pub fn new(config: ConnectionConfig<NetworkMessage>) -> Self {
         let ConnectionConfig {
             address_entry,
             handle,
@@ -256,11 +255,13 @@ mod test {
         sync::mpsc::{unbounded_channel, UnboundedReceiver},
     };
 
-    impl Connection {
+    type NetworkMessage = bitcoin::p2p::message::NetworkMessage<bitcoin::Block>;
+
+    impl Connection<NetworkMessage> {
         /// This function creates a new connection that will be used to manage a
         /// connection to the BTC network.
         pub fn new_with_state(
-            config: ConnectionConfig,
+            config: ConnectionConfig<NetworkMessage>,
             state: ConnectionState,
             last_pong_at: SystemTime,
         ) -> Self {
@@ -282,7 +283,10 @@ mod test {
 
     fn make_connection_and_receiver(
         runtime: &Runtime,
-    ) -> (Connection, UnboundedReceiver<NetworkMessage>) {
+    ) -> (
+        Connection<NetworkMessage>,
+        UnboundedReceiver<NetworkMessage>,
+    ) {
         let addr = SocketAddr::from_str("127.0.0.1:8333").expect("invalid string");
         let address_entry = AddressEntry::Discovered(addr);
         let handle = runtime.spawn(async {});

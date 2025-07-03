@@ -3,15 +3,18 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use bitcoin::{block::Header as BlockHeader, BlockHash, Network};
+use bitcoin::{block::Header as BlockHeader, BlockHash};
 use ic_metrics::MetricsRegistry;
 use static_assertions::const_assert_eq;
 use tokio::sync::mpsc::Sender;
 use tonic::Status;
 
 use crate::{
-    blockchainstate::SerializedBlock, common::BlockHeight, config::Config,
-    metrics::GetSuccessorMetrics, BlockchainManagerRequest, BlockchainState,
+    blockchainstate::SerializedBlock,
+    common::{BlockHeight, Network},
+    config::Config,
+    metrics::GetSuccessorMetrics,
+    BlockchainManagerRequest, BlockchainState,
 };
 
 // Max size of the `GetSuccessorsResponse` message.
@@ -201,7 +204,7 @@ fn get_successor_blocks(
         .unwrap_or_default();
 
     let max_blocks_size = match network {
-        Network::Testnet4 => TESTNET4_MAX_BLOCKS_BYTES,
+        Network::Bitcoin(bitcoin::Network::Testnet4) => TESTNET4_MAX_BLOCKS_BYTES,
         _ => MAX_BLOCKS_BYTES,
     };
 
@@ -266,7 +269,7 @@ fn get_next_headers(
         .unwrap_or_default();
 
     let max_in_flight_blocks = match network {
-        Network::Testnet4 => TESTNET4_MAX_IN_FLIGHT_BLOCKS,
+        Network::Bitcoin(bitcoin::Network::Testnet4) => TESTNET4_MAX_IN_FLIGHT_BLOCKS,
         _ => MAX_IN_FLIGHT_BLOCKS,
     };
 
@@ -289,9 +292,15 @@ fn get_next_headers(
 /// Helper used to determine if multiple blocks should be returned.
 fn are_multiple_blocks_allowed(network: Network, anchor_height: BlockHeight) -> bool {
     match network {
-        Network::Bitcoin => anchor_height <= MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT,
-        Network::Testnet | Network::Signet | Network::Regtest | Network::Testnet4 => true,
-        other => unreachable!("Unsupported network: {:?}", other),
+        Network::Bitcoin(network) => {
+            use bitcoin::Network::*;
+            match network {
+                Bitcoin => anchor_height <= MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT,
+                Testnet | Signet | Regtest | Testnet4 => true,
+                other => unreachable!("Unsupported network: {:?}", other),
+            }
+        }
+        Network::Dogecoin(_) => false, // TODO: confirm if it really doesn't support it
     }
 }
 
@@ -301,7 +310,7 @@ mod test {
 
     use std::sync::{Arc, Mutex};
 
-    use bitcoin::{consensus::Decodable, Block, Network};
+    use bitcoin::{consensus::Decodable, Block};
     use ic_metrics::MetricsRegistry;
     use tokio::sync::mpsc::channel;
 
@@ -318,7 +327,9 @@ mod test {
     /// with the next headers of many forks and enqueue missing block hashes.
     #[tokio::test]
     async fn test_get_successors() {
-        let config = ConfigBuilder::new().with_network(Network::Regtest).build();
+        let config = ConfigBuilder::new()
+            .with_network(bitcoin::Network::Regtest.into())
+            .build();
         let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
         let genesis = *blockchain_state.genesis();
         let genesis_hash = genesis.block_hash();
@@ -427,7 +438,9 @@ mod test {
 
     #[tokio::test]
     async fn test_get_successors_wait_header_sync_regtest() {
-        let config = ConfigBuilder::new().with_network(Network::Regtest).build();
+        let config = ConfigBuilder::new()
+            .with_network(bitcoin::Network::Regtest.into())
+            .build();
         let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
         let genesis = *blockchain_state.genesis();
         let genesis_hash = genesis.block_hash();
@@ -476,7 +489,9 @@ mod test {
     /// blocks from the main chain and a fork. Order should be preserved.
     #[tokio::test]
     async fn test_get_successors_multiple_blocks() {
-        let config = ConfigBuilder::new().with_network(Network::Regtest).build();
+        let config = ConfigBuilder::new()
+            .with_network(bitcoin::Network::Regtest.into())
+            .build();
         let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
         let genesis = *blockchain_state.genesis();
         let genesis_hash = genesis.block_hash();
@@ -548,7 +563,9 @@ mod test {
     /// This tests ensures that `get_successor` returns no more than MAX_BLOCKS_LENGTH blocks.
     #[tokio::test]
     async fn test_get_successors_max_num_blocks() {
-        let config = ConfigBuilder::new().with_network(Network::Regtest).build();
+        let config = ConfigBuilder::new()
+            .with_network(bitcoin::Network::Regtest.into())
+            .build();
         let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
         let genesis = *blockchain_state.genesis();
         let genesis_hash = genesis.block_hash();
@@ -585,7 +602,9 @@ mod test {
     /// blocks from the main chain and a fork. Order should be preserved.
     #[tokio::test]
     async fn test_get_successors_multiple_blocks_out_of_order() {
-        let config = ConfigBuilder::new().with_network(Network::Regtest).build();
+        let config = ConfigBuilder::new()
+            .with_network(bitcoin::Network::Regtest.into())
+            .build();
         let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
         let genesis = *blockchain_state.genesis();
         let genesis_hash = genesis.block_hash();
@@ -678,7 +697,9 @@ mod test {
     /// This test ensures that the 2MB limit is enforced by `BlockchainManager.get_successors(...)`.
     #[tokio::test]
     async fn test_get_successors_large_block() {
-        let config = ConfigBuilder::new().with_network(Network::Regtest).build();
+        let config = ConfigBuilder::new()
+            .with_network(bitcoin::Network::Regtest.into())
+            .build();
         let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
         let genesis = *blockchain_state.genesis();
         let genesis_hash = genesis.block_hash();
@@ -741,7 +762,9 @@ mod test {
     /// This test ensures that `BlockchainManager::get_successors(...)` sends blocks up to the cap limit.
     #[tokio::test]
     async fn test_get_successors_many_blocks_until_size_cap_is_met() {
-        let config = ConfigBuilder::new().with_network(Network::Regtest).build();
+        let config = ConfigBuilder::new()
+            .with_network(bitcoin::Network::Regtest.into())
+            .build();
         let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
         let genesis = *blockchain_state.genesis();
         let genesis_hash = genesis.block_hash();
@@ -802,37 +825,40 @@ mod test {
     fn test_are_multiple_blocks_allowed() {
         // Mainnet
         assert!(
-            are_multiple_blocks_allowed(Network::Bitcoin, 100_500),
+            are_multiple_blocks_allowed(bitcoin::Network::Bitcoin.into(), 100_500),
             "Multiple blocks are allowed at 100_500"
         );
         assert!(
-            are_multiple_blocks_allowed(Network::Bitcoin, MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT),
+            are_multiple_blocks_allowed(
+                bitcoin::Network::Bitcoin.into(),
+                MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT
+            ),
             "Multiple blocks are allowed at {}",
             MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT
         );
         assert!(
-            !are_multiple_blocks_allowed(Network::Bitcoin, 900_000),
+            !are_multiple_blocks_allowed(bitcoin::Network::Bitcoin.into(), 900_000),
             "Multiple blocks are not allowed at 900_000"
         );
 
         // Testnet
         assert!(
-            are_multiple_blocks_allowed(Network::Testnet, 1_000_000),
+            are_multiple_blocks_allowed(bitcoin::Network::Testnet.into(), 1_000_000),
             "Multiple blocks are allowed at 1_000_000"
         );
         assert!(
-            are_multiple_blocks_allowed(Network::Testnet, u32::MAX),
+            are_multiple_blocks_allowed(bitcoin::Network::Testnet.into(), u32::MAX),
             "Multiple blocks are allowed at {}",
             u32::MAX
         );
 
         // Regtest
         assert!(
-            are_multiple_blocks_allowed(Network::Regtest, 1),
+            are_multiple_blocks_allowed(bitcoin::Network::Regtest.into(), 1),
             "Multiple blocks are allowed at 1"
         );
         assert!(
-            are_multiple_blocks_allowed(Network::Regtest, u32::MAX),
+            are_multiple_blocks_allowed(bitcoin::Network::Regtest.into(), u32::MAX),
             "Multiple blocks are allowed at {}",
             u32::MAX
         );
