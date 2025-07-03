@@ -1,13 +1,14 @@
 //! The module is responsible for keeping track of the blockchain state.
 //!
-use crate::{common::BlockHeight, config::Config, metrics::BlockchainStateMetrics};
-use bitcoin::{
-    block::Header as BlockHeader, blockdata::constants::genesis_block, consensus::Encodable, Block,
-    BlockHash, Network,
+use crate::{
+    common::{BlockHeight, BlockLike, Network},
+    config::Config,
+    metrics::BlockchainStateMetrics,
 };
+use bitcoin::{block::Header as BlockHeader, BlockHash};
 
 use bitcoin::Work;
-use ic_btc_validation::{validate_header, HeaderStore, ValidateHeaderError};
+use ic_btc_validation::{HeaderStore, ValidateHeaderError};
 use ic_metrics::MetricsRegistry;
 use std::{collections::HashMap, sync::Arc};
 use thiserror::Error;
@@ -119,7 +120,7 @@ impl BlockchainState {
     /// This function is used to create a new BlockChainState object.  
     pub fn new(config: &Config, metrics_registry: &MetricsRegistry) -> Self {
         // Create a header cache and inserting dummy header corresponding the `adapter_genesis_hash`.
-        let genesis_block_header = genesis_block(config.network).header;
+        let genesis_block_header = config.network.genesis_block_header();
         let header_cache = init_cache_with_genesis(genesis_block_header);
         let block_cache = HashMap::new();
         let tips = vec![Tip {
@@ -197,7 +198,7 @@ impl BlockchainState {
             return Ok(AddHeaderResult::HeaderAlreadyExists);
         }
 
-        if let Err(err) = validate_header(&self.network, self, &header) {
+        if let Err(err) = self.network.validate_header(self, &header) {
             return Err(AddHeaderError::InvalidHeader(block_hash, err));
         }
 
@@ -244,7 +245,7 @@ impl BlockchainState {
     }
 
     /// This method adds a new block to the `block_cache`
-    pub fn add_block(&mut self, block: Block) -> Result<(), AddBlockError> {
+    pub fn add_block<Block: BlockLike>(&mut self, block: Block) -> Result<(), AddBlockError> {
         let block_hash = block.block_hash();
 
         if block.compute_merkle_root().is_some() && !block.check_merkle_root() {
@@ -253,7 +254,7 @@ impl BlockchainState {
 
         // If the block's header is not added before, then add the header into the `header_cache` first.
         let _ = self
-            .add_header(block.header)
+            .add_header(block.header())
             .map_err(AddBlockError::Header)?;
         self.tips.sort_unstable_by(|a, b| b.work.cmp(&a.work));
 
@@ -379,7 +380,7 @@ impl HeaderStore for BlockchainState {
 
 #[cfg(test)]
 mod test {
-    use bitcoin::{consensus::Decodable, Block, TxMerkleNode};
+    use bitcoin::{consensus::Decodable, Block, Network, TxMerkleNode};
     use ic_metrics::MetricsRegistry;
 
     use super::*;
@@ -418,7 +419,9 @@ mod test {
     /// successfully.
     #[test]
     fn test_adding_headers_successfully() {
-        let config = ConfigBuilder::new().with_network(Network::Regtest).build();
+        let config = ConfigBuilder::new()
+            .with_network(Network::Regtest.into())
+            .build();
         let mut state = BlockchainState::new(&config, &MetricsRegistry::default());
 
         let initial_header = state.genesis();
@@ -442,7 +445,9 @@ mod test {
     /// This is a regression test for incident at btc height 799_498.
     #[test]
     fn test_adding_mainnet_headers_successfully() {
-        let config = ConfigBuilder::new().with_network(Network::Bitcoin).build();
+        let config = ConfigBuilder::new()
+            .with_network(Network::Bitcoin.into())
+            .build();
         let mut state = BlockchainState::new(&config, &MetricsRegistry::default());
 
         let headers_json = include_str!("../test_data/first_2500_mainnet_headers.json");
@@ -465,7 +470,9 @@ mod test {
     /// at least one header validation with difficulty adjustment.
     #[test]
     fn test_adding_testnet_headers_successfully() {
-        let config = ConfigBuilder::new().with_network(Network::Testnet).build();
+        let config = ConfigBuilder::new()
+            .with_network(Network::Testnet.into())
+            .build();
         let mut state = BlockchainState::new(&config, &MetricsRegistry::default());
 
         let headers_json = include_str!("../test_data/first_2500_testnet_headers.json");
@@ -487,7 +494,9 @@ mod test {
     /// Tests whether or not the `BlockchainState::add_headers(...)` function can add headers that
     /// cause 2 forks in the chain. The state should be able to determine what is the active tip.
     fn test_forks_when_adding_headers() {
-        let config = ConfigBuilder::new().with_network(Network::Regtest).build();
+        let config = ConfigBuilder::new()
+            .with_network(Network::Regtest.into())
+            .build();
         let mut state = BlockchainState::new(&config, &MetricsRegistry::default());
         let initial_header = state.genesis();
 
@@ -540,7 +549,9 @@ mod test {
     /// headers in the state.
     #[test]
     fn test_adding_headers_that_already_exist() {
-        let config = ConfigBuilder::new().with_network(Network::Regtest).build();
+        let config = ConfigBuilder::new()
+            .with_network(Network::Regtest.into())
+            .build();
         let mut state = BlockchainState::new(&config, &MetricsRegistry::default());
 
         let initial_header = state.genesis();
@@ -564,7 +575,9 @@ mod test {
     /// adding a header that is invalid.
     #[test]
     fn test_adding_headers_with_an_invalid_header() {
-        let config = ConfigBuilder::new().with_network(Network::Regtest).build();
+        let config = ConfigBuilder::new()
+            .with_network(Network::Regtest.into())
+            .build();
         let mut state = BlockchainState::new(&config, &MetricsRegistry::default());
 
         let initial_header = state.genesis();
@@ -675,7 +688,9 @@ mod test {
     /// with unknown headers.
     #[test]
     fn test_sorted_tip() {
-        let config = ConfigBuilder::new().with_network(Network::Regtest).build();
+        let config = ConfigBuilder::new()
+            .with_network(Network::Regtest.into())
+            .build();
         let mut state = BlockchainState::new(&config, &MetricsRegistry::default());
         let h1 = *state.genesis();
         // h1 - h2
@@ -719,7 +734,9 @@ mod test {
     /// Test header store `get_header` function.
     #[test]
     fn test_headerstore_get_cached_header() {
-        let config = ConfigBuilder::new().with_network(Network::Regtest).build();
+        let config = ConfigBuilder::new()
+            .with_network(Network::Regtest.into())
+            .build();
         let mut state = BlockchainState::new(&config, &MetricsRegistry::default());
 
         let initial_header = state.genesis();

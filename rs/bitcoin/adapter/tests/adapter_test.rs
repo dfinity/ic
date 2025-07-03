@@ -1,7 +1,7 @@
 use bitcoin::{consensus::encode::deserialize, Address, Amount, Block, BlockHash};
 use bitcoincore_rpc::{bitcoincore_rpc_json::CreateRawTransactionInput, Auth, Client, RpcApi};
 use bitcoind::{BitcoinD, Conf, P2P};
-use ic_btc_adapter::{start_server, Config, IncomingSource};
+use ic_btc_adapter::{start_server, Config, IncomingSource, Network as AdapterNetwork};
 use ic_btc_adapter_client::setup_bitcoin_adapter_clients;
 use ic_btc_interface::Network;
 use ic_btc_replica_types::{
@@ -97,7 +97,7 @@ fn start_adapter(
     network: bitcoin::Network,
 ) {
     let config = Config {
-        network,
+        network: AdapterNetwork::Bitcoin(network),
         incoming_source: IncomingSource::Path(uds_path.to_path_buf()),
         nodes,
         ipv6_only: true,
@@ -1002,7 +1002,7 @@ fn test_mainnet_data() {
         .unwrap();
 
     let rt = tokio::runtime::Runtime::new().unwrap();
-    let bitcoind_addr = ic_btc_adapter_test_utils::bitcoind::mock_bitcoin(
+    let bitcoind_addr = ic_btc_adapter_test_utils::bitcoind::mock_bitcoin::<bitcoin::Block>(
         rt.handle(),
         headers_data_path,
         blocks_data_path,
@@ -1041,7 +1041,7 @@ fn test_testnet_data() {
         .unwrap();
 
     let rt = tokio::runtime::Runtime::new().unwrap();
-    let bitcoind_addr = ic_btc_adapter_test_utils::bitcoind::mock_bitcoin(
+    let bitcoind_addr = ic_btc_adapter_test_utils::bitcoind::mock_bitcoin::<bitcoin::Block>(
         rt.handle(),
         headers_data_path,
         blocks_data_path,

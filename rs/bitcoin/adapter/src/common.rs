@@ -1,3 +1,8 @@
+use bitcoin::consensus::{Decodable, Encodable};
+use bitcoin::p2p::Magic;
+use ic_btc_validation::{HeaderStore, ValidateHeaderError};
+use serde::{Deserialize, Serialize};
+
 /// This const represents the default version that the adapter will support.
 /// This value will be used to filter out Bitcoin nodes that the adapter deems
 /// to far behind to interact with.
@@ -15,6 +20,135 @@ pub const DEFAULT_CHANNEL_BUFFER_SIZE: usize = 64;
 
 /// This field contains the datatype used to store height of a Bitcoin block
 pub type BlockHeight = u32;
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
+#[allow(missing_docs)]
+pub enum Network {
+    Bitcoin(bitcoin::Network),
+    Dogecoin(bitcoin::dogecoin::Network),
+}
+
+impl From<bitcoin::Network> for Network {
+    fn from(network: bitcoin::Network) -> Self {
+        Self::Bitcoin(network)
+    }
+}
+
+impl From<bitcoin::dogecoin::Network> for Network {
+    fn from(network: bitcoin::dogecoin::Network) -> Self {
+        Self::Dogecoin(network)
+    }
+}
+
+#[allow(missing_docs)]
+impl Network {
+    pub fn name(&self) -> String {
+        match self {
+            Network::Bitcoin(bitcoin::Network::Bitcoin) => "bitcoin".to_string(),
+            Network::Bitcoin(network) => format!("bitcoin::{}", network),
+            Network::Dogecoin(bitcoin::dogecoin::Network::Dogecoin) => "dogecoin".to_string(),
+            Network::Dogecoin(network) => format!("bitcoin::{}", network),
+        }
+    }
+
+    pub fn magic(&self) -> Magic {
+        match self {
+            Network::Bitcoin(network) => network.magic(),
+            Network::Dogecoin(network) => network.magic(),
+        }
+    }
+    pub fn genesis_block_header(&self) -> bitcoin::block::Header {
+        match self {
+            Network::Bitcoin(network) => {
+                bitcoin::blockdata::constants::genesis_block(network).header
+            }
+            Network::Dogecoin(network) => {
+                bitcoin::dogecoin::constants::genesis_block(network).header
+            }
+        }
+    }
+    pub fn validate_header(
+        &self,
+        store: &impl HeaderStore,
+        header: &bitcoin::block::Header,
+    ) -> Result<(), ValidateHeaderError> {
+        match self {
+            Network::Bitcoin(network) => ic_btc_validation::validate_header(network, store, header),
+            Network::Dogecoin(_network) => {
+                unimplemented!()
+            }
+        }
+    }
+}
+
+impl Serialize for Network {
+    fn serialize<S: ::serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.name())
+    }
+}
+
+impl<'de> Deserialize<'de> for Network {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use std::str::FromStr;
+        let s = String::deserialize(deserializer)?;
+        if s == "bitcoin" {
+            return Ok(bitcoin::Network::Bitcoin.into());
+        } else if s == "dogecoin" {
+            return Ok(bitcoin::dogecoin::Network::Dogecoin.into());
+        } else if s.starts_with("bitcoin:") {
+            if let Ok(network) = bitcoin::Network::from_str(&s[8..]) {
+                return Ok(network.into());
+            }
+        } else if s.starts_with("dogecoin:") {
+            if let Ok(network) = bitcoin::dogecoin::Network::from_str(&s[9..]) {
+                return Ok(network.into());
+            }
+        }
+        Err(serde::de::Error::custom(format!("unknown network {}", s)))
+    }
+}
+
+/// A trait that contains the common methods of both Bitcoin and Dogecoin blocks.
+#[allow(missing_docs)]
+pub trait BlockLike: Decodable + Encodable + Clone {
+    fn block_hash(&self) -> bitcoin::BlockHash;
+    fn compute_merkle_root(&self) -> Option<bitcoin::TxMerkleNode>;
+    fn check_merkle_root(&self) -> bool;
+    fn header(&self) -> bitcoin::block::Header;
+}
+
+impl BlockLike for bitcoin::Block {
+    fn block_hash(&self) -> bitcoin::BlockHash {
+        bitcoin::Block::block_hash(self)
+    }
+    fn compute_merkle_root(&self) -> Option<bitcoin::TxMerkleNode> {
+        bitcoin::Block::compute_merkle_root(self)
+    }
+    fn check_merkle_root(&self) -> bool {
+        bitcoin::Block::check_merkle_root(&self)
+    }
+    fn header(&self) -> bitcoin::block::Header {
+        self.header
+    }
+}
+
+impl BlockLike for bitcoin::dogecoin::Block {
+    fn block_hash(&self) -> bitcoin::BlockHash {
+        bitcoin::dogecoin::Block::block_hash(self)
+    }
+    fn compute_merkle_root(&self) -> Option<bitcoin::TxMerkleNode> {
+        bitcoin::dogecoin::Block::compute_merkle_root(self)
+    }
+    fn check_merkle_root(&self) -> bool {
+        bitcoin::dogecoin::Block::check_merkle_root(&self)
+    }
+    fn header(&self) -> bitcoin::block::Header {
+        self.header
+    }
+}
 
 #[cfg(test)]
 pub mod test_common {
@@ -36,16 +170,16 @@ pub mod test_common {
     pub const BLOCK_2_ENCODED: &str = "010000004860eb18bf1b1620e37e9490fc8a427514416fd75159ab86688e9a8300000000d5fdcc541e25de1c7a5addedf24858b8bb665c9f36ef744ee42c316022c90f9bb0bc6649ffff001d08d2bd610101000000010000000000000000000000000000000000000000000000000000000000000000ffffffff0704ffff001d010bffffffff0100f2052a010000004341047211a824f55b505228e4c3d5194c1fcfaa15a456abdf37f9b9d97a4040afc073dee6c89064984f03385237d92167c13e236446b417ab79a0fcae412ae3316b77ac00000000";
 
     /// This struct is used to capture Commands generated by managers.
-    pub struct TestChannel {
+    pub struct TestChannel<Network> {
         /// This field holds Commands that are generated by managers.
-        received_commands: VecDeque<Command>,
+        received_commands: VecDeque<Command<Network>>,
         /// The connections available for the test to interact with.
         available_connections: Vec<SocketAddr>,
         /// The addresses that disconnect was called on.
         disconnected_addresses: HashSet<SocketAddr>,
     }
 
-    impl TestChannel {
+    impl<Network> TestChannel<Network> {
         pub fn new(available_connections: Vec<SocketAddr>) -> Self {
             Self {
                 received_commands: VecDeque::new(),
@@ -55,16 +189,16 @@ pub mod test_common {
         }
     }
 
-    impl TestChannel {
+    impl<Network> TestChannel<Network> {
         pub fn command_count(&self) -> usize {
             self.received_commands.len()
         }
 
-        pub fn pop_front(&mut self) -> Option<Command> {
+        pub fn pop_front(&mut self) -> Option<Command<Network>> {
             self.received_commands.pop_front()
         }
 
-        pub fn pop_back(&mut self) -> Option<Command> {
+        pub fn pop_back(&mut self) -> Option<Command<Network>> {
             self.received_commands.pop_back()
         }
 
@@ -76,8 +210,8 @@ pub mod test_common {
         }
     }
 
-    impl Channel for TestChannel {
-        fn send(&mut self, command: Command) -> Result<(), ChannelError> {
+    impl<Network> Channel<Network> for TestChannel<Network> {
+        fn send(&mut self, command: Command<Network>) -> Result<(), ChannelError> {
             self.received_commands.push_back(command);
             Ok(())
         }

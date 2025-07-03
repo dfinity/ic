@@ -1,5 +1,6 @@
 use std::{
     collections::{HashMap, VecDeque},
+    fmt::Debug,
     io::{self, ErrorKind, Read},
     net::SocketAddr,
     sync::Arc,
@@ -15,8 +16,9 @@ use bitcoin::{
         message_blockdata::{GetHeadersMessage, Inventory},
         message_network::VersionMessage,
     },
-    Block, BlockHash,
+    BlockHash,
 };
+use ic_btc_adapter::BlockLike;
 
 use bitcoin::io as bitcoin_io;
 
@@ -27,10 +29,10 @@ use tokio::{
 
 const MINIMUM_PROTOCOL_VERSION: u32 = 70001;
 
-async fn write_network_message(
+async fn write_network_message<Block: BlockLike>(
     socket: &mut TcpStream,
     magic: Magic,
-    payload: NetworkMessage,
+    payload: NetworkMessage<Block>,
 ) -> io::Result<()> {
     let res = RawNetworkMessage::new(magic, payload);
     let serialized = serialize(&res);
@@ -39,7 +41,7 @@ async fn write_network_message(
     Ok(())
 }
 
-async fn handle_getdata(
+async fn handle_getdata<Block: BlockLike>(
     socket: &mut TcpStream,
     msg: &[Inventory],
     magic: Magic,
@@ -62,11 +64,15 @@ async fn handle_getdata(
     Ok(())
 }
 
-async fn handle_ping(socket: &mut TcpStream, val: u64, magic: Magic) -> io::Result<()> {
-    write_network_message(socket, magic, NetworkMessage::Pong(val)).await
+async fn handle_ping<Block: BlockLike>(
+    socket: &mut TcpStream,
+    val: u64,
+    magic: Magic,
+) -> io::Result<()> {
+    write_network_message(socket, magic, <NetworkMessage<Block>>::Pong(val)).await
 }
 
-async fn handle_version(
+async fn handle_version<Block: BlockLike>(
     socket: &mut TcpStream,
     v: &VersionMessage,
     magic: Magic,
@@ -77,16 +83,16 @@ async fn handle_version(
     }
     let mut version = v.clone();
     version.services.add(ServiceFlags::NETWORK);
-    write_network_message(socket, magic, NetworkMessage::Version(version)).await?;
-    write_network_message(socket, magic, NetworkMessage::Verack).await?;
+    write_network_message(socket, magic, <NetworkMessage<Block>>::Version(version)).await?;
+    write_network_message(socket, magic, <NetworkMessage<Block>>::Verack).await?;
     Ok(())
 }
 
-async fn handle_getaddr(socket: &mut TcpStream, magic: Magic) -> io::Result<()> {
-    write_network_message(socket, magic, NetworkMessage::Addr(vec![])).await
+async fn handle_getaddr<Block: BlockLike>(socket: &mut TcpStream, magic: Magic) -> io::Result<()> {
+    write_network_message(socket, magic, <NetworkMessage<Block>>::Addr(vec![])).await
 }
 
-async fn handle_getheaders(
+async fn handle_getheaders<Block: BlockLike>(
     socket: &mut TcpStream,
     msg: &GetHeadersMessage,
     magic: Magic,
@@ -121,7 +127,12 @@ async fn handle_getheaders(
         block_headers.push(cached_headers[&next]);
         queue.extend(children.get(&next).unwrap_or(&vec![]));
     }
-    write_network_message(socket, magic, NetworkMessage::Headers(block_headers)).await
+    write_network_message(
+        socket,
+        magic,
+        <NetworkMessage<Block>>::Headers(block_headers),
+    )
+    .await
 }
 
 fn decompress(location: String) -> Vec<u8> {
@@ -134,13 +145,16 @@ fn decompress(location: String) -> Vec<u8> {
 }
 
 #[derive(Clone)]
-struct FakeBitcoind {
+struct FakeBitcoind<Block> {
     cached_headers: Arc<HashMap<BlockHash, BlockHeader>>,
     blocks: Arc<HashMap<BlockHash, Block>>,
     children: Arc<HashMap<BlockHash, Vec<BlockHash>>>,
 }
 
-impl FakeBitcoind {
+impl<Block> FakeBitcoind<Block>
+where
+    Block: BlockLike + for<'de> serde::Deserialize<'de> + Clone + Debug + Send + Sync + 'static,
+{
     pub fn new(headers_location: String, blocks_location: String) -> Self {
         let decompressed_headers = decompress(headers_location);
         let headers: Vec<BlockHeader> = serde_json::from_slice(&decompressed_headers).unwrap();
@@ -189,25 +203,25 @@ impl FakeBitcoind {
                     unparsed.extend(buf.iter());
 
                     while !unparsed.is_empty() {
-                        match deserialize_partial::<RawNetworkMessage>(&unparsed) {
+                        match deserialize_partial::<RawNetworkMessage<Block>>(&unparsed) {
                             Ok((raw, cnt)) => {
                                 let handler_result =
                                 match raw.payload() {
                                     NetworkMessage::Version(v) => {
-                                        handle_version(&mut socket, v, *raw.magic()).await
+                                        handle_version::<Block>(&mut socket, v, *raw.magic()).await
                                     }
                                     NetworkMessage::Verack => Ok(()),
                                     NetworkMessage::GetAddr => {
-                                        handle_getaddr(&mut socket, *raw.magic()).await
+                                        handle_getaddr::<Block>(&mut socket, *raw.magic()).await
                                     }
                                     NetworkMessage::GetHeaders(msg) => {
-                                        handle_getheaders(&mut socket, msg, *raw.magic(), cached_headers.clone(), children.clone()).await
+                                        handle_getheaders::<Block>(&mut socket, msg, *raw.magic(), cached_headers.clone(), children.clone()).await
                                     }
                                     NetworkMessage::GetData(msg) => {
                                         handle_getdata(&mut socket, msg, *raw.magic(), blocks.clone()).await
                                     }
                                     NetworkMessage::Ping(val) => {
-                                        handle_ping(&mut socket, *val, *raw.magic()).await
+                                        handle_ping::<Block>(&mut socket, *val, *raw.magic()).await
                                     }
                                     smth => panic!("Unexpected NetworkMessage: {:?}", smth),
                                 };
@@ -230,15 +244,18 @@ impl FakeBitcoind {
     }
 }
 
-pub fn mock_bitcoin(
+pub fn mock_bitcoin<Block>(
     rt: &tokio::runtime::Handle,
     test_data_path: String,
     block_data_path: String,
-) -> SocketAddr {
+) -> SocketAddr
+where
+    Block: BlockLike + for<'de> serde::Deserialize<'de> + Clone + Debug + Send + Sync + 'static,
+{
     let listener = rt.block_on(async { TcpListener::bind("127.0.0.1:0").await.unwrap() });
     let addr = listener.local_addr().unwrap();
     rt.spawn(async {
-        let p2p_mock = FakeBitcoind::new(test_data_path, block_data_path);
+        let p2p_mock = <FakeBitcoind<Block>>::new(test_data_path, block_data_path);
         p2p_mock.start_mock(listener).await;
     });
     addr
