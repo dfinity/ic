@@ -1,7 +1,7 @@
 //! The module is responsible for keeping track of the blockchain state.
 //!
 use crate::{
-    common::{BlockHeight, BlockLike, Network},
+    common::{AdapterNetwork, BlockHeight, BlockLike},
     config::Config,
     metrics::BlockchainStateMetrics,
 };
@@ -112,7 +112,7 @@ pub struct BlockchainState {
     tips: Vec<Tip>,
 
     /// Used to determine how validation should be handled with `validate_header`.
-    network: Network,
+    network: AdapterNetwork,
     metrics: BlockchainStateMetrics,
 }
 

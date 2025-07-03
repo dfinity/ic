@@ -11,7 +11,7 @@ use tonic::Status;
 
 use crate::{
     blockchainstate::SerializedBlock,
-    common::{BlockHeight, Network},
+    common::{AdapterNetwork, BlockHeight},
     config::Config,
     metrics::GetSuccessorMetrics,
     BlockchainManagerRequest, BlockchainState,
@@ -86,7 +86,7 @@ pub struct GetSuccessorsResponse {
 pub struct GetSuccessorsHandler {
     state: Arc<Mutex<BlockchainState>>,
     blockchain_manager_tx: Sender<BlockchainManagerRequest>,
-    network: Network,
+    network: AdapterNetwork,
     metrics: GetSuccessorMetrics,
 }
 
@@ -191,7 +191,7 @@ fn get_successor_blocks(
     anchor: &BlockHash,
     processed_block_hashes: &[BlockHash],
     allow_multiple_blocks: bool,
-    network: Network,
+    network: AdapterNetwork,
 ) -> Vec<(BlockHash, Arc<SerializedBlock>)> {
     let seen: HashSet<BlockHash> = processed_block_hashes.iter().copied().collect();
 
@@ -204,7 +204,7 @@ fn get_successor_blocks(
         .unwrap_or_default();
 
     let max_blocks_size = match network {
-        Network::Bitcoin(bitcoin::Network::Testnet4) => TESTNET4_MAX_BLOCKS_BYTES,
+        AdapterNetwork::Bitcoin(bitcoin::Network::Testnet4) => TESTNET4_MAX_BLOCKS_BYTES,
         _ => MAX_BLOCKS_BYTES,
     };
 
@@ -255,7 +255,7 @@ fn get_next_headers(
     anchor: &BlockHash,
     processed_block_hashes: &[BlockHash],
     blocks: &[(BlockHash, Arc<SerializedBlock>)],
-    network: Network,
+    network: AdapterNetwork,
 ) -> Vec<BlockHeader> {
     let seen: HashSet<BlockHash> = processed_block_hashes
         .iter()
@@ -269,7 +269,7 @@ fn get_next_headers(
         .unwrap_or_default();
 
     let max_in_flight_blocks = match network {
-        Network::Bitcoin(bitcoin::Network::Testnet4) => TESTNET4_MAX_IN_FLIGHT_BLOCKS,
+        AdapterNetwork::Bitcoin(bitcoin::Network::Testnet4) => TESTNET4_MAX_IN_FLIGHT_BLOCKS,
         _ => MAX_IN_FLIGHT_BLOCKS,
     };
 
@@ -290,9 +290,9 @@ fn get_next_headers(
 }
 
 /// Helper used to determine if multiple blocks should be returned.
-fn are_multiple_blocks_allowed(network: Network, anchor_height: BlockHeight) -> bool {
+fn are_multiple_blocks_allowed(network: AdapterNetwork, anchor_height: BlockHeight) -> bool {
     match network {
-        Network::Bitcoin(network) => {
+        AdapterNetwork::Bitcoin(network) => {
             use bitcoin::Network::*;
             match network {
                 Bitcoin => anchor_height <= MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT,
@@ -300,7 +300,7 @@ fn are_multiple_blocks_allowed(network: Network, anchor_height: BlockHeight) -> 
                 other => unreachable!("Unsupported network: {:?}", other),
             }
         }
-        Network::Dogecoin(_) => false, // TODO: confirm if it really doesn't support it
+        AdapterNetwork::Dogecoin(_) => false, // TODO: confirm if it is really not supported
     }
 }
 

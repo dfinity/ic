@@ -51,7 +51,7 @@ mod transaction_store;
 // malicious fork can be prioritized by a DFS, thus potentially ignoring honest forks).
 mod get_successors_handler;
 
-pub use common::{BlockLike, Network};
+pub use common::{AdapterNetwork, BlockLike};
 pub use config::{address_limits, Config, IncomingSource};
 
 use crate::{
@@ -224,7 +224,7 @@ pub fn start_server(
     );
 
     match config.network {
-        common::Network::Bitcoin(_) => start_main_event_loop::<bitcoin::Block>(
+        AdapterNetwork::Bitcoin(_) => start_main_event_loop::<bitcoin::Block>(
             &config,
             log.clone(),
             blockchain_state,
@@ -233,7 +233,7 @@ pub fn start_server(
             blockchain_manager_rx,
             metrics_registry,
         ),
-        common::Network::Dogecoin(_) => start_main_event_loop::<bitcoin::dogecoin::Block>(
+        AdapterNetwork::Dogecoin(_) => start_main_event_loop::<bitcoin::dogecoin::Block>(
             &config,
             log.clone(),
             blockchain_state,

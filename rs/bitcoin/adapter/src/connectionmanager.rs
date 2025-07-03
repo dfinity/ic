@@ -24,7 +24,7 @@ use crate::{
     addressbook::{
         validate_services, AddressBook, AddressBookError, AddressEntry, AddressTimestamp,
     },
-    common::{BlockHeight, Network, DEFAULT_CHANNEL_BUFFER_SIZE, MINIMUM_VERSION_NUMBER},
+    common::{AdapterNetwork, BlockHeight, DEFAULT_CHANNEL_BUFFER_SIZE, MINIMUM_VERSION_NUMBER},
     config::Config,
     connection::{Connection, ConnectionConfig, ConnectionState, PingState},
     metrics::RouterMetrics,
@@ -74,7 +74,7 @@ pub type ConnectionManagerResult<T> = Result<T, ConnectionManagerError>;
 /// with Bitcoin nodes.
 pub struct ConnectionManager<NetworkMessage> {
     /// The network is either Bitcoin or Dogecoin.
-    network: Network,
+    network: AdapterNetwork,
     /// This field contains the address book.
     address_book: AddressBook,
     /// This field is used to indicate whether or not the connection manager needs to populate the
@@ -700,7 +700,7 @@ fn connection_limits(address_book: &AddressBook) -> (usize, usize) {
 }
 
 fn new_version_message(
-    network: Network,
+    network: AdapterNetwork,
     services: ServiceFlags,
     timestamp: i64,
     receiver: Address,
@@ -719,8 +719,8 @@ fn new_version_message(
         start_height,
     );
     match network {
-        Network::Bitcoin(_) => msg,
-        Network::Dogecoin(_) => msg.with_version(70015),
+        AdapterNetwork::Bitcoin(_) => msg,
+        AdapterNetwork::Dogecoin(_) => msg.with_version(70015),
     }
 }
 

@@ -1,4 +1,4 @@
-use crate::common::Network;
+use crate::AdapterNetwork;
 use ic_config::logger::Config as LoggerConfig;
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
@@ -18,8 +18,8 @@ pub enum IncomingSource {
 /// This struct contains configuration options for the BTC Adapter.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Config {
-    /// The type of Bitcoin network we plan to communicate to (e.g. Mainnet, Testnet, etc.).
-    pub network: Network,
+    /// The type of Bitcoin or Dogecoin network we plan to communicate to (e.g. Mainnet, Testnet, etc.).
+    pub network: AdapterNetwork,
     /// A list of DNS seeds for address discovery.
     #[serde(default)]
     pub dns_seeds: Vec<String>,
@@ -57,9 +57,9 @@ fn default_idle_seconds() -> u64 {
 
 /// This function is used to get the address limits for the `AddressBook`
 /// based on the provided `Network`.
-pub fn address_limits(network: Network) -> (usize, usize) {
+pub fn address_limits(network: AdapterNetwork) -> (usize, usize) {
     match network {
-        Network::Bitcoin(network) => {
+        AdapterNetwork::Bitcoin(network) => {
             use bitcoin::Network::*;
             match network {
                 Bitcoin => (500, 2000),
@@ -71,7 +71,7 @@ pub fn address_limits(network: Network) -> (usize, usize) {
                 _ => (1, 1),
             }
         }
-        Network::Dogecoin(network) => {
+        AdapterNetwork::Dogecoin(network) => {
             use bitcoin::dogecoin::Network::*;
             match network {
                 Dogecoin => (200, 1000),
@@ -87,7 +87,7 @@ impl Config {
     /// This function returns the port to use based on the Bitcoin network provided.
     pub fn network_port(&self) -> u16 {
         match self.network {
-            Network::Bitcoin(network) => {
+            AdapterNetwork::Bitcoin(network) => {
                 use bitcoin::Network::*;
                 match network {
                     Bitcoin => 8333,
@@ -96,7 +96,7 @@ impl Config {
                     _ => 8333,
                 }
             }
-            Network::Dogecoin(network) => {
+            AdapterNetwork::Dogecoin(network) => {
                 use bitcoin::dogecoin::Network::*;
                 match network {
                     Dogecoin => 22556,
@@ -151,7 +151,7 @@ pub mod test {
             self
         }
 
-        pub fn with_network(mut self, network: Network) -> Self {
+        pub fn with_network(mut self, network: AdapterNetwork) -> Self {
             self.config.network = network;
             self.config.address_limits = address_limits(network);
             self

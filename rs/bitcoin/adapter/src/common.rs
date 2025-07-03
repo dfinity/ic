@@ -2,6 +2,7 @@ use bitcoin::consensus::{Decodable, Encodable};
 use bitcoin::p2p::Magic;
 use ic_btc_validation::{HeaderStore, ValidateHeaderError};
 use serde::{Deserialize, Serialize};
+use std::{fmt, str::FromStr};
 
 /// This const represents the default version that the adapter will support.
 /// This value will be used to filter out Bitcoin nodes that the adapter deems
@@ -23,45 +24,79 @@ pub type BlockHeight = u32;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
 #[allow(missing_docs)]
-pub enum Network {
+/// AdapterNetwork selects between bitcoin and dogecoin Network.
+///
+/// The string representation for mainnet would would be either "bitcoin" or "dogecoin".
+/// But for non-mainnet networks, they would have a prefix of either "bitcoin:" or "dogecoin:".
+///
+/// The parsing from string on the other hand favors bitcoin network in order
+/// to maintain backward compatibility. It is only when a string fails to parse
+/// as a bitcoin network, it will try to parse as a dogecoin network (with prefix "dogcoin:").
+///
+/// # Examples:
+///
+/// ```rust
+/// use ic_btc_adapter::AdapterNetwork;
+/// use std::str::FromStr;
+///
+/// let bitcoin_mainnet = AdapterNetwork::Bitcoin(bitcoin::Network::Bitcoin);
+/// let bitcoin_regtest = AdapterNetwork::Bitcoin(bitcoin::Network::Regtest);
+/// let dogecoin_mainnet = AdapterNetwork::Dogecoin(bitcoin::dogecoin::Network::Dogecoin);
+/// let dogecoin_testnet = AdapterNetwork::Dogecoin(bitcoin::dogecoin::Network::Testnet);
+///
+/// assert_eq!(bitcoin_mainnet.to_string(), "bitcoin");
+/// assert_eq!(bitcoin_regtest.to_string(), "bitcoin:regtest");
+/// assert_eq!(dogecoin_mainnet.to_string(), "dogecoin");
+/// assert_eq!(dogecoin_testnet.to_string(), "dogecoin:testnet");
+/// assert_eq!(AdapterNetwork::from_str("bitcoin"), Ok(bitcoin_mainnet));
+/// assert_eq!(AdapterNetwork::from_str("dogecoin"), Ok(dogecoin_mainnet));
+/// assert_eq!(AdapterNetwork::from_str("regtest"), Ok(bitcoin_regtest));
+/// assert_eq!(AdapterNetwork::from_str("bitcoin:regtest"), Ok(bitcoin_regtest));
+/// assert_eq!(AdapterNetwork::from_str("dogecoin:testnet"), Ok(dogecoin_testnet));
+/// assert!(matches!(AdapterNetwork::from_str("testnet4"), Ok(AdapterNetwork::Bitcoin(_))));
+/// assert!(matches!(AdapterNetwork::from_str("dogecoin:testnet4"), Err(_)));
+/// ```
+pub enum AdapterNetwork {
     Bitcoin(bitcoin::Network),
     Dogecoin(bitcoin::dogecoin::Network),
 }
 
-impl From<bitcoin::Network> for Network {
+impl From<bitcoin::Network> for AdapterNetwork {
     fn from(network: bitcoin::Network) -> Self {
         Self::Bitcoin(network)
     }
 }
 
-impl From<bitcoin::dogecoin::Network> for Network {
+impl From<bitcoin::dogecoin::Network> for AdapterNetwork {
     fn from(network: bitcoin::dogecoin::Network) -> Self {
         Self::Dogecoin(network)
     }
 }
 
 #[allow(missing_docs)]
-impl Network {
+impl AdapterNetwork {
     pub fn name(&self) -> String {
         match self {
-            Network::Bitcoin(bitcoin::Network::Bitcoin) => "bitcoin".to_string(),
-            Network::Bitcoin(network) => format!("bitcoin::{network}"),
-            Network::Dogecoin(bitcoin::dogecoin::Network::Dogecoin) => "dogecoin".to_string(),
-            Network::Dogecoin(network) => format!("bitcoin::{network}"),
+            AdapterNetwork::Bitcoin(bitcoin::Network::Bitcoin) => "bitcoin".to_string(),
+            AdapterNetwork::Bitcoin(network) => format!("bitcoin:{network}"),
+            AdapterNetwork::Dogecoin(bitcoin::dogecoin::Network::Dogecoin) => {
+                "dogecoin".to_string()
+            }
+            AdapterNetwork::Dogecoin(network) => format!("dogecoin:{network}"),
         }
     }
     pub fn magic(&self) -> Magic {
         match self {
-            Network::Bitcoin(network) => network.magic(),
-            Network::Dogecoin(network) => network.magic(),
+            AdapterNetwork::Bitcoin(network) => network.magic(),
+            AdapterNetwork::Dogecoin(network) => network.magic(),
         }
     }
     pub fn genesis_block_header(&self) -> bitcoin::block::Header {
         match self {
-            Network::Bitcoin(network) => {
+            AdapterNetwork::Bitcoin(network) => {
                 bitcoin::blockdata::constants::genesis_block(network).header
             }
-            Network::Dogecoin(network) => {
+            AdapterNetwork::Dogecoin(network) => {
                 bitcoin::dogecoin::constants::genesis_block(network).header
             }
         }
@@ -72,27 +107,29 @@ impl Network {
         header: &bitcoin::block::Header,
     ) -> Result<(), ValidateHeaderError> {
         match self {
-            Network::Bitcoin(network) => ic_btc_validation::validate_header(network, store, header),
-            Network::Dogecoin(_network) => {
-                unimplemented!()
+            AdapterNetwork::Bitcoin(network) => {
+                ic_btc_validation::validate_header(network, store, header)
+            }
+            AdapterNetwork::Dogecoin(_network) => {
+                // TODO: use real dogecoin validation
+                Ok(())
             }
         }
     }
 }
 
-impl Serialize for Network {
-    fn serialize<S: ::serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(&self.name())
+impl fmt::Display for AdapterNetwork {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&self.name(), f)
     }
 }
 
-impl<'de> Deserialize<'de> for Network {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        use std::str::FromStr;
-        let s = String::deserialize(deserializer)?;
-        // In deserialization, we give priority to bitcoin network names.
+impl FromStr for AdapterNetwork {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // In parsing network names, we give priority to bitcoin network.
         // So both "testnet" and "bitcoin:testnet" will be parsed as bitcoin::Network::Testnet.
-        if let Ok(network) = bitcoin::Network::from_str(&s) {
+        if let Ok(network) = bitcoin::Network::from_str(s) {
             return Ok(network.into());
         } else if s == "dogecoin" {
             return Ok(bitcoin::dogecoin::Network::Dogecoin.into());
@@ -101,11 +138,24 @@ impl<'de> Deserialize<'de> for Network {
                 return Ok(network.into());
             }
         } else if let Some(s) = s.strip_prefix("bitcoin:") {
-            if let Ok(network) = bitcoin::dogecoin::Network::from_str(s) {
+            if let Ok(network) = bitcoin::Network::from_str(s) {
                 return Ok(network.into());
             }
         }
-        Err(serde::de::Error::custom(format!("unknown network {s}")))
+        Err(format!("unknown network name {s}"))
+    }
+}
+
+impl Serialize for AdapterNetwork {
+    fn serialize<S: ::serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.name())
+    }
+}
+
+impl<'de> Deserialize<'de> for AdapterNetwork {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(deserializer)?;
+        AdapterNetwork::from_str(&s).map_err(serde::de::Error::custom)
     }
 }
 
