@@ -33,3 +33,10 @@ impl RegistryDataStableMemory for RegistryStoreStableMemoryBorrower {
         REGISTRY_DATA_STORE_BTREE_MAP.with_borrow_mut(f)
     }
 }
+
+pub fn clear_registry_store() {
+    MEMORY_MANAGER.with_borrow(|mm| {
+        let _cleared: StableBTreeMap<StorableRegistryKey, StorableRegistryValue, VM> =
+            StableBTreeMap::new(mm.get(REGISTRY_STORE_MEMORY_ID));
+    });
+}
