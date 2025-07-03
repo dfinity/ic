@@ -8,7 +8,7 @@ use instant_acme::{
 use mockall::automock;
 use rcgen::{CertificateParams, DistinguishedName, KeyPair};
 use tokio::time::sleep;
-use tracing::{error, info};
+use tracing::info;
 use zeroize::Zeroize;
 
 #[automock]
@@ -114,21 +114,17 @@ impl Finalize for Acme {
                 identifiers: &[Identifier::Dns(name.to_string())],
             })
             .await
-            .context("failed to create new order")
-            .map_err(|e| {
-                error!(domain = name, error = %e);
-                e
-            })?;
+            .context("failed to create new order")?;
 
         // Poll until Ready (or timeout)
         info!(domain = name, "polling for order ready status");
-        poll_order(&mut order, OrderStatus::Ready)
+        let attempts = poll_order(&mut order, OrderStatus::Ready)
             .await
-            .context("order is unable to reach 'Ready' status")
-            .map_err(|e| {
-                error!(domain = name, error = %e);
-                e
-            })?;
+            .context("order is unable to reach 'Ready' status")?;
+        info!(
+            domain = name,
+            "polling for order succeeded after {attempts} attempts"
+        );
 
         // Generate key pair
         let mut key_pair = KeyPair::generate().context("failed to create key pair")?;
@@ -148,38 +144,30 @@ impl Finalize for Acme {
         order
             .finalize(csr.der().as_ref())
             .await
-            .context("failed to finalize order")
-            .map_err(|e| {
-                error!(domain = name, error = %e);
-                e
-            })?;
+            .context("failed to finalize order")?;
 
         // Poll until Valid (or timeout)
         info!(domain = name, "polling for order valid status");
-        poll_order(&mut order, OrderStatus::Valid)
+        let attempts = poll_order(&mut order, OrderStatus::Valid)
             .await
-            .context("failed to poll order status to Valid")
-            .map_err(|e| {
-                error!(domain = name, error = %e);
-                e
-            })?;
+            .context("failed to poll order status to Valid")?;
+        info!(
+            domain = name,
+            "polling for order valid status succeeded after {attempts} attempts"
+        );
 
         let cert_chain_pem = match order
             .certificate()
             .await
-            .context("failed to retrieve certificate")
-            .map_err(|e| {
-                error!(domain = name, error = %e);
-                e
-            })? {
-            Some(cert_chain_pem) => {
-                info!(domain = name, "Certificate retrieved successfully");
-                cert_chain_pem
-            }
+            .context("failed to retrieve certificate")?
+        {
+            Some(cert_chain_pem) => cert_chain_pem,
             None => {
                 let status = order.state().status;
-                error!(domain = name, status = ?status, "Certificate not available despite Valid status");
-                return Err(FinalizeError::OrderNotReady(format!("{:?}", status)));
+                return Err(FinalizeError::OrderNotReady(format!(
+                    "Certificate unavailable despite previous Valid status, current status {:?}",
+                    status
+                )));
             }
         };
 
@@ -207,32 +195,41 @@ fn get_dns_challenge(authorizations: Vec<Authorization>) -> Result<Challenge, Er
     Err(anyhow!("failed to find challenge"))
 }
 
-async fn poll_order(order: &mut instant_acme::Order, expect: OrderStatus) -> anyhow::Result<()> {
+async fn poll_order(order: &mut instant_acme::Order, expect: OrderStatus) -> anyhow::Result<u32> {
     let max_wait = Duration::from_secs(60);
     let poll_interval = Duration::from_secs(5);
     let start_time = Instant::now();
+    let mut attempt = 1;
 
     loop {
         match order.refresh().await {
             Ok(v) => {
                 if v.status == expect {
-                    return Ok(());
+                    return Ok(attempt);
                 }
 
                 if v.status == OrderStatus::Invalid {
-                    return Err(anyhow!("Order status is 'Invalid'"));
+                    return Err(anyhow!(
+                        "Order status is 'Invalid' after {attempt} attempts"
+                    ));
                 }
 
                 if start_time.elapsed() >= max_wait {
-                    return Err(anyhow!("Order status polling timed out: {:?}", v.status));
+                    return Err(anyhow!(
+                        "Order status polling timed out on attempt {attempt}: {:?}",
+                        v.status
+                    ));
                 }
             }
             Err(e) => {
                 if start_time.elapsed() >= max_wait {
-                    return Err(anyhow!("Unable to get order state: {e:#}"));
+                    return Err(anyhow!(
+                        "Unable to get order state on attempt {attempt}: {e:#}"
+                    ));
                 }
             }
         }
         sleep(poll_interval).await;
+        attempt += 1;
     }
 }
