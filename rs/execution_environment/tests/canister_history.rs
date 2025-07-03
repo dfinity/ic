@@ -1258,6 +1258,123 @@ fn check_environment_variables_for_create_canister_history(
 }
 
 #[test]
+fn canister_history_tracking_env_vars_update_settings() {
+    let user_id = user_test_id(7).get();
+    let initial_env_vars = BTreeMap::from([
+        ("NODE_ENV".to_string(), "production".to_string()),
+        ("LOG_LEVEL".to_string(), "info".to_string()),
+    ]);
+    let initial_env_vars_hash = EnvironmentVariables::new(initial_env_vars.clone()).hash();
+
+    // Set up StateMachine.
+    let env = setup_state_machine(FlagStatus::Enabled);
+    // Set time of StateMachine to current system time.
+    let mut now = std::time::SystemTime::now();
+    env.set_time(now);
+
+    let canister_id = env.create_canister_with_cycles(
+        None,
+        INITIAL_CYCLES_BALANCE,
+        Some(
+            CanisterSettingsArgsBuilder::new()
+                .with_controllers(vec![user_id])
+                .with_environment_variables(initial_env_vars)
+                .build(),
+        ),
+    );
+
+    // Update settings with new environment variables.
+    now += Duration::from_secs(5);
+    env.set_time(now);
+    let env_vars = BTreeMap::from([
+        ("NODE_ENV".to_string(), "production".to_string()),
+        ("LOG_LEVEL".to_string(), "debug".to_string()),
+    ]);
+    env.execute_ingress_as(
+        user_id,
+        ic00::IC_00,
+        Method::UpdateSettings,
+        UpdateSettingsArgs {
+            canister_id: canister_id.into(),
+            sender_canister_version: Some(2),
+            settings: CanisterSettingsArgsBuilder::new()
+                .with_environment_variables(env_vars.clone())
+                .build(),
+        }
+        .encode(),
+    )
+    .unwrap();
+
+    // Expected canister history change after update settings.
+    let env_vars_hash = EnvironmentVariables::new(env_vars.clone()).hash();
+    let reference_change = CanisterChange::new(
+        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
+        1,
+        CanisterChangeOrigin::from_user(user_id),
+        CanisterChangeDetails::settings_change(None, Some(env_vars_hash)),
+    );
+
+    // Verify canister history is updated.
+    let history = get_canister_history(&env, canister_id);
+    assert_eq!(history.get_total_num_changes(), 2);
+    let changes = history
+        .get_changes(history.get_total_num_changes() as usize)
+        .map(|c| (**c).clone())
+        .collect::<Vec<CanisterChange>>();
+    assert_eq!(
+        changes[0].details(),
+        &CanisterChangeDetails::canister_creation(vec![user_id], Some(initial_env_vars_hash))
+    );
+    assert_eq!(changes[1], reference_change);
+
+    // Verify the environment variables of the canister state.
+    let state = env.get_latest_state();
+    let canister_state = state.canister_state(&canister_id).unwrap();
+    assert_eq!(canister_state.system_state.environment_variables, env_vars);
+}
+
+#[test]
+fn canister_history_no_change_during_update_settings() {
+    let user_id = user_test_id(7).get();
+    let env = setup_state_machine(FlagStatus::Enabled);
+    let canister_id = env.create_canister_with_cycles(
+        None,
+        INITIAL_CYCLES_BALANCE,
+        Some(
+            CanisterSettingsArgsBuilder::new()
+                .with_controllers(vec![user_id])
+                .build(),
+        ),
+    );
+
+    // Update settings with no controllers and no environment variables.
+    env.execute_ingress_as(
+        user_id,
+        ic00::IC_00,
+        Method::UpdateSettings,
+        UpdateSettingsArgs {
+            canister_id: canister_id.into(),
+            sender_canister_version: Some(2),
+            settings: CanisterSettingsArgsBuilder::new().build(),
+        }
+        .encode(),
+    )
+    .unwrap();
+
+    // Verify canister history contains only the canister creation change.
+    let history = get_canister_history(&env, canister_id);
+    assert_eq!(history.get_total_num_changes(), 1);
+    let changes = history
+        .get_changes(history.get_total_num_changes() as usize)
+        .map(|c| (**c).clone())
+        .collect::<Vec<CanisterChange>>();
+    assert_eq!(
+        changes[0].details(),
+        &CanisterChangeDetails::canister_creation(vec![user_id], None)
+    );
+}
+
+#[test]
 fn canister_history_tracking_env_vars_create_canister() {
     let user_id1 = user_test_id(7).get();
     let user_id2 = user_test_id(8).get();

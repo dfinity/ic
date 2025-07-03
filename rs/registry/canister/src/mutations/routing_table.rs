@@ -39,6 +39,32 @@ impl std::fmt::Display for GetSubnetForCanisterError {
 
 const MAX_RANGES_PER_CANISTER_RANGES: u16 = 20;
 
+/// Returns a list of mutations of routing table shards so that applying them to the registry will
+/// result in the routing table (represented as routing table shards) being updated to the given new
+/// routing table.
+///
+/// Invariants that should hold before and after the mutations:
+///
+/// * each shard is a valid routing table - the canister ranges in the entries are sorted and
+///   disjoint.
+/// * for each shard, the start canister id of the first entry *is larger than or equal* to the
+///   canister id in the shard key.
+/// * for each shard, the end canister id of the last entry + 1 *is smaller than or equal to* the
+///   canister id in the next shard key.
+///
+/// Note that the method does not require the following invariants:
+///
+/// * for the last two invariants, we do not require equality as a precondition, even though the
+///   method should produce mutations that result in equality except for the shard key with
+///   `CanisterId(0)`.
+/// * each shard can have more than `MAX_RANGES_PER_CANISTER_RANGES` entries, even though this
+///   method should produce mutations that result in <= `MAX_RANGES_PER_CANISTER_RANGES` entries for
+///   each shard.
+///
+/// Relaxing the invariants as preconditions does not make it more difficult to compute the
+/// mutations, while it helps with setting up tests, since a single shard with all the entries can
+/// be inserted with a smallest possible shard key, i.e., `CanisterId::from_u64(0)`.
+///
 /// Complexity O(n)
 fn mutations_for_canister_ranges(
     registry: &Registry,

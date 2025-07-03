@@ -10,12 +10,16 @@ use std::path::{Path, PathBuf};
 // See build.rs
 include!(concat!(env!("OUT_DIR"), "/guestos_vm_template.rs"));
 
+const DEFAULT_OVMF_PATH: &str = "/usr/share/ovmf/OVMF.fd";
+
 #[derive(Debug)]
 pub struct DirectBootConfig {
     /// The kernel file
     pub kernel: PathBuf,
     /// The initrd file
     pub initrd: PathBuf,
+    /// The OVMF.fd file
+    pub ovmf: PathBuf,
     /// Kernel command line parameters
     pub kernel_cmdline: String,
 }
@@ -82,12 +86,19 @@ pub fn generate_vm_config(
         "kvm"
     };
 
+    let ovmf_path = if let Some(direct_boot) = &direct_boot {
+        &direct_boot.ovmf
+    } else {
+        Path::new(DEFAULT_OVMF_PATH)
+    };
+
     GuestOSTemplateProps {
         cpu_domain: cpu_domain.to_string(),
         vm_memory: config.hostos_settings.vm_memory,
         nr_of_vcpus: config.hostos_settings.vm_nr_of_vcpus,
         mac_address,
-        config_media: media_path.display().to_string(),
+        config_media_path: media_path.to_path_buf(),
+        ovmf_path: ovmf_path.to_path_buf(),
         direct_boot,
         enable_sev: config.icos_settings.enable_trusted_execution_environment,
     }
@@ -199,6 +210,7 @@ mod tests {
             Some(DirectBootConfig {
                 kernel: PathBuf::from("/tmp/test-kernel"),
                 initrd: PathBuf::from("/tmp/test-initrd"),
+                ovmf: PathBuf::from("/tmp/OVMF.fd"),
                 kernel_cmdline: "security=selinux selinux=1 enforcing=0".to_string(),
             })
         } else {

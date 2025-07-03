@@ -58,6 +58,7 @@ dosfstools
 fakeroot
 faketime
 grub-efi-amd64-bin
+iasl # to build OVMF
 iputils-ping
 libselinux-dev
 libsystemd-dev
@@ -66,6 +67,7 @@ libvirt-dev
 lsb-release
 lvm2
 mtools
+nasm # to build OVMF
 python-is-python3
 python3
 python3-pip
