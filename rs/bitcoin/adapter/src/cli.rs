@@ -80,7 +80,7 @@ pub mod test {
         }
     }"#;
     const TESTNET_CONFIG: &str = r#"{
-        "network": "estnet",
+        "network": "testnet",
         "dns_seeds": [
             "testnet-seed.bitcoin.jonasschnelli.ch",
             "seed.tbtc.petertodd.org",
@@ -94,7 +94,7 @@ pub mod test {
     }"#;
 
     const TESTNET_BAD_SOCKS_CONFIG: &str = r#"{
-        "network": "dogecoin:testnet",
+        "network": "testnet",
         "socks_proxy": "socks5.notaproxy.com"        
     }"#;
 
