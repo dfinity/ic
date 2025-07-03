@@ -15,7 +15,9 @@ use ic_nns_test_utils::{
     registry::{get_value_or_panic, invariant_compliant_mutation_as_atomic_req},
 };
 use ic_protobuf::registry::crypto::v1::ChainKeyEnabledSubnetList;
-use ic_protobuf::registry::subnet::v1::{ChainKeyConfig as ChainKeyConfigPb, SubnetRecord, CanisterCyclesCostSchedule};
+use ic_protobuf::registry::subnet::v1::{
+    CanisterCyclesCostSchedule, ChainKeyConfig as ChainKeyConfigPb, SubnetRecord,
+};
 use ic_registry_keys::{make_chain_key_enabled_subnet_list_key, make_subnet_record_key};
 use ic_registry_subnet_features::{
     ChainKeyConfig as ChainKeyConfigInternal, DEFAULT_ECDSA_MAX_QUEUE_SIZE,
@@ -273,7 +275,8 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
                             ssh_readonly_access: vec![],
                             ssh_backup_access: vec![],
                             chain_key_config: None,
-                            canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
+                            canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal
+                                as i32,
                         }
                         .encode_to_vec(),
                     )],

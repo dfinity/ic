@@ -19,7 +19,7 @@ use ic_protobuf::registry::{
     crypto::v1::{PublicKey as PublicKeyProto, X509PublicKeyCert},
     node::v1::{ConnectionEndpoint, NodeRecord},
     routing_table::v1::RoutingTable as PbRoutingTable,
-    subnet::v1::{SubnetListRecord, SubnetRecord, CanisterCyclesCostSchedule},
+    subnet::v1::{CanisterCyclesCostSchedule, SubnetListRecord, SubnetRecord},
 };
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::{

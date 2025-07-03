@@ -13,7 +13,7 @@ use ic_nns_test_utils::{
     itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
     registry::get_value_or_panic,
 };
-use ic_protobuf::registry::subnet::v1::{SubnetRecord, CanisterCyclesCostSchedule};
+use ic_protobuf::registry::subnet::v1::{CanisterCyclesCostSchedule, SubnetRecord};
 use ic_registry_keys::make_subnet_record_key;
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{insert, pb::v1::RegistryAtomicMutateRequest};

@@ -6,7 +6,8 @@ use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_protobuf::registry::subnet::v1::chain_key_initialization::Initialization;
 use ic_protobuf::registry::subnet::v1::ChainKeyInitialization;
 use ic_protobuf::registry::subnet::v1::{
-    CatchUpPackageContents, InitialNiDkgTranscriptRecord, SubnetListRecord, SubnetRecord, CanisterCyclesCostSchedule,
+    CanisterCyclesCostSchedule, CatchUpPackageContents, InitialNiDkgTranscriptRecord,
+    SubnetListRecord, SubnetRecord,
 };
 use ic_protobuf::types::v1::master_public_key_id::KeyId;
 use ic_registry_client_fake::FakeRegistryClient;

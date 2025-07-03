@@ -11,8 +11,8 @@ use ic_management_canister_types_private::{
 use ic_protobuf::registry::{
     node::v1::NodeRecord,
     subnet::v1::{
-        CatchUpPackageContents, ChainKeyConfig as ChainKeyConfigPb,
-        SubnetFeatures as SubnetFeaturesPb, SubnetRecord, CanisterCyclesCostSchedule as CanisterCyclesCostSchedulePb,
+        CanisterCyclesCostSchedule as CanisterCyclesCostSchedulePb, CatchUpPackageContents,
+        ChainKeyConfig as ChainKeyConfigPb, SubnetFeatures as SubnetFeaturesPb, SubnetRecord,
     },
 };
 use ic_registry_keys::{
