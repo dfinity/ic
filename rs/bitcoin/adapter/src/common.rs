@@ -50,7 +50,6 @@ impl Network {
             Network::Dogecoin(network) => format!("bitcoin::{network}"),
         }
     }
-
     pub fn magic(&self) -> Magic {
         match self {
             Network::Bitcoin(network) => network.magic(),
@@ -91,15 +90,17 @@ impl<'de> Deserialize<'de> for Network {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         use std::str::FromStr;
         let s = String::deserialize(deserializer)?;
-        if s == "bitcoin" {
-            return Ok(bitcoin::Network::Bitcoin.into());
+        // In deserialization, we give priority to bitcoin network names.
+        // So both "testnet" and "bitcoin:testnet" will be parsed as bitcoin::Network::Testnet.
+        if let Ok(network) = bitcoin::Network::from_str(&s) {
+            return Ok(network.into());
         } else if s == "dogecoin" {
             return Ok(bitcoin::dogecoin::Network::Dogecoin.into());
-        } else if let Some(s) = s.strip_prefix("bitcoin:") {
-            if let Ok(network) = bitcoin::Network::from_str(s) {
+        } else if let Some(s) = s.strip_prefix("dogecoin:") {
+            if let Ok(network) = bitcoin::dogecoin::Network::from_str(s) {
                 return Ok(network.into());
             }
-        } else if let Some(s) = s.strip_prefix("dogecoin:") {
+        } else if let Some(s) = s.strip_prefix("bitcoin:") {
             if let Ok(network) = bitcoin::dogecoin::Network::from_str(s) {
                 return Ok(network.into());
             }
