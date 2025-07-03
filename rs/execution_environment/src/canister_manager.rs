@@ -400,11 +400,9 @@ impl CanisterManager {
         }
 
         canister.system_state.canister_version += 1;
-        let is_controllers_change = validated_settings.controllers().is_some();
-        let new_controllers = if is_controllers_change {
-            Some(canister.system_state.controllers.iter().copied().collect())
-        } else {
-            None
+        let new_controllers = match validated_settings.controllers() {
+            Some(_) => Some(canister.system_state.controllers.iter().copied().collect()),
+            None => None,
         };
 
         match self.environment_variables_flag {

@@ -1275,7 +1275,7 @@ fn canister_history_tracking_env_vars_update_settings() {
     let mut now = std::time::SystemTime::now();
     env.set_time(now);
 
-    // Create and install universal_canister
+    // Create and install universal_canister.
     let ucan = env
         .install_canister_with_cycles(
             UNIVERSAL_CANISTER_WASM.to_vec(),
@@ -1320,24 +1320,28 @@ fn canister_history_tracking_env_vars_update_settings() {
         CanisterChangeDetails::canister_creation(vec![user_id1, user_id2], Some(env_vars_hash)),
     )];
 
-    // Update settings.
+    // Update settings with new environment variables.
+    now += Duration::from_secs(5);
+    env.set_time(now);
     let env_vars = BTreeMap::from([
         ("NODE_ENV".to_string(), "production".to_string()),
         ("LOG_LEVEL".to_string(), "debug".to_string()),
     ]);
 
-    now += Duration::from_secs(5);
-    env.set_time(now);
-    let payload = UpdateSettingsArgs {
-        canister_id: canister_id.into(),
-        sender_canister_version: Some(2),
-        settings: CanisterSettingsArgsBuilder::new()
-            .with_environment_variables(env_vars.clone())
-            .build(),
-    }
-    .encode();
-    env.execute_ingress_as(user_id1, ic00::IC_00, Method::UpdateSettings, payload)
-        .unwrap();
+    env.execute_ingress_as(
+        user_id1,
+        ic00::IC_00,
+        Method::UpdateSettings,
+        UpdateSettingsArgs {
+            canister_id: canister_id.into(),
+            sender_canister_version: Some(2),
+            settings: CanisterSettingsArgsBuilder::new()
+                .with_environment_variables(env_vars.clone())
+                .build(),
+        }
+        .encode(),
+    )
+    .unwrap();
 
     // Expected canister history after update settings.
     let env_vars_hash = EnvironmentVariables::new(env_vars.clone()).hash();
