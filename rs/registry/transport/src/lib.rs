@@ -11,10 +11,12 @@ pub use high_capacity::{
 use std::{fmt, str};
 
 use crate::pb::v1::{
+    high_capacity_registry_value,
     registry_error::Code,
     registry_mutation::{self, Type},
     HighCapacityRegistryDelta, HighCapacityRegistryGetChangesSinceResponse,
-    HighCapacityRegistryGetValueResponse, Precondition, RegistryError, RegistryMutation,
+    HighCapacityRegistryGetValueResponse, HighCapacityRegistryValue, Precondition, RegistryError,
+    RegistryMutation,
 };
 use prost::Message;
 use serde::{Deserialize, Serialize};
@@ -175,6 +177,17 @@ impl registry_mutation::Type {
                 PresenceRequirement::MustBePresent
             }
             registry_mutation::Type::Insert => PresenceRequirement::MustBeAbsent,
+        }
+    }
+}
+
+impl HighCapacityRegistryValue {
+    pub fn has_byte_content(&self) -> bool {
+        match &self.content {
+            Some(high_capacity_registry_value::Content::DeletionMarker(_)) => false,
+            Some(high_capacity_registry_value::Content::Value(_)) => true,
+            Some(high_capacity_registry_value::Content::LargeValueChunkKeys(_)) => true,
+            None => false, // No content means no deletion marker.
         }
     }
 }

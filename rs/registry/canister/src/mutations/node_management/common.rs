@@ -6,7 +6,9 @@ use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_protobuf::registry::{
     node::v1::NodeRecord, node_operator::v1::NodeOperatorRecord, subnet::v1::SubnetListRecord,
 };
-use ic_registry_canister_chunkify::decode_high_capacity_registry_value;
+use ic_registry_canister_chunkify::{
+    decode_high_capacity_registry_value, get_high_capacity_registry_value_bytes,
+};
 use ic_registry_keys::{
     make_crypto_node_key, make_crypto_tls_cert_key, make_firewall_rules_record_key,
     make_node_operator_record_key, make_node_record_key, make_subnet_list_record_key,
@@ -277,6 +279,22 @@ pub(crate) fn get_key_family_iter_at_version<'a, T: prost::Message + Default>(
     prefix: &'a str,
     version: u64,
 ) -> impl Iterator<Item = (String, T)> + 'a {
+    get_key_family_raw_iter_at_version(registry, prefix, version).map(|(id, value)| {
+        let latest_value: Option<T> =
+            with_chunks(|chunks| decode_high_capacity_registry_value::<T, _>(value, chunks));
+
+        // Skip deleted values.
+        let latest_value = latest_value?;
+
+        (id, latest_value)
+    })
+}
+
+pub(crate) fn get_key_family_raw_iter_at_version<'a>(
+    registry: &'a Registry,
+    prefix: &'a str,
+    version: u64,
+) -> impl Iterator<Item = (String, &'a HighCapacityRegistryValue)> + 'a {
     let prefix_bytes = prefix.as_bytes();
     let start = prefix_bytes.to_vec();
 
@@ -285,14 +303,12 @@ pub(crate) fn get_key_family_iter_at_version<'a, T: prost::Message + Default>(
         .range(start..)
         .take_while(|(k, _)| k.starts_with(prefix_bytes))
         .filter_map(move |(key, values)| {
-            let value: &HighCapacityRegistryValue =
+            let latest_value: &HighCapacityRegistryValue =
                 values.iter().rev().find(|value| value.version <= version)?;
 
-            let latest_value: Option<T> =
-                with_chunks(|chunks| decode_high_capacity_registry_value::<T, _>(value, chunks));
-
-            // Skip deleted values.
-            let latest_value = latest_value?;
+            if !latest_value.has_byte_content() {
+                return None; // Deleted or otherwise empty value.
+            }
 
             let id = key
                 .strip_prefix(prefix_bytes)

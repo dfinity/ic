@@ -1,8 +1,12 @@
-use crate::mutations::node_management::common::get_key_family_iter_at_version;
+use crate::mutations::node_management::common::{
+    get_key_family_iter, get_key_family_iter_at_version, get_key_family_raw_iter_at_version,
+};
+use crate::storage::with_chunks;
 use crate::{common::LOG_PREFIX, pb::v1::SubnetForCanister, registry::Registry};
 use dfn_core::CanisterId;
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_protobuf::registry::routing_table::v1 as pb;
+use ic_registry_canister_chunkify::decode_high_capacity_registry_value;
 use ic_registry_keys::{
     make_canister_migrations_record_key, make_canister_ranges_key, make_routing_table_record_key,
     CANISTER_RANGES_PREFIX,
@@ -11,6 +15,7 @@ use ic_registry_routing_table::{
     routing_table_insert_subnet, CanisterIdRange, CanisterIdRanges, CanisterMigrations,
     RoutingTable,
 };
+use ic_registry_transport::pb::v1::high_capacity_registry_value::Content;
 use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation, RegistryValue};
 use ic_registry_transport::{delete, upsert};
 use prost::Message;
@@ -268,6 +273,33 @@ impl Registry {
             .unwrap_or_else(|e| panic!("{e}"))
     }
 
+    pub fn get_routing_table_shard_for_canister_id(
+        &self,
+        canister_id: CanisterId,
+        version: u64,
+    ) -> Result<RoutingTable, String> {
+        // We use this to skip the deleted values, to make the logic easier.
+        let range_to_decode =
+            get_key_family_raw_iter_at_version(self, CANISTER_RANGES_PREFIX, version)
+                .skip_while(|(k, v)| {
+                    let canister_id_bytes = hex::decode(k).unwrap();
+                    CanisterId::try_from(canister_id_bytes).unwrap() > canister_id
+                })
+                .next()
+                .ok_or_else(|| {
+                    Err(format!(
+                        "{}No routing table shard found for canister ID {} at version {}",
+                        LOG_PREFIX, canister_id, version
+                    ))
+                })?
+                .1;
+
+        // TODO DO NOT MERGE- make sure this error makes sense
+        with_chunks(|chunks| decode_high_capacity_registry_value(range_to_decode, chunks))
+            .ok()
+            .and_then(|pb_rt| RoutingTable::try_from(pb_rt))
+    }
+
     pub fn get_routing_table_from_canister_range_records_or_panic(
         &self,
         version: u64,
@@ -417,11 +449,15 @@ impl Registry {
         principal_id: &PrincipalId,
     ) -> Result<SubnetForCanister, GetSubnetForCanisterError> {
         let latest_version = self.latest_version();
-        let routing_table = self.get_routing_table_or_panic(latest_version);
-        let canister_id = CanisterId::try_from(*principal_id)
-            .map_err(|_| GetSubnetForCanisterError::InvalidCanisterId)?;
 
-        match routing_table
+        let canister_id = CanisterId::try_from_principal_id(*principal_id)
+            .map_err(|_| GetSubnetForCanisterError::InvalidCanisterId)?;
+        let routing_table_segment = self
+            .get_routing_table_shard_for_canister_id(canister_id, latest_version)
+            // TODO DO NOT COMMIT - convert to proper error
+            .map_err(|e| GetSubnetForCanisterError::NoSubnetAssigned)?;
+
+        match routing_table_segment
             .lookup_entry(canister_id)
             .map(|(_, subnet_id)| subnet_id.get())
         {
