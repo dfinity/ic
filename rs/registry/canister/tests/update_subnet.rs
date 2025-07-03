@@ -15,7 +15,7 @@ use ic_nns_test_utils::{
     registry::{get_value_or_panic, invariant_compliant_mutation_as_atomic_req},
 };
 use ic_protobuf::registry::crypto::v1::ChainKeyEnabledSubnetList;
-use ic_protobuf::registry::subnet::v1::{ChainKeyConfig as ChainKeyConfigPb, SubnetRecord};
+use ic_protobuf::registry::subnet::v1::{ChainKeyConfig as ChainKeyConfigPb, SubnetRecord, CanisterCyclesCostSchedule};
 use ic_registry_keys::{make_chain_key_enabled_subnet_list_key, make_subnet_record_key};
 use ic_registry_subnet_features::{
     ChainKeyConfig as ChainKeyConfigInternal, DEFAULT_ECDSA_MAX_QUEUE_SIZE,
@@ -150,6 +150,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_a_subnets_co
             ssh_readonly_access: vec![],
             ssh_backup_access: vec![],
             chain_key_config: None,
+            canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
         };
 
         // An attacker got a canister that is trying to pass for the governance
@@ -272,6 +273,7 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
                             ssh_readonly_access: vec![],
                             ssh_backup_access: vec![],
                             chain_key_config: None,
+                            canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
                         }
                         .encode_to_vec(),
                     )],
@@ -362,6 +364,7 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
                 ssh_readonly_access: vec!["pub_key_0".to_string()],
                 ssh_backup_access: vec!["pub_key_1".to_string()],
                 chain_key_config: None,
+                canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
             }
         );
 
@@ -446,6 +449,7 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
             ssh_readonly_access: vec![],
             ssh_backup_access: vec![],
             chain_key_config: None,
+            canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
         };
 
         // Just create the registry canister and wait until the subnet_handler ID is

@@ -13,7 +13,7 @@ use ic_nns_test_utils::{
     itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
     registry::get_value_or_panic,
 };
-use ic_protobuf::registry::subnet::v1::SubnetRecord;
+use ic_protobuf::registry::subnet::v1::{SubnetRecord, CanisterCyclesCostSchedule};
 use ic_registry_keys::make_subnet_record_key;
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{insert, pb::v1::RegistryAtomicMutateRequest};
@@ -51,6 +51,7 @@ fn test_submit_and_accept_update_subnet_proposal() {
                 ssh_readonly_access: vec![],
                 ssh_backup_access: vec![],
                 chain_key_config: None,
+                canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
             };
 
             let key = make_subnet_record_key(subnet_id);
@@ -168,6 +169,7 @@ fn test_submit_and_accept_update_subnet_proposal() {
                     ssh_readonly_access: vec!["pub_key_0".to_string()],
                     ssh_backup_access: vec!["pub_key_1".to_string()],
                     chain_key_config: None,
+                    canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
                 }
             );
             Ok(())

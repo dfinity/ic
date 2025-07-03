@@ -500,7 +500,7 @@ mod tests {
     use ic_nervous_system_common_test_keys::{TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL};
     use ic_protobuf::registry::subnet::v1::{
         ChainKeyConfig as ChainKeyConfigPb, KeyConfig as KeyConfigPb,
-        SubnetRecord as SubnetRecordPb,
+        SubnetRecord as SubnetRecordPb, CanisterCyclesCostSchedule,
     };
     use ic_protobuf::types::v1::MasterPublicKeyId as MasterPublicKeyIdPb;
     use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
@@ -565,6 +565,7 @@ mod tests {
             ssh_readonly_access: vec![],
             ssh_backup_access: vec![],
             chain_key_config: None,
+            canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
         };
 
         let key_id = EcdsaKeyId {
@@ -655,6 +656,7 @@ mod tests {
                 max_number_of_canisters: 10,
                 ssh_readonly_access: vec!["pub_key_0".to_string()],
                 ssh_backup_access: vec!["pub_key_1".to_string()],
+                canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
             }
         );
     }
@@ -680,6 +682,7 @@ mod tests {
             ssh_readonly_access: vec![],
             ssh_backup_access: vec![],
             chain_key_config: None,
+            canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
         };
 
         let payload = UpdateSubnetPayload {
@@ -739,6 +742,7 @@ mod tests {
                 ssh_readonly_access: vec![],
                 ssh_backup_access: vec![],
                 chain_key_config: None,
+                canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
             }
         );
     }
