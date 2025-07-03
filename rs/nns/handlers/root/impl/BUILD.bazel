@@ -79,7 +79,6 @@ DEV_DEPENDENCIES = [
         "//rs/types/types",
         "//rs/test_utilities",
         "//rs/test_utilities/compare_dirs",
-        "//rs/registry/canister",
         "@crate_index//:tempfile",
         "@crate_index//:assert_matches",
         "@crate_index//:hex",
