@@ -285,17 +285,29 @@ pub async fn insert_value<T: Message + Default>(registry: &Canister<'_>, key: &[
     );
 }
 
-pub fn routing_table_mutation(rt: &RoutingTable) -> RegistryMutation {
+/// Returns a list of mutations that set the initial state of the routing table.
+///
+/// Note that it's undefined behavior if they are used to modify an existing
+/// routing table.
+pub fn initial_routing_table_mutations(rt: &RoutingTable) -> Vec<RegistryMutation> {
     use ic_protobuf::registry::routing_table::v1 as pb;
 
     let rt_pb = pb::RoutingTable::from(rt);
     let mut buf = vec![];
     rt_pb.encode(&mut buf).unwrap();
-    RegistryMutation {
-        mutation_type: Type::Upsert as i32,
-        key: make_routing_table_record_key().into_bytes(),
-        value: buf,
-    }
+    vec![
+        RegistryMutation {
+            mutation_type: Type::Upsert as i32,
+            key: make_routing_table_record_key().into_bytes(),
+            value: buf.clone(),
+        },
+        // TODO(NNS1-3781): Remove this once routing_table is no longer used by clients.
+        RegistryMutation {
+            mutation_type: Type::Upsert as i32,
+            key: make_canister_ranges_key(CanisterId::from(0)).into_bytes(),
+            value: buf,
+        },
+    ]
 }
 
 /// Returns a mutation that sets the initial state of the registry to be
@@ -373,7 +385,6 @@ pub fn invariant_compliant_mutation_with_subnet_id(
             make_subnet_record_key(subnet_pid).as_bytes(),
             system_subnet.encode_to_vec(),
         ),
-        routing_table_mutation(&RoutingTable::default()),
         insert(
             make_replica_version_key(replica_version_id).as_bytes(),
             replica_version.encode_to_vec(),
@@ -389,6 +400,9 @@ pub fn invariant_compliant_mutation_with_subnet_id(
         valid_pks,
     ));
     mutations.append(&mut threshold_pk_and_cup_mutations);
+    mutations.append(&mut initial_routing_table_mutations(
+        &RoutingTable::default(),
+    ));
     mutations
 }
 
