@@ -8,7 +8,7 @@ set -ue
 ## some benchmarks.
 ##
 
-DEPENDENCIES="awk bash bazel egrep sed tail tee"
+DEPENDENCIES="awk bash bazel egrep fgrep sed tail tee"
 which ${DEPENDENCIES} >/dev/null || (echo "Error checking dependencies: ${DEPENDENCIES}" >&2 && exit 1)
 
 printf "    %-12s := %s\n" \
@@ -51,7 +51,7 @@ else
         new_result_ns="${new_bench#* ... bench: }"
         new_result_ns="${new_result_ns% ns/iter*}"
 
-        min_bench=$(egrep -F "test ${name} ... bench:" "${MIN_FILE}" || true)
+        min_bench=$(fgrep "test ${name} ... bench:" "${MIN_FILE}" || true)
         min_result_ns="${min_bench#* ... bench: }"
         min_result_ns="${min_result_ns% ns/iter*}"
 
