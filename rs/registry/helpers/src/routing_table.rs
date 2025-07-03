@@ -25,10 +25,14 @@ pub trait RoutingTableRegistry {
 impl<T: RegistryClient + ?Sized> RoutingTableRegistry for T {
     fn get_routing_table(&self, version: RegistryVersion) -> RegistryClientResult<RoutingTable> {
         let canister_ranges_keys = self.get_key_family(CANISTER_RANGES_PREFIX, version)?;
+        if canister_ranges_keys.is_empty() {
+            return Ok(None);
+        }
         let routing_table_shards = canister_ranges_keys
             .iter()
             .map(|key| {
                 let bytes = self.get_value(key, version);
+                // This should never fail, as the keys all have values and should be valid
                 deserialize_registry_value::<pb::RoutingTable>(bytes)?.ok_or_else(|| DecodeError {
                     error: format!(
                         "canister ranges key {} does not have a routing table shard",
@@ -37,6 +41,7 @@ impl<T: RegistryClient + ?Sized> RoutingTableRegistry for T {
                 })
             })
             .collect::<Result<Vec<_>, _>>()?;
+
         RoutingTable::try_from(routing_table_shards)
             .map(Some)
             .map_err(|err| DecodeError {
