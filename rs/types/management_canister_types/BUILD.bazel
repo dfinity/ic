@@ -25,7 +25,6 @@ permanent_whitelist = [
     "//rs/replica:__subpackages__",
     "//rs/replica_tests:__subpackages__",
     "//rs/replicated_state:__subpackages__",
-    "//rs/starter:__subpackages__",
     "//rs/state_layout:__subpackages__",
     "//rs/state_machine_tests:__subpackages__",
     "//rs/state_manager:__subpackages__",

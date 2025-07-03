@@ -2,10 +2,11 @@ use ic_base_types::{PrincipalId, PrincipalIdClass};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     state_test_helpers::{
-        registry_get_changes_since, setup_nns_canisters, state_machine_builder_for_nns_tests,
+        registry_high_capacity_get_changes_since, setup_nns_canisters,
+        state_machine_builder_for_nns_tests,
     },
 };
-use ic_registry_transport::pb::v1::RegistryGetChangesSinceResponse;
+use ic_registry_transport::pb::v1::HighCapacityRegistryGetChangesSinceResponse;
 use std::str::FromStr;
 
 #[test]
@@ -25,10 +26,10 @@ fn test_allow_opaque_caller() {
     )
     .unwrap();
     assert_eq!(sender.class(), Ok(PrincipalIdClass::Opaque));
-    let response = registry_get_changes_since(&state_machine, sender, 0);
+    let response = registry_high_capacity_get_changes_since(&state_machine, sender, 0);
 
     // Step 3: Inspect results.
-    let RegistryGetChangesSinceResponse {
+    let HighCapacityRegistryGetChangesSinceResponse {
         error,
         version,
         deltas,
@@ -57,10 +58,10 @@ fn test_allow_self_authenticating_caller() {
         PrincipalId::from_str("ubktz-haghv-fqsdh-23fhi-3urex-bykoz-pvpfd-5rs6w-qpo3t-nf2dv-oae")
             .unwrap();
     assert_eq!(sender.class(), Ok(PrincipalIdClass::SelfAuthenticating));
-    let response = registry_get_changes_since(&state_machine, sender, 0);
+    let response = registry_high_capacity_get_changes_since(&state_machine, sender, 0);
 
     // Step 3: Inspect results.
-    let RegistryGetChangesSinceResponse {
+    let HighCapacityRegistryGetChangesSinceResponse {
         error,
         version,
         deltas,

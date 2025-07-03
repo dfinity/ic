@@ -241,9 +241,11 @@ pub(crate) fn spawn_tip_thread(
                                         .expect("Failed to send TipToCheckpointAndSwitch result");
                                     if let Some(checkpoint_readwrite) = result.checkpoint_readwrite
                                     {
-                                        let _timer =
-                                            request_timer(&metrics, "serialize_protos_to_tip");
-                                        serialize_protos_to_tip(
+                                        let _timer = request_timer(
+                                            &metrics,
+                                            "serialize_protos_to_checkpoint_readwrite",
+                                        );
+                                        serialize_protos_to_checkpoint_readwrite(
                                             &result.state,
                                             &checkpoint_readwrite,
                                             &mut thread_pool,
@@ -348,7 +350,7 @@ pub(crate) fn spawn_tip_thread(
                             checkpoint_layout,
                             pagemaptypes,
                         } => {
-                            let _timer = request_timer(&metrics, "reset_tip_to");
+                            let timer = request_timer(&metrics, "reset_tip_to");
                             tip_state.tip_folder_state = Default::default();
                             tip_state.tip_folder_state.page_maps_height =
                                 tip_state.latest_checkpoint_state.page_maps_height;
@@ -367,6 +369,9 @@ pub(crate) fn spawn_tip_thread(
                                         err
                                     );
                                 });
+                            drop(timer);
+
+                            let _timer = request_timer(&metrics, "merge");
                             merge(
                                 &mut tip_handler,
                                 &pagemaptypes,
@@ -389,7 +394,7 @@ pub(crate) fn spawn_tip_thread(
                             states,
                             persist_metadata_guard,
                         } => {
-                            let _timer = request_timer(&metrics, "compute_manifest");
+                            let _timer = request_timer(&metrics, "compute_manifest_total");
                             if let Some(manifest_delta) = &manifest_delta {
                                 info!(
                                     log,
@@ -426,7 +431,8 @@ pub(crate) fn spawn_tip_thread(
                             own_subnet_type,
                             fd_factory,
                         } => {
-                            let _timer = request_timer(&metrics, "validate_replicated_state");
+                            let _timer =
+                                request_timer(&metrics, "validate_replicated_state_and_finalize");
                             let start = Instant::now();
                             debug_assert_eq!(
                                 tip_state.latest_checkpoint_state.page_maps_height,
@@ -1020,9 +1026,9 @@ fn merge(
     });
 }
 
-fn serialize_protos_to_tip(
+fn serialize_protos_to_checkpoint_readwrite(
     state: &ReplicatedState,
-    tip: &CheckpointLayout<RwPolicy<TipHandler>>,
+    checkpoint_readwrite: &CheckpointLayout<RwPolicy<TipHandler>>,
     thread_pool: &mut scoped_threadpool::Pool,
 ) -> Result<(), CheckpointError> {
     // Serialize ingress history separately. The `SystemMetadata` proto does not
@@ -1032,34 +1038,39 @@ fn serialize_protos_to_tip(
     // manifest file hashes (the ingress history is initially preserved unmodified
     // on both sides of the split, while the system metadata is not).
     let ingress_history = (&state.system_metadata().ingress_history).into();
-    tip.ingress_history().serialize(ingress_history)?;
+    checkpoint_readwrite
+        .ingress_history()
+        .serialize(ingress_history)?;
 
     let system_metadata: SystemMetadata = state.system_metadata().into();
-    tip.system_metadata().serialize(system_metadata)?;
+    checkpoint_readwrite
+        .system_metadata()
+        .serialize(system_metadata)?;
 
     // The split marker is also serialized separately from `SystemMetadata` because
     // preserving the latter unmodified during a split makes verification a matter
     // of comparing manifest file hashes.
     match state.system_metadata().split_from {
         Some(subnet_id) => {
-            tip.split_marker().serialize(SplitFrom {
+            checkpoint_readwrite.split_marker().serialize(SplitFrom {
                 subnet_id: Some(subnet_id_into_protobuf(subnet_id)),
             })?;
         }
         None => {
-            tip.split_marker().try_remove_file()?;
+            checkpoint_readwrite.split_marker().try_remove_file()?;
         }
     }
 
-    tip.subnet_queues()
+    checkpoint_readwrite
+        .subnet_queues()
         .serialize((state.subnet_queues()).into())?;
 
-    tip.stats().serialize(Stats {
+    checkpoint_readwrite.stats().serialize(Stats {
         query_stats: state.query_stats().as_query_stats(),
     })?;
 
     let results = parallel_map(thread_pool, state.canisters_iter(), |canister_state| {
-        serialize_canister_protos_to_tip(canister_state, tip)
+        serialize_canister_protos_to_checkpoint_readwrite(canister_state, checkpoint_readwrite)
     });
 
     for result in results.into_iter() {
@@ -1070,7 +1081,11 @@ fn serialize_protos_to_tip(
         thread_pool,
         state.canister_snapshots.iter(),
         |canister_snapshot| {
-            serialize_snapshot_protos_to_tip(canister_snapshot.0, canister_snapshot.1, tip)
+            serialize_snapshot_protos_to_checkpoint_readwrite(
+                canister_snapshot.0,
+                canister_snapshot.1,
+                checkpoint_readwrite,
+            )
         },
     );
 
@@ -1206,12 +1221,12 @@ fn serialize_snapshot_wasm_binary_and_pagemaps(
     Ok(())
 }
 
-fn serialize_canister_protos_to_tip(
+fn serialize_canister_protos_to_checkpoint_readwrite(
     canister_state: &CanisterState,
-    tip: &CheckpointLayout<RwPolicy<TipHandler>>,
+    checkpoint_readwrite: &CheckpointLayout<RwPolicy<TipHandler>>,
 ) -> Result<(), CheckpointError> {
     let canister_id = canister_state.canister_id();
-    let canister_layout = tip.canister(&canister_id)?;
+    let canister_layout = checkpoint_readwrite.canister(&canister_id)?;
     canister_layout
         .queues()
         .serialize(canister_state.system_state.queues().into())?;
@@ -1304,12 +1319,12 @@ fn serialize_canister_protos_to_tip(
     Ok(())
 }
 
-fn serialize_snapshot_protos_to_tip(
+fn serialize_snapshot_protos_to_checkpoint_readwrite(
     snapshot_id: &SnapshotId,
     canister_snapshot: &CanisterSnapshot,
-    tip: &CheckpointLayout<RwPolicy<TipHandler>>,
+    checkpoint_readwrite: &CheckpointLayout<RwPolicy<TipHandler>>,
 ) -> Result<(), CheckpointError> {
-    let snapshot_layout = tip.snapshot(snapshot_id)?;
+    let snapshot_layout = checkpoint_readwrite.snapshot(snapshot_id)?;
 
     // The protobuf is written at each checkpoint.
     snapshot_layout.snapshot().serialize(

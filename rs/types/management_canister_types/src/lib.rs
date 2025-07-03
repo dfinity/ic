@@ -366,7 +366,7 @@ impl CanisterLoadSnapshotRecord {
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct CanisterSettingsChangeRecord {
     controllers: Option<Vec<PrincipalId>>,
-    environment_variables_hash: Option<Vec<u8>>,
+    environment_variables_hash: Option<[u8; HASH_LENGTH]>,
 }
 
 impl CanisterSettingsChangeRecord {
@@ -374,8 +374,8 @@ impl CanisterSettingsChangeRecord {
         self.controllers.as_deref()
     }
 
-    pub fn environment_variables_hash(&self) -> Option<Vec<u8>> {
-        self.environment_variables_hash.clone()
+    pub fn environment_variables_hash(&self) -> Option<[u8; HASH_LENGTH]> {
+        self.environment_variables_hash
     }
 }
 
@@ -410,6 +410,7 @@ pub struct RenameToRecord {
 /// variant {
 ///   creation : record {
 ///     controllers : vec principal;
+///     environment_variables_hash: opt blob;
 ///   };
 ///   code_uninstall;
 ///   code_deployment : record {
@@ -489,7 +490,7 @@ impl CanisterChangeDetails {
 
     pub fn settings_change(
         controllers: Option<Vec<PrincipalId>>,
-        environment_variables_hash: Option<Vec<u8>>,
+        environment_variables_hash: Option<[u8; HASH_LENGTH]>,
     ) -> CanisterChangeDetails {
         CanisterChangeDetails::CanisterSettingsChange(CanisterSettingsChangeRecord {
             controllers,
@@ -572,25 +573,27 @@ impl CanisterChange {
     /// the controllers are stored on heap and thus not accounted
     /// for in `size_of::<CanisterChange>()`.
     pub fn count_bytes(&self) -> NumBytes {
-        let controllers_memory_size = match &self.details {
+        let num_controllers = match &self.details {
             CanisterChangeDetails::CanisterCreation(canister_creation) => {
-                std::mem::size_of_val(canister_creation.controllers())
+                canister_creation.controllers().len()
             }
             CanisterChangeDetails::CanisterControllersChange(canister_controllers_change) => {
-                std::mem::size_of_val(canister_controllers_change.controllers())
+                canister_controllers_change.controllers().len()
             }
             CanisterChangeDetails::CanisterSettingsChange(canister_settings_change) => {
-                match canister_settings_change.controllers() {
-                    Some(controllers) => std::mem::size_of_val(controllers),
-                    None => 0,
-                }
+                canister_settings_change
+                    .controllers()
+                    .map(|controllers| controllers.len())
+                    .unwrap_or_default()
             }
             CanisterChangeDetails::CanisterCodeDeployment(_)
             | CanisterChangeDetails::CanisterCodeUninstall
             | CanisterChangeDetails::CanisterLoadSnapshot(_)
             | CanisterChangeDetails::CanisterRename(_) => 0,
         };
-        NumBytes::from((size_of::<CanisterChange>() + controllers_memory_size) as u64)
+        NumBytes::from(
+            (size_of::<CanisterChange>() + num_controllers * size_of::<PrincipalId>()) as u64,
+        )
     }
 
     pub fn canister_version(&self) -> u64 {
@@ -793,7 +796,7 @@ impl From<&CanisterChangeDetails> for pb_canister_state_bits::canister_change::C
                         ),
                         environment_variables_hash: canister_settings_change
                             .environment_variables_hash
-                            .clone(),
+                            .map(|hash| hash.to_vec()),
                     },
                 )
             }
@@ -901,9 +904,14 @@ impl TryFrom<pb_canister_state_bits::canister_change::ChangeDetails> for Caniste
                             .collect::<Result<Vec<PrincipalId>, _>>()?,
                     ),
                 };
+                let environment_variables_hash =
+                    match canister_settings_change.environment_variables_hash {
+                        Some(bytes) => Some(try_decode_hash(bytes)?),
+                        None => None,
+                    };
                 Ok(CanisterChangeDetails::settings_change(
                     controllers,
-                    canister_settings_change.environment_variables_hash.clone(),
+                    environment_variables_hash,
                 ))
             }
             pb_canister_state_bits::canister_change::ChangeDetails::CanisterRename(
@@ -4818,5 +4826,25 @@ mod tests {
                 result.description()
             );
         }
+    }
+
+    #[test]
+    fn canister_change_count_bytes() {
+        let change_bytes = |controllers| {
+            let timestamp_nanos = 0;
+            let canister_version = 0;
+            let origin = CanisterChangeOrigin::from_canister(PrincipalId::default(), Some(0));
+            let details = CanisterChangeDetails::canister_creation(controllers, None);
+            let change = CanisterChange::new(timestamp_nanos, canister_version, origin, details);
+            change.count_bytes()
+        };
+
+        assert_eq!(size_of::<PrincipalId>(), 30);
+        let controllers = vec![PrincipalId::default(); 2];
+        let num_controllers = controllers.len() as u64;
+        assert_eq!(
+            change_bytes(controllers),
+            change_bytes(vec![]) + NumBytes::new(num_controllers * 30)
+        );
     }
 }

@@ -5763,6 +5763,7 @@ dependencies = [
  "clap 4.5.27",
  "hyper 1.6.0",
  "hyper-util",
+ "rand 0.8.5",
  "rustls 0.23.27",
  "rustls-pemfile 2.2.0",
  "serde_json",
@@ -6467,6 +6468,7 @@ dependencies = [
  "tikv-jemalloc-ctl",
  "tikv-jemallocator",
  "tokio",
+ "tokio-tungstenite 0.26.2",
  "tokio-util",
  "tower 0.5.2",
  "tower-http 0.6.4",
@@ -9776,6 +9778,7 @@ dependencies = [
  "reqwest 0.12.15",
  "rosetta-core",
  "serde",
+ "serde_json",
  "tokio",
  "url",
 ]
@@ -11659,12 +11662,16 @@ dependencies = [
 name = "ic-node-rewards-canister"
 version = "0.9.0"
 dependencies = [
+ "async-trait",
  "candid",
  "candid_parser",
+ "futures",
  "futures-util",
+ "ic-base-types",
  "ic-cdk 0.17.2",
  "ic-cdk-timers",
  "ic-interfaces-registry",
+ "ic-management-canister-types",
  "ic-nervous-system-agent",
  "ic-nervous-system-canisters",
  "ic-nervous-system-integration-tests",
@@ -11675,13 +11682,16 @@ dependencies = [
  "ic-registry-canister-client",
  "ic-registry-keys",
  "ic-registry-node-provider-rewards",
- "ic-registry-transport",
  "ic-stable-structures",
  "ic-state-machine-tests",
  "ic-types",
+ "itertools 0.12.1",
  "maplit",
+ "mockall",
  "pocket-ic",
  "prost 0.13.4",
+ "rewards-calculation",
+ "serde",
  "serde_json",
  "tokio",
 ]
@@ -11693,6 +11703,14 @@ dependencies = [
  "candid",
  "ic-cdk 0.17.2",
  "serde",
+]
+
+[[package]]
+name = "ic-node-rewards-protobuf-generator"
+version = "0.9.0"
+dependencies = [
+ "ic-utils-rustfmt",
+ "prost-build 0.13.4",
 ]
 
 [[package]]
@@ -12676,7 +12694,7 @@ dependencies = [
 
 [[package]]
 name = "ic-rosetta-api"
-version = "2.1.5"
+version = "2.1.6"
 dependencies = [
  "actix-rt",
  "actix-web",
@@ -13497,27 +13515,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f0f5684f577e0146738cd11afed789109c4f51ba963c75823c48c1501dc53278"
 dependencies = [
  "ic_principal",
-]
-
-[[package]]
-name = "ic-starter"
-version = "0.9.0"
-dependencies = [
- "anyhow",
- "clap 4.5.27",
- "ic-config",
- "ic-logger",
- "ic-management-canister-types-private",
- "ic-prep",
- "ic-protobuf",
- "ic-registry-provisional-whitelist",
- "ic-registry-subnet-features",
- "ic-registry-subnet-type",
- "ic-types",
- "serde",
- "serde_json",
- "slog",
- "tempfile",
 ]
 
 [[package]]
@@ -17234,6 +17231,7 @@ dependencies = [
  "ic-http-endpoints-test-agent",
  "ic-limits",
  "ic-management-canister-types-private",
+ "ic-message",
  "ic-networking-subnet-update-workload",
  "ic-nns-governance-api",
  "ic-prep",
@@ -18704,7 +18702,6 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-registry-transport",
  "ic-replicated-state",
- "ic-starter",
  "ic-state-machine-tests",
  "ic-state-manager",
  "ic-test-utilities",

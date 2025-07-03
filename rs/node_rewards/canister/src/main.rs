@@ -5,7 +5,7 @@ use ic_nervous_system_canisters::registry::RegistryCanister;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_node_rewards_canister::canister::NodeRewardsCanister;
 use ic_node_rewards_canister::storage::clear_registry_store;
-use ic_node_rewards_canister::storage::RegistryStoreStableMemoryBorrower;
+use ic_node_rewards_canister::storage::{RegistryStoreStableMemoryBorrower, METRICS_MANAGER};
 use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
 };
@@ -56,6 +56,8 @@ fn post_upgrade() {
 }
 
 fn schedule_timers() {
+    let _metrics_manager = METRICS_MANAGER.with(|m| m.clone());
+
     schedule_registry_sync();
 }
 
