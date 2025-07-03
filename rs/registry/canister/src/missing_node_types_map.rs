@@ -101,6 +101,7 @@ lazy_static! {
         "7pq5q-kh6ns-xjvke-hunxi-lvn3b-yq54h-nfark-n7dqs-wb3xu-edeic-vae" => "type1.1",
         "7prmk-rel7w-5znpq-ir3y6-7twqb-zh2t5-buguy-sdu27-fjdw3-dg6xl-fae" => "type1.1",
         "7ro4m-qawjh-yly2b-da2u5-ziwkm-vb7ul-kweme-sitth-fqtem-llq4p-bae" => "type1.1",
+        "7tqgr-ri4wq-2ov2k-hibgd-7qxvk-pwv3o-vfrq7-2qwfi-dqdvk-jzu2y-aqe" => "type3",
         "7ugp2-u6cil-a7vsy-ggcbr-iqbhk-jzizs-ls7e5-gwvar-thbjs-sx7sb-sqe" => "type1.1",
         "7vdar-a327j-byc4q-kacxg-ubasb-6dwe3-te272-frjgx-zeny2-xvj3j-5ae" => "type1.1",
         "7xvne-mrt6m-wiw2t-gxh32-4epji-7yrwc-f4z4m-aga2d-xnyqr-2rbfk-7ae" => "type1.1",
@@ -488,8 +489,6 @@ lazy_static! {
         "zpp25-phdzv-sjnw6-yrxbt-sfame-frmw4-qnwmm-plosc-anojw-uub2c-dqe" => "type1.1",
         "zpyka-vu7a6-3hfen-oa5q5-cjpht-ynkw5-bc7mq-ndbdm-r36ex-bfgcb-wqe" => "type1.1",
         "zzzie-aooer-6ecit-rw42z-h2aym-jn3gt-baeys-kmdgd-c3p46-7te4i-2qe" => "type1.1",
-        "7tqgr-ri4wq-2ov2k-hibgd-7qxvk-pwv3o-vfrq7-2qwfi-dqdvk-jzu2y-aqe" => "type3.1",
-
     }
     .into_iter()
     .map(|(k, v)| (k.to_string(), v.to_string()))
