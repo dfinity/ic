@@ -2,7 +2,7 @@ use crate::guest_direct_boot::{prepare_direct_boot, DirectBoot};
 use crate::guest_vm_config::{assemble_config_media, generate_vm_config};
 use crate::mount::PartitionProvider;
 use crate::systemd_notifier::SystemdNotifier;
-use anyhow::{anyhow, Context, Error, Result};
+use anyhow::{anyhow, bail, Context, Error, Result};
 use config_types::{HostOSConfig, Ipv6Config};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{calculate_deterministic_mac, IpVariant, MacAddr6Ext};
@@ -240,6 +240,17 @@ impl GuestVmService {
         )
         .await
         .context("Failed to prepare direct boot")?;
+
+        let enable_tee = self
+            .hostos_config
+            .icos_settings
+            .enable_trusted_execution_environment;
+        if enable_tee && direct_boot.is_none() {
+            bail!(
+                "enable_trusted_execution_environment is true but direct boot could not be \
+                 configured."
+            )
+        }
 
         assemble_config_media(&self.hostos_config, config_media.path())
             .context("Failed to assemble config media")?;
