@@ -58,6 +58,14 @@ pub trait TreasuryManager {
     /// Implements the `balances` API query function.
     fn balances(&self, request: BalancesRequest) -> TreasuryManagerResult;
 
+    // While the following methods go beyond just the Treasury Manager API agreement, they guide
+    // the implementers to organize the code in a reasonable and predictable way.
+
+    /// Context: the source of truth for balances are some remote canisters (e.g., the ledgers).
+    /// The Treasury Manager needs to have a local cache of these balances to be able to make
+    /// important decisions, e.g., how much can be refunded / withdrawn. That cache should be
+    /// regularly updated, and this is the function that should do that.
+    ///
     /// Should not be exposed as an API function, but rather called periodically by the canister.
     fn refresh_balances(&mut self) -> impl std::future::Future<Output = ()> + Send;
 
@@ -75,21 +83,16 @@ pub struct BalancesRequest {}
 
 pub type Subaccount = [u8; 32];
 
-#[derive(CandidType, Clone, Copy, Debug, PartialEq, Eq, Hash, Deserialize)]
+#[derive(CandidType, Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct Account {
     pub owner: Principal,
     pub subaccount: Option<Subaccount>,
 }
 
 #[derive(CandidType, Clone, Debug, Deserialize, PartialEq)]
-pub struct Accounts {
-    pub ledger_id_to_account: BTreeMap<Principal, Account>,
-}
-
-#[derive(CandidType, Clone, Debug, Deserialize, PartialEq)]
 pub struct WithdrawRequest {
     /// If not set, accounts specified at the time of deposit will be used for the withdrawal.
-    pub withdraw_accounts: Option<Accounts>,
+    pub withdraw_accounts: Option<BTreeMap<Principal, Account>>,
 }
 
 #[derive(CandidType, Clone, Debug, Deserialize, PartialEq)]
@@ -199,29 +202,56 @@ impl From<TreasuryManagerOperation> for Vec<u8> {
 #[derive(CandidType, Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub enum TransactionError {
     /// Prevents the call from being attempted.
-    Precondition(String),
+    Precondition {
+        error: String,
+        code: u64,
+    },
+
+    /// Prevents the response from being interpreted.
+    Postcondition {
+        error: String,
+        code: u64,
+    },
 
     /// An error that occurred while calling a canister.
     Call {
+        error: String,
+        code: u64,
+
         canister_id: Principal,
         method: String,
-        error: String,
     },
 
     /// Backend refers to, e.g., the DEX canister that this asset manager talks to.
-    Backend(String),
+    Backend {
+        error: String,
+        code: u64,
+    },
 
-    /// Prevents the response from being interpreted.
-    Postcondition(String),
+    /// The service is currently not available; please call back later.
+    TemporarilyUnavailable {
+        code: u64,
+    },
+
+    /// An exotic error that cannot be categorized using the tags above.
+    Generic {
+        error: String,
+        code: u64,
+        name: Option<String>,
+    },
 }
 
+/// Most operations that a Treasury Manager performs are (direct or indirect) ledger transactions.
+/// However, for generality, any call from the Treasury Manager can be recorded in the audit trail,
+/// even if it is not related to any literal ledger transaction, e.g., adding a token to a DEX
+/// for the first time, or checking the latest ledger metadata.
 #[derive(CandidType, Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Transaction {
     pub timestamp_ns: u64,
     pub canister_id: Principal,
 
     pub result: Result<TransactionWitness, TransactionError>,
-    pub human_readable: String,
+    pub purpose: String,
 
     pub treasury_manager_operation: TreasuryManagerOperation,
 }
@@ -260,8 +290,14 @@ pub struct Transfer {
     pub amount_decimals: Nat,
     #[serde(serialize_with = "serialize_nat_as_u64")]
     pub block_index: Nat,
+
+    pub sender: Option<Account>,
+    pub receiver: Option<Account>,
 }
 
+/// Most of the time, this just points to the Ledger block index. But for generality, once can
+/// also use this structure for representing witnesses of non-ledger transactions, e.g., from adding
+/// a token to a DEX for the first time.
 #[derive(CandidType, Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub enum TransactionWitness {
     Ledger(Vec<Transfer>),

@@ -50,7 +50,7 @@ fn canister_state() -> MockTreasuryManager {
     MockTreasuryManager {}
 }
 
-fn check_access() {
+fn check_caller_is_controller_or_self() {
     let caller = ic_cdk::api::caller();
 
     if caller == ic_cdk::id() {
@@ -66,7 +66,7 @@ fn check_access() {
 
 #[update]
 async fn deposit(request: DepositRequest) -> TreasuryManagerResult {
-    check_access();
+    check_caller_is_controller_or_self();
 
     log("deposit.");
 
@@ -77,7 +77,7 @@ async fn deposit(request: DepositRequest) -> TreasuryManagerResult {
 
 #[update]
 async fn withdraw(request: WithdrawRequest) -> TreasuryManagerResult {
-    check_access();
+    check_caller_is_controller_or_self();
 
     log("withdraw.");
 
@@ -99,11 +99,11 @@ fn audit_trail(request: AuditTrailRequest) -> AuditTrail {
 async fn run_periodic_tasks() {
     log("run_periodic_tasks.");
 
-    let mut kong_adaptor = canister_state();
+    let mut state = canister_state();
 
-    kong_adaptor.refresh_balances().await;
+    state.refresh_balances().await;
 
-    kong_adaptor.issue_rewards().await;
+    state.issue_rewards().await;
 }
 
 fn init_periodic_tasks() {

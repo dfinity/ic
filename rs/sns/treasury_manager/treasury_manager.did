@@ -1,13 +1,51 @@
-type TreasuryManagerResult = variant {
+type Result = variant {
+  // Represents current balances of all parties known to the Treasury Manager from its perspective.
+  // Refer to `BalanceForAsset` for a concrete list of parties.
   Ok : Balances;
+
+  // Represents all errors potentially observed during a composite operation.
   Err : vec TransactionError;
 };
 
 type TransactionError = variant {
-  Call : record { method : text; canister_id : principal; error : text };
-  Postcondition : text;
-  Precondition : text;
-  Backend : text;
+  // Prevents the call from being attempted.
+  Precondition : record {
+    error : text;
+    code : nat64;
+  };
+
+  // Prevents the response from being interpreted.
+  Postcondition : record {
+    error : text;
+    code : nat64;
+  };
+
+  // An error that occurred while calling a canister.
+  Call : record {
+    error : text;
+    code : nat64;
+
+    method : text;
+    canister_id : principal;
+  };
+
+  // Backend refers to, e.g., the DEX canister that this asset manager talks to.
+  Backend : record {
+    error : text;
+    code : nat64;
+  };
+
+  // The service is currently not available; please call back later.
+  TemporarilyUnavailable : record {
+    code : nat64;
+  };
+
+  // An exotic error that cannot be categorized using the tags above.
+  Generic : record {
+    error : text;
+    code : nat64;
+    name : opt text;
+ };
 };
 
 type BalanceForAsset = record {
@@ -32,6 +70,9 @@ type Account = record {
   subaccount : opt blob;
 };
 
+// This might be different from, e.g., ICRC-2 allowances; it's just a way to specify how much
+// assets are expected to be available for the manager. Whether to use ICRC-1, ICRC-2, or something
+// else is an implementation detail.
 type Allowance = record {
   asset : Asset;
   amount_decimals : nat;
@@ -50,22 +91,51 @@ type AuditTrail = record {
   transactions : vec Transaction;
 };
 
+// Most operations that a Treasury Manager performs are (direct or indirect) ledger transactions.
+// However, for generality, any call from the Treasury Manager can be recorded in the audit trail,
+// even if it is not related to any literal ledger transaction, e.g., adding a token to a DEX
+// for the first time, or checking the latest ledger metadata.
 type Transaction = record {
   result : TransactionResult;
   timestamp_ns : nat64;
-  human_readable : text;
+  purpose : text;
   canister_id : principal;
   treasury_manager_operation : TreasuryManagerOperation;
+};
+
+// Example use case in the audit trail:
+//
+// ```candid
+// transactions = vec {
+//   record {
+//     treasury_manager_operation = {
+//       operation = Deposit;
+//       step = record {
+//         index = 0;
+//         is_final = false;
+//       };
+//     };
+//     ...
+//   };
+//   record {
+//     treasury_manager_operation = {
+//       operation = Deposit;
+//       step = record {
+//         index = 1;
+//         is_final = true;
+//       };
+//     };
+//     ...
+//   };
+// };
+type TreasuryManagerOperation = record {
+  operation : Operation;
+  step : Step;
 };
 
 type Step = record {
   index : nat64;
   is_final : bool;
-};
-
-type TreasuryManagerOperation = record {
-  operation : Operation;
-  step : Step;
 };
 
 type Operation = variant {
@@ -80,15 +150,23 @@ type TransactionResult = variant {
   Err : TransactionError;
 };
 
+// Most of the time, this just points to the Ledger block index. But for generality, once can
+// also use this structure for representing witnesses of non-ledger transactions, e.g., from adding
+// a token to a DEX for the first time.
 type TransactionWitness = variant {
-  NonLedger : text;
+  // For financial audits.
   Ledger : vec Transfer;
+
+  // For low-level debugging.
+  NonLedger : text;
 };
 
 type Transfer = record {
   block_index : nat;
   amount_decimals : nat;
   ledger_canister_id : text;
+  sender : opt Account;
+  receiver : opt Account;
 };
 
 type DepositRequest = record {
@@ -105,16 +183,25 @@ type TreasuryManagerArg = variant {
 };
 
 type WithdrawRequest = record {
-  withdraw_accounts : opt Accounts;
+  withdraw_accounts : opt vec record { principal; Account };
 };
 
-type Accounts = record {
-  ledger_id_to_account : vec record { principal; Account };
-};
-
+// Expects flow of assets:
+//
+// I. Deposit
+//
+// treasury_owner --> TreasuryManager --> External (DEX)
+//              \                   \
+//                -----> FeeCollector   -----> FeeCollector
+//
+// II. Withdrawal
+//
+// External --> TreasuryManager --> TreasuryOwner
+//         \                   \
+//           -----> FeeCollector    -----> FeeCollector
 service : (TreasuryManagerArg) -> {
-  deposit : (DepositRequest) -> (TreasuryManagerResult);
-  withdraw : (WithdrawRequest) -> (TreasuryManagerResult);
+  deposit : (DepositRequest) -> (Result);
+  withdraw : (WithdrawRequest) -> (Result);
+  balances : (record {}) -> (Result) query;
   audit_trail : (record {}) -> (AuditTrail) query;
-  balances : (record {}) -> (TreasuryManagerResult) query;
 }
