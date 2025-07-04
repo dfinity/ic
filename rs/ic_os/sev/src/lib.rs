@@ -54,14 +54,12 @@ impl HostSevCertificateProvider {
     /// querying the platform status.
     pub fn new_for_test(
         certificate_cache_dir: PathBuf,
-        sev_host_firmware: Option<Box<dyn SevHostFirmware>>,
+        sev_host_firmware: Box<dyn SevHostFirmware>,
     ) -> Self {
         Self {
-            implementation: sev_host_firmware.map(|sev_host_firmware| {
-                HostSevCertificateProviderImpl {
-                    certificate_cache_dir,
-                    sev_host_firmware,
-                }
+            implementation: Some(HostSevCertificateProviderImpl {
+                certificate_cache_dir,
+                sev_host_firmware,
             }),
         }
     }
@@ -287,8 +285,7 @@ mod tests {
             .expect_get_identifier()
             .return_once(move || Ok(non_existing_chip_id));
 
-        let mut provider =
-            HostSevCertificateProvider::new_for_test(cache_dir, Some(Box::new(firmware)));
+        let mut provider = HostSevCertificateProvider::new_for_test(cache_dir, Box::new(firmware));
 
         let chain_pem = provider
             .load_certificate_chain_pem()
@@ -311,14 +308,13 @@ mod tests {
             .expect_snp_platform_status()
             .return_once(|| Err(sev::error::UserApiError::Unknown));
 
-        assert!(HostSevCertificateProvider::new_for_test(
-            cache_dir,
-            Some(Box::new(erroring_firmware))
-        )
-        .load_certificate_chain_pem()
-        .expect_err("Expected error")
-        .to_string()
-        .contains("Failed to get SNP platform status"));
+        assert!(
+            HostSevCertificateProvider::new_for_test(cache_dir, Box::new(erroring_firmware))
+                .load_certificate_chain_pem()
+                .expect_err("Expected error")
+                .to_string()
+                .contains("Failed to get SNP platform status")
+        );
     }
 
     #[test]
@@ -336,7 +332,7 @@ mod tests {
 
         assert!(HostSevCertificateProvider::new_for_test(
             cache_dir,
-            Some(Box::new(mock_sev_host_firmware()))
+            Box::new(mock_sev_host_firmware())
         )
         .load_certificate_chain_pem()
         .expect_err("Expected error")
@@ -351,7 +347,7 @@ mod tests {
 
         let mut provider = HostSevCertificateProvider::new_for_test(
             cache_dir.clone(),
-            Some(Box::new(mock_sev_host_firmware())),
+            Box::new(mock_sev_host_firmware()),
         );
 
         // First call should fetch from AMD server and cache

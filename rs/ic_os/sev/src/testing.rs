@@ -26,7 +26,7 @@ pub fn mock_host_sev_certificate_provider() -> Result<(HostSevCertificateProvide
     Ok((
         HostSevCertificateProvider::new_for_test(
             dir.path().to_path_buf(),
-            Some(Box::new(mock_sev_host_firmware())),
+            Box::new(mock_sev_host_firmware()),
         ),
         dir,
     ))
