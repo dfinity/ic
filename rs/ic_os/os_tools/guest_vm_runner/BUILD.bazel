@@ -78,6 +78,9 @@ rust_test(
 
 rust_test(
     name = "guest_vm_runner_integration_tests",
+    # the test sometimes times out on CI with default timeout
+    # of "moderate" (5 minutes) - 2025-07-04
+    timeout = "long",
     crate = ":guest_vm_runner_dev",
     crate_features = [
         "dev",
