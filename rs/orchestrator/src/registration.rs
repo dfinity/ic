@@ -150,11 +150,21 @@ impl NodeRegistration {
                     let nns_url = self
                         .get_random_nns_url_from_config()
                         .expect("no NNS urls available");
-                    let agent = Agent::builder()
+                    let agent = match Agent::builder()
                         .with_url(nns_url)
                         .with_identity(signer)
                         .build()
-                        .expect("Failed to create IC agent");
+                    {
+                        Ok(agent) => agent,
+                        Err(e) => {
+                            warn!(self.log, "Failed to create IC agent: {}", e);
+                            UtilityCommand::notify_host(
+                                format!("Failed to create IC agent: {}", e).as_str(),
+                                1,
+                            );
+                            continue;
+                        }
+                    };
                     let add_node_encoded = Encode!(&add_node_payload)
                         .expect("Could not encode payload for the registration request");
 
