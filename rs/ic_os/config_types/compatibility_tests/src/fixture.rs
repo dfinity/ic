@@ -94,6 +94,9 @@ fn generate_default_hostos_config() -> HostOSConfig {
 }
 
 fn generate_default_guestos_config() -> GuestOSConfig {
+    let sev_cert_chain_pem = "-----BEGIN CERTIFICATE-----\
+                                     -----END CERTIFICATE-----"
+        .to_string();
     let default_hostos_config = generate_default_hostos_config();
     GuestOSConfig {
         config_version: CONFIG_VERSION.to_string(),
@@ -104,5 +107,8 @@ fn generate_default_guestos_config() -> GuestOSConfig {
         upgrade_config: GuestOSUpgradeConfig {
             peer_guest_vm_address: Some("2a00:fb01:400:200:6801:95ff:fed7:d475".parse().unwrap()),
         },
+        trusted_execution_environment_config: Some(TrustedExecutionEnvironmentConfig {
+            sev_cert_chain_pem,
+        }),
     }
 }

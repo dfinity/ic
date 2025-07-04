@@ -29,7 +29,7 @@ use std::str::FromStr;
 use strum::EnumString;
 use url::Url;
 
-pub const CONFIG_VERSION: &str = "1.3.0";
+pub const CONFIG_VERSION: &str = "1.4.0";
 
 /// List of field names that have been removed and should not be reused.
 pub static RESERVED_FIELD_NAMES: &[&str] = &[];
@@ -72,6 +72,12 @@ pub enum GuestVMType {
     Upgrade,
 }
 
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
+pub struct TrustedExecutionEnvironmentConfig {
+    /// AMD SEV-SNP certificate chain in PEM format.
+    pub sev_cert_chain_pem: String,
+}
+
 /// GuestOS configuration. In production, this struct inherits settings from `HostOSConfig`.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct GuestOSConfig {
@@ -84,6 +90,10 @@ pub struct GuestOSConfig {
     pub guest_vm_type: GuestVMType,
     #[serde(default)]
     pub upgrade_config: GuestOSUpgradeConfig,
+    /// This is only filled in when running on SEV-SNP capable hardware and trusted execution
+    /// environment is enabled in icos_settings.enable_trusted_execution_environment
+    #[serde(default)]
+    pub trusted_execution_environment_config: Option<TrustedExecutionEnvironmentConfig>,
 }
 
 #[serde_as]
