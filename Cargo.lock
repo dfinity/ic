@@ -18695,6 +18695,7 @@ dependencies = [
  "ic-logger",
  "ic-management-canister-types-private",
  "ic-metrics",
+ "ic-nns-common",
  "ic-nns-constants",
  "ic-protobuf",
  "ic-registry-keys",

@@ -2908,6 +2908,32 @@ fn with_all_icp_features() {
     let _pic = PocketIcBuilder::new().with_all_icp_features().build();
 }
 
+#[derive(CandidType, Deserialize)]
+struct IcpXdrConversionRate {
+    timestamp_seconds: u64,
+    xdr_permyriad_per_icp: u64,
+}
+
+fn get_icp_exchange_rate(pic: &PocketIc) -> IcpXdrConversionRate {
+    #[derive(CandidType, Deserialize)]
+    struct IcpXdrConversionRateResponse {
+        data: IcpXdrConversionRate,
+        hash_tree: Vec<u8>,
+        certificate: Vec<u8>,
+    }
+
+    let cmc_id = Principal::from_text("rkp4c-7iaaa-aaaaa-aaaca-cai").unwrap();
+    update_candid::<_, (IcpXdrConversionRateResponse,)>(
+        pic,
+        cmc_id,
+        "get_icp_xdr_conversion_rate",
+        (),
+    )
+    .unwrap()
+    .0
+    .data
+}
+
 fn get_authorized_subnets(pic: &PocketIc) -> Vec<Principal> {
     let cmc_id = Principal::from_text("rkp4c-7iaaa-aaaaa-aaaca-cai").unwrap();
     update_candid::<_, (Vec<Principal>,)>(pic, cmc_id, "get_default_subnets", ())
@@ -2934,6 +2960,13 @@ fn get_subnet_types(pic: &PocketIc) -> BTreeMap<String, Vec<Principal>> {
 }
 
 fn check_cmc_state(pic: &PocketIc, expect_fiduciary: bool) {
+    // check XDR exchange rate
+    // these values are hard-coded in the PocketIC server implementation
+    // including steps how they were obtained
+    let icp_exchange_rate = get_icp_exchange_rate(pic);
+    assert_eq!(icp_exchange_rate.timestamp_seconds, 1_751_617_980);
+    assert_eq!(icp_exchange_rate.xdr_permyriad_per_icp, 35_200);
+
     // check authorized (application) subnets
     let mut authorized_subnets = get_authorized_subnets(pic);
     authorized_subnets.sort();

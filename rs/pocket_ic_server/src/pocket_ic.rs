@@ -51,6 +51,7 @@ use ic_management_canister_types_private::{
     VetKdKeyId,
 };
 use ic_metrics::MetricsRegistry;
+use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, REGISTRY_CANISTER_ID,
     ROOT_CANISTER_ID,
@@ -966,6 +967,29 @@ impl PocketIcSubnets {
                     Encode!(&cmc_init_payload).unwrap(),
                 )
                 .unwrap();
+
+            // Set XDR exchange rate.
+            // The values have been obtained by calling
+            // `dfx canister call rkp4c-7iaaa-aaaaa-aaaca-cai get_icp_xdr_conversion_rate --ic`:
+            //     data = record {
+            //       xdr_permyriad_per_icp = 35_200 : nat64;
+            //       timestamp_seconds = 1_751_617_980 : nat64;
+            //     };
+            let timestamp_seconds = 1_751_617_980;
+            let xdr_permyriad_per_icp = 35_200;
+            let update_icp_xdr_conversion_rate_payload = UpdateIcpXdrConversionRatePayload {
+                data_source: "PocketIC".to_string(),
+                timestamp_seconds,
+                xdr_permyriad_per_icp,
+                reason: None,
+            };
+            self.execute_ingress_on(
+                nns_subnet.clone(),
+                GOVERNANCE_CANISTER_ID.get(),
+                CYCLES_MINTING_CANISTER_ID,
+                "set_icp_xdr_conversion_rate".to_string(),
+                Encode!(&update_icp_xdr_conversion_rate_payload).unwrap(),
+            );
         }
 
         // set default (application) subnets on CMC

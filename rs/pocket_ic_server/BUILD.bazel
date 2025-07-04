@@ -27,6 +27,7 @@ LIB_DEPENDENCIES = [
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
     "//rs/nns/cmc",
+    "//rs/nns/common",
     "//rs/nns/constants",
     "//rs/protobuf",
     "//rs/registry/canister",
