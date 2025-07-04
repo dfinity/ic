@@ -36,6 +36,7 @@ use ic_state_machine_tests::StateMachine;
 use ic_types::ingress::WasmResult;
 use icp_ledger::Tokens;
 use prost::Message;
+use std::thread::sleep;
 use std::{
     env,
     fmt::{Debug, Formatter},
@@ -369,7 +370,7 @@ fn test_upgrade_canisters_with_golden_nns_state() {
             NODE_REWARDS_CANISTER_ID,
             "get_node_providers_monthly_xdr_rewards",
             Encode!(&GetNodeProvidersMonthlyXdrRewardsRequest {
-                registry_version: None
+                registry_version: Some(51709)
             })
             .unwrap(),
         )
@@ -393,13 +394,15 @@ fn test_upgrade_canisters_with_golden_nns_state() {
 
     check_canisters_are_all_protocol_canisters(&state_machine);
 
+    sleep(std::time::Duration::from_secs(60));
+
     let result = state_machine
         .execute_ingress_as(
             GOVERNANCE_CANISTER_ID.get(),
             NODE_REWARDS_CANISTER_ID,
             "get_node_providers_monthly_xdr_rewards",
             Encode!(&GetNodeProvidersMonthlyXdrRewardsRequest {
-                registry_version: None
+                registry_version: Some(51709)
             })
             .unwrap(),
         )
