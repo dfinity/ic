@@ -20,6 +20,7 @@ pub fn dispatch(command: &Command) -> Response {
         Notify(notify_data) => notify(notify_data),
         GetVsockProtocol => get_hostos_vsock_version(),
         GetHostOSVersion => get_hostos_version(),
+        StartUpgradeGuestVM => start_upgrade_guest_vm(),
     }
 }
 
@@ -123,4 +124,30 @@ async fn upgrade_hostos(upgrade_data: &UpgradeData) -> Response {
 
     println!("Starting upgrade...");
     run_upgrade()
+}
+
+fn start_upgrade_guest_vm() -> Response {
+    const GUESTOS_UPGRADER_SERVICE: &str = "upgrade-guestos.service";
+
+    match std::process::Command::new("systemctl")
+        .arg("restart")
+        .arg(GUESTOS_UPGRADER_SERVICE)
+        .output()
+    {
+        Ok(output) if output.status.success() => return Ok(Payload::NoPayload),
+        Ok(_) => {} // systemctl failed, fallthrough to error handling below
+        Err(err) => return Err(format!("Could not start {GUESTOS_UPGRADER_SERVICE}: {err}")),
+    };
+
+    // systemctl failed, get status
+    let status = std::process::Command::new("journalctl")
+        .arg("status")
+        .arg(GUESTOS_UPGRADER_SERVICE)
+        .output()
+        .map(|output| String::from_utf8_lossy(&output.stdout).into_owned())
+        .unwrap_or_else(|_| format!("[Could not get {GUESTOS_UPGRADER_SERVICE} status]"));
+
+    Err(format!(
+        "Could not start {GUESTOS_UPGRADER_SERVICE}, status: {status}"
+    ))
 }
