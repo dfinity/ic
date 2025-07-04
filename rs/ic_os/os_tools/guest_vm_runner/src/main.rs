@@ -463,7 +463,6 @@ mod tests {
     use std::path::PathBuf;
     use std::sync::LazyLock;
     use tempfile::TempDir;
-    use tokio::io::AsyncWriteExt;
     use tokio::task::JoinHandle;
     use virt::sys::VIR_DOMAIN_RUNNING_BOOTED;
 
@@ -488,7 +487,7 @@ mod tests {
             "Tar returned error"
         );
 
-        let mut guestos_device = NamedTempFile::new().unwrap();
+        let guestos_device = NamedTempFile::new().unwrap();
         std::fs::rename(tempdir.path().join("disk.img"), guestos_device.path()).unwrap();
 
         guestos_device
