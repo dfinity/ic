@@ -718,6 +718,7 @@ impl Proposal {
                         .valid_topic()
                         .unwrap_or(Topic::Unspecified)
                 }
+                Action::FulfillSubnetRentalRequest(_) => Topic::SubnetRental,
             }
         } else {
             println!("{}ERROR: No action -> no topic.", LOG_PREFIX);
@@ -784,6 +785,7 @@ impl Action {
             Action::InstallCode(_) => "ACTION_CHANGE_CANISTER",
             Action::StopOrStartCanister(_) => "ACTION_STOP_OR_START_CANISTER",
             Action::UpdateCanisterSettings(_) => "ACTION_UPDATE_CANISTER_SETTINGS",
+            Action::FulfillSubnetRentalRequest(_) => "ACTION_FULFILL_SUBNET_RENTAL_REQUEST",
         }
     }
 
@@ -4374,6 +4376,7 @@ impl Governance {
                 self.perform_update_canister_settings(pid, update_settings)
                     .await;
             }
+            Action::FulfillSubnetRentalRequest(_) => todo!(),
         }
     }
 
@@ -4969,6 +4972,12 @@ impl Governance {
             Action::InstallCode(install_code) => install_code.validate(),
             Action::StopOrStartCanister(stop_or_start) => stop_or_start.validate(),
             Action::UpdateCanisterSettings(update_settings) => update_settings.validate(),
+            Action::FulfillSubnetRentalRequest(_) => {  // DO NOT MERGE - Block this via a feature flag.
+                Err(GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    "FulfillSubnetRentalRequest is not yet enabled.".to_string(),
+                ))
+            }
         }?;
 
         Ok(action.clone())
