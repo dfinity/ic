@@ -447,7 +447,9 @@ fn canister_history_tracks_controllers_change() {
                 amount: Some(candid::Nat::from(INITIAL_CYCLES_BALANCE.get())),
                 settings: Some(
                     CanisterSettingsArgsBuilder::new()
-                        .with_controllers(vec![user_id2, user_id1, user_id2, user_id1, user_id1, user_id2])
+                        .with_controllers(vec![
+                            user_id2, user_id1, user_id2, user_id1, user_id1, user_id2,
+                        ])
                         .build(),
                 ),
                 specified_id: None,
@@ -463,7 +465,7 @@ fn canister_history_tracks_controllers_change() {
         WasmResult::Reject(reason) => panic!("create_canister call rejected: {}", reason),
     };
     // update reference canister history
-    // the list of controllers contains no duplicates
+    // the list of controllers in the canister history contains no duplicates
     let mut reference_change_entries: Vec<CanisterChange> = vec![CanisterChange::new(
         now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
         0,
@@ -472,7 +474,9 @@ fn canister_history_tracks_controllers_change() {
     )];
 
     for i in 1..MAX_CANISTER_HISTORY_CHANGES + 42 {
-        // update controllers via ingress from user_id2 (effectively the same set of controllers, but canister history still updated)
+        // update controllers via ingress from user_id2
+        // (effectively the same set of controllers provided as a list containing repeated controllers,
+        // but canister history still updated)
         let new_controllers = vec![user_id2, user_id1, user_id2, user_id1, user_id1, user_id2];
         now += Duration::from_secs(5);
         env.set_time(now);
@@ -491,6 +495,7 @@ fn canister_history_tracks_controllers_change() {
         )
         .unwrap();
         // check canister history
+        // the list of controllers in the canister history contains no duplicates
         reference_change_entries.push(CanisterChange::new(
             now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
             i,
