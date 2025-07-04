@@ -151,7 +151,7 @@ type TransactionResult = variant {
   Err : TransactionError;
 };
 
-// Most of the time, this just points to the Ledger block index. But for generality, once can
+// Most of the time, this just points to the Ledger block index. But for generality, one can
 // also use this structure for representing witnesses of non-ledger transactions, e.g., from adding
 // a token to a DEX for the first time.
 type TransactionWitness = variant {
