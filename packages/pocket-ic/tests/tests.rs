@@ -3027,7 +3027,7 @@ async fn with_all_icp_features_and_nns_subnet_state() {
         nonmainnet_features: false,
         log_level: None,
         bitcoind_addr: None,
-        icp_features: Some(IcpFeatures::all_features()),
+        icp_features: Some(IcpFeatures::all_icp_features()),
     };
     let response = client
         .post(url.join("instances").unwrap())
