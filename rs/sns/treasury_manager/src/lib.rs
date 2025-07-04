@@ -21,20 +21,23 @@ pub struct Balance {
     #[serde(serialize_with = "serialize_nat_as_u64")]
     pub amount_decimals: Nat,
     pub account: Option<Account>,
+    pub name: Option<String>,
 }
 
 #[derive(CandidType, Clone, Debug, Deserialize, PartialEq)]
-pub struct BalancesForAsset {
+pub struct BalanceBook {
     pub treasury_owner: Option<Balance>,
     pub treasury_manager: Option<Balance>,
     pub external: Option<Balance>,
     pub fee_collector: Option<Balance>,
+    pub spendings: Option<Balance>,
+    pub earnings: Option<Balance>,
 }
 
 #[derive(CandidType, Clone, Debug, Default, Deserialize, PartialEq)]
 pub struct Balances {
     pub timestamp_ns: u64,
-    pub asset_to_balances: Option<BTreeMap<Asset, BalancesForAsset>>,
+    pub asset_to_balances: Option<BTreeMap<Asset, BalanceBook>>,
 }
 
 pub type TreasuryManagerResult = Result<Balances, Vec<TransactionError>>;

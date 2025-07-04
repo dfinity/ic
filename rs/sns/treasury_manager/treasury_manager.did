@@ -1,10 +1,69 @@
-type Result = variant {
-  // Represents current balances of all parties known to the Treasury Manager from its perspective.
-  // Refer to `BalanceForAsset` for a concrete list of parties.
-  Ok : Balances;
+// NOTE TO POTENTIAL CLIENTS
+// =========================
+// This API is a draft, it may change in the next few weeks. Please stay tuned, and await the final
+// version before implementing your canister code or tooling that relies on this API. Thank you for
+// your interest!
 
+// Part A. Canister arguments
+// ==========================
+
+type TreasuryManagerArg = variant {
+  Upgrade : record {};
+  Init : TreasuryManagerInit;
+};
+
+type TreasuryManagerInit = record {
+  allowances : vec Allowance;
+};
+
+// This might be different from, e.g., ICRC-2 allowances; it's just a way to specify how much
+// assets are expected to be available for the manager. Whether to use ICRC-1, ICRC-2, or something
+// else is an implementation detail.
+type Allowance = record {
+  asset : Asset;
+  amount_decimals : nat;
+
+  // Needed to refund excess assets that cannot be managed at this time.
+  owner_account : Account;
+};
+
+type Asset = variant {
+  Token : record {
+    ledger_fee_decimals : nat;
+    ledger_canister_id : principal;
+    symbol : text;
+  };
+};
+
+type Account = record {
+  owner : principal;
+  subaccount : opt blob;
+};
+
+// Part B. Update function requests
+// ================================
+
+type DepositRequest = record {
+  allowances : vec Allowance;
+};
+
+type WithdrawRequest = record {
+  // Maps Ledger canister IDs of assets to be withdrawn to the respective withdraw accounts.
+  //
+  // If not set, accounts specified at the time of deposit will be used for the withdrawal.
+  withdraw_accounts : opt vec record { principal; Account };
+};
+
+// Part C. Result of a Treasury Manager's operations
+// =================================================
+
+type Result = variant {
   // Represents all errors potentially observed during a composite operation.
   Err : vec TransactionError;
+
+  // Represents current balances of all parties known to the Treasury Manager from its perspective.
+  // Refer to the comment above `service : (TreasuryManagerArg)` for more details.
+  Ok : Balances;
 };
 
 type TransactionError = variant {
@@ -48,44 +107,28 @@ type TransactionError = variant {
  };
 };
 
-type BalanceForAsset = record {
+type Balances = record {
+  timestamp_ns : nat64;
+  asset_to_balances : opt vec record { Asset; BalanceBook };
+};
+
+type BalanceBook = record {
   treasury_owner : opt Balance;
   treasury_manager : opt Balance;
   external : opt Balance;
   fee_collector : opt Balance;
-};
-
-type Balances = record {
-  timestamp_ns : nat64;
-  asset_to_balances : opt vec record { Asset; BalanceForAsset };
+  spendings : opt Balance;
+  earnings : opt Balance;
 };
 
 type Balance = record {
   amount_decimals : nat;
   account : opt Account;
+  name : opt text;
 };
 
-type Account = record {
-  owner : principal;
-  subaccount : opt blob;
-};
-
-// This might be different from, e.g., ICRC-2 allowances; it's just a way to specify how much
-// assets are expected to be available for the manager. Whether to use ICRC-1, ICRC-2, or something
-// else is an implementation detail.
-type Allowance = record {
-  asset : Asset;
-  amount_decimals : nat;
-  owner_account : Account;
-};
-
-type Asset = variant {
-  Token : record {
-    ledger_fee_decimals : nat;
-    ledger_canister_id : principal;
-    symbol : text;
-  };
-};
+// Part D. Audit trail
+// ===================
 
 type AuditTrail = record {
   transactions : vec Transaction;
@@ -101,6 +144,30 @@ type Transaction = record {
   purpose : text;
   canister_id : principal;
   treasury_manager_operation : TreasuryManagerOperation;
+};
+
+type TransactionResult = variant {
+  Ok : TransactionWitness;
+  Err : TransactionError;
+};
+
+// Most of the time, this just points to the Ledger block index. But for generality, once can
+// also use this structure for representing witnesses of non-ledger transactions, e.g., from adding
+// a token to a DEX for the first time.
+type TransactionWitness = variant {
+  // For financial audits.
+  Ledger : vec Transfer;
+
+  // For low-level debugging.
+  NonLedger : text;
+};
+
+type Transfer = record {
+  block_index : nat;
+  amount_decimals : nat;
+  ledger_canister_id : text;
+  sender : opt Account;
+  receiver : opt Account;
 };
 
 // Example use case in the audit trail:
@@ -133,11 +200,6 @@ type TreasuryManagerOperation = record {
   step : Step;
 };
 
-type Step = record {
-  index : nat64;
-  is_final : bool;
-};
-
 type Operation = variant {
   Withdraw;
   Deposit;
@@ -145,60 +207,36 @@ type Operation = variant {
   Balances;
 };
 
-type TransactionResult = variant {
-  Ok : TransactionWitness;
-  Err : TransactionError;
+type Step = record {
+  index : nat64;
+  is_final : bool;
 };
 
-// Most of the time, this just points to the Ledger block index. But for generality, once can
-// also use this structure for representing witnesses of non-ledger transactions, e.g., from adding
-// a token to a DEX for the first time.
-type TransactionWitness = variant {
-  // For financial audits.
-  Ledger : vec Transfer;
-
-  // For low-level debugging.
-  NonLedger : text;
-};
-
-type Transfer = record {
-  block_index : nat;
-  amount_decimals : nat;
-  ledger_canister_id : text;
-  sender : opt Account;
-  receiver : opt Account;
-};
-
-type DepositRequest = record {
-  allowances : vec Allowance;
-};
-
-type TreasuryManagerInit = record {
-  allowances : vec Allowance;
-};
-
-type TreasuryManagerArg = variant {
-  Upgrade : record {};
-  Init : TreasuryManagerInit;
-};
-
-type WithdrawRequest = record {
-  withdraw_accounts : opt vec record { principal; Account };
-};
-
+// Parties involved in the treasury asset management process:
+// 1. treasury_owner   - e.g., the SNS Governance canister.
+// 2. treasury_manager - this canister.
+// 3. external         - e.g., the DEX in which assets are held temporarily.
+// 4. fee_collector    - takes into account all the fees incurred due to treasury_manager's work.
+// 5. spendings        - e.g., developer salary payments.
+// 6. earnings         - e.g., liquidity provider rewards.
+//
 // Expects flow of assets:
 //
-// I. Deposit
-//
-// treasury_owner --> TreasuryManager --> External (DEX)
-//              \                   \
-//                -----> FeeCollector   -----> FeeCollector
+// I. Initialization / Deposit
+// ===========================
+//                                      ,--------------> spendings
+//                                     /
+// treasury_owner ---> treasury_manager ---> external
+//              \                      \             \
+//               `----------------------`-------------`--------> fee_collector
 //
 // II. Withdrawal
-//
-// External --> TreasuryManager --> TreasuryOwner
-//         \                   \
-//           -----> FeeCollector    -----> FeeCollector
+// ==============
+// earnings --->.
+//               \
+//  external ---> treasury_manager ---> treasury_owner
+//          \                     \
+//           `---------------------`---------------------------> fee_collector
 service : (TreasuryManagerArg) -> {
   deposit : (DepositRequest) -> (Result);
   withdraw : (WithdrawRequest) -> (Result);
