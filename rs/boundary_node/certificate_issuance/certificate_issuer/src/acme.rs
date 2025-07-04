@@ -203,11 +203,11 @@ fn get_dns_challenge(authorizations: Vec<Authorization>) -> Result<Challenge, Er
 }
 
 async fn poll_order(order: &mut instant_acme::Order, expect: OrderStatus) -> anyhow::Result<u32> {
-    // Set a bit shorter than canister retry_delay (which is currently IN_PROGRESS_TTL = 10 mins)
+    // Uses a duration slightly shorter than the canister's retry_delay (current IN_PROGRESS_TTL = 10 minutes)
     let timeout = Duration::from_secs(500);
-    let max_poll_interval = Duration::from_secs(40);
-    // initial polling interval, then doubled: 2 -> 4 -> 8 -> ... -> up to max_poll_interval
-    let mut poll_interval = Duration::from_secs(2);
+    let max_poll_interval = Duration::from_secs(10);
+    // initial polling interval, then doubled: 1 -> 2 -> 4 -> ... -> up to max_poll_interval
+    let mut poll_interval = Duration::from_secs(1);
     let start_time = Instant::now();
     let mut attempt = 1;
 
@@ -240,7 +240,7 @@ async fn poll_order(order: &mut instant_acme::Order, expect: OrderStatus) -> any
             }
         }
         sleep(poll_interval).await;
-        poll_interval = min(2 * poll_interval, max_poll_interval);
+        poll_interval = max_poll_interval.min(2 * poll_interval);
         attempt += 1;
     }
 }
