@@ -1,11 +1,15 @@
 //! The module is responsible for awaiting messages from bitcoin peers and dispaching them
 //! to the correct component.
 use crate::{
-    blockchainmanager::BlockchainManager, common::DEFAULT_CHANNEL_BUFFER_SIZE, config::Config,
-    connectionmanager::ConnectionManager, metrics::RouterMetrics, stream::handle_stream,
-    transaction_store::TransactionStore, AdapterState, BlockchainManagerRequest, BlockchainState,
-    Channel, ProcessBitcoinNetworkMessage, ProcessBitcoinNetworkMessageError, ProcessEvent,
-    TransactionManagerRequest,
+    blockchainmanager::BlockchainManager,
+    common::{BlockLike, DEFAULT_CHANNEL_BUFFER_SIZE},
+    config::Config,
+    connectionmanager::ConnectionManager,
+    metrics::RouterMetrics,
+    stream::handle_stream,
+    transaction_store::TransactionStore,
+    AdapterState, BlockchainManagerRequest, BlockchainState, Channel, ProcessBitcoinNetworkMessage,
+    ProcessBitcoinNetworkMessageError, ProcessEvent, TransactionManagerRequest,
 };
 use bitcoin::p2p::message::NetworkMessage;
 use ic_logger::ReplicaLogger;
@@ -23,7 +27,7 @@ use tokio::{
 /// Having a design where we have a separate task that awaits on messages from the
 /// ConnectionManager, we keep the ConnectionManager free of dependencies like the
 /// TransactionStore or the BlockchainManager.
-pub fn start_main_event_loop(
+pub fn start_main_event_loop<Block: BlockLike + Send + Clone + 'static>(
     config: &Config,
     logger: ReplicaLogger,
     blockchain_state: Arc<Mutex<BlockchainState>>,
@@ -33,7 +37,7 @@ pub fn start_main_event_loop(
     metrics_registry: &MetricsRegistry,
 ) {
     let (network_message_sender, mut network_message_receiver) =
-        channel::<(SocketAddr, NetworkMessage)>(DEFAULT_CHANNEL_BUFFER_SIZE);
+        channel::<(SocketAddr, NetworkMessage<Block>)>(DEFAULT_CHANNEL_BUFFER_SIZE);
 
     let router_metrics = RouterMetrics::new(metrics_registry);
 
