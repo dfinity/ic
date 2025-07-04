@@ -1,4 +1,4 @@
-use candid::Encode;
+use candid::{Decode, Encode};
 use cycles_minting_canister::CyclesCanisterInitPayload;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_crypto_sha2::Sha256;
@@ -27,6 +27,9 @@ use ic_nns_test_utils::{
     },
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_or_panic;
+use ic_node_rewards_canister_api::monthly_rewards::{
+    GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
+};
 use ic_protobuf::registry::subnet::v1::SubnetListRecord;
 use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
 use ic_state_machine_tests::StateMachine;
@@ -361,15 +364,21 @@ fn test_upgrade_canisters_with_golden_nns_state() {
     perform_sequence_of_upgrades(&nns_canister_upgrade_sequence);
 
     let result = state_machine
-        .execute_ingress(
+        .execute_ingress_as(
+            GOVERNANCE_CANISTER_ID.get(),
             NODE_REWARDS_CANISTER_ID,
-            "get_registry_value",
-            Encode!(&make_subnet_list_record_key()).unwrap(),
+            "get_node_providers_monthly_xdr_rewards",
+            Encode!(&GetNodeProvidersMonthlyXdrRewardsRequest {
+                registry_version: None
+            })
+            .unwrap(),
         )
         .unwrap();
 
     let expected = match result {
-        WasmResult::Reply(result) => SubnetListRecord::decode(result.as_slice()).unwrap(),
+        WasmResult::Reply(result) => {
+            Decode!(&result, GetNodeProvidersMonthlyXdrRewardsResponse).unwrap()
+        }
         WasmResult::Reject(s) => panic!("Call to get_registry_value failed: {:#?}", s),
     };
 
@@ -385,15 +394,21 @@ fn test_upgrade_canisters_with_golden_nns_state() {
     check_canisters_are_all_protocol_canisters(&state_machine);
 
     let result = state_machine
-        .execute_ingress(
+        .execute_ingress_as(
+            GOVERNANCE_CANISTER_ID.get(),
             NODE_REWARDS_CANISTER_ID,
-            "get_registry_value",
-            Encode!(&make_subnet_list_record_key()).unwrap(),
+            "get_node_providers_monthly_xdr_rewards",
+            Encode!(&GetNodeProvidersMonthlyXdrRewardsRequest {
+                registry_version: None
+            })
+            .unwrap(),
         )
         .unwrap();
 
     let got = match result {
-        WasmResult::Reply(result) => SubnetListRecord::decode(result.as_slice()).unwrap(),
+        WasmResult::Reply(result) => {
+            Decode!(&result, GetNodeProvidersMonthlyXdrRewardsResponse).unwrap()
+        }
         WasmResult::Reject(s) => panic!("Call to get_registry_value failed: {:#?}", s),
     };
 
