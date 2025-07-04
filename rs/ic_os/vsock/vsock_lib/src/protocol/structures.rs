@@ -50,6 +50,8 @@ pub enum Command {
     Notify(NotifyData),
     GetVsockProtocol,
     GetHostOSVersion,
+    #[serde(rename = "start-upgrade-guest-vm")]
+    StartUpgradeGuestVM,
 }
 
 impl fmt::Display for Command {
@@ -69,6 +71,7 @@ impl fmt::Display for Command {
             ),
             Command::GetVsockProtocol => write!(f, "Command: Get Vsock Protocol"),
             Command::GetHostOSVersion => write!(f, "Command: Get HostOS Version"),
+            Command::StartUpgradeGuestVM => write!(f, "Command: Start Upgrade Guest VM"),
         }
     }
 }
