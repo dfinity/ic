@@ -54,16 +54,21 @@ impl Partition for ExtPartition {
         let backing_dir = tempdir()?;
         let output_path = backing_dir.path().join(STORE_NAME);
 
-        let mut input = std::fs::File::open(&image)?;
-        let mut output = std::fs::File::create(output_path)?;
-
-        // We use blocking IO here because tokio's copy is several times slower than std::io::copy.
-        tokio::task::spawn_blocking(move || {
-            input.seek(SeekFrom::Start(offset_bytes))?;
-            std::io::copy(&mut input.take(length_bytes), &mut output)?;
-            Ok::<(), anyhow::Error>(())
-        })
-        .await??;
+        // Use dd command to copy the specific range, with sparse file support
+        ensure!(Command::new("dd")
+            .args([
+                &format!("if={}", image.display()),
+                &format!("of={}", output_path.display()),
+                "bs=4M",
+                &format!("skip={}", offset_bytes),
+                &format!("count={}", length_bytes),
+                "conv=sparse",
+                "iflag=skip_bytes,count_bytes"
+            ])
+            .status()
+            .await
+            .context("failed to run dd command")?
+            .success());
 
         Ok(ExtPartition {
             offset_bytes: Some(offset_bytes), // No partition index when using explicit range

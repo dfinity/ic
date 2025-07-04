@@ -461,9 +461,38 @@ mod tests {
     use regex::Regex;
     use std::fs::File;
     use std::path::PathBuf;
+    use std::sync::LazyLock;
     use tempfile::TempDir;
+    use tokio::io::AsyncWriteExt;
     use tokio::task::JoinHandle;
     use virt::sys::VIR_DOMAIN_RUNNING_BOOTED;
+
+    static GUESTOS_IMAGE: LazyLock<NamedTempFile> = LazyLock::new(|| {
+        let icos_image_path =
+            std::env::var("ICOS_IMAGE").expect("Could not find ICOS_IMAGE environment variable");
+        let tempdir = TempDir::new().expect("Failed to create temp dir");
+
+        assert!(
+            std::process::Command::new("tar")
+                .args([
+                    "-xa",
+                    "-f",
+                    &icos_image_path,
+                    "-C",
+                    tempdir.path().to_str().unwrap(),
+                    "disk.img"
+                ])
+                .status()
+                .expect("Could not run tar command")
+                .success(),
+            "Tar returned error"
+        );
+
+        let mut guestos_device = NamedTempFile::new().unwrap();
+        std::fs::rename(tempdir.path().join("disk.img"), guestos_device.path()).unwrap();
+
+        guestos_device
+    });
 
     /// A running service and methods to interact with it from the test code.
     struct TestServiceInstance {
@@ -583,7 +612,7 @@ mod tests {
     struct TestFixture {
         libvirt_connection: Connect,
         hostos_config: HostOSConfig,
-        guestos_device: NamedTempFile,
+        guestos_device: PathBuf,
         mock_mounter: ExtractingFilesystemMounter,
         /// Fake libvirt host definition that backs `libvirt_connection`.
         _libvirt_definition: NamedTempFile,
@@ -591,8 +620,6 @@ mod tests {
 
     impl TestFixture {
         fn new(hostos_config: HostOSConfig) -> TestFixture {
-            let guestos_device = extract_guestos_image();
-
             let libvirt_definition =
                 NamedTempFile::new().expect("Failed to create libvirt connection");
             std::fs::write(&libvirt_definition, "<node/>").unwrap();
@@ -606,7 +633,7 @@ mod tests {
             TestFixture {
                 libvirt_connection,
                 hostos_config,
-                guestos_device,
+                guestos_device: GUESTOS_IMAGE.path().to_path_buf(),
                 mock_mounter: ExtractingFilesystemMounter::new(),
                 _libvirt_definition: libvirt_definition,
             }
@@ -628,7 +655,7 @@ mod tests {
                 console_tty: Box::new(File::create(console_file.path()).unwrap()),
                 partition_provider: Box::new(
                     GptPartitionProvider::with_mounter(
-                        self.guestos_device.path().to_path_buf(),
+                        self.guestos_device.clone(),
                         Box::new(self.mock_mounter.clone()),
                     )
                     .unwrap(),
@@ -688,29 +715,6 @@ mod tests {
         let mut hostos_config = valid_hostos_config();
         hostos_config.hostos_settings.vm_memory = 0;
         hostos_config
-    }
-
-    fn extract_guestos_image() -> NamedTempFile {
-        let guestos_image_dir = TempDir::new().unwrap();
-        let icos_image_path =
-            std::env::var("ICOS_IMAGE").expect("Could not find ICOS_IMAGE environment variable");
-        assert!(
-            std::process::Command::new("tar")
-                .args(["-xaf", &icos_image_path, "-C"])
-                .arg(guestos_image_dir.path())
-                .status()
-                .unwrap()
-                .success(),
-            "Could not untar image"
-        );
-
-        let guestos_device = NamedTempFile::new().unwrap();
-        std::fs::rename(
-            guestos_image_dir.path().join("disk.img"),
-            guestos_device.path(),
-        )
-        .expect("Could not open guestos device");
-        guestos_device
     }
 
     #[tokio::test]
