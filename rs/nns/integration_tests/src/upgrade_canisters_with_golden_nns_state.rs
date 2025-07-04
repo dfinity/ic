@@ -370,7 +370,7 @@ fn test_upgrade_canisters_with_golden_nns_state() {
             NODE_REWARDS_CANISTER_ID,
             "get_node_providers_monthly_xdr_rewards",
             Encode!(&GetNodeProvidersMonthlyXdrRewardsRequest {
-                registry_version: Some(51709)
+                registry_version: Some(51706)
             })
             .unwrap(),
         )
@@ -402,7 +402,7 @@ fn test_upgrade_canisters_with_golden_nns_state() {
             NODE_REWARDS_CANISTER_ID,
             "get_node_providers_monthly_xdr_rewards",
             Encode!(&GetNodeProvidersMonthlyXdrRewardsRequest {
-                registry_version: Some(51709)
+                registry_version: Some(51706)
             })
             .unwrap(),
         )
@@ -415,7 +415,7 @@ fn test_upgrade_canisters_with_golden_nns_state() {
         WasmResult::Reject(s) => panic!("Call to get_registry_value failed: {:#?}", s),
     };
 
-    assert_eq!(got, expected);
+    assert_eq!(expected, got);
 }
 
 fn perform_sanity_check_after_upgrade(
