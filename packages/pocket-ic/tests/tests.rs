@@ -2899,8 +2899,8 @@ fn test_invalid_specified_id() {
 }
 
 #[test]
-fn with_registry() {
-    let _pic = PocketIcBuilder::new().with_registry().build();
+fn with_system_canisters() {
+    let _pic = PocketIcBuilder::new().with_system_canisters().build();
 }
 
 fn get_subnet_from_registry(pic: &PocketIc, canister_id: Principal) -> Principal {
@@ -2934,7 +2934,7 @@ fn read_registry() {
     let state = PocketIcState::new();
     let pic = PocketIcBuilder::new()
         .with_application_subnet()
-        .with_registry()
+        .with_system_canisters()
         .with_state(state)
         .build();
 
@@ -2991,7 +2991,7 @@ fn read_registry() {
 #[should_panic(
     expected = "The NNS subnet must be empty when specifying the `registry` ICP feature."
 )]
-fn with_registry_and_nns_state() {
+fn with_system_canisters_and_nns_state() {
     let state_dir = TempDir::new().unwrap();
     #[cfg(not(windows))]
     let state_dir_path_buf = state_dir.path().to_path_buf();
@@ -3001,13 +3001,13 @@ fn with_registry_and_nns_state() {
         .into();
 
     let _pic = PocketIcBuilder::new()
-        .with_registry()
+        .with_system_canisters()
         .with_nns_state(state_dir_path_buf)
         .build();
 }
 
 #[tokio::test]
-async fn with_registry_and_nns_subnet_state() {
+async fn with_system_canisters_and_nns_subnet_state() {
     let state_dir = TempDir::new().unwrap();
     #[cfg(not(windows))]
     let state_dir_path_buf = state_dir.path().to_path_buf();

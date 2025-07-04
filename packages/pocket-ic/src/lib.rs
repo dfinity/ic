@@ -407,8 +407,8 @@ impl PocketIcBuilder {
         self
     }
 
-    pub fn with_registry(mut self) -> Self {
-        self.icp_features.registry = true;
+    pub fn with_system_canisters(mut self) -> Self {
+        self.icp_features = IcpFeatures { registry: true };
         self
     }
 }
