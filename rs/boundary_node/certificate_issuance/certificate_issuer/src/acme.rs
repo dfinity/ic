@@ -226,7 +226,7 @@ async fn poll_order(order: &mut instant_acme::Order, expect: OrderStatus) -> any
 
                 if start_time.elapsed() >= timeout {
                     return Err(anyhow!(
-                        "Order status polling timed out on attempt {attempt}: {:?}",
+                        "Order status polling timed out on attempt {attempt}, last status '{:?}'",
                         v.status
                     ));
                 }
