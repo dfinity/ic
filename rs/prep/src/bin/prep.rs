@@ -227,6 +227,7 @@ fn main() -> Result<()> {
         Some(root_subnet_idx),
         valid_args.release_package_download_url,
         valid_args.release_package_sha256_hex,
+        /*guest_launch_measurements = */ None,
         valid_args.provisional_whitelist,
         valid_args.initial_node_operator,
         valid_args.initial_node_provider,

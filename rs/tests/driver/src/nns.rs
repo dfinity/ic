@@ -32,6 +32,7 @@ use ic_nns_test_utils::governance::{
     submit_external_update_proposal_allowing_error, wait_for_final_state,
 };
 use ic_prep_lib::subnet_configuration::{self, duration_to_millis};
+use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
 use ic_protobuf::registry::subnet::v1::SubnetListRecord;
 use ic_registry_client_helpers::deserialize_registry_value;
 use ic_registry_keys::make_subnet_list_record_key;
@@ -489,6 +490,7 @@ pub async fn submit_update_elected_replica_versions_proposal(
     version: Option<ReplicaVersion>,
     sha256: Option<String>,
     upgrade_urls: Vec<String>,
+    guest_launch_measurements: GuestLaunchMeasurements,
     versions_to_unelect: Vec<String>,
 ) -> ProposalId {
     submit_external_update_proposal_allowing_error(
@@ -501,7 +503,7 @@ pub async fn submit_update_elected_replica_versions_proposal(
             release_package_sha256_hex: sha256.clone(),
             release_package_urls: upgrade_urls,
             replica_versions_to_unelect: versions_to_unelect.clone(),
-            guest_launch_measurement_sha256_hex: None,
+            guest_launch_measurements: Some(guest_launch_measurements),
         },
         match (version, sha256, versions_to_unelect.is_empty()) {
             (Some(v), Some(sha), _) => format!(

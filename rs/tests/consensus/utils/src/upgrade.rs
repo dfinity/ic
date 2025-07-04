@@ -1,9 +1,9 @@
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use ic_canister_client::Sender;
 use ic_http_utils::file_downloader::FileDownloader;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::NeuronId;
-use ic_protobuf::registry::replica_version::v1::BlessedReplicaVersions;
+use ic_protobuf::registry::replica_version::v1::{BlessedReplicaVersions, GuestLaunchMeasurements};
 use ic_registry_keys::make_blessed_replica_versions_key;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_system_test_driver::{
@@ -39,24 +39,58 @@ pub fn get_public_update_image_sha_url(git_revision: &str) -> String {
     )
 }
 
-pub async fn fetch_update_file_sha256_with_retry(log: &Logger, version_str: &str) -> String {
-    ic_system_test_driver::retry_with_msg_async!(
+pub fn get_public_update_image_guest_launch_measurements(git_revision: &str) -> String {
+    format!(
+        "http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/update-img/launch-measurements.json",
+        git_revision
+    )
+}
+
+/// Returns (SHA256, GuestLaunchMeasurements) of the update package with the given version string.
+pub async fn fetch_update_metadata_with_retry(
+    log: &Logger,
+    version_str: &str,
+) -> (String, GuestLaunchMeasurements) {
+    let sha256 = retry_async(
         format!("fetch update file sha256 of version {}", version_str),
         log,
         READY_WAIT_TIMEOUT,
         RETRY_BACKOFF,
         || async {
-            match fetch_update_file_sha256(version_str).await {
-                Err(err) => bail!(err),
-                Ok(sha) => Ok(sha),
-            }
-        }
-    )
-    .await
-    .expect("Failed to fetch sha256 file.")
+            fetch_update_file_sha256(version_str)
+                .await
+                .context("Failed to fetch update file sha256")
+        },
+    );
+
+    let guest_launch_measurements = retry_async(
+        format!(
+            "fetch guest launch measurements file of version {}",
+            version_str
+        ),
+        log,
+        READY_WAIT_TIMEOUT,
+        RETRY_BACKOFF,
+        || async {
+            let tmpfile = tempfile::NamedTempFile::new()?;
+            FileDownloader::new(None)
+                .download_file(
+                    &get_public_update_image_guest_launch_measurements(version_str),
+                    tmpfile.path(),
+                    None,
+                )
+                .await?;
+            serde_json::from_slice::<GuestLaunchMeasurements>(
+                &tokio::fs::read(tmpfile.path()).await?,
+            )
+            .context("Could not deserialize guest launch measurements")
+        },
+    );
+
+    futures::try_join!(sha256, guest_launch_measurements).expect("Failed to fetch update metadata")
 }
 
-pub async fn fetch_update_file_sha256(version_str: &str) -> Result<String, String> {
+pub async fn fetch_update_file_sha256(version_str: &str) -> Result<String> {
     let sha_url = get_public_update_image_sha_url(version_str);
     let tmp_dir = tempfile::tempdir().unwrap().keep();
     let mut tmp_file = tmp_dir.clone();
@@ -66,9 +100,8 @@ pub async fn fetch_update_file_sha256(version_str: &str) -> Result<String, Strin
     file_downloader
         .download_file(&sha_url, &tmp_file, None)
         .await
-        .map_err(|err| format!("Download of SHA256SUMS file failed: {:?}", err))?;
-    let contents = fs::read_to_string(tmp_file)
-        .map_err(|err| format!("Something went wrong reading the file: {:?}", err))?;
+        .context("Download of SHA256SUMS file failed")?;
+    let contents = fs::read_to_string(tmp_file).context("Something went wrong reading the file")?;
     for line in contents.lines() {
         let words: Vec<&str> = line.split(char::is_whitespace).collect();
         let suffix = "update-img.tar.zst";
@@ -77,7 +110,7 @@ pub async fn fetch_update_file_sha256(version_str: &str) -> Result<String, Strin
         }
     }
 
-    Err(format!("SHA256 hash is not found in {}", sha_url))
+    bail!("SHA256 hash is not found in {}", sha_url)
 }
 
 pub async fn get_blessed_replica_versions(
@@ -203,6 +236,7 @@ async fn bless_replica_version_with_sha(
     image_type: UpdateImageType,
     logger: &Logger,
     sha256: &String,
+    guest_launch_measurements: GuestLaunchMeasurements,
     upgrade_url: Vec<String>,
 ) {
     let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
@@ -237,6 +271,7 @@ async fn bless_replica_version_with_sha(
         Some(replica_version),
         Some(sha256.clone()),
         upgrade_url,
+        guest_launch_measurements,
         vec![],
     )
     .await;
@@ -252,6 +287,7 @@ pub async fn bless_replica_version(
     image_type: UpdateImageType,
     logger: &Logger,
     sha256: &String,
+    guest_launch_measurements: GuestLaunchMeasurements,
     upgrade_url: Vec<String>,
 ) {
     bless_replica_version_with_sha(
@@ -260,6 +296,7 @@ pub async fn bless_replica_version(
         image_type,
         logger,
         sha256,
+        guest_launch_measurements,
         upgrade_url,
     )
     .await;
@@ -273,7 +310,8 @@ pub async fn bless_public_replica_version(
     let upgrade_url = get_public_update_image_url(target_version);
     info!(logger, "Upgrade URL: {}", upgrade_url);
 
-    let sha256 = fetch_update_file_sha256_with_retry(logger, target_version).await;
+    let (sha256, guest_launch_measurements) =
+        fetch_update_metadata_with_retry(logger, target_version).await;
 
     bless_replica_version_with_sha(
         nns_node,
@@ -281,6 +319,7 @@ pub async fn bless_public_replica_version(
         UpdateImageType::Image,
         logger,
         &sha256,
+        guest_launch_measurements,
         vec![upgrade_url.clone()],
     )
     .await;
@@ -292,6 +331,7 @@ pub async fn bless_replica_version_with_urls(
     image_type: UpdateImageType,
     release_package_urls: Vec<String>,
     sha256: String,
+    guest_launch_measurements: GuestLaunchMeasurements,
     logger: &Logger,
 ) {
     let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
@@ -321,6 +361,7 @@ pub async fn bless_replica_version_with_urls(
         Some(replica_version),
         Some(sha256),
         release_package_urls,
+        guest_launch_measurements,
         vec![],
     )
     .await;

@@ -74,6 +74,7 @@ def image_deps(mode, malicious = False):
         "boot_args_template": Label("//ic-os/bootloader:guestos_boot_args.template"),
         # GuestOS requires dm-verity root partition signing
         "requires_root_signing": True,
+        "generate_launch_measurements": True,
     }
 
     dev_build_args = ["BUILD_TYPE=dev", "ROOT_PASSWORD=root"]

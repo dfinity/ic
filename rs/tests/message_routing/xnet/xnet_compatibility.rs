@@ -36,9 +36,9 @@ use ic_system_test_driver::driver::pot_dsl::{PotSetupFn, SysTestFn};
 use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    get_ic_os_update_img_test_sha256, get_ic_os_update_img_test_url, get_mainnet_nns_revision,
-    read_dependency_from_env_to_string, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-    IcNodeSnapshot,
+    get_ic_os_launch_measurements_test, get_ic_os_update_img_test_sha256,
+    get_ic_os_update_img_test_url, get_mainnet_nns_revision, read_dependency_from_env_to_string,
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{block_on, runtime_from_url, MetricsFetcher};
@@ -177,12 +177,14 @@ pub async fn test_async(env: TestEnv) {
 
     let sha256 = get_ic_os_update_img_test_sha256().unwrap();
     let upgrade_url = get_ic_os_update_img_test_url().unwrap();
+    let guest_launch_measurements = get_ic_os_launch_measurements_test().unwrap();
     bless_replica_version(
         &nns_node,
         &original_branch_version,
         UpdateImageType::ImageTest,
         &logger,
         &sha256,
+        guest_launch_measurements,
         vec![upgrade_url.to_string()],
     )
     .await;

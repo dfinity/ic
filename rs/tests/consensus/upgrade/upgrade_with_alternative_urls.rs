@@ -87,6 +87,7 @@ fn test(env: TestEnv) {
         UpdateImageType::ImageTest,
         release_package_urls,
         get_ic_os_update_img_test_sha256().expect("no SHA256 hash"),
+        get_ic_os_launch_measurements_test().expect("no launch measurements"),
         &logger,
     ));
 

@@ -1,3 +1,6 @@
+use crate::driver::test_env_api::{
+    get_ic_os_launch_measurements, get_malicious_ic_os_launch_measurements,
+};
 use crate::k8s::config::LOGS_URL;
 use crate::k8s::images::*;
 use crate::k8s::tnet::{TNet, TNode};
@@ -187,7 +190,7 @@ pub fn init_ic(
     }
 
     let whitelist = ProvisionalWhitelist::All;
-    let (ic_os_update_img_sha256, ic_os_update_img_url) = {
+    let (ic_os_update_img_sha256, ic_os_update_img_url, ic_os_launch_measurements) = {
         if ic.has_malicious_behaviours() {
             warn!(
                 logger,
@@ -196,14 +199,20 @@ pub fn init_ic(
             (
                 get_malicious_ic_os_update_img_sha256()?,
                 get_malicious_ic_os_update_img_url()?,
+                get_malicious_ic_os_launch_measurements()?,
             )
         } else if ic.with_mainnet_config {
             (
                 test_env.get_mainnet_ic_os_update_img_sha256()?,
                 get_mainnet_ic_os_update_img_url()?,
+                get_malicious_ic_os_launch_measurements()?,
             )
         } else {
-            (get_ic_os_update_img_sha256()?, get_ic_os_update_img_url()?)
+            (
+                get_ic_os_update_img_sha256()?,
+                get_ic_os_update_img_url()?,
+                get_ic_os_launch_measurements()?,
+            )
         }
     };
     let mut ic_config = IcConfig::new(
@@ -219,6 +228,7 @@ pub fn init_ic(
         Some(nns_subnet_idx.unwrap_or(0)),
         Some(ic_os_update_img_url),
         Some(ic_os_update_img_sha256),
+        Some(ic_os_launch_measurements),
         Some(whitelist),
         ic.node_operator,
         ic.node_provider,

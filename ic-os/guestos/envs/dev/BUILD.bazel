@@ -39,7 +39,10 @@ file_size_check(
 artifact_bundle(
     name = "bundle-disk",
     testonly = True,
-    inputs = [icos_images.disk_image],
+    inputs = [
+        icos_images.disk_image,
+        icos_images.launch_measurements,
+    ],
     prefix = "guest-os/disk-img-dev",
     visibility = ["//visibility:public"],
 )

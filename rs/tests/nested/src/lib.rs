@@ -342,6 +342,13 @@ pub fn upgrade_guestos(env: TestEnv) {
         let sha256 = get_ic_os_update_img_test_sha256().expect("no SHA256 hash");
         info!(logger, "Update image SHA256: {}", sha256);
 
+        let guest_launch_measurements =
+            get_ic_os_launch_measurements_test().expect("no launch measurements");
+        info!(
+            logger,
+            "Launch measurements: {:?}", guest_launch_measurements
+        );
+
         // check that GuestOS is on the expected version (initial version)
         let client = Client::builder()
             .danger_accept_invalid_certs(true)
@@ -377,6 +384,7 @@ pub fn upgrade_guestos(env: TestEnv) {
             new_replica_version.clone(),
             sha256,
             vec![upgrade_url],
+            guest_launch_measurements,
         )
         .await;
 

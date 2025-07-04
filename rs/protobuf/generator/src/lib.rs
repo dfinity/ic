@@ -222,6 +222,18 @@ fn build_registry_proto(def: &Path, out: &Path) {
         "#[derive(serde::Serialize, serde::Deserialize)]",
     );
     config.type_attribute(
+        ".registry.replica_version.v1.GuestLaunchMeasurement",
+        "#[derive(candid::CandidType, Eq)]",
+    );
+    config.type_attribute(
+        ".registry.replica_version.v1.GuestLaunchMeasurements",
+        "#[derive(candid::CandidType, Eq)]",
+    );
+    config.type_attribute(
+        ".registry.replica_version.v1.GuestLaunchMeasurementMetadata",
+        "#[derive(candid::CandidType, Eq)]",
+    );
+    config.type_attribute(
         ".registry.hostos_version",
         "#[derive(serde::Serialize, serde::Deserialize)]",
     );

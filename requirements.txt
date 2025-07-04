@@ -409,6 +409,7 @@ cryptography==45.0.4 \
     #   ansible-core
     #   paramiko
     #   pyjwt
+    #   sev-snp-measure
 cvss==3.4 \
     --hash=sha256:632353244ba3c58b53355466677edc968b9d7143c317b66271f9fd7939951ee8 \
     --hash=sha256:d9950613758e60820f7fac37ca5f35158712f8f2ea4f6629858a60c4984fe4ef
@@ -857,6 +858,10 @@ resolvelib==1.0.1 \
     --hash=sha256:04ce76cbd63fded2078ce224785da6ecd42b9564b1390793f64ddecbe997b309 \
     --hash=sha256:d2da45d1a8dfee81bdd591647783e340ef3bcb104b54c383f70d422ef5cc7dbf
     # via ansible-core
+sev-snp-measure==0.0.11 \
+    --hash=sha256:1f1953b94cce43b08041aa7b0e804998f6d89a3d648395b40c447ecd470b1d54 \
+    --hash=sha256:579abfc6e9359b6bff4755a99d0704c3d2e2fd8fec16882d533192c1d5943c35
+    # via -r requirements.in
 simple-parsing==0.1.7 \
     --hash=sha256:225e6b35252d68f7894716101fe3bd7e6dd3d30ab7b1c3c023f77a42dbe1336f \
     --hash=sha256:5276e6c90c157362dd0173d1eecebe58361a66b457129cc9bba13b78a4e85092

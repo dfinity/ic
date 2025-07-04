@@ -51,12 +51,14 @@ pub fn bless_branch_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> String 
     // Bless branch version
     let sha256 = get_ic_os_update_img_test_sha256().unwrap();
     let upgrade_url = get_ic_os_update_img_test_url().unwrap();
+    let guest_launch_measurements = get_ic_os_launch_measurements_test().unwrap();
     block_on(bless_replica_version(
         nns_node,
         &original_branch_version,
         UpdateImageType::ImageTest,
         &logger,
         &sha256,
+        guest_launch_measurements,
         vec![upgrade_url.to_string()],
     ));
     info!(&logger, "Blessed branch version");
@@ -71,12 +73,14 @@ pub fn bless_mainnet_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> String
     // Bless mainnet version
     let sha256 = env.get_mainnet_ic_os_update_img_sha256().unwrap();
     let upgrade_url = get_mainnet_ic_os_update_img_url().unwrap();
+    let guest_launch_measurements = get_ic_os_launch_measurements().unwrap();
     block_on(bless_replica_version(
         nns_node,
         &mainnet_version,
         UpdateImageType::Image,
         &logger,
         &sha256,
+        guest_launch_measurements,
         vec![upgrade_url.to_string()],
     ));
     info!(&logger, "Blessed mainnet version");

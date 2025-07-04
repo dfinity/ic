@@ -37,6 +37,7 @@ use regex::Regex;
 use reqwest::Client;
 use std::net::Ipv6Addr;
 
+use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
 use slog::info;
 
 /// Use an SSH channel to check the version on the running HostOS.
@@ -66,6 +67,7 @@ pub(crate) async fn elect_guestos_version(
     target_version: ReplicaVersion,
     sha256: String,
     upgrade_urls: Vec<String>,
+    guest_launch_measurements: GuestLaunchMeasurements,
 ) {
     let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     let governance_canister = get_governance_canister(&nns);
@@ -79,6 +81,7 @@ pub(crate) async fn elect_guestos_version(
         Some(target_version),
         Some(sha256),
         upgrade_urls,
+        guest_launch_measurements,
         vec![],
     )
     .await;

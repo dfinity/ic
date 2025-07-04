@@ -271,7 +271,7 @@ mod tests {
                 ReplicaVersionRecord {
                     release_package_sha256_hex: "".into(),
                     release_package_urls: vec![],
-                    guest_launch_measurement_sha256_hex: None,
+                    guest_launch_measurements: None,
                 }
                 .encode_to_vec(),
             ),
@@ -336,7 +336,7 @@ mod tests {
                 ReplicaVersionRecord {
                     release_package_sha256_hex: "".into(),
                     release_package_urls: vec![],
-                    guest_launch_measurement_sha256_hex: None,
+                    guest_launch_measurements: None,
                 }
                 .encode_to_vec(),
             ),
@@ -392,7 +392,7 @@ mod tests {
                 ReplicaVersionRecord {
                     release_package_sha256_hex: "".into(),
                     release_package_urls: vec![],
-                    guest_launch_measurement_sha256_hex: None,
+                    guest_launch_measurements: None,
                 }
                 .encode_to_vec(),
             ),
@@ -445,7 +445,7 @@ mod tests {
                 ReplicaVersionRecord {
                     release_package_sha256_hex: "".into(),
                     release_package_urls: vec![],
-                    guest_launch_measurement_sha256_hex: None,
+                    guest_launch_measurements: None,
                 }
                 .encode_to_vec(),
             ),
@@ -508,7 +508,7 @@ mod tests {
                 ReplicaVersionRecord {
                     release_package_sha256_hex: "".into(),
                     release_package_urls: vec![],
-                    guest_launch_measurement_sha256_hex: None,
+                    guest_launch_measurements: None,
                 }
                 .encode_to_vec(),
             ),
