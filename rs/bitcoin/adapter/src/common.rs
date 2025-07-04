@@ -31,7 +31,7 @@ pub type BlockHeight = u32;
 ///
 /// The parsing from string on the other hand favors Bitcoin network in order
 /// to maintain backward compatibility. It is only when a string fails to parse
-/// as a Bitcoin network, it will try to parse as a Dogecoin network (with prefix "dogcoin:").
+/// as a bitcoin network, it will try to parse as a Dogecoin network (with prefix "dogecoin:").
 ///
 /// # Examples:
 ///
