@@ -26,6 +26,7 @@ use reqwest::header::CONTENT_LENGTH;
 use reqwest::{Method, StatusCode};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
+use std::collections::BTreeMap;
 #[cfg(windows)]
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::{io::Read, sync::OnceLock, time::SystemTime};
@@ -2817,6 +2818,31 @@ fn with_empty_subnet_state() {
         .build();
 }
 
+fn create_mainnet_subnet(pic: &PocketIc, i: u64) {
+    // We derive a "specified" canister ID that exists on the IC mainnet,
+    // but belongs to the canister ranges of no subnet on the PocketIC instance.
+    // That "specified" canister ID has the form: <i> 00000 01 01,
+    // i.e., it is the first canister ID on the <i>-th subnet.
+    let mut slice = [0_u8; 10];
+    slice[..8].copy_from_slice(&(i << 20).to_be_bytes());
+    slice[8] = 0x01;
+    slice[9] = 0x01;
+    let specified_id = Principal::from_slice(&slice);
+    assert!(pic.get_subnet(specified_id).is_none());
+
+    let num_subnets = pic.topology().subnet_configs.len();
+
+    // We create a canister with that specified canister ID: this should succeed
+    // and a new subnet should be created.
+    let canister_id = pic
+        .create_canister_with_id(None, None, specified_id)
+        .unwrap();
+    assert_eq!(canister_id, specified_id);
+    pic.get_subnet(specified_id).unwrap();
+
+    assert_eq!(pic.topology().subnet_configs.len(), num_subnets + 1);
+}
+
 #[test]
 fn registry_after_instance_restart() {
     // Create a PocketIC instance with NNS, SNS, II, fiduciary, bitcoin,
@@ -2837,30 +2863,9 @@ fn registry_after_instance_restart() {
     }
     let pic = builder.with_state(state).build();
 
-    let create_subnet = |pic: &PocketIc, i: u64| {
-        // We derive a "specified" canister ID that exists on the IC mainnet,
-        // but belongs to the canister ranges of no subnet on the PocketIC instance.
-        // That "specified" canister ID has the form: <i> 00000 01 01,
-        // i.e., it is the first canister ID on the <i>-th subnet.
-        let mut slice = [0_u8; 10];
-        slice[..8].copy_from_slice(&(i << 20).to_be_bytes());
-        slice[8] = 0x01;
-        slice[9] = 0x01;
-        let specified_id = Principal::from_slice(&slice);
-        assert!(pic.get_subnet(specified_id).is_none());
-
-        // We create a canister with that specified canister ID: this should succeed
-        // and a new subnet should be created.
-        let canister_id = pic
-            .create_canister_with_id(None, None, specified_id)
-            .unwrap();
-        assert_eq!(canister_id, specified_id);
-        pic.get_subnet(specified_id).unwrap();
-    };
-
     // Create 10 more application subnets dynamically after the instance has already been created.
     for i in 1..=10_u64 {
-        create_subnet(&pic, i);
+        create_mainnet_subnet(&pic, i);
     }
 
     // Restart the instance (failures to restore the registry
@@ -2870,7 +2875,7 @@ fn registry_after_instance_restart() {
 
     // Create 10 more application subnets dynamically after the instance has already been restarted.
     for i in 11..=20_u64 {
-        create_subnet(&pic, i);
+        create_mainnet_subnet(&pic, i);
     }
 
     // Restart the instance (failures to restore the registry
@@ -2901,6 +2906,104 @@ fn test_invalid_specified_id() {
 #[test]
 fn with_all_icp_features() {
     let _pic = PocketIcBuilder::new().with_all_icp_features().build();
+}
+
+fn get_authorized_subnets(pic: &PocketIc) -> Vec<Principal> {
+    let cmc_id = Principal::from_text("rkp4c-7iaaa-aaaaa-aaaca-cai").unwrap();
+    update_candid::<_, (Vec<Principal>,)>(pic, cmc_id, "get_default_subnets", ())
+        .unwrap()
+        .0
+}
+
+fn get_subnet_types(pic: &PocketIc) -> BTreeMap<String, Vec<Principal>> {
+    #[derive(CandidType, Deserialize)]
+    pub struct SubnetTypesToSubnetsResponse {
+        pub data: BTreeMap<String, Vec<Principal>>,
+    }
+
+    let cmc_id = Principal::from_text("rkp4c-7iaaa-aaaaa-aaaca-cai").unwrap();
+    update_candid::<_, (SubnetTypesToSubnetsResponse,)>(
+        pic,
+        cmc_id,
+        "get_subnet_types_to_subnets",
+        (),
+    )
+    .unwrap()
+    .0
+    .data
+}
+
+fn check_cmc_state(pic: &PocketIc, expect_fiduciary: bool) {
+    // check authorized (application) subnets
+    let mut authorized_subnets = get_authorized_subnets(pic);
+    authorized_subnets.sort();
+    let mut app_subnets = pic.topology().get_app_subnets();
+    app_subnets.sort();
+    assert_eq!(authorized_subnets, app_subnets);
+
+    // check fiduciary subnet
+    assert_eq!(pic.topology().get_fiduciary().is_some(), expect_fiduciary);
+    let subnet_types = get_subnet_types(pic);
+    let subnet_types_len = if expect_fiduciary { 1 } else { 0 };
+    assert_eq!(subnet_types.len(), subnet_types_len);
+    let fiduciary_subnet_ids = pic
+        .topology()
+        .get_fiduciary()
+        .map(|subnet_id| vec![subnet_id]);
+    assert_eq!(subnet_types.get("fiduciary").cloned(), fiduciary_subnet_ids);
+}
+
+#[test]
+fn test_cmc_fiduciary_subnet() {
+    let pic = PocketIcBuilder::new()
+        .with_fiduciary_subnet()
+        .with_all_icp_features()
+        .build();
+
+    check_cmc_state(&pic, true);
+}
+
+#[test]
+fn test_cmc_fiduciary_subnet_creation() {
+    let pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_all_icp_features()
+        .build();
+
+    check_cmc_state(&pic, false);
+
+    create_mainnet_subnet(&pic, 0x23); // fiduciary subnet
+
+    check_cmc_state(&pic, true);
+}
+
+#[test]
+fn test_cmc_state() {
+    let state = PocketIcState::new();
+    let pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_fiduciary_subnet()
+        .with_all_icp_features()
+        .with_state(state)
+        .build();
+
+    check_cmc_state(&pic, true);
+
+    for i in 1..3 {
+        create_mainnet_subnet(&pic, i);
+        check_cmc_state(&pic, true);
+    }
+
+    // Restart the instance from its state.
+    let state = pic.drop_and_take_state().unwrap();
+    let pic = PocketIcBuilder::new().with_state(state).build();
+
+    check_cmc_state(&pic, true);
+
+    for i in 3..5 {
+        create_mainnet_subnet(&pic, i);
+        check_cmc_state(&pic, true);
+    }
 }
 
 fn get_subnet_from_registry(pic: &PocketIc, canister_id: Principal) -> Principal {
