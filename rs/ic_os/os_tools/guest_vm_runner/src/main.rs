@@ -47,6 +47,15 @@ pub enum GuestVMType {
     Upgrade,
 }
 
+impl GuestVMType {
+    pub fn to_config_type(self) -> config_types::GuestVMType {
+        match self {
+            GuestVMType::Default => config_types::GuestVMType::Default,
+            GuestVMType::Upgrade => config_types::GuestVMType::Upgrade,
+        }
+    }
+}
+
 #[derive(Parser)]
 struct Args {
     #[arg(long = "type", default_value = "default", value_enum)]

@@ -34,11 +34,7 @@ pub fn assemble_config_media(
     guest_vm_type: GuestVMType,
     media_path: &Path,
 ) -> Result<()> {
-    let config_guest_vm_type = match guest_vm_type {
-        GuestVMType::Default => ConfigGuestVMType::Default,
-        GuestVMType::Upgrade => ConfigGuestVMType::Upgrade,
-    };
-    let guestos_config = generate_guestos_config(hostos_config, config_guest_vm_type)
+    let guestos_config = generate_guestos_config(hostos_config, guest_vm_type.to_config_type())
         .context("Failed to generate GuestOS config")?;
 
     let bootstrap_options = make_bootstrap_options(hostos_config, guestos_config)?;
