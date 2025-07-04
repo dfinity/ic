@@ -1,7 +1,4 @@
-use std::{
-    cmp::min,
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, Context, Error};
 use async_trait::async_trait;
