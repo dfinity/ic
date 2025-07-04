@@ -47,5 +47,6 @@ mod registration;
 mod registry_helper;
 mod signer;
 mod ssh_access_manager;
+mod tls_config;
 mod upgrade;
 mod utils;
