@@ -113,7 +113,7 @@ fn test_receives_new_3rd_party_txs(env: TestEnv) {
         adapter_proxy
             .sync_blocks(&mut vec![], anchor, 102, 15)
             .await
-            .expect("Failed to syncronize blocks")
+            .expect("Failed to synchronize blocks")
     });
 
     assert!(blocks
