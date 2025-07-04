@@ -23,17 +23,12 @@ pub struct Balance {
     pub account: Option<Account>,
 }
 
-#[derive(CandidType, Clone, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd)]
-pub enum Party {
-    TreasuryOwner,
-    TreasuryManager,
-    External,
-    LedgerFee,
-}
-
 #[derive(CandidType, Clone, Debug, Deserialize, PartialEq)]
 pub struct BalancesForAsset {
-    pub party_to_balance: Option<BTreeMap<Party, Balance>>,
+    pub treasury_owner: Option<Balance>,
+    pub treasury_manager: Option<Balance>,
+    pub external: Option<Balance>,
+    pub fee_collector: Option<Balance>,
 }
 
 #[derive(CandidType, Clone, Debug, Default, Deserialize, PartialEq)]

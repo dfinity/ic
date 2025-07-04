@@ -10,15 +10,11 @@ type TransactionError = variant {
   Backend : text;
 };
 
-type Party = variant {
-  TreasuryOwner;
-  TreasuryManager;
-  External;
-  LedgerFee;
-};
-
 type BalanceForAsset = record {
-  party_to_balance : opt vec record { Party; Balance };
+  treasury_owner : opt Balance;
+  treasury_manager : opt Balance;
+  external : opt Balance;
+  fee_collector : opt Balance;
 };
 
 type Balances = record {
