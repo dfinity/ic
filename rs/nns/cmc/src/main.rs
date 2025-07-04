@@ -46,7 +46,6 @@ use std::{
     cell::{Cell, RefCell},
     collections::{btree_map::Entry, BTreeMap, BTreeSet},
     convert::TryInto,
-    str::FromStr,
     thread::LocalKey,
     time::Duration,
 };
