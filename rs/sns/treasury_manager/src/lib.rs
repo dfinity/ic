@@ -205,16 +205,10 @@ impl From<TreasuryManagerOperation> for Vec<u8> {
 #[derive(CandidType, Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub enum TransactionError {
     /// Prevents the call from being attempted.
-    Precondition {
-        error: String,
-        code: u64,
-    },
+    Precondition { error: String, code: u64 },
 
     /// Prevents the response from being interpreted.
-    Postcondition {
-        error: String,
-        code: u64,
-    },
+    Postcondition { error: String, code: u64 },
 
     /// An error that occurred while calling a canister.
     Call {
@@ -226,15 +220,10 @@ pub enum TransactionError {
     },
 
     /// Backend refers to, e.g., the DEX canister that this asset manager talks to.
-    Backend {
-        error: String,
-        code: u64,
-    },
+    Backend { error: String, code: u64 },
 
     /// The service is currently not available; please call back later.
-    TemporarilyUnavailable {
-        code: u64,
-    },
+    TemporarilyUnavailable { code: u64 },
 
     /// An exotic error that cannot be categorized using the tags above.
     Generic {
