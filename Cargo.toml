@@ -706,6 +706,7 @@ rustls = { version = "0.23.18", default-features = false, features = [
     "std",
     "brotli",
 ] }
+rustls-native-certs = "0.8.1"
 schemars = { version = "0.8.21", features = ["derive"] }
 scopeguard = "1.2.0"
 serde = { version = "1.0.203", features = ["derive"] }
@@ -787,6 +788,7 @@ wasmparser = "0.228.0"
 wasmprinter = "0.228.0"
 wast = "228.0.0"
 wat = "1.228.0"
+webpki-roots = "1.0.1"
 which = "6.0.3"
 x509-cert = { version = "0.2.5", features = ["builder", "hazmat"] }
 x509-parser = { version = "0.16.0" }
