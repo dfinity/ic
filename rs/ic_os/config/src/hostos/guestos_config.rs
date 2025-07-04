@@ -148,7 +148,7 @@ mod tests {
         assert_eq!(guestos_config.guest_vm_type, GuestVMType::Default);
         assert_eq!(
             guestos_config.upgrade_config.peer_guest_vm_address,
-            Some("2001:db8::6803:94ff:feef:2978".parse().unwrap())
+            Some("2001:db8::6802:94ff:feef:2978".parse().unwrap())
         );
     }
 
