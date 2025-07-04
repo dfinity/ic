@@ -84,7 +84,7 @@ pub fn address_limits(network: AdapterNetwork) -> (usize, usize) {
 }
 
 impl Config {
-    /// This function returns the port to use based on the Bitcoin network provided.
+    /// This function returns the port to use based on the network provided.
     pub fn network_port(&self) -> u16 {
         match self.network {
             AdapterNetwork::Bitcoin(network) => {
