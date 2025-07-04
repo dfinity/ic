@@ -6185,7 +6185,6 @@ name = "ic-artifact-manager"
 version = "0.9.0"
 dependencies = [
  "assert_matches",
- "futures",
  "ic-artifact-pool",
  "ic-config",
  "ic-consensus-manager",
@@ -6196,7 +6195,6 @@ dependencies = [
  "ic-types",
  "prometheus 0.13.4",
  "tokio",
- "tokio-stream",
  "tracing",
 ]
 
@@ -11756,7 +11754,6 @@ dependencies = [
  "slog",
  "tempfile",
  "tokio",
- "tokio-stream",
  "turmoil",
 ]
 

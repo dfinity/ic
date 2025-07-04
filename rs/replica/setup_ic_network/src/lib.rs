@@ -60,10 +60,7 @@ use std::{
     str::FromStr,
     sync::{Arc, Mutex, RwLock},
 };
-use tokio::sync::{
-    mpsc::{unbounded_channel, UnboundedSender},
-    watch,
-};
+use tokio::sync::{mpsc::UnboundedSender, watch};
 use tower_http::trace::TraceLayer;
 
 /// [IC-1718]: Whether the `hashes-in-blocks` feature is enabled. If the flag is set to `true`, we
