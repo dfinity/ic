@@ -131,6 +131,20 @@ def icos_build(
         tags = ["manual"],
     )
 
+    tar_extract(
+        name = "extracted_initrd.img",
+        src = "rootfs-tree.tar",
+        path = "boot/initrd.img",
+        tags = ["manual"],
+    )
+
+    tar_extract(
+        name = "extracted_vmlinuz",
+        src = "rootfs-tree.tar",
+        path = "boot/vmlinuz",
+        tags = ["manual"],
+    )
+
     # -------------------- Extract root and boot partitions --------------------
 
     # NOTE: e2fsdroid does not support filenames with spaces, fortunately,
@@ -160,6 +174,7 @@ def icos_build(
         version_txt = "version" + test_suffix + ".txt"
         boot_args = "boot" + test_suffix + "_args"
         extra_boot_args = "extra_boot" + test_suffix + "_args"
+        sev_measurements = "sev-measurements" + test_suffix + ".json"
 
         ext4_image(
             name = partition_root_unsigned_tzst,
@@ -258,6 +273,24 @@ def icos_build(
                 actual = ":extra_boot_args_template",
                 tags = ["manual"],
             )
+
+        native.genrule(
+            name = "generate-" + sev_measurements,
+            outs = [sev_measurements],
+            srcs = ["//ic-os/components/ovmf:ovmf_sev", boot_args, ":extracted_initrd.img", ":extracted_vmlinuz"],
+            cmd = r"""
+                source $(location """ + boot_args + """)
+                (for cmdline in "$$BOOT_ARGS_A" "$$BOOT_ARGS_B"; do
+                    hex=$$(sev-snp-measure --mode snp --vcpus 64 --ovmf "$(location //ic-os/components/ovmf:ovmf_sev)" --vcpu-type="EPYC-Milan" --append "$$cmdline" --initrd "$(location extracted_initrd.img)" --kernel "$(location extracted_vmlinuz)")
+                    # Convert hex string to decimal list, e.g. "abcd" ->  171\\n205
+                    measurement=$$(echo -n "$$hex" | fold -w2 | sed "s/^/0x/" | xargs printf "%d\n")
+                    jq -na --arg cmd "$$cmdline" --arg m "$$measurement" '{
+                      measurement: ($$m | split("\n") | map(tonumber)),
+                      metadata: {kernel_cmdline: $$cmd}
+                    }'
+                done) | jq -sc "{guest_launch_measurements: .}" > $@
+            """,
+        )
 
     component_file_references_test(
         name = name + "_component_file_references_test",
@@ -442,6 +475,7 @@ EOF
     icos_images = struct(
         disk_image = ":disk-img.tar.zst",
         update_image = ":update-img.tar.zst",
+        sev_measurements = ":sev-measurements.json",
         update_image_test = ":update-img-test.tar.zst",
     )
     return icos_images

@@ -44,7 +44,7 @@ fn test_the_anonymous_user_cannot_elect_a_version() {
             replica_version_to_elect: Some("version_43".into()),
             release_package_sha256_hex: None,
             release_package_urls: vec![],
-            guest_launch_measurement_sha256_hex: None,
+            guest_launch_measurements: None,
             replica_versions_to_unelect: vec![],
         };
         // The anonymous end-user tries to bless a version, bypassing the proposals
@@ -119,7 +119,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_bless_a_version() {
             replica_version_to_elect: Some("version_43".into()),
             release_package_sha256_hex: Some(MOCK_HASH.into()),
             release_package_urls: vec!["http://release_package.tar.zst".into()],
-            guest_launch_measurement_sha256_hex: None,
+            guest_launch_measurements: None,
             replica_versions_to_unelect: vec![],
         };
         // The attacker canister tries to bless a version, pretending to be the
@@ -171,7 +171,7 @@ fn test_accepted_proposal_mutates_the_registry() {
             replica_version_to_elect: Some("version_43".into()),
             release_package_sha256_hex: Some(MOCK_HASH.into()),
             release_package_urls: vec!["http://release_package.tar.zst".into()],
-            guest_launch_measurement_sha256_hex: None,
+            guest_launch_measurements: None,
             replica_versions_to_unelect: vec![],
         };
         assert!(
@@ -202,7 +202,7 @@ fn test_accepted_proposal_mutates_the_registry() {
             replica_version_to_elect: Some("version_43".into()),
             release_package_sha256_hex: None,
             release_package_urls: vec![],
-            guest_launch_measurement_sha256_hex: None,
+            guest_launch_measurements: None,
             replica_versions_to_unelect: vec![],
         };
         assert!(
@@ -225,7 +225,7 @@ fn test_accepted_proposal_mutates_the_registry() {
             ReplicaVersionRecord {
                 release_package_sha256_hex: MOCK_HASH.into(),
                 release_package_urls: vec![release_package_url.clone()],
-                guest_launch_measurement_sha256_hex: None,
+                guest_launch_measurements: None,
             }
         );
 

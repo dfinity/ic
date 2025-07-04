@@ -496,7 +496,7 @@ pub async fn submit_update_elected_replica_versions_proposal(
             release_package_sha256_hex: sha256.clone(),
             release_package_urls: upgrade_urls,
             replica_versions_to_unelect: versions_to_unelect.clone(),
-            guest_launch_measurement_sha256_hex: None,
+            guest_launch_measurements: None,
         },
         match (version, sha256, versions_to_unelect.is_empty()) {
             (Some(v), Some(sha), _) => format!(

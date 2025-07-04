@@ -193,7 +193,7 @@ mod tests {
         let replica_version = ReplicaVersionRecord {
             release_package_sha256_hex: "".to_string(),
             release_package_urls: vec![],
-            guest_launch_measurement_sha256_hex: None,
+            guest_launch_measurements: None,
         };
         let blessed_replica_version = BlessedReplicaVersions {
             blessed_version_ids: vec![ReplicaVersion::default().into(), replica_version_id.clone()],
@@ -253,7 +253,7 @@ mod tests {
         let value = ReplicaVersionRecord {
             release_package_sha256_hex: hash.into(),
             release_package_urls: urls,
-            guest_launch_measurement_sha256_hex: None,
+            guest_launch_measurements: None,
         }
         .encode_to_vec();
 

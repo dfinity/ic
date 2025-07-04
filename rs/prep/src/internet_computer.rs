@@ -614,7 +614,9 @@ impl IcConfig {
         let replica_version_record = ReplicaVersionRecord {
             release_package_sha256_hex: self.initial_release_package_sha256_hex.unwrap_or_default(),
             release_package_urls: opturl_to_string_vec(self.initial_release_package_url),
-            guest_launch_measurement_sha256_hex: None,
+
+            // TODO:
+            guest_launch_measurements: None,
         };
 
         let blessed_replica_versions_record = BlessedReplicaVersions {

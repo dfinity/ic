@@ -53,5 +53,5 @@ pub struct BlessReplicaVersionPayload {
     pub release_package_urls: Option<Vec<String>>,
 
     /// The hex-formatted SHA-256 hash measurement of the SEV guest launch context.
-    pub guest_launch_measurement_sha256_hex: Option<String>,
+    pub guest_launch_measurements: Option<String>,
 }
