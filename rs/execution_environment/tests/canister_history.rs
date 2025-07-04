@@ -465,7 +465,7 @@ fn canister_history_tracks_controllers_change() {
         WasmResult::Reject(reason) => panic!("create_canister call rejected: {}", reason),
     };
     // update reference canister history
-    // the list of controllers in the canister history contains no duplicates
+    // the list of controllers in the canister history is sorted and contains no duplicates
     let mut reference_change_entries: Vec<CanisterChange> = vec![CanisterChange::new(
         now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
         0,
@@ -495,7 +495,7 @@ fn canister_history_tracks_controllers_change() {
         )
         .unwrap();
         // check canister history
-        // the list of controllers in the canister history contains no duplicates
+        // the list of controllers in the canister history is sorted and contains no duplicates
         reference_change_entries.push(CanisterChange::new(
             now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
             i,
