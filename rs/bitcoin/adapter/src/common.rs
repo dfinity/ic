@@ -24,14 +24,14 @@ pub type BlockHeight = u32;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
 #[allow(missing_docs)]
-/// AdapterNetwork selects between bitcoin and dogecoin Network.
+/// AdapterNetwork selects between Bitcoin and Dogecoin Network.
 ///
 /// The string representation for mainnet would would be either "bitcoin" or "dogecoin".
 /// But for non-mainnet networks, they would have a prefix of either "bitcoin:" or "dogecoin:".
 ///
-/// The parsing from string on the other hand favors bitcoin network in order
+/// The parsing from string on the other hand favors Bitcoin network in order
 /// to maintain backward compatibility. It is only when a string fails to parse
-/// as a bitcoin network, it will try to parse as a dogecoin network (with prefix "dogcoin:").
+/// as a Bitcoin network, it will try to parse as a Dogecoin network (with prefix "dogcoin:").
 ///
 /// # Examples:
 ///
@@ -127,7 +127,7 @@ impl fmt::Display for AdapterNetwork {
 impl FromStr for AdapterNetwork {
     type Err = String;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // In parsing network names, we give priority to bitcoin network.
+        // In parsing network names, we give priority to Bitcoin network.
         // So both "testnet" and "bitcoin:testnet" will be parsed as bitcoin::Network::Testnet.
         if let Ok(network) = bitcoin::Network::from_str(s) {
             return Ok(network.into());
