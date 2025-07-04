@@ -165,7 +165,7 @@ mod tests {
         let guestos_config = generate_guestos_config(&hostos_config, GuestVMType::Upgrade).unwrap();
 
         if let Ipv6Config::Fixed(fixed) = &guestos_config.network_settings.ipv6_config {
-            assert_eq!(fixed.address, "2001:db8::6803:94ff:feef:2978/64");
+            assert_eq!(fixed.address, "2001:db8::6802:94ff:feef:2978/64");
             assert_eq!(fixed.gateway, "2001:db8::1".parse::<Ipv6Addr>().unwrap());
         } else {
             panic!("Unexpected Ipv6Config type");
