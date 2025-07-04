@@ -1371,9 +1371,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "ring",
                 ],
             ),
-            "tokio-stream": crate.spec(
-                version = "^0.1.17",
-            ),
             "tokio-serde": crate.spec(
                 version = "^0.8",
                 features = [

@@ -70,7 +70,12 @@ impl AbortableBroadcastChannelBuilder {
         &mut self,
         (assembler, assembler_router): (F, Router),
         slot_limit: usize,
-    ) -> AbortableBroadcastChannel<Artifact> {
+    ) -> (
+        AbortableBroadcastSender<Artifact>,
+        AbortableBroadcastReceiver<Artifact>,
+        // TODO: remove this by introducing a new channel from the http handler into the processor
+        Sender<UnvalidatedArtifactMutation<Artifact>>,
+    ) {
         let (outbound_tx, outbound_rx) = tokio::sync::mpsc::channel(MAX_IO_CHANNEL_SIZE);
         let (inbound_tx, inbound_rx) = tokio::sync::mpsc::channel(MAX_IO_CHANNEL_SIZE);
 
@@ -83,6 +88,7 @@ impl AbortableBroadcastChannelBuilder {
         let rt_handle = self.rt_handle.clone();
         let metrics_registry = self.metrics_registry.clone();
 
+        let inbound_tx_c = inbound_tx.clone();
         let builder = move |transport: Arc<dyn Transport>, topology_watcher| {
             start_consensus_manager(
                 log,
@@ -107,10 +113,7 @@ impl AbortableBroadcastChannelBuilder {
         );
 
         self.managers.push(Box::new(builder));
-        AbortableBroadcastChannel {
-            outbound_tx,
-            inbound_rx,
-        }
+        (outbound_tx, inbound_rx, inbound_tx_c)
     }
 
     pub fn router(&self) -> Router {

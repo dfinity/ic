@@ -381,10 +381,8 @@ pub fn add_transport_to_sim<F>(
                     bouncer_factory,
                     MetricsRegistry::default(),
                 );
-                let AbortableBroadcastChannel {
-                    outbound_tx,
-                    inbound_rx,
-                } = consensus_builder.abortable_broadcast_channel(downloader, usize::MAX);
+                let (outbound_tx, inbound_rx, _) =
+                    consensus_builder.abortable_broadcast_channel(downloader, usize::MAX);
 
                 let artifact_processor_jh = start_test_processor(
                     outbound_tx,

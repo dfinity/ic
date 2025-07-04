@@ -43,7 +43,6 @@ DEPENDENCIES = [
     "@crate_index//:slog",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
-    "@crate_index//:tokio-stream",
     "@crate_index//:turmoil",
 ]
 

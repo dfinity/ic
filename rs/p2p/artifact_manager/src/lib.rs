@@ -1,4 +1,3 @@
-use futures::stream::Stream;
 use ic_consensus_manager::AbortableBroadcastChannel;
 use ic_interfaces::{
     p2p::{
@@ -14,20 +13,17 @@ use ic_metrics::MetricsRegistry;
 use ic_types::{artifact::*, messages::SignedIngress};
 use prometheus::{histogram_opts, labels, Histogram};
 use std::{
-    pin::Pin,
     sync::{
         atomic::{AtomicBool, Ordering::SeqCst},
         Arc, RwLock,
     },
-    task::Poll,
     thread::{Builder as ThreadBuilder, JoinHandle},
     time::Duration,
 };
 use tokio::{
-    sync::mpsc::{Sender, UnboundedReceiver},
+    sync::mpsc::{Sender, Receiver},
     time::timeout,
 };
-use tokio_stream::StreamExt;
 use tracing::instrument;
 
 /// Metrics for a client artifact processor.
@@ -133,15 +129,13 @@ impl Drop for ArtifactProcessorJoinGuard {
     }
 }
 
-fn run_artifact_processor<
-    Artifact: IdentifiableArtifact,
-    I: Stream<Item = UnvalidatedArtifactMutation<Artifact>> + Send + Unpin + 'static,
->(
+// TODO: make it private, it is used only for tests outside of this crate
+pub(crate) fn run_artifact_processor<Artifact: IdentifiableArtifact>(
     time_source: Arc<dyn TimeSource>,
     metrics_registry: MetricsRegistry,
     client: Box<dyn ArtifactProcessor<Artifact>>,
     outbound_tx: Sender<ArtifactTransmit<Artifact>>,
-    inbound_rx_stream: I,
+    inbound_rx: Receiver<UnvalidatedArtifactMutation<Artifact>>,
     initial_artifacts: Vec<Artifact>,
 ) -> Box<dyn JoinGuard> {
     let shutdown = Arc::new(AtomicBool::new(false));
@@ -160,7 +154,7 @@ fn run_artifact_processor<
                 time_source,
                 client,
                 outbound_tx,
-                inbound_rx_stream,
+                inbound_rx,
                 ArtifactProcessorMetrics::new(metrics_registry, Artifact::NAME.to_string()),
                 shutdown_cl,
             );
@@ -169,52 +163,12 @@ fn run_artifact_processor<
     Box::new(ArtifactProcessorJoinGuard::new(handle, shutdown))
 }
 
-enum StreamState<T> {
-    Value(T),
-    NoNewValueAvailable,
-    EndOfStream,
-}
-
-async fn read_batch<T, S: Stream<Item = T> + Send + Unpin + 'static>(
-    mut stream: Pin<&mut S>,
-    recv_timeout: Duration,
-) -> Option<Vec<T>> {
-    let mut stream = std::pin::Pin::new(&mut stream);
-    match timeout(recv_timeout, stream.next()).await {
-        Ok(Some(first_value)) => {
-            let mut res = vec![first_value];
-            // We ignore the end of stream and empty value states.
-            while let StreamState::Value(value) =
-                std::future::poll_fn(|cx| match stream.as_mut().poll_next(cx) {
-                    Poll::Pending => Poll::Ready(StreamState::NoNewValueAvailable),
-                    Poll::Ready(Some(v)) => Poll::Ready(StreamState::Value(v)),
-                    // Stream has finished because the abortable broadcast/p2p has stopped.
-                    // This is infallible.
-                    Poll::Ready(None) => Poll::Ready(StreamState::EndOfStream),
-                })
-                .await
-            {
-                res.push(value)
-            }
-            Some(res)
-        }
-        // Stream has finished because the abortable broadcast/p2p has stopped.
-        // This is infallible.
-        Ok(None) => None,
-        // First value didn't arrive on time
-        Err(_) => Some(vec![]),
-    }
-}
-
 // The artifact processor thread loop
-fn process_messages<
-    Artifact: IdentifiableArtifact + 'static,
-    I: Stream<Item = UnvalidatedArtifactMutation<Artifact>> + Send + Unpin + 'static,
->(
+fn process_messages<Artifact: IdentifiableArtifact + 'static>(
     time_source: Arc<dyn TimeSource>,
     client: Box<dyn ArtifactProcessor<Artifact>>,
     send_advert: Sender<ArtifactTransmit<Artifact>>,
-    mut inbound_stream: I,
+    mut receiver: Receiver<UnvalidatedArtifactMutation<Artifact>>,
     mut metrics: ArtifactProcessorMetrics,
     shutdown: Arc<AtomicBool>,
 ) {
@@ -234,8 +188,20 @@ fn process_messages<
         };
 
         let batched_artifact_events = current_thread_rt.block_on(async {
-            let inbound_stream = std::pin::Pin::new(&mut inbound_stream);
-            read_batch(inbound_stream, recv_timeout).await
+            match timeout(recv_timeout, receiver.recv()).await {
+                Ok(Some(artifact_event)) => {
+                    let mut artifacts = vec![artifact_event];
+                    while let Ok(artifact) = receiver.try_recv() {
+                        artifacts.push(artifact);
+                    }
+                    Some(artifacts)
+                }
+                Ok(None) => {
+                    // p2p is stopped
+                    None
+                }
+                Err(_) => Some(vec![]),
+            }
         });
         let batched_artifact_events = match batched_artifact_events {
             Some(v) => v,
@@ -263,8 +229,8 @@ const ARTIFACT_MANAGER_TIMER_DURATION_MSEC: u64 = 200;
 pub fn create_ingress_handlers<
     PoolIngress: MutablePool<SignedIngress> + Send + Sync + ValidatedPoolReader<SignedIngress> + 'static,
 >(
-    channel: AbortableBroadcastChannel<SignedIngress>,
-    user_ingress_rx: UnboundedReceiver<UnvalidatedArtifactMutation<SignedIngress>>,
+    outbound_tx: Sender<ArtifactTransmit<SignedIngress>>,
+    inbound_rx: Receiver<UnvalidatedArtifactMutation<SignedIngress>>,
     time_source: Arc<dyn TimeSource>,
     ingress_pool: Arc<RwLock<PoolIngress>>,
     ingress_handler: Arc<
@@ -277,15 +243,12 @@ pub fn create_ingress_handlers<
     metrics_registry: MetricsRegistry,
 ) -> Box<dyn JoinGuard> {
     let client = IngressProcessor::new(ingress_pool.clone(), ingress_handler);
-    let inbound_rx_stream = tokio_stream::wrappers::ReceiverStream::new(channel.inbound_rx);
-    let user_ingress_rx_stream =
-        tokio_stream::wrappers::UnboundedReceiverStream::new(user_ingress_rx);
     run_artifact_processor(
         time_source.clone(),
         metrics_registry,
         Box::new(client),
-        channel.outbound_tx,
-        inbound_rx_stream.merge(user_ingress_rx_stream),
+        outbound_tx,
+        inbound_rx,
         vec![],
     )
 }
@@ -304,13 +267,12 @@ pub fn create_artifact_handler<
 ) -> Box<dyn JoinGuard> {
     let inital_artifacts: Vec<_> = pool.read().unwrap().get_all_for_broadcast().collect();
     let client = Processor::new(pool, change_set_producer);
-    let inbound_rx_stream = tokio_stream::wrappers::ReceiverStream::new(channel.inbound_rx);
     run_artifact_processor(
         time_source.clone(),
         metrics_registry,
         Box::new(client),
         channel.outbound_tx,
-        inbound_rx_stream,
+        channel.inbound_rx,
         inital_artifacts,
     )
 }
@@ -441,47 +403,8 @@ mod tests {
     use ic_types::artifact::UnvalidatedArtifactMutation;
     use std::{convert::Infallible, sync::Arc};
     use tokio::sync::mpsc::channel;
-    use tokio_stream::wrappers::ReceiverStream;
 
     use crate::{run_artifact_processor, ArtifactProcessor};
-
-    #[tokio::test]
-    async fn test_read_batch_with_closing_channel_after_consuming_all() {
-        let (tx, rx) = channel(100);
-        let mut rx_stream = ReceiverStream::new(rx);
-        let recv_timeout = Duration::from_secs(100);
-        tx.send(1).await.unwrap();
-        let pinned_rx_stream_1 = std::pin::Pin::new(&mut rx_stream);
-        assert_eq!(
-            read_batch(pinned_rx_stream_1, recv_timeout).await,
-            Some(vec![1])
-        );
-        tx.send(2).await.unwrap();
-        tx.send(3).await.unwrap();
-        let pinned_rx_stream_2 = std::pin::Pin::new(&mut rx_stream);
-        assert_eq!(
-            read_batch(pinned_rx_stream_2, recv_timeout).await,
-            Some(vec![2, 3])
-        );
-        std::mem::drop(tx);
-        let pinned_rx_stream_3 = std::pin::Pin::new(&mut rx_stream);
-        assert_eq!(read_batch(pinned_rx_stream_3, recv_timeout).await, None);
-    }
-
-    #[tokio::test]
-    async fn test_read_batch_with_closing_channel_before_consuming_all() {
-        let (tx, rx) = channel(100);
-        let mut rx_stream = ReceiverStream::new(rx);
-        let recv_timeout = Duration::from_secs(100);
-        tx.send(1).await.unwrap();
-        tx.send(2).await.unwrap();
-        std::mem::drop(tx);
-        let pinned_rx_stream = std::pin::Pin::new(&mut rx_stream);
-        assert_eq!(
-            read_batch(pinned_rx_stream, recv_timeout).await,
-            Some(vec![1, 2])
-        );
-    }
 
     #[test]
     fn send_initial_artifacts() {
@@ -530,15 +453,12 @@ mod tests {
         let time_source = Arc::new(SysTimeSource::new());
         let (send_tx, mut send_rx) = tokio::sync::mpsc::channel(100);
         let (_, inbound_rx) = tokio::sync::mpsc::channel(100);
-        run_artifact_processor::<
-            DummyArtifact,
-            ReceiverStream<UnvalidatedArtifactMutation<DummyArtifact>>,
-        >(
+        run_artifact_processor::<DummyArtifact>(
             time_source,
             MetricsRegistry::default(),
             Box::new(DummyProcessor),
             send_tx,
-            inbound_rx.into(),
+            inbound_rx,
             (0..10).map(Into::into).collect(),
         );
 

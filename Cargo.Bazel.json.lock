@@ -1,5 +1,5 @@
 {
-  "checksum": "571e69b3e0b9fe5cc03fd27f4b5d4ee55349a72e2ebda493a3a0e02f2de57998",
+  "checksum": "3582fad10926a8a47845fdbef12f61c7c8a2d3ac19d25ad27ee38048a871c45c",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -21207,10 +21207,6 @@
             {
               "id": "tokio-socks 0.5.2",
               "target": "tokio_socks"
-            },
-            {
-              "id": "tokio-stream 0.1.17",
-              "target": "tokio_stream"
             },
             {
               "id": "tokio-test 0.4.4",
@@ -51376,7 +51372,7 @@
               "target": "tokio"
             },
             {
-              "id": "tokio-stream 0.1.17",
+              "id": "tokio-stream 0.1.16",
               "target": "tokio_stream"
             }
           ],
@@ -51491,7 +51487,7 @@
               "target": "tokio"
             },
             {
-              "id": "tokio-stream 0.1.17",
+              "id": "tokio-stream 0.1.16",
               "target": "tokio_stream"
             },
             {
@@ -77810,7 +77806,7 @@
               "target": "tokio"
             },
             {
-              "id": "tokio-stream 0.1.17",
+              "id": "tokio-stream 0.1.16",
               "target": "tokio_stream"
             }
           ],
@@ -78176,14 +78172,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "tokio-stream 0.1.17": {
+    "tokio-stream 0.1.16": {
       "name": "tokio-stream",
-      "version": "0.1.17",
+      "version": "0.1.16",
       "package_url": "https://github.com/tokio-rs/tokio",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/tokio-stream/0.1.17/download",
-          "sha256": "eca58d7bba4a75707817a2c44174253f9236b2d5fbd055602e9d5c07c139a047"
+          "url": "https://static.crates.io/crates/tokio-stream/0.1.16/download",
+          "sha256": "4f4e6ce100d0eb49a2734f8c0812bcd324cf357d21810932c5df6b96ef2b86f1"
         }
       },
       "targets": [
@@ -78231,7 +78227,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.1.17"
+        "version": "0.1.16"
       },
       "license": "MIT",
       "license_ids": [
@@ -78287,7 +78283,7 @@
               "target": "tokio"
             },
             {
-              "id": "tokio-stream 0.1.17",
+              "id": "tokio-stream 0.1.16",
               "target": "tokio_stream"
             }
           ],
@@ -78858,7 +78854,7 @@
               "target": "tokio"
             },
             {
-              "id": "tokio-stream 0.1.17",
+              "id": "tokio-stream 0.1.16",
               "target": "tokio_stream"
             },
             {
@@ -81159,7 +81155,7 @@
               "target": "tokio"
             },
             {
-              "id": "tokio-stream 0.1.17",
+              "id": "tokio-stream 0.1.16",
               "target": "tokio_stream"
             },
             {
@@ -93252,7 +93248,6 @@
     "tokio-rustls 0.26.0",
     "tokio-serde 0.8.0",
     "tokio-socks 0.5.2",
-    "tokio-stream 0.1.17",
     "tokio-test 0.4.4",
     "tokio-tungstenite 0.26.2",
     "tokio-util 0.7.13",
