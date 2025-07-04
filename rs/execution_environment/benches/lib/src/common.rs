@@ -162,7 +162,6 @@ where
             MAX_NUM_INSTRUCTIONS,
             MAX_NUM_INSTRUCTIONS,
         ),
-        canister_memory_limit: canister_state.memory_limit(NumBytes::new(u64::MAX)),
         wasm_memory_limit: None,
         memory_allocation: canister_state.memory_allocation(),
         canister_guaranteed_callback_quota: CANISTER_GUARANTEED_CALLBACK_QUOTA as u64,
