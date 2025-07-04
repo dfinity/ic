@@ -1145,6 +1145,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "brotli",
                 ],
             ),
+            "rustls-native-certs": crate.spec(
+                version = "^0.8.1",
+            ),
             "rustls-pemfile": crate.spec(
                 version = "^2.1.2",
             ),
@@ -1535,6 +1538,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "wat": crate.spec(
                 version = "^1.228.0",
+            ),
+            "webpki-roots": crate.spec(
+                version = "^1.0.1",
             ),
             "wee_alloc": crate.spec(
                 version = "^0.4.3",
