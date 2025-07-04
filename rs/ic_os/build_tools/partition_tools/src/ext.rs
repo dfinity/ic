@@ -2,7 +2,6 @@ use anyhow::{anyhow, bail, ensure, Context, Result};
 use async_trait::async_trait;
 use itertools::Itertools;
 use pcre2::bytes::Regex;
-use std::io::{Read, Seek};
 use std::path::{Path, PathBuf};
 use std::process::{Output, Stdio};
 use tempfile::{tempdir, TempDir};
