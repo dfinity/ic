@@ -15207,9 +15207,7 @@ version = "0.1.2"
 dependencies = [
  "async-trait",
  "candid",
- "ic-cdk 0.17.2",
  "icrc-ledger-types",
- "serde",
 ]
 
 [[package]]
