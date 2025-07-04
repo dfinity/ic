@@ -4972,11 +4972,8 @@ impl Governance {
             Action::InstallCode(install_code) => install_code.validate(),
             Action::StopOrStartCanister(stop_or_start) => stop_or_start.validate(),
             Action::UpdateCanisterSettings(update_settings) => update_settings.validate(),
-            Action::FulfillSubnetRentalRequest(_) => {  // DO NOT MERGE - Block this via a feature flag.
-                Err(GovernanceError::new_with_message(
-                    ErrorType::InvalidProposal,
-                    "FulfillSubnetRentalRequest is not yet enabled.".to_string(),
-                ))
+            Action::FulfillSubnetRentalRequest(fulfill_subnet_rental_request) => {
+                fulfill_subnet_rental_request.validate()
             }
         }?;
 
