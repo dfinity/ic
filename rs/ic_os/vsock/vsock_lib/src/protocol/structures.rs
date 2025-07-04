@@ -50,6 +50,7 @@ pub enum Command {
     Notify(NotifyData),
     GetVsockProtocol,
     GetHostOSVersion,
+    /// Start the Upgrade Guest VM. If it's already running, the VM will be stopped and restarted.
     #[serde(rename = "start-upgrade-guest-vm")]
     StartUpgradeGuestVM,
 }
