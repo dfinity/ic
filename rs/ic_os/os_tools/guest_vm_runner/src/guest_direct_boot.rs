@@ -33,6 +33,8 @@ pub struct DirectBoot {
     pub kernel: NamedTempFile,
     /// The initrd file
     pub initrd: NamedTempFile,
+    /// The OVMF.fd file
+    pub ovmf: NamedTempFile,
     /// Kernel command line parameters
     pub kernel_cmdline: String,
 }
@@ -42,6 +44,7 @@ impl DirectBoot {
         DirectBootConfig {
             kernel: self.kernel.path().to_path_buf(),
             initrd: self.initrd.path().to_path_buf(),
+            ovmf: self.ovmf.path().to_path_buf(),
             kernel_cmdline: self.kernel_cmdline.clone(),
         }
     }
@@ -113,13 +116,26 @@ pub async fn prepare_direct_boot(
         .with_context(|| format!("Could not mount boot partition {boot_alternative}"))?;
 
     let boot_args_path = boot_partition.mount_point().join("boot_args");
-    // Older GuestOS releases do not have the boot_args file. If the file exists, we have a modern
-    // enough GuestOS that supports direct boot. If not, abandon direct boot by returning None.
+    let ovmf_path = boot_partition.mount_point().join("OVMF.fd");
+    // Older GuestOS releases do not have the boot_args and OVMF.fd files. If the files exist,
+    // we have a modern enough GuestOS that supports direct boot. If not, abandon direct boot by
+    // returning None.
     // Also note that we decide about abandoning direct boot before writing out grubenv below since
     // booting with GRUB will also try to refresh the grubenv and it's *not* an idempotent
     // operation. Therefore, we don't write out grubenv until we can ensure that we'll do a direct
     // boot.
     if !boot_args_path.exists() {
+        println!(
+            "No boot_args file found in boot partition {boot_alternative}. Cannot prepare \
+             direct boot."
+        );
+        return Ok(None);
+    }
+    if !ovmf_path.exists() {
+        println!(
+            "No OVMF.fd file found in boot partition {boot_alternative}. Cannot prepare \
+             direct boot."
+        );
         return Ok(None);
     }
 
@@ -128,6 +144,7 @@ pub async fn prepare_direct_boot(
 
     let kernel = NamedTempFile::new()?;
     let initrd = NamedTempFile::new()?;
+    let ovmf = NamedTempFile::new()?;
 
     tokio::fs::copy(boot_partition.mount_point().join("vmlinuz"), &kernel)
         .await
@@ -135,6 +152,9 @@ pub async fn prepare_direct_boot(
     tokio::fs::copy(boot_partition.mount_point().join("initrd.img"), &initrd)
         .await
         .context("Could not copy initrd.img")?;
+    tokio::fs::copy(ovmf_path, &ovmf)
+        .await
+        .context("Could not copy OVMF.fd")?;
 
     // We defer writing out the updated grubenv until we can ensure that the direct boot preparation
     // was successful.
@@ -147,6 +167,7 @@ pub async fn prepare_direct_boot(
     Ok(Some(DirectBoot {
         kernel,
         initrd,
+        ovmf,
         kernel_cmdline: boot_args,
     }))
 }
@@ -201,6 +222,7 @@ mod tests {
         boot_args_b: String,
         create_boot_args_files: bool,
         create_kernel_files: bool,
+        create_ovmf_file: bool,
     }
 
     impl TestSetupBuilder {
@@ -212,6 +234,7 @@ mod tests {
                 boot_args_b: "args_b".to_string(),
                 create_boot_args_files: true,
                 create_kernel_files: true,
+                create_ovmf_file: true,
             }
         }
 
@@ -236,6 +259,11 @@ mod tests {
             self
         }
 
+        fn without_ovmf(mut self) -> Self {
+            self.create_ovmf_file = false;
+            self
+        }
+
         fn without_kernel_files(mut self) -> Self {
             self.create_kernel_files = false;
             self
@@ -249,12 +277,14 @@ mod tests {
                 "SHOULD NOT BE USED",
                 self.create_boot_args_files,
                 self.create_kernel_files,
+                self.create_ovmf_file,
             );
             let b_boot_partition = create_boot_partition(
                 "SHOULD NOT BE USED",
                 &self.boot_args_b,
                 self.create_boot_args_files,
                 self.create_kernel_files,
+                self.create_ovmf_file,
             );
 
             let mut partitions = HashMap::new();
@@ -323,6 +353,7 @@ mod tests {
         boot_args_b: &str,
         create_boot_args: bool,
         create_kernel_files: bool,
+        create_ovmf_file: bool,
     ) -> Arc<TempDir> {
         let boot_dir = Arc::new(TempDir::new().expect("Failed to create temp dir"));
 
@@ -335,6 +366,10 @@ mod tests {
         if create_kernel_files {
             fs::write(boot_dir.path().join("vmlinuz"), b"fake kernel").unwrap();
             fs::write(boot_dir.path().join("initrd.img"), b"fake initrd").unwrap();
+        }
+
+        if create_ovmf_file {
+            fs::write(boot_dir.path().join("OVMF.fd"), b"fake OVMF").unwrap();
         }
 
         boot_dir
@@ -541,6 +576,20 @@ mod tests {
             .expect_err("prepare_direct_boot should fail")
             .to_string()
             .contains("vmlinuz"));
+    }
+
+    #[tokio::test]
+    async fn test_missing_ovmf_file() {
+        let setup = TestSetupBuilder::new()
+            .with_grubenv(BootAlternative::B, BootCycle::Stable)
+            .without_ovmf()
+            .build();
+
+        let result = setup
+            .prepare_direct_boot(false)
+            .await
+            .expect("prepare_direct_boot failed");
+        assert!(result.is_none());
     }
 
     #[tokio::test]

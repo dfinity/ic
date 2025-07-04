@@ -29,5 +29,6 @@ simple-parsing
 tqdm
 uuid
 PyGithub>=2.3.0
+python_gitlab
 # packages not directly used, but required by other packages and need to be manually version pinned for python 3.12
 typing_extensions>=4.6.0

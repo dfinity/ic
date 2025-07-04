@@ -4,7 +4,7 @@ use crate::guest_vm_config::{
 };
 use crate::mount::PartitionProvider;
 use crate::systemd_notifier::SystemdNotifier;
-use anyhow::{anyhow, Context, Error, Result};
+use anyhow::{anyhow, bail, Context, Error, Result};
 use clap::{Parser, ValueEnum};
 use config_types::{HostOSConfig, Ipv6Config};
 use deterministic_ips::node_type::NodeType;
@@ -270,6 +270,17 @@ impl GuestVmService {
                 "Direct boot dependencies not found (old GuestOS version?). Falling back to \
                  legacy boot."
             );
+        }
+
+        let enable_tee = self
+            .hostos_config
+            .icos_settings
+            .enable_trusted_execution_environment;
+        if enable_tee && direct_boot.is_none() {
+            bail!(
+                "enable_trusted_execution_environment is true but direct boot could not be \
+                 configured."
+            )
         }
 
         assemble_config_media(&self.hostos_config, self.guest_vm_type, config_media.path())

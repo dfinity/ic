@@ -8,7 +8,6 @@ pub enum NodeType {
     SetupOS,
     HostOS,
     GuestOS,
-    BoundaryOS,
     UpgradeGuestOS,
 }
 
@@ -18,8 +17,7 @@ impl NodeType {
             NodeType::SetupOS => 0x0f,
             NodeType::HostOS => 0x00,
             NodeType::GuestOS => 0x01,
-            NodeType::BoundaryOS => 0x02,
-            NodeType::UpgradeGuestOS => 0x03,
+            NodeType::UpgradeGuestOS => 0x02,
         }
     }
 }
@@ -30,7 +28,6 @@ impl fmt::Display for NodeType {
             NodeType::SetupOS => write!(f, "SetupOS"),
             NodeType::HostOS => write!(f, "HostOS"),
             NodeType::GuestOS => write!(f, "GuestOS"),
-            NodeType::BoundaryOS => write!(f, "BoundaryOS"),
             NodeType::UpgradeGuestOS => write!(f, "UpgradeGuestOS"),
         }
     }
@@ -46,7 +43,6 @@ impl FromStr for NodeType {
             "setupos" => Ok(NodeType::SetupOS),
             "hostos" => Ok(NodeType::HostOS),
             "guestos" => Ok(NodeType::GuestOS),
-            "boundary" => Ok(NodeType::BoundaryOS),
             "upgradeguestos" => Ok(NodeType::UpgradeGuestOS),
             _ => Err(anyhow!("Invalid node type: {}", s)),
         }
@@ -63,10 +59,6 @@ mod tests {
         assert_eq!(NodeType::from_str("setupos").unwrap(), NodeType::SetupOS);
         assert_eq!(NodeType::from_str("HostOS").unwrap(), NodeType::HostOS);
         assert_eq!(NodeType::from_str("gUest.oS").unwrap(), NodeType::GuestOS);
-        assert_eq!(
-            NodeType::from_str("b-o-u-n-d-a-r-y").unwrap(),
-            NodeType::BoundaryOS
-        );
         assert_eq!(
             NodeType::from_str("upgrade-guest-os").unwrap(),
             NodeType::UpgradeGuestOS

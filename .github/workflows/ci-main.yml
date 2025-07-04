@@ -72,7 +72,7 @@ jobs:
               diff_only="false"
               skip_long_tests="false"
           else
-              # default behavior is to build targets specified in BAZEL_TARGETS and not upload to s3
+              # default behavior is to build all targets and not upload to s3
               release_build="false"
               diff_only="true"
               skip_long_tests="true"
@@ -107,7 +107,7 @@ jobs:
     name: Bazel Test All
     needs: [config]
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
+      image: ghcr.io/dfinity/ic-build@sha256:c30de392a5104df90509a118170d07e3b797775e226adf5246c7271cb88f434b
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 120
@@ -164,8 +164,7 @@ jobs:
           diff-only: ${{ needs.config.outputs.diff_only }}
           stamp-build: ${{ needs.config.outputs.release-build }}
           upload-artifacts: ${{ needs.config.outputs.release-build }}
-          BAZEL_COMMAND: test ${{ steps.bazel-extra-args.outputs.BAZEL_EXTRA_ARGS }}
-          BAZEL_TARGETS: //...
+          extra-bazel-args: ${{ steps.bazel-extra-args.outputs.BAZEL_EXTRA_ARGS }}
           CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
   bazel-test-macos-intel:
@@ -181,24 +180,31 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
-      - name: Infer macos intel build command
-        id: cfg
-        run: |
-          if [[ '${{ needs.config.outputs.full_macos_build }}' == 'true' ]]; then
-            echo build-command='test --test_tag_filters=test_macos' >> "$GITHUB_OUTPUT"
-          else
-            echo build-command='build --test_tag_filters=test_macos --nobuild' >> "$GITHUB_OUTPUT"
-          fi
-      - name: Run Bazel Checks on Darwin x86-64
-        uses: ./.github/actions/bazel-test-all/
-        env:
-          NODE_NAME: ${{ runner.name }}
+      - name: Evaluate workspace
+        uses: ./.github/actions/bazel
         with:
-          upload-artifacts: ${{ needs.config.outputs.release-build && needs.config.outputs.full_macos_build }}
-          BAZEL_COMMAND: ${{ steps.cfg.outputs.build-command }}
-          BAZEL_TARGETS: //...
-          CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
-          GPG_PASSPHRASE: ''
+          run: |
+            bazel build \
+              --config=stamped \
+              --build_tag_filters=test_macos \
+              //... --nobuild
+      - name: Build & Test
+        if: ${{ needs.config.outputs.full_macos_build == 'true' }}
+        uses: ./.github/actions/bazel
+        with:
+          run: |
+            bazel test \
+              --config=stamped \
+              --test_tag_filters=test_macos \
+              //...
+      - name: Upload artifacts
+        # NOTE: GHA output quirk, 'true' is a string
+        if: ${{ needs.config.outputs.full_macos_build == 'true' && needs.config.outputs.release-build == 'true' }}
+        uses: ./.github/actions/upload-artifacts
+        with:
+          name: macOS Intel artifacts
+          upload-command: bazel run --check_up_to_date //:upload-artifacts
+          credentials-content: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
       - name: Purge Bazel Output
         if: always()
         shell: bash
@@ -256,12 +262,26 @@ jobs:
           # Setup zig-cache
           mkdir -p /tmp/zig-cache
 
+          bazel_targets=(
+            # make sure codebase builds for local development
+            //rs/...
+            //publish/binaries/...
+
+            # necessary artifacts & tests for pocket -ic
+            //packages/pocket-ic:all \
+            # NOTE: technically covered by //rs/... above, but
+            # added explicitly for clarity
+            //rs/pocket_ic_server:test \
+            //rs/pocket_ic_server:gateway \
+            //rs/pocket_ic_server:pocket-ic-server
+          )
+
           bazel \
             --noworkspace_rc \
             --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc \
             test \
             --test_tag_filters="test_macos,test_macos_slow" \
-            //packages/pocket-ic/... //rs/... //publish/binaries/...
+            "${bazel_targets[@]}"
 
           mkdir -p build
           cp \
@@ -278,7 +298,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
+      image: ghcr.io/dfinity/ic-build@sha256:c30de392a5104df90509a118170d07e3b797775e226adf5246c7271cb88f434b
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 90
@@ -322,7 +342,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
+      image: ghcr.io/dfinity/ic-build@sha256:c30de392a5104df90509a118170d07e3b797775e226adf5246c7271cb88f434b
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 90
@@ -342,7 +362,7 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
+      image: ghcr.io/dfinity/ic-build@sha256:c30de392a5104df90509a118170d07e3b797775e226adf5246c7271cb88f434b
       options: >-
         -e NODE_NAME
     timeout-minutes: 30
@@ -374,7 +394,7 @@ jobs:
     needs: [config]
     name: Build IC
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
+      image: ghcr.io/dfinity/ic-build@sha256:c30de392a5104df90509a118170d07e3b797775e226adf5246c7271cb88f434b
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 90
@@ -456,7 +476,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
+      image: ghcr.io/dfinity/ic-build@sha256:c30de392a5104df90509a118170d07e3b797775e226adf5246c7271cb88f434b
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 90
@@ -475,7 +495,7 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
+      image: ghcr.io/dfinity/ic-build@sha256:c30de392a5104df90509a118170d07e3b797775e226adf5246c7271cb88f434b
       options: >-
         -e NODE_NAME
     timeout-minutes: 30
@@ -512,7 +532,7 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
+      image: ghcr.io/dfinity/ic-build@sha256:c30de392a5104df90509a118170d07e3b797775e226adf5246c7271cb88f434b
       options: >-
         -e NODE_NAME
     timeout-minutes: 30
