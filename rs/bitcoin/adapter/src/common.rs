@@ -26,7 +26,7 @@ pub type BlockHeight = u32;
 #[allow(missing_docs)]
 /// AdapterNetwork selects between Bitcoin and Dogecoin Network.
 ///
-/// The string representation for mainnet would would be either "bitcoin" or "dogecoin".
+/// The string representation for mainnet would be either "bitcoin" or "dogecoin".
 /// But for non-mainnet networks, they would have a prefix of either "bitcoin:" or "dogecoin:".
 ///
 /// The parsing from string on the other hand favors Bitcoin network in order
