@@ -545,6 +545,12 @@ pub struct IcpFeatures {
     pub registry: bool,
 }
 
+impl IcpFeatures {
+    pub fn all_icp_features() -> Self {
+        Self { registry: true }
+    }
+}
+
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
 pub struct InstanceConfig {
     pub subnet_config_set: ExtendedSubnetConfigSet,
