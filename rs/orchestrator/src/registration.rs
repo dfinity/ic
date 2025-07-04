@@ -15,6 +15,7 @@ use ic_config::{
     transport::TransportConfig,
     Config,
 };
+use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
 use ic_interfaces::crypto::IDkgKeyRotationResult;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{info, warn, ReplicaLogger};
@@ -165,6 +166,17 @@ impl NodeRegistration {
                             continue;
                         }
                     };
+
+                    if let Some(nns_pub_key) = self.get_nns_pub_key_der() {
+                        agent.set_root_key(nns_pub_key);
+                    } else {
+                        warn!(self.log, "Failed to get NNS public key from the registry");
+                        UtilityCommand::notify_host(
+                            "Failed to get NNS public key from the registry",
+                            1,
+                        );
+                    }
+
                     let add_node_encoded = Encode!(&add_node_payload)
                         .expect("Could not encode payload for the registration request");
 
@@ -456,6 +468,13 @@ impl NodeRegistration {
             .with_identity(signer)
             .build()
             .map_err(|e| format!("Failed to create IC agent: {e}"))?;
+
+        if let Some(nns_pub_key) = self.get_nns_pub_key_der() {
+            agent.set_root_key(nns_pub_key);
+        } else {
+            warn!(self.log, "Failed to get NNS public key from the registry");
+        }
+
         let update_node_payload = UpdateNodeDirectlyPayload {
             idkg_dealing_encryption_pk: Some(protobuf_to_vec(idkg_pk)),
         };
@@ -532,6 +551,40 @@ impl NodeRegistration {
         let mut rng = thread_rng();
         urls.shuffle(&mut rng);
         urls.pop()
+    }
+
+    fn get_nns_pub_key_der(&self) -> Option<Vec<u8>> {
+        let version = self.registry_client.get_latest_version();
+        let root_subnet_id = match self.registry_client.get_root_subnet_id(version) {
+            Ok(Some(id)) => id,
+            err => {
+                warn!(self.log, "Failed to get root subnet id: {:?}", err);
+                return None;
+            }
+        };
+
+        let pub_key = match self
+            .registry_client
+            .get_threshold_signing_public_key_for_subnet(root_subnet_id, version)
+        {
+            Ok(Some(pub_key)) => pub_key,
+            Ok(None) => {
+                warn!(self.log, "NNS public key not set in the registry");
+                return None;
+            }
+            Err(e) => {
+                warn!(self.log, "Error when retrieving NNS public key: {:?}", e);
+                return None;
+            }
+        };
+
+        match threshold_sig_public_key_to_der(pub_key) {
+            Ok(der) => Some(der),
+            Err(e) => {
+                warn!(self.log, "Failed to convert NNS public key to DER: {:?}", e);
+                None
+            }
+        }
     }
 
     async fn is_node_registered(&self) -> bool {

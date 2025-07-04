@@ -17981,6 +17981,7 @@ dependencies = [
  "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-test-utils-tls",
  "ic-crypto-tls-interfaces",
+ "ic-crypto-utils-threshold-sig-der",
  "ic-dashboard",
  "ic-ed25519",
  "ic-http-endpoints-async-utils",
