@@ -427,7 +427,7 @@ pub struct Proposal {
     /// take.
     #[prost(
         oneof = "proposal::Action",
-        tags = "10, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 24, 25, 26, 27"
+        tags = "10, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 24, 25, 26, 27, 28"
     )]
     pub action: ::core::option::Option<proposal::Action>,
 }
@@ -527,6 +527,9 @@ pub mod proposal {
         /// Update the settings of a canister that is controlled by the NNS.
         #[prost(message, tag = "27")]
         UpdateCanisterSettings(super::UpdateCanisterSettings),
+        /// Create a rented subnet.
+        #[prost(message, tag = "28")]
+        FulfillSubnetRentalRequest(super::FulfillSubnetRentalRequest),
     }
 }
 /// Empty message to use in oneof fields that represent empty
@@ -2732,6 +2735,23 @@ pub mod update_canister_settings {
             }
         }
     }
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct FulfillSubnetRentalRequest {
+    #[prost(message, optional, tag = "1")]
+    pub user: ::core::option::Option<::ic_base_types::PrincipalId>,
+    #[prost(message, repeated, tag = "3")]
+    pub node_ids: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
+    #[prost(string, tag = "2")]
+    pub replica_version_id: ::prost::alloc::string::String,
 }
 /// This represents the whole NNS governance system. It contains all
 /// information about the NNS governance system that must be kept
