@@ -1,6 +1,6 @@
 use candid::Encode;
 use cycles_minting_canister::CyclesCanisterInitPayload;
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_clients::canister_status::CanisterStatusType;
 use ic_nervous_system_common::ONE_MONTH_SECONDS;
@@ -27,8 +27,12 @@ use ic_nns_test_utils::{
     },
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_or_panic;
+use ic_protobuf::registry::subnet::v1::SubnetListRecord;
+use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
 use ic_state_machine_tests::StateMachine;
+use ic_types::ingress::WasmResult;
 use icp_ledger::Tokens;
+use prost::Message;
 use std::{
     env,
     fmt::{Debug, Formatter},
@@ -356,6 +360,19 @@ fn test_upgrade_canisters_with_golden_nns_state() {
 
     perform_sequence_of_upgrades(&nns_canister_upgrade_sequence);
 
+    let result = state_machine
+        .execute_ingress(
+            NODE_REWARDS_CANISTER_ID,
+            "get_registry_value",
+            Encode!(&make_subnet_list_record_key()).unwrap(),
+        )
+        .unwrap();
+
+    let expected = match result {
+        WasmResult::Reply(result) => SubnetListRecord::decode(result.as_slice()).unwrap(),
+        WasmResult::Reject(s) => panic!("Call to get_registry_value failed: {:#?}", s),
+    };
+
     // Modify all WASMs, but preserve their behavior.
     for nns_canister_upgrade in &mut nns_canister_upgrade_sequence {
         nns_canister_upgrade.modify_wasm_but_preserve_behavior();
@@ -366,6 +383,21 @@ fn test_upgrade_canisters_with_golden_nns_state() {
     perform_sanity_check_after_upgrade(&state_machine, &nns_canister_upgrade_sequence);
 
     check_canisters_are_all_protocol_canisters(&state_machine);
+
+    let result = state_machine
+        .execute_ingress(
+            NODE_REWARDS_CANISTER_ID,
+            "get_registry_value",
+            Encode!(&make_subnet_list_record_key()).unwrap(),
+        )
+        .unwrap();
+
+    let got = match result {
+        WasmResult::Reply(result) => SubnetListRecord::decode(result.as_slice()).unwrap(),
+        WasmResult::Reject(s) => panic!("Call to get_registry_value failed: {:#?}", s),
+    };
+
+    assert_eq!(got, expected);
 }
 
 fn perform_sanity_check_after_upgrade(
