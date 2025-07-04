@@ -23,8 +23,11 @@ LIB_DEPENDENCIES = [
     "//rs/interfaces/adapter_client",
     "//rs/interfaces/registry",
     "//rs/interfaces/state_manager",
+    "//rs/ledger_suite/icp:icp_ledger",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
+    "//rs/nns/cmc",
+    "//rs/nns/common",
     "//rs/nns/constants",
     "//rs/protobuf",
     "//rs/registry/canister",
@@ -137,9 +140,13 @@ cargo_build_script(
     name = "build_script",
     srcs = ["build.rs"],
     aliases = ALIASES,
-    build_script_env = {"REGISTRY_CANISTER_WASM_PATH": "$(location @mainnet_nns_registry_canister//file)"},
+    build_script_env = {
+        "REGISTRY_CANISTER_WASM_PATH": "$(location @mainnet_nns_registry_canister//file)",
+        "CYCLES_MINTING_CANISTER_WASM_PATH": "$(location @mainnet_nns_cycles-minting-canister//file)",
+    },
     data = [
         "templates/dashboard.html",
+        "@mainnet_nns_cycles-minting-canister//file",
         "@mainnet_nns_registry_canister//file",
     ],  # build script data (e.g. template files) goes here
     deps = BUILD_DEPENDENCIES,
@@ -168,11 +175,15 @@ rust_library(
     ] + glob([
         "src/state_api/**/*.rs",
     ]),
-    compile_data = ["@mainnet_nns_registry_canister//file"],
+    compile_data = [
+        "@mainnet_nns_registry_canister//file",
+        "@mainnet_nns_cycles-minting-canister//file",
+    ],
     crate_name = "pocket_ic_server",
     proc_macro_deps = MACRO_DEPENDENCIES,
     rustc_env = {
         "REGISTRY_CANISTER_WASM_PATH": "$(location @mainnet_nns_registry_canister//file)",
+        "CYCLES_MINTING_CANISTER_WASM_PATH": "$(location @mainnet_nns_cycles-minting-canister//file)",
     },
     version = "9.0.3",
     deps = LIB_DEPENDENCIES + [":build_script"],
