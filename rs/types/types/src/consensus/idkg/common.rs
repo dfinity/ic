@@ -7,6 +7,7 @@ use crate::{
                 IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams,
                 IDkgTranscriptType,
             },
+            EcdsaPreSignatureQuadruple, SchnorrPreSignatureTranscript,
             ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs,
             ThresholdSchnorrCombinedSignature, ThresholdSchnorrSigInputs,
         },
@@ -23,11 +24,14 @@ use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::registry::subnet::v1 as subnet_pb;
 use ic_protobuf::types::v1 as pb;
 use serde::{Deserialize, Serialize};
-use std::convert::{AsMut, AsRef, TryFrom};
 use std::hash::Hash;
 use std::{
     collections::BTreeSet,
     fmt::{self, Display, Formatter},
+};
+use std::{
+    convert::{AsMut, AsRef, TryFrom},
+    sync::Arc,
 };
 
 use super::{
@@ -1176,5 +1180,39 @@ impl Display for SignatureScheme {
             SignatureScheme::Schnorr => write!(f, "Schnorr"),
             SignatureScheme::VetKd => write!(f, "VetKd"),
         }
+    }
+}
+
+/// An enum over all existing pre-signature types that will be stored in replicated state.
+/// Internal types should be wrapped in Arc<_> to make cloning of the replicated state cheaper,
+/// which is a frequent operation.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PreSignature {
+    Ecdsa(Arc<EcdsaPreSignatureQuadruple>),
+    Schnorr(Arc<SchnorrPreSignatureTranscript>),
+}
+
+impl From<&PreSignature> for pb::PreSignature {
+    fn from(value: &PreSignature) -> Self {
+        use pb::pre_signature::Msg;
+        let msg = match value {
+            PreSignature::Schnorr(x) => Msg::Schnorr(x.as_ref().into()),
+            PreSignature::Ecdsa(x) => Msg::Ecdsa(x.as_ref().into()),
+        };
+        Self { msg: Some(msg) }
+    }
+}
+
+impl TryFrom<&pb::PreSignature> for PreSignature {
+    type Error = ProxyDecodeError;
+    fn try_from(pre_signature: &pb::PreSignature) -> Result<Self, Self::Error> {
+        use pb::pre_signature::Msg;
+        let Some(msg) = pre_signature.msg.as_ref() else {
+            return Err(ProxyDecodeError::MissingField("PreSignature::msg"));
+        };
+        Ok(match msg {
+            Msg::Schnorr(x) => PreSignature::Schnorr(Arc::new(x.try_into()?)),
+            Msg::Ecdsa(x) => PreSignature::Ecdsa(Arc::new(x.try_into()?)),
+        })
     }
 }

@@ -369,6 +369,10 @@ fn build_types_proto(def: &Path, out: &Path) {
         ".types.v1.PreSignatureInCreation",
         "#[allow(clippy::large_enum_variant)]",
     );
+    config.type_attribute(
+        ".types.v1.PreSignature",
+        "#[allow(clippy::large_enum_variant)]",
+    );
     config.type_attribute(".types.v1.Artifact", "#[allow(clippy::large_enum_variant)]");
     config.type_attribute(
         ".types.v1.GossipChunk",
