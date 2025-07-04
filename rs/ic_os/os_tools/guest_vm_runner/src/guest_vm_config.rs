@@ -11,8 +11,6 @@ use std::path::{Path, PathBuf};
 // See build.rs
 include!(concat!(env!("OUT_DIR"), "/guestos_vm_template.rs"));
 
-const DEFAULT_OVMF_PATH: &str = "/usr/share/ovmf/OVMF.fd";
-
 const DEFAULT_GUEST_VM_DOMAIN_NAME: &str = "guestos";
 const UPGRADE_GUEST_VM_DOMAIN_NAME: &str = "upgrade-guestos";
 
@@ -106,12 +104,6 @@ pub fn generate_vm_config(
         "kvm"
     };
 
-    let ovmf_path = if let Some(direct_boot) = &direct_boot {
-        &direct_boot.ovmf
-    } else {
-        Path::new(DEFAULT_OVMF_PATH)
-    };
-
     GuestOSTemplateProps {
         domain_name: vm_domain_name(guest_vm_type).to_string(),
         domain_uuid: vm_domain_uuid(guest_vm_type).to_string(),
@@ -122,7 +114,6 @@ pub fn generate_vm_config(
         nr_of_vcpus: config.hostos_settings.vm_nr_of_vcpus,
         mac_address,
         config_media_path: media_path.to_path_buf(),
-        ovmf_path: ovmf_path.to_path_buf(),
         direct_boot,
         enable_sev: config.icos_settings.enable_trusted_execution_environment,
     }

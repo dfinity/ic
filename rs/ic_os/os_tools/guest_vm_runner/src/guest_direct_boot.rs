@@ -586,7 +586,7 @@ mod tests {
             .build();
 
         let result = setup
-            .prepare_direct_boot(false)
+            .prepare_direct_boot(GuestVMType::Default)
             .await
             .expect("prepare_direct_boot failed");
         assert!(result.is_none());

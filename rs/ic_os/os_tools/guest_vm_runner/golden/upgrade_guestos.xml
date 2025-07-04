@@ -21,11 +21,10 @@
   <resource>
     <partition>/machine</partition>
   </resource>
-  <os>
-    <type arch='x86_64' machine='pc-q35-5.0'>hvm</type>
-    <loader readonly='yes' type='pflash'>/usr/share/OVMF/OVMF_CODE_4M.fd</loader>
-    <nvram>/var/lib/libvirt/qemu/nvram/upgrade-guestos_VARS.fd</nvram>
+  <os type='efi'>
+    <type arch='x86_64' machine='pc-q35-9.2'>hvm</type>
     <boot dev='hd'/>
+    <loader readonly='yes'>/tmp/OVMF.fd</loader>
     <kernel>/tmp/test-kernel</kernel>
     <initrd>/tmp/test-initrd</initrd>
     <cmdline>security=selinux selinux=1 enforcing=0</cmdline>
@@ -47,7 +46,7 @@
     <suspend-to-disk enabled='no'/>
   </pm>
   <devices>
-    <emulator>/usr/local/bin/qemu-system-x86_64</emulator>
+    <emulator>/usr/bin/qemu-system-x86_64</emulator>
     <disk type='block' device='disk'>
       <driver name='qemu' type='raw' cache='none' discard='unmap'/>
       <source dev='/dev/hostlvm/guestos' index='1'/>
@@ -133,7 +132,7 @@
       <address type='pci' domain='0x0000' bus='0x00' slot='0x01' function='0x6'/>
     </controller>
     <interface type='bridge'>
-      <mac address='6A:03:AE:1A:09:BB'/>
+      <mac address='6A:02:AE:1A:09:BB'/>
       <source bridge='br6'/>
       <target dev='vnet1'/>
       <model type='virtio'/>
