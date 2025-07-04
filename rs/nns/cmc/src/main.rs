@@ -30,6 +30,7 @@ use ic_nervous_system_time_helpers::now_seconds;
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID, ICP_LEDGER_ARCHIVE_1_CANISTER_ID, REGISTRY_CANISTER_ID,
+    SUBNET_RENTAL_CANISTER_ID,
 };
 use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
 use icp_ledger::{
@@ -442,13 +443,9 @@ fn set_authorized_subnetwork_list(arg: SetAuthorizedSubnetworkListArgs) {
     let SetAuthorizedSubnetworkListArgs { who, subnets } = arg;
     with_state_mut(|state| {
         let governance_canister_id = state.governance_canister_id;
-
         let caller_id = CanisterId::unchecked_from_principal(caller());
-        let subnet_rental_canister_id = CanisterId::unchecked_from_principal(
-            PrincipalId::from_str("qvhpv-4qaaa-aaaaa-aaagq-cai").unwrap(),
-        );
 
-        if !(caller_id == governance_canister_id || caller_id == subnet_rental_canister_id) {
+        if caller_id != governance_canister_id && caller_id != SUBNET_RENTAL_CANISTER_ID {
             panic!(
                 "Only the governance canister and subnet rental canister can set authorized subnetwork lists."
             );
