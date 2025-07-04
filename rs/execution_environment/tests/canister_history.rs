@@ -437,6 +437,7 @@ fn canister_history_tracks_controllers_change() {
     let user_id2 = user_test_id(8).get();
 
     // create canister via ingress from user_id1
+    // overriding controllers with a list containing repeated controllers
     let wasm_result = env
         .execute_ingress_as(
             user_id1,
@@ -446,7 +447,7 @@ fn canister_history_tracks_controllers_change() {
                 amount: Some(candid::Nat::from(INITIAL_CYCLES_BALANCE.get())),
                 settings: Some(
                     CanisterSettingsArgsBuilder::new()
-                        .with_controllers(vec![user_id1, user_id2])
+                        .with_controllers(vec![user_id2, user_id1, user_id2, user_id1, user_id1, user_id2])
                         .build(),
                 ),
                 specified_id: None,
@@ -462,6 +463,7 @@ fn canister_history_tracks_controllers_change() {
         WasmResult::Reject(reason) => panic!("create_canister call rejected: {}", reason),
     };
     // update reference canister history
+    // the list of controllers contains no duplicates
     let mut reference_change_entries: Vec<CanisterChange> = vec![CanisterChange::new(
         now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
         0,
@@ -471,7 +473,7 @@ fn canister_history_tracks_controllers_change() {
 
     for i in 1..MAX_CANISTER_HISTORY_CHANGES + 42 {
         // update controllers via ingress from user_id2 (effectively the same set of controllers, but canister history still updated)
-        let new_controllers = vec![user_id1, user_id2];
+        let new_controllers = vec![user_id2, user_id1, user_id2, user_id1, user_id1, user_id2];
         now += Duration::from_secs(5);
         env.set_time(now);
         env.execute_ingress_as(
@@ -493,7 +495,7 @@ fn canister_history_tracks_controllers_change() {
             now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
             i,
             CanisterChangeOrigin::from_user(user_id2),
-            CanisterChangeDetails::controllers_change(new_controllers),
+            CanisterChangeDetails::controllers_change(vec![user_id1, user_id2]),
         ));
         let history = get_canister_history(&env, canister_id);
         assert_eq!(history.get_total_num_changes(), i + 1);
