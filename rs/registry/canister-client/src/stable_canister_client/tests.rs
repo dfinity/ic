@@ -22,10 +22,10 @@ thread_local! {
 
 test_registry_data_stable_memory_impl!(DummyState, STATE);
 
-pub fn add_record_helper(key: &str, version: u64, value: Option<u64>) {
+pub fn add_record_helper(key: &str, version: u64, value: Option<u64>, timestamp_nanoseconds: u64) {
     STATE.with_borrow_mut(|map| {
         map.insert(
-            StorableRegistryKey::new(key.to_string(), version),
+            StorableRegistryKey::new(key.to_string(), version, timestamp_nanoseconds),
             StorableRegistryValue(value.map(|v| vec![v as u8])),
         );
     });
@@ -41,13 +41,13 @@ fn add_dummy_data() {
         NODE_RECORD_KEY_PREFIX,
         PrincipalId::new_user_test_id(42),
     );
-    add_record_helper(DELETED_KEY, 39662, Some(42));
-    add_record_helper(DELETED_KEY, 39663, None);
-    add_record_helper(DELETED_KEY, 39664, Some(42));
-    add_record_helper(DELETED_KEY, 39779, Some(42));
-    add_record_helper(&user42_key, 39779, Some(40));
-    add_record_helper(DELETED_KEY, 39801, None);
-    add_record_helper(&user42_key, 39972, Some(50));
+    add_record_helper(DELETED_KEY, 39662, Some(42), 1);
+    add_record_helper(DELETED_KEY, 39663, None, 1);
+    add_record_helper(DELETED_KEY, 39664, Some(42), 2);
+    add_record_helper(DELETED_KEY, 39779, Some(42), 2);
+    add_record_helper(&user42_key, 39779, Some(40), 2);
+    add_record_helper(DELETED_KEY, 39801, None, 5);
+    add_record_helper(&user42_key, 39972, Some(50), 6);
 }
 
 #[derive(PartialEq, Eq, Debug)]
@@ -74,8 +74,8 @@ fn client_for_tests() -> (StableCanisterRegistryClient<DummyState>, Arc<FakeRegi
 
 #[test]
 fn test_absent_after_delete() {
-    let (client, _) = client_for_tests();
     add_dummy_data();
+    let (client, _) = client_for_tests();
 
     // Version before it was deleted, it should show up.
     let result = client.get_key_family(NODE_RECORD_KEY_PREFIX, RegistryVersion::new(39800));
@@ -104,6 +104,25 @@ fn test_absent_after_delete() {
 }
 
 #[test]
+fn test_timestamp_to_registry_versions_mapping_correct() {
+    add_dummy_data();
+    let (client, _) = client_for_tests();
+
+    let expected: BTreeMap<u64, HashSet<RegistryVersion>> = BTreeMap::from_iter(vec![
+        (1, vec![v(39662), v(39663)]),
+        (2, vec![v(39664), v(39779)]),
+        (5, vec![v(39801)]),
+        (6, vec![v(39972)]),
+    ])
+    .into_iter()
+    .map(|(k, v)| (k, v.into_iter().collect()))
+    .collect();
+    let actual = client.timestamp_to_versions_map().clone();
+
+    assert_eq!(actual, expected);
+}
+
+#[test]
 fn empty_registry_should_report_zero_as_latest_version() {
     let (client, _) = client_for_tests();
 
@@ -114,8 +133,8 @@ fn empty_registry_should_report_zero_as_latest_version() {
 fn can_retrieve_entries_correctly() {
     let (client, _) = client_for_tests();
 
-    let set = |key: &str, ver: u64| add_record_helper(key, ver, Some(ver));
-    let rem = |key: &str, ver: u64| add_record_helper(key, ver, None);
+    let set = |key: &str, ver: u64| add_record_helper(key, ver, Some(ver), 0);
+    let rem = |key: &str, ver: u64| add_record_helper(key, ver, None, 0);
     let get_versioned = |key: &str, ver: u64| -> RegistryClientVersionedResult<Vec<u8>> {
         client.get_versioned_value(key, v(ver))
     };
@@ -272,12 +291,12 @@ fn can_retrieve_entries_correctly() {
 #[test]
 fn test_sync_registry_stored() {
     let (client, fake_registry) = client_for_tests();
-    fake_registry.set_value_at_version("Foo", 1, Some(vec![1]));
-    fake_registry.set_value_at_version("Foo", 2, Some(vec![2]));
-    fake_registry.set_value_at_version("Foo", 3, Some(vec![3]));
-    fake_registry.set_value_at_version("Foo", 4, Some(vec![4]));
-    fake_registry.set_value_at_version("Foo", 5, None);
-    fake_registry.set_value_at_version("Bar", 5, Some(vec![50]));
+    fake_registry.set_value_at_version_with_timestamp("Foo", 1, 1, Some(vec![1]));
+    fake_registry.set_value_at_version_with_timestamp("Foo", 2, 1, Some(vec![2]));
+    fake_registry.set_value_at_version_with_timestamp("Foo", 3, 2, Some(vec![3]));
+    fake_registry.set_value_at_version_with_timestamp("Foo", 4, 2, Some(vec![4]));
+    fake_registry.set_value_at_version_with_timestamp("Foo", 5, 3, None);
+    fake_registry.set_value_at_version_with_timestamp("Bar", 5, 3, Some(vec![50]));
 
     let current_latest = client.get_latest_version();
     assert_eq!(current_latest, ZERO_REGISTRY_VERSION);
@@ -299,6 +318,19 @@ fn test_sync_registry_stored() {
     assert!(client.get_value("Foo", v(5)).unwrap().is_none());
 
     assert_eq!(client.get_value("Bar", v(5)).unwrap().unwrap(), vec![50u8]);
+
+    let expected_timestamp_to_registry_versions: BTreeMap<u64, HashSet<RegistryVersion>> =
+        BTreeMap::from_iter(vec![
+            (1, vec![v(1), v(2)]),
+            (2, vec![v(3), v(4)]),
+            (3, vec![v(5)]),
+        ])
+        .into_iter()
+        .map(|(k, v)| (k, v.into_iter().collect()))
+        .collect();
+    let actual = client.timestamp_to_versions_map().clone();
+
+    assert_eq!(expected_timestamp_to_registry_versions, actual);
 }
 
 #[test]

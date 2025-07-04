@@ -88,10 +88,10 @@ use ic_registry_client_helpers::{
 };
 use ic_registry_keys::{
     make_blessed_replica_versions_key, make_canister_migrations_record_key,
-    make_catch_up_package_contents_key, make_chain_key_enabled_subnet_list_key,
-    make_crypto_node_key, make_crypto_tls_cert_key, make_node_record_key,
-    make_provisional_whitelist_record_key, make_replica_version_key, make_routing_table_record_key,
-    ROOT_SUBNET_ID_KEY,
+    make_canister_ranges_key, make_catch_up_package_contents_key,
+    make_chain_key_enabled_subnet_list_key, make_crypto_node_key, make_crypto_tls_cert_key,
+    make_node_record_key, make_provisional_whitelist_record_key, make_replica_version_key,
+    make_routing_table_record_key, ROOT_SUBNET_ID_KEY,
 };
 use ic_registry_proto_data_provider::{ProtoRegistryDataProvider, INITIAL_REGISTRY_VERSION};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -256,6 +256,14 @@ pub fn add_global_registry_records(
 
     // routing table record
     let pb_routing_table = PbRoutingTable::from(routing_table.clone());
+    registry_data_provider
+        .add(
+            &make_canister_ranges_key(CanisterId::from_u64(0)),
+            registry_version,
+            Some(pb_routing_table.clone()),
+        )
+        .unwrap();
+    // TODO(NNS1-3781): Remove this once routing_table is no longer used by clients.
     registry_data_provider
         .add(
             &make_routing_table_record_key(),
@@ -4003,11 +4011,20 @@ impl StateMachine {
             )
             .expect("ranges are not well formed");
 
+        let pb_routing_table = PbRoutingTable::from(routing_table);
+        self.registry_data_provider
+            .add(
+                &make_canister_ranges_key(CanisterId::from_u64(0)),
+                next_version,
+                Some(pb_routing_table.clone()),
+            )
+            .unwrap();
+        // TODO(NNS1-3781): Remove this once routing_table is no longer used by clients.
         self.registry_data_provider
             .add(
                 &make_routing_table_record_key(),
                 next_version,
-                Some(PbRoutingTable::from(routing_table)),
+                Some(pb_routing_table),
             )
             .unwrap();
         self.registry_client.update_to_latest_version();
