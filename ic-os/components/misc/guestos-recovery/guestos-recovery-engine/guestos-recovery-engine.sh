@@ -2,6 +2,7 @@
 
 set -e
 
+readonly VERSION=""
 readonly EXPECTED_RECOVERY_HASH=""
 
 # Completes the recovery process by downloading and applying the recovery artifacts
@@ -33,7 +34,7 @@ verify_file_hash() {
 
 download_recovery_artifact() {
     local base_url="$1"
-    local recovery_url="${base_url}/ic/${EXPECTED_RECOVERY_HASH}/recovery.tar.zst"
+    local recovery_url="${base_url}/ic/${VERSION}/guest-os/recovery-artifacts/recovery.tar.zst"
 
     echo "Attempting to download recovery artifact from $recovery_url"
 
@@ -91,7 +92,9 @@ sudo chown -R "$OWNER_UID:$GROUP_UID" "cup.proto"
 
 echo "Applying recovery artifacts..."
 echo "Syncing ic_registry_local_store to target location..."
+setenforce 0
 sudo rsync -a --delete ic_registry_local_store/ /var/lib/ic/data/ic_registry_local_store/
+setenforce 1
 echo "Copying cup.proto to target location..."
 sudo cp "cup.proto" /var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb
 
