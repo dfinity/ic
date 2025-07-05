@@ -14,13 +14,15 @@ use ic_registry_client_helpers::{
     subnet::{SubnetRegistry, SubnetTransportRegistry},
 };
 use ic_registry_keys::{
-    make_routing_table_record_key, make_subnet_list_record_key, make_subnet_record_key,
-    ROOT_SUBNET_ID_KEY,
+    make_canister_ranges_key, make_routing_table_record_key, make_subnet_list_record_key,
+    make_subnet_record_key, CANISTER_RANGES_PREFIX, ROOT_SUBNET_ID_KEY,
 };
 use ic_registry_local_store::{Changelog, ChangelogEntry, KeyMutation, LocalStore};
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
-use ic_types::{crypto::threshold_sig::ThresholdSigPublicKey, NodeId, RegistryVersion, SubnetId};
+use ic_types::{
+    crypto::threshold_sig::ThresholdSigPublicKey, CanisterId, NodeId, RegistryVersion, SubnetId,
+};
 use std::{
     collections::BTreeMap, convert::TryFrom, fmt::Debug, net::IpAddr, str::FromStr, sync::Arc,
     time::Duration,
@@ -362,17 +364,37 @@ impl InternalState {
         // It's safe to unwrap here because we started from a valid table and
         // removed entries from it.  Removing entries cannot invalidate the
         // table.
-        let new_routing_table =
-            RoutingTable::try_from(new_routing_table).expect("bug: invalid routing table");
-        let pb_routing_table = PbRoutingTable::from(new_routing_table);
-        let mut pb_routing_table_bytes = vec![];
-        pb_routing_table
-            .encode(&mut pb_routing_table_bytes)
-            .expect("encode can't fail");
+        let new_routing_table = PbRoutingTable::from(
+            RoutingTable::try_from(new_routing_table).expect("bug: invalid routing table"),
+        );
+
+        // Delete all routing table shards except the shard for canister id 0, and put the new routing table there.
+        let mut routing_table_updates: Vec<_> = self
+            .registry_client
+            .get_key_family(CANISTER_RANGES_PREFIX, registry_version)
+            .into_iter()
+            .map(|key| {
+                if key == make_canister_ranges_key(CanisterId::from_u64(0)) {
+                    return KeyMutation {
+                        key: key.to_string(),
+                        value: Some(new_routing_table.encode_to_vec()),
+                    };
+                } else {
+                    return KeyMutation {
+                        key: key.to_string(),
+                        value: None,
+                    };
+                }
+            })
+            .collect();
+
+        // TODO(NNS1-3781): Remove this once routing_table is no longer used by clients.
         last.push(KeyMutation {
             key: make_routing_table_record_key(),
-            value: Some(pb_routing_table_bytes),
+            value: Some(new_routing_table.encode_to_vec()),
         });
+
+        last.append(&mut routing_table_updates);
     }
 
     /// Update the [`RegistryCanister`] API wrapper with the newest API Urls
