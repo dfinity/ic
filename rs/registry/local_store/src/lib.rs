@@ -21,6 +21,8 @@ pub struct KeyMutation {
     /// The value of this key value pair. `None` means that the value has been
     /// deleted at the corresponding version.
     pub value: Option<Vec<u8>>,
+
+    pub timestamp_nanoseconds: u64,
 }
 
 /// A ChangelogEntry is a list of mutations that, when applied to a registry at
@@ -219,6 +221,7 @@ impl RegistryDataProvider for LocalStoreImpl {
                 version: version + RegistryVersion::from((i as u64) + 1),
                 key: km.key.clone(),
                 value: km.value.clone(),
+                timestamp_nanoseconds: km.timestamp_nanoseconds,
             })
             .collect();
         Ok(res)
@@ -268,11 +271,13 @@ fn key_mutation_try_from_proto(value: &PbKeyMutation) -> Result<KeyMutation, io:
             KeyMutation {
                 key: value.key.clone(),
                 value: None,
+                timestamp_nanoseconds: value.timestamp_nanoseconds,
             }
         }
         MutationType::Set => KeyMutation {
             key: value.key.clone(),
             value: Some(value.value.clone()),
+            timestamp_nanoseconds: value.timestamp_nanoseconds,
         },
     };
     Ok(res)
@@ -345,6 +350,7 @@ fn changelog_entry_to_protobuf(ce: ChangelogEntry) -> PbChangelogEntry {
                 key: km.key.clone(),
                 value: km.value.clone().unwrap_or_default(),
                 mutation_type,
+                timestamp_nanoseconds: km.timestamp_nanoseconds,
             }
         })
         .collect();
