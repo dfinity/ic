@@ -6116,11 +6116,15 @@ fn subnet_info_canister_call_succeeds() {
         WasmResult::Reply(bytes) => bytes,
         WasmResult::Reject(err_msg) => panic!("Unexpected reject, expected reply: {}", err_msg),
     };
-    let SubnetInfoResponse { replica_version } = Decode!(&bytes, SubnetInfoResponse).unwrap();
+    let SubnetInfoResponse {
+        replica_version,
+        registry_version,
+    } = Decode!(&bytes, SubnetInfoResponse).unwrap();
     assert_eq!(
         replica_version,
         ic_types::ReplicaVersion::default().to_string()
     );
+    assert_eq!(registry_version, ic_types::RegistryVersion::default().get());
 }
 
 #[test]
