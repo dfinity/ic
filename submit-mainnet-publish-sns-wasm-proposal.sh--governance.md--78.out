@@ -1,0 +1,77 @@
+[0;34m================================================================================[0m
+# Publish SNS Governance WASM Built at Commit c494c2a
+
+__Proposer__: arshavir.ter.gabrielyan at dfinity.org
+
+__Source Code__: [c494c2af8bfc70a6501448dc73bf806477388738][new-commit]
+
+[new-commit]: https://github.com/dfinity/ic/tree/c494c2af8bfc70a6501448dc73bf806477388738
+
+
+## New Commits
+
+```
+$ git log --format="%C(auto) %h %s" db5901a6e90b718918978ae5167b9c98d5aa7ab6..c494c2af8bfc70a6501448dc73bf806477388738 --  ./rs/sns/governance
+ 158f799bb0 chore: Remove __get_candid_interface_tmp_hack from nns and sns canisters (#1975)
+ 5890eaa8f5 refactor(sns): migrate sns governance to use ic_cdk (#1941)
+ 733be312a1 refactor(sns): Migrate swap canister from dfn_core to ic_cdk (#1914)
+ cb996c54db chore(sns): Remove accidentally-committed logs (#1911)
+ 04f661ea24 feat(sns): Add periodic task for caching the upgrade steps (#1788)
+ 3bbabefb70 chore(Ledger-Suite): FI-1502 move icp and icrc ledger suites (#1682)
+ e2cb3d6389 chore: upgrade prost and tonic crates (#1738)
+ 7e78a87aa5 refactor(sns): Rename random_u64 to insecure_random_u64 and remove random_bytes in SNS gov (#1731)
+```
+
+
+## Wasm Verification
+
+See the general instructions on [how to verify] proposals like this. A "quick
+start" guide is provided here.
+
+[how to verify]: https://github.com/dfinity/ic/tree/c494c2af8bfc70a6501448dc73bf806477388738/rs/nervous_system/docs/proposal_verification.md
+
+See ["Building the code"][prereqs] for prerequisites.
+
+[prereqs]: https://github.com/dfinity/ic?tab=readme-ov-file#building-the-code
+
+```
+# 1. Get a copy of the code.
+git clone git@github.com:dfinity/ic.git
+cd ic
+# Or, if you already have a copy of the ic repo,
+git fetch
+git checkout c494c2af8bfc70a6501448dc73bf806477388738
+
+# 2. Build canisters.
+./ci/container/build-ic.sh -c
+
+# 3. Fingerprint the result.
+sha256sum ./artifacts/canisters/sns-governance-canister.wasm.gz
+```
+
+This should match `wasm` field of this proposal.
+[0;34m================================================================================[0m
+
+Publish SNS WASM Synopsis:
+    Target Canister: Governance
+    Build Commit: c494c2af8bfc70a6501448dc73bf806477388738
+
+
+[0;32mWould you like to run the following command?[0m
+
+/tmp/arshavir_nns_tools_tmp/ic-admin \
+    --nns-url \
+    https://icp-api.io \
+    --use-hsm \
+    --slot=0 \
+    --key-id=01 \
+    --pin=******
+    propose-to-add-wasm-to-sns-wasm \
+    --proposal-title=Publish\ SNS\ Governance\ WASM\ Built\ at\ Commit\ c494c2a \
+    --summary-file=../mainnet-proposals/2024-oct-11/sns/governance.md \
+    --canister-type=governance \
+    --wasm-module-path=/tmp/arshavir_nns_tools_tmp/sns-governance-canister-c494c2af8bfc70a6501448dc73bf806477388738.wasm.gz \
+    --wasm-module-sha256=62be1b74e8f8d1c51253035c91bc6f159c2885bcf653f79e9143b8edcd60ff9c \
+    --proposer=78 \
+
+[0;32mType 'yes' to confirm, anything else, or Ctrl+C to cancel:[0m 
