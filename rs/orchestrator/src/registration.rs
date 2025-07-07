@@ -145,67 +145,19 @@ impl NodeRegistration {
         while !self.is_node_registered().await {
             let message = "Node registration not complete. Trying to register it".to_string();
             warn!(self.log, "{}", message);
-            UtilityCommand::notify_host(&message, 1);
-            match self.signer.get() {
-                Ok(signer) => {
-                    let nns_url = self
-                        .get_random_nns_url_from_config()
-                        .expect("no NNS urls available");
-                    let agent = match Agent::builder()
-                        .with_url(nns_url)
-                        .with_identity(signer)
-                        .build()
-                    {
-                        Ok(agent) => agent,
-                        Err(e) => {
-                            warn!(self.log, "Failed to create IC agent: {}", e);
-                            UtilityCommand::notify_host(
-                                format!("Failed to create IC agent: {}", e).as_str(),
-                                1,
-                            );
-                            continue;
-                        }
-                    };
+            UtilityCommand::notify_host(
+                format!("node-id {}: {}", self.node_id, message).as_str(),
+                1,
+            );
 
-                    if let Some(nns_pub_key) = self.get_nns_pub_key_der() {
-                        agent.set_root_key(nns_pub_key);
-                    } else {
-                        warn!(self.log, "Failed to get NNS public key from the registry");
-                        UtilityCommand::notify_host(
-                            "Failed to get NNS public key from the registry",
-                            1,
-                        );
-                    }
-
-                    let add_node_encoded = Encode!(&add_node_payload)
-                        .expect("Could not encode payload for the registration request");
-
-                    if let Err(e) = agent
-                        .update(&Principal::from(REGISTRY_CANISTER_ID), "add_node")
-                        .with_arg(add_node_encoded)
-                        .call_and_wait()
-                        .await
-                    {
-                        let message = format!(
-                            "Node {} registration request failed with error: {}\nUsed payload: {:?}",
-                            self.node_id, e, add_node_payload
-                        );
-                        warn!(self.log, "{}", message);
-                        UtilityCommand::notify_host(&message, 1);
-                    };
-                }
-                Err(e) => {
-                    warn!(self.log, "Failed to create the message signer: {}", e);
-                    UtilityCommand::notify_host(
-                        format!(
-                            "node-id {}: Failed to create the message signer: {}",
-                            self.node_id, e
-                        )
-                        .as_str(),
-                        1,
-                    );
-                }
+            if let Err(error_message) = self.do_register_node(&add_node_payload).await {
+                warn!(self.log, "{}", error_message);
+                UtilityCommand::notify_host(
+                    format!("node-id {}: {}", self.node_id, error_message).as_str(),
+                    1,
+                );
             };
+
             tokio::time::sleep(Duration::from_secs(5)).await;
         }
 
@@ -217,6 +169,48 @@ impl NodeRegistration {
             .as_str(),
             10,
         );
+    }
+
+    async fn do_register_node(&mut self, add_node_payload: &AddNodePayload) -> Result<(), String> {
+        let signer = self
+            .signer
+            .get()
+            .map_err(|e| format!("Failed to create the message signer: {}", e))?;
+
+        let nns_url = self
+            .get_random_nns_url_from_config()
+            .ok_or_else(|| "Failed to get random NNS URL from config")?;
+
+        let agent = Agent::builder()
+            .with_url(nns_url)
+            .with_identity(signer)
+            .build()
+            .map_err(|e| format!("Failed to create IC agent: {}", e))?;
+
+        if let Some(nns_pub_key) = self.get_nns_pub_key_der() {
+            agent.set_root_key(nns_pub_key);
+        } else {
+            let message = "Failed to get NNS public key from the registry";
+            warn!(self.log, "{}", message);
+            UtilityCommand::notify_host(message, 1);
+        }
+
+        let add_node_encoded = Encode!(add_node_payload)
+            .expect("Could not encode payload for the registration request");
+
+        if let Err(e) = agent
+            .update(&Principal::from(REGISTRY_CANISTER_ID), "add_node")
+            .with_arg(add_node_encoded)
+            .call_and_wait()
+            .await
+        {
+            return Err(format!(
+                "Node {} registration request failed with error: {}\nUsed payload: {:?}",
+                self.node_id, e, add_node_payload
+            ));
+        };
+
+        Ok(())
     }
 
     async fn assemble_add_node_message(&self) -> AddNodePayload {
