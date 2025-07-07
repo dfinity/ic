@@ -93,9 +93,15 @@ fn try_get_metrics(
     state_machine: &StateMachine,
     governance_canister_id: CanisterId,
     payload: GetMetricsRequest,
+    use_replicated_mode: bool,
 ) -> Result<get_metrics_response::GetMetricsResponse, String> {
     let payload = Encode!(&payload).unwrap();
-    let response = state_machine.query(governance_canister_id, "get_metrics", payload);
+
+    let response = if use_replicated_mode {
+        state_machine.update(governance_canister_id, "get_metrics", payload)
+    } else {
+        state_machine.query(governance_canister_id, "get_metrics", payload)
+    };
 
     match response {
         Ok(response) => {
@@ -208,10 +214,12 @@ fn test_sns_metrics() {
             time_window_seconds: Some(time_window_seconds),
         };
 
-        let Ok(observed_result) = try_get_metrics(&state_machine, governance_canister_id, payload)
-        else {
-            panic!("Received an Error upon fetching the metrics")
-        };
+        let Ok(observed_result) =
+            try_get_metrics(&state_machine, governance_canister_id, payload, true).unwrap();
+        let Ok(observed_result_1) =
+            try_get_metrics(&state_machine, governance_canister_id, payload, false).unwrap();
+
+        assert_eq!(observed_result_1, observed_result);
 
         let Some(get_metrics_result) = observed_result.get_metrics_result else {
             panic!("Expected a non-empty response");
