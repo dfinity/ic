@@ -1,30 +1,15 @@
-<domain type='{{cpu_domain}}' id='1'>
-  <name>{{domain_name}}</name>
-  <uuid>{{domain_uuid}}</uuid>
+<domain type='qemu' id='1'>
+  <name>upgrade-guestos</name>
+  <uuid>1ea49839-7f46-4560-a4c7-fce677bbfbbd</uuid>
   <metadata>
     <libosinfo:libosinfo xmlns:libosinfo="http://libosinfo.org/xmlns/libvirt/domain/1.0">
       <libosinfo:os id="http://ubuntu.com/ubuntu/20.04"/>
     </libosinfo:libosinfo>
   </metadata>
-  <memory unit='GiB'>{{vm_memory}}</memory>
-  <currentMemory unit='GiB'>{{vm_memory}}</currentMemory>
-  <vcpu placement='static'>{{nr_of_vcpus}}</vcpu>
-
-  {%- if cpu_domain == "qemu" %}
+  <memory unit='GiB'>490</memory>
+  <currentMemory unit='GiB'>490</currentMemory>
+  <vcpu placement='static'>64</vcpu>
   <cpu mode='host-model'/>
-  {% else %}
-  <cpu mode='host-passthrough' migratable='off'>
-    <cache mode='passthrough'/>
-    <topology sockets='2' cores='{{nr_of_vcpus / 4}}' threads='2'/>
-    <feature policy='require' name='topoext'/>
-  </cpu>
-  <commandline xmlns="http://libvirt.org/schemas/domain/qemu/1.0">
-    <arg value='-cpu'/>
-    <arg value='EPYC-v4,topoext=on,l3-cache=off'/>
-  </commandline>
-  {% endif -%}
-
-  {%- if enable_sev -%}
   <launchSecurity type='sev-snp' kernelHashes='yes'>
     <cbitpos>51</cbitpos>
     <reducedPhysBits>1</reducedPhysBits>
@@ -33,23 +18,16 @@
   <memoryBacking>
     <locked/>
   </memoryBacking>
-  {% endif -%}
-
   <resource>
     <partition>/machine</partition>
   </resource>
   <os type='efi'>
     <type arch='x86_64' machine='pc-q35-9.2'>hvm</type>
     <boot dev='hd'/>
-    {%- if let Some(direct_boot) = direct_boot %}
-    <loader readonly='yes'>{{direct_boot.ovmf.display()}}</loader>
-    <kernel>{{direct_boot.kernel.display()}}</kernel>
-    <initrd>{{direct_boot.initrd.display()}}</initrd>
-    <cmdline>{{direct_boot.kernel_cmdline}}</cmdline>
-    {%- else %}
-    <loader readonly='yes' type='pflash'>/usr/share/OVMF/OVMF_CODE_4M.fd</loader>
-    <nvram>/var/lib/libvirt/qemu/nvram/{{domain_name}}_VARS.fd</nvram>
-    {%- endif %}
+    <loader readonly='yes'>/tmp/OVMF.fd</loader>
+    <kernel>/tmp/test-kernel</kernel>
+    <initrd>/tmp/test-initrd</initrd>
+    <cmdline>security=selinux selinux=1 enforcing=0</cmdline>
   </os>
   <features>
     <acpi/>
@@ -71,14 +49,14 @@
     <emulator>/usr/bin/qemu-system-x86_64</emulator>
     <disk type='block' device='disk'>
       <driver name='qemu' type='raw' cache='none' discard='unmap'/>
-      <source dev='{{disk_device}}' index='1'/>
+      <source dev='/dev/hostlvm/guestos' index='1'/>
       <backingStore/>
       <target dev='vda' bus='virtio'/>
       <alias name='virtio-disk0'/>
       <address type='pci' domain='0x0000' bus='0x04' slot='0x00' function='0x0'/>
     </disk>
     <disk type='file' device='disk'>
-      <source file='{{config_media_path.display()}}'/>
+      <source file='/tmp/config.img'/>
       <target dev='sda' bus='usb' removable='on'/>
     </disk>
     <controller type='usb' index='0' model='ich9-ehci1'>
@@ -154,7 +132,7 @@
       <address type='pci' domain='0x0000' bus='0x00' slot='0x01' function='0x6'/>
     </controller>
     <interface type='bridge'>
-      <mac address='{{mac_address}}'/>
+      <mac address='6A:02:AE:1A:09:BB'/>
       <source bridge='br6'/>
       <target dev='vnet1'/>
       <model type='virtio'/>
@@ -167,7 +145,7 @@
         <model name='isa-serial'/>
       </target>
       <alias name='serial0'/>
-      <log file='{{console_log_path}}' append='off'/>
+      <log file='/var/log/libvirt/qemu/upgrade-guestos-serial.log' append='off'/>
     </serial>
     <console type='pty' tty='/dev/pts/3'>
       <source path='/dev/pts/3'/>

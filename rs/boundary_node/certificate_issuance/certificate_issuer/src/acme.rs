@@ -200,8 +200,11 @@ fn get_dns_challenge(authorizations: Vec<Authorization>) -> Result<Challenge, Er
 }
 
 async fn poll_order(order: &mut instant_acme::Order, expect: OrderStatus) -> anyhow::Result<u32> {
-    let max_wait = Duration::from_secs(60);
-    let poll_interval = Duration::from_secs(5);
+    // Uses a duration slightly shorter than the canister's retry_delay (current IN_PROGRESS_TTL = 10 minutes)
+    let timeout = Duration::from_secs(500);
+    let max_poll_interval = Duration::from_secs(10);
+    // initial polling interval, then doubled: 1 -> 2 -> 4 -> ... -> up to max_poll_interval
+    let mut poll_interval = Duration::from_secs(1);
     let start_time = Instant::now();
     let mut attempt = 1;
 
@@ -218,15 +221,15 @@ async fn poll_order(order: &mut instant_acme::Order, expect: OrderStatus) -> any
                     ));
                 }
 
-                if start_time.elapsed() >= max_wait {
+                if start_time.elapsed() >= timeout {
                     return Err(anyhow!(
-                        "Order status polling timed out on attempt {attempt}: {:?}",
+                        "Order status polling timed out on attempt {attempt}, last status '{:?}'",
                         v.status
                     ));
                 }
             }
             Err(e) => {
-                if start_time.elapsed() >= max_wait {
+                if start_time.elapsed() >= timeout {
                     return Err(anyhow!(
                         "Unable to get order state on attempt {attempt}: {e:#}"
                     ));
@@ -234,6 +237,7 @@ async fn poll_order(order: &mut instant_acme::Order, expect: OrderStatus) -> any
             }
         }
         sleep(poll_interval).await;
+        poll_interval = max_poll_interval.min(2 * poll_interval);
         attempt += 1;
     }
 }
