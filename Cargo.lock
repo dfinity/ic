@@ -6318,6 +6318,7 @@ dependencies = [
  "ic-btc-interface",
  "ic-cdk 0.17.2",
  "ic-config",
+ "ic-dummy-getrandom-for-wasm",
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
  "ic-types",

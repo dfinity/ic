@@ -76,7 +76,7 @@ fn ledger_wasm() -> Vec<u8> {
         .unwrap()
         .parent()
         .unwrap()
-        .join("rosetta-api")
+        .join("ledger_suite")
         .join("icrc1")
         .join("ledger");
     load_wasm(path, "ic-icrc1-ledger", &[])
@@ -86,13 +86,15 @@ fn minter_wasm() -> Vec<u8> {
     load_wasm(
         std::env::var("CARGO_MANIFEST_DIR").unwrap(),
         "ic-ckbtc-minter",
-        &[],
+        &["self_check"],
     )
 }
 
 fn bitcoin_mock_wasm() -> Vec<u8> {
     load_wasm(
         PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
+            .parent()
+            .unwrap()
             .parent()
             .unwrap()
             .join("mock"),
@@ -109,7 +111,7 @@ fn btc_checker_wasm() -> Vec<u8> {
             .parent()
             .unwrap()
             .join("checker"),
-        "ic-btc-checker",
+        "ic-btc-checker-canister",
         &[],
     )
 }
@@ -1528,7 +1530,7 @@ fn test_min_retrieval_amount_custom() {
 
 #[test]
 fn test_transaction_resubmission_finalize_new() {
-    let ckbtc = CkBtcSetup::new();
+    let mut ckbtc = CkBtcSetup::new();
 
     // Step 1: deposit ckBTC
 
@@ -1611,11 +1613,23 @@ fn test_transaction_resubmission_finalize_new() {
 
     assert_replacement_transaction(tx, new_tx);
 
+    ckbtc = ckbtc
+        .check_minter_metrics()
+        .assert_contains_metric_matching(
+            r#"ckbtc_minter_oldest_retrieve_btc_request_age_seconds [1-9]\d+ \d+"#,
+        )
+        .into();
     // Step 5: finalize the new transaction
 
     ckbtc.finalize_transaction(new_tx);
     assert_eq!(ckbtc.await_finalization(block_index, 10), new_txid);
     ckbtc.minter_self_check();
+    ckbtc = ckbtc
+        .check_minter_metrics()
+        .assert_contains_metric_matching(
+            r#"ckbtc_minter_oldest_retrieve_btc_request_age_seconds 0 \d+"#,
+        )
+        .into();
 }
 
 #[test]

@@ -249,6 +249,16 @@ pub fn encode_metrics(
         "The length of the longest active transaction resubmission chain.",
     )?;
 
+    let now = ic_cdk::api::time();
+    let oldest = state::read_state(|s| s.oldest_retrieve_btc_submitted_transaction_timestamp())
+        .unwrap_or(now);
+    let oldest_retrieve_btc_age = now.saturating_sub(oldest) / 1_000_000_000;
+    metrics.encode_gauge(
+        "ckbtc_minter_oldest_retrieve_btc_request_age_seconds",
+        oldest_retrieve_btc_age as f64,
+        "The age of the oldest submitted transaction for retrieve btc request in seconds.",
+    )?;
+
     metrics.encode_gauge(
         "ckbtc_minter_stored_finalized_requests",
         state::read_state(|s| s.finalized_requests.len()) as f64,
