@@ -70,6 +70,10 @@ pub struct SubnetRecord {
     /// key. If the removed key is not held by another subnet, it will be lost.
     #[prost(message, optional, tag = "29")]
     pub chain_key_config: ::core::option::Option<ChainKeyConfig>,
+    /// When set to UNSPECIFIED, this field behaves the same as NORMAL, which just
+    /// means to behave according to the `subnet_type` field.
+    #[prost(enumeration = "CanisterCyclesCostSchedule", tag = "30")]
+    pub canister_cycles_cost_schedule: i32,
 }
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct EcdsaInitialization {
@@ -456,6 +460,52 @@ impl SubnetType {
             "SUBNET_TYPE_APPLICATION" => Some(Self::Application),
             "SUBNET_TYPE_SYSTEM" => Some(Self::System),
             "SUBNET_TYPE_VERIFIED_APPLICATION" => Some(Self::VerifiedApplication),
+            _ => None,
+        }
+    }
+}
+/// How to charge canisters for their use of computational resources (such as
+/// executing instructions, storing data, network, etc.)
+#[derive(
+    serde::Serialize,
+    serde::Deserialize,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    ::prost::Enumeration,
+)]
+#[repr(i32)]
+pub enum CanisterCyclesCostSchedule {
+    /// This should be treated the same as NORMAL.
+    Unspecified = 0,
+    /// Behave according to SubnetType.
+    Normal = 1,
+    /// Canisters are not charged cycles.
+    Free = 2,
+}
+impl CanisterCyclesCostSchedule {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "CANISTER_CYCLES_COST_SCHEDULE_UNSPECIFIED",
+            Self::Normal => "CANISTER_CYCLES_COST_SCHEDULE_NORMAL",
+            Self::Free => "CANISTER_CYCLES_COST_SCHEDULE_FREE",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "CANISTER_CYCLES_COST_SCHEDULE_UNSPECIFIED" => Some(Self::Unspecified),
+            "CANISTER_CYCLES_COST_SCHEDULE_NORMAL" => Some(Self::Normal),
+            "CANISTER_CYCLES_COST_SCHEDULE_FREE" => Some(Self::Free),
             _ => None,
         }
     }

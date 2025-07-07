@@ -12,7 +12,7 @@ use ic_types::{
     crypto::{canister_threshold_sig::MasterPublicKey, threshold_sig::ni_dkg::NiDkgId},
     ingress::{IngressStatus, WasmResult},
     messages::{CertificateDelegation, MessageId, Query, SignedIngressContent},
-    Cycles, ExecutionRound, Height, NumInstructions, Randomness, ReplicaVersion, Time,
+    Cycles, ExecutionRound, Height, NodeId, NumInstructions, Randomness, ReplicaVersion, Time,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -272,6 +272,8 @@ pub enum SystemApiCallId {
     EnvVarNameSize,
     /// Tracker for `ic0.env_var_name_copy()`
     EnvVarNameCopy,
+    /// Tracker for `ic0.env_var_name_exists()`
+    EnvVarNameExists,
     /// Tracker for `ic0.env_var_value_size()`
     EnvVarValueSize,
     /// Tracker for `ic0.env_var_value_copy()`
@@ -681,6 +683,21 @@ pub trait SystemApi {
         size: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
+
+    /// Checks if an environment variable with the given name exists.
+    /// Returns 1 if the environment variable with the given name exists, 0 otherwise.
+    ///
+    /// # Panics
+    ///
+    /// This traps if:
+    ///     - the name is too long
+    ///     - the name is not a valid UTF-8 string.
+    fn ic0_env_var_name_exists(
+        &self,
+        name_src: usize,
+        name_size: usize,
+        heap: &[u8],
+    ) -> HypervisorResult<i32>;
 
     /// Returns the size of the value for the environment variable with the given name.
     ///
@@ -1363,6 +1380,7 @@ pub struct RegistryExecutionSettings {
     pub provisional_whitelist: ProvisionalWhitelist,
     pub chain_key_settings: BTreeMap<MasterPublicKeyId, ChainKeySettings>,
     pub subnet_size: usize,
+    pub node_ids: BTreeSet<NodeId>,
 }
 
 /// Chain key configuration of execution that comes from the registry.

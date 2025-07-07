@@ -580,12 +580,6 @@ impl Step for ValidateReplayStep {
             ));
         }
 
-        if latest_height.get() - self.extra_batches < finalization_height.get() {
-            return Err(RecoveryError::invalid_output_error(
-                "There exists a node with finalization height greater than the replay height.",
-            ));
-        }
-
         info!(self.logger, "Success!");
 
         Ok(())
