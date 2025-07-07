@@ -82,22 +82,24 @@ pub async fn gen_vetkd_key(
         transport_public_key: ic_bls12_381::G1Affine::generator().to_compressed().to_vec(),
     };
 
-    match vetkd_derive_key(&key_request).await.map_err(|err| err.1) {
+    match vetkd_derive_key(key_request)
+        .await
+        .map(|(res,)| res)
+        .map_err(|err| err.1)
+    {
         Ok(key) => ManualReply::one(key),
         Err(err) => ManualReply::reject(err),
     }
 }
 
-pub async fn vetkd_derive_key(arg: &VetKDDeriveKeyArgs) -> CallResult<VetKDDeriveKeyResult> {
-    let (result,) = call_with_payment128(
+pub async fn vetkd_derive_key(arg: VetKDDeriveKeyArgs) -> CallResult<(VetKDDeriveKeyResult,)> {
+    call_with_payment128(
         Principal::management_canister(),
         "vetkd_derive_key",
         (arg,),
         26_153_846_153,
     )
-    .await?;
-
-    result
+    .await
 }
 
 fn main() {}
