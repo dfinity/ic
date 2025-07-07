@@ -39,9 +39,34 @@ impl std::fmt::Display for GetSubnetForCanisterError {
 
 const MAX_RANGES_PER_CANISTER_RANGES: u16 = 20;
 
+/// Returns a list of mutations of routing table shards so that applying them to the registry will
+/// result in the routing table (represented as routing table shards) being updated to the given new
+/// routing table.
+///
+/// Invariants that should hold before and after the mutations:
+///
+/// * each shard is a valid routing table - the canister ranges in the entries are sorted and
+///   disjoint.
+/// * for each shard, the start canister id of the first entry *is larger than or equal* to the
+///   canister id in the shard key.
+/// * for each shard, the end canister id of the last entry + 1 *is smaller than or equal to* the
+///   canister id in the next shard key.
+///
+/// Note that the method does not require the following invariants:
+///
+/// * for the last two invariants, we do not require equality as a precondition, even though the
+///   method should produce mutations that result in equality except for the shard key with
+///   `CanisterId(0)`.
+/// * each shard can have more than `MAX_RANGES_PER_CANISTER_RANGES` entries, even though this
+///   method should produce mutations that result in <= `MAX_RANGES_PER_CANISTER_RANGES` entries for
+///   each shard.
+///
+/// Relaxing the invariants as preconditions does not make it more difficult to compute the
+/// mutations, while it helps with setting up tests, since a single shard with all the entries can
+/// be inserted with a smallest possible shard key, i.e., `CanisterId::from_u64(0)`.
+///
 /// Complexity O(n)
-// TODO after migration runs in registry_lifecycle.rs, make this function private to this module again.
-pub(crate) fn mutations_for_canister_ranges(
+fn mutations_for_canister_ranges(
     registry: &Registry,
     new_rt: &RoutingTable,
 ) -> Vec<RegistryMutation> {
@@ -462,57 +487,6 @@ mod tests {
         );
 
         // GetSubnetForCanisterError::CanisterIdConversion currently not reachable - CanisterId::try_from() always succeeds
-    }
-
-    #[test]
-    fn test_routing_table_saves_as_canister_range_records_on_first_invocation_correctly() {
-        let mut registry = invariant_compliant_registry(0);
-        let system_subnet =
-            PrincipalId::try_from(registry.get_subnet_list_record().subnets.first().unwrap())
-                .unwrap();
-
-        let mut original = RoutingTable::new();
-        original
-            .insert(
-                CanisterIdRange {
-                    start: CanisterId::from(5000),
-                    end: CanisterId::from(6000),
-                },
-                system_subnet.into(),
-            )
-            .unwrap();
-        original
-            .insert(
-                CanisterIdRange {
-                    start: CanisterId::from(6001),
-                    end: CanisterId::from(7000),
-                },
-                system_subnet.into(),
-            )
-            .unwrap();
-
-        let new_routing_table = pb::RoutingTable::from(original.clone());
-        let mutations = vec![upsert(
-            make_routing_table_record_key().as_bytes(),
-            new_routing_table.encode_to_vec(),
-        )];
-        registry.maybe_apply_mutation_internal(mutations);
-
-        let recovered = registry
-            .get_routing_table_from_canister_range_records_or_panic(registry.latest_version());
-
-        assert_eq!(recovered, RoutingTable::new());
-
-        // Now we are in a situation where there is no difference between what's stored under the
-        // `routing_table` key and what's being saved BUT we should still generate canister_ranges_*
-        // records b/c they're empty
-        let mutations = routing_table_into_registry_mutation(&registry, original.clone());
-        registry.maybe_apply_mutation_internal(mutations);
-
-        let recovered = registry
-            .get_routing_table_from_canister_range_records_or_panic(registry.latest_version());
-
-        assert_eq!(recovered, original);
     }
 
     #[test]

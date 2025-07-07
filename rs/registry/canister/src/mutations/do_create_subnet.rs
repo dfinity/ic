@@ -11,8 +11,8 @@ use ic_management_canister_types_private::{
 use ic_protobuf::registry::{
     node::v1::NodeRecord,
     subnet::v1::{
-        CatchUpPackageContents, ChainKeyConfig as ChainKeyConfigPb,
-        SubnetFeatures as SubnetFeaturesPb, SubnetRecord,
+        CanisterCyclesCostSchedule as CanisterCyclesCostSchedulePb, CatchUpPackageContents,
+        ChainKeyConfig as ChainKeyConfigPb, SubnetFeatures as SubnetFeaturesPb, SubnetRecord,
     },
 };
 use ic_registry_keys::{
@@ -283,6 +283,10 @@ pub struct CreateSubnetPayload {
 
     pub chain_key_config: Option<InitialChainKeyConfig>,
 
+    /// None is treated the same as Some(Normal). Some(Normal) should be
+    /// preferred over None though, because explicit is better than implicit.
+    pub canister_cycles_cost_schedule: Option<CanisterCyclesCostSchedule>,
+
     // TODO(NNS1-2444): The fields below are deprecated and they are not read anywhere.
     pub ingress_bytes_per_block_soft_cap: u64,
     pub gossip_max_artifact_streams_per_peer: u32,
@@ -465,6 +469,32 @@ impl TryFrom<KeyConfigRequest> for KeyConfigRequestInternal {
     }
 }
 
+/// How much (in cycles) does it cost a canister to consume computational
+/// resources? Examples of such resources, which generally require cycles:
+///
+///     1. Execute instructions.
+///     2. Store Data - In normal memory, and stable memory.
+#[derive(Clone, Copy, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
+pub enum CanisterCyclesCostSchedule {
+    /// Use the cost schedule associate with the subnet's type.
+    #[default]
+    Normal,
+
+    /// This is used by rented subnets. This is because rented subnets get paid
+    /// for in a different way.
+    Free,
+}
+
+impl From<CanisterCyclesCostSchedule> for CanisterCyclesCostSchedulePb {
+    fn from(src: CanisterCyclesCostSchedule) -> Self {
+        type Src = CanisterCyclesCostSchedule;
+        match src {
+            Src::Normal => Self::Normal,
+            Src::Free => Self::Free,
+        }
+    }
+}
+
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
 pub struct EcdsaInitialConfig {
     pub quadruples_to_create_in_advance: u32,
@@ -517,6 +547,12 @@ impl From<CreateSubnetPayload> for SubnetRecord {
                         .expect("Invalid InitialChainKeyConfig")
                 })
                 .map(ChainKeyConfigPb::from),
+
+            canister_cycles_cost_schedule: val
+                .canister_cycles_cost_schedule
+                .map(CanisterCyclesCostSchedulePb::from)
+                .unwrap_or(CanisterCyclesCostSchedulePb::Normal)
+                as i32,
         }
     }
 }
