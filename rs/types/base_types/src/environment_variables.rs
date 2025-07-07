@@ -5,8 +5,7 @@ use ic_crypto_sha2::Sha256;
 /// The length of a environment variables hash in bytes.
 pub const HASH_LENGTH: usize = 32;
 
-
-/// Represents a set of environment variables for a canister 
+/// Represents a set of environment variables for a canister
 /// mapping environment variable names to their values.
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct EnvironmentVariables {
@@ -20,7 +19,7 @@ impl EnvironmentVariables {
         }
     }
 
-    /// Calculates the hash of environment variables as 
+    /// Calculates the hash of environment variables as
     /// described in `hash_of_map` as specified in the public spec.
     pub fn hash(&self) -> [u8; HASH_LENGTH] {
         // Create a vector to store the hashes of key-value pairs
