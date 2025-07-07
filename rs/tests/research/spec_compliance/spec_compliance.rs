@@ -41,7 +41,6 @@ pub fn group_01() -> Vec<&'static str> {
         "($0 ~ /canister version/)",
         "($0 ~ /canister global timer/)",
         "($0 ~ /canister http/)",
-        "($0 ~ /WebAssembly module validation/)",
     ]
 }
 
