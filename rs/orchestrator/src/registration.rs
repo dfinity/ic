@@ -271,13 +271,10 @@ impl NodeRegistration {
         let registry_version = self.registry_client.get_latest_version();
         // If there is no Chain key config or no key_ids, threshold signing is disabled.
         // Delta is the key rotation period of a single node, if it is None, key rotation is disabled.
-        let delta = match self.get_key_rotation_period(registry_version, subnet_id) {
-            Some(delta) => delta,
-            None => {
-                self.metrics
-                    .observe_key_rotation_status(KeyRotationStatus::Disabled);
-                return;
-            }
+        let Some(delta) = self.get_key_rotation_period(registry_version, subnet_id) else {
+            self.metrics
+                .observe_key_rotation_status(KeyRotationStatus::Disabled);
+            return;
         };
 
         let key_handler = self.key_handler.clone();
@@ -416,12 +413,11 @@ impl NodeRegistration {
         info!(self.log, "Trying to register rotated idkg key...");
 
         let node_id = self.node_id;
-        let nns_url = match self
+        let Some(nns_url) = self
             .get_random_nns_url()
             .or_else(|| self.get_random_nns_url_from_config())
-        {
-            Some(url) => url,
-            None => return Err("Failed to get random NNS URL.".into()),
+        else {
+            return Err("Failed to get random NNS URL.".into());
         };
         let key_handler = self.key_handler.clone();
         let node_pub_key_opt = tokio::task::spawn_blocking(move || {
