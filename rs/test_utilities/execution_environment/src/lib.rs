@@ -2194,11 +2194,6 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_environment_variables_flag(mut self, environment_variables_flag: FlagStatus) -> Self {
-        self.execution_config.environment_variables = environment_variables_flag;
-        self
-    }
-
     pub fn build(self) -> ExecutionTest {
         let own_range = CanisterIdRange {
             start: CanisterId::from(CANISTER_IDS_PER_SUBNET),

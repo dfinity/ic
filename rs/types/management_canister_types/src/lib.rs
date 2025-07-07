@@ -14,8 +14,8 @@ pub use http::{
     HttpMethod, TransformArgs, TransformContext, TransformFunc,
 };
 use ic_base_types::{
-    CanisterId, NodeId, NumBytes, PrincipalId, RegistryVersion, SnapshotId, SubnetId,
-    EnvironmentVariables,
+    CanisterId, EnvironmentVariables, NodeId, NumBytes, PrincipalId, RegistryVersion, SnapshotId,
+    SubnetId,
 };
 use ic_error_types::{ErrorCode, UserError};
 use ic_protobuf::proxy::ProxyDecodeError;
@@ -1138,10 +1138,13 @@ impl DefiniteCanisterSettingsArgs {
         let memory_allocation = candid::Nat::from(memory_allocation.unwrap_or(0));
         let reserved_cycles_limit = candid::Nat::from(reserved_cycles_limit.unwrap_or(0));
         let wasm_memory_limit = candid::Nat::from(wasm_memory_limit.unwrap_or(0));
-        let environment_variables = environment_variables.iter().map(|(name, value)| EnvironmentVariable {
-            name: name.clone(),
-            value: value.clone(),
-        }).collect::<Vec<EnvironmentVariable>>();
+        let environment_variables = environment_variables
+            .iter()
+            .map(|(name, value)| EnvironmentVariable {
+                name: name.clone(),
+                value: value.clone(),
+            })
+            .collect::<Vec<EnvironmentVariable>>();
         Self {
             controller,
             controllers,

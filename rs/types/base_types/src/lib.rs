@@ -12,9 +12,9 @@ use serde_bytes::ByteBuf;
 use std::{convert::TryFrom, fmt};
 
 mod canister_id;
+mod environment_variables;
 mod pb_internal;
 mod principal_id;
-mod environment_variables;
 
 pub use canister_id::{CanisterId, CanisterIdError, CanisterIdError as CanisterIdBlobParseError};
 pub use environment_variables::EnvironmentVariables;

@@ -2,12 +2,11 @@ use ic00::{
     CanisterSettingsArgsBuilder, CanisterSnapshotResponse, LoadCanisterSnapshotArgs,
     TakeCanisterSnapshotArgs,
 };
-use ic_base_types::PrincipalId;
+use ic_base_types::{EnvironmentVariables, PrincipalId};
 use ic_config::flag_status::FlagStatus;
 use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
 use ic_crypto_sha2::Sha256;
 use ic_error_types::{ErrorCode, UserError};
-use ic_execution_environment::EnvironmentVariables;
 use ic_management_canister_types_private::CanisterInstallMode::{Install, Reinstall, Upgrade};
 use ic_management_canister_types_private::{
     self as ic00, CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterIdRecord,
@@ -1253,12 +1252,15 @@ fn check_environment_variables_for_create_canister_history(
     let canister_state = state.canister_state(&canister_id).unwrap();
     match environment_variables_flag {
         FlagStatus::Enabled => {
-            assert_eq!(&canister_state.system_state.environment_variables, env_vars);
+            assert_eq!(
+                canister_state.system_state.environment_variables,
+                EnvironmentVariables::new(env_vars.clone())
+            );
         }
         FlagStatus::Disabled => {
             assert_eq!(
                 canister_state.system_state.environment_variables,
-                BTreeMap::new()
+                EnvironmentVariables::new(BTreeMap::new())
             );
         }
     }
@@ -1337,7 +1339,10 @@ fn canister_history_tracking_env_vars_update_settings() {
     // Verify the environment variables of the canister state.
     let state = env.get_latest_state();
     let canister_state = state.canister_state(&canister_id).unwrap();
-    assert_eq!(canister_state.system_state.environment_variables, env_vars);
+    assert_eq!(
+        canister_state.system_state.environment_variables,
+        EnvironmentVariables::new(env_vars)
+    );
 }
 
 #[test]

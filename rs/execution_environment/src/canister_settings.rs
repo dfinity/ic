@@ -1,15 +1,15 @@
-use ic_base_types::{NumBytes, NumSeconds, EnvironmentVariables};
+use ic_base_types::{EnvironmentVariables, NumBytes, NumSeconds};
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
-use ic_management_canister_types_private::{CanisterSettingsArgs, LogVisibilityV2, HASH_LENGTH};
+use ic_management_canister_types_private::{CanisterSettingsArgs, LogVisibilityV2};
 use ic_replicated_state::MessageMemoryUsage;
 use ic_types::{
     ComputeAllocation, Cycles, InvalidComputeAllocationError, InvalidMemoryAllocationError,
     MemoryAllocation, PrincipalId,
 };
 use num_traits::{cast::ToPrimitive, SaturatingSub};
-use std::{convert::TryFrom};
+use std::convert::TryFrom;
 
 use crate::canister_manager::types::CanisterManagerError;
 

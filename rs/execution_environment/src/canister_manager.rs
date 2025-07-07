@@ -325,8 +325,7 @@ impl CanisterManager {
         }
         if let Some(environment_variables) = settings.environment_variables() {
             if self.environment_variables_flag == FlagStatus::Enabled {
-                canister.system_state.environment_variables =
-                    environment_variables.clone();
+                canister.system_state.environment_variables = environment_variables.clone();
             }
         }
     }

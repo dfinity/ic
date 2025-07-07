@@ -15,7 +15,7 @@ use crate::{
     PageMap, StateError,
 };
 pub use call_context_manager::{CallContext, CallContextAction, CallContextManager, CallOrigin};
-use ic_base_types::{NumSeconds, EnvironmentVariables};
+use ic_base_types::{EnvironmentVariables, NumSeconds};
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::HypervisorError;
 use ic_logger::{error, ReplicaLogger};
