@@ -11225,6 +11225,7 @@ dependencies = [
  "ic-nns-handler-root-interface",
  "ic-node-rewards-canister-api",
  "ic-protobuf",
+ "ic-registry-subnet-type",
  "ic-sns-init",
  "ic-sns-root",
  "ic-sns-swap",
