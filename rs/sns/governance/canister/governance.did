@@ -254,10 +254,20 @@ type GetMetricsRequest = record {
 };
 
 type TreasuryMetrics = record {
+  // Same as, e.g., `TransferSnsTreasuryFunds.from_treasury`.
   treasury : int32;
+
+  // A human-readable identified for this treasury, e.g., "ICP".
   name : opt text;
+  
+  // The source of truth for the treasury balance is this ledger canister / account.
+  ledger_canister_id : opt principal;
   account : opt Account;
+
+  // The regularly updated amount of tokens in this treasury.
   amount_e8s : opt nat64;
+  // The amount of tokens in this treasury at the end of swap finalization.
+  original_amount_e8s : opt nat64;
 };
 
 type Metrics = record {

@@ -1687,11 +1687,12 @@ pub struct GetMetricsRequest {
 
 #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
 pub struct TreasuryMetrics {
-    /// Same as, e.g., `TransferSnsTreasuryFunds.from_treasury`.
     pub treasury: i32,
     pub name: Option<String>,
+    pub ledger_canister_id: Option<::ic_base_types::PrincipalId>,
     pub account: Option<Account>,
     pub amount_e8s: Option<u64>,
+    pub original_amount_e8s: Option<u64>,
 }
 
 pub mod get_metrics_response {

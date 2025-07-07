@@ -1949,12 +1949,39 @@ impl From<pb_api::GetMetadataRequest> for pb::GetMetadataRequest {
     }
 }
 
+impl From<pb::TreasuryMetrics> for pb_api::TreasuryMetrics {
+    fn from(item: pb::TreasuryMetrics) -> Self {
+        let pb::TreasuryMetrics {
+            treasury,
+            name,
+            ledger_canister_id,
+            account,
+            amount_e8s,
+            original_amount_e8s,
+        } = item;
+
+        let account = account.map(pb_api::Account::from);
+        let amount_e8s = Some(amount_e8s);
+        let original_amount_e8s = Some(original_amount_e8s);
+
+        Self {
+            treasury,
+            name,
+            ledger_canister_id,
+            account,
+            amount_e8s,
+            original_amount_e8s,
+        }
+    }
+}
+
 impl From<pb::Metrics> for pb_api::get_metrics_response::Metrics {
     fn from(item: pb::Metrics) -> Self {
         let pb::Metrics {
             num_recently_submitted_proposals,
             last_ledger_block_timestamp,
             num_recently_executed_proposals,
+            treasury_metrics,
         } = item;
 
         let num_recently_submitted_proposals = Some(num_recently_submitted_proposals);
@@ -1966,10 +1993,18 @@ impl From<pb::Metrics> for pb_api::get_metrics_response::Metrics {
             Some(last_ledger_block_timestamp)
         };
 
+        let treasury_metrics = Some(
+            treasury_metrics
+                .into_iter()
+                .map(pb_api::TreasuryMetrics::from)
+                .collect(),
+        );
+
         Self {
             num_recently_submitted_proposals,
             num_recently_executed_proposals,
             last_ledger_block_timestamp,
+            treasury_metrics,
         }
     }
 }

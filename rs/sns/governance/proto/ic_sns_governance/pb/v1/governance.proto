@@ -1634,11 +1634,29 @@ message GetMetricsRequest {
   uint64 time_window_seconds = 1;
 }
 
+message TreasuryMetrics {
+  enum Treasury {
+    TREASURY_UNSPECIFIED = 0;
+    ICP_TREASURY = 1;
+    SNS_TOKEN_TREASURY = 2;
+  }
+
+  Treasury treasury = 1;
+  optional string name = 2;
+
+  ic_base_types.pb.v1.PrincipalId ledger_canister_id = 3;
+  Account account = 4;
+
+  uint64 amount_e8s = 5;
+  uint64 original_amount_e8s = 6;
+}
+
 // Response message for 'get_sns_status'
 message Metrics {
   uint64 num_recently_submitted_proposals = 1;
   uint64 last_ledger_block_timestamp = 2;
   uint64 num_recently_executed_proposals = 3;
+  repeated TreasuryMetrics treasury_metrics = 4;
 }
 
 // Request message for 'get_sns_initialization_parameters'

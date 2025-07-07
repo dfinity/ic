@@ -55,18 +55,17 @@ use crate::{
             DisburseMaturityInProgress, Empty, ExecuteGenericNervousSystemFunction,
             FailStuckUpgradeInProgressRequest, FailStuckUpgradeInProgressResponse,
             GetMaturityModulationRequest, GetMaturityModulationResponse, GetMetadataRequest,
-            GetMetadataResponse, GetMetricsRequest, GetMode, GetModeResponse, GetNeuron,
-            GetNeuronResponse, GetProposal, GetProposalResponse,
-            GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
-            Governance as GovernanceProto, GovernanceError, ListNervousSystemFunctionsResponse,
-            ListNeurons, ListNeuronsResponse, ListProposals, ListProposalsResponse,
-            ManageDappCanisterSettings, ManageLedgerParameters, ManageNeuron, ManageNeuronResponse,
-            ManageSnsMetadata, MintSnsTokens, MintTokensRequest, MintTokensResponse,
-            NervousSystemFunction, NervousSystemParameters, Neuron, NeuronId, NeuronPermission,
-            NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData,
-            ProposalDecisionStatus, ProposalId, ProposalRewardStatus, RegisterDappCanisters,
-            RewardEvent, SetTopicsForCustomProposals, Tally, Topic, TransferSnsTreasuryFunds,
-            UpgradeSnsControlledCanister, Vote, WaitForQuietState,
+            GetMetadataResponse, GetMode, GetModeResponse, GetNeuron, GetNeuronResponse,
+            GetProposal, GetProposalResponse, GetSnsInitializationParametersRequest,
+            GetSnsInitializationParametersResponse, Governance as GovernanceProto, GovernanceError,
+            ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
+            ListProposalsResponse, ManageDappCanisterSettings, ManageLedgerParameters,
+            ManageNeuron, ManageNeuronResponse, ManageSnsMetadata, MintSnsTokens,
+            MintTokensRequest, MintTokensResponse, NervousSystemFunction, NervousSystemParameters,
+            Neuron, NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType,
+            Proposal, ProposalData, ProposalDecisionStatus, ProposalId, ProposalRewardStatus,
+            RegisterDappCanisters, RewardEvent, SetTopicsForCustomProposals, Tally, Topic,
+            TransferSnsTreasuryFunds, UpgradeSnsControlledCanister, Vote, WaitForQuietState,
         },
     },
     proposal::{
@@ -2011,15 +2010,12 @@ impl Governance {
             .unwrap_or(u64::MAX);
     }
 
-    pub async fn get_metrics(
-        &self,
-        request: GetMetricsRequest,
-    ) -> Result<Metrics, GovernanceError> {
+    pub async fn get_metrics(&self, time_window_seconds: u64) -> Result<Metrics, GovernanceError> {
         let num_recently_submitted_proposals =
-            self.recently_submitted_proposals(request.time_window_seconds);
+            self.recently_submitted_proposals(time_window_seconds);
 
-        let num_recently_executed_proposals =
-            self.recently_executed_proposals(request.time_window_seconds);
+        let num_recently_executed_proposals = self.recently_executed_proposals(time_window_seconds);
+
         let icrc_ledger_helper = ICRCLedgerHelper::with_ledger(self.ledger.as_ref());
 
         let last_ledger_block_timestamp = icrc_ledger_helper
@@ -2033,6 +2029,7 @@ impl Governance {
             num_recently_submitted_proposals,
             num_recently_executed_proposals,
             last_ledger_block_timestamp,
+            treasury_metrics: vec![],
         })
     }
 
