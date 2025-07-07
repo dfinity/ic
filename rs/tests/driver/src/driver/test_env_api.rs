@@ -1220,27 +1220,6 @@ pub fn get_ic_os_initial_update_img_sha256(env: &TestEnv) -> Result<String> {
     }
 }
 
-// Mainnet Support
-pub fn get_mainnet_ic_os_img_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__MAINNET_GUESTOS_DISK_IMG_URL")?;
-    Ok(Url::parse(&url)?)
-}
-
-pub fn get_mainnet_ic_os_img_sha256() -> Result<String> {
-    Ok(std::env::var("ENV_DEPS__MAINNET_GUESTOS_DISK_IMG_HASH")?)
-}
-
-pub fn get_mainnet_ic_os_update_img_url() -> Result<Url> {
-    let mainnet_version = get_mainnet_nns_revision();
-    let url = format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/update-img/update-img.tar.zst");
-    Ok(Url::parse(&url)?)
-}
-
-pub fn get_mainnet_ic_os_update_img_sha256(env: &TestEnv) -> Result<String> {
-    let mainnet_version = get_mainnet_nns_revision();
-    fetch_sha256(format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/update-img"), "update-img.tar.zst", env.logger())
-}
-
 // Target version
 pub fn get_ic_os_update_img_version() -> Result<String> {
     // TODO: Until the version can be passed directly in the env variable, resolve it from a file, instead.
