@@ -103,6 +103,14 @@ type CreateSubnetPayload = record {
   gossip_retransmission_request_ms : nat32;
 };
 
+type CreateSubnetResponse = variant {
+  Ok : record {
+    new_subnet_id : opt principal;
+  };
+
+  Err: text;
+};
+
 type CanisterCyclesCostSchedule = variant {
   Normal;
   Free;
@@ -480,7 +488,7 @@ service : {
   change_subnet_membership : (ChangeSubnetMembershipPayload) -> ();
   clear_provisional_whitelist : () -> ();
   complete_canister_migration : (CompleteCanisterMigrationPayload) -> ();
-  create_subnet : (CreateSubnetPayload) -> ();
+  create_subnet : (CreateSubnetPayload) -> (CreateSubnetResponse);
   deploy_guestos_to_all_subnet_nodes : (
     DeployGuestosToAllSubnetNodesPayload
   ) -> ();
