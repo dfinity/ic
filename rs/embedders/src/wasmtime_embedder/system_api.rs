@@ -10,7 +10,7 @@ use ic_interfaces::execution_environment::{
     StableMemoryApi, SubnetAvailableMemory, SystemApi, SystemApiCallCounters,
     TrapCode::{self, CyclesAmountTooBigFor64Bit},
 };
-use ic_logger::{error, info, ReplicaLogger};
+use ic_logger::{error, ReplicaLogger};
 use ic_management_canister_types_private::{
     EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
     VetKdKeyId, IC_00,
