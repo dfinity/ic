@@ -1,5 +1,8 @@
 use crate::icrc_ledger_helper::ICRCLedgerHelper;
-use crate::pb::v1::Metrics;
+use crate::pb::v1::governance::GovernanceCachedMetrics;
+use crate::pb::v1::{Metrics, TreasuryMetrics};
+use crate::proposal::assess_treasury_balance;
+use crate::treasury::{interpret_token_code, tokens_to_e8s};
 use crate::{
     canister_control::{
         get_canister_id, perform_execute_generic_nervous_system_function_call,
@@ -100,7 +103,7 @@ use ic_nervous_system_collections_union_multi_map::UnionMultiMap;
 use ic_nervous_system_common::{
     i2d,
     ledger::{self, compute_distribution_subaccount_bytes},
-    NervousSystemError, ONE_DAY_SECONDS,
+    NervousSystemError, ONE_DAY_SECONDS, ONE_HOUR_SECONDS,
 };
 use ic_nervous_system_governance::maturity_modulation::{
     apply_maturity_modulation, MIN_MATURITY_MODULATION_PERMYRIAD,
@@ -2834,6 +2837,19 @@ impl Governance {
         Ok(())
     }
 
+    fn sns_treasury_icp_subaccount(&self) -> Option<Subaccount> {
+        None
+    }
+
+    fn sns_treasury_sns_token_subaccount(&self) -> Option<Subaccount> {
+        // See ic_sns_init::distributions::FractionalDeveloperVotingPower.insert_treasury_accounts
+        let treasury_subaccount = compute_distribution_subaccount_bytes(
+            self.env.canister_id().get(),
+            TREASURY_SUBACCOUNT_NONCE,
+        );
+        Some(treasury_subaccount)
+    }
+
     async fn perform_transfer_sns_treasury_funds(
         &mut self,
         proposal_id: u64, // This is just to control concurrency.
@@ -2878,7 +2894,7 @@ impl Governance {
                 .transfer_funds(
                     transfer.amount_e8s,
                     NNS_DEFAULT_TRANSFER_FEE.get_e8s(),
-                    None,
+                    self.sns_treasury_icp_subaccount(),
                     to,
                     transfer.memo.unwrap_or(0),
                 )
@@ -2892,16 +2908,12 @@ impl Governance {
                 }),
             TransferFrom::SnsTokenTreasury => {
                 let transaction_fee_e8s = self.transaction_fee_e8s_or_panic();
-                // See ic_sns_init::distributions::FractionalDeveloperVotingPower.insert_treasury_accounts
-                let treasury_subaccount = compute_distribution_subaccount_bytes(
-                    self.env.canister_id().get(),
-                    TREASURY_SUBACCOUNT_NONCE,
-                );
+
                 self.ledger
                     .transfer_funds(
                         transfer.amount_e8s,
                         transaction_fee_e8s,
-                        Some(treasury_subaccount),
+                        self.sns_treasury_sns_token_subaccount(),
                         to,
                         transfer.memo.unwrap_or(0),
                     )
@@ -5017,6 +5029,104 @@ impl Governance {
         }
     }
 
+    pub(crate) async fn maybe_refresh_cached_metrics(&mut self) {
+        let now_seconds = self.env.now();
+
+        if let Some(GovernanceCachedMetrics {
+            timestamp_seconds, ..
+        }) = self.proto.metrics
+        {
+            if now_seconds.saturating_sub(timestamp_seconds) < ONE_HOUR_SECONDS {
+                return;
+            }
+        }
+
+        log!(
+            INFO,
+            "Refreshing cached metrics at {}.",
+            format_timestamp_for_humans(now_seconds),
+        );
+
+        let mut metrics = self.proto.metrics.clone().unwrap_or_default();
+
+        let mut treasury_metrics = vec![];
+
+        for TreasuryMetrics {
+            // These fields remain unchanged.
+            treasury,
+            name,
+            ledger_canister_id,
+            account,
+            original_amount_e8s,
+
+            // These fields can change over time.
+            amount_e8s: _,
+            timestamp_seconds: _,
+        } in metrics.treasury_metrics
+        {
+            let token = match interpret_token_code(treasury) {
+                Ok(token) => token,
+                Err(err) => {
+                    log!(
+                        ERROR,
+                        "Failed to interpret treasury token code {}: {}",
+                        treasury,
+                        err
+                    );
+                    continue;
+                }
+            };
+
+            let treasury_valuation_result = assess_treasury_balance(
+                token,
+                self.env.canister_id(),
+                self.ledger.canister_id(),
+                self.proto.swap_canister_id_or_panic(),
+            )
+            .await;
+
+            let amount_e8s = match treasury_valuation_result {
+                Ok(valuation) => valuation.valuation_factors.tokens,
+                Err(err) => {
+                    log!(
+                        ERROR,
+                        "Failed to assess treasury balance for {:?}: {}",
+                        token,
+                        err
+                    );
+                    continue;
+                }
+            };
+
+            let amount_e8s = match tokens_to_e8s(amount_e8s) {
+                Ok(amount_e8s) => amount_e8s,
+                Err(err) => {
+                    log!(
+                        ERROR,
+                        "Failed to convert treasury balance to e8s for {:?}: {}",
+                        token,
+                        err
+                    );
+                    continue;
+                }
+            };
+
+            treasury_metrics.push(TreasuryMetrics {
+                treasury,
+                name,
+                ledger_canister_id,
+                account,
+                amount_e8s,
+                original_amount_e8s,
+                timestamp_seconds: now_seconds,
+            });
+        }
+
+        metrics.treasury_metrics = treasury_metrics;
+
+        self.proto.metrics.replace(metrics);
+    }
+
     /// Garbage collect obsolete data from the governance canister.
     ///
     /// Current implementation only garbage collects proposals - not neurons.
@@ -5157,6 +5267,8 @@ impl Governance {
         self.maybe_finalize_disburse_maturity().await;
 
         self.maybe_move_staked_maturity();
+
+        self.maybe_refresh_cached_metrics().await;
 
         self.maybe_gc();
     }

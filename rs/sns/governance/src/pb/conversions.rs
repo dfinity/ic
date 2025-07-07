@@ -1770,6 +1770,11 @@ impl From<pb::governance::GovernanceCachedMetrics> for pb_api::governance::Gover
                 .neurons_with_less_than_6_months_dissolve_delay_count,
             neurons_with_less_than_6_months_dissolve_delay_e8s: item
                 .neurons_with_less_than_6_months_dissolve_delay_e8s,
+            treasury_metrics: item
+                .treasury_metrics
+                .into_iter()
+                .map(|metrics| metrics.into())
+                .collect(),
         }
     }
 }
@@ -1793,6 +1798,11 @@ impl From<pb_api::governance::GovernanceCachedMetrics> for pb::governance::Gover
                 .neurons_with_less_than_6_months_dissolve_delay_count,
             neurons_with_less_than_6_months_dissolve_delay_e8s: item
                 .neurons_with_less_than_6_months_dissolve_delay_e8s,
+            treasury_metrics: item
+                .treasury_metrics
+                .into_iter()
+                .map(|metrics| metrics.into())
+                .collect(),
         }
     }
 }
@@ -1949,6 +1959,35 @@ impl From<pb_api::GetMetadataRequest> for pb::GetMetadataRequest {
     }
 }
 
+impl From<pb_api::TreasuryMetrics> for pb::TreasuryMetrics {
+    fn from(item: pb_api::TreasuryMetrics) -> Self {
+        let pb_api::TreasuryMetrics {
+            treasury,
+            name,
+            ledger_canister_id,
+            account,
+            amount_e8s,
+            original_amount_e8s,
+            timestamp_seconds,
+        } = item;
+
+        let account = account.map(pb::Account::from);
+        let amount_e8s = amount_e8s.unwrap_or_default();
+        let original_amount_e8s = original_amount_e8s.unwrap_or_default();
+        let timestamp_seconds = timestamp_seconds.unwrap_or_default();
+
+        Self {
+            treasury,
+            name,
+            ledger_canister_id,
+            account,
+            amount_e8s,
+            original_amount_e8s,
+            timestamp_seconds,
+        }
+    }
+}
+
 impl From<pb::TreasuryMetrics> for pb_api::TreasuryMetrics {
     fn from(item: pb::TreasuryMetrics) -> Self {
         let pb::TreasuryMetrics {
@@ -1958,11 +1997,13 @@ impl From<pb::TreasuryMetrics> for pb_api::TreasuryMetrics {
             account,
             amount_e8s,
             original_amount_e8s,
+            timestamp_seconds,
         } = item;
 
         let account = account.map(pb_api::Account::from);
         let amount_e8s = Some(amount_e8s);
         let original_amount_e8s = Some(original_amount_e8s);
+        let timestamp_seconds = Some(timestamp_seconds);
 
         Self {
             treasury,
@@ -1971,6 +2012,7 @@ impl From<pb::TreasuryMetrics> for pb_api::TreasuryMetrics {
             account,
             amount_e8s,
             original_amount_e8s,
+            timestamp_seconds,
         }
     }
 }

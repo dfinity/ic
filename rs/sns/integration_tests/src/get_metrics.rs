@@ -225,7 +225,11 @@ fn test_sns_metrics() {
             panic!("Expected a non-empty response");
         };
 
-        let get_metrics_response::GetMetricsResult::Ok(metrics) = get_metrics_result else {
+        let get_metrics_response::GetMetricsResult::Ok(Metrics {
+            num_recently_submitted_proposals,
+            num_recently_executed_proposals,
+            last_ledger_block_timestamp,
+        }) = get_metrics_result else {
             panic!(
                 "Expected to get an Ok() from the response, got {:?}",
                 get_metrics_result
@@ -233,7 +237,7 @@ fn test_sns_metrics() {
         };
 
         {
-            let Some(num_recently_submitted_proposals) = metrics.num_recently_submitted_proposals
+            let Some(num_recently_submitted_proposals) = num_recently_submitted_proposals
             else {
                 panic!("Expected `num_recently_submitted_proposals` to be Some(_)");
             };
@@ -246,7 +250,7 @@ fn test_sns_metrics() {
         }
 
         {
-            let Some(num_recently_executed_proposals) = metrics.num_recently_executed_proposals
+            let Some(num_recently_executed_proposals) = num_recently_executed_proposals
             else {
                 panic!("Expected `num_recently_executed_proposals` to be Some(_)");
             };
@@ -259,7 +263,7 @@ fn test_sns_metrics() {
         }
 
         {
-            let Some(last_ledger_block_timestamp) = metrics.last_ledger_block_timestamp else {
+            let Some(last_ledger_block_timestamp) = last_ledger_block_timestamp else {
                 panic!("Expected `num_recently_submitted_proposals` to be Some(_)");
             };
 

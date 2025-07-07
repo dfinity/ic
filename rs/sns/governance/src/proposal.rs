@@ -755,6 +755,25 @@ trait TokenProposalAction {
     fn recent_amount_total_upper_bound_tokens(valuation: &Valuation) -> Result<Decimal, String>;
 }
 
+pub(crate) async fn assess_treasury_balance(
+    token: Token,
+    sns_governance_canister_id: CanisterId,
+    sns_ledger_canister_id: CanisterId,
+    swap_canister_id: CanisterId,
+) -> Result<Valuation, String> {
+    let treasury_account = token.treasury_account(sns_governance_canister_id)?;
+    let valuation = token
+        .assess_balance(sns_ledger_canister_id, swap_canister_id, treasury_account)
+        .await
+        .map_err(|valuation_error| {
+            format!(
+                "Unable to assess current treasury balance: {:?}",
+                valuation_error
+            )
+        })?;
+    Ok(valuation)
+}
+
 // Ideally, I'd like to make this a "direct" method of TokenProposalAction. That is, there should be
 // just one implementation of this within TokenProposalAction, not a different implementation for
 // each type that implements TokenProposalAction. In general, it seems you can do that, but trying
@@ -781,11 +800,13 @@ where
 
     // Get valuation of the tokens in the treasury.
     let token = action.token()?;
-    let treasury_account = token.treasury_account(env.canister_id())?;
-    let valuation = token
-        .assess_balance(sns_ledger_canister_id, swap_canister_id, treasury_account)
-        .await
-        .map_err(|valuation_error| format!("Unable to validate amount: {:?}", valuation_error))?;
+    let valuation = assess_treasury_balance(
+        token,
+        env.canister_id(),
+        sns_ledger_canister_id,
+        swap_canister_id,
+    )
+    .await?;
 
     // From valuation, determine limit on the total from the past 7 days.
     let max_tokens = MyTokenProposalAction::recent_amount_total_upper_bound_tokens(&valuation)

@@ -277,6 +277,9 @@ type TreasuryMetrics = record {
   amount_e8s : opt nat64;
   // The amount of tokens in this treasury at the end of swap finalization.
   original_amount_e8s : opt nat64;
+
+  // When the metrics were last updated.
+  timestamp_seconds : opt nat64;
 };
 
 type Metrics = record {

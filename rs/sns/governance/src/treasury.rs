@@ -49,6 +49,24 @@ impl TryFrom<Valuation> for ValuationPb {
     }
 }
 
+pub(crate) fn tokens_to_e8s(tokens: Decimal) -> Result<u64, String> {
+    let e8s = tokens.checked_mul(Decimal::from(E8)).ok_or_else(|| {
+        format!(
+            "Unable to convert {} tokens (Decimal) to e8s (u64) due to multiplication overflow.",
+            tokens,
+        )
+    })?;
+
+    let e8s = u64::try_from(e8s).map_err(|err| {
+        format!(
+            "Unable to convert {} tokens (Decimal) to e8s (u64): {:?}",
+            tokens, err,
+        )
+    })?;
+
+    Ok(e8s)
+}
+
 impl TryFrom<ValuationFactors> for ValuationFactorsPb {
     type Error = String;
 
@@ -59,22 +77,9 @@ impl TryFrom<ValuationFactors> for ValuationFactorsPb {
             xdrs_per_icp,
         } = src;
 
-        let tokens = Some(Tokens {
-            e8s: Some(
-                u64::try_from(tokens.checked_mul(Decimal::from(E8)).ok_or_else(|| {
-                    format!(
-                        "Unable to convert {} tokens (Decimal) to e8s (u64).",
-                        tokens,
-                    )
-                })?)
-                .map_err(|err| {
-                    format!(
-                        "Unable to convert {} tokens (Decimal) to e8s (u64): {:?}",
-                        tokens, err,
-                    )
-                })?,
-            ),
-        });
+        let e8s = tokens_to_e8s(tokens)?;
+
+        let tokens = Some(Tokens { e8s: Some(e8s) });
 
         let icps_per_token = Some(DecimalPb::from(icps_per_token));
         let xdrs_per_icp = Some(DecimalPb::from(xdrs_per_icp));
@@ -101,6 +106,16 @@ impl TryFrom<Token> for TokenPb {
     }
 }
 
+pub(crate) fn interpret_token_code(token: i32) -> Result<Token, String> {
+    // First, convert from i32 to TokePb.
+    let token_pb = TokenPb::try_from(token)
+        .map_err(|err| format!("Unknown or unspecified token code {:?}: {:?}", token, err))?;
+
+    // Then, convert from TokenPb to Token.
+    Token::try_from(token_pb)
+        .map_err(|err| format!("Unknown or unspecified token code {:?}: {:?}", token, err,))
+}
+
 impl TryFrom<&ValuationPb> for Valuation {
     type Error = String;
 
@@ -114,28 +129,7 @@ impl TryFrom<&ValuationPb> for Valuation {
 
         let mut defects = Vec::<String>::new();
 
-        let token = {
-            // First, convert from i32 to TokePb.
-            let token_pb = TokenPb::try_from(token.unwrap_or_default()).unwrap_or_else(|err| {
-                defects.push(format!(
-                    "Unknown or unspecified token code {:?}: {:?}",
-                    token, err
-                ));
-                // This is a little dangerous, because it is misleading. However, since defects is
-                // now non-empty, this won't get used.
-                TokenPb::Icp
-            });
-
-            // Then, convert from TokenPb to Token.
-            Token::try_from(token_pb).unwrap_or_else(|err| {
-                defects.push(format!(
-                    "Unknown or unspecified token code {:?}: {:?}",
-                    token, err,
-                ));
-                // Ditto earlier comment.
-                Token::Icp
-            })
-        };
+        let token = interpret_token_code(token.unwrap_or_default())?;
 
         let account =
             Account::try_from(account.clone().unwrap_or_default()).unwrap_or_else(|err| {
