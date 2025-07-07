@@ -1098,6 +1098,7 @@ pub struct PocketIc {
 impl Drop for PocketIc {
     fn drop(&mut self) {
         if let Some(ref state_dir) = self.subnets.state_dir {
+            println!("dropping");
             let subnets = self.subnets.get_all();
             for subnet in &subnets {
                 subnet.state_machine.checkpointed_tick();
