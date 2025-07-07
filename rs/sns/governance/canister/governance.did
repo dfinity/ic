@@ -253,10 +253,18 @@ type GetMetricsRequest = record {
   time_window_seconds : opt nat64;
 };
 
+type TreasuryMetrics = record {
+  treasury : int32;
+  name : opt text;
+  account : opt Account;
+  amount_e8s : opt nat64;
+};
+
 type Metrics = record {
   num_recently_submitted_proposals : opt nat64;
   num_recently_executed_proposals: opt nat64;
   last_ledger_block_timestamp : opt nat64;
+  treasury_metrics : opt vec TreasuryMetrics;
 };
 
 type GetMetricsResult = variant {

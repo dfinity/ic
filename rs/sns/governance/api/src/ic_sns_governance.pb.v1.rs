@@ -1685,14 +1685,24 @@ pub struct GetMetricsRequest {
     pub time_window_seconds: Option<u64>,
 }
 
+#[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
+pub struct TreasuryMetrics {
+    /// Same as, e.g., `TransferSnsTreasuryFunds.from_treasury`.
+    pub treasury: i32,
+    pub name: Option<String>,
+    pub account: Option<Account>,
+    pub amount_e8s: Option<u64>,
+}
+
 pub mod get_metrics_response {
-    use super::GovernanceError;
+    use super::{GovernanceError, TreasuryMetrics};
 
     #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
     pub struct Metrics {
         pub num_recently_submitted_proposals: Option<u64>,
         pub num_recently_executed_proposals: Option<u64>,
         pub last_ledger_block_timestamp: Option<u64>,
+        pub treasury_metrics: Option<Vec<TreasuryMetrics>>,
     }
 
     #[derive(candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
