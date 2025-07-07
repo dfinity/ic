@@ -23,6 +23,7 @@
 
 use crate::{node_id_into_protobuf, node_id_try_from_option, QueryStatsEpoch};
 use ic_base_types::{CanisterId, NodeId, NumBytes};
+use ic_protobuf::registry::subnet::v1 as proto;
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     state::{
@@ -334,6 +335,25 @@ impl TryFrom<&pb::CanisterQueryStats> for CanisterQueryStats {
                 egress_payload_size: entry.egress_payload_size,
             },
         })
+    }
+}
+
+/// How to charge canisters for their use of computational resources (such as
+/// executing instructions, storing data, network, etc.)
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum CanisterCyclesCostSchedule {
+    #[default]
+    Normal,
+    Free,
+}
+
+impl From<proto::CanisterCyclesCostSchedule> for CanisterCyclesCostSchedule {
+    fn from(value: proto::CanisterCyclesCostSchedule) -> Self {
+        match value {
+            proto::CanisterCyclesCostSchedule::Unspecified => CanisterCyclesCostSchedule::Normal,
+            proto::CanisterCyclesCostSchedule::Normal => CanisterCyclesCostSchedule::Normal,
+            proto::CanisterCyclesCostSchedule::Free => CanisterCyclesCostSchedule::Free,
+        }
     }
 }
 
