@@ -254,7 +254,7 @@ pub fn encode_metrics(
         .unwrap_or(now);
     let oldest_retrieve_btc_age = now.saturating_sub(oldest) / 1_000_000_000;
     metrics.encode_gauge(
-        "ckbtc_minter_oldest_retrieve_btc_request_age_seconds",
+        "ckbtc_minter_oldest_retrieve_btc_submitted_transaction_age_seconds",
         oldest_retrieve_btc_age as f64,
         "The age of the oldest submitted transaction for retrieve btc request in seconds.",
     )?;

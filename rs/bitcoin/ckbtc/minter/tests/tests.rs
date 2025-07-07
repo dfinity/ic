@@ -1616,7 +1616,7 @@ fn test_transaction_resubmission_finalize_new() {
     ckbtc = ckbtc
         .check_minter_metrics()
         .assert_contains_metric_matching(
-            r#"ckbtc_minter_oldest_retrieve_btc_request_age_seconds [1-9]\d+ \d+"#,
+            r#"ckbtc_minter_oldest_retrieve_btc_submitted_transaction_age_seconds [1-9]\d+ \d+"#,
         )
         .into();
     // Step 5: finalize the new transaction
@@ -1627,7 +1627,7 @@ fn test_transaction_resubmission_finalize_new() {
     ckbtc
         .check_minter_metrics()
         .assert_contains_metric_matching(
-            r#"ckbtc_minter_oldest_retrieve_btc_request_age_seconds 0 \d+"#,
+            r#"ckbtc_minter_oldest_retrieve_btc_submitted_transaction_age_seconds 0 \d+"#,
         );
 }
 
