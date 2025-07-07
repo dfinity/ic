@@ -1624,12 +1624,11 @@ fn test_transaction_resubmission_finalize_new() {
     ckbtc.finalize_transaction(new_tx);
     assert_eq!(ckbtc.await_finalization(block_index, 10), new_txid);
     ckbtc.minter_self_check();
-    ckbtc = ckbtc
+    ckbtc
         .check_minter_metrics()
         .assert_contains_metric_matching(
             r#"ckbtc_minter_oldest_retrieve_btc_request_age_seconds 0 \d+"#,
-        )
-        .into();
+        );
 }
 
 #[test]
