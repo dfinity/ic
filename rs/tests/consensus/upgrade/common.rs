@@ -62,24 +62,24 @@ pub fn bless_branch_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> String 
     branch_version
 }
 
-pub fn bless_mainnet_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> String {
+pub fn bless_target_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> String {
     let logger = env.logger();
 
-    let mainnet_version = get_mainnet_nns_revision();
+    let target_version = get_mainnet_nns_revision();
 
-    // Bless mainnet version
-    let sha256 = get_mainnet_ic_os_update_img_sha256(env).unwrap();
-    let upgrade_url = get_mainnet_ic_os_update_img_url().unwrap();
+    // Bless target version
+    let sha256 = get_ic_os_update_img_sha256(env).unwrap();
+    let upgrade_url = get_ic_os_update_img_url().unwrap();
     block_on(bless_replica_version(
         nns_node,
-        &mainnet_version,
+        &target_version,
         UpdateImageType::Image,
         &logger,
         &sha256,
         vec![upgrade_url.to_string()],
     ));
-    info!(&logger, "Blessed mainnet version");
-    mainnet_version
+    info!(&logger, "Blessed target version");
+    target_version
 }
 
 // Enable ECDSA signing on the first subnet of the given type, and
