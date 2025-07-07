@@ -968,6 +968,7 @@ service : (Governance) -> {
   get_maturity_modulation : (record {}) -> (GetMaturityModulationResponse);
   get_metadata : (record {}) -> (GetMetadataResponse) query;
   get_metrics : (GetMetricsRequest) -> (GetMetricsResponse) composite_query;
+  get_metrics_replicated : (GetMetricsRequest) -> (GetMetricsResponse);
   get_mode : (record {}) -> (GetModeResponse) query;
   get_nervous_system_parameters : (null) -> (NervousSystemParameters) query;
   get_neuron : (GetNeuron) -> (GetNeuronResponse) query;
