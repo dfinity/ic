@@ -227,7 +227,6 @@ system_test_nns(
         "//rs/rust_canisters/canister_test",
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
-        "//rs/tests/idx/wabt-tests",
         "//rs/tests/test_canisters/message:lib",
         "//rs/types/base_types",
         "//rs/types/types",

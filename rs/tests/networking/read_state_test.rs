@@ -62,7 +62,35 @@ use ic_system_test_driver::{
 };
 use ic_types::{CanisterId, PrincipalId};
 use slog::info;
-use wabt_tests::with_custom_sections;
+
+/// Encodes an unsigned integer into leb128.
+fn enc_leb128(x: usize) -> Vec<u8> {
+    let mut buf = [0; 1024];
+    let mut writable = &mut buf[..];
+    let n =
+        leb128::write::unsigned(&mut writable, x.try_into().unwrap()).expect("Should write number");
+    buf[..n].to_vec()
+}
+
+fn add_custom_section(mut n: Vec<u8>, mut c: Vec<u8>) -> Vec<u8> {
+    let mut ret = vec![0x00];
+    ret.append(&mut enc_leb128(
+        enc_leb128(n.len()).len() + n.len() + c.len(),
+    ));
+    ret.append(&mut enc_leb128(n.len()));
+    ret.append(&mut n);
+    ret.append(&mut c);
+    ret
+}
+
+/// Creates a valid WASM binary with the provided custom sections.
+fn with_custom_sections(cs: Vec<(Vec<u8>, Vec<u8>)>) -> Vec<u8> {
+    let mut ret = vec![0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00];
+    for nc in cs {
+        ret.append(&mut add_custom_section(nc.0, nc.1));
+    }
+    ret
+}
 
 /// Sets up a testnet with
 /// 1. System subnet with a single node

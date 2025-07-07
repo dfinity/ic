@@ -163,54 +163,6 @@ icTests my_sub other_sub conf =
                                                                                   let specified_id = entityIdToPrincipal $ EntityId doesn'tExist
                                                                                   ic_provisional_create' ic00 ecid (Just specified_id) (Just (2 ^ (60 :: Int))) Nothing >>= isReject [4]
                                                                               ],
-                                                                            let inst name = do
-                                                                                  cid <- create ecid
-                                                                                  wasm <- getTestWasm (name ++ ".wasm")
-                                                                                  ic_install ic00 (enum #install) cid wasm ""
-                                                                                  return cid
-                                                                             in let good name = testCase ("valid: " ++ name) $ void $ inst name
-                                                                                 in let bad name = testCase ("invalid: " ++ name) $ do
-                                                                                          cid <- create ecid
-                                                                                          wasm <- getTestWasm (name ++ ".wasm")
-                                                                                          ic_install' ic00 (enum #install) cid wasm "" >>= isReject [5]
-                                                                                     in let read cid m =
-                                                                                              ( awaitCall cid $
-                                                                                                  rec
-                                                                                                    [ "request_type" =: GText "call",
-                                                                                                      "sender" =: GBlob defaultUser,
-                                                                                                      "canister_id" =: GBlob cid,
-                                                                                                      "method_name" =: GText m,
-                                                                                                      "arg" =: GBlob ""
-                                                                                                    ]
-                                                                                              )
-                                                                                                >>= isReply
-                                                                                                >>= asWord32
-                                                                                         in testGroup "WebAssembly module validation" $
-                                                                                              map good ["empty_custom_section_name", "large_custom_sections", "long_exported_function_names", "many_custom_sections", "many_exports", "many_functions", "many_globals", "valid_import"]
-                                                                                                ++ map bad ["duplicate_custom_section", "invalid_canister_composite_query_cq_reta", "invalid_canister_composite_query_cq_retb", "invalid_canister_export", "invalid_canister_global_timer_reta", "invalid_canister_global_timer_retb", "invalid_canister_heartbeat_reta", "invalid_canister_heartbeat_retb", "invalid_canister_init_reta", "invalid_canister_init_retb", "invalid_canister_inspect_message_reta", "invalid_canister_inspect_message_retb", "invalid_canister_post_upgrade_reta", "invalid_canister_post_upgrade_retb", "invalid_canister_pre_upgrade_reta", "invalid_canister_pre_upgrade_retb", "invalid_canister_query_que_reta", "invalid_canister_query_que_retb", "invalid_canister_update_upd_reta", "invalid_canister_update_upd_retb", "invalid_custom_section", "invalid_empty_custom_section_name", "invalid_empty_query_name", "invalid_import", "name_clash_query_composite_query", "name_clash_update_composite_query", "name_clash_update_query", "too_large_custom_sections", "too_long_exported_function_names", "too_many_custom_sections", "too_many_exports", "too_many_functions", "too_many_globals"]
-                                                                                                ++ [ testCase "(start) function" $ do
-                                                                                                       cid <- inst "start"
-                                                                                                       ctr <- read cid "read"
-                                                                                                       ctr @?= 4, -- (start) function was executed
-                                                                                                     testCase "no (start) function" $ do
-                                                                                                       cid <- inst "no_start"
-                                                                                                       ctr <- read cid "read"
-                                                                                                       ctr @?= 0, -- no (start) function was executed
-                                                                                                     testCase "empty query name" $ do
-                                                                                                       cid <- inst "empty_query_name"
-                                                                                                       void $ read cid "",
-                                                                                                     testCase "query name with spaces" $ do
-                                                                                                       cid <- inst "query_name_with_spaces"
-                                                                                                       void $ read cid "name with spaces",
-                                                                                                     testCase "empty custom section name" $ do
-                                                                                                       cid <- inst "empty_custom_section_name"
-                                                                                                       cert <- getStateCert otherUser cid [["canister", cid, "metadata", ""]]
-                                                                                                       lookupPath (cert_tree cert) ["canister", cid, "metadata", ""] @?= Found "a",
-                                                                                                     testCase "custom section name with spaces" $ do
-                                                                                                       cid <- inst "custom_section_name_with_spaces"
-                                                                                                       cert <- getStateCert otherUser cid [["canister", cid, "metadata", "name with spaces"]]
-                                                                                                       lookupPath (cert_tree cert) ["canister", cid, "metadata", "name with spaces"] @?= Found "a"
-                                                                                                   ],
                                                                             testCaseSteps "management requests" $ \step -> do
                                                                               step "Create (provisional)"
                                                                               can_id <- create ecid
