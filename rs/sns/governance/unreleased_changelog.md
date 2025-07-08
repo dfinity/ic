@@ -14,6 +14,10 @@ on the process that this file is part of, see
 
 * Extended SNS metrics with treasury metrics.
 
+* Extended SNS metrics with voting power metrics.
+
+* Extended SNS metrics with the genesis timestamp.
+
 ## Changed
 
 ## Deprecated
