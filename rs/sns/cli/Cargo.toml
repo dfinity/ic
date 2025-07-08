@@ -42,6 +42,7 @@ ic-sns-wasm = { path = "../../nns/sns-wasm" }
 ic-wasm = { workspace = true }
 itertools = { workspace = true }
 json-patch = "0.2.6"
+maplit = "1.0.2"
 pretty_assertions = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
