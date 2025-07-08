@@ -2,7 +2,9 @@ use crate::pb::v1::{
     valuation::{Token as TokenPb, ValuationFactors as ValuationFactorsPb},
     Account as AccountPb, Valuation as ValuationPb,
 };
+use crate::proposal::TreasuryAccount;
 use candid::Principal;
+use ic_base_types::CanisterId;
 use ic_base_types::PrincipalId;
 use ic_nervous_system_common::E8;
 use ic_nervous_system_proto::pb::v1::{Decimal as DecimalPb, Tokens};
@@ -104,16 +106,6 @@ impl TryFrom<Token> for TokenPb {
 
         Ok(result)
     }
-}
-
-pub(crate) fn interpret_token_code(token: i32) -> Result<Token, String> {
-    // First, convert from i32 to TokePb.
-    let token_pb = TokenPb::try_from(token)
-        .map_err(|err| format!("Unknown or unspecified token code {:?}: {:?}", token, err))?;
-
-    // Then, convert from TokenPb to Token.
-    Token::try_from(token_pb)
-        .map_err(|err| format!("Unknown or unspecified token code {:?}: {:?}", token, err,))
 }
 
 impl TryFrom<&ValuationPb> for Valuation {
@@ -270,4 +262,33 @@ impl<'a> Default for &'a ValuationFactorsPb {
         }
         &DEFAULT
     }
+}
+
+pub(crate) async fn assess_treasury_balance(
+    token: Token,
+    sns_governance_canister_id: CanisterId,
+    sns_ledger_canister_id: CanisterId,
+    swap_canister_id: CanisterId,
+) -> Result<Valuation, String> {
+    let treasury_account = token.treasury_account(sns_governance_canister_id)?;
+    let valuation = token
+        .assess_balance(sns_ledger_canister_id, swap_canister_id, treasury_account)
+        .await
+        .map_err(|valuation_error| {
+            format!(
+                "Unable to assess current treasury balance: {:?}",
+                valuation_error
+            )
+        })?;
+    Ok(valuation)
+}
+
+pub(crate) fn interpret_token_code(token: i32) -> Result<Token, String> {
+    // First, convert from i32 to TokePb.
+    let token_pb = TokenPb::try_from(token)
+        .map_err(|err| format!("Unknown or unspecified token code {:?}: {:?}", token, err))?;
+
+    // Then, convert from TokenPb to Token.
+    Token::try_from(token_pb)
+        .map_err(|err| format!("Unknown or unspecified token code {:?}: {:?}", token, err,))
 }

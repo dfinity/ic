@@ -1,5 +1,6 @@
 use crate::cached_upgrade_steps::render_two_versions_as_markdown_table;
 use crate::pb::v1::{AdvanceSnsTargetVersion, SetTopicsForCustomProposals, Topic};
+use crate::treasury::assess_treasury_balance;
 use crate::types::Wasm;
 use crate::{
     canister_control::perform_execute_generic_nervous_system_function_validate_and_render_call,
@@ -753,25 +754,6 @@ trait TokenProposalAction {
     /// The greatest that recent_amount_total_tokens is allowed to be. This is based on the value of
     /// the token is in the treasury.
     fn recent_amount_total_upper_bound_tokens(valuation: &Valuation) -> Result<Decimal, String>;
-}
-
-pub(crate) async fn assess_treasury_balance(
-    token: Token,
-    sns_governance_canister_id: CanisterId,
-    sns_ledger_canister_id: CanisterId,
-    swap_canister_id: CanisterId,
-) -> Result<Valuation, String> {
-    let treasury_account = token.treasury_account(sns_governance_canister_id)?;
-    let valuation = token
-        .assess_balance(sns_ledger_canister_id, swap_canister_id, treasury_account)
-        .await
-        .map_err(|valuation_error| {
-            format!(
-                "Unable to assess current treasury balance: {:?}",
-                valuation_error
-            )
-        })?;
-    Ok(valuation)
 }
 
 // Ideally, I'd like to make this a "direct" method of TokenProposalAction. That is, there should be

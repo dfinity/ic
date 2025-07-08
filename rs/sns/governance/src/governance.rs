@@ -1,9 +1,8 @@
 use crate::icrc_ledger_helper::ICRCLedgerHelper;
 use crate::pb::v1::governance::GovernanceCachedMetrics;
 use crate::pb::v1::{valuation, Metrics, TreasuryMetrics};
-use crate::proposal::assess_treasury_balance;
 use crate::proposal::TreasuryAccount;
-use crate::treasury::{interpret_token_code, tokens_to_e8s};
+use crate::treasury::{assess_treasury_balance, interpret_token_code, tokens_to_e8s};
 use crate::{
     canister_control::{
         get_canister_id, perform_execute_generic_nervous_system_function_call,
@@ -5160,7 +5159,7 @@ impl Governance {
                 account,
                 original_amount_e8s,
 
-                // These fields can change over time; they will be refreshed later.
+                // These fields can change over time; they will be computed later.
                 amount_e8s: 0,
                 timestamp_seconds: 0,
             });
@@ -5175,7 +5174,7 @@ impl Governance {
         self.proto.metrics.replace(metrics);
     }
 
-    pub(crate) async fn maybe_refresh_cached_metrics(&mut self) {
+    pub(crate) async fn compute_cached_metrics(&mut self) {
         let now_seconds = self.env.now();
 
         if let Some(GovernanceCachedMetrics {
@@ -5198,14 +5197,14 @@ impl Governance {
             // If we don't have too few treasury metrics, initialize them.
             log!(
                 INFO,
-                "Initializing cached metrics at {}.",
+                "Initializing cached metrics at {} ...",
                 format_timestamp_for_humans(now_seconds),
             );
             self.init_cached_metrics().await;
         } else {
             log!(
                 INFO,
-                "Refreshing cached metrics at {}.",
+                "Refreshing cached metrics at {} ...",
                 format_timestamp_for_humans(now_seconds),
             );
         }
@@ -5230,7 +5229,7 @@ impl Governance {
             let amount_e8s = match self.treasury_valuation_amount_e8s(treasury).await {
                 Ok(amount) => amount,
                 Err(err) => {
-                    log!(ERROR, "Failed to refresh_cached_metrics: {}", err);
+                    log!(ERROR, "Failed to compute_cached_metrics: {}", err);
                     continue;
                 }
             };
@@ -5392,9 +5391,7 @@ impl Governance {
 
         self.maybe_move_staked_maturity();
 
-        println!("AAA");
-
-        self.maybe_refresh_cached_metrics().await;
+        self.compute_cached_metrics().await;
 
         self.maybe_gc();
     }
@@ -6486,7 +6483,7 @@ fn get_neuron_id_from_memo_and_controller(
     ))
 }
 
-pub mod swap_types;
+mod swap_types;
 
 #[cfg(test)]
 mod assorted_governance_tests;

@@ -3,7 +3,6 @@ use candid::{CandidType, Decode, Encode, Error};
 use ic_base_types::CanisterId;
 use ic_nervous_system_clients::update_settings::CanisterSettings;
 use ic_sns_governance::{
-    governance::swap_types::GetDerivedStateRequest,
     pb::sns_root_types::{RegisterDappCanistersRequest, SetDappControllersRequest},
     sns_upgrade::ListUpgradeStepsRequest,
     types::{Environment, HeapGrowthPotential},
@@ -20,7 +19,6 @@ pub enum CanisterCallRequest {
     SetDappControllers(SetDappControllersRequest),
     UpdateSettings(CanisterSettings),
     ListUpgradeSteps(ListUpgradeStepsRequest),
-    GetDerivedState(GetDerivedStateRequest),
 }
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
@@ -81,9 +79,6 @@ impl EnvironmentFixture {
             }
             "list_upgrade_steps" => {
                 CanisterCallRequest::ListUpgradeSteps(Decode!(&args, ListUpgradeStepsRequest)?)
-            }
-            "get_derived_state" => {
-                CanisterCallRequest::GetDerivedState(Decode!(&args, GetDerivedStateRequest)?)
             }
             _ => panic!("Unsupported method_name `{method_name}` in decode_canister_call."),
         };
