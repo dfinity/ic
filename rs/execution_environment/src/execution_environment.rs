@@ -37,11 +37,11 @@ use ic_limits::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX_SI
 use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_management_canister_types_private::{
     CanisterChangeOrigin, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInfoRequest,
-    CanisterInfoResponse, CanisterStatusType, ClearChunkStoreArgs, ComputeInitialIDkgDealingsArgs,
-    CreateCanisterArgs, DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse,
-    EmptyBlob, InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs,
-    LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs,
-    Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
+    CanisterInfoResponse, CanisterStatusType, ClearChunkStoreArgs, CreateCanisterArgs,
+    DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EmptyBlob,
+    InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
+    MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs, Payload as Ic00Payload,
+    ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
     ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs, RenameCanisterArgs,
     ReshareChainKeyArgs, SchnorrAlgorithm, SchnorrPublicKeyArgs, SchnorrPublicKeyResponse,
     SetupInitialDKGArgs, SignWithECDSAArgs, SignWithSchnorrArgs, SignWithSchnorrAux,
@@ -1083,41 +1083,13 @@ impl ExecutionEnvironment {
                 }
             }
 
-            Ok(Ic00Method::ComputeInitialIDkgDealings) => {
-                let cycles = msg.take_cycles();
-                match &msg {
-                    CanisterCall::Request(request) => {
-                        match ComputeInitialIDkgDealingsArgs::decode(request.method_payload()) {
-                            Ok(args) => match get_master_public_key(
-                                &chain_key_data.master_public_keys,
-                                self.own_subnet_id,
-                                &args.key_id,
-                            ) {
-                                Ok(_) => self
-                                    .compute_initial_idkg_dealings(&mut state, args, request)
-                                    .map_or_else(
-                                        |err| ExecuteSubnetMessageResult::Finished {
-                                            response: Err(err),
-                                            refund: cycles,
-                                        },
-                                        |()| ExecuteSubnetMessageResult::Processing,
-                                    ),
-                                Err(err) => ExecuteSubnetMessageResult::Finished {
-                                    response: Err(err),
-                                    refund: cycles,
-                                },
-                            },
-                            Err(err) => ExecuteSubnetMessageResult::Finished {
-                                response: Err(err),
-                                refund: cycles,
-                            },
-                        }
-                    }
-                    CanisterCall::Ingress(_) => {
-                        self.reject_unexpected_ingress(Ic00Method::ComputeInitialIDkgDealings)
-                    }
-                }
-            }
+            Ok(Ic00Method::ComputeInitialIDkgDealings) => ExecuteSubnetMessageResult::Finished {
+                response: Err(UserError::new(
+                    ErrorCode::CanisterRejectedMessage,
+                    format!("{} \"compute_initial_i_dkg_dealings\" is no longer supported. Call \"reshare_chain_key\" instead", msg.method_name()),
+                )),
+                refund: msg.take_cycles(),
+            },
 
             Ok(Ic00Method::SchnorrPublicKey) => {
                 let cycles = msg.take_cycles();
@@ -3363,36 +3335,6 @@ impl ExecutionEnvironment {
                 batch_time: state.metadata.batch_time,
                 matched_pre_signature: None,
                 nonce: None,
-            }),
-        );
-        Ok(())
-    }
-
-    // TODO(CRP-2613): Remove this function after migrating registry to `reshare_chain_key`
-    fn compute_initial_idkg_dealings(
-        &self,
-        state: &mut ReplicatedState,
-        args: ComputeInitialIDkgDealingsArgs,
-        request: &Request,
-    ) -> Result<(), UserError> {
-        let nodes = args.get_set_of_nodes()?;
-        let registry_version = args.get_registry_version();
-
-        if !args.key_id.is_idkg_key() {
-            return Err(UserError::new(
-                ErrorCode::CanisterRejectedMessage,
-                "This key is not an idkg key",
-            ));
-        }
-
-        state.metadata.subnet_call_context_manager.push_context(
-            SubnetCallContext::ReshareChainKey(ReshareChainKeyContext {
-                request: request.clone(),
-                key_id: args.key_id,
-                nodes,
-                registry_version,
-                time: state.time(),
-                target_id: NiDkgTargetId::new([0; 32]),
             }),
         );
         Ok(())
