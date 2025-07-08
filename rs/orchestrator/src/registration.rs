@@ -198,17 +198,17 @@ impl NodeRegistration {
         let add_node_encoded = Encode!(add_node_payload)
             .expect("Could not encode payload for the registration request");
 
-        if let Err(e) = agent
+        agent
             .update(&Principal::from(REGISTRY_CANISTER_ID), "add_node")
             .with_arg(add_node_encoded)
             .call_and_wait()
             .await
-        {
-            return Err(format!(
-                "Node {} registration request failed with error: {}\nUsed payload: {:?}",
-                self.node_id, e, add_node_payload
-            ));
-        };
+            .map_err(|e| {
+                format!(
+                    "Node {} registration request failed with error: {}\nUsed payload: {:?}",
+                    self.node_id, e, add_node_payload
+                )
+            })?;
 
         Ok(())
     }
