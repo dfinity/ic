@@ -689,6 +689,7 @@ impl ExecutionEnvironment {
                                     ThresholdArguments::Ecdsa(EcdsaArguments {
                                         key_id: args.key_id,
                                         message_hash: args.message_hash,
+                                        pre_signature: None,
                                     }),
                                     args.derivation_path.into_inner(),
                                     registry_settings
@@ -1267,6 +1268,7 @@ impl ExecutionEnvironment {
                                                 Arc::new(v.merkle_root_hash.into_vec())
                                             }
                                         }),
+                                        pre_signature: None,
                                     }),
                                     args.derivation_path.into_inner(),
                                     registry_settings
