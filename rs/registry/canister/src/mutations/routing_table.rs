@@ -1,5 +1,5 @@
 use crate::mutations::node_management::common::{
-    get_key_family_iter, get_key_family_iter_at_version, get_key_family_raw_iter_at_version,
+    get_key_family_iter_at_version, get_key_family_raw_iter_at_version,
 };
 use crate::storage::with_chunks;
 use crate::{common::LOG_PREFIX, pb::v1::SubnetForCanister, registry::Registry};
@@ -15,7 +15,6 @@ use ic_registry_routing_table::{
     routing_table_insert_subnet, CanisterIdRange, CanisterIdRanges, CanisterMigrations,
     RoutingTable,
 };
-use ic_registry_transport::pb::v1::high_capacity_registry_value::Content;
 use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation, RegistryValue};
 use ic_registry_transport::{delete, upsert};
 use prost::Message;
@@ -278,26 +277,36 @@ impl Registry {
         canister_id: CanisterId,
         version: u64,
     ) -> Result<RoutingTable, String> {
-        // We use this to skip the deleted values, to make the logic easier.
-        let range_to_decode =
+        // get_key_family_* functions don't return deleted values.
+        let mut ranges: Vec<_> =
             get_key_family_raw_iter_at_version(self, CANISTER_RANGES_PREFIX, version)
-                .skip_while(|(k, v)| {
-                    let canister_id_bytes = hex::decode(k).unwrap();
-                    CanisterId::try_from(canister_id_bytes).unwrap() > canister_id
+                .map(|(k, v)| {
+                    let shard_canister_id_bytes = hex::decode(k).unwrap();
+                    (CanisterId::try_from(shard_canister_id_bytes).unwrap(), v)
                 })
-                .next()
-                .ok_or_else(|| {
-                    Err(format!(
-                        "{}No routing table shard found for canister ID {} at version {}",
-                        LOG_PREFIX, canister_id, version
-                    ))
-                })?
-                .1;
+                .collect();
 
-        // TODO DO NOT MERGE- make sure this error makes sense
-        with_chunks(|chunks| decode_high_capacity_registry_value(range_to_decode, chunks))
-            .ok()
-            .and_then(|pb_rt| RoutingTable::try_from(pb_rt))
+        ranges.sort_by_key(|(canister_id, _)| *canister_id);
+
+        let maybe_range_to_decode = ranges
+            .into_iter()
+            .take_while(|(shard_canister_id, _)| shard_canister_id <= &canister_id)
+            .last()
+            .map(|(_, record)| record);
+
+        let Some(range_to_decode) = maybe_range_to_decode else {
+            return Err(format!("{}Could not find routing table shard", LOG_PREFIX));
+        };
+
+        match with_chunks(|chunks| {
+            decode_high_capacity_registry_value::<pb::RoutingTable, _>(range_to_decode, chunks)
+        }) {
+            Some(rt) => RoutingTable::try_from(rt).map_err(|e| e.to_string()),
+            None => Err(format!(
+                "{}Could not decode routing table shard",
+                LOG_PREFIX
+            )),
+        }
     }
 
     pub fn get_routing_table_from_canister_range_records_or_panic(
@@ -454,8 +463,7 @@ impl Registry {
             .map_err(|_| GetSubnetForCanisterError::InvalidCanisterId)?;
         let routing_table_segment = self
             .get_routing_table_shard_for_canister_id(canister_id, latest_version)
-            // TODO DO NOT COMMIT - convert to proper error
-            .map_err(|e| GetSubnetForCanisterError::NoSubnetAssigned)?;
+            .map_err(|_| GetSubnetForCanisterError::NoSubnetAssigned)?;
 
         match routing_table_segment
             .lookup_entry(canister_id)
@@ -525,6 +533,154 @@ mod tests {
         // GetSubnetForCanisterError::CanisterIdConversion currently not reachable - CanisterId::try_from() always succeeds
     }
 
+    // Helper functions to reduce test boilerplate
+    fn assert_subnet_for_canister(registry: &Registry, canister_id: u64, expected_subnet_idx: u64) {
+        let result = registry
+            .get_subnet_for_canister(&CanisterId::from(canister_id).get())
+            .unwrap_or_else(|_| panic!("No subnet found for canister {}", canister_id));
+
+        assert_eq!(
+            PrincipalId::try_from(result.subnet_id.unwrap()).unwrap(),
+            PrincipalId::new_user_test_id(expected_subnet_idx),
+            "Canister {} should be on subnet with index {}",
+            canister_id,
+            expected_subnet_idx
+        );
+    }
+
+    // Helper function to assert that no subnet is assigned for a canister
+    fn assert_no_subnet_for_canister(registry: &Registry, canister_id: u64) {
+        assert_matches!(
+            registry
+                .get_subnet_for_canister(&CanisterId::from(canister_id).get())
+                .unwrap_err(),
+            GetSubnetForCanisterError::NoSubnetAssigned
+        );
+    }
+
+    #[test]
+    fn get_subnet_for_canister_with_multiple_shards() {
+        let mut registry = invariant_compliant_registry(0);
+        // Create enough entries to trigger multiple shards (more than MAX_RANGES_PER_CANISTER_RANGES)
+        let entries = make_rt_entry_definitions(0..25, 100); // 25 entries, each covering 100 canister IDs
+
+        let rt = rt_from_ranges(entries);
+
+        let mutations = routing_table_into_registry_mutation(&registry, rt);
+        registry.maybe_apply_mutation_internal(mutations);
+
+        // Test 5 random canister IDs from different ranges
+        // Test canister ID 50 (should be in range 0-99, subnet_id from index 0)
+        assert_subnet_for_canister(&registry, 50, 0);
+
+        // Test canister ID 550 (should be in range 500-599, subnet_id from index 5)
+        assert_subnet_for_canister(&registry, 550, 5);
+
+        // Test canister ID 1250 (should be in range 1200-1299, subnet_id from index 12)
+        assert_subnet_for_canister(&registry, 1250, 12);
+
+        // Test canister ID 1999 (should be in range 1900-1999, subnet_id from index 19)
+        assert_subnet_for_canister(&registry, 1999, 19);
+
+        // Test canister ID 2399 (should be in range 2300-2399, subnet_id from index 23)
+        assert_subnet_for_canister(&registry, 2399, 23);
+
+        // Test a canister ID outside all ranges
+        assert_matches!(
+            registry
+                .get_subnet_for_canister(&CanisterId::from(3000).get())
+                .unwrap_err(),
+            GetSubnetForCanisterError::NoSubnetAssigned
+        );
+    }
+
+    #[test]
+    fn test_canister_lookup_at_shard_boundaries() {
+        let mut registry = invariant_compliant_registry(0);
+        let shards = shards(vec![
+            (0, vec![((0, 999), test_subnet(0))]),
+            (1000, vec![((1000, 1999), test_subnet(1))]),
+            (2000, vec![((2000, 2999), test_subnet(2))]),
+        ]);
+        apply_shards_to_registry(&mut registry, &shards);
+
+        assert_subnet_for_canister(&registry, 1000, 1);
+        assert_subnet_for_canister(&registry, 999, 0);
+        assert_subnet_for_canister(&registry, 1999, 1);
+        assert_subnet_for_canister(&registry, 2000, 2);
+        assert_no_subnet_for_canister(&registry, 3000);
+    }
+
+    #[test]
+    fn test_canister_lookup_with_gaps_in_shards() {
+        let mut registry = invariant_compliant_registry(0);
+        let shards = shards(vec![
+            (0, vec![((0, 500), test_subnet(0))]),
+            (2000, vec![((2000, 2500), test_subnet(2))]),
+        ]);
+        apply_shards_to_registry(&mut registry, &shards);
+
+        assert_subnet_for_canister(&registry, 250, 0);
+        assert_no_subnet_for_canister(&registry, 1500);
+        assert_subnet_for_canister(&registry, 2250, 2);
+    }
+
+    #[test]
+    fn test_canister_lookup_with_empty_shards() {
+        let mut registry = invariant_compliant_registry(0);
+        let shards = shards(vec![
+            (0, vec![((0, 500), test_subnet(0))]),
+            (1000, vec![]), // Empty shard
+            (2000, vec![((2000, 2500), test_subnet(2))]),
+        ]);
+        apply_shards_to_registry(&mut registry, &shards);
+
+        assert_no_subnet_for_canister(&registry, 1500);
+    }
+
+    #[test]
+    fn test_canister_lookup_below_first_shard() {
+        let mut registry = invariant_compliant_registry(0);
+        let shards = shards(vec![
+            (1000, vec![((1000, 1500), test_subnet(1))]),
+            (2000, vec![((2000, 2500), test_subnet(2))]),
+        ]);
+        apply_shards_to_registry(&mut registry, &shards);
+
+        assert_no_subnet_for_canister(&registry, 500);
+    }
+
+    #[test]
+    fn test_canister_lookup_with_gaps() {
+        let mut registry = invariant_compliant_registry(0);
+        let shards = shards(vec![
+            (0, vec![((100, 500), test_subnet(0))]),
+            (400, vec![((600, 800), test_subnet(1))]),
+            (850, vec![((900, 1200), test_subnet(2))]),
+        ]);
+        apply_shards_to_registry(&mut registry, &shards);
+
+        assert_subnet_for_canister(&registry, 300, 0);
+        assert_no_subnet_for_canister(&registry, 50);
+        assert_subnet_for_canister(&registry, 700, 1);
+    }
+
+    #[test]
+    fn test_canister_lookup_at_max_canister_id() {
+        let mut registry = invariant_compliant_registry(0);
+        let shards = shards(vec![
+            (0, vec![((0, 1000), test_subnet(0))]),
+            (
+                u64::MAX - 1000,
+                vec![((u64::MAX - 1000, u64::MAX), test_subnet(1))],
+            ),
+        ]);
+        apply_shards_to_registry(&mut registry, &shards);
+
+        assert_subnet_for_canister(&registry, u64::MAX, 1);
+        assert_no_subnet_for_canister(&registry, u64::MAX - 2000);
+    }
+
     #[test]
     fn test_routing_table_updates_and_deletes_entries_as_expected() {
         let mut registry = invariant_compliant_registry(0);
@@ -581,6 +737,11 @@ mod tests {
             })
             .unwrap()
         );
+    }
+
+    // Simple helper to create SubnetId from index
+    fn test_subnet(idx: u64) -> SubnetId {
+        SubnetId::new(PrincipalId::new_user_test_id(idx))
     }
 
     /// Helper to build a RoutingTable from a Vec of ((start, end), subnet_id)

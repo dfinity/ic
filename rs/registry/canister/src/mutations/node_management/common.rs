@@ -279,14 +279,11 @@ pub(crate) fn get_key_family_iter_at_version<'a, T: prost::Message + Default>(
     prefix: &'a str,
     version: u64,
 ) -> impl Iterator<Item = (String, T)> + 'a {
-    get_key_family_raw_iter_at_version(registry, prefix, version).map(|(id, value)| {
+    get_key_family_raw_iter_at_version(registry, prefix, version).filter_map(|(id, value)| {
         let latest_value: Option<T> =
             with_chunks(|chunks| decode_high_capacity_registry_value::<T, _>(value, chunks));
 
-        // Skip deleted values.
-        let latest_value = latest_value?;
-
-        (id, latest_value)
+        latest_value.is_some().then(|| (id, latest_value.unwrap()))
     })
 }
 
