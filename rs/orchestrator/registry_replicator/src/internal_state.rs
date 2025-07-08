@@ -377,14 +377,11 @@ impl InternalState {
             .map(|key| {
                 if key == make_canister_ranges_key(CanisterId::from_u64(0)) {
                     KeyMutation {
-                        key: key.to_string(),
+                        key,
                         value: Some(new_routing_table.encode_to_vec()),
                     }
                 } else {
-                    KeyMutation {
-                        key: key.to_string(),
-                        value: None,
-                    }
+                    KeyMutation { key, value: None }
                 }
             })
             .collect();
