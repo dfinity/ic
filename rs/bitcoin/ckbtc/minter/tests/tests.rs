@@ -1624,7 +1624,7 @@ fn test_transaction_resubmission_finalize_new() {
 
     // Step 1: deposit ckBTC
 
-    let deposit_value = 1_000_000;
+    let deposit_value = 100_000_000;
     let utxo = Utxo {
         height: 0,
         outpoint: OutPoint {
