@@ -102,10 +102,7 @@ trait Channel<Block> {
 trait ProcessEvent {
     /// This method is used to route an event in a component's internals and
     /// perform state updates.
-    fn process_event(
-        &mut self,
-        event: &StreamEvent,
-    ) -> Result<(), ProcessNetworkMessageError>;
+    fn process_event(&mut self, event: &StreamEvent) -> Result<(), ProcessNetworkMessageError>;
 }
 
 /// This trait provides an interface for processing messages coming from
