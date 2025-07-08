@@ -1,7 +1,9 @@
 use crate::tests::mock::{MockLogger, MockRuntime};
-use crate::EvmRpcClient;
 use crate::{Block, BlockTag, MultiRpcResult, ProviderError, RpcConfig, RpcError, RpcServices};
+use crate::{EvmRpcClient, OverrideRpcConfig};
+use evm_rpc_types::{GetLogsArgs, GetLogsRpcConfig, LogEntry};
 use mockall::Sequence;
+use serde_json::json;
 
 #[tokio::test]
 async fn should_not_retry_when_no_cycles_error() {
@@ -152,6 +154,56 @@ mod max_expected_too_few_cycles_error {
     }
 }
 
+#[tokio::test]
+async fn should_use_custom_block_range_for_get_logs() {
+    let mut runtime = MockRuntime::new();
+    let min_attached_cycles = 3_000_000_000_u128;
+    let args = GetLogsArgs {
+        from_block: None,
+        to_block: None,
+        addresses: vec![],
+        topics: None,
+    };
+    let args_cloned = args.clone();
+    let expected_result = MultiRpcResult::Consistent(Ok(vec![log_entry()]));
+    let max_block_range = Some(u32::MAX);
+    runtime
+        .expect_call::<_, MultiRpcResult<Vec<LogEntry>>>()
+        .times(1)
+        .withf(
+            move |_,
+                  method,
+                  (_services, config, args): &(
+                RpcServices,
+                Option<GetLogsRpcConfig>,
+                GetLogsArgs,
+            ),
+                  attached_cycles| {
+                method == "eth_getLogs"
+                    && attached_cycles == &min_attached_cycles
+                    && config.as_ref().unwrap().max_block_range == max_block_range
+                    && args == &args_cloned.clone()
+            },
+        )
+        .return_const(Ok(expected_result.clone()));
+
+    let client = EvmRpcClient::builder(runtime, printable_logger())
+        .with_min_attached_cycles(min_attached_cycles)
+        .with_max_num_retries(1)
+        .with_override_rpc_config(OverrideRpcConfig {
+            eth_get_logs: Some(GetLogsRpcConfig {
+                max_block_range,
+                ..Default::default()
+            }),
+            ..Default::default()
+        })
+        .build();
+
+    let result = client.eth_get_logs(args).await;
+
+    assert_eq!(result, expected_result);
+}
+
 fn a_block() -> Block {
     Block {
         base_fee_per_gas: Some(8_876_901_983_u64.into()),
@@ -245,6 +297,26 @@ fn a_block() -> Block {
         transactions_root: Some("0xdee0b25a965ff236e4d2e89f56de233759d71ad3e3e150ceb4cf5bb1f0ecf5c0".parse().unwrap()),
         uncles: vec![],
     }
+}
+
+fn log_entry() -> LogEntry {
+    let entry = json!(
+    {
+        "transactionHash": "0xf1ac37d920fa57d9caeebc7136fea591191250309ffca95ae0e8a7739de89cc2",
+        "logIndex": 29,
+        "blockHash": "0x4205f2436ee7a90aa87a88ae6914ec6860971360995f463602a40803bff98f4d",
+        "blockNumber": 3960623,
+        "data": "0x000000000000000000000000000000000000000000000000002386f26fc10000",
+        "address": "0xb44b5e756a894775fc32eddf3314bb1b1944dc34",
+        "removed": false,
+        "topics": [
+            "0x257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435",
+            "0x000000000000000000000000dd2851cdd40ae6536831558dd46db62fac7a844d",
+            "0x0000000000000000000000000000000000000000000000000000000000000000"
+        ],
+        "transactionIndex": 31
+    });
+    serde_json::from_value(entry).unwrap()
 }
 
 fn test_client(
