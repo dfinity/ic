@@ -836,7 +836,6 @@ pub enum CostReturnCode {
 }
 /// A struct to gather the relevant fields that correspond to a canister's
 /// memory consumption.
-#[derive(Clone, Debug)]
 struct MemoryUsage {
     /// Upper limit on how much the memory the canister could use.
     limit: NumBytes,
@@ -3409,8 +3408,7 @@ impl SystemApi for SystemApiImpl {
         if resulting_size > MAX_STABLE_MEMORY_IN_BYTES / WASM_PAGE_SIZE_IN_BYTES as u64 {
             return Ok(StableGrowOutcome::Failure);
         }
-        let old_memory_usage = self.memory_usage.clone();
-        let allocate_execution_memory_res = self.memory_usage.allocate_execution_memory(
+        match self.memory_usage.allocate_execution_memory(
             // From the checks above we know that converting `additional_pages`
             // to bytes will not overflow, so the `unwrap()` will succeed.
             ic_replicated_state::num_bytes_try_from(NumWasmPages::new(additional_pages as usize))
@@ -3419,34 +3417,7 @@ impl SystemApi for SystemApiImpl {
             &mut self.sandbox_safe_system_state,
             &self.execution_parameters.subnet_memory_saturation,
             ExecutionMemoryType::StableMemory,
-        );
-        eprintln!(
-            "allocate_execution_memory_res: {:?}",
-            allocate_execution_memory_res,
-        );
-        eprintln!("memory_usage: {:?}", self.memory_usage,);
-        let current_usage_delta = self.memory_usage.current_usage.get() as i64
-            - (old_memory_usage.current_usage.get() as i64);
-
-        let current_subnet_available_memory = self
-            .memory_usage
-            .subnet_available_memory
-            .get_execution_memory();
-
-        let old_subnet_available_memory = old_memory_usage
-            .subnet_available_memory
-            .get_execution_memory();
-
-        let subnet_available_delta = current_subnet_available_memory - old_subnet_available_memory;
-        eprintln!(
-            "current_usage_delta: {} GiB, subnet_available_delta: {} GiB, current_subnet_available_memory: {} GiB, old_subnet_available_memory: {} GiB",
-            current_usage_delta as f64 / ((1024 * 1024 * 1024) as f64),
-            subnet_available_delta as f64 / ((1024 * 1024 * 1024) as f64),
-            current_subnet_available_memory as f64 / ((1024 * 1024 * 1024) as f64),
-            old_subnet_available_memory as f64 / ((1024 * 1024 * 1024) as f64),
-        );
-
-        match allocate_execution_memory_res {
+        ) {
             Ok(()) => Ok(StableGrowOutcome::Success),
             Err(err @ HypervisorError::InsufficientCyclesInMemoryGrow { .. }) => {
                 // Trap instead of returning -1 in order to give the developer
