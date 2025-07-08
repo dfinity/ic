@@ -111,23 +111,22 @@ pub fn setup_downgrade(env: TestEnv) {
 pub fn test_upgrade(env: TestEnv) {
     let log = env.logger();
     let nns_node = get_nns_node(&env.topology_snapshot());
-    info!(log, "Elect the branch replica version");
-    let original_branch_version = get_current_branch_version().expect("tip-of-branch IC version");
-    let branch_version = format!("{}-test", original_branch_version);
+    info!(log, "Elect the target replica version");
+    let target_version = get_ic_os_update_img_version().expect("target IC version");
 
-    // Bless branch version
-    let sha256 = get_ic_os_update_img_test_sha256().unwrap();
-    let upgrade_url = get_ic_os_update_img_test_url().unwrap();
+    // Bless target version
+    let sha256 = get_ic_os_update_img_sha256(&env).unwrap();
+    let upgrade_url = get_ic_os_update_img_url().unwrap();
     block_on(bless_replica_version(
         &nns_node,
-        &original_branch_version,
-        UpdateImageType::ImageTest,
+        &target_version,
+        UpdateImageType::Image,
         &log,
         &sha256,
         vec![upgrade_url.to_string()],
     ));
-    info!(log, "TARGET_VERSION: {}", branch_version);
-    test(env, branch_version.clone(), branch_version);
+    info!(log, "TARGET_VERSION: {}", target_version);
+    test(env, target_version.clone(), target_version);
 }
 
 pub fn test_downgrade(env: TestEnv) {

@@ -1252,17 +1252,6 @@ pub fn get_ic_os_update_img_sha256(env: &TestEnv) -> Result<String> {
     }
 }
 
-// Update URL*
-pub fn get_ic_os_update_img_test_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_TEST_URL")?;
-    Ok(Url::parse(&url)?)
-}
-
-// Update Hash*
-pub fn get_ic_os_update_img_test_sha256() -> Result<String> {
-    Ok(std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_TEST_HASH")?)
-}
-
 // Initial version
 pub fn get_setupos_img_version() -> Result<String> {
     // TODO: Until the version can be passed directly in the env variable, resolve it from a file, instead.
@@ -1305,17 +1294,6 @@ pub fn get_hostos_update_img_url() -> Result<Url> {
 // Update Hash
 pub fn get_hostos_update_img_sha256() -> Result<String> {
     Ok(std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_HASH")?)
-}
-
-// Update URL*
-pub fn get_hostos_update_img_test_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_TEST_URL")?;
-    Ok(Url::parse(&url)?)
-}
-
-// Update hash*
-pub fn get_hostos_update_img_test_sha256() -> Result<String> {
-    Ok(std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_TEST_HASH")?)
 }
 
 pub fn get_empty_disk_img_url() -> Result<Url> {
