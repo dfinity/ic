@@ -23,6 +23,7 @@ use tracing_subscriber;
 
 // Seems trivial but helps with readability when using indexes.
 const NEURON_INDEX: [u64; 4] = [0, 1, 2, 3];
+const NON_VOTING_NEURON_INDEX: u64 = 100;
 const VOTE_YES: i32 = Vote::Yes as i32;
 const VOTE_NO: i32 = Vote::No as i32;
 const VOTE_UNSPECIFIED: i32 = Vote::Unspecified as i32;
@@ -54,6 +55,14 @@ fn test_neuron_voting() {
 
         // Create neurons
         let neuron_ids = create_neurons(&env, INITIAL_BALANCE / 10, minimum_dissolve_delay).await;
+
+        let _ = create_neuron_with_dissolve(
+            &env,
+            INITIAL_BALANCE / 10,
+            NON_VOTING_NEURON_INDEX,
+            minimum_dissolve_delay - 1,
+        )
+        .await;
 
         // Ensure no proposals exist initially
         assert!(env
@@ -154,6 +163,11 @@ fn test_neuron_voting() {
             extract_votes(&voted_proposal_info, &neuron_ids),
             vec![VOTE_YES, VOTE_YES, VOTE_NO, VOTE_NO]
         );
+
+        // Verify that a neuron with smaller than minimum delay cannot vote.
+        let result = register_vote(&env, proposal_ids[0], NON_VOTING_NEURON_INDEX, Vote::No).await;
+        let error_string = result.unwrap_err().to_string();
+        assert!(error_string.contains("Neuron not authorized to vote on proposal."));
 
         // Verify the first proposal is no longer pending
         let pending_proposals = env

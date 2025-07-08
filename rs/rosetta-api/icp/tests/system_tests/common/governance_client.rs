@@ -5,7 +5,7 @@ use ic_nns_common::{pb::v1::ProposalId, types::NeuronId};
 use ic_nns_governance_api::{
     manage_neuron_response, manage_neuron_response::MakeProposalResponse,
     proposal_submission_helpers::create_make_proposal_payload, MakeProposalRequest,
-    ManageNeuronResponse, Motion, NetworkEconomics, ProposalActionRequest, ProposalInfo,
+    ManageNeuronResponse, Motion, ProposalActionRequest, ProposalInfo,
 };
 
 pub struct GovernanceClient {
@@ -91,26 +91,6 @@ impl GovernanceClient {
             .await
             .expect("Error while calling endpoint.");
         Decode!(res.as_slice(), Vec<ProposalInfo>).expect("Error while decoding response.")
-    }
-
-    pub async fn get_minimum_dissolve_delay(&self) -> Option<u64> {
-        let arg = Encode!(&"").expect("Error while encoding arg.");
-        let res = self
-            .agent
-            .query(
-                &self.governance_principal,
-                "get_network_economics_parameters",
-            )
-            .with_arg(arg)
-            .call()
-            .await
-            .expect("Error while calling endpoint.");
-        let network_economics =
-            Decode!(res.as_slice(), NetworkEconomics).expect("Error while decoding response.");
-        match network_economics.voting_power_economics {
-            Some(vpe) => vpe.neuron_minimum_dissolve_delay_to_vote_seconds,
-            None => None,
-        }
     }
 
     pub async fn get_proposal_info(&self, proposal_id: ProposalId) -> Option<ProposalInfo> {
