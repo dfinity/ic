@@ -24,7 +24,7 @@ use crate::{
     addressbook::{
         validate_services, AddressBook, AddressBookError, AddressEntry, AddressTimestamp,
     },
-    common::{AdapterNetwork, BlockHeight, DEFAULT_CHANNEL_BUFFER_SIZE, MINIMUM_VERSION_NUMBER},
+    common::{BlockHeight, DEFAULT_CHANNEL_BUFFER_SIZE, MINIMUM_VERSION_NUMBER},
     config::Config,
     connection::{Connection, ConnectionConfig, ConnectionState, PingState},
     metrics::RouterMetrics,
@@ -73,8 +73,8 @@ pub type ConnectionManagerResult<T> = Result<T, ConnectionManagerError>;
 /// This struct manages the connection connections that the adapter uses to communicate
 /// with Bitcoin nodes.
 pub struct ConnectionManager<NetworkMessage> {
-    /// The network is either Bitcoin or Dogecoin.
-    network: AdapterNetwork,
+    /// Whether to override the protocol version used in `VersionMessage`.
+    protocol_version_override: Option<u32>,
     /// This field contains the address book.
     address_book: AddressBook,
     /// This field is used to indicate whether or not the connection manager needs to populate the
@@ -122,7 +122,7 @@ impl<Block: Clone> ConnectionManager<NetworkMessage<Block>> {
         let (min_connections, max_connections) = connection_limits(&address_book);
 
         Self {
-            network: config.network,
+            protocol_version_override: config.network.p2p_protocol_version_override(),
             initial_address_discovery: !address_book.has_enough_addresses(),
             address_book,
             logger,
@@ -357,7 +357,7 @@ impl<Block: Clone> ConnectionManager<NetworkMessage<Block>> {
         let nonce: u64 = self.rng.gen();
         let user_agent = String::from(USER_AGENT);
         let message = <NetworkMessage<Block>>::Version(new_version_message(
-            self.network,
+            self.protocol_version_override,
             services,
             timestamp as i64,
             receiver,
@@ -695,7 +695,7 @@ fn connection_limits(address_book: &AddressBook) -> (usize, usize) {
 }
 
 fn new_version_message(
-    network: AdapterNetwork,
+    protocol_version_override: Option<u32>,
     services: ServiceFlags,
     timestamp: i64,
     receiver: Address,
@@ -713,9 +713,10 @@ fn new_version_message(
         user_agent,
         start_height,
     );
-    match network {
-        AdapterNetwork::Bitcoin(_) => msg,
-        AdapterNetwork::Dogecoin(_) => msg.with_version(70015),
+    if let Some(version) = protocol_version_override {
+        msg.with_version(version)
+    } else {
+        msg
     }
 }
 

@@ -120,6 +120,13 @@ impl AdapterNetwork {
             }
         }
     }
+    /// Return the p2p protocol version if an override is required.
+    pub fn p2p_protocol_version_override(&self) -> Option<u32> {
+        match self {
+            AdapterNetwork::Bitcoin(_) => None,
+            AdapterNetwork::Dogecoin(_) => Some(70015),
+        }
+    }
 }
 
 impl fmt::Display for AdapterNetwork {
