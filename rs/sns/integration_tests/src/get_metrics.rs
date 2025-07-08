@@ -5,6 +5,7 @@ use ic_ledger_core::tokens::Tokens;
 use ic_management_canister_types_private::CanisterInstallMode;
 use ic_nervous_system_common::ledger::compute_distribution_subaccount;
 use ic_nervous_system_common::E8;
+use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_constants::NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET;
 use ic_nns_test_utils::common::NnsInitPayloadsBuilder;
 use ic_nns_test_utils::sns_wasm::{
@@ -14,7 +15,9 @@ use ic_nns_test_utils::state_test_helpers::setup_nns_canisters;
 use ic_sns_governance::governance::TREASURY_SUBACCOUNT_NONCE;
 use ic_sns_governance::init::GovernanceCanisterInitPayloadBuilder;
 use ic_sns_governance::pb::v1::{ProposalData, ProposalId};
-use ic_sns_governance_api::pb::v1::{get_metrics_response, GetMetricsRequest, TreasuryMetrics};
+use ic_sns_governance_api::pb::v1::{
+    self as sns_gov, get_metrics_response, GetMetricsRequest, TreasuryMetrics,
+};
 use ic_sns_swap::pb::v1::{Init as SwapInit, NeuronBasketConstructionParameters};
 use ic_sns_test_utils::{
     itest_helpers::SnsTestsInitPayloadBuilder,
@@ -282,6 +285,8 @@ fn test_sns_metrics() {
 
     assert_eq!(governance, governance_canister_id);
 
+    state_machine.advance_time(Duration::from_secs(ONE_MONTH));
+    state_machine.tick();
     state_machine
         .execute_ingress(
             governance_canister_id,
@@ -289,8 +294,7 @@ fn test_sns_metrics() {
             Encode!(&()).unwrap(),
         )
         .unwrap();
-    state_machine.advance_time(Duration::from_secs(ONE_MONTH));
-    state_machine.tick();
+
     {
         // Prepare the payload to get metrics during the last month.
         let time_window_seconds = 2 * ONE_MONTH;
@@ -298,16 +302,18 @@ fn test_sns_metrics() {
             time_window_seconds: Some(time_window_seconds),
         };
 
-        let observed_result =
-            try_get_metrics(&state_machine, governance_canister_id, payload, true).unwrap();
-        let observed_result_1 =
-            try_get_metrics(&state_machine, governance_canister_id, payload, false).unwrap();
+        let get_metrics_result =
+            try_get_metrics(&state_machine, governance_canister_id, payload, true)
+                .unwrap()
+                .get_metrics_result
+                .unwrap();
+        let get_metrics_result_1 =
+            try_get_metrics(&state_machine, governance_canister_id, payload, false)
+                .unwrap()
+                .get_metrics_result
+                .unwrap();
 
-        assert_eq!(observed_result_1, observed_result);
-
-        let Some(get_metrics_result) = observed_result.get_metrics_result else {
-            panic!("Expected a non-empty response");
-        };
+        assert_eq!(get_metrics_result_1, get_metrics_result);
 
         let get_metrics_response::GetMetricsResult::Ok(get_metrics_response::Metrics {
             num_recently_submitted_proposals,
@@ -366,16 +372,19 @@ fn test_sns_metrics() {
             assert_eq!(
                 treasury_metrics,
                 vec![TreasuryMetrics {
-                    treasury: 0,
-                    name: Some("ICP".to_string()),
+                    treasury: 1,
+                    name: Some("TOKEN_ICP".to_string()),
 
-                    ledger_canister_id: None,
-                    account: None,
+                    ledger_canister_id: Some(LEDGER_CANISTER_ID.get()),
+                    account: Some(sns_gov::Account {
+                        owner: Some(governance_canister_id.get()),
+                        subaccount: None,
+                    }),
 
-                    amount_e8s: None,
-                    original_amount_e8s: None,
+                    amount_e8s: Some(1000000000000),
+                    original_amount_e8s: Some(0),
 
-                    timestamp_seconds: None,
+                    timestamp_seconds: Some(1756814370),
                 }]
             )
         }

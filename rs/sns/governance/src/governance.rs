@@ -2029,11 +2029,18 @@ impl Governance {
                 GovernanceError::new_with_message(ErrorType::External, error_mesage)
             })?;
 
+        let treasury_metrics = self
+            .proto
+            .metrics
+            .as_ref()
+            .map(|metrics| metrics.treasury_metrics.clone())
+            .unwrap_or_default();
+
         Ok(Metrics {
             num_recently_submitted_proposals,
             num_recently_executed_proposals,
             last_ledger_block_timestamp,
-            treasury_metrics: vec![],
+            treasury_metrics,
         })
     }
 
@@ -5083,6 +5090,7 @@ impl Governance {
     async fn original_treasury_icp_amount_e8s(&self) -> Result<u64, String> {
         let request = Encode!(&GetDerivedStateRequest {})
             .map_err(|err| format!("Failed to encode Swap.get_derived_state request: {:?}", err))?;
+
         let derived_state_result = self
             .env
             .call_canister(
@@ -5179,16 +5187,21 @@ impl Governance {
             }
         }
 
-        let mut metrics = self.proto.metrics.clone().unwrap_or_default();
+        let num_treasury_metrics = self
+            .proto
+            .metrics
+            .as_ref()
+            .map(|metrics| metrics.treasury_metrics.len())
+            .unwrap_or_default();
 
-        if metrics.treasury_metrics.len() < 2 {
+        if num_treasury_metrics < 2 {
             // If we don't have too few treasury metrics, initialize them.
-            self.init_cached_metrics().await;
             log!(
                 INFO,
                 "Initializing cached metrics at {}.",
                 format_timestamp_for_humans(now_seconds),
             );
+            self.init_cached_metrics().await;
         } else {
             log!(
                 INFO,
@@ -5196,6 +5209,8 @@ impl Governance {
                 format_timestamp_for_humans(now_seconds),
             );
         }
+
+        let mut metrics = self.proto.metrics.clone().unwrap_or_default();
 
         let mut treasury_metrics = vec![];
 
@@ -5376,6 +5391,8 @@ impl Governance {
         self.maybe_finalize_disburse_maturity().await;
 
         self.maybe_move_staked_maturity();
+
+        println!("AAA");
 
         self.maybe_refresh_cached_metrics().await;
 
