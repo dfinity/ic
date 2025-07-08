@@ -64,6 +64,12 @@ pub(crate) fn basic_governance_proto() -> GovernanceProto {
             description: Some("A project to spin up a ServiceNervousSystem".to_string()),
             url: Some("https://internetcomputer.org".to_string()),
         }),
+
+        // Ensure that cached metrics are not attempted to be refreshed in tests.
+        metrics: Some(GovernanceCachedMetrics {
+            timestamp_seconds: u64::MAX,
+            ..Default::default()
+        }),
         ..Default::default()
     }
 }
