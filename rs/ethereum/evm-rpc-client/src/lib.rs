@@ -126,14 +126,15 @@ impl<R: Runtime, L: Sink> EvmRpcClient<R, L> {
         .await
     }
 
-    async fn call_internal<In, Out>(
+    async fn call_internal<In, Config, Out>(
         &self,
         method: &str,
-        config: Option<RpcConfig>,
+        config: Option<Config>,
         args: In,
     ) -> MultiRpcResult<Out>
     where
         In: CandidType + Send + Clone + Debug + 'static,
+        Config: CandidType + Send + Clone + Debug + 'static,
         Out: CandidType + DeserializeOwned + Debug + 'static,
     {
         let mut retries = 0;
