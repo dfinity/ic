@@ -12,6 +12,7 @@ on the process that this file is part of, see
 * Added `SnsGovernance.get_metrics_replicated`, enabling other canisters to fetch SNS metrics.
   `SnsGovernance.get_metrics` is a replicated query and thus cannot be called by canisters.
 
+* Extended SNS metrics with treasury metrics.
 
 ## Changed
 

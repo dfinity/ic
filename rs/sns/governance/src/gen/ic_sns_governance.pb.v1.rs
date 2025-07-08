@@ -2326,13 +2326,79 @@ pub struct GetMetricsRequest {
     #[prost(uint64, tag = "1")]
     pub time_window_seconds: u64,
 }
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct TreasuryMetrics {
+    #[prost(enumeration = "treasury_metrics::Treasury", tag = "1")]
+    pub treasury: i32,
+    #[prost(string, optional, tag = "2")]
+    pub name: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(message, optional, tag = "3")]
+    pub ledger_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    #[prost(message, optional, tag = "4")]
+    pub account: ::core::option::Option<Account>,
+    #[prost(uint64, tag = "5")]
+    pub amount_e8s: u64,
+    #[prost(uint64, tag = "6")]
+    pub original_amount_e8s: u64,
+}
+/// Nested message and enum types in `TreasuryMetrics`.
+pub mod treasury_metrics {
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        Copy,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+        PartialOrd,
+        Ord,
+        ::prost::Enumeration,
+    )]
+    #[repr(i32)]
+    pub enum Treasury {
+        Unspecified = 0,
+        Icp = 1,
+        SnsToken = 2,
+    }
+    impl Treasury {
+        /// String value of the enum field names used in the ProtoBuf definition.
+        ///
+        /// The values are not transformed in any way and thus are considered stable
+        /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+        pub fn as_str_name(&self) -> &'static str {
+            match self {
+                Self::Unspecified => "TREASURY_UNSPECIFIED",
+                Self::Icp => "TREASURY_ICP",
+                Self::SnsToken => "TREASURY_SNS_TOKEN",
+            }
+        }
+        /// Creates an enum from field names used in the ProtoBuf definition.
+        pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+            match value {
+                "TREASURY_UNSPECIFIED" => Some(Self::Unspecified),
+                "TREASURY_ICP" => Some(Self::Icp),
+                "TREASURY_SNS_TOKEN" => Some(Self::SnsToken),
+                _ => None,
+            }
+        }
+    }
+}
 /// Response message for 'get_sns_status'
 #[derive(
     candid::CandidType,
     candid::Deserialize,
     comparable::Comparable,
     Clone,
-    Copy,
     PartialEq,
     ::prost::Message,
 )]
@@ -2343,6 +2409,8 @@ pub struct Metrics {
     pub last_ledger_block_timestamp: u64,
     #[prost(uint64, tag = "3")]
     pub num_recently_executed_proposals: u64,
+    #[prost(message, repeated, tag = "4")]
+    pub treasury_metrics: ::prost::alloc::vec::Vec<TreasuryMetrics>,
 }
 /// Request message for 'get_sns_initialization_parameters'
 #[derive(
