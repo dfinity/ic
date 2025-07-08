@@ -10612,6 +10612,7 @@ dependencies = [
  "registry-canister",
  "serde",
  "serde_cbor",
+ "sns-treasury-manager",
  "tempfile",
  "thiserror 2.0.12",
  "tokio",
@@ -10862,6 +10863,7 @@ dependencies = [
  "ic-error-types 0.2.0",
  "ic-icrc1",
  "ic-icrc1-index-ng",
+ "ic-icrc1-ledger",
  "ic-icrc1-tokens-u64",
  "ic-interfaces-registry",
  "ic-ledger-core",
@@ -10917,6 +10919,7 @@ dependencies = [
  "rust_decimal_macros",
  "rustc-hash 1.1.0",
  "serde",
+ "sns-treasury-manager",
  "tempfile",
  "tokio",
  "url",
@@ -21910,6 +21913,14 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.101",
+]
+
+[[package]]
+name = "sns-treasury-manager"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "serde",
 ]
 
 [[package]]
