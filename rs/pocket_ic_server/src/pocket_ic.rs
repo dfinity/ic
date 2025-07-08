@@ -815,10 +815,16 @@ impl PocketIcSubnets {
         self.subnet_configs.push(subnet_config.clone());
 
         if let Some(icp_features) = self.icp_features.clone() {
-            if icp_features.registry {
+            // using `let IcpFeatures { }` with explicit field names
+            // to force an update of this place after adding a new field to `IcpFeatures`
+            let IcpFeatures {
+                registry,
+                cycles_minting,
+            } = icp_features;
+            if registry {
                 self.update_registry();
             }
-            if icp_features.cycles_minting {
+            if cycles_minting {
                 self.update_cmc();
             }
         }
