@@ -29,6 +29,7 @@ use virt::sys::{
 };
 
 mod boot_args;
+mod device_mapping;
 mod guest_direct_boot;
 mod guest_vm_config;
 mod mount;
@@ -256,8 +257,7 @@ impl GuestVmService {
             })
             .transpose()?;
 
-        dbg!(&upgrade_mapped_device);
-        // std::thread::sleep(Duration::from_secs(30));
+        // dbg!(&upgrade_mapped_device);
 
         let disk_device = upgrade_mapped_device
             .as_ref()
