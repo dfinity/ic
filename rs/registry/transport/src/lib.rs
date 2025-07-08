@@ -187,7 +187,7 @@ impl HighCapacityRegistryValue {
             Some(high_capacity_registry_value::Content::DeletionMarker(_)) => false,
             Some(high_capacity_registry_value::Content::Value(_)) => true,
             Some(high_capacity_registry_value::Content::LargeValueChunkKeys(_)) => true,
-            None => false, // No content means no deletion marker.
+            None => false, // No content is treated as equivalent to deletion marker
         }
     }
 }

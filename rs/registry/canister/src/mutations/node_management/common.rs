@@ -281,7 +281,9 @@ pub(crate) fn get_key_family_iter_at_version<'a, T: prost::Message + Default>(
         let latest_value: Option<T> =
             with_chunks(|chunks| decode_high_capacity_registry_value::<T, _>(value, chunks));
 
-        latest_value.is_some().then(|| (id, latest_value.unwrap()))
+        let latest_value = latest_value?;
+
+        Some((id, latest_value))
     })
 }
 
