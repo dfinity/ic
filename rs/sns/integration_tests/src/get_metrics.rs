@@ -362,7 +362,30 @@ fn test_sns_metrics() {
         }
 
         {
-            let treasury_metrics = treasury_metrics.unwrap();
+            // Redact the timestamps
+            let treasury_metrics = treasury_metrics
+                .unwrap()
+                .into_iter()
+                .map(
+                    |TreasuryMetrics {
+                         treasury,
+                         name,
+                         ledger_canister_id,
+                         account,
+                         amount_e8s,
+                         original_amount_e8s,
+                         timestamp_seconds: _, // We don't care about the timestamp in this test
+                     }| TreasuryMetrics {
+                        treasury,
+                        name,
+                        ledger_canister_id,
+                        account,
+                        amount_e8s,
+                        original_amount_e8s,
+                        timestamp_seconds: None, // Redact the timestamp
+                    },
+                )
+                .collect::<Vec<_>>();
 
             assert_eq!(
                 treasury_metrics,
@@ -379,7 +402,7 @@ fn test_sns_metrics() {
                     amount_e8s: Some(1000000000000),
                     original_amount_e8s: Some(0),
 
-                    timestamp_seconds: Some(1756814370),
+                    timestamp_seconds: None,
                 }]
             )
         }
