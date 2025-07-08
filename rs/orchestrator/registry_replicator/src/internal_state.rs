@@ -393,7 +393,7 @@ impl InternalState {
             // We want to delete all canister ranges (unless they were deleted above, as we wouldn't
             // make another deletion entry for them).
             !km.key.starts_with(CANISTER_RANGES_PREFIX)
-                && &km.key != &make_routing_table_record_key()
+                && km.key != make_routing_table_record_key()
         });
 
         // TODO(NNS1-3781): Remove this once routing_table is no longer used by clients.
