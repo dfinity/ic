@@ -4,14 +4,16 @@ use crate::guest_vm_config::{
 };
 use crate::mount::PartitionProvider;
 use crate::systemd_notifier::SystemdNotifier;
+use crate::upgrade_device_mapper::{create_mapped_device, MappedUpgradeDevice};
 use anyhow::{anyhow, bail, Context, Error, Result};
 use clap::{Parser, ValueEnum};
 use config_types::{HostOSConfig, Ipv6Config};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{calculate_deterministic_mac, IpVariant, MacAddr6Ext};
 use ic_metrics_tool::{Metric, MetricsWriter};
+use nix::unistd::getuid;
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 use tempfile::NamedTempFile;
@@ -22,13 +24,16 @@ use tokio_util::sync::CancellationToken;
 use virt::connect::Connect;
 use virt::domain::Domain;
 use virt::error::{ErrorDomain, ErrorNumber};
-use virt::sys::{VIR_DOMAIN_DESTROY_GRACEFUL, VIR_DOMAIN_NONE, VIR_DOMAIN_RUNNING};
+use virt::sys::{
+    VIR_DOMAIN_DESTROY_GRACEFUL, VIR_DOMAIN_NONE, VIR_DOMAIN_PAUSED, VIR_DOMAIN_RUNNING,
+};
 
 mod boot_args;
 mod guest_direct_boot;
 mod guest_vm_config;
 mod mount;
 mod systemd_notifier;
+mod upgrade_device_mapper;
 
 const DEFAULT_METRICS_FILE_PATH: &str =
     "/run/node_exporter/collector_textfile/hostos_guestos_service.prom";
@@ -64,6 +69,11 @@ struct Args {
 
 #[tokio::main]
 pub async fn main() -> Result<()> {
+    // TODO: We could replace this with Linux capabilities but this works well for now.
+    if !getuid().is_root() {
+        bail!("This program requires root privileges.");
+    }
+
     let args = Args::parse();
 
     match args.vm_type {
@@ -146,20 +156,17 @@ impl VirtualMachine {
         }
     }
 
-    /// Checks if the virtual machine is currently running
-    fn is_running(&self) -> bool {
+    /// Checks if the virtual machine is currently active
+    fn is_active(&self) -> bool {
         let Ok(domain) = self.get_domain() else {
             eprintln!("Failed to get domain");
             return false;
         };
 
-        match domain.get_state() {
-            Ok((state, _reason)) => state == VIR_DOMAIN_RUNNING,
-            Err(err) => {
-                eprintln!("Failed to get domain state: {err}");
-                false
-            }
-        }
+        domain.is_active().unwrap_or_else(|err| {
+            eprintln!("Failed to get domain state: {err}");
+            false
+        })
     }
 
     fn get_domain(&self) -> Result<Domain> {
@@ -167,9 +174,20 @@ impl VirtualMachine {
             .context("Domain no longer exists")
     }
 
+    async fn wait_for_running(&self) {
+        while !self.is_active() {
+            // Poll every 1s in production and 50ms in tests to speed up tests (in prod, we can
+            // wait 1s between polls and we save some CPU cycles).
+            #[cfg(not(test))]
+            sleep(Duration::from_secs(1)).await;
+            #[cfg(test)]
+            sleep(Duration::from_millis(50)).await;
+        }
+    }
+
     /// Returns once the VM is no longer running.
     async fn wait_for_shutdown(&self) {
-        while self.is_running() {
+        while self.is_active() {
             // Poll every 1s in production and 50ms in tests to speed up tests (in prod, we can
             // wait 1s between polls and we save some CPU cycles).
             #[cfg(not(test))]
@@ -183,7 +201,7 @@ impl VirtualMachine {
 impl Drop for VirtualMachine {
     /// Ensures the VM is properly shut down when the object is dropped
     fn drop(&mut self) {
-        if self.is_running() {
+        if self.is_active() {
             println!("Shutting down {} domain gracefully", self.domain_name);
             if let Err(e) = self.get_domain().and_then(|domain| {
                 domain
@@ -203,8 +221,11 @@ pub struct GuestVmService {
     hostos_config: HostOSConfig,
     systemd_notifier: Arc<dyn SystemdNotifier>,
     console_tty: Box<dyn Write + Send + Sync>,
-    partition_provider: Box<dyn PartitionProvider>,
     guest_vm_type: GuestVMType,
+    disk_device: PathBuf,
+    partition_provider: Box<dyn PartitionProvider>,
+    // Partition provider uses the mapped device, so it must be declared after it.
+    _upgrade_mapped_device: Option<MappedUpgradeDevice>,
 }
 
 impl GuestVmService {
@@ -226,6 +247,23 @@ impl GuestVmService {
             .open(CONSOLE_TTY_PATH)
             .context("Failed to open console")?;
 
+        // If this is an Upgrade VM, create a mapped device which protects the data partition of the
+        // Guest device.
+        let upgrade_mapped_device = (guest_vm_type == GuestVMType::Upgrade)
+            .then(|| {
+                create_mapped_device(Path::new(GUESTOS_DEVICE))
+                    .context("Cannot create mapped device")
+            })
+            .transpose()?;
+
+        dbg!(&upgrade_mapped_device);
+        // std::thread::sleep(Duration::from_secs(30));
+
+        let disk_device = upgrade_mapped_device
+            .as_ref()
+            .map(|x| x.path())
+            .unwrap_or(Path::new(GUESTOS_DEVICE));
+
         Ok(Self {
             metrics_writer,
             libvirt_connection,
@@ -233,7 +271,12 @@ impl GuestVmService {
             guest_vm_type,
             systemd_notifier: Arc::new(systemd_notifier::DefaultSystemdNotifier),
             console_tty: Box::new(console_tty),
-            partition_provider: Box::new(mount::GptPartitionProvider::new(GUESTOS_DEVICE.into())?),
+            partition_provider: Box::new(
+                mount::GptPartitionProvider::new(disk_device.to_path_buf())
+                    .context("Failed to create partition provider")?,
+            ),
+            disk_device: disk_device.to_path_buf(),
+            _upgrade_mapped_device: upgrade_mapped_device,
         })
     }
 
@@ -299,11 +342,23 @@ impl GuestVmService {
             &self.hostos_config,
             config_media.path(),
             direct_boot.as_ref().map(DirectBoot::to_config),
+            &self.disk_device,
             self.guest_vm_type,
         )
         .context("Failed to generate GuestOS VM config")?;
 
         println!("Creating GuestOS virtual machine");
+
+        let vm_config_log_path = Self::vm_config_log_path(self.guest_vm_type);
+        if tokio::fs::write(&vm_config_log_path, vm_config.to_string())
+            .await
+            .is_ok()
+        {
+            self.write_to_console_and_stdout(&format!(
+                "GuestOS VM config written to {}",
+                vm_config_log_path.display()
+            ));
+        }
 
         let virtual_machine = VirtualMachine::new(
             &self.libvirt_connection,
@@ -313,6 +368,13 @@ impl GuestVmService {
             vm_domain_name(self.guest_vm_type),
         )
         .context("Failed to define GuestOS virtual machine")?;
+
+        if tokio::time::timeout(Duration::from_secs(60), virtual_machine.wait_for_running())
+            .await
+            .is_err()
+        {
+            bail!("GuestOS VM failed to start within 60 seconds");
+        }
 
         // Notify systemd that we're ready
         self.systemd_notifier.notify_ready()?;
@@ -433,6 +495,13 @@ impl GuestVmService {
         }
     }
 
+    fn vm_config_log_path(guest_vm_type: GuestVMType) -> PathBuf {
+        match guest_vm_type {
+            GuestVMType::Default => std::env::temp_dir().join("guestos-vm-config.xml"),
+            GuestVMType::Upgrade => std::env::temp_dir().join("upgrade-guestos-vm-config.xml"),
+        }
+    }
+
     /// Displays serial logs from the console log file if it exists
     async fn display_serial_logs(&mut self) -> Result<()> {
         let serial_log_path = serial_log_path(self.guest_vm_type);
@@ -460,7 +529,7 @@ impl GuestVmService {
 
     /// Monitors the virtual machine for shutdown or stop signals
     async fn monitor_virtual_machine(
-        &self,
+        &mut self,
         vm: &VirtualMachine,
         termination_token: CancellationToken,
     ) -> Result<()> {
@@ -480,6 +549,8 @@ impl GuestVmService {
 
                 // Notify systemd we're stopping
                 self.systemd_notifier.notify_stopping("GuestOS VM stopped unexpectedly.")?;
+                self.write_to_console_and_stdout("GuestOS VM stopped unexpectedly.");
+                let _ = self.display_serial_logs().await;
 
                 Err(anyhow!("GuestOS VM stopped unexpectedly"))
             }
@@ -706,6 +777,8 @@ mod tests {
                     .unwrap(),
                 ),
                 guest_vm_type,
+                _upgrade_mapped_device: None,
+                disk_device: GUESTOS_DEVICE.into(),
             };
 
             // Start the service in the background

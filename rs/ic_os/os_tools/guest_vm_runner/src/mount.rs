@@ -107,7 +107,8 @@ impl GptPartitionProvider {
     }
 
     pub fn with_mounter(device: PathBuf, mounter: Box<dyn Mounter>) -> Result<Self> {
-        let gpt = gpt::disk::read_disk(&device).context("Could not read GPT from device")?;
+        let gpt = gpt::disk::read_disk(&device)
+            .with_context(|| format!("Could not read GPT from device {}", device.display()))?;
         Ok(Self {
             device,
             gpt,

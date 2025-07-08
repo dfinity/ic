@@ -13,8 +13,11 @@ DEPENDENCIES = [
     "@crate_index//:anyhow",
     "@crate_index//:askama",
     "@crate_index//:clap",
+    "@crate_index//:devicemapper",
     "@crate_index//:gpt",
+    "@crate_index//:loopdev-3",
     "@crate_index//:macaddr",
+    "@crate_index//:nix",
     "@crate_index//:regex",
     "@crate_index//:sys-mount",
     "@crate_index//:systemd",
@@ -30,7 +33,6 @@ DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/ic_os/build_tools/partition_tools",
     "@crate_index//:goldenfile",
-    "@crate_index//:nix",
     "@crate_index//:url",
 ]
 
