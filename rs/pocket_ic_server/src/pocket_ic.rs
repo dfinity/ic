@@ -819,7 +819,7 @@ impl PocketIcSubnets {
 
         if let Some(icp_features) = self.icp_features.clone() {
             // using `let IcpFeatures { }` with explicit field names
-            // to force an update of this place after adding a new field to `IcpFeatures`
+            // to force an update after adding a new field to `IcpFeatures`
             let IcpFeatures {
                 registry,
                 cycles_minting,
