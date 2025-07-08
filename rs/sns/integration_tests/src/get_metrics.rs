@@ -2,9 +2,7 @@ use candid::{Decode, Encode};
 use ic_icrc1_ledger::{InitArgsBuilder, LedgerArgument};
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::Tokens;
-use ic_management_canister_types_private::CanisterInstallMode;
 use ic_nervous_system_common::ledger::compute_distribution_subaccount;
-use ic_nervous_system_common::E8;
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_constants::NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET;
 use ic_nns_test_utils::common::NnsInitPayloadsBuilder;
@@ -18,13 +16,11 @@ use ic_sns_governance::pb::v1::{ProposalData, ProposalId};
 use ic_sns_governance_api::pb::v1::{
     self as sns_gov, get_metrics_response, GetMetricsRequest, TreasuryMetrics,
 };
-use ic_sns_swap::pb::v1::{Init as SwapInit, NeuronBasketConstructionParameters};
 use ic_sns_test_utils::{
     itest_helpers::SnsTestsInitPayloadBuilder,
     state_test_helpers::state_machine_builder_for_sns_tests,
 };
 use ic_state_machine_tests::StateMachine;
-use ic_types::Cycles;
 use ic_types::{CanisterId, PrincipalId};
 use icp_ledger::AccountIdentifier;
 use icp_ledger::Subaccount as IcpSubaccount;
@@ -35,7 +31,6 @@ use icrc_ledger_types::icrc1::{
 };
 use pretty_assertions::assert_eq;
 use std::collections::HashMap;
-use std::str::FromStr;
 use std::time::{Duration, UNIX_EPOCH};
 
 const FEE: u64 = 10_000;
@@ -177,7 +172,7 @@ fn test_sns_metrics() {
         subaccount: None,
     };
 
-    let sns_treasury_account_sns = Account {
+    let _sns_treasury_account_sns = Account {
         owner: governance.get().0,
         subaccount: Some(
             compute_distribution_subaccount(governance.get(), TREASURY_SUBACCOUNT_NONCE).0,
