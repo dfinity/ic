@@ -25,12 +25,9 @@ pub async fn forward(
         payload,
     }: ForwardParams,
 ) -> ManualReply<Vec<u8>> {
-    match ic_cdk::api::call::call_raw128(receiver, &method, &payload, cycles)
-        .await
-        .map_err(|err| err.1)
-    {
+    match ic_cdk::api::call::call_raw128(receiver, &method, &payload, cycles).await {
         Ok(res) => ManualReply::one(res),
-        Err(err) => ManualReply::reject(err),
+        Err((_, err)) => ManualReply::reject(err),
     }
 }
 
