@@ -710,13 +710,15 @@ impl ExtendedSubnetConfigSet {
             registry,
             cycles_minting,
         } = icp_features;
-        if *registry {
-            check_empty_subnet(&self.nns, "NNS", "registry")?;
-            self.nns = Some(self.nns.unwrap_or_default());
-        }
-        if *cycles_minting {
-            check_empty_subnet(&self.nns, "NNS", "cmc")?;
-            self.nns = Some(self.nns.unwrap_or_default());
+        // NNS canisters
+        for (flag, icp_feature_str) in [
+            (*registry, "registry"),
+            (*cycles_minting, "cycles_minting"),
+        ] {
+            if flag {
+                check_empty_subnet(&self.nns, "NNS", icp_feature_str)?;
+                self.nns = Some(self.nns.unwrap_or_default());
+            }
         }
         Ok(self)
     }
