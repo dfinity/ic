@@ -569,6 +569,24 @@ class RosettaClient:
         }
         return self._send("call", payload, verbose=verbose)
 
+    def get_minimum_dissolve_delay(self, verbose=False):
+        """
+        Returns the minumum dissolve delay of a neuron that still allows it to vote.
+
+        Args:
+            verbose (bool, optional): Whether to print verbose output. Defaults to False.
+
+        Returns:
+            dict: Information about minumum dissolve delay of a neuron.
+
+        """
+        payload = {
+            "network_identifier": {"blockchain": "Internet Computer", "network": self.network},
+            "method_name": "get_minimum_dissolve_delay",
+            "parameters": {},
+        }
+        return self._send("call", payload, verbose=verbose)        
+
     def get_proposal_info(self, proposal_id, verbose=False):
         """
         Get information about a specific proposal on the Network Nervous System.

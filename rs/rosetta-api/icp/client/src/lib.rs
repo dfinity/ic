@@ -4,6 +4,7 @@ use candid::Nat;
 use candid::Principal;
 use ic_base_types::PrincipalId;
 use ic_nns_governance_api::Proposal;
+use ic_rosetta_api::ledger_client::minimum_dissolve_delay_response::MinimumDissolveDelayResponse;
 use ic_rosetta_api::ledger_client::pending_proposals_response::PendingProposalsResponse;
 use ic_rosetta_api::models::seconds::Seconds;
 use ic_rosetta_api::models::AccountType;
@@ -1226,6 +1227,28 @@ impl RosettaClient {
                 .collect();
 
         Ok(pending_proposals)
+    }
+
+    // Retrieves the minumum neuron dissolve delay in seconds.
+    pub async fn get_minimum_dissolve_delay(
+        &self,
+        network_identifier: NetworkIdentifier,
+    ) -> anyhow::Result<Option<u64>, String> {
+        let response = self
+            .call(CallRequest::new(
+                network_identifier.clone(),
+                "get_network_economics_parameters".to_owned(),
+                ObjectMap::new(),
+            ))
+            .await
+            .unwrap();
+
+        let minimum_delay: Option<u64> =
+            MinimumDissolveDelayResponse::try_from(Some(response.result))
+                .unwrap()
+                .neuron_minimum_dissolve_delay_to_vote_seconds;
+
+        Ok(minimum_delay)
     }
 
     /// A neuron can be set to automatically restake its maturity.
