@@ -446,7 +446,7 @@ fn test_sns_metrics() {
 
         assert_eq!(
             genesis_timestamp_seconds,
-            expected_genesis_timestamp_seconds
-        )
+            Some(expected_genesis_timestamp_seconds)
+        );
     }
 }
