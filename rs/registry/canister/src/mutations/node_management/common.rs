@@ -303,7 +303,7 @@ pub(crate) fn get_key_family_raw_iter_at_version<'a>(
             let latest_value: &HighCapacityRegistryValue =
                 values.iter().rev().find(|value| value.version <= version)?;
 
-            if !latest_value.has_byte_content() {
+            if !latest_value.is_present() {
                 return None; // Deleted or otherwise empty value.
             }
 

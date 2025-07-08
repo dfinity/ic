@@ -741,7 +741,7 @@ mod tests {
 
     // Simple helper to create SubnetId from index
     fn test_subnet(idx: u64) -> SubnetId {
-        SubnetId::new(PrincipalId::new_user_test_id(idx))
+        SubnetId::new(PrincipalId::new_subnet_test_id(idx))
     }
 
     /// Helper to build a RoutingTable from a Vec of ((start, end), subnet_id)

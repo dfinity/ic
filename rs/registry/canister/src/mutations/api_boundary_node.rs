@@ -72,7 +72,7 @@ mod tests {
     use ic_registry_keys::{
         make_api_boundary_node_record_key, API_BOUNDARY_NODE_RECORD_KEY_PREFIX,
     };
-    use ic_registry_transport::pb::v1::{high_capacity_registry_value, HighCapacityRegistryValue};
+    use ic_registry_transport::pb::v1::HighCapacityRegistryValue;
     use ic_types_test_utils::ids::node_test_id;
 
     use crate::registry::Registry;
@@ -86,7 +86,6 @@ mod tests {
 
         let mut value = VecDeque::new();
         value.push_back(HighCapacityRegistryValue {
-            content: Some(high_capacity_registry_value::Content::Value(vec![])),
             ..Default::default()
         });
 
@@ -118,7 +117,6 @@ mod tests {
 
         let mut value = VecDeque::new();
         value.push_back(HighCapacityRegistryValue {
-            content: Some(high_capacity_registry_value::Content::Value(vec![])),
             ..Default::default()
         });
 
