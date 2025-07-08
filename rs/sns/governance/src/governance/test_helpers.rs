@@ -115,7 +115,7 @@ impl ICRC1Ledger for DoNothingLedger {
     }
 
     fn canister_id(&self) -> CanisterId {
-        unimplemented!()
+        CanisterId::from(42)
     }
 
     async fn icrc3_get_blocks(

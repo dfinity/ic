@@ -1,7 +1,8 @@
 use crate::icrc_ledger_helper::ICRCLedgerHelper;
 use crate::pb::v1::governance::GovernanceCachedMetrics;
-use crate::pb::v1::{Metrics, TreasuryMetrics};
+use crate::pb::v1::{valuation, Metrics, TreasuryMetrics};
 use crate::proposal::assess_treasury_balance;
+use crate::proposal::TreasuryAccount;
 use crate::treasury::{interpret_token_code, tokens_to_e8s};
 use crate::{
     canister_control::{
@@ -84,7 +85,6 @@ use crate::{
     },
     types::{is_registered_function_id, Environment, HeapGrowthPotential, LedgerUpdateLock, Wasm},
 };
-
 use candid::{Decode, Encode};
 #[cfg(not(target_arch = "wasm32"))]
 use futures::FutureExt;
@@ -137,6 +137,7 @@ use std::{
     thread::LocalKey,
 };
 use strum::IntoEnumIterator;
+use swap_types::{GetDerivedStateRequest, GetDerivedStateResponse};
 
 lazy_static! {
     pub static ref NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER: NervousSystemFunction =
@@ -5029,6 +5030,143 @@ impl Governance {
         }
     }
 
+    async fn treasury_valuation_amount_e8s(&self, treasury: i32) -> Result<u64, String> {
+        let token = interpret_token_code(treasury).map_err(|err| {
+            format!(
+                "Failed to interpret treasury token code {}: {}",
+                treasury, err
+            )
+        })?;
+
+        let treasury_valuation_result = assess_treasury_balance(
+            token,
+            self.env.canister_id(),
+            self.ledger.canister_id(),
+            self.proto.swap_canister_id_or_panic(),
+        )
+        .await;
+
+        let treasury_valuation = treasury_valuation_result
+            .map_err(|err| format!("Failed to assess treasury balance for {:?}: {}", token, err))?;
+
+        let amount_e8s =
+            tokens_to_e8s(treasury_valuation.valuation_factors.tokens).map_err(|err| {
+                format!(
+                    "Failed to convert treasury balance to e8s for {:?}: {}",
+                    token, err
+                )
+            })?;
+
+        Ok(amount_e8s)
+    }
+
+    fn treasury_account(&self, treasury: i32) -> Result<Account, String> {
+        let token = interpret_token_code(treasury).map_err(|err| {
+            format!(
+                "Failed to interpret treasury token code {}: {}",
+                treasury, err
+            )
+        })?;
+
+        let treasury_account = token
+            .treasury_account(self.env.canister_id())
+            .map_err(|err| {
+                format!(
+                    "Failed to get treasury account for token {:?}: {}",
+                    token, err
+                )
+            })?;
+
+        Ok(treasury_account)
+    }
+
+    async fn original_treasury_icp_amount_e8s(&self) -> Result<u64, String> {
+        let request = Encode!(&GetDerivedStateRequest {})
+            .map_err(|err| format!("Failed to encode Swap.get_derived_state request: {:?}", err))?;
+        let derived_state_result = self
+            .env
+            .call_canister(
+                self.proto.swap_canister_id_or_panic(),
+                "get_derived_state",
+                request,
+            )
+            .await
+            .map_err(|err| format!("Calling Swap.get_derived_state failed: {:?}", err))
+            .and_then(|response| {
+                Decode!(&response, GetDerivedStateResponse).map_err(|err| {
+                    format!(
+                        "Failed to decode Swap.get_derived_state response: {:?}",
+                        err
+                    )
+                })
+            })?;
+
+        Ok(derived_state_result.buyer_total_icp_e8s.unwrap_or_default())
+    }
+
+    pub(crate) async fn init_cached_metrics(&mut self) {
+        let now_seconds = self.env.now();
+
+        let mut treasury_metrics = vec![];
+
+        let original_icp_amount_e8s = match self.original_treasury_icp_amount_e8s().await {
+            Ok(amount) => amount,
+            Err(err) => {
+                log!(ERROR, "Failed to init_cached_metrics: {}", err);
+                0 // Default to 0 if we cannot get the valuation.
+            }
+        };
+
+        // TODO: This value could be fetched using `SnsIndex.get_account_transactions` to
+        // TODO: get the initial amount of SNS tokens in the treasury.
+        let original_sns_token_amount_e8s = 0;
+
+        for (treasury, ledger_canister_id, original_amount_e8s) in [
+            (
+                valuation::Token::Icp,
+                NNS_LEDGER_CANISTER_ID,
+                original_icp_amount_e8s,
+            ),
+            (
+                valuation::Token::SnsToken,
+                self.ledger.canister_id(),
+                original_sns_token_amount_e8s,
+            ),
+        ] {
+            let ledger_canister_id = Some(ledger_canister_id.get());
+            let name = Some(treasury.as_str_name().to_string());
+            let treasury = i32::from(treasury);
+            let account = match self.treasury_account(treasury) {
+                Ok(account) => Some(account.into()),
+                Err(err) => {
+                    log!(ERROR, "Failed to init_cached_metrics: {}", err);
+                    None
+                }
+            };
+
+            treasury_metrics.push(TreasuryMetrics {
+                // These fields remain unchanged, but now is the time to compute them.
+                name,
+                treasury,
+                ledger_canister_id,
+                account,
+                original_amount_e8s,
+
+                // These fields can change over time; they will be refreshed later.
+                amount_e8s: 0,
+                timestamp_seconds: 0,
+            });
+        }
+
+        let metrics = GovernanceCachedMetrics {
+            treasury_metrics,
+            timestamp_seconds: now_seconds,
+            ..Default::default()
+        };
+
+        self.proto.metrics.replace(metrics);
+    }
+
     pub(crate) async fn maybe_refresh_cached_metrics(&mut self) {
         let now_seconds = self.env.now();
 
@@ -5041,13 +5179,23 @@ impl Governance {
             }
         }
 
-        log!(
-            INFO,
-            "Refreshing cached metrics at {}.",
-            format_timestamp_for_humans(now_seconds),
-        );
-
         let mut metrics = self.proto.metrics.clone().unwrap_or_default();
+
+        if metrics.treasury_metrics.len() < 2 {
+            // If we don't have too few treasury metrics, initialize them.
+            self.init_cached_metrics().await;
+            log!(
+                INFO,
+                "Initializing cached metrics at {}.",
+                format_timestamp_for_humans(now_seconds),
+            );
+        } else {
+            log!(
+                INFO,
+                "Refreshing cached metrics at {}.",
+                format_timestamp_for_humans(now_seconds),
+            );
+        }
 
         let mut treasury_metrics = vec![];
 
@@ -5064,49 +5212,10 @@ impl Governance {
             timestamp_seconds: _,
         } in metrics.treasury_metrics
         {
-            let token = match interpret_token_code(treasury) {
-                Ok(token) => token,
+            let amount_e8s = match self.treasury_valuation_amount_e8s(treasury).await {
+                Ok(amount) => amount,
                 Err(err) => {
-                    log!(
-                        ERROR,
-                        "Failed to interpret treasury token code {}: {}",
-                        treasury,
-                        err
-                    );
-                    continue;
-                }
-            };
-
-            let treasury_valuation_result = assess_treasury_balance(
-                token,
-                self.env.canister_id(),
-                self.ledger.canister_id(),
-                self.proto.swap_canister_id_or_panic(),
-            )
-            .await;
-
-            let amount_e8s = match treasury_valuation_result {
-                Ok(valuation) => valuation.valuation_factors.tokens,
-                Err(err) => {
-                    log!(
-                        ERROR,
-                        "Failed to assess treasury balance for {:?}: {}",
-                        token,
-                        err
-                    );
-                    continue;
-                }
-            };
-
-            let amount_e8s = match tokens_to_e8s(amount_e8s) {
-                Ok(amount_e8s) => amount_e8s,
-                Err(err) => {
-                    log!(
-                        ERROR,
-                        "Failed to convert treasury balance to e8s for {:?}: {}",
-                        token,
-                        err
-                    );
+                    log!(ERROR, "Failed to refresh_cached_metrics: {}", err);
                     continue;
                 }
             };
@@ -6359,6 +6468,8 @@ fn get_neuron_id_from_memo_and_controller(
         controller, memo,
     ))
 }
+
+pub mod swap_types;
 
 #[cfg(test)]
 mod assorted_governance_tests;

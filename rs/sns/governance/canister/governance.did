@@ -380,6 +380,7 @@ type GovernanceCachedMetrics = record {
   dissolving_neurons_count : nat64;
   dissolving_neurons_e8s_buckets : vec record { nat64; float64 };
   timestamp_seconds : nat64;
+  treasury_metrics : vec TreasuryMetrics;
 };
 
 type GovernanceError = record {

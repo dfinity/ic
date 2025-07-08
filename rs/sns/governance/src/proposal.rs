@@ -703,7 +703,7 @@ fn locally_validate_and_render_transfer_sns_treasury_funds(
 /// The only thing that implements this is Token.
 // treasury_account could be moved to impl Token if TREASURY_SUBACCOUNT_NONCE where defined in
 // another crate instead of this one.
-trait TreasuryAccount {
+pub trait TreasuryAccount {
     fn treasury_account(self, sns_governance_canister_id: CanisterId) -> Result<Account, String>;
 }
 
