@@ -414,7 +414,7 @@ impl LedgerAccess for LedgerClient {
                 ApiError::InvalidRequest(
                     false,
                     Details::from(format!(
-                        "Could not decode PendingProposals response: {}",
+                        "Could not decode NetworkEconomics response: {}",
                         err
                     )),
                 )
