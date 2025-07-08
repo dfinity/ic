@@ -2826,7 +2826,7 @@ impl StateMachine {
     /// This function panics if the state hash computation takes more than a few
     /// seconds to complete.
     pub fn await_state_hash(&self) -> CryptoHashOfState {
-        //self.state_manager.flush_tip_channel();
+        self.state_manager.flush_tip_channel();
         let h = self.state_manager.latest_state_height();
         let started_at = Instant::now();
         loop {
