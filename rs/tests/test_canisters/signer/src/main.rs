@@ -28,13 +28,9 @@ pub async fn gen_ecdsa_sig(
         key_id,
     };
 
-    match sign_with_ecdsa(signature_request)
-        .await
-        .map(|(res,)| res)
-        .map_err(|err| err.1)
-    {
-        Ok(sig) => ManualReply::one(sig),
-        Err(err) => ManualReply::reject(err),
+    match sign_with_ecdsa(signature_request).await {
+        Ok((sig,)) => ManualReply::one(sig),
+        Err((_, err)) => ManualReply::reject(err),
     }
 }
 
@@ -55,13 +51,9 @@ pub async fn gen_schnorr_sig(
         key_id,
     };
 
-    match sign_with_schnorr(signature_request)
-        .await
-        .map(|(res,)| res)
-        .map_err(|err| err.1)
-    {
-        Ok(sig) => ManualReply::one(sig),
-        Err(err) => ManualReply::reject(err),
+    match sign_with_schnorr(signature_request).await {
+        Ok((sig,)) => ManualReply::one(sig),
+        Err((_, err)) => ManualReply::reject(err),
     }
 }
 
@@ -82,13 +74,9 @@ pub async fn gen_vetkd_key(
         transport_public_key: ic_bls12_381::G1Affine::generator().to_compressed().to_vec(),
     };
 
-    match vetkd_derive_key(key_request)
-        .await
-        .map(|(res,)| res)
-        .map_err(|err| err.1)
-    {
-        Ok(key) => ManualReply::one(key),
-        Err(err) => ManualReply::reject(err),
+    match vetkd_derive_key(key_request).await {
+        Ok((key,)) => ManualReply::one(key),
+        Err((_, err)) => ManualReply::reject(err),
     }
 }
 
