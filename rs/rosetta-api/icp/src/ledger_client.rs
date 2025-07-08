@@ -409,19 +409,22 @@ impl LedgerAccess for LedgerClient {
             .call()
             .await
             .map_err(|e| ApiError::invalid_request(format!("{}", e)))?;
-        Decode!(bytes.as_slice(), NetworkEconomics).map_err(|err| {
-            ApiError::InvalidRequest(
-                false,
-                Details::from(format!(
-                    "Could not decode PendingProposals response: {}",
-                    err
-                )),
+        Decode!(bytes.as_slice(), NetworkEconomics)
+            .map_err(|err| {
+                ApiError::InvalidRequest(
+                    false,
+                    Details::from(format!(
+                        "Could not decode PendingProposals response: {}",
+                        err
+                    )),
+                )
+            })
+            .map(
+                |network_economics| match network_economics.voting_power_economics {
+                    Some(vpe) => vpe.neuron_minimum_dissolve_delay_to_vote_seconds,
+                    None => None,
+                },
             )
-        }).map(|network_economics| 
-        match network_economics.voting_power_economics {
-            Some(vpe) => vpe.neuron_minimum_dissolve_delay_to_vote_seconds,
-            None => None,
-        })
     }
     async fn list_known_neurons(&self) -> Result<Vec<KnownNeuron>, ApiError> {
         if self.offline {
