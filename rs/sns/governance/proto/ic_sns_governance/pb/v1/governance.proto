@@ -1637,8 +1637,8 @@ message GetMetricsRequest {
 message TreasuryMetrics {
   enum Treasury {
     TREASURY_UNSPECIFIED = 0;
-    ICP_TREASURY = 1;
-    SNS_TOKEN_TREASURY = 2;
+    TREASURY_ICP = 1;
+    TREASURY_SNS_TOKEN = 2;
   }
 
   Treasury treasury = 1;

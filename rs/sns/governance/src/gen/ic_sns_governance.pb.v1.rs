@@ -2367,8 +2367,8 @@ pub mod treasury_metrics {
     #[repr(i32)]
     pub enum Treasury {
         Unspecified = 0,
-        IcpTreasury = 1,
-        SnsTokenTreasury = 2,
+        Icp = 1,
+        SnsToken = 2,
     }
     impl Treasury {
         /// String value of the enum field names used in the ProtoBuf definition.
@@ -2378,16 +2378,16 @@ pub mod treasury_metrics {
         pub fn as_str_name(&self) -> &'static str {
             match self {
                 Self::Unspecified => "TREASURY_UNSPECIFIED",
-                Self::IcpTreasury => "ICP_TREASURY",
-                Self::SnsTokenTreasury => "SNS_TOKEN_TREASURY",
+                Self::Icp => "TREASURY_ICP",
+                Self::SnsToken => "TREASURY_SNS_TOKEN",
             }
         }
         /// Creates an enum from field names used in the ProtoBuf definition.
         pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
             match value {
                 "TREASURY_UNSPECIFIED" => Some(Self::Unspecified),
-                "ICP_TREASURY" => Some(Self::IcpTreasury),
-                "SNS_TOKEN_TREASURY" => Some(Self::SnsTokenTreasury),
+                "TREASURY_ICP" => Some(Self::Icp),
+                "TREASURY_SNS_TOKEN" => Some(Self::SnsToken),
                 _ => None,
             }
         }
