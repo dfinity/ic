@@ -287,6 +287,11 @@ pub fn fund_with_btc(to_fund_client: &Client, to_fund_address: &Address) -> List
         .unwrap();
 
     assert_eq!(
+        to_fund_client.get_blockchain_info().unwrap().blocks,
+        initial_height + 101
+    );
+
+    assert_eq!(
         to_fund_client
             .get_received_by_address(to_fund_address, Some(0))
             .unwrap(),
