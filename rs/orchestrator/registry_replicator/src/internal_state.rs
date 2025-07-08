@@ -372,18 +372,19 @@ impl InternalState {
         let mut routing_table_updates: Vec<_> = self
             .registry_client
             .get_key_family(CANISTER_RANGES_PREFIX, registry_version)
+            .expect("Could not query registry for canister ranges")
             .into_iter()
             .map(|key| {
                 if key == make_canister_ranges_key(CanisterId::from_u64(0)) {
-                    return KeyMutation {
+                    KeyMutation {
                         key: key.to_string(),
                         value: Some(new_routing_table.encode_to_vec()),
-                    };
+                    }
                 } else {
-                    return KeyMutation {
+                    KeyMutation {
                         key: key.to_string(),
                         value: None,
-                    };
+                    }
                 }
             })
             .collect();
