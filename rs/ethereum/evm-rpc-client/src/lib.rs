@@ -11,10 +11,10 @@ use std::fmt::Debug;
 
 pub use evm_rpc_types::{
     Block, BlockTag, ConsensusStrategy, EthMainnetService, EthSepoliaService, FeeHistory,
-    FeeHistoryArgs, GetLogsArgs, GetTransactionCountArgs, Hex, Hex20, Hex256, Hex32, HexByte,
-    HttpOutcallError, JsonRpcError, LogEntry, MultiRpcResult, Nat256, ProviderError, RpcApi,
-    RpcConfig, RpcError, RpcResult, RpcService, RpcServices, SendRawTransactionStatus,
-    TransactionReceipt, ValidationError,
+    FeeHistoryArgs, GetLogsArgs, GetLogsRpcConfig, GetTransactionCountArgs, Hex, Hex20, Hex256,
+    Hex32, HexByte, HttpOutcallError, JsonRpcError, LogEntry, MultiRpcResult, Nat256,
+    ProviderError, RpcApi, RpcConfig, RpcError, RpcResult, RpcService, RpcServices,
+    SendRawTransactionStatus, TransactionReceipt, ValidationError,
 };
 
 #[async_trait]
@@ -45,7 +45,7 @@ pub struct EvmRpcClient<R: Runtime, L: Sink> {
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct OverrideRpcConfig {
     pub eth_get_block_by_number: Option<RpcConfig>,
-    pub eth_get_logs: Option<RpcConfig>,
+    pub eth_get_logs: Option<GetLogsRpcConfig>,
     pub eth_fee_history: Option<RpcConfig>,
     pub eth_get_transaction_receipt: Option<RpcConfig>,
     pub eth_get_transaction_count: Option<RpcConfig>,
