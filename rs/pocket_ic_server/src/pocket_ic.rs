@@ -818,7 +818,7 @@ impl PocketIcSubnets {
             if icp_features.registry {
                 self.update_registry();
             }
-            if icp_features.cmc {
+            if icp_features.cycles_minting {
                 self.update_cmc();
             }
         }

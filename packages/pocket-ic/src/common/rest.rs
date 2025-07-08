@@ -543,14 +543,14 @@ impl From<SubnetConfigSet> for ExtendedSubnetConfigSet {
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
 pub struct IcpFeatures {
     pub registry: bool,
-    pub cmc: bool,
+    pub cycles_minting: bool,
 }
 
 impl IcpFeatures {
     pub fn all_icp_features() -> Self {
         Self {
             registry: true,
-            cmc: true,
+            cycles_minting: true,
         }
     }
 }
@@ -708,7 +708,7 @@ impl ExtendedSubnetConfigSet {
             check_empty_subnet(&self.nns, "NNS", "registry")?;
             self.nns = Some(self.nns.unwrap_or_default());
         }
-        if icp_features.cmc {
+        if icp_features.cycles_minting {
             check_empty_subnet(&self.nns, "NNS", "cmc")?;
             self.nns = Some(self.nns.unwrap_or_default());
         }
