@@ -1237,7 +1237,7 @@ impl RosettaClient {
         let response = self
             .call(CallRequest::new(
                 network_identifier.clone(),
-                "get_network_economics_parameters".to_owned(),
+                "get_minimum_dissolve_delay".to_owned(),
                 ObjectMap::new(),
             ))
             .await

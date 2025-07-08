@@ -27,7 +27,6 @@ const VOTE_YES: i32 = Vote::Yes as i32;
 const VOTE_NO: i32 = Vote::No as i32;
 const VOTE_UNSPECIFIED: i32 = Vote::Unspecified as i32;
 
-const DISSOLVE_DELAY_6_MONTHS: u64 = 60 * 60 * 24 * 31 * 6 + 100;
 const INITIAL_BALANCE: u64 = 100_000_000_000;
 
 lazy_static! {
@@ -46,8 +45,15 @@ fn test_neuron_voting() {
             Principal::from(GOVERNANCE_CANISTER_ID),
         );
 
+        let minimum_dissolve_delay = env
+            .rosetta_client
+            .get_minimum_dissolve_delay(env.network_identifier.clone())
+            .await
+            .expect("failed to get the minimum dissolve delay")
+            .expect("optional dissolve delay not provided");
+
         // Create neurons
-        let neuron_ids = create_neurons(&env, INITIAL_BALANCE / 10, DISSOLVE_DELAY_6_MONTHS).await;
+        let neuron_ids = create_neurons(&env, INITIAL_BALANCE / 10, minimum_dissolve_delay).await;
 
         // Ensure no proposals exist initially
         assert!(env

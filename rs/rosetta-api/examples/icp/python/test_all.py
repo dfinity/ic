@@ -175,6 +175,9 @@ def main():
     # List pending proposals
     results.append(run_example(["./list_pending_proposals.py"] + base_args, "list_pending_proposals.py", show_output))
 
+    # Get Minimum Dissolve Delay
+    results.append(run_example(["./get_minimum_dissolve_delay.py"] + base_args, "get_minimum_dissolve_delay.py", show_output))
+
     # Get a specific proposal - use a recent one from pending proposals response
     try:
         client = RosettaClient(args.node_address)

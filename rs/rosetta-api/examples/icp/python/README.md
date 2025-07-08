@@ -126,6 +126,13 @@ python list_pending_proposals.py --node-address <NODE_ADDRESS>
 
 Lists all currently pending proposals on the NNS, showing titles, descriptions, proposers, and voting status.
 
+**Get Minimum Dissolve Delay of a Nuron**:
+```sh
+python get_minimum_dissolve_delay.py --node-address <NODE_ADDRESS>
+```
+
+Returns the minumum dissolve delay of a neuron that still allows it to vote on NNS proposals.
+
 **Get Specific Proposal Details**:
 ```sh
 python get_proposal_info.py --node-address <NODE_ADDRESS> --proposal-id <PROPOSAL_ID>
