@@ -192,6 +192,8 @@ impl RegistryCanister {
                 ))
             })?;
 
+        panic!("Came to here.");
+
         crate::certification::decode_certified_deltas(
             version,
             &self.canister_id,
