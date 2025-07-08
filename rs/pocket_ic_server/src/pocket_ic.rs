@@ -39,6 +39,7 @@ use ic_https_outcalls_service::https_outcalls_service_server::HttpsOutcallsServi
 use ic_https_outcalls_service::https_outcalls_service_server::HttpsOutcallsServiceServer;
 use ic_https_outcalls_service::HttpsOutcallRequest;
 use ic_https_outcalls_service::HttpsOutcallResponse;
+use ic_icp_index::InitArg as IcpIndexInitArg;
 use ic_interfaces::{crypto::BasicSigner, ingress_pool::IngressPoolThrottler};
 use ic_interfaces_adapter_client::NonBlockingChannel;
 use ic_interfaces_registry::{RegistryValue, ZERO_REGISTRY_VERSION};
@@ -53,8 +54,8 @@ use ic_management_canister_types_private::{
 use ic_metrics::MetricsRegistry;
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_nns_constants::{
-    CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, REGISTRY_CANISTER_ID,
-    ROOT_CANISTER_ID,
+    CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID,
+    LEDGER_INDEX_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_routing_table::{
@@ -86,7 +87,10 @@ use ic_types::{
 };
 use ic_types::{NumBytes, Time};
 use ic_validator_ingress_message::StandaloneIngressSigVerifier;
-use icp_ledger::AccountIdentifier;
+use icp_ledger::{
+    AccountIdentifier, ArchiveOptions as IcpLedgerArchiveOptions, InitArgs as IcpLedgerInitArgs,
+    LedgerCanisterPayload, Tokens,
+};
 use itertools::Itertools;
 use pocket_ic::common::rest::{
     self, BinaryBlob, BlobCompression, CanisterHttpHeader, CanisterHttpMethod, CanisterHttpRequest,
@@ -101,7 +105,7 @@ use slog::Level;
 use std::hash::Hash;
 use std::str::FromStr;
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     fs::{remove_file, File},
     io::{BufReader, Read, Write},
     net::SocketAddr,
@@ -125,6 +129,8 @@ include!(concat!(env!("OUT_DIR"), "/dashboard.rs"));
 const REGISTRY_CANISTER_WASM: &[u8] = include_bytes!(env!("REGISTRY_CANISTER_WASM_PATH"));
 const CYCLES_MINTING_CANISTER_WASM: &[u8] =
     include_bytes!(env!("CYCLES_MINTING_CANISTER_WASM_PATH"));
+const ICP_LEDGER_CANISTER_WASM: &[u8] = include_bytes!(env!("ICP_LEDGER_CANISTER_WASM_PATH"));
+const ICP_INDEX_CANISTER_WASM: &[u8] = include_bytes!(env!("ICP_INDEX_CANISTER_WASM_PATH"));
 
 // Maximum duration of waiting for bitcoin/canister http adapter server to start.
 const MAX_START_SERVER_DURATION: Duration = Duration::from_secs(60);
@@ -820,12 +826,16 @@ impl PocketIcSubnets {
             let IcpFeatures {
                 registry,
                 cycles_minting,
+                icp_token,
             } = icp_features;
             if registry {
                 self.update_registry();
             }
             if cycles_minting {
                 self.update_cmc();
+            }
+            if icp_token {
+                self.deploy_icp_token();
             }
         }
 
@@ -840,7 +850,7 @@ impl PocketIcSubnets {
 
     fn update_registry(&mut self) {
         let nns_subnet = self.nns_subnet.clone().expect(
-            "The NNS subnet is supposed to already exist if the registry is to be deployed.",
+            "The NNS subnet is supposed to already exist if the `registry` ICP feature is specified.",
         );
 
         if !nns_subnet
@@ -915,7 +925,7 @@ impl PocketIcSubnets {
         let nns_subnet = self
             .nns_subnet
             .clone()
-            .expect("The NNS subnet is supposed to already exist if the CMC is to be deployed.");
+            .expect("The NNS subnet is supposed to already exist if the `cycles_minting` ICP feature is specified.");
 
         if !nns_subnet
             .state_machine
@@ -1050,6 +1060,146 @@ impl PocketIcSubnets {
                 "change_subnet_type_assignment".to_string(),
                 Encode!(&change_subnet_type_assignment_args).unwrap(),
             );
+        }
+    }
+
+    fn deploy_icp_token(&self) {
+        let nns_subnet = self
+            .nns_subnet
+            .clone()
+            .expect("The NNS subnet is supposed to already exist if the `icp_token` ICP feature is specified.");
+
+        if !nns_subnet.state_machine.canister_exists(LEDGER_CANISTER_ID) {
+            // Create the ICP ledger with its ICP mainnet settings.
+            // These settings have been obtained by calling
+            // `dfx canister call r7inp-6aaaa-aaaaa-aaabq-cai canister_status '(record {canister_id=principal"ryjl3-tyaaa-aaaaa-aaaba-cai";})' --ic`:
+            //     settings = record {
+            //       freezing_threshold = opt (2_592_000 : nat);
+            //       wasm_memory_threshold = opt (0 : nat);
+            //       controllers = vec { principal "r7inp-6aaaa-aaaaa-aaabq-cai" };
+            //       reserved_cycles_limit = opt (5_000_000_000_000 : nat);
+            //       log_visibility = opt variant { controllers };
+            //       wasm_memory_limit = opt (3_221_225_472 : nat);
+            //       memory_allocation = opt (4_294_967_296 : nat);
+            //       compute_allocation = opt (0 : nat);
+            //     };
+            let settings = CanisterSettingsArgs {
+                controllers: Some(BoundedVec::new(vec![ROOT_CANISTER_ID.get()])),
+                compute_allocation: Some(0_u64.into()),
+                memory_allocation: Some(4_294_967_296_u64.into()),
+                freezing_threshold: Some(2_592_000_u64.into()),
+                reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
+                log_visibility: Some(LogVisibilityV2::Controllers),
+                wasm_memory_limit: Some(3_221_225_472_u64.into()),
+                wasm_memory_threshold: Some(0_u64.into()),
+                environment_variables: None,
+            };
+            let canister_id = nns_subnet.state_machine.create_canister_with_cycles(
+                Some(LEDGER_CANISTER_ID.get()),
+                Cycles::zero(),
+                Some(settings),
+            );
+            assert_eq!(canister_id, LEDGER_CANISTER_ID);
+
+            // Install the ICP ledger.
+            // The following initial values are used by the `dfx nns extension` (https://github.com/dfinity/dfx-extensions/blob/2949dd3cbf6e8a52093da32c7ff27011f5ff3f3d/extensions/nns/src/install_nns.rs#L128-L131).
+            let mut initial_values = HashMap::new();
+            initial_values.insert(
+                AccountIdentifier::from_hex(
+                    "5b315d2f6702cb3a27d826161797d7b2c2e131cd312aece51d4d5574d1247087",
+                )
+                .unwrap(),
+                Tokens::from_tokens(1_000_000_000).unwrap(),
+            );
+            initial_values.insert(
+                AccountIdentifier::from_hex(
+                    "2b8fbde99de881f695f279d2a892b1137bfe81a42d7694e064b1be58701e1138",
+                )
+                .unwrap(),
+                Tokens::from_tokens(1_000_000_000).unwrap(),
+            );
+            let archive_options = IcpLedgerArchiveOptions {
+                trigger_threshold: 2000,
+                num_blocks_to_archive: 1000,
+                node_max_memory_size_bytes: Some(1024 * 1024 * 1024),
+                max_message_size_bytes: Some(128 * 1024),
+                controller_id: ROOT_CANISTER_ID.into(),
+                more_controller_ids: None,
+                cycles_for_archive_creation: Some(0),
+                max_transactions_per_response: None,
+            };
+            let icp_ledger_init_args = IcpLedgerInitArgs {
+                minting_account: AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), None),
+                icrc1_minting_account: None,
+                initial_values,
+                max_message_size_bytes: Some(128 * 1024),
+                transaction_window: Some(Duration::from_secs(24 * 60 * 60)),
+                archive_options: Some(archive_options),
+                send_whitelist: HashSet::new(),
+                transfer_fee: Some(Tokens::from_e8s(10_000)),
+                token_symbol: Some("ICP".to_string()),
+                token_name: Some("Internet Computer".to_string()),
+                feature_flags: None,
+            };
+            nns_subnet
+                .state_machine
+                .install_wasm_in_mode(
+                    canister_id,
+                    CanisterInstallMode::Install,
+                    ICP_LEDGER_CANISTER_WASM.to_vec(),
+                    Encode!(&LedgerCanisterPayload::Init(icp_ledger_init_args)).unwrap(),
+                )
+                .unwrap();
+        }
+
+        if !nns_subnet
+            .state_machine
+            .canister_exists(LEDGER_INDEX_CANISTER_ID)
+        {
+            // Create the ICP ledger with its ICP mainnet settings.
+            // These settings have been obtained by calling
+            // `dfx canister call r7inp-6aaaa-aaaaa-aaabq-cai canister_status '(record {canister_id=principal"qhbym-qaaaa-aaaaa-aaafq-cai";})' --ic`:
+            //     settings = record {
+            //       freezing_threshold = opt (2_592_000 : nat);
+            //       wasm_memory_threshold = opt (0 : nat);
+            //       controllers = vec { principal "r7inp-6aaaa-aaaaa-aaabq-cai" };
+            //       reserved_cycles_limit = opt (5_000_000_000_000 : nat);
+            //       log_visibility = opt variant { controllers };
+            //       wasm_memory_limit = opt (3_221_225_472 : nat);
+            //       memory_allocation = opt (0 : nat);
+            //       compute_allocation = opt (0 : nat);
+            //     };
+            let settings = CanisterSettingsArgs {
+                controllers: Some(BoundedVec::new(vec![ROOT_CANISTER_ID.get()])),
+                compute_allocation: Some(0_u64.into()),
+                memory_allocation: Some(0_u64.into()),
+                freezing_threshold: Some(2_592_000_u64.into()),
+                reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
+                log_visibility: Some(LogVisibilityV2::Controllers),
+                wasm_memory_limit: Some(3_221_225_472_u64.into()),
+                wasm_memory_threshold: Some(0_u64.into()),
+                environment_variables: None,
+            };
+            let canister_id = nns_subnet.state_machine.create_canister_with_cycles(
+                Some(LEDGER_INDEX_CANISTER_ID.get()),
+                Cycles::zero(),
+                Some(settings),
+            );
+            assert_eq!(canister_id, LEDGER_INDEX_CANISTER_ID);
+
+            // Install the ICP index.
+            let icp_index_init_arg = IcpIndexInitArg {
+                ledger_id: LEDGER_CANISTER_ID.get().0,
+            };
+            nns_subnet
+                .state_machine
+                .install_wasm_in_mode(
+                    canister_id,
+                    CanisterInstallMode::Install,
+                    ICP_INDEX_CANISTER_WASM.to_vec(),
+                    Encode!(&icp_index_init_arg).unwrap(),
+                )
+                .unwrap();
         }
     }
 

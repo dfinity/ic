@@ -544,6 +544,7 @@ impl From<SubnetConfigSet> for ExtendedSubnetConfigSet {
 pub struct IcpFeatures {
     pub registry: bool,
     pub cycles_minting: bool,
+    pub icp_token: bool,
 }
 
 impl IcpFeatures {
@@ -551,6 +552,7 @@ impl IcpFeatures {
         Self {
             registry: true,
             cycles_minting: true,
+            icp_token: true,
         }
     }
 }
@@ -709,11 +711,13 @@ impl ExtendedSubnetConfigSet {
         let IcpFeatures {
             registry,
             cycles_minting,
+            icp_token,
         } = icp_features;
         // NNS canisters
         for (flag, icp_feature_str) in [
             (*registry, "registry"),
             (*cycles_minting, "cycles_minting"),
+            (*icp_token, "icp_token"),
         ] {
             if flag {
                 check_empty_subnet(&self.nns, "NNS", icp_feature_str)?;
