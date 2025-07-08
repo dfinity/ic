@@ -149,10 +149,10 @@ cargo_build_script(
     },
     data = [
         "templates/dashboard.html",
+        "@mainnet_icp_index_canister//file",
+        "@mainnet_icp_ledger_canister//file",
         "@mainnet_nns_cycles-minting-canister//file",
         "@mainnet_nns_registry_canister//file",
-        "@mainnet_icp_ledger_canister//file",
-        "@mainnet_icp_index_canister//file",
     ],  # build script data (e.g. template files) goes here
     deps = BUILD_DEPENDENCIES,
 )
