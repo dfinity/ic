@@ -413,8 +413,6 @@ pub struct SystemState {
 
 
 
-
-
 /// State that is controlled and owned by the system (IC).
 ///
 /// Contains structs needed for running and maintaining the canister on the IC.
@@ -632,7 +630,7 @@ impl SystemStateV2 {
             &DEFAULT_PRINCIPAL_MULTIPLE_CONTROLLERS
         }
     }
-    
+
     /// Returns the memory currently in use by the `SystemState`
     /// for canister history.
     pub fn canister_history_memory_usage(&self) -> NumBytes {
@@ -647,7 +645,7 @@ impl SystemStateV2 {
             .collect::<Vec<String>>()
             .join(" ")
     }
-    
+
     /// Increments 'cycles_balance' and in case of refund for consumed cycles
     /// decrements the metric `consumed_cycles`.
     pub fn add_cycles(&mut self, amount: Cycles, use_case: CyclesUseCase) {
@@ -799,7 +797,6 @@ impl SystemStateV2 {
     }
 }
 
-
 #[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
 pub struct CanisterMessaging {
     #[validate_eq(CompareWithValidateEq)]
@@ -807,11 +804,29 @@ pub struct CanisterMessaging {
     status: CanisterStatusV2,
 }
 
-impl CanisterMessaging {
+#[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
+pub struct ExecutingCallOrTaskMessaging {
+    #[validate_eq(CompareWithValidateEq)]
+    queues: CanisterQueues,
+    call_context_manager: CallContextManager,
+    status: RunningOrStopping,
+    call_context: CallContext,
+    call_context_id: CallContextId,
+    outstanding_callbacks: usize,
 }
 
-
-
+#[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
+pub struct ExecutingResponseMessaging {
+    #[validate_eq(CompareWithValidateEq)]
+    queues: CanisterQueues,
+    call_context_manager: CallContextManager,
+    status: RunningOrStopping,
+    call_context: CallContext,
+    call_context_id: CallContextId,
+    callback: Arc<Callback>,
+    callback_id: CallbackId,
+    outstanding_callbacks: usize,
+}
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum CanisterStatusV2 {
@@ -819,7 +834,7 @@ pub enum CanisterStatusV2 {
         status: IdleStatus,
         aborted_execution: Option<AbortedExecution>,
     },
-    Stopped(StoppedStatus),
+    Stopped,
     PausedCallOrTaskExecution {
         status: PausedCallOrTaskStatus,
         paused_execution_id: PausedExecutionId,
@@ -830,150 +845,40 @@ pub enum CanisterStatusV2 {
     },
 }
 
-impl CanisterStatusV2 {
-    pub(crate) fn push_input(
-        &mut self,
-        msg: RequestOrResponse,
-        subnet_available_guaranteed_response_memory: &mut i64,
-        own_subnet_type: SubnetType,
-        input_queue_type: InputQueueType,
-    ) -> Result<bool, (StateError, RequestOrResponse)> {
-        match self {
-            // A canister in idle status may have an aborted execution.
-            Self::Idle {
-                status,
-                aborted_execution,
-            } => {
-                let opt_aborted_response = aborted_execution.as_ref().and_then(
-                    |aborted_execution| match &aborted_execution.input {
-                        CanisterMessageOrTask::Message(CanisterMessage::Response(response)) => {
-                            Some(&**response)
-                        }
-                        _ => None,
-                    },
-                );
-                status.push_input(
-                    msg,
-                    opt_aborted_response,
-                    subnet_available_guaranteed_response_memory,
-                    own_subnet_type,
-                    input_queue_type,
-                )
-            }
-            Self::Stopped(_) => match msg {
-                // Best-effort responses are silently dropped when stopped.
-                RequestOrResponse::Response(response) if response.is_best_effort() => Ok(false),
-                // Requests and guaranteed responses are both rejected when stopped.
-                _ => Err((StateError::CanisterStopped(msg.receiver()), msg)),
-            },
-            // A canister in execution state cannot have an aborted execution.
-            Self::PausedCallOrTaskExecution {
-                status: CallOrTaskStatus { status, .. },
-                ..
-            }
-            | Self::PausedResponseExecution {
-                status: ResponseStatus { status, .. },
-                ..
-            } => status.push_input(
-                msg,
-                None,
-                subnet_available_guaranteed_response_memory,
-                own_subnet_type,
-                input_queue_type,
-            ),
-        }
-    }
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct IdleStatus {
+    call_context_manager: CallContextManager,
+    status: RunningOrStopping,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
-pub enum IdleStatus {
-    Running(RunningStatus),
-    Stopping(StoppingStatus),
+pub enum RunningOrStopping {
+    Running,
+    Stopping {
+        /// Info about the messages that requested the canister to stop.
+        /// The reason this is a vec is because it's possible to receive
+        /// multiple requests to stop the canister while it is stopping. All
+        /// of them would be tracked here so that they can all get a response.
+        stop_contexts: Vec<StopCanisterContext>,
+    },
 }
 
-impl IdleStatus {
-    fn push_input(
-        &mut self,
-        msg: RequestOrResponse,
-        opt_aborted_response: Option<&Response>,
-        subnet_available_guaranteed_response_memory: &mut i64,
-        own_subnet_type: SubnetType,
-        input_queue_type: InputQueueType,
-    ) -> Result<bool, (StateError, RequestOrResponse)> {
-        match (&msg, self) {
-            // Requests (only) are rejected while stopping.
-            (RequestOrResponse::Request(_), Self::Stopping(_)) => {
-                Err((StateError::CanisterStopping(msg.receiver()), msg))
-            }
-            // Everything else is accepted iff there is available memory and queue slots.
-            (
-                _,
-                Self::Running(RunningStatus {
-                    queues,
-                    call_context_manager,
-                }),
-            )
-            | (
-                _,
-                Self::Stopping(StoppingStatus {
-                    queues,
-                    call_context_manager,
-                    ..
-                }),
-            ) => {
-                if let RequestOrResponse::Response(response) = &msg {
-                    if !should_enqueue_input(response, call_context_manager, opt_aborted_response)
-                        .map_err(|err| (err, msg.clone()))?
-                    {
-                        // Best effort response whose callback is gone. Silently drop it.
-                        return Ok(false);
-                    }
-                }
-                push_input(
-                    queues,
-                    msg,
-                    subnet_available_guaranteed_response_memory,
-                    own_subnet_type,
-                    input_queue_type,
-                )
-            }
-        }
-    }
-}
-
-#[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
-pub struct RunningStatus {
-    #[validate_eq(CompareWithValidateEq)]
-    queues: CanisterQueues,
-    call_context_manager: CallContextManager,
-}
-
-#[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
-pub struct StoppingStatus {
-    #[validate_eq(CompareWithValidateEq)]
-    queues: CanisterQueues,
-    call_context_manager: CallContextManager,
-    /// Info about the messages that requested the canister to stop.
-    /// The reason this is a vec is because it's possible to receive
-    /// multiple requests to stop the canister while it is stopping. All
-    /// of them would be tracked here so that they can all get a response.
-    stop_contexts: Vec<StopCanisterContext>,
-}
-
-#[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
-pub struct StoppedStatus {
-    #[validate_eq(CompareWithValidateEq)]
-    queues: CanisterQueues,
-}
-
-#[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct PausedCallOrTaskStatus {
     status: IdleStatus,
+    call_context: CallContext,
+    call_context_id: CallContextId,
+    outstanding_callbacks: usize,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct PausedResponseStatus {
     status: IdleStatus,
+    call_context: CallContext,
+    call_context_id: CallContextId,
+    callback: Arc<Callback>,
+    callback_id: CallbackId,
+    outstanding_callbacks: usize,
 }
 
 /// Any paused execution that doesn't finish until the next checkpoint
@@ -987,6 +892,98 @@ pub struct AbortedExecution {
     /// Retried execution does not have to pay for it again.
     prepaid_execution_cycles: Cycles,
 }
+
+impl CanisterMessaging {
+    pub(crate) fn push_input(
+        &mut self,
+        msg: RequestOrResponse,
+        subnet_available_guaranteed_response_memory: &mut i64,
+        own_subnet_type: SubnetType,
+        input_queue_type: InputQueueType,
+    ) -> Result<bool, (StateError, RequestOrResponse)> {
+        /*
+         * move this to the canister state level?
+         *
+        assert_eq!(
+            msg.receiver(),
+            self.canister_id,
+            "Expected `RequestOrResponse` to be targeted to canister ID {}, but instead got {}",
+            self.canister_id,
+            msg.receiver()
+        );
+        */
+
+        // Implements pushing input for the idle state, i.e. running or stopping.
+        let mut push_input = |msg: RequestOrResponse,
+                              idle_status: &IdleStatus,
+                              opt_aborted_response: Option<&Response>|
+         -> Result<bool, (StateError, RequestOrResponse)> {
+            match (&msg, &idle_status.status) {
+                // Requests (only) are rejected while stopping.
+                (RequestOrResponse::Request(_), RunningOrStopping::Stopping { .. }) => {
+                    Err((StateError::CanisterStopping(msg.receiver()), msg))
+                }
+                // Filter responses whose callback is gone.
+                (RequestOrResponse::Response(response), _)
+                    if !should_enqueue_input(
+                        response,
+                        &idle_status.call_context_manager,
+                        opt_aborted_response,
+                    )
+                    .map_err(|err| (err, msg.clone()))? =>
+                {
+                    // Best effort response. Silently drop it.
+                    return Ok(false);
+                }
+                // Everything else is accepted iff there is available memory and queue slots.
+                _ => push_input(
+                    &mut self.queues,
+                    msg,
+                    subnet_available_guaranteed_response_memory,
+                    own_subnet_type,
+                    input_queue_type,
+                ),
+            }
+        };
+
+        match &self.status {
+            CanisterStatusV2::Stopped => match &msg {
+                // Best-effort responses are silently dropped when stopped.
+                RequestOrResponse::Response(response) if response.is_best_effort() => Ok(false),
+                // Requests and guaranteed responses are both rejected when stopped.
+                _ => Err((StateError::CanisterStopped(msg.receiver()), msg)),
+            },
+
+            // A canister in idle status may have an aborted execution.
+            CanisterStatusV2::Idle {
+                status,
+                aborted_execution,
+            } => {
+                let opt_aborted_response = aborted_execution.as_ref().and_then(
+                    |aborted_execution| match &aborted_execution.input {
+                        CanisterMessageOrTask::Message(CanisterMessage::Response(response)) => {
+                            Some(&**response)
+                        }
+                        _ => None,
+                    },
+                );
+
+                push_input(msg, status, opt_aborted_response)
+            }
+
+            // A canister in paused execution state cannot have an aborted execution.
+            CanisterStatusV2::PausedCallOrTaskExecution {
+                status: PausedCallOrTaskStatus { status, .. },
+                ..
+            }
+            | CanisterStatusV2::PausedResponseExecution {
+                status: PausedResponseStatus { status, .. },
+                ..
+            } => push_input(msg, status, None),
+        }
+    }
+}
+
 
 
 
