@@ -1512,6 +1512,8 @@ pub mod governance {
         /// The number of governance tokens in neurons with a dissolve delay of
         /// less than six months.
         pub neurons_with_less_than_6_months_dissolve_delay_e8s: u64,
+        /// Metrics related to the treasury assets of this SNS.
+        pub treasury_metrics: Vec<super::TreasuryMetrics>,
     }
     /// Metadata about this SNS.
     #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
@@ -1693,6 +1695,7 @@ pub struct TreasuryMetrics {
     pub account: Option<Account>,
     pub amount_e8s: Option<u64>,
     pub original_amount_e8s: Option<u64>,
+    pub timestamp_seconds: Option<u64>,
 }
 
 pub mod get_metrics_response {
