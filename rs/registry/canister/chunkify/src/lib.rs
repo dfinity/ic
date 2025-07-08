@@ -191,20 +191,6 @@ where
     Some(decoded.unwrap())
 }
 
-pub fn get_high_capacity_registry_value_bytes<M: Memory>(
-    value: &HighCapacityRegistryValue,
-    chunks: &Chunks<M>,
-) -> Vec<u8> {
-    match &value.content {
-        Some(high_capacity_registry_value::Content::Value(value)) => value.clone(),
-        Some(high_capacity_registry_value::Content::DeletionMarker(_)) => vec![],
-        Some(high_capacity_registry_value::Content::LargeValueChunkKeys(
-            large_value_chunk_keys,
-        )) => dechunkify(large_value_chunk_keys, chunks),
-        None => vec![],
-    }
-}
-
 fn chunkify_prime_mutation<M: Memory>(
     original_mutation: RegistryMutation,
     chunks: &mut Chunks<M>,
