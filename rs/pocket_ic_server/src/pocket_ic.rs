@@ -1156,7 +1156,7 @@ impl PocketIcSubnets {
             .state_machine
             .canister_exists(LEDGER_INDEX_CANISTER_ID)
         {
-            // Create the ICP ledger with its ICP mainnet settings.
+            // Create the ICP index with its ICP mainnet settings.
             // These settings have been obtained by calling
             // `dfx canister call r7inp-6aaaa-aaaaa-aaabq-cai canister_status '(record {canister_id=principal"qhbym-qaaaa-aaaaa-aaafq-cai";})' --ic`:
             //     settings = record {
