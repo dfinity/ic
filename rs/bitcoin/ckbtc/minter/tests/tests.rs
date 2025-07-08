@@ -1567,6 +1567,11 @@ fn test_transaction_resubmission_finalize_new_above_threshold() {
     // available_utxos.len() > UTXOS_COUNT_THRESHOLD, the minter will
     // include 2 input utxos.
     let withdrawal_amount = 900_000;
+    assert!(
+        deposit_value > withdrawal_amount,
+        "ensure only 1 utxo is needed",
+    );
+
     let withdrawal_account = ckbtc.withdrawal_account(user.into());
     ckbtc.transfer(user, withdrawal_account, withdrawal_amount);
 
