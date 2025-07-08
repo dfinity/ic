@@ -75,6 +75,7 @@ pub fn address_limits(network: AdapterNetwork) -> (usize, usize) {
             use bitcoin::dogecoin::Network::*;
             match network {
                 Dogecoin => (200, 1000),
+                //TODO(XC-423): revisit these values
                 Testnet => (20, 100),
                 Regtest => (1, 1),
                 _ => (1, 1),

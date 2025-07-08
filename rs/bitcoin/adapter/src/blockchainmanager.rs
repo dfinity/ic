@@ -2,7 +2,7 @@ use crate::{
     blockchainstate::{AddHeaderError, BlockchainState},
     common::{BlockHeight, BlockLike, MINIMUM_VERSION_NUMBER},
     metrics::RouterMetrics,
-    Channel, Command, ProcessBitcoinNetworkMessageError,
+    Channel, Command, ProcessNetworkMessageError,
 };
 use bitcoin::{
     block::Header as BlockHeader,
@@ -628,7 +628,7 @@ impl BlockchainManager {
         channel: &mut impl Channel<Block>,
         addr: SocketAddr,
         message: &NetworkMessage<Block>,
-    ) -> Result<(), ProcessBitcoinNetworkMessageError> {
+    ) -> Result<(), ProcessNetworkMessageError> {
         match message {
             NetworkMessage::Inv(inventory) => {
                 if let Err(err) = self.received_inv_message(channel, &addr, inventory) {
@@ -636,7 +636,7 @@ impl BlockchainManager {
                         self.logger,
                         "Received an invalid inv message from {}: {}", addr, err
                     );
-                    return Err(ProcessBitcoinNetworkMessageError::InvalidMessage);
+                    return Err(ProcessNetworkMessageError::InvalidMessage);
                 }
             }
             NetworkMessage::Headers(headers) => {
@@ -645,13 +645,13 @@ impl BlockchainManager {
                         self.logger,
                         "Received an invalid headers message form {}: {}", addr, err
                     );
-                    return Err(ProcessBitcoinNetworkMessageError::InvalidMessage);
+                    return Err(ProcessNetworkMessageError::InvalidMessage);
                 }
             }
             NetworkMessage::Block(block) => {
                 if let Err(err) = self.received_block_message(&addr, block) {
                     warn!(self.logger, "Received an invalid block {}: {}", addr, err);
-                    return Err(ProcessBitcoinNetworkMessageError::InvalidMessage);
+                    return Err(ProcessNetworkMessageError::InvalidMessage);
                 }
             }
             _ => {}

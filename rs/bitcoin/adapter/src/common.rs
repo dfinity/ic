@@ -23,7 +23,6 @@ pub const DEFAULT_CHANNEL_BUFFER_SIZE: usize = 64;
 pub type BlockHeight = u32;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
-#[allow(missing_docs)]
 /// AdapterNetwork selects between Bitcoin and Dogecoin Network.
 ///
 /// The string representation for mainnet would be either "bitcoin" or "dogecoin".
@@ -57,7 +56,9 @@ pub type BlockHeight = u32;
 /// assert!(matches!(AdapterNetwork::from_str("dogecoin:testnet4"), Err(_)));
 /// ```
 pub enum AdapterNetwork {
+    /// Bitcoin network.
     Bitcoin(bitcoin::Network),
+    /// Dogecoin network.
     Dogecoin(bitcoin::dogecoin::Network),
 }
 
@@ -73,8 +74,8 @@ impl From<bitcoin::dogecoin::Network> for AdapterNetwork {
     }
 }
 
-#[allow(missing_docs)]
 impl AdapterNetwork {
+    /// Return the network name in a format as explained above.
     pub fn name(&self) -> String {
         match self {
             AdapterNetwork::Bitcoin(bitcoin::Network::Bitcoin) => "bitcoin".to_string(),
@@ -85,12 +86,14 @@ impl AdapterNetwork {
             AdapterNetwork::Dogecoin(network) => format!("dogecoin:{network}"),
         }
     }
+    /// Call `magic()` function on the respective network.
     pub fn magic(&self) -> Magic {
         match self {
             AdapterNetwork::Bitcoin(network) => network.magic(),
             AdapterNetwork::Dogecoin(network) => network.magic(),
         }
     }
+    /// Call `genesis_block(network).header` function on the respective network.
     pub fn genesis_block_header(&self) -> bitcoin::block::Header {
         match self {
             AdapterNetwork::Bitcoin(network) => {
@@ -101,6 +104,7 @@ impl AdapterNetwork {
             }
         }
     }
+    /// Validate block header against the network type and known headers.
     pub fn validate_header(
         &self,
         store: &impl HeaderStore,
@@ -111,7 +115,7 @@ impl AdapterNetwork {
                 ic_btc_validation::validate_header(network, store, header)
             }
             AdapterNetwork::Dogecoin(_network) => {
-                // TODO: use real dogecoin validation
+                // TODO(XC-422): use real dogecoin validation
                 Ok(())
             }
         }
@@ -160,11 +164,14 @@ impl<'de> Deserialize<'de> for AdapterNetwork {
 }
 
 /// A trait that contains the common methods of both Bitcoin and Dogecoin blocks.
-#[allow(missing_docs)]
 pub trait BlockLike: Decodable + Encodable + Clone {
+    /// Return block hash.
     fn block_hash(&self) -> bitcoin::BlockHash;
+    /// Compute merkle root.
     fn compute_merkle_root(&self) -> Option<bitcoin::TxMerkleNode>;
+    /// Check if the merkle root in block header matches what is computed.
     fn check_merkle_root(&self) -> bool;
+    /// Return the block header.
     fn header(&self) -> bitcoin::block::Header;
 }
 

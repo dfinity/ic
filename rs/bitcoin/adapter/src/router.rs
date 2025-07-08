@@ -8,8 +8,8 @@ use crate::{
     metrics::RouterMetrics,
     stream::handle_stream,
     transaction_store::TransactionStore,
-    AdapterState, BlockchainManagerRequest, BlockchainState, Channel, ProcessBitcoinNetworkMessage,
-    ProcessBitcoinNetworkMessageError, ProcessEvent, TransactionManagerRequest,
+    AdapterState, BlockchainManagerRequest, BlockchainState, Channel, ProcessEvent,
+    ProcessNetworkMessage, ProcessNetworkMessageError, TransactionManagerRequest,
 };
 use bitcoin::p2p::message::NetworkMessage;
 use ic_logger::ReplicaLogger;
@@ -65,7 +65,7 @@ pub fn start_main_event_loop<Block: BlockLike + Send + Clone + 'static>(
             // tokio::time::Interval::tick which are all cancellation safe.
             tokio::select! {
                 event = connection_manager.receive_stream_event() => {
-                    if let Err(ProcessBitcoinNetworkMessageError::InvalidMessage) =
+                    if let Err(ProcessNetworkMessageError::InvalidMessage) =
                         connection_manager.process_event(&event)
                     {
                         connection_manager.discard(&event.address);
@@ -77,15 +77,15 @@ pub fn start_main_event_loop<Block: BlockLike + Send + Clone + 'static>(
                         .bitcoin_messages_received
                         .with_label_values(&[message.cmd()])
                         .inc();
-                    if let Err(ProcessBitcoinNetworkMessageError::InvalidMessage) =
+                    if let Err(ProcessNetworkMessageError::InvalidMessage) =
                         connection_manager.process_bitcoin_network_message(address, &message) {
                         connection_manager.discard(&address);
                     }
 
-                    if let Err(ProcessBitcoinNetworkMessageError::InvalidMessage) = blockchain_manager.process_bitcoin_network_message(&mut connection_manager, address, &message) {
+                    if let Err(ProcessNetworkMessageError::InvalidMessage) = blockchain_manager.process_bitcoin_network_message(&mut connection_manager, address, &message) {
                         connection_manager.discard(&address);
                     }
-                    if let Err(ProcessBitcoinNetworkMessageError::InvalidMessage) = transaction_manager.process_bitcoin_network_message(&mut connection_manager, address, &message) {
+                    if let Err(ProcessNetworkMessageError::InvalidMessage) = transaction_manager.process_bitcoin_network_message(&mut connection_manager, address, &message) {
                         connection_manager.discard(&address);
                     }
                 },

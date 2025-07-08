@@ -300,7 +300,7 @@ fn are_multiple_blocks_allowed(network: AdapterNetwork, anchor_height: BlockHeig
                 other => unreachable!("Unsupported network: {:?}", other),
             }
         }
-        AdapterNetwork::Dogecoin(_) => false, // TODO: confirm if it is really not supported
+        AdapterNetwork::Dogecoin(_) => true,
     }
 }
 

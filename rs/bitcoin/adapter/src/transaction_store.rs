@@ -12,7 +12,7 @@ use ic_logger::{debug, info, trace, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 
 use crate::metrics::TransactionMetrics;
-use crate::ProcessBitcoinNetworkMessageError;
+use crate::ProcessNetworkMessageError;
 use crate::{Channel, Command};
 
 /// How long should the transaction manager hold on to a transaction.
@@ -175,10 +175,10 @@ impl TransactionStore {
         channel: &mut impl Channel<Block>,
         addr: SocketAddr,
         message: &NetworkMessage<Block>,
-    ) -> Result<(), ProcessBitcoinNetworkMessageError> {
+    ) -> Result<(), ProcessNetworkMessageError> {
         if let NetworkMessage::GetData(inventory) = message {
             if inventory.len() > MAXIMUM_TRANSACTION_PER_INV {
-                return Err(ProcessBitcoinNetworkMessageError::InvalidMessage);
+                return Err(ProcessNetworkMessageError::InvalidMessage);
             }
 
             for inv in inventory {

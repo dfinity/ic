@@ -29,8 +29,8 @@ use crate::{
     connection::{Connection, ConnectionConfig, ConnectionState, PingState},
     metrics::RouterMetrics,
     stream::{StreamConfig, StreamEvent, StreamEventKind},
-    Channel, ChannelError, Command, ProcessBitcoinNetworkMessage,
-    ProcessBitcoinNetworkMessageError, ProcessEvent,
+    Channel, ChannelError, Command, ProcessEvent, ProcessNetworkMessage,
+    ProcessNetworkMessageError,
 };
 
 /// How the adapter identifies itself to other Bitcoin nodes.
@@ -434,11 +434,11 @@ impl<Block: Clone> ConnectionManager<NetworkMessage<Block>> {
         &mut self,
         address: &SocketAddr,
         message: &VersionMessage,
-    ) -> Result<(), ProcessBitcoinNetworkMessageError> {
+    ) -> Result<(), ProcessNetworkMessageError> {
         trace!(self.logger, "Received version from {}", address);
         let conn = self
             .get_connection(address)
-            .map_err(|_| ProcessBitcoinNetworkMessageError::InvalidMessage)?;
+            .map_err(|_| ProcessNetworkMessageError::InvalidMessage)?;
         if !conn.is_seed() && !self.validate_received_version(message) {
             warn!(
                 self.logger,
@@ -449,7 +449,7 @@ impl<Block: Clone> ConnectionManager<NetworkMessage<Block>> {
                 message.services,
                 self.current_height,
             );
-            return Err(ProcessBitcoinNetworkMessageError::InvalidMessage);
+            return Err(ProcessNetworkMessageError::InvalidMessage);
         }
         self.send_verack(address).ok();
 
@@ -463,7 +463,7 @@ impl<Block: Clone> ConnectionManager<NetworkMessage<Block>> {
     fn process_verack_message(
         &mut self,
         address: &SocketAddr,
-    ) -> Result<(), ProcessBitcoinNetworkMessageError> {
+    ) -> Result<(), ProcessNetworkMessageError> {
         trace!(self.logger, "Received verack from {}", address);
         if let Ok(conn) = self.get_connection(address) {
             match conn.address_entry() {
@@ -485,7 +485,7 @@ impl<Block: Clone> ConnectionManager<NetworkMessage<Block>> {
         &mut self,
         address: &SocketAddr,
         nonce: u64,
-    ) -> Result<(), ProcessBitcoinNetworkMessageError> {
+    ) -> Result<(), ProcessNetworkMessageError> {
         // If we cannot find the connection, the connection has been cleaned up before the
         // message has been received. It can be skipped.
         trace!(self.logger, "Received ping from {}", address);
@@ -498,7 +498,7 @@ impl<Block: Clone> ConnectionManager<NetworkMessage<Block>> {
         &mut self,
         address: &SocketAddr,
         nonce: u64,
-    ) -> Result<(), ProcessBitcoinNetworkMessageError> {
+    ) -> Result<(), ProcessNetworkMessageError> {
         // If we cannot find the connection, the connection has been cleaned up before the
         // message has been received. It can be skipped.
         trace!(self.logger, "Received pong from {}", address);
@@ -529,7 +529,7 @@ impl<Block: Clone> ConnectionManager<NetworkMessage<Block>> {
         &mut self,
         address: &SocketAddr,
         addresses: &[(AddressTimestamp, Address)],
-    ) -> Result<(), ProcessBitcoinNetworkMessageError> {
+    ) -> Result<(), ProcessNetworkMessageError> {
         let result = self.address_book.add_many(address, addresses);
         if let Err(AddressBookError::TooManyAddresses {
             received,
@@ -540,7 +540,7 @@ impl<Block: Clone> ConnectionManager<NetworkMessage<Block>> {
                 self.logger,
                 "Received {} addresses from {} (max: {})", received, address, max_amount
             );
-            return Err(ProcessBitcoinNetworkMessageError::InvalidMessage);
+            return Err(ProcessNetworkMessageError::InvalidMessage);
         }
 
         if let Ok(conn) = self.get_connection(address) {
@@ -568,7 +568,7 @@ impl<Block: Clone> ConnectionManager<NetworkMessage<Block>> {
         address: &SocketAddr,
         command: &CommandString,
         payload: &[u8],
-    ) -> Result<(), ProcessBitcoinNetworkMessageError> {
+    ) -> Result<(), ProcessNetworkMessageError> {
         // If we receive an unknown message from a BTC node, the adapter should log
         // the message for further analysis.
         warn!(
@@ -630,10 +630,7 @@ impl<Block: Clone> Channel<Block> for ConnectionManager<NetworkMessage<Block>> {
 }
 
 impl<Block: Clone> ProcessEvent for ConnectionManager<NetworkMessage<Block>> {
-    fn process_event(
-        &mut self,
-        event: &StreamEvent,
-    ) -> Result<(), ProcessBitcoinNetworkMessageError> {
+    fn process_event(&mut self, event: &StreamEvent) -> Result<(), ProcessNetworkMessageError> {
         match &event.kind {
             StreamEventKind::Connected => {
                 let result = self.send_version(&event.address);
@@ -665,14 +662,12 @@ impl<Block: Clone> ProcessEvent for ConnectionManager<NetworkMessage<Block>> {
     }
 }
 
-impl<Block: Clone> ProcessBitcoinNetworkMessage<Block>
-    for ConnectionManager<NetworkMessage<Block>>
-{
+impl<Block: Clone> ProcessNetworkMessage<Block> for ConnectionManager<NetworkMessage<Block>> {
     fn process_bitcoin_network_message(
         &mut self,
         address: SocketAddr,
         message: &NetworkMessage<Block>,
-    ) -> Result<(), ProcessBitcoinNetworkMessageError> {
+    ) -> Result<(), ProcessNetworkMessageError> {
         match message {
             NetworkMessage::Version(version_message) => {
                 self.process_version_message(&address, version_message)
