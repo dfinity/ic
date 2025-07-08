@@ -1118,6 +1118,7 @@ impl PocketIcSubnets {
                 .unwrap(),
                 Tokens::from_tokens(1_000_000_000).unwrap(),
             );
+            // The following values are taken from https://github.com/dfinity/ic/blob/894e3501dcba0f14cdc2466a821da84afae94352/rs/nns/test_utils/src/common.rs#L66-L86
             let archive_options = IcpLedgerArchiveOptions {
                 trigger_threshold: 2000,
                 num_blocks_to_archive: 1000,
