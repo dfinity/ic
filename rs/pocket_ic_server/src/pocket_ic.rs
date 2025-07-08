@@ -87,10 +87,7 @@ use ic_types::{
 };
 use ic_types::{NumBytes, Time};
 use ic_validator_ingress_message::StandaloneIngressSigVerifier;
-use icp_ledger::{
-    AccountIdentifier, ArchiveOptions as IcpLedgerArchiveOptions, InitArgs as IcpLedgerInitArgs,
-    LedgerCanisterPayload, Tokens,
-};
+use icp_ledger::{AccountIdentifier, LedgerCanisterInitPayloadBuilder, Tokens};
 use itertools::Itertools;
 use pocket_ic::common::rest::{
     self, BinaryBlob, BlobCompression, CanisterHttpHeader, CanisterHttpMethod, CanisterHttpRequest,
@@ -105,7 +102,7 @@ use slog::Level;
 use std::hash::Hash;
 use std::str::FromStr;
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap},
     fs::{remove_file, File},
     io::{BufReader, Read, Write},
     net::SocketAddr,
@@ -1118,37 +1115,18 @@ impl PocketIcSubnets {
                 .unwrap(),
                 Tokens::from_tokens(1_000_000_000).unwrap(),
             );
-            // The following values are taken from https://github.com/dfinity/ic/blob/894e3501dcba0f14cdc2466a821da84afae94352/rs/nns/test_utils/src/common.rs#L66-L86
-            let archive_options = IcpLedgerArchiveOptions {
-                trigger_threshold: 2000,
-                num_blocks_to_archive: 1000,
-                node_max_memory_size_bytes: Some(1024 * 1024 * 1024),
-                max_message_size_bytes: Some(128 * 1024),
-                controller_id: ROOT_CANISTER_ID.into(),
-                more_controller_ids: None,
-                cycles_for_archive_creation: Some(0),
-                max_transactions_per_response: None,
-            };
-            let icp_ledger_init_args = IcpLedgerInitArgs {
-                minting_account: AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), None),
-                icrc1_minting_account: None,
-                initial_values,
-                max_message_size_bytes: Some(128 * 1024),
-                transaction_window: Some(Duration::from_secs(24 * 60 * 60)),
-                archive_options: Some(archive_options),
-                send_whitelist: HashSet::new(),
-                transfer_fee: Some(Tokens::from_e8s(10_000)),
-                token_symbol: Some("ICP".to_string()),
-                token_name: Some("Internet Computer".to_string()),
-                feature_flags: None,
-            };
+            let icp_ledger_init_payload =
+                LedgerCanisterInitPayloadBuilder::new_with_mainnet_settings()
+                    .initial_values(initial_values)
+                    .build()
+                    .unwrap();
             nns_subnet
                 .state_machine
                 .install_wasm_in_mode(
                     canister_id,
                     CanisterInstallMode::Install,
                     ICP_LEDGER_CANISTER_WASM.to_vec(),
-                    Encode!(&LedgerCanisterPayload::Init(icp_ledger_init_args)).unwrap(),
+                    Encode!(&icp_ledger_init_payload).unwrap(),
                 )
                 .unwrap();
         }

@@ -13,6 +13,7 @@ use ic_ledger_core::{
 };
 use ic_ledger_hash_of::HashOf;
 use ic_ledger_hash_of::HASH_LENGTH;
+use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use icrc_ledger_types::icrc1::account::Account;
 use on_wire::{FromWire, IntoWire};
 use prost::Message;
@@ -527,6 +528,27 @@ impl LedgerCanisterInitPayloadBuilder {
             token_name: None,
             feature_flags: None,
         }
+    }
+
+    pub fn new_with_mainnet_settings() -> Self {
+        Self::new()
+            .minting_account(GOVERNANCE_CANISTER_ID.get().into())
+            .archive_options(ArchiveOptions {
+                trigger_threshold: 2000,
+                num_blocks_to_archive: 1000,
+                // 1 GB, which gives us 3 GB space when upgrading
+                node_max_memory_size_bytes: Some(1024 * 1024 * 1024),
+                // 128kb
+                max_message_size_bytes: Some(128 * 1024),
+                controller_id: ROOT_CANISTER_ID.into(),
+                more_controller_ids: None,
+                cycles_for_archive_creation: Some(0),
+                max_transactions_per_response: None,
+            })
+            .max_message_size_bytes(128 * 1024)
+            // 24 hour transaction window
+            .transaction_window(Duration::from_secs(24 * 60 * 60))
+            .transfer_fee(DEFAULT_TRANSFER_FEE)
     }
 
     pub fn minting_account(mut self, minting_account: AccountIdentifier) -> Self {
