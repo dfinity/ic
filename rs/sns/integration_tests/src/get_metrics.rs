@@ -428,16 +428,18 @@ fn test_sns_metrics() {
         }
 
         {
-            let mut voting_power_metrics = voting_power_metrics.unwrap();
+            let voting_power_metrics = voting_power_metrics.unwrap();
 
             // This is quite a weak assertion. Once we get treasury valuations (and this test) to work
             // deterministically, we should make this assertion stronger.
-            assert!(voting_power_metricsgovernance_total_potential_voting_power.is_some());
+            assert!(voting_power_metrics
+                .governance_total_potential_voting_power
+                .is_some());
         }
 
         assert_eq!(
             genesis_timestamp_seconds,
-            expected_genesis_timestamp_seconds
+            Some(expected_genesis_timestamp_seconds)
         );
     }
 }
