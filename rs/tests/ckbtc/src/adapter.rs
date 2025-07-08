@@ -1,5 +1,5 @@
 use bitcoin::{block::Header, consensus::deserialize, Address, Amount, Block};
-use bitcoincore_rpc::{Auth, Client, RpcApi};
+use bitcoincore_rpc::{json::ListUnspentResultEntry, Auth, Client, RpcApi};
 use candid::{Encode, Principal};
 use ic_agent::{agent::RejectCode, Agent, AgentError};
 use ic_btc_interface::Network;
@@ -249,13 +249,17 @@ fn get_test_wallet(env: &TestEnv, name: &str) -> (Client, Address) {
     (client, address)
 }
 
-pub fn fund_with_btc(to_fund_client: &Client, to_fund_address: &Address) {
+pub fn fund_with_btc(to_fund_client: &Client, to_fund_address: &Address) -> ListUnspentResultEntry {
     let initial_amount = to_fund_client
         .get_received_by_address(to_fund_address, Some(0))
         .unwrap();
 
     let initial_height = to_fund_client.get_blockchain_info().unwrap().blocks;
     let expected_rewards = calculate_regtest_reward(initial_height);
+
+    let initial_utxos = to_fund_client
+        .list_unspent(None, None, None, None, None)
+        .unwrap();
 
     to_fund_client
         .generate_to_address(1, to_fund_address)
@@ -266,13 +270,27 @@ pub fn fund_with_btc(to_fund_client: &Client, to_fund_address: &Address) {
         .generate_to_address(100, &get_blackhole_address())
         .unwrap();
 
-    // The reward for mining a block is 50 bitcoins
     assert_eq!(
         to_fund_client
             .get_received_by_address(to_fund_address, Some(0))
             .unwrap(),
         initial_amount + expected_rewards
     );
+
+    // Find the coinbase UTXO
+    let coinbase_utxo = to_fund_client
+        .list_unspent(None, None, None, None, None)
+        .unwrap()
+        .into_iter()
+        .find(|utxo| utxo.amount == expected_rewards)
+        .expect("Failed to find the coinbase utxo");
+
+    assert!(initial_utxos
+        .iter()
+        .find(|&utxo| utxo == &coinbase_utxo)
+        .is_none());
+
+    coinbase_utxo
 }
 
 fn calculate_regtest_reward(height: u64) -> Amount {
