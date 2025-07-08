@@ -6,7 +6,8 @@ use ic_btc_interface::Network;
 use ic_config::execution_environment::BITCOIN_MAINNET_CANISTER_ID;
 use ic_management_canister_types_private::{
     BitcoinGetSuccessorsArgs, BitcoinGetSuccessorsRequestInitial, BitcoinGetSuccessorsResponse,
-    BitcoinGetSuccessorsResponsePartial, BitcoinSendTransactionInternalArgs, Payload,
+    BitcoinGetSuccessorsResponsePartial, BitcoinSendTransactionInternalArgs, Method as Ic00Method,
+    Payload,
 };
 use ic_system_test_driver::{
     driver::{test_env::TestEnv, test_env_api::retry, universal_vm::UniversalVms},
@@ -77,7 +78,7 @@ impl<'a> AdapterProxy<'a> {
     ) -> Result<(Vec<Block>, Vec<Header>), AgentError> {
         let get_successors_request =
             BitcoinGetSuccessorsArgs::Initial(BitcoinGetSuccessorsRequestInitial {
-                network: Network::Mainnet,
+                network: Network::Regtest,
                 anchor,
                 processed_block_hashes: headers,
             });
@@ -86,7 +87,7 @@ impl<'a> AdapterProxy<'a> {
             .msg_can
             .forward_to(
                 &Principal::management_canister(),
-                "bitcoin_get_successors",
+                &Ic00Method::BitcoinGetSuccessors.to_string(),
                 Encode!(&get_successors_request).unwrap(),
             )
             .await?;
@@ -129,7 +130,7 @@ impl<'a> AdapterProxy<'a> {
         self.msg_can
             .forward_to(
                 &Principal::management_canister(),
-                "bitcoin_send_transaction_internal",
+                &Ic00Method::BitcoinSendTransactionInternal.to_string(),
                 Encode!(&send_tx_request).unwrap(),
             )
             .await?;
