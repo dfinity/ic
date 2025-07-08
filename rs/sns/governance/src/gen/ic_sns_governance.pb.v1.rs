@@ -2391,6 +2391,8 @@ pub struct Metrics {
     pub treasury_metrics: ::prost::alloc::vec::Vec<TreasuryMetrics>,
     #[prost(message, optional, tag = "5")]
     pub voting_power_metrics: ::core::option::Option<VotingPowerMetrics>,
+    #[prost(uint64, tag = "6")]
+    pub genesis_timestamp_seconds: u64,
 }
 /// Request message for 'get_sns_initialization_parameters'
 #[derive(

@@ -1716,6 +1716,7 @@ pub mod get_metrics_response {
         pub last_ledger_block_timestamp: Option<u64>,
         pub treasury_metrics: Option<Vec<TreasuryMetrics>>,
         pub voting_power_metrics: Option<VotingPowerMetrics>,
+        pub genesis_timestamp_seconds: Option<u64>,
     }
 
     #[derive(candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]

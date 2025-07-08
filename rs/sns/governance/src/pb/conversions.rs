@@ -2064,6 +2064,7 @@ impl From<pb::Metrics> for pb_api::get_metrics_response::Metrics {
             num_recently_executed_proposals,
             treasury_metrics,
             voting_power_metrics,
+            genesis_timestamp_seconds,
         } = item;
 
         let num_recently_submitted_proposals = Some(num_recently_submitted_proposals);
@@ -2084,12 +2085,15 @@ impl From<pb::Metrics> for pb_api::get_metrics_response::Metrics {
 
         let voting_power_metrics = voting_power_metrics.map(pb_api::VotingPowerMetrics::from);
 
+        let genesis_timestamp_seconds = Some(genesis_timestamp_seconds);
+
         Self {
             num_recently_submitted_proposals,
             num_recently_executed_proposals,
             last_ledger_block_timestamp,
             treasury_metrics,
             voting_power_metrics,
+            genesis_timestamp_seconds,
         }
     }
 }

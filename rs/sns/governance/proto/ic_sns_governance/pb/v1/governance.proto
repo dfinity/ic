@@ -1665,6 +1665,7 @@ message Metrics {
   uint64 num_recently_executed_proposals = 3;
   repeated TreasuryMetrics treasury_metrics = 4;
   optional VotingPowerMetrics voting_power_metrics = 5;
+  uint64 genesis_timestamp_seconds = 6;
 }
 
 // Request message for 'get_sns_initialization_parameters'

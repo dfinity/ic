@@ -298,6 +298,7 @@ type Metrics = record {
   // The metrics below are cached (albeit this is an implementation detail).
   treasury_metrics : opt vec TreasuryMetrics;
   voting_power_metrics : opt VotingPowerMetrics;
+  genesis_timestamp_seconds : opt nat64;
 };
 
 type GetMetricsResult = variant {

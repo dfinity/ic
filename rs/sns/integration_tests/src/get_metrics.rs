@@ -204,6 +204,8 @@ fn test_sns_metrics() {
 
     let swap_canister_id = install_swap(&state_machine);
 
+    let expected_genesis_timestamp_seconds = 123456789; // Arbitrary value for testing
+
     let governance_canister_id = {
         let wasm = build_governance_sns_wasm().wasm;
         let mut governance = GovernanceCanisterInitPayloadBuilder::new()
@@ -285,6 +287,9 @@ fn test_sns_metrics() {
             NeuronId::new_test_neuron_id(1).to_string() => neuron,
         };
 
+        // Ensure we have an expectation for `genesis_timestamp_seconds`.
+        governance.genesis_timestamp_seconds = expected_genesis_timestamp_seconds;
+
         let args = Encode!(&governance).unwrap();
         state_machine
             .install_canister(wasm.clone(), args, None)
@@ -329,6 +334,7 @@ fn test_sns_metrics() {
             last_ledger_block_timestamp,
             treasury_metrics,
             voting_power_metrics,
+            genesis_timestamp_seconds,
         }) = get_metrics_result
         else {
             panic!(
@@ -437,5 +443,10 @@ fn test_sns_metrics() {
                 }
             );
         }
+
+        assert_eq!(
+            genesis_timestamp_seconds,
+            expected_genesis_timestamp_seconds
+        )
     }
 }

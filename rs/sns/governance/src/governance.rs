@@ -2042,12 +2042,15 @@ impl Governance {
             .map(|metrics| metrics.voting_power_metrics)
             .unwrap_or_default();
 
+        let genesis_timestamp_seconds = self.proto.genesis_timestamp_seconds;
+
         Ok(Metrics {
             num_recently_submitted_proposals,
             num_recently_executed_proposals,
             last_ledger_block_timestamp,
             treasury_metrics,
             voting_power_metrics,
+            genesis_timestamp_seconds,
         })
     }
 
