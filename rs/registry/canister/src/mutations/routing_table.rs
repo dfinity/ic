@@ -540,7 +540,7 @@ mod tests {
             .unwrap_or_else(|_| panic!("No subnet found for canister {}", canister_id));
 
         assert_eq!(
-            PrincipalId::try_from(result.subnet_id.unwrap()).unwrap(),
+            result.subnet_id.unwrap(),
             PrincipalId::new_user_test_id(expected_subnet_idx),
             "Canister {} should be on subnet with index {}",
             canister_id,
