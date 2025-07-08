@@ -150,7 +150,23 @@ impl<'a> AdapterProxy<'a> {
         let mut tries = 0;
 
         while blocks.len() < max_num_blocks && tries < max_tries {
-            let (new_blocks, _) = self.get_successors(anchor.clone(), headers.clone()).await?;
+            let (new_blocks, _) = loop {
+                match self.get_successors(anchor.clone(), headers.clone()).await {
+                    // Break inner loop, if adapter returned data
+                    Ok(successor) => break successor,
+                    // Retry if the call returned an `Unavailable` error
+                    Err(AgentError::CertifiedReject { reject, .. })
+                    | Err(AgentError::UncertifiedReject { reject, .. })
+                        if reject.reject_code == RejectCode::SysTransient
+                            && reject.reject_message.starts_with("Unavailable") => {}
+                    // Other errors are fatal
+                    Err(err) => return Err(err),
+                }
+
+                tries += 1;
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            };
+
             let new_headers = new_blocks
                 .iter()
                 .map(|block| block.block_hash()[..].to_vec())
@@ -285,6 +301,7 @@ pub fn fund_with_btc(to_fund_client: &Client, to_fund_address: &Address) -> List
         .find(|utxo| utxo.amount == expected_rewards)
         .expect("Failed to find the coinbase utxo");
 
+    // Check that the coinbase UTXO is not part of the initial set of UTXOs
     assert!(initial_utxos
         .iter()
         .find(|&utxo| utxo == &coinbase_utxo)

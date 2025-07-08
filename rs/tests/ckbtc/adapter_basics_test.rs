@@ -133,18 +133,10 @@ fn test_send_tx(env: TestEnv) {
     let (alice_client, bob_client, alice_address, bob_address) = get_alice_and_bob_wallets(&env);
     info!(log, "Set up alice and bob");
 
-    fund_with_btc(&alice_client, &alice_address);
+    let utxo = fund_with_btc(&alice_client, &alice_address);
 
     let to_send = Amount::from_btc(1.0).unwrap();
     let tx_fee = Amount::from_btc(0.001).unwrap();
-
-    let unspent = alice_client
-        .list_unspent(None, None, None, None, None)
-        .unwrap();
-    let utxo = unspent
-        .iter()
-        .find(|utxo| utxo.amount > to_send + tx_fee)
-        .expect("Not enough BTC in Alice's wallet");
 
     let mut outs = HashMap::new();
     let change = utxo.amount - to_send - tx_fee;
