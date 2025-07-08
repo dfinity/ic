@@ -23,7 +23,7 @@ use ic_interfaces::execution_environment::{
 use ic_logger::{info, ReplicaLogger};
 use ic_replicated_state::{
     canister_state::execution_state::WasmExecutionMode, num_bytes_try_from, CallContextAction,
-    CallOrigin, CanisterState,
+    CallOrigin, CanisterState, ExecutingCanisterState,
 };
 use ic_types::messages::{
     CallContextId, CanisterCall, CanisterCallOrTask, CanisterMessage, CanisterMessageOrTask,
@@ -333,7 +333,7 @@ struct PausedCallOrTaskHelper {
 /// A helper that implements and keeps track of update call steps.
 /// It is used to safely pause and resume an update call execution.
 struct CallOrTaskHelper {
-    canister: CanisterState,
+    canister: ExecutingCanisterState,
     call_context_id: CallContextId,
     initial_cycles_balance: Cycles,
     deallocation_sender: DeallocationSender,
@@ -348,7 +348,7 @@ impl CallOrTaskHelper {
     ) -> Result<Self, UserError> {
         let mut canister = clean_canister.clone();
 
-        validate_message(&canister, &original.method)?;
+        validate_message(clean_canister, &original.method)?;
 
         match original.call_or_task {
             CanisterCallOrTask::Update(_) => {
@@ -384,16 +384,17 @@ impl CallOrTaskHelper {
             }
         }
 
-        let call_context_id = canister
-            .system_state
-            .new_call_context(
-                original.call_origin.clone(),
-                original.call_or_task.cycles(),
-                original.time,
-                original.request_metadata.clone(),
-            )
-            .unwrap();
-
+        /*
+                let call_context_id = canister
+                    .system_state
+                    .new_call_context(
+                        original.call_origin.clone(),
+                        original.call_or_task.cycles(),
+                        original.time,
+                        original.request_metadata.clone(),
+                    )
+                    .unwrap();
+        */
         let initial_cycles_balance = canister.system_state.balance();
 
         match original.call_or_task {
@@ -406,6 +407,14 @@ impl CallOrTaskHelper {
                 canister.system_state.global_timer = CanisterTimer::Inactive;
             }
         }
+
+        let canister = ExecutingCanister::with_new_call_context(
+            canister,
+            original.call_origin.clone(),
+            original.call_or_task.cycles(),
+            original.time,
+            original.request_metadata.clone(),
+        );
 
         Ok(Self {
             canister,
@@ -420,7 +429,7 @@ impl CallOrTaskHelper {
     fn pause(self) -> PausedCallOrTaskHelper {
         self.deallocation_sender.send(Box::new(self.canister));
         PausedCallOrTaskHelper {
-            call_context_id: self.call_context_id,
+            call_context_id: self.call_context_id(),
             initial_cycles_balance: self.initial_cycles_balance,
         }
     }
@@ -450,7 +459,7 @@ impl CallOrTaskHelper {
             let err = HypervisorError::WasmEngineError(FailedToApplySystemChanges(msg));
             return Err(err.into_user_error(&clean_canister.canister_id()));
         }
-        if helper.call_context_id != paused.call_context_id {
+        if helper.call_context_id() != paused.call_context_id {
             let msg = match original.call_or_task {
                 CanisterCallOrTask::Update(_) => {
                     "Mismatch in call context id when resuming an update call".to_string()
@@ -480,27 +489,26 @@ impl CallOrTaskHelper {
         round_limits: &mut RoundLimits,
         call_tree_metrics: &dyn CallTreeMetrics,
     ) -> ExecuteMessageResult {
-        self.canister
-            .system_state
-            .apply_ingress_induction_cycles_debit(
-                self.canister.canister_id(),
-                round.log,
-                round.counters.charging_from_balance_error,
-            );
+        self.canister.apply_ingress_induction_cycles_debit(
+            self.canister.canister_id(),
+            round.log,
+            round.counters.charging_from_balance_error,
+        );
 
         // Check that the cycles balance does not go below the freezing
         // threshold after applying the Wasm execution state changes.
-        let old_balance = self.canister.system_state.balance();
+        let old_balance = self.canister.raw_canister().system_state.balance();
         let requested = canister_state_changes
             .system_state_modifications
             .removed_cycles();
         let reveal_top_up = self
             .canister
+            .raw_canister()
             .controllers()
             .contains(&original.call_origin.get_principal());
         if old_balance < requested + original.freezing_threshold {
             let err = CanisterOutOfCyclesError {
-                canister_id: self.canister.canister_id(),
+                canister_id: clean_canister.canister_id(),
                 available: old_balance,
                 requested,
                 threshold: original.freezing_threshold,
@@ -597,7 +605,7 @@ impl CallOrTaskHelper {
 
         let response = match original.call_or_task {
             CanisterCallOrTask::Update(_) | CanisterCallOrTask::Task(_) => action_to_response(
-                &self.canister,
+                self.canister.raw_canister(),
                 action,
                 original.call_origin,
                 round.time,
@@ -670,7 +678,7 @@ impl CallOrTaskHelper {
     }
 
     fn call_context_id(&self) -> CallContextId {
-        self.call_context_id
+        self.canister.call_context_id()
     }
 }
 

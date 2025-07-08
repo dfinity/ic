@@ -6,23 +6,32 @@ mod tests;
 
 use crate::canister_state::queues::CanisterOutputQueuesIterator;
 use crate::canister_state::system_state::{ExecutionTask, SystemState};
-use crate::{InputQueueType, MessageMemoryUsage, StateError};
+use crate::{
+    CallContext, CallContextAction, CallOrigin, InputQueueType, MessageMemoryUsage, StateError,
+};
 pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions};
+use ic_interfaces::execution_environment::HypervisorError;
+use ic_logger::ReplicaLogger;
 use ic_management_canister_types_private::{CanisterStatusType, LogVisibilityV2};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::batch::TotalQueryStats;
+use ic_types::ingress::WasmResult;
 use ic_types::methods::SystemMethod;
 use ic_types::time::UNIX_EPOCH;
 use ic_types::{
-    messages::{CanisterMessage, Ingress, Request, RequestOrResponse, Response},
-    methods::WasmMethod,
-    AccumulatedPriority, CanisterId, CanisterLog, ComputeAllocation, ExecutionRound,
+    messages::{
+        CallContextId, CallbackId, CanisterMessage, CanisterMessageOrTask, Ingress, Request,
+        RequestMetadata, RequestOrResponse, Response,
+    },
+    methods::{Callback, WasmMethod},
+    AccumulatedPriority, CanisterId, CanisterLog, ComputeAllocation, Cycles, ExecutionRound,
     MemoryAllocation, NumBytes, PrincipalId, Time,
 };
 use ic_types::{LongExecutionMode, NumInstructions};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use phantom_newtype::AmountOf;
+use prometheus::IntCounter;
 pub use queues::{CanisterQueues, DEFAULT_QUEUE_CAPACITY};
 use std::collections::BTreeSet;
 use std::sync::Arc;
@@ -194,17 +203,17 @@ impl CanisterState {
         )
     }
 
+    /// See `SystemState::has_input` for documentation.
+    pub fn has_input(&self) -> bool {
+        self.system_state.has_input()
+    }
+
     /// See `SystemState::pop_input` for documentation.
     ///
     /// The function is public as we pop directly from the Canister state in
     /// `SchedulerImpl::execute_canisters_on_thread()`
     pub fn pop_input(&mut self) -> Option<CanisterMessage> {
         self.system_state.pop_input()
-    }
-
-    /// See `SystemState::has_input` for documentation.
-    pub fn has_input(&self) -> bool {
-        self.system_state.has_input()
     }
 
     /// Returns what the canister is going to execute next.
@@ -612,6 +621,142 @@ impl CanisterState {
             )
     }
 }
+
+pub struct ExecutingCanisterState {
+    canister: CanisterState,
+    call_context_id: CallContextId,
+}
+
+impl ExecutingCanisterState {
+    pub fn with_new_call_context(
+        mut canister: CanisterState,
+        call_origin: CallOrigin,
+        cycles: Cycles,
+        time: Time,
+        metadata: RequestMetadata,
+    ) -> Self {
+        let call_context_id = canister
+            .system_state
+            .new_call_context(call_origin, cycles, time, metadata)
+            .unwrap();
+        Self {
+            canister,
+            call_context_id,
+        }
+    }
+
+    pub fn call_context_id(&self) -> CallContextId {
+        self.call_context_id
+    }
+
+    pub fn raw_canister(&self) -> &CanisterState {
+        &self.canister
+    }
+
+    pub fn system_state_mut(&mut self) -> &mut SystemState {
+        &mut self.system_state
+    }
+/*
+    pub fn apply_ingress_induction_cycles_debit(
+        &mut self,
+        canister_id: CanisterId,
+        log: &ReplicaLogger,
+        charging_from_balance_error: &IntCounter,
+    ) {
+        self.canister
+            .system_state
+            .apply_ingress_induction_cycles_debit(canister_id, log, charging_from_balance_error)
+    }
+*/
+    pub fn on_canister_result(
+        mut self,
+        callback_id: Option<CallbackId>,
+        result: Result<Option<WasmResult>, HypervisorError>,
+        instructions_used: NumInstructions,
+    ) -> (CanisterState, CallContextAction, Option<CallContext>) {
+        let (action, call_context) = self
+            .canister
+            .system_state
+            .on_canister_result(self.call_context_id, callback_id, result, instructions_used)
+            .unwrap();
+        (self.canister, action, call_context)
+    }
+}
+
+/*
+pub enum ExecutingMode {
+    ExecutingTask {
+        state: ExecutingCanisterState,
+        task: ExecutionTask,
+    },
+    ExecutingMessage {
+        state: ExecutingCanisterState,
+        message: CanisterMessage,
+    },
+    Neither(CanisterState),
+}
+*/
+
+/*
+impl ExecutingCanisterState {
+    pub fn with_new_call_context(
+        mut canister_state: CanisterState,
+        call_origin: CallOrigin,
+        cycles: Cycles,
+        time: Time,
+        metadata: RequestMetadata,
+    ) -> Result<(Self, CallContextId), StateError> {
+        let call_context_id =
+            canister_state
+                .system_state
+                .new_call_context(call_origin, cycles, time, metadata)?;
+        Ok((Self(canister_state), call_context_id))
+    }
+
+    pub fn canister_id(&self) -> CanisterId {
+        self.0.system_state.canister_id()
+    }
+
+    pub fn
+}
+*/
+/*
+pub struct ResponseCanisterState {
+    canister_state: CanisterState,
+    callback: Callback,
+    callback_id: CallbackId,
+    call_context: CallContext,
+    call_context_id: CallContextId,
+}
+
+impl ResponseCanisterState {
+    pub fn from_canister_state(
+        canister_state: CanisterState,
+        callback_id: CallbackId,
+    ) -> Result<Self, StateError> {
+        fn from_canister_state(
+            mut canister_state: CanisterState,
+            callback_id: CallbackId,
+        ) -> Option<ResponseCanisterState> {
+            let call_context_manager = canister_state.system_state.call_context_manager()?;
+            let callback = call_context_manager.callback(callback_id)?.clone();
+            let call_context_id = callback.call_context_id;
+            let call_context = call_context_manager.call_context(call_context_id)?.clone();
+
+            Some(ResponseCanisterState {
+                canister_state,
+                callback,
+                callback_id,
+                call_context,
+                call_context_id,
+            })
+        }
+        let canister_id = canister_state.canister_id();
+        from_canister_state(canister_state, callback_id)
+            .ok_or(StateError::CanisterStopped(canister_id))
+    }
+}
+*/
 
 /// The result of `next_execution()` function.
 /// Describes what the canister is going to execute next:
