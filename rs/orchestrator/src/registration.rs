@@ -179,7 +179,7 @@ impl NodeRegistration {
 
         let nns_url = self
             .get_random_nns_url_from_config()
-            .ok_or_else(|| "Failed to get random NNS URL from config")?;
+            .ok_or("Failed to get random NNS URL from config")?;
 
         let agent = Agent::builder()
             .with_url(nns_url)
