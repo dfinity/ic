@@ -69,14 +69,11 @@ fn test_receives_new_3rd_party_txs(env: TestEnv) {
     info!(log, "Set up alice and bob");
 
     fund_with_btc(&alice_client, &alice_address);
-    assert_eq!(
-        alice_client.get_blockchain_info().unwrap().blocks,
-        start_height + 101
-    );
 
     let alice_balance_initial = alice_client.get_balance(None, None).unwrap();
     let bob_balance_initial = bob_client.get_balance(None, None).unwrap();
 
+    let start_height = client.get_blockchain_info().unwrap().blocks;
     let txid = alice_client
         .send_to_address(
             &bob_address,
@@ -94,7 +91,7 @@ fn test_receives_new_3rd_party_txs(env: TestEnv) {
         .unwrap();
     assert_eq!(
         alice_client.get_blockchain_info().unwrap().blocks,
-        start_height + 102
+        start_height + 1
     );
 
     // Take the tx fee into consideration
@@ -169,6 +166,9 @@ fn test_send_tx(env: TestEnv) {
     let signed_tx = alice_client
         .sign_raw_transaction_with_wallet(&raw_tx, None, None)
         .unwrap();
+
+    assert!(signed_tx.complete);
+    assert!(signed_tx.errors.is_none());
 
     block_on(async {
         let agent = assert_create_agent(sys_node.get_public_url().as_str()).await;

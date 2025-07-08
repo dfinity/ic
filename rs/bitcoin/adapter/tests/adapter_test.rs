@@ -417,6 +417,7 @@ fn fund_with_btc(to_fund_client: &Client, to_fund_address: &Address) {
         .get_received_by_address(to_fund_address, Some(0))
         .unwrap()
         .to_btc();
+    let initial_height = to_fund_client.get_blockchain_info().unwrap().blocks;
 
     to_fund_client
         .generate_to_address(1, to_fund_address)
@@ -433,6 +434,10 @@ fn fund_with_btc(to_fund_client: &Client, to_fund_address: &Address) {
             .get_received_by_address(to_fund_address, Some(0))
             .unwrap(),
         Amount::from_btc(initial_amount + 50.0).unwrap()
+    );
+    assert_eq!(
+        to_fund_client.get_blockchain_info().unwrap().blocks,
+        initial_height + 101
     );
 }
 
