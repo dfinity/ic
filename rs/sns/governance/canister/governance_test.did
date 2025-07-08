@@ -283,7 +283,10 @@ type TreasuryMetrics = record {
 };
 
 type VotingPowerMetrics = record {
-  governance_total_potential_voting_power : opt nat64; 
+  governance_total_potential_voting_power : opt nat64;
+
+  // When the metrics were last updated.
+  timestamp_seconds : opt nat64;
 };
 
 type Metrics = record {
@@ -295,9 +298,6 @@ type Metrics = record {
   // The metrics below are cached (albeit this is an implementation detail).
   treasury_metrics : opt vec TreasuryMetrics;
   voting_power_metrics : opt VotingPowerMetrics;
-
-  // When the metrics were last updated.
-  timestamp_seconds : opt nat64;
 };
 
 type GetMetricsResult = variant {
