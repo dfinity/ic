@@ -4376,6 +4376,9 @@ impl Governance {
                 self.perform_update_canister_settings(pid, update_settings)
                     .await;
             }
+            // This is currently unreachable, because creating such proposals is
+            // currently blocked by a feature flag. As you would guess, this
+            // will be implemented imminently.
             Action::FulfillSubnetRentalRequest(_) => todo!(),
         }
     }
