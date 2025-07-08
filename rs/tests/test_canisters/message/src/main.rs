@@ -1,3 +1,4 @@
+use ic_cdk::api::call::ManualReply;
 use ic_message::ForwardParams;
 use std::cell::RefCell;
 
@@ -15,7 +16,7 @@ fn read() -> Option<String> {
     MSG.with(|msg| (*msg.borrow()).clone())
 }
 
-#[ic_cdk::update]
+#[ic_cdk::update(manual_reply = true)]
 pub async fn forward(
     ForwardParams {
         receiver,
@@ -23,10 +24,14 @@ pub async fn forward(
         cycles,
         payload,
     }: ForwardParams,
-) -> Result<Vec<u8>, String> {
-    ic_cdk::api::call::call_raw128(receiver, &method, &payload, cycles)
+) -> ManualReply<Vec<u8>> {
+    match ic_cdk::api::call::call_raw128(receiver, &method, &payload, cycles)
         .await
         .map_err(|err| err.1)
+    {
+        Ok(res) => ManualReply::one(res),
+        Err(err) => ManualReply::reject(err),
+    }
 }
 
 #[ic_cdk::pre_upgrade]
