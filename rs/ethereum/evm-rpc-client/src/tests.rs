@@ -182,7 +182,7 @@ async fn should_use_custom_block_range_for_get_logs() {
                 method == "eth_getLogs"
                     && attached_cycles == &min_attached_cycles
                     && config.as_ref().unwrap().max_block_range == max_block_range
-                    && args == &args_cloned.clone()
+                    && args == &args_cloned
             },
         )
         .return_const(Ok(expected_result.clone()));
