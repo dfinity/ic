@@ -2,18 +2,34 @@ use candid::{Decode, Encode};
 use ic_icrc1_ledger::{InitArgsBuilder, LedgerArgument};
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::Tokens;
-use ic_nns_test_utils::sns_wasm::{build_governance_sns_wasm, build_mainnet_ledger_sns_wasm};
+use ic_nervous_system_common::ledger::compute_distribution_subaccount;
+use ic_nns_constants::LEDGER_CANISTER_ID;
+use ic_nns_constants::NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET;
+use ic_nns_test_utils::common::NnsInitPayloadsBuilder;
+use ic_nns_test_utils::sns_wasm::{
+    build_governance_sns_wasm, build_mainnet_ledger_sns_wasm, build_swap_sns_wasm,
+};
+use ic_nns_test_utils::state_test_helpers::setup_nns_canisters;
+use ic_sns_governance::governance::TREASURY_SUBACCOUNT_NONCE;
 use ic_sns_governance::init::GovernanceCanisterInitPayloadBuilder;
 use ic_sns_governance::pb::v1::{ProposalData, ProposalId};
-use ic_sns_governance_api::pb::v1::{get_metrics_response, GetMetricsRequest};
-use ic_sns_test_utils::state_test_helpers::state_machine_builder_for_sns_tests;
+use ic_sns_governance_api::pb::v1::{
+    self as sns_gov, get_metrics_response, GetMetricsRequest, TreasuryMetrics,
+};
+use ic_sns_test_utils::{
+    itest_helpers::SnsTestsInitPayloadBuilder,
+    state_test_helpers::state_machine_builder_for_sns_tests,
+};
 use ic_state_machine_tests::StateMachine;
 use ic_types::{CanisterId, PrincipalId};
+use icp_ledger::AccountIdentifier;
+use icp_ledger::Subaccount as IcpSubaccount;
 use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 use icrc_ledger_types::icrc1::{
     account::Account,
     transfer::{BlockIndex, NumTokens},
 };
+use pretty_assertions::assert_eq;
 use std::collections::HashMap;
 use std::time::{Duration, UNIX_EPOCH};
 
@@ -33,6 +49,10 @@ const ONE_DAY: u64 = 24 * 3600;
 const ONE_WEEK: u64 = 7 * ONE_DAY;
 const ONE_MONTH: u64 = 4 * ONE_WEEK;
 
+lazy_static::lazy_static! {
+    static ref SNS_LEDGER_CANISTER_ID: CanisterId = CanisterId::from(NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET + 2);
+}
+
 fn install_ledger(env: &StateMachine, initial_balances: HashMap<Account, Tokens>) -> CanisterId {
     let mut init = InitArgsBuilder::with_symbol_and_name(TOKEN_NAME, TOKEN_SYMBOL);
 
@@ -44,6 +64,21 @@ fn install_ledger(env: &StateMachine, initial_balances: HashMap<Account, Tokens>
     let args = LedgerArgument::Init(init);
     let ledger = build_mainnet_ledger_sns_wasm().wasm;
     env.install_canister(ledger, Encode!(&args).unwrap(), None)
+        .unwrap()
+}
+
+fn install_swap(env: &StateMachine) -> CanisterId {
+    let swap = build_swap_sns_wasm().wasm;
+    let mut swap_arg = SnsTestsInitPayloadBuilder::new().build().swap;
+
+    swap_arg.sns_root_canister_id = PrincipalId::new_anonymous().to_string();
+    swap_arg.sns_governance_canister_id = PrincipalId::new_anonymous().to_string();
+    swap_arg.sns_ledger_canister_id = PrincipalId::new_anonymous().to_string();
+
+    swap_arg.nns_governance_canister_id = PrincipalId::new_anonymous().to_string();
+    swap_arg.icp_ledger_canister_id = PrincipalId::new_anonymous().to_string();
+
+    env.install_canister(swap, Encode!(&swap_arg).unwrap(), None)
         .unwrap()
 }
 
@@ -93,9 +128,15 @@ fn try_get_metrics(
     state_machine: &StateMachine,
     governance_canister_id: CanisterId,
     payload: GetMetricsRequest,
+    use_replicated_mode: bool,
 ) -> Result<get_metrics_response::GetMetricsResponse, String> {
     let payload = Encode!(&payload).unwrap();
-    let response = state_machine.query(governance_canister_id, "get_metrics", payload);
+
+    let response = if use_replicated_mode {
+        state_machine.execute_ingress(governance_canister_id, "get_metrics_replicated", payload)
+    } else {
+        state_machine.query(governance_canister_id, "get_metrics", payload)
+    };
 
     match response {
         Ok(response) => {
@@ -108,10 +149,46 @@ fn try_get_metrics(
     }
 }
 
+fn icrc1_account_to_icp_accountidentifier(account: Account) -> AccountIdentifier {
+    AccountIdentifier::new(
+        PrincipalId(account.owner),
+        account.subaccount.map(IcpSubaccount),
+    )
+}
+
 #[test]
 fn test_sns_metrics() {
     // Prepare the world
     let state_machine = state_machine_builder_for_sns_tests().build();
+
+    // NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET is the last index used by `setup_nns_canisters`.
+    let first_sns_canister_id = NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET + 1;
+
+    // In this test, we install SNS Ledger, Swap, then SNS Governance canister.
+    let governance = CanisterId::from(first_sns_canister_id + 2);
+
+    let sns_treasury_account_nns = Account {
+        owner: governance.get().0,
+        subaccount: None,
+    };
+
+    let _sns_treasury_account_sns = Account {
+        owner: governance.get().0,
+        subaccount: Some(
+            compute_distribution_subaccount(governance.get(), TREASURY_SUBACCOUNT_NONCE).0,
+        ),
+    };
+
+    let nns_init_payloads = NnsInitPayloadsBuilder::new()
+        .with_ledger_accounts(vec![(
+            icrc1_account_to_icp_accountidentifier(sns_treasury_account_nns),
+            Tokens::new(10000, 0).unwrap(),
+        )])
+        .with_test_neurons()
+        .build();
+
+    setup_nns_canisters(&state_machine, nns_init_payloads);
+
     let alice = get_account(ALICE, 0);
     let bob = get_account(BOB, 0);
 
@@ -125,11 +202,13 @@ fn test_sns_metrics() {
         install_ledger(&state_machine, initial_balances)
     };
 
+    let swap_canister_id = install_swap(&state_machine);
+
     let governance_canister_id = {
         let wasm = build_governance_sns_wasm().wasm;
         let mut governance = GovernanceCanisterInitPayloadBuilder::new()
-            .with_root_canister_id(PrincipalId::new_anonymous())
-            .with_swap_canister_id(PrincipalId::new_anonymous())
+            .with_root_canister_id(CanisterId::from(42).get())
+            .with_swap_canister_id(swap_canister_id.into())
             .with_ledger_canister_id(ledger_canister_id.into())
             .build();
 
@@ -199,8 +278,18 @@ fn test_sns_metrics() {
             .unwrap()
     };
 
+    assert_eq!(governance, governance_canister_id);
+
     state_machine.advance_time(Duration::from_secs(ONE_MONTH));
     state_machine.tick();
+    state_machine
+        .execute_ingress(
+            governance_canister_id,
+            "run_periodic_tasks_now",
+            Encode!(&()).unwrap(),
+        )
+        .unwrap();
+
     {
         // Prepare the payload to get metrics during the last month.
         let time_window_seconds = 2 * ONE_MONTH;
@@ -208,16 +297,26 @@ fn test_sns_metrics() {
             time_window_seconds: Some(time_window_seconds),
         };
 
-        let Ok(observed_result) = try_get_metrics(&state_machine, governance_canister_id, payload)
+        let get_metrics_result =
+            try_get_metrics(&state_machine, governance_canister_id, payload, true)
+                .unwrap()
+                .get_metrics_result
+                .unwrap();
+        let get_metrics_result_1 =
+            try_get_metrics(&state_machine, governance_canister_id, payload, false)
+                .unwrap()
+                .get_metrics_result
+                .unwrap();
+
+        assert_eq!(get_metrics_result_1, get_metrics_result);
+
+        let get_metrics_response::GetMetricsResult::Ok(get_metrics_response::Metrics {
+            num_recently_submitted_proposals,
+            num_recently_executed_proposals,
+            last_ledger_block_timestamp,
+            treasury_metrics,
+        }) = get_metrics_result
         else {
-            panic!("Received an Error upon fetching the metrics")
-        };
-
-        let Some(get_metrics_result) = observed_result.get_metrics_result else {
-            panic!("Expected a non-empty response");
-        };
-
-        let get_metrics_response::GetMetricsResult::Ok(metrics) = get_metrics_result else {
             panic!(
                 "Expected to get an Ok() from the response, got {:?}",
                 get_metrics_result
@@ -225,10 +324,7 @@ fn test_sns_metrics() {
         };
 
         {
-            let Some(num_recently_submitted_proposals) = metrics.num_recently_submitted_proposals
-            else {
-                panic!("Expected `num_recently_submitted_proposals` to be Some(_)");
-            };
+            let num_recently_submitted_proposals = num_recently_submitted_proposals.unwrap();
 
             assert_eq!(
                 num_recently_submitted_proposals, 2,
@@ -238,10 +334,7 @@ fn test_sns_metrics() {
         }
 
         {
-            let Some(num_recently_executed_proposals) = metrics.num_recently_executed_proposals
-            else {
-                panic!("Expected `num_recently_executed_proposals` to be Some(_)");
-            };
+            let num_recently_executed_proposals = num_recently_executed_proposals.unwrap();
 
             assert_eq!(
                 num_recently_executed_proposals, 1,
@@ -251,9 +344,7 @@ fn test_sns_metrics() {
         }
 
         {
-            let Some(last_ledger_block_timestamp) = metrics.last_ledger_block_timestamp else {
-                panic!("Expected `num_recently_submitted_proposals` to be Some(_)");
-            };
+            let last_ledger_block_timestamp = last_ledger_block_timestamp.unwrap();
 
             let now = state_machine
                 .time()
@@ -268,6 +359,52 @@ fn test_sns_metrics() {
                 now,
                 last_ledger_block_timestamp
             );
+        }
+
+        {
+            // Redact the timestamps
+            let treasury_metrics = treasury_metrics
+                .unwrap()
+                .into_iter()
+                .map(
+                    |TreasuryMetrics {
+                         treasury,
+                         name,
+                         ledger_canister_id,
+                         account,
+                         amount_e8s,
+                         original_amount_e8s,
+                         timestamp_seconds: _, // We don't care about the timestamp in this test
+                     }| TreasuryMetrics {
+                        treasury,
+                        name,
+                        ledger_canister_id,
+                        account,
+                        amount_e8s,
+                        original_amount_e8s,
+                        timestamp_seconds: None, // Redact the timestamp
+                    },
+                )
+                .collect::<Vec<_>>();
+
+            assert_eq!(
+                treasury_metrics,
+                vec![TreasuryMetrics {
+                    treasury: 1,
+                    name: Some("TOKEN_ICP".to_string()),
+
+                    ledger_canister_id: Some(LEDGER_CANISTER_ID.get()),
+                    account: Some(sns_gov::Account {
+                        owner: Some(governance_canister_id.get()),
+                        subaccount: None,
+                    }),
+
+                    amount_e8s: Some(1000000000000),
+                    original_amount_e8s: Some(0),
+
+                    timestamp_seconds: None,
+                }]
+            )
         }
     }
 }

@@ -1479,6 +1479,9 @@ message Governance {
     // The number of governance tokens in neurons with a dissolve delay of
     // less than six months.
     uint64 neurons_with_less_than_6_months_dissolve_delay_e8s = 15;
+
+    // Metrics related to the treasury assets of this SNS.
+    repeated TreasuryMetrics treasury_metrics = 17;
   }
 
   GovernanceCachedMetrics metrics = 13;
@@ -1634,11 +1637,25 @@ message GetMetricsRequest {
   uint64 time_window_seconds = 1;
 }
 
+message TreasuryMetrics {
+  Valuation.Token treasury = 1;
+  optional string name = 2;
+
+  ic_base_types.pb.v1.PrincipalId ledger_canister_id = 3;
+  Account account = 4;
+
+  uint64 amount_e8s = 5;
+  uint64 original_amount_e8s = 6;
+
+  uint64 timestamp_seconds = 7;
+}
+
 // Response message for 'get_sns_status'
 message Metrics {
   uint64 num_recently_submitted_proposals = 1;
   uint64 last_ledger_block_timestamp = 2;
   uint64 num_recently_executed_proposals = 3;
+  repeated TreasuryMetrics treasury_metrics = 4;
 }
 
 // Request message for 'get_sns_initialization_parameters'

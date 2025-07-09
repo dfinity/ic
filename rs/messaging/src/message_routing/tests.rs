@@ -19,7 +19,9 @@ use ic_protobuf::registry::{
     node::v1::NodeRecord,
 };
 use ic_registry_client_fake::FakeRegistryClient;
-use ic_registry_keys::make_chain_key_enabled_subnet_list_key;
+use ic_registry_keys::{
+    make_canister_ranges_key, make_chain_key_enabled_subnet_list_key, make_routing_table_record_key,
+};
 use ic_registry_local_registry::LocalRegistry;
 use ic_registry_proto_data_provider::{ProtoRegistryDataProvider, ProtoRegistryDataProviderError};
 use ic_registry_routing_table::{routing_table_insert_subnet, CanisterMigrations, RoutingTable};
@@ -36,7 +38,6 @@ use ic_test_utilities_types::{
 };
 use ic_types::batch::BlockmakerMetrics;
 use ic_types::xnet::{StreamIndexedQueue, StreamSlice};
-use ic_types::ReplicaVersion;
 use ic_types::{
     batch::{Batch, BatchMessages},
     crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript},
@@ -44,6 +45,7 @@ use ic_types::{
     time::Time,
     NodeId, PrincipalId, Randomness,
 };
+use ic_types::{CanisterId, ReplicaVersion};
 use maplit::{btreemap, btreeset};
 use std::{fmt::Debug, str::FromStr, sync::Arc, time::Duration};
 
@@ -430,8 +432,12 @@ impl RegistryFixture {
         routing_table: Integrity<&RoutingTable>,
     ) -> Result<(), ProtoRegistryDataProviderError> {
         use ic_protobuf::registry::routing_table::v1::RoutingTable as RoutingTableProto;
-        use ic_registry_keys::make_routing_table_record_key;
 
+        self.write_record(
+            &make_canister_ranges_key(CanisterId::from_u64(0)),
+            routing_table.map(RoutingTableProto::from),
+        )?;
+        // TODO(NNS1-3781): Remove this once routing_table is no longer used by clients.
         self.write_record(
             &make_routing_table_record_key(),
             routing_table.map(RoutingTableProto::from),
