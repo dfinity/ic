@@ -2089,6 +2089,9 @@ pub mod governance {
         /// Metrics related to the treasury assets of this SNS.
         #[prost(message, repeated, tag = "17")]
         pub treasury_metrics: ::prost::alloc::vec::Vec<super::TreasuryMetrics>,
+        /// Metrics related to the voting power in this SNS.
+        #[prost(message, optional, tag = "18")]
+        pub voting_power_metrics: ::core::option::Option<super::VotingPowerMetrics>,
     }
     /// Metadata about this SNS.
     #[derive(
@@ -2353,6 +2356,21 @@ pub struct TreasuryMetrics {
     #[prost(uint64, tag = "7")]
     pub timestamp_seconds: u64,
 }
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct VotingPowerMetrics {
+    #[prost(uint64, tag = "1")]
+    pub governance_total_potential_voting_power: u64,
+    #[prost(uint64, tag = "2")]
+    pub timestamp_seconds: u64,
+}
 /// Response message for 'get_sns_status'
 #[derive(
     candid::CandidType,
@@ -2371,6 +2389,10 @@ pub struct Metrics {
     pub num_recently_executed_proposals: u64,
     #[prost(message, repeated, tag = "4")]
     pub treasury_metrics: ::prost::alloc::vec::Vec<TreasuryMetrics>,
+    #[prost(message, optional, tag = "5")]
+    pub voting_power_metrics: ::core::option::Option<VotingPowerMetrics>,
+    #[prost(uint64, tag = "6")]
+    pub genesis_timestamp_seconds: u64,
 }
 /// Request message for 'get_sns_initialization_parameters'
 #[derive(

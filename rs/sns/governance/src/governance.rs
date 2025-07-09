@@ -1,6 +1,6 @@
 use crate::icrc_ledger_helper::ICRCLedgerHelper;
 use crate::pb::v1::governance::GovernanceCachedMetrics;
-use crate::pb::v1::{valuation, Metrics, TreasuryMetrics};
+use crate::pb::v1::{valuation, Metrics, TreasuryMetrics, VotingPowerMetrics};
 use crate::proposal::TreasuryAccount;
 use crate::treasury::{assess_treasury_balance, interpret_token_code, tokens_to_e8s};
 use crate::{
@@ -2035,11 +2035,22 @@ impl Governance {
             .map(|metrics| metrics.treasury_metrics.clone())
             .unwrap_or_default();
 
+        let voting_power_metrics = self
+            .proto
+            .metrics
+            .as_ref()
+            .map(|metrics| metrics.voting_power_metrics)
+            .unwrap_or_default();
+
+        let genesis_timestamp_seconds = self.proto.genesis_timestamp_seconds;
+
         Ok(Metrics {
             num_recently_submitted_proposals,
             num_recently_executed_proposals,
             last_ledger_block_timestamp,
             treasury_metrics,
+            voting_power_metrics,
+            genesis_timestamp_seconds,
         })
     }
 
@@ -3360,6 +3371,8 @@ impl Governance {
         // Validate proposal
         let (rendering, action_auxiliary) = self.validate_and_render_proposal(proposal).await?;
 
+        let nervous_system_parameters = self.nervous_system_parameters_or_panic();
+
         // This should not panic, because the proposal was just validated.
         let action = proposal.action.as_ref().expect("No action.");
 
@@ -3378,8 +3391,7 @@ impl Governance {
             &self.proto.id_to_nervous_system_functions,
         )?;
 
-        let reject_cost_e8s = self
-            .nervous_system_parameters_or_panic()
+        let reject_cost_e8s = nervous_system_parameters
             .reject_cost_e8s
             .expect("NervousSystemParameters must have reject_cost_e8s");
 
@@ -3395,8 +3407,7 @@ impl Governance {
         // Check that the caller is authorized to make a proposal
         proposer.check_authorized(caller, NeuronPermissionType::SubmitProposal)?;
 
-        let min_dissolve_delay_for_vote = self
-            .nervous_system_parameters_or_panic()
+        let min_dissolve_delay_for_vote = nervous_system_parameters
             .neuron_minimum_dissolve_delay_to_vote_seconds
             .expect("NervousSystemParameters must have min_dissolve_delay_for_vote");
 
@@ -3449,24 +3460,9 @@ impl Governance {
         // proposal creation (i.e., now).
         //
         // The electoral roll to put into the proposal.
-        let mut electoral_roll = BTreeMap::<String, Ballot>::new();
-        let mut total_power: u128 = 0;
-
-        let nervous_system_parameters = self.nervous_system_parameters_or_panic();
-
-        // Voting power bonus parameters.
-        let max_dissolve_delay = nervous_system_parameters
-            .max_dissolve_delay_seconds
-            .expect("NervousSystemParameters must have max_dissolve_delay_seconds");
-        let max_age_bonus = nervous_system_parameters
-            .max_neuron_age_for_age_bonus
-            .expect("NervousSystemParameters must have max_neuron_age_for_age_bonus");
-        let max_dissolve_delay_bonus_percentage = nervous_system_parameters
-            .max_dissolve_delay_bonus_percentage
-            .expect("NervousSystemParameters must have max_dissolve_delay_bonus_percentage");
-        let max_age_bonus_percentage = nervous_system_parameters
-            .max_age_bonus_percentage
-            .expect("NervousSystemParameters must have max_age_bonus_percentage");
+        let (_, electoral_roll) = self
+            .compute_ballots_for_new_proposal()
+            .map_err(|err| GovernanceError::new_with_message(ErrorType::PreconditionFailed, err))?;
 
         // Define topic-based criticality based on the current mapping from proposals to topics.
         let (proposal_topic, proposal_criticality) = self
@@ -3508,47 +3504,6 @@ impl Governance {
             )
         };
 
-        for (k, v) in self.proto.neurons.iter() {
-            // If this neuron is eligible to vote, record its
-            // voting power at the time of proposal creation (now).
-            if v.dissolve_delay_seconds(now_seconds) < min_dissolve_delay_for_vote {
-                // Not eligible due to dissolve delay.
-                continue;
-            }
-            let power = v.voting_power(
-                now_seconds,
-                max_dissolve_delay,
-                max_age_bonus,
-                max_dissolve_delay_bonus_percentage,
-                max_age_bonus_percentage,
-            );
-            total_power += power as u128;
-            electoral_roll.insert(
-                k.clone(),
-                Ballot {
-                    vote: Vote::Unspecified as i32,
-                    voting_power: power,
-                    cast_timestamp_seconds: 0,
-                },
-            );
-        }
-        if total_power >= (u64::MAX as u128) {
-            // The way the neurons are configured, the total voting
-            // power on this proposal would overflow a u64!
-            return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                "Voting power overflow.",
-            ));
-        }
-        if electoral_roll.is_empty() {
-            // Cannot make a proposal with no eligible voters.  This
-            // is a precaution that shouldn't happen as we check that
-            // the voter is allowed to vote.
-            return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                "No eligible voters.",
-            ));
-        }
         // Create a new proposal ID for this proposal.
         let proposal_num = self.next_proposal_id();
         let proposal_id = ProposalId { id: proposal_num };
@@ -5111,6 +5066,11 @@ impl Governance {
         Ok(derived_state_result.buyer_total_icp_e8s.unwrap_or_default())
     }
 
+    /// Some metrics are not supposed to be ever updated, just computed once and stored next
+    /// to dynamically updated metrics (e.g., the starting amount of ICP collected via the swap).
+    ///
+    /// This function takes care of initializing those metrics. It assumes that
+    /// `compute_cached_metrics` will be called after to (re-)compute the dynamic metrics.
     pub(crate) async fn init_cached_metrics(&mut self) {
         let now_seconds = self.env.now();
 
@@ -5172,6 +5132,78 @@ impl Governance {
         };
 
         self.proto.metrics.replace(metrics);
+    }
+
+    /// Computes the total potential voting power of the governance canister and ballots.
+    fn compute_ballots_for_new_proposal(&self) -> Result<(u64, BTreeMap<String, Ballot>), String> {
+        let now_seconds = self.env.now();
+
+        let nervous_system_parameters = self.nervous_system_parameters_or_panic();
+
+        // Voting power bonus parameters.
+        let max_dissolve_delay = nervous_system_parameters
+            .max_dissolve_delay_seconds
+            .expect("NervousSystemParameters must have max_dissolve_delay_seconds");
+
+        let max_age_bonus = nervous_system_parameters
+            .max_neuron_age_for_age_bonus
+            .expect("NervousSystemParameters must have max_neuron_age_for_age_bonus");
+
+        let max_dissolve_delay_bonus_percentage = nervous_system_parameters
+            .max_dissolve_delay_bonus_percentage
+            .expect("NervousSystemParameters must have max_dissolve_delay_bonus_percentage");
+
+        let max_age_bonus_percentage = nervous_system_parameters
+            .max_age_bonus_percentage
+            .expect("NervousSystemParameters must have max_age_bonus_percentage");
+
+        let min_dissolve_delay_for_vote = nervous_system_parameters
+            .neuron_minimum_dissolve_delay_to_vote_seconds
+            .expect("NervousSystemParameters must have min_dissolve_delay_for_vote");
+
+        let mut electoral_roll = BTreeMap::<String, Ballot>::new();
+        let mut total_power: u128 = 0;
+
+        for (k, v) in self.proto.neurons.iter() {
+            // If this neuron is eligible to vote, record its
+            // voting power at the time of proposal creation (now).
+            if v.dissolve_delay_seconds(now_seconds) < min_dissolve_delay_for_vote {
+                // Not eligible due to dissolve delay.
+                continue;
+            }
+
+            let voting_power = v.voting_power(
+                now_seconds,
+                max_dissolve_delay,
+                max_age_bonus,
+                max_dissolve_delay_bonus_percentage,
+                max_age_bonus_percentage,
+            );
+
+            total_power += voting_power as u128;
+            electoral_roll.insert(
+                k.clone(),
+                Ballot {
+                    vote: Vote::Unspecified as i32,
+                    voting_power,
+                    cast_timestamp_seconds: 0,
+                },
+            );
+        }
+
+        if total_power >= (u64::MAX as u128) {
+            // The way the neurons are configured, the total voting
+            // power on this proposal would overflow a u64!
+            return Err("Voting power overflow.".to_string());
+        }
+        if electoral_roll.is_empty() {
+            // Cannot make a proposal with no eligible voters.  This
+            // is a precaution that shouldn't happen as we check that
+            // the voter is allowed to vote.
+            return Err("No eligible voters.".to_string());
+        }
+
+        Ok((total_power as u64, electoral_roll))
     }
 
     pub(crate) async fn compute_cached_metrics(&mut self) {
@@ -5246,6 +5278,22 @@ impl Governance {
         }
 
         metrics.treasury_metrics = treasury_metrics;
+
+        match self.compute_ballots_for_new_proposal() {
+            Ok((governance_total_potential_voting_power, _)) => {
+                metrics.voting_power_metrics = Some(VotingPowerMetrics {
+                    governance_total_potential_voting_power,
+                    timestamp_seconds: now_seconds,
+                });
+            }
+            Err(err) => {
+                log!(
+                    ERROR,
+                    "Failed to compute total potential voting power: {}",
+                    err
+                );
+            }
+        };
 
         self.proto.metrics.replace(metrics);
     }

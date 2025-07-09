@@ -1482,6 +1482,9 @@ message Governance {
 
     // Metrics related to the treasury assets of this SNS.
     repeated TreasuryMetrics treasury_metrics = 17;
+
+    // Metrics related to the voting power in this SNS.
+    optional VotingPowerMetrics voting_power_metrics = 18;
   }
 
   GovernanceCachedMetrics metrics = 13;
@@ -1650,12 +1653,19 @@ message TreasuryMetrics {
   uint64 timestamp_seconds = 7;
 }
 
+message VotingPowerMetrics {
+  uint64 governance_total_potential_voting_power = 1;
+  uint64 timestamp_seconds = 2;
+}
+
 // Response message for 'get_sns_status'
 message Metrics {
   uint64 num_recently_submitted_proposals = 1;
   uint64 last_ledger_block_timestamp = 2;
   uint64 num_recently_executed_proposals = 3;
   repeated TreasuryMetrics treasury_metrics = 4;
+  optional VotingPowerMetrics voting_power_metrics = 5;
+  uint64 genesis_timestamp_seconds = 6;
 }
 
 // Request message for 'get_sns_initialization_parameters'
