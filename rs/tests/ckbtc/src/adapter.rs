@@ -307,10 +307,8 @@ pub fn fund_with_btc(to_fund_client: &Client, to_fund_address: &Address) -> List
         .expect("Failed to find the coinbase utxo");
 
     // Check that the coinbase UTXO is not part of the initial set of UTXOs
-    assert!(initial_utxos
-        .iter()
-        .find(|&utxo| utxo == &coinbase_utxo)
-        .is_none());
+    assert!(!initial_utxos
+        .iter().any(|utxo| utxo == &coinbase_utxo));
 
     coinbase_utxo
 }
