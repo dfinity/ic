@@ -80,11 +80,11 @@ impl Drop for CowDevice {
 /// Device mapper mapped device
 // #[derive(Debug)]
 pub struct MappedDevice {
-    name: &'static str,
-    path: PathBuf,
-    len: Sectors,
-    dependencies: Vec<Box<dyn Any>>,
-    device_mapper: Arc<DM>,
+    pub name: &'static str,
+    pub path: PathBuf,
+    pub len: Sectors,
+    pub dependencies: Vec<Box<dyn Any>>,
+    pub device_mapper: Arc<DM>,
 }
 
 impl MappedDevice {

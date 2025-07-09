@@ -1,10 +1,11 @@
+use crate::device_mapping::MappedDevice;
 use crate::guest_direct_boot::{prepare_direct_boot, DirectBoot};
 use crate::guest_vm_config::{
     assemble_config_media, generate_vm_config, serial_log_path, vm_domain_name,
 };
 use crate::mount::PartitionProvider;
 use crate::systemd_notifier::SystemdNotifier;
-use crate::upgrade_device_mapper::{create_mapped_device, MappedUpgradeDevice};
+use crate::upgrade_device_mapper::create_mapped_device;
 use anyhow::{anyhow, bail, Context, Error, Result};
 use clap::{Parser, ValueEnum};
 use config_types::{HostOSConfig, Ipv6Config};
@@ -226,7 +227,7 @@ pub struct GuestVmService {
     disk_device: PathBuf,
     partition_provider: Box<dyn PartitionProvider>,
     // Partition provider uses the mapped device, so it must be declared after it.
-    _upgrade_mapped_device: Option<MappedUpgradeDevice>,
+    _upgrade_mapped_device: Option<MappedDevice>,
 }
 
 impl GuestVmService {
