@@ -70,9 +70,7 @@ pub enum ErrorKind {
     TemporarilyUnavailable {},
 
     /// An exotic error that cannot be categorized using the tags above.
-    Generic {
-        generic_error_name: String,
-    },
+    Generic { generic_error_name: String },
 }
 
 pub trait TreasuryManager {
