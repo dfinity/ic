@@ -586,12 +586,7 @@ mod tests {
         assert_subnet_for_canister(&registry, 2399, 23);
 
         // Test a canister ID outside all ranges
-        assert_matches!(
-            registry
-                .get_subnet_for_canister(&CanisterId::from(3000).get())
-                .unwrap_err(),
-            GetSubnetForCanisterError::NoSubnetAssigned
-        );
+        assert_no_subnet_for_canister(&registry, 3000);
     }
 
     #[test]
