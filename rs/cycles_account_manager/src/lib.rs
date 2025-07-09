@@ -487,6 +487,7 @@ impl CyclesAccountManager {
                 threshold,
                 CyclesUseCase::IngressInduction,
                 reveal_top_up,
+                cost_schedule,
             )
         }
     }
@@ -523,7 +524,14 @@ impl CyclesAccountManager {
             cost_schedule,
             system_state.reserved_balance(),
         );
-        self.consume_with_threshold(system_state, cycles, threshold, use_case, reveal_top_up)
+        self.consume_with_threshold(
+            system_state,
+            cycles,
+            threshold,
+            use_case,
+            reveal_top_up,
+            cost_schedule,
+        )
     }
 
     /// Withdraws and consumes the cost of executing the given number of
@@ -594,6 +602,7 @@ impl CyclesAccountManager {
             ),
             CyclesUseCase::Instructions,
             reveal_top_up,
+            cost_schedule,
         )
         .map(|_| cost)
     }
@@ -1055,7 +1064,11 @@ impl CyclesAccountManager {
         threshold: Cycles,
         use_case: CyclesUseCase,
         reveal_top_up: bool,
+        cost_schedule: CanisterCyclesCostSchedule,
     ) -> Result<(), CanisterOutOfCyclesError> {
+        if cost_schedule == CanisterCyclesCostSchedule::Free {
+            return Ok(());
+        }
         let effective_cycles_balance = match use_case {
             CyclesUseCase::Memory | CyclesUseCase::ComputeAllocation | CyclesUseCase::Uninstall => {
                 // The resource use cases first drain the `reserved_balance` and
@@ -1281,6 +1294,7 @@ impl CyclesAccountManager {
                 Cycles::zero(),
                 use_case,
                 false, // caller is system => no need to reveal top up balance
+                cost_schedule,
             ) {
                 info!(
                     log,

@@ -310,6 +310,46 @@ fn verify_no_cycles_charged_for_message_execution_on_system_subnets() {
 }
 
 #[test]
+fn verify_no_cycles_charged_for_message_execution_on_free_schedule() {
+    let cost_schedule = CanisterCyclesCostSchedule::Free;
+    let subnet_size = SMALL_APP_SUBNET_MAX_SIZE;
+    let mut system_state = SystemStateBuilder::new().build();
+    let cycles_account_manager = CyclesAccountManagerBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+
+    let initial_balance = system_state.balance();
+    let cycles = cycles_account_manager
+        .prepay_execution_cycles(
+            &mut system_state,
+            NumBytes::from(0),
+            MessageMemoryUsage::ZERO,
+            ComputeAllocation::default(),
+            NumInstructions::from(1_000_000),
+            subnet_size,
+            cost_schedule,
+            false,
+            WASM_EXECUTION_MODE,
+        )
+        .unwrap();
+    assert_eq!(system_state.balance(), initial_balance);
+
+    let no_op_counter: IntCounter = IntCounter::new("no_op", "no_op").unwrap();
+    cycles_account_manager.refund_unused_execution_cycles(
+        &mut system_state,
+        NumInstructions::from(1_000_000),
+        NumInstructions::from(1_000_000),
+        cycles,
+        &no_op_counter,
+        subnet_size,
+        cost_schedule,
+        WASM_EXECUTION_MODE,
+        &no_op_logger(),
+    );
+    assert_eq!(system_state.balance(), initial_balance);
+}
+
+#[test]
 fn ingress_induction_cost_valid_subnet_message() {
     let cost_schedule = CanisterCyclesCostSchedule::Normal;
     let subnet_id = subnet_test_id(0);
@@ -339,6 +379,43 @@ fn ingress_induction_cost_valid_subnet_message() {
                     + cycles_account_manager
                         .ingress_byte_received_fee(SMALL_APP_SUBNET_MAX_SIZE, cost_schedule)
                         * num_bytes
+            }
+        );
+    }
+}
+
+#[test]
+fn ingress_induction_cost_valid_subnet_message_free_schedule() {
+    let cost_schedule = CanisterCyclesCostSchedule::Free;
+    let subnet_id = subnet_test_id(0);
+    for receiver in [IC_00, CanisterId::from(subnet_id)].iter() {
+        let msg: SignedIngressContent = SignedIngressBuilder::new()
+            .sender(user_test_id(0))
+            .canister_id(*receiver)
+            .method_name("start_canister")
+            .method_payload(CanisterIdRecord::from(canister_test_id(0)).encode())
+            .build()
+            .into();
+        let effective_canister_id = extract_effective_canister_id(&msg, subnet_id).unwrap();
+        let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
+        let num_bytes = msg.arg().len() + msg.method_name().len();
+
+        let cost = cycles_account_manager
+            .ingress_message_received_fee(SMALL_APP_SUBNET_MAX_SIZE, cost_schedule)
+            + cycles_account_manager
+                .ingress_byte_received_fee(SMALL_APP_SUBNET_MAX_SIZE, cost_schedule)
+                * num_bytes;
+        assert_eq!(cost, Cycles::new(0));
+        assert_eq!(
+            cycles_account_manager.ingress_induction_cost(
+                &msg,
+                effective_canister_id,
+                SMALL_APP_SUBNET_MAX_SIZE,
+                cost_schedule,
+            ),
+            IngressInductionCost::Fee {
+                payer: canister_test_id(0),
+                cost
             }
         );
     }
@@ -474,6 +551,70 @@ fn charge_canister_for_memory_usage() {
 }
 
 #[test]
+fn do_not_charge_canister_for_memory_usage_free_schedule() {
+    let cost_schedule = CanisterCyclesCostSchedule::Free;
+    with_test_replica_logger(|log| {
+        const INITIAL_BALANCE: Cycles = Cycles::new(u64::MAX as u128);
+        const MEMORY_ALLOCATION: NumBytes = NumBytes::new(1 << 30);
+        const HOUR: Duration = Duration::from_secs(3600);
+
+        let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
+
+        let canister_id = canister_test_id(1);
+        let mut canister = new_canister_state(
+            canister_id,
+            canister_test_id(11).get(),
+            INITIAL_BALANCE,
+            NumSeconds::from(0),
+        );
+        canister.system_state.memory_allocation =
+            MemoryAllocation::try_from(MEMORY_ALLOCATION).unwrap();
+        canister
+            .push_output_request(
+                RequestBuilder::new().sender(canister_id).build().into(),
+                UNIX_EPOCH,
+            )
+            .unwrap();
+        canister
+            .push_output_request(
+                RequestBuilder::new()
+                    .sender(canister_id)
+                    .deadline(CoarseTime::from_secs_since_unix_epoch(1))
+                    .build()
+                    .into(),
+                UNIX_EPOCH,
+            )
+            .unwrap();
+        let message_memory_usage = canister.message_memory_usage();
+        assert_ne!(0, message_memory_usage.guaranteed_response.get());
+        assert_ne!(0, message_memory_usage.best_effort.get());
+
+        cycles_account_manager
+            .charge_canister_for_resource_allocation_and_usage(
+                &log,
+                &mut canister,
+                HOUR,
+                SMALL_APP_SUBNET_MAX_SIZE,
+                cost_schedule,
+            )
+            .unwrap();
+
+        let memory_usage = MEMORY_ALLOCATION + message_memory_usage.total();
+        let cycles_burned = INITIAL_BALANCE - canister.system_state.balance();
+        assert_eq!(cycles_burned, Cycles::new(0));
+        assert_eq!(
+            cycles_account_manager.memory_cost(
+                memory_usage,
+                HOUR,
+                SMALL_APP_SUBNET_MAX_SIZE,
+                cost_schedule
+            ),
+            cycles_burned
+        )
+    })
+}
+
+#[test]
 fn cycles_withdraw_no_threshold() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
 
@@ -553,6 +694,7 @@ fn cycles_withdraw_no_threshold() {
 
 #[test]
 fn test_consume_with_threshold() {
+    let cost_schedule = CanisterCyclesCostSchedule::Normal;
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
 
     // Create an account with u128::MAX
@@ -570,6 +712,7 @@ fn test_consume_with_threshold() {
             threshold,
             CyclesUseCase::Memory,
             false,
+            cost_schedule,
         )
         .is_ok());
     // unchanged cycles
@@ -584,7 +727,8 @@ fn test_consume_with_threshold() {
             amount,
             threshold,
             CyclesUseCase::Memory,
-            false
+            false,
+            cost_schedule,
         )
         .is_ok());
     cycles_balance_expected -= amount;
@@ -599,7 +743,8 @@ fn test_consume_with_threshold() {
             amount,
             threshold,
             CyclesUseCase::Memory,
-            false
+            false,
+            cost_schedule,
         )
         .is_ok());
     cycles_balance_expected -= amount;
@@ -612,7 +757,8 @@ fn test_consume_with_threshold() {
             amount,
             threshold,
             CyclesUseCase::Memory,
-            false
+            false,
+            cost_schedule,
         )
         .is_ok());
     cycles_balance_expected -= amount;
@@ -624,7 +770,8 @@ fn test_consume_with_threshold() {
             amount,
             threshold,
             CyclesUseCase::Memory,
-            false
+            false,
+            cost_schedule,
         )
         .is_err());
     cycles_balance_expected -= amount;
@@ -798,6 +945,71 @@ fn cycles_withdraw_for_execution() {
 }
 
 #[test]
+fn do_not_withdraw_cycles_for_execution_free_schedule() {
+    let cost_schedule = CanisterCyclesCostSchedule::Free;
+    let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
+    let memory_usage = NumBytes::from(4 << 30);
+    let message_memory_usage = MessageMemoryUsage {
+        guaranteed_response: NumBytes::new(6 << 20),
+        best_effort: NumBytes::new(2 << 20),
+    };
+    let compute_allocation = ComputeAllocation::try_from(90).unwrap();
+
+    let initial_amount = u128::MAX;
+    let initial_cycles = Cycles::from(initial_amount);
+    let freeze_threshold = NumSeconds::from(10);
+    let canister_id = canister_test_id(1);
+    let mut system_state = SystemState::new_running_for_testing(
+        canister_id,
+        canister_test_id(2).get(),
+        initial_cycles,
+        freeze_threshold,
+    );
+
+    let freeze_threshold_cycles = cycles_account_manager.freeze_threshold_cycles(
+        system_state.freeze_threshold,
+        system_state.memory_allocation,
+        memory_usage,
+        message_memory_usage,
+        compute_allocation,
+        SMALL_APP_SUBNET_MAX_SIZE,
+        cost_schedule,
+        system_state.reserved_balance(),
+    );
+
+    let amount = Cycles::from(initial_amount / 2);
+    assert!(cycles_account_manager
+        .consume_cycles(
+            &mut system_state,
+            memory_usage,
+            message_memory_usage,
+            compute_allocation,
+            amount,
+            SMALL_APP_SUBNET_MAX_SIZE,
+            cost_schedule,
+            CyclesUseCase::Instructions,
+            false,
+        )
+        .is_ok());
+    assert_eq!(system_state.balance(), initial_cycles);
+
+    let exec_cycles_max = system_state.balance() - freeze_threshold_cycles;
+
+    assert!(cycles_account_manager
+        .can_withdraw_cycles(
+            &system_state,
+            exec_cycles_max,
+            memory_usage,
+            message_memory_usage,
+            compute_allocation,
+            SMALL_APP_SUBNET_MAX_SIZE,
+            cost_schedule,
+            false,
+        )
+        .is_ok());
+}
+
+#[test]
 fn withdraw_execution_cycles_consumes_cycles() {
     let cost_schedule = CanisterCyclesCostSchedule::Normal;
     let mut system_state = SystemStateBuilder::new().build();
@@ -886,6 +1098,7 @@ fn consume_cycles_updates_consumed_cycles() {
 
 #[test]
 fn consume_cycles_for_memory_drains_reserved_balance() {
+    let cost_schedule = CanisterCyclesCostSchedule::Normal;
     let cam = CyclesAccountManagerBuilder::new()
         .with_subnet_type(SubnetType::Application)
         .build();
@@ -900,6 +1113,7 @@ fn consume_cycles_for_memory_drains_reserved_balance() {
         Cycles::new(0),
         CyclesUseCase::Memory,
         false,
+        cost_schedule,
     )
     .unwrap();
     assert_eq!(system_state.reserved_balance(), Cycles::new(0));
@@ -908,6 +1122,7 @@ fn consume_cycles_for_memory_drains_reserved_balance() {
 
 #[test]
 fn consume_cycles_for_compute_drains_reserved_balance() {
+    let cost_schedule = CanisterCyclesCostSchedule::Normal;
     let cam = CyclesAccountManagerBuilder::new()
         .with_subnet_type(SubnetType::Application)
         .build();
@@ -922,6 +1137,7 @@ fn consume_cycles_for_compute_drains_reserved_balance() {
         Cycles::new(0),
         CyclesUseCase::ComputeAllocation,
         false,
+        cost_schedule,
     )
     .unwrap();
     assert_eq!(system_state.reserved_balance(), Cycles::new(0));
@@ -930,6 +1146,7 @@ fn consume_cycles_for_compute_drains_reserved_balance() {
 
 #[test]
 fn consume_cycles_for_uninstall_drains_reserved_balance() {
+    let cost_schedule = CanisterCyclesCostSchedule::Normal;
     let cam = CyclesAccountManagerBuilder::new()
         .with_subnet_type(SubnetType::Application)
         .build();
@@ -944,6 +1161,7 @@ fn consume_cycles_for_uninstall_drains_reserved_balance() {
         Cycles::new(0),
         CyclesUseCase::Uninstall,
         false,
+        cost_schedule,
     )
     .unwrap();
     assert_eq!(system_state.reserved_balance(), Cycles::new(0));
@@ -952,6 +1170,7 @@ fn consume_cycles_for_uninstall_drains_reserved_balance() {
 
 #[test]
 fn consume_cycles_for_execution_does_not_drain_reserved_balance() {
+    let cost_schedule = CanisterCyclesCostSchedule::Normal;
     let cam = CyclesAccountManagerBuilder::new()
         .with_subnet_type(SubnetType::Application)
         .build();
@@ -966,6 +1185,7 @@ fn consume_cycles_for_execution_does_not_drain_reserved_balance() {
         Cycles::new(0),
         CyclesUseCase::Instructions,
         false,
+        cost_schedule,
     )
     .unwrap();
     assert_eq!(system_state.reserved_balance(), Cycles::new(1_000_000));
