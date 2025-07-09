@@ -144,7 +144,9 @@ fn client_for_tests() -> RegistryClient<DummyStore> {
     add_dummy_data();
 
     RegistryClient {
-        store: StableCanisterRegistryClient::<DummyStore>::new(Arc::new(RegistryCanister::new())),
+        store: Arc::new(StableCanisterRegistryClient::<DummyStore>::new(Arc::new(
+            RegistryCanister::new(),
+        ))),
     }
 }
 

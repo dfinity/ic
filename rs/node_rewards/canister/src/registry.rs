@@ -45,7 +45,7 @@ impl RegistryEntry for NodeRewardsTable {
 }
 
 pub struct RegistryClient<S: RegistryDataStableMemory> {
-    store: StableCanisterRegistryClient<S>,
+    store: Arc<StableCanisterRegistryClient<S>>,
 }
 
 struct NodeOperatorData {
@@ -67,8 +67,12 @@ struct RegistryRecordWithStates {
 
 impl<S: RegistryDataStableMemory> RegistryClient<S> {
     pub fn new(registry: Arc<dyn Registry>) -> Self {
-        let store = StableCanisterRegistryClient::<S>::new(registry);
+        let store = Arc::new(StableCanisterRegistryClient::<S>::new(registry));
         RegistryClient { store }
+    }
+
+    pub fn store(&self) -> Arc<StableCanisterRegistryClient<S>> {
+        self.store.clone()
     }
 
     pub async fn sync_registry_stored(&self) -> Result<RegistryVersion, String> {
@@ -400,14 +404,8 @@ impl<S: RegistryDataStableMemory> RegistryClient<S> {
                 ..
             } = some_node_operator_data;
 
-            // TODO: Modify RewardableNode to use NodeRewardType instead of NodeType and rewardable_days instead of rewardable_from and rewardable_to.
+            // TODO: Modify RewardableNode to use NodeRewardType instead of NodeType.
             let node_type = NodeType(node_reward_type.as_node_reward_rates_type().to_string());
-            let rewardable_from = *rewardable_days
-                .first()
-                .expect("Rewardable days should not be empty");
-            let rewardable_to = *rewardable_days
-                .last()
-                .expect("Rewardable days should not be empty");
 
             rewardable_nodes_per_provider
                 .entry(*node_provider_id)
@@ -418,8 +416,7 @@ impl<S: RegistryDataStableMemory> RegistryClient<S> {
                 .rewardable_nodes
                 .push(RewardableNode {
                     node_id,
-                    rewardable_from,
-                    rewardable_to,
+                    rewardable_days,
                     node_type,
                     dc_id: dc_id.clone(),
                     region: region.clone(),

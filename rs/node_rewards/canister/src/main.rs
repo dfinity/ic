@@ -18,14 +18,14 @@ use std::time::Duration;
 fn main() {}
 
 thread_local! {
-    static REGISTRY_STORE: Arc<RegistryClient<RegistryStoreStableMemoryBorrower>> = {
+    static REGISTRY_CLIENT: Arc<RegistryClient<RegistryStoreStableMemoryBorrower>> = {
         let registry = Arc::new(RegistryCanister::new());
         Arc::new(RegistryClient::<RegistryStoreStableMemoryBorrower>::new(registry))
     };
 
     static CANISTER: RefCell<NodeRewardsCanister> = {
-        RefCell::new(NodeRewardsCanister::new(REGISTRY_STORE.with(|store| {
-            store.clone()
+        RefCell::new(NodeRewardsCanister::new(REGISTRY_CLIENT.with(|client| {
+            client.store()
         })))
     };
 }
@@ -44,7 +44,7 @@ fn post_upgrade() {
     clear_registry_store();
     ic_cdk_timers::set_timer(Duration::from_secs(0), || {
         spawn(async move {
-            let store = REGISTRY_STORE.with(|s| s.clone());
+            let store = REGISTRY_CLIENT.with(|s| s.clone());
             store
                 .sync_registry_stored()
                 .await
@@ -67,7 +67,7 @@ const REGISTRY_SYNC_INTERVAL_SECONDS: Duration = Duration::from_secs(60 * 60); /
 fn schedule_registry_sync() {
     ic_cdk_timers::set_timer_interval(REGISTRY_SYNC_INTERVAL_SECONDS, move || {
         spawn(async move {
-            let store = REGISTRY_STORE.with(|s| s.clone());
+            let store = REGISTRY_CLIENT.with(|s| s.clone());
             // panicking here is okay because we are using an interval instead of a timer that
             // has to reschedule itself.
             store
