@@ -30,8 +30,8 @@ use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_
 use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
 };
-use ic_protobuf::state::ingress::v1::ingress_status_completed::WasmResult;
 use ic_state_machine_tests::StateMachine;
+use ic_types::ingress::WasmResult;
 use icp_ledger::Tokens;
 use std::thread::sleep;
 use std::{
