@@ -768,7 +768,13 @@ impl CyclesAccountManager {
 
     /// The cost of using `bytes` worth of memory.
     #[doc(hidden)] // pub for usage in tests
-    pub fn memory_cost(&self, bytes: NumBytes, duration: Duration, subnet_size: usize) -> Cycles {
+    pub fn memory_cost(
+        &self,
+        bytes: NumBytes,
+        duration: Duration,
+        subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
+    ) -> Cycles {
         let one_gib = 1024 * 1024 * 1024;
         let cycles = Cycles::from(
             (bytes.get() as u128
@@ -776,8 +782,7 @@ impl CyclesAccountManager {
                 * duration.as_secs() as u128)
                 / one_gib,
         );
-        // cost calculations should assume normal schedule
-        self.scale_cost(cycles, subnet_size, CanisterCyclesCostSchedule::Normal)
+        self.scale_cost(cycles, subnet_size, cost_schedule)
     }
 
     /// Returns the amount of reserved cycles required for allocating the given
@@ -1252,14 +1257,14 @@ impl CyclesAccountManager {
         &self,
         num_instructions: NumInstructions,
         subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
         execution_mode: WasmExecutionMode,
     ) -> Cycles {
-        // cost calculations should assume normal schedule
         self.scale_cost(
             self.config.update_message_execution_fee
                 + self.convert_instructions_to_cycles(num_instructions, execution_mode),
             subnet_size,
-            CanisterCyclesCostSchedule::Normal,
+            cost_schedule,
         )
     }
 
