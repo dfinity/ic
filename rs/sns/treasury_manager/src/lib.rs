@@ -28,10 +28,10 @@ pub struct Balance {
 pub struct BalanceBook {
     pub treasury_owner: Option<Balance>,
     pub treasury_manager: Option<Balance>,
-    pub external: Option<Balance>,
+    pub external_custodian: Option<Balance>,
     pub fee_collector: Option<Balance>,
-    pub spendings: Option<Balance>,
-    pub earnings: Option<Balance>,
+    pub payees: Option<Balance>,
+    pub payers: Option<Balance>,
 }
 
 #[derive(CandidType, Clone, Debug, Default, Deserialize, PartialEq)]
@@ -40,7 +40,40 @@ pub struct Balances {
     pub asset_to_balances: Option<BTreeMap<Asset, BalanceBook>>,
 }
 
-pub type TreasuryManagerResult = Result<Balances, Vec<TransactionError>>;
+pub type TreasuryManagerResult = Result<Balances, Vec<Error>>;
+
+#[derive(CandidType, Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct Error {
+    pub code: u64,
+    pub message: String,
+    pub kind: ErrorKind,
+}
+
+#[derive(CandidType, Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub enum ErrorKind {
+    /// Prevents the call from being attempted.
+    Precondition {},
+
+    /// Prevents the response from being interpreted.
+    Postcondition {},
+
+    /// An error that occurred while calling a canister.
+    Call {
+        method: String,
+        canister_id: Principal,
+    },
+
+    /// Backend refers to, e.g., the DEX canister that this asset manager talks to.
+    Backend {},
+
+    /// The service is currently not available; please call back later.
+    TemporarilyUnavailable {},
+
+    /// An exotic error that cannot be categorized using the tags above.
+    Generic {
+        generic_error_name: String,
+    },
+}
 
 pub trait TreasuryManager {
     /// Implements the `deposit` API function.
@@ -202,37 +235,6 @@ impl From<TreasuryManagerOperation> for Vec<u8> {
     }
 }
 
-#[derive(CandidType, Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub enum TransactionError {
-    /// Prevents the call from being attempted.
-    Precondition { error: String, code: u64 },
-
-    /// Prevents the response from being interpreted.
-    Postcondition { error: String, code: u64 },
-
-    /// An error that occurred while calling a canister.
-    Call {
-        error: String,
-        code: u64,
-
-        canister_id: Principal,
-        method: String,
-    },
-
-    /// Backend refers to, e.g., the DEX canister that this asset manager talks to.
-    Backend { error: String, code: u64 },
-
-    /// The service is currently not available; please call back later.
-    TemporarilyUnavailable { code: u64 },
-
-    /// An exotic error that cannot be categorized using the tags above.
-    Generic {
-        error: String,
-        code: u64,
-        name: Option<String>,
-    },
-}
-
 /// Most operations that a Treasury Manager performs are (direct or indirect) ledger transactions.
 /// However, for generality, any call from the Treasury Manager can be recorded in the audit trail,
 /// even if it is not related to any literal ledger transaction, e.g., adding a token to a DEX
@@ -242,7 +244,7 @@ pub struct Transaction {
     pub timestamp_ns: u64,
     pub canister_id: Principal,
 
-    pub result: Result<TransactionWitness, TransactionError>,
+    pub result: Result<TransactionWitness, Error>,
     pub purpose: String,
 
     pub treasury_manager_operation: TreasuryManagerOperation,
