@@ -405,7 +405,7 @@ impl<S: RegistryDataStableMemory> RegistryClient<S> {
             } = some_node_operator_data;
 
             // TODO: Modify RewardableNode to use NodeRewardType instead of NodeType.
-            let node_type = NodeType(node_reward_type.as_node_reward_rates_type().to_string());
+            let node_type = NodeType(node_reward_type.into());
 
             rewardable_nodes_per_provider
                 .entry(*node_provider_id)

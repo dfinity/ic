@@ -112,17 +112,4 @@ impl NodeRewardType {
             _ => None,
         }
     }
-    /// Returns the string representation of the node reward type as used in the
-    /// NodeRewardRates struct.
-    pub fn as_node_reward_rates_type(&self) -> &'static str {
-        match self {
-            NodeRewardType::Type0 => "type0",
-            NodeRewardType::Type1 => "type1",
-            NodeRewardType::Type2 => "type2",
-            NodeRewardType::Type3 => "type3",
-            NodeRewardType::Type3dot1 => "type3.1",
-            NodeRewardType::Type1dot1 => "type1.1",
-            NodeRewardType::Unspecified => "unspecified",
-        }
-    }
 }
