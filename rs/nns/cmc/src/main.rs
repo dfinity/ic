@@ -2253,7 +2253,7 @@ async fn deposit_cycles(
     mint_cycles: bool,
 ) -> Result<(), String> {
     if mint_cycles {
-        ensure_balance(cycles)?;
+        ensure_balance(cycles, true)?;
     }
 
     let res: CallResult<()> = ic_cdk::api::call::call_with_payment128(
@@ -2284,7 +2284,7 @@ async fn do_mint_cycles(
         return Err("No cycles ledger canister id configured.".to_string());
     };
 
-    ensure_balance(cycles)?;
+    ensure_balance(cycles, true)?;
 
     let arg = CyclesLedgerDepositArgs {
         to: account,
@@ -2380,7 +2380,7 @@ async fn do_create_canister(
     }
 
     // We have subnets available, so we can now mint the cycles and create the canister.
-    ensure_balance(cycles)?;
+    ensure_balance(cycles, true)?;
 
     let canister_settings = settings
         .map(|mut settings| {
@@ -2433,29 +2433,18 @@ async fn do_create_canister(
     Err(last_err.unwrap_or_else(|| "Unknown problem attempting to create a canister.".to_owned()))
 }
 
-fn ensure_balance(cycles: Cycles) -> Result<(), String> {
+fn ensure_balance(cycles: Cycles, check_minting_limit: bool) -> Result<(), String> {
     let now = now_system_time();
 
     let current_balance = Cycles::from(ic_cdk::api::canister_balance128());
     let cycles_to_mint = cycles - current_balance;
 
     with_state_mut(|state| {
-        state.limiter.purge_old(now);
-        let count = state.limiter.get_count();
-
-        if count + cycles_to_mint > state.cycles_limit {
-            LIMITER_REJECT_COUNT.with(|count| {
-                count.set(count.get().saturating_add(1));
-            });
-
-            return Err(format!(
-                "More than {} cycles have been minted in the last {} seconds, please try again later.",
-                state.cycles_limit,
-                state.limiter.get_max_age().as_secs(),
-            ));
+        if check_minting_limit {
+            state
+                .limiter
+                .check_and_add_cycles(now, cycles_to_mint, state.cycles_limit)?;
         }
-
-        state.limiter.add(now, cycles_to_mint);
         state.total_cycles_minted += cycles_to_mint;
         Ok(())
     })?;
