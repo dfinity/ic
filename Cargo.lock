@@ -23947,7 +23947,6 @@ version = "1.0.0"
 dependencies = [
  "anyhow",
  "ic-http-utils",
- "regex",
  "reqwest 0.12.15",
  "rusb",
  "serde",
