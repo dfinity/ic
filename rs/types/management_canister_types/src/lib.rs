@@ -1191,8 +1191,8 @@ impl DefiniteCanisterSettingsArgs {
         self.freezing_threshold.clone()
     }
 
-    pub fn environment_variables(&self) -> Vec<EnvironmentVariable> {
-        self.environment_variables.clone()
+    pub fn environment_variables(&self) -> &[EnvironmentVariable] {
+        &self.environment_variables
     }
 }
 

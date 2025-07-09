@@ -1322,7 +1322,10 @@ fn canister_status_with_environment_variables() {
         .into_iter()
         .map(|(name, value)| EnvironmentVariable { name, value })
         .collect::<Vec<_>>();
-    assert_eq!(status.settings().environment_variables(), expected_env_vars);
+    assert_eq!(
+        status.settings().environment_variables(),
+        &expected_env_vars
+    );
 }
 
 #[test]
