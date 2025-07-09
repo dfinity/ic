@@ -68,6 +68,7 @@ use crate::{
         handlers::{self, logs_canister, LogsState},
         middleware::{
             cache::{cache_middleware, CacheState},
+            cors::{self},
             geoip::{self},
             process::{self},
             retry::{retry_request, RetryParams},
@@ -81,7 +82,7 @@ use crate::{
         MetricParamsSnapshot, MetricsCache, MetricsRunner, WithMetricsCheck, WithMetricsPersist,
         WithMetricsSnapshot,
     },
-    persist::{Persist, Persister, Routes},
+    persist::{Persist, Persister},
     rate_limiting::{generic, RateLimit},
     routes::{self, Health, Lookup, Proxy, ProxyRouter, RootKey},
     salt_fetcher::AnonymizationSaltFetcher,
@@ -365,17 +366,24 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
     // HTTP Logs Anonymization
     let anonymization_salt = Arc::new(ArcSwapOption::<Vec<u8>>::empty());
 
+    // Proxy Router
+    let proxy_router = Arc::new(ProxyRouter::new(
+        http_client.clone(),
+        routing_table.clone(),
+        registry_snapshot.clone(),
+        cli.health.health_subnets_alive_threshold,
+        cli.health.health_nodes_per_subnet_alive_threshold,
+    ));
+
     // Prepare Axum Router
     let router = setup_router(
-        registry_snapshot.clone(),
-        routing_table.clone(),
-        http_client,
         bouncer,
         generic_limiter.clone(),
         &cli,
         &metrics_registry,
         cache_state.clone(),
         anonymization_salt.clone(),
+        proxy_router.clone(),
     );
 
     // HTTP server metrics
@@ -468,6 +476,7 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
         metrics_registry.clone(),
         cache_state,
         Arc::clone(&registry_snapshot),
+        proxy_router,
     ));
     tasks.add_interval("metrics_runner", metrics_runner, 5 * SECOND);
 
@@ -862,28 +871,16 @@ impl TypeExtractor for RequestTypeExtractor {
 
 /// Creates an Axum router that is ready to be served over HTTP
 pub fn setup_router(
-    registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
-    routing_table: Arc<ArcSwapOption<Routes>>,
-    http_client: Arc<dyn bnhttp::Client>,
     bouncer: Option<Arc<bouncer::Bouncer>>,
     generic_limiter: Option<Arc<generic::GenericLimiter>>,
     cli: &Cli,
     metrics_registry: &Registry,
     cache_state: Option<Arc<CacheState>>,
     anonymization_salt: Arc<ArcSwapOption<Vec<u8>>>,
+    proxy_router: Arc<ProxyRouter>,
 ) -> Router {
     // Init it early to avoid race conditions
     lazy_static::initialize(&UUID_REGEX);
-
-    let proxy_router = ProxyRouter::new(
-        http_client.clone(),
-        Arc::clone(&routing_table),
-        Arc::clone(&registry_snapshot),
-        cli.health.health_subnets_alive_threshold,
-        cli.health.health_nodes_per_subnet_alive_threshold,
-    );
-
-    let proxy_router = Arc::new(proxy_router);
 
     let (proxy, lookup, root_key, health) = (
         proxy_router.clone() as Arc<dyn Proxy>,
@@ -946,7 +943,7 @@ pub fn setup_router(
             BrokerBuilder::new()
                 .with_buffer_size(cli.obs.obs_log_websocket_buffer)
                 .with_idle_timeout(cli.obs.obs_log_websocket_idle_timeout)
-                .with_max_subscribers(cli.obs.obs_log_websocket_max_subscribers)
+                .with_max_subscribers(cli.obs.obs_log_websocket_max_subscribers_per_topic)
                 .with_max_topics(cli.obs.obs_log_websocket_max_topics)
                 .with_metric_registry(metrics_registry)
                 .build(),
@@ -1092,12 +1089,19 @@ pub fn setup_router(
         .merge(health_route);
 
     if let Some(v) = logs_broker {
-        let state = LogsState::new(v, lookup);
-        let logs_canister_router =
-            Router::new().route("/canister/{canister_id}", any(logs_canister));
+        let state = Arc::new(LogsState::new(
+            v,
+            lookup,
+            cli.obs.obs_log_websocket_max_subscribers_per_topic_per_ip,
+        ));
+
+        let logs_canister_router = Router::new()
+            .route("/canister/{canister_id}", any(logs_canister))
+            .layer(cors::layer());
         let logs_router = Router::new()
             .nest("/logs", logs_canister_router)
             .with_state(state);
+
         router = router.merge(logs_router);
     }
 

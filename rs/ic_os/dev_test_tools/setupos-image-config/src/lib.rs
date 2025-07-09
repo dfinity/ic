@@ -10,7 +10,7 @@ use anyhow::{Context, Error};
 use clap::Args;
 use url::Url;
 
-use config::deployment_json::DeploymentSettings;
+use config::setupos::deployment_json::DeploymentSettings;
 use config_types::DeploymentEnvironment;
 
 #[derive(Args)]

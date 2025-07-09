@@ -2791,6 +2791,7 @@ pub mod governance {
         pub dissolving_neurons_e8s_buckets_ect: ::std::collections::HashMap<u64, f64>,
         pub not_dissolving_neurons_e8s_buckets_seed: ::std::collections::HashMap<u64, f64>,
         pub not_dissolving_neurons_e8s_buckets_ect: ::std::collections::HashMap<u64, f64>,
+        pub spawning_neurons_count: u64,
         /// Deprecated. Use non_self_authenticating_controller_neuron_subset_metrics instead.
         pub total_voting_power_non_self_authenticating_controller: Option<u64>,
         pub total_staked_e8s_non_self_authenticating_controller: Option<u64>,

@@ -26,7 +26,7 @@ use ic_sns_governance::{
     governance::Governance,
     neuron::{NeuronState, DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER},
     pb::v1::{
-        governance::{self, SnsMetadata},
+        governance::{self, GovernanceCachedMetrics, SnsMetadata},
         governance_error::ErrorType,
         manage_neuron::{
             claim_or_refresh::{By, MemoAndController},
@@ -1299,6 +1299,11 @@ async fn zero_total_reward_shares() {
             name: Some("ServiceNervousSystemTest".to_string()),
             description: Some("A project testing the SNS".to_string()),
         }),
+        metrics: Some(GovernanceCachedMetrics {
+            // This disables refreshing the cached metrics in periodic tasks.
+            timestamp_seconds: u64::MAX,
+            ..Default::default()
+        }),
         ..Default::default()
     };
     let mut governance = Governance::new(
@@ -1526,6 +1531,13 @@ async fn couple_of_neurons_who_voted_get_rewards() {
             name: Some("foo bar baz".to_string()),
             description: Some("foo bar baz".to_string()),
         }),
+
+        metrics: Some(GovernanceCachedMetrics {
+            // This disables refreshing the cached metrics in periodic tasks.
+            timestamp_seconds: u64::MAX,
+            ..Default::default()
+        }),
+
         ..Default::default()
     };
     let mut governance = Governance::new(

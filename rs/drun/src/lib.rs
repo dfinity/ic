@@ -22,7 +22,8 @@ use ic_protobuf::types::v1::PrincipalId as PrincipalIdIdProto;
 use ic_protobuf::types::v1::SubnetId as SubnetIdProto;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_keys::{
-    make_provisional_whitelist_record_key, make_routing_table_record_key, ROOT_SUBNET_ID_KEY,
+    make_canister_ranges_key, make_provisional_whitelist_record_key, make_routing_table_record_key,
+    ROOT_SUBNET_ID_KEY,
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -132,6 +133,14 @@ fn get_registry(
     let mut routing_table = RoutingTable::new();
     routing_table_insert_subnet(&mut routing_table, subnet_id).unwrap();
     let pb_routing_table = PbRoutingTable::from(routing_table);
+    data_provider
+        .add(
+            &make_canister_ranges_key(CanisterId::from_u64(0)),
+            registry_version,
+            Some(pb_routing_table.clone()),
+        )
+        .unwrap();
+    // TODO(NNS1-3781): Remove this once routing_table is no longer used by clients.
     data_provider
         .add(
             &make_routing_table_record_key(),

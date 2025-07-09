@@ -158,6 +158,7 @@ pub fn test_registry_settings() -> RegistryExecutionSettings {
         provisional_whitelist: ProvisionalWhitelist::Set(BTreeSet::new()),
         chain_key_settings: BTreeMap::new(),
         subnet_size: SMALL_APP_SUBNET_MAX_SIZE,
+        node_ids: BTreeSet::new(),
     }
 }
 
@@ -2182,6 +2183,14 @@ impl ExecutionTestBuilder {
 
     pub fn with_snapshot_metadata_upload(mut self) -> Self {
         self.execution_config.canister_snapshot_upload = FlagStatus::Enabled;
+        self
+    }
+
+    pub fn with_environment_variables_flag(
+        mut self,
+        environment_variables_flag: FlagStatus,
+    ) -> Self {
+        self.execution_config.environment_variables = environment_variables_flag;
         self
     }
 
