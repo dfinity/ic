@@ -15,7 +15,7 @@ use ic_config::{
     transport::TransportConfig,
     Config,
 };
-use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
+use ic_crypto_utils_threshold_sig_der::{parse_threshold_sig_key, threshold_sig_public_key_to_der};
 use ic_interfaces::crypto::IDkgKeyRotationResult;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{info, warn, ReplicaLogger};
@@ -28,7 +28,11 @@ use ic_registry_client_helpers::{
 };
 use ic_registry_local_store::LocalStore;
 use ic_sys::utility_command::UtilityCommand;
-use ic_types::{crypto::KeyPurpose, messages::MessageId, NodeId, RegistryVersion, SubnetId};
+use ic_types::{
+    crypto::{threshold_sig::ThresholdSigPublicKey, KeyPurpose},
+    messages::MessageId,
+    NodeId, RegistryVersion, SubnetId,
+};
 use idna::domain_to_ascii_strict;
 use prost::Message;
 use rand::prelude::*;
@@ -187,10 +191,10 @@ impl NodeRegistration {
             .build()
             .map_err(|e| format!("Failed to create IC agent: {}", e))?;
 
-        if let Some(nns_pub_key) = self.get_nns_pub_key_der() {
+        if let Some(nns_pub_key) = self.get_nns_pub_key_der_from_config() {
             agent.set_root_key(nns_pub_key);
         } else {
-            let message = "Failed to get NNS public key from the registry";
+            let message = "Failed to get NNS public key";
             warn!(self.log, "{}", message);
             UtilityCommand::notify_host(message, 1);
         }
@@ -459,7 +463,10 @@ impl NodeRegistration {
             .build()
             .map_err(|e| format!("Failed to create IC agent: {e}"))?;
 
-        if let Some(nns_pub_key) = self.get_nns_pub_key_der() {
+        if let Some(nns_pub_key) = self
+            .get_nns_pub_key_der()
+            .or_else(|| self.get_nns_pub_key_der_from_config())
+        {
             agent.set_root_key(nns_pub_key);
         } else {
             warn!(self.log, "Failed to get NNS public key from the registry");
@@ -541,6 +548,29 @@ impl NodeRegistration {
         let mut rng = thread_rng();
         urls.shuffle(&mut rng);
         urls.pop()
+    }
+
+    fn get_nns_pub_key_der_from_config(&self) -> Option<Vec<u8>> {
+        let Some(path) = self.node_config.registration.nns_pub_key_pem.as_ref() else {
+            warn!(self.log, "NNS public key path not set in the config");
+            return None;
+        };
+
+        let pub_key = match parse_threshold_sig_key(path) {
+            Ok(pub_key) => pub_key,
+            Err(e) => {
+                warn!(self.log, "Failed to parse NNS public key: {:?}", e);
+                return None;
+            }
+        };
+
+        match threshold_sig_public_key_to_der(pub_key) {
+            Ok(der) => Some(der),
+            Err(e) => {
+                warn!(self.log, "Failed to convert NNS public key to DER: {:?}", e);
+                None
+            }
+        }
     }
 
     fn get_nns_pub_key_der(&self) -> Option<Vec<u8>> {
