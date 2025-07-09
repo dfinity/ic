@@ -138,7 +138,7 @@ impl RewardCalculatorRunnerTest {
             node_id,
             region: Region(region.to_string()),
             node_type: NodeType(node_type.to_string()),
-            rewardable_days,
+            rewardable_days: rewardable_days.clone(),
             ..Default::default()
         });
         if let Some(rewardable_nodes) = self.rewardable_nodes.as_mut() {
@@ -168,7 +168,7 @@ impl RewardCalculatorRunnerTest {
                     .flat_map(|nodes| {
                         nodes.iter().map(|node| RewardableNode {
                             node_id: node.1,
-                            rewardable_days,
+                            rewardable_days: rewardable_days.clone(),
                             ..Default::default()
                         })
                     })
