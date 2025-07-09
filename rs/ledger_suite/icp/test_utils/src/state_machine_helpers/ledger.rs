@@ -131,7 +131,7 @@ pub fn icp_ledger_tip(env: &StateMachine, ledger_id: CanisterId) -> u64 {
         .query(ledger_id, "tip_of_chain", req)
         .expect("Failed to send tip_of_chain request")
         .bytes();
-    let tip_candid = Decode!(&res, TipOfChainRes).expect("Failed to decode GetBlocksResponse");
+    let tip_candid = Decode!(&res, TipOfChainRes).expect("Failed to decode TipOfChainRes");
     assert_eq!(tip, tip_candid);
 
     tip.tip_index
