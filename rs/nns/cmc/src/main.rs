@@ -30,6 +30,7 @@ use ic_nervous_system_time_helpers::now_seconds;
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID, ICP_LEDGER_ARCHIVE_1_CANISTER_ID, REGISTRY_CANISTER_ID,
+    SUBNET_RENTAL_CANISTER_ID,
 };
 use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
 use icp_ledger::{
@@ -1121,7 +1122,13 @@ async fn notify_top_up(
         canister_id,
     }: NotifyTopUp,
 ) -> Result<Cycles, NotifyError> {
-    let use_cycles_limit = true; // TODO DO NOT MERGE - this is where we set this value.
+    let caller = caller();
+
+    let src_canister_principal = SUBNET_RENTAL_CANISTER_ID.get();
+    // caller and destination needs to be src_canister_principal to turn off cycles_limit.
+    let use_cycles_limit =
+        caller != src_canister_principal || canister_id.get() != src_canister_principal;
+
     let (amount, from) = fetch_transaction(
         block_index,
         Subaccount::from(&canister_id),
