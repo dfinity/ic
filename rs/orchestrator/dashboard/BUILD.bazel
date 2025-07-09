@@ -5,6 +5,7 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:tokio",
+    "@crate_index//:tokio-util",
 ]
 
 MACRO_DEPENDENCIES = [

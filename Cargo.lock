@@ -8943,6 +8943,7 @@ version = "0.9.0"
 dependencies = [
  "async-trait",
  "tokio",
+ "tokio-util",
 ]
 
 [[package]]
@@ -10105,6 +10106,7 @@ dependencies = [
  "ic-logger",
  "slog",
  "tokio",
+ "tokio-util",
 ]
 
 [[package]]
@@ -18120,6 +18122,7 @@ dependencies = [
  "strum_macros 0.26.4",
  "tempfile",
  "tokio",
+ "tokio-util",
  "url",
 ]
 
