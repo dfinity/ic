@@ -1,4 +1,4 @@
-// Stack grows down. Allocs start at stack_add + stacksize - 1
+// Stack grows down. Allocs start at stack_addr + stacksize - 1
 //
 // +--------------------+
 // |    frame n         | | Stack growth
@@ -32,9 +32,6 @@ pub struct ScopedSignalStack {
     stack: libc::stack_t,
     prev_stack: libc::stack_t,
 }
-
-//impl !Send for ScopedSignalStack {}
-//impl !Sync for ScopedSignalStack {}
 
 impl ScopedSignalStack {
     unsafe fn new(stack: libc::stack_t) -> Self {

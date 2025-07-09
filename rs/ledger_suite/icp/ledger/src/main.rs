@@ -44,10 +44,11 @@ use icp_ledger::IcpAllowanceArgs;
 use icp_ledger::InitArgs;
 use icp_ledger::{
     from_proto_bytes, max_blocks_per_request, protobuf, to_proto_bytes, tokens_into_proto,
-    AccountBalanceArgs, AccountIdBlob, AccountIdentifier, AccountIdentifierByteBuf, ArchiveInfo,
-    ArchivedBlocksRange, ArchivedEncodedBlocksRange, Archives, BinaryAccountBalanceArgs, Block,
-    BlockArg, CandidBlock, Decimals, FeatureFlags, GetBlocksArgs, GetBlocksRes, IterBlocksArgs,
-    IterBlocksRes, LedgerCanisterPayload, Memo, Name, Operation, PaymentError, QueryBlocksResponse,
+    AccountBalanceArgs, AccountIdBlob, AccountIdentifier, AccountIdentifierByteBuf, Allowances,
+    ArchiveInfo, ArchivedBlocksRange, ArchivedEncodedBlocksRange, Archives,
+    BinaryAccountBalanceArgs, Block, BlockArg, CandidBlock, Decimals, FeatureFlags,
+    GetAllowancesArgs, GetBlocksArgs, GetBlocksRes, IterBlocksArgs, IterBlocksRes,
+    LedgerCanisterPayload, Memo, Name, Operation, PaymentError, QueryBlocksResponse,
     QueryEncodedBlocksResponse, SendArgs, Subaccount, Symbol, TipOfChainRes, TotalSupplyArgs,
     Transaction, TransferArgs, TransferError, TransferFee, TransferFeeArgs, MEMO_SIZE_BYTES,
 };
@@ -68,7 +69,8 @@ use icrc_ledger_types::{
     icrc21::{errors::Icrc21Error, requests::ConsentMessageRequest, responses::ConsentInfo},
 };
 use ledger_canister::{
-    balances_len, Ledger, LEDGER, LEDGER_VERSION, MAX_MESSAGE_SIZE_BYTES, UPGRADES_MEMORY,
+    balances_len, get_allowances_list, Ledger, LEDGER, LEDGER_VERSION, MAX_MESSAGE_SIZE_BYTES,
+    UPGRADES_MEMORY,
 };
 use num_traits::cast::ToPrimitive;
 #[allow(unused_imports)]
@@ -1675,6 +1677,29 @@ fn icrc10_supported_standards() -> Vec<StandardRecord> {
 #[candid_method(query)]
 fn is_ledger_ready() -> bool {
     true
+}
+
+/// Get allowances where the approver is `arg.from_account_id`. If `arg.prev_spender_id`
+/// is not specified, the list starts from the first allowance from `arg.from_account_id`.
+/// If `arg.prev_spender_id` is specified, the list starts with allowance that is lexicographically
+/// larger than (`arg.from_account_id`, `arg.prev_spender_id`). This way `arg.prev_spender_id`
+/// can be used for pagination - the user can specify which allowance they already saw.
+/// `arg.take` can be used to limit the number of returned allowances. If not specified,
+/// at most 500 allowances will be returned.
+#[query]
+#[candid_method(query)]
+fn get_allowances(arg: GetAllowancesArgs) -> Allowances {
+    let max_take_allowances = Access::with_ledger(|ledger| ledger.max_take_allowances());
+    let max_results = arg
+        .take
+        .map(|take| std::cmp::min(take, max_take_allowances))
+        .unwrap_or(max_take_allowances);
+    get_allowances_list(
+        arg.from_account_id,
+        arg.prev_spender_id,
+        max_results,
+        ic_cdk::api::time(),
+    )
 }
 
 candid::export_service!();

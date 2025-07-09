@@ -17,6 +17,7 @@ bytes = { workspace = true }
 candid = { workspace = true }
 clap = { workspace = true }
 ctrlc = { version = "3.4.5", features = ["termination"] }
+cycles-minting-canister = { path = "../nns/cmc" }
 flate2 = { workspace = true }
 form_urlencoded = "1"
 fqdn = "0.3.11"
@@ -26,6 +27,7 @@ http = { workspace = true }
 http-body-util = { workspace = true }
 hyper = { workspace = true }
 hyper-util = { workspace = true }
+icp-ledger = { path = "../ledger_suite/icp" }
 ic-agent = { workspace = true }
 ic-boundary = { path = "../boundary_node/ic_boundary" }
 ic-btc-adapter = { path = "../bitcoin/adapter" }
@@ -49,6 +51,7 @@ ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
 ic-logger = { path = "../monitoring/logger" }
 ic-management-canister-types-private = { path = "../types/management_canister_types" }
 ic-metrics = { path = "../monitoring/metrics" }
+ic-nns-common = { path = "../nns/common" }
 ic-nns-constants = { path = "../nns/constants" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-keys = { path = "../registry/keys" }
