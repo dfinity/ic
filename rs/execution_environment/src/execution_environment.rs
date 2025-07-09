@@ -1083,14 +1083,6 @@ impl ExecutionEnvironment {
                 }
             }
 
-            Ok(Ic00Method::ComputeInitialIDkgDealings) => ExecuteSubnetMessageResult::Finished {
-                response: Err(UserError::new(
-                    ErrorCode::CanisterRejectedMessage,
-                    format!("{} \"compute_initial_i_dkg_dealings\" is no longer supported. Call \"reshare_chain_key\" instead", msg.method_name()),
-                )),
-                refund: msg.take_cycles(),
-            },
-
             Ok(Ic00Method::SchnorrPublicKey) => {
                 let cycles = msg.take_cycles();
                 match &msg {
