@@ -1,4 +1,4 @@
-use candid::Encode;
+use candid::{Decode, Encode};
 use cycles_minting_canister::CyclesCanisterInitPayload;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha2::Sha256;
@@ -27,8 +27,13 @@ use ic_nns_test_utils::{
     },
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_or_panic;
+use ic_node_rewards_canister_api::monthly_rewards::{
+    GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
+};
+use ic_protobuf::state::ingress::v1::ingress_status_completed::WasmResult;
 use ic_state_machine_tests::StateMachine;
 use icp_ledger::Tokens;
+use std::thread::sleep;
 use std::{
     env,
     fmt::{Debug, Formatter},
@@ -355,6 +360,24 @@ fn test_upgrade_canisters_with_golden_nns_state() {
     nns_wait_for_proposal_execution(&state_machine, proposal_id.id);
 
     perform_sequence_of_upgrades(&nns_canister_upgrade_sequence);
+    let result = state_machine
+        .execute_ingress_as(
+            GOVERNANCE_CANISTER_ID.get(),
+            NODE_REWARDS_CANISTER_ID,
+            "get_node_providers_monthly_xdr_rewards",
+            Encode!(&GetNodeProvidersMonthlyXdrRewardsRequest {
+                registry_version: Some(51706)
+            })
+            .unwrap(),
+        )
+        .unwrap();
+
+    let expected = match result {
+        WasmResult::Reply(result) => {
+            Decode!(&result, GetNodeProvidersMonthlyXdrRewardsResponse).unwrap()
+        }
+        WasmResult::Reject(s) => panic!("Call to get_registry_value failed: {:#?}", s),
+    };
 
     // Modify all WASMs, but preserve their behavior.
     for nns_canister_upgrade in &mut nns_canister_upgrade_sequence {
@@ -366,6 +389,29 @@ fn test_upgrade_canisters_with_golden_nns_state() {
     perform_sanity_check_after_upgrade(&state_machine, &nns_canister_upgrade_sequence);
 
     check_canisters_are_all_protocol_canisters(&state_machine);
+
+    sleep(std::time::Duration::from_secs(60));
+
+    let result = state_machine
+        .execute_ingress_as(
+            GOVERNANCE_CANISTER_ID.get(),
+            NODE_REWARDS_CANISTER_ID,
+            "get_node_providers_monthly_xdr_rewards",
+            Encode!(&GetNodeProvidersMonthlyXdrRewardsRequest {
+                registry_version: Some(51706)
+            })
+            .unwrap(),
+        )
+        .unwrap();
+
+    let got = match result {
+        WasmResult::Reply(result) => {
+            Decode!(&result, GetNodeProvidersMonthlyXdrRewardsResponse).unwrap()
+        }
+        WasmResult::Reject(s) => panic!("Call to get_registry_value failed: {:#?}", s),
+    };
+
+    assert_eq!(expected, got);
 }
 
 fn perform_sanity_check_after_upgrade(
