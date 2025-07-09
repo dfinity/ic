@@ -200,9 +200,6 @@ def main():
         print(f"Error when trying to get a proposal ID: {e}")
         print("Skipping get_proposal_info.py test")
 
-    # Get Minimum Dissolve Delay
-    results.append(run_example(["./get_minimum_dissolve_delay.py"] + base_args, "get_minimum_dissolve_delay.py", show_output))
-
     # Test neuron balance if public key is provided
     if args.public_key and args.curve_type:
         print("\nTesting neuron balance with provided public key")
@@ -254,6 +251,9 @@ def main():
         )
     else:
         print("\nSkipping transfer test (missing funded-private-key-pem and/or recipient-account)")
+
+    # Get Minimum Dissolve Delay
+    results.append(run_example(["./get_minimum_dissolve_delay.py"] + base_args, "get_minimum_dissolve_delay.py", show_output))
 
     # Print summary
     print("\n" + "=" * 50)
