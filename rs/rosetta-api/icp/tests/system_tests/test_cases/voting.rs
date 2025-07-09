@@ -56,13 +56,27 @@ fn test_neuron_voting() {
         // Create neurons
         let neuron_ids = create_neurons(&env, INITIAL_BALANCE / 10, minimum_dissolve_delay).await;
 
-        let _ = create_neuron_with_dissolve(
+        // Create a neuron that cannot vote due to too short dissolve delay.
+        let non_voting_neuron_id = create_neuron_with_dissolve(
             &env,
             INITIAL_BALANCE / 10,
             NON_VOTING_NEURON_INDEX,
             minimum_dissolve_delay - 1,
         )
         .await;
+
+        // The neuron should not be able to submit a proposal.
+        let result = governance_client
+            .submit_proposal(
+                TEST_IDENTITY.sender().unwrap(),
+                non_voting_neuron_id.into(),
+                &format!("dummy title"),
+                &format!("test summary"),
+                &format!("dummy text"),
+            )
+            .await;
+        let error_string = result.unwrap_err().to_string();
+        assert!(error_string.contains("Neuron's dissolve delay is too short."));
 
         // Ensure no proposals exist initially
         assert!(env
@@ -82,7 +96,8 @@ fn test_neuron_voting() {
                     &format!("test summary {}", i),
                     &format!("dummy text {}", i),
                 )
-                .await;
+                .await
+                .expect("failed to submit proposal");
         }
 
         // Ensure all proposals are pending and have the expected details
