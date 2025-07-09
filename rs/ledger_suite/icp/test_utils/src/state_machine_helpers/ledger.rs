@@ -1,9 +1,12 @@
+use core::assert_eq;
+
 use candid::{Decode, Encode};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::block::BlockType;
 use ic_state_machine_tests::StateMachine;
 use icp_ledger::{
-    GetBlocksArgs, QueryBlocksResponse, QueryEncodedBlocksResponse, MAX_BLOCKS_PER_REQUEST,
+    GetBlocksArgs, QueryBlocksResponse, QueryEncodedBlocksResponse, TipOfChainRes,
+    MAX_BLOCKS_PER_REQUEST,
 };
 use on_wire::FromWire;
 
@@ -121,5 +124,15 @@ pub fn icp_ledger_tip(env: &StateMachine, ledger_id: CanisterId) -> u64 {
     let tip: icp_ledger::TipOfChainRes = dfn_protobuf::ProtoBuf::from_bytes(res)
         .map(|c| c.0)
         .expect("failed to decode tip_of_chain_pb result");
+
+    // Verify that the candid endpoint returns the same tip.
+    let req = Encode!(&()).expect("Failed to encode empty args");
+    let res = env
+        .query(ledger_id, "tip_of_chain", req)
+        .expect("Failed to send tip_of_chain request")
+        .bytes();
+    let tip_candid = Decode!(&res, TipOfChainRes).expect("Failed to decode GetBlocksResponse");
+    assert_eq!(tip, tip_candid);
+
     tip.tip_index
 }
