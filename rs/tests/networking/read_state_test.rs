@@ -63,33 +63,45 @@ use ic_system_test_driver::{
 use ic_types::{CanisterId, PrincipalId};
 use slog::info;
 
-/// Encodes an unsigned integer into leb128.
+/// Encodes an unsigned integer into its binary representation using `leb128`.
 fn enc_leb128(x: usize) -> Vec<u8> {
     let mut buf = [0; 1024];
     let mut writable = &mut buf[..];
-    let n =
+    let num_bytes =
         leb128::write::unsigned(&mut writable, x.try_into().unwrap()).expect("Should write number");
-    buf[..n].to_vec()
+    buf[..num_bytes].to_vec()
 }
 
-fn add_custom_section(mut n: Vec<u8>, mut c: Vec<u8>) -> Vec<u8> {
-    let mut ret = vec![0x00];
-    ret.append(&mut enc_leb128(
-        enc_leb128(n.len()).len() + n.len() + c.len(),
-    ));
-    ret.append(&mut enc_leb128(n.len()));
-    ret.append(&mut n);
-    ret.append(&mut c);
-    ret
+struct CustomSection {
+    name: Vec<u8>,
+    content: Vec<u8>,
+}
+
+/// Encodes a WASM custom section with a given name and content into its binary representation,
+/// following the WebAssembly standard: https://webassembly.github.io/spec/core/binary/modules.html#custom-section
+fn encode_custom_section(custom_section: CustomSection) -> Vec<u8> {
+    let mut name = custom_section.name;
+    let mut content = custom_section.content;
+    let mut name_len_leb128 = enc_leb128(name.len());
+    let mut section_len_leb128 = enc_leb128(name_len_leb128.len() + name.len() + content.len());
+    let mut buf = vec![0x00]; // Custom sections have the id 0.
+    buf.append(&mut section_len_leb128);
+    buf.append(&mut name_len_leb128);
+    buf.append(&mut name);
+    buf.append(&mut content);
+    buf
 }
 
 /// Creates a valid WASM binary with the provided custom sections.
-fn with_custom_sections(cs: Vec<(Vec<u8>, Vec<u8>)>) -> Vec<u8> {
-    let mut ret = vec![0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00];
-    for nc in cs {
-        ret.append(&mut add_custom_section(nc.0, nc.1));
+fn wasm_with_custom_sections(custom_sections: Vec<CustomSection>) -> Wasm {
+    // We start with the trivial WASM represented as `(module)` in the WebAssembly textual representation (WAT)
+    let mut buf = vec![0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00];
+    // and append the binary representations of the individual custom sections
+    // (which are self-contained and can thus be simply appended).
+    for custom_section in custom_sections {
+        buf.append(&mut encode_custom_section(custom_section));
     }
-    ret
+    Wasm::from_bytes(buf)
 }
 
 /// Sets up a testnet with
@@ -292,11 +304,6 @@ fn test_invalid_path_rejected(env: TestEnv) {
     }
 }
 
-/// Create a wasm with custom metadata sections
-fn wasm_with_custom_sections(sections: Vec<(Vec<u8>, Vec<u8>)>) -> Wasm {
-    Wasm::from_bytes(with_custom_sections(sections))
-}
-
 /// Look up the value of the given metadata section for the given canister
 fn lookup_metadata(
     env: &TestEnv,
@@ -347,8 +354,9 @@ fn test_metadata_path(env: TestEnv) {
         metadata_sections
             .iter()
             .cloned()
-            .map(|(section_name, content)| {
-                ([b"icp:public ".to_vec(), section_name].concat(), content)
+            .map(|(section_name, content)| CustomSection {
+                name: [b"icp:public ".to_vec(), section_name].concat(),
+                content,
             })
             .collect(),
     );
@@ -358,8 +366,9 @@ fn test_metadata_path(env: TestEnv) {
         metadata_sections
             .iter()
             .cloned()
-            .map(|(section_name, content)| {
-                ([b"icp:private ".to_vec(), section_name].concat(), content)
+            .map(|(section_name, content)| CustomSection {
+                name: [b"icp:private ".to_vec(), section_name].concat(),
+                content,
             })
             .collect(),
     );
