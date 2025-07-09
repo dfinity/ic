@@ -9,6 +9,7 @@ use ic_sys::utility_command::UtilityCommand;
 use ic_types::{hostos_version::HostosVersion, NodeId};
 use std::{sync::Arc, time::Duration};
 use tokio::sync::watch::Receiver;
+use tokio_util::sync::CancellationToken;
 
 pub(crate) struct HostosUpgrader {
     registry: Arc<RegistryHelper>,
@@ -39,11 +40,11 @@ impl HostosUpgrader {
     /// `exit_signal` is set to `true`.
     pub async fn upgrade_loop(
         &mut self,
-        mut exit_signal: Receiver<bool>,
+        cancellation_token: CancellationToken,
         mut backoff: ExponentialBackoff,
         liveness_timeout: Duration,
     ) {
-        while !*exit_signal.borrow() {
+        loop {
             match tokio::time::timeout(liveness_timeout, self.check_for_upgrade()).await {
                 Ok(Ok(())) => backoff.reset(),
                 e => warn!(&self.logger, "Check for HostOS upgrade failed: {:?}", e),
@@ -58,7 +59,7 @@ impl HostosUpgrader {
             let safe_backoff = backoff.next_backoff().unwrap_or(backoff.max_interval);
             tokio::select! {
                 _ = tokio::time::sleep(safe_backoff) => {}
-                _ = exit_signal.changed() => {}
+                _ = cancellation_token.cancelled() => break
             };
         }
     }

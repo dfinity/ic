@@ -13,6 +13,7 @@ use std::{
 use tokio::process::Command;
 use tokio::sync::watch::Receiver;
 use tokio::time::error::Elapsed;
+use tokio_util::sync::CancellationToken;
 
 use crate::error::{UpgradeError, UpgradeResult};
 
@@ -316,7 +317,7 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
     /// the result returned by the check.
     async fn upgrade_loop<F, Fut>(
         &mut self,
-        mut exit_signal: Receiver<bool>,
+        cancellation_token: CancellationToken,
         interval: Duration,
         timeout: Duration,
         handler: F,
@@ -324,12 +325,12 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
         F: Fn(Result<UpgradeResult<R>, Elapsed>) -> Fut + Send + Sync,
         Fut: Future<Output = ()> + Send,
     {
-        while !*exit_signal.borrow() {
+        loop {
             let r = tokio::time::timeout(timeout, self.check_for_upgrade()).await;
             handler(r).await;
             tokio::select! {
                 _ = tokio::time::sleep(interval) => {}
-                _ = exit_signal.changed() => {}
+                _ = cancellation_token.cancelled() => break
             };
         }
     }
