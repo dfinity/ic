@@ -541,7 +541,7 @@ mod tests {
 
         assert_eq!(
             result.subnet_id.unwrap(),
-            PrincipalId::new_user_test_id(expected_subnet_idx),
+            PrincipalId::new_subnet_test_id(expected_subnet_idx),
             "Canister {} should be on subnet with index {}",
             canister_id,
             expected_subnet_idx
@@ -815,7 +815,7 @@ mod tests {
                         i * entries_per_range,
                         i * entries_per_range + entries_per_range - 1,
                     ),
-                    SubnetId::new(PrincipalId::new_user_test_id(i)),
+                    SubnetId::new(PrincipalId::new_subnet_test_id(i)),
                 )
             })
             .collect()
