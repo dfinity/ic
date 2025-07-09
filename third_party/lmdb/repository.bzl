@@ -9,7 +9,7 @@ def lmdb_repository():
         name = "lmdb",
         build_file = Label("//third_party/lmdb:BUILD.lmdb.bazel"),
         sha256 = "d424c1eb841d0b78b91994b6ddef31aa6a3300727b9d9e7868033edfca0f142c",
-        strip_prefix = "openldap-55fd54dae6f90080b770dbc9dbcee5044976b7bf/libraries/liblmdb",
+        strip_prefix = "openldap-OPENLDAP_REL_ENG_2_5_9/libraries/liblmdb",
         urls = [
             "https://github.com/openldap/openldap/archive/refs/tags/OPENLDAP_REL_ENG_2_5_9.zip",
         ],
