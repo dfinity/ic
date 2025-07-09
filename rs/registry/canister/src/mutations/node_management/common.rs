@@ -258,6 +258,9 @@ pub fn node_exists_with_ipv4(registry: &Registry, ipv4_addr: &str) -> bool {
 /// Similar to `get_key_family` on the `RegistryClient`, return a list of
 /// tuples, (ID, value).  This strips the prefix from the key and returns the
 /// value as a decoded struct.
+///
+/// This function must return keys in order of their bytes, which should
+/// also be the same order as the string representations.
 pub(crate) fn get_key_family<T: prost::Message + Default>(
     registry: &Registry,
     prefix: &str,
@@ -265,6 +268,8 @@ pub(crate) fn get_key_family<T: prost::Message + Default>(
     get_key_family_iter(registry, prefix).collect()
 }
 
+/// This function must return keys in order of their bytes, which should
+/// also be the same order as the string representations.
 pub(crate) fn get_key_family_iter<'a, T: prost::Message + Default>(
     registry: &'a Registry,
     prefix: &'a str,
@@ -272,6 +277,8 @@ pub(crate) fn get_key_family_iter<'a, T: prost::Message + Default>(
     get_key_family_iter_at_version(registry, prefix, registry.latest_version())
 }
 
+/// This function must return keys in order of their bytes, which should
+/// also be the same order as the string representations.
 pub(crate) fn get_key_family_iter_at_version<'a, T: prost::Message + Default>(
     registry: &'a Registry,
     prefix: &'a str,
@@ -287,6 +294,8 @@ pub(crate) fn get_key_family_iter_at_version<'a, T: prost::Message + Default>(
     })
 }
 
+/// This function must return keys in order of their bytes, which should
+/// also be the same order as the string representations.
 pub(crate) fn get_key_family_raw_iter_at_version<'a>(
     registry: &'a Registry,
     prefix: &'a str,
@@ -295,6 +304,7 @@ pub(crate) fn get_key_family_raw_iter_at_version<'a>(
     let prefix_bytes = prefix.as_bytes();
     let start = prefix_bytes.to_vec();
 
+    // Note, using the 'store' which is a BTreeMap is what guarantees the order of keys.
     registry
         .store
         .range(start..)

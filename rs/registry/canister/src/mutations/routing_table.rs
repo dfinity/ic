@@ -286,8 +286,6 @@ impl Registry {
                 })
                 .collect();
 
-        ranges.sort_by_key(|(canister_id, _)| *canister_id);
-
         let maybe_range_to_decode = ranges
             .into_iter()
             .take_while(|(shard_canister_id, _)| shard_canister_id <= &canister_id)
