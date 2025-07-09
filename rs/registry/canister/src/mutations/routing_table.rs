@@ -278,7 +278,7 @@ impl Registry {
         version: u64,
     ) -> Result<RoutingTable, String> {
         // get_key_family_* functions don't return deleted values.
-        let mut ranges: Vec<_> =
+        let ranges: Vec<_> =
             get_key_family_raw_iter_at_version(self, CANISTER_RANGES_PREFIX, version)
                 .map(|(k, v)| {
                     let shard_canister_id_bytes = hex::decode(k).unwrap();
