@@ -3133,6 +3133,19 @@ impl StateManager for StateManagerImpl {
             .resident_state_count
             .set(states.snapshots.len() as i64);
 
+        // simulate OOM
+        let max_resident_states = 10i64;
+        if height.get() > 6_000 && self.metrics.resident_state_count.get() > max_resident_states {
+            info!(
+                self.log,
+                "Resident state count exceeded maximum: {} > {}",
+                self.metrics.resident_state_count.get(),
+                max_resident_states
+            );
+            std::thread::sleep(std::time::Duration::from_secs(20));
+            panic!();
+        }
+
         // The next call to take_tip() will take care of updating the
         // tip if needed.
         states.tip = next_tip;
