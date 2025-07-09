@@ -60,7 +60,7 @@
     <timer name='pit' tickpolicy='delay'/>
     <timer name='hpet' present='no'/>
   </clock>
-  <!-- Destroy the VM in all these cases and let the guest_vm_runner -->
+  <!-- Destroy the VM in all these cases and let the guest_vm_runner restart it -->
   <on_poweroff>destroy</on_poweroff>
   <on_reboot>destroy</on_reboot>
   <on_crash>destroy</on_crash>
