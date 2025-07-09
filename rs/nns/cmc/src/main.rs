@@ -1121,6 +1121,7 @@ async fn notify_top_up(
         canister_id,
     }: NotifyTopUp,
 ) -> Result<Cycles, NotifyError> {
+    let use_cycles_limit = true; // TODO DO NOT MERGE - this is where we set this value.
     let (amount, from) = fetch_transaction(
         block_index,
         Subaccount::from(&canister_id),
@@ -1176,7 +1177,7 @@ async fn notify_top_up(
     match maybe_early_result {
         Some(result) => result,
         None => {
-            let result = process_top_up(canister_id, from, amount).await;
+            let result = process_top_up(canister_id, from, amount, use_cycles_limit).await;
 
             with_state_mut(|state| {
                 state.blocks_notified.insert(
@@ -1210,6 +1211,9 @@ async fn notify_mint_cycles(
         deposit_memo,
     }: NotifyMintCyclesArg,
 ) -> NotifyMintCyclesResult {
+    // TODO DO NOT MERGE-  this is where we set this value.
+    let use_cycles_limit = true;
+
     let subaccount = Subaccount::from(&caller());
     let to_account = Account {
         owner: caller().into(),
@@ -1267,8 +1271,15 @@ async fn notify_mint_cycles(
     match maybe_early_result {
         Some(result) => result,
         None => {
-            let result =
-                process_mint_cycles(to_account, amount, deposit_memo, from, subaccount).await;
+            let result = process_mint_cycles(
+                to_account,
+                amount,
+                deposit_memo,
+                from,
+                subaccount,
+                use_cycles_limit,
+            )
+            .await;
 
             with_state_mut(|state| {
                 state.blocks_notified.insert(
@@ -1946,7 +1957,9 @@ async fn do_transaction_notification(
             .ok_or_else(|| "Topping up requires a subaccount.".to_string())?)
             .try_into()
             .map_err(|err| format!("Cannot parse subaccount: {}", err))?;
-        match process_top_up(canister_id, from, tn.amount).await {
+        // We always use cycles limit for these transaction_notifications because they can't come from
+        // any canisters that have exceptions (i.e. only from ledger) and we will remove these soon.
+        match process_top_up(canister_id, from, tn.amount, true).await {
             Ok(cycles) => (
                 Ok(CyclesResponse::ToppedUp(())),
                 Some(NotificationStatus::NotifiedTopUp(Ok(cycles))),
@@ -2097,9 +2110,10 @@ async fn process_mint_cycles(
     deposit_memo: Option<Vec<u8>>,
     from: AccountIdentifier,
     sub: Subaccount,
+    use_cycles_limit: bool,
 ) -> NotifyMintCyclesResult {
     let cycles = tokens_to_cycles(amount)?;
-    match do_mint_cycles(to_account, cycles, deposit_memo).await {
+    match do_mint_cycles(to_account, cycles, deposit_memo, use_cycles_limit).await {
         Ok(deposit_result) => {
             burn_and_log(sub, amount).await;
             Ok(NotifyMintCyclesSuccess {
@@ -2122,6 +2136,7 @@ async fn process_top_up(
     canister_id: CanisterId,
     from: AccountIdentifier,
     amount: Tokens,
+    use_cycles_limit: bool,
 ) -> Result<Cycles, NotifyError> {
     let cycles = tokens_to_cycles(amount)?;
 
@@ -2132,7 +2147,7 @@ async fn process_top_up(
         canister_id, cycles
     ));
 
-    match deposit_cycles(canister_id, cycles, true).await {
+    match deposit_cycles(canister_id, cycles, true, use_cycles_limit).await {
         Ok(()) => {
             burn_and_log(sub, amount).await;
             Ok(cycles)
@@ -2251,9 +2266,10 @@ async fn deposit_cycles(
     canister_id: CanisterId,
     cycles: Cycles,
     mint_cycles: bool,
+    use_cycles_limit: bool,
 ) -> Result<(), String> {
     if mint_cycles {
-        ensure_balance(cycles, true)?;
+        ensure_balance(cycles, use_cycles_limit)?;
     }
 
     let res: CallResult<()> = ic_cdk::api::call::call_with_payment128(
@@ -2278,13 +2294,14 @@ async fn do_mint_cycles(
     account: Account,
     cycles: Cycles,
     deposit_memo: Option<Vec<u8>>,
+    use_cycles_limit: bool,
 ) -> Result<CyclesLedgerDepositResult, String> {
     let Some(cycles_ledger_canister_id) = with_state(|state| state.cycles_ledger_canister_id)
     else {
         return Err("No cycles ledger canister id configured.".to_string());
     };
 
-    ensure_balance(cycles, true)?;
+    ensure_balance(cycles, use_cycles_limit)?;
 
     let arg = CyclesLedgerDepositArgs {
         to: account,
@@ -2379,8 +2396,12 @@ async fn do_create_canister(
         return Err("No subnets in which to create a canister.".to_owned());
     }
 
+    // We always set use_cycles_limit true here, since there are no reasons for an exception when
+    // creating canisters.  Only the Subnet Rental Canister has a reason to create massive bursts
+    // of cycles, which it does not do for canister creation.
+    let use_cycles_limit = true;
     // We have subnets available, so we can now mint the cycles and create the canister.
-    ensure_balance(cycles, true)?;
+    ensure_balance(cycles, use_cycles_limit)?;
 
     let canister_settings = settings
         .map(|mut settings| {
