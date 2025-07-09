@@ -175,9 +175,6 @@ def main():
     # List pending proposals
     results.append(run_example(["./list_pending_proposals.py"] + base_args, "list_pending_proposals.py", show_output))
 
-    # Get Minimum Dissolve Delay
-    results.append(run_example(["./get_minimum_dissolve_delay.py"] + base_args, "get_minimum_dissolve_delay.py", show_output))
-
     # Get a specific proposal - use a recent one from pending proposals response
     try:
         client = RosettaClient(args.node_address)
@@ -202,6 +199,9 @@ def main():
     except Exception as e:
         print(f"Error when trying to get a proposal ID: {e}")
         print("Skipping get_proposal_info.py test")
+
+    # Get Minimum Dissolve Delay
+    results.append(run_example(["./get_minimum_dissolve_delay.py"] + base_args, "get_minimum_dissolve_delay.py", show_output))
 
     # Test neuron balance if public key is provided
     if args.public_key and args.curve_type:
