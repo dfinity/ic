@@ -1245,7 +1245,7 @@ impl ProposalTitle for ProposeToFulfillSubnetRentalRequestCmd {
 impl ProposalAction for ProposeToFulfillSubnetRentalRequestCmd {
     async fn action(&self) -> ProposalActionRequest {
         ProposalActionRequest::FulfillSubnetRentalRequest(
-            ic_nns_governance_api::types::FulfillSubnetRentalRequest {
+            ic_nns_governance_api::FulfillSubnetRentalRequest {
                 user: self.user,
                 node_ids: self.node_ids.clone(),
                 replica_version_id: self.replica_version_id.clone(),
