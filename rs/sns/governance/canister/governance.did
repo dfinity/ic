@@ -268,13 +268,28 @@ type TreasuryMetrics = record {
   amount_e8s : opt nat64;
   // The amount of tokens in this treasury at the end of swap finalization.
   original_amount_e8s : opt nat64;
+
+  // When the metrics were last updated.
+  timestamp_seconds : opt nat64;
+};
+
+type VotingPowerMetrics = record {
+  governance_total_potential_voting_power : opt nat64; 
+
+  // When the metrics were last updated.
+  timestamp_seconds : opt nat64;
 };
 
 type Metrics = record {
   num_recently_submitted_proposals : opt nat64;
   num_recently_executed_proposals: opt nat64;
+
   last_ledger_block_timestamp : opt nat64;
+
+  // The metrics below are cached (albeit this is an implementation detail).
   treasury_metrics : opt vec TreasuryMetrics;
+  voting_power_metrics : opt VotingPowerMetrics;
+  genesis_timestamp_seconds : opt nat64;
 };
 
 type GetMetricsResult = variant {
@@ -377,6 +392,8 @@ type GovernanceCachedMetrics = record {
   dissolving_neurons_count : nat64;
   dissolving_neurons_e8s_buckets : vec record { nat64; float64 };
   timestamp_seconds : nat64;
+  treasury_metrics : vec TreasuryMetrics;
+  voting_power_metrics : opt VotingPowerMetrics;
 };
 
 type GovernanceError = record {

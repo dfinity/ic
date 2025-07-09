@@ -2086,6 +2086,12 @@ pub mod governance {
         /// less than six months.
         #[prost(uint64, tag = "15")]
         pub neurons_with_less_than_6_months_dissolve_delay_e8s: u64,
+        /// Metrics related to the treasury assets of this SNS.
+        #[prost(message, repeated, tag = "17")]
+        pub treasury_metrics: ::prost::alloc::vec::Vec<super::TreasuryMetrics>,
+        /// Metrics related to the voting power in this SNS.
+        #[prost(message, optional, tag = "18")]
+        pub voting_power_metrics: ::core::option::Option<super::VotingPowerMetrics>,
     }
     /// Metadata about this SNS.
     #[derive(
@@ -2335,7 +2341,7 @@ pub struct GetMetricsRequest {
     ::prost::Message,
 )]
 pub struct TreasuryMetrics {
-    #[prost(enumeration = "treasury_metrics::Treasury", tag = "1")]
+    #[prost(enumeration = "valuation::Token", tag = "1")]
     pub treasury: i32,
     #[prost(string, optional, tag = "2")]
     pub name: ::core::option::Option<::prost::alloc::string::String>,
@@ -2347,51 +2353,23 @@ pub struct TreasuryMetrics {
     pub amount_e8s: u64,
     #[prost(uint64, tag = "6")]
     pub original_amount_e8s: u64,
+    #[prost(uint64, tag = "7")]
+    pub timestamp_seconds: u64,
 }
-/// Nested message and enum types in `TreasuryMetrics`.
-pub mod treasury_metrics {
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        comparable::Comparable,
-        Clone,
-        Copy,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash,
-        PartialOrd,
-        Ord,
-        ::prost::Enumeration,
-    )]
-    #[repr(i32)]
-    pub enum Treasury {
-        Unspecified = 0,
-        Icp = 1,
-        SnsToken = 2,
-    }
-    impl Treasury {
-        /// String value of the enum field names used in the ProtoBuf definition.
-        ///
-        /// The values are not transformed in any way and thus are considered stable
-        /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-        pub fn as_str_name(&self) -> &'static str {
-            match self {
-                Self::Unspecified => "TREASURY_UNSPECIFIED",
-                Self::Icp => "TREASURY_ICP",
-                Self::SnsToken => "TREASURY_SNS_TOKEN",
-            }
-        }
-        /// Creates an enum from field names used in the ProtoBuf definition.
-        pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
-            match value {
-                "TREASURY_UNSPECIFIED" => Some(Self::Unspecified),
-                "TREASURY_ICP" => Some(Self::Icp),
-                "TREASURY_SNS_TOKEN" => Some(Self::SnsToken),
-                _ => None,
-            }
-        }
-    }
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct VotingPowerMetrics {
+    #[prost(uint64, tag = "1")]
+    pub governance_total_potential_voting_power: u64,
+    #[prost(uint64, tag = "2")]
+    pub timestamp_seconds: u64,
 }
 /// Response message for 'get_sns_status'
 #[derive(
@@ -2411,6 +2389,10 @@ pub struct Metrics {
     pub num_recently_executed_proposals: u64,
     #[prost(message, repeated, tag = "4")]
     pub treasury_metrics: ::prost::alloc::vec::Vec<TreasuryMetrics>,
+    #[prost(message, optional, tag = "5")]
+    pub voting_power_metrics: ::core::option::Option<VotingPowerMetrics>,
+    #[prost(uint64, tag = "6")]
+    pub genesis_timestamp_seconds: u64,
 }
 /// Request message for 'get_sns_initialization_parameters'
 #[derive(
