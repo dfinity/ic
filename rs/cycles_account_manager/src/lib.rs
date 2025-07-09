@@ -395,7 +395,7 @@ impl CyclesAccountManager {
     /// Withdraws `cycles` worth of cycles from the canister's balance.
     ///
     /// Withdraws cycles even when `CanisterCyclesCostSchedule::Free` is passed.
-    /// This argument is only used for calculating the freeze threshold.
+    /// This argument is only used for calculating the freezing threshold.
     ///
     /// NOTE: This method is intended for use in inter-canister transfers.
     ///       It doesn't report these cycles as consumed. To withdraw cycles
@@ -932,6 +932,9 @@ impl CyclesAccountManager {
     /// and the reservation for the response execution. Corresponds to the amount of
     /// cycles above the freezing threshold a canister must be for ic0.call_perform to
     /// succeed.
+    ///
+    /// The `CanisterCyclesCostSchedule` argument is only used for calculating
+    /// the response execution cost. Other cost factors are active for xnet calls.
     pub fn xnet_call_total_fee(
         &self,
         payload_size: NumBytes,
