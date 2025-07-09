@@ -12,25 +12,23 @@ use ic_embedders::{
     },
 };
 use ic_interfaces::execution_environment::{
-    CanisterBacktrace, ExecutionMode, HypervisorError, SystemApi, TrapCode,
+    CanisterBacktrace, HypervisorError, SystemApi, TrapCode,
 };
 use ic_management_canister_types_private::Global;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
 use ic_test_utilities_embedders::{WasmtimeInstanceBuilder, DEFAULT_NUM_INSTRUCTIONS};
 use ic_test_utilities_types::ids::{call_context_test_id, user_test_id};
-use ic_types::PrincipalId;
 use ic_types::{
     ingress::WasmResult,
     messages::RejectContext,
     methods::{FuncRef, WasmClosure, WasmMethod},
     time::UNIX_EPOCH,
-    Cycles, NumBytes, NumInstructions,
+    Cycles, NumBytes, NumInstructions, PrincipalId,
 };
 
 const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
 
-#[cfg(target_os = "linux")]
 /// Ensures that attempts to execute messages on wasm modules that do not
 /// define memory fails.
 #[test]
@@ -2572,7 +2570,6 @@ fn wasm64_reject_msg_copy() {
         Cycles::zero(),
         call_context_test_id(13),
         false,
-        ExecutionMode::Replicated,
         NumInstructions::new(700),
     );
 
@@ -3095,7 +3092,6 @@ fn wasm64_msg_cycles_refunded128() {
         Cycles::new(777),
         call_context_test_id(13),
         false,
-        ExecutionMode::Replicated,
         NumInstructions::new(700),
     );
 
@@ -3421,49 +3417,104 @@ fn wasm64_saturate_fun_index() {
 #[test]
 fn test_environment_variable_system_api() {
     let wat = r#"
-  (module
+(module
       (import "ic0" "msg_reply" (func $msg_reply))
       (import "ic0" "msg_reply_data_append"
             (func $msg_reply_data_append (param i32 i32)))
       (import "ic0" "env_var_count" (func $ic0_env_var_count (result i32)))
       (import "ic0" "env_var_name_size" (func $env_var_name_size (param i32) (result i32)))
       (import "ic0" "env_var_name_copy" (func $env_var_name_copy (param i32 i32 i32 i32)))
+      (import "ic0" "env_var_name_exists" (func $env_var_name_exists (param i32 i32) (result i32)))
       (import "ic0" "env_var_value_size" (func $env_var_value_size (param i32 i32) (result i32)))
       (import "ic0" "env_var_value_copy" (func $env_var_value_copy (param i32 i32 i32 i32 i32)))
-    
-            
+      (import "ic0" "trap" (func $trap (param i32 i32)))
+
       (func (export "canister_update go")
-        (call $ic0_env_var_count)
-        drop
+        (local $name_dst i32)
+        (local $output_dst i32)
+        (local $var_count i32)
+        (local $index i32)
+        (local $name_size i32)
+        (local $value_size i32)
 
+        (local.set $name_dst (i32.const 0))
+        (local.set $output_dst (i32.const 1000)) ;; output buffer starting after enough slack for the name buffer
+
+        ;; Assert that the number of environment variables is 2:
+        ;; this update call traps with an empty error message if this is not the case
+        (local.set $var_count (call $ic0_env_var_count))
+        (if (i32.ne (local.get $var_count) (i32.const 2))
+          (then
+            (call $trap (i32.const 0) (i32.const 0))
+          )
+        )
+       
         ;; Copy first name to memory
-        (call $env_var_name_copy (i32.const 0) (i32.const 0) (i32.const 0) (call $env_var_name_size (i32.const 0)))
+        (local.set $index (i32.const 0))
+        (local.set $name_size (call $env_var_name_size (local.get $index)))
+        (call $env_var_name_copy
+            (local.get $index)     ;; index
+            (local.get $name_dst)  ;; dst
+            (i32.const 0)          ;; offset
+            (local.get $name_size) ;; (name) size
+        )
+        
+        ;; Assert that the first name exists:
+        (if (i32.ne (call $env_var_name_exists (local.get $name_dst) (local.get $name_size)) (i32.const 1))
+          (then
+            (call $trap (i32.const 0) (i32.const 0))
+          )
+        )
 
-        ;; Get value size: 11.
-        (call $env_var_value_size (i32.const 0) (i32.const 10))
-        drop
+        ;; Copy first value to memory
+        (local.set $value_size (call $env_var_value_size (local.get $name_dst) (local.get $name_size)))
+        (call $env_var_value_copy
+            (local.get $name_dst)   ;; name_src
+            (local.get $name_size)  ;; name_size
+            (local.get $output_dst) ;; dst
+            (i32.const 0)           ;; offset
+            (local.get $value_size) ;; (value) size
+        )
 
-        ;; Copy value to memory
-        (call $env_var_value_copy (i32.const 0) (i32.const 10) (i32.const 20) (i32.const 0) (i32.const 11))
-
-        (call $msg_reply_data_append (i32.const 20) (i32.const 11))
+        ;; Append first value to reply
+        (call $msg_reply_data_append (local.get $output_dst) (local.get $value_size))
 
         ;; Copy second name to memory
-        (call $env_var_name_copy (i32.const 1) (i32.const 0) (i32.const 0) (call $env_var_name_size (i32.const 1)))
+        (local.set $index (i32.const 1))
+        (local.set $name_size (call $env_var_name_size (local.get $index)))
+        (call $env_var_name_copy
+            (local.get $index)     ;; index
+            (local.get $name_dst)  ;; dst
+            (i32.const 0)          ;; offset
+            (local.get $name_size) ;; (name) size
+        )
 
-        ;; Get value size: 10.
-        (call $env_var_value_size (i32.const 0) (i32.const 10))
-        drop
+        ;; Assert that the second name exists:
+        (if (i32.ne (call $env_var_name_exists (local.get $name_dst) (local.get $name_size)) (i32.const 1))
+          (then
+            (call $trap (i32.const 0) (i32.const 0))
+          )
+        )
 
-        ;; Copy value to memory
-        (call $env_var_value_copy (i32.const 0) (i32.const 10) (i32.const 20) (i32.const 0) (i32.const 10))
+        ;; Copy second value to memory
+        (local.set $value_size (call $env_var_value_size (local.get $name_dst) (local.get $name_size)))
+        (call $env_var_value_copy
+            (local.get $name_dst)   ;; name_src
+            (local.get $name_size)  ;; name_size
+            (local.get $output_dst) ;; dst
+            (i32.const 0)           ;; offset
+            (local.get $value_size) ;; (value) size
+        )
 
+        ;; Append second value to reply
+        (call $msg_reply_data_append (local.get $output_dst) (local.get $value_size))
 
-        (call $msg_reply_data_append (i32.const 20) (i32.const 10))
+        ;; Finish the reply
         (call $msg_reply)
       )
+
       (memory (export "memory") 10)
-  )"#;
+)"#;
 
     // Add test environment variables
     let mut env_vars = std::collections::BTreeMap::new();

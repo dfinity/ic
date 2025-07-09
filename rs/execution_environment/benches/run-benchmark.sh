@@ -16,13 +16,15 @@ printf "    %-12s := %s\n" \
     "BENCH_ARGS" "${BENCH_ARGS:=--warm-up-time=1 --measurement-time=1 --output-format=bencher}" \
     "FILTER" "${FILTER:=}" \
     "MIN_FILE" "${MIN_FILE:=${0##*/}.min}" \
-    "LOG_FILE" "${LOG_FILE:=${MIN_FILE%.*}.log}" >&2
+    "LOG_FILE" "${LOG_FILE:=${MIN_FILE%.*}.log}" \
+    "CMD" "${CMD:=bazel run ${BENCH} -- ${FILTER} ${BENCH_ARGS}}" \
+    >&2
 
 TMP_FILE="${TMP_FILE:-${MIN_FILE%.*}.tmp}"
 
 # Run the benchmark and capture its output in the `LOG_FILE`.
 bash -c "set -o pipefail; \
-    bazel run '${BENCH}' -- ${FILTER} ${BENCH_ARGS} \
+    ${CMD} \
         2>&1 | tee '${LOG_FILE}' | rg '^(test .* )?bench:' --line-buffered \
         | awk '{
                 match(\$0, /^test (.+) ... bench: +([0-9]+) ns\/iter.*/, r)

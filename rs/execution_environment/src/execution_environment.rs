@@ -42,13 +42,13 @@ use ic_management_canister_types_private::{
     EmptyBlob, InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs,
     LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs,
     Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
-    ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs, ReshareChainKeyArgs,
-    SchnorrAlgorithm, SchnorrPublicKeyArgs, SchnorrPublicKeyResponse, SetupInitialDKGArgs,
-    SignWithECDSAArgs, SignWithSchnorrArgs, SignWithSchnorrAux, StoredChunksArgs, SubnetInfoArgs,
-    SubnetInfoResponse, TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs,
-    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
-    UploadCanisterSnapshotMetadataResponse, UploadChunkArgs, VetKdDeriveKeyArgs,
-    VetKdPublicKeyArgs, VetKdPublicKeyResult, IC_00,
+    ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs, RenameCanisterArgs,
+    ReshareChainKeyArgs, SchnorrAlgorithm, SchnorrPublicKeyArgs, SchnorrPublicKeyResponse,
+    SetupInitialDKGArgs, SignWithECDSAArgs, SignWithSchnorrArgs, SignWithSchnorrAux,
+    StoredChunksArgs, SubnetInfoArgs, SubnetInfoResponse, TakeCanisterSnapshotArgs,
+    UninstallCodeArgs, UpdateSettingsArgs, UploadCanisterSnapshotDataArgs,
+    UploadCanisterSnapshotMetadataArgs, UploadCanisterSnapshotMetadataResponse, UploadChunkArgs,
+    VetKdDeriveKeyArgs, VetKdPublicKeyArgs, VetKdPublicKeyResult, IC_00,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -418,6 +418,7 @@ impl ExecutionEnvironment {
             Arc::clone(&cycles_account_manager),
             Arc::clone(&ingress_history_writer),
             fd_factory,
+            config.environment_variables,
         );
         // Deallocate `SystemStates` and `ExecutionStates` in the background. Sleep for
         // 0.1 ms between deallocations, to spread out the load on the memory allocator
@@ -989,87 +990,34 @@ impl ExecutionEnvironment {
                                 response: Err(err),
                                 refund: msg.take_cycles(),
                             },
-                            Ok(args) => match CanisterHttpRequestContext::try_from((
-                                state.time(),
-                                request.as_ref(),
-                                args,
-                            )) {
-                                Err(err) => ExecuteSubnetMessageResult::Finished {
-                                    response: Err(err.into()),
-                                    refund: msg.take_cycles(),
-                                },
-                                Ok(mut canister_http_request_context) => {
-                                    let http_request_fee =
-                                        self.cycles_account_manager.http_request_fee(
-                                            canister_http_request_context.variable_parts_size(),
-                                            canister_http_request_context.max_response_bytes,
-                                            registry_settings.subnet_size,
-                                        );
-                                    // Here we make sure that we do not let upper layers open new
-                                    // http calls while the maximum number of calls is in-flight.
-                                    // Later, in the http adapter we also have a bounded queue of
-                                    // the same size, but this queue alone is not enough as it is
-                                    // used as the interface between DSM and consensus, and the latter
-                                    // consumes requests from this queue upon the request processing
-                                    // start. This means more elements can be added to the queue, while
-                                    // previous requests are still in-flight.
-                                    if state
-                                        .metadata
-                                        .subnet_call_context_manager
-                                        .canister_http_request_contexts
-                                        .len()
-                                        >= self.config.max_canister_http_requests_in_flight
-                                    {
-                                        let err = Err(UserError::new(
-                                            ErrorCode::CanisterRejectedMessage,
-                                            format!("max number ({}) of http requests in-flight reached.", self.config.max_canister_http_requests_in_flight),
-                                        ));
-                                        ExecuteSubnetMessageResult::Finished {
-                                            response: err,
+                            Ok(args) => {
+                                match CanisterHttpRequestContext::generate_from_args(
+                                    state.time(),
+                                    request.as_ref(),
+                                    args,
+                                    &registry_settings.node_ids,
+                                    rng,
+                                ) {
+                                    Err(err) => ExecuteSubnetMessageResult::Finished {
+                                        response: Err(err.into()),
+                                        refund: msg.take_cycles(),
+                                    },
+                                    Ok(canister_http_request_context) => match self
+                                        .try_add_http_context_to_replicated_state(
+                                            canister_http_request_context,
+                                            &mut state,
+                                            request.as_ref(),
+                                            registry_settings,
+                                            since,
+                                        ) {
+                                        Err(err) => ExecuteSubnetMessageResult::Finished {
+                                            response: Err(err),
                                             refund: msg.take_cycles(),
-                                        }
-                                    } else if request.payment < http_request_fee {
-                                        let err = Err(UserError::new(
-                                                        ErrorCode::CanisterRejectedMessage,
-                                                        format!(
-                                                            "http_request request sent with {} cycles, but {} cycles are required.",
-                                                            request.payment, http_request_fee
-                                                        ),
-                                                    ));
-                                        ExecuteSubnetMessageResult::Finished {
-                                            response: err,
-                                            refund: msg.take_cycles(),
-                                        }
-                                    } else {
-                                        canister_http_request_context.request.payment -=
-                                            http_request_fee;
-                                        let http_fee = NominalCycles::from(http_request_fee);
-                                        state
-                                            .metadata
-                                            .subnet_metrics
-                                            .consumed_cycles_http_outcalls += http_fee;
-                                        state
-                                            .metadata
-                                            .subnet_metrics
-                                            .observe_consumed_cycles_with_use_case(
-                                                CyclesUseCase::HTTPOutcalls,
-                                                http_fee,
-                                            );
-                                        state.metadata.subnet_call_context_manager.push_context(
-                                            SubnetCallContext::CanisterHttpRequest(
-                                                canister_http_request_context,
-                                            ),
-                                        );
-                                        self.metrics.observe_message_with_label(
-                                            &request.method_name,
-                                            since.elapsed().as_secs_f64(),
-                                            SUBMITTED_OUTCOME_LABEL.into(),
-                                            SUCCESS_STATUS_LABEL.into(),
-                                        );
-                                        ExecuteSubnetMessageResult::Processing
-                                    }
+                                        },
+                                        Ok(()) => ExecuteSubnetMessageResult::Processing,
+                                    },
                                 }
-                            },
+                            }
                         }
                     }
 
@@ -1807,6 +1755,19 @@ impl ExecutionEnvironment {
                 }
             }
 
+            Ok(Ic00Method::RenameCanister) => {
+                let res = RenameCanisterArgs::decode(payload).and_then(|args| {
+                    let canister_id = args.get_canister_id();
+                    let origin = msg.canister_change_origin(args.get_sender_canister_version());
+                    self.rename_canister(*msg.sender(), &mut state, args, origin)
+                        .map(|res| (res, Some(canister_id)))
+                });
+                ExecuteSubnetMessageResult::Finished {
+                    response: res,
+                    refund: msg.take_cycles(),
+                }
+            }
+
             Err(ParseError::VariantNotFound) => {
                 let res = Err(UserError::new(
                     ErrorCode::CanisterMethodNotFound,
@@ -1829,6 +1790,70 @@ impl ExecutionEnvironment {
         // these cases.
         let state = self.finish_subnet_message_execution(state, msg, result, since);
         (state, Some(NumInstructions::from(0)))
+    }
+
+    fn try_add_http_context_to_replicated_state(
+        &self,
+        mut canister_http_request_context: CanisterHttpRequestContext,
+        state: &mut ReplicatedState,
+        request: &Request,
+        registry_settings: &RegistryExecutionSettings,
+        since: Instant,
+    ) -> Result<(), UserError> {
+        let http_request_fee = self.cycles_account_manager.http_request_fee(
+            canister_http_request_context.variable_parts_size(),
+            canister_http_request_context.max_response_bytes,
+            registry_settings.subnet_size,
+        );
+        // Here we make sure that we do not let upper layers open new
+        // http calls while the maximum number of calls is in-flight.
+        // Later, in the http adapter we also have a bounded queue of
+        // the same size, but this queue alone is not enough as it is
+        // used as the interface between DSM and consensus, and the latter
+        // consumes requests from this queue upon the request processing
+        // start. This means more elements can be added to the queue, while
+        // previous requests are still in-flight.
+        if state
+            .metadata
+            .subnet_call_context_manager
+            .canister_http_request_contexts
+            .len()
+            >= self.config.max_canister_http_requests_in_flight
+        {
+            Err(UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "max number ({}) of http requests in-flight reached.",
+                    self.config.max_canister_http_requests_in_flight
+                ),
+            ))
+        } else if request.payment < http_request_fee {
+            Err(UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "http_request request sent with {} cycles, but {} cycles are required.",
+                    request.payment, http_request_fee
+                ),
+            ))
+        } else {
+            canister_http_request_context.request.payment -= http_request_fee;
+            let http_fee = NominalCycles::from(http_request_fee);
+            state.metadata.subnet_metrics.consumed_cycles_http_outcalls += http_fee;
+            state
+                .metadata
+                .subnet_metrics
+                .observe_consumed_cycles_with_use_case(CyclesUseCase::HTTPOutcalls, http_fee);
+            state.metadata.subnet_call_context_manager.push_context(
+                SubnetCallContext::CanisterHttpRequest(canister_http_request_context),
+            );
+            self.metrics.observe_message_with_label(
+                &request.method_name,
+                since.elapsed().as_secs_f64(),
+                SUBMITTED_OUTCOME_LABEL.into(),
+                SUCCESS_STATUS_LABEL.into(),
+            );
+            Ok(())
+        }
     }
 
     /// Observes a subnet message metrics and outputs the given subnet response.
@@ -2572,6 +2597,49 @@ impl ExecutionEnvironment {
         result
     }
 
+    fn rename_canister(
+        &self,
+        sender: PrincipalId,
+        state: &mut ReplicatedState,
+        args: RenameCanisterArgs,
+        origin: CanisterChangeOrigin,
+    ) -> Result<Vec<u8>, UserError> {
+        let old_id = args.get_canister_id();
+        let new_id = args.rename_to.get_canister_id();
+        let to_version = args.rename_to.version;
+        let to_total_num_changes = args.rename_to.total_num_changes;
+
+        // Take canister out.
+        let mut canister = match state.take_canister_state(&old_id) {
+            None => {
+                return Err(UserError::new(
+                    ErrorCode::CanisterNotFound,
+                    format!("Canister {} not found.", old_id),
+                ))
+            }
+            Some(canister) => canister,
+        };
+
+        let result = self
+            .canister_manager
+            .rename_canister(
+                sender,
+                &mut canister,
+                origin,
+                old_id,
+                new_id,
+                to_version,
+                to_total_num_changes,
+                state,
+            )
+            .map(|()| EmptyBlob.encode())
+            .map_err(|err| err.into());
+
+        // Put canister back with the new id.
+        state.put_canister_state(canister);
+        result
+    }
+
     fn read_canister_snapshot_metadata(
         &self,
         sender: PrincipalId,
@@ -2624,10 +2692,7 @@ impl ExecutionEnvironment {
         state.put_canister_state(canister);
         match result {
             Ok((snapshot_id, instructions_used)) => (
-                Ok(Encode!(&UploadCanisterSnapshotMetadataResponse {
-                    snapshot_id: snapshot_id.to_vec()
-                })
-                .unwrap()),
+                Ok(Encode!(&UploadCanisterSnapshotMetadataResponse { snapshot_id }).unwrap()),
                 instructions_used,
             ),
             Err(e) => (Err(e), NumInstructions::new(0)),

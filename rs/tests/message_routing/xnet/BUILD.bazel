@@ -12,9 +12,8 @@ system_test_nns(
     tags = [
         #TODO: enable k8s when there's enough capacity
         # "k8s",
-        "system_test_staging",
+        "system_test_large",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
     runtime_deps = GUESTOS_RUNTIME_DEPS + XNET_TEST_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = [
@@ -32,9 +31,8 @@ system_test_nns(
     extra_head_nns_tags = ["manual"],  # only run this test with the mainnet NNS canisters.
     tags = [
         "k8s",
-        "system_test_hotfix",
+        "system_test_large",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "long",
     runtime_deps = GUESTOS_RUNTIME_DEPS + XNET_TEST_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = [
@@ -52,9 +50,8 @@ system_test_nns(
     extra_head_nns_tags = ["manual"],  # only run this test with the mainnet NNS canisters.
     tags = [
         "k8s",
-        "system_test_nightly",
+        "system_test_large",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "long",
     runtime_deps = GUESTOS_RUNTIME_DEPS + XNET_TEST_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = [
@@ -73,9 +70,8 @@ system_test_nns(
     tags = [
         #TODO: enable k8s when there's enough capacity
         # "k8s",
-        "system_test_nightly",
+        "system_test_large",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
     runtime_deps = GUESTOS_RUNTIME_DEPS + XNET_TEST_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = [
@@ -92,9 +88,8 @@ system_test(
     },
     malicious = True,
     tags = [
-        "system_test_nightly",
+        "system_test_large",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "long",
     runtime_deps = GRAFANA_RUNTIME_DEPS + XNET_TEST_CANISTER_RUNTIME_DEPS,
     deps = [
@@ -118,7 +113,6 @@ system_test_nns(
     tags = [
         "long_test",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "long",
     uses_guestos_dev_test = True,
     runtime_deps =

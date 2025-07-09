@@ -1,12 +1,11 @@
 use anyhow::Result;
 use clap::{Args, Parser, Subcommand};
-use config::config_ini::{get_config_ini_settings, ConfigIniSettings};
-use config::deployment_json::get_deployment_settings;
 use config::generate_testnet_config::{
     generate_testnet_config, GenerateTestnetConfigArgs, Ipv6ConfigType,
 };
 use config::serialize_and_write_config;
-use config::update_config::{update_guestos_config, update_hostos_config};
+use config::setupos::config_ini::{get_config_ini_settings, ConfigIniSettings};
+use config::setupos::deployment_json::get_deployment_settings;
 use config_types::*;
 use macaddr::MacAddr6;
 use network::resolve_mgmt_mac;
@@ -37,18 +36,6 @@ pub enum Commands {
     },
     /// Creates a GuestOSConfig object directly from GenerateTestnetConfigClapArgs. Only used for testing purposes.
     GenerateTestnetConfig(GenerateTestnetConfigClapArgs),
-    /// Creates a GuestOSConfig object from existing guestos configuration files
-    UpdateGuestosConfig,
-    UpdateHostosConfig {
-        #[arg(long, default_value = config::DEFAULT_HOSTOS_CONFIG_INI_FILE_PATH, value_name = "config.ini")]
-        config_ini_path: PathBuf,
-
-        #[arg(long, default_value = config::DEFAULT_HOSTOS_DEPLOYMENT_JSON_PATH, value_name = "deployment.json")]
-        deployment_json_path: PathBuf,
-
-        #[arg(long, default_value = config::DEFAULT_HOSTOS_CONFIG_OBJECT_PATH, value_name = "config.json")]
-        hostos_config_json_path: PathBuf,
-    },
 }
 
 #[derive(Parser)]
@@ -205,14 +192,13 @@ pub fn main() -> Result<()> {
             let icos_settings = ICOSSettings {
                 node_reward_type,
                 mgmt_mac,
-                deployment_environment: deployment_json_settings.deployment.name.parse()?,
+                deployment_environment: deployment_json_settings.deployment.deployment_environment,
                 logging: Logging {
-                    elasticsearch_hosts: Some(deployment_json_settings.logging.hosts)
-                        .filter(|v| !v.is_empty()),
-                    elasticsearch_tags: deployment_json_settings.logging.tags,
+                    elasticsearch_hosts: deployment_json_settings.logging.elasticsearch_hosts,
+                    elasticsearch_tags: deployment_json_settings.logging.elasticsearch_tags,
                 },
                 use_nns_public_key: Path::new("/data/nns_public_key.pem").exists(),
-                nns_urls: deployment_json_settings.nns.url.clone(),
+                nns_urls: deployment_json_settings.nns.urls.clone(),
                 use_node_operator_private_key: Path::new("/config/node_operator_private_key.pem")
                     .exists(),
                 enable_trusted_execution_environment,
@@ -223,13 +209,9 @@ pub fn main() -> Result<()> {
             let setupos_settings = SetupOSSettings;
 
             let hostos_settings = HostOSSettings {
-                vm_memory: deployment_json_settings.resources.memory,
-                vm_cpu: deployment_json_settings
-                    .resources
-                    .cpu
-                    .clone()
-                    .unwrap_or("kvm".to_string()),
-                vm_nr_of_vcpus: deployment_json_settings.resources.nr_of_vcpus.unwrap_or(64),
+                vm_memory: deployment_json_settings.vm_resources.memory,
+                vm_cpu: deployment_json_settings.vm_resources.cpu,
+                vm_nr_of_vcpus: deployment_json_settings.vm_resources.nr_of_vcpus,
                 verbose,
             };
 
@@ -326,19 +308,6 @@ pub fn main() -> Result<()> {
                 &generate_testnet_config(args)?,
             )
         }
-        // TODO(NODE-1518): delete UpdateGuestosConfig and UpdateHostosConfig after moved to new config format
-        // Regenerate config.json on *every boot* in case the config structure changes between
-        // when we roll out the update-config service and when we roll out the 'config integration'
-        Some(Commands::UpdateGuestosConfig) => update_guestos_config(),
-        Some(Commands::UpdateHostosConfig {
-            config_ini_path,
-            deployment_json_path,
-            hostos_config_json_path,
-        }) => update_hostos_config(
-            &config_ini_path,
-            &deployment_json_path,
-            &hostos_config_json_path,
-        ),
         None => {
             println!("No command provided. Use --help for usage information.");
             Ok(())

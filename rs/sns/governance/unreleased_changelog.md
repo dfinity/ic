@@ -9,13 +9,14 @@ on the process that this file is part of, see
 
 ## Added
 
-### New `RegisterExtension` proposal type
+* Added `SnsGovernance.get_metrics_replicated`, enabling other canisters to fetch SNS metrics.
+  `SnsGovernance.get_metrics` is a replicated query and thus cannot be called by canisters.
 
-A new proposal type, `RegisterExtension`, is added for registering SNS extensions.
-Extensions are a new class of SNS canisters that (unlike SNS-controlled dapp canisters)
-can operate on behalf of the DAO, e.g., by managing a portion of the treasury funds.
+* Extended SNS metrics with treasury metrics.
 
-Note that while `RegisterExtension` proposals are already recognized, they are not enabled yet.
+* Extended SNS metrics with voting power metrics.
+
+* Extended SNS metrics with the genesis timestamp.
 
 ## Changed
 

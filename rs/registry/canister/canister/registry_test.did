@@ -72,31 +72,40 @@ type CompleteCanisterMigrationPayload = record {
 type CreateSubnetPayload = record {
   unit_delay_millis : nat64;
   features : SubnetFeatures;
-  gossip_registry_poll_period_ms : nat32;
   max_ingress_bytes_per_message : nat64;
   dkg_dealings_per_block : nat64;
   max_block_payload_size : nat64;
   start_as_nns : bool;
   is_halted : bool;
-  gossip_pfn_evaluation_period_ms : nat32;
   max_ingress_messages_per_block : nat64;
   max_number_of_canisters : nat64;
   chain_key_config : opt InitialChainKeyConfig;
-  gossip_max_artifact_streams_per_peer : nat32;
   replica_version_id : text;
-  gossip_max_duplicity : nat32;
-  gossip_max_chunk_wait_ms : nat32;
   dkg_interval_length : nat64;
   subnet_id_override : opt principal;
   ssh_backup_access : vec text;
-  ingress_bytes_per_block_soft_cap : nat64;
   initial_notary_delay_millis : nat64;
-  gossip_max_chunk_size : nat32;
   subnet_type : SubnetType;
   ssh_readonly_access : vec text;
-  gossip_retransmission_request_ms : nat32;
-  gossip_receive_check_cache_size : nat32;
   node_ids : vec principal;
+
+  canister_cycles_cost_schedule: opt CanisterCyclesCostSchedule;
+
+  // TODO(NNS1-2444): The fields below are deprecated and they are not read anywhere.
+  ingress_bytes_per_block_soft_cap : nat64;
+  gossip_max_artifact_streams_per_peer : nat32;
+  gossip_max_chunk_size : nat32;
+  gossip_max_chunk_wait_ms : nat32;
+  gossip_max_duplicity : nat32;
+  gossip_pfn_evaluation_period_ms : nat32;
+  gossip_receive_check_cache_size : nat32;
+  gossip_registry_poll_period_ms : nat32;
+  gossip_retransmission_request_ms : nat32;
+};
+
+type CanisterCyclesCostSchedule = variant {
+  Normal;
+  Free;
 };
 
 type DataCenterRecord = record {

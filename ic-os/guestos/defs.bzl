@@ -25,7 +25,9 @@ def image_deps(mode, malicious = False):
         "dockerfile": "//ic-os/guestos/context:Dockerfile",
 
         # Extra files to be added to rootfs and bootfs
-        "bootfs": {},
+        "bootfs": {
+            "//ic-os/components/ovmf:ovmf_sev": "/OVMF.fd:0644",
+        },
         "rootfs": {
             # additional files to install
             # Required by the IC protocol
@@ -54,8 +56,6 @@ def image_deps(mode, malicious = False):
 
             # additional libraries to install
             "//rs/ic_os/release:nss_icos": "/usr/lib/x86_64-linux-gnu/libnss_icos.so.2:0644",  # Allows referring to the guest IPv6 by name guestos from host, and host as hostos from guest.
-
-            # TODO(NODE-1518): delete config tool from guestos after switch to new icos config
             "//rs/ic_os/release:config": "/opt/ic/bin/config:0755",
         },
 

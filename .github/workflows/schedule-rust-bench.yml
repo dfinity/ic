@@ -25,7 +25,7 @@ jobs:
       # see linux-x86-64 runner group
       labels: rust-benchmarks
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
+      image: ghcr.io/dfinity/ic-build@sha256:c30de392a5104df90509a118170d07e3b797775e226adf5246c7271cb88f434b
       # running on bare metal machine using ubuntu user
       options: --user ubuntu
     timeout-minutes: 720 # 12 hours
@@ -59,7 +59,7 @@ jobs:
             echo -e "\e[34mRunning rust benchmarks on dedicated machine fr1-spm15!\e[0m"
 
             while IFS= read -r tgt; do
-                bazel run --config=ci "$tgt"
+                bazel run "$tgt"
             done < <(bazel query "attr(tags, 'rust_bench', ${{ matrix.target }})")
 
             while IFS= read -r bench_dir; do

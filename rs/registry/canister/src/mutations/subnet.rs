@@ -53,6 +53,7 @@ impl Registry {
             value: subnet_record_vec,
             version: _,
             deletion_marker: _,
+            timestamp_nanoseconds: _,
         } = self
             .get(&make_subnet_record_key(subnet_id).into_bytes(), version)
             .ok_or_else(|| {
@@ -74,6 +75,7 @@ impl Registry {
                 value,
                 version: _,
                 deletion_marker: _,
+                timestamp_nanoseconds: _,
             }) => SubnetListRecord::decode(value.as_slice()).unwrap(),
             None => panic!(
                 "{}set_subnet_membership_mutation: subnet list record not found in the registry.",

@@ -138,20 +138,18 @@ impl ApiTypeBuilder {
             incoming_cycles,
             CallContextId::new(1),
             false,
-            ExecutionMode::Replicated,
             0.into(),
         )
     }
 
     pub fn build_composite_reply_api(incoming_cycles: Cycles) -> ApiType {
-        ApiType::reply_callback(
+        ApiType::composite_reply_callback(
             UNIX_EPOCH,
             PrincipalId::new_anonymous(),
             vec![],
             incoming_cycles,
             CallContextId::new(1),
             false,
-            ExecutionMode::NonReplicated,
             0.into(),
         )
     }
@@ -164,20 +162,18 @@ impl ApiTypeBuilder {
             Cycles::zero(),
             call_context_test_id(1),
             false,
-            ExecutionMode::Replicated,
             0.into(),
         )
     }
 
     pub fn build_composite_reject_api(reject_context: RejectContext) -> ApiType {
-        ApiType::reject_callback(
+        ApiType::composite_reject_callback(
             UNIX_EPOCH,
             PrincipalId::new_anonymous(),
             reject_context,
             Cycles::zero(),
             call_context_test_id(1),
             false,
-            ExecutionMode::NonReplicated,
             0.into(),
         )
     }

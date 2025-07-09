@@ -79,9 +79,7 @@ mod downgrade_get_changes_since_response {
             let HighCapacityRegistryValue {
                 version,
                 content,
-
-                // This gets dropped.
-                timestamp_nanoseconds: _,
+                timestamp_nanoseconds,
             } = original;
 
             let (value, deletion_marker) = match content {
@@ -103,6 +101,7 @@ mod downgrade_get_changes_since_response {
                 version,
                 value,
                 deletion_marker,
+                timestamp_nanoseconds,
             })
         }
     }
@@ -317,8 +316,7 @@ async fn dechunkify_value(
     let HighCapacityRegistryValue {
         version,
         content,
-        // Ignored.
-        timestamp_nanoseconds: _,
+        timestamp_nanoseconds,
     } = value;
 
     let value = match content {
@@ -334,6 +332,7 @@ async fn dechunkify_value(
         value,
         version,
         deletion_marker,
+        timestamp_nanoseconds,
     })
 }
 
