@@ -48,6 +48,27 @@ impl DayUTC {
     pub fn unix_ts_at_day_start(&self) -> UnixTsNanos {
         (self.0.get() / NANOS_PER_DAY) * NANOS_PER_DAY
     }
+
+    pub fn next_day(&self) -> DayUTC {
+        DayUTC(DayEnd::from(self.0.get() + NANOS_PER_DAY))
+    }
+
+    pub fn days_until(&self, other: &DayUTC) -> Result<Vec<DayUTC>, String> {
+        if self > other {
+            return Err(format!(
+                "Cannot compute days_until: {} > {}",
+                self.0.get(),
+                other.0.get()
+            ));
+        }
+
+        let num_days = (other.0.get() - self.0.get()) / NANOS_PER_DAY;
+        let days_until = (0..=num_days)
+            .map(|i| DayUTC(DayEnd::from(self.0.get() + i * NANOS_PER_DAY)))
+            .collect();
+
+        Ok(days_until)
+    }
 }
 impl From<DayEnd> for DayUTC {
     fn from(value: DayEnd) -> Self {
@@ -100,9 +121,7 @@ pub struct NodeResults {
     pub region: Region,
     pub node_type: NodeType,
     pub dc_id: String,
-    pub rewardable_from: DayUTC,
-    pub rewardable_to: DayUTC,
-    pub rewardable_days: usize,
+    pub rewardable_days: Vec<DayUTC>,
     pub daily_metrics: Vec<NodeMetricsDaily>,
 
     /// Average Relative Failure Rate (`ARFR`).

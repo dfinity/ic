@@ -20,6 +20,7 @@ use std::borrow::Cow;
 pub mod canister;
 pub mod metrics;
 pub mod pb;
+pub mod registry;
 pub mod storage;
 
 const HOUR_IN_SECONDS: u64 = 60 * 60;
