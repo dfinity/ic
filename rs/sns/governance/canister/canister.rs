@@ -359,16 +359,19 @@ async fn get_metrics_common(
 
     let request = sns_gov_pb::GetMetricsRequest::try_from(request);
 
-    if let Err(error_message) = request {
-        return GetMetricsResponse {
-            get_metrics_result: Some(GetMetricsResult::Err(GovernanceError {
-                error_type: i32::from(ErrorType::InvalidCommand),
-                error_message,
-            })),
-        };
-    }
+    let time_window_seconds = match request {
+        Ok(request) => request.time_window_seconds,
+        Err(error_message) => {
+            return GetMetricsResponse {
+                get_metrics_result: Some(GetMetricsResult::Err(GovernanceError {
+                    error_type: i32::from(ErrorType::InvalidCommand),
+                    error_message,
+                })),
+            };
+        }
+    };
 
-    let result = governance().get_metrics(request.unwrap()).await;
+    let result = governance().get_metrics(time_window_seconds).await;
 
     let get_metrics_result = match result {
         Ok(metrics) => {
