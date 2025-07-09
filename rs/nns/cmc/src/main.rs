@@ -1211,9 +1211,6 @@ async fn notify_mint_cycles(
         deposit_memo,
     }: NotifyMintCyclesArg,
 ) -> NotifyMintCyclesResult {
-    // TODO DO NOT MERGE-  this is where we set this value.
-    let use_cycles_limit = true;
-
     let subaccount = Subaccount::from(&caller());
     let to_account = Account {
         owner: caller().into(),
@@ -1271,15 +1268,8 @@ async fn notify_mint_cycles(
     match maybe_early_result {
         Some(result) => result,
         None => {
-            let result = process_mint_cycles(
-                to_account,
-                amount,
-                deposit_memo,
-                from,
-                subaccount,
-                use_cycles_limit,
-            )
-            .await;
+            let result =
+                process_mint_cycles(to_account, amount, deposit_memo, from, subaccount).await;
 
             with_state_mut(|state| {
                 state.blocks_notified.insert(
@@ -2110,10 +2100,9 @@ async fn process_mint_cycles(
     deposit_memo: Option<Vec<u8>>,
     from: AccountIdentifier,
     sub: Subaccount,
-    use_cycles_limit: bool,
 ) -> NotifyMintCyclesResult {
     let cycles = tokens_to_cycles(amount)?;
-    match do_mint_cycles(to_account, cycles, deposit_memo, use_cycles_limit).await {
+    match do_mint_cycles(to_account, cycles, deposit_memo).await {
         Ok(deposit_result) => {
             burn_and_log(sub, amount).await;
             Ok(NotifyMintCyclesSuccess {
@@ -2294,13 +2283,14 @@ async fn do_mint_cycles(
     account: Account,
     cycles: Cycles,
     deposit_memo: Option<Vec<u8>>,
-    use_cycles_limit: bool,
 ) -> Result<CyclesLedgerDepositResult, String> {
     let Some(cycles_ledger_canister_id) = with_state(|state| state.cycles_ledger_canister_id)
     else {
         return Err("No cycles ledger canister id configured.".to_string());
     };
-
+    // always use cycles limit for minting cycles, since the SRC is the only exception and uses
+    // top_up to send cycles to itself.
+    let use_cycles_limit = true;
     ensure_balance(cycles, use_cycles_limit)?;
 
     let arg = CyclesLedgerDepositArgs {
@@ -2467,7 +2457,7 @@ fn ensure_balance(cycles: Cycles, check_minting_limit: bool) -> Result<(), Strin
                 .check_and_add_cycles(now, cycles_to_mint, state.cycles_limit)?;
         }
         state.total_cycles_minted += cycles_to_mint;
-        Ok(())
+        Ok::<_, String>(())
     })?;
 
     // unused because of check above
