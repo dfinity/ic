@@ -10,7 +10,6 @@ use ic_node_rewards_canister::storage::RegistryStoreStableMemoryBorrower;
 use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
 };
-use ic_registry_canister_client::CanisterRegistryClient;
 use std::cell::RefCell;
 use std::sync::Arc;
 use std::time::Duration;
