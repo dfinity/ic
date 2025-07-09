@@ -1,5 +1,6 @@
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
 use ic_interfaces_registry::RegistryValue;
+use ic_nervous_system_canisters::registry::Registry;
 use ic_protobuf::registry::dc::v1::DataCenterRecord;
 use ic_protobuf::registry::node::v1::{NodeRecord, NodeRewardType};
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
@@ -21,6 +22,7 @@ use rewards_calculation::types::{
 };
 use std::collections::{BTreeMap, HashMap};
 use std::str::FromStr;
+use std::sync::Arc;
 
 pub trait RegistryEntry: RegistryValue {
     const KEY_PREFIX: &'static str;
@@ -43,7 +45,7 @@ impl RegistryEntry for NodeRewardsTable {
 }
 
 pub struct RegistryClient<S: RegistryDataStableMemory> {
-    pub(crate) store: StableCanisterRegistryClient<S>,
+    store: StableCanisterRegistryClient<S>,
 }
 
 struct NodeOperatorData {
@@ -64,7 +66,12 @@ struct RegistryRecordWithStates {
 }
 
 impl<S: RegistryDataStableMemory> RegistryClient<S> {
-    pub async fn schedule_registry_sync(&self) -> Result<RegistryVersion, String> {
+    pub fn new(registry: Arc<dyn Registry>) -> Self {
+        let store = StableCanisterRegistryClient::<S>::new(registry);
+        RegistryClient { store }
+    }
+
+    pub async fn sync_registry_stored(&self) -> Result<RegistryVersion, String> {
         self.store.sync_registry_stored().await
     }
 
@@ -392,7 +399,15 @@ impl<S: RegistryDataStableMemory> RegistryClient<S> {
                 region,
                 ..
             } = some_node_operator_data;
+
+            // TODO: Modify RewardableNode to use NodeRewardType instead of NodeType and rewardable_days instead of rewardable_from and rewardable_to.
             let node_type = NodeType(node_reward_type.as_node_reward_rates_type().to_string());
+            let rewardable_from = *rewardable_days
+                .first()
+                .expect("Rewardable days should not be empty");
+            let rewardable_to = *rewardable_days
+                .last()
+                .expect("Rewardable days should not be empty");
 
             rewardable_nodes_per_provider
                 .entry(*node_provider_id)
@@ -403,7 +418,8 @@ impl<S: RegistryDataStableMemory> RegistryClient<S> {
                 .rewardable_nodes
                 .push(RewardableNode {
                     node_id,
-                    rewardable_days,
+                    rewardable_from,
+                    rewardable_to,
                     node_type,
                     dc_id: dc_id.clone(),
                     region: region.clone(),

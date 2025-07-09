@@ -1,5 +1,5 @@
 use crate::rewards_calculator_results::{
-    NodeMetricsDaily, RewardCalculatorError, RewardsCalculatorResults,
+    days_between, NodeMetricsDaily, RewardCalculatorError, RewardsCalculatorResults,
 };
 use crate::types::{
     NodeMetricsDailyRaw, NodeType, ProviderRewardableNodes, Region, RewardPeriod,
@@ -133,7 +133,9 @@ impl<'a> RewardsCalculatorPipeline<'a, ComputeRewardableNodesMetrics> {
             node_results.region = node.region.clone();
             node_results.node_type = node.node_type.clone();
             node_results.dc_id = node.dc_id.clone();
-            node_results.rewardable_days = node.rewardable_days.clone();
+            node_results.rewardable_from = node.rewardable_from;
+            node_results.rewardable_to = node.rewardable_to;
+            node_results.rewardable_days = days_between(node.rewardable_from, node.rewardable_to);
 
             if let Some(rewardable_node_metrics) = self.metrics_by_node.get(&node.node_id) {
                 rewardable_node_metrics
@@ -206,7 +208,7 @@ impl<'a> RewardsCalculatorPipeline<'a, ComputeAverageExtrapolatedFR> {
             // Use the extrapolated failure rate on days in which the node is not assigned.
             // This covers also the case of nodes completely unassigned in the reward period
             rel_fr.resize(
-                node_results.rewardable_days.len(),
+                node_results.rewardable_days,
                 self.calculator_results.extrapolated_fr.get(),
             );
 
@@ -371,7 +373,7 @@ impl<'a> RewardsCalculatorPipeline<'a, AdjustNodesRewards> {
         for node_results in self.calculator_results.results_by_node.values_mut() {
             let base_node_rewards: Decimal = node_results.base_rewards_per_month.clone().get()
                 / REWARDS_TABLE_DAYS
-                * Decimal::from(node_results.rewardable_days.len());
+                * Decimal::from(node_results.rewardable_days);
             node_results.base_rewards = base_node_rewards.into();
 
             if nodes_count <= FULL_REWARDS_MACHINES_LIMIT {

@@ -31,7 +31,8 @@ impl Default for RewardableNode {
     fn default() -> Self {
         Self {
             node_id: NodeId::from(PrincipalId::default()),
-            rewardable_days: Vec::new(),
+            rewardable_from: 0.into(),
+            rewardable_to: 0.into(),
             region: Default::default(),
             node_type: Default::default(),
             dc_id: Default::default(),
@@ -130,15 +131,13 @@ impl RewardCalculatorRunnerTest {
         let period = self.reward_period.clone().unwrap();
         let start_ts = period.from;
         let end_ts = period.to;
-        let rewardable_days = start_ts
-            .days_until(&end_ts)
-            .expect("Failed to calculate rewardable days");
 
         let rewardables = nodes.into_iter().map(|node_id| RewardableNode {
             node_id,
             region: Region(region.to_string()),
             node_type: NodeType(node_type.to_string()),
-            rewardable_days,
+            rewardable_from: start_ts,
+            rewardable_to: end_ts,
             ..Default::default()
         });
         if let Some(rewardable_nodes) = self.rewardable_nodes.as_mut() {
@@ -156,10 +155,6 @@ impl RewardCalculatorRunnerTest {
             RewardPeriod::new(*start_ts, *end_ts).unwrap()
         });
 
-        let rewardable_days = reward_period
-            .from
-            .days_until(&reward_period.to)
-            .expect("Failed to calculate rewardable days");
         let rewardables: Vec<_> = self
             .rewardable_nodes
             .unwrap_or(
@@ -168,7 +163,8 @@ impl RewardCalculatorRunnerTest {
                     .flat_map(|nodes| {
                         nodes.iter().map(|node| RewardableNode {
                             node_id: node.1,
-                            rewardable_days,
+                            rewardable_from: reward_period.from,
+                            rewardable_to: reward_period.to,
                             ..Default::default()
                         })
                     })

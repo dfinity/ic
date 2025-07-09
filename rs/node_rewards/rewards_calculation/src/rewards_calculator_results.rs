@@ -121,7 +121,9 @@ pub struct NodeResults {
     pub region: Region,
     pub node_type: NodeType,
     pub dc_id: String,
-    pub rewardable_days: Vec<DayUTC>,
+    pub rewardable_from: DayUTC,
+    pub rewardable_to: DayUTC,
+    pub rewardable_days: usize,
     pub daily_metrics: Vec<NodeMetricsDaily>,
 
     /// Average Relative Failure Rate (`ARFR`).
