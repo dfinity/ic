@@ -212,8 +212,8 @@ fn test_upgrade_canisters_with_golden_nns_state() {
         "governance",
         "ledger",
         "lifeline",
-        "registry",
         "node-rewards",
+        "registry",
         "root",
         "sns-wasm",
     ]
@@ -359,7 +359,6 @@ fn test_upgrade_canisters_with_golden_nns_state() {
     vote_yes_with_well_known_public_neurons(&state_machine, proposal_id.id);
     nns_wait_for_proposal_execution(&state_machine, proposal_id.id);
 
-    perform_sequence_of_upgrades(&nns_canister_upgrade_sequence);
     let result = state_machine
         .execute_ingress_as(
             GOVERNANCE_CANISTER_ID.get(),
@@ -378,6 +377,8 @@ fn test_upgrade_canisters_with_golden_nns_state() {
         }
         WasmResult::Reject(s) => panic!("Call to get_registry_value failed: {:#?}", s),
     };
+
+    perform_sequence_of_upgrades(&nns_canister_upgrade_sequence);
 
     // Modify all WASMs, but preserve their behavior.
     for nns_canister_upgrade in &mut nns_canister_upgrade_sequence {
