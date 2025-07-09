@@ -1730,14 +1730,14 @@ fn cmc_notify_top_up_not_rate_limited_by_invalid_top_up() {
     state_machine.advance_time(Duration::from_secs(60 * 60));
 
     // Now the attack begins - the bad account sends 0.69 tokens per 5 seconds to the non-existing
-    // canister, which makes it 69T * 12 * 60 = 49.68P cycles per hour, close to the 50P limit,
+    // canister, which makes it 207T * 12 * 60 = 149.04P cycles per hour, close to the 150P limit,
     // while getting the 0.69 tokens back each time (the account only has 1 token in the
     // beginning).
     for _ in 0..(12 * 60) {
         let error = notify_top_up(
             &state_machine,
             non_existing_canister_id,
-            Tokens::from_e8s(69_000_000),
+            Tokens::from_e8s(207_000_000),
         )
         .unwrap_err();
         assert_matches!(error, NotifyError::Refunded { .. });
