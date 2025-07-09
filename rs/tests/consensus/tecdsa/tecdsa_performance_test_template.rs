@@ -68,7 +68,7 @@ use ic_system_test_driver::generic_workload_engine::metrics::{
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{
-    block_on, get_app_subnet_and_node, get_nns_node, MessageCanister, SignerCanister,
+    block_on, get_app_subnet_and_node, get_nns_node, MessageCanister,
 };
 use ic_types::Height;
 use slog::{error, info};
@@ -243,10 +243,10 @@ pub fn tecdsa_performance_test(
         run_chain_key_signature_test(&nns_canister, &log, &key_id, public_key);
     }
 
-    info!(log, "Step 2: Installing Signer canisters");
+    info!(log, "Step 2: Installing Message canisters");
     let principals = (0..CANISTER_COUNT)
         .map(|_| {
-            block_on(SignerCanister::new_with_cycles(
+            block_on(MessageCanister::new_with_cycles(
                 &app_agent,
                 app_node.effective_canister_id(),
                 u128::MAX,
@@ -257,41 +257,11 @@ pub fn tecdsa_performance_test(
     let mut requests = vec![];
     for principal in principals {
         for key_id in make_key_ids() {
-            // The derivation path can vary either in length or in size of the elements.
-            // For simplicity, we test one derivation element of maximum size. We could
-            // also test a big number of small elements, but this would imply a larger
-            // serialization overhead (as it would include the length of each element),
-            // which we would need to account for in the LARGE_MSG_SIZE_BYTES constant.
-            //
-            // For Schnorr, we test a large message and a keep the derivation path small,
-            // as the latter is tested in ECDSA.
-            //
-            // For VetKD, we can vary either the context size or the input size. For simplicity,
-            // we test a large input size.
-
-            let (method_name, payload) = match key_id.clone() {
-                MasterPublicKeyId::Ecdsa(key_id) => {
-                    ChainSignatureRequest::large_ecdsa_method_and_payload(1, MSG_SIZE_BYTES, key_id)
-                }
-                MasterPublicKeyId::Schnorr(key_id) => {
-                    ChainSignatureRequest::large_schnorr_method_and_payload(
-                        MSG_SIZE_BYTES,
-                        1,
-                        0,
-                        key_id,
-                    )
-                }
-                MasterPublicKeyId::VetKd(key_id) => {
-                    ChainSignatureRequest::large_vetkd_method_and_payload(MSG_SIZE_BYTES, 0, key_id)
-                }
-            };
-
-            requests.push(ChainSignatureRequest {
+            requests.push(ChainSignatureRequest::new(
                 principal,
-                method_name,
                 key_id,
-                payload,
-            });
+                MSG_SIZE_BYTES,
+            ))
         }
     }
 

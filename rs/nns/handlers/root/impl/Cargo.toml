@@ -43,6 +43,7 @@ lazy_static = { workspace = true }
 maplit = "1.0.2"
 on_wire = { path = "../../../../rust_canisters/on_wire" }
 prost = { workspace = true }
+registry-canister = { path = "../../../../registry/canister" }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 
@@ -57,7 +58,6 @@ ic-test-utilities = { path = "../../../../test_utilities" }
 ic-test-utilities-compare-dirs = { path = "../../../../test_utilities/compare_dirs" }
 ic-types = { path = "../../../../types/types" }
 on_wire = { path = "../../../../rust_canisters/on_wire" }
-registry-canister = { path = "../../../../registry/canister" }
 tempfile = { workspace = true }
 
 [build-dependencies]

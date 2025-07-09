@@ -25,18 +25,18 @@ pub fn canister_post_upgrade(
     );
 
     // Registry data migrations should be implemented as follows:
-    // let mutation_batches_due_to_data_migrations = {
-    //     let mutations = registry.compute_mutations_from_my_data_migration();
-    //     if mutations.is_empty() {
-    //         0 // No mutations required for this data migration.
-    //     } else {
-    //         registry.maybe_apply_mutation_internal(mutations);
-    //         1 // Single batch of mutations due to this data migration.
-    //     }
-    // };
+    let mutation_batches_due_to_data_migrations = {
+        let mutations = add_missing_node_types_to_nodes(registry);
+        if mutations.is_empty() {
+            0 // No mutations required for this data migration.
+        } else {
+            registry.maybe_apply_mutation_internal(mutations);
+            1 // Single batch of mutations due to this data migration.
+        }
+    };
     //
     // When there are no migrations, `mutation_batches_due_to_data_migrations` should be set to `0`.
-    let mutation_batches_due_to_data_migrations = 0;
+    // let mutation_batches_due_to_data_migrations = 0;
 
     registry.check_global_state_invariants(&[]);
     // Registry::from_serializable_from guarantees this always passes in this function
@@ -253,7 +253,7 @@ mod test {
         }
 
         let nodes_expected = node_additions.len();
-        assert_eq!(nodes_expected, 1418);
+        assert_eq!(nodes_expected, 485);
 
         registry.apply_mutations_for_test(node_additions);
 

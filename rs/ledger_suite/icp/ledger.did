@@ -477,6 +477,24 @@ type icrc21_consent_message_response = variant {
     Err: icrc21_error;
 };
 
+// The arguments for the `get_allowances` endpoint.
+// The `prev_spender_id` argument can be used for pagination. If specified
+// the endpoint returns allowances that are lexicographically greater than
+// (`from_account_id`, `prev_spender_id`) - start with spender after `prev_spender_id`.
+type GetAllowancesArgs = record {
+    from_account_id: TextAccountIdentifier;
+    prev_spender_id: opt TextAccountIdentifier;
+    take: opt nat64;
+};
+
+// The allowances returned by the `get_allowances` endpoint.
+type Allowances = vec record {
+    from_account_id: TextAccountIdentifier;
+    to_spender_id: TextAccountIdentifier;
+    allowance: Tokens;
+    expires_at: opt nat64;
+};
+
 service: (LedgerCanisterPayload) -> {
     // Transfers tokens from a subaccount of the caller to the destination address.
     // The source address is computed from the principal of the caller and the specified subaccount.
@@ -531,6 +549,8 @@ service: (LedgerCanisterPayload) -> {
 
     icrc21_canister_call_consent_message: (icrc21_consent_message_request) -> (icrc21_consent_message_response);
     icrc10_supported_standards : () -> (vec record { name : text; url : text }) query;
+
+    get_allowances : (GetAllowancesArgs) -> (Allowances) query;
 
     is_ledger_ready: () -> (bool) query;
 }

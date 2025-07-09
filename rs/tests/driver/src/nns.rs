@@ -41,7 +41,7 @@ use ic_types::{CanisterId, PrincipalId, ReplicaVersion, SubnetId};
 use registry_canister::mutations::{
     do_add_nodes_to_subnet::AddNodesToSubnetPayload,
     do_change_subnet_membership::ChangeSubnetMembershipPayload,
-    do_create_subnet::CreateSubnetPayload,
+    do_create_subnet::{CanisterCyclesCostSchedule, CreateSubnetPayload},
     do_deploy_guestos_to_all_subnet_nodes::DeployGuestosToAllSubnetNodesPayload,
     do_deploy_guestos_to_all_unassigned_nodes::DeployGuestosToAllUnassignedNodesPayload,
     do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
@@ -596,6 +596,8 @@ pub async fn submit_create_application_subnet_proposal(
         ssh_readonly_access: vec![],
         ssh_backup_access: vec![],
         chain_key_config: None,
+        canister_cycles_cost_schedule: Some(CanisterCyclesCostSchedule::Normal),
+
         // Unused section follows
         ingress_bytes_per_block_soft_cap: Default::default(),
         gossip_max_artifact_streams_per_peer: Default::default(),

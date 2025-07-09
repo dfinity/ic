@@ -589,7 +589,7 @@ pub fn encode_metrics(
     });
 
     w.encode_gauge(
-        "voting_power_snapshots_latest_snapshot_is_spike",
+        "governance_voting_power_snapshots_latest_snapshot_is_spike",
         if latest_snapshot_is_spike { 1.0 } else { 0.0 },
         "Indicates whether the latest voting power snapshot is a spike compared to previous snapshots.",
     )?;
