@@ -1,3 +1,4 @@
+use core::convert::Into;
 use core::option::Option::Some;
 
 use crate::pb::v1::{self as pb};
@@ -1775,6 +1776,7 @@ impl From<pb::governance::GovernanceCachedMetrics> for pb_api::governance::Gover
                 .into_iter()
                 .map(|metrics| metrics.into())
                 .collect(),
+            voting_power_metrics: item.voting_power_metrics.map(|metrics| metrics.into()),
         }
     }
 }
@@ -1803,6 +1805,7 @@ impl From<pb_api::governance::GovernanceCachedMetrics> for pb::governance::Gover
                 .into_iter()
                 .map(|metrics| metrics.into())
                 .collect(),
+            voting_power_metrics: item.voting_power_metrics.map(|metrics| metrics.into()),
         }
     }
 }
@@ -2017,6 +2020,42 @@ impl From<pb::TreasuryMetrics> for pb_api::TreasuryMetrics {
     }
 }
 
+impl From<pb::VotingPowerMetrics> for pb_api::VotingPowerMetrics {
+    fn from(item: pb::VotingPowerMetrics) -> Self {
+        let pb::VotingPowerMetrics {
+            governance_total_potential_voting_power,
+            timestamp_seconds,
+        } = item;
+
+        let governance_total_potential_voting_power = Some(governance_total_potential_voting_power);
+        let timestamp_seconds = Some(timestamp_seconds);
+
+        Self {
+            governance_total_potential_voting_power,
+            timestamp_seconds,
+        }
+    }
+}
+
+impl From<pb_api::VotingPowerMetrics> for pb::VotingPowerMetrics {
+    fn from(item: pb_api::VotingPowerMetrics) -> Self {
+        let pb_api::VotingPowerMetrics {
+            governance_total_potential_voting_power,
+            timestamp_seconds,
+        } = item;
+
+        let governance_total_potential_voting_power =
+            governance_total_potential_voting_power.unwrap_or_default();
+
+        let timestamp_seconds = timestamp_seconds.unwrap_or_default();
+
+        Self {
+            governance_total_potential_voting_power,
+            timestamp_seconds,
+        }
+    }
+}
+
 impl From<pb::Metrics> for pb_api::get_metrics_response::Metrics {
     fn from(item: pb::Metrics) -> Self {
         let pb::Metrics {
@@ -2024,6 +2063,8 @@ impl From<pb::Metrics> for pb_api::get_metrics_response::Metrics {
             last_ledger_block_timestamp,
             num_recently_executed_proposals,
             treasury_metrics,
+            voting_power_metrics,
+            genesis_timestamp_seconds,
         } = item;
 
         let num_recently_submitted_proposals = Some(num_recently_submitted_proposals);
@@ -2042,11 +2083,17 @@ impl From<pb::Metrics> for pb_api::get_metrics_response::Metrics {
                 .collect(),
         );
 
+        let voting_power_metrics = voting_power_metrics.map(pb_api::VotingPowerMetrics::from);
+
+        let genesis_timestamp_seconds = Some(genesis_timestamp_seconds);
+
         Self {
             num_recently_submitted_proposals,
             num_recently_executed_proposals,
             last_ledger_block_timestamp,
             treasury_metrics,
+            voting_power_metrics,
+            genesis_timestamp_seconds,
         }
     }
 }

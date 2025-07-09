@@ -12,10 +12,9 @@ use ic_nns_test_utils::sns_wasm::{
 use ic_nns_test_utils::state_test_helpers::setup_nns_canisters;
 use ic_sns_governance::governance::TREASURY_SUBACCOUNT_NONCE;
 use ic_sns_governance::init::GovernanceCanisterInitPayloadBuilder;
-use ic_sns_governance::pb::v1::{ProposalData, ProposalId};
-use ic_sns_governance_api::pb::v1::{
-    self as sns_gov, get_metrics_response, GetMetricsRequest, TreasuryMetrics,
-};
+use ic_sns_governance::pb::v1::neuron;
+use ic_sns_governance::pb::v1::{Neuron, NeuronId, ProposalData, ProposalId};
+use ic_sns_governance_api::pb::v1::{self as sns_gov, get_metrics_response, GetMetricsRequest};
 use ic_sns_test_utils::{
     itest_helpers::SnsTestsInitPayloadBuilder,
     state_test_helpers::state_machine_builder_for_sns_tests,
@@ -29,6 +28,7 @@ use icrc_ledger_types::icrc1::{
     account::Account,
     transfer::{BlockIndex, NumTokens},
 };
+use maplit::btreemap;
 use pretty_assertions::assert_eq;
 use std::collections::HashMap;
 use std::time::{Duration, UNIX_EPOCH};
@@ -204,6 +204,8 @@ fn test_sns_metrics() {
 
     let swap_canister_id = install_swap(&state_machine);
 
+    let expected_genesis_timestamp_seconds = 123456789; // Arbitrary value for testing
+
     let governance_canister_id = {
         let wasm = build_governance_sns_wasm().wasm;
         let mut governance = GovernanceCanisterInitPayloadBuilder::new()
@@ -272,6 +274,22 @@ fn test_sns_metrics() {
             );
         }
 
+        // Add a neuron.
+        let neuron = Neuron {
+            id: Some(NeuronId::new_test_neuron_id(1)),
+            created_timestamp_seconds: 0,
+            cached_neuron_stake_e8s: 1_000_000_000_000,
+            voting_power_percentage_multiplier: 100,
+            dissolve_state: Some(neuron::DissolveState::DissolveDelaySeconds(12 * ONE_MONTH)),
+            ..Default::default()
+        };
+        governance.neurons = btreemap! {
+            NeuronId::new_test_neuron_id(1).to_string() => neuron,
+        };
+
+        // Ensure we have an expectation for `genesis_timestamp_seconds`.
+        governance.genesis_timestamp_seconds = expected_genesis_timestamp_seconds;
+
         let args = Encode!(&governance).unwrap();
         state_machine
             .install_canister(wasm.clone(), args, None)
@@ -315,6 +333,8 @@ fn test_sns_metrics() {
             num_recently_executed_proposals,
             last_ledger_block_timestamp,
             treasury_metrics,
+            voting_power_metrics,
+            genesis_timestamp_seconds,
         }) = get_metrics_result
         else {
             panic!(
@@ -367,7 +387,7 @@ fn test_sns_metrics() {
                 .unwrap()
                 .into_iter()
                 .map(
-                    |TreasuryMetrics {
+                    |sns_gov::TreasuryMetrics {
                          treasury,
                          name,
                          ledger_canister_id,
@@ -375,7 +395,7 @@ fn test_sns_metrics() {
                          amount_e8s,
                          original_amount_e8s,
                          timestamp_seconds: _, // We don't care about the timestamp in this test
-                     }| TreasuryMetrics {
+                     }| sns_gov::TreasuryMetrics {
                         treasury,
                         name,
                         ledger_canister_id,
@@ -389,7 +409,7 @@ fn test_sns_metrics() {
 
             assert_eq!(
                 treasury_metrics,
-                vec![TreasuryMetrics {
+                vec![sns_gov::TreasuryMetrics {
                     treasury: 1,
                     name: Some("TOKEN_ICP".to_string()),
 
@@ -406,5 +426,20 @@ fn test_sns_metrics() {
                 }]
             )
         }
+
+        {
+            let voting_power_metrics = voting_power_metrics.unwrap();
+
+            // This is quite a weak assertion. Once we get treasury valuations (and this test) to work
+            // deterministically, we should make this assertion stronger.
+            assert!(voting_power_metrics
+                .governance_total_potential_voting_power
+                .is_some());
+        }
+
+        assert_eq!(
+            genesis_timestamp_seconds,
+            Some(expected_genesis_timestamp_seconds)
+        );
     }
 }
