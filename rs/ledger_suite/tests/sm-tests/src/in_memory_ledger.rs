@@ -698,24 +698,15 @@ where
             "total_blocks in ledger: {}, total InMemoryLedger transactions: {}",
             num_ledger_blocks, self.transactions
         );
-        assert_eq!(
-            num_ledger_blocks, self.transactions,
-            "Mismatch in number of transactions ({} vs {})",
-            self.transactions, num_ledger_blocks
-        );
-        assert_eq!(
-            self.balances.len() as u64,
-            actual_num_balances,
-            "Mismatch in number of balances ({} vs {})",
-            self.balances.len(),
-            actual_num_balances
-        );
-        assert_eq!(
-            self.allowances.len() as u64,
+        println!(
+            "number of approvals in ledger: {}, number of approvals in InMemoryLedger: {}",
             actual_num_approvals,
-            "Mismatch in number of approvals ({} vs {})",
-            self.allowances.len(),
-            actual_num_approvals
+            self.allowances.len()
+        );
+        println!(
+            "number of balances in ledger: {}, number of balances in InMemoryLedger: {}",
+            actual_num_balances,
+            self.balances.len()
         );
         println!(
             "Checking {} balances and {} allowances",
@@ -829,6 +820,25 @@ where
         println!(
             "allowances with no expiration: {}, expiration in future: {}, expiration in past: {}",
             no_expiration_count, expiration_in_future_count, expiration_in_past_count
+        );
+        assert_eq!(
+            self.transactions, num_ledger_blocks,
+            "Mismatch in number of transactions (InMemoryLedger: {}, vs StateMachine ledger: {})",
+            self.transactions, num_ledger_blocks
+        );
+        assert_eq!(
+            self.balances.len() as u64,
+            actual_num_balances,
+            "Mismatch in number of balances (InMemoryLedger: {}, vs StateMachine ledger: {})",
+            self.balances.len(),
+            actual_num_balances
+        );
+        assert_eq!(
+            self.allowances.len() as u64,
+            actual_num_approvals,
+            "Mismatch in number of approvals (InMemoryLedger: {}, vs StateMachine ledger: {})",
+            self.allowances.len(),
+            actual_num_approvals
         );
     }
 }
