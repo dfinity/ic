@@ -394,6 +394,9 @@ impl CyclesAccountManager {
 
     /// Withdraws `cycles` worth of cycles from the canister's balance.
     ///
+    /// Withdraws cycles even when `CanisterCyclesCostSchedule::Free` is passed.
+    /// This argument is only used for calculating the freeze threshold.
+    ///
     /// NOTE: This method is intended for use in inter-canister transfers.
     ///       It doesn't report these cycles as consumed. To withdraw cycles
     ///       and have them reported as consumed, use `consume_cycles`.
@@ -765,13 +768,7 @@ impl CyclesAccountManager {
 
     /// The cost of using `bytes` worth of memory.
     #[doc(hidden)] // pub for usage in tests
-    pub fn memory_cost(
-        &self,
-        bytes: NumBytes,
-        duration: Duration,
-        subnet_size: usize,
-        cost_schedule: CanisterCyclesCostSchedule,
-    ) -> Cycles {
+    pub fn memory_cost(&self, bytes: NumBytes, duration: Duration, subnet_size: usize) -> Cycles {
         let one_gib = 1024 * 1024 * 1024;
         let cycles = Cycles::from(
             (bytes.get() as u128
@@ -779,7 +776,8 @@ impl CyclesAccountManager {
                 * duration.as_secs() as u128)
                 / one_gib,
         );
-        self.scale_cost(cycles, subnet_size, cost_schedule)
+        // cost calculations should assume normal schedule
+        self.scale_cost(cycles, subnet_size, CanisterCyclesCostSchedule::Normal)
     }
 
     /// Returns the amount of reserved cycles required for allocating the given
@@ -845,6 +843,9 @@ impl CyclesAccountManager {
     /// The leftover cycles is reimbursed after the `Response` for this request
     /// is received and executed. Only at that point will be known how much
     /// cycles receiving and executing the `Response` costs exactly.
+    ///
+    /// The `CanisterCyclesCostSchedule` argument is only used for calculating
+    /// the freezing threshold. All other cost factors are active for xnet calls.
     ///
     /// # Errors
     ///
@@ -930,15 +931,14 @@ impl CyclesAccountManager {
         &self,
         payload_size: NumBytes,
         execution_mode: WasmExecutionMode,
+        cost_schedule: CanisterCyclesCostSchedule,
     ) -> Cycles {
         let subnet_size = self.config.reference_subnet_size;
-        let prepayment_for_response_transmission = self
-            .prepayment_for_response_transmission(subnet_size, CanisterCyclesCostSchedule::Normal);
-        let prepayment_for_response_execution = self.prepayment_for_response_execution(
-            subnet_size,
-            CanisterCyclesCostSchedule::Normal,
-            execution_mode,
-        );
+        let prepayment_for_response_transmission =
+            self.prepayment_for_response_transmission(subnet_size);
+        // response execution might be free depending on cost_schedule
+        let prepayment_for_response_execution =
+            self.prepayment_for_response_execution(subnet_size, cost_schedule, execution_mode);
         self.xnet_total_transmission_fee(
             payload_size,
             subnet_size,
@@ -964,15 +964,12 @@ impl CyclesAccountManager {
 
     /// Returns the amount of cycles required for transmitting the largest
     /// response message.
-    pub fn prepayment_for_response_transmission(
-        &self,
-        subnet_size: usize,
-        cost_schedule: CanisterCyclesCostSchedule,
-    ) -> Cycles {
+    pub fn prepayment_for_response_transmission(&self, subnet_size: usize) -> Cycles {
+        // response transmission always costs, hence the hard-coded `CanisterCyclesCostSchedule::Normal`.
         self.scale_cost(
             self.config.xnet_byte_transmission_fee * MAX_INTER_CANISTER_PAYLOAD_IN_BYTES.get(),
             subnet_size,
-            cost_schedule,
+            CanisterCyclesCostSchedule::Normal,
         )
     }
 
@@ -985,7 +982,6 @@ impl CyclesAccountManager {
         response: &Response,
         prepayment_for_response_transmission: Cycles,
         subnet_size: usize,
-        cost_schedule: CanisterCyclesCostSchedule,
     ) -> Cycles {
         let max_expected_bytes = MAX_INTER_CANISTER_PAYLOAD_IN_BYTES.get();
         let transmitted_bytes = response.payload_size_bytes().get();
@@ -1000,10 +996,11 @@ impl CyclesAccountManager {
                 max_expected_bytes,
             );
         }
+        // response transmission always costs, hence the hard-coded `CanisterCyclesCostSchedule::Normal`.
         let transmission_cost = self.scale_cost(
             self.config.xnet_byte_transmission_fee * transmitted_bytes,
             subnet_size,
-            cost_schedule,
+            CanisterCyclesCostSchedule::Normal,
         );
         prepayment_for_response_transmission
             - transmission_cost.min(prepayment_for_response_transmission)
@@ -1255,14 +1252,14 @@ impl CyclesAccountManager {
         &self,
         num_instructions: NumInstructions,
         subnet_size: usize,
-        cost_schedule: CanisterCyclesCostSchedule,
         execution_mode: WasmExecutionMode,
     ) -> Cycles {
+        // cost calculations should assume normal schedule
         self.scale_cost(
             self.config.update_message_execution_fee
                 + self.convert_instructions_to_cycles(num_instructions, execution_mode),
             subnet_size,
-            cost_schedule,
+            CanisterCyclesCostSchedule::Normal,
         )
     }
 
