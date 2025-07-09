@@ -70,9 +70,9 @@ fn test_neuron_voting() {
             .submit_proposal(
                 TEST_IDENTITY.sender().unwrap(),
                 non_voting_neuron_id.into(),
-                &format!("dummy title"),
-                &format!("test summary"),
-                &format!("dummy text"),
+                "dummy title",
+                "test summary",
+                "dummy text",
             )
             .await;
         let error_string = result.unwrap_err().to_string();
@@ -150,6 +150,11 @@ fn test_neuron_voting() {
             .map(|proposal| proposal.id.unwrap().id)
             .collect::<Vec<u64>>();
 
+        // Verify that a neuron with smaller than minimum delay cannot vote.
+        let result = register_vote(&env, proposal_ids[0], NON_VOTING_NEURON_INDEX, Vote::No).await;
+        let error_string = result.unwrap_err().to_string();
+        assert!(error_string.contains("Neuron not authorized to vote on proposal."));
+
         // Vote on the first proposal and verify the YES vote was correctly registered
         register_vote(&env, proposal_ids[0], NEURON_INDEX[1], Vote::Yes)
             .await
@@ -178,11 +183,6 @@ fn test_neuron_voting() {
             extract_votes(&voted_proposal_info, &neuron_ids),
             vec![VOTE_YES, VOTE_YES, VOTE_NO, VOTE_NO]
         );
-
-        // Verify that a neuron with smaller than minimum delay cannot vote.
-        let result = register_vote(&env, proposal_ids[0], NON_VOTING_NEURON_INDEX, Vote::No).await;
-        let error_string = result.unwrap_err().to_string();
-        assert!(error_string.contains("Neuron not authorized to vote on proposal."));
 
         // Verify the first proposal is no longer pending
         let pending_proposals = env
