@@ -1955,8 +1955,9 @@ async fn do_transaction_notification(
             .try_into()
             .map_err(|err| format!("Cannot parse subaccount: {}", err))?;
         // We always use cycles limit for these transaction_notifications because they can't come from
-        // any canisters that have exceptions (i.e. only from ledger) and we will remove these soon.
-        match process_top_up(canister_id, from, tn.amount, true).await {
+        // any canisters that have exceptions to the limit.
+        let use_cycles_limit = true;
+        match process_top_up(canister_id, from, tn.amount, use_cycles_limit).await {
             Ok(cycles) => (
                 Ok(CyclesResponse::ToppedUp(())),
                 Some(NotificationStatus::NotifiedTopUp(Ok(cycles))),
