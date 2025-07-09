@@ -2531,9 +2531,6 @@ fn post_upgrade(maybe_args: Option<CyclesCanisterInitPayload>) {
         new_state.cycles_ledger_canister_id = args.cycles_ledger_canister_id;
     }
 
-    // Delete after release.
-    new_state.cycles_limit = Cycles::new(DEFAULT_CYCLES_LIMIT);
-
     STATE.with(|state| state.replace(Some(new_state)));
 }
 
