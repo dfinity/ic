@@ -824,7 +824,7 @@ pub async fn generate_dummy_ecdsa_signature_with_logger(
     key_id: &EcdsaKeyId,
     sig_can: &SignerCanister<'_>,
     logger: &Logger,
-) -> Result<SignWithEcdsaResponse, String> {
+) -> Result<SignWithEcdsaResponse, AgentError> {
     let signature_request = GenEcdsaParams {
         derivation_path_length,
         derivation_path_element_size,
@@ -869,7 +869,7 @@ pub async fn generate_dummy_schnorr_signature_with_logger(
     key_id: &SchnorrKeyId,
     sig_can: &SignerCanister<'_>,
     logger: &Logger,
-) -> Result<SignWithSchnorrResponse, String> {
+) -> Result<SignWithSchnorrResponse, AgentError> {
     let signature_request = GenSchnorrParams {
         message_size,
         derivation_path_length,
@@ -914,7 +914,7 @@ pub async fn generate_dummy_vetkd_key_with_logger(
     key_id: &VetKdKeyId,
     sig_can: &SignerCanister<'_>,
     logger: &Logger,
-) -> Result<VetKDDeriveKeyResult, String> {
+) -> Result<VetKDDeriveKeyResult, AgentError> {
     let key_request = GenVetkdParams {
         context_size,
         input_size,

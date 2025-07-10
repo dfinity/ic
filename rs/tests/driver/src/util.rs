@@ -841,46 +841,37 @@ impl<'a> SignerCanister<'a> {
     pub async fn gen_ecdsa_sig(
         &self,
         params: GenEcdsaParams,
-    ) -> Result<SignWithEcdsaResponse, String> {
-        let bytes = self
-            .agent
+    ) -> Result<SignWithEcdsaResponse, AgentError> {
+        self.agent
             .update(&self.canister_id, "gen_ecdsa_sig")
             .with_arg(Encode!(&params).unwrap())
             .call_and_wait()
             .await
-            .map_err(|e| e.to_string())?;
-
-        Decode!(&bytes, Result<SignWithEcdsaResponse, String>).unwrap()
+            .map(|bytes| Decode!(&bytes, SignWithEcdsaResponse).unwrap())
     }
 
     pub async fn gen_schnorr_sig(
         &self,
         params: GenSchnorrParams,
-    ) -> Result<SignWithSchnorrResponse, String> {
-        let bytes = self
-            .agent
+    ) -> Result<SignWithSchnorrResponse, AgentError> {
+        self.agent
             .update(&self.canister_id, "gen_schnorr_sig")
             .with_arg(Encode!(&params).unwrap())
             .call_and_wait()
             .await
-            .map_err(|e| e.to_string())?;
-
-        Decode!(&bytes, Result<SignWithSchnorrResponse, String>).unwrap()
+            .map(|bytes| Decode!(&bytes, SignWithSchnorrResponse).unwrap())
     }
 
     pub async fn gen_vetkd_key(
         &self,
         params: GenVetkdParams,
-    ) -> Result<VetKDDeriveKeyResult, String> {
-        let bytes = self
-            .agent
+    ) -> Result<VetKDDeriveKeyResult, AgentError> {
+        self.agent
             .update(&self.canister_id, "gen_vetkd_key")
             .with_arg(Encode!(&params).unwrap())
             .call_and_wait()
             .await
-            .map_err(|e| e.to_string())?;
-
-        Decode!(&bytes, Result<VetKDDeriveKeyResult, String>).unwrap()
+            .map(|bytes| Decode!(&bytes, VetKDDeriveKeyResult).unwrap())
     }
 }
 
