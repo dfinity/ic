@@ -32,6 +32,7 @@ pub struct BalanceBook {
     pub fee_collector: Option<Balance>,
     pub payees: Option<Balance>,
     pub payers: Option<Balance>,
+    pub balance_discrepancy: Option<Balance>,
 }
 
 #[derive(CandidType, Clone, Debug, Default, Deserialize, PartialEq)]

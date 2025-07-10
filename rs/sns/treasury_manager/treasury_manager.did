@@ -140,6 +140,7 @@ type BalanceBook = record {
   fee_collector : opt Balance;
   payees : opt Balance;
   payers : opt Balance;
+  balance_discrepancy: opt Balance;
 };
 
 type Balance = record {
