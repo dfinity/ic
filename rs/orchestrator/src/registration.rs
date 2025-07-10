@@ -28,11 +28,7 @@ use ic_registry_client_helpers::{
 };
 use ic_registry_local_store::LocalStore;
 use ic_sys::utility_command::UtilityCommand;
-use ic_types::{
-    crypto::KeyPurpose,
-    messages::MessageId,
-    NodeId, RegistryVersion, SubnetId,
-};
+use ic_types::{crypto::KeyPurpose, messages::MessageId, NodeId, RegistryVersion, SubnetId};
 use idna::domain_to_ascii_strict;
 use prost::Message;
 use rand::prelude::*;
