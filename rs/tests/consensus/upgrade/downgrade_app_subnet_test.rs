@@ -59,20 +59,21 @@ fn downgrade_app_subnet(env: TestEnv) {
     let nns_node = env.get_first_healthy_system_node_snapshot();
     let mainnet_version = bless_mainnet_version(&env, &nns_node);
     let agent = nns_node.with_default_agent(|agent| async move { agent });
-    let ecdsa_state = get_chain_key_canister_and_public_key(
-        &env,
-        &nns_node,
-        &agent,
-        SubnetType::Application,
-        make_key_ids_for_all_schemes(),
-    );
+    //let ecdsa_state = get_chain_key_canister_and_public_key(
+    //    &env,
+    //    &nns_node,
+    //    &agent,
+    //    SubnetType::Application,
+    //    make_key_ids_for_all_schemes(),
+    //);
 
     upgrade(
         &env,
         &nns_node,
         &mainnet_version,
         SubnetType::Application,
-        Some(&ecdsa_state),
+        None,
+        //Some(&ecdsa_state),
     );
 }
 

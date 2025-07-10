@@ -33,6 +33,7 @@ use std::{
     convert::TryFrom,
     future::Future,
     net::SocketAddr,
+    ops::ControlFlow,
     path::{Path, PathBuf},
     sync::{Arc, Mutex, RwLock},
     thread,
@@ -386,15 +387,18 @@ impl Orchestrator {
                     timeout,
                     |r| async {
                         match r {
-                            Ok(Ok(val)) => {
+                            Ok(Ok(std::ops::ControlFlow::Continue(val))) => {
                                 *maybe_subnet_id.write().unwrap() = val;
                                 metrics.failed_consecutive_upgrade_checks.reset();
+                                ControlFlow::Continue(())
                             }
+                            Ok(Ok(std::ops::ControlFlow::Break(()))) => ControlFlow::Break(()),
                             e => {
                                 warn!(log, "Check for upgrade failed: {:?}", e);
                                 metrics.failed_consecutive_upgrade_checks.inc();
+                                ControlFlow::Continue(())
                             }
-                        };
+                        }
                     },
                 )
                 .await;
