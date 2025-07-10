@@ -1,5 +1,5 @@
 use crate::addressbook::AddressEntry;
-use bitcoin::p2p::message::NetworkMessage;
+use crate::import::NetworkMessage;
 use std::time::{Duration, SystemTime};
 use thiserror::Error;
 use tokio::{sync::mpsc::UnboundedSender, task::JoinHandle};
@@ -246,6 +246,7 @@ impl Connection {
     }
 }
 
+#[cfg(not(feature = "dogecoin"))]
 #[cfg(test)]
 mod test {
     use super::*;

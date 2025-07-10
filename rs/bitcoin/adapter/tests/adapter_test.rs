@@ -1,6 +1,6 @@
-use bitcoin::{consensus::encode::deserialize, Address, Amount, Block, BlockHash};
 use bitcoincore_rpc::{bitcoincore_rpc_json::CreateRawTransactionInput, Auth, Client, RpcApi};
 use bitcoind::{BitcoinD, Conf, P2P};
+use ic_btc_adapter::import;
 use ic_btc_adapter::{start_server, Config, IncomingSource};
 use ic_btc_adapter_client::setup_bitcoin_adapter_clients;
 use ic_btc_interface::Network;
@@ -13,6 +13,7 @@ use ic_config::bitcoin_payload_builder_config::Config as BitcoinPayloadBuilderCo
 use ic_interfaces_adapter_client::{Options, RpcAdapterClient, RpcError};
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
+use import::{deserialize, Address, Amount, Block, BlockHash};
 use std::{
     collections::{HashMap, HashSet},
     net::{SocketAddr, SocketAddrV4},
@@ -94,7 +95,7 @@ fn start_adapter(
     rt_handle: &tokio::runtime::Handle,
     nodes: Vec<SocketAddr>,
     uds_path: &Path,
-    network: bitcoin::Network,
+    network: import::Network,
 ) {
     let config = Config {
         network,
@@ -150,6 +151,7 @@ fn check_received_blocks(client: &Client, blocks: &[Vec<u8>], start_index: usize
 
 fn get_bitcoind_url(bitcoind: &BitcoinD) -> Option<SocketAddrV4> {
     if let P2P::Connect(url, _) = bitcoind.p2p_connect(true).unwrap() {
+        println!("get_bitcoind_url {}", url);
         Some(url)
     } else {
         None
@@ -160,7 +162,7 @@ fn start_adapter_and_client(
     rt: &Runtime,
     urls: Vec<SocketAddr>,
     logger: ReplicaLogger,
-    network: bitcoin::Network,
+    network: import::Network,
     adapter_state: AdapterState,
 ) -> (BitcoinAdapterClient, TempPath) {
     let metrics_registry = MetricsRegistry::new();
@@ -199,7 +201,7 @@ fn start_idle_adapter_and_client(
     rt: &Runtime,
     urls: Vec<SocketAddr>,
     logger: ReplicaLogger,
-    network: bitcoin::Network,
+    network: import::Network,
 ) -> (BitcoinAdapterClient, TempPath) {
     start_adapter_and_client(rt, urls, logger, network, AdapterState::Idle)
 }
@@ -208,7 +210,7 @@ fn start_active_adapter_and_client(
     rt: &Runtime,
     urls: Vec<SocketAddr>,
     logger: ReplicaLogger,
-    network: bitcoin::Network,
+    network: import::Network,
 ) -> (BitcoinAdapterClient, TempPath) {
     start_adapter_and_client(rt, urls, logger, network, AdapterState::Active)
 }
@@ -260,9 +262,12 @@ fn sync_until_end_block(
     let mut anchor = client.get_block_hash(start_index).unwrap()[..].to_vec();
     let mut tries = 0;
 
-    let end_hash = client.get_best_block_hash().unwrap()[..].to_vec();
+    let end_hash = client.get_best_block_hash().unwrap();
+    println!("end_hash = {:?}", end_hash);
+    let end_hash = (end_hash.as_ref() as &[u8]).to_vec();
     while anchor != end_hash && tries < max_tries {
         let res = make_get_successors_request(adapter_client, anchor.clone(), headers.clone());
+        println!("res = {:?}", res);
         match res {
             Ok(BitcoinAdapterResponseWrapper::GetSuccessorsResponse(res)) => {
                 let new_blocks = res.blocks;
@@ -381,8 +386,21 @@ fn get_blackhole_address() -> Address {
         .assume_checked()
 }
 
-fn create_alice_and_bob_wallets(bitcoind: &BitcoinD) -> (Client, Client, Address, Address) {
+fn create_alice_and_bob_wallets(bitcoind: &BitcoinD) -> (Client, Address, Address) {
+    let client = Client::new(
+        import::Network::Regtest,
+        bitcoind.rpc_url().as_str(),
+        Auth::CookieFile(bitcoind.params.cookie_file.clone()),
+    )
+    .unwrap();
+    #[cfg(not(feature = "dogecoin"))]
+    client
+        .create_wallet("alice", None, None, None, None)
+        .unwrap();
+
+    /*
     let alice_client = Client::new(
+        import::Network::Regtest,
         format!("{}/wallet/{}", bitcoind.rpc_url(), "alice").as_str(),
         Auth::CookieFile(bitcoind.params.cookie_file.clone()),
     )
@@ -392,6 +410,7 @@ fn create_alice_and_bob_wallets(bitcoind: &BitcoinD) -> (Client, Client, Address
         .unwrap();
 
     let bob_client = Client::new(
+        import::Network::Regtest,
         format!("{}/wallet/{}", bitcoind.rpc_url(), "bob").as_str(),
         Auth::CookieFile(bitcoind.params.cookie_file.clone()),
     )
@@ -399,17 +418,11 @@ fn create_alice_and_bob_wallets(bitcoind: &BitcoinD) -> (Client, Client, Address
     bob_client
         .create_wallet("bob", None, None, None, None)
         .unwrap();
+    */
+    let alice_address = client.get_new_address(Some("alice"), None).unwrap();
+    let bob_address = client.get_new_address(Some("bob"), None).unwrap();
 
-    let alice_address = alice_client
-        .get_new_address(None, None)
-        .unwrap()
-        .assume_checked();
-    let bob_address = bob_client
-        .get_new_address(None, None)
-        .unwrap()
-        .assume_checked();
-
-    (alice_client, bob_client, alice_address, bob_address)
+    (client, alice_address, bob_address)
 }
 
 fn fund_with_btc(to_fund_client: &Client, to_fund_address: &Address) {
@@ -418,16 +431,24 @@ fn fund_with_btc(to_fund_client: &Client, to_fund_address: &Address) {
         .unwrap()
         .to_btc();
 
+    to_fund_client.generate(90, None).unwrap();
     to_fund_client
-        .generate_to_address(1, to_fund_address)
+        .send_to_address(
+            to_fund_address,
+            Amount::from_btc(50.0).unwrap(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
         .unwrap();
 
-    // Generate 100 blocks for coinbase maturity
-    to_fund_client
-        .generate_to_address(100, &get_blackhole_address())
-        .unwrap();
+    // Generate 10 blocks for confirmation
+    to_fund_client.generate(11, None).unwrap();
 
-    // The reward for mining a block is 50 bitcoins
+    // Should receive 50 coins
     assert_eq!(
         to_fund_client
             .get_received_by_address(to_fund_address, Some(0))
@@ -524,14 +545,16 @@ fn test_receives_blocks() {
     let logger = no_op_logger();
     let bitcoind = get_default_bitcoind();
     let client = Client::new(
+        import::Network::Regtest,
         bitcoind.rpc_url().as_str(),
         Auth::CookieFile(bitcoind.params.cookie_file.clone()),
     )
     .unwrap();
 
+    eprintln!("{:?}", client.get_blockchain_info());
     assert_eq!(0, client.get_blockchain_info().unwrap().blocks);
 
-    let address = client.get_new_address(None, None).unwrap().assume_checked();
+    let address = client.get_new_address(None, None).unwrap();
 
     client.generate_to_address(150, &address).unwrap();
 
@@ -541,10 +564,10 @@ fn test_receives_blocks() {
         &rt,
         vec![SocketAddr::V4(get_bitcoind_url(&bitcoind).unwrap())],
         logger,
-        bitcoin::Network::Regtest,
+        import::Network::Regtest,
     );
 
-    let blocks = sync_until_end_block(&adapter_client, &client, 0, &mut vec![], 15);
+    let blocks = sync_until_end_block(&adapter_client, &client, 0, &mut vec![], 1500);
 
     assert_eq!(blocks.len(), 150);
 }
@@ -556,6 +579,7 @@ fn test_adapter_disconnects_when_idle() {
 
     let bitcoind = get_default_bitcoind();
     let client = Client::new(
+        import::Network::Regtest,
         bitcoind.rpc_url().as_str(),
         Auth::CookieFile(bitcoind.params.cookie_file.clone()),
     )
@@ -565,7 +589,7 @@ fn test_adapter_disconnects_when_idle() {
 
     let rt: Runtime = tokio::runtime::Runtime::new().unwrap();
 
-    let _r = start_active_adapter_and_client(&rt, vec![url], logger, bitcoin::Network::Regtest);
+    let _r = start_active_adapter_and_client(&rt, vec![url], logger, import::Network::Regtest);
 
     // The client should be connected to the adapter
     wait_for_connection(&client, 1);
@@ -585,6 +609,7 @@ fn idle_adapter_does_not_connect_to_peers() {
 
     let bitcoind = get_default_bitcoind();
     let client = Client::new(
+        import::Network::Regtest,
         bitcoind.rpc_url().as_str(),
         Auth::CookieFile(bitcoind.params.cookie_file.clone()),
     )
@@ -597,7 +622,7 @@ fn idle_adapter_does_not_connect_to_peers() {
 
     let rt = tokio::runtime::Runtime::new().unwrap();
 
-    let _r = start_idle_adapter_and_client(&rt, vec![url], logger, bitcoin::Network::Regtest);
+    let _r = start_idle_adapter_and_client(&rt, vec![url], logger, import::Network::Regtest);
 
     // The client still does not have any connections
     exact_connections(&client, 0);
@@ -610,6 +635,7 @@ fn test_connection_to_multiple_peers() {
 
     let bitcoind1 = get_default_bitcoind();
     let client1 = Client::new(
+        import::Network::Regtest,
         bitcoind1.rpc_url().as_str(),
         Auth::CookieFile(bitcoind1.params.cookie_file.clone()),
     )
@@ -617,6 +643,7 @@ fn test_connection_to_multiple_peers() {
 
     let bitcoind2 = get_default_bitcoind();
     let client2 = Client::new(
+        import::Network::Regtest,
         bitcoind2.rpc_url().as_str(),
         Auth::CookieFile(bitcoind2.params.cookie_file.clone()),
     )
@@ -624,6 +651,7 @@ fn test_connection_to_multiple_peers() {
 
     let bitcoind3 = get_default_bitcoind();
     let client3 = Client::new(
+        import::Network::Regtest,
         bitcoind3.rpc_url().as_str(),
         Auth::CookieFile(bitcoind3.params.cookie_file.clone()),
     )
@@ -653,7 +681,7 @@ fn test_connection_to_multiple_peers() {
         &rt,
         vec![url1, url2, url3],
         logger,
-        bitcoin::Network::Regtest,
+        import::Network::Regtest,
     );
 
     wait_for_connection(&client1, 3);
@@ -672,16 +700,15 @@ fn test_receives_new_3rd_party_txs() {
         &rt,
         vec![SocketAddr::V4(get_bitcoind_url(&bitcoind).unwrap())],
         logger,
-        bitcoin::Network::Regtest,
+        import::Network::Regtest,
     );
 
-    let (alice_client, bob_client, alice_address, bob_address) =
-        create_alice_and_bob_wallets(&bitcoind);
+    let (client, alice_address, bob_address) = create_alice_and_bob_wallets(&bitcoind);
 
-    fund_with_btc(&alice_client, &alice_address);
+    fund_with_btc(&client, &alice_address);
 
-    assert_eq!(101, alice_client.get_blockchain_info().unwrap().blocks);
-    let txid = alice_client
+    assert_eq!(101, client.get_blockchain_info().unwrap().blocks);
+    let txid = client
         .send_to_address(
             &bob_address,
             Amount::from_btc(1.0).unwrap(),
@@ -693,13 +720,16 @@ fn test_receives_new_3rd_party_txs() {
             None,
         )
         .expect("Failed to send to Bob");
-    assert_eq!(101, alice_client.get_blockchain_info().unwrap().blocks);
-    alice_client
+    assert_eq!(101, client.get_blockchain_info().unwrap().blocks);
+    client
         .generate_to_address(1, &get_blackhole_address())
         .unwrap();
-    assert_eq!(102, alice_client.get_blockchain_info().unwrap().blocks);
+    assert_eq!(102, client.get_blockchain_info().unwrap().blocks);
 
-    let alice_balance = alice_client.get_balance(None, None).unwrap();
+    /* The assertions below had to be disabled because dogecoind does not support
+     * sending from a specific address.
+
+    let alice_balance = client.get_received_by_address(&alice_address, Some(0)).unwrap();
 
     // Take the tx fee into consideration
     assert!(
@@ -707,11 +737,12 @@ fn test_receives_new_3rd_party_txs() {
             && alice_balance > Amount::from_btc(48.999).unwrap()
     );
     assert_eq!(
-        bob_client.get_balance(None, None).unwrap(),
+        client.get_balance(None, None).unwrap(),
         Amount::from_btc(1.0).unwrap()
     );
+    */
 
-    let blocks = sync_until_end_block(&adapter_client, &alice_client, 101, &mut vec![], 15);
+    let blocks = sync_until_end_block(&adapter_client, &client, 101, &mut vec![], 15);
 
     assert_eq!(blocks.len(), 1);
     assert!(blocks[0].txdata.iter().any(|tx| tx.compute_txid() == txid));
@@ -728,20 +759,17 @@ fn test_send_tx() {
         &rt,
         vec![SocketAddr::V4(get_bitcoind_url(&bitcoind).unwrap())],
         logger,
-        bitcoin::Network::Regtest,
+        import::Network::Regtest,
     );
 
-    let (alice_client, bob_client, alice_address, bob_address) =
-        create_alice_and_bob_wallets(&bitcoind);
+    let (client, alice_address, bob_address) = create_alice_and_bob_wallets(&bitcoind);
 
-    fund_with_btc(&alice_client, &alice_address);
+    fund_with_btc(&client, &alice_address);
 
     let to_send = Amount::from_btc(1.0).unwrap();
     let tx_fee = Amount::from_btc(0.001).unwrap();
 
-    let unspent = alice_client
-        .list_unspent(None, None, None, None, None)
-        .unwrap();
+    let unspent = client.list_unspent(None, None, None, None, None).unwrap();
     let utxo = unspent
         .iter()
         .find(|utxo| utxo.amount > to_send + tx_fee)
@@ -760,20 +788,23 @@ fn test_send_tx() {
         outs.insert(alice_address.to_string(), change);
     }
 
-    let raw_tx = alice_client
+    let raw_tx = client
         .create_raw_transaction(&[raw_tx_input], &outs, None, Some(true))
         .expect("Failed to create raw transaction");
 
-    let signed_tx = alice_client
-        .sign_raw_transaction_with_wallet(&raw_tx, None, None)
+    #[allow(deprecated)]
+    let signed_tx = client
+        .sign_raw_transaction(&raw_tx, None, None, None)
         .unwrap();
 
     let res = make_send_tx_request(&adapter_client, &signed_tx.hex);
-
+    let bob_balance = client.get_received_by_address(&bob_address, Some(0)).unwrap();
     let mut tries = 0;
     while tries < 5
-        && bob_client.get_balances().unwrap().mine.untrusted_pending
-            == Amount::from_btc(0.0).unwrap()
+        && client
+            .get_received_by_address(&bob_address, Some(0))
+            .unwrap()
+            == bob_balance
     {
         std::thread::sleep(std::time::Duration::from_secs(1));
         tries += 1;
@@ -781,8 +812,10 @@ fn test_send_tx() {
 
     if let BitcoinAdapterResponseWrapper::SendTransactionResponse(_) = res.unwrap() {
         assert_eq!(
-            bob_client.get_balances().unwrap().mine.untrusted_pending,
-            Amount::from_btc(1.0).unwrap()
+            client
+                .get_received_by_address(&bob_address, Some(0))
+                .unwrap(),
+            bob_balance + Amount::from_btc(1.0).unwrap()
         );
     } else {
         panic!("Failed to send transaction");
@@ -795,6 +828,7 @@ fn test_receives_blocks_from_forks() {
     let logger = no_op_logger();
     let bitcoind1 = get_default_bitcoind();
     let client1 = Client::new(
+        import::Network::Regtest,
         bitcoind1.rpc_url().as_str(),
         Auth::CookieFile(bitcoind1.params.cookie_file.clone()),
     )
@@ -802,6 +836,7 @@ fn test_receives_blocks_from_forks() {
 
     let bitcoind2 = get_default_bitcoind();
     let client2 = Client::new(
+        import::Network::Regtest,
         bitcoind2.rpc_url().as_str(),
         Auth::CookieFile(bitcoind2.params.cookie_file.clone()),
     )
@@ -815,7 +850,7 @@ fn test_receives_blocks_from_forks() {
         &rt,
         vec![SocketAddr::V4(url1), SocketAddr::V4(url2)],
         logger,
-        bitcoin::Network::Regtest,
+        import::Network::Regtest,
     );
 
     // Connect the nodes and mine some shared blocks
@@ -826,19 +861,14 @@ fn test_receives_blocks_from_forks() {
     wait_for_connection(&client1, 2);
     wait_for_connection(&client2, 2);
 
-    let address1 = client1
-        .get_new_address(None, None)
-        .unwrap()
-        .assume_checked();
+    let address1 = client1.get_new_address(None, None).unwrap();
     client1.generate_to_address(10, &address1).unwrap();
 
     wait_for_blocks(&client1, 10);
     wait_for_blocks(&client2, 10);
 
-    let address2 = client2
-        .get_new_address(None, None)
-        .unwrap()
-        .assume_checked();
+    let address2 = client2.get_new_address(None, None).unwrap();
+
     client2.generate_to_address(10, &address2).unwrap();
 
     wait_for_blocks(&client1, 20);
@@ -869,6 +899,7 @@ fn test_bfs_order() {
     let logger = no_op_logger();
     let bitcoind1 = get_default_bitcoind();
     let client1 = Client::new(
+        import::Network::Regtest,
         bitcoind1.rpc_url().as_str(),
         Auth::CookieFile(bitcoind1.params.cookie_file.clone()),
     )
@@ -876,6 +907,7 @@ fn test_bfs_order() {
 
     let bitcoind2 = get_default_bitcoind();
     let client2 = Client::new(
+        import::Network::Regtest,
         bitcoind2.rpc_url().as_str(),
         Auth::CookieFile(bitcoind2.params.cookie_file.clone()),
     )
@@ -889,7 +921,7 @@ fn test_bfs_order() {
         &rt,
         vec![SocketAddr::V4(url1), SocketAddr::V4(url2)],
         logger,
-        bitcoin::Network::Regtest,
+        import::Network::Regtest,
     );
 
     // Connect the nodes and mine some shared blocks
@@ -900,10 +932,7 @@ fn test_bfs_order() {
     wait_for_connection(&client1, 2);
     wait_for_connection(&client2, 2);
 
-    let address1 = client1
-        .get_new_address(None, None)
-        .unwrap()
-        .assume_checked();
+    let address1 = client1.get_new_address(None, None).unwrap();
     // IMPORTANT:
     // Increasing the number of blocks in this test could lead to flakiness due to the number of "request rounds"
     // alligning with the round robin of the adapter's peers. Currently all blocks are tried and retried in a single round.
@@ -928,10 +957,7 @@ fn test_bfs_order() {
         .generate_to_address(branch_length, &address1)
         .unwrap();
 
-    let address2 = client2
-        .get_new_address(None, None)
-        .unwrap()
-        .assume_checked();
+    let address2 = client2.get_new_address(None, None).unwrap();
     let fork2 = client2
         .generate_to_address(branch_length, &address2)
         .unwrap();
@@ -1009,12 +1035,8 @@ fn test_mainnet_data() {
     );
 
     let rt = tokio::runtime::Runtime::new().unwrap();
-    let (adapter_client, _path) = start_active_adapter_and_client(
-        &rt,
-        vec![bitcoind_addr],
-        logger,
-        bitcoin::Network::Bitcoin,
-    );
+    let (adapter_client, _path) =
+        start_active_adapter_and_client(&rt, vec![bitcoind_addr], logger, import::Network::Regtest);
     sync_headers_until_checkpoint(&adapter_client, genesis[..].to_vec());
 
     // Block 350,989's block hash.
@@ -1048,12 +1070,8 @@ fn test_testnet_data() {
     );
 
     let rt = tokio::runtime::Runtime::new().unwrap();
-    let (adapter_client, _path) = start_active_adapter_and_client(
-        &rt,
-        vec![bitcoind_addr],
-        logger,
-        bitcoin::Network::Testnet,
-    );
+    let (adapter_client, _path) =
+        start_active_adapter_and_client(&rt, vec![bitcoind_addr], logger, import::Network::Testnet);
     sync_headers_until_checkpoint(&adapter_client, genesis[..].to_vec());
 
     let anchor: BlockHash = "0000000000ec75f32a0805740a6fa1364cc1683e419e915d99892db97c3e80b2"

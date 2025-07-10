@@ -2,12 +2,11 @@
 //! to the correct component.
 use crate::{
     blockchainmanager::BlockchainManager, common::DEFAULT_CHANNEL_BUFFER_SIZE, config::Config,
-    connectionmanager::ConnectionManager, metrics::RouterMetrics, stream::handle_stream,
-    transaction_store::TransactionStore, AdapterState, BlockchainManagerRequest, BlockchainState,
-    Channel, ProcessBitcoinNetworkMessage, ProcessBitcoinNetworkMessageError, ProcessEvent,
-    TransactionManagerRequest,
+    connectionmanager::ConnectionManager, import::NetworkMessage, metrics::RouterMetrics,
+    stream::handle_stream, transaction_store::TransactionStore, AdapterState,
+    BlockchainManagerRequest, BlockchainState, Channel, ProcessBitcoinNetworkMessage,
+    ProcessBitcoinNetworkMessageError, ProcessEvent, TransactionManagerRequest,
 };
-use bitcoin::p2p::message::NetworkMessage;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use std::net::SocketAddr;
@@ -61,6 +60,7 @@ pub fn start_main_event_loop(
             // tokio::time::Interval::tick which are all cancellation safe.
             tokio::select! {
                 event = connection_manager.receive_stream_event() => {
+                    // println!("event received = {:?}", event);
                     if let Err(ProcessBitcoinNetworkMessageError::InvalidMessage) =
                         connection_manager.process_event(&event)
                     {
@@ -69,26 +69,32 @@ pub fn start_main_event_loop(
                 },
                 network_message = network_message_receiver.recv() => {
                     let (address, message) = network_message.unwrap();
+                    println!("network_message received = {:?}", message);
                     router_metrics
                         .bitcoin_messages_received
                         .with_label_values(&[message.cmd()])
                         .inc();
                     if let Err(ProcessBitcoinNetworkMessageError::InvalidMessage) =
                         connection_manager.process_bitcoin_network_message(address, &message) {
+                        println!("connection_manager invalid");
                         connection_manager.discard(&address);
                     }
 
                     if let Err(ProcessBitcoinNetworkMessageError::InvalidMessage) = blockchain_manager.process_bitcoin_network_message(&mut connection_manager, address, &message) {
+                        println!("blockchain_manager invalid");
                         connection_manager.discard(&address);
                     }
                     if let Err(ProcessBitcoinNetworkMessageError::InvalidMessage) = transaction_manager.process_bitcoin_network_message(&mut connection_manager, address, &message) {
+                        println!("transaction_manager invalid");
                         connection_manager.discard(&address);
                     }
                 },
                 result = blockchain_manager_rx.recv() => {
+                    println!("result received = {:?}", result);
                     let command = result.expect("Receiving should not fail because the sender part of the channel is never closed.");
                     match command {
                         BlockchainManagerRequest::EnqueueNewBlocksToDownload(next_headers) => {
+                            println!("receives EnqueueNewBlocksToDownload");
                             blockchain_manager.enqueue_new_blocks_to_download(next_headers);
                         }
                         BlockchainManagerRequest::PruneBlocks(anchor, processed_block_hashes) => {
@@ -97,6 +103,7 @@ pub fn start_main_event_loop(
                     };
                 }
                 transaction_manager_request = transaction_manager_rx.recv() => {
+                    println!("transaction_manager_request received = {:?}", transaction_manager_request);
                     match transaction_manager_request.unwrap() {
                         TransactionManagerRequest::SendTransaction(transaction) => transaction_manager.enqueue_transaction(&transaction),
                     }

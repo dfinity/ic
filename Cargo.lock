@@ -1364,9 +1364,27 @@ dependencies = [
 
 [[package]]
 name = "bitcoin"
-version = "0.32.5"
+version = "0.32.5-doge.0"
+source = "git+https://github.com/dfinity/rust-dogecoin?rev=2f89de4f1104c45a5fce82db95d8e3406320a3f3#2f89de4f1104c45a5fce82db95d8e3406320a3f3"
+dependencies = [
+ "base58ck",
+ "bech32 0.11.0",
+ "bitcoin-internals",
+ "bitcoin-io",
+ "bitcoin-units",
+ "bitcoin_hashes 0.14.0",
+ "hex-conservative",
+ "hex_lit",
+ "scrypt",
+ "secp256k1 0.29.1",
+ "serde",
+]
+
+[[package]]
+name = "bitcoin"
+version = "0.32.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ce6bc65742dea50536e35ad42492b234c27904a27f0abdcbce605015cb4ea026"
+checksum = "ad8929a18b8e33ea6b3c09297b687baaa71fb1b97353243a3f1029fad5c59c5b"
 dependencies = [
  "base58ck",
  "bech32 0.11.0",
@@ -1444,7 +1462,19 @@ version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aedd23ae0fd321affb4bbbc36126c6f49a32818dc6b979395d24da8c9d4e80ee"
 dependencies = [
- "bitcoincore-rpc-json",
+ "bitcoincore-rpc-json 0.19.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "jsonrpc 0.18.0",
+ "log",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "bitcoincore-rpc"
+version = "0.19.0"
+source = "git+https://github.com/dfinity/rust-bitcoincore-rpc?rev=3604655f4ec220f80f09ca1d2ea5501b5dc2cdbd#3604655f4ec220f80f09ca1d2ea5501b5dc2cdbd"
+dependencies = [
+ "bitcoincore-rpc-json 0.19.0 (git+https://github.com/dfinity/rust-bitcoincore-rpc?rev=3604655f4ec220f80f09ca1d2ea5501b5dc2cdbd)",
  "jsonrpc 0.18.0",
  "log",
  "serde",
@@ -1457,7 +1487,17 @@ version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d8909583c5fab98508e80ef73e5592a651c954993dc6b7739963257d19f0e71a"
 dependencies = [
- "bitcoin 0.32.5",
+ "bitcoin 0.32.6",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "bitcoincore-rpc-json"
+version = "0.19.0"
+source = "git+https://github.com/dfinity/rust-bitcoincore-rpc?rev=3604655f4ec220f80f09ca1d2ea5501b5dc2cdbd#3604655f4ec220f80f09ca1d2ea5501b5dc2cdbd"
+dependencies = [
+ "bitcoin 0.32.5-doge.0",
  "serde",
  "serde_json",
 ]
@@ -1465,8 +1505,7 @@ dependencies = [
 [[package]]
 name = "bitcoind"
 version = "0.32.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ee93e3628c679646a9f1cb2e4c55ec10fc3d477a2a8c26dcde4267dfb2e2109a"
+source = "git+https://github.com/ninegua/bitcoind?rev=60ed030114a826a51ec87688de017ddc82f27fad#60ed030114a826a51ec87688de017ddc82f27fad"
 dependencies = [
  "anyhow",
  "core-rpc",
@@ -4538,7 +4577,7 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "assert_matches",
- "bitcoincore-rpc",
+ "bitcoincore-rpc 0.19.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "candid",
  "futures",
  "ic-agent",
@@ -6312,7 +6351,7 @@ name = "ic-bitcoin-canister-mock"
 version = "0.9.0"
 dependencies = [
  "bech32 0.9.1",
- "bitcoin 0.32.5",
+ "bitcoin 0.32.6",
  "candid",
  "candid_parser",
  "hex",
@@ -6549,8 +6588,8 @@ dependencies = [
 name = "ic-btc-adapter"
 version = "0.9.0"
 dependencies = [
- "bitcoin 0.32.5",
- "bitcoincore-rpc",
+ "bitcoin 0.32.5-doge.0",
+ "bitcoincore-rpc 0.19.0 (git+https://github.com/dfinity/rust-bitcoincore-rpc?rev=3604655f4ec220f80f09ca1d2ea5501b5dc2cdbd)",
  "bitcoind",
  "clap 4.5.27",
  "criterion",
@@ -6617,9 +6656,9 @@ dependencies = [
 name = "ic-btc-adapter-test-utils"
 version = "0.9.0"
 dependencies = [
- "bitcoin 0.32.5",
  "flate2",
  "hex",
+ "ic-btc-adapter",
  "rand 0.8.5",
  "serde_json",
  "tokio",
@@ -6631,7 +6670,7 @@ version = "0.9.0"
 dependencies = [
  "askama",
  "base64 0.13.1",
- "bitcoin 0.32.5",
+ "bitcoin 0.32.6",
  "candid",
  "candid_parser",
  "ciborium",
@@ -6729,7 +6768,7 @@ dependencies = [
 name = "ic-btc-validation"
 version = "0.9.0"
 dependencies = [
- "bitcoin 0.32.5",
+ "bitcoin 0.32.5-doge.0",
  "csv",
  "hex",
  "proptest 0.9.6",
@@ -14240,7 +14279,7 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "assert_matches",
- "bitcoincore-rpc",
+ "bitcoincore-rpc 0.19.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "candid",
  "canister-test",
  "dfn_candid",
@@ -18625,8 +18664,8 @@ dependencies = [
  "axum-server",
  "backoff",
  "base64 0.13.1",
- "bitcoin 0.32.5",
- "bitcoincore-rpc",
+ "bitcoin 0.32.6",
+ "bitcoincore-rpc 0.19.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "bytes",
  "candid",
  "clap 4.5.27",
@@ -20894,6 +20933,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ea1a2d0a644769cc99faa24c3ad26b379b786fe7c36fd3c546254801650e6dd"
 
 [[package]]
+name = "salsa20"
+version = "0.10.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "97a22f5af31f73a954c10289c93e8a50cc23d971e80ee446f1f6f7137a088213"
+dependencies = [
+ "cipher",
+]
+
+[[package]]
 name = "salt-sharing-api"
 version = "0.9.0"
 dependencies = [
@@ -21044,6 +21092,17 @@ dependencies = [
  "selectors",
  "smallvec",
  "tendril",
+]
+
+[[package]]
+name = "scrypt"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0516a385866c09368f0b5bcd1caff3366aace790fcd46e2bb032697bb172fd1f"
+dependencies = [
+ "pbkdf2 0.12.2",
+ "salsa20",
+ "sha2 0.10.8",
 ]
 
 [[package]]

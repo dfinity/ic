@@ -1,13 +1,8 @@
 //! The module is responsible for keeping track of the blockchain state.
 //!
+use crate::import::validation::{validate_header, HeaderStore, ValidateHeaderError};
+use crate::import::{genesis_block, Block, BlockHash, BlockHeader, Encodable, Network, Work};
 use crate::{common::BlockHeight, config::Config, metrics::BlockchainStateMetrics};
-use bitcoin::{
-    block::Header as BlockHeader, blockdata::constants::genesis_block, consensus::Encodable, Block,
-    BlockHash, Network,
-};
-
-use bitcoin::Work;
-use ic_btc_validation::{validate_header, HeaderStore, ValidateHeaderError};
 use ic_metrics::MetricsRegistry;
 use std::{collections::HashMap, sync::Arc};
 use thiserror::Error;
@@ -166,7 +161,7 @@ impl BlockchainState {
 
         let err = headers
             .iter()
-            .try_for_each(|header| match self.add_header(*header) {
+            .try_for_each(|header| match self.add_header(header.clone()) {
                 Ok(AddHeaderResult::HeaderAdded(block_hash)) => {
                     block_hashes_of_added_headers.push(block_hash);
                     Ok(())
@@ -253,7 +248,7 @@ impl BlockchainState {
 
         // If the block's header is not added before, then add the header into the `header_cache` first.
         let _ = self
-            .add_header(block.header)
+            .add_header(block.header.clone())
             .map_err(AddBlockError::Header)?;
         self.tips.sort_unstable_by(|a, b| b.work.cmp(&a.work));
 
@@ -308,7 +303,7 @@ impl BlockchainState {
     pub fn locator_hashes(&self) -> Vec<BlockHash> {
         let mut hashes = Vec::new();
         let tip = self.get_active_chain_tip();
-        let mut current_header = tip.header;
+        let mut current_header = tip.header.clone();
         let mut current_hash = current_header.block_hash();
         let mut step: u32 = 1;
         let mut last_hash = current_hash;
@@ -322,7 +317,7 @@ impl BlockchainState {
                 let prev_hash = current_header.prev_blockhash;
                 //If the prev header does not exist, then simply return the `hashes` vector.
                 if let Some(cached) = self.header_cache.get(&prev_hash) {
-                    current_header = cached.header;
+                    current_header = cached.header.clone();
                 } else {
                     if last_hash != genesis_hash {
                         hashes.push(genesis_hash);
@@ -365,7 +360,7 @@ impl BlockchainState {
 impl HeaderStore for BlockchainState {
     fn get_header(&self, hash: &BlockHash) -> Option<(BlockHeader, BlockHeight)> {
         self.get_cached_header(hash)
-            .map(|cached| (cached.header, cached.height))
+            .map(|cached| (cached.header.clone(), cached.height))
     }
 
     fn get_initial_hash(&self) -> BlockHash {
@@ -377,9 +372,10 @@ impl HeaderStore for BlockchainState {
     }
 }
 
+#[cfg(not(feature = "dogecoin"))]
 #[cfg(test)]
 mod test {
-    use bitcoin::{consensus::Decodable, Block, TxMerkleNode};
+    use crate::import::{Block, Decodable, TxMerkleNode};
     use ic_metrics::MetricsRegistry;
 
     use super::*;
@@ -570,7 +566,7 @@ mod test {
         let initial_header = state.genesis();
         let mut chain = generate_headers(initial_header.block_hash(), initial_header.time, 16, &[]);
         let last_header = chain.get_mut(10).unwrap();
-        last_header.prev_blockhash = BlockHash::from_raw_hash(bitcoin::hashes::Hash::all_zeros());
+        last_header.prev_blockhash = BlockHash::from_raw_hash(crate::import::Hash::all_zeros());
 
         let chain_hashes: Vec<BlockHash> = chain.iter().map(|header| header.block_hash()).collect();
         let last_hash = chain_hashes[10];
@@ -607,8 +603,7 @@ mod test {
         assert!(matches!(result, Ok(())));
 
         // Make a block 2's merkle root invalid and try to add the block to the cache.
-        block_2.header.merkle_root =
-            TxMerkleNode::from_raw_hash(bitcoin::hashes::Hash::all_zeros());
+        block_2.header.merkle_root = TxMerkleNode::from_raw_hash(crate::import::Hash::all_zeros());
         // Block 2's hash will now be changed because of the merkle root change.
         let block_2_hash = block_2.block_hash();
         let result = state.add_block(block_2);

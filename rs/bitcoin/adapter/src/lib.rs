@@ -4,10 +4,27 @@
 //! and publish transactions. Moreover, it interacts with the Bitcoin system
 //! component to provide blocks and collect outgoing transactions.
 
-use bitcoin::p2p::message::NetworkMessage;
-use bitcoin::{block::Header as BlockHeader, BlockHash};
+#[cfg(not(feature = "dogecoin"))]
+mod bitcoin;
+
+#[cfg(feature = "dogecoin")]
+mod dogecoin;
+
+#[cfg(not(feature = "dogecoin"))]
+/// imports from bitcoin.
+pub mod import {
+    pub use crate::bitcoin::*;
+}
+
+#[cfg(feature = "dogecoin")]
+/// imports from dogecoin.
+pub mod import {
+    pub use crate::dogecoin::*;
+}
+
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
+use import::{BlockHash, BlockHeader, NetworkMessage};
 use std::{
     net::SocketAddr,
     sync::{Arc, Mutex},

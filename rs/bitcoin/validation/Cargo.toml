@@ -9,7 +9,7 @@ documentation.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bitcoin = { workspace = true }
+bitcoin = { git = "https://github.com/dfinity/rust-dogecoin", rev = "2f89de4f1104c45a5fce82db95d8e3406320a3f3", features = [ "serde" ]}
 hex = { workspace = true }
 
 [dev-dependencies]
