@@ -41,8 +41,12 @@
   <os type='efi'>
     <type arch='x86_64' machine='pc-q35-9.2'>hvm</type>
     <boot dev='hd'/>
-    {%- if let Some(direct_boot) = direct_boot %}
-    <loader readonly='yes'>{{direct_boot.ovmf.display()}}</loader>
+    {% if let Some(direct_boot) = direct_boot -%}
+    {# TODO: Reenable custom OVMF once we know why it doesn't support direct boot -#}
+    {#-    <loader readonly='yes'>{{direct_boot.ovmf.display()}}</loader> -#}
+
+    <loader readonly='yes' type='pflash'>/usr/share/OVMF/OVMF_CODE_4M.fd</loader>
+    <nvram>/var/lib/libvirt/qemu/nvram/{{domain_name}}_VARS.fd</nvram>
     <kernel>{{direct_boot.kernel.display()}}</kernel>
     <initrd>{{direct_boot.initrd.display()}}</initrd>
     <cmdline>{{direct_boot.kernel_cmdline}}</cmdline>
