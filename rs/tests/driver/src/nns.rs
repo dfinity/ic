@@ -399,10 +399,7 @@ pub async fn vote_execute_proposal_assert_failed(
     );
 }
 
-pub async fn vote_and_execute_proposal(
-    governance_canister: &Canister<'_>,
-    proposal_id: ProposalId,
-) -> ProposalInfo {
+pub async fn vote_on_proposal(governance_canister: &Canister<'_>, proposal_id: ProposalId) {
     // Cast votes.
     let input = ManageNeuron {
         neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
@@ -425,6 +422,14 @@ pub async fn vote_and_execute_proposal(
         )
         .await
         .expect("Vote failed");
+}
+
+pub async fn vote_and_execute_proposal(
+    governance_canister: &Canister<'_>,
+    proposal_id: ProposalId,
+) -> ProposalInfo {
+    // Cast votes.
+    vote_on_proposal(governance_canister, proposal_id).await;
     wait_for_final_state(governance_canister, proposal_id).await
 }
 

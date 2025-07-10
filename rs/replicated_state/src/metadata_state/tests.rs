@@ -1,11 +1,19 @@
 use super::*;
 use crate::metadata_state::subnet_call_context_manager::{
-    InstallCodeCall, RawRandContext, StopCanisterCall, SubnetCallContext, SubnetCallContextManager,
+    InstallCodeCall, PreSignatureStash, RawRandContext, StopCanisterCall, SubnetCallContext,
+    SubnetCallContextManager,
 };
 use assert_matches::assert_matches;
+use ic_crypto_test_utils_canister_threshold_sigs::{
+    generate_ecdsa_presig_quadruple, generate_key_transcript, setup_unmasked_random_params,
+    CanisterThresholdSigTestEnvironment, IDkgParticipants,
+};
+use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
 use ic_error_types::{ErrorCode, UserError};
 use ic_limits::MAX_INGRESS_TTL;
-use ic_management_canister_types_private::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, IC_00};
+use ic_management_canister_types_private::{
+    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, IC_00,
+};
 use ic_registry_routing_table::CanisterIdRange;
 use ic_test_utilities_types::{
     ids::{
@@ -18,6 +26,14 @@ use ic_test_utilities_types::{
 use ic_types::{
     batch::BlockmakerMetrics,
     canister_http::{CanisterHttpMethod, CanisterHttpRequestContext, Replication},
+    consensus::idkg::{common::PreSignature, PreSigId},
+    crypto::{
+        canister_threshold_sig::{
+            idkg::{IDkgDealers, IDkgReceivers, IDkgTranscript},
+            SchnorrPreSignatureTranscript,
+        },
+        AlgorithmId,
+    },
     ingress::WasmResult,
     messages::{CallbackId, CanisterCall, Payload, Request, RequestMetadata},
     time::CoarseTime,
@@ -678,6 +694,113 @@ fn subnet_call_contexts_deserialization() {
             time: UNIX_EPOCH,
         }]
     )
+}
+
+pub fn generate_pre_signature(
+    env: &CanisterThresholdSigTestEnvironment,
+    dealers: &IDkgDealers,
+    receivers: &IDkgReceivers,
+    key_transcript: &IDkgTranscript,
+    rng: &mut ReproducibleRng,
+) -> PreSignature {
+    let alg = key_transcript.algorithm_id;
+    match alg {
+        AlgorithmId::ThresholdEcdsaSecp256k1 => {
+            let pre_sig =
+                generate_ecdsa_presig_quadruple(env, dealers, receivers, alg, key_transcript, rng);
+            PreSignature::Ecdsa(Arc::new(pre_sig))
+        }
+        AlgorithmId::ThresholdEd25519 | AlgorithmId::ThresholdSchnorrBip340 => {
+            let blinder_unmasked_params =
+                setup_unmasked_random_params(env, alg, dealers, receivers, rng);
+            let blinder_transcript = env
+                .nodes
+                .run_idkg_and_create_and_verify_transcript(&blinder_unmasked_params, rng);
+            PreSignature::Schnorr(Arc::new(
+                SchnorrPreSignatureTranscript::new(blinder_transcript).unwrap(),
+            ))
+        }
+        _ => panic!("unsupported algorithm"),
+    }
+}
+
+#[test]
+fn pre_signature_stash_roundtrip() {
+    let rng = &mut reproducible_rng();
+    let env = CanisterThresholdSigTestEnvironment::new(34, rng);
+    let (dealers, receivers) =
+        env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
+    let key_id_alg = [
+        (
+            MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+                curve: EcdsaCurve::Secp256k1,
+                name: "key1".into(),
+            }),
+            AlgorithmId::ThresholdEcdsaSecp256k1,
+        ),
+        (
+            MasterPublicKeyId::Schnorr(SchnorrKeyId {
+                algorithm: SchnorrAlgorithm::Ed25519,
+                name: "key1".into(),
+            }),
+            AlgorithmId::ThresholdEd25519,
+        ),
+        (
+            MasterPublicKeyId::Schnorr(SchnorrKeyId {
+                algorithm: SchnorrAlgorithm::Bip340Secp256k1,
+                name: "key1".into(),
+            }),
+            AlgorithmId::ThresholdSchnorrBip340,
+        ),
+    ];
+    let mut stashes = BTreeMap::new();
+    // create some stashes with pre-signatures
+    for (key_id, alg) in key_id_alg {
+        let key_transcript = generate_key_transcript(&env, &dealers, &receivers, alg, rng);
+        let mut pre_signatures = BTreeMap::new();
+        for i in 1..10 {
+            pre_signatures.insert(
+                PreSigId(i),
+                generate_pre_signature(&env, &dealers, &receivers, &key_transcript, rng),
+            );
+        }
+        stashes.insert(
+            key_id,
+            PreSignatureStash {
+                pre_signatures,
+                key_transcript: Arc::new(key_transcript),
+            },
+        );
+    }
+    // insert empty stash
+    stashes.insert(
+        MasterPublicKeyId::Ecdsa(make_key_id()),
+        PreSignatureStash {
+            pre_signatures: BTreeMap::new(),
+            key_transcript: Arc::new(generate_key_transcript(
+                &env,
+                &dealers,
+                &receivers,
+                AlgorithmId::ThresholdEcdsaSecp256k1,
+                rng,
+            )),
+        },
+    );
+
+    let mut subnet_call_context_manager: SubnetCallContextManager =
+        SubnetCallContextManager::default();
+    subnet_call_context_manager.pre_signature_stashes = stashes;
+
+    // Encode and decode.
+    let subnet_call_context_manager_proto: ic_protobuf::state::system_metadata::v1::SubnetCallContextManager = (&subnet_call_context_manager).into();
+    let deserialized_subnet_call_context_manager: SubnetCallContextManager =
+        SubnetCallContextManager::try_from((UNIX_EPOCH, subnet_call_context_manager_proto))
+            .unwrap();
+
+    assert_eq!(
+        subnet_call_context_manager,
+        deserialized_subnet_call_context_manager
+    );
 }
 
 #[test]
