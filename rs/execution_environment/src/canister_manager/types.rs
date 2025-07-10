@@ -92,6 +92,9 @@ pub(crate) struct CanisterMgrConfig {
     pub(crate) canister_snapshot_data_baseline_instructions: NumInstructions,
     pub(crate) default_wasm_memory_limit: NumBytes,
     pub(crate) max_number_of_snapshots_per_canister: usize,
+    pub(crate) max_environment_variables: usize,
+    pub(crate) max_environment_variable_key_length: usize,
+    pub(crate) max_environment_variable_value_length: usize,
 }
 
 impl CanisterMgrConfig {
@@ -114,6 +117,9 @@ impl CanisterMgrConfig {
         canister_snapshot_data_baseline_instructions: NumInstructions,
         default_wasm_memory_limit: NumBytes,
         max_number_of_snapshots_per_canister: usize,
+        max_environment_variables: usize,
+        max_environment_variable_key_length: usize,
+        max_environment_variable_value_length: usize,
     ) -> Self {
         Self {
             subnet_memory_capacity,
@@ -133,6 +139,9 @@ impl CanisterMgrConfig {
             canister_snapshot_data_baseline_instructions,
             default_wasm_memory_limit,
             max_number_of_snapshots_per_canister,
+            max_environment_variables,
+            max_environment_variable_key_length,
+            max_environment_variable_value_length,
         }
     }
 }
@@ -478,6 +487,18 @@ pub(crate) enum CanisterManagerError {
     },
     RenameCanisterNotStopped(CanisterId),
     RenameCanisterHasSnapshot(CanisterId),
+    EnvironmentVariablesTooManyKeys {
+        max_keys: usize,
+        provided_keys: usize,
+    },
+    EnvironmentVariablesKeyTooLong {
+        key: String,
+        max_length: usize,
+    },
+    EnvironmentVariablesValueTooLong {
+        value: String,
+        max_length: usize,
+    },
 }
 
 impl AsErrorHelp for CanisterManagerError {
@@ -687,7 +708,19 @@ impl AsErrorHelp for CanisterManagerError {
                     suggestion: "Delete all snapshots before renaming.".to_string(),
                     doc_link: "".to_string(),
                 }
-            }
+            },
+            CanisterManagerError::EnvironmentVariablesTooManyKeys { .. } => ErrorHelp::UserError {
+                suggestion: "Try reducing the number of environment variables.".to_string(),
+                doc_link: "".to_string(),
+            },
+            CanisterManagerError::EnvironmentVariablesKeyTooLong { .. } => ErrorHelp::UserError {
+                suggestion: "Try reducing the length of the environment variable key.".to_string(),
+                doc_link: "".to_string(),
+            },
+            CanisterManagerError::EnvironmentVariablesValueTooLong { .. } => ErrorHelp::UserError {
+                suggestion: "Try reducing the length of the environment variable value.".to_string(),
+                doc_link: "".to_string(),
+            },
         }
     }
 }
@@ -1056,6 +1089,24 @@ impl From<CanisterManagerError> for UserError {
                 Self::new(
                     ErrorCode::InvalidManagementPayload,
                     message,
+                )
+            }
+            EnvironmentVariablesTooManyKeys { max_keys, provided_keys } => {
+                Self::new(
+                    ErrorCode::CanisterContractViolation,
+                    format!("Too many environment variables: {} (max: {})", provided_keys, max_keys),
+                )
+            }
+            EnvironmentVariablesKeyTooLong { key, max_length } => {
+                Self::new(
+                    ErrorCode::CanisterContractViolation,
+                    format!("Environment variable key too long: {} (max: {})", key, max_length),
+                )
+            }
+            EnvironmentVariablesValueTooLong { value, max_length } => {
+                Self::new(
+                    ErrorCode::CanisterContractViolation,
+                    format!("Environment variable value too long: {} (max: {})", value, max_length),
                 )
             }
         }

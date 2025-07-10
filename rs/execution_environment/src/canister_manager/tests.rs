@@ -17,7 +17,9 @@ use ic_base_types::{EnvironmentVariables, NumSeconds, PrincipalId};
 use ic_config::{
     execution_environment::{
         Config, CANISTER_GUARANTEED_CALLBACK_QUOTA, DEFAULT_WASM_MEMORY_LIMIT,
-        MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER, SUBNET_CALLBACK_SOFT_LIMIT,
+        MAX_ENVIRONMENT_VARIABLES, MAX_ENVIRONMENT_VARIABLE_KEY_LENGTH,
+        MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH, MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER,
+        SUBNET_CALLBACK_SOFT_LIMIT,
     },
     flag_status::FlagStatus,
     subnet_config::SchedulerConfig,
@@ -324,6 +326,9 @@ fn canister_manager_config(
         SchedulerConfig::application_subnet().canister_snapshot_data_baseline_instructions,
         DEFAULT_WASM_MEMORY_LIMIT,
         MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER,
+        MAX_ENVIRONMENT_VARIABLES,
+        MAX_ENVIRONMENT_VARIABLE_KEY_LENGTH,
+        MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH,
     )
 }
 

@@ -160,6 +160,16 @@ pub const MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT: usize = 3000;
 ///   - use the maximum of `default_wasm_memory_limit` and `halfway_to_max`.
 pub const DEFAULT_WASM_MEMORY_LIMIT: NumBytes = NumBytes::new(3 * GIB);
 
+/// The maximum number of environment variables allowed per canister.
+pub const MAX_ENVIRONMENT_VARIABLES: usize = 10;
+
+/// The maximum length of an environment variable key.
+pub const MAX_ENVIRONMENT_VARIABLE_KEY_LENGTH: usize = 128;
+
+/// The maximum length of an environment variable value.
+/// Environment variables are limited to 128 bytes to comfortably accommodate the root key.
+pub const MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH: usize = 128;
+
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 #[serde(default)]
 pub struct Config {
@@ -320,6 +330,15 @@ pub struct Config {
 
     /// Whether environment variables are supported.
     pub environment_variables: FlagStatus,
+
+    /// The maximum number of environment variables allowed per canister.
+    pub max_environment_variables: usize,
+
+    /// The maximum length of an environment variable key.
+    pub max_environment_variable_key_length: usize,
+
+    /// The maximum length of an environment variable value.
+    pub max_environment_variable_value_length: usize,
 }
 
 impl Default for Config {
@@ -396,6 +415,9 @@ impl Default for Config {
             canister_snapshot_download: FlagStatus::Disabled,
             canister_snapshot_upload: FlagStatus::Disabled,
             environment_variables: FlagStatus::Disabled,
+            max_environment_variables: MAX_ENVIRONMENT_VARIABLES,
+            max_environment_variable_key_length: MAX_ENVIRONMENT_VARIABLE_KEY_LENGTH,
+            max_environment_variable_value_length: MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH,
         }
     }
 }
