@@ -25,7 +25,7 @@ use ic_consensus_system_test_utils::upgrade::{
 use ic_consensus_threshold_sig_system_test_utils::run_chain_key_signature_test;
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::util::create_agent;
+use ic_system_test_driver::util::{create_agent, LogStream};
 use ic_system_test_driver::{
     driver::{test_env::TestEnv, test_env_api::*},
     util::{block_on, MessageCanister},
@@ -255,6 +255,13 @@ fn upgrade_to(
         &ic_types::ReplicaVersion::try_from(target_version).unwrap(),
         subnet_id,
     ));
+
+    info!(
+        logger,
+        "Checking if the node has produced a log \
+        indicating that the orchestrator has gracefully shut down the tasks"
+    );
+    block_on(assert_registry_replicator_stopped(subnet_node.clone()));
     assert_assigned_replica_version(subnet_node, target_version, logger.clone());
     info!(
         logger,
@@ -286,4 +293,15 @@ pub fn start_node(logger: &Logger, app_node: &IcNodeSnapshot) {
         .await_status_is_healthy()
         .expect("Node not healthy");
     info!(logger, "Node started: {}", app_node.get_ip_addr());
+}
+
+async fn assert_registry_replicator_stopped(node: IcNodeSnapshot) {
+    const MESSAGE: &str = "Task `registry_replicator` finished gracefully";
+
+    LogStream::open([node].into_iter())
+        .await
+        .unwrap()
+        .wait_until(|_, line| dbg!(line).contains(MESSAGE))
+        .await
+        .expect("Node didn't shut down the registry replicator task grafefully")
 }

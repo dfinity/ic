@@ -8,7 +8,6 @@ use ic_protobuf::registry::hostos_version::v1::HostosVersionRecord;
 use ic_sys::utility_command::UtilityCommand;
 use ic_types::{hostos_version::HostosVersion, NodeId};
 use std::{sync::Arc, time::Duration};
-use tokio::sync::watch::Receiver;
 use tokio_util::sync::CancellationToken;
 
 pub(crate) struct HostosUpgrader {

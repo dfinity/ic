@@ -30,6 +30,7 @@ use ic_types::{
 };
 use std::{
     collections::{BTreeMap, HashMap},
+    ops::ControlFlow,
     path::PathBuf,
     sync::{Arc, Mutex},
     time::Instant,
@@ -143,7 +144,7 @@ impl Upgrade {
 
     /// Checks for a new release package, and if found, upgrades to this release
     /// package
-    pub(crate) async fn check(&mut self) -> OrchestratorResult<Option<SubnetId>> {
+    pub(crate) async fn check(&mut self) -> OrchestratorResult<ControlFlow<(), Option<SubnetId>>> {
         let latest_registry_version = self.registry.get_latest_version();
         // Determine the subnet_id using the local CUP.
         let (subnet_id, local_cup_proto, local_cup) = {
@@ -201,7 +202,7 @@ impl Upgrade {
                                     // we will trust the registry and go ahead with removing the node's state
                                     // including the broken local CUP.
                                     self.remove_state().await?;
-                                    return Ok(None);
+                                    return Ok(ControlFlow::Continue(None));
                                 }
                                 Err(other) => return Err(other),
                             }
@@ -215,10 +216,10 @@ impl Upgrade {
                         (subnet_id, None, None)
                     }
                     // If no subnet is assigned to the node id, we're unassigned.
-                    _ => {
-                        self.check_for_upgrade_as_unassigned().await?;
-                        return Ok(None);
-                    }
+                    _ => match self.check_for_upgrade_as_unassigned().await? {
+                        ControlFlow::Continue(()) => return Ok(ControlFlow::Continue(None)),
+                        ControlFlow::Break(()) => return Ok(ControlFlow::Break(())),
+                    },
                 },
             }
         };
@@ -276,7 +277,7 @@ impl Upgrade {
         ) {
             self.stop_replica()?;
             return match self.remove_state().await {
-                Ok(()) => Ok(None),
+                Ok(()) => Ok(ControlFlow::Continue(None)),
                 Err(err) => {
                     warn!(
                         self.logger,
@@ -305,8 +306,10 @@ impl Upgrade {
             // Only downloads the new image if it doesn't already exists locally, i.e. it
             // was previously downloaded by `prepare_upgrade_if_scheduled()`, see
             // below.
-            self.execute_upgrade(&new_replica_version).await?;
-            return Ok(Some(subnet_id));
+            match self.execute_upgrade(&new_replica_version).await? {
+                ControlFlow::Continue(()) => return Ok(ControlFlow::Continue(Some(subnet_id))),
+                ControlFlow::Break(()) => return Ok(ControlFlow::Break(())),
+            }
         }
 
         // If we arrive here, we are on the newest replica version.
@@ -321,7 +324,7 @@ impl Upgrade {
         // not arrive at the corresponding CUP yet.
         self.prepare_upgrade_if_scheduled(subnet_id).await?;
 
-        Ok(Some(subnet_id))
+        Ok(ControlFlow::Continue(Some(subnet_id)))
     }
 
     // Special case for when we are doing bootstrap subnet recovery for
@@ -421,7 +424,7 @@ impl Upgrade {
         Ok(())
     }
 
-    async fn check_for_upgrade_as_unassigned(&mut self) -> OrchestratorResult<()> {
+    async fn check_for_upgrade_as_unassigned(&mut self) -> OrchestratorResult<ControlFlow<()>> {
         let registry_version = self.registry.get_latest_version();
 
         // If the node is a boundary node, we upgrade to that version, otherwise we upgrade to the unassigned version
@@ -436,14 +439,16 @@ impl Upgrade {
             })?;
 
         if self.replica_version == replica_version {
-            return Ok(());
+            return Ok(ControlFlow::Continue(()));
         }
+
         info!(
             self.logger,
             "Replica upgrade on unassigned node detected: old version {}, new version {}",
             self.replica_version,
             replica_version
         );
+
         self.execute_upgrade(&replica_version)
             .await
             .map_err(OrchestratorError::from)
@@ -570,7 +575,7 @@ impl ImageUpgrader<ReplicaVersion, Option<SubnetId>> for Upgrade {
         principal.as_slice().iter().fold(0, |acc, x| (acc ^ x)) as usize
     }
 
-    async fn check_for_upgrade(&mut self) -> UpgradeResult<Option<SubnetId>> {
+    async fn check_for_upgrade(&mut self) -> UpgradeResult<ControlFlow<(), Option<SubnetId>>> {
         self.check().await.map_err(UpgradeError::from)
     }
 }

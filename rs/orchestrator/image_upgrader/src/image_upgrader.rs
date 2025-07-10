@@ -2,16 +2,15 @@ use async_trait::async_trait;
 use ic_http_utils::file_downloader::FileDownloader;
 use ic_logger::{error, info, warn, ReplicaLogger};
 use std::future::Future;
+use std::ops::ControlFlow;
 use std::str::FromStr;
 use std::{
     fmt::Debug,
     io::Write,
     path::PathBuf,
-    process::exit,
     time::{Duration, SystemTime},
 };
 use tokio::process::Command;
-use tokio::sync::watch::Receiver;
 use tokio::time::error::Elapsed;
 use tokio_util::sync::CancellationToken;
 
@@ -221,7 +220,7 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
 
     /// Executes the node upgrade by unpacking the downloaded image (if it didn't happen yet)
     /// and rebooting the node.
-    async fn execute_upgrade(&mut self, version: &V) -> UpgradeResult<()> {
+    async fn execute_upgrade(&mut self, version: &V) -> UpgradeResult<ControlFlow<()>> {
         match self.get_prepared_version() {
             Some(v) if v == version => {
                 info!(
@@ -262,7 +261,7 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
             ))
         } else {
             info!(self.log(), "Rebooting {:?}", out);
-            exit(42);
+            Ok(ControlFlow::Break(()))
         }
     }
 
@@ -309,7 +308,7 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
     /// * Check if an image upgrade is scheduled.
     /// * Optionally prepare the upgrade in advance using `prepare_upgrade`.
     /// * Once it is time to upgrade, execute it using `execute_upgrade`
-    async fn check_for_upgrade(&mut self) -> UpgradeResult<R>;
+    async fn check_for_upgrade(&mut self) -> UpgradeResult<ControlFlow<(), R>>;
 
     /// Calls `check_for_upgrade()` once every `interval`, timing out after `timeout`.
     /// Awaiting this function blocks until `exit_signal` is set to `true`.
@@ -322,12 +321,18 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
         timeout: Duration,
         handler: F,
     ) where
-        F: Fn(Result<UpgradeResult<R>, Elapsed>) -> Fut + Send + Sync,
-        Fut: Future<Output = ()> + Send,
+        F: Fn(Result<UpgradeResult<ControlFlow<(), R>>, Elapsed>) -> Fut + Send + Sync,
+        Fut: Future<Output = ControlFlow<()>> + Send,
     {
         loop {
             let r = tokio::time::timeout(timeout, self.check_for_upgrade()).await;
-            handler(r).await;
+            match handler(r).await {
+                ControlFlow::Continue(()) => {}
+                ControlFlow::Break(()) => {
+                    cancellation_token.cancel();
+                    break;
+                }
+            }
             tokio::select! {
                 _ = tokio::time::sleep(interval) => {}
                 _ = cancellation_token.cancelled() => break

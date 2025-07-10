@@ -17,7 +17,11 @@ async fn main() {
     let logger = orchestrator.logger.clone();
     let join_handle =
         tokio::spawn(async move { orchestrator.start_tasks(cancellation_token_clone).await });
-    shutdown_signal(logger.inner_logger.root.clone()).await;
+
+    tokio::select! {
+        _ = shutdown_signal(logger.inner_logger.root.clone()) => {},
+        _ = cancellation_token.cancelled() => {},
+    }
 
     cancellation_token.cancel();
 
@@ -30,4 +34,5 @@ async fn main() {
             info!(logger, "Orchestrator shut down gracefully")
         }
     }
+    std::thread::sleep(std::time::Duration::from_secs(30));
 }
