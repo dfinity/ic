@@ -25,6 +25,12 @@ pub trait RoutingTableRegistry {
 impl<T: RegistryClient + ?Sized> RoutingTableRegistry for T {
     fn get_routing_table(&self, version: RegistryVersion) -> RegistryClientResult<RoutingTable> {
         let canister_ranges_keys = self.get_key_family(CANISTER_RANGES_PREFIX, version)?;
+        println!(
+            "get_routing_table() found {} canister ranges keys for version {}",
+            canister_ranges_keys.len(),
+            version
+        );
+
         if canister_ranges_keys.is_empty() {
             return Ok(None);
         }

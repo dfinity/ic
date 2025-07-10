@@ -398,15 +398,12 @@ impl InternalState {
 
 /// Standalone function for switch-over logic, for unit testing.
 /// Looks up all required registry data using the provided RegistryClient.
-#[allow(clippy::too_many_arguments)]
 pub fn apply_switch_over_to_last_changelog_entry_impl(
     registry_client: &dyn RegistryClient,
     changelog: &mut [ChangelogEntry],
     new_nns_subnet_id: SubnetId,
     mut new_nns_subnet_record: SubnetRecord,
 ) {
-    use prost::Message;
-
     let registry_version = RegistryVersion::from(changelog.len() as u64);
 
     let routing_table = registry_client
@@ -509,4 +506,313 @@ pub fn apply_switch_over_to_last_changelog_entry_impl(
     });
 
     last.append(&mut routing_table_updates);
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use ic_registry_client_fake::FakeRegistryClient;
+    use ic_registry_keys::{
+        make_canister_ranges_key, make_routing_table_record_key, make_subnet_list_record_key,
+        make_subnet_record_key, ROOT_SUBNET_ID_KEY,
+    };
+    use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+    use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
+    use ic_types::{CanisterId, PrincipalId, SubnetId};
+    use std::collections::BTreeMap;
+    use std::convert::TryFrom;
+    use std::sync::Arc;
+
+    fn create_test_subnet_id(id: u64) -> SubnetId {
+        SubnetId::from(PrincipalId::new_subnet_test_id(id))
+    }
+
+    fn create_test_subnet_record(start_as_nns: bool, subnet_type: SubnetType) -> SubnetRecord {
+        SubnetRecord {
+            membership: vec![],
+            max_ingress_bytes_per_message: 2048,
+            max_ingress_messages_per_block: 1000,
+            max_block_payload_size: 4 * 1024 * 1024,
+            unit_delay_millis: 500,
+            initial_notary_delay_millis: 1500,
+            replica_version_id: "test_version".to_string(),
+            dkg_interval_length: 0,
+            dkg_dealings_per_block: 1,
+            start_as_nns,
+            subnet_type: subnet_type as i32,
+            is_halted: false,
+            halt_at_cup_height: false,
+            features: None,
+            max_number_of_canisters: 0,
+            ssh_readonly_access: vec![],
+            ssh_backup_access: vec![],
+            chain_key_config: None,
+            canister_cycles_cost_schedule: 0,
+        }
+    }
+
+    fn setup_fake_registry_client(
+        old_nns_subnet_id: SubnetId,
+        routing_table: BTreeMap<CanisterIdRange, SubnetId>,
+        canister_range_keys: Vec<String>,
+    ) -> FakeRegistryClient {
+        let data_provider = Arc::new(ProtoRegistryDataProvider::new());
+
+        // Set root subnet ID
+        let old_nns_subnet_id_proto = ic_types::subnet_id_into_protobuf(old_nns_subnet_id);
+
+        data_provider
+            .add(
+                ROOT_SUBNET_ID_KEY,
+                RegistryVersion::from(1),
+                Some(old_nns_subnet_id_proto),
+            )
+            .expect("Failed to set root subnet ID");
+
+        // Set routing table
+        let pb_routing_table = PbRoutingTable::from(
+            RoutingTable::try_from(routing_table).expect("Invalid routing table"),
+        );
+        data_provider
+            .add(
+                &make_routing_table_record_key(),
+                RegistryVersion::from(2),
+                Some(pb_routing_table.clone()),
+            )
+            .expect("Failed to set routing table");
+
+        // Add canister range keys
+        for key in canister_range_keys {
+            data_provider
+                .add(
+                    &key,
+                    RegistryVersion::from(3),
+                    Some(pb_routing_table.clone()), // Just use the same data for test
+                )
+                .expect("Failed to set canister range");
+        }
+
+        let client = FakeRegistryClient::new(data_provider);
+        client.update_to_latest_version();
+
+        client
+    }
+
+    #[test]
+    fn test_apply_switch_over_modifies_only_last_changelog_entry() {
+        let old_nns_subnet_id = create_test_subnet_id(1);
+        let new_nns_subnet_id = create_test_subnet_id(2);
+        let new_nns_subnet_record = create_test_subnet_record(true, SubnetType::Application);
+
+        // Create routing table with old NNS subnet
+        let mut routing_table = BTreeMap::new();
+        routing_table.insert(
+            CanisterIdRange {
+                start: CanisterId::from_u64(0),
+                end: CanisterId::from_u64(1000),
+            },
+            old_nns_subnet_id,
+        );
+
+        let canister_range_keys = vec![make_canister_ranges_key(CanisterId::from_u64(0))];
+
+        let fake_client =
+            setup_fake_registry_client(old_nns_subnet_id, routing_table, canister_range_keys);
+
+        // Create changelog with multiple entries
+        let mut changelog = vec![
+            vec![
+                KeyMutation {
+                    key: "some_key_1".to_string(),
+                    value: Some(b"value1".to_vec()),
+                },
+                KeyMutation {
+                    key: "some_key_2".to_string(),
+                    value: Some(b"value2".to_vec()),
+                },
+            ],
+            vec![KeyMutation {
+                key: "some_key_3".to_string(),
+                value: Some(b"value3".to_vec()),
+            }],
+            vec![
+                KeyMutation {
+                    key: "some_key_4".to_string(),
+                    value: Some(b"value4".to_vec()),
+                },
+                KeyMutation {
+                    key: ROOT_SUBNET_ID_KEY.to_string(),
+                    value: Some(b"old_value".to_vec()),
+                },
+            ],
+        ];
+
+        let original_first_entry = changelog[0].clone();
+        let original_second_entry = changelog[1].clone();
+        let original_last_entry_len = changelog[2].len();
+
+        apply_switch_over_to_last_changelog_entry_impl(
+            &fake_client,
+            &mut changelog,
+            new_nns_subnet_id,
+            new_nns_subnet_record,
+        );
+
+        // Verify first two entries are unchanged
+        assert_eq!(changelog[0], original_first_entry);
+        assert_eq!(changelog[1], original_second_entry);
+
+        // Verify last entry was modified (should have more entries now)
+        assert!(changelog[2].len() > original_last_entry_len);
+
+        // Verify that old ROOT_SUBNET_ID_KEY entry was removed and new one added
+        let root_subnet_mutations: Vec<_> = changelog[2]
+            .iter()
+            .filter(|km| km.key == ROOT_SUBNET_ID_KEY)
+            .collect();
+        assert_eq!(root_subnet_mutations.len(), 1);
+        assert!(root_subnet_mutations[0].value.is_some());
+        assert_ne!(
+            root_subnet_mutations[0].value.as_ref().unwrap(),
+            b"old_value"
+        );
+    }
+
+    #[test]
+    fn test_apply_switch_over_removes_start_as_nns_flag() {
+        let old_nns_subnet_id = create_test_subnet_id(1);
+        let new_nns_subnet_id = create_test_subnet_id(2);
+        let new_nns_subnet_record = create_test_subnet_record(true, SubnetType::Application);
+
+        let routing_table = BTreeMap::new();
+        let canister_range_keys = vec![make_canister_ranges_key(CanisterId::from_u64(0))];
+
+        let fake_client =
+            setup_fake_registry_client(old_nns_subnet_id, routing_table, canister_range_keys);
+
+        let mut changelog = vec![vec![], vec![], vec![]];
+
+        // Verify start_as_nns is initially true
+        assert!(new_nns_subnet_record.start_as_nns);
+
+        apply_switch_over_to_last_changelog_entry_impl(
+            &fake_client,
+            &mut changelog,
+            new_nns_subnet_id,
+            new_nns_subnet_record.clone(),
+        );
+
+        // Find the subnet record mutation in the changelog
+        let subnet_record_key = make_subnet_record_key(new_nns_subnet_id);
+        let subnet_record_mutation = changelog[2]
+            .iter()
+            .find(|km| km.key == subnet_record_key)
+            .expect("Subnet record mutation should exist");
+
+        // Decode and verify start_as_nns is false
+        let decoded_record =
+            SubnetRecord::decode(subnet_record_mutation.value.as_ref().unwrap().as_slice())
+                .expect("Should decode successfully");
+
+        assert!(!decoded_record.start_as_nns);
+        assert_eq!(decoded_record.subnet_type, SubnetType::System as i32);
+    }
+
+    #[test]
+    fn test_apply_switch_over_updates_required_keys() {
+        let old_nns_subnet_id = create_test_subnet_id(1);
+        let new_nns_subnet_id = create_test_subnet_id(2);
+        let new_nns_subnet_record = create_test_subnet_record(true, SubnetType::Application);
+
+        let routing_table = BTreeMap::new();
+        let canister_range_keys = vec![make_canister_ranges_key(CanisterId::from_u64(0))];
+
+        let fake_client =
+            setup_fake_registry_client(old_nns_subnet_id, routing_table, canister_range_keys);
+
+        let mut changelog = vec![vec![], vec![], vec![]];
+
+        apply_switch_over_to_last_changelog_entry_impl(
+            &fake_client,
+            &mut changelog,
+            new_nns_subnet_id,
+            new_nns_subnet_record,
+        );
+
+        let last_entry = &changelog[2];
+        let keys: Vec<&String> = last_entry.iter().map(|km| &km.key).collect();
+
+        // Verify all required keys are present
+        assert!(keys.contains(&&ROOT_SUBNET_ID_KEY.to_string()));
+        assert!(keys.contains(&&make_subnet_list_record_key()));
+        assert!(keys.contains(&&make_routing_table_record_key()));
+        assert!(keys.contains(&&make_subnet_record_key(new_nns_subnet_id)));
+        assert!(keys.contains(&&make_canister_ranges_key(CanisterId::from_u64(0))));
+
+        // Verify the subnet record and other main keys have values
+        let subnet_key = make_subnet_record_key(new_nns_subnet_id);
+        let subnet_mutation = last_entry.iter().find(|km| km.key == subnet_key).unwrap();
+        assert!(subnet_mutation.value.is_some());
+
+        let root_mutation = last_entry
+            .iter()
+            .find(|km| km.key == ROOT_SUBNET_ID_KEY)
+            .unwrap();
+        assert!(root_mutation.value.is_some());
+    }
+
+    #[test]
+    fn test_apply_switch_over_routing_table_updates() {
+        let old_nns_subnet_id = create_test_subnet_id(1);
+        let new_nns_subnet_id = create_test_subnet_id(2);
+        let other_subnet_id = create_test_subnet_id(3);
+        let new_nns_subnet_record = create_test_subnet_record(true, SubnetType::Application);
+
+        // Create routing table with old NNS subnet and another subnet
+        let mut routing_table = BTreeMap::new();
+        routing_table.insert(
+            CanisterIdRange {
+                start: CanisterId::from_u64(0),
+                end: CanisterId::from_u64(50),
+            },
+            old_nns_subnet_id,
+        );
+        routing_table.insert(
+            CanisterIdRange {
+                start: CanisterId::from_u64(51),
+                end: CanisterId::from_u64(100),
+            },
+            other_subnet_id,
+        );
+
+        let canister_range_keys = vec![make_canister_ranges_key(CanisterId::from_u64(0))];
+
+        let fake_client =
+            setup_fake_registry_client(old_nns_subnet_id, routing_table, canister_range_keys);
+
+        let mut changelog = vec![vec![], vec![], vec![]];
+
+        apply_switch_over_to_last_changelog_entry_impl(
+            &fake_client,
+            &mut changelog,
+            new_nns_subnet_id,
+            new_nns_subnet_record,
+        );
+
+        // Verify routing table was updated
+        let routing_table_mutation = changelog[2]
+            .iter()
+            .find(|km| km.key == make_routing_table_record_key())
+            .expect("Routing table mutation should exist");
+
+        assert!(routing_table_mutation.value.is_some());
+
+        // Decode and verify the routing table was created successfully
+        let decoded_routing_table =
+            PbRoutingTable::decode(routing_table_mutation.value.as_ref().unwrap().as_slice())
+                .expect("Should decode successfully");
+
+        // The routing table should only contain ranges that were previously assigned to old NNS
+        assert!(!decoded_routing_table.entries.is_empty());
+    }
 }
