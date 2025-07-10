@@ -1089,9 +1089,10 @@ impl RosettaClient {
     }
 
     /// The amount of rewards you can expect to receive are amongst other factors dependent on the amount of time a neuron is locked up for.
-    /// If the dissolve timestamp is set to a value that is before 6 months in the future you will not be getting any rewards for the locked period.
-    /// This is because the last 6 months of a dissolving neuron, the neuron will not get any rewards.
-    /// If you set the dissolve timestamp to 1 year in the future and start dissolving the neuron right away, you will receive rewards for the next 6 months.
+    /// If the dissolve timestamp is set to a value that is less than minimum dissolve delay in the future you will not be getting any rewards for the locked period.
+    /// This is because the neuron dissolve delay has to be larger than the minimum dissolve delay for the neuron to receive rewards.
+    /// If you set the dissolve timestamp to 1 year in the future and start dissolving the neuron right away, you will receive rewards for the next 1 year - minimum dissolve delay.
+    /// The minimum dissolve delay can be obtained by querying the `get_minimum_dissolve_delay` endpoint.
     /// The dissolve timestamp always increases monotonically.
     /// If the neuron is in the DISSOLVING state, this operation can move the dissolve timestamp further into the future.
     /// If the neuron is in the NOT_DISSOLVING state, invoking SET_DISSOLVE_TIMESTAMP with time T will attempt to increase the neuron’s dissolve delay (the minimal time it will take to dissolve the neuron) to T - current_time.
