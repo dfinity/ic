@@ -332,6 +332,7 @@ type Governance = record {
 };
 
 type GovernanceCachedMetrics = record {
+  some_metric: nat64;
   total_maturity_e8s_equivalent : nat64;
   not_dissolving_neurons_e8s_buckets : vec record { nat64; float64 };
   dissolving_neurons_staked_maturity_e8s_equivalent_sum : nat64;

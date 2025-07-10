@@ -65,7 +65,7 @@ wasm_rust_binary_rule = rule(
     },
 )
 
-def rust_canister(name, service_file, visibility = ["//visibility:public"], testonly = False, opt = "3", **kwargs):
+def rust_canister(name, service_file, visibility = ["//visibility:public"], testonly = False, opt = "3", did_git_test_enable_also_reverse = False, **kwargs):
     """Defines a Rust program that builds into a WebAssembly module.
 
     The following targets are generated:
@@ -145,6 +145,7 @@ def rust_canister(name, service_file, visibility = ["//visibility:public"], test
     did_git_test(
         name = name + "_did_git_test",
         did = service_file,
+        enable_also_reverse = did_git_test_enable_also_reverse,
     )
 
 def motoko_canister(name, entry, deps):
