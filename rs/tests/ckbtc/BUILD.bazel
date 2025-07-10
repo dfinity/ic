@@ -1,6 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
 load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
-load("//rs/tests:system_tests.bzl", "system_test_nns")
+load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs/tests:__subpackages__"])
 
@@ -34,11 +34,14 @@ DEPENDENCIES = [
     "//rs/universal_canister/lib",
     "@crate_index//:anyhow",
     "@crate_index//:assert_matches",
+    "@crate_index//:bitcoin",
     "@crate_index//:bitcoincore-rpc",
     "@crate_index//:candid",
+    "@crate_index//:futures",
     "@crate_index//:ic-agent",
     "@crate_index//:ic-btc-interface",
     "@crate_index//:ic-management-canister-types",
+    "@crate_index//:ic-utils",
     "@crate_index//:k256",
     "@crate_index//:rand",
     "@crate_index//:rand_chacha",
@@ -220,6 +223,23 @@ system_test_nns(
             "//rs/tests:ckbtc_uvm_config_image",
             "//rs/universal_canister/impl:universal_canister.wasm.gz",
             "@btc_canister//file",
+        ],
+    deps = DEPENDENCIES + [":ckbtc"],
+)
+
+system_test(
+    name = "adapter_basics_test",
+    env = {
+        "CKBTC_UVM_CONFIG_PATH": "$(rootpath //rs/tests:ckbtc_uvm_config_image)",
+        "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
+    },
+    tags = [],
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        UNIVERSAL_VM_RUNTIME_DEPS + [
+            # Keep sorted.
+            "//rs/tests:ckbtc_uvm_config_image",
+            "//rs/universal_canister/impl:universal_canister.wasm.gz",
         ],
     deps = DEPENDENCIES + [":ckbtc"],
 )
