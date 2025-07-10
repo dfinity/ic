@@ -25,9 +25,7 @@ use tokio_util::sync::CancellationToken;
 use virt::connect::Connect;
 use virt::domain::Domain;
 use virt::error::{ErrorDomain, ErrorNumber};
-use virt::sys::{
-    VIR_DOMAIN_DESTROY_GRACEFUL, VIR_DOMAIN_NONE, VIR_DOMAIN_PAUSED, VIR_DOMAIN_RUNNING,
-};
+use virt::sys::{VIR_DOMAIN_DESTROY_GRACEFUL, VIR_DOMAIN_NONE};
 
 mod boot_args;
 mod device_mapping;

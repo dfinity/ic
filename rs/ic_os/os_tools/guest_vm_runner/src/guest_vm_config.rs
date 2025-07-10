@@ -1,4 +1,4 @@
-use crate::{GuestVMType, GUESTOS_DEVICE};
+use crate::GuestVMType;
 use anyhow::{ensure, Context, Result};
 use askama::Template;
 use config::hostos::guestos_bootstrap_image::BootstrapOptions;
