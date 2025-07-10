@@ -234,7 +234,9 @@ rust_library(
 
 rust_test(
     name = "spec_test",
-    size = "medium",
+    # the test sometimes times out on CI with default timeout
+    # of "moderate" (5 minutes) - 2025-07-03
+    timeout = "long",
     srcs = [
         "tests/common.rs",
         "tests/spec_test.rs",
