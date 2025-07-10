@@ -123,6 +123,7 @@ pub fn upgrade(
     upgrade_version: &str,
     subnet_type: SubnetType,
     ecdsa_canister_key: Option<&(MessageCanister, BTreeMap<MasterPublicKeyId, Vec<u8>>)>,
+    assert_graceful_orchestrator_tasks_exits: bool,
 ) -> (IcNodeSnapshot, Principal, String) {
     let logger = env.logger();
     let (subnet_id, subnet_node, faulty_node, redundant_nodes) =
@@ -184,7 +185,14 @@ pub fn upgrade(
     stop_node(&logger, &faulty_node);
 
     info!(logger, "Upgrade to version {}", upgrade_version);
-    upgrade_to(nns_node, subnet_id, &subnet_node, upgrade_version, &logger);
+    upgrade_to(
+        nns_node,
+        subnet_id,
+        &subnet_node,
+        upgrade_version,
+        assert_graceful_orchestrator_tasks_exits,
+        &logger,
+    );
 
     // Killing redundant nodes should not prevent the `faulty_node` from upgrading
     // and catching up after restarting.
@@ -245,6 +253,7 @@ fn upgrade_to(
     subnet_id: SubnetId,
     subnet_node: &IcNodeSnapshot,
     target_version: &str,
+    assert_graceful_orchestrator_tasks_exits: bool,
     logger: &Logger,
 ) {
     info!(
@@ -257,13 +266,17 @@ fn upgrade_to(
         subnet_id,
     ));
 
-    info!(
-        logger,
-        "Checking if the node {} has produced a log \
-        indicating that the orchestrator has gracefully shut down the tasks",
-        subnet_node.get_ip_addr(),
-    );
-    block_on(assert_registry_replicator_stopped(subnet_node.clone()));
+    if assert_graceful_orchestrator_tasks_exits {
+        info!(
+            logger,
+            "Checking if the node {} has produced a log \
+            indicating that the orchestrator has gracefully shut down the tasks",
+            subnet_node.get_ip_addr(),
+        );
+        block_on(assert_registry_replicator_stopped(subnet_node.clone()));
+        info!(logger, "The orchestrator shut down the tasks gracefully");
+    }
+
     assert_assigned_replica_version(subnet_node, target_version, logger.clone());
     info!(
         logger,
