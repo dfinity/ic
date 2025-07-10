@@ -57,7 +57,7 @@ impl<'a> AdapterProxy<'a> {
                         .call_and_wait()
                         .await
                         .expect("Failed to provision id");
-                    mgr.install_code(&(bitcoin_principal), MESSAGE_CANISTER_WASM)
+                    mgr.install_code(&(bitcoin_principal), &MESSAGE_CANISTER_WASM)
                         .call_and_wait()
                         .await
                         .expect("Failed to install code");
