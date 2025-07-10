@@ -21,6 +21,7 @@ on:
       - Container IC Base Images
       - PocketIC Windows
       - Sync IC private from IC public
+      - Update IC versions file
 
 jobs:
   slack-workflow-run:
@@ -61,6 +62,8 @@ jobs:
           # Non-IDX alerts
           if [[ "$TRIGGERING_WORKFLOW_NAME" == "Schedule Rust Benchmarks" ]]; then
             CHANNEL="eng-crypto-alerts"
+          elif [[ "$TRIGGERING_WORKFLOW_NAME" == "Update IC versions file" ]]; then
+            CHANNEL="eng-consensus-alerts"
           fi
 
           echo "channel=${CHANNEL}" >> $GITHUB_OUTPUT

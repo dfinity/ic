@@ -482,6 +482,18 @@ pub fn encode_metrics(
         "The total amount of potential voting power (in the most recent proposal).",
     )?;
 
+    let proposals_using_previous_voting_power_snapshots = governance
+        .heap_data
+        .proposals
+        .values()
+        .filter(|proposal| proposal.previous_ballots_timestamp_seconds.is_some())
+        .count();
+    w.encode_gauge(
+        "governance_proposals_using_previous_voting_power_snapshots",
+        proposals_using_previous_voting_power_snapshots as f64,
+        "The number of proposals that are using previous voting power snapshots.",
+    )?;
+
     // Neuron Indexes
 
     let neuron_store::NeuronIndexesLens {
@@ -577,7 +589,7 @@ pub fn encode_metrics(
     });
 
     w.encode_gauge(
-        "voting_power_snapshots_latest_snapshot_is_spike",
+        "governance_voting_power_snapshots_latest_snapshot_is_spike",
         if latest_snapshot_is_spike { 1.0 } else { 0.0 },
         "Indicates whether the latest voting power snapshot is a spike compared to previous snapshots.",
     )?;
@@ -621,6 +633,7 @@ pub fn encode_metrics(
             dissolving_neurons_e8s_buckets_ect,
             not_dissolving_neurons_e8s_buckets_seed,
             not_dissolving_neurons_e8s_buckets_ect,
+            spawning_neurons_count,
 
             // Non-self-authenticating neurons.
             total_voting_power_non_self_authenticating_controller: _,
@@ -883,6 +896,12 @@ pub fn encode_metrics(
                 w,
             )?;
         }
+
+        w.encode_gauge(
+            "governance_spawning_neurons_count",
+            *spawning_neurons_count as f64,
+            "The number of neurons that are in the \"spawning\" state.",
+        )?;
     }
 
     Ok(())

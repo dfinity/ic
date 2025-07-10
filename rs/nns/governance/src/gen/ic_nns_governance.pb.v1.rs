@@ -1445,6 +1445,12 @@ pub struct ProposalData {
     /// The topic of the proposal.
     #[prost(enumeration = "Topic", optional, tag = "23")]
     pub topic: ::core::option::Option<i32>,
+    /// When a voting power spike is detected, ballots are created using a previous snapshot of the
+    /// voting power, and this field indicates the timestamp at which the snapshot was taken. This
+    /// field should not be set in normal circumstances, and if it is set, it is an indicator that a
+    /// bug might have caused the voting power spike.
+    #[prost(uint64, optional, tag = "24")]
+    pub previous_ballots_timestamp_seconds: ::core::option::Option<u64>,
 }
 /// This structure contains data for settling the Neurons' Fund participation in an SNS token swap.
 #[derive(
@@ -3002,6 +3008,8 @@ pub mod governance {
         pub not_dissolving_neurons_e8s_buckets_seed: ::std::collections::HashMap<u64, f64>,
         #[prost(map = "uint64, double", tag = "35")]
         pub not_dissolving_neurons_e8s_buckets_ect: ::std::collections::HashMap<u64, f64>,
+        #[prost(uint64, tag = "42")]
+        pub spawning_neurons_count: u64,
         /// Deprecated. Use non_self_authenticating_controller_neuron_subset_metrics instead.
         #[prost(uint64, optional, tag = "36")]
         pub total_voting_power_non_self_authenticating_controller: ::core::option::Option<u64>,

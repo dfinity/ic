@@ -1,12 +1,16 @@
 use crate::guest_direct_boot::{prepare_direct_boot, DirectBoot};
-use crate::guest_vm_config::{assemble_config_media, generate_vm_config};
+use crate::guest_vm_config::{
+    assemble_config_media, generate_vm_config, serial_log_path, vm_domain_name,
+};
 use crate::mount::PartitionProvider;
 use crate::systemd_notifier::SystemdNotifier;
-use anyhow::{anyhow, Context, Error, Result};
+use anyhow::{bail, Context, Error, Result};
+use clap::{Parser, ValueEnum};
 use config_types::{HostOSConfig, Ipv6Config};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{calculate_deterministic_mac, IpVariant, MacAddr6Ext};
 use ic_metrics_tool::{Metric, MetricsWriter};
+use std::fmt::{Debug, Formatter};
 use std::io::Write;
 use std::path::Path;
 use std::sync::Arc;
@@ -19,7 +23,7 @@ use tokio_util::sync::CancellationToken;
 use virt::connect::Connect;
 use virt::domain::Domain;
 use virt::error::{ErrorDomain, ErrorNumber};
-use virt::sys::{VIR_DOMAIN_DESTROY_GRACEFUL, VIR_DOMAIN_RUNNING};
+use virt::sys::{VIR_DOMAIN_DESTROY_GRACEFUL, VIR_DOMAIN_NONE, VIR_DOMAIN_RUNNING};
 
 mod boot_args;
 mod guest_direct_boot;
@@ -27,21 +31,65 @@ mod guest_vm_config;
 mod mount;
 mod systemd_notifier;
 
-const GUESTOS_DOMAIN_NAME: &str = "guestos";
-const CONSOLE_LOG_PATH: &str = "/var/log/libvirt/qemu/guestos-serial.log";
-const METRICS_FILE_PATH: &str = "/run/node_exporter/collector_textfile/hostos_guestos_service.prom";
+const DEFAULT_METRICS_FILE_PATH: &str =
+    "/run/node_exporter/collector_textfile/hostos_guestos_service.prom";
+const UPGRADE_METRICS_FILE_PATH: &str =
+    "/run/node_exporter/collector_textfile/hostos_guestos_upgrade_service.prom";
+
+const DEFAULT_GUESTOS_SERVICE_NAME: &str = "guestos.service";
+const UPGRADE_GUESTOS_SERVICE_NAME: &str = "upgrade-guestos.service";
+
 const CONSOLE_TTY_PATH: &str = "/dev/tty1";
-const GUESTOS_SERVICE_NAME: &str = "guestos.service";
-const DEFAULT_GUESTOS_DEVICE: &str = "/dev/hostlvm/guestos";
+const GUESTOS_DEVICE: &str = "/dev/hostlvm/guestos";
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug, ValueEnum)]
+pub enum GuestVMType {
+    Default,
+    Upgrade,
+}
+
+impl GuestVMType {
+    pub fn to_config_type(self) -> config_types::GuestVMType {
+        match self {
+            GuestVMType::Default => config_types::GuestVMType::Default,
+            GuestVMType::Upgrade => config_types::GuestVMType::Upgrade,
+        }
+    }
+}
+
+#[derive(Parser)]
+struct Args {
+    #[arg(long = "type", default_value = "default", value_enum)]
+    vm_type: GuestVMType,
+}
 
 #[tokio::main]
 pub async fn main() -> Result<()> {
-    println!("Starting GuestOS service");
+    let args = Args::parse();
+
+    match args.vm_type {
+        GuestVMType::Default => println!("Starting GuestOS service"),
+        GuestVMType::Upgrade => println!("Starting Upgrade GuestOS service"),
+    }
 
     let termination_token = CancellationToken::new();
     setup_signal_handler(termination_token.clone()).context("Failed to setup signal handler")?;
-    let mut service = GuestVmService::new()?;
-    service.run(termination_token).await
+
+    loop {
+        match GuestVmService::create_and_run(args.vm_type, termination_token.clone()).await {
+            // If the VM started and stopped regularly, we exit with success.
+            Ok(()) => return Ok(()),
+            // If the VM started but stopped, we restart it. Note that we recreate the entire
+            // service in order to start the VM with fresh config.
+            Err(GuestVmServiceError::VirtualMachineStopped) => {
+                println!("Guest VM stopped, restarting");
+                continue;
+            }
+            // If we encounter an unexpected error, we exit with the error and let systemd restart
+            // the service.
+            Err(GuestVmServiceError::Other(err)) => return Err(err),
+        }
+    }
 }
 
 fn setup_signal_handler(termination_token: CancellationToken) -> Result<()> {
@@ -59,6 +107,7 @@ fn setup_signal_handler(termination_token: CancellationToken) -> Result<()> {
 /// Manages a libvirt-based virtual machine
 pub struct VirtualMachine {
     domain_id: u32,
+    domain_name: String,
     libvirt_connect: Connect,
     // These fields hold resources (files) that are used by the virtual machine and must be kept
     // alive until the virtual machine is destroyed.
@@ -74,11 +123,11 @@ impl VirtualMachine {
         xml_config: &str,
         config_media: NamedTempFile,
         direct_boot: Option<DirectBoot>,
+        vm_domain_name: &str,
     ) -> Result<Self> {
         let mut retries = 3;
         let domain = loop {
-            let domain_result =
-                Domain::create_xml(libvirt_connect, xml_config, virt::sys::VIR_DOMAIN_NONE);
+            let domain_result = Domain::create_xml(libvirt_connect, xml_config, VIR_DOMAIN_NONE);
             match domain_result {
                 Ok(domain) => break domain,
                 Err(e)
@@ -86,7 +135,7 @@ impl VirtualMachine {
                         && e.code() == ErrorNumber::OperationInvalid
                         && e.domain() == ErrorDomain::Domain =>
                 {
-                    Self::try_destroy_existing_vm(libvirt_connect);
+                    Self::try_destroy_existing_vm(libvirt_connect, vm_domain_name);
                     retries -= 1;
                     continue;
                 }
@@ -96,14 +145,15 @@ impl VirtualMachine {
         Ok(Self {
             domain_id: domain.get_id().context("Domain does not have id")?,
             libvirt_connect: libvirt_connect.clone(),
+            domain_name: vm_domain_name.to_string(),
             _config_media: config_media,
             _direct_boot: direct_boot,
         })
     }
 
-    fn try_destroy_existing_vm(libvirt_connect: &Connect) {
-        println!("Attempting to destroy existing {GUESTOS_DOMAIN_NAME} domain");
-        if let Err(e) = Domain::lookup_by_name(libvirt_connect, GUESTOS_DOMAIN_NAME)
+    fn try_destroy_existing_vm(libvirt_connect: &Connect, vm_domain_name: &str) {
+        println!("Attempting to destroy existing '{vm_domain_name}' domain");
+        if let Err(e) = Domain::lookup_by_name(libvirt_connect, vm_domain_name)
             .and_then(|existing| existing.destroy_flags(VIR_DOMAIN_DESTROY_GRACEFUL))
         {
             eprintln!("Failed to destroy existing domain: {e}");
@@ -148,7 +198,7 @@ impl Drop for VirtualMachine {
     /// Ensures the VM is properly shut down when the object is dropped
     fn drop(&mut self) {
         if self.is_running() {
-            println!("Shutting down {GUESTOS_DOMAIN_NAME} domain gracefully");
+            println!("Shutting down {} domain gracefully", self.domain_name);
             if let Err(e) = self.get_domain().and_then(|domain| {
                 domain
                     .destroy_flags(VIR_DOMAIN_DESTROY_GRACEFUL)
@@ -156,6 +206,30 @@ impl Drop for VirtualMachine {
             }) {
                 eprintln!("{e}");
             }
+        }
+    }
+}
+
+#[derive(thiserror::Error)]
+pub enum GuestVmServiceError {
+    /// This can happen because QEMU stopped/crashed or because the GuestOS requested reboot.
+    #[error("Virtual machine stopped")]
+    VirtualMachineStopped,
+    #[error("{0}")]
+    Other(#[from] Error),
+}
+
+impl From<std::io::Error> for GuestVmServiceError {
+    fn from(e: std::io::Error) -> Self {
+        Self::Other(e.into())
+    }
+}
+
+impl Debug for GuestVmServiceError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::VirtualMachineStopped => write!(f, "VirtualMachineStopped"),
+            Self::Other(e) => e.fmt(f),
         }
     }
 }
@@ -168,17 +242,19 @@ pub struct GuestVmService {
     systemd_notifier: Arc<dyn SystemdNotifier>,
     console_tty: Box<dyn Write + Send + Sync>,
     partition_provider: Box<dyn PartitionProvider>,
+    guest_vm_type: GuestVMType,
 }
 
 impl GuestVmService {
     #[cfg(not(target_os = "linux"))]
-    pub fn new() -> Result<Self> {
+    pub fn new(guest_vm_type: GuestVMType) -> Result<Self> {
         anyhow::bail!("GuestVM service is only supported on Linux");
     }
 
     #[cfg(target_os = "linux")]
-    pub fn new() -> Result<Self> {
-        let metrics_writer = MetricsWriter::new(std::path::PathBuf::from(METRICS_FILE_PATH));
+    pub fn new(guest_vm_type: GuestVMType) -> Result<Self> {
+        let metrics_writer =
+            MetricsWriter::new(std::path::PathBuf::from(Self::metrics_path(guest_vm_type)));
         let libvirt_connection = Connect::open(None).context("Failed to connect to libvirt")?;
         let hostos_config: HostOSConfig =
             config::deserialize_config(config::DEFAULT_HOSTOS_CONFIG_OBJECT_PATH)
@@ -192,16 +268,27 @@ impl GuestVmService {
             metrics_writer,
             libvirt_connection,
             hostos_config,
-            systemd_notifier: Arc::new(crate::systemd_notifier::DefaultSystemdNotifier),
+            guest_vm_type,
+            systemd_notifier: Arc::new(systemd_notifier::DefaultSystemdNotifier),
             console_tty: Box::new(console_tty),
-            partition_provider: Box::new(crate::mount::GptPartitionProvider::new(
-                DEFAULT_GUESTOS_DEVICE.into(),
-            )?),
+            partition_provider: Box::new(mount::GptPartitionProvider::new(GUESTOS_DEVICE.into())?),
         })
     }
 
+    #[cfg(target_os = "linux")]
+    pub async fn create_and_run(
+        guest_vm_type: GuestVMType,
+        termination_token: CancellationToken,
+    ) -> Result<(), GuestVmServiceError> {
+        let mut guest_vm_service = Self::new(guest_vm_type)?;
+        guest_vm_service.run(termination_token).await
+    }
+
     /// Runs the GuestOS service
-    pub async fn run(&mut self, termination_token: CancellationToken) -> Result<()> {
+    pub async fn run(
+        &mut self,
+        termination_token: CancellationToken,
+    ) -> Result<(), GuestVmServiceError> {
         let virtual_machine = match self.start_virtual_machine().await {
             Ok(virtual_machine) => {
                 self.metrics_writer
@@ -220,7 +307,7 @@ impl GuestVmService {
                         0.0,
                         "GuestOS virtual machine define state",
                     )])?;
-                return Err(err);
+                return Err(err.into());
             }
         };
 
@@ -232,22 +319,37 @@ impl GuestVmService {
     async fn start_virtual_machine(&mut self) -> Result<VirtualMachine> {
         let config_media = NamedTempFile::new().context("Failed to create config media file")?;
 
-        let direct_boot = prepare_direct_boot(
-            // TODO: We should not refresh in Upgrade VMs once we add them
-            /*should_refresh_grubenv=*/
-            true,
-            self.partition_provider.as_ref(),
-        )
-        .await
-        .context("Failed to prepare direct boot")?;
+        println!("Extracting direct boot dependencies");
+        let direct_boot = prepare_direct_boot(self.guest_vm_type, self.partition_provider.as_ref())
+            .await
+            .context("Failed to prepare direct boot")?;
 
-        assemble_config_media(&self.hostos_config, config_media.path())
+        if direct_boot.is_none() {
+            println!(
+                "Direct boot dependencies not found (old GuestOS version?). Falling back to \
+                 legacy boot."
+            );
+        }
+
+        let enable_tee = self
+            .hostos_config
+            .icos_settings
+            .enable_trusted_execution_environment;
+        if enable_tee && direct_boot.is_none() {
+            bail!(
+                "enable_trusted_execution_environment is true but direct boot could not be \
+                 configured."
+            )
+        }
+
+        assemble_config_media(&self.hostos_config, self.guest_vm_type, config_media.path())
             .context("Failed to assemble config media")?;
 
         let vm_config = generate_vm_config(
             &self.hostos_config,
             config_media.path(),
             direct_boot.as_ref().map(DirectBoot::to_config),
+            self.guest_vm_type,
         )
         .context("Failed to generate GuestOS VM config")?;
 
@@ -258,6 +360,7 @@ impl GuestVmService {
             &vm_config,
             config_media,
             direct_boot,
+            vm_domain_name(self.guest_vm_type),
         )
         .context("Failed to define GuestOS virtual machine")?;
 
@@ -323,7 +426,10 @@ impl GuestVmService {
         // Write debug repr because it includes the cause.
         self.write_to_console(&format!("{e:?}"));
         self.write_to_console("#################################################");
-        self.write_to_console("###      LOGGING GUESTOS.SERVICE LOGS...      ###");
+        self.write_to_console(&format!(
+            "###      LOGGING {} LOGS...      ###",
+            self.systemd_service_name().to_uppercase()
+        ));
         self.write_to_console("#################################################");
 
         self.display_systemd_logs().await?;
@@ -340,7 +446,8 @@ impl GuestVmService {
         self.display_serial_logs().await?;
 
         self.write_to_console_and_stdout(&format!(
-            "Exiting guestos so that systemd can restart {GUESTOS_SERVICE_NAME}"
+            "Exiting so that systemd can restart {}",
+            self.systemd_service_name()
         ));
 
         Ok(())
@@ -349,7 +456,7 @@ impl GuestVmService {
     /// Captures and displays journalctl logs for the guestos service
     async fn display_systemd_logs(&mut self) -> Result<()> {
         let journalctl_output = Command::new("journalctl")
-            .args(["-u", GUESTOS_SERVICE_NAME])
+            .args(["-u", self.systemd_service_name()])
             .output()
             .await
             .context("Failed to run journalctl")?;
@@ -362,9 +469,23 @@ impl GuestVmService {
         Ok(())
     }
 
+    fn systemd_service_name(&self) -> &str {
+        match self.guest_vm_type {
+            GuestVMType::Default => DEFAULT_GUESTOS_SERVICE_NAME,
+            GuestVMType::Upgrade => UPGRADE_GUESTOS_SERVICE_NAME,
+        }
+    }
+
+    fn metrics_path(guest_vm_type: GuestVMType) -> &'static Path {
+        match guest_vm_type {
+            GuestVMType::Default => Path::new(DEFAULT_METRICS_FILE_PATH),
+            GuestVMType::Upgrade => Path::new(UPGRADE_METRICS_FILE_PATH),
+        }
+    }
+
     /// Displays serial logs from the console log file if it exists
     async fn display_serial_logs(&mut self) -> Result<()> {
-        let serial_log_path = Path::new(CONSOLE_LOG_PATH);
+        let serial_log_path = serial_log_path(self.guest_vm_type);
         if serial_log_path.exists() {
             self.write_to_console_and_stdout("#################################################");
             self.write_to_console_and_stdout("###  LOGGING GUESTOS CONSOLE LOGS, IF ANY...  ###");
@@ -392,7 +513,7 @@ impl GuestVmService {
         &self,
         vm: &VirtualMachine,
         termination_token: CancellationToken,
-    ) -> Result<()> {
+    ) -> Result<(), GuestVmServiceError> {
         tokio::select! {
             biased;
             // Wait for either VM shutdown event or stop signal
@@ -401,16 +522,7 @@ impl GuestVmService {
                 Ok(())
             },
             _ = vm.wait_for_shutdown() => {
-                self.metrics_writer.write_metrics(&[Metric::with_annotation(
-                    "hostos_guestos_service_unexpected_shutdown",
-                    1.0,
-                    "GuestOS virtual machine unexpected shutdown"
-                )])?;
-
-                // Notify systemd we're stopping
-                self.systemd_notifier.notify_stopping("GuestOS VM stopped unexpectedly.")?;
-
-                Err(anyhow!("GuestOS VM stopped unexpectedly"))
+                Err(GuestVmServiceError::VirtualMachineStopped)
             }
         }
     }
@@ -450,13 +562,42 @@ mod tests {
     use regex::Regex;
     use std::fs::File;
     use std::path::PathBuf;
+    use std::sync::LazyLock;
     use tempfile::TempDir;
     use tokio::task::JoinHandle;
     use virt::sys::VIR_DOMAIN_RUNNING_BOOTED;
 
+    static GUESTOS_IMAGE: LazyLock<NamedTempFile> = LazyLock::new(|| {
+        let icos_image_path =
+            std::env::var("ICOS_IMAGE").expect("Could not find ICOS_IMAGE environment variable");
+        let tempdir = TempDir::new().expect("Failed to create temp dir");
+
+        assert!(
+            std::process::Command::new("tar")
+                .args([
+                    "-xa",
+                    "-f",
+                    &icos_image_path,
+                    "-C",
+                    tempdir.path().to_str().unwrap(),
+                    "disk.img"
+                ])
+                .status()
+                .expect("Could not run tar command")
+                .success(),
+            "Tar returned error"
+        );
+
+        let guestos_device = NamedTempFile::new().unwrap();
+        std::fs::rename(tempdir.path().join("disk.img"), guestos_device.path()).unwrap();
+
+        guestos_device
+    });
+
     /// A running service and methods to interact with it from the test code.
     struct TestServiceInstance {
-        task: JoinHandle<Result<()>>,
+        task: JoinHandle<Result<(), GuestVmServiceError>>,
+        vm_domain_name: String,
         libvirt_connection: Connect,
         console_file: NamedTempFile,
         metrics_file: NamedTempFile,
@@ -470,23 +611,22 @@ mod tests {
                 biased;
                     _ = self.systemd_notifier.await_ready() => {/*success*/},
                 result = &mut self.task => {
-                    panic!("Service stopped before becoming ready. Status: {result:?}");
+                    panic!("{} stopped before becoming ready. Status: {result:?}", self.vm_domain_name);
                 }
             };
         }
 
-        async fn wait_for_systemd_stopping(&mut self) {
-            tokio::select! {
-                biased;
-                _ = self.systemd_notifier.await_stopping() => {/*success*/},
-                result = &mut self.task => {
-                    panic!("Service stopped before notifying about stopping. Status: {result:?}");
+        async fn wait_for_vm_shutdown(&mut self) {
+            loop {
+                if Domain::lookup_by_name(&self.libvirt_connection, &self.vm_domain_name).is_err() {
+                    return;
                 }
-            };
+                sleep(Duration::from_millis(100)).await;
+            }
         }
 
         fn get_domain(&self) -> Domain {
-            Domain::lookup_by_name(&self.libvirt_connection, GUESTOS_DOMAIN_NAME)
+            Domain::lookup_by_name(&self.libvirt_connection, &self.vm_domain_name)
                 .expect("Failed to find VM domain")
         }
 
@@ -499,7 +639,8 @@ mod tests {
         }
 
         fn assert_vm_not_exists(&self) {
-            assert!(Domain::lookup_by_name(&self.libvirt_connection, GUESTOS_DOMAIN_NAME).is_err());
+            Domain::lookup_by_name(&self.libvirt_connection, &self.vm_domain_name)
+                .expect_err("Expected VM domain to not exist");
         }
 
         fn read_console(&self) -> String {
@@ -551,15 +692,14 @@ mod tests {
             kernel_path
         }
 
-        async fn assert_no_systemd_stopping_notification(&mut self) {
-            tokio::select! {
-                _ = self.systemd_notifier.await_stopping() => {
-                    panic!("Expected service to stop without systemd stopping notification");
-                }
-                result = &mut self.task => {
-                    result.expect("Service panicked").expect("Service failed with error")
-                }
-            }
+        fn get_kernel_cmdline(&self) -> String {
+            let domain = self.get_domain();
+            let vm_config = domain.get_xml_desc(0).unwrap();
+            Regex::new("<cmdline>([^']+)</cmdline>")
+                .unwrap()
+                .captures(&vm_config)
+                .expect("Kernel cmdline not found in VM config")[1]
+                .to_string()
         }
 
         #[allow(dead_code)] // Remove once used
@@ -572,7 +712,7 @@ mod tests {
     struct TestFixture {
         libvirt_connection: Connect,
         hostos_config: HostOSConfig,
-        guestos_device: NamedTempFile,
+        guestos_device: PathBuf,
         mock_mounter: ExtractingFilesystemMounter,
         /// Fake libvirt host definition that backs `libvirt_connection`.
         _libvirt_definition: NamedTempFile,
@@ -580,8 +720,6 @@ mod tests {
 
     impl TestFixture {
         fn new(hostos_config: HostOSConfig) -> TestFixture {
-            let guestos_device = extract_guestos_image();
-
             let libvirt_definition =
                 NamedTempFile::new().expect("Failed to create libvirt connection");
             std::fs::write(&libvirt_definition, "<node/>").unwrap();
@@ -595,7 +733,7 @@ mod tests {
             TestFixture {
                 libvirt_connection,
                 hostos_config,
-                guestos_device,
+                guestos_device: GUESTOS_IMAGE.path().to_path_buf(),
                 mock_mounter: ExtractingFilesystemMounter::new(),
                 _libvirt_definition: libvirt_definition,
             }
@@ -604,7 +742,7 @@ mod tests {
         /// Starts a VM service in the background.
         /// This roughly corresponds to invoking `run_guest_vm()` in prod code.
         /// The returned instance can be used to interact with the newly started service.
-        fn start_service(&self) -> TestServiceInstance {
+        fn start_service(&self, guest_vm_type: GuestVMType) -> TestServiceInstance {
             let console_file = NamedTempFile::new().expect("Failed to create console log file");
             let metrics_file = NamedTempFile::new().expect("Failed to create metrics file");
             let systemd_notifier = Arc::new(MockSystemdNotifier::new());
@@ -617,11 +755,12 @@ mod tests {
                 console_tty: Box::new(File::create(console_file.path()).unwrap()),
                 partition_provider: Box::new(
                     GptPartitionProvider::with_mounter(
-                        self.guestos_device.path().to_path_buf(),
+                        self.guestos_device.clone(),
                         Box::new(self.mock_mounter.clone()),
                     )
                     .unwrap(),
                 ),
+                guest_vm_type,
             };
 
             // Start the service in the background
@@ -635,6 +774,7 @@ mod tests {
                 systemd_notifier,
                 termination_token,
                 libvirt_connection: self.libvirt_connection.clone(),
+                vm_domain_name: vm_domain_name(guest_vm_type).to_string(),
             }
         }
     }
@@ -679,33 +819,10 @@ mod tests {
         hostos_config
     }
 
-    fn extract_guestos_image() -> NamedTempFile {
-        let guestos_image_dir = TempDir::new().unwrap();
-        let icos_image_path =
-            std::env::var("ICOS_IMAGE").expect("Could not find ICOS_IMAGE environment variable");
-        assert!(
-            std::process::Command::new("tar")
-                .args(["-xaf", &icos_image_path, "-C"])
-                .arg(guestos_image_dir.path())
-                .status()
-                .unwrap()
-                .success(),
-            "Could not untar image"
-        );
-
-        let guestos_device = NamedTempFile::new().unwrap();
-        std::fs::rename(
-            guestos_image_dir.path().join("disk.img"),
-            guestos_device.path(),
-        )
-        .expect("Could not open guestos device");
-        guestos_device
-    }
-
     #[tokio::test]
     async fn test_run_guest_vm() {
         let fixture = TestFixture::new(valid_hostos_config());
-        let mut service = fixture.start_service();
+        let mut service = fixture.start_service(GuestVMType::Default);
         // The signal handlers work on the process level. All unit tests in this file are run in the
         // same process. We must only test the signal handler in one test otherwise a signal sent in
         // one unit test may be caught by a service running in another unit test which leads to
@@ -732,41 +849,36 @@ mod tests {
 
         nix::sys::signal::raise(SIGTERM).expect("Failed to send SIGTERM");
 
-        // The service should not notify systemd when stopping after receiving SIGTERM
-        service.assert_no_systemd_stopping_notification().await;
-
-        // The domain should be destroyed
-        service.assert_vm_not_exists();
+        tokio::time::timeout(Duration::from_secs(2), service.wait_for_vm_shutdown())
+            .await
+            .expect("VM did not shut down within 2 seconds");
+        service
+            .task
+            .await
+            .expect("Could not join task")
+            .expect("Task did not return Ok(())");
     }
 
     #[tokio::test]
     async fn test_vm_killed() {
         let fixture = TestFixture::new(valid_hostos_config());
-        let mut service = fixture.start_service();
+        let mut service = fixture.start_service(GuestVMType::Default);
         // Wait for the service to start the VM and notify systemd
         service.wait_for_systemd_ready().await;
 
         // Kill the VM
         service.get_domain().destroy().unwrap();
 
-        // The service should notify systemd about stopping
-        service.wait_for_systemd_stopping().await;
-
-        service.assert_metrics_contains("hostos_guestos_service_unexpected_shutdown 1");
-
-        assert!(service
-            .task
-            .await
-            .unwrap()
-            .unwrap_err()
-            .to_string()
-            .contains("GuestOS VM stopped unexpectedly"));
+        assert!(matches!(
+            service.task.await.unwrap().unwrap_err(),
+            GuestVmServiceError::VirtualMachineStopped
+        ));
     }
 
     #[tokio::test]
     async fn test_vm_cannot_be_started() {
         let fixture = TestFixture::new(invalid_hostos_config());
-        let mut service = fixture.start_service();
+        let mut service = fixture.start_service(GuestVMType::Default);
 
         // Wait until the service fails
         let error = (&mut service.task)
@@ -789,20 +901,39 @@ mod tests {
     async fn test_stops_already_running_vm() {
         let fixture = TestFixture::new(valid_hostos_config());
 
-        let mut service1 = fixture.start_service();
+        let mut service1 = fixture.start_service(GuestVMType::Default);
         service1.wait_for_systemd_ready().await;
 
-        let mut service2 = fixture.start_service();
+        let mut service2 = fixture.start_service(GuestVMType::Default);
 
         service2.wait_for_systemd_ready().await;
 
         // Assert that the first service was stopped
-        assert!(tokio::time::timeout(Duration::from_secs(1), service1.task)
-            .await
-            .unwrap()
-            .unwrap()
-            .expect_err("Stopped VM service did not return error")
-            .to_string()
-            .contains("GuestOS VM stopped unexpectedly"));
+        assert!(matches!(
+            tokio::time::timeout(Duration::from_secs(1), service1.task)
+                .await
+                .unwrap()
+                .unwrap()
+                .expect_err("Stopped VM service did not return error"),
+            GuestVmServiceError::VirtualMachineStopped
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_run_default_and_upgrade_vm_at_once() {
+        let fixture = TestFixture::new(valid_hostos_config());
+
+        let mut service1 = fixture.start_service(GuestVMType::Default);
+        service1.wait_for_systemd_ready().await;
+
+        let mut service2 = fixture.start_service(GuestVMType::Upgrade);
+        service2.wait_for_systemd_ready().await;
+
+        // Assert that both VMs are running
+        service1.assert_vm_running();
+        service2.assert_vm_running();
+
+        assert!(service1.get_kernel_cmdline().contains("root=/dev/vda5"));
+        assert!(service2.get_kernel_cmdline().contains("root=/dev/vda8"));
     }
 }

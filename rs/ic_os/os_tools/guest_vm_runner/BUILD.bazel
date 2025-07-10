@@ -12,12 +12,14 @@ DEPENDENCIES = [
     "//rs/ic_os/metrics_tool",
     "@crate_index//:anyhow",
     "@crate_index//:askama",
+    "@crate_index//:clap",
     "@crate_index//:gpt",
     "@crate_index//:macaddr",
     "@crate_index//:regex",
     "@crate_index//:sys-mount",
     "@crate_index//:systemd",
     "@crate_index//:tempfile",
+    "@crate_index//:thiserror",
     "@crate_index//:tokio",
     "@crate_index//:tokio-util",
     "@crate_index//:uuid",
@@ -51,14 +53,14 @@ rust_binary(
     target_compatible_with = [
         "@platforms//os:linux",
     ],
-    deps = DEPENDENCIES + ["//rs/ic_os/config:config_lib_dev"],
+    deps = DEPENDENCIES + ["//rs/ic_os/config:config_lib"],
 )
 
 rust_binary(
     name = "guest_vm_runner_dev",
     srcs = glob(["src/**/*.rs"]),
+    crate_features = ["dev"],
     crate_name = "guest_vm_runner",
-    features = ["dev"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = [
         "@platforms//os:linux",
@@ -78,13 +80,16 @@ rust_test(
 
 rust_test(
     name = "guest_vm_runner_integration_tests",
+    # the test sometimes times out on CI with default timeout
+    # of "moderate" (5 minutes) - 2025-07-04
+    timeout = "long",
     crate = ":guest_vm_runner_dev",
     crate_features = [
         "dev",
         "integration_tests",
     ],
-    data = glob(["golden/*"]) + ["//ic-os/guestos/envs/prod:disk-img.tar.zst"],
-    env = {"ICOS_IMAGE": "$(rootpath //ic-os/guestos/envs/prod:disk-img.tar.zst)"},
+    data = glob(["golden/*"]) + ["//ic-os/guestos/envs/prod:disk-img-for-tests.tar"],
+    env = {"ICOS_IMAGE": "$(rootpath //ic-os/guestos/envs/prod:disk-img-for-tests.tar)"},
     # Mark it manual here and expose it in //ic-os/tests:integration_tests
     tags = ["manual"],
     deps = DEV_DEPENDENCIES,
