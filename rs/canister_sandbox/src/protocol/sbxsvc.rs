@@ -495,6 +495,7 @@ mod tests {
                     Some(canister_test_id(1).get()),
                     Some(CallContextId::new(123)),
                     IS_WASM64_EXECUTION,
+                    CanisterCyclesCostSchedule::Normal,
                 ),
                 wasm_reserved_pages: NumWasmPages::new(1),
             },

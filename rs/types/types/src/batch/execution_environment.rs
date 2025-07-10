@@ -33,6 +33,7 @@ use ic_protobuf::{
     types::v1::{self as pb},
 };
 use prost::{bytes::BufMut, Message};
+use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, hash::Hash};
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Default)]
@@ -340,11 +341,20 @@ impl TryFrom<&pb::CanisterQueryStats> for CanisterQueryStats {
 
 /// How to charge canisters for their use of computational resources (such as
 /// executing instructions, storing data, network, etc.)
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub enum CanisterCyclesCostSchedule {
     #[default]
     Normal,
     Free,
+}
+
+impl From<CanisterCyclesCostSchedule> for i32 {
+    fn from(value: CanisterCyclesCostSchedule) -> Self {
+        match value {
+            CanisterCyclesCostSchedule::Normal => 1,
+            CanisterCyclesCostSchedule::Free => 2,
+        }
+    }
 }
 
 impl From<proto::CanisterCyclesCostSchedule> for CanisterCyclesCostSchedule {

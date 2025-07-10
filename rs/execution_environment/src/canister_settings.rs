@@ -6,8 +6,8 @@ use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_management_canister_types_private::{CanisterSettingsArgs, LogVisibilityV2, HASH_LENGTH};
 use ic_replicated_state::MessageMemoryUsage;
 use ic_types::{
-    ComputeAllocation, Cycles, InvalidComputeAllocationError, InvalidMemoryAllocationError,
-    MemoryAllocation, PrincipalId,
+    batch::CanisterCyclesCostSchedule, ComputeAllocation, Cycles, InvalidComputeAllocationError,
+    InvalidMemoryAllocationError, MemoryAllocation, PrincipalId,
 };
 use num_traits::{cast::ToPrimitive, SaturatingSub};
 use std::{collections::BTreeMap, convert::TryFrom};
@@ -491,6 +491,7 @@ pub(crate) fn validate_canister_settings(
     canister_cycles_balance: Cycles,
     cycles_account_manager: &CyclesAccountManager,
     subnet_size: usize,
+    cost_schedule: CanisterCyclesCostSchedule,
     canister_reserved_balance: Cycles,
     canister_reserved_balance_limit: Option<Cycles>,
 ) -> Result<ValidatedCanisterSettings, CanisterManagerError> {
@@ -575,6 +576,7 @@ pub(crate) fn validate_canister_settings(
         canister_message_memory_usage,
         new_compute_allocation,
         subnet_size,
+        cost_schedule,
         canister_reserved_balance,
     );
 
@@ -608,6 +610,7 @@ pub(crate) fn validate_canister_settings(
         allocated_bytes,
         subnet_memory_saturation,
         subnet_size,
+        cost_schedule,
     );
     let reserved_balance_limit = settings
         .reserved_cycles_limit()

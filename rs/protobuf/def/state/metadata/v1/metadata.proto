@@ -358,6 +358,8 @@ message SystemMetadata {
   BlockmakerMetricsTimeSeries blockmaker_metrics_time_series = 20;
 
   repeated ApiBoundaryNodeEntry api_boundary_nodes = 21;
+
+  registry.subnet.v1.CanisterCyclesCostSchedule canister_cycles_cost_schedule = 22;
 }
 
 message StableMemory {

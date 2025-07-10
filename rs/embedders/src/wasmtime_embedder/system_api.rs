@@ -21,6 +21,7 @@ use ic_replicated_state::{
     canister_state::WASM_PAGE_SIZE_IN_BYTES, memory_usage_of_request, Memory, MessageMemoryUsage,
     NumWasmPages,
 };
+use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{
     ingress::WasmResult,
     messages::{CallContextId, RejectContext, Request, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
@@ -1268,6 +1269,10 @@ impl SystemApiImpl {
             instructions_executed_before_current_slice: 0,
             call_counters: SystemApiCallCounters::default(),
         }
+    }
+
+    pub fn get_cost_schedule(&self) -> CanisterCyclesCostSchedule {
+        self.sandbox_safe_system_state.cost_schedule
     }
 
     /// Refunds any cycles used for an outgoing request that doesn't get sent
@@ -4204,6 +4209,7 @@ impl SystemApi for SystemApiImpl {
             .xnet_call_total_fee(
                 (method_name_size.saturating_add(payload_size)).into(),
                 execution_mode,
+                self.get_cost_schedule(),
             );
         copy_cycles_to_heap(cost, dst, heap, "ic0_cost_call")?;
         trace_syscall!(self, CostCall, cost);
@@ -4215,7 +4221,7 @@ impl SystemApi for SystemApiImpl {
         let cost = self
             .sandbox_safe_system_state
             .get_cycles_account_manager()
-            .canister_creation_fee(subnet_size);
+            .canister_creation_fee(subnet_size, self.get_cost_schedule());
         copy_cycles_to_heap(cost, dst, heap, "ic0_cost_create_canister")?;
         trace_syscall!(self, CostCreateCanister, cost);
         Ok(())
