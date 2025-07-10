@@ -17231,7 +17231,6 @@ dependencies = [
  "slog",
  "tokio",
  "url",
- "wabt-tests",
 ]
 
 [[package]]
@@ -23962,14 +23961,6 @@ dependencies = [
  "tempfile",
  "tokio",
  "vsock",
-]
-
-[[package]]
-name = "wabt-tests"
-version = "0.9.0"
-dependencies = [
- "leb128",
- "wat",
 ]
 
 [[package]]
