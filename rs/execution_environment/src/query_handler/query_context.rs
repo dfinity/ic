@@ -396,7 +396,7 @@ impl<'a> QueryContext<'a> {
                 );
             }
         }
-
+        let cost_schedule = self.get_cost_schedule();
         let subnet_size = self
             .network_topology
             .get_subnet_size(&self.cycles_account_manager.get_subnet_id())
@@ -440,7 +440,7 @@ impl<'a> QueryContext<'a> {
                 self.hypervisor,
                 &mut self.round_limits,
                 self.query_critical_error,
-                self.get_cost_schedule(),
+                cost_schedule,
             );
         self.add_system_api_call_counters(system_api_call_counters);
         let instructions_executed = instruction_limit - instructions_left;
@@ -648,6 +648,8 @@ impl<'a> QueryContext<'a> {
             ),
         };
 
+        let cost_schedule = self.get_cost_schedule();
+
         let (output, output_execution_state, output_system_state) = self.hypervisor.execute(
             api_type,
             time,
@@ -662,7 +664,7 @@ impl<'a> QueryContext<'a> {
             self.query_critical_error,
             &CallTreeMetricsNoOp,
             call_context.time(),
-            self.get_cost_schedule(),
+            cost_schedule,
         );
 
         self.add_system_api_call_counters(output.system_api_call_counters);
@@ -747,6 +749,7 @@ impl<'a> QueryContext<'a> {
                 FuncRef::QueryClosure(cleanup_closure)
             }
         };
+        let cost_schedule = self.get_cost_schedule();
         let (cleanup_output, output_execution_state, output_system_state) =
             self.hypervisor.execute(
                 ApiType::CompositeCleanup {
@@ -766,7 +769,7 @@ impl<'a> QueryContext<'a> {
                 self.query_critical_error,
                 &CallTreeMetricsNoOp,
                 time,
-                self.get_cost_schedule(),
+                cost_schedule,
             );
 
         self.add_system_api_call_counters(cleanup_output.system_api_call_counters);

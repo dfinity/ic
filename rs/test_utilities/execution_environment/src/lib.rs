@@ -379,6 +379,7 @@ impl ExecutionTest {
             message_memory_usage,
             compute_allocation,
             self.subnet_size(),
+            self.state().metadata.cost_schedule,
         )
     }
 
@@ -396,6 +397,7 @@ impl ExecutionTest {
             message_memory_usage,
             compute_allocation,
             self.subnet_size(),
+            self.state().metadata.cost_schedule,
             canister.system_state.reserved_balance(),
         )
     }
@@ -431,7 +433,7 @@ impl ExecutionTest {
 
     pub fn canister_creation_fee(&self) -> Cycles {
         self.cycles_account_manager
-            .canister_creation_fee(self.subnet_size())
+            .canister_creation_fee(self.subnet_size(), self.state().metadata.cost_schedule)
     }
 
     pub fn http_request_fee(
@@ -460,6 +462,7 @@ impl ExecutionTest {
         self.cycles_account_manager.execution_cost(
             num_instructions,
             self.subnet_size(),
+            self.state().metadata.cost_schedule,
             WasmExecutionMode::Wasm32, // For this test, we can assume a Wasm32 execution.
         )
     }
@@ -1082,6 +1085,7 @@ impl ExecutionTest {
             self.time,
             &mut round_limits,
             self.subnet_size(),
+            self.state().metadata.cost_schedule,
         );
         self.subnet_available_memory = round_limits.subnet_available_memory;
         self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
@@ -1170,6 +1174,7 @@ impl ExecutionTest {
             network_topology,
             &mut round_limits,
             self.subnet_size(),
+            self.state().metadata.cost_schedule,
         );
         let (canister, response, instructions_used, heap_delta) = match result {
             ExecuteMessageResult::Finished {
@@ -1335,6 +1340,7 @@ impl ExecutionTest {
                     self.time,
                     &mut round_limits,
                     self.subnet_size(),
+                    self.state().metadata.cost_schedule,
                 );
                 state.metadata.heap_delta_estimate += result.heap_delta;
                 self.subnet_available_memory = round_limits.subnet_available_memory;
@@ -1429,6 +1435,7 @@ impl ExecutionTest {
                     self.time,
                     &mut round_limits,
                     self.subnet_size(),
+                    self.state().metadata.cost_schedule,
                 );
                 state.metadata.heap_delta_estimate += result.heap_delta;
                 self.subnet_available_memory = round_limits.subnet_available_memory;
@@ -1481,10 +1488,20 @@ impl ExecutionTest {
         let fixed_cost = mgr.execution_cost(
             NumInstructions::from(0),
             self.subnet_size(),
+            self.state().metadata.cost_schedule,
             is_wasm64_execution,
         );
-        let instruction_cost = mgr.execution_cost(limit, self.subnet_size(), is_wasm64_execution)
-            - mgr.execution_cost(left, self.subnet_size(), is_wasm64_execution);
+        let instruction_cost = mgr.execution_cost(
+            limit,
+            self.subnet_size(),
+            self.state().metadata.cost_schedule,
+            is_wasm64_execution,
+        ) - mgr.execution_cost(
+            left,
+            self.subnet_size(),
+            self.state().metadata.cost_schedule,
+            is_wasm64_execution,
+        );
 
         *self
             .execution_cost

@@ -25,7 +25,6 @@ use ic_replicated_state::{
     canister_state::execution_state::WasmExecutionMode, num_bytes_try_from, CallContextAction,
     CallOrigin, CanisterState,
 };
-use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::messages::{
     CallContextId, CanisterCall, CanisterCallOrTask, CanisterMessage, CanisterMessageOrTask,
     CanisterTask, RequestMetadata,

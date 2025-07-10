@@ -2003,7 +2003,6 @@ impl ExecutionEnvironment {
                     round,
                     round_limits,
                     subnet_size,
-                    cost_schedule,
                     &self.call_tree_metrics,
                     self.config.dirty_page_logging,
                     self.deallocator_thread.sender(),
@@ -2037,7 +2036,6 @@ impl ExecutionEnvironment {
                     round,
                     round_limits,
                     subnet_size,
-                    cost_schedule,
                     &self.call_tree_metrics,
                     self.config.dirty_page_logging,
                     self.deallocator_thread.sender(),
@@ -2180,6 +2178,7 @@ impl ExecutionEnvironment {
         round_limits: &mut RoundLimits,
         subnet_size: usize,
     ) -> Result<Vec<u8>, UserError> {
+        let cost_schedule = state.metadata.cost_schedule;
         let canister = get_canister_mut(canister_id, state)?;
         self.canister_manager
             .update_settings(
@@ -2190,7 +2189,7 @@ impl ExecutionEnvironment {
                 round_limits,
                 self.subnet_memory_saturation(&round_limits.subnet_available_memory),
                 subnet_size,
-                state.metadata.cost_schedule,
+                cost_schedule,
             )
             .map(|()| EmptyBlob.encode())
             .map_err(|err| err.into())
@@ -4376,6 +4375,7 @@ pub fn execute_canister(
     time: Time,
     round_limits: &mut RoundLimits,
     subnet_size: usize,
+    cost_schedule: CanisterCyclesCostSchedule,
 ) -> ExecuteCanisterResult {
     match canister.next_execution() {
         NextExecution::None | NextExecution::ContinueInstallCode => {
@@ -4411,6 +4411,7 @@ pub fn execute_canister(
                     counters: round_counters,
                     log: &exec_env.log,
                     time,
+                    cost_schedule,
                 };
                 let result = paused.resume(
                     canister,
@@ -4471,6 +4472,7 @@ pub fn execute_canister(
         time,
         round_limits,
         subnet_size,
+        cost_schedule,
     )
 }
 
