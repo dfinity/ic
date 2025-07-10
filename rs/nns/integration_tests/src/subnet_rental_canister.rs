@@ -351,10 +351,10 @@ fn subnet_rental_request_lifecycle() {
         .unwrap();
     let balance_after = check_balance(&state_machine, renter, None);
     assert_eq!(
+        balance_after.get_e8s(),
         balance_before.get_e8s()
             - initial_cost_icp.get_e8s() / 10
             - DEFAULT_TRANSFER_FEE.get_e8s() * 2,
-        balance_after.get_e8s(),
     );
 
     // afterwards there should be no more rental requests
