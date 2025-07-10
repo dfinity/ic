@@ -1,12 +1,7 @@
-use crate::extensions::{
-    ExtensionKind, ValidatedRegisterExtension,
-};
+use crate::extensions::{ExtensionKind, ValidatedRegisterExtension};
 use crate::icrc_ledger_helper::ICRCLedgerHelper;
 use crate::pb::v1::governance::GovernanceCachedMetrics;
-use crate::pb::v1::{
-    valuation, Metrics, RegisterExtension,
-    TreasuryMetrics, VotingPowerMetrics,
-};
+use crate::pb::v1::{valuation, Metrics, RegisterExtension, TreasuryMetrics, VotingPowerMetrics};
 use crate::proposal::TreasuryAccount;
 use crate::treasury::{assess_treasury_balance, interpret_token_code, tokens_to_e8s};
 use crate::{

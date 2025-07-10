@@ -33,8 +33,9 @@ use pretty_assertions::assert_eq;
 use sns_treasury_manager;
 use sns_treasury_manager::Asset;
 use sns_treasury_manager::AuditTrailRequest;
+use sns_treasury_manager::BalanceBook;
 use sns_treasury_manager::BalancesRequest;
-use sns_treasury_manager::{Accounts, Balance, WithdrawRequest};
+use sns_treasury_manager::{Balance, WithdrawRequest};
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::Duration;
@@ -204,6 +205,39 @@ async fn test_treasury_manager() {
         extension_canister_id.get()
     };
 
+    let treasury_sns_account = sns_treasury_manager::Account {
+        owner: sns.governance.canister_id.0,
+        subaccount: Some(compute_distribution_subaccount_bytes(
+            sns.governance.canister_id,
+            TREASURY_SUBACCOUNT_NONCE,
+        )),
+    };
+
+    let treasury_icp_account = sns_treasury_manager::Account {
+        owner: sns.governance.canister_id.0,
+        subaccount: None,
+    };
+
+    let empty_sns_balance_book = BalanceBook::empty()
+        .with_treasury_owner(treasury_sns_account, "SNS token treasury".to_string())
+        .with_treasury_manager(
+            sns_treasury_manager::Account {
+                owner: adaptor_canister_id.0,
+                subaccount: None,
+            },
+            "KongSwapAdaptor".to_string(),
+        );
+
+    let empty_icp_balance_book = BalanceBook::empty()
+        .with_treasury_owner(treasury_icp_account, "ICP treasury".to_string())
+        .with_treasury_manager(
+            sns_treasury_manager::Account {
+                owner: adaptor_canister_id.0,
+                subaccount: None,
+            },
+            "KongSwapAdaptor".to_string(),
+        );
+
     for _ in 0..100 {
         pocket_ic.tick().await;
         pocket_ic.advance_time(Duration::from_secs(100)).await;
@@ -237,19 +271,6 @@ async fn test_treasury_manager() {
         // println!(">>> AuditTrail: {:#?}", response);
     }
 
-    let treasury_sns_account = sns_treasury_manager::Account {
-        owner: sns.governance.canister_id.0,
-        subaccount: Some(compute_distribution_subaccount_bytes(
-            sns.governance.canister_id,
-            TREASURY_SUBACCOUNT_NONCE,
-        )),
-    };
-
-    let treasury_icp_account = sns_treasury_manager::Account {
-        owner: sns.governance.canister_id.0,
-        subaccount: None,
-    };
-
     let _withdrawn_amounts = {
         let ledger_id_to_account = btreemap! {
             sns.ledger.canister_id.0 => treasury_sns_account,
@@ -257,9 +278,7 @@ async fn test_treasury_manager() {
         };
 
         let request = WithdrawRequest {
-            withdraw_accounts: Some(Accounts {
-                ledger_id_to_account,
-            }),
+            withdraw_accounts: Some(ledger_id_to_account),
         };
 
         let response = PocketIcAgent::new(&pocket_ic, sns.root.canister_id)
@@ -269,17 +288,15 @@ async fn test_treasury_manager() {
             .unwrap();
 
         assert_eq!(
-            response.balances,
-            btreemap! {
-                sns_token => Balance {
-                    amount_decimals: Nat::from(350 * E8 - 2 * SNS_FEE),
-                    owner_account: treasury_sns_account,
-                },
-                icp_token => Balance {
-                    amount_decimals: Nat::from(150 * E8 - 2 * ICP_FEE),
-                    owner_account: treasury_icp_account,
-                },
-            },
+            response.asset_to_balances,
+            Some(btreemap! {
+                sns_token => empty_sns_balance_book
+                    .clone()
+                    .treasury_owner(initial_sns_balance_e8s - 5 * SNS_FEE),
+                icp_token => empty_icp_balance_book
+                    .clone()
+                    .treasury_owner(initial_icp_balance_e8s - 5 * SNS_FEE)
+            }),
         );
     };
 
