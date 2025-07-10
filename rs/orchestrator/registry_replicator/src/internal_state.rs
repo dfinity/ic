@@ -511,6 +511,8 @@ pub fn apply_switch_over_to_last_changelog_entry_impl(
 #[cfg(test)]
 mod test {
     use super::*;
+    use ic_protobuf::registry::routing_table;
+    use ic_protobuf::registry::routing_table::v1::routing_table::Entry;
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_keys::{
         make_canister_ranges_key, make_routing_table_record_key, make_subnet_list_record_key,
@@ -599,7 +601,7 @@ mod test {
     }
 
     #[test]
-    fn test_apply_switch_over_modifies_only_last_changelog_entry() {
+    fn test_apply_switch_over_modifies_last_changelog_entry_and_updates_keys_as_expected() {
         let old_nns_subnet_id = create_test_subnet_id(1);
         let new_nns_subnet_id = create_test_subnet_id(2);
         let new_nns_subnet_record = create_test_subnet_record(true, SubnetType::Application);
@@ -616,8 +618,11 @@ mod test {
 
         let canister_range_keys = vec![make_canister_ranges_key(CanisterId::from_u64(0))];
 
-        let fake_client =
-            setup_fake_registry_client(old_nns_subnet_id, routing_table, canister_range_keys);
+        let fake_client = setup_fake_registry_client(
+            old_nns_subnet_id,
+            routing_table,
+            canister_range_keys.clone(),
+        );
 
         // Create changelog with multiple entries
         let mut changelog = vec![
@@ -642,7 +647,31 @@ mod test {
                 },
                 KeyMutation {
                     key: ROOT_SUBNET_ID_KEY.to_string(),
-                    value: Some(b"old_value".to_vec()),
+                    value: Some(vec![1]),
+                },
+                KeyMutation {
+                    key: make_subnet_list_record_key(),
+                    value: Some(vec![2]),
+                },
+                KeyMutation {
+                    key: make_routing_table_record_key(),
+                    value: Some(vec![3]),
+                },
+                KeyMutation {
+                    key: make_subnet_record_key(new_nns_subnet_id),
+                    value: Some(vec![4]),
+                },
+                KeyMutation {
+                    key: canister_range_keys[0].clone(),
+                    value: Some(vec![5]),
+                },
+                KeyMutation {
+                    key: canister_range_keys[1].clone(),
+                    value: Some(vec![6]),
+                },
+                KeyMutation {
+                    key: make_canister_ranges_key(CanisterId::from_u64(10000)),
+                    value: None,
                 },
             ],
         ];
@@ -663,7 +692,7 @@ mod test {
         assert_eq!(changelog[1], original_second_entry);
 
         // Verify last entry was modified (should have more entries now)
-        assert!(changelog[2].len() > original_last_entry_len);
+        assert_eq!(changelog[2].len(), 4);
 
         // Verify that old ROOT_SUBNET_ID_KEY entry was removed and new one added
         let root_subnet_mutations: Vec<_> = changelog[2]
@@ -672,9 +701,14 @@ mod test {
             .collect();
         assert_eq!(root_subnet_mutations.len(), 1);
         assert!(root_subnet_mutations[0].value.is_some());
-        assert_ne!(
+        assert_eq!(
             root_subnet_mutations[0].value.as_ref().unwrap(),
-            b"old_value"
+            &SubnetIdProto {
+                principal_id: Some(PrincipalIdProto {
+                    raw: new_nns_subnet_id.get().into_vec()
+                })
+            }
+            .encode_to_vec()
         );
     }
 
@@ -716,6 +750,21 @@ mod test {
 
         assert!(!decoded_record.start_as_nns);
         assert_eq!(decoded_record.subnet_type, SubnetType::System as i32);
+
+        let deleted_range_key = make_canister_ranges_key(CanisterId::from_u64(10000));
+        let deleted_range_mutation = changelog[2]
+            .iter()
+            .find(|km| km.key == deleted_range_key)
+            .expect("Expected deletion mutation for non-zero CanisterId");
+        assert!(deleted_range_mutation.value.is_none());
+
+        // Assert that the range with CanisterId = 0 has the new routing table
+        let canister_0_key = make_canister_ranges_key(CanisterId::from_u64(0));
+        let canister_0_mutation = changelog[2]
+            .iter()
+            .find(|km| km.key == canister_0_key)
+            .expect("Expected mutation for CanisterId = 0");
+        assert!(canister_0_mutation.value.is_some());
     }
 
     #[test]
@@ -814,5 +863,15 @@ mod test {
 
         // The routing table should only contain ranges that were previously assigned to old NNS
         assert!(!decoded_routing_table.entries.is_empty());
+        let expected_routing_table = PbRoutingTable {
+            entries: vec![Entry {
+                range: Some(routing_table::v1::CanisterIdRange {
+                    start_canister_id: Some(CanisterId::from_u64(0).into()),
+                    end_canister_id: Some(CanisterId::from_u64(50).into()),
+                }),
+                subnet_id: Some(ic_types::subnet_id_into_protobuf(new_nns_subnet_id)),
+            }],
+        };
+        assert_eq!(decoded_routing_table, expected_routing_table);
     }
 }
