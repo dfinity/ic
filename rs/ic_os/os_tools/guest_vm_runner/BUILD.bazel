@@ -86,6 +86,7 @@ rust_test(
     timeout = "long",
     crate = ":guest_vm_runner_dev",
     crate_features = [
+        "skip_default_tests",
         "dev",
         "integration_tests",
     ],
@@ -94,4 +95,22 @@ rust_test(
     # Mark it manual here and expose it in //ic-os/tests:integration_tests
     tags = ["manual"],
     deps = DEV_DEPENDENCIES,
+)
+
+rust_test(
+    name = "upgrade_device_mapper_test",
+    crate = ":guest_vm_runner_dev",
+    crate_features = [
+        "skip_default_tests",
+        "dev",
+        "upgrade_device_mapper_test",
+    ],
+    #    rustc_flags = [
+    #        "-C",
+    #        "target-feature=+crt-static",
+    #    ],
+    # Mark it manual here and expose it in TODO
+    tags = ["manual"],
+    visibility = ["//rs/tests/node:__subpackages__"],  # For use in system tests
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

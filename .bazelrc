@@ -2,3 +2,4 @@
 import %workspace%/bazel/conf/.bazelrc.build
 import %workspace%/bazel/conf/.bazelrc.internal
 try-import %workspace%/user.bazelrc
+build:fully_static_link --@rules_rust//rust/settings:target_triple=x86_64-unknown-linux-musl

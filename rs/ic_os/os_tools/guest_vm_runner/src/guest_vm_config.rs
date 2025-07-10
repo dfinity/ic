@@ -149,7 +149,7 @@ pub fn serial_log_path(guest_vm_type: GuestVMType) -> &'static Path {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(feature = "skip_default_tests")))]
 mod tests {
     use super::*;
     use config_types::{

@@ -1,4 +1,4 @@
-use crate::device_mapping::{BaseDevice, DeviceTrait, LinearSegment, MappedDevice, TempDevice};
+use crate::device_mapping::{BaseDevice, LinearSegment, MappedDevice, TempDevice};
 use anyhow::{bail, ensure, Context, Result};
 use devicemapper::{DevId, DmName, DmOptions, Sectors, DM};
 use std::path::Path;
@@ -21,6 +21,8 @@ const ALL_DM_NAMES_IN_CLEANUP_ORDER: [&'static str; 3] = [
 /// 1. GPT + first 9 partitions of base device
 /// 2. Data partition that stores writes in a temporary file
 /// 3. Backup GPT
+///
+/// The created device lives as long as the returned [MappedDevice] is in scope.
 pub fn create_mapped_device(base_device: &Path) -> Result<MappedDevice> {
     if !base_device.exists() {
         bail!(
@@ -157,5 +159,18 @@ fn try_remove_device(dev_mapper: &DM, name: &DmName) {
                 }
             }
         }
+    }
+}
+
+#[cfg(all(test, feature = "upgrade_device_mapper_test"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_create_mapped_device() {
+        let device = create_mapped_device(Path::new(
+            &std::env::var("GUESTOS_DEVICE").expect("Missing 'GUESTOS_DEVICE' env variable"),
+        ))
+        .expect("Failed to create mapped device");
     }
 }
