@@ -13,9 +13,10 @@ async fn main() {
     let cancellation_token = CancellationToken::new();
     let cancellation_token_clone = cancellation_token.clone();
 
-    let mut orchestrator = Orchestrator::new(args, &config, logger.clone())
-        .await
-        .expect("Failed to start orchestrator");
+    let mut orchestrator =
+        Orchestrator::new(args, &config, cancellation_token.clone(), logger.clone())
+            .await
+            .expect("Failed to start orchestrator");
     let join_handle =
         tokio::spawn(async move { orchestrator.start_tasks(cancellation_token_clone).await });
 

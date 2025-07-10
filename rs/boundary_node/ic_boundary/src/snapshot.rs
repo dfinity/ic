@@ -488,7 +488,7 @@ impl Run for RegistryReplicatorRunner {
     async fn run(&self, token: CancellationToken) -> Result<(), Error> {
         let fut = self
             .0
-            .start_polling(self.1.clone(), self.2)
+            .start_polling(self.1.clone(), self.2, token.clone())
             .await
             .context("unable to start polling Registry")?;
 
