@@ -19,7 +19,6 @@ Examples:
 
 import argparse
 import json
-from datetime import datetime
 
 from rosetta_client import RosettaClient
 

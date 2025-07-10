@@ -604,4 +604,4 @@ class RosettaClient:
             "method_name": "get_minimum_dissolve_delay",
             "parameters": {},
         }
-        return self._send("call", payload, verbose=verbose)        
+        return self._send("call", payload, verbose=verbose)
