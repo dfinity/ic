@@ -85,7 +85,10 @@ fn load_version_from_file(logger: &ReplicaLogger, path: &Path) -> Result<Replica
 }
 
 impl Orchestrator {
-    pub async fn new(args: OrchestratorArgs) -> Result<Self, OrchestratorInstantiationError> {
+    pub async fn new(
+        args: OrchestratorArgs,
+        cancellation_token: CancellationToken,
+    ) -> Result<Self, OrchestratorInstantiationError> {
         args.create_dirs();
         let metrics_addr = args.get_metrics_addr();
         let config = args.get_ic_config();
@@ -157,7 +160,7 @@ impl Orchestrator {
             registry_replicator.parse_registry_access_info_from_config(&config);
 
         match registry_replicator
-            .start_polling(nns_urls, nns_pub_key)
+            .start_polling(nns_urls, nns_pub_key, cancellation_token)
             .await
         {
             Ok(future) => task_tracker.spawn("registry_replicator", future),

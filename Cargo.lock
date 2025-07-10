@@ -12304,6 +12304,7 @@ dependencies = [
  "slog",
  "tempfile",
  "tokio",
+ "tokio-util",
  "url",
 ]
 

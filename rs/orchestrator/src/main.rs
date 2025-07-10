@@ -11,7 +11,7 @@ async fn main() {
     let cancellation_token = CancellationToken::new();
     let cancellation_token_clone = cancellation_token.clone();
 
-    let mut orchestrator = Orchestrator::new(args)
+    let mut orchestrator = Orchestrator::new(args, cancellation_token.clone())
         .await
         .expect("Failed to start orchestrator");
     let logger = orchestrator.logger.clone();

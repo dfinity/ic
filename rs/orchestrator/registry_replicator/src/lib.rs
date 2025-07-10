@@ -53,6 +53,7 @@ use std::{
     },
     time::Duration,
 };
+use tokio_util::sync::CancellationToken;
 use url::Url;
 
 pub mod args;
@@ -305,6 +306,7 @@ impl RegistryReplicator {
         &self,
         nns_urls: Vec<Url>,
         nns_pub_key: Option<ThresholdSigPublicKey>,
+        cancellation_token: CancellationToken,
     ) -> Result<impl Future<Output = ()>, Error> {
         if self.started.swap(true, Ordering::Relaxed) {
             return Err(Error::new(
@@ -352,7 +354,11 @@ impl RegistryReplicator {
                 metrics
                     .registry_version
                     .set(registry_client.get_latest_version().get() as i64);
-                tokio::time::sleep(poll_delay).await;
+
+                tokio::select! {
+                   _ = tokio::time::sleep(poll_delay) => {}
+                   _ = cancellation_token.cancelled() => break
+                };
             }
         };
 
