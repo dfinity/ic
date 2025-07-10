@@ -34,5 +34,4 @@ async fn main() {
             info!(logger, "Orchestrator shut down gracefully")
         }
     }
-    std::thread::sleep(std::time::Duration::from_secs(30));
 }
