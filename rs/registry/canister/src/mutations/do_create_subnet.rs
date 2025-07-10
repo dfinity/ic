@@ -175,9 +175,7 @@ impl Registry {
         self.maybe_apply_mutation_internal(mutations);
 
         let new_subnet_id = Some(subnet_id);
-        NewSubnet {
-            new_subnet_id,
-        }
+        NewSubnet { new_subnet_id }
     }
 
     /// Validates runtime payload values that aren't checked by invariants.
