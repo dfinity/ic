@@ -79,3 +79,6 @@ fn is_potential_full_git_commit_id(s: &str) -> bool {
 
     s.chars().all(|character| character.is_ascii_hexdigit())
 }
+
+#[cfg(test)]
+mod tests;
