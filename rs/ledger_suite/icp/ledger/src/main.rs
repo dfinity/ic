@@ -387,7 +387,7 @@ thread_local! {
 }
 
 #[cfg(feature = "notify-method")]
-fn trap_since_notify_is_not_longer_supported() {
+fn trap_since_notify_is_no_longer_supported() {
     let caller_principal_id = PrincipalId::from(caller());
     print(format!(
         "[ledger] notify method called by [{}]",
