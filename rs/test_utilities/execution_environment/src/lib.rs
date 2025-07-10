@@ -159,6 +159,7 @@ pub fn test_registry_settings() -> RegistryExecutionSettings {
         chain_key_settings: BTreeMap::new(),
         subnet_size: SMALL_APP_SUBNET_MAX_SIZE,
         node_ids: BTreeSet::new(),
+        canister_cycles_cost_schedule: ic_types::batch::CanisterCyclesCostSchedule::Normal,
     }
 }
 
