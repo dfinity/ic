@@ -4,7 +4,7 @@ use crate::guest_vm_config::{
 };
 use crate::mount::PartitionProvider;
 use crate::systemd_notifier::SystemdNotifier;
-use anyhow::{bail, Context, Error, Result};
+use anyhow::{anyhow, bail, Context, Error, Result};
 use clap::{Parser, ValueEnum};
 use config_types::{HostOSConfig, Ipv6Config};
 use deterministic_ips::node_type::NodeType;
