@@ -23,6 +23,7 @@ use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_types::{
     crypto::threshold_sig::ThresholdSigPublicKey, CanisterId, NodeId, RegistryVersion, SubnetId,
 };
+use prost::Message;
 use std::{
     collections::BTreeMap, convert::TryFrom, fmt::Debug, net::IpAddr, str::FromStr, sync::Arc,
     time::Duration,
@@ -246,7 +247,8 @@ impl InternalState {
             .expect("Could not read changelog from disk.");
         changelog.truncate(k.get() as usize);
 
-        self.apply_switch_over_to_last_changelog_entry(
+        apply_switch_over_to_last_changelog_entry_impl(
+            self.registry_client.as_ref(),
             changelog.as_mut_slice(),
             subnet_id,
             subnet_record,
@@ -266,143 +268,6 @@ impl InternalState {
             "Rebooting node after switch-over to new NNS subnet."
         );
         std::process::exit(1);
-    }
-
-    /// Given a `changelog`, this function adjusts the following entries of the
-    /// last registry changelog entry:
-    /// * Update subnet type to be `system`
-    /// * Update root subnet ID to be new NNS subnet ID
-    /// * Assign canister ranges of old NNS to new NNS in routing table
-    /// * Include new NNS in subnet list
-    fn apply_switch_over_to_last_changelog_entry(
-        &self,
-        changelog: &mut [ChangelogEntry],
-        new_nns_subnet_id: SubnetId,
-        mut new_nns_subnet_record: SubnetRecord,
-    ) {
-        use prost::Message;
-        let registry_version = RegistryVersion::from(changelog.len() as u64);
-
-        let routing_table = self
-            .registry_client
-            .get_routing_table(registry_version)
-            .expect("Could not query registry for routing table.")
-            .expect("No routing table configured in registry");
-
-        let old_nns_subnet_id = self
-            .registry_client
-            .get_root_subnet_id(registry_version)
-            .expect("Could not query registry for nns subnet id")
-            .expect("No NNS subnet id configured in the registry");
-
-        assert!(!changelog.is_empty());
-
-        let last = changelog.last_mut().expect("can't fail");
-        // remove all entries that will be adjusted
-        let subnet_record_key = make_subnet_record_key(new_nns_subnet_id);
-        last.retain(|k| {
-            k.key != ROOT_SUBNET_ID_KEY
-                && k.key != make_subnet_list_record_key()
-                && k.key != make_routing_table_record_key()
-                && k.key != subnet_record_key
-        });
-
-        // remove the start_as_nns flag on the subnet record
-        new_nns_subnet_record.start_as_nns = false;
-        // force subnet type to be a system subnet
-        new_nns_subnet_record.subnet_type = SubnetType::System as i32;
-        // adjust subnet record
-        let mut subnet_record_bytes = vec![];
-        new_nns_subnet_record
-            .encode(&mut subnet_record_bytes)
-            .expect("encode can't fail");
-        last.push(KeyMutation {
-            key: subnet_record_key,
-            value: Some(subnet_record_bytes),
-        });
-
-        // set nns subnet id (actually, root subnet id)
-        let new_nns_subnet_id_proto = SubnetIdProto {
-            principal_id: Some(PrincipalIdProto {
-                raw: new_nns_subnet_id.get().into_vec(),
-            }),
-        };
-        let mut new_nns_subnet_id_bytes = vec![];
-        new_nns_subnet_id_proto
-            .encode(&mut new_nns_subnet_id_bytes)
-            .expect("encoding can't fail");
-        last.push(KeyMutation {
-            key: ROOT_SUBNET_ID_KEY.to_string(),
-            value: Some(new_nns_subnet_id_bytes),
-        });
-
-        // adjust subnet list
-        let subnet_list_record = SubnetListRecord {
-            subnets: vec![new_nns_subnet_id.get().into_vec()],
-        };
-        let mut subnet_list_record_bytes = vec![];
-        subnet_list_record
-            .encode(&mut subnet_list_record_bytes)
-            .expect("encoding can't fail");
-        last.push(KeyMutation {
-            key: make_subnet_list_record_key(),
-            value: Some(subnet_list_record_bytes),
-        });
-
-        // adjust routing table
-        let new_routing_table: BTreeMap<CanisterIdRange, SubnetId> = routing_table
-            .into_iter()
-            .filter_map(|(r, s_id)| {
-                if s_id == old_nns_subnet_id {
-                    Some((r, new_nns_subnet_id))
-                } else {
-                    None
-                }
-            })
-            .collect();
-
-        // It's safe to unwrap here because we started from a valid table and
-        // removed entries from it.  Removing entries cannot invalidate the
-        // table.
-        let new_routing_table = PbRoutingTable::from(
-            RoutingTable::try_from(new_routing_table).expect("bug: invalid routing table"),
-        );
-
-        // Delete all routing table shards except the shard for canister id 0, and put the new routing table there.
-        let mut routing_table_updates: Vec<_> = self
-            .registry_client
-            .get_key_family(CANISTER_RANGES_PREFIX, registry_version)
-            .expect("Could not query registry for canister ranges")
-            .into_iter()
-            .map(|key| {
-                if key == make_canister_ranges_key(CanisterId::from_u64(0)) {
-                    KeyMutation {
-                        key,
-                        value: Some(new_routing_table.encode_to_vec()),
-                    }
-                } else {
-                    KeyMutation { key, value: None }
-                }
-            })
-            .collect();
-
-        last.retain(|km| {
-            if km.value.is_none() {
-                return true;
-            }
-            // We want to delete all canister ranges (unless they were deleted above, as we wouldn't
-            // make another deletion entry for them).
-            // TODO(NNS1-3781): Remove second part of conditional once routing_table is no longer used by clients.
-            !km.key.starts_with(CANISTER_RANGES_PREFIX) && km.key != make_routing_table_record_key()
-        });
-
-        // TODO(NNS1-3781): Remove this once routing_table is no longer used by clients.
-        last.push(KeyMutation {
-            key: make_routing_table_record_key(),
-            value: Some(new_routing_table.encode_to_vec()),
-        });
-
-        last.append(&mut routing_table_updates);
     }
 
     /// Update the [`RegistryCanister`] API wrapper with the newest API Urls
@@ -529,4 +394,119 @@ impl InternalState {
             }
         }
     }
+}
+
+/// Standalone function for switch-over logic, for unit testing.
+/// Looks up all required registry data using the provided RegistryClient.
+#[allow(clippy::too_many_arguments)]
+pub fn apply_switch_over_to_last_changelog_entry_impl(
+    registry_client: &dyn RegistryClient,
+    changelog: &mut [ChangelogEntry],
+    new_nns_subnet_id: SubnetId,
+    mut new_nns_subnet_record: SubnetRecord,
+) {
+    use prost::Message;
+
+    let registry_version = RegistryVersion::from(changelog.len() as u64);
+
+    let routing_table = registry_client
+        .get_routing_table(registry_version)
+        .expect("Could not query registry for routing table.")
+        .expect("No routing table configured in registry");
+
+    let old_nns_subnet_id = registry_client
+        .get_root_subnet_id(registry_version)
+        .expect("Could not query registry for nns subnet id")
+        .expect("No NNS subnet id configured in the registry");
+
+    let canister_range_keys = registry_client
+        .get_key_family(CANISTER_RANGES_PREFIX, registry_version)
+        .expect("Could not query registry for canister ranges");
+
+    assert!(!changelog.is_empty());
+
+    let last = changelog.last_mut().expect("can't fail");
+
+    // remove all entries that will be adjusted
+    let subnet_record_key = make_subnet_record_key(new_nns_subnet_id);
+    last.retain(|k| {
+        k.key != ROOT_SUBNET_ID_KEY
+            && k.key != make_subnet_list_record_key()
+            && k.key != make_routing_table_record_key()
+            && k.key != subnet_record_key
+            // Remove all canister_ranges_* records that are not deletion records, since those
+            // won't come up in the canister_range_keys due to being deleted.
+            && !(k.key.starts_with(CANISTER_RANGES_PREFIX) && k.value.is_some())
+    });
+
+    // remove the start_as_nns flag on the subnet record
+    new_nns_subnet_record.start_as_nns = false;
+    // force subnet type to be a system subnet
+    new_nns_subnet_record.subnet_type = SubnetType::System as i32;
+    // adjust subnet record
+    let subnet_record_bytes = new_nns_subnet_record.encode_to_vec();
+    last.push(KeyMutation {
+        key: subnet_record_key,
+        value: Some(subnet_record_bytes),
+    });
+
+    // set nns subnet id (actually, root subnet id)
+    let new_nns_subnet_id_proto = SubnetIdProto {
+        principal_id: Some(PrincipalIdProto {
+            raw: new_nns_subnet_id.get().into_vec(),
+        }),
+    };
+    let new_nns_subnet_id_bytes = new_nns_subnet_id_proto.encode_to_vec();
+    last.push(KeyMutation {
+        key: ROOT_SUBNET_ID_KEY.to_string(),
+        value: Some(new_nns_subnet_id_bytes),
+    });
+
+    // adjust subnet list
+    let subnet_list_record = SubnetListRecord {
+        subnets: vec![new_nns_subnet_id.get().into_vec()],
+    };
+    let subnet_list_record_bytes = subnet_list_record.encode_to_vec();
+    last.push(KeyMutation {
+        key: make_subnet_list_record_key(),
+        value: Some(subnet_list_record_bytes),
+    });
+
+    // adjust routing table
+    let new_routing_table: BTreeMap<CanisterIdRange, SubnetId> = routing_table
+        .into_iter()
+        .filter_map(|(r, s_id)| {
+            if s_id == old_nns_subnet_id {
+                Some((r, new_nns_subnet_id))
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    let new_routing_table = PbRoutingTable::from(
+        RoutingTable::try_from(new_routing_table).expect("bug: invalid routing table"),
+    );
+
+    // Delete all routing table shards except the shard for canister id 0, and put the new routing table there.
+    let mut routing_table_updates: Vec<_> = canister_range_keys
+        .into_iter()
+        .map(|key| {
+            if key == make_canister_ranges_key(CanisterId::from_u64(0)) {
+                KeyMutation {
+                    key,
+                    value: Some(new_routing_table.encode_to_vec()),
+                }
+            } else {
+                KeyMutation { key, value: None }
+            }
+        })
+        .collect();
+
+    last.push(KeyMutation {
+        key: make_routing_table_record_key(),
+        value: Some(new_routing_table.encode_to_vec()),
+    });
+
+    last.append(&mut routing_table_updates);
 }
