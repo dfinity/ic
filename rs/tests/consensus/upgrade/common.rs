@@ -17,6 +17,7 @@ use ic_agent::Agent;
 use ic_consensus_system_test_utils::rw_message::{
     can_read_msg, cert_state_makes_progress_with_retries, store_message,
 };
+use ic_consensus_system_test_utils::ssh_access::execute_bash_command;
 use ic_consensus_system_test_utils::subnet::enable_chain_key_signing_on_subnet;
 use ic_consensus_system_test_utils::upgrade::{
     assert_assigned_replica_version, bless_replica_version, deploy_guestos_to_all_subnet_nodes,
@@ -25,7 +26,7 @@ use ic_consensus_system_test_utils::upgrade::{
 use ic_consensus_threshold_sig_system_test_utils::run_chain_key_signature_test;
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::util::{create_agent, LogStream};
+use ic_system_test_driver::util::create_agent;
 use ic_system_test_driver::{
     driver::{test_env::TestEnv, test_env_api::*},
     util::{block_on, MessageCanister},
@@ -258,8 +259,9 @@ fn upgrade_to(
 
     info!(
         logger,
-        "Checking if the node has produced a log \
-        indicating that the orchestrator has gracefully shut down the tasks"
+        "Checking if the node {} has produced a log \
+        indicating that the orchestrator has gracefully shut down the tasks",
+        subnet_node.get_ip_addr(),
     );
     block_on(assert_registry_replicator_stopped(subnet_node.clone()));
     assert_assigned_replica_version(subnet_node, target_version, logger.clone());
@@ -296,12 +298,13 @@ pub fn start_node(logger: &Logger, app_node: &IcNodeSnapshot) {
 }
 
 async fn assert_registry_replicator_stopped(node: IcNodeSnapshot) {
-    const MESSAGE: &str = "Task `registry_replicator` finished gracefully";
+    const MESSAGE: &str = r"Task \`registry_replicator\` finished gracefullyPOOP";
 
-    LogStream::open([node].into_iter())
-        .await
-        .unwrap()
-        .wait_until(|_, line| dbg!(line).contains(MESSAGE))
-        .await
-        .expect("Node didn't shut down the registry replicator task grafefully")
+    let script = format!("journalctl -f | grep -q \"{}\"", MESSAGE);
+
+    let ssh_session = node
+        .block_on_ssh_session()
+        .expect("Failed to establish SSH session");
+
+    execute_bash_command(&ssh_session, script).expect("Didn't find the appropriate log entry");
 }
