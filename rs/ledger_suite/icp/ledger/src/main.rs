@@ -769,7 +769,7 @@ async fn send_dfx(arg: SendArgs) -> BlockIndex {
 #[cfg(feature = "notify-method")]
 #[export_name = "canister_update notify_pb"]
 fn notify_() {
-    trap_since_notify_is_not_longer_supported();
+    trap_since_notify_is_no_longer_supported();
 }
 
 #[update]
@@ -872,7 +872,7 @@ async fn icrc2_transfer_from(arg: TransferFromArgs) -> Result<Nat, TransferFromE
 #[cfg(feature = "notify-method")]
 #[export_name = "canister_update notify_dfx"]
 fn notify_dfx_() {
-    trap_since_notify_is_not_longer_supported();
+    trap_since_notify_is_no_longer_supported();
 }
 
 #[export_name = "canister_query block_pb"]
