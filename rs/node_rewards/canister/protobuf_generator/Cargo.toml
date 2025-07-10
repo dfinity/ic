@@ -1,5 +1,5 @@
 [package]
-name = "wabt-tests"
+name = "ic-node-rewards-protobuf-generator"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -7,5 +7,5 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-leb128 = "0.2.5"
-wat = { workspace = true }
+ic-utils-rustfmt = { path = "../../../utils/rustfmt" }
+prost-build = { workspace = true }

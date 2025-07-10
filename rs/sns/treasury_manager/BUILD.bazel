@@ -23,3 +23,5 @@ rust_library(
     version = "0.9.0",
     deps = DEPENDENCIES,
 )
+
+exports_files(["treasury_manager.did"])

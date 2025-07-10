@@ -11,6 +11,19 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-07-06: Proposal 137254
+
+http://dashboard.internetcomputer.org/proposal/137254
+
+## Added
+
+* There is now a `canister_cycles_cost_schedule` field in `CreateSubnetPayload`
+  and `SubnetRecord`. This isn't used yet, but it will be in the not too distant
+  future, for [subnet rental].
+
+[subnet rental]: https://dashboard.internetcomputer.org/proposal/128820
+
+
 # 2025-06-20: Proposal 137081
 
 https://dashboard.internetcomputer.org/proposal/137081

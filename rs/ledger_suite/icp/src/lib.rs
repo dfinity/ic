@@ -49,6 +49,8 @@ pub const MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST: usize = 50;
 
 pub const MEMO_SIZE_BYTES: usize = 32;
 
+pub const MAX_TAKE_ALLOWANCES: u64 = 500;
+
 pub type LedgerBalances = Balances<BTreeMap<AccountIdentifier, Tokens>>;
 pub type LedgerAllowances = AllowanceTable<HeapAllowancesData<AccountIdentifier, Tokens>>;
 
@@ -1085,6 +1087,7 @@ pub struct Archives {
 }
 
 /// Argument returned by the tip_of_chain endpoint
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub struct TipOfChainRes {
     pub certification: Option<Vec<u8>>,
     pub tip_index: BlockIndex,
@@ -1247,6 +1250,29 @@ pub fn to_proto_bytes<T: ToProto>(msg: T) -> Result<Vec<u8>, String> {
 pub fn from_proto_bytes<T: ToProto>(msg: Vec<u8>) -> Result<T, String> {
     T::from_proto(prost::Message::decode(&msg[..]).map_err(|e| e.to_string())?)
 }
+
+/// The arguments for the `get_allowances` endpoint.
+/// The `prev_spender_id` argument can be used for pagination. If specified
+/// the endpoint returns allowances that are lexicographically greater than
+/// (`from_account_id`, `prev_spender_id`) - start with spender after `prev_spender_id`.
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct GetAllowancesArgs {
+    pub from_account_id: AccountIdentifier,
+    pub prev_spender_id: Option<AccountIdentifier>,
+    pub take: Option<u64>,
+}
+
+/// The allowance returned by the `get_allowances` endpoint.
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct Allowance {
+    pub from_account_id: AccountIdentifier,
+    pub to_spender_id: AccountIdentifier,
+    pub allowance: Tokens,
+    pub expires_at: Option<u64>,
+}
+
+/// The allowances vector returned by the `get_allowances` endpoint.
+pub type Allowances = Vec<Allowance>;
 
 #[cfg(test)]
 mod test {

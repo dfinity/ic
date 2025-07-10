@@ -17,6 +17,4 @@ on the process that this file is part of, see
 
 ## Fixed
 
-Fixed a bug in the decoder of Candid `Nat` values as `u64`.
-
 ## Security

@@ -2588,6 +2588,7 @@ impl From<MintSnsTokens> for Action {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Wasm {
     Bytes(Vec<u8>),
     Chunked {
@@ -2595,6 +2596,35 @@ pub enum Wasm {
         store_canister_id: CanisterId,
         chunk_hashes_list: Vec<Vec<u8>>,
     },
+}
+
+impl TryFrom<ChunkedCanisterWasm> for Wasm {
+    type Error = String;
+
+    fn try_from(chunked_canister_wasm: ChunkedCanisterWasm) -> Result<Self, Self::Error> {
+        let ChunkedCanisterWasm {
+            wasm_module_hash,
+            store_canister_id,
+            chunk_hashes_list,
+        } = chunked_canister_wasm;
+
+        if wasm_module_hash.is_empty() {
+            return Err("ChunkedCanisterWasm.wasm_module_hash cannot be empty".to_string());
+        }
+
+        let Some(store_canister_id) = store_canister_id else {
+            return Err("ChunkedCanisterWasm.store_canister_id cannot be None".to_string());
+        };
+
+        let store_canister_id = CanisterId::try_from_principal_id(store_canister_id)
+            .map_err(|err| format!("Invalid store_canister_id: {err}"))?;
+
+        Ok(Wasm::Chunked {
+            wasm_module_hash,
+            store_canister_id,
+            chunk_hashes_list,
+        })
+    }
 }
 
 /// Validates that the specified byte sequence meets the following requirements:

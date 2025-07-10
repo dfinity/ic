@@ -19,13 +19,13 @@ use ic_protobuf::registry::{
     crypto::v1::{PublicKey as PublicKeyProto, X509PublicKeyCert},
     node::v1::{ConnectionEndpoint, NodeRecord},
     routing_table::v1::RoutingTable as PbRoutingTable,
-    subnet::v1::{SubnetListRecord, SubnetRecord},
+    subnet::v1::{CanisterCyclesCostSchedule, SubnetListRecord, SubnetRecord},
 };
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::{
-    make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key, make_node_record_key,
-    make_routing_table_record_key, make_subnet_list_record_key, make_subnet_record_key,
-    ROOT_SUBNET_ID_KEY,
+    make_canister_ranges_key, make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key,
+    make_node_record_key, make_routing_table_record_key, make_subnet_list_record_key,
+    make_subnet_record_key, ROOT_SUBNET_ID_KEY,
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable as RoutingTableIC};
@@ -124,6 +124,7 @@ pub fn test_subnet_record() -> SubnetRecord {
         ssh_readonly_access: vec![],
         ssh_backup_access: vec![],
         chain_key_config: None,
+        canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
     }
 }
 
@@ -235,6 +236,14 @@ pub fn create_fake_registry_client(
         .expect("could not add subnet list record");
 
     // Add routing table
+    data_provider
+        .add(
+            &make_canister_ranges_key(CanisterId::from_u64(0)),
+            reg_ver,
+            Some(PbRoutingTable::from(routing_table.clone())),
+        )
+        .expect("could not add routing table");
+    // TODO(NNS1-3781): Remove this once routing_table is no longer used by clients.
     data_provider
         .add(
             &make_routing_table_record_key(),

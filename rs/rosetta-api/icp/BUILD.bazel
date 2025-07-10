@@ -96,7 +96,7 @@ MACRO_DEV_DEPENDENCIES = []
 ALIASES = {
 }
 
-ROSETTA_VERSION = "2.1.5"
+ROSETTA_VERSION = "2.1.6"
 
 rust_library(
     name = "rosetta-api",
@@ -196,7 +196,6 @@ rust_test_suite_with_extra_srcs(
         "tests/system_tests/common/*.rs",
         "tests/system_tests/test_cases/*.rs",
     ]),
-    flaky = True,
     proc_macro_deps = MACRO_DEV_DEPENDENCIES,
     tags = ["cpu:4"],
     deps = DEV_DEPENDENCIES + DEPENDENCIES,
