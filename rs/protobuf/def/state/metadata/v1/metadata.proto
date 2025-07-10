@@ -9,6 +9,7 @@ import "registry/subnet/v1/subnet.proto";
 import "state/canister_state_bits/v1/canister_state_bits.proto";
 import "state/ingress/v1/ingress.proto";
 import "state/queues/v1/queues.proto";
+import "types/v1/idkg.proto";
 import "types/v1/types.proto";
 
 message Time {
@@ -110,6 +111,17 @@ message SignWithThresholdContext {
 message SignWithThresholdContextTree {
   uint64 callback_id = 1;
   SignWithThresholdContext context = 2;
+}
+
+message PreSignatureStashTree {
+  types.v1.MasterPublicKeyId key_id = 1;
+  registry.subnet.v1.IDkgTranscript key_transcript = 2;
+  repeated PreSignatureIdPair pre_signatures = 3;
+}
+
+message PreSignatureIdPair {
+  uint64 pre_sig_id = 1;
+  types.v1.PreSignature pre_signature = 2;
 }
 
 enum HttpMethod {
@@ -258,6 +270,7 @@ message SubnetCallContextManager {
   repeated RawRandContext raw_rand_contexts = 16;
   repeated ReshareChainKeyContextTree reshare_chain_key_contexts = 17;
   repeated SignWithThresholdContextTree sign_with_threshold_contexts = 18;
+  repeated PreSignatureStashTree pre_signature_stashes = 19;
 }
 
 message SubnetMetrics {

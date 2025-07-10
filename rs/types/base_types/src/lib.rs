@@ -12,10 +12,12 @@ use serde_bytes::ByteBuf;
 use std::{convert::TryFrom, fmt};
 
 mod canister_id;
+mod environment_variables;
 mod pb_internal;
 mod principal_id;
 
 pub use canister_id::{CanisterId, CanisterIdError, CanisterIdError as CanisterIdBlobParseError};
+pub use environment_variables::EnvironmentVariables;
 use ic_protobuf::state::canister_state_bits::v1::SnapshotId as pbSnapshot;
 pub use principal_id::{
     PrincipalId, PrincipalIdClass, PrincipalIdError, PrincipalIdError as PrincipalIdBlobParseError,
