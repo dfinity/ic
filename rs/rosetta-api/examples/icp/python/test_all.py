@@ -253,7 +253,9 @@ def main():
         print("\nSkipping transfer test (missing funded-private-key-pem and/or recipient-account)")
 
     # Get Minimum Dissolve Delay
-    results.append(run_example(["./get_minimum_dissolve_delay.py"] + base_args, "get_minimum_dissolve_delay.py", show_output))
+    results.append(
+        run_example(["./get_minimum_dissolve_delay.py"] + base_args, "get_minimum_dissolve_delay.py", show_output)
+    )
 
     # Print summary
     print("\n" + "=" * 50)

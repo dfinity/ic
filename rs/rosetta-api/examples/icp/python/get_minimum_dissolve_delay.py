@@ -2,7 +2,7 @@
 """
 Get Minimum Dissolve Delay for Neuron Example
 
-This script demonstrates how to get the minumum dissolve delay of a neuron 
+This script demonstrates how to get the minumum dissolve delay of a neuron
 that still allows it to vote on NNS proposals.
 
 Examples:
@@ -24,7 +24,9 @@ from rosetta_client import RosettaClient
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Get the minumum dissolve delay of a neuron that still allows it to vote.")
+    parser = argparse.ArgumentParser(
+        description="Get the minumum dissolve delay of a neuron that still allows it to vote."
+    )
     parser.add_argument("--node-address", type=str, required=True, help="Rosetta node address")
     parser.add_argument("--verbose", action="store_true", help="Enable verbose output")
     parser.add_argument("--raw", action="store_true", help="Display raw JSON response")
