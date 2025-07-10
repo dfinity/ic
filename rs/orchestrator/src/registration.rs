@@ -29,7 +29,7 @@ use ic_registry_client_helpers::{
 use ic_registry_local_store::LocalStore;
 use ic_sys::utility_command::UtilityCommand;
 use ic_types::{
-    crypto::{threshold_sig::ThresholdSigPublicKey, KeyPurpose},
+    crypto::KeyPurpose,
     messages::MessageId,
     NodeId, RegistryVersion, SubnetId,
 };
