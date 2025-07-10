@@ -1,5 +1,6 @@
 use super::*;
 use crate::temporarily_enable_fulfill_subnet_rental_request_proposals;
+use ic_base_types::PrincipalId;
 
 #[test]
 fn test_validate_fulfill_subnet_rental_request() {
