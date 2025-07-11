@@ -29,7 +29,6 @@ fn setup(env: TestEnv) {
         .with_dkg_interval_length(Height::from(DKG_INTERVAL));
 
     InternetComputer::new()
-        .with_mainnet_config()
         .add_subnet(subnet_under_test)
         .setup_and_start(&env)
         .expect("failed to setup IC under test");

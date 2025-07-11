@@ -101,7 +101,7 @@ fn setup(env: TestEnv, config: Config) {
             .start(&env)
             .expect("failed to start prometheus VM");
     }
-    let ic = InternetComputer::new().with_mainnet_config();
+    let ic = InternetComputer::new();
     ic.add_subnet(subnet(SubnetType::System, None))
         .add_subnet(subnet(SubnetType::Application, Some(DKG_INTERVAL)))
         .add_subnet(subnet(SubnetType::Application, Some(DKG_INTERVAL)))

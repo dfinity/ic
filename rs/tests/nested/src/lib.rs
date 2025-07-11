@@ -43,7 +43,6 @@ pub fn config(env: TestEnv) {
     InternetComputer::new()
         .add_fast_single_node_subnet(SubnetType::System)
         .with_api_boundary_nodes(1)
-        .with_mainnet_config()
         .with_node_provider(principal)
         .with_node_operator(principal)
         .setup_and_start(&env)
