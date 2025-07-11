@@ -1,6 +1,5 @@
 load("@aspect_bazel_lib//lib:tar.bzl", "tar")
 load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
-load("@bazel_skylib//rules:run_binary.bzl", "run_binary")
 load("@rules_distroless//apt:defs.bzl", "dpkg_status")
 load("@rules_distroless//distroless:defs.bzl", "passwd")
 load("@rules_oci//oci:defs.bzl", "oci_image")
@@ -177,61 +176,6 @@ filegroup(
 exports_files([
     "src/canister_http/universal_vm_activation.sh",
 ])
-
-run_binary(
-    name = "wabt-tests",
-    outs = [
-        "custom_section_name_with_spaces.wasm",
-        "duplicate_custom_section.wasm",
-        "empty_custom_section_name.wasm",
-        "empty_query_name.wasm",
-        "invalid_canister_composite_query_cq_reta.wasm",
-        "invalid_canister_composite_query_cq_retb.wasm",
-        "invalid_canister_export.wasm",
-        "invalid_canister_global_timer_reta.wasm",
-        "invalid_canister_global_timer_retb.wasm",
-        "invalid_canister_heartbeat_reta.wasm",
-        "invalid_canister_heartbeat_retb.wasm",
-        "invalid_canister_init_reta.wasm",
-        "invalid_canister_init_retb.wasm",
-        "invalid_canister_inspect_message_reta.wasm",
-        "invalid_canister_inspect_message_retb.wasm",
-        "invalid_canister_post_upgrade_reta.wasm",
-        "invalid_canister_post_upgrade_retb.wasm",
-        "invalid_canister_pre_upgrade_reta.wasm",
-        "invalid_canister_pre_upgrade_retb.wasm",
-        "invalid_canister_query_que_reta.wasm",
-        "invalid_canister_query_que_retb.wasm",
-        "invalid_canister_update_upd_reta.wasm",
-        "invalid_canister_update_upd_retb.wasm",
-        "invalid_custom_section.wasm",
-        "invalid_empty_custom_section_name.wasm",
-        "invalid_empty_query_name.wasm",
-        "invalid_import.wasm",
-        "large_custom_sections.wasm",
-        "long_exported_function_names.wasm",
-        "many_custom_sections.wasm",
-        "many_exports.wasm",
-        "many_functions.wasm",
-        "many_globals.wasm",
-        "name_clash_query_composite_query.wasm",
-        "name_clash_update_composite_query.wasm",
-        "name_clash_update_query.wasm",
-        "no_start.wasm",
-        "query_name_with_spaces.wasm",
-        "start.wasm",
-        "too_large_custom_sections.wasm",
-        "too_long_exported_function_names.wasm",
-        "too_many_custom_sections.wasm",
-        "too_many_exports.wasm",
-        "too_many_functions.wasm",
-        "too_many_globals.wasm",
-        "valid_import.wasm",
-    ],
-    args = ["$(location valid_import.wasm)"],  # passing location of an arbitrary output file is a hack, see https://github.com/bazelbuild/bazel-skylib/blob/288731ef9f7f688932bd50e704a91a45ec185f9b/rules/run_binary.bzl#L29
-    target_compatible_with = ["@platforms//os:linux"],
-    tool = "//rs/tests/idx/wabt-tests:generator",
-)
 
 oci_tar(
     name = "jaeger.tar",

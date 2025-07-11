@@ -76,8 +76,8 @@
     "sha256": "b443df3315902404b142d60f3cfd2f580181683310f6e6321b52de297deffcda"
   },
   "ledger": {
-    "rev": "2949c97ba369bd01c8bd5c99c59987519b730990",
-    "sha256": "a233f0eccb9735fff70a77e2f8a64f527f7d663fc94aada3c1a74c06d85a6105"
+    "rev": "73bb32695d703e4e36a3790e54f1715854233490",
+    "sha256": "1b634871bcbf377b1bd617172a72f5439c7285c9425ccc9389747ac0a70e35ae"
   },
   "lifeline": {
     "rev": "b5192581ccd35b67fe5a1f795ead9cbcd25956d6",
@@ -104,8 +104,8 @@
     "sha256": "bd21de14ad2bf39af9603fb8e5de1f69fdba2573f82ca781700c68fac64f4d3d"
   },
   "sns_governance": {
-    "rev": "66674e781671246a1af25d60b6ed78b5bf479e14",
-    "sha256": "45090c6945f19ff85b3a1df6a4797878a2f903cbf0cc3e2cb91ad5e7ea8a2327"
+    "rev": "fccfa2c7c7cba9e5485ad0b48823990e24a67f40",
+    "sha256": "12214386fbfc2d57a3c3fcf72f627d5b2419eb60d11df2ab3a1701446ec7e8d4"
   },
   "sns_index": {
     "rev": "2dd93c8aeb7f85c00e3add7efa6f573ddc9b0122",

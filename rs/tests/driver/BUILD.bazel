@@ -3,10 +3,6 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
-exports_files([
-    "src/message.wasm",
-])
-
 bool_flag(
     name = "k8s",
     build_setting_default = False,
@@ -21,7 +17,6 @@ rust_library(
     },
     compile_data = [
         "//ic-os/components:ic/generate-ic-config/ic.json5.template",
-        "src/message.wasm",
     ],
     crate_name = "ic_system_test_driver",
     proc_macro_deps = [

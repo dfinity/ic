@@ -1,16 +1,15 @@
-use ic_base_types::{NumBytes, NumSeconds};
-use ic_crypto_sha2::Sha256;
+use ic_base_types::{EnvironmentVariables, NumBytes, NumSeconds};
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
-use ic_management_canister_types_private::{CanisterSettingsArgs, LogVisibilityV2, HASH_LENGTH};
+use ic_management_canister_types_private::{CanisterSettingsArgs, LogVisibilityV2};
 use ic_replicated_state::MessageMemoryUsage;
 use ic_types::{
     ComputeAllocation, Cycles, InvalidComputeAllocationError, InvalidMemoryAllocationError,
     MemoryAllocation, PrincipalId,
 };
 use num_traits::{cast::ToPrimitive, SaturatingSub};
-use std::{collections::BTreeMap, convert::TryFrom};
+use std::convert::TryFrom;
 
 use crate::canister_manager::types::CanisterManagerError;
 
@@ -419,46 +418,6 @@ impl ValidatedCanisterSettings {
 
     pub fn environment_variables(&self) -> Option<&EnvironmentVariables> {
         self.environment_variables.as_ref()
-    }
-}
-
-#[derive(Clone)]
-pub struct EnvironmentVariables {
-    environment_variables: BTreeMap<String, String>,
-}
-
-impl EnvironmentVariables {
-    pub fn new(environment_variables: BTreeMap<String, String>) -> Self {
-        Self {
-            environment_variables,
-        }
-    }
-
-    pub fn hash(&self) -> [u8; HASH_LENGTH] {
-        // Create a vector to store the hashes of key-value pairs
-        let mut hashes: Vec<Vec<u8>> = Vec::new();
-
-        // 1. For each key-value pair, hash the key and value, and concatenate the hashes.
-        for (key, value) in &self.environment_variables {
-            let mut key_hash = Sha256::hash(key.as_bytes()).to_vec();
-            let mut value_hash = Sha256::hash(value.as_bytes()).to_vec();
-            key_hash.append(&mut value_hash);
-            hashes.push(key_hash);
-        }
-        // 2. Sort the concatenated hashes.
-        hashes.sort();
-
-        // 3. Concatenate the sorted hashes, and hash the result.
-        let mut hasher = Sha256::new();
-        for hash in hashes {
-            hasher.write(&hash);
-        }
-
-        hasher.finish()
-    }
-
-    pub fn get_environment_variables(&self) -> BTreeMap<String, String> {
-        self.environment_variables.clone()
     }
 }
 

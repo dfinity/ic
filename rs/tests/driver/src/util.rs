@@ -88,8 +88,6 @@ pub const AGENT_REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
 pub const CANISTER_CREATE_TIMEOUT: Duration = Duration::from_secs(30);
 /// A short wasm module that is a legal canister binary.
 pub const _EMPTY_WASM: &[u8] = &[0, 97, 115, 109, 1, 0, 0, 0];
-/// The following definition is a temporary work-around. Please do not copy!
-pub const MESSAGE_CANISTER_WASM: &[u8] = include_bytes!("message.wasm");
 
 pub const CFG_TEMPLATE_BYTES: &[u8] =
     include_bytes!("../../../../ic-os/components/ic/generate-ic-config/ic.json5.template");
@@ -131,6 +129,11 @@ lazy_static! {
     /// The WASM of the Universal Canister.
     pub static ref UNIVERSAL_CANISTER_WASM: &'static [u8] = {
         let vec = get_canister_wasm("UNIVERSAL_CANISTER_WASM_PATH");
+        Box::leak(vec.into_boxed_slice())
+    };
+
+    pub static ref MESSAGE_CANISTER_WASM: &'static [u8] = {
+        let vec = get_canister_wasm("MESSAGE_CANISTER_WASM_PATH");
         Box::leak(vec.into_boxed_slice())
     };
 
@@ -677,7 +680,7 @@ impl<'a> MessageCanister<'a> {
             .0;
 
         // Install the universal canister.
-        mgr.install_code(&canister_id, MESSAGE_CANISTER_WASM)
+        mgr.install_code(&canister_id, &MESSAGE_CANISTER_WASM)
             .call_and_wait()
             .await
             .map_err(|err| format!("Couldn't install message canister: {}", err))?;
@@ -838,46 +841,37 @@ impl<'a> SignerCanister<'a> {
     pub async fn gen_ecdsa_sig(
         &self,
         params: GenEcdsaParams,
-    ) -> Result<SignWithEcdsaResponse, String> {
-        let bytes = self
-            .agent
+    ) -> Result<SignWithEcdsaResponse, AgentError> {
+        self.agent
             .update(&self.canister_id, "gen_ecdsa_sig")
             .with_arg(Encode!(&params).unwrap())
             .call_and_wait()
             .await
-            .map_err(|e| e.to_string())?;
-
-        Decode!(&bytes, Result<SignWithEcdsaResponse, String>).unwrap()
+            .map(|bytes| Decode!(&bytes, SignWithEcdsaResponse).unwrap())
     }
 
     pub async fn gen_schnorr_sig(
         &self,
         params: GenSchnorrParams,
-    ) -> Result<SignWithSchnorrResponse, String> {
-        let bytes = self
-            .agent
+    ) -> Result<SignWithSchnorrResponse, AgentError> {
+        self.agent
             .update(&self.canister_id, "gen_schnorr_sig")
             .with_arg(Encode!(&params).unwrap())
             .call_and_wait()
             .await
-            .map_err(|e| e.to_string())?;
-
-        Decode!(&bytes, Result<SignWithSchnorrResponse, String>).unwrap()
+            .map(|bytes| Decode!(&bytes, SignWithSchnorrResponse).unwrap())
     }
 
     pub async fn gen_vetkd_key(
         &self,
         params: GenVetkdParams,
-    ) -> Result<VetKDDeriveKeyResult, String> {
-        let bytes = self
-            .agent
+    ) -> Result<VetKDDeriveKeyResult, AgentError> {
+        self.agent
             .update(&self.canister_id, "gen_vetkd_key")
             .with_arg(Encode!(&params).unwrap())
             .call_and_wait()
             .await
-            .map_err(|e| e.to_string())?;
-
-        Decode!(&bytes, Result<VetKDDeriveKeyResult, String>).unwrap()
+            .map(|bytes| Decode!(&bytes, VetKDDeriveKeyResult).unwrap())
     }
 }
 
