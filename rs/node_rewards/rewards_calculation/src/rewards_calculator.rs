@@ -9,6 +9,7 @@ use ic_base_types::{NodeId, PrincipalId};
 use ic_protobuf::registry::node::v1::NodeRewardType;
 use ic_protobuf::registry::node_rewards::v2::NodeRewardsTable;
 use itertools::Itertools;
+use rust_decimal::prelude::Zero;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use std::cmp::max;
@@ -126,6 +127,13 @@ impl<'a> RewardsCalculatorPipeline<'a, Initialized> {
 impl<'a> RewardsCalculatorPipeline<'a, ComputeRewardableNodesMetrics> {
     pub(crate) fn next(mut self) -> RewardsCalculatorPipeline<'a, ComputeExtrapolatedFR> {
         for node in self.provider_rewardable_nodes.rewardable_nodes.iter() {
+            if node.node_reward_type == NodeRewardType::Unspecified {
+                println!(
+                    "Node {} has Unspecified reward type, skipping",
+                    node.node_id
+                );
+                continue;
+            }
             let node_results = self
                 .calculator_results
                 .results_by_node
@@ -206,12 +214,14 @@ impl<'a> RewardsCalculatorPipeline<'a, ComputePerformanceMultipliers> {
                 if let Some(metrics) = node_results.daily_metrics.get(day) {
                     // If the node is assigned on this day, use the relative failure rate for that day.
                     daily_fr_used = metrics.relative_fr.clone().get();
-                } else if let Some(avg_fr) = self.calculator_results.extrapolated_fr.get(day) {
+                } else if let Some(extrapolated_fr) =
+                    self.calculator_results.extrapolated_fr.get(day)
+                {
                     // If the node is not assigned on this day, use the extrapolated failure rate for that day.
-                    daily_fr_used = avg_fr.clone().get();
+                    daily_fr_used = extrapolated_fr.clone().get();
                 } else {
-                    // If there is no extrapolated failure rate for this day, the node will not be rewarded.
-                    continue;
+                    // If there is no extrapolated failure rate for this day, will be rewarded fully.
+                    daily_fr_used = Decimal::zero();
                 }
                 if daily_fr_used < MIN_FAILURE_RATE {
                     rewards_reduction = MIN_REWARDS_REDUCTION;
@@ -223,6 +233,10 @@ impl<'a> RewardsCalculatorPipeline<'a, ComputePerformanceMultipliers> {
                         / (MAX_FAILURE_RATE - MIN_FAILURE_RATE))
                         * MAX_REWARDS_REDUCTION;
                 };
+
+                node_results
+                    .rewards_reduction
+                    .insert(*day, rewards_reduction.into());
 
                 node_results
                     .performance_multiplier
