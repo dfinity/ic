@@ -1809,12 +1809,12 @@ fn test_cmc_topups_from_subnet_rental_canister_do_not_affect_limit() {
 
     // Third top-up should succeed since the limit isn't used at all.
     state_machine.advance_time(Duration::from_secs(3000));
-    let error = notify_top_up(
+    let cycles = notify_top_up(
         &state_machine,
         GOVERNANCE_CANISTER_ID,
         Tokens::new(tokens, 0).unwrap(),
     )
-    .unwrap_err();
+    .unwrap();
     assert_eq!(cycles, Cycles::new(CYCLES_MINTING_LIMIT));
 
     // Fourth top-up should fail since the rate limit is 150e15 cycles per hour,
