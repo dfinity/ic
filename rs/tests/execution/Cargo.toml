@@ -72,3 +72,7 @@ path = "fill_execution_rounds_workload.rs"
 [[bin]]
 name = "btc_get_balance_test"
 path = "btc_get_balance_test.rs"
+
+[[bin]]
+name = "cost_schedule_tests"
+path = "cost_schedule_tests.rs"
