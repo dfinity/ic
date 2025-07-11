@@ -406,7 +406,7 @@ def system_test_nns(name, extra_head_nns_tags = ["system_test_large"], **kwargs)
     )
     return struct(test_driver_target = mainnet_nns_systest.test_driver_target)
 
-def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_paths = None):
+def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_paths = None, testonly = False):
     """This macro creates bazel targets for uvm config images.
 
     Args:
@@ -425,6 +425,7 @@ def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_pa
         tags = ["manual"],
         target_compatible_with = ["@platforms//os:linux"],
         visibility = ["//visibility:private"],
+        testonly = testonly,
     )
 
     # TODO: install dosfstools as dependency
@@ -439,6 +440,7 @@ def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_pa
         tags = ["manual"],
         target_compatible_with = ["@platforms//os:linux"],
         visibility = ["//visibility:private"],
+        testonly = testonly,
     )
 
     mcopy(
@@ -449,6 +451,7 @@ def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_pa
         tags = ["manual"],
         target_compatible_with = ["@platforms//os:linux"],
         visibility = ["//visibility:private"],
+        testonly = testonly,
     )
 
     zstd_compress(
@@ -457,6 +460,7 @@ def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_pa
         target_compatible_with = ["@platforms//os:linux"],
         tags = tags,
         visibility = ["//visibility:private"],
+        testonly = testonly,
     )
 
     native.alias(
@@ -465,6 +469,7 @@ def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_pa
         tags = tags,
         target_compatible_with = ["@platforms//os:linux"],
         visibility = visibility,
+        testonly = testonly,
     )
 
 def oci_tar(name, image, repo_tags = []):

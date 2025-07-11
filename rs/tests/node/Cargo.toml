@@ -31,5 +31,5 @@ name = "reboot_toy"
 path = "reboot_toy.rs"
 
 [[bin]]
-name = "upgrade_vm_device_test"
-path = "upgrade_vm_device_test.rs"
+name = "root_tests"
+path = "root_tests.rs"

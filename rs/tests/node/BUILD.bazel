@@ -1,5 +1,5 @@
 load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
-load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
+load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns", "uvm_config_image")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
@@ -25,17 +25,25 @@ system_test_nns(
     ],
 )
 
+# Unit tests that require root privileges to run.
 system_test(
-    name = "upgrade_vm_device_test",
-    env = {
-        "TEST_PATH": "$(location //rs/ic_os/os_tools/guest_vm_runner:upgrade_device_mapper_test)",
-    },
-    runtime_deps = UNIVERSAL_VM_RUNTIME_DEPS + ["//rs/ic_os/os_tools/guest_vm_runner:upgrade_device_mapper_test"],
+    name = "root_tests",
+    runtime_deps = UNIVERSAL_VM_RUNTIME_DEPS + [":root_tests_config_image"],
     deps = [
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
         "@crate_index//:slog",
     ],
+)
+
+uvm_config_image(
+    name = "root_tests_config_image",
+    testonly = True,
+    srcs = [
+        "//rs/ic_os/os_tools/guest_vm_runner:upgrade_device_mapper_test",
+        "//rs/tests:ubuntu_test_runtime.tar",
+    ],
+    tags = ["manual"],
 )
 
 system_test(

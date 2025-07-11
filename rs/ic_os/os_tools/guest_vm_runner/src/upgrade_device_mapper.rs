@@ -34,7 +34,7 @@ pub fn create_mapped_device(base_device: &Path) -> Result<MappedDevice> {
     let gpt = gpt::disk::read_disk(base_device).context("Could not read GPT from device")?;
     ensure!(
         gpt.partitions().len() == 10,
-        "Expected guest device to have 10 partitions but only found {}",
+        "Expected guest device to have 10 partitions but found {}",
         gpt.partitions().len()
     );
 
@@ -61,11 +61,10 @@ pub fn create_mapped_device(base_device: &Path) -> Result<MappedDevice> {
 /// Creates the mapped device chain.
 ///
 /// We create 3 devices (device mapper tables are somewhat primitive, so we stack them):
-///   - readonly data partition device:
-///         Maps just the data partition of the base device to a readonly device.
-///   - cached data partition device:
-///         Since the data partition is readonly, writes do not work. We add a cache layer, so
-///         writes are still possible but are not persisted to the backing device.
+///   - data partition device:
+///         Maps just the data partition of the base device.
+///   - data partition device with snapshot:
+///         Writes are persisted to the snapshot instead of the original device.
 ///   - upgrade device:
 ///         The merger of the base device and the newly created data partition device.
 fn create_device_for_upgrade(
@@ -83,27 +82,18 @@ fn create_device_for_upgrade(
             data_partition_start,
             data_partition_len,
         )],
-        // This is important, by marking it readonly, writes won't be persisted to the data
-        // partition
-        /*readonly=*/
-        true,
     )
     .context("Failed to create data partition device")?;
 
     // Create cached data partition that writes to the temporary device
-    let cached_data_partition_device = MappedDevice::create_writeback_cache(
+    let cached_data_partition_device = MappedDevice::create_snapshot_table(
         dev_mapper.clone(),
         DATA_PARTITION_WRITETHROUGH_DM_NAME,
-        Box::new(
-            TempDevice::new(Sectors(16 * 1024))
-                .context("Failed to create temporary device for metadata")?,
-        ),
+        Box::new(readonly_data_partition_device),
         Box::new(
             TempDevice::new(Sectors(1024 * 1024))
-                .context("Failed to create temporary device for cache")?,
+                .context("Failed to create temporary device for copy-on-write")?,
         ),
-        Box::new(readonly_data_partition_device),
-        /*readonly=*/ false,
     )
     .context("Failed to create cached data partition device")?;
 
@@ -165,12 +155,93 @@ fn try_remove_device(dev_mapper: &DM, name: &DmName) {
 #[cfg(all(test, feature = "upgrade_device_mapper_test"))]
 mod tests {
     use super::*;
+    use crate::device_mapping::LoopDeviceWrapper;
+    use gpt::GptConfig;
+    use loopdev::LoopControl;
+    use std::fs::File;
+    use std::io::{Read, Write};
+    use std::os::unix::fs::FileExt;
+    use tempfile::NamedTempFile;
 
     #[test]
     fn test_create_mapped_device() {
-        let device = create_mapped_device(Path::new(
-            &std::env::var("GUESTOS_DEVICE").expect("Missing 'GUESTOS_DEVICE' env variable"),
-        ))
-        .expect("Failed to create mapped device");
+        let backing_file = NamedTempFile::new().expect("Failed to create temporary file");
+        backing_file
+            .as_file()
+            .set_len(1024 * 1024)
+            .expect("Failed to set file length");
+
+        let backing_file = backing_file.into_temp_path();
+
+        let base = LoopDeviceWrapper(
+            LoopControl::open()
+                .expect("Failed to open loop control")
+                .next_free()
+                .expect("Failed to find free loop device"),
+        );
+
+        base.attach_file(&backing_file)
+            .expect("Failed to attach file to loop device");
+        let base_path = base.path().expect("Failed to get loop device path");
+
+        let mut gpt = GptConfig::new()
+            .writable(true)
+            .create(&base_path)
+            .expect("Failed to open GPT disk");
+        for partition in 1..=10 {
+            gpt.add_partition(
+                &format!("part{partition}"),
+                2048,
+                gpt::partition_types::LINUX_FS,
+                0,
+                None,
+            )
+            .expect("Failed to add partition");
+        }
+        gpt.write_inplace().expect("Could not write GPT to device");
+
+        let device = create_mapped_device(&base_path).expect("Failed to create mapped device");
+
+        let partition3_start_bytes = gpt.partitions().get(&3).unwrap().first_lba * 512;
+        let partition10_start_bytes = gpt.partitions().get(&10).unwrap().first_lba * 512;
+
+        let mut upgrade_device = File::options()
+            .write(true)
+            .read(true)
+            .open(device.path())
+            .expect("Failed to open device file");
+        upgrade_device
+            .write_at(b"foo", partition3_start_bytes)
+            .expect("Failed to write to device file");
+        upgrade_device
+            .write_at(b"bar", partition10_start_bytes)
+            .expect("Failed to write to device file");
+        drop(upgrade_device);
+
+        let mut upgrade_device =
+            File::open(device.path()).expect("Failed to open device file after write");
+        let mut read_buf = vec![0; 3];
+        upgrade_device
+            .read_at(&mut read_buf, partition3_start_bytes)
+            .expect("Failed to read from device file");
+        assert_eq!(read_buf, b"foo");
+
+        upgrade_device
+            .read_at(&mut read_buf, partition10_start_bytes)
+            .expect("Failed to read from device file");
+        assert_eq!(read_buf, b"bar");
+        drop(upgrade_device);
+
+        let mut file = File::open(backing_file).expect("Failed to open backing file");
+        let mut read_buf = vec![0; 3];
+        file.read_at(&mut read_buf, partition3_start_bytes)
+            .expect("Failed to read from backing file");
+        // Check that the read-write partition is written to the backing file
+        assert_eq!(read_buf, b"foo");
+
+        file.read_at(&mut read_buf, partition10_start_bytes)
+            .expect("Failed to read from backing file");
+        // Check that the read-only partition is not written to the backing file
+        assert_eq!(read_buf, &[0, 0, 0]);
     }
 }

@@ -180,7 +180,7 @@ impl DeviceTrait for TempDevice {
 }
 
 /// Wrapper around a loop device that automatically detaches it when dropped.
-struct LoopDeviceWrapper(LoopDevice);
+pub struct LoopDeviceWrapper(pub LoopDevice);
 
 impl Drop for LoopDeviceWrapper {
     fn drop(&mut self) {
@@ -217,7 +217,6 @@ impl MappedDevice {
         device_mapper: Arc<DM>,
         name: &'static str,
         segments: Vec<LinearSegment>,
-        readonly: bool,
     ) -> Result<Self> {
         let mut table = Vec::with_capacity(segments.len());
         let mut current_offset = Sectors(0);
@@ -240,67 +239,46 @@ impl MappedDevice {
         Self::create(
             device_mapper,
             name,
-            &LinearDevTargetTable::new(table),
+            &LinearDevTargetTable::new(table).to_raw_table(),
             current_offset,
-            readonly,
             dependencies,
         )
     }
 
-    /// Creates a mapped device that reads from `origin` or `cache` and writes to `cache` only.
-    pub fn create_writeback_cache(
+    pub fn create_snapshot_table(
         device_mapper: Arc<DM>,
         name: &'static str,
-        metadata: Box<dyn DeviceTrait>,
-        cache: Box<dyn DeviceTrait>,
-        origin: Box<dyn DeviceTrait>,
-        readonly: bool,
+        source: Box<dyn DeviceTrait>,
+        copy_on_write: Box<dyn DeviceTrait>,
     ) -> Result<MappedDevice> {
-        let len = origin.len();
-        let params = CacheDevTargetTable::new(
-            Sectors(0),
-            origin.len(),
-            CacheTargetParams::new(
-                metadata.device(),
-                cache.device(),
-                origin.device(),
-                Sectors(512),
-                // writeback: a write to a block that is cached will go only to the cache and the
-                // block will be marked dirty in the metadata.
-                vec!["writeback".to_string()],
-                "default".to_string(),
-                vec![],
-            ),
-        );
         Self::create(
             device_mapper,
             name,
-            &params,
-            len,
-            readonly,
-            vec![origin, cache, metadata],
+            &[(
+                /*start=*/ 0,
+                /*length=*/ source.len().0,
+                "snapshot".to_string(),
+                /*snapshot params, see dm-snapshot docs */
+                format!("{} {} N 8", source.device(), copy_on_write.device()),
+            )],
+            source.len(),
+            vec![source, copy_on_write],
         )
     }
 
     fn create(
         dm: Arc<DM>,
         name: &'static str,
-        table: &impl TargetTable,
+        table: &[(u64, u64, String, String)],
         len: Sectors,
-        readonly: bool,
         dependencies: Vec<Box<dyn Any>>,
     ) -> Result<MappedDevice> {
-        let options = if readonly {
-            DmOptions::default().set_flags(DmFlags::DM_READONLY)
-        } else {
-            DmOptions::default()
-        };
         let dm_name = DmName::new(name).expect("Illegal DmName");
         let device = dm
-            .device_create(dm_name, None, options)
+            .device_create(dm_name, None, DmOptions::default())
             .context("Failed to create mapped device")?;
-        // Wrap the device right away so it gets detached in the MappedDevice Drop impl if there
-        // is an error later.
+        // Wrap the device right away by creating a MappedDevice so it gets detached in the
+        // MappedDevice Drop impl if there is an error later.
         let mapped_device = MappedDevice {
             name,
             path: format!("/dev/mapper/{name}").into(),
@@ -312,11 +290,7 @@ impl MappedDevice {
 
         mapped_device
             .device_mapper
-            .table_load(
-                &DevId::Name(dm_name),
-                &table.to_raw_table(),
-                DmOptions::default(),
-            )
+            .table_load(&DevId::Name(dm_name), table, DmOptions::default())
             .context("Failed to load device table")?;
 
         // The name is somewhat confusing, this activates the device.

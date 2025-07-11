@@ -105,12 +105,8 @@ rust_test(
         "dev",
         "upgrade_device_mapper_test",
     ],
-    #    rustc_flags = [
-    #        "-C",
-    #        "target-feature=+crt-static",
-    #    ],
-    # Mark it manual here and expose it in TODO
+    # This test needs root, so we mark it manual here and expose it in //rs/tests/node:root_tests
     tags = ["manual"],
-    visibility = ["//rs/tests/node:__subpackages__"],  # For use in system tests
+    visibility = ["//rs/tests/node:__subpackages__"],
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
