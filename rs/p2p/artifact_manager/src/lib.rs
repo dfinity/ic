@@ -1,4 +1,4 @@
-use futures::stream::Stream;
+use futures::{stream::Stream, FutureExt};
 use ic_consensus_manager::AbortableBroadcastChannel;
 use ic_interfaces::{
     p2p::{
@@ -14,12 +14,10 @@ use ic_metrics::MetricsRegistry;
 use ic_types::{artifact::*, messages::SignedIngress};
 use prometheus::{histogram_opts, labels, Histogram};
 use std::{
-    pin::Pin,
     sync::{
         atomic::{AtomicBool, Ordering::SeqCst},
         Arc, RwLock,
     },
-    task::Poll,
     thread::{Builder as ThreadBuilder, JoinHandle},
     time::Duration,
 };
@@ -169,32 +167,15 @@ fn run_artifact_processor<
     Box::new(ArtifactProcessorJoinGuard::new(handle, shutdown))
 }
 
-enum StreamState<T> {
-    Value(T),
-    NoNewValueAvailable,
-    EndOfStream,
-}
-
 async fn read_batch<T, S: Stream<Item = T> + Send + Unpin + 'static>(
-    mut stream: Pin<&mut S>,
+    stream: &mut S,
     recv_timeout: Duration,
 ) -> Option<Vec<T>> {
-    let mut stream = std::pin::Pin::new(&mut stream);
     match timeout(recv_timeout, stream.next()).await {
         Ok(Some(first_value)) => {
             let mut res = vec![first_value];
-            // We ignore the end of stream and empty value states.
-            while let StreamState::Value(value) =
-                std::future::poll_fn(|cx| match stream.as_mut().poll_next(cx) {
-                    Poll::Pending => Poll::Ready(StreamState::NoNewValueAvailable),
-                    Poll::Ready(Some(v)) => Poll::Ready(StreamState::Value(v)),
-                    // Stream has finished because the abortable broadcast/p2p has stopped.
-                    // This is infallible.
-                    Poll::Ready(None) => Poll::Ready(StreamState::EndOfStream),
-                })
-                .await
-            {
-                res.push(value)
+            while let Some(Some(v)) = stream.next().now_or_never() {
+                res.push(v);
             }
             Some(res)
         }
@@ -233,10 +214,8 @@ fn process_messages<
             Duration::from_millis(ARTIFACT_MANAGER_TIMER_DURATION_MSEC)
         };
 
-        let batched_artifact_events = current_thread_rt.block_on(async {
-            let inbound_stream = std::pin::Pin::new(&mut inbound_stream);
-            read_batch(inbound_stream, recv_timeout).await
-        });
+        let batched_artifact_events =
+            current_thread_rt.block_on(read_batch(&mut inbound_stream, recv_timeout));
         let batched_artifact_events = match batched_artifact_events {
             Some(v) => v,
             None => {
@@ -451,21 +430,18 @@ mod tests {
         let mut rx_stream = ReceiverStream::new(rx);
         let recv_timeout = Duration::from_secs(100);
         tx.send(1).await.unwrap();
-        let pinned_rx_stream_1 = std::pin::Pin::new(&mut rx_stream);
         assert_eq!(
-            read_batch(pinned_rx_stream_1, recv_timeout).await,
+            read_batch(&mut rx_stream, recv_timeout).await,
             Some(vec![1])
         );
         tx.send(2).await.unwrap();
         tx.send(3).await.unwrap();
-        let pinned_rx_stream_2 = std::pin::Pin::new(&mut rx_stream);
         assert_eq!(
-            read_batch(pinned_rx_stream_2, recv_timeout).await,
+            read_batch(&mut rx_stream, recv_timeout).await,
             Some(vec![2, 3])
         );
         std::mem::drop(tx);
-        let pinned_rx_stream_3 = std::pin::Pin::new(&mut rx_stream);
-        assert_eq!(read_batch(pinned_rx_stream_3, recv_timeout).await, None);
+        assert_eq!(read_batch(&mut rx_stream, recv_timeout).await, None);
     }
 
     #[tokio::test]
@@ -476,9 +452,8 @@ mod tests {
         tx.send(1).await.unwrap();
         tx.send(2).await.unwrap();
         std::mem::drop(tx);
-        let pinned_rx_stream = std::pin::Pin::new(&mut rx_stream);
         assert_eq!(
-            read_batch(pinned_rx_stream, recv_timeout).await,
+            read_batch(&mut rx_stream, recv_timeout).await,
             Some(vec![1, 2])
         );
     }
