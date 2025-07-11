@@ -34,10 +34,11 @@ use ic_test_utilities_metrics::{
     fetch_histogram_vec_stats, fetch_int_counter, metric_vec, HistogramStats,
 };
 use ic_test_utilities_types::ids::subnet_test_id;
-use ic_types::messages::{
-    CanisterMessage, CanisterTask, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, NO_DEADLINE,
-};
 use ic_types::time::CoarseTime;
+use ic_types::{
+    batch::CanisterCyclesCostSchedule,
+    messages::{CanisterMessage, CanisterTask, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, NO_DEADLINE},
+};
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
     methods::WasmMethod,
@@ -2277,6 +2278,7 @@ fn ic0_call_cycles_add_deducts_cycles() {
         + mgr.execution_cost(
             MAX_NUM_INSTRUCTIONS,
             test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
             test.canister_wasm_execution_mode(canister_id),
         );
     let transferred_cycles = Cycles::new(10_000_000_000);
@@ -5404,6 +5406,7 @@ fn dts_abort_works_in_update_call() {
             - test.cycles_account_manager().execution_cost(
                 NumInstructions::from(100_000_000),
                 test.subnet_size(),
+                CanisterCyclesCostSchedule::Normal,
                 test.canister_wasm_execution_mode(canister_id)
             ),
     );
@@ -5437,6 +5440,7 @@ fn dts_abort_works_in_update_call() {
             - test.cycles_account_manager().execution_cost(
                 NumInstructions::from(100_000_000),
                 test.subnet_size(),
+                CanisterCyclesCostSchedule::Normal,
                 test.canister_wasm_execution_mode(canister_id)
             ),
     );
@@ -6930,6 +6934,7 @@ fn memory_grow_succeeds_in_init_if_canister_has_memory_allocation() {
         MessageMemoryUsage::ZERO,
         ComputeAllocation::zero(),
         test.subnet_size(),
+        CanisterCyclesCostSchedule::Normal,
         Cycles::zero(),
     );
 
@@ -6975,6 +6980,7 @@ fn memory_grow_succeeds_in_post_upgrade_if_the_same_amount_is_dropped_after_pre_
         MessageMemoryUsage::ZERO,
         ComputeAllocation::zero(),
         test.subnet_size(),
+        CanisterCyclesCostSchedule::Normal,
         Cycles::zero(),
     );
 
@@ -7076,6 +7082,7 @@ fn stable_memory_grow_reserves_cycles() {
                 memory_usage_after - memory_usage_before,
                 &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
                 test.subnet_size(),
+                CanisterCyclesCostSchedule::Normal,
             )
         );
 
@@ -7157,6 +7164,7 @@ fn wasm_memory_grow_reserves_cycles() {
                 memory_usage_after - memory_usage_before,
                 &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
                 test.subnet_size(),
+                CanisterCyclesCostSchedule::Normal,
             )
         );
 
@@ -7236,6 +7244,7 @@ fn set_reserved_cycles_limit_below_existing_fails() {
             memory_usage_after - memory_usage_before,
             &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
             test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
         )
     );
 
@@ -7366,6 +7375,7 @@ fn resource_saturation_scaling_works_in_regular_execution() {
                 CAPACITY / SCALING
             ),
             test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
         )
     );
 
@@ -8280,6 +8290,7 @@ fn invoke_cost_call() {
     let expected_cost = test.cycles_account_manager().xnet_call_total_fee(
         (method_name.len() as u64 + argument.len() as u64).into(),
         WasmExecutionMode::Wasm32,
+        CanisterCyclesCostSchedule::Normal,
     );
     let Ok(WasmResult::Reply(bytes)) = res else {
         panic!("Expected reply, got {:?}", res);
@@ -8301,7 +8312,7 @@ fn invoke_cost_create_canister() {
     let res = test.ingress(canister_id, "update", payload);
     let expected_cost = test
         .cycles_account_manager()
-        .canister_creation_fee(subnet_size);
+        .canister_creation_fee(subnet_size, CanisterCyclesCostSchedule::Normal);
     let Ok(WasmResult::Reply(bytes)) = res else {
         panic!("Expected reply, got {:?}", res);
     };

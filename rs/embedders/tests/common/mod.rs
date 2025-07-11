@@ -23,6 +23,7 @@ use ic_test_utilities_types::ids::{
     call_context_test_id, canister_test_id, subnet_test_id, user_test_id,
 };
 use ic_types::{
+    batch::CanisterCyclesCostSchedule,
     messages::{CallContextId, CallbackId, RejectContext, NO_DEADLINE},
     methods::SystemMethod,
     time::UNIX_EPOCH,
@@ -217,6 +218,7 @@ pub fn get_system_api(
         Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
+        CanisterCyclesCostSchedule::Normal,
     );
     SystemApiImpl::new(
         api_type,

@@ -125,8 +125,9 @@ pub use ic_types::ingress::WasmResult;
 use ic_types::{
     artifact::IngressMessageId,
     batch::{
-        Batch, BatchMessages, BatchSummary, BlockmakerMetrics, ConsensusResponse,
-        QueryStatsPayload, SelfValidatingPayload, TotalQueryStats, ValidationContext, XNetPayload,
+        Batch, BatchMessages, BatchSummary, BlockmakerMetrics, CanisterCyclesCostSchedule,
+        ConsensusResponse, QueryStatsPayload, SelfValidatingPayload, TotalQueryStats,
+        ValidationContext, XNetPayload,
     },
     canister_http::{CanisterHttpResponse, CanisterHttpResponseContent},
     consensus::{
@@ -3821,6 +3822,7 @@ impl StateMachine {
             msg.content(),
             effective_canister_id,
             subnet_size,
+            CanisterCyclesCostSchedule::Normal, // TODO: make state machine cost schedule configurable
         )
     }
 

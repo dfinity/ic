@@ -51,6 +51,7 @@ use ic_test_utilities_types::{
     messages::{RequestBuilder, SignedIngressBuilder},
 };
 use ic_types::{
+    batch::CanisterCyclesCostSchedule,
     consensus::idkg::PreSigId,
     crypto::{canister_threshold_sig::MasterPublicKey, AlgorithmId},
     ingress::{IngressState, IngressStatus},
@@ -204,6 +205,7 @@ impl SchedulerTest {
         self.scheduler.cycles_account_manager.execution_cost(
             num_instructions,
             self.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
             WasmExecutionMode::Wasm32,
         )
     }
@@ -642,9 +644,12 @@ impl SchedulerTest {
     }
 
     pub fn memory_cost(&self, bytes: NumBytes, duration: Duration) -> Cycles {
-        self.scheduler
-            .cycles_account_manager
-            .memory_cost(bytes, duration, self.subnet_size())
+        self.scheduler.cycles_account_manager.memory_cost(
+            bytes,
+            duration,
+            self.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
+        )
     }
 
     pub(crate) fn deliver_pre_signature_ids(
@@ -1347,6 +1352,7 @@ impl TestWasmExecutorCore {
             .cycles_account_manager
             .prepayment_for_response_execution(
                 self.subnet_size,
+                CanisterCyclesCostSchedule::Normal,
                 WasmExecutionMode::from_is_wasm64(system_state.is_wasm64_execution),
             );
         let prepayment_for_response_transmission = self

@@ -21,6 +21,7 @@ use ic_test_utilities_types::{
     ids::{canister_test_id, subnet_test_id, user_test_id},
     messages::{RequestBuilder, ResponseBuilder},
 };
+use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::nominal_cycles::NominalCycles;
 use ic_types::{
     messages::{CanisterMessage, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
@@ -73,6 +74,7 @@ fn push_output_request_fails_not_enough_cycles_for_request() {
         Default::default(),
         Some(request.sender().into()),
         None,
+        CanisterCyclesCostSchedule::Normal,
     );
 
     assert_eq!(
@@ -101,7 +103,11 @@ fn push_output_request_fails_not_enough_cycles_for_response() {
     let request_payload_cost = cycles_account_manager
         .xnet_call_bytes_transmitted_fee(request.payload_size_bytes(), SMALL_APP_SUBNET_MAX_SIZE);
     let prepayment_for_response_execution = cycles_account_manager
-        .prepayment_for_response_execution(SMALL_APP_SUBNET_MAX_SIZE, WASM_EXECUTION_MODE);
+        .prepayment_for_response_execution(
+            SMALL_APP_SUBNET_MAX_SIZE,
+            CanisterCyclesCostSchedule::Normal,
+            WASM_EXECUTION_MODE,
+        );
     let prepayment_for_response_transmission =
         cycles_account_manager.prepayment_for_response_transmission(SMALL_APP_SUBNET_MAX_SIZE);
     let total_cost = xnet_cost
@@ -128,6 +134,7 @@ fn push_output_request_fails_not_enough_cycles_for_response() {
         Default::default(),
         Some(request.sender().into()),
         None,
+        CanisterCyclesCostSchedule::Normal,
     );
 
     assert_eq!(
@@ -166,10 +173,15 @@ fn push_output_request_succeeds_with_enough_cycles() {
         Default::default(),
         caller,
         None,
+        CanisterCyclesCostSchedule::Normal,
     );
 
     let prepayment_for_response_execution = cycles_account_manager
-        .prepayment_for_response_execution(SMALL_APP_SUBNET_MAX_SIZE, WASM_EXECUTION_MODE);
+        .prepayment_for_response_execution(
+            SMALL_APP_SUBNET_MAX_SIZE,
+            CanisterCyclesCostSchedule::Normal,
+            WASM_EXECUTION_MODE,
+        );
     let prepayment_for_response_transmission =
         cycles_account_manager.prepayment_for_response_transmission(SMALL_APP_SUBNET_MAX_SIZE);
 
@@ -218,13 +230,18 @@ fn correct_charging_source_canister_for_a_request() {
         Default::default(),
         Some(request.sender().into()),
         None,
+        CanisterCyclesCostSchedule::Normal,
     );
 
     let xnet_cost = cycles_account_manager.xnet_call_performed_fee(SMALL_APP_SUBNET_MAX_SIZE);
     let request_payload_cost = cycles_account_manager
         .xnet_call_bytes_transmitted_fee(request.payload_size_bytes(), SMALL_APP_SUBNET_MAX_SIZE);
     let prepayment_for_response_execution = cycles_account_manager
-        .prepayment_for_response_execution(SMALL_APP_SUBNET_MAX_SIZE, WASM_EXECUTION_MODE);
+        .prepayment_for_response_execution(
+            SMALL_APP_SUBNET_MAX_SIZE,
+            CanisterCyclesCostSchedule::Normal,
+            WASM_EXECUTION_MODE,
+        );
     let prepayment_for_response_transmission =
         cycles_account_manager.prepayment_for_response_transmission(SMALL_APP_SUBNET_MAX_SIZE);
     let total_cost = xnet_cost
@@ -441,6 +458,7 @@ fn is_controller_test() {
         Default::default(),
         caller,
         None,
+        CanisterCyclesCostSchedule::Normal,
     );
 
     // Users IDs 1 and 2 are controllers, hence is_controller should return true,
@@ -523,6 +541,7 @@ fn test_inter_canister_call(
         Default::default(),
         Some(sender.into()),
         None,
+        CanisterCyclesCostSchedule::Normal,
     );
 
     let request = RequestBuilder::default()
@@ -533,7 +552,11 @@ fn test_inter_canister_call(
         .build();
 
     let prepayment_for_response_execution = cycles_account_manager
-        .prepayment_for_response_execution(SMALL_APP_SUBNET_MAX_SIZE, WASM_EXECUTION_MODE);
+        .prepayment_for_response_execution(
+            SMALL_APP_SUBNET_MAX_SIZE,
+            CanisterCyclesCostSchedule::Normal,
+            WASM_EXECUTION_MODE,
+        );
     let prepayment_for_response_transmission =
         cycles_account_manager.prepayment_for_response_transmission(SMALL_APP_SUBNET_MAX_SIZE);
 

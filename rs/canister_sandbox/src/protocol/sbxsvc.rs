@@ -331,6 +331,7 @@ mod tests {
     };
     use ic_test_utilities_types::ids::canister_test_id;
     use ic_types::{
+        batch::CanisterCyclesCostSchedule,
         messages::{CallContextId, RequestMetadata},
         methods::{FuncRef, WasmMethod},
         ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions, SubnetId, Time,

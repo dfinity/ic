@@ -11,6 +11,7 @@ use ic_test_utilities_execution_environment::{
 };
 use ic_test_utilities_metrics::fetch_int_counter;
 use ic_test_utilities_types::ids::user_test_id;
+use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::ingress::IngressState;
 use ic_types::Cycles;
 use ic_types::{ComputeAllocation, MemoryAllocation};
@@ -226,6 +227,7 @@ fn upgrade_fails_on_not_enough_cycles() {
     let balance_cycles = test.cycles_account_manager().execution_cost(
         (MAX_INSTRUCTIONS_PER_SLICE * 3).into(),
         test.subnet_size(),
+        CanisterCyclesCostSchedule::Normal,
         WasmExecutionMode::Wasm32,
     );
 
@@ -245,6 +247,7 @@ fn upgrade_fails_on_not_enough_cycles() {
         canister_message_memory_usage,
         ComputeAllocation::zero(),
         test.subnet_size(),
+        CanisterCyclesCostSchedule::Normal,
         Cycles::zero(),
     );
     let canister_id = test
