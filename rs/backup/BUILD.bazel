@@ -22,6 +22,7 @@ DEPENDENCIES = [
     "@crate_index//:slog-async",
     "@crate_index//:slog-term",
     "@crate_index//:tokio",
+    "@crate_index//:tokio-util",
     "@crate_index//:url",
 ]
 
