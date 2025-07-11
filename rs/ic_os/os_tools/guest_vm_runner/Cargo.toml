@@ -20,6 +20,7 @@ clap = { workspace = true }
 gpt = { workspace = true }
 macaddr = { workspace = true }
 regex = { workspace = true }
+thiserror = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }

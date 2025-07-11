@@ -15,7 +15,6 @@ mod types;
 pub mod util;
 
 use crate::ingress_filter::IngressFilterServiceImpl;
-pub use canister_settings::EnvironmentVariables;
 pub use execution_environment::{
     as_num_instructions, as_round_instructions, execute_canister, CompilationCostHandling,
     ExecuteMessageResult, ExecutionEnvironment, ExecutionResponse, RoundInstructions, RoundLimits,
