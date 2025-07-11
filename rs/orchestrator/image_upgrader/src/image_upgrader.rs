@@ -2,7 +2,6 @@ use async_trait::async_trait;
 use ic_http_utils::file_downloader::FileDownloader;
 use ic_logger::{error, info, warn, ReplicaLogger};
 use std::future::Future;
-use std::ops::ControlFlow;
 use std::str::FromStr;
 use std::{
     fmt::Debug,
@@ -17,6 +16,8 @@ use tokio_util::sync::CancellationToken;
 use crate::error::{UpgradeError, UpgradeResult};
 
 pub mod error;
+
+pub struct Reboot;
 
 const REBOOT_TIME_FILENAME: &str = "reboot_time.txt";
 
@@ -87,6 +88,8 @@ const REBOOT_TIME_FILENAME: &str = "reboot_time.txt";
 pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send>:
     Send + Sync
 {
+    type UpgradeType;
+
     /// Return the currently prepared version, if there is one. Default is None.
     /// A version `v` is considered to be prepared if its release package was successfully
     /// downloaded and unpacked after a call to `prepare_upgrade(v)`.
@@ -220,7 +223,7 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
 
     /// Executes the node upgrade by unpacking the downloaded image (if it didn't happen yet)
     /// and rebooting the node.
-    async fn execute_upgrade(&mut self, version: &V) -> UpgradeResult<ControlFlow<()>> {
+    async fn execute_upgrade(&mut self, version: &V) -> UpgradeResult<Reboot> {
         match self.get_prepared_version() {
             Some(v) if v == version => {
                 info!(
@@ -261,7 +264,7 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
             ))
         } else {
             info!(self.log(), "Rebooting {:?}", out);
-            Ok(ControlFlow::Break(()))
+            Ok(Reboot)
         }
     }
 
@@ -308,34 +311,5 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
     /// * Check if an image upgrade is scheduled.
     /// * Optionally prepare the upgrade in advance using `prepare_upgrade`.
     /// * Once it is time to upgrade, execute it using `execute_upgrade`
-    async fn check_for_upgrade(&mut self) -> UpgradeResult<ControlFlow<(), R>>;
-
-    /// Calls `check_for_upgrade()` once every `interval`, timing out after `timeout`.
-    /// Awaiting this function blocks until `exit_signal` is set to `true`.
-    /// For every execution of `check_for_upgrade()` the given handler is called with
-    /// the result returned by the check.
-    async fn upgrade_loop<F, Fut>(
-        &mut self,
-        cancellation_token: CancellationToken,
-        interval: Duration,
-        timeout: Duration,
-        handler: F,
-    ) where
-        F: Fn(Result<UpgradeResult<ControlFlow<(), R>>, Elapsed>) -> Fut + Send + Sync,
-        Fut: Future<Output = ControlFlow<()>> + Send,
-    {
-        loop {
-            let r = tokio::time::timeout(timeout, self.check_for_upgrade()).await;
-
-            if handler(r).await == ControlFlow::Break(()) {
-                cancellation_token.cancel();
-                break;
-            }
-
-            tokio::select! {
-                _ = tokio::time::sleep(interval) => {}
-                _ = cancellation_token.cancelled() => break
-            };
-        }
-    }
+    async fn check_for_upgrade(&mut self) -> UpgradeResult<Self::UpgradeType>;
 }
