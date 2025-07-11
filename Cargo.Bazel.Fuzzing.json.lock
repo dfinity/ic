@@ -1,5 +1,5 @@
 {
-  "checksum": "27e6a0550c49829a71f7359e6509ba37ac377d089cc8821537beb01638dfe280",
+  "checksum": "978f64691a04fa690c64919b08403374c77c4a7d11015c53344acd3b3b56ac32",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -21158,6 +21158,10 @@
               "target": "rustls"
             },
             {
+              "id": "rustls-native-certs 0.8.1",
+              "target": "rustls_native_certs"
+            },
+            {
               "id": "rustls-pemfile 2.2.0",
               "target": "rustls_pemfile"
             },
@@ -21533,6 +21537,10 @@
             {
               "id": "wat 1.234.0",
               "target": "wat"
+            },
+            {
+              "id": "webpki-roots 1.0.1",
+              "target": "webpki_roots"
             },
             {
               "id": "wee_alloc 0.4.5",
@@ -32317,7 +32325,7 @@
               "target": "rustls"
             },
             {
-              "id": "rustls-native-certs 0.8.0",
+              "id": "rustls-native-certs 0.8.1",
               "target": "rustls_native_certs"
             },
             {
@@ -62694,7 +62702,7 @@
                 "target": "rustls"
               },
               {
-                "id": "rustls-native-certs 0.8.0",
+                "id": "rustls-native-certs 0.8.1",
                 "target": "rustls_native_certs"
               },
               {
@@ -62752,7 +62760,7 @@
                 "target": "rustls"
               },
               {
-                "id": "rustls-native-certs 0.8.0",
+                "id": "rustls-native-certs 0.8.1",
                 "target": "rustls_native_certs"
               },
               {
@@ -62886,7 +62894,7 @@
                 "target": "rustls"
               },
               {
-                "id": "rustls-native-certs 0.8.0",
+                "id": "rustls-native-certs 0.8.1",
                 "target": "rustls_native_certs"
               },
               {
@@ -62944,7 +62952,7 @@
                 "target": "rustls"
               },
               {
-                "id": "rustls-native-certs 0.8.0",
+                "id": "rustls-native-certs 0.8.1",
                 "target": "rustls_native_certs"
               },
               {
@@ -65777,14 +65785,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "rustls-native-certs 0.8.0": {
+    "rustls-native-certs 0.8.1": {
       "name": "rustls-native-certs",
-      "version": "0.8.0",
+      "version": "0.8.1",
       "package_url": "https://github.com/rustls/rustls-native-certs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/rustls-native-certs/0.8.0/download",
-          "sha256": "fcaf18a4f2be7326cd874a5fa579fae794320a0f388d365dca7e480e55f83f8a"
+          "url": "https://static.crates.io/crates/rustls-native-certs/0.8.1/download",
+          "sha256": "7fcff2dd52b58a8d98a70243663a0d234c4e2b79235637849d15913394a247d3"
         }
       },
       "targets": [
@@ -65809,10 +65817,6 @@
         "deps": {
           "common": [
             {
-              "id": "rustls-pemfile 2.2.0",
-              "target": "rustls_pemfile"
-            },
-            {
               "id": "rustls-pki-types 1.12.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
@@ -65827,7 +65831,7 @@
             ],
             "cfg(target_os = \"macos\")": [
               {
-                "id": "security-framework 2.11.1",
+                "id": "security-framework 3.0.1",
                 "target": "security_framework"
               }
             ],
@@ -65840,7 +65844,7 @@
           }
         },
         "edition": "2021",
-        "version": "0.8.0"
+        "version": "0.8.1"
       },
       "license": "Apache-2.0 OR ISC OR MIT",
       "license_ids": [
@@ -66059,7 +66063,7 @@
           "selects": {
             "cfg(all(unix, not(target_os = \"android\"), not(target_vendor = \"apple\"), not(target_arch = \"wasm32\")))": [
               {
-                "id": "rustls-native-certs 0.8.0",
+                "id": "rustls-native-certs 0.8.1",
                 "target": "rustls_native_certs"
               },
               {
@@ -87038,6 +87042,54 @@
       ],
       "license_file": "LICENSE"
     },
+    "webpki-roots 1.0.1": {
+      "name": "webpki-roots",
+      "version": "1.0.1",
+      "package_url": "https://github.com/rustls/webpki-roots",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/webpki-roots/1.0.1/download",
+          "sha256": "8782dd5a41a24eed3a4f40b606249b3e236ca61adf1f25ea4d45c73de122b502"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "webpki_roots",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "webpki_roots",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "rustls-pki-types 1.12.0",
+              "target": "rustls_pki_types",
+              "alias": "pki_types"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "1.0.1"
+      },
+      "license": "CDLA-Permissive-2.0",
+      "license_ids": [
+        "CDLA-Permissive-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
     "wee_alloc 0.4.5": {
       "name": "wee_alloc",
       "version": "0.4.5",
@@ -93226,6 +93278,7 @@
     "rustc-demangle 0.1.23",
     "rustc-hash 1.1.0",
     "rustls 0.23.27",
+    "rustls-native-certs 0.8.1",
     "rustls-pemfile 2.2.0",
     "rustversion 1.0.14",
     "rusty-fork 0.3.0",
@@ -93323,6 +93376,7 @@
     "wasmtime-environ 33.0.1",
     "wast 228.0.0",
     "wat 1.234.0",
+    "webpki-roots 1.0.1",
     "wee_alloc 0.4.5",
     "which 4.4.2",
     "wsl 0.1.0",

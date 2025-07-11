@@ -3,7 +3,8 @@ use crate::{
     error::{OrchestratorError, OrchestratorResult},
     metrics::{KeyRotationStatus, OrchestratorMetrics},
     signer::{Hsm, NodeProviderSigner, NodeSender, Signer},
-    utils::http_endpoint_to_url,
+    tls_config::{get_client_for_self_signed_cert, UrlAndMaybeCert},
+    utils::{http_endpoint_to_url, https_endpoint_to_url},
 };
 use candid::Encode;
 use ic_agent::{export::Principal, Agent};
@@ -31,6 +32,7 @@ use ic_types::{crypto::KeyPurpose, messages::MessageId, NodeId, RegistryVersion,
 use idna::domain_to_ascii_strict;
 use prost::Message;
 use rand::prelude::*;
+use rustls::pki_types::CertificateDer as RustlsCertificate;
 use std::{
     net::IpAddr,
     sync::Arc,
@@ -400,11 +402,11 @@ impl NodeRegistration {
         info!(self.log, "Trying to register rotated idkg key...");
 
         let node_id = self.node_id;
-        let nns_url = match self
-            .get_random_nns_url()
-            .or_else(|| self.get_random_nns_url_from_config())
-        {
-            Some(url) => url,
+        let url_maybe_cert = match self.get_random_nns_url_and_tls_cert().or_else(|| {
+            self.get_random_nns_url_from_config()
+                .map(UrlAndMaybeCert::WithoutCert)
+        }) {
+            Some(url_maybe_cert) => url_maybe_cert,
             None => return Err("Failed to get random NNS URL.".into()),
         };
         let key_handler = self.key_handler.clone();
@@ -441,11 +443,20 @@ impl NodeRegistration {
         };
 
         let signer = NodeSender::new(node_pub_key, Arc::new(sign_cmd))?;
-        let agent = Agent::builder()
-            .with_url(nns_url)
-            .with_identity(signer)
-            .build()
-            .map_err(|e| format!("Failed to create IC agent: {e}"))?;
+
+        let agent = match url_maybe_cert {
+            UrlAndMaybeCert::WithoutCert(url) => Agent::builder().with_url(url),
+            UrlAndMaybeCert::WithCert(url, tls_cert) => {
+                let custom_client = get_client_for_self_signed_cert(tls_cert)?;
+
+                Agent::builder()
+                    .with_url(url)
+                    .with_http_client(custom_client)
+            }
+        }
+        .with_identity(signer)
+        .build()
+        .map_err(|e| format!("Failed to create IC agent: {e}"))?;
         let update_node_payload = UpdateNodeDirectlyPayload {
             idkg_dealing_encryption_pk: Some(protobuf_to_vec(idkg_pk)),
         };
@@ -487,8 +498,31 @@ impl NodeRegistration {
         urls.pop()
     }
 
-    // Returns one random NNS url from registry.
-    fn get_random_nns_url(&self) -> Option<Url> {
+    fn get_tls_cert_for_node_id(
+        &self,
+        node_id: NodeId,
+        version: RegistryVersion,
+    ) -> Option<RustlsCertificate> {
+        let x509_cert = match self.registry_client.get_tls_certificate(node_id, version) {
+            Ok(Some(x509_cert)) => x509_cert,
+            Ok(None) => {
+                warn!(self.log, "Node {} has no TLS certificate", node_id);
+                return None;
+            }
+            Err(err) => {
+                warn!(
+                    self.log,
+                    "Failed to get TLS certificate for node {}: {:?}", node_id, err
+                );
+                return None;
+            }
+        };
+
+        Some(RustlsCertificate::from(x509_cert.certificate_der))
+    }
+
+    // Returns one random NNS url and its TLS certificate if available from the registry.
+    fn get_random_nns_url_and_tls_cert(&self) -> Option<UrlAndMaybeCert> {
         let version = self.registry_client.get_latest_version();
         let root_subnet_id = match self.registry_client.get_root_subnet_id(version) {
             Ok(Some(id)) => id,
@@ -509,19 +543,32 @@ impl NodeRegistration {
             }
         };
 
-        let mut urls: Vec<Url> = t_infos
-            .iter()
-            .filter_map(|(_nid, n_record)| {
-                n_record
-                    .http
-                    .as_ref()
-                    .and_then(|h| http_endpoint_to_url(h, &self.log))
-            })
-            .collect();
+        let mut http_urls = Vec::new();
+        let mut https_urls = Vec::new();
+
+        for (n_id, n_record) in t_infos {
+            let Some(endpoint) = n_record.http.as_ref() else {
+                continue;
+            };
+
+            if let Some(rustls_cert) = self.get_tls_cert_for_node_id(n_id, version) {
+                if let Some(url) = https_endpoint_to_url(endpoint, &self.log) {
+                    https_urls.push(UrlAndMaybeCert::WithCert(url, rustls_cert));
+                    continue;
+                }
+            }
+
+            if let Some(url) = http_endpoint_to_url(endpoint, &self.log) {
+                http_urls.push(UrlAndMaybeCert::WithoutCert(url));
+            }
+        }
 
         let mut rng = thread_rng();
-        urls.shuffle(&mut rng);
-        urls.pop()
+        http_urls.shuffle(&mut rng);
+        https_urls.shuffle(&mut rng);
+
+        // Prefer HTTPS URLs if available, otherwise fall back to HTTP URLs.
+        https_urls.pop().or_else(|| http_urls.pop())
     }
 
     async fn is_node_registered(&self) -> bool {
