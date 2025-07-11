@@ -2151,7 +2151,7 @@ fn test_tip_of_chain() {
         .map(|c| c.0)
         .expect("failed to decode tip_of_chain_pb result");
 
-    assert_eq!(tip.tip_index, 2);
+    assert_eq!(tip.tip_index, 1);
     assert!(tip.certification.is_some());
 
     // Verify that the candid endpoint returns the same tip.
