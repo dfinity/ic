@@ -33,7 +33,7 @@ impl Default for RewardableNode {
             node_id: NodeId::from(PrincipalId::default()),
             rewardable_days: Vec::new(),
             region: Default::default(),
-            node_type: Default::default(),
+            node_reward_type: Default::default(),
             dc_id: Default::default(),
         }
     }
@@ -58,7 +58,7 @@ impl RewardCalculatorRunnerTest {
     pub fn with_rewards_rates(
         mut self,
         region: &str,
-        node_types: Vec<&str>,
+        node_types: Vec<NodeRewardType>,
         rate: u64,
         coeff: u64,
     ) -> Self {
@@ -125,19 +125,17 @@ impl RewardCalculatorRunnerTest {
         mut self,
         nodes: Vec<NodeId>,
         region: &str,
-        node_type: &str,
+        node_type: &NodeRewardType,
     ) -> Self {
         let period = self.reward_period.clone().unwrap();
         let start_ts = period.from;
         let end_ts = period.to;
-        let rewardable_days = start_ts
-            .days_until(&end_ts)
-            .expect("Failed to calculate rewardable days");
+        let rewardable_days = start_ts.days_until(&end_ts).unwrap();
 
         let rewardables = nodes.into_iter().map(|node_id| RewardableNode {
             node_id,
             region: Region(region.to_string()),
-            node_type: NodeType(node_type.to_string()),
+            node_reward_type: *node_type,
             rewardable_days: rewardable_days.clone(),
             ..Default::default()
         });
@@ -156,10 +154,7 @@ impl RewardCalculatorRunnerTest {
             RewardPeriod::new(*start_ts, *end_ts).unwrap()
         });
 
-        let rewardable_days = reward_period
-            .from
-            .days_until(&reward_period.to)
-            .expect("Failed to calculate rewardable days");
+        let rewardable_days = reward_period.from.days_until(&reward_period.to).unwrap();
         let rewardables: Vec<_> = self
             .rewardable_nodes
             .unwrap_or(
@@ -177,16 +172,9 @@ impl RewardCalculatorRunnerTest {
             .into_iter()
             .collect();
 
-        let rewardable_nodes_count = rewardables.iter().fold(HashMap::new(), |mut acc, node| {
-            *acc.entry((node.region.clone(), node.node_type.clone()))
-                .or_insert(0) += 1;
-            acc
-        });
-
         let rewardable_nodes_per_provider = btreemap! {
             PrincipalId::new_anonymous() => ProviderRewardableNodes {
                 provider_id: PrincipalId::new_anonymous(),
-                rewardable_nodes_count,
                 rewardable_nodes: rewardables,
             }
         };
@@ -216,7 +204,7 @@ impl RewardCalculatorRunnerTest {
         RewardsCalculatorBuilder {
             reward_period,
             rewardable_nodes_per_provider,
-            daily_metrics_by_subnet: subnets_metrics,
+            daily_metrics_by_subnet: subnets_metrics.into_iter().collect(),
             rewards_table: self.node_rewards_table.unwrap_or_default(),
         }
         .build()
@@ -290,15 +278,33 @@ fn test_calculates_node_failure_rates_correctly() {
     let node_0_fr = &nodes_results.get(&node_id(0)).unwrap().daily_metrics;
 
     // Expected subnet 2 to be selected as the primary subnet because it has the highest number of proposed blocks
-    assert_eq!(node_0_fr[0].subnet_assigned, subnet_id(2));
-    assert_eq!(node_0_fr[0].original_fr.get(), dec!(0.1));
-    assert_eq!(node_0_fr[0].relative_fr.get(), dec!(0));
+    assert_eq!(
+        node_0_fr.values().next().unwrap().subnet_assigned,
+        subnet_id(2)
+    );
+    assert_eq!(
+        node_0_fr.values().next().unwrap().original_fr.get(),
+        dec!(0.1)
+    );
+    assert_eq!(
+        node_0_fr.values().next().unwrap().relative_fr.get(),
+        dec!(0)
+    );
 
     let node_1_fr = &nodes_results.get(&node_id(1)).unwrap().daily_metrics;
 
-    assert_eq!(node_1_fr[0].subnet_assigned, subnet_id(1));
-    assert_eq!(node_1_fr[0].original_fr.get(), dec!(0.4));
-    assert_eq!(node_1_fr[0].relative_fr.get(), dec!(0));
+    assert_eq!(
+        node_1_fr.values().next().unwrap().subnet_assigned,
+        subnet_id(1)
+    );
+    assert_eq!(
+        node_1_fr.values().next().unwrap().original_fr.get(),
+        dec!(0.4)
+    );
+    assert_eq!(
+        node_1_fr.values().next().unwrap().relative_fr.get(),
+        dec!(0)
+    );
 }
 
 #[test]
@@ -306,7 +312,7 @@ fn test_scenario_1() {
     let results = RewardCalculatorRunnerTest::for_scenario_1().build_and_run();
     let mut subnet_rates = BTreeMap::new();
     for (_, metrics) in results.results_by_node.iter() {
-        for metric in metrics.daily_metrics.clone().into_iter() {
+        for (_, metric) in metrics.daily_metrics.clone().into_iter() {
             subnet_rates.insert(
                 (metric.subnet_assigned, metric.day),
                 metric.subnet_assigned_fr,
@@ -376,9 +382,18 @@ fn test_node_provider_rewards_one_assigned() {
 
     let mut builder = RewardCalculatorRunnerTest::default()
         .with_reward_period(0, 30 * NANOS_PER_DAY)
-        .with_rewards_rates("A,B", vec!["type0", "type1", "type3"], 1000, 97)
+        .with_rewards_rates(
+            "A,B",
+            vec![
+                NodeRewardType::Type0,
+                NodeRewardType::Type1,
+                NodeRewardType::Type3,
+            ],
+            1000,
+            97,
+        )
         // Node Provider 1: node_1 assigned, rest unassigned
-        .with_rewardable_nodes(nodes_np_1, "A,B", "type1")
+        .with_rewardable_nodes(nodes_np_1, "A,B", &NodeRewardType::Type1)
         .with_node_metrics(
             node_id(1),
             vec![

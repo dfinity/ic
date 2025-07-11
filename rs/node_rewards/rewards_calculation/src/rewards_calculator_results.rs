@@ -1,7 +1,8 @@
 use crate::types::{NodeType, Region, RewardPeriod, RewardPeriodError, UnixTsNanos, NANOS_PER_DAY};
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
+use ic_protobuf::registry::node::v1::NodeRewardType;
 use rust_decimal::Decimal;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::error::Error;
 use std::fmt;
 
@@ -90,35 +91,18 @@ impl DayUTC {
     }
 }
 
-pub fn days_between(first_day: DayUTC, last_day: DayUTC) -> usize {
-    (((last_day.unix_ts_at_day_end() - first_day.unix_ts_at_day_start()) / NANOS_PER_DAY) + 1)
-        as usize
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct NodeCategory {
-    pub region: String,
-    pub node_type: String,
-}
-
 #[derive(Clone, PartialEq, Debug)]
 pub struct NodeMetricsDaily {
     pub day: DayUTC,
     pub subnet_assigned: SubnetId,
-    /// Subnet Assigned Failure Rate.
-    ///
     /// The failure rate of the entire subnet.
     /// Calculated as 75th percentile of the failure rate of all nodes in the subnet.
     pub subnet_assigned_fr: Percent,
     pub num_blocks_proposed: u64,
     pub num_blocks_failed: u64,
-    /// Original Failure Rate.
-    ///
     /// The failure rate before subnet failure rate reduction.
     /// Calculated as `blocks_failed` / (`blocks_proposed` + `blocks_failed`)
     pub original_fr: Percent,
-    /// Relative Failure Rate (`RFR`).
-    ///
     /// The failure rate reduced by the subnet assigned failure rate.
     /// Calculated as Max(0, `original_fr` - `subnet_assigned_fr`)
     pub relative_fr: Percent,
@@ -127,57 +111,35 @@ pub struct NodeMetricsDaily {
 #[derive(Debug, Default)]
 pub struct NodeResults {
     pub region: Region,
-    pub node_type: NodeType,
+    pub node_reward_type: NodeRewardType,
     pub dc_id: String,
     pub rewardable_days: Vec<DayUTC>,
-    pub daily_metrics: Vec<NodeMetricsDaily>,
-
-    /// Average Relative Failure Rate (`ARFR`).
+    pub daily_metrics: BTreeMap<DayUTC, NodeMetricsDaily>,
+    /// Daily Rewards reduction.
     ///
-    /// Average of `RFR` for the entire reward period.
-    /// None if the node is unassigned in the entire reward period
-    pub avg_relative_fr: Option<Percent>,
+    /// - For nodes with `FR` < 0.1, the rewards reduction is 0
+    /// - For nodes with `FR` > 0.6, the rewards reduction is 0.8
+    /// - For nodes with 0.1 <= `FR` <= 0.6, the rewards reduction is linearly interpolated between 0 and 0.8
+    pub rewards_reduction: BTreeMap<DayUTC, Percent>,
 
-    /// Average Extrapolated Failure Rate (`AEFR`).
+    /// Daily Performance multiplier.
     ///
-    /// Failure rate average for the entire reward period
-    /// - On days when the node is unassigned `ARFR` is used
-    /// - On days when the node is assigned `RFR` is used
-    pub avg_extrapolated_fr: Percent,
-
-    /// Rewards reduction (`RR`).
-    ///
-    /// - For nodes with `AEFR` < 0.1, the rewards reduction is 0
-    /// - For nodes with `AEFR` > 0.6, the rewards reduction is 0.8
-    /// - For nodes with 0.1 <= `AEFR` <= 0.6, the rewards reduction is linearly interpolated between 0 and 0.8
-    pub rewards_reduction: Percent,
-
-    /// Performance multiplier (`PM`).
-    ///
-    /// Calculated as 1 - 'RR'
-    pub performance_multiplier: Percent,
-    pub base_rewards_per_month: XDRPermyriad,
-
-    /// Base Rewards for the rewards period.
-    ///
-    /// Calculated as `base_rewards_per_month` / 30.4375 * `rewardable_days`
-    pub base_rewards: XDRPermyriad,
-
-    /// Adjusted rewards (`AR`).
-    ///
-    /// Calculated as base_rewards * `PM`
-    pub adjusted_rewards: XDRPermyriad,
+    /// Calculated as 1 - 'rewards_reduction' for each day.
+    pub performance_multiplier: BTreeMap<DayUTC, Percent>,
+    pub adjusted_rewards: BTreeMap<DayUTC, XDRPermyriad>,
 }
 
 #[derive(Debug, Default)]
 pub struct RewardsCalculatorResults {
     pub results_by_node: BTreeMap<NodeId, NodeResults>,
-    // [EFR]
     // Extrapolated failure rate used as replacement for days when the node is unassigned
-    pub extrapolated_fr: Percent,
-    /// Rewards Total
-    /// The total rewards for the entire reward period computed as sum of the `AR`
+    pub extrapolated_fr: BTreeMap<DayUTC, Percent>,
+    /// The total rewards for the entire reward period computed as sum of the `adjusted_rewards`
+    /// for all nodes in the reward period.
     pub rewards_total: XDRPermyriad,
+    /// Rewardable nodes count by day region and node reward type.
+    pub rewardable_nodes_count: HashMap<(DayUTC, Region, NodeRewardType), u32>,
+    pub base_rewards_by_category: HashMap<(DayUTC, Region, NodeRewardType), XDRPermyriad>,
 }
 
 #[derive(Debug, PartialEq)]
