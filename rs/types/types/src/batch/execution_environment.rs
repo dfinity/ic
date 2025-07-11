@@ -348,21 +348,21 @@ pub enum CanisterCyclesCostSchedule {
     Free,
 }
 
-impl From<CanisterCyclesCostSchedule> for i32 {
-    fn from(value: CanisterCyclesCostSchedule) -> Self {
-        match value {
-            CanisterCyclesCostSchedule::Normal => 1,
-            CanisterCyclesCostSchedule::Free => 2,
-        }
-    }
-}
-
 impl From<proto::CanisterCyclesCostSchedule> for CanisterCyclesCostSchedule {
     fn from(value: proto::CanisterCyclesCostSchedule) -> Self {
         match value {
             proto::CanisterCyclesCostSchedule::Unspecified => CanisterCyclesCostSchedule::Normal,
             proto::CanisterCyclesCostSchedule::Normal => CanisterCyclesCostSchedule::Normal,
             proto::CanisterCyclesCostSchedule::Free => CanisterCyclesCostSchedule::Free,
+        }
+    }
+}
+
+impl From<CanisterCyclesCostSchedule> for proto::CanisterCyclesCostSchedule {
+    fn from(value: CanisterCyclesCostSchedule) -> Self {
+        match value {
+            CanisterCyclesCostSchedule::Normal => proto::CanisterCyclesCostSchedule::Normal,
+            CanisterCyclesCostSchedule::Free => proto::CanisterCyclesCostSchedule::Free,
         }
     }
 }

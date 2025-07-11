@@ -647,7 +647,9 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
                 )
                 .collect(),
             blockmaker_metrics_time_series: Some((&item.blockmaker_metrics_time_series).into()),
-            canister_cycles_cost_schedule: item.cost_schedule.into(),
+            canister_cycles_cost_schedule: i32::from(CanisterCyclesCostScheduleProto::from(
+                item.cost_schedule,
+            )),
         }
     }
 }
