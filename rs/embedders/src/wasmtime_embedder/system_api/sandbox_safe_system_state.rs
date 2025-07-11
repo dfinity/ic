@@ -261,7 +261,6 @@ impl SystemStateModifications {
             | Ok(Ic00Method::HttpRequest)
             | Ok(Ic00Method::SetupInitialDKG)
             | Ok(Ic00Method::ECDSAPublicKey)
-            | Ok(Ic00Method::ComputeInitialIDkgDealings)
             | Ok(Ic00Method::ReshareChainKey)
             | Ok(Ic00Method::SchnorrPublicKey)
             | Ok(Ic00Method::SignWithSchnorr)
