@@ -36,7 +36,7 @@ system_test_nns(
         "long_test",
     ],
     test_timeout = "eternal",
-    uses_guestos_dev_test = True,
+    uses_guestos_test_update = True,
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         MESSAGE_CANISTER_RUNTIME_DEPS +
@@ -64,7 +64,7 @@ system_test_nns(
         "long_test",
     ],
     test_timeout = "eternal",
-    uses_guestos_dev_test = True,
+    uses_guestos_test_update = True,
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         MESSAGE_CANISTER_RUNTIME_DEPS +
@@ -89,7 +89,7 @@ system_test_nns(
         "long_test",  # since it takes longer than 5 minutes.
     ],
     test_timeout = "eternal",  # the default 900 seconds (15 minutes) is not enough for this test, so we set it to 3600 seconds (1 hour).
-    uses_guestos_dev_test = True,
+    uses_guestos_test_update = True,
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         MESSAGE_CANISTER_RUNTIME_DEPS +
@@ -116,7 +116,7 @@ system_test_nns(
         "long_test",  # since it takes longer than 5 minutes.
     ],
     test_timeout = "eternal",  # the default 900 seconds (15 minutes) is not enough for this test, so we set it to 3600 seconds (1 hour).
-    uses_guestos_dev_test = True,
+    uses_guestos_test_update = True,
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         MESSAGE_CANISTER_RUNTIME_DEPS +
@@ -140,8 +140,8 @@ system_test_nns(
         "k8s",
         "long_test",
     ],
-    uses_guestos_dev = True,
-    uses_guestos_dev_test = True,
+    uses_guestos_img = True,
+    uses_guestos_test_update = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -161,8 +161,8 @@ system_test_nns(
         "k8s",
         "long_test",
     ],
-    uses_guestos_dev = True,
-    uses_guestos_dev_test = True,
+    uses_guestos_img = True,
+    uses_guestos_test_update = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
