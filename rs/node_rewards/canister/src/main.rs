@@ -4,12 +4,13 @@ use ic_cdk::{init, post_upgrade, pre_upgrade, spawn, update};
 use ic_nervous_system_canisters::registry::RegistryCanister;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_node_rewards_canister::canister::NodeRewardsCanister;
-use ic_node_rewards_canister::registry::RegistryClient;
 use ic_node_rewards_canister::storage::clear_registry_store;
 use ic_node_rewards_canister::storage::RegistryStoreStableMemoryBorrower;
 use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
 };
+use ic_registry_canister_client::CanisterRegistryClient;
+use ic_registry_canister_client::StableCanisterRegistryClient;
 use std::cell::RefCell;
 use std::sync::Arc;
 use std::time::Duration;
@@ -17,14 +18,14 @@ use std::time::Duration;
 fn main() {}
 
 thread_local! {
-    static REGISTRY_CLIENT: Arc<RegistryClient<RegistryStoreStableMemoryBorrower>> = {
-        let registry = Arc::new(RegistryCanister::new());
-        Arc::new(RegistryClient::<RegistryStoreStableMemoryBorrower>::new(registry))
+    static REGISTRY_STORE: Arc<StableCanisterRegistryClient<RegistryStoreStableMemoryBorrower>> = {
+        let store = StableCanisterRegistryClient::<RegistryStoreStableMemoryBorrower>::new(
+            Arc::new(RegistryCanister::new()));
+        Arc::new(store)
     };
-
     static CANISTER: RefCell<NodeRewardsCanister> = {
-        RefCell::new(NodeRewardsCanister::new(REGISTRY_CLIENT.with(|client| {
-            client.store()
+        RefCell::new(NodeRewardsCanister::new(REGISTRY_STORE.with(|store| {
+            store.clone()
         })))
     };
 }
@@ -43,7 +44,7 @@ fn post_upgrade() {
     clear_registry_store();
     ic_cdk_timers::set_timer(Duration::from_secs(0), || {
         spawn(async move {
-            let store = REGISTRY_CLIENT.with(|s| s.clone());
+            let store = REGISTRY_STORE.with(|s| s.clone());
             store
                 .sync_registry_stored()
                 .await
@@ -66,7 +67,7 @@ const REGISTRY_SYNC_INTERVAL_SECONDS: Duration = Duration::from_secs(60 * 60); /
 fn schedule_registry_sync() {
     ic_cdk_timers::set_timer_interval(REGISTRY_SYNC_INTERVAL_SECONDS, move || {
         spawn(async move {
-            let store = REGISTRY_CLIENT.with(|s| s.clone());
+            let store = REGISTRY_STORE.with(|s| s.clone());
             // panicking here is okay because we are using an interval instead of a timer that
             // has to reschedule itself.
             store
