@@ -9,7 +9,6 @@ DEPENDENCIES = [
     "//rs/recovery",
     "//rs/registry/client",
     "//rs/registry/helpers",
-    "//rs/registry/local_store",
     "//rs/types/types",
     "@crate_index//:anyhow",
     "@crate_index//:chrono",
@@ -27,6 +26,7 @@ DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
+    "//rs/registry/local_store",
     "//rs/test_utilities/tmpdir",
 ]
 
