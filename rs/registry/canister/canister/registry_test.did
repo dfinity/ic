@@ -159,14 +159,6 @@ type VetKdKeyId = record { curve: VetKdCurve; name: text };
 
 type VetKdCurve = variant { bls12_381_g2 };
 
-type EcdsaConfig = record {
-  quadruples_to_create_in_advance : nat32;
-  max_queue_size : opt nat32;
-  key_ids : vec EcdsaKeyId;
-  signature_request_timeout_ns : opt nat64;
-  idkg_key_rotation_period_ms : opt nat64;
-};
-
 type EcdsaCurve = variant { secp256k1 };
 
 type EcdsaInitialConfig = record {

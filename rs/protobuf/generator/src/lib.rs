@@ -214,10 +214,6 @@ fn build_registry_proto(def: &Path, out: &Path) {
         "#[derive(serde::Serialize, serde::Deserialize)]",
     );
     config.type_attribute(
-        ".registry.subnet.v1.EcdsaConfig",
-        "#[derive(candid::CandidType, Eq)]",
-    );
-    config.type_attribute(
         ".registry.subnet.v1.SubnetFeatures",
         "#[derive(candid::CandidType, Eq)]",
     );
