@@ -420,9 +420,7 @@ pub fn apply_switch_over_to_last_changelog_entry_impl(
         .get_key_family(CANISTER_RANGES_PREFIX, registry_version)
         .expect("Could not query registry for canister ranges");
 
-    assert!(!changelog.is_empty());
-
-    let last = changelog.last_mut().expect("can't fail");
+    let last = changelog.last_mut().expect("Changelog cannot be empty");
 
     // remove all entries that will be adjusted
     let subnet_record_key = make_subnet_record_key(new_nns_subnet_id);
