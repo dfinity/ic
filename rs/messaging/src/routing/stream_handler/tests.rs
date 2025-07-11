@@ -1781,6 +1781,73 @@ fn induct_stream_slices_reject_response_from_old_host_subnet_is_accepted() {
     );
 }
 
+/// During single canister migration, we enforce that the canister has no ongoing calls.
+/// However, we might generate local timeout for best effort request and receive a response
+/// after the migration. In this case we silently drop the response.
+#[test]
+fn induct_best_effort_response_to_migrated_away_canister_is_ok() {
+    with_test_setup(
+        btreemap![],
+        btreemap![REMOTE_SUBNET => StreamSliceConfig {
+            messages: vec![
+                 BestEffortResponse(*REMOTE_CANISTER, *LOCAL_CANISTER, CoarseTime::from_secs_since_unix_epoch(123)),
+            ],
+            ..StreamSliceConfig::default()
+        }],
+        |stream_handler, state, slices, metrics| {
+            let state = simulate_single_canister_migration(
+                state,
+                *LOCAL_CANISTER,
+                CANISTER_MIGRATION_SUBNET,
+            );
+            let mut available_guaranteed_response_memory =
+                stream_handler.available_guaranteed_response_memory(&state);
+
+            stream_handler.induct_stream_slices(
+                state,
+                slices,
+                &mut available_guaranteed_response_memory,
+            );
+            metrics.assert_eq_critical_errors(CriticalErrorCounts {
+                ..CriticalErrorCounts::default()
+            });
+        },
+    );
+}
+
+/// Guaranteed responses must be delivered; failure to do so is a critical error.
+#[test]
+fn induct_guaranteed_response_to_migrated_away_canister_is_error() {
+    with_test_setup(
+        btreemap![],
+        btreemap![REMOTE_SUBNET => StreamSliceConfig {
+            messages: vec![
+                Response(*REMOTE_CANISTER, *LOCAL_CANISTER),
+            ],
+            ..StreamSliceConfig::default()
+        }],
+        |stream_handler, state, slices, metrics| {
+            let state = simulate_single_canister_migration(
+                state,
+                *LOCAL_CANISTER,
+                CANISTER_MIGRATION_SUBNET,
+            );
+            let mut available_guaranteed_response_memory =
+                stream_handler.available_guaranteed_response_memory(&state);
+
+            stream_handler.induct_stream_slices(
+                state,
+                slices,
+                &mut available_guaranteed_response_memory,
+            );
+            metrics.assert_eq_critical_errors(CriticalErrorCounts {
+                receiver_subnet_mismatch: 1,
+                ..CriticalErrorCounts::default()
+            });
+        },
+    );
+}
+
 /// Common implementation for tests checking reject responses generated locally by the
 /// `StreamHandler` directly.
 fn check_stream_handler_locally_generated_reject_response_impl(
@@ -4613,7 +4680,7 @@ fn complete_canister_migration(
     state
 }
 
-/// Simulates the migration of the given canister between `from_subnet` and
+/// Simulates the subnet splitting related migration of the given canister between `from_subnet` and
 /// `to_subnet` by recording the corresponding entry in `state`'s
 /// `canister_migrations` and updating its routing table.
 fn simulate_canister_migration(
@@ -4623,5 +4690,16 @@ fn simulate_canister_migration(
     to_subnet: SubnetId,
 ) -> ReplicatedState {
     let state = prepare_canister_migration(state, migrated_canister, from_subnet, to_subnet);
+    complete_canister_migration(state, migrated_canister, to_subnet)
+}
+
+/// Simulates the migration of the given canister between `from_subnet` and
+/// `to_subnet` by recording the corresponding entry in `state`'s
+/// `canister_migrations` and updating its routing table.
+fn simulate_single_canister_migration(
+    state: ReplicatedState,
+    migrated_canister: CanisterId,
+    to_subnet: SubnetId,
+) -> ReplicatedState {
     complete_canister_migration(state, migrated_canister, to_subnet)
 }
