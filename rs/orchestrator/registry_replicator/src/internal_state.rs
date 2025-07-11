@@ -574,8 +574,8 @@ mod test {
         let pb_routing_table = PbRoutingTable::from(
             RoutingTable::try_from(
                 shards
-                    .iter()
-                    .map(|(_, map)| {
+                    .values()
+                    .map(|map| {
                         PbRoutingTable::from(
                             RoutingTable::try_from(map.clone())
                                 .expect("Invalid routing table shard"),
