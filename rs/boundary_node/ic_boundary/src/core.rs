@@ -44,7 +44,7 @@ use ic_protobuf::registry::crypto::v1::{AlgorithmId, PublicKey};
 use ic_registry_client::client::{RegistryClient, RegistryClientImpl};
 use ic_registry_client_helpers::{crypto::CryptoRegistry, subnet::SubnetRegistry};
 use ic_registry_local_store::{LocalStore, LocalStoreImpl};
-use ic_registry_replicator::RegistryReplicator;
+use ic_registry_replicator::{PollableRegistryClient, RegistryReplicator};
 use ic_types::messages::MessageId;
 use nix::unistd::{getpgid, setpgid, Pid};
 use rustls::client::danger::ServerCertVerifier;
@@ -648,7 +648,7 @@ async fn create_agent(
 fn setup_registry(
     cli: &Cli,
     local_store: Arc<dyn LocalStore>,
-    registry_client: Arc<dyn RegistryClient>,
+    registry_client: Arc<dyn PollableRegistryClient>,
     registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
     persister: WithMetricsPersist<Persister>,
     http_client_check: Arc<dyn bnhttp::Client>,

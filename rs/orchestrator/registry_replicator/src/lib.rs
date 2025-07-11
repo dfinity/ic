@@ -41,7 +41,10 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_local_store::{Changelog, ChangelogEntry, KeyMutation, LocalStore, LocalStoreImpl};
 use ic_registry_nns_data_provider::registry::RegistryCanister;
-use ic_types::{crypto::threshold_sig::ThresholdSigPublicKey, NodeId, RegistryVersion};
+use ic_types::{
+    crypto::threshold_sig::ThresholdSigPublicKey, registry::RegistryClientError, NodeId,
+    RegistryVersion,
+};
 use metrics::RegistryreplicatorMetrics;
 use std::{
     future::Future,
@@ -59,10 +62,21 @@ pub mod args;
 mod internal_state;
 pub mod metrics;
 
+pub trait PollableRegistryClient: RegistryClient {
+    /// Polls the registry once, updating the local store with the latest registry updates.
+    fn poll_once(&self) -> Result<(), RegistryClientError>;
+}
+
+impl PollableRegistryClient for RegistryClientImpl {
+    fn poll_once(&self) -> Result<(), RegistryClientError> {
+        self.poll_once()
+    }
+}
+
 pub struct RegistryReplicator {
     logger: ReplicaLogger,
     node_id: Option<NodeId>,
-    registry_client: Arc<dyn RegistryClient>,
+    registry_client: Arc<dyn PollableRegistryClient>,
     local_store: Arc<dyn LocalStore>,
     started: Arc<AtomicBool>,
     cancelled: Arc<AtomicBool>,
@@ -74,7 +88,7 @@ impl RegistryReplicator {
     pub fn new_with_clients(
         logger: ReplicaLogger,
         local_store: Arc<dyn LocalStore>,
-        registry_client: Arc<dyn RegistryClient>,
+        registry_client: Arc<dyn PollableRegistryClient>,
         poll_delay: Duration,
     ) -> Self {
         let metrics = Arc::new(RegistryreplicatorMetrics::new(&MetricsRegistry::new()));
@@ -149,7 +163,7 @@ impl RegistryReplicator {
     /// provider for registry updates
     fn initialize_registry_client(
         data_provider: Arc<dyn RegistryDataProvider>,
-    ) -> Arc<dyn RegistryClient> {
+    ) -> Arc<dyn PollableRegistryClient> {
         let metrics_registry = MetricsRegistry::global();
         let registry_client = Arc::new(RegistryClientImpl::new(
             data_provider,
@@ -317,6 +331,14 @@ impl RegistryReplicator {
         // reachable.
         self.initialize_local_store(nns_urls.clone(), nns_pub_key)
             .await;
+
+        // Update the registry client with the just initialized local store.
+        if let Err(err) = self.registry_client.poll_once() {
+            warn!(
+                self.logger,
+                "Failed to poll the registry client after initializing local store: {}", err
+            );
+        }
 
         let mut internal_state = InternalState::new(
             self.logger.clone(),
