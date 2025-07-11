@@ -326,13 +326,12 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
     {
         loop {
             let r = tokio::time::timeout(timeout, self.check_for_upgrade()).await;
-            match handler(r).await {
-                ControlFlow::Continue(()) => {}
-                ControlFlow::Break(()) => {
-                    cancellation_token.cancel();
-                    break;
-                }
+
+            if handler(r).await == ControlFlow::Break(()) {
+                cancellation_token.cancel();
+                break;
             }
+
             tokio::select! {
                 _ = tokio::time::sleep(interval) => {}
                 _ = cancellation_token.cancelled() => break
