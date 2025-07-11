@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use anyhow::Result;
 
-use ic_consensus_system_test_upgrade_common::{bless_branch_version, upgrade};
+use ic_consensus_system_test_upgrade_common::{bless_target_version, upgrade};
 use ic_consensus_system_test_utils::rw_message::{
     can_read_msg_with_retries, install_nns_and_check_progress,
 };
@@ -12,7 +12,7 @@ use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::HasPublicApiUrl;
 use ic_system_test_driver::driver::test_env_api::{
-    get_mainnet_nns_revision, GetFirstHealthyNodeSnapshot, HasTopologySnapshot,
+    get_ic_os_img_version, GetFirstHealthyNodeSnapshot, HasTopologySnapshot,
 };
 use ic_system_test_driver::systest;
 use ic_types::Height;
@@ -39,11 +39,11 @@ fn setup(env: TestEnv) {
 // Tests an upgrade of the NNS subnet to the branch version and a downgrade back to the mainnet version
 fn upgrade_downgrade_nns_subnet(env: TestEnv) {
     let nns_node = env.get_first_healthy_system_node_snapshot();
-    let branch_version = bless_branch_version(&env, &nns_node);
+    let target_version = bless_target_version(&env, &nns_node);
     let (faulty_node, can_id, msg) =
-        upgrade(&env, &nns_node, &branch_version, SubnetType::System, None);
-    let mainnet_version = get_mainnet_nns_revision();
-    upgrade(&env, &nns_node, &mainnet_version, SubnetType::System, None);
+        upgrade(&env, &nns_node, &target_version, SubnetType::System, None);
+    let initial_version = get_ic_os_img_version().expect("Failed to find initial version");
+    upgrade(&env, &nns_node, &initial_version, SubnetType::System, None);
     // Make sure we can still read the message stored before the first upgrade
     assert!(can_read_msg_with_retries(
         &env.logger(),
