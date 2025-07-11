@@ -216,10 +216,11 @@ impl Upgrade {
                         (subnet_id, None, None)
                     }
                     // If no subnet is assigned to the node id, we're unassigned.
-                    _ => match self.check_for_upgrade_as_unassigned().await? {
-                        ControlFlow::Continue(()) => return Ok(ControlFlow::Continue(None)),
-                        ControlFlow::Break(()) => return Ok(ControlFlow::Break(())),
-                    },
+                    _ => {
+                        let res = self.check_for_upgrade_as_unassigned().await?;
+
+                        return Ok(res.map_continue(|()| None));
+                    }
                 },
             }
         };
@@ -306,10 +307,8 @@ impl Upgrade {
             // Only downloads the new image if it doesn't already exists locally, i.e. it
             // was previously downloaded by `prepare_upgrade_if_scheduled()`, see
             // below.
-            match self.execute_upgrade(&new_replica_version).await? {
-                ControlFlow::Continue(()) => return Ok(ControlFlow::Continue(Some(subnet_id))),
-                ControlFlow::Break(()) => return Ok(ControlFlow::Break(())),
-            }
+            let res = self.execute_upgrade(&new_replica_version).await?;
+            return Ok(res.map_continue(|()| Some(subnet_id)));
         }
 
         // If we arrive here, we are on the newest replica version.
