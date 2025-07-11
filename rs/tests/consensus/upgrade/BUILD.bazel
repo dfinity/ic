@@ -36,6 +36,8 @@ system_test_nns(
         "long_test",
     ],
     test_timeout = "eternal",
+    uses_guestos_img = False,
+    uses_guestos_mainnet_img = True,
     uses_guestos_test_update = True,
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
@@ -64,6 +66,8 @@ system_test_nns(
         "long_test",
     ],
     test_timeout = "eternal",
+    uses_guestos_img = False,
+    uses_guestos_mainnet_img = True,
     uses_guestos_test_update = True,
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
@@ -89,6 +93,8 @@ system_test_nns(
         "long_test",  # since it takes longer than 5 minutes.
     ],
     test_timeout = "eternal",  # the default 900 seconds (15 minutes) is not enough for this test, so we set it to 3600 seconds (1 hour).
+    uses_guestos_img = False,
+    uses_guestos_mainnet_img = True,
     uses_guestos_test_update = True,
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +

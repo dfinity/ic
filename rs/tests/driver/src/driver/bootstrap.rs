@@ -16,10 +16,9 @@ use crate::{
         test_env_api::{
             get_dependency_path_from_env, get_elasticsearch_hosts, get_ic_os_img_version,
             get_ic_os_initial_update_img_sha256, get_ic_os_initial_update_img_url,
-            get_mainnet_ic_os_update_img_sha256, get_mainnet_ic_os_update_img_url,
-            get_mainnet_nns_revision, get_malicious_ic_os_update_img_sha256,
-            get_malicious_ic_os_update_img_url, get_setupos_img_sha256, get_setupos_img_url,
-            HasTopologySnapshot, HasVmName, IcNodeContainer, InitialReplicaVersion, NodesInfo,
+            get_malicious_ic_os_update_img_sha256, get_malicious_ic_os_update_img_url,
+            get_setupos_img_sha256, get_setupos_img_url, HasTopologySnapshot, HasVmName,
+            IcNodeContainer, InitialReplicaVersion, NodesInfo,
         },
         test_setup::InfraProvider,
     },
@@ -97,12 +96,7 @@ pub fn init_ic(
     // is not supported anymore.
     let dummy_hash = "60958ccac3e5dfa6ae74aa4f8d6206fd33a5fc9546b8abaad65e3f1c4023c5bf".to_string();
 
-    let replica_version = if ic.with_mainnet_config {
-        get_mainnet_nns_revision()
-    } else {
-        get_ic_os_img_version()?
-    };
-
+    let replica_version = get_ic_os_img_version()?;
     let replica_version = ReplicaVersion::try_from(replica_version.clone())?;
     let initial_replica_version = InitialReplicaVersion {
         version: replica_version.clone(),
@@ -197,11 +191,6 @@ pub fn init_ic(
             (
                 get_malicious_ic_os_update_img_sha256()?,
                 get_malicious_ic_os_update_img_url()?,
-            )
-        } else if ic.with_mainnet_config {
-            (
-                get_mainnet_ic_os_update_img_sha256(test_env)?,
-                get_mainnet_ic_os_update_img_url()?,
             )
         } else {
             (

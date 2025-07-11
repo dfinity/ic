@@ -94,7 +94,6 @@ fn setup_common() -> InternetComputer {
 
 pub fn setup_upgrade(env: TestEnv) {
     setup_common()
-        .with_mainnet_config()
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 

@@ -44,9 +44,6 @@ pub struct InternetComputer {
     pub jaeger_addr: Option<SocketAddr>,
     pub socks_proxy: Option<String>,
     use_specified_ids_allocation_range: bool,
-    /// Indicates whether this `InternetComputer` instance should be installed with
-    /// GuestOS disk images of the latest-deployed mainnet version.
-    pub with_mainnet_config: bool,
     pub api_boundary_nodes: Vec<Node>,
 }
 
@@ -62,10 +59,7 @@ pub enum VmAllocationStrategy {
 
 impl InternetComputer {
     pub fn new() -> Self {
-        Self {
-            with_mainnet_config: false,
-            ..Self::default()
-        }
+        Self::default()
     }
 
     /// Set the VM resources (like number of virtual CPUs and memory) of all
@@ -213,11 +207,6 @@ impl InternetComputer {
 
     pub fn with_socks_proxy(mut self, socks_proxy: String) -> Self {
         self.socks_proxy = Some(socks_proxy);
-        self
-    }
-
-    pub fn with_mainnet_config(mut self) -> Self {
-        self.with_mainnet_config = true;
         self
     }
 
