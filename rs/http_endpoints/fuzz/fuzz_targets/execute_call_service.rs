@@ -188,8 +188,7 @@ fn new_call_service(
     let ingress_pool_throttler = MockIngressPoolThrottler::new(throttler_rx);
 
     let ingress_throttler = Arc::new(RwLock::new(ingress_pool_throttler));
-    #[allow(clippy::disallowed_methods)]
-    let (ingress_tx, _ingress_rx) = tokio::sync::mpsc::unbounded_channel();
+    let (ingress_tx, _ingress_rx) = tokio::sync::mpsc::channel(100000);
 
     let sig_verifier = Arc::new(temp_crypto_component_with_fake_registry(node_test_id(1)));
     let call_handler = IngressValidatorBuilder::builder(
