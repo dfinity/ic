@@ -6,8 +6,8 @@
       <libosinfo:os id="http://ubuntu.com/ubuntu/20.04"/>
     </libosinfo:libosinfo>
   </metadata>
-  <memory unit='GiB'>490</memory>
-  <currentMemory unit='GiB'>490</currentMemory>
+  <memory unit='GiB'>4</memory>
+  <currentMemory unit='GiB'>4</currentMemory>
   <vcpu placement='static'>64</vcpu>
   <cpu mode='host-model'/>
   <launchSecurity type='sev-snp' kernelHashes='yes'>
@@ -16,6 +16,7 @@
     <policy>30000</policy>
   </launchSecurity>
   <memoryBacking>
+    <hugepages/>
     <locked/>
   </memoryBacking>
   <resource>
@@ -49,7 +50,7 @@
     <emulator>/usr/bin/qemu-system-x86_64</emulator>
     <disk type='block' device='disk'>
       <driver name='qemu' type='raw' cache='none' discard='unmap'/>
-      <source dev='/dev/hostlvm/guestos' index='1'/>
+      <source dev='/dev/guest_disk' index='1'/>
       <backingStore/>
       <target dev='vda' bus='virtio'/>
       <alias name='virtio-disk0'/>

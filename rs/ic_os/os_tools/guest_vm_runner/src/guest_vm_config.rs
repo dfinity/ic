@@ -266,6 +266,7 @@ mod tests {
             &config,
             Path::new("/tmp/config.img"),
             direct_boot,
+            Path::new("/dev/guest_disk"),
             guest_vm_type,
         )
         .unwrap();

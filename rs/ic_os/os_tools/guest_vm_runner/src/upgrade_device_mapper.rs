@@ -6,12 +6,12 @@ use std::sync::Arc;
 
 const UPGRADE_DM_NAME: &'static str = "upgrade-guestos";
 const DATA_PARTITION_DM_NAME: &'static str = "guestos-data";
-const DATA_PARTITION_WRITETHROUGH_DM_NAME: &'static str = "guestos-data-writethrough";
+const DATA_PARTITION_SNAPSHOT_DM_NAME: &'static str = "guestos-data-snapshot";
 
 const ALL_DM_NAMES_IN_CLEANUP_ORDER: [&'static str; 3] = [
-    // Cleanup order is the reverse of creation order in create_device_for_upgrade.
+    // The cleanup order is the reverse of creation order in create_device_for_upgrade.
     UPGRADE_DM_NAME,
-    DATA_PARTITION_WRITETHROUGH_DM_NAME,
+    DATA_PARTITION_SNAPSHOT_DM_NAME,
     DATA_PARTITION_DM_NAME,
 ];
 
@@ -85,17 +85,17 @@ fn create_device_for_upgrade(
     )
     .context("Failed to create data partition device")?;
 
-    // Create cached data partition that writes to the temporary device
-    let cached_data_partition_device = MappedDevice::create_snapshot_table(
+    // Create data partition snapshot that writes to the temporary device
+    let data_partition_snapshot_device = MappedDevice::create_snapshot_table(
         dev_mapper.clone(),
-        DATA_PARTITION_WRITETHROUGH_DM_NAME,
+        DATA_PARTITION_SNAPSHOT_DM_NAME,
         Box::new(readonly_data_partition_device),
         Box::new(
             TempDevice::new(Sectors(1024 * 1024))
                 .context("Failed to create temporary device for copy-on-write")?,
         ),
     )
-    .context("Failed to create cached data partition device")?;
+    .context("Failed to create data snapshotpartition device")?;
 
     // Create final upgrade VM device with all segments
     MappedDevice::create_linear(
@@ -105,14 +105,13 @@ fn create_device_for_upgrade(
             // Read-write section: GPT + first 9 partitions
             LinearSegment::prefix(Box::new(base_device), data_partition_start),
             // Read-only section: data partition
-            LinearSegment::full(Box::new(cached_data_partition_device)),
+            LinearSegment::full(Box::new(data_partition_snapshot_device)),
             // Read-write section: whatever is left at the end of the device (backup GPT)
             LinearSegment::suffix(
                 Box::new(base_device),
                 data_partition_start + data_partition_len,
             ),
         ],
-        /*readonly=*/ false,
     )
     .context("Failed to create upgrade device")
 }
@@ -144,9 +143,7 @@ fn try_remove_device(dev_mapper: &DM, name: &DmName) {
             Ok(_) => return,
             Err(err) => {
                 eprintln!("Failed to remove device {name} (attempt {retry}/{MAX_RETRIES}): {err}");
-                if retry < MAX_RETRIES {
-                    std::thread::sleep(std::time::Duration::from_secs(RETRY_DELAY_SECS));
-                }
+                std::thread::sleep(std::time::Duration::from_secs(RETRY_DELAY_SECS));
             }
         }
     }
@@ -156,15 +153,26 @@ fn try_remove_device(dev_mapper: &DM, name: &DmName) {
 mod tests {
     use super::*;
     use crate::device_mapping::LoopDeviceWrapper;
-    use gpt::GptConfig;
+    use gpt::{GptConfig, GptDisk};
     use loopdev::LoopControl;
     use std::fs::File;
-    use std::io::{Read, Write};
     use std::os::unix::fs::FileExt;
-    use tempfile::NamedTempFile;
+    use std::path::PathBuf;
+    use std::sync::Mutex;
+    use tempfile::{NamedTempFile, TempPath};
 
-    #[test]
-    fn test_create_mapped_device() {
+    // The tests use the same global device mapper instance, so we need to ensure that
+    // they do not interfere with each other. Each test that interacts with the device mapper
+    // must hold the lock for the duration of the test.
+    static DM_MUTEX: Mutex<()> = Mutex::new(());
+
+    struct TestSetup {
+        backing_file: TempPath,
+        gpt: GptDisk<File>,
+        device: MappedDevice,
+    }
+
+    fn create_test_setup() -> TestSetup {
         let backing_file = NamedTempFile::new().expect("Failed to create temporary file");
         backing_file
             .as_file()
@@ -179,7 +187,6 @@ mod tests {
                 .next_free()
                 .expect("Failed to find free loop device"),
         );
-
         base.attach_file(&backing_file)
             .expect("Failed to attach file to loop device");
         let base_path = base.path().expect("Failed to get loop device path");
@@ -201,14 +208,43 @@ mod tests {
         gpt.write_inplace().expect("Could not write GPT to device");
 
         let device = create_mapped_device(&base_path).expect("Failed to create mapped device");
+        TestSetup {
+            backing_file,
+            gpt,
+            device,
+        }
+    }
 
-        let partition3_start_bytes = gpt.partitions().get(&3).unwrap().first_lba * 512;
-        let partition10_start_bytes = gpt.partitions().get(&10).unwrap().first_lba * 512;
+    fn get_mapped_devices() -> Vec<PathBuf> {
+        std::fs::read_dir("/dev/mapper")
+            .expect("Failed to read /dev/mapper")
+            .map(|entry| entry.unwrap().path())
+            .collect()
+    }
 
-        let mut upgrade_device = File::options()
+    /// Tests the creation of a mapped device for the upgrade VM.
+    ///
+    /// - Creates a temporary backing file and attaches it to a loop device.
+    /// - Initializes a partition table with 10 partitions on the loop device.
+    /// - Calls `create_mapped_device` to create the upgrade device.
+    /// - Writes to both a read-write and the read-only (10th) partition via the upgrade device.
+    /// - Verifies that data written to the read-write partition is persisted to the backing file.
+    /// - Verifies that data written to the read-only partition is not persisted to the backing file.
+    #[test]
+    fn test_create_mapped_device() {
+        let _lock = DM_MUTEX.lock().unwrap();
+
+        let mapped_devices_before = get_mapped_devices();
+
+        let setup = create_test_setup();
+
+        let partition3_start_bytes = setup.gpt.partitions().get(&3).unwrap().first_lba * 512;
+        let partition10_start_bytes = setup.gpt.partitions().get(&10).unwrap().first_lba * 512;
+
+        let upgrade_device = File::options()
             .write(true)
             .read(true)
-            .open(device.path())
+            .open(setup.device.path())
             .expect("Failed to open device file");
         upgrade_device
             .write_at(b"foo", partition3_start_bytes)
@@ -218,8 +254,8 @@ mod tests {
             .expect("Failed to write to device file");
         drop(upgrade_device);
 
-        let mut upgrade_device =
-            File::open(device.path()).expect("Failed to open device file after write");
+        let upgrade_device =
+            File::open(setup.device.path()).expect("Failed to open device file after write");
         let mut read_buf = vec![0; 3];
         upgrade_device
             .read_at(&mut read_buf, partition3_start_bytes)
@@ -232,7 +268,7 @@ mod tests {
         assert_eq!(read_buf, b"bar");
         drop(upgrade_device);
 
-        let mut file = File::open(backing_file).expect("Failed to open backing file");
+        let file = File::open(&setup.backing_file).expect("Failed to open backing file");
         let mut read_buf = vec![0; 3];
         file.read_at(&mut read_buf, partition3_start_bytes)
             .expect("Failed to read from backing file");
@@ -243,5 +279,51 @@ mod tests {
             .expect("Failed to read from backing file");
         // Check that the read-only partition is not written to the backing file
         assert_eq!(read_buf, &[0, 0, 0]);
+
+        let device_path = setup.device.path().to_path_buf();
+        drop(setup.device);
+
+        assert!(
+            !device_path.exists(),
+            "Device file should be removed after drop"
+        );
+
+        // Verify that the device mapper entries are cleaned up
+        assert_eq!(mapped_devices_before, get_mapped_devices());
+    }
+
+    #[test]
+    fn test_create_mapped_device_base_device_missing() {
+        let missing_path = Path::new("/nonexistent/device/path");
+        let result = create_mapped_device(missing_path);
+        let err = result
+            .expect_err("Expected error on missing base device")
+            .to_string();
+        assert!(err.contains("Base device does not exist"));
+    }
+
+    #[test]
+    fn test_create_mapped_device_cleans_up_first() {
+        let _lock = DM_MUTEX.lock().unwrap();
+
+        let mapped_devices_before = get_mapped_devices();
+        let device = create_test_setup().device;
+        let device_path = device.path().to_path_buf();
+        // Forget the device so it doesn't get cleaned up automatically
+        std::mem::forget(device);
+        assert!(device_path.exists());
+
+        // Create another device to verify that it cleans up the previous one
+        let device = create_test_setup();
+        drop(device);
+        assert!(
+            !device_path.exists(),
+            "Previous device should be cleaned up"
+        );
+        assert_eq!(
+            mapped_devices_before,
+            get_mapped_devices(),
+            "Device mapper entries should be cleaned up"
+        );
     }
 }

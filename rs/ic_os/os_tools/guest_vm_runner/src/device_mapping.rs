@@ -1,12 +1,12 @@
 use anyhow::{Context, Result};
 use devicemapper::{
-    devnode_to_devno, Bytes, CacheDevTargetTable, CacheTargetParams, DevId, Device, DmFlags,
-    DmName, DmOptions, LinearDevTargetParams, LinearDevTargetTable, LinearTargetParams, Sectors,
-    TargetLine, TargetTable, DM,
+    devnode_to_devno, Bytes, DevId, Device, DmName, DmOptions, LinearDevTargetParams,
+    LinearDevTargetTable, LinearTargetParams, Sectors, TargetLine, TargetTable, DM,
 };
 use loopdev::LoopDevice;
 use nix::ioctl_read;
 use std::any::Any;
+use std::fmt::Debug;
 use std::fs::File;
 use std::ops::Deref;
 use std::os::fd::AsRawFd;
@@ -209,6 +209,15 @@ pub struct MappedDevice {
     device_mapper: Arc<DM>,
     device: Device,
     _dependencies: Vec<Box<dyn Any>>,
+}
+
+impl Debug for MappedDevice {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MappedDevice")
+            .field("name", &self.name)
+            .field("len", &self.len)
+            .finish()
+    }
 }
 
 impl MappedDevice {
