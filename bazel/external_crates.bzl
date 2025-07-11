@@ -383,6 +383,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "serde",
                 ],
             ),
+            # Required because chrono uses canisters incompatible features
             "chrono_canisters": crate.spec(
                 git = "https://github.com/chronotope/chrono.git",
                 package = "chrono",

@@ -1,4 +1,4 @@
-use crate::registry::RegistryClient;
+use crate::registry_querier::RegistryQuerier;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use ic_base_types::{NodeId, PrincipalId};
 use ic_nervous_system_canisters::registry::RegistryCanister;
@@ -6,8 +6,8 @@ use ic_protobuf::registry::dc::v1::DataCenterRecord;
 use ic_protobuf::registry::node::v1::{NodeRecord, NodeRewardType};
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_registry_canister_client::{
-    RegistryDataStableMemory, StableCanisterRegistryClient, StorableRegistryKey,
-    StorableRegistryValue,
+    test_registry_data_stable_memory_impl, RegistryDataStableMemory, StableCanisterRegistryClient,
+    StorableRegistryKey, StorableRegistryValue,
 };
 use ic_registry_keys::{
     DATA_CENTER_KEY_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_RECORD_KEY_PREFIX,
@@ -28,21 +28,7 @@ thread_local! {
     });
 }
 
-pub struct DummyStore;
-
-impl RegistryDataStableMemory for DummyStore {
-    fn with_registry_map<R>(
-        f: impl FnOnce(&StableBTreeMap<StorableRegistryKey, StorableRegistryValue, VM>) -> R,
-    ) -> R {
-        STATE.with_borrow(f)
-    }
-
-    fn with_registry_map_mut<R>(
-        f: impl FnOnce(&mut StableBTreeMap<StorableRegistryKey, StorableRegistryValue, VM>) -> R,
-    ) -> R {
-        STATE.with_borrow_mut(f)
-    }
-}
+test_registry_data_stable_memory_impl!(DummyState, STATE);
 
 pub fn dt_to_timestamp_nanos(datetime_str: &str) -> u64 {
     let dt = format!("{} 00:00:00", datetime_str);
@@ -140,11 +126,11 @@ fn add_dummy_data() {
     add_record_helper(&node_3_k, 39667, Some(node_3_v), "2025-07-11");
 }
 
-fn client_for_tests() -> RegistryClient<DummyStore> {
+fn client_for_tests() -> RegistryQuerier {
     add_dummy_data();
 
-    RegistryClient {
-        store: Arc::new(StableCanisterRegistryClient::<DummyStore>::new(Arc::new(
+    RegistryQuerier {
+        registry_client: Arc::new(StableCanisterRegistryClient::<DummyState>::new(Arc::new(
             RegistryCanister::new(),
         ))),
     }

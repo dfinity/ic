@@ -1,15 +1,18 @@
 //! An implementation of RegistryClient intended to be used in canister
 //! where polling in the background is not required because handed over to a timer.
 //! The code is entirely copied from `ic-registry-client-fake` and more tests added.
+
 use async_trait::async_trait;
 use ic_interfaces_registry::{RegistryClientResult, RegistryClientVersionedResult};
 use ic_types::registry::RegistryClientError;
 use ic_types::registry::RegistryClientError::DecodeError;
 use ic_types::RegistryVersion;
+use std::collections::{BTreeMap, HashSet};
 
 mod stable_canister_client;
 mod stable_memory;
 
+use crate::stable_memory::UnixTsNanos;
 pub use stable_canister_client::StableCanisterRegistryClient;
 pub use stable_memory::{RegistryDataStableMemory, StorableRegistryKey, StorableRegistryValue};
 
@@ -86,6 +89,12 @@ pub trait CanisterRegistryClient: Send + Sync {
         version: RegistryVersion,
     ) -> Result<Vec<(String, Vec<u8>)>, RegistryClientError>;
 
+    fn get_key_family_entries_before_timestamp(
+        &self,
+        key_prefix: &str,
+        timestamp: &UnixTsNanos,
+    ) -> BTreeMap<(String, UnixTsNanos, RegistryVersion), Option<Vec<u8>>>;
+
     /// Returns a particular value for a key at a given version.
     fn get_value(&self, key: &str, version: RegistryVersion) -> RegistryClientResult<Vec<u8>> {
         self.get_versioned_value(key, version).map(|vr| vr.value)
@@ -100,6 +109,10 @@ pub trait CanisterRegistryClient: Send + Sync {
     /// over multiple messages.  It should generally be scheduled in a timer, but if it's never called
     /// the local registry data will not be in sync with the data in the Registry canister.
     async fn sync_registry_stored(&self) -> Result<RegistryVersion, String>;
+
+    /// Returns a map of timestamps to registry versions, where the keys are the timestamps
+    /// when the versions were first added to the registry.
+    fn timestamp_to_versions_map(&self) -> BTreeMap<u64, HashSet<RegistryVersion>>;
 }
 
 // Helpers

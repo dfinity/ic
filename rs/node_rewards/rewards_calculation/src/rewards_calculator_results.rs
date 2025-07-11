@@ -1,6 +1,4 @@
-use crate::types::{
-    DayEnd, NodeType, Region, RewardPeriod, RewardPeriodError, UnixTsNanos, NANOS_PER_DAY,
-};
+use crate::types::{NodeType, Region, RewardPeriod, RewardPeriodError, UnixTsNanos, NANOS_PER_DAY};
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use rust_decimal::Decimal;
 use std::collections::BTreeMap;
@@ -37,48 +35,58 @@ impl From<Decimal> for Percent {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Hash, PartialOrd, Ord, Eq, Copy, Default)]
-pub struct DayUTC(pub DayEnd);
+#[derive(Clone, Debug, PartialEq, Hash, PartialOrd, Ord, Eq, Copy)]
+pub struct DayUTC(UnixTsNanos);
+
+impl From<UnixTsNanos> for DayUTC {
+    fn from(value: UnixTsNanos) -> Self {
+        let day_end = ((value / NANOS_PER_DAY) + 1) * NANOS_PER_DAY - 1;
+        Self(day_end)
+    }
+}
+
+impl Default for DayUTC {
+    fn default() -> Self {
+        DayUTC::from(0)
+    }
+}
 
 impl DayUTC {
     pub fn unix_ts_at_day_end(&self) -> UnixTsNanos {
-        self.0.get()
+        self.0
+    }
+
+    pub fn get(&self) -> UnixTsNanos {
+        self.0
     }
 
     pub fn unix_ts_at_day_start(&self) -> UnixTsNanos {
-        (self.0.get() / NANOS_PER_DAY) * NANOS_PER_DAY
+        (self.0 / NANOS_PER_DAY) * NANOS_PER_DAY
     }
 
     pub fn next_day(&self) -> DayUTC {
-        DayUTC(DayEnd::from(self.0.get() + NANOS_PER_DAY))
+        DayUTC(self.0 + NANOS_PER_DAY)
+    }
+
+    pub fn previous_day(&self) -> DayUTC {
+        let ts_previous_day = self.0.checked_sub(NANOS_PER_DAY).unwrap_or_default();
+        DayUTC(ts_previous_day)
     }
 
     pub fn days_until(&self, other: &DayUTC) -> Result<Vec<DayUTC>, String> {
         if self > other {
             return Err(format!(
                 "Cannot compute days_until: {} > {}",
-                self.0.get(),
-                other.0.get()
+                self.0, other.0
             ));
         }
 
-        let num_days = (other.0.get() - self.0.get()) / NANOS_PER_DAY;
+        let num_days = (other.0 - self.0) / NANOS_PER_DAY;
         let days_until = (0..=num_days)
-            .map(|i| DayUTC(DayEnd::from(self.0.get() + i * NANOS_PER_DAY)))
+            .map(|i| DayUTC(self.0 + i * NANOS_PER_DAY))
             .collect();
 
         Ok(days_until)
-    }
-}
-impl From<DayEnd> for DayUTC {
-    fn from(value: DayEnd) -> Self {
-        Self(value)
-    }
-}
-
-impl From<UnixTsNanos> for DayUTC {
-    fn from(value: UnixTsNanos) -> Self {
-        Self(DayEnd::from(value))
     }
 }
 
@@ -209,9 +217,7 @@ impl fmt::Display for RewardCalculatorError {
                 write!(
                     f,
                     "Node {} has metrics outside the reward period: timestamp: {} not in {}",
-                    subnet_id,
-                    day.0.get(),
-                    reward_period
+                    subnet_id, day.0, reward_period
                 )
             }
             RewardCalculatorError::DuplicateMetrics(subnet_id, day) => {

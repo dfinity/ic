@@ -1,4 +1,6 @@
-use crate::stable_memory::{RegistryDataStableMemory, StorableRegistryKey, StorableRegistryValue};
+use crate::stable_memory::{
+    RegistryDataStableMemory, StorableRegistryKey, StorableRegistryValue, UnixTsNanos,
+};
 use crate::CanisterRegistryClient;
 use async_trait::async_trait;
 use ic_cdk::println;
@@ -15,7 +17,7 @@ use std::collections::{BTreeMap, HashSet};
 use std::marker::PhantomData;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering as AtomicOrdering;
-use std::sync::{Arc, RwLock, RwLockReadGuard};
+use std::sync::{Arc, RwLock};
 
 /// This implementation of CanisterRegistryClient uses StableMemory to store a copy of the
 /// Registry data in the canister.  An implementation of RegistryDataStableMemory trait that
@@ -51,12 +53,6 @@ impl<S: RegistryDataStableMemory> StableCanisterRegistryClient<S> {
             timestamp_to_versions_map: Arc::new(RwLock::new(timestamp_to_versions_map)),
             registry,
         }
-    }
-
-    pub fn timestamp_to_versions_map(
-        &self,
-    ) -> RwLockReadGuard<BTreeMap<u64, HashSet<RegistryVersion>>> {
-        self.timestamp_to_versions_map.read().unwrap()
     }
 
     fn add_deltas(&self, deltas: Vec<RegistryDelta>) -> Result<(), String> {
@@ -188,6 +184,28 @@ impl<S: RegistryDataStableMemory> CanisterRegistryClient for StableCanisterRegis
         self.get_key_family_base(key_prefix, version, Box::new(|k, v| (k, v.unwrap())))
     }
 
+    fn get_key_family_entries_before_timestamp(
+        &self,
+        key_prefix: &str,
+        timestamp: &UnixTsNanos,
+    ) -> BTreeMap<(String, UnixTsNanos, RegistryVersion), Option<Vec<u8>>> {
+        let start_range = StorableRegistryKey {
+            key: key_prefix.to_string(),
+            ..Default::default()
+        };
+
+        S::with_registry_map(|map| {
+            map.range(start_range..)
+                .filter(|(k, _)| k.timestamp_nanoseconds <= *timestamp)
+                .take_while(|(k, _)| k.key.starts_with(key_prefix))
+                .map(|(k, v)| {
+                    let version = RegistryVersion::from(k.version);
+                    ((k.key, k.timestamp_nanoseconds, version), v.0)
+                })
+                .collect::<BTreeMap<_, _>>()
+        })
+    }
+
     fn get_value(&self, key: &str, version: RegistryVersion) -> RegistryClientResult<Vec<u8>> {
         self.get_versioned_value(key, version).map(|vr| vr.value)
     }
@@ -245,6 +263,10 @@ impl<S: RegistryDataStableMemory> CanisterRegistryClient for StableCanisterRegis
             current_local_version = self.get_latest_version();
         }
         Ok(current_local_version)
+    }
+
+    fn timestamp_to_versions_map(&self) -> BTreeMap<u64, HashSet<RegistryVersion>> {
+        self.timestamp_to_versions_map.read().unwrap().clone()
     }
 }
 
