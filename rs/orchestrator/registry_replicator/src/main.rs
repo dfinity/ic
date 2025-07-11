@@ -14,14 +14,12 @@ async fn main() {
         None,
         &config,
         args.get_metrics_addr(),
-    );
-
-    let (nns_urls, nns_pub_key) =
-        registry_replicator.parse_registry_access_info_from_config(&config);
+    )
+    .await;
 
     info!(logger, "Start polling registry.");
     registry_replicator
-        .start_polling(nns_urls, nns_pub_key)
+        .start_polling()
         .await
         .expect("Failed to start registry replicator")
         .await;

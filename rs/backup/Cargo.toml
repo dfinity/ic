@@ -16,7 +16,6 @@ ic-logger = { path = "../monitoring/logger" }
 ic-recovery = { path = "../recovery" }
 ic-registry-client = { path = "../registry/client" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
-ic-registry-local-store = { path = "../registry/local_store" }
 ic-registry-replicator = { path = "../orchestrator/registry_replicator" }
 ic-types = { path = "../types/types" }
 rand = { workspace = true }
@@ -30,6 +29,7 @@ tokio = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]
+ic-registry-local-store = { path = "../registry/local_store" }
 ic-test-utilities-tmpdir = { path = "../test_utilities/tmpdir" }
 
 [[bin]]

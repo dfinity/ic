@@ -13,7 +13,7 @@ use async_trait::async_trait;
 use candid::Principal;
 use ic_bn_lib::tasks::Run;
 use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
-use ic_registry_client::client::{RegistryClient, ThresholdSigPublicKey};
+use ic_registry_client::client::RegistryClient;
 use ic_registry_client_helpers::{
     api_boundary_node::ApiBoundaryNodeRegistry,
     crypto::CryptoRegistry,
@@ -481,14 +481,14 @@ impl<T: Snapshot> Run for WithMetricsSnapshot<T> {
 
 /// Wrapper for registry replicator to run it as Task
 #[derive(derive_new::new)]
-pub struct RegistryReplicatorRunner(RegistryReplicator, Vec<Url>, Option<ThresholdSigPublicKey>);
+pub struct RegistryReplicatorRunner(RegistryReplicator);
 
 #[async_trait]
 impl Run for RegistryReplicatorRunner {
     async fn run(&self, token: CancellationToken) -> Result<(), Error> {
         let fut = self
             .0
-            .start_polling(self.1.clone(), self.2)
+            .start_polling()
             .await
             .context("unable to start polling Registry")?;
 

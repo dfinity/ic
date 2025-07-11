@@ -10,16 +10,15 @@ use ic_protobuf::registry::{
     crypto::v1::PublicKey,
     subnet::v1::{SubnetListRecord, SubnetRecord},
 };
-use ic_registry_client::client::{RegistryClient, RegistryClientImpl, ThresholdSigPublicKey};
+use ic_registry_client::client::{RegistryClient, ThresholdSigPublicKey};
 use ic_registry_client_helpers::{routing_table::RoutingTableRegistry, subnet::SubnetRegistry};
 use ic_registry_keys::{make_crypto_threshold_signing_pubkey_key, make_subnet_list_record_key};
-use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_replicator::RegistryReplicator;
 use ic_registry_routing_table::{CanisterMigrations, RoutingTable};
 use ic_registry_subnet_features::ChainKeyConfig;
 use prost::Message;
-use slog::{error, info, warn, Logger};
+use slog::{info, warn, Logger};
 use url::Url;
 
 use std::{
@@ -41,16 +40,15 @@ pub enum RegistryPollingStrategy {
     WithEveryRead,
 }
 
-/// Wrapper around [RegistryClientImpl] which simplifies accessing the *locally* stored registry.
+/// Wrapper around [RegistryReplicator] which simplifies accessing the *locally* stored registry.
 ///
 /// 1. All errors are mapped to [RecoveryError];
-/// 2. All get_* methods return an error, when [RegistryClientImpl] returns `Ok(None)`;
+/// 2. All get_* methods return an error, when [RegistryClient] returns `Ok(None)`;
 /// 3. Depending on the [RegistryPollingStrategy], we might call [RegistryReplicator:poll] each
 ///    time a get_* method is called, before accessing the registry.
 #[derive(Clone)]
 pub struct RegistryHelper {
     nns_url: Url,
-    registry_client: Arc<RegistryClientImpl>,
     registry_replicator: Arc<RegistryReplicator>,
     polling_strategy: RegistryPollingStrategy,
 }
@@ -63,39 +61,24 @@ impl RegistryHelper {
         nns_pem_path: &Path,
         polling_strategy: RegistryPollingStrategy,
     ) -> Self {
-        let local_store = Arc::new(LocalStoreImpl::new(local_store_path));
-        let registry_client = Arc::new(RegistryClientImpl::new(
-            local_store.clone(),
-            /*metrics_registry=*/ None,
-        ));
-        let registry_replicator = Arc::new(RegistryReplicator::new_with_clients(
+        let registry_replicator = Arc::new(block_on(RegistryReplicator::new(
             logger.clone().into(),
-            local_store,
-            registry_client.clone(),
+            &local_store_path,
             Duration::from_secs(10),
-        ));
-
-        match get_nns_public_key(&nns_url, nns_pem_path, &logger) {
-            Ok(nns_public_key) => {
-                block_on(
-                    registry_replicator
-                        .initialize_local_store(vec![nns_url.clone()], Some(nns_public_key)),
-                );
-            }
-            Err(err) => error!(logger, "Failed getting the nns public key: {}", err),
-        }
+            vec![nns_url.clone()],
+            get_nns_public_key(&nns_url, nns_pem_path, &logger).ok(),
+        )));
 
         Self {
             nns_url,
-            registry_client,
             registry_replicator,
             polling_strategy,
         }
     }
 
-    /// Returns the reference to [RegistryClientImpl].
-    pub fn registry_client(&self) -> &RegistryClientImpl {
-        self.registry_client.as_ref()
+    /// Returns the underlying [RegistryClient].
+    pub fn registry_client(&self) -> Arc<dyn RegistryClient> {
+        self.registry_replicator.get_registry_client()
     }
 
     /// Returns the node ids of the given subnet.
@@ -156,25 +139,24 @@ impl RegistryHelper {
             RegistryPollingStrategy::OnlyOnInit => {}
         }
 
-        self.registry_client.poll_once().map_err(|err| {
-            RecoveryError::RegistryError(format!("Failed to poll the newest registry: {}", err))
-        })?;
-
-        Ok(self.registry_client.get_latest_version())
+        self.registry_replicator
+            .get_latest_local_version()
+            .map_err(|err| {
+                RecoveryError::RegistryError(format!("Failed to poll the newest registry: {}", err))
+            })
     }
 
     /// Polls the [RegistryReplicator] for the most recent version of the registry and then
     /// extracts the appropriate entries based on the provided closure.
     fn get<T>(
         &self,
-        field_extractor: impl Fn(RegistryVersion, &RegistryClientImpl) -> RegistryClientResult<T>,
+        field_extractor: impl Fn(RegistryVersion, Arc<dyn RegistryClient>) -> RegistryClientResult<T>,
     ) -> VersionedRecoveryResult<T> {
         let registry_version = self.latest_registry_version()?;
 
-        let field =
-            field_extractor(registry_version, self.registry_client.as_ref()).map_err(|err| {
-                RecoveryError::RegistryError(format!("Failed to extract the field: {}", err))
-            })?;
+        let field = field_extractor(registry_version, self.registry_client()).map_err(|err| {
+            RecoveryError::RegistryError(format!("Failed to extract the field: {}", err))
+        })?;
 
         Ok((registry_version, field))
     }
