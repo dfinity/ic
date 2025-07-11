@@ -579,6 +579,28 @@ pub mod pre_signature {
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct EcdsaMatchedPreSignature {
+    #[prost(uint64, tag = "1")]
+    pub pre_signature_id: u64,
+    #[prost(uint64, tag = "2")]
+    pub height: u64,
+    #[prost(message, optional, tag = "3")]
+    pub pre_signature: ::core::option::Option<EcdsaPreSignatureQuadruple>,
+    #[prost(message, optional, tag = "4")]
+    pub key_transcript: ::core::option::Option<super::super::registry::subnet::v1::IDkgTranscript>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SchnorrMatchedPreSignature {
+    #[prost(uint64, tag = "1")]
+    pub pre_signature_id: u64,
+    #[prost(uint64, tag = "2")]
+    pub height: u64,
+    #[prost(message, optional, tag = "3")]
+    pub pre_signature: ::core::option::Option<SchnorrPreSignatureTranscript>,
+    #[prost(message, optional, tag = "4")]
+    pub key_transcript: ::core::option::Option<super::super::registry::subnet::v1::IDkgTranscript>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct QuadrupleInCreation {
     #[prost(message, optional, tag = "3")]
     pub lambda_config: ::core::option::Option<RandomTranscriptParams>,
