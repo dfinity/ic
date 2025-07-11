@@ -129,7 +129,7 @@ system_test_nns(
     test_timeout = "eternal",
     uses_guestos_img = False,
     uses_guestos_mainnet_img = True,
-    uses_hostos_test_update = True,
+    uses_hostos_update = True,
     uses_setupos_mainnet_img = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + IC_GATEWAY_RUNTIME_DEPS + ["//ic-os/setupos:config/node_operator_private_key.pem"],
     deps = RUNNER_DEPENDENCIES,
