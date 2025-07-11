@@ -140,6 +140,10 @@ type BalanceBook = record {
   fee_collector : opt Balance;
   payees : opt Balance;
   payers : opt Balance;
+
+  // An account in which items are entered temporarily before allocation to the correct
+  // or final account, e.g., due to transient errors.
+  suspense : opt Balance;
 };
 
 type Balance = record {
