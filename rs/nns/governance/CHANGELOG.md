@@ -18,7 +18,7 @@ http://dashboard.internetcomputer.org/proposal/137252
 ## Added
 
 * Add a metric for the nubmer of spawning neurons.
-* Use a previous voting power snapshot to create ballots if a voting power spike id detected.
+* Use a previous voting power snapshot to create ballots if a voting power spike is detected.
 
 ## Changed
 

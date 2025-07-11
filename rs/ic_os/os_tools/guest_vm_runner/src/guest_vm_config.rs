@@ -23,8 +23,6 @@ pub struct DirectBootConfig {
     pub kernel: PathBuf,
     /// The initrd file
     pub initrd: PathBuf,
-    /// The OVMF.fd file
-    pub ovmf: PathBuf,
     /// Kernel command line parameters
     pub kernel_cmdline: String,
 }
@@ -244,7 +242,6 @@ mod tests {
             Some(DirectBootConfig {
                 kernel: PathBuf::from("/tmp/test-kernel"),
                 initrd: PathBuf::from("/tmp/test-initrd"),
-                ovmf: PathBuf::from("/tmp/OVMF.fd"),
                 kernel_cmdline: "security=selinux selinux=1 enforcing=0".to_string(),
             })
         } else {
