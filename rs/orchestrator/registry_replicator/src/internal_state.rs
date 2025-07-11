@@ -555,8 +555,7 @@ mod test {
 
     fn setup_fake_registry_client(
         old_nns_subnet_id: SubnetId,
-        routing_table: BTreeMap<CanisterIdRange, SubnetId>,
-        canister_range_keys: Vec<String>,
+        shards: BTreeMap<String, BTreeMap<CanisterIdRange, SubnetId>>,
     ) -> FakeRegistryClient {
         let data_provider = Arc::new(ProtoRegistryDataProvider::new());
 
@@ -573,7 +572,18 @@ mod test {
 
         // Set routing table
         let pb_routing_table = PbRoutingTable::from(
-            RoutingTable::try_from(routing_table).expect("Invalid routing table"),
+            RoutingTable::try_from(
+                shards
+                    .iter()
+                    .map(|(_, map)| {
+                        PbRoutingTable::from(
+                            RoutingTable::try_from(map.clone())
+                                .expect("Invalid routing table shard"),
+                        )
+                    })
+                    .collect::<Vec<_>>(),
+            )
+            .expect("Invalid routing table"),
         );
         data_provider
             .add(
@@ -584,7 +594,10 @@ mod test {
             .expect("Failed to set routing table");
 
         // Add canister range keys
-        for key in canister_range_keys {
+        for (key, shard) in shards {
+            let pb_routing_table = PbRoutingTable::from(
+                RoutingTable::try_from(shard).expect("Invalid routing table shard"),
+            );
             data_provider
                 .add(
                     &key,
@@ -608,6 +621,7 @@ mod test {
         let new_nns_subnet_record = create_test_subnet_record(true, SubnetType::Application);
 
         // Create routing table with old NNS subnet and another subnet
+        let mut shards = BTreeMap::new();
         let mut routing_table = BTreeMap::new();
         routing_table.insert(
             CanisterIdRange {
@@ -616,6 +630,11 @@ mod test {
             },
             old_nns_subnet_id,
         );
+        shards.insert(
+            make_canister_ranges_key(CanisterId::from_u64(0)),
+            routing_table,
+        );
+        let mut routing_table = BTreeMap::new();
         routing_table.insert(
             CanisterIdRange {
                 start: CanisterId::from_u64(51),
@@ -623,17 +642,12 @@ mod test {
             },
             other_subnet_id,
         );
-
-        let canister_range_keys = vec![
-            make_canister_ranges_key(CanisterId::from_u64(0)),
-            make_canister_ranges_key(CanisterId::from_u64(50)),
-        ];
-
-        let fake_client = setup_fake_registry_client(
-            old_nns_subnet_id,
+        shards.insert(
+            make_canister_ranges_key(CanisterId::from_u64(51)),
             routing_table,
-            canister_range_keys.clone(),
         );
+
+        let fake_client = setup_fake_registry_client(old_nns_subnet_id, shards);
 
         // Create changelog with multiple entries
         let mut changelog = vec![
@@ -673,11 +687,11 @@ mod test {
                     value: Some(vec![4]),
                 },
                 KeyMutation {
-                    key: canister_range_keys[0].clone(),
+                    key: make_canister_ranges_key(CanisterId::from_u64(0)),
                     value: Some(vec![5]),
                 },
                 KeyMutation {
-                    key: canister_range_keys[1].clone(),
+                    key: make_canister_ranges_key(CanisterId::from_u64(51)),
                     value: Some(vec![6]),
                 },
                 KeyMutation {
@@ -780,11 +794,11 @@ mod test {
         assert!(canister_0_mutation.value.is_some());
         assert_eq!(canister_0_mutation.value, routing_table_mutation.value);
 
-        let canister_50_key = make_canister_ranges_key(CanisterId::from_u64(50));
-        let canister_50_mutation = last_entry
+        let canister_51_key = make_canister_ranges_key(CanisterId::from_u64(51));
+        let canister_51_mutation = last_entry
             .iter()
-            .find(|km| km.key == canister_50_key)
-            .expect("Expected deletion mutation for CanisterId = 50");
-        assert!(canister_50_mutation.value.is_none());
+            .find(|km| km.key == canister_51_key)
+            .expect("Expected deletion mutation for CanisterId = 51");
+        assert!(canister_51_mutation.value.is_none());
     }
 }
