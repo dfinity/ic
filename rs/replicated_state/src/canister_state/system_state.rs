@@ -28,9 +28,9 @@ use ic_protobuf::state::canister_state_bits::v1 as pb;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{
-    CallContextId, CallbackId, CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask,
-    Ingress, Payload, RejectContext, Request, RequestMetadata, RequestOrResponse, Response,
-    StopCanisterContext, NO_DEADLINE,
+    CallContextId, CallbackId, CanisterCall, CanisterCallOrTask, CanisterMessage,
+    CanisterMessageOrTask, CanisterTask, Ingress, Payload, RejectContext, Request, RequestMetadata,
+    RequestOrResponse, Response, StopCanisterContext, NO_DEADLINE,
 };
 use ic_types::methods::Callback;
 use ic_types::nominal_cycles::NominalCycles;
@@ -407,11 +407,6 @@ pub struct SystemState {
     /// Environment variables.
     pub environment_variables: BTreeMap<String, String>,
 }
-
-
-
-
-
 
 /// State that is controlled and owned by the system (IC).
 ///
@@ -798,49 +793,22 @@ impl SystemStateV2 {
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
-pub struct CanisterMessaging {
+pub struct IdleMessaging {
     #[validate_eq(CompareWithValidateEq)]
     queues: CanisterQueues,
     status: CanisterStatusV2,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
-pub struct ExecutingCallOrTaskMessaging {
-    #[validate_eq(CompareWithValidateEq)]
-    queues: CanisterQueues,
-    call_context_manager: CallContextManager,
-    status: RunningOrStopping,
-    call_context: CallContext,
-    call_context_id: CallContextId,
-    outstanding_callbacks: usize,
-}
-
-#[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
-pub struct ExecutingResponseMessaging {
-    #[validate_eq(CompareWithValidateEq)]
-    queues: CanisterQueues,
-    call_context_manager: CallContextManager,
-    status: RunningOrStopping,
-    call_context: CallContext,
-    call_context_id: CallContextId,
-    callback: Arc<Callback>,
-    callback_id: CallbackId,
-    outstanding_callbacks: usize,
-}
-
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum CanisterStatusV2 {
     Idle {
-        status: IdleStatus,
+        idle_status: IdleStatus,
         aborted_execution: Option<AbortedExecution>,
     },
     Stopped,
-    PausedCallOrTaskExecution {
-        status: PausedCallOrTaskStatus,
-        paused_execution_id: PausedExecutionId,
-    },
-    PausedResponseExecution {
-        status: PausedResponseStatus,
+    PausedExecution {
+        idle_status: IdleStatus,
+        execution_status: ExecutingStatus,
         paused_execution_id: PausedExecutionId,
     },
 }
@@ -864,20 +832,10 @@ pub enum RunningOrStopping {
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
-pub struct PausedCallOrTaskStatus {
-    status: IdleStatus,
+pub struct ExecutingStatus {
+    input: CanisterMessageOrTask,
     call_context: CallContext,
     call_context_id: CallContextId,
-    outstanding_callbacks: usize,
-}
-
-#[derive(Clone, Eq, PartialEq, Debug)]
-pub struct PausedResponseStatus {
-    status: IdleStatus,
-    call_context: CallContext,
-    call_context_id: CallContextId,
-    callback: Arc<Callback>,
-    callback_id: CallbackId,
     outstanding_callbacks: usize,
 }
 
@@ -893,8 +851,8 @@ pub struct AbortedExecution {
     prepaid_execution_cycles: Cycles,
 }
 
-impl CanisterMessaging {
-    pub(crate) fn push_input(
+impl IdleMessaging {
+    pub(super) fn push_input(
         &mut self,
         msg: RequestOrResponse,
         subnet_available_guaranteed_response_memory: &mut i64,
@@ -956,35 +914,309 @@ impl CanisterMessaging {
 
             // A canister in idle status may have an aborted execution.
             CanisterStatusV2::Idle {
-                status,
+                idle_status,
                 aborted_execution,
             } => {
                 let opt_aborted_response = aborted_execution.as_ref().and_then(
                     |aborted_execution| match &aborted_execution.input {
-                        CanisterMessageOrTask::Message(CanisterMessage::Response(response)) => {
+                        CanisterMessageOrTask::Message(CanisterMessage::Response { response, .. }) => {
                             Some(&**response)
                         }
                         _ => None,
                     },
                 );
 
-                push_input(msg, status, opt_aborted_response)
+                push_input(msg, &idle_status, opt_aborted_response)
             }
 
-            // A canister in paused execution state cannot have an aborted execution.
-            CanisterStatusV2::PausedCallOrTaskExecution {
-                status: PausedCallOrTaskStatus { status, .. },
-                ..
+            // A canister in paused execution status cannot have an aborted execution.
+            CanisterStatusV2::PausedExecution { idle_status, .. } => {
+                push_input(msg, &idle_status, None)
             }
-            | CanisterStatusV2::PausedResponseExecution {
-                status: PausedResponseStatus { status, .. },
-                ..
-            } => push_input(msg, status, None),
+        }
+    }
+    
+    /// Extracts the next inter-canister or ingress message (round-robin).
+    fn pop_input(&mut self) -> Option<CanisterMessage> {
+        Some(match self.queues.pop_input()? {
+            CanisterInput::Ingress(ingress) => CanisterMessage::Ingress(ingress),
+            CanisterInput::Request(request) => CanisterMessage::Request(request),
+            CanisterInput::Response(response) => {
+                let callback = self
+                    .call_context_manager_mut()
+                    .unwrap()
+                    .unregister_callback(response.originator_reply_callback)
+                    .unwrap();
+                CanisterMessage::Response {
+                    response,
+                    callback,
+                }
+            },
+            CanisterInput::DeadlineExpired(callback_id) => {
+                self.to_reject_response(callback_id, "Call deadline has expired.")
+            }
+            CanisterInput::ResponseDropped(callback_id) => {
+                self.to_reject_response(callback_id, "Response was dropped.")
+            }
+        })
+    }
+
+    /// Generates a reject response for the given callback ID with the given
+    /// message.
+    fn to_reject_response(&mut self, callback_id: CallbackId, message: &str) -> CanisterMessage {
+        const UNKNOWN_CANISTER_ID: CanisterId =
+            CanisterId::unchecked_from_principal(PrincipalId::new_anonymous());
+        const SOME_DEADLINE: CoarseTime = CoarseTime::from_secs_since_unix_epoch(1);
+
+        let call_context_manager = self.call_context_manager_mut().unwrap();
+        let callback = call_context_manager.unregister_callback(callback_id).unwrap();
+
+        CanisterMessage::Response {
+            response: Response {
+                originator: callback.originator,
+                respondent: callback.respondent,
+                originator_reply_callback: callback_id,
+                refund: Cycles::zero(),
+                response_payload: Payload::Reject(RejectContext::new_with_message_length_limit(
+                    RejectCode::SysUnknown,
+                    message,
+                    MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
+                )),
+                deadline: callback.deadline,
+            }
+            .into(),
+            callback,
+        }
+    }
+
+    fn call_context_manager(&self) -> Option<&CallContextManager> {
+        match &self.status {
+            CanisterStatusV2::Idle { idle_status, .. } | CanisterStatusV2::PausedExecution { idle_status, .. } => {
+                Some(&idle_status.call_context_manager)
+            }
+            CanisterStatusV2::Stopped => None,
+        }
+    }
+    
+    fn call_context_manager_mut(&mut self) -> Option<&mut CallContextManager> {
+        match &mut self.status {
+            CanisterStatusV2::Idle { idle_status, .. } | CanisterStatusV2::PausedExecution { idle_status, .. } => {
+                Some(&mut idle_status.call_context_manager)
+            }
+            CanisterStatusV2::Stopped => None,
+        }
+    }
+
+    pub(super) fn to_executing(
+        mut self,
+        time: Time,
+    ) -> Result<(CanisterMessageOrTask, ExecutingMessaging), Self> {
+        match self.status {
+            CanisterStatusV2::Idle {
+                aborted_execution: Some(AbortedExecution {
+                    input,
+                    ..
+                }),
+                idle_status,
+            } => {
+                let messaging = match &input {
+                    CanisterMessageOrTask::Message(CanisterMessage::Ingress(ingress)) => {
+                        ExecutingMessaging::for_ingress(
+                            self.queues,
+                            idle_status,
+                            ingress,
+                            time
+                        )
+                    }
+                    CanisterMessageOrTask::Message(CanisterMessage::Request(request)) => {
+                        ExecutingMessaging::for_request(
+                            self.queues,
+                            idle_status,
+                            request,
+                            time,
+                        )
+                    }
+                    CanisterMessageOrTask::Message(CanisterMessage::Response {
+                        response,
+                        callback,
+                    }) => {
+                        ExecutingMessaging::for_response(
+                            self.queues,
+                            idle_status,
+                            callback.call_context_id,
+                        )
+                    }
+                    CanisterMessageOrTask::Task(_) => {
+                        ExecutingMessaging::for_task(
+                            self.queues,
+                            idle_status,
+                            time,
+                        )
+                    }
+                };
+                Ok((input, messaging))
+            }
+
+            CanisterStatusV2::Stopped => Err(self),
+
+            CanisterStatusV2::PausedExecution {
+                idle_status,
+                execution_status: ExecutingStatus {
+                    input,
+                    call_context,
+                    call_context_id,
+                    outstanding_callbacks,
+                },
+                paused_execution_id,
+            } => {
+                let messaging = ExecutingMessaging::for_paused_execution(
+                    self.queues,
+                    idle_status,
+                    call_context,
+                    call_context_id,
+                    outstanding_callbacks,
+                    paused_execution_id,
+                );
+                Ok((input, messaging))
+            }
         }
     }
 }
 
+// `Input` is `CallOrTaskInput` or `ResponseInput`.
+#[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
+pub struct ExecutingMessaging {
+    #[validate_eq(CompareWithValidateEq)]
+    queues: CanisterQueues,
+    idle_status: IdleStatus,
+    call_context: CallContext,
+    call_context_id: CallContextId,
+    outstanding_callbacks: usize,
+    paused_execution_id: Option<PausedExecutionId>,
+}
 
+impl ExecutingMessaging {
+    fn with_new_call_context(
+        queues: CanisterQueues,
+        idle_status: IdleStatus,
+        call_origin: CallOrigin,
+        metadata: RequestMetadata,
+        time: Time,
+        paused_execution_id: Option<PausedExecutionId>,
+    ) -> Self {
+        let call_context = CallContext::new(
+            call_origin,
+            false,          // responded
+            false,          // deleted
+            Cycles::zero(), // available_cycles
+            time,
+            metadata,
+        );
+
+        let call_context_id = idle_status.call_context_manager.next_call_context_id();
+        let outstanding_callbacks = 0;
+
+        Self {
+            queues,
+            idle_status,
+            call_context,
+            call_context_id,
+            outstanding_callbacks,
+            paused_execution_id,
+        }
+    }
+
+    pub(super) fn for_request(
+        queues: CanisterQueues,
+        idle_status: IdleStatus,
+        request: &Request,
+        time: Time,
+    ) -> Self {
+        Self::with_new_call_context(
+            queues,
+            idle_status,
+            CallOrigin::CanisterUpdate(
+                request.sender,
+                request.sender_reply_callback,
+                request.deadline,
+            ),
+            request.metadata.for_downstream_call(),
+            time,
+            None,
+        )
+    }
+
+    pub(super) fn for_ingress(
+        queues: CanisterQueues,
+        idle_status: IdleStatus,
+        ingress: &Ingress,
+        time: Time,
+    ) -> Self {
+        Self::with_new_call_context(
+            queues,
+            idle_status,
+            CallOrigin::Ingress(ingress.source, ingress.message_id.clone()),
+            RequestMetadata::for_new_call_tree(time),
+            time,
+            None,
+        )
+    }
+
+    pub(super) fn for_task(queues: CanisterQueues, idle_status: IdleStatus, time: Time) -> Self {
+        Self::with_new_call_context(
+            queues,
+            idle_status,
+            CallOrigin::SystemTask,
+            RequestMetadata::for_new_call_tree(time),
+            time,
+            None,
+        )
+    }
+
+    pub(super) fn for_response(
+        queues: CanisterQueues,
+        mut idle_status: IdleStatus,
+        call_context_id: CallContextId,
+    ) -> Self {
+        let call_context = idle_status
+            .call_context_manager
+            .call_contexts
+            .remove(&call_context_id)
+            .unwrap();
+        let outstanding_callbacks = idle_status
+            .call_context_manager
+            .outstanding_callbacks
+            .remove(&call_context_id)
+            .unwrap();
+
+        Self {
+            queues,
+            idle_status,
+            call_context,
+            call_context_id,
+            outstanding_callbacks,
+            paused_execution_id: None,
+        }
+    }
+
+    pub(super) fn for_paused_execution(
+        queues: CanisterQueues,
+        idle_status: IdleStatus,
+        call_context: CallContext,
+        call_context_id: CallContextId,
+        outstanding_callbacks: usize,
+        paused_execution_id: PausedExecutionId,
+    ) -> Self {
+        Self {
+            queues,
+            idle_status,
+            call_context,
+            call_context_id,
+            outstanding_callbacks,
+            paused_execution_id: Some(paused_execution_id),
+        }
+    }
+}
 
 
 
@@ -1143,7 +1375,7 @@ impl ExecutionTask {
         }
     }
 }
-
+/*
 impl From<&ExecutionTask> for pb::ExecutionTask {
     fn from(item: &ExecutionTask) -> Self {
         match item {
@@ -1228,7 +1460,7 @@ impl TryFrom<pb::ExecutionTask> for ExecutionTask {
                         CanisterMessage::Request(Arc::new(v.try_into()?)),
                     ),
                     PbInput::Response(v) => CanisterMessageOrTask::Message(
-                        CanisterMessage::Response(Arc::new(v.try_into()?)),
+                        CanisterMessage::Response(Arc::new(v.try_into()?))
                     ),
                     PbInput::Ingress(v) => CanisterMessageOrTask::Message(
                         CanisterMessage::Ingress(Arc::new(v.try_into()?)),
@@ -1276,6 +1508,7 @@ impl TryFrom<pb::ExecutionTask> for ExecutionTask {
         Ok(task)
     }
 }
+*/
 
 impl From<&CanisterHistory> for pb::CanisterHistory {
     fn from(item: &CanisterHistory) -> Self {
@@ -1778,6 +2011,8 @@ impl SystemState {
         self.queues.push_output_response(msg)
     }
 
+
+    /*
     /// Extracts the next inter-canister or ingress message (round-robin).
     pub(crate) fn pop_input(&mut self) -> Option<CanisterMessage> {
         Some(match self.queues.pop_input()? {
@@ -1792,7 +2027,9 @@ impl SystemState {
             }
         })
     }
+    */
 
+    /*
     /// Generates a reject response for the given callback ID with the given
     /// message.
     ///
@@ -1833,6 +2070,7 @@ impl SystemState {
             .into(),
         )
     }
+    */
 
     /// Returns true if there are messages in the input queues, false otherwise.
     pub fn has_input(&self) -> bool {
@@ -2595,11 +2833,18 @@ impl SystemState {
     fn aborted_or_paused_response(&self) -> Option<&Response> {
         match self.task_queue.front() {
             Some(ExecutionTask::AbortedExecution {
-                input: CanisterMessageOrTask::Message(CanisterMessage::Response(response)),
+                //input: CanisterMessageOrTask::Message(CanisterMessage::Response(response)),
+                input: CanisterMessageOrTask::Message(CanisterMessage::Response {
+                    response,
+                    ..
+                }),
                 ..
             })
             | Some(ExecutionTask::PausedExecution {
-                input: CanisterMessageOrTask::Message(CanisterMessage::Response(response)),
+                input: CanisterMessageOrTask::Message(CanisterMessage::Response {
+                    response,
+                    ..
+                }),
                 ..
             }) => Some(response),
             _ => None,

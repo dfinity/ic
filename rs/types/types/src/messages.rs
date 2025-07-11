@@ -16,7 +16,7 @@ pub use self::http::{
     HttpUserQuery, NodeSignature, QueryResponseHash, RawHttpRequestVal, ReplicaHealthStatus,
     SignedDelegation,
 };
-pub use crate::methods::SystemMethod;
+pub use crate::methods::{SystemMethod, Callback};
 use crate::time::CoarseTime;
 use crate::{user_id_into_protobuf, user_id_try_from_protobuf, Cycles, Funds, NumBytes, UserId};
 pub use blob::Blob;
@@ -326,10 +326,57 @@ impl SignedRequestBytes {
     }
 }
 
+
+
+
 /// A wrapper around ingress messages and canister requests/responses.
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum CanisterMessage {
-    Response(Arc<Response>),
+    Response {
+        response: Arc<Response>,
+        callback: Arc<Callback>,
+    },
+    Request(Arc<Request>),
+    Ingress(Arc<Ingress>),
+}
+
+impl CanisterMessage {
+    /// Helper function to extract the effective canister id.
+    pub fn effective_canister_id(&self) -> Option<CanisterId> {
+        match &self {
+            CanisterMessage::Ingress(ingress) => ingress.effective_canister_id,
+            CanisterMessage::Request(request) => request.extract_effective_canister_id(),
+            CanisterMessage::Response { .. } => None,
+        }
+    }
+}
+
+impl Display for CanisterMessage {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            CanisterMessage::Ingress(ingress) => {
+                write!(f, "Ingress, method name {},", ingress.method_name)
+            }
+            CanisterMessage::Request(request) => {
+                write!(f, "Request, method name {},", request.method_name)
+            }
+            CanisterMessage::Response { .. } => write!(f, "Response"),
+        }
+    }
+}
+
+
+
+
+/*
+/// A wrapper around ingress messages and canister requests/responses.
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+pub enum CanisterMessage {
+//    Response(Arc<Response>),
+    Response {
+        response: Arc<Response>,
+        callback: Arc<Callback>,
+    },
     Request(Arc<Request>),
     Ingress(Arc<Ingress>),
 }
@@ -367,6 +414,9 @@ impl From<RequestOrResponse> for CanisterMessage {
         }
     }
 }
+*/
+
+
 
 /// A wrapper around a canister request and an ingress message.
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
@@ -439,7 +489,8 @@ impl TryFrom<CanisterMessage> for CanisterCall {
         match msg {
             CanisterMessage::Request(msg) => Ok(CanisterCall::Request(msg)),
             CanisterMessage::Ingress(msg) => Ok(CanisterCall::Ingress(msg)),
-            CanisterMessage::Response(_) => Err(()),
+//            CanisterMessage::Response(_) => Err(()),
+            CanisterMessage::Response { .. } => Err(()),
         }
     }
 }

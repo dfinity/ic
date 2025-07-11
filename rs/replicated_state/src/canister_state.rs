@@ -5,7 +5,9 @@ pub mod system_state;
 mod tests;
 
 use crate::canister_state::queues::CanisterOutputQueuesIterator;
-use crate::canister_state::system_state::{ExecutionTask, SystemState};
+use crate::canister_state::system_state::{
+    ExecutingMessaging, ExecutionTask, IdleMessaging, SystemState, SystemStateV2,
+};
 use crate::{InputQueueType, MessageMemoryUsage, StateError};
 pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions};
 use ic_management_canister_types_private::{CanisterStatusType, LogVisibilityV2};
@@ -130,6 +132,53 @@ pub struct CanisterState {
     pub scheduler_state: SchedulerState,
 }
 
+/// The full state of a single canister.
+#[derive(Clone, PartialEq, Debug, ValidateEq)]
+pub struct CanisterStateV2 {
+    /// See `SystemState` for documentation.
+    #[validate_eq(CompareWithValidateEq)]
+    pub system_state: SystemStateV2,
+
+    #[validate_eq(CompareWithValidateEq)]
+    pub messaging: IdleMessaging,
+
+    /// See `ExecutionState` for documentation.
+    ///
+    /// This may or may not exist depending on whether or not the canister has
+    /// an actual wasm module. A valid canister is not required to contain a
+    /// Wasm module. Canisters without Wasm modules can exist as a store of
+    /// ICP; temporarily when they are being upgraded, etc.
+    #[validate_eq(CompareWithValidateEq)]
+    pub execution_state: Option<ExecutionState>,
+
+    /// See `SchedulerState` for documentation.
+    #[validate_eq(CompareWithValidateEq)]
+    pub scheduler_state: SchedulerState,
+}
+
+#[derive(Clone, Debug)]
+pub struct ExecutingCanisterState {
+    /// See `SystemState` for documentation.
+    pub system_state: SystemStateV2,
+
+    pub messaging: ExecutingMessaging,
+
+    /// See `ExecutionState` for documentation.
+    ///
+    /// This may or may not exist depending on whether or not the canister has
+    /// an actual wasm module. A valid canister is not required to contain a
+    /// Wasm module. Canisters without Wasm modules can exist as a store of
+    /// ICP; temporarily when they are being upgraded, etc.
+    pub execution_state: Option<ExecutionState>,
+
+    /// See `SchedulerState` for documentation.
+    pub scheduler_state: SchedulerState,
+}
+
+impl CanisterStateV2 {
+    //    pub fn
+}
+
 impl CanisterState {
     pub fn new(
         system_state: SystemState,
@@ -193,7 +242,7 @@ impl CanisterState {
             input_queue_type,
         )
     }
-
+/*
     /// See `SystemState::pop_input` for documentation.
     ///
     /// The function is public as we pop directly from the Canister state in
@@ -201,7 +250,7 @@ impl CanisterState {
     pub fn pop_input(&mut self) -> Option<CanisterMessage> {
         self.system_state.pop_input()
     }
-
+*/
     /// See `SystemState::has_input` for documentation.
     pub fn has_input(&self) -> bool {
         self.system_state.has_input()
