@@ -841,6 +841,10 @@ impl SandboxSafeSystemState {
         &self.environment_variables
     }
 
+    pub fn cost_schedule(&self) -> CanisterCyclesCostSchedule {
+        self.cost_schedule
+    }
+
     pub fn set_global_timer(&mut self, timer: CanisterTimer) {
         // Update both sandbox global timer and the changes.
         self.system_state_modifications.new_global_timer = Some(timer);
@@ -1052,7 +1056,7 @@ impl SandboxSafeSystemState {
 
     pub fn prepayment_for_response_transmission(&self) -> Cycles {
         self.cycles_account_manager
-            .prepayment_for_response_transmission(self.subnet_size)
+            .prepayment_for_response_transmission(self.subnet_size, self.cost_schedule)
     }
 
     pub(super) fn withdraw_cycles_for_transfer(

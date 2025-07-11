@@ -173,6 +173,7 @@ impl ResponseHelper {
                 response,
                 original.callback.prepayment_for_response_transmission,
                 original.subnet_size,
+                round.cost_schedule,
             );
 
         let canister = clean_canister.clone();

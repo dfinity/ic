@@ -2266,14 +2266,17 @@ fn ic0_call_cycles_add_deducts_cycles() {
     assert_eq!(IngressState::Processing, ingress_state);
     assert_eq!(1, test.xnet_messages().len());
     let mgr = test.cycles_account_manager();
-    let messaging_fee = mgr.xnet_call_performed_fee(test.subnet_size())
+    let messaging_fee = mgr
+        .xnet_call_performed_fee(test.subnet_size(), CanisterCyclesCostSchedule::Normal)
         + mgr.xnet_call_bytes_transmitted_fee(
             test.xnet_messages()[0].payload_size_bytes(),
             test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
         )
         + mgr.xnet_call_bytes_transmitted_fee(
             MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
             test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
         )
         + mgr.execution_cost(
             MAX_NUM_INSTRUCTIONS,

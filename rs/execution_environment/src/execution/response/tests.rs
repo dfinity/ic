@@ -121,10 +121,14 @@ fn execute_response_refunds_cycles() {
     // plus the unaccepted cycles (no more the cycles sent via request),
     // the execution cost refund and the refunded transmission fee.
     // Compute the response transmission refund.
+    let cost_schedule = CanisterCyclesCostSchedule::Normal;
     let mgr = test.cycles_account_manager();
-    let response_transmission_refund = mgr
-        .xnet_call_bytes_transmitted_fee(MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, test.subnet_size());
-    mgr.xnet_call_bytes_transmitted_fee(response_payload_size, test.subnet_size());
+    let response_transmission_refund = mgr.xnet_call_bytes_transmitted_fee(
+        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
+        test.subnet_size(),
+        cost_schedule,
+    );
+    mgr.xnet_call_bytes_transmitted_fee(response_payload_size, test.subnet_size(), cost_schedule);
     let instructions_left = NumInstructions::from(instruction_limit) - instructions_executed;
     let execution_refund = mgr
         .convert_instructions_to_cycles(instructions_left, test.canister_wasm_execution_mode(a_id));
