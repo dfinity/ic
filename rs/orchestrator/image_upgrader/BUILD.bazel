@@ -8,7 +8,6 @@ DEPENDENCIES = [
     "//rs/monitoring/logger",
     "@crate_index//:slog",
     "@crate_index//:tokio",
-    "@crate_index//:tokio-util",
 ]
 
 MACRO_DEPENDENCIES = [

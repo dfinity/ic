@@ -10107,7 +10107,6 @@ dependencies = [
  "ic-logger",
  "slog",
  "tokio",
- "tokio-util",
 ]
 
 [[package]]

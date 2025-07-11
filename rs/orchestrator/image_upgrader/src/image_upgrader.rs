@@ -1,7 +1,6 @@
 use async_trait::async_trait;
 use ic_http_utils::file_downloader::FileDownloader;
 use ic_logger::{error, info, warn, ReplicaLogger};
-use std::future::Future;
 use std::str::FromStr;
 use std::{
     fmt::Debug,
@@ -10,8 +9,6 @@ use std::{
     time::{Duration, SystemTime},
 };
 use tokio::process::Command;
-use tokio::time::error::Elapsed;
-use tokio_util::sync::CancellationToken;
 
 use crate::error::{UpgradeError, UpgradeResult};
 
