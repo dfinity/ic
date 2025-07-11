@@ -36,8 +36,8 @@ use ic_system_test_driver::driver::pot_dsl::{PotSetupFn, SysTestFn};
 use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    get_ic_os_update_img_sha256, get_ic_os_update_img_url, get_ic_os_update_img_version,
-    get_mainnet_nns_revision, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+    get_ic_os_img_version, get_ic_os_update_img_sha256, get_ic_os_update_img_url,
+    get_ic_os_update_img_version, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
     IcNodeSnapshot,
 };
 use ic_system_test_driver::systest;
@@ -165,9 +165,8 @@ pub async fn test_async(env: TestEnv) {
         120,
     );
 
-    let mainnet_version = get_mainnet_nns_revision();
-
-    let upgrade_version = get_ic_os_update_img_version().expect("target IC version");
+    let initial_version = get_ic_os_img_version().expect("initial IC version");
+    let target_version = get_ic_os_update_img_version().expect("target IC version");
 
     let (upgrade_subnet_id, _, upgrade_node) = app_subnets.first().unwrap();
 
@@ -177,7 +176,7 @@ pub async fn test_async(env: TestEnv) {
     let upgrade_url = get_ic_os_update_img_url().unwrap();
     bless_replica_version(
         &nns_node,
-        &upgrade_version,
+        &target_version,
         UpdateImageType::Image,
         &logger,
         &sha256,
@@ -211,7 +210,7 @@ pub async fn test_async(env: TestEnv) {
         &nns_node,
         *upgrade_subnet_id,
         upgrade_node,
-        &upgrade_version,
+        &target_version,
         &logger,
     )
     .await;
@@ -234,7 +233,7 @@ pub async fn test_async(env: TestEnv) {
         &nns_node,
         *upgrade_subnet_id,
         upgrade_node,
-        &mainnet_version,
+        &initial_version,
         &logger,
     )
     .await;
