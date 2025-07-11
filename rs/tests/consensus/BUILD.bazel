@@ -245,6 +245,32 @@ system_test_nns(
     ],
 )
 
+# Run this test with
+#     bazel test \
+#         --test_env=RECOVERY_CUP_CONTENT_B64 \
+#         --test_env=RECOVERY_STORE_CONTENT1_B64 \
+#         --test_env=RECOVERY_STORE_CONTENT2_B64 \
+#         //rs/tests/consensus:guestos_recovery_engine_smoke_test`
+system_test(
+    name = "guestos_recovery_engine_smoke_test",
+    tags = [
+        "k8s",
+        "manual",
+        "system_test_large",
+    ],
+    uses_guestos_recovery = True,
+    runtime_deps = GUESTOS_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        "//rs/registry/subnet_type",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+        "@crate_index//:ssh2",
+    ],
+)
+
 system_test(
     name = "replica_determinism_test",
     env = UNIVERSAL_CANISTER_ENV,
