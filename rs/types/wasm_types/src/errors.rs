@@ -1,3 +1,4 @@
+use ic_types::MemoryDiskBytes;
 use serde::{Deserialize, Serialize};
 
 /// Create a link to this section of the Execution Errors documentation.
@@ -45,6 +46,12 @@ pub trait AsErrorHelp {
 /// Represents an error that can happen when parsing or encoding a Wasm module
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct WasmError(String);
+
+impl MemoryDiskBytes for WasmError {
+    fn heap_bytes(&self) -> usize {
+        self.0.heap_bytes()
+    }
+}
 
 impl WasmError {
     /// Creates a new `WasmError` out of an error message.
@@ -113,6 +120,35 @@ pub enum WasmValidationError {
         declared_size: u64,
         allowed_size: u64,
     },
+}
+
+impl MemoryDiskBytes for WasmValidationError {
+    fn heap_bytes(&self) -> usize {
+        match self {
+            WasmValidationError::WasmtimeValidation(s)
+            | WasmValidationError::DecodingError(s)
+            | WasmValidationError::InvalidFunctionSignature(s)
+            | WasmValidationError::InvalidImportSection(s)
+            | WasmValidationError::InvalidExportSection(s) => s.heap_bytes(),
+            WasmValidationError::DuplicateExport { name } => name.heap_bytes(),
+            WasmValidationError::TooManyExports { .. } => 0,
+            WasmValidationError::ExportedNamesTooLong { .. } => 0,
+            WasmValidationError::InvalidDataSection(s)
+            | WasmValidationError::InvalidCustomSection(s)
+            | WasmValidationError::InvalidGlobalSection(s) => s.heap_bytes(),
+            WasmValidationError::TooManyGlobals { .. } => 0,
+            WasmValidationError::TooManyFunctions { .. } => 0,
+            WasmValidationError::TooManyCustomSections { .. } => 0,
+            WasmValidationError::FunctionComplexityTooHigh { .. } => 0,
+            WasmValidationError::UnsupportedWasmInstruction { instruction, .. } => {
+                instruction.heap_bytes()
+            }
+            WasmValidationError::FunctionTooLarge { .. } => 0,
+            WasmValidationError::CodeSectionTooLarge { .. } => 0,
+            WasmValidationError::ModuleTooLarge { .. } => 0,
+            WasmValidationError::InitialWasm64MemoryTooLarge { .. } => 0,
+        }
+    }
 }
 
 impl std::fmt::Display for WasmValidationError {
@@ -319,6 +355,18 @@ pub enum WasmInstrumentationError {
     InvalidFunctionType(String),
 }
 
+impl MemoryDiskBytes for WasmInstrumentationError {
+    fn heap_bytes(&self) -> usize {
+        match self {
+            WasmInstrumentationError::WasmDeserializeError(wasm_error)
+            | WasmInstrumentationError::WasmSerializeError(wasm_error) => wasm_error.heap_bytes(),
+            WasmInstrumentationError::IncorrectNumberMemorySections { .. } => 0,
+            WasmInstrumentationError::InvalidDataSegment { .. } => 0,
+            WasmInstrumentationError::InvalidFunctionType(s) => s.heap_bytes(),
+        }
+    }
+}
+
 impl std::fmt::Display for WasmInstrumentationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -367,6 +415,21 @@ pub enum WasmEngineError {
     FailedToApplySystemChanges(String),
     Other(String),
     Unexpected(String),
+}
+
+impl MemoryDiskBytes for WasmEngineError {
+    fn heap_bytes(&self) -> usize {
+        match self {
+            WasmEngineError::FailedToInitializeEngine => 0,
+            WasmEngineError::FailedToInstantiateModule(s) => s.heap_bytes(),
+            WasmEngineError::FailedToSetAsyncStack | WasmEngineError::FailedToSetWasmStack => 0,
+            WasmEngineError::FailedToSerializeModule(s)
+            | WasmEngineError::FailedToDeserializeModule(s)
+            | WasmEngineError::FailedToApplySystemChanges(s)
+            | WasmEngineError::Other(s)
+            | WasmEngineError::Unexpected(s) => s.heap_bytes(),
+        }
+    }
 }
 
 impl std::fmt::Display for WasmEngineError {
