@@ -51,6 +51,7 @@ mod transaction_store;
 // malicious fork can be prioritized by a DFS, thus potentially ignoring honest forks).
 mod get_successors_handler;
 
+pub use common::{AdapterNetwork, BlockLike};
 pub use config::{address_limits, Config, IncomingSource};
 
 use crate::{
@@ -61,20 +62,20 @@ use crate::{
 /// This struct is used to represent commands given to the adapter in order to interact
 /// with BTC nodes.
 #[derive(Clone, Eq, PartialEq, Debug)]
-struct Command {
+struct Command<Block> {
     /// This is the address of the Bitcoin node to which the message is supposed to be sent.
     /// If the address is None, then the message will be sent to all the peers.
     address: Option<SocketAddr>,
     /// This the network message to be sent to the above peer.
-    message: NetworkMessage,
+    message: NetworkMessage<Block>,
 }
 
 /// This enum is used to represent errors that could occur while dispatching an
 /// event.
 #[derive(Debug)]
-enum ProcessBitcoinNetworkMessageError {
+enum ProcessNetworkMessageError {
     /// This variant is used to represent when an invalid message has been
-    /// received from a Bitcoin node.
+    /// received from a peer node.
     InvalidMessage,
 }
 
@@ -83,10 +84,10 @@ enum ProcessBitcoinNetworkMessageError {
 enum ChannelError {}
 
 /// This trait is to provide an interface so that managers can communicate to BTC nodes.
-trait Channel {
+trait Channel<Block> {
     /// This method is used to send a message to a specific connection
     /// or to all connections based on the [Command](Command)'s fields.
-    fn send(&mut self, command: Command) -> Result<(), ChannelError>;
+    fn send(&mut self, command: Command<Block>) -> Result<(), ChannelError>;
 
     /// This method is used to retrieve a list of available connections
     /// that have completed the version handshake.
@@ -101,23 +102,20 @@ trait Channel {
 trait ProcessEvent {
     /// This method is used to route an event in a component's internals and
     /// perform state updates.
-    fn process_event(
-        &mut self,
-        event: &StreamEvent,
-    ) -> Result<(), ProcessBitcoinNetworkMessageError>;
+    fn process_event(&mut self, event: &StreamEvent) -> Result<(), ProcessNetworkMessageError>;
 }
 
 /// This trait provides an interface for processing messages coming from
 /// bitcoin peers.
 /// [StreamEvent](crate::stream::StreamEvent).
-trait ProcessBitcoinNetworkMessage {
+trait ProcessNetworkMessage<Block> {
     /// This method is used to route an event in a component's internals and
     /// perform state updates.
     fn process_bitcoin_network_message(
         &mut self,
         addr: SocketAddr,
-        message: &NetworkMessage,
-    ) -> Result<(), ProcessBitcoinNetworkMessageError>;
+        message: &NetworkMessage<Block>,
+    ) -> Result<(), ProcessNetworkMessageError>;
 }
 
 /// Commands sent back to the router in order perform actions on the blockchain state.
@@ -222,13 +220,24 @@ pub fn start_server(
         metrics_registry,
     );
 
-    start_main_event_loop(
-        &config,
-        log.clone(),
-        blockchain_state,
-        transaction_manager_rx,
-        adapter_state,
-        blockchain_manager_rx,
-        metrics_registry,
-    );
+    match config.network {
+        AdapterNetwork::Bitcoin(_) => start_main_event_loop::<bitcoin::Block>(
+            &config,
+            log.clone(),
+            blockchain_state,
+            transaction_manager_rx,
+            adapter_state,
+            blockchain_manager_rx,
+            metrics_registry,
+        ),
+        AdapterNetwork::Dogecoin(_) => start_main_event_loop::<bitcoin::dogecoin::Block>(
+            &config,
+            log.clone(),
+            blockchain_state,
+            transaction_manager_rx,
+            adapter_state,
+            blockchain_manager_rx,
+            metrics_registry,
+        ),
+    }
 }
