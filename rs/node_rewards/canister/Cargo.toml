@@ -31,6 +31,7 @@ ic-stable-structures = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-types = { path = "../../types/types" }
 ic-protobuf = { path = "../../protobuf" }
+indexmap = { workspace = true }
 mockall = { workspace = true }
 prost = { workspace = true }
 rewards-calculation = { path = "../rewards_calculation" }
@@ -45,6 +46,7 @@ ic-nervous-system-agent = { path = "../../nervous_system/agent", features = ["te
 ic-nervous-system-integration-tests = { path = "../../nervous_system/integration_tests" }
 ic-nns-test-utils = { path = "../../nns/test_utils" }
 maplit = "1.0.2"
+chrono = "0.4.41"
 pocket-ic = { path = "../../../packages/pocket-ic" }
 serde_json = { workspace = true }
 tokio = { workspace = true }

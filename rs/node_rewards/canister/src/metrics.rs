@@ -1,5 +1,5 @@
 use crate::pb::v1::{SubnetIdKey, SubnetMetricsKey, SubnetMetricsValue};
-use crate::{KeyRange, DAY_IN_NANOS};
+use crate::KeyRange;
 use async_trait::async_trait;
 use candid::Principal;
 use ic_base_types::{NodeId, SubnetId};
@@ -7,7 +7,8 @@ use ic_cdk::api::call::CallResult;
 use ic_management_canister_types::{NodeMetricsHistoryArgs, NodeMetricsHistoryRecord};
 use ic_stable_structures::StableBTreeMap;
 use itertools::Itertools;
-use rewards_calculation::types::{DayEnd, NodeMetricsDailyRaw, SubnetMetricsDailyKey, UnixTsNanos};
+use rewards_calculation::rewards_calculator_results::DayUTC;
+use rewards_calculation::types::{NodeMetricsDailyRaw, SubnetMetricsDailyKey, UnixTsNanos};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
 
@@ -184,31 +185,31 @@ where
     /// previous day from those of the current day.
     pub fn daily_metrics_by_subnet(
         &self,
-        start_ts: UnixTsNanos,
-        end_ts: UnixTsNanos,
+        start_day: DayUTC,
+        end_day: DayUTC,
     ) -> BTreeMap<SubnetMetricsDailyKey, Vec<NodeMetricsDailyRaw>> {
         let mut daily_metrics_by_subnet = BTreeMap::new();
-        let one_day_before_start = start_ts.checked_sub(DAY_IN_NANOS).unwrap_or_default();
+        let previous_day_ts = start_day.previous_day().unix_ts_at_day_start();
         let first_key = SubnetMetricsKey {
-            timestamp_nanos: one_day_before_start,
+            timestamp_nanos: previous_day_ts,
             ..SubnetMetricsKey::min_key()
         };
         let last_key = SubnetMetricsKey {
-            timestamp_nanos: end_ts,
+            timestamp_nanos: end_day.get(),
             ..SubnetMetricsKey::max_key()
         };
 
-        let mut subnets_metrics_by_day: BTreeMap<_, _> = self
+        let mut subnets_metrics_by_day: BTreeMap<DayUTC, _> = self
             .subnets_metrics
             .borrow()
             .range(first_key..=last_key)
-            .into_group_map_by(|(k, _)| DayEnd::from(k.timestamp_nanos))
+            .into_group_map_by(|(k, _)| k.timestamp_nanos.into())
             .into_iter()
             .collect();
 
         let mut last_total_metrics: HashMap<_, _> = HashMap::new();
         if let Some((timestamp_nanos, _)) = subnets_metrics_by_day.first_key_value() {
-            if timestamp_nanos.get() < start_ts {
+            if timestamp_nanos < &start_day {
                 last_total_metrics = subnets_metrics_by_day
                     .pop_first()
                     .unwrap()
