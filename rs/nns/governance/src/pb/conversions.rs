@@ -409,6 +409,9 @@ impl From<pb_api::proposal::Action> for pb::proposal::Action {
             pb_api::proposal::Action::UpdateCanisterSettings(v) => {
                 pb::proposal::Action::UpdateCanisterSettings(v.into())
             }
+            pb_api::proposal::Action::FulfillSubnetRentalRequest(v) => {
+                pb::proposal::Action::FulfillSubnetRentalRequest(v.into())
+            }
         }
     }
 }
@@ -451,6 +454,9 @@ impl From<pb_api::ProposalActionRequest> for pb::proposal::Action {
             }
             pb_api::ProposalActionRequest::UpdateCanisterSettings(v) => {
                 pb::proposal::Action::UpdateCanisterSettings(v.into())
+            }
+            pb_api::ProposalActionRequest::FulfillSubnetRentalRequest(v) => {
+                pb::proposal::Action::FulfillSubnetRentalRequest(v.into())
             }
         }
     }
@@ -2531,6 +2537,26 @@ impl From<pb_api::UpdateCanisterSettings> for pb::UpdateCanisterSettings {
         Self {
             canister_id: item.canister_id,
             settings: item.settings.map(|x| x.into()),
+        }
+    }
+}
+
+impl From<pb::FulfillSubnetRentalRequest> for pb_api::FulfillSubnetRentalRequest {
+    fn from(item: pb::FulfillSubnetRentalRequest) -> Self {
+        Self {
+            user: item.user,
+            node_ids: Some(item.node_ids),
+            replica_version_id: Some(item.replica_version_id),
+        }
+    }
+}
+
+impl From<pb_api::FulfillSubnetRentalRequest> for pb::FulfillSubnetRentalRequest {
+    fn from(item: pb_api::FulfillSubnetRentalRequest) -> Self {
+        Self {
+            user: item.user,
+            node_ids: item.node_ids.unwrap_or_default(),
+            replica_version_id: item.replica_version_id.unwrap_or_default(),
         }
     }
 }

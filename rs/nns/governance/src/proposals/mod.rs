@@ -10,6 +10,7 @@ use std::collections::HashMap;
 
 pub mod call_canister;
 pub mod create_service_nervous_system;
+pub mod fulfill_subnet_rental_request;
 pub mod install_code;
 pub mod stop_or_start_canister;
 pub mod update_canister_settings;
