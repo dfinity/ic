@@ -1782,7 +1782,8 @@ fn test_cmc_topups_from_subnet_rental_canister_do_not_affect_limit() {
         .build();
     setup_nns_canisters(&state_machine, nns_init_payloads);
 
-    let tokens = CYCLES_MINTING_LIMIT as u64 / ONE_TRILLION;
+    // Conversion rate in tests is 100 XDR per ICP
+    let tokens = CYCLES_MINTING_LIMIT as u64 / ONE_TRILLION / 100;
 
     // First top-up should succeed since it's 90P - less than the 150P/hr limit.
     let cycles = notify_top_up_as(
