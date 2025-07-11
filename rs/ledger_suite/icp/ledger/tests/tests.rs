@@ -1,5 +1,6 @@
 use candid::Principal;
 use candid::{Decode, Encode, Nat};
+use core::assert_eq;
 use dfn_protobuf::ProtoBuf;
 use ic_agent::identity::Identity;
 use ic_base_types::{CanisterId, PrincipalId};
@@ -19,7 +20,7 @@ use icp_ledger::{
     GetAllowancesArgs, GetBlocksArgs, GetBlocksRes, GetBlocksResult, GetEncodedBlocksResult,
     IcpAllowanceArgs, InitArgs, IterBlocksArgs, IterBlocksRes, LedgerCanisterInitPayload,
     LedgerCanisterPayload, LedgerCanisterUpgradePayload, Operation, QueryBlocksResponse,
-    QueryEncodedBlocksResponse, TimeStamp, UpgradeArgs, DEFAULT_TRANSFER_FEE,
+    QueryEncodedBlocksResponse, TimeStamp, TipOfChainRes, UpgradeArgs, DEFAULT_TRANSFER_FEE,
     MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST, MAX_BLOCKS_PER_REQUEST,
 };
 use icrc_ledger_types::icrc1::{
@@ -2131,6 +2132,36 @@ fn test_allowance_listing_take() {
     args.take = Some(u64::MAX);
     let allowances = list_allowances(&env, canister_id, approver, &args);
     assert_eq!(allowances.len(), MAX_RESULTS);
+}
+
+#[test]
+fn test_tip_of_chain() {
+    let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
+    let (env, canister_id) = setup(
+        ledger_wasm(),
+        encode_init_args,
+        vec![(Account::from(p1.0), 1), (Account::from(p2.0), 2)],
+    );
+    let res = env
+        .query(canister_id, "tip_of_chain_pb", vec![])
+        .expect("Failed to send tip_of_chain_pb request")
+        .bytes();
+    let tip: TipOfChainRes = dfn_protobuf::ProtoBuf::from_bytes(res)
+        .map(|c| c.0)
+        .expect("failed to decode tip_of_chain_pb result");
+
+    assert_eq!(tip.tip_index, 2);
+    assert!(tip.certification.is_some());
+
+    // Verify that the candid endpoint returns the same tip.
+    let req = Encode!(&()).expect("Failed to encode empty args");
+    let res = env
+        .query(canister_id, "tip_of_chain", req)
+        .expect("Failed to send tip_of_chain request")
+        .bytes();
+    let tip_candid = Decode!(&res, TipOfChainRes).expect("Failed to decode TipOfChainRes");
+    assert_eq!(tip, tip_candid);
 }
 
 mod metrics {
