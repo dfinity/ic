@@ -1,5 +1,5 @@
 use crate::GuestVMType;
-use anyhow::{ensure, Context, Result};
+use anyhow::{Context, Result};
 use askama::Template;
 use config::hostos::guestos_bootstrap_image::BootstrapOptions;
 use config::hostos::guestos_config::generate_guestos_config;
@@ -101,23 +101,13 @@ pub fn generate_vm_config(
         "kvm"
     };
 
-    ensure!(
-        config.hostos_settings.vm_memory > 8,
-        "Memory must be at least 8GB"
-    );
-
-    let vm_memory = match guest_vm_type {
-        GuestVMType::Default => 470, //config.hostos_settings.vm_memory - 4,
-        GuestVMType::Upgrade => 4,
-    };
-
     GuestOSTemplateProps {
         domain_name: vm_domain_name(guest_vm_type).to_string(),
         domain_uuid: vm_domain_uuid(guest_vm_type).to_string(),
         disk_device: disk_device.to_path_buf(),
         cpu_domain: cpu_domain.to_string(),
         console_log_path: serial_log_path(guest_vm_type).display().to_string(),
-        vm_memory,
+        vm_memory: config.hostos_settings.vm_memory,
         nr_of_vcpus: config.hostos_settings.vm_nr_of_vcpus,
         mac_address,
         config_media_path: media_path.to_path_buf(),

@@ -6,8 +6,8 @@
       <libosinfo:os id="http://ubuntu.com/ubuntu/20.04"/>
     </libosinfo:libosinfo>
   </metadata>
-  <memory unit='GiB'>470</memory>
-  <currentMemory unit='GiB'>470</currentMemory>
+  <memory unit='GiB'>490</memory>
+  <currentMemory unit='GiB'>490</currentMemory>
   <vcpu placement='static'>56</vcpu>
   <cpu mode='host-passthrough' migratable='off'>
     <cache mode='passthrough'/>

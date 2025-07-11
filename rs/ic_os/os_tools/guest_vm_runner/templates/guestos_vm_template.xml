@@ -31,7 +31,6 @@
     <policy>30000</policy>
   </launchSecurity>
   <memoryBacking>
-    <hugepages/>
     <locked/>
   </memoryBacking>
   {% endif -%}

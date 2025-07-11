@@ -6,8 +6,8 @@
       <libosinfo:os id="http://ubuntu.com/ubuntu/20.04"/>
     </libosinfo:libosinfo>
   </metadata>
-  <memory unit='GiB'>4</memory>
-  <currentMemory unit='GiB'>4</currentMemory>
+  <memory unit='GiB'>490</memory>
+  <currentMemory unit='GiB'>490</currentMemory>
   <vcpu placement='static'>64</vcpu>
   <cpu mode='host-model'/>
   <launchSecurity type='sev-snp' kernelHashes='yes'>
@@ -16,7 +16,6 @@
     <policy>30000</policy>
   </launchSecurity>
   <memoryBacking>
-    <hugepages/>
     <locked/>
   </memoryBacking>
   <resource>

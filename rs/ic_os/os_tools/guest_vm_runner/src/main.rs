@@ -25,7 +25,7 @@ use tokio_util::sync::CancellationToken;
 use virt::connect::Connect;
 use virt::domain::Domain;
 use virt::error::{ErrorDomain, ErrorNumber};
-use virt::sys::{VIR_DOMAIN_DESTROY_GRACEFUL, VIR_DOMAIN_NONE};
+use virt::sys::{VIR_DOMAIN_DESTROY_GRACEFUL, VIR_DOMAIN_NONE, VIR_DOMAIN_RUNNING};
 
 mod boot_args;
 mod device_mapping;
@@ -156,17 +156,20 @@ impl VirtualMachine {
         }
     }
 
-    /// Checks if the virtual machine is currently active
-    fn is_active(&self) -> bool {
+    /// Checks if the virtual machine is currently running
+    fn is_running(&self) -> bool {
         let Ok(domain) = self.get_domain() else {
             eprintln!("Failed to get domain");
             return false;
         };
 
-        domain.is_active().unwrap_or_else(|err| {
-            eprintln!("Failed to get domain state: {err}");
-            false
-        })
+        match domain.get_state() {
+            Ok((state, _reason)) => state == VIR_DOMAIN_RUNNING,
+            Err(err) => {
+                eprintln!("Failed to get domain state: {err}");
+                false
+            }
+        }
     }
 
     fn get_domain(&self) -> Result<Domain> {
@@ -175,7 +178,7 @@ impl VirtualMachine {
     }
 
     async fn wait_for_running(&self) {
-        while !self.is_active() {
+        while !self.is_running() {
             // Poll every 1s in production and 50ms in tests to speed up tests (in prod, we can
             // wait 1s between polls and we save some CPU cycles).
             #[cfg(not(test))]
@@ -187,7 +190,7 @@ impl VirtualMachine {
 
     /// Returns once the VM is no longer running.
     async fn wait_for_shutdown(&self) {
-        while self.is_active() {
+        while self.is_running() {
             // Poll every 1s in production and 50ms in tests to speed up tests (in prod, we can
             // wait 1s between polls and we save some CPU cycles).
             #[cfg(not(test))]
@@ -201,7 +204,7 @@ impl VirtualMachine {
 impl Drop for VirtualMachine {
     /// Ensures the VM is properly shut down when the object is dropped
     fn drop(&mut self) {
-        if self.is_active() {
+        if self.is_running() {
             println!("Shutting down {} domain gracefully", self.domain_name);
             if let Err(e) = self.get_domain().and_then(|domain| {
                 domain
@@ -528,7 +531,7 @@ impl GuestVmService {
 
     /// Monitors the virtual machine for shutdown or stop signals
     async fn monitor_virtual_machine(
-        &mut self,
+        &self,
         vm: &VirtualMachine,
         termination_token: CancellationToken,
     ) -> Result<()> {
@@ -548,8 +551,6 @@ impl GuestVmService {
 
                 // Notify systemd we're stopping
                 self.systemd_notifier.notify_stopping("GuestOS VM stopped unexpectedly.")?;
-                self.write_to_console_and_stdout("GuestOS VM stopped unexpectedly.");
-                let _ = self.display_serial_logs().await;
 
                 Err(anyhow!("GuestOS VM stopped unexpectedly"))
             }
