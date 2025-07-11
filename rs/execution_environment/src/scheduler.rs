@@ -1251,6 +1251,9 @@ impl Scheduler for SchedulerImpl {
             self.metrics.canister_ingress_queue_latencies.clone(),
         );
 
+        // Copy state of registry flag over to ReplicatedState
+        state.metadata.cost_schedule = registry_settings.canister_cycles_cost_schedule;
+
         // Round preparation.
         let mut scheduler_round_limits = {
             let _timer = self.metrics.round_preparation_duration.start_timer();
