@@ -6,7 +6,7 @@ use slog::Logger;
 use tokio::runtime::{Builder, Runtime};
 
 use ic_consensus_system_test_upgrade_common::{
-    bless_branch_version, get_chain_key_canister_and_public_key, upgrade,
+    bless_target_version, get_chain_key_canister_and_public_key, upgrade,
 };
 use ic_consensus_system_test_utils::rw_message::{
     can_read_msg_with_retries, install_nns_and_check_progress,
@@ -22,7 +22,7 @@ use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    get_mainnet_nns_revision, GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot,
+    get_ic_os_img_version, GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot,
     IcNodeContainer, SubnetSnapshot,
 };
 use ic_system_test_driver::generic_workload_engine::engine::Engine;
@@ -74,7 +74,7 @@ fn setup(env: TestEnv) {
 // Tests an upgrade of the app subnet to the branch version and a downgrade back to the mainnet version
 fn upgrade_downgrade_app_subnet(env: TestEnv) {
     let nns_node = env.get_first_healthy_system_node_snapshot();
-    let branch_version = bless_branch_version(&env, &nns_node);
+    let target_version = bless_target_version(&env, &nns_node);
     let agent = nns_node.with_default_agent(|agent| async move { agent });
     let key_ids = make_key_ids_for_all_schemes();
     get_chain_key_canister_and_public_key(
@@ -113,15 +113,15 @@ fn upgrade_downgrade_app_subnet(env: TestEnv) {
     let (faulty_node, can_id, msg) = upgrade(
         &env,
         &nns_node,
-        &branch_version,
+        &target_version,
         SubnetType::Application,
         None,
     );
-    let mainnet_version = get_mainnet_nns_revision();
+    let initial_version = get_ic_os_img_version().expect("target IC version");
     upgrade(
         &env,
         &nns_node,
-        &mainnet_version,
+        &initial_version,
         SubnetType::Application,
         None,
     );
