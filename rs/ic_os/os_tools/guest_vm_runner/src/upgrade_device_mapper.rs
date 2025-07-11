@@ -91,6 +91,7 @@ fn create_device_for_upgrade(
         DATA_PARTITION_SNAPSHOT_DM_NAME,
         Box::new(readonly_data_partition_device),
         Box::new(
+            // TODO: Is 512MB a good size for the snapshot?
             TempDevice::new(Sectors(1024 * 1024))
                 .context("Failed to create temporary device for copy-on-write")?,
         ),
