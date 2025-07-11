@@ -40,7 +40,6 @@ def _zstd_compress(ctx):
     """
     out = ctx.actions.declare_file(ctx.label.name)
 
-    # TODO: install zstd as dependency.
     ctx.actions.run(
         executable = "zstd",
         arguments = ["-q", "--threads=0", "-10", "-f", "-z", "-o", out.path] + [s.path for s in ctx.files.srcs],
@@ -63,7 +62,6 @@ def _untar(ctx):
     """
     out = ctx.actions.declare_directory(ctx.label.name)
 
-    # TODO: install tar as dependency.
     ctx.actions.run(
         executable = "tar",
         arguments = ["-xf", ctx.file.src.path, "-C", out.path],
@@ -88,7 +86,6 @@ def _mcopy(ctx):
     for src in ctx.files.srcs:
         command += "&& mcopy -mi {output} -sQ {src_path} ::/{filename} ".format(output = out.path, src_path = src.path, filename = ctx.attr.remap_paths.get(src.basename, src.basename))
 
-    # TODO: install mcopy as dependency.
     ctx.actions.run_shell(
         command = command,
         inputs = ctx.files.srcs + [ctx.file.fs],

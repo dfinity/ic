@@ -14,6 +14,10 @@ path = "test_canisters/test_dapp_canister.rs"
 name = "sns-governance-mem-test-canister"
 path = "test_canisters/sns_governance_mem_test_canister.rs"
 
+[[test]]
+name = "sns-governance-get-metrics-test"
+path = "src/get_metrics.rs"
+
 # Dependencies required to compile the test canisters.
 [dependencies]
 async-trait = { workspace = true }

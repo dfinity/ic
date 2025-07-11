@@ -23,6 +23,7 @@ loopdev-3 = "0.5"
 macaddr = { workspace = true }
 nix = { workspace = true }
 regex = { workspace = true }
+thiserror = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }

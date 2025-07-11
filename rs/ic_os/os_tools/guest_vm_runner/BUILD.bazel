@@ -22,6 +22,7 @@ DEPENDENCIES = [
     "@crate_index//:sys-mount",
     "@crate_index//:systemd",
     "@crate_index//:tempfile",
+    "@crate_index//:thiserror",
     "@crate_index//:tokio",
     "@crate_index//:tokio-util",
     "@crate_index//:uuid",

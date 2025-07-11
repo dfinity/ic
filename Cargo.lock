@@ -4504,6 +4504,7 @@ dependencies = [
  "ic-cdk 0.17.2",
  "mockall",
  "serde",
+ "serde_json",
  "thiserror 2.0.12",
  "tokio",
 ]
@@ -5254,6 +5255,7 @@ dependencies = [
  "sys-mount",
  "systemd",
  "tempfile",
+ "thiserror 2.0.12",
  "tokio",
  "tokio-util",
  "url",
@@ -12323,10 +12325,12 @@ dependencies = [
  "ic-metrics",
  "ic-protobuf",
  "ic-registry-client",
+ "ic-registry-client-fake",
  "ic-registry-client-helpers",
  "ic-registry-keys",
  "ic-registry-local-store",
  "ic-registry-nns-data-provider",
+ "ic-registry-proto-data-provider",
  "ic-registry-routing-table",
  "ic-types",
  "prometheus 0.13.4",
@@ -12644,7 +12648,9 @@ dependencies = [
  "ic-certification-version",
  "ic-config",
  "ic-crypto-sha2",
+ "ic-crypto-test-utils-canister-threshold-sigs",
  "ic-crypto-test-utils-keys",
+ "ic-crypto-test-utils-reproducible-rng",
  "ic-ed25519",
  "ic-error-types 0.2.0",
  "ic-interfaces",
@@ -14270,10 +14276,12 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "assert_matches",
+ "bitcoin 0.32.5",
  "bitcoincore-rpc",
  "candid",
  "canister-test",
  "dfn_candid",
+ "futures",
  "ic-agent",
  "ic-base-types",
  "ic-btc-checker",
@@ -14296,6 +14304,7 @@ dependencies = [
  "ic-types",
  "ic-types-test-utils",
  "ic-universal-canister",
+ "ic-utils 0.40.1",
  "ic_consensus_threshold_sig_system_test_utils",
  "icp-ledger",
  "icrc-ledger-agent",
@@ -17258,7 +17267,6 @@ dependencies = [
  "slog",
  "tokio",
  "url",
- "wabt-tests",
 ]
 
 [[package]]
@@ -23987,7 +23995,6 @@ version = "1.0.0"
 dependencies = [
  "anyhow",
  "ic-http-utils",
- "regex",
  "reqwest 0.12.15",
  "rusb",
  "serde",
@@ -23996,14 +24003,6 @@ dependencies = [
  "tempfile",
  "tokio",
  "vsock",
-]
-
-[[package]]
-name = "wabt-tests"
-version = "0.9.0"
-dependencies = [
- "leb128",
- "wat",
 ]
 
 [[package]]
