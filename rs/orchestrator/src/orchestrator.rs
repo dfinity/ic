@@ -11,7 +11,7 @@ use crate::{
     registration::NodeRegistration,
     registry_helper::RegistryHelper,
     ssh_access_manager::SshAccessManager,
-    upgrade::Upgrade,
+    upgrade::{OrchestratorControlFlow, Upgrade},
 };
 use backoff::ExponentialBackoffBuilder;
 use get_if_addrs::get_if_addrs;
@@ -33,7 +33,6 @@ use std::{
     convert::TryFrom,
     future::Future,
     net::SocketAddr,
-    ops::ControlFlow,
     path::{Path, PathBuf},
     sync::{Arc, Mutex, RwLock},
     thread,
@@ -379,33 +378,43 @@ impl Orchestrator {
         ) {
             // This timeout is a last resort trying to revive the upgrade monitoring
             // in case it gets stuck in an unexpected situation for longer than 15 minutes.
-            let timeout = Duration::from_secs(60 * 15);
-            let metrics = upgrade.metrics.clone();
-            upgrade
-                .upgrade_loop(
-                    cancellation_token,
-                    CHECK_INTERVAL_SECS,
-                    timeout,
-                    |r| async {
-                        match r {
-                            Ok(Ok(std::ops::ControlFlow::Continue(val))) => {
-                                *maybe_subnet_id.write().unwrap() = val;
-                                metrics.failed_consecutive_upgrade_checks.reset();
-                                ControlFlow::Continue(())
-                            }
-                            Ok(Ok(std::ops::ControlFlow::Break(()))) => ControlFlow::Break(()),
-                            e => {
-                                warn!(log, "Check for upgrade failed: {:?}", e);
-                                metrics.failed_consecutive_upgrade_checks.inc();
-                                ControlFlow::Continue(())
-                            }
-                        }
-                    },
-                )
-                .await;
+            const UPGRADE_TIMEOUT: Duration = Duration::from_secs(60 * 15);
+
+            loop {
+                match tokio::time::timeout(UPGRADE_TIMEOUT, upgrade.check_for_upgrade()).await {
+                    Ok(Ok(OrchestratorControlFlow::Assigned(subnet_id))) => {
+                        *maybe_subnet_id.write().unwrap() = Some(subnet_id);
+                        upgrade.metrics.failed_consecutive_upgrade_checks.reset();
+                    }
+                    Ok(Ok(OrchestratorControlFlow::Unassigned)) => {
+                        *maybe_subnet_id.write().unwrap() = None;
+                        upgrade.metrics.failed_consecutive_upgrade_checks.reset();
+                    }
+                    Ok(Ok(OrchestratorControlFlow::Stop)) => {
+                        upgrade.metrics.failed_consecutive_upgrade_checks.reset();
+                        // Wake up all orchestrator tasks and instruct them to stop.
+                        cancellation_token.cancel();
+                        break;
+                    }
+                    Ok(Err(err)) => {
+                        warn!(log, "Check for upgrade failed: {err}");
+                        upgrade.metrics.failed_consecutive_upgrade_checks.inc();
+                    }
+                    Err(err) => {
+                        warn!(log, "Check for upgrade timed out: {err}");
+                        upgrade.metrics.failed_consecutive_upgrade_checks.inc();
+                    }
+                }
+
+                tokio::select! {
+                    _ = tokio::time::sleep(CHECK_INTERVAL_SECS) => {}
+                    _ = cancellation_token.cancelled() => break
+                };
+            }
+
             info!(log, "Shut down the upgrade loop");
             if let Err(e) = upgrade.stop_replica() {
-                warn!(log, "{}", e);
+                warn!(log, "Failed to stop the replica process: {e}");
             }
             info!(log, "Shut down the replica process");
         }
