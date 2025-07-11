@@ -88,15 +88,6 @@ impl FromStr for SubnetFeatures {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
-pub struct EcdsaConfig {
-    pub quadruples_to_create_in_advance: u32,
-    pub key_ids: Vec<EcdsaKeyId>,
-    pub max_queue_size: Option<u32>,
-    pub signature_request_timeout_ns: Option<u64>,
-    pub idkg_key_rotation_period_ms: Option<u64>,
-}
-
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct KeyConfig {
     pub key_id: MasterPublicKeyId,
