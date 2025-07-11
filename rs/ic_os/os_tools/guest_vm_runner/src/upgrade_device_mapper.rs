@@ -23,7 +23,7 @@ const ALL_DM_NAMES_IN_CLEANUP_ORDER: [&'static str; 3] = [
 /// 3. Backup GPT
 ///
 /// The created device lives as long as the returned [MappedDevice] is in scope.
-pub fn create_mapped_device(base_device: &Path) -> Result<MappedDevice> {
+pub fn create_mapped_device_for_upgrade(base_device: &Path) -> Result<MappedDevice> {
     if !base_device.exists() {
         bail!(
             "Base device does not exist at path: {}",
@@ -207,7 +207,8 @@ mod tests {
         }
         gpt.write_inplace().expect("Could not write GPT to device");
 
-        let device = create_mapped_device(&base_path).expect("Failed to create mapped device");
+        let device =
+            create_mapped_device_for_upgrade(&base_path).expect("Failed to create mapped device");
         TestSetup {
             backing_file,
             gpt,
@@ -231,7 +232,7 @@ mod tests {
     /// - Verifies that data written to the read-write partition is persisted to the backing file.
     /// - Verifies that data written to the read-only partition is not persisted to the backing file.
     #[test]
-    fn test_create_mapped_device() {
+    fn test_create_mapped_device_for_upgrade() {
         let _lock = DM_MUTEX.lock().unwrap();
 
         let mapped_devices_before = get_mapped_devices();
@@ -293,9 +294,9 @@ mod tests {
     }
 
     #[test]
-    fn test_create_mapped_device_base_device_missing() {
+    fn test_device_missing() {
         let missing_path = Path::new("/nonexistent/device/path");
-        let result = create_mapped_device(missing_path);
+        let result = create_mapped_device_for_upgrade(missing_path);
         let err = result
             .expect_err("Expected error on missing base device")
             .to_string();
@@ -303,7 +304,7 @@ mod tests {
     }
 
     #[test]
-    fn test_create_mapped_device_cleans_up_first() {
+    fn test_clean_up_before_creation() {
         let _lock = DM_MUTEX.lock().unwrap();
 
         let mapped_devices_before = get_mapped_devices();

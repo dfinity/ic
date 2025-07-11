@@ -5,7 +5,7 @@ use crate::guest_vm_config::{
 };
 use crate::mount::PartitionProvider;
 use crate::systemd_notifier::SystemdNotifier;
-use crate::upgrade_device_mapper::create_mapped_device;
+use crate::upgrade_device_mapper::create_mapped_device_for_upgrade;
 use anyhow::{anyhow, bail, Context, Error, Result};
 use clap::{Parser, ValueEnum};
 use config_types::{HostOSConfig, Ipv6Config};
@@ -177,17 +177,6 @@ impl VirtualMachine {
             .context("Domain no longer exists")
     }
 
-    async fn wait_for_running(&self) {
-        while !self.is_running() {
-            // Poll every 1s in production and 50ms in tests to speed up tests (in prod, we can
-            // wait 1s between polls and we save some CPU cycles).
-            #[cfg(not(test))]
-            sleep(Duration::from_secs(1)).await;
-            #[cfg(test)]
-            sleep(Duration::from_millis(50)).await;
-        }
-    }
-
     /// Returns once the VM is no longer running.
     async fn wait_for_shutdown(&self) {
         while self.is_running() {
@@ -254,12 +243,10 @@ impl GuestVmService {
         // Guest device.
         let upgrade_mapped_device = (guest_vm_type == GuestVMType::Upgrade)
             .then(|| {
-                create_mapped_device(Path::new(GUESTOS_DEVICE))
+                create_mapped_device_for_upgrade(Path::new(GUESTOS_DEVICE))
                     .context("Cannot create mapped device")
             })
             .transpose()?;
-
-        // dbg!(&upgrade_mapped_device);
 
         let disk_device = upgrade_mapped_device
             .as_ref()
@@ -351,17 +338,6 @@ impl GuestVmService {
 
         println!("Creating GuestOS virtual machine");
 
-        let vm_config_log_path = Self::vm_config_log_path(self.guest_vm_type);
-        if tokio::fs::write(&vm_config_log_path, vm_config.to_string())
-            .await
-            .is_ok()
-        {
-            self.write_to_console_and_stdout(&format!(
-                "GuestOS VM config written to {}",
-                vm_config_log_path.display()
-            ));
-        }
-
         let virtual_machine = VirtualMachine::new(
             &self.libvirt_connection,
             &vm_config,
@@ -370,13 +346,6 @@ impl GuestVmService {
             vm_domain_name(self.guest_vm_type),
         )
         .context("Failed to define GuestOS virtual machine")?;
-
-        if tokio::time::timeout(Duration::from_secs(60), virtual_machine.wait_for_running())
-            .await
-            .is_err()
-        {
-            bail!("GuestOS VM failed to start within 60 seconds");
-        }
 
         // Notify systemd that we're ready
         self.systemd_notifier.notify_ready()?;
@@ -494,13 +463,6 @@ impl GuestVmService {
         match guest_vm_type {
             GuestVMType::Default => Path::new(DEFAULT_METRICS_FILE_PATH),
             GuestVMType::Upgrade => Path::new(UPGRADE_METRICS_FILE_PATH),
-        }
-    }
-
-    fn vm_config_log_path(guest_vm_type: GuestVMType) -> PathBuf {
-        match guest_vm_type {
-            GuestVMType::Default => std::env::temp_dir().join("guestos-vm-config.xml"),
-            GuestVMType::Upgrade => std::env::temp_dir().join("upgrade-guestos-vm-config.xml"),
         }
     }
 
