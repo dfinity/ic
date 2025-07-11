@@ -81,7 +81,7 @@ fn create_device_for_upgrade(
             Box::new(base_device),
             data_partition_start,
             data_partition_len,
-        )],
+        )?],
     )
     .context("Failed to create data partition device")?;
 
@@ -104,14 +104,14 @@ fn create_device_for_upgrade(
         UPGRADE_DM_NAME,
         vec![
             // Read-write section: GPT + first 9 partitions
-            LinearSegment::prefix(Box::new(base_device), data_partition_start),
+            LinearSegment::prefix(Box::new(base_device), data_partition_start)?,
             // Read-only section: data partition
             LinearSegment::full(Box::new(data_partition_snapshot_device)),
             // Read-write section: whatever is left at the end of the device (backup GPT)
             LinearSegment::suffix(
                 Box::new(base_device),
                 data_partition_start + data_partition_len,
-            ),
+            )?,
         ],
     )
     .context("Failed to create upgrade device")

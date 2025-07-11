@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::{ensure, Context, Result};
 use devicemapper::{
     devnode_to_devno, Bytes, DevId, Device, DmName, DmOptions, LinearDevTargetParams,
     LinearDevTargetTable, LinearTargetParams, Sectors, TargetLine, TargetTable, DM,
@@ -49,31 +49,34 @@ impl LinearSegment {
     }
 
     /// Creates a linear segment that maps the first `len` sectors of `device`.
-    pub fn prefix(device: Box<dyn DeviceTrait>, len: Sectors) -> Self {
-        Self {
+    pub fn prefix(device: Box<dyn DeviceTrait>, len: Sectors) -> Result<Self> {
+        ensure!(len <= device.len(), "Length exceeds device size");
+        Ok(Self {
             source: device,
             start: Sectors(0),
             len,
-        }
+        })
     }
 
     /// Creates a linear segment that maps the device starting from `from`.
-    pub fn suffix(device: Box<dyn DeviceTrait>, start: Sectors) -> Self {
+    pub fn suffix(device: Box<dyn DeviceTrait>, start: Sectors) -> Result<Self> {
+        ensure!(start <= device.len(), "Start sector exceeds device size");
         let len = device.len() - start;
-        Self {
+        Ok(Self {
             source: device,
             start,
             len,
-        }
+        })
     }
 
     /// Creates a linear segment that maps `len` sectors starting at `start` from `device`.
-    pub fn slice(device: Box<dyn DeviceTrait>, start: Sectors, len: Sectors) -> Self {
-        Self {
+    pub fn slice(device: Box<dyn DeviceTrait>, start: Sectors, len: Sectors) -> Result<Self> {
+        ensure!(start + len <= device.len(), "Slice exceeds device size");
+        Ok(Self {
             source: device,
             start,
             len,
-        }
+        })
     }
 }
 
