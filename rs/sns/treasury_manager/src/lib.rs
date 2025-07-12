@@ -24,6 +24,20 @@ pub struct Balance {
     pub name: Option<String>,
 }
 
+impl Balance {
+    pub fn new(amount_decimals: u64, account: Option<Account>, name: Option<String>) -> Self {
+        Self {
+            amount_decimals: Nat::from(amount_decimals),
+            account,
+            name,
+        }
+    }
+
+    pub fn zero(account: Option<Account>, name: Option<String>) -> Self {
+        Self::new(0, account, name)
+    }
+}
+
 #[derive(CandidType, Clone, Debug, Deserialize, PartialEq)]
 pub struct BalanceBook {
     pub treasury_owner: Option<Balance>,
@@ -32,6 +46,71 @@ pub struct BalanceBook {
     pub fee_collector: Option<Balance>,
     pub payees: Option<Balance>,
     pub payers: Option<Balance>,
+}
+
+impl BalanceBook {
+    pub fn empty() -> Self {
+        Self {
+            treasury_owner: None,
+            treasury_manager: None,
+            external_custodian: None,
+            fee_collector: None,
+            payees: None,
+            payers: None,
+        }
+    }
+
+    pub fn with_treasury_owner(mut self, account: Account, name: String) -> Self {
+        self.treasury_owner = Some(Balance::zero(Some(account), Some(name)));
+        self
+    }
+
+    pub fn with_treasury_manager(mut self, account: Account, name: String) -> Self {
+        self.treasury_manager = Some(Balance::zero(Some(account), Some(name)));
+        self
+    }
+
+    pub fn with_external_custodian(
+        mut self,
+        account: Option<Account>,
+        name: Option<String>,
+    ) -> Self {
+        self.external_custodian = Some(Balance::zero(account, name));
+        self
+    }
+
+    pub fn with_fee_collector(mut self, account: Option<Account>, name: Option<String>) -> Self {
+        self.fee_collector = Some(Balance::zero(account, name));
+        self
+    }
+
+    pub fn treasury_owner(mut self, amount_decimals: u64) -> Self {
+        if let Some(treasury_owner) = self.treasury_owner.as_mut() {
+            treasury_owner.amount_decimals = Nat::from(amount_decimals)
+        }
+        self
+    }
+
+    pub fn treasury_manager(mut self, amount_decimals: u64) -> Self {
+        if let Some(treasury_manager) = self.treasury_manager.as_mut() {
+            treasury_manager.amount_decimals = Nat::from(amount_decimals)
+        }
+        self
+    }
+
+    pub fn external_custodian(mut self, amount_decimals: u64) -> Self {
+        if let Some(external_custodian) = self.external_custodian.as_mut() {
+            external_custodian.amount_decimals = Nat::from(amount_decimals)
+        }
+        self
+    }
+
+    pub fn fee_collector(mut self, amount_decimals: u64) -> Self {
+        if let Some(fee_collector) = self.fee_collector.as_mut() {
+            fee_collector.amount_decimals = Nat::from(amount_decimals)
+        }
+        self
+    }
 }
 
 #[derive(CandidType, Clone, Debug, Default, Deserialize, PartialEq)]

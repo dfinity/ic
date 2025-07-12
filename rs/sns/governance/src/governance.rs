@@ -1,6 +1,7 @@
+use crate::extensions::{ExtensionKind, ValidatedRegisterExtension};
 use crate::icrc_ledger_helper::ICRCLedgerHelper;
 use crate::pb::v1::governance::GovernanceCachedMetrics;
-use crate::pb::v1::{valuation, Metrics, TreasuryMetrics, VotingPowerMetrics};
+use crate::pb::v1::{valuation, Metrics, RegisterExtension, TreasuryMetrics, VotingPowerMetrics};
 use crate::proposal::TreasuryAccount;
 use crate::treasury::{assess_treasury_balance, interpret_token_code, tokens_to_e8s};
 use crate::{
@@ -84,6 +85,7 @@ use crate::{
     },
     types::{is_registered_function_id, Environment, HeapGrowthPotential, LedgerUpdateLock, Wasm},
 };
+
 use candid::{Decode, Encode};
 #[cfg(not(target_arch = "wasm32"))]
 use futures::FutureExt;
@@ -616,10 +618,10 @@ pub struct Governance {
     pub env: Box<dyn Environment>,
 
     /// Implementation of the interface with the SNS ledger canister.
-    ledger: Box<dyn ICRC1Ledger>,
+    pub(crate) ledger: Box<dyn ICRC1Ledger>,
 
     // Implementation of the interface pointing to the NNS's ICP ledger canister
-    nns_ledger: Box<dyn ICRC1Ledger>,
+    pub(crate) nns_ledger: Box<dyn ICRC1Ledger>,
 
     /// Implementation of the interface with the CMC canister.
     cmc: Box<dyn CMC>,
@@ -2153,10 +2155,9 @@ impl Governance {
                 self.perform_register_dapp_canisters(register_dapp_canisters)
                     .await
             }
-            Action::RegisterExtension(_) => Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "RegisterExtension proposals are not supported yet.",
-            )),
+            Action::RegisterExtension(register_extension) => {
+                self.perform_register_extension(register_extension).await
+            }
             Action::DeregisterDappCanisters(deregister_dapp_canisters) => {
                 self.perform_deregister_dapp_canisters(deregister_dapp_canisters)
                     .await
@@ -2281,6 +2282,65 @@ impl Governance {
                 Ok(())
             },
         }
+    }
+
+    async fn perform_register_extension(
+        &mut self,
+        register_extension: RegisterExtension,
+    ) -> Result<(), GovernanceError> {
+        // Step 0. Validate the RegisterExtension proposal.
+        let ValidatedRegisterExtension { wasm, init, spec } =
+            register_extension.try_into().map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    format!("Invalid RegisterExtension: {err:?}"),
+                )
+            })?;
+
+        let Wasm::Chunked {
+            wasm_module_hash,
+            store_canister_id,
+            chunk_hashes_list,
+        } = wasm
+        else {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                "RegisterExtension proposal must contain a chunked wasm module.",
+            ));
+        };
+
+        // Step 1. Register the extension as a dapp canister.
+        self.perform_register_dapp_canisters(RegisterDappCanisters {
+            canister_ids: vec![store_canister_id.get()],
+        })
+        .await?;
+
+        // Step 2. Validate the init arguments.
+        if spec.kind != ExtensionKind::TreasuryManager {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                "Only TreasuryManager extensions are currently supported.",
+            ));
+        }
+
+        let (arg, sns_amount_e8s, icp_amount_e8s) = self.construct_treasury_manager_init(init)?;
+
+        self.deposit_treasury_manager(store_canister_id, sns_amount_e8s, icp_amount_e8s)
+            .await?;
+
+        self.upgrade_non_root_canister(
+            store_canister_id,
+            Wasm::Chunked {
+                wasm_module_hash,
+                store_canister_id,
+                chunk_hashes_list,
+            },
+            arg,
+            CanisterInstallMode::Install,
+        )
+        .await?;
+
+        Ok(())
     }
 
     /// Registers a list of Dapp canister ids in the root canister.
@@ -3272,7 +3332,7 @@ impl Governance {
     }
 
     /// Returns the ledger's transaction fee as stored in the service nervous parameters.
-    fn transaction_fee_e8s_or_panic(&self) -> u64 {
+    pub(crate) fn transaction_fee_e8s_or_panic(&self) -> u64 {
         self.nervous_system_parameters_or_panic()
             .transaction_fee_e8s
             .expect("NervousSystemParameters must have transaction_fee_e8s")
