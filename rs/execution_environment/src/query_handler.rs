@@ -267,8 +267,6 @@ impl InternalHttpQueryHandler {
             subnet_available_memory,
             subnet_available_callbacks,
             self.config.canister_guaranteed_callback_quota as u64,
-            self.config.max_canister_memory_size_wasm32,
-            self.config.max_canister_memory_size_wasm64,
             self.max_instructions_per_query,
             self.config.max_query_call_graph_depth,
             self.config.max_query_call_graph_instructions,

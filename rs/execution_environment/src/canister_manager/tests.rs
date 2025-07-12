@@ -106,7 +106,6 @@ const CANISTER_FREEZE_BALANCE_RESERVE: Cycles = Cycles::new(5_000_000_000_000);
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(5_000_000_000);
 const DEFAULT_PROVISIONAL_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
 const MEMORY_CAPACITY: NumBytes = NumBytes::new(8 * 1024 * 1024 * 1024); // 8GiB
-const MAX_CANISTER_MEMORY_SIZE: NumBytes = NumBytes::new(8 * 1024 * 1024 * 1024); // 8GiB
 const MAX_CONTROLLERS: usize = 10;
 const WASM_PAGE_SIZE_IN_BYTES: u64 = 64 * 1024; // 64KiB
 const MAX_NUMBER_OF_CANISTERS: u64 = 0;
@@ -146,7 +145,6 @@ lazy_static! {
             MAX_NUM_INSTRUCTIONS,
             MAX_NUM_INSTRUCTIONS
         ),
-        canister_memory_limit: NumBytes::new(u64::MAX / 2),
         wasm_memory_limit: None,
         memory_allocation: MemoryAllocation::default(),
         canister_guaranteed_callback_quota: CANISTER_GUARANTEED_CALLBACK_QUOTA as u64,
@@ -315,8 +313,6 @@ fn canister_manager_config(
         // Compute capacity for 2-core scheduler is 100%
         // TODO(RUN-319): the capacity should be defined based on actual `scheduler_cores`
         100,
-        MAX_CANISTER_MEMORY_SIZE,
-        MAX_CANISTER_MEMORY_SIZE,
         rate_limiting_of_instructions,
         100,
         FlagStatus::Enabled,
@@ -402,10 +398,7 @@ fn install_code(
 
     let old_canister = state.take_canister_state(&context.canister_id).unwrap();
     execution_parameters.compute_allocation = old_canister.scheduler_state.compute_allocation;
-    execution_parameters.canister_memory_limit = match old_canister.memory_allocation() {
-        MemoryAllocation::Reserved(bytes) => bytes,
-        MemoryAllocation::BestEffort => execution_parameters.canister_memory_limit,
-    };
+    execution_parameters.memory_allocation = old_canister.memory_allocation();
 
     let dts_result = canister_manager.install_code_dts(
         context,
