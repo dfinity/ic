@@ -37,6 +37,7 @@ rust_library(
         "//rs/crypto/sha2",
         "//rs/ledger_suite/common/ledger_canister_core",
         "//rs/ledger_suite/common/ledger_core",
+        "//rs/nns/constants",
         "//rs/rust_canisters/dfn_protobuf",
         "//rs/rust_canisters/on_wire",
         "//rs/types/base_types",
