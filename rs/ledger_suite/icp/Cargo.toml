@@ -10,8 +10,6 @@ documentation.workspace = true
 candid = { workspace = true }
 comparable = { version = "0.5", features = ["derive"] }
 crc32fast = "1.2.0"
-dfn_candid = { path = "../../rust_canisters/dfn_candid" }
-dfn_core = { path = "../../rust_canisters/dfn_core" }
 dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
 hex = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
@@ -67,7 +65,3 @@ path = "tests/check_generated_files.rs"
 [[test]]
 name = "protobuf_encoding"
 path = "tests/protobuf_encoding.rs"
-
-[[bin]]
-name = "test-notified"
-path = "tests/notified/notified.rs"
