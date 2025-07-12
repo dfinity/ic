@@ -11,7 +11,7 @@ use ic_cycles_account_manager::{
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 use ic_limits::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX_SIZE};
-use ic_logger::{info, ReplicaLogger};
+use ic_logger::{debug, info, ReplicaLogger};
 use ic_management_canister_types_private::{
     CanisterStatusType, CreateCanisterArgs, InstallChunkedCodeArgs, InstallCodeArgsV2,
     LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, Payload,
@@ -217,7 +217,7 @@ impl SystemStateModifications {
             .push_output_request(msg.into(), time)
             .map_err(|e| Self::error(format!("Failed to push output request: {:?}", e)))?;
         if sent_cycles > LOG_CANISTER_OPERATION_CYCLES_THRESHOLD {
-            info!(
+            debug!(
                 logger,
                 "Canister {} sent {} cycles to canister {}.",
                 system_state.canister_id,
