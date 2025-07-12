@@ -30,6 +30,7 @@ use ic_nervous_system_time_helpers::now_seconds;
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID, ICP_LEDGER_ARCHIVE_1_CANISTER_ID, REGISTRY_CANISTER_ID,
+    SUBNET_RENTAL_CANISTER_ID,
 };
 use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
 use icp_ledger::{
@@ -1121,6 +1122,13 @@ async fn notify_top_up(
         canister_id,
     }: NotifyTopUp,
 ) -> Result<Cycles, NotifyError> {
+    let caller = caller();
+
+    let src_canister_principal = SUBNET_RENTAL_CANISTER_ID.get();
+    // caller and destination needs to be src_canister_principal to turn off cycles_limit.
+    let use_cycles_limit =
+        caller != src_canister_principal || canister_id.get() != src_canister_principal;
+
     let (amount, from) = fetch_transaction(
         block_index,
         Subaccount::from(&canister_id),
@@ -1176,7 +1184,7 @@ async fn notify_top_up(
     match maybe_early_result {
         Some(result) => result,
         None => {
-            let result = process_top_up(canister_id, from, amount).await;
+            let result = process_top_up(canister_id, from, amount, use_cycles_limit).await;
 
             with_state_mut(|state| {
                 state.blocks_notified.insert(
@@ -1946,7 +1954,10 @@ async fn do_transaction_notification(
             .ok_or_else(|| "Topping up requires a subaccount.".to_string())?)
             .try_into()
             .map_err(|err| format!("Cannot parse subaccount: {}", err))?;
-        match process_top_up(canister_id, from, tn.amount).await {
+        // We always use cycles limit for these transaction_notifications because they can't come from
+        // any canisters that have exceptions to the limit.
+        let use_cycles_limit = true;
+        match process_top_up(canister_id, from, tn.amount, use_cycles_limit).await {
             Ok(cycles) => (
                 Ok(CyclesResponse::ToppedUp(())),
                 Some(NotificationStatus::NotifiedTopUp(Ok(cycles))),
@@ -2122,6 +2133,7 @@ async fn process_top_up(
     canister_id: CanisterId,
     from: AccountIdentifier,
     amount: Tokens,
+    use_cycles_limit: bool,
 ) -> Result<Cycles, NotifyError> {
     let cycles = tokens_to_cycles(amount)?;
 
@@ -2132,7 +2144,7 @@ async fn process_top_up(
         canister_id, cycles
     ));
 
-    match deposit_cycles(canister_id, cycles, true).await {
+    match deposit_cycles(canister_id, cycles, true, use_cycles_limit).await {
         Ok(()) => {
             burn_and_log(sub, amount).await;
             Ok(cycles)
@@ -2251,9 +2263,10 @@ async fn deposit_cycles(
     canister_id: CanisterId,
     cycles: Cycles,
     mint_cycles: bool,
+    use_cycles_limit: bool,
 ) -> Result<(), String> {
     if mint_cycles {
-        ensure_balance(cycles)?;
+        ensure_balance(cycles, use_cycles_limit)?;
     }
 
     let res: CallResult<()> = ic_cdk::api::call::call_with_payment128(
@@ -2283,8 +2296,10 @@ async fn do_mint_cycles(
     else {
         return Err("No cycles ledger canister id configured.".to_string());
     };
-
-    ensure_balance(cycles)?;
+    // always use cycles limit for minting cycles, since the SRC is the only exception and uses
+    // top_up to send cycles to itself.
+    let use_cycles_limit = true;
+    ensure_balance(cycles, use_cycles_limit)?;
 
     let arg = CyclesLedgerDepositArgs {
         to: account,
@@ -2379,8 +2394,12 @@ async fn do_create_canister(
         return Err("No subnets in which to create a canister.".to_owned());
     }
 
+    // We always set use_cycles_limit true here, since there are no reasons for an exception when
+    // creating canisters.  Only the Subnet Rental Canister has a reason to create massive bursts
+    // of cycles, which it does not do for canister creation.
+    let use_cycles_limit = true;
     // We have subnets available, so we can now mint the cycles and create the canister.
-    ensure_balance(cycles)?;
+    ensure_balance(cycles, use_cycles_limit)?;
 
     let canister_settings = settings
         .map(|mut settings| {
@@ -2433,31 +2452,20 @@ async fn do_create_canister(
     Err(last_err.unwrap_or_else(|| "Unknown problem attempting to create a canister.".to_owned()))
 }
 
-fn ensure_balance(cycles: Cycles) -> Result<(), String> {
+fn ensure_balance(cycles: Cycles, check_minting_limit: bool) -> Result<(), String> {
     let now = now_system_time();
 
     let current_balance = Cycles::from(ic_cdk::api::canister_balance128());
     let cycles_to_mint = cycles - current_balance;
 
     with_state_mut(|state| {
-        state.limiter.purge_old(now);
-        let count = state.limiter.get_count();
-
-        if count + cycles_to_mint > state.cycles_limit {
-            LIMITER_REJECT_COUNT.with(|count| {
-                count.set(count.get().saturating_add(1));
-            });
-
-            return Err(format!(
-                "More than {} cycles have been minted in the last {} seconds, please try again later.",
-                state.cycles_limit,
-                state.limiter.get_max_age().as_secs(),
-            ));
+        if check_minting_limit {
+            state
+                .limiter
+                .check_and_add_cycles(now, cycles_to_mint, state.cycles_limit)?;
         }
-
-        state.limiter.add(now, cycles_to_mint);
         state.total_cycles_minted += cycles_to_mint;
-        Ok(())
+        Ok::<_, String>(())
     })?;
 
     // unused because of check above
@@ -2530,9 +2538,6 @@ fn post_upgrade(maybe_args: Option<CyclesCanisterInitPayload>) {
         }
         new_state.cycles_ledger_canister_id = args.cycles_ledger_canister_id;
     }
-
-    // Delete after release.
-    new_state.cycles_limit = Cycles::new(DEFAULT_CYCLES_LIMIT);
 
     STATE.with(|state| state.replace(Some(new_state)));
 }
