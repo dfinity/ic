@@ -94,7 +94,7 @@ use std::{
 use tempfile::NamedTempFile;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
-    sync::mpsc::{Receiver, UnboundedSender},
+    sync::mpsc::{Receiver, Sender},
     sync::watch,
     time::{sleep, timeout, Instant},
 };
@@ -247,7 +247,7 @@ pub fn start_server(
     ingress_filter: IngressFilterService,
     query_execution_service: QueryExecutionService,
     ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
-    ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
+    ingress_tx: Sender<UnvalidatedArtifactMutation<SignedIngress>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     query_signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
@@ -287,7 +287,7 @@ pub fn start_server(
         ingress_verifier.clone(),
         ingress_filter.clone(),
         ingress_throttler.clone(),
-        ingress_tx.clone(),
+        ingress_tx,
     )
     .with_malicious_flags(malicious_flags.clone())
     .build();
