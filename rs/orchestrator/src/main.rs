@@ -2,21 +2,28 @@ use clap::Parser;
 use ic_http_endpoints_async_utils::shutdown_signal;
 use ic_logger::{info, warn};
 use orchestrator::{args::OrchestratorArgs, orchestrator::Orchestrator};
+use tokio_util::sync::CancellationToken;
 
 #[tokio::main]
 async fn main() {
     let args = OrchestratorArgs::parse();
 
-    let (exit_sender, exit_signal) = tokio::sync::watch::channel(false);
+    let cancellation_token = CancellationToken::new();
+    let cancellation_token_clone = cancellation_token.clone();
 
-    let mut orchestrator = Orchestrator::new(args)
+    let mut orchestrator = Orchestrator::new(args, cancellation_token.clone())
         .await
         .expect("Failed to start orchestrator");
     let logger = orchestrator.logger.clone();
-    let join_handle = tokio::spawn(async move { orchestrator.start_tasks(exit_signal).await });
-    shutdown_signal(logger.inner_logger.root.clone()).await;
+    let join_handle =
+        tokio::spawn(async move { orchestrator.start_tasks(cancellation_token_clone).await });
 
-    exit_sender.send(true).expect("Failed to send exit signal");
+    tokio::select! {
+        _ = shutdown_signal(logger.inner_logger.root.clone()) => {},
+        _ = cancellation_token.cancelled() => {},
+    }
+
+    cancellation_token.cancel();
 
     info!(logger, "Shutting down orchestrator...");
     match join_handle.await {

@@ -73,6 +73,7 @@ fn downgrade_app_subnet(env: TestEnv) {
         &mainnet_version,
         SubnetType::Application,
         Some(&ecdsa_state),
+        /*assert_graceful_orchestrator_tasks_exits=*/ true,
     );
 }
 
