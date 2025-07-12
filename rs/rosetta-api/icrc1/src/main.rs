@@ -33,7 +33,7 @@ use tokio::{net::TcpListener, sync::Mutex as AsyncMutex};
 use tower_http::classify::{ServerErrorsAsFailures, SharedClassifier};
 use tower_http::trace::TraceLayer;
 use tower_request_id::{RequestId, RequestIdLayer};
-use tracing::{debug, error, error_span, info, Level, Span};
+use tracing::{debug, error, error_span, info, warn, Level, Span};
 use tracing::{level_filters::LevelFilter, Instrument};
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::layer::SubscriberExt;
@@ -404,6 +404,9 @@ async fn main() -> Result<()> {
     let token_defs = extract_token_defs(&args)?;
     let mut token_states = HashMap::new();
 
+    let num_tokens = token_defs.len();
+    let mut num_failed_tokens = 0;
+
     for token_def in token_defs.iter() {
         let network_url = args.effective_network_url();
 
@@ -439,11 +442,23 @@ async fn main() -> Result<()> {
             StoreType::File => {
                 let mut path = args.multi_tokens_store_dir.clone();
                 path.push(format!("{}.db", PrincipalId::from(token_def.ledger_id)));
-                StorageClient::new_persistent(&path).unwrap()
+                StorageClient::new_persistent(&path).unwrap_or_else(|err| {
+                    panic!("error creating persistent storage '{:?}': {}", path, err)
+                })
             }
         };
 
-        let metadata = load_metadata(token_def, &icrc1_agent, &storage, args.offline).await?;
+        let metadata = match load_metadata(token_def, &icrc1_agent, &storage, args.offline).await {
+            Ok(metadata) => metadata,
+            Err(err) => {
+                warn!(
+                    "Failed to load metadata for token {}: {:?}",
+                    token_def.ledger_id, err
+                );
+                num_failed_tokens += 1;
+                continue;
+            }
+        };
 
         if token_def.icrc1_symbol.is_some()
             && metadata.symbol != token_def.icrc1_symbol.clone().unwrap()
@@ -515,6 +530,21 @@ async fn main() -> Result<()> {
             }
         }
         process::exit(0);
+    }
+
+    if num_failed_tokens == num_tokens {
+        warn!("Failed to load metadata for any token. Rosetta will exit.");
+        bail!("No metadata loaded for any token.");
+    } else if num_failed_tokens > 0 {
+        warn!(
+            "Failed to load metadata for {} out of {} tokens. Rosetta will continue with the rest.",
+            num_failed_tokens, num_tokens
+        );
+    } else {
+        info!(
+            "Successfully loaded metadata for all {} tokens.",
+            num_tokens
+        );
     }
 
     // Create metrics middleware for Axum
