@@ -98,9 +98,8 @@ fn subnet_splitting_test(env: TestEnv) {
     //
     let logger = env.logger();
 
-    let initial_replica_version = env
-        .get_initial_replica_version()
-        .expect("Failed to get master version");
+    let initial_replica_version = get_ic_os_img_version().expect("Failed to get master version");
+    let initial_replica_version = ReplicaVersion::try_from(initial_replica_version).unwrap();
 
     let (source_subnet, destination_subnet) = get_subnets(&env);
 

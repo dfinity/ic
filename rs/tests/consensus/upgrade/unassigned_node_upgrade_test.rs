@@ -89,11 +89,11 @@ fn test(env: TestEnv) {
     let original_version = fetch_unassigned_node_version(&unassigned_node).unwrap();
     info!(logger, "Original replica version: {}", original_version);
 
-    let upgrade_url = get_ic_os_update_img_test_url()
+    let upgrade_url = get_ic_os_update_img_url()
         .expect("no image URL")
         .to_string();
     info!(logger, "Upgrade URL: {}", upgrade_url);
-    let target_version = format!("{}-test", original_version);
+    let target_version = get_ic_os_update_img_version().unwrap();
     let new_replica_version = ReplicaVersion::try_from(target_version.clone()).unwrap();
     info!(logger, "Target replica version: {}", new_replica_version);
 
@@ -105,7 +105,7 @@ fn test(env: TestEnv) {
         info!(logger, "Registry version: {}", reg_ver);
         let blessed_versions = get_blessed_replica_versions(&registry_canister).await;
         info!(logger, "Initial: {:?}", blessed_versions);
-        let sha256 = get_ic_os_update_img_test_sha256().expect("no SHA256 hash");
+        let sha256 = get_ic_os_update_img_sha256(&env).expect("no SHA256 hash");
         info!(logger, "Update image SHA256: {}", sha256);
 
         // prepare for the 1. proposal

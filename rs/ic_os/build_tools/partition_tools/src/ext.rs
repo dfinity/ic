@@ -127,7 +127,7 @@ impl Partition for ExtPartition {
     }
 
     /// Read a file from a given partition
-    async fn read_file(&mut self, input: &Path) -> Result<String> {
+    async fn read_file(&mut self, input: &Path) -> Result<Vec<u8>> {
         // run the underlying debugfs operation
         // debugfs has already been ensured.
         let mut cmd = Command::new(debugfs().context("debugfs is needed to read files")?)
@@ -160,13 +160,17 @@ impl Partition for ExtPartition {
         let out = cmd.wait_with_output().await?;
         Self::check_debugfs_result(&out)?;
 
-        let cleaned_output = std::str::from_utf8(&out.stdout)?
-            .lines()
-            .skip(2)
-            .collect::<Vec<_>>()
-            .join("\n");
+        // Strip the first two lines of stdout, as this contains debugfs info
+        let mut stdout = out.stdout;
+        let output_start = stdout
+            .iter()
+            .enumerate()
+            .filter_map(|(i, v)| (*v == b'\n').then_some(i))
+            .nth(1)
+            .unwrap();
+        stdout.drain(..=output_start);
 
-        Ok(cleaned_output)
+        Ok(stdout)
     }
 
     async fn copy_files_to(&mut self, output: &Path) -> Result<()> {
@@ -187,6 +191,31 @@ impl Partition for ExtPartition {
             .context("failed to run debugfs for extraction")?;
 
         Self::check_debugfs_result(&out)?;
+
+        Ok(())
+    }
+
+    async fn copy_file_to(&mut self, input: &Path, output: &Path) -> Result<()> {
+        let file_name = input.file_name().expect("input must reference a file");
+
+        // When extracting to a directory, use the input filename.
+        let dest = if output.is_dir() {
+            ensure!(output.exists(), "output directory path must already exist");
+
+            &output.join(file_name)
+        } else {
+            ensure!(
+                output.parent().map(|v| v.exists()).unwrap_or(false),
+                "output directory path must already exist"
+            );
+
+            output
+        };
+
+        let out = self.read_file(input).await?;
+
+        let mut output = File::create(&dest).await?;
+        output.write_all(&out).await?;
 
         Ok(())
     }
@@ -504,7 +533,7 @@ mod test {
             .await
             .expect("Could not read file from partition");
 
-        assert_eq!(read, std::str::from_utf8(contents1).unwrap());
+        assert_eq!(read, contents1);
 
         // Overwrite the file that we just created.
         partition
@@ -516,7 +545,7 @@ mod test {
             .await
             .expect("Could not read file from partition");
 
-        assert_eq!(read, std::str::from_utf8(contents2).unwrap());
+        assert_eq!(read, contents2);
 
         // Reading non-existing files should fail.
         assert!(partition
@@ -568,5 +597,78 @@ mod test {
         actual_file_names.sort();
 
         assert_eq!(actual_file_names, ["input.txt", "input2.txt", "lost+found"]);
+    }
+
+    #[tokio::test]
+    async fn copy_file_test() {
+        let dir = tempdir().unwrap();
+        let img_path = dir.path().join("empty_ext4.img");
+        create_empty_partition_img(&img_path)
+            .await
+            .expect("Could not create test partition image");
+
+        let mut partition = ExtPartition::open(img_path.to_path_buf(), None)
+            .await
+            .expect("Could not open partition");
+
+        let input_file_names = ["input.txt", "input2.txt"];
+        for file in input_file_names {
+            let input_path = dir.path().join(file);
+            let output_path = Path::new("/").join(file);
+            fs::write(input_path.clone(), b"").await.unwrap();
+            partition
+                .write_file(&input_path, &output_path)
+                .await
+                .expect("Could not write file in partition");
+        }
+
+        let output_dir = TempDir::new().expect("Could not create temp dir");
+
+        // Copy with assumed name (from input).
+        partition
+            .copy_file_to(Path::new("/input.txt"), output_dir.path())
+            .await
+            .unwrap();
+
+        let mut actual_file_names = std::fs::read_dir(output_dir.path())
+            .expect("read_dir failed")
+            .map(|entry| {
+                entry
+                    .unwrap()
+                    .path()
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect::<Vec<_>>();
+        actual_file_names.sort();
+
+        assert_eq!(actual_file_names, ["input.txt"]);
+
+        // Copy with explicit name (from output).
+        partition
+            .copy_file_to(
+                Path::new("/input2.txt"),
+                &output_dir.path().join("different.txt"),
+            )
+            .await
+            .unwrap();
+
+        let mut actual_file_names = std::fs::read_dir(output_dir.path())
+            .expect("read_dir failed")
+            .map(|entry| {
+                entry
+                    .unwrap()
+                    .path()
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect::<Vec<_>>();
+        actual_file_names.sort();
+
+        assert_eq!(actual_file_names, ["different.txt", "input.txt"]);
     }
 }
