@@ -1,5 +1,5 @@
 {
-  "checksum": "27e6a0550c49829a71f7359e6509ba37ac377d089cc8821537beb01638dfe280",
+  "checksum": "5c43aed979e2a30ca7ac2438db128a5301c9d91ca28a799132b5c8d9575392f9",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -11127,7 +11127,7 @@
               "target": "cc"
             },
             {
-              "id": "pkg-config 0.3.27",
+              "id": "pkg-config 0.3.32",
               "target": "pkg_config"
             }
           ],
@@ -19710,6 +19710,212 @@
       ],
       "license_file": "LICENSE"
     },
+    "devicemapper 0.34.4": {
+      "name": "devicemapper",
+      "version": "0.34.4",
+      "package_url": "https://github.com/stratis-storage/devicemapper-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/devicemapper/0.34.4/download",
+          "sha256": "cfc1218171f91b60cfeb178048f076a79930acf1fe7c295e9304bd871da1bd35"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "devicemapper",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "devicemapper",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "bitflags 2.9.0",
+              "target": "bitflags"
+            },
+            {
+              "id": "devicemapper 0.34.4",
+              "target": "build_script_build"
+            },
+            {
+              "id": "devicemapper-sys 0.3.1",
+              "target": "devicemapper_sys"
+            },
+            {
+              "id": "env_logger 0.11.2",
+              "target": "env_logger"
+            },
+            {
+              "id": "log 0.4.20",
+              "target": "log"
+            },
+            {
+              "id": "nix 0.29.0",
+              "target": "nix"
+            },
+            {
+              "id": "once_cell 1.21.3",
+              "target": "once_cell"
+            },
+            {
+              "id": "rand 0.8.5",
+              "target": "rand"
+            },
+            {
+              "id": "retry 2.1.0",
+              "target": "retry"
+            },
+            {
+              "id": "semver 1.0.22",
+              "target": "semver"
+            },
+            {
+              "id": "serde 1.0.217",
+              "target": "serde"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.34.4"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "compile_data_glob_excludes": [
+          "**/*.rs"
+        ],
+        "data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "devicemapper-sys 0.3.1",
+              "target": "devicemapper_sys"
+            },
+            {
+              "id": "semver 1.0.22",
+              "target": "semver"
+            }
+          ],
+          "selects": {}
+        }
+      },
+      "license": "MPL-2.0",
+      "license_ids": [
+        "MPL-2.0"
+      ],
+      "license_file": "LICENSE.md"
+    },
+    "devicemapper-sys 0.3.1": {
+      "name": "devicemapper-sys",
+      "version": "0.3.1",
+      "package_url": "https://github.com/stratis-storage/devicemapper-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/devicemapper-sys/0.3.1/download",
+          "sha256": "2edf94f6d3ca216380413446f38d1aa3035ac2c503a21b6929ead7e32f66a0b9"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "devicemapper_sys",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "devicemapper_sys",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "devicemapper-sys 0.3.1",
+              "target": "build_script_build"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.3.1"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "compile_data_glob_excludes": [
+          "**/*.rs"
+        ],
+        "data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "bindgen 0.69.4",
+              "target": "bindgen"
+            },
+            {
+              "id": "pkg-config 0.3.32",
+              "target": "pkg_config"
+            }
+          ],
+          "selects": {}
+        }
+      },
+      "license": "MPL-2.0",
+      "license_ids": [
+        "MPL-2.0"
+      ],
+      "license_file": "LICENSE.md"
+    },
     "dfx-core 0.1.4": {
       "name": "dfx-core",
       "version": "0.1.4",
@@ -20476,6 +20682,10 @@
               "target": "dashmap"
             },
             {
+              "id": "devicemapper 0.34.4",
+              "target": "devicemapper"
+            },
+            {
               "id": "dfx-core 0.1.4",
               "target": "dfx_core"
             },
@@ -20857,6 +21067,10 @@
               "target": "local_ip_address"
             },
             {
+              "id": "loopdev-3 0.5.1",
+              "target": "loopdev"
+            },
+            {
               "id": "lru 0.7.8",
               "target": "lru"
             },
@@ -20985,7 +21199,7 @@
               "target": "pkcs8"
             },
             {
-              "id": "pkg-config 0.3.27",
+              "id": "pkg-config 0.3.32",
               "target": "pkg_config"
             },
             {
@@ -23634,11 +23848,21 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": {
+          "common": [
+            "regex"
+          ],
+          "selects": {}
+        },
         "deps": {
           "common": [
             {
               "id": "log 0.4.20",
               "target": "log"
+            },
+            {
+              "id": "regex 1.11.1",
+              "target": "regex"
             }
           ],
           "selects": {}
@@ -23740,11 +23964,33 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": {
+          "common": [
+            "auto-color",
+            "color",
+            "default",
+            "humantime",
+            "regex"
+          ],
+          "selects": {}
+        },
         "deps": {
           "common": [
             {
+              "id": "anstream 0.6.15",
+              "target": "anstream"
+            },
+            {
+              "id": "anstyle 1.0.8",
+              "target": "anstyle"
+            },
+            {
               "id": "env_filter 0.1.2",
               "target": "env_filter"
+            },
+            {
+              "id": "humantime 2.2.0",
+              "target": "humantime"
             },
             {
               "id": "log 0.4.20",
@@ -42019,7 +42265,7 @@
               "target": "cc"
             },
             {
-              "id": "pkg-config 0.3.27",
+              "id": "pkg-config 0.3.32",
               "target": "pkg_config"
             }
           ],
@@ -42721,7 +42967,7 @@
               "target": "cc"
             },
             {
-              "id": "pkg-config 0.3.27",
+              "id": "pkg-config 0.3.32",
               "target": "pkg_config"
             },
             {
@@ -42836,7 +43082,7 @@
               "target": "cc"
             },
             {
-              "id": "pkg-config 0.3.27",
+              "id": "pkg-config 0.3.32",
               "target": "pkg_config"
             }
           ],
@@ -42956,7 +43202,7 @@
               "target": "build_env"
             },
             {
-              "id": "pkg-config 0.3.27",
+              "id": "pkg-config 0.3.32",
               "target": "pkg_config"
             }
           ],
@@ -43043,7 +43289,7 @@
               "target": "cc"
             },
             {
-              "id": "pkg-config 0.3.27",
+              "id": "pkg-config 0.3.32",
               "target": "pkg_config"
             }
           ],
@@ -43145,7 +43391,7 @@
               "target": "cc"
             },
             {
-              "id": "pkg-config 0.3.27",
+              "id": "pkg-config 0.3.32",
               "target": "pkg_config"
             },
             {
@@ -43625,7 +43871,7 @@
               "target": "cc"
             },
             {
-              "id": "pkg-config 0.3.27",
+              "id": "pkg-config 0.3.32",
               "target": "pkg_config"
             }
           ],
@@ -44545,7 +44791,7 @@
               "target": "cc"
             },
             {
-              "id": "pkg-config 0.3.27",
+              "id": "pkg-config 0.3.32",
               "target": "pkg_config"
             }
           ],
@@ -47756,11 +48002,30 @@
         ],
         "crate_features": {
           "common": [
+            "default",
             "fs",
-            "process",
-            "signal"
+            "ioctl",
+            "mount",
+            "uio"
           ],
-          "selects": {}
+          "selects": {
+            "aarch64-apple-darwin": [
+              "process",
+              "signal"
+            ],
+            "aarch64-unknown-linux-gnu": [
+              "process",
+              "signal"
+            ],
+            "x86_64-apple-darwin": [
+              "process",
+              "signal"
+            ],
+            "x86_64-unknown-linux-gnu": [
+              "process",
+              "signal"
+            ]
+          }
         },
         "deps": {
           "common": [
@@ -50480,7 +50745,7 @@
               "target": "cc"
             },
             {
-              "id": "pkg-config 0.3.27",
+              "id": "pkg-config 0.3.32",
               "target": "pkg_config"
             },
             {
@@ -53043,7 +53308,7 @@
               "target": "cc"
             },
             {
-              "id": "pkg-config 0.3.27",
+              "id": "pkg-config 0.3.32",
               "target": "pkg_config"
             }
           ],
@@ -54776,14 +55041,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "pkg-config 0.3.27": {
+    "pkg-config 0.3.32": {
       "name": "pkg-config",
-      "version": "0.3.27",
+      "version": "0.3.32",
       "package_url": "https://github.com/rust-lang/pkg-config-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/pkg-config/0.3.27/download",
-          "sha256": "26072860ba924cbfa98ea39c8c19b4dd6a4a25423dbdf219c1eca91aa0cf6964"
+          "url": "https://static.crates.io/crates/pkg-config/0.3.32/download",
+          "sha256": "7edddbd0b52d732b21ad9a5fab5c704c14cd949e5e9a1ec5929a24fded1b904c"
         }
       },
       "targets": [
@@ -54805,8 +55070,8 @@
         "compile_data_glob": [
           "**"
         ],
-        "edition": "2015",
-        "version": "0.3.27"
+        "edition": "2018",
+        "version": "0.3.32"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -63042,6 +63307,44 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
+    },
+    "retry 2.1.0": {
+      "name": "retry",
+      "version": "2.1.0",
+      "package_url": "https://github.com/jimmycuadra/retry",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/retry/2.1.0/download",
+          "sha256": "a1e211f878258887b3e65dd3c8ff9f530fe109f441a117ee0cdc27f341355032"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "retry",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "retry",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2018",
+        "version": "2.1.0"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
     },
     "rfc6979 0.3.1": {
       "name": "rfc6979",
@@ -83142,7 +83445,7 @@
         "deps": {
           "common": [
             {
-              "id": "pkg-config 0.3.27",
+              "id": "pkg-config 0.3.32",
               "target": "pkg_config"
             }
           ],
@@ -92657,7 +92960,7 @@
               "target": "cc"
             },
             {
-              "id": "pkg-config 0.3.27",
+              "id": "pkg-config 0.3.32",
               "target": "pkg_config"
             }
           ],
@@ -93050,6 +93353,7 @@
     "darling 0.20.11",
     "dashmap 5.5.3",
     "derive-new 0.7.0",
+    "devicemapper 0.34.4",
     "dfx-core 0.1.4",
     "dyn-clone 1.0.14",
     "ed25519-dalek 2.1.1",
@@ -93147,6 +93451,7 @@
     "lmdb-rkv 0.14.99",
     "lmdb-rkv-sys 0.11.99",
     "local-ip-address 0.5.6",
+    "loopdev-3 0.5.1",
     "lru 0.7.8",
     "macaddr 1.0.1",
     "maplit 1.0.2",
@@ -93181,7 +93486,7 @@
     "pin-project-lite 0.2.13",
     "ping 0.5.0",
     "pkcs8 0.10.2",
-    "pkg-config 0.3.27",
+    "pkg-config 0.3.32",
     "pprof 0.14.0",
     "predicates 3.1.2",
     "pretty-bytes 0.2.2",

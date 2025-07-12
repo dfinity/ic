@@ -59,6 +59,8 @@ fakeroot
 faketime
 grub-efi-amd64-bin
 iputils-ping
+ # Linked in by IC-OS binaries for creating mapped devices.
+libdevmapper-dev
 libselinux-dev
 libsystemd-dev
  # Linked in by IC-OS binaries for managing virtual machines programmatically.

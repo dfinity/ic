@@ -35,5 +35,6 @@ packages:
   - "perl"
   - "rsync"
   - "tar"
+  - "udev" # for device-mapper tests
   - "xz-utils"
   - "zstd"
