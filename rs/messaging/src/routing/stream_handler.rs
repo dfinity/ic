@@ -925,6 +925,10 @@ impl StreamHandlerImpl {
                 Reject(RejectReason::CanisterMigrating, msg)
             }
 
+            Some(_) if msg.is_best_effort() && matches!(msg, RequestOrResponse::Response(_)) => {
+                Accept(msg.cycles())
+            }
+
             // Receiver is not and was not (according to `migrating_canisters`) recently
             // hosted by this subnet.
             host_subnet => {
