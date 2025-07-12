@@ -428,10 +428,10 @@ pub struct CallContextManager {
     next_callback_id: u64,
 
     /// Call contexts (including deleted ones) that still have open callbacks.
-    call_contexts: MutableIntMap<CallContextId, CallContext>,
+    pub(super) call_contexts: MutableIntMap<CallContextId, CallContext>,
 
     /// Counts of open callbacks per call context.
-    outstanding_callbacks: MutableIntMap<CallContextId, usize>,
+    pub(super) outstanding_callbacks: MutableIntMap<CallContextId, usize>,
 
     /// Callbacks still awaiting response, plus the callback of the currently
     /// paused or aborted DTS response execution, if any.
@@ -584,6 +584,10 @@ impl CallContextManager {
         debug_assert!(self.stats_ok());
 
         id
+    }
+
+    pub(super) fn next_call_context_id(&self) -> CallContextId {
+        (self.next_call_context_id + 1).into()
     }
 
     /// Returns the currently open `CallContexts` maintained by this
