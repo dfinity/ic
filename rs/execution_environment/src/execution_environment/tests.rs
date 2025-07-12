@@ -4,7 +4,7 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_management_canister_types_private::{
     self as ic00, BitcoinGetUtxosArgs, BitcoinNetwork, BoundedHttpHeaders, CanisterChange,
     CanisterHttpRequestArgs, CanisterIdRecord, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
-    CanisterStatusType, ClearChunkStoreArgs, DerivationPath, EcdsaKeyId, EmptyBlob,
+    CanisterStatusType, ClearChunkStoreArgs, DerivationPath, EcdsaCurve, EcdsaKeyId, EmptyBlob,
     FetchCanisterLogsRequest, HttpMethod, LogVisibilityV2, MasterPublicKeyId, Method,
     OnLowWasmMemoryHookStatus, Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs,
     ProvisionalTopUpCanisterArgs, SchnorrAlgorithm, SchnorrKeyId, TakeCanisterSnapshotArgs,
@@ -2521,6 +2521,13 @@ fn get_reject_message(response: RequestOrResponse) -> String {
     }
 }
 
+fn make_ecdsa_key(name: &str) -> MasterPublicKeyId {
+    MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+        curve: EcdsaCurve::Secp256k1,
+        name: name.to_string(),
+    })
+}
+
 fn make_ed25519_key(name: &str) -> MasterPublicKeyId {
     MasterPublicKeyId::Schnorr(SchnorrKeyId {
         algorithm: SchnorrAlgorithm::Ed25519,
@@ -3644,6 +3651,63 @@ fn test_sign_with_schnorr_api_is_enabled() {
             1
         );
     }
+}
+
+#[test]
+fn test_ecdsa_public_key_api_is_enabled() {
+    let key_id = make_ecdsa_key("correct_key");
+    let own_subnet = subnet_test_id(1);
+    let nns_subnet = subnet_test_id(2);
+    let nns_canister = canister_test_id(0x10);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_nns_subnet_id(nns_subnet)
+        .with_caller(nns_subnet, nns_canister)
+        .with_chain_key(key_id.clone())
+        .build();
+
+    let nonexistent_key_id = into_inner_ecdsa(make_ecdsa_key("nonexistent_key_id"));
+    test.inject_call_to_ic00(
+        Method::ECDSAPublicKey,
+        ic00::ECDSAPublicKeyArgs {
+            canister_id: None,
+            derivation_path: DerivationPath::default(),
+            key_id: nonexistent_key_id.clone(),
+        }
+        .encode(),
+        Cycles::new(0),
+    );
+    test.inject_call_to_ic00(
+        Method::ECDSAPublicKey,
+        ic00::ECDSAPublicKeyArgs {
+            canister_id: None,
+            derivation_path: DerivationPath::default(),
+            key_id: into_inner_ecdsa(key_id),
+        }
+        .encode(),
+        Cycles::new(0),
+    );
+    test.execute_all();
+
+    // Check, that call fails for a key that doesn't exist
+    let response = test.xnet_messages()[0].clone();
+    assert_eq!(
+        get_reject_message(response),
+        format!(
+            "Subnet {} does not hold threshold key ecdsa:{}.",
+            own_subnet, nonexistent_key_id
+        ),
+    );
+
+    // NOTE: Since the public keys delivered to execution by the test framework
+    // are not well formed points, the deserialization of this function will
+    // fail. However, the fact that we get this error message indicates, that we
+    // requested a key that actually exists.
+    let response = test.xnet_messages()[1].clone();
+    assert_eq!(
+        get_reject_message(response),
+        "InternalError(\"InvalidPoint\")",
+    )
 }
 
 #[test]
