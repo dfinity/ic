@@ -6,8 +6,8 @@ use crate::metrics::{
 };
 use ic_adapter_metrics_client::AdapterMetrics;
 use ic_btc_replica_types::{
-    BitcoinAdapterRequestWrapper, BitcoinAdapterResponseWrapper, GetSuccessorsRequestInitial,
-    GetSuccessorsResponseComplete, SendTransactionRequest, SendTransactionResponse,
+    BitcoinAdapterRequestInner, BitcoinAdapterRequestWrapper, BitcoinAdapterResponseWrapper,
+    GetSuccessorsResponseComplete, SendTransactionResponse,
 };
 use ic_btc_service::{
     btc_service_client::BtcServiceClient, BtcServiceGetSuccessorsRequest,
@@ -65,11 +65,8 @@ impl RpcAdapterClient<BitcoinAdapterRequestWrapper> for BitcoinAdapterClientImpl
         );
         let mut client = self.client.clone();
         self.rt_handle.block_on(async move {
-            let response = match request {
-                BitcoinAdapterRequestWrapper::SendTransactionRequest(SendTransactionRequest {
-                    transaction,
-                    ..
-                }) => {
+            let response = match request.as_inner() {
+                BitcoinAdapterRequestInner::SendTransaction { transaction } => {
                     request_timer.set_label(LABEL_REQUEST_TYPE, LABEL_SEND_TRANSACTION);
                     let send_transaction_request = BtcServiceSendTransactionRequest { transaction };
                     let mut tonic_request = tonic::Request::new(send_transaction_request);
@@ -86,13 +83,10 @@ impl RpcAdapterClient<BitcoinAdapterRequestWrapper> for BitcoinAdapterClientImpl
                         })
                         .map_err(convert_tonic_error)
                 }
-                BitcoinAdapterRequestWrapper::GetSuccessorsRequest(
-                    GetSuccessorsRequestInitial {
-                        anchor,
-                        processed_block_hashes,
-                        ..
-                    },
-                ) => {
+                BitcoinAdapterRequestInner::GetSuccessors {
+                    anchor,
+                    processed_block_hashes,
+                } => {
                     request_timer.set_label(LABEL_REQUEST_TYPE, LABEL_GET_SUCCESSORS);
                     let get_successors_request = BtcServiceGetSuccessorsRequest {
                         anchor,
@@ -153,11 +147,11 @@ impl RpcAdapterClient<BitcoinAdapterRequestWrapper> for BrokenConnectionBitcoinC
             &REQUESTS_LABEL_NAMES,
             [UNKNOWN_LABEL, UNKNOWN_LABEL],
         );
-        match request {
-            BitcoinAdapterRequestWrapper::GetSuccessorsRequest(_) => {
+        match request.as_inner() {
+            BitcoinAdapterRequestInner::GetSuccessors { .. } => {
                 request_timer.set_label(LABEL_REQUEST_TYPE, LABEL_GET_SUCCESSORS)
             }
-            BitcoinAdapterRequestWrapper::SendTransactionRequest(_) => {
+            BitcoinAdapterRequestInner::SendTransaction { .. } => {
                 request_timer.set_label(LABEL_REQUEST_TYPE, LABEL_SEND_TRANSACTION)
             }
         }
@@ -216,6 +210,61 @@ pub struct BitcoinAdapterClients {
             Response = BitcoinAdapterResponseWrapper,
         >,
     >,
+}
+
+pub struct DogecoinAdapterClients {
+    pub doge_testnet_client: Box<
+        dyn RpcAdapterClient<
+            BitcoinAdapterRequestWrapper,
+            Response = BitcoinAdapterResponseWrapper,
+        >,
+    >,
+    pub doge_mainnet_client: Box<
+        dyn RpcAdapterClient<
+            BitcoinAdapterRequestWrapper,
+            Response = BitcoinAdapterResponseWrapper,
+        >,
+    >,
+}
+
+pub fn setup_dogecoin_adapter_clients(
+    log: ReplicaLogger,
+    metrics_registry: &MetricsRegistry,
+    rt_handle: tokio::runtime::Handle,
+    adapters_config: AdaptersConfig,
+) -> DogecoinAdapterClients {
+    let metrics = Metrics::new(metrics_registry);
+
+    // Register bitcoin adapters metrics.
+    if let Some(metrics_uds_path) = adapters_config.dogecoin_testnet_uds_metrics_path {
+        metrics_registry.register_adapter(AdapterMetrics::new(
+            "dogetestnet",
+            metrics_uds_path,
+            rt_handle.clone(),
+        ));
+    }
+    if let Some(metrics_uds_path) = adapters_config.dogecoin_mainnet_uds_metrics_path {
+        metrics_registry.register_adapter(AdapterMetrics::new(
+            "dogemainnet",
+            metrics_uds_path,
+            rt_handle.clone(),
+        ));
+    }
+
+    DogecoinAdapterClients {
+        doge_testnet_client: setup_bitcoin_adapter_client(
+            log.clone(),
+            metrics.clone(),
+            rt_handle.clone(),
+            adapters_config.dogecoin_testnet_uds_path,
+        ),
+        doge_mainnet_client: setup_bitcoin_adapter_client(
+            log,
+            metrics,
+            rt_handle,
+            adapters_config.dogecoin_mainnet_uds_path,
+        ),
+    }
 }
 
 pub fn setup_bitcoin_adapter_clients(

@@ -171,6 +171,12 @@ pub struct SystemMetadata {
     #[validate_eq(Ignore)]
     pub bitcoin_get_successors_follow_up_responses: BTreeMap<CanisterId, Vec<BlockBlob>>,
 
+    /// Responses to `DogecoinGetSuccessors` can be larger than the max inter-canister
+    /// response limit. To work around this limitation, large responses are paginated
+    /// and are stored here temporarily until they're fetched by the calling canister.
+    #[validate_eq(Ignore)]
+    pub dogecoin_get_successors_follow_up_responses: BTreeMap<CanisterId, Vec<BlockBlob>>,
+
     /// Metrics collecting blockmaker stats (block proposed and failures to propose a block)
     /// by aggregating them and storing a running total over multiple days by node id and
     /// timestamp. Observations of blockmaker stats are performed each time a batch is processed.
@@ -205,6 +211,12 @@ pub struct NetworkTopology {
 
     /// The ID of the canister to forward bitcoin mainnet requests to.
     pub bitcoin_mainnet_canister_id: Option<CanisterId>,
+
+    /// The ID of the canister to forward dogecoin testnet requests to.
+    pub dogecoin_testnet_canister_id: Option<CanisterId>,
+
+    /// The ID of the canister to forward dogecoin mainnet requests to.
+    pub dogecoin_mainnet_canister_id: Option<CanisterId>,
 }
 
 /// Full description of the API Boundary Node, which is saved in the metadata.
@@ -232,6 +244,8 @@ impl Default for NetworkTopology {
             chain_key_enabled_subnets: Default::default(),
             bitcoin_testnet_canister_id: None,
             bitcoin_mainnet_canister_id: None,
+            dogecoin_testnet_canister_id: None,
+            dogecoin_mainnet_canister_id: None,
         }
     }
 }
@@ -271,6 +285,14 @@ impl From<&NetworkTopology> for pb_metadata::NetworkTopology {
                 None => vec![],
             },
             bitcoin_mainnet_canister_ids: match item.bitcoin_mainnet_canister_id {
+                Some(c) => vec![pb_types::CanisterId::from(c)],
+                None => vec![],
+            },
+            dogecoin_testnet_canister_ids: match item.dogecoin_testnet_canister_id {
+                Some(c) => vec![pb_types::CanisterId::from(c)],
+                None => vec![],
+            },
+            dogecoin_mainnet_canister_ids: match item.dogecoin_mainnet_canister_id {
                 Some(c) => vec![pb_types::CanisterId::from(c)],
                 None => vec![],
             },
@@ -333,6 +355,16 @@ impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
             None => None,
         };
 
+        let dogecoin_testnet_canister_id = match item.dogecoin_testnet_canister_ids.first() {
+            Some(canister) => Some(CanisterId::try_from(canister.clone())?),
+            None => None,
+        };
+
+        let dogecoin_mainnet_canister_id = match item.dogecoin_mainnet_canister_ids.first() {
+            Some(canister) => Some(CanisterId::try_from(canister.clone())?),
+            None => None,
+        };
+
         Ok(Self {
             subnets,
             routing_table: try_from_option_field(
@@ -351,6 +383,8 @@ impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
             chain_key_enabled_subnets,
             bitcoin_testnet_canister_id,
             bitcoin_mainnet_canister_id,
+            dogecoin_testnet_canister_id,
+            dogecoin_mainnet_canister_id,
         })
     }
 }
@@ -619,6 +653,17 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
                     },
                 )
                 .collect(),
+            dogecoin_get_successors_follow_up_responses: item
+                .dogecoin_get_successors_follow_up_responses
+                .clone()
+                .into_iter()
+                .map(
+                    |(sender, payloads)| pb_metadata::BitcoinGetSuccessorsFollowUpResponses {
+                        sender: Some(sender.into()),
+                        payloads,
+                    },
+                )
+                .collect(),
             node_public_keys: item
                 .node_public_keys
                 .iter()
@@ -697,6 +742,18 @@ impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for S
             bitcoin_get_successors_follow_up_responses.insert(sender, response.payloads);
         }
 
+        let mut dogecoin_get_successors_follow_up_responses = BTreeMap::new();
+        for response in item.dogecoin_get_successors_follow_up_responses {
+            let sender_pb: pb_types::CanisterId = try_from_option_field(
+                response.sender,
+                "BitcoinGetSuccessorsFollowUpResponses::sender",
+            )?;
+
+            let sender = CanisterId::try_from(sender_pb)?;
+
+            dogecoin_get_successors_follow_up_responses.insert(sender, response.payloads);
+        }
+
         let batch_time = Time::from_nanos_since_unix_epoch(item.batch_time_nanos);
 
         let mut node_public_keys = BTreeMap::<NodeId, Vec<u8>>::new();
@@ -763,6 +820,7 @@ impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for S
             },
             expected_compiled_wasms: BTreeSet::new(),
             bitcoin_get_successors_follow_up_responses,
+            dogecoin_get_successors_follow_up_responses,
             blockmaker_metrics_time_series: match item.blockmaker_metrics_time_series {
                 Some(blockmaker_metrics) => (blockmaker_metrics, metrics).try_into()?,
                 None => BlockmakerMetricsTimeSeries::default(),
@@ -798,6 +856,7 @@ impl SystemMetadata {
             subnet_metrics: Default::default(),
             expected_compiled_wasms: BTreeSet::new(),
             bitcoin_get_successors_follow_up_responses: BTreeMap::default(),
+            dogecoin_get_successors_follow_up_responses: BTreeMap::default(),
             blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries::default(),
             unflushed_checkpoint_ops: Default::default(),
         }
@@ -1077,6 +1136,7 @@ impl SystemMetadata {
             subnet_metrics: _,
             ref expected_compiled_wasms,
             bitcoin_get_successors_follow_up_responses: _,
+            dogecoin_get_successors_follow_up_responses: _,
             blockmaker_metrics_time_series: _,
             unflushed_checkpoint_ops: _,
         } = self;
@@ -2314,6 +2374,7 @@ pub(crate) mod testing {
             subnet_metrics: Default::default(),
             expected_compiled_wasms: Default::default(),
             bitcoin_get_successors_follow_up_responses: Default::default(),
+            dogecoin_get_successors_follow_up_responses: Default::default(),
             blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries::default(),
             unflushed_checkpoint_ops: Default::default(),
         };

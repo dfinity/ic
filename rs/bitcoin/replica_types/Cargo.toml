@@ -9,6 +9,7 @@ documentation.workspace = true
 [dependencies]
 candid = { workspace = true }
 ic-btc-interface = { workspace = true }
+ic-doge-interface = { git = "ssh://git@github.com/dfinity/dogecoin-canister" }
 ic-error-types = { path = "../../../packages/ic-error-types" }
 ic-protobuf = { path = "../../protobuf" }
 serde = { workspace = true }

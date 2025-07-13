@@ -198,6 +198,8 @@ pub fn default_get_latest_state() -> Labeled<Arc<ReplicatedState>> {
         chain_key_enabled_subnets: Default::default(),
         bitcoin_mainnet_canister_id: None,
         bitcoin_testnet_canister_id: None,
+        dogecoin_mainnet_canister_id: None,
+        dogecoin_testnet_canister_id: None,
     };
 
     metadata.network_topology = network_topology;

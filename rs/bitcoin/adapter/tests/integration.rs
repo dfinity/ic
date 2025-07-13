@@ -57,11 +57,12 @@ fn make_get_successors_request(
     anchor: Vec<u8>,
     headers: Vec<Vec<u8>>,
 ) -> Result<BitcoinAdapterResponseWrapper, ic_interfaces_adapter_client::RpcError> {
-    let request = BitcoinAdapterRequestWrapper::GetSuccessorsRequest(GetSuccessorsRequestInitial {
-        network: Network::Regtest,
-        anchor,
-        processed_block_hashes: headers,
-    });
+    let request =
+        BitcoinAdapterRequestWrapper::GetBtcSuccessorsRequest(GetSuccessorsRequestInitial {
+            network: Network::Regtest,
+            anchor,
+            processed_block_hashes: headers,
+        });
 
     adapter_client.send_blocking(
         request,
@@ -75,7 +76,7 @@ fn make_send_tx_request(
     adapter_client: &BitcoinAdapterClient,
     raw_tx: &[u8],
 ) -> Result<BitcoinAdapterResponseWrapper, ic_interfaces_adapter_client::RpcError> {
-    let request = BitcoinAdapterRequestWrapper::SendTransactionRequest(SendTransactionRequest {
+    let request = BitcoinAdapterRequestWrapper::SendBtcTransactionRequest(SendTransactionRequest {
         network: Network::Regtest,
         transaction: raw_tx.to_vec(),
     });

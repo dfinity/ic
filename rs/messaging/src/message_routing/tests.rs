@@ -681,6 +681,7 @@ fn make_batch_processor<RegistryClient_: RegistryClient + 'static>(
         state_machine: Box::new(FakeStateMachine(registry_settings.clone())),
         registry,
         bitcoin_config: BitcoinConfig::default(),
+        dogecoin_config: DogecoinConfig::default(),
         metrics: metrics.clone(),
         log,
         malicious_flags: MaliciousFlags::default(),

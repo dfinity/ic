@@ -3548,6 +3548,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0e60eed09d8c01d3cee5b7d30acb059b76614c918fa0f992e0dd6eeb10daad6f"
 
 [[package]]
+name = "datasize"
+version = "0.2.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e65c07d59e45d77a8bda53458c24a828893a99ac6cdd9c84111e09176ab739a2"
+dependencies = [
+ "datasize_derive",
+]
+
+[[package]]
+name = "datasize_derive"
+version = "0.2.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "613e4ee15899913285b7612004bbd490abd605be7b11d35afada5902fb6b91d5"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "dbus"
 version = "0.9.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6668,6 +6688,7 @@ dependencies = [
  "ic-btc-interface",
  "ic-btc-replica-types",
  "ic-config",
+ "ic-doge-interface",
  "ic-error-types 0.2.0",
  "ic-interfaces",
  "ic-interfaces-adapter-client",
@@ -6712,6 +6733,7 @@ version = "0.9.0"
 dependencies = [
  "candid",
  "ic-btc-interface",
+ "ic-doge-interface",
  "ic-error-types 0.2.0",
  "ic-protobuf",
  "serde",
@@ -8894,6 +8916,17 @@ dependencies = [
  "slog",
  "tokio",
  "wat",
+]
+
+[[package]]
+name = "ic-doge-interface"
+version = "0.1.0"
+source = "git+ssh://git@github.com/dfinity/dogecoin-canister#fb7e2491232de8642b3f6eb5fac8e2290cea2180"
+dependencies = [
+ "candid",
+ "datasize",
+ "serde",
+ "serde_bytes",
 ]
 
 [[package]]

@@ -20,7 +20,7 @@ use std::cmp::min;
 const MAX_RESPONSE_SIZE: usize = 2_000_000;
 
 /// Pushes a response from the Bitcoin Adapter into the state.
-pub fn push_response(
+pub fn push_response_bitcoin(
     state: &mut ReplicatedState,
     response: BitcoinAdapterResponse,
 ) -> Result<(), StateError> {
@@ -44,6 +44,90 @@ pub fn push_response(
                     state
                         .metadata
                         .bitcoin_get_successors_follow_up_responses
+                        .insert(context.request.sender(), follow_ups);
+
+                    Payload::Data(initial_response.encode())
+                }
+                Err(err) => Payload::Reject(RejectContext::new(
+                    RejectCode::CanisterError,
+                    format!("Received invalid response from adapter: {:?}", err),
+                )),
+            };
+
+            // Add response to the consensus queue.
+            state
+                .consensus_queue
+                .push(ConsensusResponse::new(callback_id, payload));
+
+            Ok(())
+        }
+        BitcoinAdapterResponseWrapper::SendTransactionResponse(_) => {
+            // Retrieve the associated request from the call context manager.
+            let callback_id = CallbackId::from(response.callback_id);
+            // The response to a `send_transaction` call is always the empty blob.
+            let payload = Payload::Data(EmptyBlob.encode());
+
+            // Add response to the consensus queue.
+            state
+                .consensus_queue
+                .push(ConsensusResponse::new(callback_id, payload));
+
+            Ok(())
+        }
+        BitcoinAdapterResponseWrapper::GetSuccessorsReject(reject) => {
+            // Retrieve the associated request from the call context manager.
+            let callback_id = CallbackId::from(response.callback_id);
+            let reject_payload =
+                Payload::Reject(RejectContext::new(reject.reject_code, reject.message));
+
+            // Add response to the consensus queue.
+            state
+                .consensus_queue
+                .push(ConsensusResponse::new(callback_id, reject_payload));
+
+            Ok(())
+        }
+        BitcoinAdapterResponseWrapper::SendTransactionReject(reject) => {
+            // Retrieve the associated request from the call context manager.
+            let callback_id = CallbackId::from(response.callback_id);
+            let reject_payload =
+                Payload::Reject(RejectContext::new(reject.reject_code, reject.message));
+
+            // Add response to the consensus queue.
+            state
+                .consensus_queue
+                .push(ConsensusResponse::new(callback_id, reject_payload));
+
+            Ok(())
+        }
+    }
+}
+
+/// Pushes a response from the Bitcoin Adapter into the state.
+pub fn push_response_dogecoin(
+    state: &mut ReplicatedState,
+    response: BitcoinAdapterResponse,
+) -> Result<(), StateError> {
+    match response.response {
+        BitcoinAdapterResponseWrapper::GetSuccessorsResponse(r) => {
+            // Received a response to a request from the dogecoin wasm canister.
+            // Retrieve the associated request.
+            let callback_id = CallbackId::from(response.callback_id);
+            let context = state
+                .metadata
+                .subnet_call_context_manager
+                .dogecoin_get_successors_contexts
+                .get_mut(&callback_id)
+                .ok_or_else(|| StateError::BitcoinNonMatchingResponse {
+                    callback_id: callback_id.get(),
+                })?;
+
+            let payload = match maybe_split_response(r) {
+                Ok((initial_response, follow_ups)) => {
+                    // Store the follow-ups for later (overwrites previous ones).
+                    state
+                        .metadata
+                        .dogecoin_get_successors_follow_up_responses
                         .insert(context.request.sender(), follow_ups);
 
                     Payload::Data(initial_response.encode())

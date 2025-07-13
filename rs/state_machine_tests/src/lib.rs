@@ -2,7 +2,7 @@ use candid::Decode;
 use core::sync::atomic::Ordering;
 use ed25519_dalek::{pkcs8::EncodePrivateKey, SigningKey};
 use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
-use ic_btc_adapter_client::setup_bitcoin_adapter_clients;
+use ic_btc_adapter_client::{setup_bitcoin_adapter_clients, setup_dogecoin_adapter_clients};
 use ic_btc_consensus::BitcoinPayloadBuilder;
 use ic_config::{
     adapters::AdaptersConfig,
@@ -1384,15 +1384,15 @@ impl StateMachineBuilder {
             sm.replica_logger.clone(),
         ));
 
-        let adapters_config = AdaptersConfig {
-            bitcoin_mainnet_uds_path: None,
-            bitcoin_mainnet_uds_metrics_path: None,
-            bitcoin_testnet_uds_path,
-            bitcoin_testnet_uds_metrics_path: None,
-            https_outcalls_uds_path: None,
-            https_outcalls_uds_metrics_path: None,
-        };
+        let mut adapters_config = AdaptersConfig::default();
+        adapters_config.bitcoin_testnet_uds_path = bitcoin_testnet_uds_path;
         let bitcoin_clients = setup_bitcoin_adapter_clients(
+            sm.replica_logger.clone(),
+            &sm.metrics_registry,
+            sm.runtime.handle().clone(),
+            adapters_config.clone(),
+        );
+        let dogecoin_clients = setup_dogecoin_adapter_clients(
             sm.replica_logger.clone(),
             &sm.metrics_registry,
             sm.runtime.handle().clone(),
@@ -1403,6 +1403,8 @@ impl StateMachineBuilder {
             &sm.metrics_registry,
             bitcoin_clients.btc_mainnet_client,
             bitcoin_clients.btc_testnet_client,
+            dogecoin_clients.doge_mainnet_client,
+            dogecoin_clients.doge_testnet_client,
             sm.subnet_id,
             sm.registry_client.clone(),
             BitcoinPayloadBuilderConfig::default(),

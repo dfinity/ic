@@ -64,6 +64,12 @@ pub struct NetworkTopology {
         ::prost::alloc::vec::Vec<super::super::super::types::v1::CanisterId>,
     #[prost(message, repeated, tag = "8")]
     pub chain_key_enabled_subnets: ::prost::alloc::vec::Vec<ChainKeySubnetEntry>,
+    #[prost(message, repeated, tag = "9")]
+    pub dogecoin_testnet_canister_ids:
+        ::prost::alloc::vec::Vec<super::super::super::types::v1::CanisterId>,
+    #[prost(message, repeated, tag = "10")]
+    pub dogecoin_mainnet_canister_ids:
+        ::prost::alloc::vec::Vec<super::super::super::types::v1::CanisterId>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SetupInitialDkgContext {
@@ -392,6 +398,11 @@ pub struct SubnetCallContextManager {
     pub sign_with_threshold_contexts: ::prost::alloc::vec::Vec<SignWithThresholdContextTree>,
     #[prost(message, repeated, tag = "19")]
     pub pre_signature_stashes: ::prost::alloc::vec::Vec<PreSignatureStashTree>,
+    #[prost(message, repeated, tag = "20")]
+    pub dogecoin_get_successors_contexts: ::prost::alloc::vec::Vec<BitcoinGetSuccessorsContextTree>,
+    #[prost(message, repeated, tag = "21")]
+    pub dogecoin_send_transaction_internal_contexts:
+        ::prost::alloc::vec::Vec<BitcoinSendTransactionInternalContextTree>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubnetMetrics {
@@ -524,6 +535,9 @@ pub struct SystemMetadata {
     pub blockmaker_metrics_time_series: ::core::option::Option<BlockmakerMetricsTimeSeries>,
     #[prost(message, repeated, tag = "21")]
     pub api_boundary_nodes: ::prost::alloc::vec::Vec<ApiBoundaryNodeEntry>,
+    #[prost(message, repeated, tag = "22")]
+    pub dogecoin_get_successors_follow_up_responses:
+        ::prost::alloc::vec::Vec<BitcoinGetSuccessorsFollowUpResponses>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StableMemory {
