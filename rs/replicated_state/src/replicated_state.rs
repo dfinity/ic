@@ -1065,7 +1065,15 @@ impl ReplicatedState {
         &mut self,
         response: BitcoinAdapterResponse,
     ) -> Result<(), StateError> {
-        crate::bitcoin::push_response(self, response)
+        crate::bitcoin::push_response_bitcoin(self, response)
+    }
+
+    /// Pushes a response from the Bitcoin Adapter into the state.
+    pub fn push_response_dogecoin(
+        &mut self,
+        response: BitcoinAdapterResponse,
+    ) -> Result<(), StateError> {
+        crate::bitcoin::push_response_dogecoin(self, response)
     }
 
     /// Times out all messages with expired deadlines (given the state time) in all

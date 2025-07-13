@@ -8,12 +8,13 @@ mod tests;
 mod proptests;
 
 use crate::metrics::BitcoinPayloadBuilderMetrics;
-use ic_btc_interface::Network;
+use ic_btc_interface::Network as BtcNetwork;
 use ic_btc_replica_types::{
     BitcoinAdapterRequestWrapper, BitcoinAdapterResponse, BitcoinAdapterResponseWrapper,
-    BitcoinReject,
+    BitcoinReject, Network,
 };
 use ic_config::bitcoin_payload_builder_config::Config;
+use ic_doge_interface::Network as DogeNetwork;
 use ic_error_types::RejectCode;
 use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, IntoMessages, PastPayload, ProposalContext},
@@ -67,21 +68,17 @@ impl GetPayloadError {
     }
 }
 
+type AdapterClient = Box<
+    dyn RpcAdapterClient<BitcoinAdapterRequestWrapper, Response = BitcoinAdapterResponseWrapper>,
+>;
+
 pub struct BitcoinPayloadBuilder {
     state_manager: Arc<dyn StateReader<State = ReplicatedState>>,
     metrics: Arc<BitcoinPayloadBuilderMetrics>,
-    bitcoin_mainnet_adapter_client: Box<
-        dyn RpcAdapterClient<
-            BitcoinAdapterRequestWrapper,
-            Response = BitcoinAdapterResponseWrapper,
-        >,
-    >,
-    bitcoin_testnet_adapter_client: Box<
-        dyn RpcAdapterClient<
-            BitcoinAdapterRequestWrapper,
-            Response = BitcoinAdapterResponseWrapper,
-        >,
-    >,
+    bitcoin_mainnet_adapter_client: AdapterClient,
+    bitcoin_testnet_adapter_client: AdapterClient,
+    dogecoin_mainnet_adapter_client: AdapterClient,
+    dogecoin_testnet_adapter_client: AdapterClient,
     subnet_id: SubnetId,
     registry: Arc<dyn RegistryClient + Send + Sync>,
     config: Config,
@@ -92,18 +89,10 @@ impl BitcoinPayloadBuilder {
     pub fn new(
         state_manager: Arc<dyn StateReader<State = ReplicatedState>>,
         metrics_registry: &MetricsRegistry,
-        bitcoin_mainnet_adapter_client: Box<
-            dyn RpcAdapterClient<
-                BitcoinAdapterRequestWrapper,
-                Response = BitcoinAdapterResponseWrapper,
-            >,
-        >,
-        bitcoin_testnet_adapter_client: Box<
-            dyn RpcAdapterClient<
-                BitcoinAdapterRequestWrapper,
-                Response = BitcoinAdapterResponseWrapper,
-            >,
-        >,
+        bitcoin_mainnet_adapter_client: AdapterClient,
+        bitcoin_testnet_adapter_client: AdapterClient,
+        dogecoin_mainnet_adapter_client: AdapterClient,
+        dogecoin_testnet_adapter_client: AdapterClient,
         subnet_id: SubnetId,
         registry: Arc<dyn RegistryClient + Send + Sync>,
         config: Config,
@@ -114,6 +103,8 @@ impl BitcoinPayloadBuilder {
             metrics: Arc::new(BitcoinPayloadBuilderMetrics::new(metrics_registry)),
             bitcoin_mainnet_adapter_client,
             bitcoin_testnet_adapter_client,
+            dogecoin_mainnet_adapter_client,
+            dogecoin_testnet_adapter_client,
             subnet_id,
             registry,
             config,
@@ -146,8 +137,13 @@ impl BitcoinPayloadBuilder {
             }
 
             let adapter_client = match request.network() {
-                Network::Mainnet => &self.bitcoin_mainnet_adapter_client,
-                Network::Testnet | Network::Regtest => &self.bitcoin_testnet_adapter_client,
+                Network::Bitcoin(BtcNetwork::Mainnet) => &self.bitcoin_mainnet_adapter_client,
+                Network::Bitcoin(BtcNetwork::Testnet) | Network::Bitcoin(BtcNetwork::Regtest) => {
+                    &self.bitcoin_testnet_adapter_client
+                }
+                Network::Dogecoin(DogeNetwork::Mainnet) => &self.dogecoin_mainnet_adapter_client,
+                Network::Dogecoin(DogeNetwork::Testnet)
+                | Network::Dogecoin(DogeNetwork::Regtest) => &self.dogecoin_testnet_adapter_client,
             };
 
             // Send request to the adapter.
@@ -198,7 +194,7 @@ impl BitcoinPayloadBuilder {
                     Err(err) => {
                         let error_message = err.to_string();
                         match request {
-                            BitcoinAdapterRequestWrapper::SendTransactionRequest(context) => {
+                            BitcoinAdapterRequestWrapper::SendBtcTransactionRequest(context) => {
                                 BitcoinAdapterResponseWrapper::SendTransactionReject(
                                     BitcoinReject {
                                         reject_code: RejectCode::SysTransient,
@@ -206,7 +202,21 @@ impl BitcoinPayloadBuilder {
                                     },
                                 )
                             }
-                            BitcoinAdapterRequestWrapper::GetSuccessorsRequest(context) => {
+                            BitcoinAdapterRequestWrapper::GetBtcSuccessorsRequest(context) => {
+                                BitcoinAdapterResponseWrapper::GetSuccessorsReject(BitcoinReject {
+                                    reject_code: RejectCode::SysTransient,
+                                    message: error_message,
+                                })
+                            }
+                            BitcoinAdapterRequestWrapper::SendDogeTransactionRequest(context) => {
+                                BitcoinAdapterResponseWrapper::SendTransactionReject(
+                                    BitcoinReject {
+                                        reject_code: RejectCode::SysTransient,
+                                        message: error_message,
+                                    },
+                                )
+                            }
+                            BitcoinAdapterRequestWrapper::GetDogeSuccessorsRequest(context) => {
                                 BitcoinAdapterResponseWrapper::GetSuccessorsReject(BitcoinReject {
                                     reject_code: RejectCode::SysTransient,
                                     message: error_message,
@@ -321,7 +331,7 @@ fn bitcoin_requests_iter(
         .map(|(callback_id, context)| {
             (
                 callback_id,
-                BitcoinAdapterRequestWrapper::SendTransactionRequest(context.payload.clone()),
+                BitcoinAdapterRequestWrapper::SendBtcTransactionRequest(context.payload.clone()),
             )
         })
         .chain(
@@ -331,7 +341,9 @@ fn bitcoin_requests_iter(
                 .map(|(callback_id, context)| {
                     (
                         callback_id,
-                        BitcoinAdapterRequestWrapper::GetSuccessorsRequest(context.payload.clone()),
+                        BitcoinAdapterRequestWrapper::GetBtcSuccessorsRequest(
+                            context.payload.clone(),
+                        ),
                     )
                 }),
         )

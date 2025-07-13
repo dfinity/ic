@@ -1,4 +1,7 @@
-use ic_btc_replica_types::{GetSuccessorsRequestInitial, SendTransactionRequest};
+use ic_btc_replica_types::{
+    GetDogeSuccessorsRequestInitial, GetSuccessorsRequestInitial, SendDogeTransactionRequest,
+    SendTransactionRequest,
+};
 use ic_logger::{info, ReplicaLogger};
 use ic_management_canister_types_private::{
     EcdsaKeyId, MasterPublicKeyId, SchnorrKeyId, VetKdKeyId,
@@ -42,6 +45,8 @@ pub enum SubnetCallContext {
     ReshareChainKey(ReshareChainKeyContext),
     BitcoinGetSuccessors(BitcoinGetSuccessorsContext),
     BitcoinSendTransactionInternal(BitcoinSendTransactionInternalContext),
+    DogecoinGetSuccessors(DogecoinGetSuccessorsContext),
+    DogecoinSendTransactionInternal(DogecoinSendTransactionInternalContext),
     SignWithThreshold(SignWithThresholdContext),
 }
 
@@ -53,6 +58,8 @@ impl SubnetCallContext {
             SubnetCallContext::ReshareChainKey(context) => &context.request,
             SubnetCallContext::BitcoinGetSuccessors(context) => &context.request,
             SubnetCallContext::BitcoinSendTransactionInternal(context) => &context.request,
+            SubnetCallContext::DogecoinGetSuccessors(context) => &context.request,
+            SubnetCallContext::DogecoinSendTransactionInternal(context) => &context.request,
             SubnetCallContext::SignWithThreshold(context) => &context.request,
         }
     }
@@ -64,6 +71,8 @@ impl SubnetCallContext {
             SubnetCallContext::ReshareChainKey(context) => context.time,
             SubnetCallContext::BitcoinGetSuccessors(context) => context.time,
             SubnetCallContext::BitcoinSendTransactionInternal(context) => context.time,
+            SubnetCallContext::DogecoinGetSuccessors(context) => context.time,
+            SubnetCallContext::DogecoinSendTransactionInternal(context) => context.time,
             SubnetCallContext::SignWithThreshold(context) => context.batch_time,
         }
     }
@@ -226,6 +235,9 @@ pub struct SubnetCallContextManager {
     pub bitcoin_get_successors_contexts: BTreeMap<CallbackId, BitcoinGetSuccessorsContext>,
     pub bitcoin_send_transaction_internal_contexts:
         BTreeMap<CallbackId, BitcoinSendTransactionInternalContext>,
+    pub dogecoin_get_successors_contexts: BTreeMap<CallbackId, DogecoinGetSuccessorsContext>,
+    pub dogecoin_send_transaction_internal_contexts:
+        BTreeMap<CallbackId, DogecoinSendTransactionInternalContext>,
     canister_management_calls: CanisterManagementCalls,
     pub raw_rand_contexts: VecDeque<RawRandContext>,
     pub pre_signature_stashes: BTreeMap<MasterPublicKeyId, PreSignatureStash>,
@@ -261,6 +273,14 @@ impl SubnetCallContextManager {
             }
             SubnetCallContext::BitcoinSendTransactionInternal(context) => {
                 self.bitcoin_send_transaction_internal_contexts
+                    .insert(callback_id, context);
+            }
+            SubnetCallContext::DogecoinGetSuccessors(context) => {
+                self.dogecoin_get_successors_contexts
+                    .insert(callback_id, context);
+            }
+            SubnetCallContext::DogecoinSendTransactionInternal(context) => {
+                self.dogecoin_send_transaction_internal_contexts
                     .insert(callback_id, context);
             }
         };
@@ -551,6 +571,26 @@ impl From<&SubnetCallContextManager> for pb_metadata::SubnetCallContextManager {
                     }
                 })
                 .collect(),
+            dogecoin_get_successors_contexts: item
+                .dogecoin_get_successors_contexts
+                .iter()
+                .map(
+                    |(callback_id, context)| pb_metadata::BitcoinGetSuccessorsContextTree {
+                        callback_id: callback_id.get(),
+                        context: Some(context.into()),
+                    },
+                )
+                .collect(),
+            dogecoin_send_transaction_internal_contexts: item
+                .dogecoin_send_transaction_internal_contexts
+                .iter()
+                .map(|(callback_id, context)| {
+                    pb_metadata::BitcoinSendTransactionInternalContextTree {
+                        callback_id: callback_id.get(),
+                        context: Some(context.into()),
+                    }
+                })
+                .collect(),
             install_code_calls: item
                 .canister_management_calls
                 .install_code_call_manager
@@ -689,6 +729,29 @@ impl TryFrom<(Time, pb_metadata::SubnetCallContextManager)> for SubnetCallContex
                 .insert(CallbackId::new(entry.callback_id), context);
         }
 
+        let mut dogecoin_get_successors_contexts =
+            BTreeMap::<CallbackId, DogecoinGetSuccessorsContext>::new();
+        for entry in item.dogecoin_get_successors_contexts {
+            let pb_context = try_from_option_field(
+                entry.context,
+                "SystemMetadata::DogecoinGetSuccessorsContext",
+            )?;
+            let context = DogecoinGetSuccessorsContext::try_from((time, pb_context))?;
+            dogecoin_get_successors_contexts.insert(CallbackId::new(entry.callback_id), context);
+        }
+
+        let mut dogecoin_send_transaction_internal_contexts =
+            BTreeMap::<CallbackId, DogecoinSendTransactionInternalContext>::new();
+        for entry in item.dogecoin_send_transaction_internal_contexts {
+            let pb_context = try_from_option_field(
+                entry.context,
+                "SystemMetadata::DogecoinSendTransactionInternalContext",
+            )?;
+            let context = DogecoinSendTransactionInternalContext::try_from((time, pb_context))?;
+            dogecoin_send_transaction_internal_contexts
+                .insert(CallbackId::new(entry.callback_id), context);
+        }
+
         let mut install_code_calls = BTreeMap::<InstallCodeCallId, InstallCodeCall>::new();
         // TODO(EXC-1454): Remove when `install_code_requests` field is not needed.
         for entry in item.install_code_requests {
@@ -733,6 +796,8 @@ impl TryFrom<(Time, pb_metadata::SubnetCallContextManager)> for SubnetCallContex
             canister_http_request_contexts,
             bitcoin_get_successors_contexts,
             bitcoin_send_transaction_internal_contexts,
+            dogecoin_get_successors_contexts,
+            dogecoin_send_transaction_internal_contexts,
             canister_management_calls: CanisterManagementCalls {
                 install_code_call_manager,
                 stop_canister_call_manager,
@@ -1232,6 +1297,44 @@ impl TryFrom<(Time, pb_metadata::BitcoinGetSuccessorsContext)> for BitcoinGetSuc
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
+pub struct DogecoinGetSuccessorsContext {
+    pub request: Request,
+    pub payload: GetDogeSuccessorsRequestInitial,
+    pub time: Time,
+}
+
+impl From<&DogecoinGetSuccessorsContext> for pb_metadata::BitcoinGetSuccessorsContext {
+    fn from(context: &DogecoinGetSuccessorsContext) -> Self {
+        Self {
+            request: Some((&context.request).into()),
+            payload: Some((&context.payload).into()),
+            time: Some(pb_metadata::Time {
+                time_nanos: context.time.as_nanos_since_unix_epoch(),
+            }),
+        }
+    }
+}
+
+impl TryFrom<(Time, pb_metadata::BitcoinGetSuccessorsContext)> for DogecoinGetSuccessorsContext {
+    type Error = ProxyDecodeError;
+    fn try_from(
+        (time, context): (Time, pb_metadata::BitcoinGetSuccessorsContext),
+    ) -> Result<Self, Self::Error> {
+        let request: Request =
+            try_from_option_field(context.request, "BitcoinGetSuccessorsContext::request")?;
+        let payload: GetDogeSuccessorsRequestInitial =
+            try_from_option_field(context.payload, "BitcoinGetSuccessorsContext::payload")?;
+        Ok(DogecoinGetSuccessorsContext {
+            request,
+            payload,
+            time: context
+                .time
+                .map_or(time, |t| Time::from_nanos_since_unix_epoch(t.time_nanos)),
+        })
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct BitcoinSendTransactionInternalContext {
     pub request: Request,
     pub payload: SendTransactionRequest,
@@ -1264,6 +1367,48 @@ impl TryFrom<(Time, pb_metadata::BitcoinSendTransactionInternalContext)>
         let payload: SendTransactionRequest =
             try_from_option_field(context.payload, "BitcoinGetSuccessorsContext::payload")?;
         Ok(BitcoinSendTransactionInternalContext {
+            request,
+            payload,
+            time: context
+                .time
+                .map_or(time, |t| Time::from_nanos_since_unix_epoch(t.time_nanos)),
+        })
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct DogecoinSendTransactionInternalContext {
+    pub request: Request,
+    pub payload: SendDogeTransactionRequest,
+    pub time: Time,
+}
+
+impl From<&DogecoinSendTransactionInternalContext>
+    for pb_metadata::BitcoinSendTransactionInternalContext
+{
+    fn from(context: &DogecoinSendTransactionInternalContext) -> Self {
+        Self {
+            request: Some((&context.request).into()),
+            payload: Some((&context.payload).into()),
+            time: Some(pb_metadata::Time {
+                time_nanos: context.time.as_nanos_since_unix_epoch(),
+            }),
+        }
+    }
+}
+
+impl TryFrom<(Time, pb_metadata::BitcoinSendTransactionInternalContext)>
+    for DogecoinSendTransactionInternalContext
+{
+    type Error = ProxyDecodeError;
+    fn try_from(
+        (time, context): (Time, pb_metadata::BitcoinSendTransactionInternalContext),
+    ) -> Result<Self, Self::Error> {
+        let request: Request =
+            try_from_option_field(context.request, "BitcoinGetSuccessorsContext::request")?;
+        let payload: SendDogeTransactionRequest =
+            try_from_option_field(context.payload, "BitcoinGetSuccessorsContext::payload")?;
+        Ok(DogecoinSendTransactionInternalContext {
             request,
             payload,
             time: context
@@ -1484,6 +1629,8 @@ mod testing {
             reshare_chain_key_contexts: Default::default(),
             bitcoin_get_successors_contexts: Default::default(),
             bitcoin_send_transaction_internal_contexts: Default::default(),
+            dogecoin_get_successors_contexts: Default::default(),
+            dogecoin_send_transaction_internal_contexts: Default::default(),
             canister_management_calls,
             raw_rand_contexts: Default::default(),
             pre_signature_stashes: Default::default(),

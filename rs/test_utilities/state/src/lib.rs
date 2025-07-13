@@ -15,7 +15,9 @@ use ic_replicated_state::{
     },
     metadata_state::{
         subnet_call_context_manager::{
-            BitcoinGetSuccessorsContext, BitcoinSendTransactionInternalContext, SubnetCallContext,
+            BitcoinGetSuccessorsContext, BitcoinSendTransactionInternalContext,
+            DogecoinGetSuccessorsContext, DogecoinSendTransactionInternalContext,
+            SubnetCallContext,
         },
         Stream, SubnetMetrics,
     },
@@ -163,7 +165,7 @@ impl ReplicatedStateBuilder {
 
         for request in self.bitcoin_adapter_requests.into_iter() {
             match request {
-                BitcoinAdapterRequestWrapper::GetSuccessorsRequest(payload) => {
+                BitcoinAdapterRequestWrapper::GetBtcSuccessorsRequest(payload) => {
                     state.metadata.subnet_call_context_manager.push_context(
                         SubnetCallContext::BitcoinGetSuccessors(BitcoinGetSuccessorsContext {
                             request: RequestBuilder::default().build(),
@@ -172,10 +174,30 @@ impl ReplicatedStateBuilder {
                         }),
                     );
                 }
-                BitcoinAdapterRequestWrapper::SendTransactionRequest(payload) => {
+                BitcoinAdapterRequestWrapper::SendBtcTransactionRequest(payload) => {
                     state.metadata.subnet_call_context_manager.push_context(
                         SubnetCallContext::BitcoinSendTransactionInternal(
                             BitcoinSendTransactionInternalContext {
+                                request: RequestBuilder::default().build(),
+                                payload,
+                                time: UNIX_EPOCH,
+                            },
+                        ),
+                    );
+                }
+                BitcoinAdapterRequestWrapper::GetDogeSuccessorsRequest(payload) => {
+                    state.metadata.subnet_call_context_manager.push_context(
+                        SubnetCallContext::DogecoinGetSuccessors(DogecoinGetSuccessorsContext {
+                            request: RequestBuilder::default().build(),
+                            payload,
+                            time: UNIX_EPOCH,
+                        }),
+                    );
+                }
+                BitcoinAdapterRequestWrapper::SendDogeTransactionRequest(payload) => {
+                    state.metadata.subnet_call_context_manager.push_context(
+                        SubnetCallContext::DogecoinSendTransactionInternal(
+                            DogecoinSendTransactionInternalContext {
                                 request: RequestBuilder::default().build(),
                                 payload,
                                 time: UNIX_EPOCH,

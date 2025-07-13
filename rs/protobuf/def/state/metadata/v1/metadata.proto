@@ -53,6 +53,8 @@ message NetworkTopology {
   repeated types.v1.CanisterId bitcoin_testnet_canister_ids = 6;
   repeated types.v1.CanisterId bitcoin_mainnet_canister_ids = 7;
   repeated ChainKeySubnetEntry chain_key_enabled_subnets = 8;
+  repeated types.v1.CanisterId dogecoin_testnet_canister_ids = 9;
+  repeated types.v1.CanisterId dogecoin_mainnet_canister_ids = 10;
 }
 
 message SetupInitialDkgContext {
@@ -271,6 +273,8 @@ message SubnetCallContextManager {
   repeated ReshareChainKeyContextTree reshare_chain_key_contexts = 17;
   repeated SignWithThresholdContextTree sign_with_threshold_contexts = 18;
   repeated PreSignatureStashTree pre_signature_stashes = 19;
+  repeated BitcoinGetSuccessorsContextTree dogecoin_get_successors_contexts = 20;
+  repeated BitcoinSendTransactionInternalContextTree dogecoin_send_transaction_internal_contexts = 21;
 }
 
 message SubnetMetrics {
@@ -371,6 +375,9 @@ message SystemMetadata {
   BlockmakerMetricsTimeSeries blockmaker_metrics_time_series = 20;
 
   repeated ApiBoundaryNodeEntry api_boundary_nodes = 21;
+
+  repeated BitcoinGetSuccessorsFollowUpResponses dogecoin_get_successors_follow_up_responses = 22;
+
 }
 
 message StableMemory {
