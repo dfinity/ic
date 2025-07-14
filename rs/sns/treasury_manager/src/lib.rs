@@ -1,6 +1,9 @@
 use candid::{CandidType, Nat, Principal};
 use serde::{Deserialize, Serialize, Serializer};
-use std::{collections::BTreeMap, fmt::{self, Display}};
+use std::{
+    collections::BTreeMap,
+    fmt::{self, Display},
+};
 
 #[derive(CandidType, Clone, Debug, Deserialize)]
 pub struct TreasuryManagerInit {
@@ -178,15 +181,14 @@ impl Error {
         }
     }
 
-    pub fn new_call(
-        method: String,
-        canister_id: Principal,
-        message: String,
-    ) -> Self {
+    pub fn new_call(method: String, canister_id: Principal, message: String) -> Self {
         Self {
             code: 3,
             message,
-            kind: ErrorKind::Call { method, canister_id },
+            kind: ErrorKind::Call {
+                method,
+                canister_id,
+            },
         }
     }
 
@@ -361,22 +363,14 @@ impl TreasuryManagerOperation {
 
 impl Display for TreasuryManagerOperation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "TreasuryManager.{}-{}",
-            self.operation.name(),
-            self.step,
-        )
+        write!(f, "TreasuryManager.{}-{}", self.operation.name(), self.step)
     }
 }
 
 /// To be used for ledger transaction memos.
 impl From<TreasuryManagerOperation> for Vec<u8> {
     fn from(operation: TreasuryManagerOperation) -> Self {
-        operation
-            .to_string()
-            .as_bytes()
-            .to_vec()
+        operation.to_string().as_bytes().to_vec()
     }
 }
 
@@ -403,7 +397,7 @@ impl Display for Transaction {
             self.treasury_manager_operation,
             match &self.result {
                 Ok(_) => "✓",
-                Err(_) => "✗"
+                Err(_) => "✗",
             },
             self.canister_id,
             self.purpose,
@@ -420,7 +414,10 @@ impl fmt::Debug for Transaction {
             .field("result", &self.result)
             .field("purpose", &self.purpose)
             // This is the 2nd motivation for this hand-crafted Debug impl.
-            .field("treasury_manager_operation", &self.treasury_manager_operation.to_string())
+            .field(
+                "treasury_manager_operation",
+                &self.treasury_manager_operation.to_string(),
+            )
             .finish()
     }
 }
