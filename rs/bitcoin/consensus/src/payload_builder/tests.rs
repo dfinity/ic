@@ -1,5 +1,5 @@
 use crate::{payload_builder::parse, BitcoinPayloadBuilder};
-use ic_btc_interface::Network;
+use ic_btc_interface::Network as BtcNetwork;
 use ic_btc_replica_types::{
     BitcoinAdapterRequestWrapper, BitcoinAdapterResponse, BitcoinAdapterResponseWrapper,
     BitcoinReject, GetSuccessorsRequestInitial, GetSuccessorsResponseComplete,
@@ -95,6 +95,8 @@ fn make_subnet_record_key(subnet_id: SubnetId) -> String {
 fn bitcoin_payload_builder_test(
     bitcoin_mainnet_adapter_client: MockBitcoinAdapterClient,
     bitcoin_testnet_adapter_client: MockBitcoinAdapterClient,
+    dogecoin_mainnet_adapter_client: MockBitcoinAdapterClient,
+    dogecoin_testnet_adapter_client: MockBitcoinAdapterClient,
     state_manager: MockStateManager,
     registry_client: MockRegistryClient,
     run_test: impl FnOnce(ProposalContext, BitcoinPayloadBuilder),
@@ -117,6 +119,8 @@ fn bitcoin_payload_builder_test(
             &MetricsRegistry::new(),
             Box::new(bitcoin_mainnet_adapter_client),
             Box::new(bitcoin_testnet_adapter_client),
+            Box::new(dogecoin_mainnet_adapter_client),
+            Box::new(dogecoin_testnet_adapter_client),
             subnet_test_id(0),
             Arc::new(registry_client),
             Config::default(),
@@ -152,16 +156,18 @@ fn can_successfully_create_bitcoin_payload() {
     // Create a mock state manager that returns a `ReplicatedState` with
     // some bitcoin adapter requests.
     let state_manager =
-        mock_state_manager(vec![BitcoinAdapterRequestWrapper::GetSuccessorsRequest(
+        mock_state_manager(vec![BitcoinAdapterRequestWrapper::GetBtcSuccessorsRequest(
             GetSuccessorsRequestInitial {
                 processed_block_hashes: vec![vec![10; 32]],
                 anchor: vec![10; 32],
-                network: Network::Testnet,
+                network: BtcNetwork::Testnet,
             },
         )]);
 
     bitcoin_payload_builder_test(
         MockBitcoinAdapterClient::new(),
+        mock_adapter(),
+        mock_adapter(),
         mock_adapter(),
         state_manager,
         registry_client,
@@ -216,15 +222,15 @@ fn includes_responses_in_the_payload() {
     }
 
     let state_manager = mock_state_manager(vec![
-        BitcoinAdapterRequestWrapper::GetSuccessorsRequest(GetSuccessorsRequestInitial {
+        BitcoinAdapterRequestWrapper::GetBtcSuccessorsRequest(GetSuccessorsRequestInitial {
             processed_block_hashes: vec![vec![10; 32]],
             anchor: vec![10; 32],
-            network: Network::Testnet,
+            network: BtcNetwork::Testnet,
         }),
-        BitcoinAdapterRequestWrapper::GetSuccessorsRequest(GetSuccessorsRequestInitial {
+        BitcoinAdapterRequestWrapper::GetBtcSuccessorsRequest(GetSuccessorsRequestInitial {
             processed_block_hashes: vec![vec![20; 32]],
             anchor: vec![20; 32],
-            network: Network::Testnet,
+            network: BtcNetwork::Testnet,
         }),
     ]);
 
@@ -232,6 +238,8 @@ fn includes_responses_in_the_payload() {
 
     bitcoin_payload_builder_test(
         MockBitcoinAdapterClient::new(),
+        mock_adapter(),
+        mock_adapter(),
         mock_adapter(),
         state_manager,
         registry_client,
@@ -304,19 +312,21 @@ fn includes_only_responses_for_callback_ids_not_seen_in_past_payloads() {
                 },
             ))
         });
+    let dogecoin_mainnet_adapter_client = MockBitcoinAdapterClient::new();
+    let dogecoin_testnet_adapter_client = MockBitcoinAdapterClient::new();
 
     // Create a mock state manager that returns a `ReplicatedState` with
     // some bitcoin adapter requests.
     let state_manager = mock_state_manager(vec![
-        BitcoinAdapterRequestWrapper::GetSuccessorsRequest(GetSuccessorsRequestInitial {
+        BitcoinAdapterRequestWrapper::GetBtcSuccessorsRequest(GetSuccessorsRequestInitial {
             processed_block_hashes: vec![vec![10; 32]],
             anchor: vec![10; 32],
-            network: Network::Testnet,
+            network: BtcNetwork::Testnet,
         }),
-        BitcoinAdapterRequestWrapper::GetSuccessorsRequest(GetSuccessorsRequestInitial {
+        BitcoinAdapterRequestWrapper::GetBtcSuccessorsRequest(GetSuccessorsRequestInitial {
             processed_block_hashes: vec![vec![20; 32]],
             anchor: vec![20; 32],
-            network: Network::Testnet,
+            network: BtcNetwork::Testnet,
         }),
     ]);
 
@@ -325,6 +335,8 @@ fn includes_only_responses_for_callback_ids_not_seen_in_past_payloads() {
     bitcoin_payload_builder_test(
         bitcoin_mainnet_adapter_client,
         bitcoin_testnet_adapter_client,
+        dogecoin_mainnet_adapter_client,
+        dogecoin_testnet_adapter_client,
         state_manager,
         registry_client,
         |proposal_context, bitcoin_payload_builder| {
@@ -407,15 +419,17 @@ fn bitcoin_payload_builder_fits_largest_blocks() {
                 },
             ))
         });
+    let dogecoin_mainnet_adapter_client = MockBitcoinAdapterClient::new();
+    let dogecoin_testnet_adapter_client = MockBitcoinAdapterClient::new();
 
     // Create a mock state manager that returns a `ReplicatedState` with
     // some bitcoin adapter requests.
     let state_manager =
-        mock_state_manager(vec![BitcoinAdapterRequestWrapper::GetSuccessorsRequest(
+        mock_state_manager(vec![BitcoinAdapterRequestWrapper::GetBtcSuccessorsRequest(
             GetSuccessorsRequestInitial {
                 processed_block_hashes: vec![vec![10; 32]],
                 anchor: vec![10; 32],
-                network: Network::Testnet,
+                network: BtcNetwork::Testnet,
             },
         )]);
 
@@ -424,6 +438,8 @@ fn bitcoin_payload_builder_fits_largest_blocks() {
     bitcoin_payload_builder_test(
         bitcoin_mainnet_adapter_client,
         bitcoin_testnet_adapter_client,
+        dogecoin_mainnet_adapter_client,
+        dogecoin_testnet_adapter_client,
         state_manager,
         registry_client,
         |proposal_context, bitcoin_payload_builder| {
