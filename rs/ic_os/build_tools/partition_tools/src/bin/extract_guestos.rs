@@ -13,14 +13,13 @@ use partition_tools::{ext::ExtPartition, Partition};
 struct Cli {
     #[arg(long)]
     image: PathBuf,
-    #[arg(long, default_value_t = 4)]
-    index: usize,
     #[arg(long, default_value_t = true)]
     unarchive: bool,
-    #[arg(long, default_value = "/guest-os.img.tar.zst")]
-    source: PathBuf,
     dest: PathBuf,
 }
+
+const GUESTOS_PATH: &str = "/guest-os.img.tar.zst";
+const SETUPOS_DATA_INDEX: usize = 4;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -35,12 +34,12 @@ async fn main() -> Result<()> {
     };
 
     // Open the image
-    let mut partition = ExtPartition::open(partition_path, Some(cli.index))
+    let mut partition = ExtPartition::open(partition_path, Some(SETUPOS_DATA_INDEX))
         .await
         .expect("Could not open partition");
 
     partition
-        .copy_file_to(&cli.source, &cli.dest)
+        .copy_file_to(Path::new(GUESTOS_PATH), &cli.dest)
         .await
         .unwrap();
 

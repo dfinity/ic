@@ -126,29 +126,29 @@ impl Partition for FatPartition {
         Ok(())
     }
 
-    async fn copy_file_to(&mut self, input: &Path, output: &Path) -> Result<()> {
-        let file_name = input.file_name().expect("input must reference a file");
+    async fn copy_file_to(&mut self, from: &Path, to: &Path) -> Result<()> {
+        let file_name = from.file_name().expect("`from` must reference a file");
 
-        // When extracting to a directory, use the input filename.
-        let dest = if output.is_dir() {
-            ensure!(output.exists(), "output directory path must already exist");
+        // When extracting to a directory, use the from filename.
+        let dest = if to.is_dir() {
+            ensure!(to.exists(), "the path to `to` must already exist");
 
-            &output.join(file_name)
+            &to.join(file_name)
         } else {
             ensure!(
-                output.parent().map(|v| v.exists()).unwrap_or(false),
-                "output directory path must already exist"
+                to.parent().map(|v| v.exists()).unwrap_or(false),
+                "the path to `to` must already exist"
             );
 
-            output
+            to
         };
 
         ensure!(
             dest.parent().map(|v| v.exists()).unwrap_or(false),
-            "output directory path must already exist"
+            "the path to `to` must already exist"
         );
 
-        let _stdout = self.copy_file_inner(input, dest).await?;
+        let _stdout = self.copy_file_inner(from, dest).await?;
 
         Ok(())
     }
@@ -156,7 +156,7 @@ impl Partition for FatPartition {
 
 impl FatPartition {
     // Capture and return stdout, which may be used to "read" the file directly
-    async fn copy_file_inner(&mut self, input: &Path, output: &Path) -> Result<Vec<u8>> {
+    async fn copy_file_inner(&mut self, from: &Path, to: &Path) -> Result<Vec<u8>> {
         let mcopy = mcopy().context("mcopy is needed to read files")?;
 
         let out = if let Some(offset) = self.offset_bytes {
@@ -165,8 +165,8 @@ impl FatPartition {
                     "-o",
                     "-i",
                     &format!("{}@@{}", self.original.display(), offset),
-                    &format!("::{}", input.display()),
-                    &format!("{}", output.display()),
+                    &format!("::{}", from.display()),
+                    &format!("{}", to.display()),
                 ])
                 .output()
                 .await
@@ -177,8 +177,8 @@ impl FatPartition {
                     "-o",
                     "-i",
                     &format!("{}", self.original.display()),
-                    &format!("::{}", input.display()),
-                    &format!("{}", output.display()),
+                    &format!("::{}", from.display()),
+                    &format!("{}", to.display()),
                 ])
                 .output()
                 .await

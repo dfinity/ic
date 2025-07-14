@@ -29,8 +29,9 @@ pub trait Partition: Sized {
     async fn copy_files_to(&mut self, output: &Path) -> Result<()>;
 
     /// Copy a single file from a partition to the output destination. The path
-    /// to `output` must already exist.
-    async fn copy_file_to(&mut self, input: &Path, output: &Path) -> Result<()>;
+    /// leading to `to` must already exist. If `to` is a directory, the filename
+    /// from `from` will be used.
+    async fn copy_file_to(&mut self, from: &Path, to: &Path) -> Result<()>;
 }
 
 /// Use fdisk to check the byte offset of a given partition

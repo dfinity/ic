@@ -157,21 +157,21 @@ impl Partition for ExtPartition {
         Ok(())
     }
 
-    async fn copy_file_to(&mut self, input: &Path, output: &Path) -> Result<()> {
-        let file_name = input.file_name().expect("input must reference a file");
+    async fn copy_file_to(&mut self, from: &Path, to: &Path) -> Result<()> {
+        let file_name = from.file_name().expect("`from` must reference a file");
 
-        // When extracting to a directory, use the input filename.
-        let dest = if output.is_dir() {
-            ensure!(output.exists(), "output directory path must already exist");
+        // When extracting to a directory, use the from filename.
+        let dest = if to.is_dir() {
+            ensure!(to.exists(), "the path to `to` must already exist");
 
-            &output.join(file_name)
+            &to.join(file_name)
         } else {
             ensure!(
-                output.parent().map(|v| v.exists()).unwrap_or(false),
-                "output directory path must already exist"
+                to.parent().map(|v| v.exists()).unwrap_or(false),
+                "the path to `to` must already exist"
             );
 
-            output
+            to
         };
 
         // run the underlying debugfs operation
@@ -195,8 +195,8 @@ impl Partition for ExtPartition {
                 cd {path}
                 dump {filename} {dest}
             "#,
-                path = input.parent().unwrap().to_str().unwrap(),
-                filename = input.file_name().unwrap().to_str().unwrap(),
+                path = from.parent().unwrap().to_str().unwrap(),
+                filename = from.file_name().unwrap().to_str().unwrap(),
                 dest = dest.display(),
             )
             .as_bytes(),
