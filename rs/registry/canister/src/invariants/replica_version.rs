@@ -117,6 +117,9 @@ mod tests {
 
     use super::*;
     use canister_test::PrincipalId;
+    use ic_protobuf::registry::replica_version::v1::{
+        GuestLaunchMeasurement, GuestLaunchMeasurementMetadata, GuestLaunchMeasurements,
+    };
     use ic_registry_transport::{insert, upsert};
     use ic_types::ReplicaVersion;
     use prost::Message;
@@ -253,7 +256,14 @@ mod tests {
         let value = ReplicaVersionRecord {
             release_package_sha256_hex: hash.into(),
             release_package_urls: urls,
-            guest_launch_measurements: None,
+            guest_launch_measurements: Some(GuestLaunchMeasurements {
+                guest_launch_measurements: vec![GuestLaunchMeasurement {
+                    measurement: vec![0x01, 0x02, 0x03],
+                    metadata: Some(GuestLaunchMeasurementMetadata {
+                        kernel_cmdline: "foo=bar",
+                    }),
+                }],
+            }),
         }
         .encode_to_vec();
 

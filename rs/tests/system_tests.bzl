@@ -55,6 +55,8 @@ def _run_system_test(ctx):
                 export ENV_DEPS__HOSTOS_UPDATE_IMG_SHA="${{ENV_DEPS__HOSTOS_UPDATE_IMG_TEST_HASH:-}}"
             fi
 
+            export
+
             # clean up the env for the test
             unset RUN_SCRIPT_ICOS_IMAGES RUN_SCRIPT_UPLOAD_SYSTEST_DEP RUN_SCRIPT_HOSTOS_UPDATE_IMG_TEST
 
@@ -267,6 +269,7 @@ def system_test(
     if uses_guestos_dev:
         icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = _guestos + "disk-img.tar.zst"
         icos_images["ENV_DEPS__GUESTOS_UPDATE_IMG"] = _guestos + "update-img.tar.zst"
+        _env_deps["ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS"] = _guestos + "sev-measurements.json"
 
     if uses_hostos_dev_test:
         icos_images["ENV_DEPS__HOSTOS_UPDATE_IMG_TEST"] = "//ic-os/hostos/envs/dev:update-img-test.tar.zst"
@@ -292,12 +295,14 @@ def system_test(
 
     if uses_guestos_dev_test:
         icos_images["ENV_DEPS__GUESTOS_UPDATE_IMG_TEST"] = _guestos + "update-img-test.tar.zst"
+        _env_deps["ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_TEST"] = _guestos + "sev-measurements-test.json"
 
     if malicious:
         _guestos_malicous = "//ic-os/guestos/envs/dev-malicious:"
 
         icos_images["ENV_DEPS__GUESTOS_MALICIOUS_DISK_IMG"] = _guestos_malicous + "disk-img.tar.zst"
         icos_images["ENV_DEPS__GUESTOS_MALICIOUS_UPDATE_IMG"] = _guestos_malicous + "update-img.tar.zst"
+        _env_deps["ENV_DEPS__GUESTOS_MALICIOUS_LAUNCH_MEASUREMENTS"] = _guestos_malicous + "sev-measurements.json"
 
     if use_empty_image:
         icos_images["ENV_DEPS__EMPTY_DISK_IMG"] = "//rs/tests/nested:empty-disk-img.tar.zst"

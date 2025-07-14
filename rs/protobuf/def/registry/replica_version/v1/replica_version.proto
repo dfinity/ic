@@ -33,6 +33,7 @@ message GuestLaunchMeasurement {
 }
 
 message GuestLaunchMeasurementMetadata {
+  // Kernel command line string used to launch the guest
   string kernel_cmdline = 1;
 }
 

@@ -42,6 +42,7 @@ artifact_bundle(
     inputs = [
         icos_images.update_image,
         icos_images.update_image_test,
+        icos_images.sev_measurements,
     ],
     prefix = "guest-os/update-img-recovery",
     tags = [

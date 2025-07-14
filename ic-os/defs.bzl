@@ -131,17 +131,20 @@ def icos_build(
         tags = ["manual"],
     )
 
+    # Extract initrd and kernel for SEV measurement
     tar_extract(
         name = "extracted_initrd.img",
         src = "rootfs-tree.tar",
-        path = "boot/initrd.img",
+        path = "boot/initrd.img-*",
+        wildcards = True,
         tags = ["manual"],
     )
 
     tar_extract(
         name = "extracted_vmlinuz",
         src = "rootfs-tree.tar",
-        path = "boot/vmlinuz",
+        path = "boot/vmlinuz-*",
+        wildcards = True,
         tags = ["manual"],
     )
 
@@ -278,10 +281,11 @@ def icos_build(
             name = "generate-" + sev_measurements,
             outs = [sev_measurements],
             srcs = ["//ic-os/components/ovmf:ovmf_sev", boot_args, ":extracted_initrd.img", ":extracted_vmlinuz"],
+            visibility = visibility,
             cmd = r"""
                 source $(location """ + boot_args + """)
                 (for cmdline in "$$BOOT_ARGS_A" "$$BOOT_ARGS_B"; do
-                    hex=$$(sev-snp-measure --mode snp --vcpus 64 --ovmf "$(location //ic-os/components/ovmf:ovmf_sev)" --vcpu-type="EPYC-Milan" --append "$$cmdline" --initrd "$(location extracted_initrd.img)" --kernel "$(location extracted_vmlinuz)")
+                    hex=$$(sev-snp-measure --mode snp --vcpus 64 --ovmf "$(location //ic-os/components/ovmf:ovmf_sev)"  --vmm-type=QEMU --vcpu-type=EPYC-V4 --append "$$cmdline" --initrd "$(location extracted_initrd.img)" --kernel "$(location extracted_vmlinuz)")
                     # Convert hex string to decimal list, e.g. "abcd" ->  171\\n205
                     measurement=$$(echo -n "$$hex" | fold -w2 | sed "s/^/0x/" | xargs printf "%d\n")
                     jq -na --arg cmd "$$cmdline" --arg m "$$measurement" '{
@@ -489,7 +493,8 @@ def _tar_extract_impl(ctx):
     ctx.actions.run_shell(
         inputs = [in_tar],
         outputs = [out],
-        command = "tar xOf %s --occurrence=1 %s > %s" % (
+        command = "tar %s -xOf %s --occurrence=1  %s > %s" % (
+            "--wildcards" if ctx.attr.wildcards else "",
             in_tar.path,
             ctx.attr.path,
             out.path,
@@ -507,6 +512,10 @@ tar_extract = rule(
         ),
         "path": attr.string(
             mandatory = True,
+        ),
+        "wildcards": attr.bool(
+            default = False,
+            doc = "If True, the path is treated as a glob pattern.",
         ),
     },
 )

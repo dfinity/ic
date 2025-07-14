@@ -961,14 +961,9 @@ impl ProposeToReviseElectedGuestsOsVersionsCmd {
     fn read_guest_launch_measurements(&self) -> GuestLaunchMeasurements {
         self.guest_launch_measurements_path
             .as_ref()
-            .map(|guest_launch_measurements_path| {
-                let guest_launch_measurements_json = std::fs::read(guest_launch_measurements_path)
-                    .unwrap_or_else(|_| {
-                        panic!(
-                            "Failed to read {}",
-                            guest_launch_measurements_path.display()
-                        )
-                    });
+            .map(|path| {
+                let guest_launch_measurements_json = std::fs::read(path)
+                    .unwrap_or_else(|_| panic!("Failed to read {}", path.display()));
                 serde_json::from_slice::<GuestLaunchMeasurements>(&guest_launch_measurements_json)
                     .expect("Could not decode GuestLaunchMeasurements")
             })
