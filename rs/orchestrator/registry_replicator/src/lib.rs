@@ -109,13 +109,8 @@ impl RegistryReplicator {
 
         // Initialize the registry local store. Will not return if the nns is not
         // reachable.
-        Self::initialize_local_store(
-            &logger,
-            Arc::clone(&local_store),
-            nns_urls.clone(),
-            nns_pub_key,
-        )
-        .await;
+        Self::initialize_local_store(&logger, local_store.clone(), nns_urls.clone(), nns_pub_key)
+            .await;
 
         let registry_client = Arc::new(RegistryClientImpl::new(
             local_store.clone(),
