@@ -447,11 +447,12 @@ fn time_on_resumed_instance() {
     pic.set_certified_time(now.into());
 
     let time = pic.get_time();
+    assert_eq!(time, now.into());
     let state = pic.drop_and_take_state().unwrap();
 
     let pic = PocketIcBuilder::new().with_state(state).build();
 
-    // the time on the resumed instances increases by 2ns:
+    // The time on the resumed instances increases by 2ns:
     // - 1ns due to executing a checkpointed round before dropping the original instance;
     // - 1ns due to bumping time when creating a new instance to ensure strict time monotonicity.
     let resumed_time = pic.get_time();
