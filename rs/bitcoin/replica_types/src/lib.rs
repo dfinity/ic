@@ -29,9 +29,7 @@ fn to_btc_network(network: i32) -> Result<Network, ProxyDecodeError> {
         Ok(v1::Network::Testnet) => Ok(Network::Testnet),
         Ok(v1::Network::Mainnet) => Ok(Network::Mainnet),
         Ok(v1::Network::Regtest) => Ok(Network::Regtest),
-        _ => Err(ProxyDecodeError::MissingField(
-            "SendTransactionRequest::network",
-        )),
+        _ => Err(ProxyDecodeError::MissingField("network")),
     }
 }
 
