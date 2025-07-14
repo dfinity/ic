@@ -12,11 +12,14 @@ use ic_transport_types::EnvelopeContent::{Call, ReadState};
 use pocket_ic::common::rest::{BlockmakerConfigs, RawSubnetBlockmaker, TickConfigs};
 use pocket_ic::{
     common::rest::{
-        BlobCompression, CanisterHttpReply, CanisterHttpResponse, MockCanisterHttpResponse,
-        RawEffectivePrincipal, RawMessageId, SubnetKind,
+        BlobCompression, CanisterHttpReply, CanisterHttpResponse, CreateInstanceResponse,
+        ExtendedSubnetConfigSet, InstanceConfig, MockCanisterHttpResponse, RawEffectivePrincipal,
+        RawMessageId, SubnetKind,
     },
-    query_candid, start_or_reuse_server_impl, update_candid, DefaultEffectiveCanisterIdError,
-    ErrorCode, IngressStatusResult, PocketIc, PocketIcBuilder, PocketIcState, RejectCode, Time,
+    nonblocking::PocketIc as PocketIcAsync,
+    query_candid, start_server, update_candid, DefaultEffectiveCanisterIdError, ErrorCode,
+    IngressStatusResult, PocketIc, PocketIcBuilder, PocketIcState, RejectCode, StartServerParams,
+    Time,
 };
 use reqwest::blocking::Client;
 use reqwest::header::CONTENT_LENGTH;
@@ -455,9 +458,8 @@ fn time_on_resumed_instance() {
     assert_eq!(resumed_time, time + Duration::from_nanos(2));
 }
 
-#[tokio::test]
-async fn killed_instance() {
-    let (mut server, server_url) = start_or_reuse_server_impl(None).await;
+async fn resume_killed_instance_impl(allow_corrupted_state: Option<bool>) -> Result<(), String> {
+    let (mut server, server_url) = start_server(StartServerParams::default()).await;
     let temp_dir = TempDir::new().unwrap();
 
     let state = PocketIcState::new_from_path(temp_dir.path().to_path_buf());
@@ -487,8 +489,31 @@ async fn killed_instance() {
 
     server.kill().unwrap();
 
-    let state = PocketIcState::new_from_path(temp_dir.path().to_path_buf());
-    let pic = PocketIcBuilder::new().with_state(state).build_async().await;
+    let (_, server_url) = start_server(StartServerParams::default()).await;
+    let client = reqwest::Client::new();
+    let instance_config = InstanceConfig {
+        subnet_config_set: ExtendedSubnetConfigSet::default(),
+        state_dir: Some(temp_dir.path().to_path_buf()),
+        nonmainnet_features: false,
+        log_level: None,
+        bitcoind_addr: None,
+        icp_features: None,
+        allow_corrupted_state,
+    };
+    let response = client
+        .post(server_url.join("instances").unwrap())
+        .json(&instance_config)
+        .send()
+        .await
+        .unwrap();
+    if !response.status().is_success() {
+        return Err(response.text().await.unwrap());
+    }
+    let instance_id = match response.json::<CreateInstanceResponse>().await.unwrap() {
+        CreateInstanceResponse::Created { instance_id, .. } => instance_id,
+        CreateInstanceResponse::Error { message } => panic!("Unexpected error: {}", message),
+    };
+    let pic = PocketIcAsync::new_from_existing_instance(server_url, instance_id, None);
 
     // Only the first canister (created before the last checkpoint) is preserved,
     // the other canister and time change are lost.
@@ -499,6 +524,25 @@ async fn killed_instance() {
 
     // Drop instance explicitly to prevent data races in the StateManager.
     pic.drop().await;
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn resume_killed_instance_default() {
+    let err = resume_killed_instance_impl(None).await.unwrap_err();
+    assert!(err.contains("The state of subnet qxw6a-xchhl-fytzl-qfagk-kuv6t-ye6xf-box4s-fiqod-vn2ex-qkp3q-5ae is corrupted."));
+}
+
+#[tokio::test]
+async fn resume_killed_instance_strict() {
+    let err = resume_killed_instance_impl(Some(false)).await.unwrap_err();
+    assert!(err.contains("The state of subnet qxw6a-xchhl-fytzl-qfagk-kuv6t-ye6xf-box4s-fiqod-vn2ex-qkp3q-5ae is corrupted."));
+}
+
+#[tokio::test]
+async fn resume_killed_instance() {
+    resume_killed_instance_impl(Some(true)).await.unwrap();
 }
 
 #[test]

@@ -1,6 +1,8 @@
 use candid::{CandidType, Principal};
 use pocket_ic::common::rest::{ExtendedSubnetConfigSet, IcpFeatures, InstanceConfig, SubnetSpec};
-use pocket_ic::{start_or_reuse_server, update_candid, PocketIc, PocketIcBuilder, PocketIcState};
+use pocket_ic::{
+    start_server, update_candid, PocketIc, PocketIcBuilder, PocketIcState, StartServerParams,
+};
 use reqwest::StatusCode;
 use serde::Deserialize;
 use std::collections::BTreeMap;
@@ -323,7 +325,7 @@ async fn with_all_icp_features_and_nns_subnet_state() {
         .unwrap()
         .into();
 
-    let url = start_or_reuse_server(None).await;
+    let (_, url) = start_server(StartServerParams::default()).await;
     let client = reqwest::Client::new();
     let instance_config = InstanceConfig {
         subnet_config_set: ExtendedSubnetConfigSet {
@@ -335,6 +337,7 @@ async fn with_all_icp_features_and_nns_subnet_state() {
         log_level: None,
         bitcoind_addr: None,
         icp_features: Some(IcpFeatures::all_icp_features()),
+        allow_corrupted_state: None,
     };
     let response = client
         .post(url.join("instances").unwrap())
