@@ -61,6 +61,7 @@ rust_binary(
     name = "adapter-stress-test",
     srcs = ["bin/adapter-stress-test.rs"],
     deps = [
+        ":adapter",
         "//rs/bitcoin/service",
         "@crate_index//:bitcoin",
         "@crate_index//:clap",
