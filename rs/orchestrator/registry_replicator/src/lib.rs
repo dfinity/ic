@@ -107,14 +107,32 @@ impl RegistryReplicator {
         std::fs::create_dir_all(local_store_path)
             .expect("Could not create directory for registry local store.");
 
+        // Initialize the registry local store. Will not return if the nns is not
+        // reachable.
+        Self::initialize_local_store(
+            &logger,
+            Arc::clone(&local_store),
+            nns_urls.clone(),
+            nns_pub_key,
+        )
+        .await;
+
         let registry_client = Arc::new(RegistryClientImpl::new(
             local_store.clone(),
             Some(&metrics_registry),
         ));
 
+        // Initialize the registry client with the latest version from the local store.
+        if let Err(err) = registry_client.poll_once() {
+            error!(
+                logger,
+                "Failed to poll the registry once after initialization: {}", err
+            )
+        }
+
         let metrics = Arc::new(RegistryreplicatorMetrics::new(&metrics_registry));
 
-        let self_ = Self {
+        Self {
             logger,
             node_id,
             nns_urls,
@@ -124,21 +142,7 @@ impl RegistryReplicator {
             cancelled: Arc::new(AtomicBool::new(false)),
             poll_delay,
             metrics,
-        };
-
-        // Initialize the registry local store. Will not return if the nns is not
-        // reachable.
-        self_.initialize_local_store(nns_pub_key).await;
-
-        // Initialize the registry client with the latest version from the local store.
-        if let Err(err) = self_.registry_client.poll_once() {
-            error!(
-                self_.logger,
-                "Failed to poll the registry once after initialization: {}", err
-            )
         }
-
-        self_
     }
 
     pub async fn new(
@@ -243,16 +247,20 @@ impl RegistryReplicator {
         (nns_urls, nns_pub_key)
     }
 
-    async fn initialize_local_store(&self, nns_pub_key: Option<ThresholdSigPublicKey>) {
+    async fn initialize_local_store(
+        logger: &ReplicaLogger,
+        local_store: Arc<dyn LocalStore>,
+        nns_urls: Vec<Url>,
+        nns_pub_key: Option<ThresholdSigPublicKey>,
+    ) {
         // If the local registry store is not empty, exit.
-        if !self
-            .local_store
+        if !local_store
             .get_changelog_since_version(ZERO_REGISTRY_VERSION)
             .expect("Could not read registry local store.")
             .is_empty()
         {
             info!(
-                self.logger,
+                logger,
                 "Local registry store is not empty, skipping initialization."
             );
             return;
@@ -263,7 +271,7 @@ impl RegistryReplicator {
         let mut registry_version = ZERO_REGISTRY_VERSION;
         let mut timeout = 1;
 
-        let registry_canister = RegistryCanister::new(self.nns_urls.clone());
+        let registry_canister = RegistryCanister::new(nns_urls);
 
         // Fill the local registry store by polling the registry canister until we get no
         // more changes.
@@ -298,7 +306,7 @@ impl RegistryReplicator {
                         .enumerate()
                         .try_for_each(|(i, cle)| {
                             let v = registry_version + RegistryVersion::from(i as u64 + 1);
-                            self.local_store.store(v, cle)
+                            local_store.store(v, cle)
                         })
                         .expect("Could not write to local store.");
 
@@ -307,14 +315,14 @@ impl RegistryReplicator {
 
                     if entries > 0 {
                         info!(
-                            self.logger,
+                            logger,
                             "Stored registry versions up to: {}", registry_version
                         );
                     }
                 }
                 Err(e) => {
                     warn!(
-                        self.logger,
+                        logger,
                         "Couldn't fetch registry updates (retry in {}s): {:?}", timeout, e
                     );
                     tokio::time::sleep(Duration::from_secs(timeout)).await;
@@ -325,7 +333,7 @@ impl RegistryReplicator {
         }
 
         info!(
-            self.logger,
+            logger,
             "Finished local store initialization at registry version: {}", registry_version
         );
     }
