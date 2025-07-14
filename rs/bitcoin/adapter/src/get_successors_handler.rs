@@ -297,10 +297,18 @@ fn are_multiple_blocks_allowed(network: AdapterNetwork, anchor_height: BlockHeig
             match network {
                 Bitcoin => anchor_height <= MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT,
                 Testnet | Signet | Regtest | Testnet4 => true,
-                other => unreachable!("Unsupported network: {:?}", other),
+                other => unreachable!("Unsupported Bitcoin network: {:?}", other),
             }
         }
-        AdapterNetwork::Dogecoin(_) => true,
+        // TODO(XC-432): check if Dogecoin mainnet can also be guarded by an anchor height.
+        AdapterNetwork::Dogecoin(network) => {
+            use bitcoin::dogecoin::Network::*;
+            match network {
+                Dogecoin => false,
+                Testnet | Regtest => true,
+                other => unreachable!("Unsupported Dogecoin network: {:?}", other),
+            }
+        }
     }
 }
 
