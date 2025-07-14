@@ -144,7 +144,7 @@ impl PocketIc {
         let server_url = if let Some(server_url) = server_url {
             server_url
         } else {
-            start_or_reuse_server(server_binary).await.1
+            start_or_reuse_server(server_binary).await
         };
 
         let subnet_config_set = subnet_config_set
@@ -314,11 +314,7 @@ impl PocketIc {
     /// List all instances and their status.
     #[instrument(ret)]
     pub async fn list_instances() -> Vec<String> {
-        let url = start_or_reuse_server(None)
-            .await
-            .1
-            .join("instances")
-            .unwrap();
+        let url = start_or_reuse_server(None).await.join("instances").unwrap();
         let instances: Vec<String> = reqwest::Client::new()
             .get(url)
             .send()

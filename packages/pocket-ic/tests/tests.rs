@@ -18,8 +18,9 @@ use pocket_ic::{
         BlobCompression, CanisterHttpReply, CanisterHttpResponse, MockCanisterHttpResponse,
         RawEffectivePrincipal, RawMessageId, SubnetKind,
     },
-    query_candid, start_or_reuse_server, update_candid, DefaultEffectiveCanisterIdError, ErrorCode,
-    IngressStatusResult, PocketIc, PocketIcBuilder, PocketIcState, RejectCode, Time,
+    query_candid, start_or_reuse_server, start_or_reuse_server_impl, update_candid,
+    DefaultEffectiveCanisterIdError, ErrorCode, IngressStatusResult, PocketIc, PocketIcBuilder,
+    PocketIcState, RejectCode, Time,
 };
 use reqwest::blocking::Client;
 use reqwest::header::CONTENT_LENGTH;
@@ -461,7 +462,7 @@ fn time_on_resumed_instance() {
 
 #[tokio::test]
 async fn time_on_killed_instance() {
-    let (mut server, server_url) = start_or_reuse_server(None).await;
+    let (mut server, server_url) = start_or_reuse_server_impl(None).await;
     let temp_dir = TempDir::new().unwrap();
 
     let state = PocketIcState::new_from_path(temp_dir.path().to_path_buf());
@@ -3224,7 +3225,7 @@ async fn with_all_icp_features_and_nns_subnet_state() {
         .unwrap()
         .into();
 
-    let url = start_or_reuse_server(None).await.1;
+    let url = start_or_reuse_server(None).await;
     let client = reqwest::Client::new();
     let instance_config = InstanceConfig {
         subnet_config_set: ExtendedSubnetConfigSet {
