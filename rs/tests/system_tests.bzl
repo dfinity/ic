@@ -256,6 +256,19 @@ def system_test(
     # NOTE: we use "ENV_DEPS__" as prefix for env variables, which are passed to system-tests via Bazel.
     _env_deps["ENV_DEPS__IC_VERSION_FILE"] = _guestos + "version.txt"
 
+    # Guardrails for specifying source and target images
+    if uses_guestos_img and uses_guestos_mainnet_img:
+        fail("More than one initial GuestOS (disk) image was specified!")
+
+    if uses_guestos_update and uses_guestos_test_update and uses_guestos_mainnet_update:
+        fail("More than one target GuestOS (upgrade) image was specified!")
+
+    if uses_setupos_img and uses_setupos_mainnet_img:
+        fail("More than one initial SetupOS (disk) image was provided!")
+
+    if uses_hostos_update and uses_hostos_test_update and uses_hostos_mainnet_update:
+        fail("More than one target HostOS (upgrade) image was specified!")
+
     icos_images = dict()
 
     if uses_guestos_img:
