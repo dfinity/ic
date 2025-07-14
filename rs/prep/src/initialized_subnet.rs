@@ -15,6 +15,7 @@ use ic_registry_keys::{
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::{subnet_id_into_protobuf, RegistryVersion, SubnetId};
+use serde::Serialize;
 
 use crate::{node::InitializedNode, util::write_registry_entry};
 use crate::{
@@ -24,7 +25,7 @@ use crate::{
 
 /// Represents a subnet for which all initial state (node crypto keys, initial
 /// dkg transcript) was generated.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub struct InitializedSubnet {
     pub subnet_index: u64,
 

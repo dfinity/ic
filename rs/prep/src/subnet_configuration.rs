@@ -35,12 +35,12 @@ use ic_types::{
     },
     Height, NodeId, PrincipalId, ReplicaVersion, SubnetId,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 pub type SubnetIndex = u64;
 
-#[derive(Copy, Clone, PartialEq, Debug, Default, Deserialize)]
+#[derive(Copy, Clone, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub enum SubnetRunningState {
     #[default]
     Active,
@@ -49,7 +49,7 @@ pub enum SubnetRunningState {
 
 /// This represents the initial configuration of an NNS subnetwork of an IC
 /// instance.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Serialize)]
 pub struct SubnetConfig {
     /// The subnet id of this subnetwork.
     pub subnet_index: SubnetIndex,

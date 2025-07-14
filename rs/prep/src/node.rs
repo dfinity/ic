@@ -40,7 +40,7 @@ const STATE_DIR: &str = "state";
 pub type SubnetIndex = u64;
 pub type NodeIndex = u64;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub struct InitializedNode {
     pub node_id: NodeId,
 

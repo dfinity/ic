@@ -163,6 +163,10 @@ struct CliArgs {
     /// commas. Port 8080 is always included.
     #[clap(long)]
     whitelisted_ports: Option<String>,
+
+    /// If true, the registry will be printed as JSON (along with protobuf).
+    #[clap(long)]
+    topology_as_json: bool,
 }
 
 fn main() -> Result<()> {
@@ -246,7 +250,7 @@ fn main() -> Result<()> {
         None => ic_config0,
     };
 
-    let _ = ic_config.initialize()?;
+    let _ = ic_config.initialize(valid_args.topology_as_json)?;
     Ok(())
 }
 
@@ -274,6 +278,7 @@ struct ValidatedArgs {
     pub use_specified_ids_allocation_range: bool,
     pub whitelisted_prefixes: Option<String>,
     pub whitelisted_ports: Option<String>,
+    pub topology_as_json: bool,
 }
 
 impl CliArgs {
@@ -418,6 +423,7 @@ impl CliArgs {
             use_specified_ids_allocation_range: self.use_specified_ids_allocation_range,
             whitelisted_prefixes: self.whitelisted_prefixes,
             whitelisted_ports: self.whitelisted_ports,
+            topology_as_json: self.topology_as_json,
         })
     }
 }

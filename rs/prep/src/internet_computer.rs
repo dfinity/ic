@@ -17,6 +17,7 @@ use std::{
 use anyhow::{anyhow, Result};
 
 use prost::Message;
+use serde::Serialize;
 use serde_json::Value;
 use thiserror::Error;
 use url::Url;
@@ -86,7 +87,7 @@ pub const INITIAL_NODE_ALLOWANCE_MULTIPLIER: usize = 2;
 
 pub const INITIAL_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(1);
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Serialize, Debug, Default)]
 pub struct TopologyConfig {
     subnets: BTreeMap<SubnetIndex, SubnetConfig>,
     subnet_ids: BTreeMap<SubnetIndex, SubnetId>,
@@ -212,7 +213,7 @@ impl TopologyConfig {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub struct NodeOperatorEntry {
     _name: String,
     principal_id: PrincipalId,
@@ -422,7 +423,10 @@ impl IcConfig {
     /// * ... the secret key store for each node in this IC
     /// * ... registry entries to be picked up by ic-admin
     /// * ... a registry file to be used as a static registry
-    pub fn initialize(mut self) -> Result<InitializedIc, InitializeError> {
+    ///
+    /// The `topology_as_json` parameter indicates whether the topology should be
+    /// serialized as JSON in addition to the protobuf format.
+    pub fn initialize(mut self, topology_as_json: bool) -> Result<InitializedIc, InitializeError> {
         let version = INITIAL_REGISTRY_VERSION;
 
         let mut mutations = self.initial_mutations.clone();
@@ -726,6 +730,18 @@ impl IcConfig {
             let v = ZERO_REGISTRY_VERSION + RegistryVersion::from(i as u64 + 1);
             registry_store.store(v, cle)
         })?;
+
+        if topology_as_json {
+            let json_path = self.target_dir.join("ic_registry.json");
+            let json_data = serde_json::to_string(&initialized_topology)
+                .map_err(|e| InitializeError::JsonError { source: e })?;
+            std::fs::write(&json_path, json_data)
+                .map_err(|e| InitializeError::IoError { source: e })
+                .expect(&format!(
+                    "Failed to write JSON registry file: {:?}",
+                    json_path
+                ));
+        }
 
         Ok(InitializedIc {
             target_dir: self.target_dir,
