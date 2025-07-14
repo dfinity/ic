@@ -8,7 +8,6 @@ lazy_static! {
         "phgey-5cyzw-2ype7-y5q7w-yce6j-3yvg7-tlkfe-quvvy-pqpt4-252od-fqe" => "type3.1",
         "jognp-ct5lo-tobx4-fpaio-gwwh6-7aybl-cmmlw-x4oo4-zut5y-rdrfj-6qe" => "type3",
         "eteye-hwqyn-n36jd-isvcm-qxddm-jyai6-r5zvb-xnmd4-p7gye-x6cyz-7ae" => "type3",
-        "mgsm4-dtqz6-qjrcm-46lrl-525hm-zysjr-5awdt-pn56a-5fegb-sf6nk-iae" => "type3",
     }
     .into_iter()
     .map(|(k, v)| (k.to_string(), v.to_string()))
