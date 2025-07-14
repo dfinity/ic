@@ -42,6 +42,8 @@ EOF
 
         docker build --tag final -f /tmp/Dockerfile .
         docker run --privileged -v /dev:/dev --rm final /usr/bin/bash -c "
+            # The udev daemon is necessary so that the devices created in the test are properly
+            # picked up. dmsetup must be available in the container image for this to work.
             /usr/lib/systemd/systemd-udevd --daemon
             /upgrade_device_mapper_test
         "
