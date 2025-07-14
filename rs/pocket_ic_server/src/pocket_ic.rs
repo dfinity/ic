@@ -716,8 +716,7 @@ impl PocketIcSubnets {
         let subnet_id = sm.get_subnet_id();
 
         if let Some(expected_time) = time {
-            let metadata = &sm.state_manager.get_latest_state().take().metadata;
-            let actual_time: SystemTime = metadata.batch_time.into();
+            let actual_time: SystemTime = sm.get_state_time().into();
             if actual_time != expected_time {
                 return Err(format!("The state of subnet {} is corrupted.", subnet_id));
             }
@@ -792,13 +791,7 @@ impl PocketIcSubnets {
         // set the time to the maximum time in the latest state across all subnets.
         let mut time: SystemTime = GENESIS.into();
         for subnet in self.subnets.get_all() {
-            let metadata = &subnet
-                .state_machine
-                .state_manager
-                .get_latest_state()
-                .take()
-                .metadata;
-            time = max(time, metadata.batch_time.into());
+            time = max(time, subnet.state_machine.get_state_time().into());
         }
 
         // Make sure time is strictly monotone.
