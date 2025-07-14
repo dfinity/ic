@@ -24,6 +24,7 @@ packages:
   - "bash"
   - "ca-certificates"
   - "coreutils" # for chmod
+  - "dmsetup"
   - "dosfstools"
   - "dpkg" # for apt list --installed
   - "gawk" # for build-bootstrap-config-image
