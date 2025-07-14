@@ -257,7 +257,7 @@ impl MappedDevice {
         )
     }
 
-    pub fn create_snapshot_table(
+    pub fn create_snapshot(
         device_mapper: Arc<DM>,
         name: &'static str,
         source: Box<dyn DeviceTrait>,

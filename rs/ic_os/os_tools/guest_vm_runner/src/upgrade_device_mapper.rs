@@ -86,7 +86,7 @@ fn create_device_for_upgrade(
     .context("Failed to create data partition device")?;
 
     // Create data partition snapshot that writes to the temporary device
-    let data_partition_snapshot_device = MappedDevice::create_snapshot_table(
+    let data_partition_snapshot_device = MappedDevice::create_snapshot(
         dev_mapper.clone(),
         DATA_PARTITION_SNAPSHOT_DM_NAME,
         Box::new(readonly_data_partition_device),
