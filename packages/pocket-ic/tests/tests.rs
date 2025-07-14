@@ -461,8 +461,14 @@ fn time_on_resumed_instance() {
 async fn resume_killed_instance_impl(allow_corrupted_state: Option<bool>) -> Result<(), String> {
     let (mut server, server_url) = start_server(StartServerParams::default()).await;
     let temp_dir = TempDir::new().unwrap();
+    #[cfg(not(windows))]
+    let state_dir_path = temp_dir.path().to_path_buf();
+    #[cfg(windows)]
+    let state_dir_path = windows_to_wsl(temp_dir.path().as_os_str().to_str().unwrap())
+        .unwrap()
+        .into();
 
-    let state = PocketIcState::new_from_path(temp_dir.path().to_path_buf());
+    let state = PocketIcState::new_from_path(state_dir_path.clone());
     let pic = PocketIcBuilder::new()
         .with_application_subnet()
         .with_server_url(server_url)
@@ -493,7 +499,7 @@ async fn resume_killed_instance_impl(allow_corrupted_state: Option<bool>) -> Res
     let client = reqwest::Client::new();
     let instance_config = InstanceConfig {
         subnet_config_set: ExtendedSubnetConfigSet::default(),
-        state_dir: Some(temp_dir.path().to_path_buf()),
+        state_dir: Some(state_dir_path),
         nonmainnet_features: false,
         log_level: None,
         bitcoind_addr: None,
