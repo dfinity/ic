@@ -71,6 +71,10 @@
     "rev": "2f87fe95207dc6371a2f2dc273362ba03b41e0e9",
     "sha256": "f3e28dd6102fd0a9a959a4b0fecdd052b7391aab6ecd626e194e6afeeb36f07f"
   },
+  "governance-canister_test": {
+    "rev": "2f87fe95207dc6371a2f2dc273362ba03b41e0e9",
+    "sha256": "1676d35b79dc212f3f52be347f8072d7d2851d59f771da95f3b412f2b39a5439"
+  },
   "index": {
     "rev": "3ae3649a2366aaca83404b692fc58e4c6e604a25",
     "sha256": "b443df3315902404b142d60f3cfd2f580181683310f6e6321b52de297deffcda"
