@@ -4,16 +4,16 @@ use ic_agent::Agent;
 use ic_base_types::CanisterId;
 use ic_nervous_system_agent::nns::sns_wasm;
 use ic_nns_constants::{
-    CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID,
-    LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, NODE_REWARDS_CANISTER_ID, REGISTRY_CANISTER_ID,
-    ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
+    CYCLES_LEDGER_INDEX_CANISTER_ID, CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID,
+    GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, NODE_REWARDS_CANISTER_ID,
+    REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
 use std::env;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
 
-pub const NNS_CANISTER_NAME_TO_ID: [(&str, CanisterId); 9] = [
+pub const NNS_CANISTER_NAME_TO_ID: [(&str, CanisterId); 10] = [
     ("registry", REGISTRY_CANISTER_ID),
     ("governance", GOVERNANCE_CANISTER_ID),
     ("ledger", LEDGER_CANISTER_ID),
@@ -23,6 +23,7 @@ pub const NNS_CANISTER_NAME_TO_ID: [(&str, CanisterId); 9] = [
     ("cycles-minting", CYCLES_MINTING_CANISTER_ID),
     ("sns-wasm", SNS_WASM_CANISTER_ID),
     ("node-rewards", NODE_REWARDS_CANISTER_ID),
+    ("cycles_ledger_index", CYCLES_LEDGER_INDEX_CANISTER_ID),
 ];
 
 async fn get_mainnet_canister_git_commit_id_and_module_hash(
