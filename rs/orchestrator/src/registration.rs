@@ -409,7 +409,7 @@ impl NodeRegistration {
 
         let node_id = self.node_id;
 
-        let (nns_url, rustls_config) = match self.get_random_nns_url_and_client() {
+        let (nns_url, rustls_config) = match self.get_random_nns_url_and_rustls_config() {
             Some((url, config)) => (url, Some(config)),
             None => match self.get_random_nns_url_from_config() {
                 Some(url) => (url, None),
@@ -509,7 +509,7 @@ impl NodeRegistration {
     }
 
     // Returns one random NNS url from registry.
-    fn get_random_nns_url_and_client(&self) -> Option<(Url, rustls::ClientConfig)> {
+    fn get_random_nns_url_and_rustls_config(&self) -> Option<(Url, rustls::ClientConfig)> {
         let version = self.registry_client.get_latest_version();
         let root_subnet_id = match self.registry_client.get_root_subnet_id(version) {
             Ok(Some(id)) => id,
