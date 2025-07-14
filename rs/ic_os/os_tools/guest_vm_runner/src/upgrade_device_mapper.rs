@@ -309,6 +309,7 @@ mod tests {
         let device = create_test_setup().device;
         let device_path = device.path().to_path_buf();
         // Forget the device so it doesn't get cleaned up automatically
+        #[allow(clippy::mem_forget)] // This is intentional to test cleanup
         std::mem::forget(device);
         assert!(device_path.exists());
 
