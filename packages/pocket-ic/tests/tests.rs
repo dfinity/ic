@@ -472,20 +472,34 @@ async fn time_on_killed_instance() {
         .build_async()
         .await;
 
-    let time = pic.get_time().await;
+    let canister_id = pic.create_canister().await;
 
-    // this change of time is lost after killing the server
+    // Execute many rounds to trigger a checkpoint.
+    for _ in 0..600 {
+        pic.tick().await;
+    }
+
+    // The following (most recent) changes will be lost after killing the instance.
     let now = SystemTime::now();
     pic.set_certified_time(now.into()).await;
+    let another_canister_id = pic.create_canister().await;
+
+    assert!(pic.canister_exists(canister_id).await);
+    assert!(pic.canister_exists(another_canister_id).await);
+    let time = pic.get_time().await;
+    assert!(time >= now.into());
 
     server.kill().unwrap();
 
     let state = PocketIcState::new_from_path(temp_dir.path().to_path_buf());
     let pic = PocketIcBuilder::new().with_state(state).build_async().await;
 
-    // The time on the resumed instances increases by 1ns due to bumping time when creating a new instance to ensure strict time monotonicity.
+    // Only the first canister (created before the last checkpoint) is preserved,
+    // the other canister and time change are lost.
+    assert!(pic.canister_exists(canister_id).await);
+    assert!(!pic.canister_exists(another_canister_id).await);
     let resumed_time = pic.get_time().await;
-    assert_eq!(resumed_time, time + Duration::from_nanos(1));
+    assert!(resumed_time < now.into());
 }
 
 #[test]
