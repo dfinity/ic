@@ -73,8 +73,8 @@ pub type ConnectionManagerResult<T> = Result<T, ConnectionManagerError>;
 /// This struct manages the connection connections that the adapter uses to communicate
 /// with Bitcoin nodes.
 pub struct ConnectionManager<NetworkMessage> {
-    /// Whether to override the protocol version used in `VersionMessage`.
-    protocol_version_override: Option<u32>,
+    /// p2p protocol version used in `VersionMessage`.
+    p2p_protocol_version: u32,
     /// This field contains the address book.
     address_book: AddressBook,
     /// This field is used to indicate whether or not the connection manager needs to populate the
@@ -122,7 +122,7 @@ impl<Block: Clone> ConnectionManager<NetworkMessage<Block>> {
         let (min_connections, max_connections) = connection_limits(&address_book);
 
         Self {
-            protocol_version_override: config.network.p2p_protocol_version_override(),
+            p2p_protocol_version: config.network.p2p_protocol_version(),
             initial_address_discovery: !address_book.has_enough_addresses(),
             address_book,
             logger,
@@ -356,8 +356,8 @@ impl<Block: Clone> ConnectionManager<NetworkMessage<Block>> {
         let receiver = Address::new(addr, ServiceFlags::NETWORK | ServiceFlags::NETWORK_LIMITED);
         let nonce: u64 = self.rng.gen();
         let user_agent = String::from(USER_AGENT);
-        let message = <NetworkMessage<Block>>::Version(new_version_message(
-            self.protocol_version_override,
+        let message = <NetworkMessage<Block>>::Version(VersionMessage::new(
+            self.p2p_protocol_version,
             services,
             timestamp as i64,
             receiver,
@@ -694,32 +694,6 @@ fn connection_limits(address_book: &AddressBook) -> (usize, usize) {
     }
 }
 
-fn new_version_message(
-    protocol_version_override: Option<u32>,
-    services: ServiceFlags,
-    timestamp: i64,
-    receiver: Address,
-    sender: Address,
-    nonce: u64,
-    user_agent: String,
-    start_height: i32,
-) -> VersionMessage {
-    let msg = VersionMessage::new(
-        services,
-        timestamp,
-        receiver,
-        sender,
-        nonce,
-        user_agent,
-        start_height,
-    );
-    if let Some(version) = protocol_version_override {
-        msg.with_version(version)
-    } else {
-        msg
-    }
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
@@ -743,6 +717,7 @@ mod test {
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
         let mut version_message = VersionMessage::new(
+            bitcoin::p2p::PROTOCOL_VERSION,
             services,
             0,
             receiver,
@@ -772,6 +747,7 @@ mod test {
         let receiver = Address::new(&socket_1, services);
         let sender = Address::new(&socket_2, ServiceFlags::NONE);
         let version_message = VersionMessage::new(
+            bitcoin::p2p::PROTOCOL_VERSION,
             services,
             0,
             receiver,
@@ -806,6 +782,7 @@ mod test {
         let receiver = Address::new(&socket_1, ServiceFlags::NONE);
         let sender = Address::new(&socket_2, ServiceFlags::NONE);
         let version_message = VersionMessage::new(
+            bitcoin::p2p::PROTOCOL_VERSION,
             services,
             0,
             receiver,
@@ -879,6 +856,7 @@ mod test {
                             .send((
                                 address,
                                 NetworkMessage::Version(VersionMessage::new(
+                                    bitcoin::p2p::PROTOCOL_VERSION,
                                     services,
                                     since_epoch as i64,
                                     Address::new(&adapter_address, services),
@@ -1136,6 +1114,7 @@ mod test {
         let receiver = Address::new(&socket_1, services);
         let sender = Address::new(&socket_2, ServiceFlags::NONE);
         let version_message = VersionMessage::new(
+            bitcoin::p2p::PROTOCOL_VERSION,
             services,
             0,
             receiver,
@@ -1183,6 +1162,7 @@ mod test {
         let receiver = Address::new(&socket_1, services);
         let sender = Address::new(&socket_2, ServiceFlags::NONE);
         let version_message = VersionMessage::new(
+            bitcoin::p2p::PROTOCOL_VERSION,
             services,
             0,
             receiver,

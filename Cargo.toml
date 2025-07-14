@@ -798,4 +798,4 @@ features = ["exe"]
 version = "^0.8.1"
 
 [patch.crates-io]
-bitcoin = { git = "https://github.com/dfinity/rust-dogecoin", rev = "f1f900da0b193c43fd16f4598e614ed3eafbfd8f" }
+bitcoin = { git = "https://github.com/dfinity/rust-dogecoin", rev = "b5125f00d9d1e6c553d83ee54ee9d6203da8e0db" }
