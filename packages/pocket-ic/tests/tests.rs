@@ -461,7 +461,7 @@ fn time_on_resumed_instance() {
 }
 
 #[tokio::test]
-async fn time_on_killed_instance() {
+async fn killed_instance() {
     let (mut server, server_url) = start_or_reuse_server_impl(None).await;
     let temp_dir = TempDir::new().unwrap();
 
