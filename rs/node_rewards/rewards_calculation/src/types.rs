@@ -7,6 +7,10 @@ use std::fmt;
 use std::fmt::Display;
 
 pub type UnixTsNanos = u64;
+pub type NodesCount = u64;
+
+pub type Region = String;
+
 pub const NANOS_PER_DAY: UnixTsNanos = 24 * 60 * 60 * 1_000_000_000;
 
 #[cfg(target_arch = "wasm32")]
@@ -99,11 +103,6 @@ impl fmt::Display for RewardPeriodError {
 }
 
 impl Error for RewardPeriodError {}
-
-#[derive(Eq, Hash, PartialEq, Clone, Ord, PartialOrd, Debug, Default)]
-pub struct Region(pub String);
-#[derive(Eq, Hash, PartialEq, Clone, Ord, PartialOrd, Debug, Default)]
-pub struct NodeType(pub String);
 
 #[derive(Default)]
 pub struct ProviderRewardableNodes {
