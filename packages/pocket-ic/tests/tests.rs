@@ -538,13 +538,13 @@ async fn resume_killed_instance_impl(allow_corrupted_state: Option<bool>) -> Res
 #[tokio::test]
 async fn resume_killed_instance_default() {
     let err = resume_killed_instance_impl(None).await.unwrap_err();
-    assert!(err.contains("The state of subnet qxw6a-xchhl-fytzl-qfagk-kuv6t-ye6xf-box4s-fiqod-vn2ex-qkp3q-5ae is corrupted."));
+    assert!(err.contains("The state of subnet with seed 7712b2c09cb96b3aa3fbffd4034a21a39d5d13f80e043161d1d71f4c593434af is corrupted."));
 }
 
 #[tokio::test]
 async fn resume_killed_instance_strict() {
     let err = resume_killed_instance_impl(Some(false)).await.unwrap_err();
-    assert!(err.contains("The state of subnet qxw6a-xchhl-fytzl-qfagk-kuv6t-ye6xf-box4s-fiqod-vn2ex-qkp3q-5ae is corrupted."));
+    assert!(err.contains("The state of subnet with seed 7712b2c09cb96b3aa3fbffd4034a21a39d5d13f80e043161d1d71f4c593434af is corrupted."));
 }
 
 #[tokio::test]

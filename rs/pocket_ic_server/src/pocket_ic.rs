@@ -718,7 +718,10 @@ impl PocketIcSubnets {
         if let Some(expected_time) = time {
             let actual_time: SystemTime = sm.get_state_time().into();
             if actual_time != expected_time {
-                return Err(format!("The state of subnet {} is corrupted.", subnet_id));
+                return Err(format!(
+                    "The state of subnet with seed {} is corrupted.",
+                    hex::encode(subnet_seed)
+                ));
             }
         }
 
