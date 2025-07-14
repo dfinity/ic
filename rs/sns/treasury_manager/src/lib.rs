@@ -161,6 +161,60 @@ pub enum ErrorKind {
     Generic { generic_error_name: String },
 }
 
+impl Error {
+    pub fn new_precondition(message: impl ToString) -> Self {
+        Self {
+            code: 1,
+            message: message.to_string(),
+            kind: ErrorKind::Precondition {},
+        }
+    }
+
+    pub fn new_postcondition(message: String) -> Self {
+        Self {
+            code: 2,
+            message,
+            kind: ErrorKind::Postcondition {},
+        }
+    }
+
+    pub fn new_call(
+        method: String,
+        canister_id: Principal,
+        message: String,
+    ) -> Self {
+        Self {
+            code: 3,
+            message,
+            kind: ErrorKind::Call { method, canister_id },
+        }
+    }
+
+    pub fn new_backend(message: String) -> Self {
+        Self {
+            code: 4,
+            message,
+            kind: ErrorKind::Backend {},
+        }
+    }
+
+    pub fn new_temporarily_unavailable(message: String) -> Self {
+        Self {
+            code: 5,
+            message,
+            kind: ErrorKind::TemporarilyUnavailable {},
+        }
+    }
+
+    pub fn new_generic(code: u64, generic_error_name: String, message: String) -> Self {
+        Self {
+            code,
+            message,
+            kind: ErrorKind::Generic { generic_error_name },
+        }
+    }
+}
+
 pub trait TreasuryManager {
     /// Implements the `deposit` API function.
     fn deposit(
@@ -222,8 +276,8 @@ pub struct AuditTrailRequest {}
 
 #[derive(CandidType, Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Step {
-    index: usize,
-    is_final: bool,
+    pub index: usize,
+    pub is_final: bool,
 }
 
 impl Display for Step {
@@ -257,8 +311,8 @@ impl Operation {
 
 #[derive(CandidType, Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 pub struct TreasuryManagerOperation {
-    operation: Operation,
-    step: Step,
+    pub operation: Operation,
+    pub step: Step,
 }
 
 impl TreasuryManagerOperation {
