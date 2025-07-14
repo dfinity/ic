@@ -1313,26 +1313,6 @@ pub fn get_empty_disk_img_sha256() -> Result<String> {
     Ok(std::env::var("ENV_DEPS__EMPTY_DISK_IMG_HASH")?)
 }
 
-pub fn get_malicious_ic_os_img_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__GUESTOS_MALICIOUS_DISK_IMG_URL")?;
-    Ok(Url::parse(&url)?)
-}
-
-pub fn get_malicious_ic_os_img_sha256() -> Result<String> {
-    Ok(std::env::var("ENV_DEPS__GUESTOS_MALICIOUS_DISK_IMG_HASH")?)
-}
-
-pub fn get_malicious_ic_os_update_img_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__GUESTOS_MALICIOUS_UPDATE_IMG_URL")?;
-    Ok(Url::parse(&url)?)
-}
-
-pub fn get_malicious_ic_os_update_img_sha256() -> Result<String> {
-    Ok(std::env::var(
-        "ENV_DEPS__GUESTOS_MALICIOUS_UPDATE_IMG_HASH",
-    )?)
-}
-
 pub fn get_boundary_node_img_url() -> Result<Url> {
     let url = std::env::var("ENV_DEPS__BOUNDARY_GUESTOS_DISK_IMG_URL")?;
     Ok(Url::parse(&url)?)

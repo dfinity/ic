@@ -16,7 +16,6 @@ use crate::{
         test_env_api::{
             get_dependency_path_from_env, get_elasticsearch_hosts, get_guestos_img_version,
             get_guestos_initial_update_img_sha256, get_guestos_initial_update_img_url,
-            get_malicious_ic_os_update_img_sha256, get_malicious_ic_os_update_img_url,
             get_setupos_img_sha256, get_setupos_img_url, HasTopologySnapshot, HasVmName,
             IcNodeContainer, InitialReplicaVersion, NodesInfo,
         },
@@ -182,23 +181,10 @@ pub fn init_ic(
     }
 
     let whitelist = ProvisionalWhitelist::All;
-    let (ic_os_update_img_sha256, ic_os_update_img_url) = {
-        if ic.has_malicious_behaviours() {
-            warn!(
-                logger,
-                "Using malicious guestos update image for IC config."
-            );
-            (
-                get_malicious_ic_os_update_img_sha256()?,
-                get_malicious_ic_os_update_img_url()?,
-            )
-        } else {
-            (
-                get_guestos_initial_update_img_sha256(test_env)?,
-                get_guestos_initial_update_img_url()?,
-            )
-        }
-    };
+    let (ic_os_update_img_sha256, ic_os_update_img_url) = (
+        get_guestos_initial_update_img_sha256(test_env)?,
+        get_guestos_initial_update_img_url()?,
+    );
     let mut ic_config = IcConfig::new(
         working_dir.path(),
         ic_topology,
