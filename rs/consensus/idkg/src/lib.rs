@@ -197,7 +197,9 @@ use ic_interfaces::{
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_replicated_state::ReplicatedState;
+use ic_replicated_state::{
+    metadata_state::subnet_call_context_manager::ThresholdArguments, ReplicatedState,
+};
 use ic_types::{
     artifact::IDkgMessageId, consensus::idkg::IDkgBlockReader,
     crypto::canister_threshold_sig::error::IDkgRetainKeysError, malicious_flags::MaliciousFlags,
@@ -247,6 +249,7 @@ pub struct IDkgImpl {
     complaint_handler: Box<dyn IDkgComplaintHandler>,
     consensus_block_cache: Arc<dyn ConsensusBlockCache>,
     crypto: Arc<dyn ConsensusCrypto>,
+    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     schedule: RoundRobin,
     last_transcript_purge_ts: RefCell<Instant>,
     metrics: IDkgClientMetrics,
@@ -277,7 +280,7 @@ impl IDkgImpl {
             node_id,
             consensus_block_cache.clone(),
             crypto.clone(),
-            state_reader,
+            state_reader.clone(),
             metrics_registry.clone(),
             logger.clone(),
         ));
@@ -293,6 +296,7 @@ impl IDkgImpl {
             signer,
             complaint_handler,
             crypto,
+            state_reader,
             consensus_block_cache,
             schedule: RoundRobin::default(),
             last_transcript_purge_ts: RefCell::new(Instant::now()),
@@ -338,6 +342,33 @@ impl IDkgImpl {
                 "purge_inactive_transcripts(): abort due to {} errors", error_count,
             );
             return;
+        }
+
+        if let Some(snapshot) = self.state_reader.get_certified_state_snapshot() {
+            let state = snapshot.get_state();
+            let pre_signature_stashes = &state
+                .metadata
+                .subnet_call_context_manager
+                .pre_signature_stashes;
+            for stash in pre_signature_stashes.values() {
+                active_transcripts.insert(stash.key_transcript.as_ref().clone());
+            }
+
+            for request in state.signature_request_contexts().values() {
+                match &request.args {
+                    ThresholdArguments::Ecdsa(ecdsa) => {
+                        for transcript in ecdsa.iter_idkg_transcripts() {
+                            active_transcripts.insert(transcript.clone());
+                        }
+                    }
+                    ThresholdArguments::Schnorr(schnorr) => {
+                        for transcript in schnorr.iter_idkg_transcripts() {
+                            active_transcripts.insert(transcript.clone());
+                        }
+                    }
+                    ThresholdArguments::VetKd(_) => continue,
+                }
+            }
         }
 
         match IDkgProtocol::retain_active_transcripts(&*self.crypto, &active_transcripts) {

@@ -875,6 +875,23 @@ pub struct EcdsaArguments {
     pub pre_signature: Option<EcdsaMatchedPreSignature>,
 }
 
+impl EcdsaArguments {
+    pub fn iter_idkg_transcripts(&self) -> impl Iterator<Item = &IDkgTranscript> {
+        let refs = if let Some(pre_sig) = &self.pre_signature {
+            vec![
+                pre_sig.pre_signature.kappa_unmasked(),
+                pre_sig.pre_signature.lambda_masked(),
+                pre_sig.pre_signature.kappa_times_lambda(),
+                pre_sig.pre_signature.key_times_lambda(),
+                pre_sig.key_transcript.as_ref(),
+            ]
+        } else {
+            vec![]
+        };
+        refs.into_iter()
+    }
+}
+
 impl From<&EcdsaArguments> for pb_metadata::EcdsaArguments {
     fn from(args: &EcdsaArguments) -> Self {
         Self {
@@ -949,6 +966,20 @@ pub struct SchnorrArguments {
     pub message: Arc<Vec<u8>>,
     pub taproot_tree_root: Option<Arc<Vec<u8>>>,
     pub pre_signature: Option<SchnorrMatchedPreSignature>,
+}
+
+impl SchnorrArguments {
+    pub fn iter_idkg_transcripts(&self) -> impl Iterator<Item = &IDkgTranscript> {
+        let refs = if let Some(pre_sig) = &self.pre_signature {
+            vec![
+                pre_sig.pre_signature.blinder_unmasked(),
+                pre_sig.key_transcript.as_ref(),
+            ]
+        } else {
+            vec![]
+        };
+        refs.into_iter()
+    }
 }
 
 impl From<&SchnorrArguments> for pb_metadata::SchnorrArguments {
