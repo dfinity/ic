@@ -33,12 +33,12 @@ impl Balance {
         }
     }
 
-    pub fn zero(account: Option<Account>, name: Option<String>) -> Self {
+    fn zero(account: Option<Account>, name: Option<String>) -> Self {
         Self::new(0, account, name)
     }
 }
 
-#[derive(CandidType, Clone, Debug, Deserialize, PartialEq)]
+#[derive(CandidType, Clone, Debug, Default, Deserialize, PartialEq)]
 pub struct BalanceBook {
     pub treasury_owner: Option<Balance>,
     pub treasury_manager: Option<Balance>,
@@ -361,12 +361,9 @@ impl TreasuryManagerOperation {
 
 impl Display for TreasuryManagerOperation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        const PREFIX: &str = "TreasuryManager";
-
         write!(
             f,
-            "{}.{}-{}",
-            PREFIX,
+            "TreasuryManager.{}-{}",
             self.operation.name(),
             self.step,
         )
@@ -418,9 +415,11 @@ impl fmt::Debug for Transaction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Transaction")
             .field("timestamp_ns", &self.timestamp_ns)
+            // This is the 1st motivation for this hand-crafted Debug impl.
             .field("canister_id", &self.canister_id.to_string())
             .field("result", &self.result)
             .field("purpose", &self.purpose)
+            // This is the 2nd motivation for this hand-crafted Debug impl.
             .field("treasury_manager_operation", &self.treasury_manager_operation.to_string())
             .finish()
     }
