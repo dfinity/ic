@@ -1954,8 +1954,8 @@ async fn do_transaction_notification(
             .ok_or_else(|| "Topping up requires a subaccount.".to_string())?)
             .try_into()
             .map_err(|err| format!("Cannot parse subaccount: {}", err))?;
-        // We always use cycles limit for these transaction_notifications because they can't come from
-        // any canisters that have exceptions to the limit.
+        // Only the Subnet Rental Canister has an exception to the cycles limit, and it does not
+        // use this path, therefore we always enforce the limit here.
         let use_cycles_limit = true;
         match process_top_up(canister_id, from, tn.amount, use_cycles_limit).await {
             Ok(cycles) => (
@@ -2296,7 +2296,7 @@ async fn do_mint_cycles(
     else {
         return Err("No cycles ledger canister id configured.".to_string());
     };
-    // always use cycles limit for minting cycles, since the SRC is the only exception and uses
+    // always use cycles limit for minting cycles, since the Subnet Rental Canister is the only exception and uses
     // top_up to send cycles to itself.
     let use_cycles_limit = true;
     ensure_balance(cycles, use_cycles_limit)?;
@@ -2452,6 +2452,9 @@ async fn do_create_canister(
     Err(last_err.unwrap_or_else(|| "Unknown problem attempting to create a canister.".to_owned()))
 }
 
+/// Ensure the Cycles Minting canister has at least `cycles` balance of cycles, otherwise, mint more
+/// so that the balance of this canister is at least `cycles`.  If the `check_minting_limit` is true,
+/// the minting limit is checked and enforced before minting, otherwise, the minting limit is ignored.
 fn ensure_balance(cycles: Cycles, check_minting_limit: bool) -> Result<(), String> {
     let now = now_system_time();
 

@@ -1771,18 +1771,20 @@ fn test_cmc_topups_from_subnet_rental_canister_do_not_affect_limit() {
     let state_machine = state_machine_builder_for_nns_tests().build();
 
     let account = AccountIdentifier::new(*TEST_USER1_PRINCIPAL, None);
-    let src_account = AccountIdentifier::new(SUBNET_RENTAL_CANISTER_ID.get(), None);
+    let subnet_rental_canister_account =
+        AccountIdentifier::new(SUBNET_RENTAL_CANISTER_ID.get(), None);
     // The only requirement here is to have sufficient funds. Other than that,
     // the precise number here does not matter.
     let balance = Tokens::new(1e6 as u64, 0).unwrap();
     let nns_init_payloads = NnsInitPayloadsBuilder::new()
         .with_test_neurons()
-        .with_ledger_account(src_account, balance)
+        .with_ledger_account(subnet_rental_canister_account, balance)
         .with_ledger_account(account, balance)
         .build();
     setup_nns_canisters(&state_machine, nns_init_payloads);
 
-    // Conversion rate in tests is 100 XDR per ICP
+    // Conversion rate in tests is 100 XDR per ICP, and cycles cost 1 XDR per trillion cycles.
+    // To get the ICP needed to mint maximum cycles, we divide by 1 trillion and then by 100.
     let tokens = CYCLES_MINTING_LIMIT as u64 / ONE_TRILLION / 100;
 
     // First top-up should succeed since it's 90P - less than the 150P/hr limit.
