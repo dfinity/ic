@@ -28,6 +28,8 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 #[cfg(windows)]
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+#[cfg(windows)]
+use std::path::PathBuf;
 use std::{
     io::Read,
     sync::OnceLock,
@@ -464,7 +466,7 @@ async fn resume_killed_instance_impl(allow_corrupted_state: Option<bool>) -> Res
     #[cfg(not(windows))]
     let state_dir_path = temp_dir.path().to_path_buf();
     #[cfg(windows)]
-    let state_dir_path = windows_to_wsl(temp_dir.path().as_os_str().to_str().unwrap())
+    let state_dir_path: PathBuf = windows_to_wsl(temp_dir.path().as_os_str().to_str().unwrap())
         .unwrap()
         .into();
 
