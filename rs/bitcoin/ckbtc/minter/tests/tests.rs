@@ -1526,40 +1526,94 @@ fn test_min_retrieval_amount_custom() {
     assert_eq!(retrieve_btc_min_amount, min_amount);
 }
 
-#[test]
-fn test_transaction_resubmission_finalize_new_above_threshold() {
+fn test_transaction_resubmission_finalize_helper(
+    deposit_fn: impl Fn(&CkBtcSetup, Principal),
+) -> (CkBtcSetup, u64, bitcoin::Transaction) {
     let ckbtc = CkBtcSetup::new();
+    let user = Principal::from(ckbtc.caller);
 
     // Step 1: deposit ckBTC
+    deposit_fn(&ckbtc, user);
 
-    let user = Principal::from(ckbtc.caller);
+    // Step 2: request a withdrawal
+
+    let withdrawal_amount = 50_000_000;
+    let withdrawal_account = ckbtc.withdrawal_account(user.into());
+    ckbtc.transfer(user, withdrawal_account, withdrawal_amount);
+
+    let RetrieveBtcOk { block_index } = ckbtc
+        .retrieve_btc(WITHDRAWAL_ADDRESS.to_string(), withdrawal_amount)
+        .expect("retrieve_btc failed");
+
+    ckbtc.env.advance_time(MAX_TIME_IN_QUEUE);
+
+    // Step 3: wait for the transaction to be submitted
+
+    let txid = ckbtc.await_btc_transaction(block_index, 10);
+    let mempool = ckbtc.mempool();
+    let tx = mempool
+        .get(&txid)
+        .expect("the mempool does not contain the original transaction");
+
+    // Step 4: wait for the transaction resubmission
+
+    ckbtc
+        .env
+        .advance_time(MIN_RESUBMISSION_DELAY - Duration::from_secs(1));
+
+    (ckbtc, block_index, tx.clone())
+}
+
+fn test_transaction_resubmission_finalize_setup() -> (CkBtcSetup, u64, bitcoin::Transaction) {
+    test_transaction_resubmission_finalize_helper(|ckbtc, user| {
+        let deposit_value = 100_000_000;
+        let utxo = Utxo {
+            height: 0,
+            outpoint: OutPoint {
+                txid: range_to_txid(1..=32),
+                vout: 1,
+            },
+            value: deposit_value,
+        };
+        ckbtc.deposit_utxo(user, utxo);
+        assert_eq!(ckbtc.balance_of(user), Nat::from(deposit_value - CHECK_FEE));
+    })
+}
+
+#[test]
+fn test_transaction_resubmission_finalize_new_above_threshold() {
     let deposit_value = 1_000_000;
 
+    // Step 1: deposit btc
+    //
     // Create many utxos that exceeds threshold by 2 so that after consuming
     // one, the remaining available count is still greater than the threshold.
     // This is to make sure utxo count optimization is triggered.
-    let count = UTXOS_COUNT_THRESHOLD + 2;
-    let utxos = (0..count)
-        .map(|i| {
-            let mut txid = vec![0; 32];
-            txid[0] = (i % 256) as u8;
-            txid[1] = (i / 256) as u8;
-            Utxo {
-                height: 0,
-                outpoint: OutPoint {
-                    txid: vec_to_txid(txid),
-                    vout: 1,
-                },
-                value: deposit_value,
-            }
-        })
-        .collect::<Vec<_>>();
-    ckbtc.deposit_utxos(user, utxos);
+    let (ckbtc, _, _) = test_transaction_resubmission_finalize_helper(|ckbtc, user| {
+        let count = UTXOS_COUNT_THRESHOLD + 2;
+        let utxos = (0..count)
+            .map(|i| {
+                let mut txid = vec![0; 32];
+                txid[0] = (i % 256) as u8;
+                txid[1] = (i / 256) as u8;
+                Utxo {
+                    height: 0,
+                    outpoint: OutPoint {
+                        txid: vec_to_txid(txid),
+                        vout: 1,
+                    },
+                    value: deposit_value,
+                }
+            })
+            .collect::<Vec<_>>();
+        ckbtc.deposit_utxos(user, utxos);
 
-    assert_eq!(
-        ckbtc.balance_of(user),
-        Nat::from(count as u64 * (deposit_value - CHECK_FEE))
-    );
+        assert_eq!(
+            ckbtc.balance_of(user),
+            Nat::from(count as u64 * (deposit_value - CHECK_FEE))
+        );
+    });
+    let user = Principal::from(ckbtc.caller);
 
     // Step 2: request a withdrawal
 
@@ -1625,51 +1679,7 @@ fn test_transaction_resubmission_finalize_new_above_threshold() {
 
 #[test]
 fn test_transaction_resubmission_finalize_new() {
-    let ckbtc = CkBtcSetup::new();
-
-    // Step 1: deposit ckBTC
-
-    let deposit_value = 100_000_000;
-    let utxo = Utxo {
-        height: 0,
-        outpoint: OutPoint {
-            txid: range_to_txid(1..=32),
-            vout: 1,
-        },
-        value: deposit_value,
-    };
-
-    let user = Principal::from(ckbtc.caller);
-
-    ckbtc.deposit_utxo(user, utxo);
-
-    assert_eq!(ckbtc.balance_of(user), Nat::from(deposit_value - CHECK_FEE));
-
-    // Step 2: request a withdrawal
-
-    let withdrawal_amount = 50_000_000;
-    let withdrawal_account = ckbtc.withdrawal_account(user.into());
-    ckbtc.transfer(user, withdrawal_account, withdrawal_amount);
-
-    let RetrieveBtcOk { block_index } = ckbtc
-        .retrieve_btc(WITHDRAWAL_ADDRESS.to_string(), withdrawal_amount)
-        .expect("retrieve_btc failed");
-
-    ckbtc.env.advance_time(MAX_TIME_IN_QUEUE);
-
-    // Step 3: wait for the transaction to be submitted
-
-    let txid = ckbtc.await_btc_transaction(block_index, 10);
-    let mempool = ckbtc.mempool();
-    let tx = mempool
-        .get(&txid)
-        .expect("the mempool does not contain the original transaction");
-
-    // Step 4: wait for the transaction resubmission
-
-    ckbtc
-        .env
-        .advance_time(MIN_RESUBMISSION_DELAY - Duration::from_secs(1));
+    let (ckbtc, block_index, tx) = test_transaction_resubmission_finalize_setup();
 
     ckbtc.assert_for_n_ticks("no resubmission before the delay", 5, |ckbtc| {
         ckbtc.mempool().len() == 1
@@ -1689,9 +1699,9 @@ fn test_transaction_resubmission_finalize_new() {
         .get(&new_txid)
         .expect("the pool does not contain the new transaction");
 
-    assert_replacement_transaction(tx, new_tx);
+    assert_replacement_transaction(&tx, new_tx);
 
-    // Step 5: finalize the new transaction
+    // finalize the new transaction
 
     ckbtc.finalize_transaction(new_tx);
     assert_eq!(ckbtc.await_finalization(block_index, 10), new_txid);
@@ -1700,51 +1710,7 @@ fn test_transaction_resubmission_finalize_new() {
 
 #[test]
 fn test_transaction_resubmission_finalize_old() {
-    let ckbtc = CkBtcSetup::new();
-
-    // Step 1: deposit ckBTC
-
-    let deposit_value = 100_000_000;
-    let utxo = Utxo {
-        height: 0,
-        outpoint: OutPoint {
-            txid: range_to_txid(1..=32),
-            vout: 1,
-        },
-        value: deposit_value,
-    };
-
-    let user = Principal::from(ckbtc.caller);
-
-    ckbtc.deposit_utxo(user, utxo);
-
-    assert_eq!(ckbtc.balance_of(user), Nat::from(deposit_value - CHECK_FEE));
-
-    // Step 2: request a withdrawal
-
-    let withdrawal_amount = 50_000_000;
-    let withdrawal_account = ckbtc.withdrawal_account(user.into());
-    ckbtc.transfer(user, withdrawal_account, withdrawal_amount);
-
-    let RetrieveBtcOk { block_index } = ckbtc
-        .retrieve_btc(WITHDRAWAL_ADDRESS.to_string(), withdrawal_amount)
-        .expect("retrieve_btc failed");
-
-    ckbtc.env.advance_time(MAX_TIME_IN_QUEUE);
-
-    // Step 3: wait for the transaction to be submitted
-
-    let txid = ckbtc.await_btc_transaction(block_index, 10);
-    let mempool = ckbtc.mempool();
-    let tx = mempool
-        .get(&txid)
-        .expect("the mempool does not contain the original transaction");
-
-    // Step 4: wait for the transaction resubmission
-
-    ckbtc
-        .env
-        .advance_time(MIN_RESUBMISSION_DELAY + Duration::from_secs(1));
+    let (ckbtc, block_index, tx) = test_transaction_resubmission_finalize_setup();
 
     let mempool = ckbtc.tick_until("mempool has a replacement transaction", 10, |ckbtc| {
         let mempool = ckbtc.mempool();
@@ -1757,62 +1723,21 @@ fn test_transaction_resubmission_finalize_old() {
         .get(&new_txid)
         .expect("the pool does not contain the new transaction");
 
-    assert_replacement_transaction(tx, new_tx);
+    assert_replacement_transaction(&tx, new_tx);
 
-    // Step 5: finalize the old transaction
+    // finalize the old transaction
 
-    ckbtc.finalize_transaction(tx);
-    assert_eq!(ckbtc.await_finalization(block_index, 10), txid);
+    ckbtc.finalize_transaction(&tx);
+    assert_eq!(
+        ckbtc.await_finalization(block_index, 10).as_ref(),
+        tx.txid().as_ref()
+    );
     ckbtc.minter_self_check();
 }
 
 #[test]
 fn test_transaction_resubmission_finalize_middle() {
-    let ckbtc = CkBtcSetup::new();
-
-    // Step 1: deposit ckBTC
-
-    let deposit_value = 100_000_000;
-    let utxo = Utxo {
-        height: 0,
-        outpoint: OutPoint {
-            txid: range_to_txid(1..=32),
-            vout: 1,
-        },
-        value: deposit_value,
-    };
-
-    let user = Principal::from(ckbtc.caller);
-
-    ckbtc.deposit_utxo(user, utxo);
-
-    assert_eq!(ckbtc.balance_of(user), Nat::from(deposit_value - CHECK_FEE));
-
-    // Step 2: request a withdrawal
-
-    let withdrawal_amount = 50_000_000;
-    let withdrawal_account = ckbtc.withdrawal_account(user.into());
-    ckbtc.transfer(user, withdrawal_account, withdrawal_amount);
-
-    let RetrieveBtcOk { block_index } = ckbtc
-        .retrieve_btc(WITHDRAWAL_ADDRESS.to_string(), withdrawal_amount)
-        .expect("retrieve_btc failed");
-
-    ckbtc.env.advance_time(MAX_TIME_IN_QUEUE);
-
-    // Step 3: wait for the transaction to be submitted
-
-    let original_txid = ckbtc.await_btc_transaction(block_index, 10);
-    let mempool = ckbtc.mempool();
-    let original_tx = mempool
-        .get(&original_txid)
-        .expect("the mempool does not contain the original transaction");
-
-    // Step 4: wait for the first transaction resubmission
-
-    ckbtc
-        .env
-        .advance_time(MIN_RESUBMISSION_DELAY + Duration::from_secs(1));
+    let (ckbtc, block_index, original_tx) = test_transaction_resubmission_finalize_setup();
 
     let mempool_2 = ckbtc.tick_until("mempool contains a replacement transaction", 10, |ckbtc| {
         let mempool = ckbtc.mempool();
@@ -1825,9 +1750,9 @@ fn test_transaction_resubmission_finalize_middle() {
         .get(&second_txid)
         .expect("the pool does not contain the second transaction");
 
-    assert_replacement_transaction(original_tx, second_tx);
+    assert_replacement_transaction(&original_tx, second_tx);
 
-    // Step 5: wait for the second transaction resubmission
+    // wait for the second transaction resubmission
     ckbtc
         .env
         .advance_time(MIN_RESUBMISSION_DELAY + Duration::from_secs(1));
@@ -1839,7 +1764,7 @@ fn test_transaction_resubmission_finalize_middle() {
 
     let third_txid = ckbtc.await_btc_transaction(block_index, 10);
     assert_ne!(third_txid, second_txid);
-    assert_ne!(third_txid, original_txid);
+    assert_ne!(third_txid.as_ref(), original_tx.txid().as_ref());
 
     let third_tx = mempool_3
         .get(&third_txid)
@@ -1847,7 +1772,7 @@ fn test_transaction_resubmission_finalize_middle() {
 
     assert_replacement_transaction(second_tx, third_tx);
 
-    // Step 6: finalize the middle transaction
+    // finalize the middle transaction
 
     ckbtc.finalize_transaction(second_tx);
     assert_eq!(ckbtc.await_finalization(block_index, 10), second_txid);
