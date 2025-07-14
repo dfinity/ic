@@ -470,11 +470,10 @@ async fn resume_killed_instance_impl(allow_corrupted_state: Option<bool>) -> Res
         .unwrap()
         .into();
 
-    let state = PocketIcState::new_from_path(state_dir_path.clone());
     let pic = PocketIcBuilder::new()
         .with_application_subnet()
         .with_server_url(server_url)
-        .with_state(state)
+        .with_state_dir(state_dir_path.clone())
         .build_async()
         .await;
 
