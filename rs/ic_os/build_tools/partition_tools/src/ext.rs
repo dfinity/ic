@@ -4,7 +4,7 @@ use itertools::Itertools;
 use pcre2::bytes::Regex;
 use std::path::{Path, PathBuf};
 use std::process::{Output, Stdio};
-use tempfile::{tempdir, TempDir};
+use tempfile::{tempdir, NamedTempFile, TempDir};
 use tokio::fs;
 use tokio::fs::File;
 use tokio::io::{self, AsyncSeekExt, AsyncWriteExt, SeekFrom};
@@ -128,49 +128,11 @@ impl Partition for ExtPartition {
 
     /// Read a file from a given partition
     async fn read_file(&mut self, input: &Path) -> Result<Vec<u8>> {
-        // run the underlying debugfs operation
-        // debugfs has already been ensured.
-        let mut cmd = Command::new(debugfs().context("debugfs is needed to read files")?)
-            .args([
-                (self.backing_dir.path().join(STORE_NAME).to_str().unwrap()),
-                "-f",
-                "-",
-            ])
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .context("failed to read file using debugfs")?;
+        let temp_file = NamedTempFile::new()?;
+        self.copy_file_to(input, temp_file.path()).await?;
+        let contents = fs::read(temp_file.path()).await?;
 
-        let mut stdin = cmd.stdin.as_mut().unwrap();
-        io::copy(
-            &mut indoc::formatdoc!(
-                r#"
-                cd {path}
-                cat {filename}
-            "#,
-                path = input.parent().unwrap().to_str().unwrap(),
-                filename = input.file_name().unwrap().to_str().unwrap(),
-            )
-            .as_bytes(),
-            &mut stdin,
-        )
-        .await?;
-
-        let out = cmd.wait_with_output().await?;
-        Self::check_debugfs_result(&out)?;
-
-        // Strip the first two lines of stdout, as this contains debugfs info
-        let mut stdout = out.stdout;
-        let output_start = stdout
-            .iter()
-            .enumerate()
-            .filter_map(|(i, v)| (*v == b'\n').then_some(i))
-            .nth(1)
-            .unwrap();
-        stdout.drain(..=output_start);
-
-        Ok(stdout)
+        Ok(contents)
     }
 
     async fn copy_files_to(&mut self, output: &Path) -> Result<()> {
@@ -212,12 +174,39 @@ impl Partition for ExtPartition {
             output
         };
 
-        let out = self.read_file(input).await?;
+        // run the underlying debugfs operation
+        // debugfs has already been ensured.
+        let mut cmd = Command::new(debugfs().context("debugfs is needed to read files")?)
+            .args([
+                (self.backing_dir.path().join(STORE_NAME).to_str().unwrap()),
+                "-f",
+                "-",
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .spawn()
+            .context("failed to read file using debugfs")?;
 
-        let mut output = File::create(&dest).await?;
-        output.write_all(&out).await?;
+        let mut stdin = cmd.stdin.as_mut().unwrap();
+        io::copy(
+            &mut indoc::formatdoc!(
+                r#"
+                cd {path}
+                dump {filename} {dest}
+            "#,
+                path = input.parent().unwrap().to_str().unwrap(),
+                filename = input.file_name().unwrap().to_str().unwrap(),
+                dest = dest.display(),
+            )
+            .as_bytes(),
+            &mut stdin,
+        )
+        .await?;
 
-        Ok(())
+        let out = cmd.wait_with_output().await?;
+
+        Self::check_debugfs_result(&out)
     }
 }
 
