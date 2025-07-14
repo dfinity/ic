@@ -3,10 +3,13 @@ use crate::{
     error::{OrchestratorError, OrchestratorResult},
     metrics::{KeyRotationStatus, OrchestratorMetrics},
     signer::{Hsm, NodeProviderSigner, NodeSender, Signer},
-    utils::http_endpoint_to_url,
+    utils::https_endpoint_to_url,
 };
 use candid::Encode;
-use ic_agent::{export::Principal, Agent};
+use ic_agent::{
+    export::{reqwest, Principal},
+    Agent,
+};
 use ic_config::{
     http_handler::Config as HttpConfig,
     initial_ipv4_config::IPv4Config as InitialIPv4Config,
@@ -43,7 +46,11 @@ use url::Url;
 const DELAY_COMPENSATION: f64 = 0.85;
 
 pub trait NodeRegistrationCrypto:
-    ic_interfaces::crypto::KeyManager + ic_interfaces::crypto::BasicSigner<MessageId> + Send + Sync
+    ic_interfaces::crypto::KeyManager
+    + ic_interfaces::crypto::BasicSigner<MessageId>
+    + ic_crypto_tls_interfaces::TlsConfig
+    + Send
+    + Sync
 {
 }
 
@@ -51,6 +58,7 @@ pub trait NodeRegistrationCrypto:
 impl<T> NodeRegistrationCrypto for T where
     T: ic_interfaces::crypto::KeyManager
         + ic_interfaces::crypto::BasicSigner<MessageId>
+        + ic_crypto_tls_interfaces::TlsConfig
         + Send
         + Sync
 {
@@ -400,13 +408,17 @@ impl NodeRegistration {
         info!(self.log, "Trying to register rotated idkg key...");
 
         let node_id = self.node_id;
-        let nns_url = match self
-            .get_random_nns_url()
-            .or_else(|| self.get_random_nns_url_from_config())
-        {
-            Some(url) => url,
-            None => return Err("Failed to get random NNS URL.".into()),
+
+        let (nns_url, rustls_config) = match self.get_random_nns_url_and_client() {
+            Some((url, config)) => (url, Some(config)),
+            None => match self.get_random_nns_url_from_config() {
+                Some(url) => (url, None),
+                None => {
+                    return Err("Failed to get random NNS URL.".into());
+                }
+            },
         };
+
         let key_handler = self.key_handler.clone();
         let node_pub_key_opt = tokio::task::spawn_blocking(move || {
             key_handler
@@ -441,11 +453,20 @@ impl NodeRegistration {
         };
 
         let signer = NodeSender::new(node_pub_key, Arc::new(sign_cmd))?;
-        let agent = Agent::builder()
-            .with_url(nns_url)
-            .with_identity(signer)
-            .build()
-            .map_err(|e| format!("Failed to create IC agent: {e}"))?;
+        let agent = if let Some(config) = rustls_config {
+            let reqwest_client = reqwest::ClientBuilder::default()
+                .use_preconfigured_tls(config)
+                .build()
+                .map_err(|e| format!("Failed to create reqwest client: {e}"))?;
+
+            Agent::builder().with_http_client(reqwest_client)
+        } else {
+            Agent::builder()
+        }
+        .with_url(nns_url)
+        .with_identity(signer)
+        .build()
+        .map_err(|e| format!("Failed to create IC agent: {e}"))?;
         let update_node_payload = UpdateNodeDirectlyPayload {
             idkg_dealing_encryption_pk: Some(protobuf_to_vec(idkg_pk)),
         };
@@ -488,7 +509,7 @@ impl NodeRegistration {
     }
 
     // Returns one random NNS url from registry.
-    fn get_random_nns_url(&self) -> Option<Url> {
+    fn get_random_nns_url_and_client(&self) -> Option<(Url, rustls::ClientConfig)> {
         let version = self.registry_client.get_latest_version();
         let root_subnet_id = match self.registry_client.get_root_subnet_id(version) {
             Ok(Some(id)) => id,
@@ -509,19 +530,20 @@ impl NodeRegistration {
             }
         };
 
-        let mut urls: Vec<Url> = t_infos
+        let mut urls_and_clients: Vec<(Url, rustls::ClientConfig)> = t_infos
             .iter()
-            .filter_map(|(_nid, n_record)| {
+            .filter_map(|(n_id, n_record)| {
                 n_record
                     .http
                     .as_ref()
-                    .and_then(|h| http_endpoint_to_url(h, &self.log))
+                    .and_then(|h| https_endpoint_to_url(h, &self.log))
+                    .zip(self.key_handler.client_config(*n_id, version).ok())
             })
             .collect();
 
         let mut rng = thread_rng();
-        urls.shuffle(&mut rng);
-        urls.pop()
+        urls_and_clients.shuffle(&mut rng);
+        urls_and_clients.pop()
     }
 
     async fn is_node_registered(&self) -> bool {
