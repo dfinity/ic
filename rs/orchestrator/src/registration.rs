@@ -797,6 +797,7 @@ mod tests {
     mod idkg_dealing_encryption_key_rotation {
         use super::*;
         use ic_crypto_temp_crypto::EcdsaSubnetConfig;
+        use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsConfig, TlsConfigError};
         use ic_interfaces::crypto::{
             BasicSigner, CheckKeysWithRegistryError, CurrentNodePublicKeysError,
             IDkgDealingEncryptionKeyRotationError, KeyManager, KeyRotationOutcome,
@@ -824,6 +825,7 @@ mod tests {
             PrincipalId,
         };
         use mockall::{predicate::*, *};
+        use rustls::{ClientConfig, ServerConfig};
         use slog::Level;
         use std::time::UNIX_EPOCH;
         use tempfile::TempDir;
@@ -856,6 +858,25 @@ mod tests {
                     signer: NodeId,
                     registry_version: RegistryVersion,
                 ) -> CryptoResult<BasicSigOf<MessageId>>;
+            }
+
+            impl TlsConfig for KeyRotationCryptoComponent {
+                fn server_config(
+                    &self,
+                    allowed_clients: SomeOrAllNodes,
+                    registry_version: RegistryVersion,
+                ) -> Result<ServerConfig, TlsConfigError>;
+
+                fn server_config_without_client_auth(
+                    &self,
+                    registry_version: RegistryVersion,
+                ) -> Result<ServerConfig, TlsConfigError>;
+
+                fn client_config(
+                    &self,
+                    server: NodeId,
+                    registry_version: RegistryVersion,
+                ) -> Result<ClientConfig, TlsConfigError>;
             }
 
             impl ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes> for KeyRotationCryptoComponent {
