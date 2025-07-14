@@ -5,6 +5,8 @@ use reqwest::StatusCode;
 use serde::Deserialize;
 use std::collections::BTreeMap;
 use tempfile::TempDir;
+#[cfg(windows)]
+use wslpath::windows_to_wsl;
 
 #[test]
 fn with_all_icp_features() {
