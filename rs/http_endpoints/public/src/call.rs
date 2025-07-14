@@ -34,7 +34,7 @@ use ic_validator::HttpRequestVerifier;
 use std::convert::TryInto;
 use std::sync::Mutex;
 use std::sync::{Arc, RwLock};
-use tokio::sync::mpsc::Sender;
+use tokio::sync::mpsc::{error::TrySendError, Sender};
 use tower::ServiceExt;
 
 pub struct IngressValidatorBuilder {
@@ -312,17 +312,18 @@ impl IngressMessageSubmitter {
 
         // Submission will fail if P2P is not running, meaning there is
         // no receiver for the ingress message.
-        let send_ingress_to_p2p_failed = ingress_tx
+        ingress_tx
             .try_send(UnvalidatedArtifactMutation::Insert((message, node_id)))
-            .is_err();
-
-        if send_ingress_to_p2p_failed {
-            return Err(HttpError {
-                status: StatusCode::INTERNAL_SERVER_ERROR,
-                message: "P2P is not running on this node.".to_string(),
-            });
-        }
-        Ok(())
+            .map_err(|err| match err {
+                TrySendError::Full(_) => HttpError {
+                    status: StatusCode::TOO_MANY_REQUESTS,
+                    message: "Service is overloaded, try again later.".to_string(),
+                },
+                TrySendError::Closed(_) => HttpError {
+                    status: StatusCode::INTERNAL_SERVER_ERROR,
+                    message: "P2P is not running on this node.".to_string(),
+                },
+            })
     }
 }
 
