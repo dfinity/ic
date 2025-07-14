@@ -553,31 +553,28 @@ impl<'de> Deserialize<'de> for HostFeature {
         D: Deserializer<'de>,
     {
         let input: String = Deserialize::deserialize(deserializer)?;
-        if let Some(("", dc)) = input.split_once("dc=") {
-            Ok(HostFeature::DC(dc.to_owned()))
-        } else if let Some(("", host)) = input.split_once("host=") {
-            Ok(HostFeature::Host(host.to_owned()))
-        } else if input == AMD_SEV_SNP {
-            Ok(HostFeature::AmdSevSnp)
-        } else if input == SNS_LOAD_TEST {
-            Ok(HostFeature::SnsLoadTest)
-        } else if input == PERFORMANCE {
-            Ok(HostFeature::Performance)
-        } else if input == DLL {
-            Ok(HostFeature::Dell)
-        } else if input == SPM {
-            Ok(HostFeature::Supermicro)
-        } else {
-            Err(Error::unknown_variant(
-                &input,
-                &[
-                    "dc=<dc-name>",
-                    "host=<host-name>",
-                    AMD_SEV_SNP,
-                    SNS_LOAD_TEST,
-                    PERFORMANCE,
-                ],
-            ))
+        match input.split_once('=') {
+            Some(("dc", dc)) => Ok(HostFeature::DC(dc.to_owned())),
+            Some(("host", host)) => Ok(HostFeature::Host(host.to_owned())),
+            _ => match input.as_str() {
+                AMD_SEV_SNP => Ok(HostFeature::AmdSevSnp),
+                SNS_LOAD_TEST => Ok(HostFeature::SnsLoadTest),
+                PERFORMANCE => Ok(HostFeature::Performance),
+                DLL => Ok(HostFeature::Dell),
+                SPM => Ok(HostFeature::Supermicro),
+                _ => Err(Error::unknown_variant(
+                    &input,
+                    &[
+                        "dc=<dc-name>",
+                        "host=<host-name>",
+                        AMD_SEV_SNP,
+                        SNS_LOAD_TEST,
+                        PERFORMANCE,
+                        DLL,
+                        SPM,
+                    ],
+                )),
+            },
         }
     }
 }
