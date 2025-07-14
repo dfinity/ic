@@ -90,12 +90,12 @@ pub mod test {
         "incoming_source": {
             "Path": "/tmp/ic-btc-adapter.socket"
         },
-        "ipv6_only": true    
+        "ipv6_only": true
     }"#;
 
     const TESTNET_BAD_SOCKS_CONFIG: &str = r#"{
         "network": "testnet",
-        "socks_proxy": "socks5.notaproxy.com"        
+        "socks_proxy": "socks5.notaproxy.com"
     }"#;
 
     #[test]
