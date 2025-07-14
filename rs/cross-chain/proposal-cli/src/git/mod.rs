@@ -113,7 +113,7 @@ impl GitRepository {
             .as_object()
             .unwrap()
             .get(canister.canister_name())
-            .unwrap()
+            .expect("canister name not found in canister_ids.json file")
             .get("ic")
             .unwrap()
             .as_str()

@@ -44,6 +44,7 @@ fn should_parse_constructor_parameters() {
             || canister == TargetCanister::CyclesLedger
             || canister == TargetCanister::ExchangeRateCanister
             || canister == TargetCanister::SolRpc
+            || canister == TargetCanister::BtcWatchdog
         {
             continue;
         }
