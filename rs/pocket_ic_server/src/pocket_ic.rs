@@ -98,6 +98,7 @@ use pocket_ic::{copy_dir, ErrorCode, RejectCode, RejectResponse};
 use registry_canister::init::RegistryCanisterInitPayload;
 use serde::{Deserialize, Serialize};
 use slog::Level;
+use std::cmp::max;
 use std::hash::Hash;
 use std::str::FromStr;
 use std::{
@@ -198,16 +199,10 @@ fn compute_subnet_seed(
 
 #[derive(Clone, Deserialize, Serialize)]
 struct RawTopologyInternal {
-    pub subnet_configs: Vec<RawSubnetConfigInternal>,
+    pub subnet_configs: Vec<SubnetConfigInternal>,
     pub default_effective_canister_id: RawCanisterId,
     pub icp_features: Option<IcpFeatures>,
     pub synced_registry_version: Option<u64>,
-}
-
-#[derive(Clone, Deserialize, Serialize)]
-struct RawSubnetConfigInternal {
-    pub subnet_config: SubnetConfigInternal,
-    pub time: SystemTime,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -488,7 +483,6 @@ impl PocketIcSubnets {
         instruction_config: SubnetInstructionConfig,
         registry_data_provider: Arc<ProtoRegistryDataProvider>,
         create_at_registry_version: RegistryVersion,
-        time: SystemTime,
         nonmainnet_features: bool,
         log_level: Option<Level>,
         bitcoin_adapter_uds_path: Option<PathBuf>,
@@ -534,18 +528,12 @@ impl PocketIcSubnets {
             .feature_flags
             .rate_limiting_of_debug_prints = FlagStatus::Disabled;
         let state_machine_config = StateMachineConfig::new(subnet_config, hypervisor_config);
-        let t = time
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos() as u64;
-        let time = Time::from_nanos_since_unix_epoch(t);
         StateMachineBuilder::new()
             .with_runtime(runtime)
             .with_config(Some(state_machine_config))
             .with_subnet_seed(subnet_seed)
             .with_subnet_size(subnet_size.try_into().unwrap())
             .with_subnet_type(subnet_type)
-            .with_time(time)
             .with_state_machine_state_dir(state_machine_state_dir)
             .with_registry_data_provider(registry_data_provider.clone())
             .with_log_level(log_level)
@@ -625,18 +613,7 @@ impl PocketIcSubnets {
             subnet_state_dir,
             subnet_kind,
             instruction_config,
-            mut time,
         } = subnet_config_info;
-
-        // All subnets must eventually have the same time and time can only advance =>
-        // advance time of the new subnet if other subnets have higher time;
-        // the maximum time must be determined before adding a `StateMachine`
-        // for the new subnet to `self.subnets` because `self.time()`
-        // is only sound if all subnets in `self.subnets` have the same time.
-        let current_time = self.time();
-        if current_time > time {
-            time = current_time;
-        }
 
         let subnet_seed = compute_subnet_seed(ranges.clone(), alloc_range);
 
@@ -669,7 +646,6 @@ impl PocketIcSubnets {
             instruction_config.clone(),
             self.registry_data_provider.clone(),
             create_at_registry_version,
-            time,
             self.nonmainnet_features,
             self.log_level,
             bitcoin_adapter_uds_path.clone(),
@@ -782,6 +758,19 @@ impl PocketIcSubnets {
         // they have a consistent view of the (latest) registry.
         for subnet in self.subnets.get_all() {
             subnet.state_machine.reload_registry();
+        }
+
+        // All subnets must have the same time and time can only advance =>
+        // set the time to the maximum time in the latest state across all subnets.
+        let mut time: SystemTime = GENESIS.into();
+        for subnet in self.subnets.get_all() {
+            let metadata = &subnet
+                .state_machine
+                .state_manager
+                .get_latest_state()
+                .take()
+                .metadata;
+            time = max(time, metadata.batch_time.into());
         }
 
         // Make sure time is strictly monotone.
@@ -1105,20 +1094,8 @@ impl Drop for PocketIc {
             for subnet in &subnets {
                 subnet.state_machine.await_state_hash();
             }
-            let subnet_configs = self
-                .subnets
-                .subnet_configs
-                .iter()
-                .map(|config| {
-                    let time = self.subnets.get(config.subnet_id).unwrap().time();
-                    RawSubnetConfigInternal {
-                        subnet_config: config.clone(),
-                        time,
-                    }
-                })
-                .collect();
             let raw_topology: RawTopologyInternal = RawTopologyInternal {
-                subnet_configs,
+                subnet_configs: self.subnets.subnet_configs.clone(),
                 default_effective_canister_id: self.default_effective_canister_id.into(),
                 icp_features: self.subnets.icp_features.clone(),
                 synced_registry_version: Some(self.subnets.synced_registry_version.get()),
@@ -1244,20 +1221,17 @@ impl PocketIc {
                 .subnet_configs
                 .into_iter()
                 .map(|config| {
-                    range_gen
-                        .add_assigned(config.subnet_config.ranges.clone())
-                        .unwrap();
-                    if let Some(allocation_range) = config.subnet_config.alloc_range {
+                    range_gen.add_assigned(config.ranges.clone()).unwrap();
+                    if let Some(allocation_range) = config.alloc_range {
                         range_gen.add_assigned(vec![allocation_range]).unwrap();
                     }
                     SubnetConfigInfo {
-                        ranges: config.subnet_config.ranges,
-                        alloc_range: config.subnet_config.alloc_range,
-                        subnet_id: Some(config.subnet_config.subnet_id),
+                        ranges: config.ranges,
+                        alloc_range: config.alloc_range,
+                        subnet_id: Some(config.subnet_id),
                         subnet_state_dir: None,
-                        subnet_kind: config.subnet_config.subnet_kind,
-                        instruction_config: config.subnet_config.instruction_config,
-                        time: config.time,
+                        subnet_kind: config.subnet_kind,
+                        instruction_config: config.instruction_config,
                     }
                 })
                 .collect()
@@ -1305,7 +1279,7 @@ impl PocketIc {
             let mut subnet_config_info: Vec<SubnetConfigInfo> = vec![];
 
             for (subnet_kind, subnet_state_dir, instruction_config) in all_subnets {
-                let (ranges, alloc_range, subnet_id, time) = if let Some(ref subnet_state_dir) =
+                let (ranges, alloc_range, subnet_id) = if let Some(ref subnet_state_dir) =
                     subnet_state_dir
                 {
                     match std::fs::read_dir(subnet_state_dir) {
@@ -1355,7 +1329,6 @@ impl PocketIc {
                     };
 
                     let subnet_id = metadata.own_subnet_id;
-                    let time = metadata.batch_time;
                     let ranges: Vec<_> = metadata
                         .network_topology
                         .routing_table
@@ -1390,14 +1363,14 @@ impl PocketIc {
                         }
                     }
 
-                    (ranges, None, Some(subnet_id), time)
+                    (ranges, None, Some(subnet_id))
                 } else {
                     let RangeConfig {
                         canister_id_ranges: ranges,
                         canister_allocation_range: alloc_range,
                     } = get_range_config(subnet_kind, &mut range_gen)?;
 
-                    (ranges, alloc_range, None, GENESIS)
+                    (ranges, alloc_range, None)
                 };
 
                 subnet_config_info.push(SubnetConfigInfo {
@@ -1407,7 +1380,6 @@ impl PocketIc {
                     subnet_state_dir,
                     subnet_kind,
                     instruction_config,
-                    time: time.into(),
                 });
             }
 
@@ -1655,7 +1627,6 @@ struct SubnetConfigInfo {
     pub subnet_state_dir: Option<PathBuf>,
     pub subnet_kind: SubnetKind,
     pub instruction_config: SubnetInstructionConfig,
-    pub time: SystemTime,
 }
 
 // ---------------------------------------------------------------------------------------- //
@@ -3233,7 +3204,6 @@ fn route(
                         subnet_state_dir: None,
                         subnet_kind,
                         instruction_config,
-                        time: GENESIS.into(),
                     });
                     Ok(pic.try_route_canister(canister_id).unwrap())
                 } else {

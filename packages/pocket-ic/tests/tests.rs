@@ -29,7 +29,11 @@ use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 #[cfg(windows)]
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::{io::Read, sync::OnceLock, time::SystemTime};
+use std::{
+    io::Read,
+    sync::OnceLock,
+    time::{Duration, SystemTime},
+};
 use tempfile::{NamedTempFile, TempDir};
 #[cfg(windows)]
 use wslpath::windows_to_wsl;
@@ -428,6 +432,30 @@ fn set_time_into_past() {
     pic.set_time(future.into());
 
     pic.set_time(now.into());
+}
+
+#[test]
+fn time_on_resumed_instance() {
+    let state = PocketIcState::new();
+
+    let pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_state(state)
+        .build();
+
+    let now = SystemTime::now();
+    pic.set_certified_time(now.into());
+
+    let time = pic.get_time();
+    let state = pic.drop_and_take_state().unwrap();
+
+    let pic = PocketIcBuilder::new().with_state(state).build();
+
+    // the time on the resumed instances increases by 2ns:
+    // - 1ns due to executing a checkpointed round before dropping the original instance;
+    // - 1ns due to bumping time when creating a new instance to ensure strict time monotonicity.
+    let resumed_time = pic.get_time();
+    assert_eq!(resumed_time, time + Duration::from_nanos(2));
 }
 
 #[test]
