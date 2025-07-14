@@ -203,6 +203,9 @@ pub const DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS: u64 = 1725148800;
 thread_local! {
     static DISABLE_NF_FUND_PROPOSALS: Cell<bool>
         = const { Cell::new(cfg!(not(any(feature = "canbench-rs", feature = "test")))) };
+
+    static ENABLE_FULFILL_SUBNET_RENTAL_REQUEST_PROPOSALS: Cell<bool>
+        = const { Cell::new(cfg!(feature = "test")) };
 }
 
 thread_local! {
@@ -226,6 +229,20 @@ pub fn temporarily_enable_nf_fund_proposals() -> Temporary {
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
 pub fn temporarily_disable_nf_fund_proposals() -> Temporary {
     Temporary::new(&DISABLE_NF_FUND_PROPOSALS, true)
+}
+
+pub fn are_fulfill_subnet_rental_request_proposals_enabled() -> bool {
+    ENABLE_FULFILL_SUBNET_RENTAL_REQUEST_PROPOSALS.get()
+}
+
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_enable_fulfill_subnet_rental_request_proposals() -> Temporary {
+    Temporary::new(&ENABLE_FULFILL_SUBNET_RENTAL_REQUEST_PROPOSALS, true)
+}
+
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_disable_fulfill_subnet_rental_request_proposals() -> Temporary {
+    Temporary::new(&ENABLE_FULFILL_SUBNET_RENTAL_REQUEST_PROPOSALS, false)
 }
 
 pub fn decoder_config() -> DecoderConfig {

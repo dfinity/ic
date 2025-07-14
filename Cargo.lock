@@ -12291,10 +12291,12 @@ dependencies = [
  "ic-metrics",
  "ic-protobuf",
  "ic-registry-client",
+ "ic-registry-client-fake",
  "ic-registry-client-helpers",
  "ic-registry-keys",
  "ic-registry-local-store",
  "ic-registry-nns-data-provider",
+ "ic-registry-proto-data-provider",
  "ic-registry-routing-table",
  "ic-types",
  "prometheus 0.13.4",
@@ -14240,10 +14242,12 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "assert_matches",
+ "bitcoin 0.32.5",
  "bitcoincore-rpc",
  "candid",
  "canister-test",
  "dfn_candid",
+ "futures",
  "ic-agent",
  "ic-base-types",
  "ic-btc-checker",
@@ -14266,6 +14270,7 @@ dependencies = [
  "ic-types",
  "ic-types-test-utils",
  "ic-universal-canister",
+ "ic-utils 0.40.1",
  "ic_consensus_threshold_sig_system_test_utils",
  "icp-ledger",
  "icrc-ledger-agent",
@@ -17158,10 +17163,16 @@ dependencies = [
  "ic-nervous-system-common-test-keys",
  "ic-nns-common",
  "ic-nns-test-utils",
+ "ic-protobuf",
+ "ic-registry-keys",
+ "ic-registry-nns-data-provider",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
  "ic-types",
  "ic_consensus_system_test_utils",
+ "prost 0.13.4",
+ "regex",
+ "reqwest 0.12.15",
  "slog",
  "url",
 ]
@@ -17228,7 +17239,6 @@ dependencies = [
  "slog",
  "tokio",
  "url",
- "wabt-tests",
 ]
 
 [[package]]
@@ -23959,14 +23969,6 @@ dependencies = [
  "tempfile",
  "tokio",
  "vsock",
-]
-
-[[package]]
-name = "wabt-tests"
-version = "0.9.0"
-dependencies = [
- "leb128",
- "wat",
 ]
 
 [[package]]
