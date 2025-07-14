@@ -13,8 +13,7 @@ use icp_ledger::AccountIdentifier;
 use icrc_ledger_types::icrc1::account::Account;
 use std::collections::HashMap;
 use std::hash::Hash;
-use std::time::Instant;
-use std::time::SystemTime;
+use std::time::{Instant, SystemTime};
 
 #[cfg(test)]
 mod tests;
@@ -102,6 +101,7 @@ where
     fee_collector: Option<AccountId>,
     burns_without_spender: Option<BurnsWithoutSpender<AccountId>>,
     transactions: u64,
+    latest_block_timestamp: Option<u64>,
 }
 
 impl<AccountId, Tokens: std::fmt::Debug> PartialEq for InMemoryLedger<AccountId, Tokens>
@@ -312,6 +312,7 @@ where
             fee_collector: None,
             burns_without_spender: None,
             transactions: 0,
+            latest_block_timestamp: None,
         }
     }
 }
@@ -584,6 +585,12 @@ impl BlockConsumer<icp_ledger::Block>
     }
 }
 
+#[derive(Eq, PartialEq, Debug)]
+pub enum AllowancesRecentlyPurged {
+    Yes,
+    No,
+}
+
 impl<AccountId, Tokens> InMemoryLedger<AccountId, Tokens>
 where
     AccountId: Ord
@@ -608,9 +615,11 @@ where
     fn post_process_ledger_blocks<T: ConsumableBlock>(&mut self, blocks: &[T]) {
         if !blocks.is_empty() {
             self.validate_invariants();
+            let latest_block_timestamp = blocks.last().unwrap().creation_timestamp();
             self.prune_expired_allowances(TimeStamp::from_nanos_since_unix_epoch(
-                blocks.last().unwrap().creation_timestamp(),
+                latest_block_timestamp,
             ));
+            self.latest_block_timestamp = Some(latest_block_timestamp);
         }
     }
 
@@ -691,6 +700,7 @@ where
         env: &StateMachine,
         ledger_id: CanisterId,
         num_ledger_blocks: u64,
+        allowances_recently_purged: AllowancesRecentlyPurged,
     ) {
         let actual_num_approvals = parse_metric(env, ledger_id, "ledger_num_approvals");
         let actual_num_balances = parse_metric(env, ledger_id, "ledger_balance_store_entries");
@@ -744,7 +754,10 @@ where
         let mut expiration_in_future_count = 0;
         let mut expiration_in_past_count = 0;
         let mut no_expiration_count = 0;
-        let timestamp = env
+        let latest_ledger_block_timestamp = self
+            .latest_block_timestamp
+            .expect("latest ledger block timestamp should be set");
+        let current_ledger_timestamp = env
             .time()
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap()
@@ -757,22 +770,30 @@ where
                 &from,
                 &spender
             );
+            let actual_allowance = AccountId::get_allowance(env, ledger_id, from, spender);
             if let Some(in_memory_expires_at) = allowance.expires_at {
-                if in_memory_expires_at.as_nanos_since_unix_epoch() < timestamp {
-                    println!(
-                        "In memory expires_at is in the past ({:?} vs {:?}), ignoring",
-                        in_memory_expires_at, timestamp
+                if in_memory_expires_at.as_nanos_since_unix_epoch() < current_ledger_timestamp {
+                    assert_eq!(
+                        Tokens::zero(),
+                        Tokens::try_from(actual_allowance.allowance.clone()).unwrap(),
+                        "Expected amount of expired actual allowance to be zero, but it is not: {:?}",
+                        &actual_allowance
                     );
+                    assert!(
+                        actual_allowance.expires_at.is_none(),
+                        "Expected expired actual allowance to have no expires_at, but it has one: {:?}",
+                        &actual_allowance
+                    );
+                    allowances_checked += 1;
                     continue;
                 }
             }
-            let actual_allowance = AccountId::get_allowance(env, ledger_id, from, spender);
             match actual_allowance.expires_at {
                 None => {
                     no_expiration_count += 1;
                 }
                 Some(expires_at) => {
-                    if expires_at > timestamp {
+                    if expires_at > latest_ledger_block_timestamp {
                         expiration_in_future_count += 1;
                     } else {
                         // This should never happen, since the allowance returned from the ledger
@@ -833,13 +854,19 @@ where
             self.balances.len(),
             actual_num_balances
         );
-        assert_eq!(
-            self.allowances.len() as u64,
-            actual_num_approvals,
-            "Mismatch in number of approvals (InMemoryLedger: {}, vs StateMachine ledger: {})",
-            self.allowances.len(),
-            actual_num_approvals
-        );
+        // The metric value for the number of allowances does not check if any allowances have
+        // expired since the last transactions was processed, and the current time. Therefore, for
+        // this test, only compare the number of expected allowances with the ledger metric if
+        // allowances were recently purged, i.e., if a transaction was recently processed.
+        if allowances_recently_purged == AllowancesRecentlyPurged::Yes {
+            assert_eq!(
+                self.allowances.len() as u64,
+                actual_num_approvals,
+                "Mismatch in number of approvals (InMemoryLedger: {}, vs StateMachine ledger: {})",
+                self.allowances.len(),
+                actual_num_approvals,
+            );
+        }
     }
 }
 
@@ -853,6 +880,7 @@ pub fn verify_ledger_state<Tokens>(
     env: &StateMachine,
     ledger_id: CanisterId,
     burns_without_spender: Option<BurnsWithoutSpender<Account>>,
+    allowances_recently_purged: AllowancesRecentlyPurged,
 ) where
     Tokens: Default + TokensType + PartialEq + std::fmt::Debug + std::fmt::Display,
 {
@@ -862,6 +890,11 @@ pub fn verify_ledger_state<Tokens>(
     let mut expected_ledger_state = InMemoryLedger::new(burns_without_spender);
     expected_ledger_state.consume_blocks(&blocks);
     println!("recreated expected ledger state");
-    expected_ledger_state.verify_balances_and_allowances(env, ledger_id, blocks.len() as u64);
+    expected_ledger_state.verify_balances_and_allowances(
+        env,
+        ledger_id,
+        blocks.len() as u64,
+        allowances_recently_purged,
+    );
     println!("ledger state verified successfully");
 }
