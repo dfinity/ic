@@ -81,7 +81,7 @@ use std::{
     fs::OpenOptions,
     net::{IpAddr, SocketAddr},
     path::PathBuf,
-    process::Command,
+    process::{Child, Command},
     sync::{mpsc::channel, Arc},
     thread,
     thread::JoinHandle,
@@ -617,8 +617,13 @@ impl PocketIc {
         let runtime = tokio::runtime::Builder::new_current_thread()
             .build()
             .unwrap();
-        let url = runtime
-            .block_on(async { start_or_reuse_server(None).await.join("instances").unwrap() });
+        let url = runtime.block_on(async {
+            start_or_reuse_server(None)
+                .await
+                .1
+                .join("instances")
+                .unwrap()
+        });
         let instances: Vec<String> = reqwest::blocking::Client::new()
             .get(url)
             .send()
@@ -1820,7 +1825,7 @@ async fn download_pocketic_server(
 }
 
 /// Attempt to start a new PocketIC server if it's not already running.
-pub async fn start_or_reuse_server(server_binary: Option<PathBuf>) -> Url {
+pub async fn start_or_reuse_server(server_binary: Option<PathBuf>) -> (Child, Url) {
     let default_bin_dir =
         std::env::temp_dir().join(format!("pocket-ic-server-{}", EXPECTED_SERVER_VERSION));
     let default_bin_path = default_bin_dir.join("pocket-ic");
@@ -1895,7 +1900,8 @@ pub async fn start_or_reuse_server(server_binary: Option<PathBuf>) -> Url {
 
     // TODO: SDK-1936
     #[allow(clippy::zombie_processes)]
-    cmd.spawn()
+    let child = cmd
+        .spawn()
         .unwrap_or_else(|_| panic!("Failed to start PocketIC binary ({})", bin_path.display()));
 
     loop {
@@ -1905,7 +1911,10 @@ pub async fn start_or_reuse_server(server_binary: Option<PathBuf>) -> Url {
                     .trim_end()
                     .parse()
                     .expect("Failed to parse port to number");
-                break Url::parse(&format!("http://{}:{}/", LOCALHOST, port)).unwrap();
+                break (
+                    child,
+                    Url::parse(&format!("http://{}:{}/", LOCALHOST, port)).unwrap(),
+                );
             }
         }
         std::thread::sleep(Duration::from_millis(20));

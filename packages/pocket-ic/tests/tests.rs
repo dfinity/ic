@@ -459,6 +459,35 @@ fn time_on_resumed_instance() {
     assert_eq!(resumed_time, time + Duration::from_nanos(2));
 }
 
+#[tokio::test]
+async fn time_on_killed_instance() {
+    let (mut server, server_url) = start_or_reuse_server(None).await;
+    let temp_dir = TempDir::new().unwrap();
+
+    let state = PocketIcState::new_from_path(temp_dir.path().to_path_buf());
+    let pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_server_url(server_url)
+        .with_state(state)
+        .build_async()
+        .await;
+
+    let time = pic.get_time().await;
+
+    // this change of time is lost after killing the server
+    let now = SystemTime::now();
+    pic.set_certified_time(now.into()).await;
+
+    server.kill().unwrap();
+
+    let state = PocketIcState::new_from_path(temp_dir.path().to_path_buf());
+    let pic = PocketIcBuilder::new().with_state(state).build_async().await;
+
+    // The time on the resumed instances increases by 1ns due to bumping time when creating a new instance to ensure strict time monotonicity.
+    let resumed_time = pic.get_time().await;
+    assert_eq!(resumed_time, time + Duration::from_nanos(1));
+}
+
 #[test]
 fn test_get_set_cycle_balance() {
     let pic = PocketIc::new();
@@ -3181,7 +3210,7 @@ async fn with_all_icp_features_and_nns_subnet_state() {
         .unwrap()
         .into();
 
-    let url = start_or_reuse_server(None).await;
+    let url = start_or_reuse_server(None).await.1;
     let client = reqwest::Client::new();
     let instance_config = InstanceConfig {
         subnet_config_set: ExtendedSubnetConfigSet {

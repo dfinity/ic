@@ -576,6 +576,20 @@ impl PocketIcSubnets {
         }
     }
 
+    fn persist_topology(&self, default_effective_canister_id: Principal) {
+        if let Some(ref state_dir) = self.state_dir {
+            let raw_topology: RawTopologyInternal = RawTopologyInternal {
+                subnet_configs: self.subnet_configs.clone(),
+                default_effective_canister_id: default_effective_canister_id.into(),
+                icp_features: self.icp_features.clone(),
+                synced_registry_version: Some(self.synced_registry_version.get()),
+            };
+            let topology_json = serde_json::to_string(&raw_topology).unwrap();
+            let mut topology_file = File::create(state_dir.join("topology.json")).unwrap();
+            topology_file.write_all(topology_json.as_bytes()).unwrap();
+        }
+    }
+
     fn get_all(&self) -> Vec<Arc<Subnet>> {
         self.subnets.get_all()
     }
@@ -1086,7 +1100,7 @@ pub struct PocketIc {
 
 impl Drop for PocketIc {
     fn drop(&mut self) {
-        if let Some(ref state_dir) = self.subnets.state_dir {
+        if self.subnets.state_dir.is_some() {
             let subnets = self.subnets.get_all();
             for subnet in &subnets {
                 subnet.state_machine.checkpointed_tick();
@@ -1094,15 +1108,8 @@ impl Drop for PocketIc {
             for subnet in &subnets {
                 subnet.state_machine.await_state_hash();
             }
-            let raw_topology: RawTopologyInternal = RawTopologyInternal {
-                subnet_configs: self.subnets.subnet_configs.clone(),
-                default_effective_canister_id: self.default_effective_canister_id.into(),
-                icp_features: self.subnets.icp_features.clone(),
-                synced_registry_version: Some(self.subnets.synced_registry_version.get()),
-            };
-            let topology_json = serde_json::to_string(&raw_topology).unwrap();
-            let mut topology_file = File::create(state_dir.join("topology.json")).unwrap();
-            topology_file.write_all(topology_json.as_bytes()).unwrap();
+            self.subnets
+                .persist_topology(self.default_effective_canister_id);
         }
         for subnet in self.subnets.get_all() {
             subnet.state_machine.drop_payload_builder();
@@ -1432,6 +1439,8 @@ impl PocketIc {
                     })
             })
             .default_effective_canister_id();
+
+        subnets.persist_topology(default_effective_canister_id);
 
         let state_label = StateLabel::new(seed);
 
@@ -3205,6 +3214,8 @@ fn route(
                         subnet_kind,
                         instruction_config,
                     });
+                    pic.subnets
+                        .persist_topology(pic.default_effective_canister_id);
                     Ok(pic.try_route_canister(canister_id).unwrap())
                 } else {
                     // If the request is not an update call to create a canister using the provisional API,
