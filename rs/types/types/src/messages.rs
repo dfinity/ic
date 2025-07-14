@@ -16,7 +16,7 @@ pub use self::http::{
     HttpUserQuery, NodeSignature, QueryResponseHash, RawHttpRequestVal, ReplicaHealthStatus,
     SignedDelegation,
 };
-pub use crate::methods::{SystemMethod, Callback};
+pub use crate::methods::{Callback, SystemMethod};
 use crate::time::CoarseTime;
 use crate::{user_id_into_protobuf, user_id_try_from_protobuf, Cycles, Funds, NumBytes, UserId};
 pub use blob::Blob;
@@ -326,9 +326,6 @@ impl SignedRequestBytes {
     }
 }
 
-
-
-
 /// A wrapper around ingress messages and canister requests/responses.
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum CanisterMessage {
@@ -364,9 +361,6 @@ impl Display for CanisterMessage {
         }
     }
 }
-
-
-
 
 /*
 /// A wrapper around ingress messages and canister requests/responses.
@@ -415,8 +409,6 @@ impl From<RequestOrResponse> for CanisterMessage {
     }
 }
 */
-
-
 
 /// A wrapper around a canister request and an ingress message.
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
@@ -489,7 +481,7 @@ impl TryFrom<CanisterMessage> for CanisterCall {
         match msg {
             CanisterMessage::Request(msg) => Ok(CanisterCall::Request(msg)),
             CanisterMessage::Ingress(msg) => Ok(CanisterCall::Ingress(msg)),
-//            CanisterMessage::Response(_) => Err(()),
+            //            CanisterMessage::Response(_) => Err(()),
             CanisterMessage::Response { .. } => Err(()),
         }
     }

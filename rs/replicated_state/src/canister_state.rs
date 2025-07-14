@@ -242,15 +242,15 @@ impl CanisterState {
             input_queue_type,
         )
     }
-/*
-    /// See `SystemState::pop_input` for documentation.
-    ///
-    /// The function is public as we pop directly from the Canister state in
-    /// `SchedulerImpl::execute_canisters_on_thread()`
-    pub fn pop_input(&mut self) -> Option<CanisterMessage> {
-        self.system_state.pop_input()
-    }
-*/
+    /*
+        /// See `SystemState::pop_input` for documentation.
+        ///
+        /// The function is public as we pop directly from the Canister state in
+        /// `SchedulerImpl::execute_canisters_on_thread()`
+        pub fn pop_input(&mut self) -> Option<CanisterMessage> {
+            self.system_state.pop_input()
+        }
+    */
     /// See `SystemState::has_input` for documentation.
     pub fn has_input(&self) -> bool {
         self.system_state.has_input()
