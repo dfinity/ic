@@ -28,7 +28,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::util::create_agent;
 use ic_system_test_driver::{
     driver::{test_env::TestEnv, test_env_api::*},
-    util::{block_on, MessageCanister},
+    util::{assert_create_agent, block_on, MessageCanister},
 };
 use ic_types::SubnetId;
 use ic_utils::interfaces::ManagementCanister;
@@ -157,12 +157,16 @@ pub fn upgrade(
     faulty_node.await_status_is_healthy().unwrap();
 
     let msg = &format!("hello before upgrade to {upgrade_version}");
-    let can_id = store_message(
-        &subnet_node.get_public_url(),
-        subnet_node.effective_canister_id(),
-        msg,
-        &logger,
-    );
+    let can_id = block_on(async {
+        let agent = assert_create_agent(subnet_node.get_public_url().as_str()).await;
+        let mcan = MessageCanister::new(&agent, subnet_node.effective_canister_id()).await;
+        // send a lot of update calls to verify that call context manager is preserved properly
+        for _ in 0..100 {
+            mcan.store_msg(msg.to_string()).await;
+        }
+        mcan.canister_id()
+    });
+
     assert!(can_read_msg(
         &logger,
         &subnet_node.get_public_url(),
