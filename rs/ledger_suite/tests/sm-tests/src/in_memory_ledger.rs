@@ -692,6 +692,7 @@ where
                 )
             }
         }
+        self.latest_block_timestamp = Some(timestamp.as_nanos_since_unix_epoch());
         self.validate_invariants();
     }
 
