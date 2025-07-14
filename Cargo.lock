@@ -18161,12 +18161,15 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "clap 4.5.27",
  "indoc",
  "itertools 0.12.1",
  "pcre2",
+ "tar",
  "tempfile",
  "tokio",
  "which 6.0.3",
+ "zstd",
 ]
 
 [[package]]
