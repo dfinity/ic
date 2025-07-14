@@ -1224,20 +1224,20 @@ impl ProposalPayload<SubnetRentalRequest> for ProposeToRentSubnetCmd {
 struct ProposeToFulfillSubnetRentalRequestCmd {
     /// The principal ID of the user whose rental request should be fulfilled
     #[clap(long)]
-    user: Option<PrincipalId>,
+    user: PrincipalId,
 
     /// Node IDs that will be members of the subnet
     #[clap(long, num_args(1..))]
-    node_ids: Option<Vec<PrincipalId>>,
+    node_ids: Vec<PrincipalId>,
 
     /// Replica version ID (40 character hexadecimal git commit ID)
     #[clap(long)]
-    replica_version_id: Option<String>,
+    replica_version_id: String,
 }
 
 impl ProposalTitle for ProposeToFulfillSubnetRentalRequestCmd {
     fn title(&self) -> String {
-        "Fulfill Subnet Rental Request".to_string()
+        format!("Fulfill Subnet Rental Request for {}", self.user)
     }
 }
 
@@ -1246,9 +1246,9 @@ impl ProposalAction for ProposeToFulfillSubnetRentalRequestCmd {
     async fn action(&self) -> ProposalActionRequest {
         ProposalActionRequest::FulfillSubnetRentalRequest(
             ic_nns_governance_api::FulfillSubnetRentalRequest {
-                user: self.user,
-                node_ids: self.node_ids.clone(),
-                replica_version_id: self.replica_version_id.clone(),
+                user: Some(self.user),
+                node_ids: Some(self.node_ids.clone()),
+                replica_version_id: Some(self.replica_version_id.clone()),
             },
         )
     }
