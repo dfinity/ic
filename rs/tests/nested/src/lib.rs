@@ -38,7 +38,7 @@ const NODE_REGISTRATION_BACKOFF: Duration = Duration::from_secs(5);
 
 /// Prepare the environment for nested tests.
 /// SetupOS -> HostOS -> GuestOS
-pub fn config(env: TestEnv, mainnet_config: bool) {
+pub fn config(env: TestEnv) {
     let mut vector = VectorVm::new();
     vector.start(&env).expect("Failed to start Vector VM");
 
@@ -47,17 +47,12 @@ pub fn config(env: TestEnv, mainnet_config: bool) {
             .unwrap();
 
     // Setup "testnet"
-    let mut ic = InternetComputer::new()
+    InternetComputer::new()
         .add_fast_single_node_subnet(SubnetType::System)
         .with_api_boundary_nodes(1)
         .with_node_provider(principal)
-        .with_node_operator(principal);
-
-    if mainnet_config {
-        ic = ic.with_mainnet_config();
-    }
-
-    ic.setup_and_start(&env)
+        .with_node_operator(principal)
+        .setup_and_start(&env)
         .expect("failed to setup IC under test");
 
     install_nns_and_check_progress(env.topology_snapshot());
@@ -307,18 +302,20 @@ pub fn upgrade_guestos(env: TestEnv) {
             "Unassigned nodes config: {:?}", unassigned_nodes_config
         );
 
+        let original_version = get_setupos_img_version().expect("Failed to find initial version");
+
         // determine new GuestOS version
-        let original_version = unassigned_nodes_config.replica_version.clone();
-        let upgrade_url = get_ic_os_update_img_test_url()
+        let upgrade_url = get_ic_os_update_img_url()
             .expect("no image URL")
             .to_string();
         info!(logger, "GuestOS upgrade image URL: {}", upgrade_url);
 
-        let target_version = format!("{}-test", original_version);
-        let new_replica_version = ReplicaVersion::try_from(target_version.clone()).unwrap();
-        info!(logger, "Target replica version: {}", new_replica_version);
+        let target_version_str =
+            get_ic_os_update_img_version().expect("Failed to get target replica version");
+        let target_version = ReplicaVersion::try_from(target_version_str.as_str()).unwrap();
+        info!(logger, "Target replica version: {}", target_version);
 
-        let sha256 = get_ic_os_update_img_test_sha256().expect("no SHA256 hash");
+        let sha256 = get_ic_os_update_img_sha256(&env).expect("no SHA256 hash");
         info!(logger, "Update image SHA256: {}", sha256);
 
         // check that GuestOS is on the expected version (initial version)
@@ -351,13 +348,7 @@ pub fn upgrade_guestos(env: TestEnv) {
         .expect("guest didn't come up as expected");
 
         // elect the new GuestOS version (upgrade version)
-        elect_guestos_version(
-            &nns_node,
-            new_replica_version.clone(),
-            sha256,
-            vec![upgrade_url],
-        )
-        .await;
+        elect_guestos_version(&nns_node, target_version.clone(), sha256, vec![upgrade_url]).await;
 
         // check that the registry was updated after blessing the new guestos version
         let reg_ver2 = registry_canister.get_latest_version().await.unwrap();
@@ -372,7 +363,7 @@ pub fn upgrade_guestos(env: TestEnv) {
         info!(logger, "Updated blessed versions: {:?}", blessed_versions);
 
         // proposal to upgrade the unassigned nodes
-        update_unassigned_nodes(&nns_node, &new_replica_version).await;
+        update_unassigned_nodes(&nns_node, &target_version).await;
 
         // check that the registry was updated after updating the unassigned nodes
         let reg_ver3 = registry_canister.get_latest_version().await.unwrap();
@@ -402,7 +393,7 @@ pub fn upgrade_guestos(env: TestEnv) {
                 let current_version = check_guestos_version(&client, &guest_ipv6)
                     .await
                     .unwrap_or("unavaiblable".to_string());
-                if current_version == target_version {
+                if current_version == target_version_str {
                     info!(logger, "Guest upgraded to '{}'", current_version);
                     Ok(())
                 } else {

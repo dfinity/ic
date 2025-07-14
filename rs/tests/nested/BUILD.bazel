@@ -84,10 +84,8 @@ system_test_nns(
     tags = ["long_test"],
     test_driver_target = ":guestos_upgrade_test_bin",
     test_timeout = "eternal",
-    use_empty_image = True,
-    uses_guestos_dev = True,
-    uses_guestos_dev_test = True,
-    uses_setupos_dev = True,
+    uses_guestos_test_update = True,
+    uses_setupos_img = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + IC_GATEWAY_RUNTIME_DEPS + VECTOR_RUNTIME_DEPS,
     deps = RUNNER_DEPENDENCIES,
 )
