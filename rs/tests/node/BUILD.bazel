@@ -28,6 +28,9 @@ system_test_nns(
 # Unit tests that require root privileges to run.
 system_test(
     name = "root_tests",
+    env = {
+        "NODE_ROOT_TESTS_UVM_CONFIG_PATH": "$(rootpath :root_tests_config_image)",
+    },
     runtime_deps = UNIVERSAL_VM_RUNTIME_DEPS + [":root_tests_config_image"],
     deps = [
         "//rs/tests/driver:ic-system-test-driver",

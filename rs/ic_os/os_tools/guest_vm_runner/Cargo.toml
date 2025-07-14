@@ -36,6 +36,7 @@ virt = { workspace = true }
 
 [features]
 dev = ["config/dev"]
+skip_default_tests = []
 integration_tests = []
 upgrade_device_mapper_test = []
 

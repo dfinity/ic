@@ -5,7 +5,6 @@ use devicemapper::{
 };
 use loopdev::LoopDevice;
 use nix::ioctl_read;
-use std::any::Any;
 use std::fmt::Debug;
 use std::fs::File;
 use std::ops::Deref;
@@ -14,7 +13,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tempfile::{NamedTempFile, TempPath};
 
-pub trait DeviceTrait: Any {
+pub trait DeviceTrait: Send + Sync {
     fn len(&self) -> Sectors;
     fn device(&self) -> Device;
 }
@@ -211,7 +210,7 @@ pub struct MappedDevice {
     len: Sectors,
     device_mapper: Arc<DM>,
     device: Device,
-    _dependencies: Vec<Box<dyn Any>>,
+    _dependencies: Vec<Box<dyn Send + Sync>>,
 }
 
 impl Debug for MappedDevice {
@@ -283,7 +282,7 @@ impl MappedDevice {
         name: &'static str,
         table: &[(u64, u64, String, String)],
         len: Sectors,
-        dependencies: Vec<Box<dyn Any>>,
+        dependencies: Vec<Box<dyn Send + Sync>>,
     ) -> Result<MappedDevice> {
         let dm_name = DmName::new(name).expect("Illegal DmName");
         let device = dm

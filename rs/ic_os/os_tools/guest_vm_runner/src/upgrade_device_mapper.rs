@@ -4,11 +4,11 @@ use devicemapper::{DevId, DmName, DmOptions, Sectors, DM};
 use std::path::Path;
 use std::sync::Arc;
 
-const UPGRADE_DM_NAME: &'static str = "upgrade-guestos";
-const DATA_PARTITION_DM_NAME: &'static str = "guestos-data";
-const DATA_PARTITION_SNAPSHOT_DM_NAME: &'static str = "guestos-data-snapshot";
+const UPGRADE_DM_NAME: &str = "upgrade-guestos";
+const DATA_PARTITION_DM_NAME: &str = "guestos-data";
+const DATA_PARTITION_SNAPSHOT_DM_NAME: &str = "guestos-data-snapshot";
 
-const ALL_DM_NAMES_IN_CLEANUP_ORDER: [&'static str; 3] = [
+const ALL_DM_NAMES_IN_CLEANUP_ORDER: [&str; 3] = [
     // The cleanup order is the reverse of creation order in create_device_for_upgrade.
     UPGRADE_DM_NAME,
     DATA_PARTITION_SNAPSHOT_DM_NAME,
@@ -61,12 +61,9 @@ pub fn create_mapped_device_for_upgrade(base_device: &Path) -> Result<MappedDevi
 /// Creates the mapped device chain.
 ///
 /// We create 3 devices (device mapper tables are somewhat primitive, so we stack them):
-///   - data partition device:
-///         Maps just the data partition of the base device.
-///   - data partition device with snapshot:
-///         Writes are persisted to the snapshot instead of the original device.
-///   - upgrade device:
-///         The merger of the base device and the newly created data partition device.
+///   - data partition device: maps just the data partition of the base device.
+///   - data partition device with snapshot: writes are persisted to the snapshot instead of the original device.
+///   - upgrade device: the merger of the base device and the newly created data partition device.
 fn create_device_for_upgrade(
     dev_mapper: Arc<DM>,
     base_device: BaseDevice,

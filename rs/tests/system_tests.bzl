@@ -406,7 +406,7 @@ def system_test_nns(name, extra_head_nns_tags = ["system_test_large"], **kwargs)
     )
     return struct(test_driver_target = mainnet_nns_systest.test_driver_target)
 
-def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_paths = None, testonly = False):
+def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_paths = None, testonly = True):
     """This macro creates bazel targets for uvm config images.
 
     Args:
