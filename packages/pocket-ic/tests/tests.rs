@@ -501,6 +501,9 @@ async fn killed_instance() {
     assert!(!pic.canister_exists(another_canister_id).await);
     let resumed_time = pic.get_time().await;
     assert!(resumed_time < now.into());
+
+    // Drop instance explicitly to prevent data races in the StateManager.
+    pic.drop().await;
 }
 
 #[test]
