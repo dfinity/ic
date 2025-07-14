@@ -8,7 +8,6 @@ documentation.workspace = true
 
 [dependencies]
 ic-btc-interface = { workspace = true }
-ic-doge-interface = { git = "ssh://git@github.com/dfinity/dogecoin-canister" }
 ic-btc-replica-types = { path = "../replica_types" }
 ic-config = { path = "../../config" }
 ic-error-types = { path = "../../../packages/ic-error-types" }
