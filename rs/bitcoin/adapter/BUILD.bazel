@@ -105,7 +105,8 @@ rust_test(
         "TESTNET_BLOCKS_DATA_PATH": "$(rootpath @bitcoin_adapter_testnet_blocks//file)",
     },
     tags = ["requires-network"],
-    deps = [":adapter"] + [
+    deps = [
+        ":adapter",
         "//rs/bitcoin/adapter/test_utils",
         "//rs/bitcoin/client",
         "//rs/bitcoin/replica_types",
