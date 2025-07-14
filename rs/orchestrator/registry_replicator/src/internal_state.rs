@@ -363,14 +363,14 @@ impl InternalState {
                 n_record
                     .http
                     .as_ref()
-                    .and_then(|h| self.http_endpoint_to_url(h))
+                    .and_then(|h| self.https_endpoint_to_url(h))
             })
             .collect();
         urls.sort();
         Ok(urls)
     }
 
-    fn http_endpoint_to_url(&self, http: &ConnectionEndpoint) -> Option<Url> {
+    fn https_endpoint_to_url(&self, http: &ConnectionEndpoint) -> Option<Url> {
         let host_str = match IpAddr::from_str(&http.ip_addr.clone()) {
             Ok(v) => {
                 if v.is_ipv6() {
@@ -385,7 +385,7 @@ impl InternalState {
             }
         };
 
-        let url = format!("http://{}:{}/", host_str, http.port);
+        let url = format!("https://{}:{}/", host_str, http.port);
         match Url::parse(&url) {
             Ok(v) => Some(v),
             Err(e) => {
