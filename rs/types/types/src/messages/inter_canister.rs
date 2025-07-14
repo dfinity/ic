@@ -254,7 +254,6 @@ impl Request {
             | Ok(Method::RawRand)
             | Ok(Method::ECDSAPublicKey)
             | Ok(Method::SignWithECDSA)
-            | Ok(Method::ComputeInitialIDkgDealings)
             | Ok(Method::ReshareChainKey)
             | Ok(Method::SchnorrPublicKey)
             | Ok(Method::SignWithSchnorr)

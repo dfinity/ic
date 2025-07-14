@@ -40,7 +40,6 @@ def _zstd_compress(ctx):
     """
     out = ctx.actions.declare_file(ctx.label.name)
 
-    # TODO: install zstd as dependency.
     ctx.actions.run(
         executable = "zstd",
         arguments = ["-q", "--threads=0", "-10", "-f", "-z", "-o", out.path] + [s.path for s in ctx.files.srcs],
@@ -63,7 +62,6 @@ def _untar(ctx):
     """
     out = ctx.actions.declare_directory(ctx.label.name)
 
-    # TODO: install tar as dependency.
     ctx.actions.run(
         executable = "tar",
         arguments = ["-xf", ctx.file.src.path, "-C", out.path],
@@ -88,7 +86,6 @@ def _mcopy(ctx):
     for src in ctx.files.srcs:
         command += "&& mcopy -mi {output} -sQ {src_path} ::/{filename} ".format(output = out.path, src_path = src.path, filename = ctx.attr.remap_paths.get(src.basename, src.basename))
 
-    # TODO: install mcopy as dependency.
     ctx.actions.run_shell(
         command = command,
         inputs = ctx.files.srcs + [ctx.file.fs],
@@ -204,7 +201,7 @@ def rust_ic_test(env = {}, data = [], **kwargs):
         **kwargs
     )
 
-def rust_bench(name, env = {}, data = [], pin_cpu = False, with_test = False, **kwargs):
+def rust_bench(name, env = {}, data = [], pin_cpu = False, test_name = None, test_timeout = None, **kwargs):
     """A rule for defining a rust benchmark.
 
     Args:
@@ -212,16 +209,22 @@ def rust_bench(name, env = {}, data = [], pin_cpu = False, with_test = False, **
       env: additional environment variables to pass to the benchmark binary.
       data: data dependencies required to run the benchmark.
       pin_cpu: pins the benchmark process to a single CPU if set `True`.
-      with_test: generates name + '_test' target to test that the benchmark work.
+      test_name: generates test with name 'test_name' to test that the benchmark work.
+      test_timeout: timeout to apply in the generated test (default: `moderate`).
       **kwargs: see docs for `rust_binary`.
     """
 
     kwargs.setdefault("testonly", True)
 
     # The initial binary is a regular rust_binary with rustc flags as in the
-    # current build configuration.
+    # current build configuration. It is marked as "manual" because it is not
+    # meant to be built.
     binary_name_initial = "_" + name + "_bin_default"
-    rust_binary(name = binary_name_initial, **kwargs)
+    kwargs_initial = dict(kwargs)
+    tags_initial = kwargs_initial.pop("tags", [])
+    if "manual" not in tags_initial:
+        tags_initial.append("manual")
+    rust_binary(name = binary_name_initial, tags = tags_initial, **kwargs_initial)
 
     # The "publish" binary has the same compiler flags applied as for production build.
     binary_name_publish = "_" + name + "_bin_publish"
@@ -248,10 +251,12 @@ def rust_bench(name, env = {}, data = [], pin_cpu = False, with_test = False, **
     )
 
     # To test that the benchmarks work.
-    if with_test:
+    if test_name != None:
+        test_timeout = test_timeout or "moderate"
         native.sh_test(
-            name = name + "_test",
+            name = test_name,
             testonly = True,
+            timeout = test_timeout,
             env = env,
             srcs = [":" + binary_name_publish],
             data = data,

@@ -11,8 +11,8 @@ use ic_management_canister_types_private::{
 use ic_protobuf::registry::{
     node::v1::NodeRecord,
     subnet::v1::{
-        CatchUpPackageContents, ChainKeyConfig as ChainKeyConfigPb,
-        SubnetFeatures as SubnetFeaturesPb, SubnetRecord,
+        CanisterCyclesCostSchedule as CanisterCyclesCostSchedulePb, CatchUpPackageContents,
+        ChainKeyConfig as ChainKeyConfigPb, SubnetFeatures as SubnetFeaturesPb, SubnetRecord,
     },
 };
 use ic_registry_keys::{
@@ -40,7 +40,10 @@ impl Registry {
     /// parameters populated by caller into registry. It is expected that
     /// the rest of the system will take the information from the registry
     /// to actually start the subnet.
-    pub async fn do_create_subnet(&mut self, payload: CreateSubnetPayload) {
+    ///
+    /// Returns the ID of the new subnet. The subnet probably isn't ready for
+    /// immediate use shortly after this returns.
+    pub async fn do_create_subnet(&mut self, payload: CreateSubnetPayload) -> NewSubnet {
         println!("{}do_create_subnet: {:?}", LOG_PREFIX, payload);
 
         self.validate_create_subnet_payload(&payload);
@@ -170,6 +173,9 @@ impl Registry {
 
         // Check invariants before applying mutations
         self.maybe_apply_mutation_internal(mutations);
+
+        let new_subnet_id = Some(subnet_id);
+        NewSubnet { new_subnet_id }
     }
 
     /// Validates runtime payload values that aren't checked by invariants.
@@ -297,6 +303,11 @@ pub struct CreateSubnetPayload {
     pub gossip_pfn_evaluation_period_ms: u32,
     pub gossip_registry_poll_period_ms: u32,
     pub gossip_retransmission_request_ms: u32,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
+pub struct NewSubnet {
+    pub new_subnet_id: Option<SubnetId>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
@@ -485,6 +496,16 @@ pub enum CanisterCyclesCostSchedule {
     Free,
 }
 
+impl From<CanisterCyclesCostSchedule> for CanisterCyclesCostSchedulePb {
+    fn from(src: CanisterCyclesCostSchedule) -> Self {
+        type Src = CanisterCyclesCostSchedule;
+        match src {
+            Src::Normal => Self::Normal,
+            Src::Free => Self::Free,
+        }
+    }
+}
+
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
 pub struct EcdsaInitialConfig {
     pub quadruples_to_create_in_advance: u32,
@@ -537,6 +558,12 @@ impl From<CreateSubnetPayload> for SubnetRecord {
                         .expect("Invalid InitialChainKeyConfig")
                 })
                 .map(ChainKeyConfigPb::from),
+
+            canister_cycles_cost_schedule: val
+                .canister_cycles_cost_schedule
+                .map(CanisterCyclesCostSchedulePb::from)
+                .unwrap_or(CanisterCyclesCostSchedulePb::Normal)
+                as i32,
         }
     }
 }
