@@ -6,7 +6,7 @@
 
 use candid::CandidType;
 use ic_btc_interface::Network as BtcNetwork;
-use ic_doge_interface::Network as DogeNetwork;
+use ic_btc_interface::Network as DogeNetwork;
 use ic_error_types::RejectCode;
 use ic_protobuf::{
     bitcoin::v1,
@@ -22,18 +22,6 @@ use std::mem::size_of_val;
 pub enum Network {
     Bitcoin(BtcNetwork),
     Dogecoin(DogeNetwork),
-}
-
-impl From<BtcNetwork> for Network {
-    fn from(network: BtcNetwork) -> Self {
-        Self::Bitcoin(network)
-    }
-}
-
-impl From<DogeNetwork> for Network {
-    fn from(network: DogeNetwork) -> Self {
-        Self::Dogecoin(network)
-    }
 }
 
 impl TryFrom<i32> for Network {
@@ -204,17 +192,17 @@ impl BitcoinAdapterRequestWrapper {
         match self {
             BitcoinAdapterRequestWrapper::GetBtcSuccessorsRequest(
                 GetSuccessorsRequestInitial { network, .. },
-            ) => (*network).into(),
+            ) => Network::Bitcoin(*network),
             BitcoinAdapterRequestWrapper::SendBtcTransactionRequest(SendTransactionRequest {
                 network,
                 ..
-            }) => (*network).into(),
+            }) => Network::Bitcoin(*network),
             BitcoinAdapterRequestWrapper::GetDogeSuccessorsRequest(
                 GetDogeSuccessorsRequestInitial { network, .. },
-            ) => (*network).into(),
+            ) => Network::Dogecoin(*network),
             BitcoinAdapterRequestWrapper::SendDogeTransactionRequest(
                 SendDogeTransactionRequest { network, .. },
-            ) => (*network).into(),
+            ) => Network::Dogecoin(*network),
         }
     }
 }

@@ -9,12 +9,12 @@ mod proptests;
 
 use crate::metrics::BitcoinPayloadBuilderMetrics;
 use ic_btc_interface::Network as BtcNetwork;
+use ic_btc_interface::Network as DogeNetwork;
 use ic_btc_replica_types::{
     BitcoinAdapterRequestWrapper, BitcoinAdapterResponse, BitcoinAdapterResponseWrapper,
     BitcoinReject, Network,
 };
 use ic_config::bitcoin_payload_builder_config::Config;
-use ic_doge_interface::Network as DogeNetwork;
 use ic_error_types::RejectCode;
 use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, IntoMessages, PastPayload, ProposalContext},
