@@ -14,7 +14,8 @@ use crate::error::{UpgradeError, UpgradeResult};
 
 pub mod error;
 
-pub struct Reboot;
+/// Used to signal that the system is rebooting.
+pub struct Rebooting;
 
 const REBOOT_TIME_FILENAME: &str = "reboot_time.txt";
 
@@ -220,7 +221,7 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
 
     /// Executes the node upgrade by unpacking the downloaded image (if it didn't happen yet)
     /// and rebooting the node.
-    async fn execute_upgrade(&mut self, version: &V) -> UpgradeResult<Reboot> {
+    async fn execute_upgrade(&mut self, version: &V) -> UpgradeResult<Rebooting> {
         match self.get_prepared_version() {
             Some(v) if v == version => {
                 info!(
@@ -261,7 +262,7 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
             ))
         } else {
             info!(self.log(), "Rebooting {:?}", out);
-            Ok(Reboot)
+            Ok(Rebooting)
         }
     }
 

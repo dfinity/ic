@@ -11,7 +11,7 @@ use ic_crypto::get_master_public_key_from_transcript;
 use ic_http_utils::file_downloader::FileDownloader;
 use ic_image_upgrader::{
     error::{UpgradeError, UpgradeResult},
-    ImageUpgrader, Reboot,
+    ImageUpgrader, Rebooting,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info, warn, ReplicaLogger};
@@ -39,7 +39,7 @@ const KEY_CHANGES_FILENAME: &str = "key_changed_metric.cbor";
 
 #[must_use = "This may be a `Stop` variant, which should be handled"]
 pub(crate) enum OrchestratorControlFlow {
-    /// The replica is assigned to the given subnet id.
+    /// The replica is assigned to the subnet with the given subnet id.
     Assigned(SubnetId),
     /// The replica is unassigned.
     Unassigned,
@@ -318,7 +318,7 @@ impl Upgrade {
                 .execute_upgrade(&new_replica_version)
                 .await
                 .map_err(OrchestratorError::from)
-                .map(|Reboot| OrchestratorControlFlow::Stop);
+                .map(|Rebooting| OrchestratorControlFlow::Stop);
         }
 
         // If we arrive here, we are on the newest replica version.
@@ -463,7 +463,7 @@ impl Upgrade {
         self.execute_upgrade(&replica_version)
             .await
             .map_err(OrchestratorError::from)
-            .map(|Reboot| OrchestratorControlFlow::Stop)
+            .map(|Rebooting| OrchestratorControlFlow::Stop)
     }
 
     /// Stop the current replica process.
