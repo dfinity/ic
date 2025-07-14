@@ -1126,7 +1126,7 @@ async fn notify_top_up(
 
     let src_canister_principal = SUBNET_RENTAL_CANISTER_ID.get();
     // caller and destination needs to be src_canister_principal to turn off cycles_limit.
-    let use_cycles_limit =
+    let check_minting_limit =
         caller != src_canister_principal || canister_id.get() != src_canister_principal;
 
     let (amount, from) = fetch_transaction(
@@ -1184,7 +1184,7 @@ async fn notify_top_up(
     match maybe_early_result {
         Some(result) => result,
         None => {
-            let result = process_top_up(canister_id, from, amount, use_cycles_limit).await;
+            let result = process_top_up(canister_id, from, amount, check_minting_limit).await;
 
             with_state_mut(|state| {
                 state.blocks_notified.insert(
@@ -1956,8 +1956,8 @@ async fn do_transaction_notification(
             .map_err(|err| format!("Cannot parse subaccount: {}", err))?;
         // Only the Subnet Rental Canister has an exception to the cycles limit, and it does not
         // use this path, therefore we always enforce the limit here.
-        let use_cycles_limit = true;
-        match process_top_up(canister_id, from, tn.amount, use_cycles_limit).await {
+        let check_minting_limit = true;
+        match process_top_up(canister_id, from, tn.amount, check_minting_limit).await {
             Ok(cycles) => (
                 Ok(CyclesResponse::ToppedUp(())),
                 Some(NotificationStatus::NotifiedTopUp(Ok(cycles))),
@@ -2133,7 +2133,7 @@ async fn process_top_up(
     canister_id: CanisterId,
     from: AccountIdentifier,
     amount: Tokens,
-    use_cycles_limit: bool,
+    check_minting_limit: bool,
 ) -> Result<Cycles, NotifyError> {
     let cycles = tokens_to_cycles(amount)?;
 
@@ -2144,7 +2144,7 @@ async fn process_top_up(
         canister_id, cycles
     ));
 
-    match deposit_cycles(canister_id, cycles, true, use_cycles_limit).await {
+    match deposit_cycles(canister_id, cycles, true, check_minting_limit).await {
         Ok(()) => {
             burn_and_log(sub, amount).await;
             Ok(cycles)
@@ -2263,10 +2263,10 @@ async fn deposit_cycles(
     canister_id: CanisterId,
     cycles: Cycles,
     mint_cycles: bool,
-    use_cycles_limit: bool,
+    check_minting_limit: bool,
 ) -> Result<(), String> {
     if mint_cycles {
-        ensure_balance(cycles, use_cycles_limit)?;
+        ensure_balance(cycles, check_minting_limit)?;
     }
 
     let res: CallResult<()> = ic_cdk::api::call::call_with_payment128(
@@ -2298,8 +2298,8 @@ async fn do_mint_cycles(
     };
     // always use cycles limit for minting cycles, since the Subnet Rental Canister is the only exception and uses
     // top_up to send cycles to itself.
-    let use_cycles_limit = true;
-    ensure_balance(cycles, use_cycles_limit)?;
+    let check_minting_limit = true;
+    ensure_balance(cycles, check_minting_limit)?;
 
     let arg = CyclesLedgerDepositArgs {
         to: account,
@@ -2394,12 +2394,12 @@ async fn do_create_canister(
         return Err("No subnets in which to create a canister.".to_owned());
     }
 
-    // We always set use_cycles_limit true here, since there are no reasons for an exception when
+    // We always set check_minting_limit true here, since there are no reasons for an exception when
     // creating canisters.  Only the Subnet Rental Canister has a reason to create massive bursts
     // of cycles, which it does not do for canister creation.
-    let use_cycles_limit = true;
+    let check_minting_limit = true;
     // We have subnets available, so we can now mint the cycles and create the canister.
-    ensure_balance(cycles, use_cycles_limit)?;
+    ensure_balance(cycles, check_minting_limit)?;
 
     let canister_settings = settings
         .map(|mut settings| {
