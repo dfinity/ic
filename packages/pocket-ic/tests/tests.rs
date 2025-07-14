@@ -28,8 +28,6 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 #[cfg(windows)]
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-#[cfg(windows)]
-use std::path::PathBuf;
 use std::{
     io::Read,
     sync::OnceLock,
@@ -463,17 +461,13 @@ fn time_on_resumed_instance() {
 async fn resume_killed_instance_impl(allow_corrupted_state: Option<bool>) -> Result<(), String> {
     let (mut server, server_url) = start_server(StartServerParams::default()).await;
     let temp_dir = TempDir::new().unwrap();
-    #[cfg(not(windows))]
     let state_dir_path = temp_dir.path().to_path_buf();
-    #[cfg(windows)]
-    let state_dir_path: PathBuf = windows_to_wsl(temp_dir.path().as_os_str().to_str().unwrap())
-        .unwrap()
-        .into();
 
+    let state = PocketIcState::new_from_path(state_dir_path.clone());
     let pic = PocketIcBuilder::new()
         .with_application_subnet()
         .with_server_url(server_url)
-        .with_state_dir(state_dir_path.clone())
+        .with_state(state)
         .build_async()
         .await;
 
