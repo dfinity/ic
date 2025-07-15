@@ -28,8 +28,6 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 #[cfg(windows)]
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-#[cfg(windows)]
-use std::path::PathBuf;
 use std::{
     io::Read,
     sync::OnceLock,
@@ -460,6 +458,8 @@ fn time_on_resumed_instance() {
     assert_eq!(resumed_time, time + Duration::from_nanos(2));
 }
 
+// Killing the PocketIC server inside WSL is challenging => skipping this test on Windows.
+#[cfg(not(windows))]
 async fn resume_killed_instance_impl(allow_corrupted_state: Option<bool>) -> Result<(), String> {
     let (mut server, server_url) = start_server(StartServerParams::default()).await;
     let temp_dir = TempDir::new().unwrap();
@@ -493,15 +493,9 @@ async fn resume_killed_instance_impl(allow_corrupted_state: Option<bool>) -> Res
 
     let (_, server_url) = start_server(StartServerParams::default()).await;
     let client = reqwest::Client::new();
-    #[cfg(not(windows))]
-    let raw_state_dir_path = temp_dir.path().to_path_buf();
-    #[cfg(windows)]
-    let raw_state_dir_path: PathBuf = windows_to_wsl(temp_dir.path().as_os_str().to_str().unwrap())
-        .unwrap()
-        .into();
     let instance_config = InstanceConfig {
         subnet_config_set: ExtendedSubnetConfigSet::default(),
-        state_dir: Some(raw_state_dir_path),
+        state_dir: Some(temp_dir.path().to_path_buf()),
         nonmainnet_features: false,
         log_level: None,
         bitcoind_addr: None,
@@ -536,18 +530,24 @@ async fn resume_killed_instance_impl(allow_corrupted_state: Option<bool>) -> Res
     Ok(())
 }
 
+// Killing the PocketIC server inside WSL is challenging => skipping this test on Windows.
+#[cfg(not(windows))]
 #[tokio::test]
 async fn resume_killed_instance_default() {
     let err = resume_killed_instance_impl(None).await.unwrap_err();
     assert!(err.contains("The state of subnet with seed 7712b2c09cb96b3aa3fbffd4034a21a39d5d13f80e043161d1d71f4c593434af is corrupted."));
 }
 
+// Killing the PocketIC server inside WSL is challenging => skipping this test on Windows.
+#[cfg(not(windows))]
 #[tokio::test]
 async fn resume_killed_instance_strict() {
     let err = resume_killed_instance_impl(Some(false)).await.unwrap_err();
     assert!(err.contains("The state of subnet with seed 7712b2c09cb96b3aa3fbffd4034a21a39d5d13f80e043161d1d71f4c593434af is corrupted."));
 }
 
+// Killing the PocketIC server inside WSL is challenging => skipping this test on Windows.
+#[cfg(not(windows))]
 #[tokio::test]
 async fn resume_killed_instance() {
     resume_killed_instance_impl(Some(true)).await.unwrap();
