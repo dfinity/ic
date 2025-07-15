@@ -576,6 +576,26 @@ impl Subnet {
         self
     }
 
+    /// Add the given number of nodes to the subnet.
+    ///
+    /// The nodes will inherit the VM resources of the subnet and extend required host features with the given ones.
+    pub fn add_node_with_required_host_features(
+        self,
+        required_host_features: Vec<HostFeature>,
+    ) -> Self {
+        let default_vm_resources = self.default_vm_resources;
+        let vm_allocation = self.vm_allocation.clone();
+        let required_host_features = required_host_features
+            .into_iter()
+            .chain(self.required_host_features.iter().cloned())
+            .collect();
+        self.add_node(Node::new_with_settings(
+            default_vm_resources,
+            vm_allocation,
+            required_host_features,
+        ))
+    }
+
     pub fn with_max_ingress_message_size(mut self, limit: u64) -> Self {
         self.max_ingress_bytes_per_message = Some(limit);
         self
