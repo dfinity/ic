@@ -81,7 +81,9 @@ system_test_nns(
         "dynamic_testnet",
         "manual",
     ],
-    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE + [
+        "//rs/tests:vector_with_log_fetcher_image"
+    ],
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
@@ -89,6 +91,9 @@ system_test_nns(
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
     ],
+    env = {
+        "VECTOR_VM_IMAGE": "$(rootpath //rs/tests:vector_with_log_fetcher_image)",
+    }
 )
 
 system_test_nns(

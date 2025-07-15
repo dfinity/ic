@@ -1,18 +1,27 @@
 use std::{
     collections::BTreeMap,
+    fs::File,
     net::{IpAddr, SocketAddr},
+    path::Path,
 };
 
 use ic_types::PrincipalId;
 use serde::Serialize;
-use slog::info;
-use url::Url;
+use slog::{info, warn};
 
-use crate::driver::test_env_api::{HasIcName, HasTopologySnapshot, IcNodeContainer};
+use crate::{
+    driver::{
+        prometheus_vm::{SCP_RETRY_BACKOFF, SCP_RETRY_TIMEOUT},
+        test_env::TestEnvAttribute,
+        test_env_api::{HasTopologySnapshot, IcNodeContainer, SshSession},
+        test_setup::GroupSetup,
+        universal_vm::UniversalVms,
+    },
+    retry_with_msg,
+};
 
 use super::{
     ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmResources},
-    resource::{DiskImage, ImageType},
     test_env::TestEnv,
     universal_vm::UniversalVm,
 };
@@ -26,14 +35,8 @@ const IS_API_BN: &str = "is_api_bn";
 const IS_MALICIOUS: &str = "is_mallicious";
 const IC: &str = "ic";
 
-const DEFAULT_VECTOR_VM_IMG_SHA256: &str =
-    "3af874174d48f5c9a59c9bc54dd73cbfc65b17b952fbacd7611ee07d19de369b";
-
 const ELASTICSEARCH_URL: &str = "https://elasticsearch.testnet.dfinity.network";
 const ELASTICSEARCH_INDEX: &str = "testnet-vector-push";
-fn get_default_vector_vm_img_url() -> Url {
-    format!("http://download.proxy-global.dfinity.network:8080/farm/vector-vm/{DEFAULT_VECTOR_VM_IMG_SHA256}/x86_64-linux/vector-vm.img.zst").parse().unwrap()
-}
 
 fn get_sinks_toml() -> String {
     format!(
@@ -99,11 +102,11 @@ impl VectorVm {
     pub fn new() -> Self {
         Self {
             universal_vm: UniversalVm::new("VectorVm".to_string())
-                .with_primary_image(DiskImage {
-                    image_type: ImageType::VectorImage,
-                    url: get_default_vector_vm_img_url(),
-                    sha256: DEFAULT_VECTOR_VM_IMG_SHA256.to_string(),
-                })
+                .with_config_img(
+                    std::env::var("VECTOR_VM_PATH")
+                        .expect("VECTOR_VM_PATH not set")
+                        .into(),
+                )
                 .with_vm_resources(VmResources {
                     vcpus: Some(NrOfVCPUs::new(2)),
                     memory_kibibytes: Some(AmountOfMemoryKiB::new(16780000)), // 16GiB
@@ -122,7 +125,7 @@ impl VectorVm {
 
         info!(logger, "Spawning vector vm for log fetching.");
 
-        // self.universal_vm.clone().start(env)?;
+        self.universal_vm.clone().start(env)?;
 
         info!(logger, "Spawned vector vm.");
         Ok(())
@@ -143,6 +146,7 @@ impl VectorVm {
             .chain(snapshot.unassigned_nodes())
             .chain(snapshot.api_boundary_nodes());
 
+        let infra_group_name = GroupSetup::read_attribute(&env).infra_group_name;
         for node in nodes {
             let node_id = node.node_id.get();
             let ip = node.get_ip_addr();
@@ -158,7 +162,7 @@ impl VectorVm {
                 (JOB, "node_exporter".to_string()),
                 (IS_API_BN, node.is_api_boundary_node().to_string()),
                 (IS_MALICIOUS, node.is_malicious().to_string()),
-                (IC, snapshot.ic_name()),
+                (IC, infra_group_name.clone()),
             ]
             .into_iter()
             .chain(match node.subnet_id() {
@@ -202,6 +206,50 @@ impl VectorVm {
             serde_json::to_string_pretty(&generated_config).unwrap(),
         )
         .map_err(anyhow::Error::from)?;
+
+        let deployed_prometheus_vm = env
+            .get_deployed_universal_vm(&self.universal_vm.name)
+            .unwrap();
+        let session = deployed_prometheus_vm
+            .block_on_ssh_session()
+            .unwrap_or_else(|e| {
+                panic!(
+                    "Failed to setup SSH session to {} because: {e:?}!",
+                    self.universal_vm.name
+                )
+            });
+
+        for file in vector_local_dir.read_dir().map_err(anyhow::Error::from)? {
+            let file = match file {
+                Ok(f) => f,
+                Err(e) => {
+                    warn!(log, "Failed to read an entry in vector local dir {:?}", e);
+                    continue;
+                }
+            };
+
+            let from = file.path();
+            let to = Path::new("/etc/vector/config").join(file.path().file_name().unwrap());
+            let size = std::fs::metadata(&from).unwrap().len();
+            retry_with_msg!(
+                format!("scp {from:?} to {}:{to:?}", self.universal_vm.name),
+                env.logger(),
+                SCP_RETRY_TIMEOUT,
+                SCP_RETRY_BACKOFF,
+                || {
+                    let mut remote_file = session.scp_send(&to, 0o644, size, None)?;
+                    let mut from_file = File::open(&from)?;
+                    std::io::copy(&mut from_file, &mut remote_file)?;
+                    Ok(())
+                }
+            )
+            .unwrap_or_else(|e| {
+                panic!(
+                    "Failed to scp {from:?} to {}:{to:?} because: {e:?}!",
+                    self.universal_vm.name
+                )
+            });
+        }
 
         Ok(())
     }
