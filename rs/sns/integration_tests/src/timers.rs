@@ -80,6 +80,7 @@ fn root_init() -> SnsRootCanister {
         index_canister_id: Some(PrincipalId::new_anonymous()),
         archive_canister_ids: vec![],
         dapp_canister_ids: vec![],
+        extension_canister_ids: vec![],
         testflight: false,
         timers: None,
     }

@@ -40,6 +40,7 @@ fn test_get_status() {
                 ledger_canister_id: Some(PrincipalId::new_user_test_id(43)),
                 swap_canister_id: Some(PrincipalId::new_user_test_id(44)),
                 dapp_canister_ids: vec![],
+                extension_canister_ids: vec![],
                 archive_canister_ids: vec![],
                 index_canister_id: Some(PrincipalId::new_user_test_id(45)),
                 testflight: false,
