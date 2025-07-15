@@ -189,7 +189,7 @@ impl Mounter for LoopDeviceMounter {
     }
 }
 
-#[cfg(all(test))]
+#[cfg(test)]
 #[allow(dead_code)]
 pub mod testing {
     use super::*;
