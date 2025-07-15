@@ -400,8 +400,6 @@ impl NodeRegistration {
     ) -> Result<(), String> {
         info!(self.log, "Trying to register rotated idkg key...");
 
-        let node_id = self.node_id;
-
         let key_handler = self.key_handler.clone();
         let node_pub_key_opt = tokio::task::spawn_blocking(move || {
             key_handler
@@ -421,6 +419,7 @@ impl NodeRegistration {
             }
         };
 
+        let node_id = self.node_id.clone();
         let key_handler = self.key_handler.clone();
         let sign_cmd = move |msg: &MessageId| {
             // Implementation of 'sign_basic' uses Tokio's 'block_on' when issuing a RPC
