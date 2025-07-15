@@ -82,5 +82,4 @@ pub fn setup(env: TestEnv) {
     vector_vm
         .sync_targets(&env)
         .expect("Failed to sync Vector targets");
-    panic!("Came here.");
 }
