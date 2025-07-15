@@ -16,11 +16,11 @@ DEPENDENCIES = [
     "//rs/crypto/utils/threshold_sig_der",
     "//rs/crypto/utils/tls",
     "//rs/interfaces",
+    "//rs/interfaces/registry"
     "//rs/limits",
     "//rs/monitoring/logger",
     "//rs/orchestrator/registry_replicator",
     "//rs/protobuf",
-    "//rs/registry/client",
     "//rs/registry/fake",
     "//rs/registry/helpers",
     "//rs/registry/keys",

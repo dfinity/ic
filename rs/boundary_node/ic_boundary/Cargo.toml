@@ -44,10 +44,10 @@ ic-crypto-utils-threshold-sig-der = { path = "../../crypto/utils/threshold_sig_d
 ic-crypto-utils-tls = { path = "../../crypto/utils/tls" }
 ic-ed25519 = { path = "../../../packages/ic-ed25519" }
 ic-interfaces = { path = "../../interfaces" }
+ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-limits = { path = "../../limits" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-protobuf = { path = "../../protobuf" }
-ic-registry-client = { path = "../../registry/client" }
 ic-registry-client-fake = { path = "../../registry/fake" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-registry-keys = { path = "../../registry/keys" }

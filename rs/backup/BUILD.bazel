@@ -4,10 +4,10 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/config",
     "//rs/crypto/utils/threshold_sig_der",
+    "//rs/interfaces/registry"
     "//rs/monitoring/logger",
     "//rs/orchestrator/registry_replicator",
     "//rs/recovery",
-    "//rs/registry/client",
     "//rs/registry/helpers",
     "//rs/types/types",
     "@crate_index//:anyhow",
@@ -26,6 +26,7 @@ DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
+    "//rs/registry/client",
     "//rs/registry/local_store",
     "//rs/test_utilities/tmpdir",
 ]

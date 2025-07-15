@@ -4,10 +4,10 @@ use crate::{
 };
 use anyhow::Context;
 use chrono::{DateTime, Utc};
+use ic_interfaces_registry::RegistryClient;
 use ic_recovery::{
     command_helper::exec_cmd, error::RecoveryError, file_sync_helper::download_binary,
 };
-use ic_registry_client::client::RegistryClient;
 use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetRegistry};
 use ic_types::{ReplicaVersion, SubnetId};
 use rand::{seq::SliceRandom, thread_rng};

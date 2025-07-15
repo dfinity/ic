@@ -5,18 +5,18 @@ use crate::{
 };
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
 use ic_crypto_utils_threshold_sig_der::{parse_threshold_sig_key, public_key_to_der};
-use ic_interfaces_registry::RegistryClientResult;
+use ic_interfaces_registry::{RegistryClient, RegistryClientResult};
 use ic_protobuf::registry::{
     crypto::v1::PublicKey,
     subnet::v1::{SubnetListRecord, SubnetRecord},
 };
-use ic_registry_client::client::{RegistryClient, ThresholdSigPublicKey};
 use ic_registry_client_helpers::{routing_table::RoutingTableRegistry, subnet::SubnetRegistry};
 use ic_registry_keys::{make_crypto_threshold_signing_pubkey_key, make_subnet_list_record_key};
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_replicator::RegistryReplicator;
 use ic_registry_routing_table::{CanisterMigrations, RoutingTable};
 use ic_registry_subnet_features::ChainKeyConfig;
+use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use prost::Message;
 use slog::{info, warn, Logger};
 use url::Url;

@@ -12,7 +12,6 @@ DEPENDENCIES = [
     "//rs/monitoring/metrics",
     "//rs/orchestrator/registry_replicator",
     "//rs/protobuf",
-    "//rs/registry/client",
     "//rs/registry/helpers",
     "//rs/registry/keys",
     "//rs/registry/nns_data_provider",
