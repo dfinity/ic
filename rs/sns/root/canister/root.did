@@ -137,6 +137,15 @@ type ManageDappCanisterSettingsResponse = record {
   failure_reason : opt text;
 };
 
+type RegisterExtensionRequest = record {
+  canister_id : opt principal;
+};
+
+type RegisterExtensionResponse = variant {
+  Ok : record {};
+  Err : CanisterCallError;
+};
+
 type RegisterDappCanisterRequest = record {
   canister_id : opt principal;
 };
@@ -186,6 +195,7 @@ service : (SnsRootCanister) -> {
   manage_dapp_canister_settings : (ManageDappCanisterSettingsRequest) -> (
       ManageDappCanisterSettingsResponse,
     );
+  register_extension : (RegisterExtensionRequest) -> (RegisterExtensionResponse);
   register_dapp_canister : (RegisterDappCanisterRequest) -> (record {});
   register_dapp_canisters : (RegisterDappCanistersRequest) -> (record {});
   set_dapp_controllers : (SetDappControllersRequest) -> (

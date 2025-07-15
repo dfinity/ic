@@ -1,8 +1,13 @@
 use std::fmt::{self, Display, Formatter};
 
 use async_trait::async_trait;
-use ic_base_types::CanisterId;
+use ic_base_types::{CanisterId, PrincipalId};
 use serde::{Deserialize, Serialize};
+
+use crate::pb::v1::{
+    register_extension_response, CanisterCallError, RegisterExtensionRequest,
+    RegisterExtensionResponse,
+};
 
 /// A general trait for the environment in which governance is running.
 #[async_trait]
@@ -22,7 +27,10 @@ pub trait Environment: Send + Sync {
         canister_id: CanisterId,
         method_name: &str,
         arg: Vec<u8>,
-    ) -> Result</* reply: */ Vec<u8>, (/* error_code: */ i32, /* message: */ String)>;
+    ) -> get_open_ticket_response::Result<
+        /* reply: */ Vec<u8>,
+        (/* error_code: */ i32, /* message: */ String),
+    >;
 }
 
 /// Different from the SnsCanisterType in SNS-W because it includes Dap
@@ -47,6 +55,40 @@ impl Display for SnsCanisterType {
             SnsCanisterType::Dapp => write!(f, "dapp"),
             SnsCanisterType::Archive => write!(f, "archive"),
             SnsCanisterType::Index => write!(f, "index"),
+        }
+    }
+}
+
+impl TryFrom<RegisterExtensionRequest> for PrincipalId {
+    type Error = CanisterCallError;
+
+    fn try_from(value: RegisterExtensionRequest) -> Result<Self, Self::Error> {
+        let RegisterExtensionRequest { canister_id } = value;
+
+        let Some(canister_id) = canister_id else {
+            // RejectCode::DestinationInvalid
+            let code = Some(3);
+            let description = "RegisterExtensionRequest.canister_id must be set.".to_string();
+
+            let err = CanisterCallError { code, description };
+
+            return Err(err);
+        };
+
+        Ok(canister_id)
+    }
+}
+
+impl From<Result<(), CanisterCallError>> for RegisterExtensionResponse {
+    fn from(result: Result<(), CanisterCallError>) -> Self {
+        use register_extension_response::{Ok, Result};
+        match result {
+            Ok(_) => RegisterExtensionResponse {
+                result: Some(Result::Ok(Ok {})),
+            },
+            Err(err) => RegisterExtensionResponse {
+                result: Some(Result::Err(err)),
+            },
         }
     }
 }
