@@ -64,7 +64,7 @@ mod internal_state;
 pub mod metrics;
 
 trait PollableRegistryClient: RegistryClient {
-    /// Polls the registry once, updating the local store with the latest registry updates.
+    /// Polls the registry once, updating its cache by polling the latest local store changes.
     fn poll_once(&self) -> Result<(), RegistryClientError>;
 
     /// Starts a background task that continuously polls the underlying data provider.
