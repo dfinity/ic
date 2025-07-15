@@ -199,8 +199,10 @@ use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    artifact::IDkgMessageId, consensus::idkg::IDkgBlockReader,
-    crypto::canister_threshold_sig::error::IDkgRetainKeysError, malicious_flags::MaliciousFlags,
+    artifact::IDkgMessageId,
+    consensus::idkg::IDkgBlockReader,
+    crypto::canister_threshold_sig::{error::IDkgRetainKeysError, idkg::IDkgTranscript},
+    malicious_flags::MaliciousFlags,
     Height, NodeId, SubnetId,
 };
 use std::{
@@ -306,61 +308,21 @@ impl IDkgImpl {
 
     /// Purges the transcripts that are no longer active.
     fn purge_inactive_transcripts(&self, block_reader: &dyn IDkgBlockReader) {
-        let mut active_transcripts = HashSet::new();
-        let mut error_count = 0;
-        for transcript_ref in block_reader.active_transcripts() {
-            match block_reader.transcript(&transcript_ref) {
-                Ok(transcript) => {
-                    self.metrics
-                        .client_metrics
-                        .with_label_values(&["resolve_active_transcript_refs"])
-                        .inc();
-                    active_transcripts.insert(transcript);
-                }
-                Err(error) => {
-                    warn!(
-                        self.logger,
-                        "purge_inactive_transcripts(): failed to resolve transcript ref: err = {:?}, \
-                        {:?}",
-                        error,
-                        transcript_ref,
-                    );
-                    self.metrics
-                        .client_errors
-                        .with_label_values(&["resolve_active_transcript_refs"])
-                        .inc();
-                    error_count += 1;
-                }
+        let active_transcripts = match get_active_transcripts(
+            block_reader,
+            self.state_reader.as_ref(),
+            &self.metrics,
+            &self.logger,
+        ) {
+            Ok(transcripts) => transcripts,
+            Err(err) => {
+                warn!(
+                    self.logger,
+                    "purge_inactive_transcripts(): abort due to: {}", err,
+                );
+                return;
             }
-        }
-
-        if error_count > 0 {
-            warn!(
-                self.logger,
-                "purge_inactive_transcripts(): abort due to {} errors", error_count,
-            );
-            return;
-        }
-
-        if let Some(snapshot) = self.state_reader.get_certified_state_snapshot() {
-            let state = snapshot.get_state();
-            let pre_signature_stashes = &state
-                .metadata
-                .subnet_call_context_manager
-                .pre_signature_stashes;
-
-            // Retain all stashed key transcripts
-            for stash in pre_signature_stashes.values() {
-                active_transcripts.insert(stash.key_transcript.as_ref().clone());
-            }
-
-            // Retain transcripts paired with ongoing requests
-            for request in state.signature_request_contexts().values() {
-                for transcript in request.iter_idkg_transcripts() {
-                    active_transcripts.insert(transcript.clone());
-                }
-            }
-        }
+        };
 
         match IDkgProtocol::retain_active_transcripts(&*self.crypto, &active_transcripts) {
             Err(IDkgRetainKeysError::TransientInternalError { internal_error }) => {
@@ -393,6 +355,70 @@ impl IDkgImpl {
             }
         }
     }
+}
+
+fn get_active_transcripts(
+    block_reader: &dyn IDkgBlockReader,
+    state_reader: &dyn StateReader<State = ReplicatedState>,
+    metrics: &IDkgClientMetrics,
+    logger: &ReplicaLogger,
+) -> Result<HashSet<IDkgTranscript>, String> {
+    let mut active_transcripts = HashSet::new();
+    let mut error_count = 0;
+    // Retain all active transcripts on the blockchain
+    for transcript_ref in block_reader.active_transcripts() {
+        match block_reader.transcript(&transcript_ref) {
+            Ok(transcript) => {
+                metrics
+                    .client_metrics
+                    .with_label_values(&["resolve_active_transcript_refs"])
+                    .inc();
+                active_transcripts.insert(transcript);
+            }
+            Err(error) => {
+                warn!(
+                    logger,
+                    "purge_inactive_transcripts(): failed to resolve transcript ref: err = {:?}, \
+                        {:?}",
+                    error,
+                    transcript_ref,
+                );
+                metrics
+                    .client_errors
+                    .with_label_values(&["resolve_active_transcript_refs"])
+                    .inc();
+                error_count += 1;
+            }
+        }
+    }
+
+    if error_count > 0 {
+        return Err(format!(
+            "Received {} errors when resolving transcipts",
+            error_count
+        ));
+    }
+
+    if let Some(snapshot) = state_reader.get_certified_state_snapshot() {
+        let state = snapshot.get_state();
+        let pre_signature_stashes = &state
+            .metadata
+            .subnet_call_context_manager
+            .pre_signature_stashes;
+
+        // Retain all stashed key transcripts
+        for stash in pre_signature_stashes.values() {
+            active_transcripts.insert((*stash.key_transcript).clone());
+        }
+
+        // Retain transcripts paired with ongoing requests
+        for request in state.signature_request_contexts().values() {
+            for transcript in request.iter_idkg_transcripts() {
+                active_transcripts.insert(transcript.clone());
+            }
+        }
+    }
+    Ok(active_transcripts)
 }
 
 impl<T: IDkgPool> PoolMutationsProducer<T> for IDkgImpl {
@@ -582,11 +608,14 @@ fn compute_bouncer(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::RwLock;
+
     use self::test_utils::TestIDkgBlockReader;
 
     use super::*;
+    use ic_logger::no_op_logger;
     use ic_test_utilities::state_manager::RefMockStateManager;
-    use ic_test_utilities_consensus::idkg::request_id;
+    use ic_test_utilities_consensus::idkg::{request_id, FakeCertifiedStateSnapshot};
     use ic_types::{
         consensus::idkg::{
             complaint_prefix, dealing_prefix, dealing_support_prefix, ecdsa_sig_share_prefix,
@@ -596,6 +625,36 @@ mod tests {
         crypto::{canister_threshold_sig::idkg::IDkgTranscriptId, CryptoHash},
     };
     use ic_types_test_utils::ids::{NODE_1, NODE_2, SUBNET_1, SUBNET_2};
+
+    #[test]
+    fn test_get_active_transcripts() {
+        let block_reader = TestIDkgBlockReader::new();
+        let logger = no_op_logger();
+        let metrics = IDkgClientMetrics::new(MetricsRegistry::new());
+
+        let state = ic_test_utilities_state::get_initial_state(0, 0);
+        let expected_state_snapshot = Arc::new(RwLock::new(FakeCertifiedStateSnapshot {
+            height: Height::from(1),
+            state: Arc::new(state),
+        }));
+        let expected_state_snapshot_clone = expected_state_snapshot.clone();
+
+        let state_manager = Arc::new(RefMockStateManager::default());
+        state_manager
+            .get_mut()
+            .expect_get_certified_state_snapshot()
+            .returning(move || {
+                Some(Box::new(
+                    expected_state_snapshot_clone.read().unwrap().clone(),
+                ))
+            });
+
+        let transcripts =
+            get_active_transcripts(&block_reader, state_manager.as_ref(), &metrics, &logger)
+                .unwrap();
+
+        assert!(transcripts.is_empty());
+    }
 
     #[test]
     fn test_idkg_priority_fn_args() {
