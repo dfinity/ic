@@ -119,7 +119,7 @@ CACHE_DIR="${CACHE_DIR:-${HOME}/.cache}"
 ZIG_CACHE="${CACHE_DIR}/zig-cache"
 mkdir -p "${ZIG_CACHE}"
 
-ICT_TESTNETS_DIR="${ICT_TESTNETS_DIR:-/tmp/ict_testnets}"
+ICT_TESTNETS_DIR="/tmp/ict_testnets"
 mkdir -p "${ICT_TESTNETS_DIR}"
 
 PODMAN_RUN_ARGS+=(
