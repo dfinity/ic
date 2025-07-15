@@ -189,7 +189,8 @@ impl Mounter for LoopDeviceMounter {
     }
 }
 
-#[cfg(all(test, feature = "integration_tests"))]
+#[cfg(all(test))]
+#[allow(dead_code)]
 pub mod testing {
     use super::*;
     use anyhow::Context;

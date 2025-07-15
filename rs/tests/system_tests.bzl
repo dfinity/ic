@@ -416,6 +416,7 @@ def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_pa
         srcs: Source files that are copied into a vfat image.
         remap_paths: Dict that maps a current filename to a desired filename,
             e.g. {"activate.sh": "activate"}
+        testonly: If True, the target is only available in test configurations.
     """
     native.genrule(
         name = name + "_size",
