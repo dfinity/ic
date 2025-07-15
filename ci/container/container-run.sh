@@ -126,6 +126,7 @@ PODMAN_RUN_ARGS+=(
     --mount type=bind,source="${HOME}/.ssh",target="${CTR_HOME}/.ssh"
     --mount type=bind,source="${HOME}/.aws",target="${CTR_HOME}/.aws"
     --mount type=bind,source="/var/lib/containers",target="/var/lib/containers"
+    --mount type=bind,source="/tmp",target="/tmp"
     --mount type=tmpfs,destination=/var/sysimage
 )
 
