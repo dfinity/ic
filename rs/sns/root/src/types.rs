@@ -27,10 +27,7 @@ pub trait Environment: Send + Sync {
         canister_id: CanisterId,
         method_name: &str,
         arg: Vec<u8>,
-    ) -> get_open_ticket_response::Result<
-        /* reply: */ Vec<u8>,
-        (/* error_code: */ i32, /* message: */ String),
-    >;
+    ) -> Result</* reply: */ Vec<u8>, (/* error_code: */ i32, /* message: */ String)>;
 }
 
 /// Different from the SnsCanisterType in SNS-W because it includes Dap
@@ -59,6 +56,19 @@ impl Display for SnsCanisterType {
     }
 }
 
+pub(crate) enum RejectCode {
+    #[allow(unused)]
+    SysFatal = 1,
+    #[allow(unused)]
+    SysTransient = 2,
+    DestinationInvalid = 3,
+    CanisterReject = 4,
+    #[allow(unused)]
+    CanisterError = 5,
+    #[allow(unused)]
+    SysUnknown = 6,
+}
+
 impl TryFrom<RegisterExtensionRequest> for PrincipalId {
     type Error = CanisterCallError;
 
@@ -66,8 +76,7 @@ impl TryFrom<RegisterExtensionRequest> for PrincipalId {
         let RegisterExtensionRequest { canister_id } = value;
 
         let Some(canister_id) = canister_id else {
-            // RejectCode::DestinationInvalid
-            let code = Some(3);
+            let code = Some(RejectCode::DestinationInvalid as i32);
             let description = "RegisterExtensionRequest.canister_id must be set.".to_string();
 
             let err = CanisterCallError { code, description };

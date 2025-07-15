@@ -204,7 +204,7 @@ fn list_sns_canisters(_request: ListSnsCanistersRequest) -> ListSnsCanistersResp
     STATE.with(|sns_root_canister| {
         sns_root_canister
             .borrow()
-            .list_sns_canisters(ic_cdk::api::id())
+            .list_sns_canisters(PrincipalId(ic_cdk::api::id()))
     })
 }
 
@@ -255,7 +255,12 @@ async fn register_extension(request: RegisterExtensionRequest) -> RegisterExtens
     log!(INFO, "register_extension");
     assert_eq_governance_canister_id(PrincipalId(ic_cdk::api::caller()));
 
-    let canister_id = request.try_into()?;
+    let canister_id = match PrincipalId::try_from(request) {
+        Ok(canister_id) => canister_id,
+        Err(err) => {
+            return RegisterExtensionResponse::from(Err(err));
+        }
+    };
 
     let root_canister_id = PrincipalId(ic_cdk::api::id());
 
@@ -299,7 +304,7 @@ async fn register_dapp_canister(
     let RegisterDappCanistersResponse {} = SnsRootCanister::register_dapp_canisters(
         &STATE,
         &ManagementCanisterClientImpl::<CanisterRuntime>::new(None),
-        ic_cdk::api::id(),
+        PrincipalId(ic_cdk::api::id()),
         request,
     )
     .await;
@@ -326,7 +331,7 @@ async fn register_dapp_canisters(
     SnsRootCanister::register_dapp_canisters(
         &STATE,
         &ManagementCanisterClientImpl::<CanisterRuntime>::new(None),
-        ic_cdk::api::id(),
+        PrincipalId(ic_cdk::api::id()),
         request,
     )
     .await
@@ -355,7 +360,7 @@ async fn set_dapp_controllers(request: SetDappControllersRequest) -> SetDappCont
     SnsRootCanister::set_dapp_controllers(
         &STATE,
         &ManagementCanisterClientImpl::<CanisterRuntime>::new(None),
-        ic_cdk::api::id(),
+        PrincipalId(ic_cdk::api::id()),
         PrincipalId(ic_cdk::api::caller()),
         &request,
     )
