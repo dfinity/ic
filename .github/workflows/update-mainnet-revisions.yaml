@@ -49,6 +49,8 @@ jobs:
       image: ghcr.io/dfinity/ic-build@sha256:02165696a5201b1a347a28e548c32dc9590d60975c22be26ac1ea7e72573523d
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Create GitHub App Token
         uses: actions/create-github-app-token@v1
