@@ -8,7 +8,7 @@ use crate::{
 use candid::Encode;
 use ic_agent::{
     export::{reqwest, Principal},
-    Agent,
+    Agent, Identity,
 };
 use ic_config::{
     http_handler::Config as HttpConfig,
@@ -155,14 +155,7 @@ impl NodeRegistration {
             UtilityCommand::notify_host(&message, 1);
             match self.signer.get() {
                 Ok(signer) => {
-                    let nns_url = self
-                        .get_random_nns_url_from_config()
-                        .expect("no NNS urls available");
-                    let agent = Agent::builder()
-                        .with_url(nns_url)
-                        .with_identity(signer)
-                        .build()
-                        .expect("Failed to create IC agent");
+                    let agent = self.get_https_agent_to_random_nns_url(signer).unwrap();
                     let add_node_encoded = Encode!(&add_node_payload)
                         .expect("Could not encode payload for the registration request");
 
@@ -409,16 +402,6 @@ impl NodeRegistration {
 
         let node_id = self.node_id;
 
-        let (nns_url, rustls_config) = match self.get_random_nns_url_and_rustls_config() {
-            Some((url, config)) => (url, Some(config)),
-            None => match self.get_random_nns_url_from_config() {
-                Some(url) => (url, None),
-                None => {
-                    return Err("Failed to get random NNS URL.".into());
-                }
-            },
-        };
-
         let key_handler = self.key_handler.clone();
         let node_pub_key_opt = tokio::task::spawn_blocking(move || {
             key_handler
@@ -453,20 +436,7 @@ impl NodeRegistration {
         };
 
         let signer = NodeSender::new(node_pub_key, Arc::new(sign_cmd))?;
-        let agent = if let Some(config) = rustls_config {
-            let reqwest_client = reqwest::ClientBuilder::default()
-                .use_preconfigured_tls(config)
-                .build()
-                .map_err(|e| format!("Failed to create reqwest client: {e}"))?;
-
-            Agent::builder().with_http_client(reqwest_client)
-        } else {
-            Agent::builder()
-        }
-        .with_url(nns_url)
-        .with_identity(signer)
-        .build()
-        .map_err(|e| format!("Failed to create IC agent: {e}"))?;
+        let agent = self.get_https_agent_to_random_nns_url(signer)?;
         let update_node_payload = UpdateNodeDirectlyPayload {
             idkg_dealing_encryption_pk: Some(protobuf_to_vec(idkg_pk)),
         };
@@ -484,6 +454,44 @@ impl NodeRegistration {
             .map_err(|e| format!("Error when sending register additional key request: {e}"))?;
 
         Ok(())
+    }
+
+    fn get_https_agent_to_random_nns_url<I: 'static + Identity>(
+        &self,
+        identity: I,
+    ) -> Result<Agent, String> {
+        let (nns_url, rustls_config) =
+            match self.get_random_nns_url_and_rustls_config_from_registry() {
+                Some((url, config)) => (url, Some(config)),
+                None => {
+                    warn!(
+                        self.log,
+                        "Failed to get random NNS URL from registry. Falling back to node config."
+                    );
+                    match self.get_random_nns_url_from_config() {
+                        Some(url) => (url, None),
+                        None => {
+                            return Err("Failed to get random NNS URL.".into());
+                        }
+                    }
+                }
+            };
+
+        let mut agent = Agent::builder();
+        if let Some(config) = rustls_config {
+            let reqwest_client = reqwest::ClientBuilder::default()
+                .use_preconfigured_tls(config)
+                .build()
+                .map_err(|e| format!("Failed to create reqwest client: {e}"))?;
+
+            agent = agent.with_http_client(reqwest_client)
+        }
+
+        agent
+            .with_url(nns_url)
+            .with_identity(identity)
+            .build()
+            .map_err(|e| format!("Failed to create IC agent: {e}"))
     }
 
     // Returns one random NNS url from the node config.
@@ -509,7 +517,9 @@ impl NodeRegistration {
     }
 
     // Returns one random NNS url from registry.
-    fn get_random_nns_url_and_rustls_config(&self) -> Option<(Url, rustls::ClientConfig)> {
+    fn get_random_nns_url_and_rustls_config_from_registry(
+        &self,
+    ) -> Option<(Url, rustls::ClientConfig)> {
         let version = self.registry_client.get_latest_version();
         let root_subnet_id = match self.registry_client.get_root_subnet_id(version) {
             Ok(Some(id)) => id,
