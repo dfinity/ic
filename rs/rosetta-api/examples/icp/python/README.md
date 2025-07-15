@@ -138,7 +138,7 @@ Fetches detailed information about a specific proposal, including its status, vo
 python get_minimum_dissolve_delay.py --node-address <NODE_ADDRESS>
 ```
 
-Returns the minumum dissolve delay of a neuron that still allows it to vote on NNS proposals.
+Returns the minimum dissolve delay of a neuron that still allows it to vote on NNS proposals.
 
 ## Testing All Examples
 
