@@ -66,18 +66,11 @@ pub mod metrics;
 trait PollableRegistryClient: RegistryClient {
     /// Polls the registry once, updating its cache by polling the latest local store changes.
     fn poll_once(&self) -> Result<(), RegistryClientError>;
-
-    /// Starts a background task that continuously polls the underlying data provider.
-    fn fetch_and_start_polling(&self) -> Result<(), RegistryClientError>;
 }
 
 impl PollableRegistryClient for RegistryClientImpl {
     fn poll_once(&self) -> Result<(), RegistryClientError> {
         self.poll_once()
-    }
-
-    fn fetch_and_start_polling(&self) -> Result<(), RegistryClientError> {
-        self.fetch_and_start_polling()
     }
 }
 
@@ -346,14 +339,6 @@ impl RegistryReplicator {
     /// Initializes the registry local store asynchronously and returns a future that
     /// continuously polls for registry updates.
     pub async fn start_polling(&self) -> Result<impl Future<Output = ()>, Error> {
-        // Make the registry client start polling/caching the *local* store
-        if let Err(err) = self.registry_client.fetch_and_start_polling() {
-            return Err(Error::new(
-                ErrorKind::Other,
-                format!("Registry client failed to start polling: {}", err),
-            ));
-        }
-
         if self.started.swap(true, Ordering::Relaxed) {
             return Err(Error::new(
                 ErrorKind::AlreadyExists,
@@ -392,6 +377,12 @@ impl RegistryReplicator {
                     metrics.poll_count.with_label_values(&["success"]).inc();
                 }
                 timer.observe_duration();
+
+                // Update the registry client with the latest changes.
+                if let Err(msg) = registry_client.poll_once() {
+                    warn!(logger, "Registry client failed to poll: {}", msg);
+                }
+
                 metrics
                     .registry_version
                     .set(registry_client.get_latest_version().get() as i64);
