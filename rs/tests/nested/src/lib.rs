@@ -25,9 +25,9 @@ use slog::info;
 
 mod util;
 use util::{
-    check_guestos_version, check_guestos_version, check_hostos_version, elect_guestos_version,
-    elect_hostos_version, get_blessed_guestos_versions, get_unassigned_nodes_config,
-    setup_nested_vm, start_nested_vm, update_nodes_hostos_version, update_unassigned_nodes,
+    check_guestos_version, check_hostos_version, elect_guestos_version, elect_hostos_version,
+    get_blessed_guestos_versions, get_unassigned_nodes_config, setup_nested_vm, start_nested_vm,
+    update_nodes_hostos_version, update_unassigned_nodes,
 };
 
 use anyhow::bail;
@@ -230,70 +230,111 @@ pub fn upgrade_hostos(env: TestEnv) {
 pub fn recovery_upgrader_test(env: TestEnv) {
     let logger = env.logger();
 
-    let initial_topology = block_on(
-        env.topology_snapshot()
-            .block_for_min_registry_version(ic_types::RegistryVersion::from(1)),
-    )
-    .unwrap();
-
-    info!(logger, "Starting recovery upgrader test...");
-
+    // start the nested VM and wait for it to join the network
+    let initial_topology = env.topology_snapshot();
     start_nested_vm(env.clone());
+    // NOTE: Don't wait for the node to join the network, because recovery-upgrader will run before the node joins
+    // info!(logger, "Waiting for node to join ...");
+    // block_on(
+    //     initial_topology.block_for_newer_registry_version_within_duration(
+    //         NODE_REGISTRATION_TIMEOUT,
+    //         NODE_REGISTRATION_BACKOFF,
+    //     ),
+    // )
+    // .unwrap();
+    // info!(logger, "The node successfully came up and registered ...");
 
-    // Wait for node to join the testnet
-    info!(logger, "Waiting for node to join ...");
-    let new_topology = block_on(
-        initial_topology.block_for_newer_registry_version_within_duration(
-            NODE_REGISTRATION_TIMEOUT,
-            NODE_REGISTRATION_BACKOFF,
-        ),
-    )
-    .unwrap();
-
+    // node: maybe we fail here because the node is not online yet? So maybe we need to wait for the node to come online?
     let host = env
         .get_nested_vm(HOST_VM_NAME)
-        .expect("Unable to find GuestOS node.");
+        .expect("Unable to find HostOS node.");
+    let guest_ipv6 = host
+        .get_nested_network()
+        .expect("Unable to get nested network")
+        .guest_ip;
 
-    // Check version
-    info!(
-        logger,
-        "Checking version via SSH on GuestOS: '{}'",
-        host.get_vm().expect("Unable to get GuestOS VM.").ipv6
-    );
-    let original_version = check_guestos_version(&host);
-    info!(logger, "Version found is: '{}'", original_version);
+    info!(logger, "Guest IP address: '{}'", guest_ipv6);
 
-    // info!(logger, "Retrieving the current boot ID from the host before we upgrade so we can determine when it rebooted post upgrade...");
-    // let retrieve_host_boot_id = || {
-    //     host.block_on_bash_script("journalctl -q --list-boots | tail -n1 | awk '{print $2}'")
-    //         .unwrap()
-    //         .trim()
-    //         .to_string()
-    // };
-    // let host_boot_id_pre_upgrade = retrieve_host_boot_id();
-    // info!(
-    //     logger,
-    //     "Host boot ID pre upgrade: '{}'", host_boot_id_pre_upgrade
-    // );
+    let nns_node = env
+        .topology_snapshot()
+        .root_subnet()
+        .nodes()
+        .next()
+        .unwrap();
+    // note: do I have to wait for the nns node to be healthy? I think so
+    // nns_node.await_status_is_healthy().unwrap();
 
-    info!(logger, "Sleeping for 30 minutes...");
-    std::thread::sleep(Duration::from_secs(30 * 60));
-    info!(logger, "Sleep completed");
+    block_on(async {
+        // check that GuestOS is on the expected version (initial version)
+        let client = Client::builder()
+            .danger_accept_invalid_certs(true)
+            .build()
+            .expect("Failed to build HTTP client");
 
-    // TODO: Add recovery upgrader specific test logic here
+        // note: I don't think this will work to get the initial version, because the node is not online yet? Or maybe we can use the host to get the initial version because the network is up?
+        // maybe there's an easier way to get the initial version? Then I don't need to consider the network timing at all
+        let unassigned_nodes_config = get_unassigned_nodes_config(&nns_node).await;
+        info!(
+            logger,
+            "Unassigned nodes config: {:?}", unassigned_nodes_config
+        );
 
-    info!(logger, "Waiting for the GuestOS upgrade to apply...");
+        // determine original and target GuestOS version
+        let original_version = unassigned_nodes_config.replica_version.clone();
+        let target_version = format!("{}-test", original_version);
 
-    // Check the GuestOS version again after upgrade
-    info!(
-        logger,
-        "Checking version via SSH on GuestOS: '{}'",
-        host.get_vm().expect("Unable to get GuestOS VM.").ipv6
-    );
-    let new_version = check_guestos_version(&host);
-    info!(logger, "Version found is: '{}'", new_version);
+        retry_with_msg_async!(
+            format!(
+                "Waiting until the guest is on the original version '{}'",
+                original_version
+            ),
+            &logger,
+            Duration::from_secs(5 * 60),
+            Duration::from_secs(5),
+            || async {
+                let current_version = check_guestos_version(&client, &guest_ipv6)
+                    .await
+                    .unwrap_or("unavaiblable".to_string());
+                if current_version == original_version {
+                    info!(logger, "Guest upgraded to '{}'", current_version);
+                    Ok(())
+                } else {
+                    bail!("Guest is still on version '{}'", current_version)
+                }
+            }
+        )
+        .await
+        .expect("guest didn't come up as expected");
 
-    assert!(new_version != original_version);
+        info!(
+            logger,
+            "Guest is on the original version '{}'", original_version
+        );
+
+        // Check that GuestOS is on the expected version
+        retry_with_msg_async!(
+            format!(
+                "Waiting until the guest is on the target version '{}'",
+                target_version
+            ),
+            &logger,
+            Duration::from_secs(5 * 60),
+            Duration::from_secs(5),
+            || async {
+                let current_version = check_guestos_version(&client, &guest_ipv6)
+                    .await
+                    .unwrap_or("unavaiblable".to_string());
+                if current_version == target_version {
+                    info!(logger, "Guest upgraded to '{}'", current_version);
+                    Ok(())
+                } else {
+                    bail!("Guest is still on version '{}'", current_version)
+                }
+            }
+        )
+        .await
+        .expect("guest failed to upgrade");
+    });
 
     info!(
         logger,
