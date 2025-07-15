@@ -18668,6 +18668,7 @@ dependencies = [
  "ic-https-outcalls-adapter",
  "ic-https-outcalls-adapter-client",
  "ic-https-outcalls-service",
+ "ic-icp-index",
  "ic-interfaces",
  "ic-interfaces-adapter-client",
  "ic-interfaces-registry",
