@@ -35,7 +35,7 @@ def main():
 
     client = RosettaClient(args.node_address)
 
-    print("Fetching minumum dissolve delay of a neuron...")
+    print("Fetching minimum dissolve delay of a neuron...")
     response = client.get_minimum_dissolve_delay(verbose=args.verbose)
 
     if args.raw:
