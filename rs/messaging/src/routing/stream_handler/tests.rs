@@ -1795,7 +1795,7 @@ fn induct_best_effort_response_to_migrated_away_canister_is_ok() {
             ..StreamSliceConfig::default()
         }],
         |stream_handler, state, slices, metrics| {
-            let state = simulate_single_canister_migration(
+            let state = simulate_manual_canister_migration(
                 state,
                 *LOCAL_CANISTER,
                 CANISTER_MIGRATION_SUBNET,
@@ -1832,7 +1832,7 @@ fn induct_guaranteed_response_to_migrated_away_canister_is_error() {
             ..StreamSliceConfig::default()
         }],
         |stream_handler, state, slices, metrics| {
-            let state = simulate_single_canister_migration(
+            let state = simulate_manual_canister_migration(
                 state,
                 *LOCAL_CANISTER,
                 CANISTER_MIGRATION_SUBNET,
