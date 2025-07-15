@@ -419,7 +419,7 @@ impl NodeRegistration {
             }
         };
 
-        let node_id = self.node_id.clone();
+        let node_id = self.node_id;
         let key_handler = self.key_handler.clone();
         let sign_cmd = move |msg: &MessageId| {
             // Implementation of 'sign_basic' uses Tokio's 'block_on' when issuing a RPC
