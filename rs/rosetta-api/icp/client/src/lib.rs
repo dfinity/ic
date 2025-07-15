@@ -1230,7 +1230,7 @@ impl RosettaClient {
         Ok(pending_proposals)
     }
 
-    // Retrieves the minumum neuron dissolve delay in seconds.
+    // Retrieves the minimum neuron dissolve delay in seconds.
     pub async fn get_minimum_dissolve_delay(
         &self,
         network_identifier: NetworkIdentifier,
