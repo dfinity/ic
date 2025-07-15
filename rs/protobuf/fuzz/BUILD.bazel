@@ -10,6 +10,7 @@ rust_fuzz_test_binary_afl(
     deps = [
         # Keep sorted.
         "//rs/protobuf",
+        "//rs/types/types",
         "@crate_index//:libfuzzer-sys",
     ],
 )
