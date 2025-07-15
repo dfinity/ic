@@ -92,7 +92,7 @@ system_test_nns(
         "@crate_index//:anyhow",
     ],
     env = {
-        "VECTOR_VM_IMAGE": "$(rootpath //rs/tests:vector_with_log_fetcher_image)",
+        "VECTOR_VM_PATH": "$(rootpath //rs/tests:vector_with_log_fetcher_image)",
     }
 )
 
