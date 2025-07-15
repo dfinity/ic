@@ -25,7 +25,7 @@ from rosetta_client import RosettaClient
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Get the minumum dissolve delay of a neuron that still allows it to vote."
+        description="Get the minimum dissolve delay of a neuron that still allows it to vote."
     )
     parser.add_argument("--node-address", type=str, required=True, help="Rosetta node address")
     parser.add_argument("--verbose", action="store_true", help="Enable verbose output")
