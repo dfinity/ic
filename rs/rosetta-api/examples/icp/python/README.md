@@ -133,7 +133,7 @@ python get_proposal_info.py --node-address <NODE_ADDRESS> --proposal-id <PROPOSA
 
 Fetches detailed information about a specific proposal, including its status, voting results, proposer, and execution time.
 
-**Get Minimum Dissolve Delay of a Nuron**:
+**Get Minimum Dissolve Delay of a Neuron**:
 ```sh
 python get_minimum_dissolve_delay.py --node-address <NODE_ADDRESS>
 ```
