@@ -911,6 +911,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "opentelemetry-prometheus": crate.spec(
                 version = "^0.13.0",
             ),
+            "orca-wasm": crate.spec(
+                git = "https://github.com/adambratschikaye/orca",
+                rev = "2e7702507c15ac262888c2e1706ca477d403001b",
+            ),
             "p256": crate.spec(
                 version = "^0.13.2",
                 features = [

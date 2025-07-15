@@ -135,6 +135,7 @@ mod tests {
             check_fee: None,
             kyt_principal: None,
             kyt_fee: None,
+            get_utxos_cache_expiration_seconds: None,
         }
     }
 

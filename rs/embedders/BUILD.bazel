@@ -34,6 +34,7 @@ DEPENDENCIES = [
     "@crate_index//:libflate",
     "@crate_index//:nix",
     "@crate_index//:num-traits",
+    "@crate_index//:orca-wasm",
     "@crate_index//:prometheus",
     "@crate_index//:rayon",
     "@crate_index//:rustc-demangle",

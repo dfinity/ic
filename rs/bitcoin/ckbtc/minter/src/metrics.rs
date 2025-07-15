@@ -28,6 +28,8 @@ thread_local! {
     pub static UPDATE_CALL_LATENCY: RefCell<BTreeMap<NumUtxoPages,LatencyHistogram>> = RefCell::default();
     pub static GET_UTXOS_CALL_LATENCY: RefCell<BTreeMap<(NumUtxoPages, CallSource),LatencyHistogram>> = RefCell::default();
     pub static GET_UTXOS_RESULT_SIZE: RefCell<BTreeMap<CallSource,NumUtxosHistogram>> = RefCell::default();
+    pub static GET_UTXOS_CACHE_HITS : Cell<u64> = Cell::default();
+    pub static GET_UTXOS_CACHE_MISSES: Cell<u64> = Cell::default();
     pub static SIGN_WITH_ECDSA_LATENCY: RefCell<BTreeMap<MetricsResult, LatencyHistogram>> = RefCell::default();
 }
 
@@ -302,6 +304,18 @@ pub fn encode_metrics(
         )?
         .value(&[("source", "client")], GET_UTXOS_CLIENT_CALLS.get() as f64)?
         .value(&[("source", "minter")], GET_UTXOS_MINTER_CALLS.get() as f64)?;
+
+    metrics.encode_counter(
+        "ckbtc_minter_get_utxos_cache_hits",
+        GET_UTXOS_CACHE_HITS.get() as f64,
+        "Number of cache hits for get_utxos calls.",
+    )?;
+
+    metrics.encode_counter(
+        "ckbtc_minter_get_utxos_cache_misses",
+        GET_UTXOS_CACHE_MISSES.get() as f64,
+        "Number of cache misses for get_utxos calls.",
+    )?;
 
     metrics.encode_gauge(
         "ckbtc_minter_btc_balance",
