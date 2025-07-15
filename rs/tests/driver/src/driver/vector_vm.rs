@@ -111,7 +111,8 @@ impl VectorVm {
                     vcpus: Some(NrOfVCPUs::new(2)),
                     memory_kibibytes: Some(AmountOfMemoryKiB::new(16780000)), // 16GiB
                     boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(1)), // Logs are pushed to elastic
-                }),
+                })
+                .enable_ipv4(),
         }
     }
 
@@ -229,7 +230,8 @@ impl VectorVm {
             };
 
             let from = file.path();
-            let to = Path::new("/etc/vector/config").join(file.path().file_name().unwrap());
+            let to =
+                Path::new("/etc/vector/generated-config").join(file.path().file_name().unwrap());
             let size = std::fs::metadata(&from).unwrap().len();
             retry_with_msg!(
                 format!("scp {from:?} to {}:{to:?}", self.universal_vm.name),
@@ -250,6 +252,8 @@ impl VectorVm {
                 )
             });
         }
+
+        info!(log, "Vector targets sync complete.");
 
         Ok(())
     }

@@ -4,9 +4,14 @@
 
 set -euo pipefail
 
-docker load -i /config/vector-with-log-fetcher.tar
+find /config -name *.tar -exec docker load -i {} \;
+
+mkdir -p /etc/vector/generated-config
+
 docker run -d --name vector \
     --entrypoint vector \
-    -e VECTOR_WATCH_CONFIG=true \ 
-    ghcr.io/dfinity/dre/log-fetcher \
-    --config-dir /etc/vector/config
+    -e VECTOR_WATCH_CONFIG=true \
+    -v /etc/vector/generated-config:/etc/vector/generated-config \
+    vector-with-log-fetcher:image \
+    --config-dir /etc/vector/config \
+    --config-dir /etc/vector/generated-config
