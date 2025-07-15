@@ -1808,6 +1808,7 @@ fn induct_best_effort_response_to_migrated_away_canister_is_ok() {
                 slices,
                 &mut available_guaranteed_response_memory,
             );
+            metrics.assert_inducted_xnet_messages_eq(&[]);
             metrics.assert_eq_critical_errors(CriticalErrorCounts {
                 ..CriticalErrorCounts::default()
             });
@@ -1840,6 +1841,13 @@ fn induct_guaranteed_response_to_migrated_away_canister_is_error() {
                 slices,
                 &mut available_guaranteed_response_memory,
             );
+
+            metrics.assert_inducted_xnet_messages_eq(&[(
+                LABEL_VALUE_TYPE_RESPONSE,
+                LABEL_VALUE_RECEIVER_SUBNET_MISMATCH,
+                1,
+            )]);
+
             metrics.assert_eq_critical_errors(CriticalErrorCounts {
                 receiver_subnet_mismatch: 1,
                 ..CriticalErrorCounts::default()
