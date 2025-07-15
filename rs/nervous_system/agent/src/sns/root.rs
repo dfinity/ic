@@ -51,7 +51,11 @@ impl TryFrom<ListSnsCanistersResponse> for SnsCanisters {
             archive: archives.into_iter().map(ArchiveCanister::new).collect(),
         };
 
-        Ok(Self { sns, dapps, extensions })
+        Ok(Self {
+            sns,
+            dapps,
+            extensions,
+        })
     }
 }
 
