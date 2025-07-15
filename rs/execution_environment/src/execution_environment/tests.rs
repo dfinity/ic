@@ -3703,7 +3703,7 @@ fn test_ecdsa_public_key_api_is_enabled() {
     let RequestOrResponse::Response(response) = response else {
         panic!("expected a response");
     };
-    assert_eq!(response.originator, nns_canister.into());
+    assert_eq!(response.originator, nns_canister);
     assert_eq!(response.respondent, own_subnet.into());
 }
 
@@ -3764,15 +3764,12 @@ fn test_schnorr_public_key_api_is_enabled() {
             ),
         );
 
-        // NOTE: Since the public keys delivered to execution by the test framework
-        // are not well formed points, the deserialization of this function will
-        // fail. However, the fact that we get this error message indicates, that we
-        // requested a key that actually exists.
         let response = test.xnet_messages()[1].clone();
-        assert_eq!(
-            get_reject_message(response),
-            "InternalError(\"InvalidPoint\")",
-        );
+        let RequestOrResponse::Response(response) = response else {
+            panic!("expected a response");
+        };
+        assert_eq!(response.originator, nns_canister);
+        assert_eq!(response.respondent, own_subnet.into());
     }
 }
 
@@ -3822,15 +3819,12 @@ fn test_vetkd_public_key_api_is_enabled() {
         ),
     );
 
-    // NOTE: Since the public keys delivered to execution by the test framework
-    // are not well formed Bls G2 points, the deserialization of this function will
-    // fail. However, the fact that we get this error message indicates, that we
-    // requested a key that actually exists.
     let response = test.xnet_messages()[1].clone();
-    assert_eq!(
-        get_reject_message(response),
-        "Invalid VetKD subnet key: InvalidPublicKey",
-    )
+    let RequestOrResponse::Response(response) = response else {
+        panic!("expected a response");
+    };
+    assert_eq!(response.originator, nns_canister);
+    assert_eq!(response.respondent, own_subnet.into());
 }
 
 #[test]
