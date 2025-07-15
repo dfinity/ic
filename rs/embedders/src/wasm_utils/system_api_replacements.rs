@@ -12,7 +12,7 @@
 //!
 
 use crate::{
-    wasm_utils::instrumentation::{InjectedImports, WasmMemoryType},
+    wasm_utils::instrumentation::{InjectedFunctions, InjectedLocalGlobals, WasmMemoryType},
     wasmtime_embedder::system_api_complexity::overhead_native,
     InternalErrorCode,
 };
@@ -23,7 +23,7 @@ use orca_wasm::{wasmparser::BlockType, DataType};
 
 use ic_types::NumBytes;
 
-use super::{instrumentation::SpecialIndices, SystemApiFunc};
+use super::SystemApiFunc;
 
 const MAX_32_BIT_STABLE_MEMORY_IN_PAGES: i64 = 64 * 1024; // 4GiB
 const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
@@ -45,7 +45,9 @@ fn make_body(
 }
 
 pub(super) fn replacement_functions(
-    special_indices: SpecialIndices,
+    injected_functions: &InjectedFunctions,
+    injected_local_globals: &InjectedLocalGlobals,
+    stable_memory_index: u32,
     dirty_page_overhead: NumInstructions,
     main_memory_type: WasmMemoryType,
     max_wasm_memory_size: NumBytes,
@@ -57,11 +59,10 @@ pub(super) fn replacement_functions(
         orca_wasm::ir::types::Body<'static>,
     ),
 )> {
-    let count_clean_pages_fn_index = special_indices.count_clean_pages_fn;
-    let dirty_pages_counter_index = special_indices.dirty_pages_counter_ix;
-    let accessed_pages_counter_index = special_indices.accessed_pages_counter_ix;
-    let stable_memory_index = special_indices.stable_memory_index;
-    let decr_instruction_counter_fn = special_indices.decr_instruction_counter_fn;
+    let count_clean_pages_fn_index = injected_local_globals.count_clean_pages_fn;
+    let dirty_pages_counter_index = injected_local_globals.dirty_pages_counter;
+    let accessed_pages_counter_index = injected_local_globals.accessed_pages_counter;
+    let decr_instruction_counter_fn = injected_local_globals.decr_instruction_counter_fn;
 
     use orca_wasm::wasmparser::Operator::*;
     let page_size_shift = PAGE_SIZE.trailing_zeros() as i32;
@@ -105,7 +106,7 @@ pub(super) fn replacement_functions(
                             value: InternalErrorCode::StableMemoryTooBigFor32Bit as i32,
                         },
                         Call {
-                            function_index: InjectedImports::InternalTrap as u32,
+                            function_index: injected_functions.internal_trap,
                         },
                         End,
                         MemorySize {
@@ -151,7 +152,7 @@ pub(super) fn replacement_functions(
                             value: StableMemoryApi::Stable32 as i32,
                         },
                         Call {
-                            function_index: InjectedImports::TryGrowStableMemory as u32,
+                            function_index: injected_functions.try_grow_stable_memory,
                         },
                         // If result is -1, return -1
                         I64Const { value: -1 },
@@ -181,7 +182,7 @@ pub(super) fn replacement_functions(
                             value: InternalErrorCode::StableGrowFailed as i32,
                         },
                         Call {
-                            function_index: InjectedImports::InternalTrap as u32,
+                            function_index: injected_functions.internal_trap,
                         },
                         End,
                         // Grow succeeded, return result of memory.grow.
@@ -211,7 +212,7 @@ pub(super) fn replacement_functions(
                             value: StableMemoryApi::Stable64 as i32,
                         },
                         Call {
-                            function_index: InjectedImports::TryGrowStableMemory as u32,
+                            function_index: injected_functions.try_grow_stable_memory,
                         },
                         // If result is -1, return -1
                         I64Const { value: -1 },
@@ -240,7 +241,7 @@ pub(super) fn replacement_functions(
                             value: InternalErrorCode::StableGrowFailed as i32,
                         },
                         Call {
-                            function_index: InjectedImports::InternalTrap as u32,
+                            function_index: injected_functions.internal_trap,
                         },
                         End,
                         // Return the result of memory.grow.
@@ -303,7 +304,7 @@ pub(super) fn replacement_functions(
                             value: InternalErrorCode::StableMemoryTooBigFor32Bit as i32,
                         },
                         Call {
-                            function_index: InjectedImports::InternalTrap as u32,
+                            function_index: injected_functions.internal_trap,
                         },
                         End,
                         // check bounds on stable memory (fail if src + size > mem_size)
@@ -327,7 +328,7 @@ pub(super) fn replacement_functions(
                             value: InternalErrorCode::StableMemoryOutOfBounds as i32,
                         },
                         Call {
-                            function_index: InjectedImports::InternalTrap as u32,
+                            function_index: injected_functions.internal_trap,
                         },
                         End,
                         // src
@@ -392,7 +393,7 @@ pub(super) fn replacement_functions(
                             value: InternalErrorCode::MemoryAccessLimitExceeded as i32,
                         },
                         Call {
-                            function_index: InjectedImports::InternalTrap as u32,
+                            function_index: injected_functions.internal_trap,
                         },
                         End,
                         // mark accessed pages if there are any to be marked
@@ -426,7 +427,7 @@ pub(super) fn replacement_functions(
                                 offset: 0,
                                 // We assume the bytemap for stable memory is always
                                 // inserted directly after the stable memory.
-                                memory: special_indices.stable_memory_index + 1,
+                                memory: stable_memory_index + 1,
                             },
                         },
                         I32Const { value: 2 }, // READ_BIT
@@ -438,7 +439,7 @@ pub(super) fn replacement_functions(
                                 offset: 0,
                                 // We assume the bytemap for stable memory is always
                                 // inserted directly after the stable memory.
-                                memory: special_indices.stable_memory_index + 1,
+                                memory: stable_memory_index + 1,
                             },
                         },
                         LocalGet {
@@ -470,7 +471,7 @@ pub(super) fn replacement_functions(
                         LocalGet { local_index: LEN },
                         I64ExtendI32U,
                         Call {
-                            function_index: InjectedImports::StableReadFirstAccess as u32,
+                            function_index: injected_functions.stable_read_first_access,
                         },
                         Else,
                         LocalGet { local_index: DST },
@@ -549,7 +550,7 @@ pub(super) fn replacement_functions(
                             value: InternalErrorCode::StableMemoryOutOfBounds as i32,
                         },
                         Call {
-                            function_index: InjectedImports::InternalTrap as u32,
+                            function_index: injected_functions.internal_trap,
                         },
                         End,
                         LocalGet { local_index: SRC },
@@ -570,7 +571,7 @@ pub(super) fn replacement_functions(
                             value: InternalErrorCode::StableMemoryOutOfBounds as i32,
                         },
                         Call {
-                            function_index: InjectedImports::InternalTrap as u32,
+                            function_index: injected_functions.internal_trap,
                         },
                         End,
                         // check if these i64 hold valid heap addresses
@@ -587,7 +588,7 @@ pub(super) fn replacement_functions(
                             value: InternalErrorCode::HeapOutOfBounds as i32,
                         },
                         Call {
-                            function_index: InjectedImports::InternalTrap as u32,
+                            function_index: injected_functions.internal_trap,
                         },
                         End,
                         // check len
@@ -603,7 +604,7 @@ pub(super) fn replacement_functions(
                             value: InternalErrorCode::HeapOutOfBounds as i32,
                         },
                         Call {
-                            function_index: InjectedImports::InternalTrap as u32,
+                            function_index: injected_functions.internal_trap,
                         },
                         End,
                         // src
@@ -670,7 +671,7 @@ pub(super) fn replacement_functions(
                             value: InternalErrorCode::MemoryAccessLimitExceeded as i32,
                         },
                         Call {
-                            function_index: InjectedImports::InternalTrap as u32,
+                            function_index: injected_functions.internal_trap,
                         },
                         End,
                         // mark accessed pages if there are any to be marked
@@ -704,7 +705,7 @@ pub(super) fn replacement_functions(
                                 offset: 0,
                                 // We assume the bytemap for stable memory is always
                                 // inserted directly after the stable memory.
-                                memory: special_indices.stable_memory_index + 1,
+                                memory: stable_memory_index + 1,
                             },
                         },
                         I32Const { value: 2 }, // READ_BIT
@@ -716,7 +717,7 @@ pub(super) fn replacement_functions(
                                 offset: 0,
                                 // We assume the bytemap for stable memory is always
                                 // inserted directly after the stable memory.
-                                memory: special_indices.stable_memory_index + 1,
+                                memory: stable_memory_index + 1,
                             },
                         },
                         LocalGet {
@@ -745,7 +746,7 @@ pub(super) fn replacement_functions(
                         LocalGet { local_index: SRC },
                         LocalGet { local_index: LEN },
                         Call {
-                            function_index: InjectedImports::StableReadFirstAccess as u32,
+                            function_index: injected_functions.stable_read_first_access,
                         },
                         Else,
                         LocalGet { local_index: DST },
@@ -814,7 +815,7 @@ pub(super) fn replacement_functions(
                             value: InternalErrorCode::StableMemoryTooBigFor32Bit as i32,
                         },
                         Call {
-                            function_index: InjectedImports::InternalTrap as u32,
+                            function_index: injected_functions.internal_trap,
                         },
                         End,
                         // check bounds on stable memory (fail if dst + size > mem_size)
@@ -838,7 +839,7 @@ pub(super) fn replacement_functions(
                             value: InternalErrorCode::StableMemoryOutOfBounds as i32,
                         },
                         Call {
-                            function_index: InjectedImports::InternalTrap as u32,
+                            function_index: injected_functions.internal_trap,
                         },
                         End,
                         // mark writes in the bytemap
@@ -898,7 +899,7 @@ pub(super) fn replacement_functions(
                             value: InternalErrorCode::MemoryAccessLimitExceeded as i32,
                         },
                         Call {
-                            function_index: InjectedImports::InternalTrap as u32,
+                            function_index: injected_functions.internal_trap,
                         },
                         End,
                         LocalTee {
@@ -917,7 +918,7 @@ pub(super) fn replacement_functions(
                             value: InternalErrorCode::MemoryWriteLimitExceeded as i32,
                         },
                         Call {
-                            function_index: InjectedImports::InternalTrap as u32,
+                            function_index: injected_functions.internal_trap,
                         },
                         End,
                         // Decrement instruction counter to charge for dirty pages
@@ -1041,7 +1042,7 @@ pub(super) fn replacement_functions(
                             value: InternalErrorCode::StableMemoryOutOfBounds as i32,
                         },
                         Call {
-                            function_index: InjectedImports::InternalTrap as u32,
+                            function_index: injected_functions.internal_trap,
                         },
                         End,
                         LocalGet { local_index: DST },
@@ -1062,7 +1063,7 @@ pub(super) fn replacement_functions(
                             value: InternalErrorCode::StableMemoryOutOfBounds as i32,
                         },
                         Call {
-                            function_index: InjectedImports::InternalTrap as u32,
+                            function_index: injected_functions.internal_trap,
                         },
                         End,
                         // check if these i64 hold valid heap addresses
@@ -1079,7 +1080,7 @@ pub(super) fn replacement_functions(
                             value: InternalErrorCode::HeapOutOfBounds as i32,
                         },
                         Call {
-                            function_index: InjectedImports::InternalTrap as u32,
+                            function_index: injected_functions.internal_trap,
                         },
                         End,
                         // check len
@@ -1095,7 +1096,7 @@ pub(super) fn replacement_functions(
                             value: InternalErrorCode::HeapOutOfBounds as i32,
                         },
                         Call {
-                            function_index: InjectedImports::InternalTrap as u32,
+                            function_index: injected_functions.internal_trap,
                         },
                         End,
                         LocalGet { local_index: DST },
@@ -1142,7 +1143,7 @@ pub(super) fn replacement_functions(
                             value: InternalErrorCode::MemoryAccessLimitExceeded as i32,
                         },
                         Call {
-                            function_index: InjectedImports::InternalTrap as u32,
+                            function_index: injected_functions.internal_trap,
                         },
                         End,
                         LocalTee {
@@ -1161,7 +1162,7 @@ pub(super) fn replacement_functions(
                             value: InternalErrorCode::MemoryWriteLimitExceeded as i32,
                         },
                         Call {
-                            function_index: InjectedImports::InternalTrap as u32,
+                            function_index: injected_functions.internal_trap,
                         },
                         End,
                         // Decrement instruction counter to charge for dirty pages

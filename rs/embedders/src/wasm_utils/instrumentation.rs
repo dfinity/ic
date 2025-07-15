@@ -123,12 +123,11 @@ use ic_types::NumInstructions;
 use ic_wasm_types::{BinaryEncodedWasm, WasmError, WasmInstrumentationError};
 use orca_wasm::{
     ir::{
-        id::{FunctionID, ImportsID, TypeID},
+        id::FunctionID,
         module::{
             module_functions::{FuncKind, LocalFunction},
             module_globals::GlobalKind,
-            module_imports::ModuleImports,
-            GetID, LocalOrImport,
+            LocalOrImport,
         },
         types::{Body, DataSegmentKind, ElementItems, FuncInstrFlag, InitExpr},
     },
@@ -161,20 +160,50 @@ pub(crate) fn main_memory_type(module: &orca_wasm::Module<'_>) -> WasmMemoryType
     mem_type
 }
 
-// The indices of injected function imports.
-pub(crate) enum InjectedImports {
-    OutOfInstructions = 0,
-    TryGrowWasmMemory = 1,
-    TryGrowStableMemory = 2,
-    InternalTrap = 3,
-    StableReadFirstAccess = 4,
+pub(crate) struct InjectedFunctions {
+    pub out_of_instructions: u32,
+    pub try_grow_wasm_memory: u32,
+    pub try_grow_stable_memory: u32,
+    pub internal_trap: u32,
+    pub stable_read_first_access: u32,
 }
 
-impl InjectedImports {
-    fn count() -> usize {
-        5
-    }
-}
+// impl InjectedFunctions {
+//     fn count() -> usize {
+//         5
+//     }
+
+//     fn new(
+//         out_of_instructions: u32,
+//         try_grow_wasm_memory: u32,
+//         try_grow_stable_memory: u32,
+//         internal_trap: u32,
+//         stable_read_first_access: u32,
+//     ) -> Self {
+//         Self {
+//             out_of_instructions,
+//             try_grow_wasm_memory,
+//             try_grow_stable_memory,
+//             internal_trap,
+//             stable_read_first_access,
+//         }
+//     }
+// }
+
+// The indices of injected function imports.
+// pub(crate) enum InjectedImports {
+//     OutOfInstructions = 0,
+//     TryGrowWasmMemory = 1,
+//     TryGrowStableMemory = 2,
+//     InternalTrap = 3,
+//     StableReadFirstAccess = 4,
+// }
+
+// impl InjectedImports {
+//     fn count() -> usize {
+//         5
+//     }
+// }
 
 // Gets the cost of an instruction.
 pub fn instruction_to_cost(i: &orca_wasm::wasmparser::Operator, mem_type: WasmMemoryType) -> u64 {
@@ -749,16 +778,30 @@ fn mutate_function_indices(module: &mut orca_wasm::Module, f: impl Fn(u32) -> u3
         }
     }
 
-    let fn_ids: Vec<_> = module
-        .functions
-        .iter()
-        .filter(|f| f.is_local())
-        .map(|f| FunctionID(f.get_id()))
-        .collect();
-    for id in fn_ids {
-        let modifier = module.functions.get_fn_modifier(id).unwrap();
-        for op in &mut modifier.body.instructions {
-            mutate_instruction(&f, &mut op.op);
+    // for f in module.functions.iter() {
+    //     println!("function id: {:?}", f.get_id());
+    //     println!("is local: {:?}", f.is_local());
+    // }
+    // println!("Functions: {:#?}", module.functions);
+    // let fn_ids: Vec<_> = module
+    //     .functions
+    //     .iter()
+    //     .filter(|f| f.is_local())
+    //     .map(|f| FunctionID(f.get_id()))
+    //     .collect();
+    // for id in fn_ids {
+    //     println!("id: {:?}", id);
+    //     let modifier = module.functions.get_fn_modifier(id).unwrap();
+    //     for op in &mut modifier.body.instructions {
+    //         mutate_instruction(&f, &mut op.op);
+    //     }
+    // }
+    for func in module.functions.iter_mut() {
+        if func.is_local() {
+            let func = func.unwrap_local_mut();
+            for op in &mut func.body.instructions {
+                mutate_instruction(&f, &mut op.op);
+            }
         }
     }
 
@@ -817,28 +860,28 @@ fn mutate_function_indices(module: &mut orca_wasm::Module, f: impl Fn(u32) -> u3
     }
 
     // TODO: add test that a name section with junk data doesn't crash.
-    for section in module.custom_sections.iter_mut() {
-        if section.name == "name" {
-            let reader = wasmparser::NameSectionReader::new(wasmparser::BinaryReader::new(
-                section.data(),
-                0,
-            ));
-            let mut corrected_names = wasm_encoder::NameMap::new();
-            for name in reader {
-                if let Ok(wasmparser::Name::Function(name_map)) = name {
-                    for entry in name_map {
-                        if let Ok(entry) = entry {
-                            corrected_names.append(f(entry.index), entry.name);
-                        }
-                    }
-                }
-            }
-            let mut new_section = wasm_encoder::NameSection::new();
-            new_section.functions(&corrected_names);
-            let custom = new_section.as_custom();
-            *section = orca_wasm::ir::types::CustomSection::new_owned("name", custom.data.to_vec());
-        }
-    }
+    // for section in module.custom_sections.iter_mut() {
+    //     if section.name == "name" {
+    //         let reader = wasmparser::NameSectionReader::new(wasmparser::BinaryReader::new(
+    //             section.data(),
+    //             0,
+    //         ));
+    //         let mut corrected_names = wasm_encoder::NameMap::new();
+    //         for name in reader {
+    //             if let Ok(wasmparser::Name::Function(name_map)) = name {
+    //                 for entry in name_map {
+    //                     if let Ok(entry) = entry {
+    //                         corrected_names.append(f(entry.index), entry.name);
+    //                     }
+    //                 }
+    //             }
+    //         }
+    //         let mut new_section = wasm_encoder::NameSection::new();
+    //         new_section.functions(&corrected_names);
+    //         let custom = new_section.as_custom();
+    //         *section = orca_wasm::ir::types::CustomSection::new_owned("name", custom.data.to_vec());
+    //     }
+    // }
 }
 
 /// Injects hidden api functions.
@@ -851,24 +894,25 @@ fn mutate_function_indices(module: &mut orca_wasm::Module, f: impl Fn(u32) -> u3
 fn inject_helper_functions(
     mut module: orca_wasm::Module,
     mem_type: WasmMemoryType,
-) -> orca_wasm::Module {
-    // Temporarily clear the import section so that the injected imports come first.
-    let mut old_imports = ModuleImports::new(vec![]);
-    std::mem::swap(&mut module.imports, &mut old_imports);
+) -> (InjectedFunctions, orca_wasm::Module) {
+    // // Temporarily clear the import section so that the injected imports come first.
+    // let mut old_imports = ModuleImports::new(vec![]);
+    // std::mem::swap(&mut module.imports, &mut old_imports);
 
     let ooi_type_idx = module.types.add_func_type(&[], &[]);
-    module.add_import_func(
+    let (out_of_instructions_fn_id, _) = module.add_import_func(
         INSTRUMENTED_FUN_MODULE.to_string(),
         OUT_OF_INSTRUCTIONS_FUN_NAME.to_string(),
         ooi_type_idx,
     );
+    // println!("out_of_instructions_fn_id: {:?}", out_of_instructions_fn_id);
 
     let (params, res) = match mem_type {
         WasmMemoryType::Wasm32 => ([DataType::I32, DataType::I32], [DataType::I32]),
         WasmMemoryType::Wasm64 => ([DataType::I64, DataType::I64], [DataType::I64]),
     };
     let tgwm_type_idx = module.types.add_func_type(&params, &res);
-    module.add_import_func(
+    let (try_grow_wasm_memory_fn_id, _) = module.add_import_func(
         INSTRUMENTED_FUN_MODULE.to_string(),
         TRY_GROW_WASM_MEMORY_FUN_NAME.to_string(),
         tgwm_type_idx,
@@ -878,14 +922,14 @@ fn inject_helper_functions(
         &[DataType::I64, DataType::I64, DataType::I32],
         &[DataType::I64],
     );
-    module.add_import_func(
+    let (try_grow_stable_memory_fn_id, _) = module.add_import_func(
         INSTRUMENTED_FUN_MODULE.to_string(),
         TRY_GROW_STABLE_MEMORY_FUN_NAME.to_string(),
         tgsm_type_idx,
     );
 
     let it_type_idx = module.types.add_func_type(&[DataType::I32], &[]);
-    module.add_import_func(
+    let (internal_trap_fn_id, _) = module.add_import_func(
         INSTRUMENTED_FUN_MODULE.to_string(),
         INTERNAL_TRAP_FUN_NAME.to_string(),
         it_type_idx,
@@ -894,77 +938,93 @@ fn inject_helper_functions(
     let fr_type_idx = module
         .types
         .add_func_type(&[DataType::I64, DataType::I64, DataType::I64], &[]);
-    module.add_import_func(
+    let (stable_read_first_access_fn_id, _) = module.add_import_func(
         INSTRUMENTED_FUN_MODULE.to_string(),
         STABLE_READ_FIRST_ACCESS_NAME.to_string(),
         fr_type_idx,
     );
 
-    for import in old_imports.iter() {
-        if let orca_wasm::wasmparser::TypeRef::Func(i) = import.ty {
-            module.add_import_func(
-                import.module.to_string(),
-                import.name.to_string(),
-                TypeID(i),
-            );
-        }
-    }
+    // for import in old_imports.iter() {
+    //     if let orca_wasm::wasmparser::TypeRef::Func(i) = import.ty {
+    //         module.add_import_func(
+    //             import.module.to_string(),
+    //             import.name.to_string(),
+    //             TypeID(i),
+    //         );
+    //     }
+    // }
 
     // now increment all function references by InjectedImports::Count
-    let cnt = InjectedImports::count() as u32;
-    mutate_function_indices(&mut module, |i| i + cnt);
+    let injected_functions = InjectedFunctions {
+        out_of_instructions: *out_of_instructions_fn_id,
+        try_grow_wasm_memory: *try_grow_wasm_memory_fn_id,
+        try_grow_stable_memory: *try_grow_stable_memory_fn_id,
+        internal_trap: *internal_trap_fn_id,
+        stable_read_first_access: *stable_read_first_access_fn_id,
+    };
+    // let cnt = InjectedImports::count() as u32;
+    // mutate_function_indices(&mut module, |i| i + cnt);
 
-    debug_assert!(
-        module
-            .imports
-            .get(ImportsID(InjectedImports::OutOfInstructions as u32))
-            .name
-            == "out_of_instructions"
-    );
-    debug_assert!(
-        module
-            .imports
-            .get(ImportsID(InjectedImports::TryGrowWasmMemory as u32))
-            .name
-            == "try_grow_wasm_memory"
-    );
-    debug_assert!(
-        module
-            .imports
-            .get(ImportsID(InjectedImports::TryGrowStableMemory as u32))
-            .name
-            == "try_grow_stable_memory"
-    );
-    debug_assert!(
-        module
-            .imports
-            .get(ImportsID(InjectedImports::InternalTrap as u32))
-            .name
-            == "internal_trap"
-    );
-    debug_assert!(
-        module
-            .imports
-            .get(ImportsID(InjectedImports::StableReadFirstAccess as u32))
-            .name
-            == "stable_read_first_access"
-    );
+    // debug_assert!(
+    //     module
+    //         .imports
+    //         .get(ImportsID(InjectedImports::OutOfInstructions as u32))
+    //         .name
+    //         == "out_of_instructions"
+    // );
+    // debug_assert!(
+    //     module
+    //         .imports
+    //         .get(ImportsID(InjectedImports::TryGrowWasmMemory as u32))
+    //         .name
+    //         == "try_grow_wasm_memory"
+    // );
+    // debug_assert!(
+    //     module
+    //         .imports
+    //         .get(ImportsID(InjectedImports::TryGrowStableMemory as u32))
+    //         .name
+    //         == "try_grow_stable_memory"
+    // );
+    // debug_assert!(
+    //     module
+    //         .imports
+    //         .get(ImportsID(InjectedImports::InternalTrap as u32))
+    //         .name
+    //         == "internal_trap"
+    // );
+    // debug_assert!(
+    //     module
+    //         .imports
+    //         .get(ImportsID(InjectedImports::StableReadFirstAccess as u32))
+    //         .name
+    //         == "stable_read_first_access"
+    // );
 
-    module
+    (injected_functions, module)
 }
 
-/// Indices of functions, globals, etc that will be need in the later parts of
-/// instrumentation.
-#[derive(Default)]
-pub(super) struct SpecialIndices {
-    pub instructions_counter_ix: u32,
-    pub dirty_pages_counter_ix: u32,
-    pub accessed_pages_counter_ix: u32,
+pub(super) struct InjectedLocalGlobals {
+    pub instructions_counter: u32,
+    pub dirty_pages_counter: u32,
+    pub accessed_pages_counter: u32,
     pub decr_instruction_counter_fn: u32,
     pub count_clean_pages_fn: u32,
-    pub start_fn_ix: Option<u32>,
-    pub stable_memory_index: u32,
 }
+
+// /// Indices of functions, globals, etc that will be need in the later parts of
+// /// instrumentation.
+// #[derive(Default)]
+// pub(super) struct SpecialIndices {
+//     pub instructions_counter_ix: u32,
+//     pub dirty_pages_counter_ix: u32,
+//     pub accessed_pages_counter_ix: u32,
+//     pub decr_instruction_counter_fn: u32,
+//     pub count_clean_pages_fn: u32,
+//     pub start_fn_ix: Option<u32>,
+//     pub stable_memory_index: u32,
+//     pub injected_functions: InjectedFunctions,
+// }
 
 fn export_table(mut module: orca_wasm::Module) -> orca_wasm::Module {
     let mut table_already_exported = false;
@@ -1127,15 +1187,46 @@ fn export_mutable_globals<'a>(
 // Returns the new module or panics in debug mode if a symbol is not reserved.
 fn export_additional_symbols<'a>(
     mut module: orca_wasm::Module<'a>,
-    special_indices: &SpecialIndices,
-) -> orca_wasm::Module<'a> {
+    injected_functions: &InjectedFunctions,
+    stable_memory_index: u32,
+) -> (InjectedLocalGlobals, orca_wasm::Module<'a>) {
     use orca_wasm::wasmparser::{BlockType, Operator::*, ValType};
+
+    // push the instructions counter
+    let instructions_counter = *module.add_global(
+        InitExpr::new(vec![orca_wasm::Instructions::Value(
+            orca_wasm::ir::types::Value::I64(0),
+        )]),
+        DataType::I64,
+        true,
+        false,
+    );
+
+    // push the dirty page counter
+    let dirty_pages_counter = *module.add_global(
+        InitExpr::new(vec![orca_wasm::Instructions::Value(
+            orca_wasm::ir::types::Value::I64(0),
+        )]),
+        DataType::I64,
+        true,
+        false,
+    );
+
+    // push the accessed page counter
+    let accessed_pages_counter = *module.add_global(
+        InitExpr::new(vec![orca_wasm::Instructions::Value(
+            orca_wasm::ir::types::Value::I64(0),
+        )]),
+        DataType::I64,
+        true,
+        false,
+    );
 
     // push function to decrement the instruction counter
     let instructions: Vec<_> = [
         // Subtract the parameter amount from the instruction counter
         GlobalGet {
-            global_index: special_indices.instructions_counter_ix,
+            global_index: instructions_counter,
         },
         LocalGet { local_index: 0 },
         I64Sub,
@@ -1144,7 +1235,7 @@ fn export_additional_symbols<'a>(
         // If `new_counter > old_counter` there was underflow, so set counter to
         // minimum value. Otherwise set it to the new counter value.
         GlobalGet {
-            global_index: special_indices.instructions_counter_ix,
+            global_index: instructions_counter,
         },
         I64GtS,
         If {
@@ -1155,11 +1246,11 @@ fn export_additional_symbols<'a>(
         LocalGet { local_index: 1 },
         End,
         GlobalSet {
-            global_index: special_indices.instructions_counter_ix,
+            global_index: instructions_counter,
         },
         // Call out_of_instructions() if `new_counter < 0`.
         GlobalGet {
-            global_index: special_indices.instructions_counter_ix,
+            global_index: instructions_counter,
         },
         I64Const { value: 0 },
         I64LtS,
@@ -1167,7 +1258,7 @@ fn export_additional_symbols<'a>(
             blockty: BlockType::Empty,
         },
         Call {
-            function_index: InjectedImports::OutOfInstructions as u32,
+            function_index: injected_functions.out_of_instructions,
         },
         End,
         // Return the original param so this function doesn't alter the stack
@@ -1190,7 +1281,7 @@ fn export_additional_symbols<'a>(
     let ty_id = module
         .types
         .add_func_type(&[DataType::I64], &[DataType::I64]);
-    module.functions.add_local_func(
+    let decr_instruction_counter_fn_id = module.functions.add_local_func(
         LocalFunction {
             ty_id,
             func_id: FunctionID(0),
@@ -1236,7 +1327,7 @@ fn export_additional_symbols<'a>(
                 offset: 0,
                 // We assume the bytemap for stable memory is always
                 // inserted directly after the stable memory.
-                memory: special_indices.stable_memory_index + 1,
+                memory: stable_memory_index + 1,
             },
         },
         LocalTee { local_index: tmp },
@@ -1294,7 +1385,7 @@ fn export_additional_symbols<'a>(
         &[DataType::I32, DataType::I32],
         &[DataType::I32, DataType::I32],
     );
-    module.functions.add_local_func(
+    let count_clean_pages_fn_id = module.functions.add_local_func(
         LocalFunction {
             ty_id,
             func_id: FunctionID(0),
@@ -1309,25 +1400,25 @@ fn export_additional_symbols<'a>(
     debug_assert!(super::validation::RESERVED_SYMBOLS.contains(&INSTRUCTIONS_COUNTER_GLOBAL_NAME));
     module.exports.add_export(
         INSTRUCTIONS_COUNTER_GLOBAL_NAME.to_string(),
-        special_indices.instructions_counter_ix,
+        instructions_counter,
         orca_wasm::wasmparser::ExternalKind::Global,
     );
 
     debug_assert!(super::validation::RESERVED_SYMBOLS.contains(&DIRTY_PAGES_COUNTER_GLOBAL_NAME));
     module.exports.add_export(
         DIRTY_PAGES_COUNTER_GLOBAL_NAME.to_string(),
-        special_indices.dirty_pages_counter_ix,
+        dirty_pages_counter,
         orca_wasm::wasmparser::ExternalKind::Global,
     );
 
     debug_assert!(super::validation::RESERVED_SYMBOLS.contains(&ACCESSED_PAGES_COUNTER_GLOBAL_NAME));
     module.exports.add_export(
         ACCESSED_PAGES_COUNTER_GLOBAL_NAME.to_string(),
-        special_indices.accessed_pages_counter_ix,
+        accessed_pages_counter,
         orca_wasm::wasmparser::ExternalKind::Global,
     );
 
-    if let Some(index) = special_indices.start_fn_ix {
+    if let Some(index) = module.start.map(|s| s.0) {
         // push canister_start
         debug_assert!(super::validation::RESERVED_SYMBOLS.contains(&CANISTER_START_STR));
         module.exports.add_export(
@@ -1337,37 +1428,16 @@ fn export_additional_symbols<'a>(
         )
     }
 
-    // push the instructions counter
-    module.add_global(
-        InitExpr::new(vec![orca_wasm::Instructions::Value(
-            orca_wasm::ir::types::Value::I64(0),
-        )]),
-        DataType::I64,
-        true,
-        false,
-    );
-
-    // push the dirty page counter
-    module.add_global(
-        InitExpr::new(vec![orca_wasm::Instructions::Value(
-            orca_wasm::ir::types::Value::I64(0),
-        )]),
-        DataType::I64,
-        true,
-        false,
-    );
-
-    // push the accessed page counter
-    module.add_global(
-        InitExpr::new(vec![orca_wasm::Instructions::Value(
-            orca_wasm::ir::types::Value::I64(0),
-        )]),
-        DataType::I64,
-        true,
-        false,
-    );
-
-    module
+    (
+        InjectedLocalGlobals {
+            instructions_counter,
+            dirty_pages_counter,
+            accessed_pages_counter,
+            decr_instruction_counter_fn: *decr_instruction_counter_fn_id,
+            count_clean_pages_fn: *count_clean_pages_fn_id,
+        },
+        module,
+    )
 }
 
 // Represents a hint about the context of each static cost injection point in
@@ -1526,7 +1596,8 @@ fn injections(
 //   the top of the stack.
 fn inject_metering(
     body: &mut orca_wasm::ir::types::Body,
-    export_data_module: &SpecialIndices,
+    injected_local_globals: &InjectedLocalGlobals,
+    injected_functions: &InjectedFunctions,
     metering_type: MeteringType,
     mem_type: WasmMemoryType,
 ) {
@@ -1548,6 +1619,11 @@ fn inject_metering(
 
     use orca_wasm::wasmparser::Operator::*;
 
+    // println!(
+    //     "out of instructions fn id: {:?}",
+    //     injected_functions.out_of_instructions
+    // );
+
     for point in points {
         elems.extend_from_slice(&orig_elems[last_injection_position..point.position]);
         match point.cost_detail {
@@ -1555,12 +1631,12 @@ fn inject_metering(
                 elems.extend(
                     [
                         GlobalGet {
-                            global_index: export_data_module.instructions_counter_ix,
+                            global_index: injected_local_globals.instructions_counter,
                         },
                         I64Const { value: cost as i64 },
                         I64Sub,
                         GlobalSet {
-                            global_index: export_data_module.instructions_counter_ix,
+                            global_index: injected_local_globals.instructions_counter,
                         },
                     ]
                     .into_iter()
@@ -1570,7 +1646,7 @@ fn inject_metering(
                     elems.extend(
                         [
                             GlobalGet {
-                                global_index: export_data_module.instructions_counter_ix,
+                                global_index: injected_local_globals.instructions_counter,
                             },
                             I64Const { value: 0 },
                             I64LtS,
@@ -1578,7 +1654,7 @@ fn inject_metering(
                                 blockty: orca_wasm::wasmparser::BlockType::Empty,
                             },
                             Call {
-                                function_index: InjectedImports::OutOfInstructions as u32,
+                                function_index: injected_functions.out_of_instructions,
                             },
                             End,
                         ]
@@ -1592,7 +1668,7 @@ fn inject_metering(
                     CostOperandOnStack::X64Bit => {
                         elems.extend(
                             [Call {
-                                function_index: export_data_module.decr_instruction_counter_fn,
+                                function_index: injected_local_globals.decr_instruction_counter_fn,
                             }]
                             .into_iter()
                             .map(|o| orca_wasm::ir::types::Instruction::new(o)),
@@ -1603,7 +1679,8 @@ fn inject_metering(
                             [
                                 I64ExtendI32U,
                                 Call {
-                                    function_index: export_data_module.decr_instruction_counter_fn,
+                                    function_index: injected_local_globals
+                                        .decr_instruction_counter_fn,
                                 },
                                 // decr_instruction_counter returns its argument unchanged,
                                 // so we can convert back to I32 without worrying about
@@ -1632,6 +1709,7 @@ fn inject_try_grow_wasm_memory(
     func_body: &mut orca_wasm::ir::types::Body,
     num_params: u32,
     mem_type: WasmMemoryType,
+    injected_functions: &InjectedFunctions,
 ) {
     use orca_wasm::wasmparser::Operator::*;
     let mut injection_points: Vec<usize> = Vec::new();
@@ -1674,7 +1752,7 @@ fn inject_try_grow_wasm_memory(
                         local_index: memory_local_ix,
                     },
                     Call {
-                        function_index: InjectedImports::TryGrowWasmMemory as u32,
+                        function_index: injected_functions.try_grow_wasm_memory,
                     },
                 ]
                 .into_iter()
@@ -1709,7 +1787,9 @@ fn calculate_api_indexes(module: &orca_wasm::Module<'_>) -> BTreeMap<SystemApiFu
 
 fn replace_system_api_functions(
     module: &mut orca_wasm::Module<'_>,
-    special_indices: SpecialIndices,
+    injected_functions: &InjectedFunctions,
+    injected_local_globals: &InjectedLocalGlobals,
+    stable_memory_index: u32,
     dirty_page_overhead: NumInstructions,
     main_memory_type: WasmMemoryType,
     max_wasm_memory_size: NumBytes,
@@ -1720,7 +1800,9 @@ fn replace_system_api_functions(
     // replaced.
     let mut func_index_replacements = BTreeMap::new();
     for (api, (param, ret, body)) in replacement_functions(
-        special_indices,
+        &injected_functions,
+        &injected_local_globals,
+        stable_memory_index,
         dirty_page_overhead,
         main_memory_type,
         max_wasm_memory_size,
@@ -1790,6 +1872,7 @@ fn get_data(
 
     Ok(res)
 }
+
 /// Takes a Wasm binary and inserts the instructions metering and memory grow
 /// instrumentation.
 ///
@@ -1805,13 +1888,13 @@ pub(super) fn instrument(
     max_stable_memory_size: NumBytes,
 ) -> Result<InstrumentationOutput, WasmInstrumentationError> {
     let main_memory_type = main_memory_type(&module);
-    let stable_memory_index;
-    let mut module = inject_helper_functions(module, main_memory_type);
-    println!("Functions");
-    for f in module.functions.iter() {
-        println!("{:?}", f);
-    }
+    let (injected_functions, mut module) = inject_helper_functions(module, main_memory_type);
+    // println!("Functions");
+    // for f in module.functions.iter() {
+    //     println!("{:?}", f);
+    // }
     module = export_table(module);
+    let stable_memory_index;
     (module, stable_memory_index) = update_memories(
         module,
         write_barrier,
@@ -1822,40 +1905,44 @@ pub(super) fn instrument(
     let mut extra_strs: Vec<String> = Vec::new();
     module = export_mutable_globals(module, &mut extra_strs);
 
-    let mut num_imported_functions = 0;
-    let mut num_imported_globals = 0;
-    for imp in module.imports.iter() {
-        match imp.ty {
-            orca_wasm::wasmparser::TypeRef::Func(_) => {
-                num_imported_functions += 1;
-            }
-            orca_wasm::wasmparser::TypeRef::Global(_) => {
-                num_imported_globals += 1;
-            }
-            _ => (),
-        }
-    }
+    // let mut num_imported_functions = 0;
+    // let mut num_imported_globals = 0;
+    // for imp in module.imports.iter() {
+    //     match imp.ty {
+    //         orca_wasm::wasmparser::TypeRef::Func(_) => {
+    //             num_imported_functions += 1;
+    //         }
+    //         orca_wasm::wasmparser::TypeRef::Global(_) => {
+    //             num_imported_globals += 1;
+    //         }
+    //         _ => (),
+    //     }
+    // }
 
-    let num_functions = (module.functions.iter().count() + num_imported_functions) as u32;
-    let num_globals = (module.globals.len() + num_imported_globals) as u32;
+    // let num_functions = (module.functions.iter().count() + num_imported_functions) as u32;
+    // let num_globals = (module.globals.len() + num_imported_globals) as u32;
 
-    let dirty_pages_counter_ix = num_globals + 1;
-    let accessed_pages_counter_ix = num_globals + 2;
-    let count_clean_pages_fn = num_functions + 1;
+    // let dirty_pages_counter_ix = num_globals + 1;
+    // let accessed_pages_counter_ix = num_globals + 2;
+    // let count_clean_pages_fn = num_functions + 1;
 
-    let special_indices = SpecialIndices {
-        instructions_counter_ix: num_globals,
-        dirty_pages_counter_ix,
-        accessed_pages_counter_ix,
-        decr_instruction_counter_fn: num_functions,
-        count_clean_pages_fn,
-        start_fn_ix: module.start.map(|s| s.0),
-        stable_memory_index,
-    };
+    // let special_indices = SpecialIndices {
+    //     instructions_counter_ix: num_globals,
+    //     dirty_pages_counter_ix,
+    //     accessed_pages_counter_ix,
+    //     decr_instruction_counter_fn: num_functions,
+    //     count_clean_pages_fn,
+    //     start_fn_ix: module.start.map(|s| s.0),
+    //     stable_memory_index,
+    //     injected_functions,
+    // };
 
-    if special_indices.start_fn_ix.is_some() {
-        module.start = None;
-    }
+    let injected_locals_globals;
+    (injected_locals_globals, module) =
+        export_additional_symbols(module, &injected_functions, stable_memory_index);
+
+    // Start has be exported as `canister_start` so we can clear it.
+    module.start = None;
 
     // inject instructions counter decrementation
     for func_body in &mut module
@@ -1863,10 +1950,16 @@ pub(super) fn instrument(
         .iter_mut()
         .filter(|f| f.is_local())
         .map(|f| f.unwrap_local_mut())
+        // skip metering on injected functions
+        .filter(|f| {
+            *f.func_id != injected_locals_globals.decr_instruction_counter_fn
+                && *f.func_id != injected_locals_globals.count_clean_pages_fn
+        })
     {
         inject_metering(
             &mut func_body.body,
-            &special_indices,
+            &injected_locals_globals,
+            &injected_functions,
             metering_type,
             main_memory_type,
         );
@@ -1901,7 +1994,12 @@ pub(super) fn instrument(
         .map(|f| f.unwrap_local_mut())
     {
         let num_params = module.types.get(func_body.ty_id).unwrap().params().len() as u32;
-        inject_try_grow_wasm_memory(&mut func_body.body, num_params, main_memory_type);
+        inject_try_grow_wasm_memory(
+            &mut func_body.body,
+            num_params,
+            main_memory_type,
+            &injected_functions,
+        );
     }
 
     // for (func_ix, func_type) in func_types.into_iter() {
@@ -1911,19 +2009,20 @@ pub(super) fn instrument(
     //     }
     // }
 
-    module = export_additional_symbols(module, &special_indices);
-    println!("Functions");
-    for f in module.functions.iter() {
-        println!("{:?}", f);
-    }
-    println!(
-        "After injecting metering\n\n{}",
-        wasmprinter::print_bytes(module.encode()).unwrap()
-    );
+    // println!("Functions");
+    // for f in module.functions.iter() {
+    //     println!("{:?}", f);
+    // }
+    // println!(
+    //     "After injecting metering\n\n{}",
+    //     wasmprinter::print_bytes(module.encode()).unwrap()
+    // );
 
     replace_system_api_functions(
         &mut module,
-        special_indices,
+        &injected_functions,
+        &injected_locals_globals,
+        stable_memory_index,
         dirty_page_overhead,
         main_memory_type,
         max_wasm_memory_size,
