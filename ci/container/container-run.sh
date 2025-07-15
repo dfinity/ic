@@ -119,10 +119,14 @@ CACHE_DIR="${CACHE_DIR:-${HOME}/.cache}"
 ZIG_CACHE="${CACHE_DIR}/zig-cache"
 mkdir -p "${ZIG_CACHE}"
 
+ICT_TESTNETS_DIR="${ICT_TESTNETS_DIR:-/tmp/ict_testnets}"
+mkdir -p "${ICT_TESTNETS_DIR}"
+
 PODMAN_RUN_ARGS+=(
     --mount type=bind,source="${REPO_ROOT}",target="${WORKDIR}"
     --mount type=bind,source="${CACHE_DIR}",target="${CTR_HOME}/.cache"
     --mount type=bind,source="${ZIG_CACHE}",target="/tmp/zig-cache"
+    --mount type=bind,source="${ICT_TESTNETS_DIR}",target="/tmp/ict_testnets"
     --mount type=bind,source="${HOME}/.ssh",target="${CTR_HOME}/.ssh"
     --mount type=bind,source="${HOME}/.aws",target="${CTR_HOME}/.aws"
     --mount type=bind,source="/var/lib/containers",target="/var/lib/containers"
