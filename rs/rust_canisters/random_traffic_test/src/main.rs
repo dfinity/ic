@@ -3,10 +3,9 @@ use futures::future::select_all;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_cdk::{
     api,
-    call::{Call, CallError, CallResult, ConfigurableCall, SendableCall},
-    setup,
+    call::{Call, CallFailed, CallFuture, Response as CallResponse},
 };
-use ic_cdk_macros::{heartbeat, init, query, update};
+use ic_cdk::{heartbeat, init, query, update};
 use rand::{
     distributions::{Distribution, WeightedIndex},
     rngs::StdRng,
@@ -17,7 +16,7 @@ use random_traffic_test::*;
 use serde::{Deserialize, Serialize};
 use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
-use std::future::Future;
+use std::future::IntoFuture;
 use std::hash::{DefaultHasher, Hasher};
 use std::time::Duration;
 
@@ -207,10 +206,7 @@ fn should_make_best_effort_call() -> bool {
 /// Generates a future for a randomized call that can be awaited; inserts a new record at `index`
 /// that must be updated (or removed) after awaiting the call. For each call, the call index is
 /// incremented by 1, such that successive calls have adjacent indices.
-fn setup_call(
-    call_tree_id: u32,
-    call_depth: u32,
-) -> (impl Future<Output = CallResult<Reply>>, u32) {
+fn setup_call(call_tree_id: u32, call_depth: u32) -> (CallFuture<'static, 'static>, u32) {
     let msg = Message::new(call_tree_id, call_depth, gen_call_bytes());
     let sent_bytes = msg.count_bytes() as u32;
     let receiver = receiver();
@@ -219,12 +215,13 @@ fn setup_call(
     )));
     let timeout_secs = should_make_best_effort_call().then_some(gen_timeout_secs());
 
-    let call = Call::new(receiver.into(), "handle_call");
-    let call = call.with_arg(msg);
     let call = match timeout_secs {
-        Some(timeout_secs) => call.change_timeout(timeout_secs),
-        None => call.with_guaranteed_response(),
-    };
+        Some(timeout_secs) => {
+            Call::bounded_wait(receiver.into(), "handle_call").change_timeout(timeout_secs)
+        }
+        None => Call::unbounded_wait(receiver.into(), "handle_call"),
+    }
+    .with_arg(msg);
 
     // Once the call was successfully generated, insert a call timestamp and record at `index`.
     let index = next_call_index();
@@ -246,7 +243,7 @@ fn setup_call(
         )
     });
 
-    (call.call(), index)
+    (call.into_future(), index)
 }
 
 /// Updates the record at `index` using the `result` of the corresponding call.
@@ -255,7 +252,7 @@ fn setup_call(
 /// subnet is at its limits. Note that since the call `index` is part of the records, removing
 /// the records for synchronous rejections will result in gaps in these numbers thus they are
 /// still included indirectly.
-fn update_record(result: &CallResult<Reply>, index: u32) {
+fn update_record(result: &Result<CallResponse, CallFailed>, index: u32) {
     // Updates the `Response` at `index` in `RECORDS`.
     let set_reply_in_call_record = move |response: Response| {
         RECORDS.with_borrow_mut(|records| {
@@ -276,7 +273,18 @@ fn update_record(result: &CallResult<Reply>, index: u32) {
     };
 
     match result {
-        Err(CallError::CallRejected(rejection)) if rejection.is_sync() => {
+        Ok(response) => {
+            let bytes_received = response
+                .candid::<Reply>()
+                .expect("candid decode failed")
+                .0
+                .len() as u32;
+            set_reply_in_call_record(Response::Reply(bytes_received));
+        }
+        Err(CallFailed::InsufficientLiquidCycleBalance(_)) => {
+            unreachable!("not doing anything with cycles for now");
+        }
+        Err(CallFailed::CallPerformFailed(_)) => {
             // Remove the record for synchronous rejections.
             SYNCHRONOUS_REJECTIONS_COUNT.set(SYNCHRONOUS_REJECTIONS_COUNT.get() + 1);
             RECORDS.with_borrow_mut(|records| {
@@ -288,18 +296,11 @@ fn update_record(result: &CallResult<Reply>, index: u32) {
                     .is_none())
             });
         }
-        Err(CallError::CallRejected(rejection)) => {
+        Err(CallFailed::CallRejected(rejection)) => {
             set_reply_in_call_record(Response::Reject(
-                rejection.reject_code().into(),
+                rejection.raw_reject_code(),
                 rejection.reject_message().to_string(),
             ));
-        }
-        Err(CallError::CandidDecodeFailed(error)) => {
-            unreachable!("{error}");
-        }
-
-        Ok(reply) => {
-            set_reply_in_call_record(Response::Reply(reply.0.len() as u32));
         }
     }
 }
@@ -383,6 +384,4 @@ fn initialize_hasher() {
     HASHER.with_borrow_mut(|hasher| hasher.write(api::canister_self().as_slice()));
 }
 
-fn main() {
-    setup();
-}
+fn main() {}

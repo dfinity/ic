@@ -9,7 +9,7 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_nns_common::{pb::v1::NeuronId as ProtoNeuronId, types::UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     add_or_remove_node_provider::Change,
     manage_neuron_response::Command as CommandResponse,
     reward_node_provider::{RewardMode, RewardToAccount},
@@ -283,24 +283,13 @@ fn test_list_node_provider_rewards() {
 
 #[test]
 fn test_automated_node_provider_remuneration() {
-    do_test_automated_node_provider_remuneration(&[]);
-}
-
-#[test]
-fn test_automated_node_provider_remuneration_with_node_reward_canister() {
-    do_test_automated_node_provider_remuneration(&["test"]);
-}
-
-// This test cannot depend on any specific "test" features to function, as
-// only one calling version uses the test feature flag.
-fn do_test_automated_node_provider_remuneration(features: &[&str]) {
     let state_machine = state_machine_builder_for_nns_tests().build();
 
     let nns_init_payload = NnsInitPayloadsBuilder::new()
         .with_initial_invariant_compliant_mutations()
         .with_test_neurons()
         .build();
-    setup_nns_canisters_with_features(&state_machine, nns_init_payload, features);
+    setup_nns_canisters_with_features(&state_machine, nns_init_payload, &[]);
 
     add_data_centers(&state_machine);
     add_node_rewards_table(&state_machine);
@@ -924,6 +913,7 @@ fn add_node_operator(
         dc_id: dc_id.into(),
         rewardable_nodes,
         ipv6: Some(ipv6.into()),
+        max_rewardable_nodes: None,
     };
 
     submit_nns_proposal(

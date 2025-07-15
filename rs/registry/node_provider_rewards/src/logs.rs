@@ -1,4 +1,5 @@
 use ic_base_types::PrincipalId;
+use ic_cdk::println;
 use std::fmt::Write;
 
 pub type RegionNodeTypeCategory = (String, String);

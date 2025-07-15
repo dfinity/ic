@@ -10,6 +10,23 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 
 INSERT NEW RELEASES HERE
 
+
+# 2025-06-06: Proposal 136892
+
+http://dashboard.internetcomputer.org/proposal/136892
+
+## Security
+
+Enforce a lower bound for `min_participant_icp_e8s` of `1_000_000`.
+
+
+# 2025-05-02: Proposal 136430
+
+https://dashboard.internetcomputer.org/proposal/136430
+
+No behavior change. This is just a "maintenance" upgrade; that is, this is to
+avoid too much unreleased code piling up.
+
 # 2025-03-13: Proposal 135773
 
 https://dashboard.internetcomputer.org/proposal/135773

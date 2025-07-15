@@ -4,6 +4,8 @@ use crate::{
     ingress::IngressWithPrinter,
     validator::{InvalidArtifact, ReplayValidator},
 };
+use async_trait::async_trait;
+use candid::{Decode, Encode};
 use ic_artifact_pool::{
     certification_pool::CertificationPoolImpl,
     consensus_pool::{ConsensusPoolImpl, UncachedConsensusPoolImpl},
@@ -17,6 +19,7 @@ use ic_consensus_utils::{
 };
 use ic_crypto_for_verification_only::CryptoComponentForVerificationOnly;
 use ic_cycles_account_manager::CyclesAccountManager;
+use ic_error_types::UserError;
 use ic_execution_environment::ExecutionServices;
 use ic_interfaces::{
     certification::CertificationPool,
@@ -24,7 +27,7 @@ use ic_interfaces::{
     messaging::{MessageRouting, MessageRoutingError},
     time_source::SysTimeSource,
 };
-use ic_interfaces_registry::{RegistryClient, RegistryTransportRecord};
+use ic_interfaces_registry::{RegistryClient, RegistryRecord, RegistryValue};
 use ic_interfaces_state_manager::{
     PermanentStateHashError, StateHashError, StateManager, StateReader,
 };
@@ -36,18 +39,20 @@ use ic_protobuf::{
     registry::{replica_version::v1::BlessedReplicaVersions, subnet::v1::SubnetRecord},
     types::v1 as pb,
 };
+use ic_registry_canister_api::{Chunk, GetChunkRequest};
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_client_helpers::{deserialize_registry_value, subnet::SubnetRegistry};
 use ic_registry_keys::{make_blessed_replica_versions_key, make_subnet_record_key};
 use ic_registry_local_store::{
     Changelog, ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreWriter,
 };
-use ic_registry_nns_data_provider::registry::registry_deltas_to_registry_transport_records;
+use ic_registry_nns_data_provider::registry::registry_deltas_to_registry_records;
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{
+    dechunkify_delta, dechunkify_get_value_response_content,
     deserialize_get_changes_since_response, deserialize_get_latest_version_response,
     deserialize_get_value_response, serialize_get_changes_since_request,
-    serialize_get_value_request,
+    serialize_get_value_request, GetChunk,
 };
 use ic_state_manager::StateManagerImpl;
 use ic_types::{
@@ -64,16 +69,18 @@ use ic_types::{
     malicious_flags::MaliciousFlags,
     messages::{Query, QuerySource},
     signature::ThresholdSignature,
-    time::current_time,
+    time::{current_time, expiry_time_from_now},
     CryptoHashOfPartialState, CryptoHashOfState, Height, NodeId, PrincipalId, Randomness,
     RegistryVersion, ReplicaVersion, SubnetId, Time, UserId,
 };
+use mockall::automock;
 use serde::{Deserialize, Serialize};
 use slog_async::AsyncGuard;
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
+    convert::Infallible,
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{Arc, Mutex},
     time::Duration,
 };
 use tempfile::TempDir;
@@ -607,23 +614,30 @@ impl Player {
     // Blocks until the state at the given height is committed.
     fn wait_for_state(&self, height: Height) {
         info!(self.log, "Waiting for the state at height {height}.");
-        loop {
-            // We first check if `height` was executed. Otherwise the state manager
-            // would return a permanent error on a too big height.
-            if self.state_manager.latest_state_height() >= height {
-                if let Some(hash) = self.get_state_hash(height) {
-                    info!(self.log, "Latest checkpoint at height: {}", height);
-                    info!(self.log, "Latest state hash: {}", hex::encode(hash.get().0));
-                };
-                break;
-            }
+        while self.state_manager.latest_state_height() < height {
+            info!(
+                self.log,
+                "State at height {height} hasn't been yet executed. \
+                Current state height = {}. \
+                Retrying in {WAIT_DURATION:?}.",
+                self.state_manager.latest_state_height()
+            );
+
             std::thread::sleep(WAIT_DURATION);
         }
+        info!(self.log, "The state at height {height} has been executed.");
+
         info!(
             self.log,
-            "Latest state height is {}",
-            self.state_manager.latest_state_height()
+            "Waiting until the latest checkpoint is created and verified."
         );
+        self.state_manager.flush_tip_channel();
+        info!(
+            self.log,
+            "The latest checkpoint at height {:?} has been created and verified.",
+            self.state_manager.checkpoint_heights().iter().max()
+        );
+
         assert_eq!(
             height,
             self.state_manager.latest_state_height(),
@@ -716,12 +730,14 @@ impl Player {
                 }
             }
         };
-        println!(
-            "latest_batch_height = {}, batches = {}",
-            last_batch_height,
-            last_batch_height - expected_batch_height.decrement()
+
+        info!(
+            self.log,
+            "Delivered {} batches up to the height {}.",
+            last_batch_height - expected_batch_height.decrement(),
+            last_batch_height
         );
-        println!("Delivered batches up to the height {}", last_batch_height);
+
         last_batch_height
     }
 
@@ -741,14 +757,14 @@ impl Player {
             Some(pool) => {
                 let pool = PoolReader::new(pool);
                 let finalized_height = pool.get_finalized_height();
-                let last_block = pool
-                    .get_finalized_block(finalized_height)
-                    .unwrap_or_else(|| {
-                        panic!(
-                            "Finalized block is not found at height {}",
-                            finalized_height
-                        )
-                    });
+                let target_height = finalized_height.min(
+                    self.replay_target_height
+                        .map(Height::from)
+                        .unwrap_or_else(|| finalized_height),
+                );
+                let last_block = pool.get_finalized_block(target_height).unwrap_or_else(|| {
+                    panic!("Finalized block is not found at height {}", target_height)
+                });
 
                 (
                     last_block.context.registry_version,
@@ -870,42 +886,13 @@ impl Player {
         &self,
         ingress_expiry: Time,
     ) -> Result<BlessedReplicaVersions, String> {
-        let key = make_blessed_replica_versions_key();
-        let query = Query {
-            source: QuerySource::User {
-                user_id: UserId::from(PrincipalId::new_anonymous()),
-                ingress_expiry: ingress_expiry.as_nanos_since_unix_epoch(),
-                nonce: None,
-            },
-            receiver: REGISTRY_CANISTER_ID,
-            method_name: "get_value".to_string(),
-            method_payload: serialize_get_value_request(key.as_bytes().to_vec(), None)
-                .map_err(|err| format!("{}", err))?,
-        };
         self.certify_state_with_dummy_certification();
-        match self
-            .runtime
-            .block_on(self.query_handler.clone().oneshot((query, None)))
-            .unwrap()
-        {
-            Ok((Ok(wasm_result), _)) => match wasm_result {
-                WasmResult::Reply(v) => {
-                    let bytes = deserialize_get_value_response(v)
-                        .map_err(|err| format!("{}", err))?
-                        .0;
-                    let record =
-                        deserialize_registry_value::<BlessedReplicaVersions>(Ok(Some(bytes)))
-                            .map_err(|err| format!("{}", err))?
-                            .expect("BlessedReplicaVersions does not exist");
-                    Ok(record)
-                }
-                WasmResult::Reject(e) => Err(format!("Query rejected: {}", e)),
-            },
-            Ok((Err(err), _)) => Err(format!("Query failed: {:?}", err)),
-            Err(QueryExecutionError::CertifiedStateUnavailable) => {
-                panic!("Certified state unavailable for query call.")
-            }
-        }
+        let perform_query = Arc::new(Mutex::new(self.query_handler.clone()));
+        self.runtime.block_on(registry_get_value(
+            &make_blessed_replica_versions_key(),
+            ingress_expiry,
+            &perform_query,
+        ))
     }
 
     /// Return the latest registry version by querying the registry canister.
@@ -953,77 +940,23 @@ impl Player {
         &self,
         version: u64,
         ingress_expiry: Time,
-    ) -> Result<Vec<RegistryTransportRecord>, String> {
-        let payload = serialize_get_changes_since_request(version).unwrap();
-        let query = Query {
-            source: QuerySource::User {
-                user_id: UserId::from(PrincipalId::new_anonymous()),
-                ingress_expiry: ingress_expiry.as_nanos_since_unix_epoch(),
-                nonce: None,
-            },
-            receiver: REGISTRY_CANISTER_ID,
-            method_name: "get_changes_since".to_string(),
-            method_payload: payload,
-        };
+    ) -> Result<Vec<RegistryRecord>, String> {
         self.certify_state_with_dummy_certification();
-        match self
-            .runtime
-            .block_on(self.query_handler.clone().oneshot((query, None)))
-            .unwrap()
-        {
-            Ok((Ok(wasm_result), _)) => match wasm_result {
-                WasmResult::Reply(v) => deserialize_get_changes_since_response(v)
-                    .and_then(|(deltas, _)| registry_deltas_to_registry_transport_records(deltas))
-                    .map_err(|err| format!("{:?}", err)),
-                WasmResult::Reject(e) => Err(format!("Query rejected: {}", e)),
-            },
-            Ok((Err(err), _)) => Err(format!("Query failed: {:?}", err)),
-            Err(QueryExecutionError::CertifiedStateUnavailable) => {
-                panic!("Certified state unavailable for query call.")
-            }
-        }
+
+        let perform_query = Arc::new(Mutex::new(self.query_handler.clone()));
+        self.runtime
+            .block_on(get_changes_since(version, ingress_expiry, &perform_query))
     }
 
     /// Return the SubnetRecord of this subnet at the latest registry version.
     pub fn get_subnet_record(&self, ingress_expiry: Time) -> Result<SubnetRecord, String> {
-        let subnet_record_key = make_subnet_record_key(self.subnet_id);
-        let query = Query {
-            source: QuerySource::User {
-                user_id: UserId::from(PrincipalId::new_anonymous()),
-                ingress_expiry: ingress_expiry.as_nanos_since_unix_epoch(),
-                nonce: None,
-            },
-            receiver: REGISTRY_CANISTER_ID,
-            method_name: "get_value".to_string(),
-            method_payload: serialize_get_value_request(
-                subnet_record_key.as_bytes().to_vec(),
-                None,
-            )
-            .map_err(|err| format!("{}", err))?,
-        };
         self.certify_state_with_dummy_certification();
-        match self
-            .runtime
-            .block_on(self.query_handler.clone().oneshot((query, None)))
-            .unwrap()
-        {
-            Ok((Ok(wasm_result), _)) => match wasm_result {
-                WasmResult::Reply(v) => {
-                    let bytes = deserialize_get_value_response(v)
-                        .map_err(|err| format!("{}", err))?
-                        .0;
-                    let record = deserialize_registry_value::<SubnetRecord>(Ok(Some(bytes)))
-                        .map_err(|err| format!("{}", err))?
-                        .expect("SubnetRecord does not exist");
-                    Ok(record)
-                }
-                WasmResult::Reject(e) => Err(format!("Query rejected: {}", e)),
-            },
-            Ok((Err(err), _)) => Err(format!("Query failed: {:?}", err)),
-            Err(QueryExecutionError::CertifiedStateUnavailable) => {
-                panic!("Certified state unavailable for query call.")
-            }
-        }
+        let perform_query = Arc::new(Mutex::new(self.query_handler.clone()));
+        self.runtime.block_on(registry_get_value(
+            &make_subnet_record_key(self.subnet_id),
+            ingress_expiry,
+            &perform_query,
+        ))
     }
 
     /// Restores the execution state starting from the given height.
@@ -1073,11 +1006,19 @@ impl Player {
                 &mut invalid_artifacts,
             );
 
+            // We don't want to replay heights strictly above the next CUP.
+            let replay_target_height = match result {
+                Err(backup::ExitPoint::CUPHeightWasFinalized(cup_height)) => {
+                    Some(target_height.unwrap_or(cup_height).min(cup_height))
+                }
+                _ => target_height,
+            };
+
             let last_batch_height = self.deliver_batches(
                 self.message_routing.as_ref(),
                 &PoolReader::new(self.consensus_pool.as_ref().unwrap()),
                 self.membership.as_ref().unwrap(),
-                self.replay_target_height.map(Height::from),
+                replay_target_height,
             );
             self.wait_for_state(last_batch_height);
             if let Some(height) = target_height {
@@ -1214,8 +1155,8 @@ impl Player {
                 self.log,
                 "The state height {} is strictly above the CUP height {}. \
                 Skipping the rest of CUP verification.",
-                last_cup.height(),
-                self.state_manager.latest_state_height()
+                self.state_manager.latest_state_height(),
+                last_cup.height()
             );
             return Ok(());
         }
@@ -1258,6 +1199,250 @@ impl Player {
     fn get_state_hash(&self, height: Height) -> Option<CryptoHashOfState> {
         get_state_hash(self.state_manager.as_ref(), &self.log, height)
     }
+}
+
+// This is just to avoid clippy complaints about complicated return type.
+pub type PerformQueryResult = Result<(Result<WasmResult, UserError>, Time), QueryExecutionError>;
+
+#[automock]
+#[async_trait]
+pub trait PerformQuery {
+    async fn perform_query(&self, query: Query) -> Result<PerformQueryResult, Infallible>;
+}
+
+#[async_trait]
+impl PerformQuery for Arc<Mutex<QueryExecutionService>> {
+    async fn perform_query(&self, query: Query) -> Result<PerformQueryResult, Infallible> {
+        let query_execution_service = self
+            .lock()
+            // In case of Mutex poisoning (as per usual).
+            .unwrap()
+            .clone();
+
+        query_execution_service.oneshot((query, None)).await
+    }
+}
+
+pub async fn public_only_for_test_get_changes_since(
+    version: u64,
+    ingress_expiry: Time,
+    perform_query: &(impl PerformQuery + Sync),
+) -> Result<Vec<RegistryRecord>, String> {
+    get_changes_since(version, ingress_expiry, perform_query).await
+}
+
+async fn get_changes_since(
+    version: u64,
+    ingress_expiry: Time,
+    perform_query: &(impl PerformQuery + Sync),
+) -> Result<Vec<RegistryRecord>, String> {
+    let payload = serialize_get_changes_since_request(version).unwrap();
+    let query = Query {
+        source: QuerySource::User {
+            user_id: UserId::from(PrincipalId::new_anonymous()),
+            ingress_expiry: ingress_expiry.as_nanos_since_unix_epoch(),
+            nonce: None,
+        },
+        receiver: REGISTRY_CANISTER_ID,
+        method_name: "get_changes_since".to_string(),
+        method_payload: payload,
+    };
+    match perform_query.perform_query(query).await.unwrap() {
+        Ok((Ok(wasm_result), _time)) => match wasm_result {
+            WasmResult::Reply(v) => {
+                let (high_capacity_deltas, _version) = deserialize_get_changes_since_response(v)
+                    .map_err(|err| format!("{:?}", err))?;
+
+                // Dechunkify deltas.
+                let mut inlined_deltas = vec![];
+                for delta in high_capacity_deltas {
+                    let get_chunk = GetChunkImpl { perform_query };
+
+                    let delta = dechunkify_delta(delta, &get_chunk)
+                        .await
+                        .map_err(|err| format!("{:?}", err))?;
+
+                    inlined_deltas.push(delta);
+                }
+
+                registry_deltas_to_registry_records(inlined_deltas)
+                    .map_err(|err| format!("{:?}", err))
+            }
+
+            WasmResult::Reject(e) => Err(format!("Query rejected: {}", e)),
+        },
+        Ok((Err(err), _)) => Err(format!("Query failed: {:?}", err)),
+        Err(QueryExecutionError::CertifiedStateUnavailable) => {
+            Err("Certified state unavailable for query call.".to_string())
+        }
+    }
+}
+
+struct GetChunkImpl<'a, PerformQueryImpl: PerformQuery + Sync> {
+    perform_query: &'a PerformQueryImpl,
+}
+
+#[async_trait]
+impl<PerformQueryImpl: PerformQuery + Sync> GetChunk for GetChunkImpl<'_, PerformQueryImpl> {
+    async fn get_chunk_without_validation(
+        &self,
+        chunk_content_sha256: &[u8],
+    ) -> Result<Vec<u8>, String> {
+        // Construct request.
+        let request = GetChunkRequest {
+            content_sha256: Some(chunk_content_sha256.to_vec()),
+        };
+        let request = Encode!(&request).map_err(|err| {
+            format!(
+                "Unable to call get_chunk, because unable to encode request: {}",
+                err
+            )
+        })?;
+        let request = Query {
+            source: QuerySource::User {
+                user_id: UserId::from(PrincipalId::new_anonymous()),
+                ingress_expiry: expiry_time_from_now().as_nanos_since_unix_epoch(),
+                nonce: None,
+            },
+            receiver: REGISTRY_CANISTER_ID,
+            method_name: "get_chunk".to_string(),
+            method_payload: request,
+        };
+
+        // Send request.
+        let result = self.perform_query.perform_query(request).await.unwrap();
+
+        // Handle problems with sending.
+        let result = match result {
+            Ok((ok, _version)) => ok,
+            Err(QueryExecutionError::CertifiedStateUnavailable) => {
+                return Err(format!(
+                    "Certified state unavailable for Registry get_chunk query \
+                     call with key={:?}.",
+                    String::from_utf8_lossy(chunk_content_sha256),
+                ));
+            }
+        };
+
+        // Handle more problems...
+        let result: WasmResult = result.map_err(|err| format!("Query failed: {:?}", err))?;
+
+        // Handle canister replied vs. rejected.
+        let result: Vec<u8> = match result {
+            WasmResult::Reply(ok) => ok,
+            WasmResult::Reject(err) => {
+                return Err(format!("Query rejected: {}", err));
+            }
+        };
+
+        // Unpack reply.
+        let result = Decode!(&result, Result<Chunk, String>).map_err(|err| {
+            format!(
+                "Unable to decode get_chunk response from the Registry canister: {}",
+                err
+            )
+        })?;
+        let Chunk { content } = result
+            .map_err(|err| format!("The Registry canister replied, but with an Err: {}", err))?;
+        let content = content.ok_or_else(|| {
+            "The Registry canister replied Ok, but did not include chunk content.".to_string()
+        })?;
+
+        // Nice reply!
+        Ok(content)
+    }
+}
+
+pub async fn public_only_for_test_registry_get_value<Record>(
+    key: &str,
+    ingress_expiry: Time,
+    perform_query: &(impl PerformQuery + Sync),
+) -> Result<Record, String>
+where
+    Record: RegistryValue + Default,
+{
+    registry_get_value(key, ingress_expiry, perform_query).await
+}
+
+async fn registry_get_value<Record>(
+    key: &str,
+    ingress_expiry: Time,
+    perform_query: &(impl PerformQuery + Sync),
+) -> Result<Record, String>
+where
+    Record: RegistryValue + Default,
+{
+    // Construct request.
+    let method_payload = serialize_get_value_request(
+        key.as_bytes().to_vec(),
+        None, // latest version
+    )
+    .map_err(|err| {
+        format!(
+            "Failed to serialize get_value request where key={}: {}",
+            key, err,
+        )
+    })?;
+    let query = Query {
+        source: QuerySource::User {
+            user_id: UserId::from(PrincipalId::new_anonymous()),
+            ingress_expiry: ingress_expiry.as_nanos_since_unix_epoch(),
+            nonce: None,
+        },
+        receiver: REGISTRY_CANISTER_ID,
+        method_name: "get_value".to_string(),
+        method_payload,
+    };
+
+    // Call the Registry canister's get_value method.
+    let perform_query_result = perform_query.perform_query(query).await.unwrap();
+
+    // Handle no reply.
+    let reply: Vec<u8> = match perform_query_result {
+        Ok((Ok(WasmResult::Reply(reply)), _)) => reply,
+        garbage => {
+            return Err(format!(
+                "Did not get reply from Registry get_value call where key={}: {:?}",
+                key, garbage,
+            ));
+        }
+    };
+
+    // Unpack reply.
+    let reply = deserialize_get_value_response(reply).map_err(|err| {
+        format!(
+            "Unable to deserialize the reply from a Registry canister get_value \
+             method call where key={}: {:?}",
+            key, err,
+        )
+    })?;
+    let Some(content) = reply.content else {
+        return Err(format!(
+            "Got a reply from Registry to get_value call, and was able to \
+             deserialize it, but no content field was populated. key={}",
+            key,
+        ));
+    };
+    let get_chunk = GetChunkImpl { perform_query };
+    let record: Vec<u8> = dechunkify_get_value_response_content(content, &get_chunk)
+        .await
+        .map_err(|err| {
+            format!(
+                "Unable to dechunkify get_value response where key={}: {:?}",
+                key, err,
+            )
+        })?;
+    let record: Record = deserialize_registry_value::<Record>(Ok(Some(record)))
+        .map_err(|err| {
+            format!(
+                "Failed to deserialize content of Registry record with key={}: {}",
+                key, err,
+            )
+        })?
+        .ok_or_else(|| format!("Registry key {} does not exist", key))?;
+
+    // Nice reply!
+    Ok(record)
 }
 
 /// Return the set of signers that created multiple valid certification shares for the same height
@@ -1386,7 +1571,7 @@ fn get_share_certified_hashes(
 fn write_records_to_local_store(
     local_store_path: &Path,
     latest_version: RegistryVersion,
-    mut records: Vec<RegistryTransportRecord>,
+    mut records: Vec<RegistryRecord>,
 ) {
     let local_store = LocalStoreImpl::new(local_store_path);
     println!(
@@ -1475,9 +1660,16 @@ fn get_state_hash<T>(
 
 #[cfg(test)]
 mod tests {
+    use ic_crypto_sha2::Sha256;
     use ic_interfaces_state_manager::TransientStateHashError;
     use ic_interfaces_state_manager_mocks::MockStateManager;
     use ic_logger::replica_logger::no_op_logger;
+    use ic_registry_canister_api::{Chunk, GetChunkRequest};
+    use ic_registry_transport::pb::v1::{
+        high_capacity_registry_value, HighCapacityRegistryDelta,
+        HighCapacityRegistryGetChangesSinceResponse, HighCapacityRegistryValue,
+        LargeValueChunkKeys,
+    };
     use ic_test_utilities_consensus::fake::FakeSigner;
     use ic_test_utilities_types::ids::node_test_id;
     use ic_types::{
@@ -1487,6 +1679,9 @@ mod tests {
         crypto::{CryptoHash, Signed},
         signature::ThresholdSignatureShare,
     };
+    use pretty_assertions::assert_eq;
+    use prost::Message;
+    use std::time::SystemTime;
 
     use super::*;
 
@@ -1655,5 +1850,215 @@ mod tests {
 
     fn fake_state_hash() -> CryptoHashOfState {
         CryptoHashOfState::from(CryptoHash(vec![1, 2, 3]))
+    }
+
+    // This test is maybe a bit of a mockery. Realistic testing is hard...
+    #[tokio::test]
+    async fn test_get_changes_since() {
+        // Step 1: Prepare the world.
+        //
+        // This almost entirely consists of expecting that various Registry
+        // canister methods are called. More precisely, the following calls are
+        // supposed to be made by the code under test:
+        //
+        //     1. get_changes_since - This is the main thing, ofc.
+        //
+        //     2. A couple of get_chunk calls. These are to fetch the content of
+        //        larger records received during the first call.
+        const VERSION: u64 = 42;
+        let ingress_expiry = expiry_time_from_now();
+
+        type ExpectedCall = (
+            /* method_name: */ &'static str,
+            /* request: */ Vec<u8>,
+            /* reply: */ Vec<u8>,
+        );
+        let expected_registry_canister_method_calls: [ExpectedCall; 3] = [
+            (
+                "get_changes_since",
+                serialize_get_changes_since_request(VERSION).unwrap(),
+                HighCapacityRegistryGetChangesSinceResponse {
+                    version: VERSION,
+                    deltas: vec![
+                        HighCapacityRegistryDelta {
+                            key: b"at one point had a large value".to_vec(),
+                            values: vec![
+                                HighCapacityRegistryValue {
+                                    version: 43,
+                                    content: Some(high_capacity_registry_value::Content::Value(
+                                        b"inline".to_vec(),
+                                    )),
+                                    timestamp_nanoseconds: 0,
+                                },
+                                HighCapacityRegistryValue {
+                                    version: 44,
+                                    content: Some(
+                                        high_capacity_registry_value::Content::LargeValueChunkKeys(
+                                            LargeValueChunkKeys {
+                                                chunk_content_sha256s: vec![
+                                                    Sha256::hash(b"first".as_ref()).to_vec(),
+                                                    Sha256::hash(b"second".as_ref()).to_vec(),
+                                                ],
+                                            },
+                                        ),
+                                    ),
+                                    timestamp_nanoseconds: 0,
+                                },
+                                HighCapacityRegistryValue {
+                                    version: 45,
+                                    content: Some(
+                                        high_capacity_registry_value::Content::DeletionMarker(true),
+                                    ),
+                                    timestamp_nanoseconds: 0,
+                                },
+                            ],
+                        },
+                        HighCapacityRegistryDelta {
+                            key: b"boring".to_vec(),
+                            values: vec![
+                                HighCapacityRegistryValue {
+                                    version: 43,
+                                    content: Some(high_capacity_registry_value::Content::Value(
+                                        b"herp".to_vec(),
+                                    )),
+                                    timestamp_nanoseconds: 0,
+                                },
+                                HighCapacityRegistryValue {
+                                    version: 50,
+                                    content: Some(high_capacity_registry_value::Content::Value(
+                                        b"derp".to_vec(),
+                                    )),
+                                    timestamp_nanoseconds: 0,
+                                },
+                            ],
+                        },
+                    ],
+                    error: None,
+                }
+                .encode_to_vec(),
+            ),
+            (
+                "get_chunk",
+                Encode!(&GetChunkRequest {
+                    content_sha256: Some(Sha256::hash(b"first".as_ref()).to_vec()),
+                })
+                .unwrap(),
+                {
+                    let result: Result<Chunk, String> = Ok(Chunk {
+                        content: Some(b"first".to_vec()),
+                    });
+                    Encode!(&result).unwrap()
+                },
+            ),
+            (
+                "get_chunk",
+                Encode!(&GetChunkRequest {
+                    content_sha256: Some(Sha256::hash(b"second".as_ref()).to_vec()),
+                })
+                .unwrap(),
+                {
+                    let result: Result<Chunk, String> = Ok(Chunk {
+                        content: Some(b"second".to_vec()),
+                    });
+                    Encode!(&result).unwrap()
+                },
+            ),
+        ];
+
+        let mut perform_query = MockPerformQuery::new();
+        for (i, (method_name, request, reply)) in expected_registry_canister_method_calls
+            .into_iter()
+            .enumerate()
+        {
+            perform_query
+                .expect_perform_query()
+                .withf(move |observed_query| {
+                    // Extract ingress_expiry from observed_query.
+                    let QuerySource::User {
+                        ingress_expiry: observed_ingress_expiry,
+                        ..
+                    } = &observed_query.source
+                    else {
+                        println!("{}th query NOT a User QuerySource.", i);
+                        return false;
+                    };
+                    // ingress_expiry is a number of nanoseconds since the UNIX Epoch.
+                    let observed_ingress_expiry: u64 = *observed_ingress_expiry;
+
+                    // Assert that observed ingress_expiry is within the next 5 minutes.
+                    let now = Time::try_from(SystemTime::now())
+                        .unwrap()
+                        .as_nanos_since_unix_epoch();
+                    let ok = now < observed_ingress_expiry
+                        && observed_ingress_expiry < now + 5 * 60 * 1_000_000_000;
+                    if !ok {
+                        println!(
+                            "Bad ingress expiry in {}th call to {}: {}",
+                            i, method_name, observed_ingress_expiry,
+                        );
+                        return false;
+                    }
+
+                    let expected_query = Query {
+                        source: QuerySource::User {
+                            user_id: UserId::from(PrincipalId::new_anonymous()),
+                            ingress_expiry: observed_ingress_expiry,
+                            nonce: None,
+                        },
+                        receiver: REGISTRY_CANISTER_ID,
+                        method_name: method_name.to_string(),
+                        method_payload: request.clone(),
+                    };
+
+                    observed_query == &expected_query
+                })
+                .times(1)
+                .returning(move |_query| {
+                    // Yo, dawg. I heard you like Results.
+                    Ok(Ok((
+                        Ok(WasmResult::Reply(reply.clone())),
+                        Time::try_from(SystemTime::now()).unwrap(),
+                    )))
+                });
+        }
+
+        // Step 2: Run code under test (finally!).
+
+        let result = get_changes_since(VERSION, ingress_expiry, &perform_query).await;
+
+        // Step 3: Verify result(s).
+
+        assert_eq!(
+            result,
+            Ok(vec![
+                RegistryRecord {
+                    key: "at one point had a large value".to_string(),
+                    value: Some(b"inline".to_vec()),
+                    version: RegistryVersion::from(43),
+                },
+                RegistryRecord {
+                    key: "boring".to_string(),
+                    value: Some(b"herp".to_vec()),
+                    version: RegistryVersion::from(43),
+                },
+                // This is the most interesting one. This shows that monolithic
+                // blob reconstitution worked the way it's supposed to.
+                RegistryRecord {
+                    key: "at one point had a large value".to_string(),
+                    value: Some(b"firstsecond".to_vec()),
+                    version: RegistryVersion::from(44),
+                },
+                RegistryRecord {
+                    key: "at one point had a large value".to_string(),
+                    value: None,
+                    version: RegistryVersion::from(45),
+                },
+                RegistryRecord {
+                    key: "boring".to_string(),
+                    value: Some(b"derp".to_vec()),
+                    version: RegistryVersion::from(50),
+                },
+            ]),
+        );
     }
 }

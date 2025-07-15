@@ -13,7 +13,6 @@ DEPENDENCIES = [
 
 MACRO_DEPENDENCIES = [
     # Keep sorted.
-    "@crate_index//:ic-cdk-macros",
 ]
 
 rust_canister(

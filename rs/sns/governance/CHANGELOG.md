@@ -11,6 +11,107 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-07-08: Proposal 137282
+
+http://dashboard.internetcomputer.org/proposal/137282
+
+## Added
+
+* Added `SnsGovernance.get_metrics_replicated`, enabling other canisters to fetch SNS metrics.
+  `SnsGovernance.get_metrics` is a replicated query and thus cannot be called by canisters.
+
+* Extended SNS metrics with treasury metrics.
+
+* Extended SNS metrics with voting power metrics.
+
+* Extended SNS metrics with the genesis timestamp.
+
+
+# 2025-06-27: Proposal 137172
+
+http://dashboard.internetcomputer.org/proposal/137172
+
+## Added
+
+The `get_metrics` function response now includes the number of *executed* proposal (in addition
+to the number of submitted proposals).
+
+## Fixed
+
+Fixed a bug in the decoder of Candid `Nat` values as `u64`.
+
+
+# 2025-06-20: Proposal 137082
+
+http://dashboard.internetcomputer.org/proposal/137082
+
+## Added
+
+### New `RegisterExtension` proposal type
+
+A new proposal type, `RegisterExtension`, is added for registering SNS extensions.
+Extensions are a new class of SNS canisters that (unlike SNS-controlled dapp canisters)
+can operate on behalf of the DAO, e.g., by managing a portion of the treasury funds.
+
+Note that while `RegisterExtension` proposals are already recognized, they are not enabled yet.
+
+
+# 2025-06-13: Proposal 136989
+
+http://dashboard.internetcomputer.org/proposal/136989
+
+## Added
+
+### New `get_metrics` function for SNS Governance
+
+A new function, `get_metrics`, has been added to the SNS Governance canister. This allows front-end clients and SNS aggregators to query for activity metrics of an SNS over a specified time period. Currently, the metrics include the number of most-recent proposals and the timestamp of the latest SNS ledger transaction.
+
+
+# 2025-06-06: Proposal 136896
+
+http://dashboard.internetcomputer.org/proposal/136896
+
+## Added
+
+### Set the principal of the index canister when installing the ledger ([ICRC-106](https://github.com/dfinity/ICRC-1/pull/196/files/7f9b4739d9b3ec2cf549bf468e3a1731c31eecbf))
+
+When installing the ledger canister for a new SNS, the index canister's principal is now set in the ledger.
+This allows a ledger client to query the ledger using the `icrc106_get_index_principal` endpoint to figure out where the
+ledger index canister is running.
+
+
+# 2025-05-10: Proposal 136582
+
+http://dashboard.internetcomputer.org/proposal/136582
+
+## Changed
+
+SNS neuron baskets created for swap participants are now set up using topic-based following.
+Within each basket, there is still a root neuron with the largest dissolve delay (which does not
+follow anyone), and all other neurons in the same basket will now follow the root on all topics,
+including the critical ones (beforehand only non-critical following was set up within each basket).
+Read more details in the [forum thread](https://forum.dfinity.org/t/topic-based-following-for-swap-neuron-baskets/43649).
+
+
+# 2025-05-06: Proposal 136455
+
+http://dashboard.internetcomputer.org/proposal/136455
+
+## Changed
+
+The DAO community settings topic is promoted to being critical. For context, please refer to
+the [forum thread](https://forum.dfinity.org/t/make-sns-topic-dao-community-settings-critical/46689).
+
+
+# 2025-04-25: Proposal 136373
+
+http://dashboard.internetcomputer.org/proposal/136373
+
+## Deprecated
+
+* Custom proposals that were not yet assigned to a topic are no longer allowed to be submitted.
+
+
 # 2025-04-11: Proposal 136227
 
 http://dashboard.internetcomputer.org/proposal/136227

@@ -29,7 +29,7 @@ use anyhow::Result;
 use candid::Principal;
 use canister_test::{Canister, Runtime, Wasm};
 use dfn_candid::candid;
-use ic_cdk::api::management_canister::provisional::CanisterId;
+use ic_management_canister_types::CanisterId;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::InternetComputer;

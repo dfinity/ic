@@ -10,7 +10,7 @@ use crate::{
 };
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::NeuronId;
-use ic_nns_governance_api::pb::v1::manage_neuron_response::MergeResponse;
+use ic_nns_governance_api::manage_neuron_response::MergeResponse;
 use icp_ledger::Subaccount;
 use std::collections::BTreeMap;
 
@@ -625,7 +625,7 @@ mod tests {
     use super::*;
     use crate::{
         neuron::{DissolveStateAndAge, NeuronBuilder},
-        pb::v1::{neuron::Followees, proposal::Action, ManageNeuron, NeuronType, Proposal, Topic},
+        pb::v1::{proposal::Action, Followees, ManageNeuron, NeuronType, Proposal, Topic},
         storage::reset_stable_memory,
     };
     use assert_matches::assert_matches;
@@ -1409,6 +1409,7 @@ mod tests {
                 }))),
                 ..Default::default()
             }),
+            topic: Some(Topic::NeuronManagement as i32),
             ..Default::default()
         };
         let managed_neuron_proposal_by_subaccount = ProposalData {
@@ -1423,6 +1424,7 @@ mod tests {
                 }))),
                 ..Default::default()
             }),
+            topic: Some(Topic::NeuronManagement as i32),
             ..Default::default()
         };
         // The proposer is a neuron 'not involved', which is OK because the proposal is decided.

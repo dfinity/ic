@@ -1,235 +1,32 @@
 use std::{
     hash::{Hash, Hasher},
-    str::FromStr,
     sync::Arc,
-    time::Duration,
 };
 
-use anyhow::anyhow;
 use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use axum::{
     body::Body,
-    extract::{MatchedPath, Path, Request, State},
-    http::StatusCode,
+    extract::{Request, State},
     middleware::Next,
     response::{IntoResponse, Response},
-    BoxError, Extension,
 };
-use bytes::Bytes;
-use candid::{CandidType, Decode, Principal};
-use http::header::{HeaderValue, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS};
-use ic_bn_lib::http::{
-    body::buffer_body, headers::*, proxy, Client as HttpClient, Error as IcBnError,
-};
+use candid::{CandidType, Principal};
+use ic_bn_lib::http::{proxy, Client as HttpClient};
 pub use ic_bn_lib::types::RequestType;
-use ic_types::{
-    messages::{Blob, HttpStatusResponse, ReplicaHealthStatus},
-    CanisterId, PrincipalId, SubnetId,
-};
-use lazy_static::lazy_static;
-use regex::Regex;
-use serde::{Deserialize, Serialize};
-use strum::{Display, IntoStaticStr};
-use tower_governor::errors::GovernorError;
+use ic_types::{messages::ReplicaHealthStatus, CanisterId, SubnetId};
+use serde::Deserialize;
 use url::Url;
 
 use crate::{
-    cache::CacheStatus,
-    core::{decoder_config, MAX_REQUEST_BODY_SIZE},
+    core::ANONYMOUS_PRINCIPAL,
+    errors::{ApiError, ErrorCause},
     http::error_infer,
     persist::{RouteSubnet, Routes},
-    retry::RetryResult,
-    snapshot::{Node, RegistrySnapshot},
+    snapshot::RegistrySnapshot,
 };
 
-pub const ANONYMOUS_PRINCIPAL: Principal = Principal::anonymous();
-const METHOD_HTTP: &str = "http_request";
-
-const HEADERS_HIDE_HTTP_REQUEST: [&str; 4] =
-    ["x-real-ip", "x-forwarded-for", "x-request-id", "user-agent"];
-
-// Rust const/static concat is non-existent, so we have to repeat
-pub const PATH_STATUS: &str = "/api/v2/status";
-pub const PATH_QUERY: &str = "/api/v2/canister/{canister_id}/query";
-pub const PATH_CALL: &str = "/api/v2/canister/{canister_id}/call";
-pub const PATH_CALL_V3: &str = "/api/v3/canister/{canister_id}/call";
-pub const PATH_READ_STATE: &str = "/api/v2/canister/{canister_id}/read_state";
-pub const PATH_SUBNET_READ_STATE: &str = "/api/v2/subnet/{subnet_id}/read_state";
-pub const PATH_HEALTH: &str = "/health";
-
-lazy_static! {
-    pub static ref UUID_REGEX: Regex =
-        Regex::new(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$").unwrap();
-}
-
-#[derive(Clone, Debug, Display)]
-#[strum(serialize_all = "snake_case")]
-pub enum RateLimitCause {
-    Normal,
-    Bouncer,
-    Generic,
-}
-
-/// Categorized possible causes for request processing failures
-#[derive(Clone, Debug, Display)]
-#[strum(serialize_all = "snake_case")]
-pub enum ErrorCause {
-    BodyTimedOut,
-    UnableToReadBody(String),
-    PayloadTooLarge(usize),
-    UnableToParseCBOR(String),
-    UnableToParseHTTPArg(String),
-    LoadShed,
-    Forbidden,
-    MalformedRequest(String),
-    NoRoutingTable,
-    SubnetNotFound,
-    CanisterNotFound,
-    NoHealthyNodes,
-    ReplicaErrorDNS(String),
-    ReplicaErrorConnect,
-    ReplicaTimeout,
-    ReplicaTLSErrorOther(String),
-    ReplicaTLSErrorCert(String),
-    ReplicaErrorOther(String),
-    #[strum(serialize = "rate_limited_{0}")]
-    RateLimited(RateLimitCause),
-    #[strum(serialize = "internal_server_error")]
-    Other(String),
-}
-
-impl ErrorCause {
-    pub fn details(&self) -> Option<String> {
-        match self {
-            Self::Other(x) => Some(x.clone()),
-            Self::PayloadTooLarge(x) => Some(format!("maximum body size is {x} bytes")),
-            Self::UnableToReadBody(x) => Some(x.clone()),
-            Self::UnableToParseCBOR(x) => Some(x.clone()),
-            Self::UnableToParseHTTPArg(x) => Some(x.clone()),
-            Self::LoadShed => Some("Overloaded".into()),
-            Self::MalformedRequest(x) => Some(x.clone()),
-            Self::ReplicaErrorDNS(x) => Some(x.clone()),
-            Self::ReplicaTLSErrorOther(x) => Some(x.clone()),
-            Self::ReplicaTLSErrorCert(x) => Some(x.clone()),
-            Self::ReplicaErrorOther(x) => Some(x.clone()),
-            _ => None,
-        }
-    }
-
-    pub fn retriable(&self) -> bool {
-        !matches!(self, Self::PayloadTooLarge(_))
-    }
-
-    pub fn to_client_facing_error(&self) -> ErrorClientFacing {
-        match self {
-            Self::Other(_) => ErrorClientFacing::Other,
-            Self::BodyTimedOut => ErrorClientFacing::BodyTimedOut,
-            Self::UnableToReadBody(_) => ErrorClientFacing::Other,
-            Self::PayloadTooLarge(x) => ErrorClientFacing::PayloadTooLarge(*x),
-            Self::UnableToParseCBOR(x) => ErrorClientFacing::UnableToParseCBOR(x.clone()),
-            Self::UnableToParseHTTPArg(x) => ErrorClientFacing::UnableToParseHTTPArg(x.clone()),
-            Self::LoadShed => ErrorClientFacing::LoadShed,
-            Self::MalformedRequest(x) => ErrorClientFacing::MalformedRequest(x.clone()),
-            Self::NoRoutingTable => ErrorClientFacing::ServiceUnavailable,
-            Self::SubnetNotFound => ErrorClientFacing::SubnetNotFound,
-            Self::CanisterNotFound => ErrorClientFacing::CanisterNotFound,
-            Self::NoHealthyNodes => ErrorClientFacing::NoHealthyNodes,
-            Self::ReplicaErrorDNS(_) => ErrorClientFacing::ReplicaError,
-            Self::ReplicaErrorConnect => ErrorClientFacing::ReplicaError,
-            Self::ReplicaTimeout => ErrorClientFacing::ReplicaError,
-            Self::ReplicaTLSErrorOther(_) => ErrorClientFacing::ReplicaError,
-            Self::ReplicaTLSErrorCert(_) => ErrorClientFacing::ReplicaError,
-            Self::ReplicaErrorOther(_) => ErrorClientFacing::ReplicaError,
-            Self::Forbidden => ErrorClientFacing::Forbidden,
-            Self::RateLimited(_) => ErrorClientFacing::RateLimited,
-        }
-    }
-}
-
-// Creates the response from ErrorCause and injects itself into extensions to be visible by middleware
-impl IntoResponse for ErrorCause {
-    fn into_response(self) -> Response {
-        let client_facing_error = self.to_client_facing_error();
-        let mut resp = client_facing_error.into_response();
-        resp.extensions_mut().insert(self);
-        resp
-    }
-}
-
-#[derive(Clone, Debug, Display, IntoStaticStr)]
-#[strum(serialize_all = "snake_case")]
-pub enum ErrorClientFacing {
-    BodyTimedOut,
-    CanisterNotFound,
-    LoadShed,
-    MalformedRequest(String),
-    NoHealthyNodes,
-    #[strum(serialize = "internal_server_error")]
-    Other,
-    PayloadTooLarge(usize),
-    Forbidden,
-    RateLimited,
-    ReplicaError,
-    ServiceUnavailable,
-    SubnetNotFound,
-    UnableToParseCBOR(String),
-    UnableToParseHTTPArg(String),
-}
-
-impl ErrorClientFacing {
-    pub fn status_code(&self) -> StatusCode {
-        match self {
-            Self::BodyTimedOut => StatusCode::REQUEST_TIMEOUT,
-            Self::CanisterNotFound => StatusCode::BAD_REQUEST,
-            Self::LoadShed => StatusCode::TOO_MANY_REQUESTS,
-            Self::MalformedRequest(_) => StatusCode::BAD_REQUEST,
-            Self::NoHealthyNodes => StatusCode::SERVICE_UNAVAILABLE,
-            Self::Other => StatusCode::INTERNAL_SERVER_ERROR,
-            Self::PayloadTooLarge(_) => StatusCode::PAYLOAD_TOO_LARGE,
-            Self::Forbidden => StatusCode::FORBIDDEN,
-            Self::RateLimited => StatusCode::TOO_MANY_REQUESTS,
-            Self::ReplicaError => StatusCode::SERVICE_UNAVAILABLE,
-            Self::ServiceUnavailable => StatusCode::SERVICE_UNAVAILABLE,
-            Self::SubnetNotFound => StatusCode::BAD_REQUEST,
-            Self::UnableToParseCBOR(_) => StatusCode::BAD_REQUEST,
-            Self::UnableToParseHTTPArg(_) => StatusCode::BAD_REQUEST,
-        }
-    }
-
-    pub fn details(&self) -> String {
-        match self {
-            Self::BodyTimedOut => "Reading the request body timed out due to data arriving too slowly.".to_string(),
-            Self::CanisterNotFound => "The specified canister does not exist.".to_string(),
-            Self::LoadShed => "Temporarily unable to handle the request due to high load. Please try again later.".to_string(),
-            Self::MalformedRequest(x) => x.clone(),
-            Self::NoHealthyNodes => "There are currently no healthy replica nodes available to handle the request. This may be due to an ongoing upgrade of the replica software in the subnet. Please try again later.".to_string(),
-            Self::Other => "Internal Server Error".to_string(),
-            Self::PayloadTooLarge(x) => format!("Payload is too large: maximum body size is {x} bytes."),
-            Self::Forbidden => "Request is forbidden according to currently active policy, it might work later.".to_string(),
-            Self::RateLimited => "Rate limit exceeded. Please slow down requests and try again later.".to_string(),
-            Self::ReplicaError => "An unexpected error occurred while communicating with the upstream replica node. Please try again later.".to_string(),
-            Self::ServiceUnavailable => "The API boundary node is temporarily unable to process the request. Please try again later.".to_string(),
-            Self::SubnetNotFound => "The specified subnet cannot be found.".to_string(),
-            Self::UnableToParseCBOR(x) => format!("Failed to parse the CBOR request body: {x}"),
-            Self::UnableToParseHTTPArg(x) => format!("Unable to decode the arguments of the request to the http_request method: {x}"),
-        }
-    }
-}
-
-// Creates the response from ErrorClientFacing and injects itself into extensions to be visible by middleware
-impl IntoResponse for ErrorClientFacing {
-    fn into_response(self) -> Response {
-        let error_cause = self.to_string();
-
-        let headers = [(X_IC_ERROR_CAUSE, error_cause.clone())];
-        let body = format!("error: {}\ndetails: {}", error_cause, self.details());
-
-        (self.status_code(), headers, body).into_response()
-    }
-}
-
-#[derive(Clone, PartialEq, Hash, CandidType, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Hash, CandidType, Deserialize)]
 pub struct HttpRequest {
     pub method: String,
     pub url: String,
@@ -239,7 +36,7 @@ pub struct HttpRequest {
 }
 
 // Object that holds per-request information
-#[derive(Clone, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct RequestContext {
     pub request_type: RequestType,
     pub request_size: u32,
@@ -299,22 +96,6 @@ impl PartialEq for RequestContext {
 }
 impl Eq for RequestContext {}
 
-// This is the subset of the request fields
-#[derive(Clone, Debug, Deserialize, Serialize)]
-struct ICRequestContent {
-    sender: Principal,
-    canister_id: Option<Principal>,
-    method_name: Option<String>,
-    nonce: Option<Blob>,
-    ingress_expiry: Option<u64>,
-    arg: Option<Blob>,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct ICRequestEnvelope {
-    content: ICRequestContent,
-}
-
 #[async_trait]
 pub trait Proxy: Sync + Send {
     async fn proxy(&self, request: Request<Body>, url: Url) -> Result<Response, ErrorCause>;
@@ -334,33 +115,15 @@ pub trait RootKey: Sync + Send {
     fn root_key(&self) -> Option<Vec<u8>>;
 }
 
-// Router that helps handlers do their job by looking up in routing table
-// and owning HTTP client for outgoing requests
-#[derive(Clone)]
+/// Router that helps handlers do their job by looking up in routing table
+/// and owning HTTP client for outgoing requests
+#[derive(Clone, derive_new::new)]
 pub struct ProxyRouter {
     http_client: Arc<dyn HttpClient>,
-    published_routes: Arc<ArcSwapOption<Routes>>,
-    published_registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
+    routing_table: Arc<ArcSwapOption<Routes>>,
+    registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
     subnets_alive_threshold: f64,
     nodes_per_subnet_alive_threshold: f64,
-}
-
-impl ProxyRouter {
-    pub fn new(
-        http_client: Arc<dyn HttpClient>,
-        published_routes: Arc<ArcSwapOption<Routes>>,
-        published_registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
-        subnets_alive_threshold: f64,
-        nodes_per_subnet_alive_threshold: f64,
-    ) -> Self {
-        Self {
-            http_client,
-            published_routes,
-            published_registry_snapshot,
-            subnets_alive_threshold,
-            nodes_per_subnet_alive_threshold,
-        }
-    }
 }
 
 #[async_trait]
@@ -382,7 +145,7 @@ impl Lookup for ProxyRouter {
         canister_id: &CanisterId,
     ) -> Result<Arc<RouteSubnet>, ErrorCause> {
         let subnet = self
-            .published_routes
+            .routing_table
             .load_full()
             .ok_or(ErrorCause::NoRoutingTable)? // No routing table present
             .lookup_by_canister_id(canister_id.get_ref().0)
@@ -393,7 +156,7 @@ impl Lookup for ProxyRouter {
 
     fn lookup_subnet_by_id(&self, subnet_id: &SubnetId) -> Result<Arc<RouteSubnet>, ErrorCause> {
         let subnet = self
-            .published_routes
+            .routing_table
             .load_full()
             .ok_or(ErrorCause::NoRoutingTable)? // No routing table present
             .lookup_by_id(subnet_id.get_ref().0)
@@ -405,7 +168,7 @@ impl Lookup for ProxyRouter {
 
 impl RootKey for ProxyRouter {
     fn root_key(&self) -> Option<Vec<u8>> {
-        self.published_registry_snapshot
+        self.registry_snapshot
             .load_full()
             .map(|x| x.nns_public_key.clone())
     }
@@ -414,8 +177,8 @@ impl RootKey for ProxyRouter {
 impl Health for ProxyRouter {
     fn health(&self) -> ReplicaHealthStatus {
         match (
-            self.published_routes.load_full(),
-            self.published_registry_snapshot.load_full(),
+            self.routing_table.load_full(),
+            self.registry_snapshot.load_full(),
         ) {
             (Some(rt), Some(snap)) => {
                 if snap.subnets.is_empty() {
@@ -462,215 +225,6 @@ impl Health for ProxyRouter {
     }
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum ApiError {
-    #[error("status {0}: {1}")]
-    _Custom(StatusCode, String),
-
-    #[error("proxy error: {0}")]
-    ProxyError(ErrorCause),
-
-    #[error(transparent)]
-    Unspecified(#[from] anyhow::Error),
-}
-
-impl IntoResponse for ApiError {
-    fn into_response(self) -> Response {
-        match self {
-            ApiError::_Custom(c, b) => (c, b).into_response(),
-            ApiError::ProxyError(c) => c.into_response(),
-            ApiError::Unspecified(err) => {
-                (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()).into_response()
-            }
-        }
-    }
-}
-
-impl From<ErrorCause> for ApiError {
-    fn from(c: ErrorCause) -> Self {
-        ApiError::ProxyError(c)
-    }
-}
-
-impl From<BoxError> for ApiError {
-    fn from(item: BoxError) -> Self {
-        if !item.is::<GovernorError>() {
-            return ApiError::Unspecified(anyhow!(item.to_string()));
-        }
-
-        // it's a GovernorError
-        let error = item.downcast_ref::<GovernorError>().unwrap().to_owned();
-        match error {
-            GovernorError::TooManyRequests { .. } => {
-                ApiError::from(ErrorCause::RateLimited(RateLimitCause::Normal))
-            }
-            GovernorError::UnableToExtractKey => ApiError::from(ErrorCause::Other(
-                "unable to extract rate-limiting key".into(),
-            )),
-            GovernorError::Other { msg, .. } => ApiError::from(ErrorCause::Other(format!(
-                "governor_error: {}",
-                msg.unwrap_or_default()
-            ))),
-        }
-    }
-}
-
-pub async fn validate_canister_request(
-    matched_path: MatchedPath,
-    canister_id: Path<String>,
-    mut request: Request,
-    next: Next,
-) -> Result<impl IntoResponse, ApiError> {
-    let request_type = match matched_path.as_str() {
-        PATH_QUERY => RequestType::Query,
-        PATH_CALL => RequestType::Call,
-        PATH_CALL_V3 => RequestType::SyncCall,
-        PATH_READ_STATE => RequestType::ReadState,
-        _ => panic!("unknown path, should never happen"),
-    };
-
-    request.extensions_mut().insert(request_type);
-
-    // Decode canister_id from URL
-    let canister_id = CanisterId::from_str(&canister_id).map_err(|err| {
-        ErrorCause::MalformedRequest(format!("Unable to decode canister_id from URL: {err}"))
-    })?;
-
-    request.extensions_mut().insert(canister_id);
-
-    let mut resp = next.run(request).await;
-    resp.headers_mut().insert(
-        X_IC_CANISTER_ID,
-        HeaderValue::from_maybe_shared(Bytes::from(canister_id.to_string())).unwrap(),
-    );
-
-    Ok(resp)
-}
-
-pub async fn validate_subnet_request(
-    matched_path: MatchedPath,
-    subnet_id: Path<String>,
-    mut request: Request,
-    next: Next,
-) -> Result<impl IntoResponse, ApiError> {
-    let request_type = match matched_path.as_str() {
-        PATH_SUBNET_READ_STATE => RequestType::ReadStateSubnet,
-        _ => panic!("unknown path, should never happen"),
-    };
-
-    request.extensions_mut().insert(request_type);
-
-    // Decode canister_id from URL
-    let principal_id: PrincipalId = Principal::from_text(subnet_id.as_str())
-        .map_err(|err| {
-            ErrorCause::MalformedRequest(format!("Unable to decode subnet_id from URL: {err}"))
-        })?
-        .into();
-    let subnet_id = SubnetId::from(principal_id);
-
-    request.extensions_mut().insert(subnet_id);
-
-    let resp = next.run(request).await;
-    Ok(resp)
-}
-
-pub async fn validate_request(request: Request, next: Next) -> Result<impl IntoResponse, ApiError> {
-    if let Some(id_header) = request.headers().get(X_REQUEST_ID) {
-        let is_valid_id = id_header
-            .to_str()
-            .map(|id| UUID_REGEX.is_match(id))
-            .unwrap_or(false);
-
-        if !is_valid_id {
-            #[allow(clippy::borrow_interior_mutable_const)]
-            return Err(ErrorCause::MalformedRequest(format!(
-                "Unable to parse the request ID in the '{X_REQUEST_ID}': the value is not in UUID format"
-            ))
-            .into());
-        }
-    }
-
-    let resp = next.run(request).await;
-    Ok(resp)
-}
-
-// Middleware: preprocess the request before handing it over to handlers
-pub async fn preprocess_request(
-    Extension(request_type): Extension<RequestType>,
-    request: Request,
-    next: Next,
-) -> Result<impl IntoResponse, ApiError> {
-    // Consume body
-    let (parts, body) = request.into_parts();
-    let body = buffer_body(body, MAX_REQUEST_BODY_SIZE, Duration::from_secs(60))
-        .await
-        .map_err(|e| match e {
-            IcBnError::BodyReadingFailed(v) => ErrorCause::UnableToReadBody(v),
-            IcBnError::BodyTooBig => ErrorCause::PayloadTooLarge(MAX_REQUEST_BODY_SIZE),
-            IcBnError::BodyTimedOut => ErrorCause::BodyTimedOut,
-            _ => ErrorCause::Other(e.to_string()),
-        })?;
-
-    // Parse the request body
-    let envelope: ICRequestEnvelope = serde_cbor::from_slice(&body)
-        .map_err(|err| ErrorCause::UnableToParseCBOR(err.to_string()))?;
-    let content = envelope.content;
-
-    // Check if the request is HTTP and try to parse the arg
-    let (arg, http_request) = match (&content.method_name, content.arg) {
-        (Some(method), Some(arg)) => {
-            if request_type == RequestType::Query && method == METHOD_HTTP {
-                let mut req: HttpRequest = Decode!([decoder_config()]; &arg.0, HttpRequest)
-                    .map_err(|err| {
-                        ErrorCause::UnableToParseHTTPArg(format!(
-                            "unable to decode arg as HttpRequest: {err}"
-                        ))
-                    })?;
-
-                // Remove specific headers
-                req.headers
-                    .retain(|x| !HEADERS_HIDE_HTTP_REQUEST.contains(&(x.0.as_str())));
-
-                // Drop the arg as it's now redundant
-                (None, Some(req))
-            } else {
-                (Some(arg), None)
-            }
-        }
-
-        (_, arg) => (arg, None),
-    };
-
-    // Construct the context
-    let ctx = RequestContext {
-        request_type,
-        request_size: body.len() as u32,
-        sender: Some(content.sender),
-        canister_id: content.canister_id,
-        method_name: content.method_name,
-        ingress_expiry: content.ingress_expiry,
-        arg: arg.map(|x| x.0),
-        nonce: content.nonce.map(|x| x.0),
-        http_request,
-    };
-
-    let ctx = Arc::new(ctx);
-
-    // Reconstruct request back from parts
-    let mut request = Request::from_parts(parts, Body::from(body));
-
-    // Inject variables into the request
-    request.extensions_mut().insert(ctx.clone());
-
-    // Pass request to the next processor
-    let mut response = next.run(request).await;
-
-    // Inject context into the response for access by other middleware
-    response.extensions_mut().insert(ctx);
-
-    Ok(response)
-}
-
 // Middleware: looks up the target subnet in the routing table
 pub async fn lookup_subnet(
     State(lk): State<Arc<dyn Lookup>>,
@@ -697,188 +251,574 @@ pub async fn lookup_subnet(
     Ok(response)
 }
 
-// Middleware: postprocess the response
-pub async fn postprocess_response(request: Request, next: Next) -> impl IntoResponse {
-    let mut response = next.run(request).await;
+#[cfg(test)]
+pub(crate) mod test {
+    use super::*;
 
-    let error_cause = response
-        .extensions()
-        .get::<ErrorCause>()
-        .map(|x| x.to_string())
-        .unwrap_or("none".into());
+    use std::sync::Arc;
 
-    // Set the correct content-type for all replies if it's not an error
-    if error_cause == "none" && response.status().is_success() {
-        response
-            .headers_mut()
-            .insert(CONTENT_TYPE, CONTENT_TYPE_CBOR);
-        response
-            .headers_mut()
-            .insert(X_CONTENT_TYPE_OPTIONS, X_CONTENT_TYPE_OPTIONS_NO_SNIFF);
-        response
-            .headers_mut()
-            .insert(X_FRAME_OPTIONS, X_FRAME_OPTIONS_DENY);
+    use anyhow::Error;
+    use axum::{body::Body, http::Request, routing::method_routing::get, Router};
+    use ethnum::u256;
+    use http::{
+        header::{HeaderName, HeaderValue, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS},
+        StatusCode,
+    };
+    use ic_bn_lib::{
+        http::headers::{
+            X_IC_CANISTER_ID, X_IC_METHOD_NAME, X_IC_NODE_ID, X_IC_REQUEST_TYPE, X_IC_SENDER,
+            X_IC_SUBNET_ID, X_IC_SUBNET_TYPE,
+        },
+        principal,
+    };
+    use ic_types::{
+        messages::{
+            Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
+            HttpReadStateContent, HttpRequestEnvelope, HttpStatusResponse, HttpUserQuery,
+        },
+        PrincipalId,
+    };
+    use tower::Service;
+
+    use crate::{
+        http::{
+            handlers::{health, status},
+            PATH_HEALTH, PATH_STATUS,
+        },
+        persist::{test::node, Persist, Persister},
+        snapshot::{test::test_registry_snapshot, Node},
+        test_utils::{setup_test_router, TestHttpClient},
+    };
+
+    pub fn test_node(id: u64) -> Arc<Node> {
+        node(id, principal!("f7crg-kabae"))
     }
 
-    response.headers_mut().insert(
-        X_IC_ERROR_CAUSE,
-        HeaderValue::from_maybe_shared(Bytes::from(error_cause)).unwrap(),
-    );
+    pub fn test_route_subnet_with_id(id: String, n: usize) -> RouteSubnet {
+        let mut nodes = Vec::new();
 
-    // Add cache status if there's one
-    let cache_status = response.extensions().get::<CacheStatus>().cloned();
-    if let Some(v) = cache_status {
-        response.headers_mut().insert(
-            X_IC_CACHE_STATUS,
-            HeaderValue::from_maybe_shared(Bytes::from(v.to_string())).unwrap(),
-        );
+        for i in 0..n {
+            nodes.push(test_node(i as u64));
+        }
 
-        if let CacheStatus::Bypass(v) = v {
-            response.headers_mut().insert(
-                X_IC_CACHE_BYPASS_REASON,
-                HeaderValue::from_maybe_shared(Bytes::from(v.to_string())).unwrap(),
-            );
+        // "casting integer literal to `u32` is unnecessary"
+        // fck clippy
+        let zero = 0u32;
+
+        RouteSubnet {
+            id: Principal::from_text(id).unwrap(),
+            range_start: u256::from(zero),
+            range_end: u256::from(zero),
+            nodes,
         }
     }
 
-    if let Some(v) = response.extensions().get::<Arc<RouteSubnet>>().cloned() {
-        response.headers_mut().insert(
-            X_IC_SUBNET_ID,
-            HeaderValue::from_maybe_shared(Bytes::from(v.id.to_string())).unwrap(),
+    pub fn test_route_subnet(n: usize) -> RouteSubnet {
+        test_route_subnet_with_id("f7crg-kabae".into(), n)
+    }
+
+    fn assert_header(headers: &http::HeaderMap, name: HeaderName, expected_value: &str) {
+        assert!(headers.contains_key(&name), "Header {} is missing", name);
+        assert_eq!(
+            headers.get(&name).unwrap(),
+            &HeaderValue::from_str(expected_value).unwrap(),
+            "Header {} does not match expected value: {}",
+            name,
+            expected_value,
         );
     }
 
-    let node = response.extensions().get::<Arc<Node>>().cloned();
-    if let Some(v) = node {
-        // Principals and subnet type are always ASCII printable, so unwrap is safe
-        response.headers_mut().insert(
-            X_IC_NODE_ID,
-            HeaderValue::from_maybe_shared(Bytes::from(v.id.to_string())).unwrap(),
+    #[tokio::test]
+    async fn test_health() -> Result<(), Error> {
+        let routing_table = Arc::new(ArcSwapOption::empty());
+        let registry_snapshot = Arc::new(ArcSwapOption::empty());
+
+        let persister = Persister::new(routing_table.clone());
+
+        let http_client = Arc::new(TestHttpClient(1));
+        let proxy_router = Arc::new(ProxyRouter::new(
+            http_client,
+            routing_table,
+            registry_snapshot.clone(),
+            0.51,
+            0.6666,
+        ));
+
+        // Install snapshot
+        let (snapshot, _, _) = test_registry_snapshot(5, 3);
+        registry_snapshot.store(Some(Arc::new(snapshot.clone())));
+
+        // Initial state
+        assert_eq!(proxy_router.health(), ReplicaHealthStatus::Starting);
+
+        let state_health = proxy_router.clone() as Arc<dyn Health>;
+        let mut app = Router::new().route(PATH_HEALTH, get(health).with_state(state_health));
+
+        // Test healthy
+        let request = Request::builder()
+            .method("GET")
+            .uri("http://localhost/health")
+            .body(Body::from(""))
+            .unwrap();
+
+        let resp = app.call(request).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
+
+        // Check when all nodes healthy
+        persister.persist(snapshot.subnets.clone());
+        assert_eq!(proxy_router.health(), ReplicaHealthStatus::Healthy);
+
+        // Test healthy
+        let request = Request::builder()
+            .method("GET")
+            .uri("http://localhost/health")
+            .body(Body::from(""))
+            .unwrap();
+
+        let resp = app.call(request).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+
+        // Check when 3/5 subnets present (> threshold)
+        let subnets = snapshot
+            .subnets
+            .clone()
+            .into_iter()
+            .enumerate()
+            .filter(|(i, _)| *i <= 2)
+            .map(|x| x.1)
+            .collect::<Vec<_>>();
+
+        persister.persist(subnets);
+        assert_eq!(proxy_router.health(), ReplicaHealthStatus::Healthy);
+
+        // Check when 2/5 subnets present (< threshold)
+        let subnets = snapshot
+            .subnets
+            .clone()
+            .into_iter()
+            .enumerate()
+            .filter(|(i, _)| *i <= 1)
+            .map(|x| x.1)
+            .collect::<Vec<_>>();
+        persister.persist(subnets);
+
+        assert_eq!(
+            proxy_router.health(),
+            ReplicaHealthStatus::CertifiedStateBehind
         );
 
-        response.headers_mut().insert(
-            X_IC_SUBNET_TYPE,
-            HeaderValue::from_str(v.subnet_type.as_ref()).unwrap(),
+        // Check when 2/3 nodes in each subnet are healthy (> threshold)
+        let subnets = snapshot
+            .subnets
+            .clone()
+            .into_iter()
+            .map(|mut x| {
+                x.nodes = x
+                    .nodes
+                    .into_iter()
+                    .enumerate()
+                    .filter(|(i, _)| *i <= 1)
+                    .map(|x| x.1)
+                    .collect::<Vec<_>>();
+                x
+            })
+            .collect::<Vec<_>>();
+
+        persister.persist(subnets);
+        assert_eq!(proxy_router.health(), ReplicaHealthStatus::Healthy);
+
+        // Check when 1/3 nodes in each subnet are healthy (< threshold)
+        let subnets = snapshot
+            .subnets
+            .clone()
+            .into_iter()
+            .map(|mut x| {
+                x.nodes = vec![x.nodes[0].clone()];
+                x
+            })
+            .collect::<Vec<_>>();
+        persister.persist(subnets);
+        assert_eq!(
+            proxy_router.health(),
+            ReplicaHealthStatus::CertifiedStateBehind
         );
-    }
 
-    if let Some(ctx) = response.extensions().get::<Arc<RequestContext>>().cloned() {
-        response.headers_mut().insert(
-            X_IC_REQUEST_TYPE,
-            HeaderValue::from_maybe_shared(Bytes::from(ctx.request_type.to_string())).unwrap(),
+        // Check when 2/3 nodes in 3/5 subnets are available (> threshold) and 1/3 nodes in 2/5 subnets (< threshold)
+        let subnets = snapshot
+            .subnets
+            .clone()
+            .into_iter()
+            .enumerate()
+            .map(|(i, mut x)| {
+                if i > 2 {
+                    x.nodes = vec![x.nodes[0].clone()];
+                } else {
+                    x.nodes = vec![x.nodes[0].clone(), x.nodes[1].clone()];
+                }
+
+                x
+            })
+            .collect::<Vec<_>>();
+        persister.persist(subnets);
+        assert_eq!(proxy_router.health(), ReplicaHealthStatus::Healthy);
+
+        // Check when 1/3 nodes in 3/5 subnets are available (< threshold) and 2/3 nodes in 2/5 subnets (> threshold)
+        let subnets = snapshot
+            .subnets
+            .clone()
+            .into_iter()
+            .enumerate()
+            .map(|(i, mut x)| {
+                if i > 2 {
+                    x.nodes = vec![x.nodes[0].clone(), x.nodes[1].clone()];
+                } else {
+                    x.nodes = vec![x.nodes[0].clone()];
+                }
+
+                x
+            })
+            .collect::<Vec<_>>();
+        persister.persist(subnets);
+        assert_eq!(
+            proxy_router.health(),
+            ReplicaHealthStatus::CertifiedStateBehind
         );
 
-        ctx.canister_id.and_then(|v| {
-            response.headers_mut().insert(
-                X_IC_CANISTER_ID_CBOR,
-                HeaderValue::from_maybe_shared(Bytes::from(v.to_string())).unwrap(),
-            )
-        });
+        // Install snapshot with zero subnets
+        let (snapshot, _, _) = test_registry_snapshot(0, 0);
+        registry_snapshot.store(Some(Arc::new(snapshot.clone())));
+        persister.persist(snapshot.subnets.clone());
 
-        ctx.sender.and_then(|v| {
-            response.headers_mut().insert(
-                X_IC_SENDER,
-                HeaderValue::from_maybe_shared(Bytes::from(v.to_string())).unwrap(),
-            )
-        });
-
-        ctx.method_name.as_ref().and_then(|v| {
-            response.headers_mut().insert(
-                X_IC_METHOD_NAME,
-                HeaderValue::from_maybe_shared(Bytes::from(v.clone())).unwrap(),
-            )
-        });
-    }
-
-    let retry_result = response.extensions().get::<RetryResult>().cloned();
-    if let Some(v) = retry_result {
-        response.headers_mut().insert(
-            X_IC_RETRIES,
-            HeaderValue::from_maybe_shared(Bytes::from(v.retries.to_string())).unwrap(),
+        // Make sure it doesn't crash
+        assert_eq!(
+            proxy_router.health(),
+            ReplicaHealthStatus::CertifiedStateBehind
         );
+
+        // Install snapshot with subnets which have zero nodes
+        let (snapshot, _, _) = test_registry_snapshot(5, 0);
+        registry_snapshot.store(Some(Arc::new(snapshot.clone())));
+        persister.persist(snapshot.subnets.clone());
+
+        // Make sure it doesn't crash
+        assert_eq!(
+            proxy_router.health(),
+            ReplicaHealthStatus::CertifiedStateBehind
+        );
+
+        Ok(())
     }
 
-    response
-}
+    #[tokio::test]
+    async fn test_status() -> Result<(), Error> {
+        const ROOT_KEY: &[u8] = &[
+            48, 129, 130, 48, 29, 6, 13, 43, 6, 1, 4, 1, 130, 220, 124, 5, 3, 1, 2, 1, 6, 12, 43,
+            6, 1, 4, 1, 130, 220, 124, 5, 3, 2, 1, 3, 97, 0, 164, 11, 155, 160, 188, 41, 117, 229,
+            63, 252, 167, 119, 29, 30, 227, 98, 237, 74, 46, 188, 146, 183, 47, 146, 73, 22, 138,
+            98, 134, 4, 227, 191, 162, 241, 66, 98, 49, 165, 59, 251, 105, 165, 137, 20, 84, 15,
+            168, 196, 17, 178, 140, 45, 29, 63, 7, 53, 150, 40, 122, 4, 40, 149, 203, 233, 231, 66,
+            46, 244, 167, 99, 183, 61, 131, 19, 223, 201, 237, 51, 94, 24, 59, 178, 188, 224, 198,
+            44, 183, 41, 121, 43, 119, 84, 128, 45, 105, 10,
+        ];
 
-// Handler: emit an HTTP status code that signals the service's state
-pub async fn health(State(h): State<Arc<dyn Health>>) -> impl IntoResponse {
-    if h.health() == ReplicaHealthStatus::Healthy {
-        StatusCode::NO_CONTENT
-    } else {
-        StatusCode::SERVICE_UNAVAILABLE
+        let routing_table = Arc::new(ArcSwapOption::empty());
+        let registry_snapshot = Arc::new(ArcSwapOption::empty());
+
+        let persister = Persister::new(routing_table.clone());
+        let (mut snapshot, _, _) = test_registry_snapshot(5, 3);
+        snapshot.nns_public_key = ROOT_KEY.into();
+        registry_snapshot.store(Some(Arc::new(snapshot.clone())));
+
+        let http_client = Arc::new(TestHttpClient(1));
+        let proxy_router = Arc::new(ProxyRouter::new(
+            http_client,
+            routing_table,
+            registry_snapshot,
+            0.51,
+            0.6666,
+        ));
+
+        // Mark all nodes healthy
+        persister.persist(snapshot.subnets.clone());
+
+        let (state_rootkey, state_health) = (
+            proxy_router.clone() as Arc<dyn RootKey>,
+            proxy_router.clone() as Arc<dyn Health>,
+        );
+
+        let mut app = Router::new().route(
+            PATH_STATUS,
+            get(status).with_state((state_rootkey, state_health)),
+        );
+
+        // Test healthy
+        let request = Request::builder()
+            .method("GET")
+            .uri("http://localhost/api/v2/status")
+            .body(Body::from(""))
+            .unwrap();
+
+        let resp = app.call(request).await.unwrap();
+
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let (parts, body) = resp.into_parts();
+        let body = axum::body::to_bytes(body, usize::MAX)
+            .await
+            .unwrap()
+            .to_vec();
+
+        let health: HttpStatusResponse = serde_cbor::from_slice(&body)?;
+        assert_eq!(
+            health.replica_health_status,
+            Some(ReplicaHealthStatus::Healthy)
+        );
+        assert_eq!(health.root_key.as_deref(), Some(&ROOT_KEY.to_vec()));
+
+        let headers = parts.headers;
+        assert_header(&headers, CONTENT_TYPE, "application/cbor");
+        assert_header(&headers, X_CONTENT_TYPE_OPTIONS, "nosniff");
+        assert_header(&headers, X_FRAME_OPTIONS, "DENY");
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_all_call_types() -> Result<(), Error> {
+        let (mut app, subnets) = setup_test_router(false, false, 10, 1, 1024, None);
+        let node = subnets[0].nodes[0].clone();
+
+        let sender = principal!("sqjm4-qahae-aq");
+        let canister_id = CanisterId::from_u64(100);
+
+        // Test query
+        let content = HttpQueryContent::Query {
+            query: HttpUserQuery {
+                canister_id: Blob(canister_id.get().as_slice().to_vec()),
+                method_name: "foobar".to_string(),
+                arg: Blob(vec![]),
+                sender: Blob(sender.as_slice().to_vec()),
+                nonce: None,
+                ingress_expiry: 1234,
+            },
+        };
+
+        let envelope = HttpRequestEnvelope::<HttpQueryContent> {
+            content,
+            sender_delegation: None,
+            sender_pubkey: None,
+            sender_sig: None,
+        };
+
+        let body = serde_cbor::to_vec(&envelope).unwrap();
+
+        let request = Request::builder()
+            .method("POST")
+            .uri(format!(
+                "http://localhost/api/v2/canister/{canister_id}/query"
+            ))
+            .body(Body::from(body))
+            .unwrap();
+
+        let resp = app.call(request).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let (parts, body) = resp.into_parts();
+
+        // Check response headers
+        let headers = parts.headers;
+        assert_header(&headers, X_IC_NODE_ID, &node.id.to_string());
+        assert_header(&headers, X_IC_SUBNET_ID, &node.subnet_id.to_string());
+        assert_header(&headers, X_IC_SUBNET_TYPE, node.subnet_type.as_ref());
+        assert_header(&headers, X_IC_SENDER, &sender.to_string());
+        assert_header(&headers, X_IC_CANISTER_ID, &canister_id.to_string());
+        assert_header(&headers, X_IC_METHOD_NAME, "foobar");
+        assert_header(&headers, X_IC_REQUEST_TYPE, "query");
+        assert_header(&headers, CONTENT_TYPE, "application/cbor");
+        assert_header(&headers, X_CONTENT_TYPE_OPTIONS, "nosniff");
+        assert_header(&headers, X_FRAME_OPTIONS, "DENY");
+
+        let body = axum::body::to_bytes(body, usize::MAX)
+            .await
+            .unwrap()
+            .to_vec();
+        let body = String::from_utf8_lossy(&body);
+        assert_eq!(body, "a".repeat(1024));
+
+        // Test call
+        let content = HttpCallContent::Call {
+            update: HttpCanisterUpdate {
+                canister_id: Blob(canister_id.get().as_slice().to_vec()),
+                method_name: "foobar".to_string(),
+                arg: Blob(vec![]),
+                sender: Blob(sender.as_slice().to_vec()),
+                nonce: None,
+                ingress_expiry: 1234,
+            },
+        };
+
+        let envelope = HttpRequestEnvelope::<HttpCallContent> {
+            content,
+            sender_delegation: None,
+            sender_pubkey: None,
+            sender_sig: None,
+        };
+
+        let body = serde_cbor::to_vec(&envelope).unwrap();
+
+        let request = Request::builder()
+            .method("POST")
+            .uri(format!(
+                "http://localhost/api/v2/canister/{canister_id}/call"
+            ))
+            .body(Body::from(body))
+            .unwrap();
+
+        let resp = app.call(request).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::ACCEPTED);
+
+        let (_parts, body) = resp.into_parts();
+        let body = axum::body::to_bytes(body, usize::MAX)
+            .await
+            .unwrap()
+            .to_vec();
+        let body = String::from_utf8_lossy(&body);
+        assert_eq!(body, "a".repeat(1024));
+
+        // Test call v3
+        let content = HttpCallContent::Call {
+            update: HttpCanisterUpdate {
+                canister_id: Blob(canister_id.get().as_slice().to_vec()),
+                method_name: "foobar".to_string(),
+                arg: Blob(vec![]),
+                sender: Blob(sender.as_slice().to_vec()),
+                nonce: None,
+                ingress_expiry: 1234,
+            },
+        };
+
+        let envelope = HttpRequestEnvelope::<HttpCallContent> {
+            content,
+            sender_delegation: None,
+            sender_pubkey: None,
+            sender_sig: None,
+        };
+
+        let body = serde_cbor::to_vec(&envelope).unwrap();
+
+        let request = Request::builder()
+            .method("POST")
+            .uri(format!(
+                "http://localhost/api/v3/canister/{canister_id}/call"
+            ))
+            .body(Body::from(body))
+            .unwrap();
+
+        let resp = app.call(request).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::ACCEPTED);
+
+        let (_parts, body) = resp.into_parts();
+        let body = axum::body::to_bytes(body, usize::MAX)
+            .await
+            .unwrap()
+            .to_vec();
+        let body = String::from_utf8_lossy(&body);
+        assert_eq!(body, "a".repeat(1024));
+
+        // Test canister read_state
+        let content = HttpReadStateContent::ReadState {
+            read_state: HttpReadState {
+                sender: Blob(sender.as_slice().to_vec()),
+                nonce: None,
+                ingress_expiry: 1234,
+                paths: vec![],
+            },
+        };
+
+        let envelope = HttpRequestEnvelope::<HttpReadStateContent> {
+            content,
+            sender_delegation: None,
+            sender_pubkey: None,
+            sender_sig: None,
+        };
+
+        let body = serde_cbor::to_vec(&envelope).unwrap();
+
+        let request = Request::builder()
+            .method("POST")
+            .uri(format!(
+                "http://localhost/api/v2/canister/{canister_id}/read_state"
+            ))
+            .body(Body::from(body))
+            .unwrap();
+
+        let resp = app.call(request).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let (parts, body) = resp.into_parts();
+
+        // Check response headers
+        let headers = parts.headers;
+        // Make sure that the canister_id is there even if the CBOR does not have it
+        assert_header(&headers, X_IC_CANISTER_ID, &canister_id.to_string());
+        assert_header(&headers, CONTENT_TYPE, "application/cbor");
+        assert_header(&headers, X_CONTENT_TYPE_OPTIONS, "nosniff");
+        assert_header(&headers, X_FRAME_OPTIONS, "DENY");
+        let body = axum::body::to_bytes(body, usize::MAX)
+            .await
+            .unwrap()
+            .to_vec();
+        let body = String::from_utf8_lossy(&body);
+        assert_eq!(body, "a".repeat(1024));
+
+        // Test subnet read_state
+        let content = HttpReadStateContent::ReadState {
+            read_state: HttpReadState {
+                sender: Blob(sender.as_slice().to_vec()),
+                nonce: None,
+                ingress_expiry: 1234,
+                paths: vec![],
+            },
+        };
+
+        let envelope = HttpRequestEnvelope::<HttpReadStateContent> {
+            content,
+            sender_delegation: None,
+            sender_pubkey: None,
+            sender_sig: None,
+        };
+
+        let body = serde_cbor::to_vec(&envelope).unwrap();
+
+        let subnet_id: SubnetId = PrincipalId(subnets[0].id).into();
+
+        let request = Request::builder()
+            .method("POST")
+            .uri(format!(
+                "http://localhost/api/v2/subnet/{subnet_id}/read_state"
+            ))
+            .body(Body::from(body))
+            .unwrap();
+
+        let resp = app.call(request).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let (parts, body) = resp.into_parts();
+
+        // Check response headers
+        let headers = parts.headers;
+        // Make sure that the subnet_id is there even if the CBOR does not have it
+        assert_header(&headers, X_IC_SUBNET_ID, &subnet_id.to_string());
+        assert_header(&headers, CONTENT_TYPE, "application/cbor");
+        assert_header(&headers, X_CONTENT_TYPE_OPTIONS, "nosniff");
+        assert_header(&headers, X_FRAME_OPTIONS, "DENY");
+        let body = axum::body::to_bytes(body, usize::MAX)
+            .await
+            .unwrap()
+            .to_vec();
+        let body = String::from_utf8_lossy(&body);
+        assert_eq!(body, "a".repeat(1024));
+
+        Ok(())
     }
 }
-
-// Handler: processes IC status call
-pub async fn status(
-    State((rk, h)): State<(Arc<dyn RootKey>, Arc<dyn Health>)>,
-) -> impl IntoResponse {
-    let health = h.health();
-
-    let status = HttpStatusResponse {
-        root_key: rk.root_key().map(|x| x.into()),
-        impl_version: None,
-        impl_hash: None,
-        replica_health_status: Some(health),
-        certified_height: None,
-    };
-
-    // Serialize to CBOR
-    let mut ser = serde_cbor::Serializer::new(Vec::new());
-    // These should not really fail, better to panic if something in serde changes which would cause them to fail
-    ser.self_describe().unwrap();
-    status.serialize(&mut ser).unwrap();
-    let cbor = ser.into_inner();
-
-    // Construct response and inject health status for middleware
-    let mut response = cbor.into_response();
-    response.extensions_mut().insert(health);
-    response
-        .headers_mut()
-        .insert(CONTENT_TYPE, CONTENT_TYPE_CBOR);
-    response
-        .headers_mut()
-        .insert(X_CONTENT_TYPE_OPTIONS, X_CONTENT_TYPE_OPTIONS_NO_SNIFF);
-    response
-        .headers_mut()
-        .insert(X_FRAME_OPTIONS, X_FRAME_OPTIONS_DENY);
-
-    response
-}
-
-// Handler: Unified handler for query/call/read_state calls
-pub async fn handle_canister(
-    State(p): State<Arc<dyn Proxy>>,
-    Extension(ctx): Extension<Arc<RequestContext>>,
-    Extension(canister_id): Extension<CanisterId>,
-    Extension(node): Extension<Arc<Node>>,
-    request: Request<Body>,
-) -> Result<impl IntoResponse, ApiError> {
-    let url = node
-        .build_url(ctx.request_type, canister_id.into())
-        .map_err(|e| ErrorCause::Other(format!("failed to build request url: {e}")))?;
-    // Proxy the request
-    let resp = p.proxy(request, url).await?;
-
-    Ok(resp)
-}
-
-pub async fn handle_subnet(
-    State(p): State<Arc<dyn Proxy>>,
-    Extension(ctx): Extension<Arc<RequestContext>>,
-    Extension(subnet_id): Extension<SubnetId>,
-    Extension(node): Extension<Arc<Node>>,
-    request: Request<Body>,
-) -> Result<impl IntoResponse, ApiError> {
-    let url = node
-        .build_url(ctx.request_type, subnet_id.get().into())
-        .map_err(|e| ErrorCause::Other(format!("failed to build request url: {e}")))?;
-    // Proxy the request
-    let resp = p.proxy(request, url).await?;
-
-    Ok(resp)
-}
-
-#[cfg(test)]
-pub mod test;

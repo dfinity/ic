@@ -480,6 +480,36 @@ pub struct RegisterDappCanisters {
     /// At least one canister ID is required.
     pub canister_ids: Vec<::ic_base_types::PrincipalId>,
 }
+
+#[derive(
+    candid::CandidType, candid::Deserialize, comparable::Comparable, Clone, Debug, PartialEq,
+)]
+pub enum PreciseValue {
+    Bool(bool),
+    Blob(Vec<u8>),
+    Text(String),
+    Nat(u64),
+    Int(i64),
+    Array(Vec<PreciseValue>),
+    Map(BTreeMap<String, PreciseValue>),
+}
+
+#[derive(
+    candid::CandidType, candid::Deserialize, comparable::Comparable, Clone, Debug, PartialEq,
+)]
+pub struct ExtensionInit {
+    pub value: Option<PreciseValue>,
+}
+
+#[derive(
+    candid::CandidType, candid::Deserialize, comparable::Comparable, Clone, Debug, PartialEq,
+)]
+pub struct RegisterExtension {
+    /// Where the extension canister Wasm can be found.
+    pub chunked_canister_wasm: Option<ChunkedCanisterWasm>,
+
+    pub extension_init: Option<ExtensionInit>,
+}
 /// A proposal to remove a list of dapps from the SNS and assign them to new controllers
 #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
 pub struct DeregisterDappCanisters {
@@ -648,6 +678,10 @@ pub mod proposal {
         ///
         /// Id = 16;
         SetTopicsForCustomProposals(super::SetTopicsForCustomProposals),
+        /// Register an SNS extension canister.
+        ///
+        /// Id = 17.
+        RegisterExtension(super::RegisterExtension),
     }
 }
 #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
@@ -1478,6 +1512,10 @@ pub mod governance {
         /// The number of governance tokens in neurons with a dissolve delay of
         /// less than six months.
         pub neurons_with_less_than_6_months_dissolve_delay_e8s: u64,
+        /// Metrics related to the treasury assets of this SNS.
+        pub treasury_metrics: Vec<super::TreasuryMetrics>,
+        /// Metrics related to the voting power in this SNS.
+        pub voting_power_metrics: Option<super::VotingPowerMetrics>,
     }
     /// Metadata about this SNS.
     #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
@@ -1645,6 +1683,54 @@ pub struct GetMetadataResponse {
     pub name: Option<String>,
     pub description: Option<String>,
 }
+/// Request message for 'get_metrics'.
+#[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, Copy, PartialEq)]
+pub struct GetMetricsRequest {
+    pub time_window_seconds: Option<u64>,
+}
+
+#[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
+pub struct TreasuryMetrics {
+    pub treasury: i32,
+    pub name: Option<String>,
+    pub ledger_canister_id: Option<::ic_base_types::PrincipalId>,
+    pub account: Option<Account>,
+    pub amount_e8s: Option<u64>,
+    pub original_amount_e8s: Option<u64>,
+    pub timestamp_seconds: Option<u64>,
+}
+
+#[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
+pub struct VotingPowerMetrics {
+    pub governance_total_potential_voting_power: Option<u64>,
+    pub timestamp_seconds: Option<u64>,
+}
+
+pub mod get_metrics_response {
+    use super::{GovernanceError, TreasuryMetrics, VotingPowerMetrics};
+
+    #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
+    pub struct Metrics {
+        pub num_recently_submitted_proposals: Option<u64>,
+        pub num_recently_executed_proposals: Option<u64>,
+        pub last_ledger_block_timestamp: Option<u64>,
+        pub treasury_metrics: Option<Vec<TreasuryMetrics>>,
+        pub voting_power_metrics: Option<VotingPowerMetrics>,
+        pub genesis_timestamp_seconds: Option<u64>,
+    }
+
+    #[derive(candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
+    pub enum GetMetricsResult {
+        Ok(Metrics),
+        Err(GovernanceError),
+    }
+
+    #[derive(candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq, Default)]
+    pub struct GetMetricsResponse {
+        pub get_metrics_result: Option<GetMetricsResult>,
+    }
+}
+
 /// Request message for 'get_sns_initialization_parameters'
 #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, Copy, PartialEq)]
 pub struct GetSnsInitializationParametersRequest {}

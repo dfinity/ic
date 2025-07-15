@@ -14,7 +14,6 @@ DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:ciborium",
     "@crate_index//:hex",
-    "@crate_index//:ic-cdk",
     "@crate_index//:num-bigint",
     "@crate_index//:num-traits",
     "@crate_index//:serde",
@@ -25,7 +24,6 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:async-trait",
-    "@crate_index//:ic-cdk-macros",
 ]
 
 DEV_DEPENDENCIES = [
@@ -44,6 +42,7 @@ DEV_DEPENDENCIES = [
 MACRO_DEV_DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:proptest-derive",
+    "@crate_index//:test-strategy",
 ]
 
 rust_library(

@@ -1,11 +1,11 @@
 #![allow(clippy::disallowed_types)]
 use async_trait::async_trait;
-use ic_ledger_canister_blocks_synchronizer::blocks::{Blocks, HashedBlock, RosettaBlocksMode};
+use ic_ledger_canister_blocks_synchronizer::blocks::{
+    Blocks, HashedBlock, RosettaBlocksMode, RosettaDbConfig,
+};
 use ic_ledger_canister_core::ledger::LedgerTransaction;
 use ic_ledger_core::{block::BlockType, timestamp::TimeStamp};
-use ic_nns_governance_api::pb::v1::{
-    manage_neuron::NeuronIdOrSubaccount, KnownNeuron, ProposalInfo,
-};
+use ic_nns_governance_api::{manage_neuron::NeuronIdOrSubaccount, KnownNeuron, ProposalInfo};
 use ic_rosetta_api::{
     convert::{from_arg, to_model_account_identifier},
     errors::ApiError,
@@ -45,7 +45,9 @@ pub struct TestLedger {
 impl TestLedger {
     pub fn new() -> Self {
         Self {
-            blockchain: RwLock::new(Blocks::new_in_memory(false).unwrap()),
+            blockchain: RwLock::new(
+                Blocks::new_in_memory(RosettaDbConfig::default_disabled()).unwrap(),
+            ),
             canister_id: CanisterId::unchecked_from_principal(
                 PrincipalId::from_str("5v3p4-iyaaa-aaaaa-qaaaa-cai").unwrap(),
             ),
@@ -120,6 +122,10 @@ impl LedgerAccess for TestLedger {
     }
 
     async fn pending_proposals(&self) -> Result<Vec<ProposalInfo>, ApiError> {
+        Err(ApiError::InternalError(false, Default::default()))
+    }
+
+    async fn minimum_dissolve_delay(&self) -> Result<Option<u64>, ApiError> {
         Err(ApiError::InternalError(false, Default::default()))
     }
 
@@ -231,7 +237,7 @@ impl LedgerAccess for TestLedger {
         &self,
         _id: NeuronIdOrSubaccount,
         _: bool,
-    ) -> Result<ic_nns_governance_api::pb::v1::NeuronInfo, ApiError> {
+    ) -> Result<ic_nns_governance_api::NeuronInfo, ApiError> {
         panic!("Neuron info not available through TestLedger");
     }
 

@@ -15,12 +15,16 @@ use crate::{
         unassigned_nodes_config::check_unassigned_nodes_config_invariants,
     },
     registry::Registry,
+    storage::with_chunks,
 };
 
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_nervous_system_string::clamp_debug_len;
-use ic_registry_transport::pb::v1::{registry_mutation::Type, RegistryMutation};
+use ic_registry_canister_chunkify::dechunkify;
+use ic_registry_transport::pb::v1::{
+    high_capacity_registry_value, registry_mutation::Type, RegistryMutation,
+};
 
 impl Registry {
     pub fn check_changelog_version_invariants(&self) {
@@ -143,10 +147,31 @@ impl Registry {
 
         for (key, values) in self.store.iter() {
             let registry_value = values.back().unwrap();
-            if !registry_value.deletion_marker {
-                snapshot.insert(key.to_vec(), registry_value.value.clone());
-            }
+
+            let content = match registry_value.content.clone() {
+                Some(ok) => ok,
+                None => high_capacity_registry_value::Content::Value(vec![]),
+            };
+
+            let value: Vec<u8> = match content {
+                high_capacity_registry_value::Content::DeletionMarker(deletion_marker) => {
+                    if deletion_marker {
+                        continue;
+                    }
+                    // Treat deletion_marker = false the same as Value(vec![]).
+                    vec![]
+                }
+
+                high_capacity_registry_value::Content::Value(value) => value,
+
+                high_capacity_registry_value::Content::LargeValueChunkKeys(
+                    large_value_chunk_keys,
+                ) => with_chunks(|chunks| dechunkify(&large_value_chunk_keys, chunks)),
+            };
+
+            snapshot.insert(key.to_vec(), value);
         }
+
         snapshot
     }
 }
@@ -165,8 +190,8 @@ mod tests {
         },
     };
     use ic_registry_keys::{
-        make_canister_migrations_record_key, make_node_operator_record_key,
-        make_routing_table_record_key,
+        make_canister_migrations_record_key, make_canister_ranges_key,
+        make_node_operator_record_key, make_routing_table_record_key,
     };
     use ic_registry_routing_table::{CanisterIdRange, CanisterMigrations, RoutingTable};
     use ic_registry_transport::{
@@ -258,6 +283,7 @@ mod tests {
             dc_id: "".into(),
             rewardable_nodes: BTreeMap::new(),
             ipv6: None,
+            max_rewardable_nodes: BTreeMap::new(),
         }
         .encode_to_vec();
         let registry = Registry::new();
@@ -275,8 +301,9 @@ mod tests {
         }).unwrap();
 
         let routing_table = PbRoutingTable::from(routing_table);
-        let key1 = make_routing_table_record_key();
-        let value1 = routing_table.encode_to_vec();
+        let routing_table_key = make_routing_table_record_key();
+        let routing_table_shard_key = make_canister_ranges_key(CanisterId::from(0));
+        let routing_table_value = routing_table.encode_to_vec();
 
         // The canister ID range {0x200:0x2ff} in `canister_migrations` is not hosted by any subnet in trace according to the routing table.
         let canister_migrations = CanisterMigrations::try_from(btreemap! {
@@ -284,12 +311,16 @@ mod tests {
         }).unwrap();
 
         let canister_migrations = PbCanisterMigrations::from(canister_migrations);
-        let key2 = make_canister_migrations_record_key();
-        let value2 = canister_migrations.encode_to_vec();
+        let canister_migrations_key = make_canister_migrations_record_key();
+        let canister_migrations_value = canister_migrations.encode_to_vec();
 
         let mutations = vec![
-            insert(key1.as_bytes(), value1),
-            insert(key2.as_bytes(), value2),
+            insert(routing_table_key.as_bytes(), &routing_table_value),
+            insert(routing_table_shard_key.as_bytes(), &routing_table_value),
+            insert(
+                canister_migrations_key.as_bytes(),
+                &canister_migrations_value,
+            ),
         ];
 
         let registry = Registry::new();
@@ -298,33 +329,36 @@ mod tests {
 
     #[test]
     fn snapshot_reflects_latest_registry_state() {
-        let key1 = make_routing_table_record_key();
-        let value1 = PbRoutingTable { entries: vec![] }.encode_to_vec();
+        let routing_table_key = make_routing_table_record_key();
+        let routing_table_shard_key = make_canister_ranges_key(CanisterId::from(0));
+        let routing_table_value = PbRoutingTable { entries: vec![] }.encode_to_vec();
 
-        let key2 = make_node_operator_record_key(*TEST_USER1_PRINCIPAL);
-        let value2 = NodeOperatorRecord {
+        let node_operator_key = make_node_operator_record_key(*TEST_USER1_PRINCIPAL);
+        let node_operator_value = NodeOperatorRecord {
             node_operator_principal_id: (*TEST_USER1_PRINCIPAL).to_vec(),
             node_allowance: 0,
             node_provider_principal_id: (*TEST_USER1_PRINCIPAL).to_vec(),
             dc_id: "".into(),
             rewardable_nodes: BTreeMap::new(),
             ipv6: None,
+            max_rewardable_nodes: BTreeMap::new(),
         }
         .encode_to_vec();
 
         let mutations = vec![
-            insert(key1.as_bytes(), &value1),
-            insert(key2.as_bytes(), &value2),
+            insert(routing_table_key.as_bytes(), &routing_table_value),
+            insert(routing_table_shard_key.as_bytes(), &routing_table_value),
+            insert(node_operator_key.as_bytes(), &node_operator_value),
         ];
         let snapshot = Registry::new().take_latest_snapshot_with_mutations(&mutations);
 
-        let snapshot_data = snapshot.get(key1.as_bytes());
+        let snapshot_data = snapshot.get(routing_table_key.as_bytes());
         assert!(snapshot_data.is_some());
-        assert_eq!(snapshot_data.unwrap(), &value1);
+        assert_eq!(snapshot_data.unwrap(), &routing_table_value);
 
-        let snapshot_data = snapshot.get(key2.as_bytes());
+        let snapshot_data = snapshot.get(node_operator_key.as_bytes());
         assert!(snapshot_data.is_some());
-        assert_eq!(snapshot_data.unwrap(), &value2);
+        assert_eq!(snapshot_data.unwrap(), &node_operator_value);
     }
 
     #[test]
@@ -337,6 +371,7 @@ mod tests {
             dc_id: "".into(),
             rewardable_nodes: BTreeMap::new(),
             ipv6: None,
+            max_rewardable_nodes: BTreeMap::new(),
         }
         .encode_to_vec();
         let mut mutations = vec![insert(key.as_bytes(), &value)];
@@ -354,3 +389,6 @@ mod tests {
         assert!(snapshot_data.is_none());
     }
 }
+
+#[cfg(feature = "canbench-rs")]
+mod benches;

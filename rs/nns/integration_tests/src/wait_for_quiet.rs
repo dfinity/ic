@@ -7,16 +7,13 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance_api::{
-    pb::v1::{
-        add_or_remove_node_provider::Change,
-        manage_neuron::{self, NeuronIdOrSubaccount},
-        manage_neuron_response::Command as CommandResponse,
-        neuron::DissolveState,
-        AddOrRemoveNodeProvider, MakeProposalRequest, ManageNeuronCommandRequest,
-        ManageNeuronRequest, ManageNeuronResponse, Neuron, NodeProvider, ProposalActionRequest,
-        ProposalInfo, Vote,
-    },
+    add_or_remove_node_provider::Change,
+    manage_neuron::{self, NeuronIdOrSubaccount},
+    manage_neuron_response::Command as CommandResponse,
+    neuron::DissolveState,
     test_api::TimeWarp,
+    AddOrRemoveNodeProvider, MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest,
+    ManageNeuronResponse, Neuron, NodeProvider, ProposalActionRequest, ProposalInfo, Vote,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,

@@ -4,9 +4,7 @@ use ic_canister_sandbox_backend_lib::{
     launcher::sandbox_launcher_main, RUN_AS_CANISTER_SANDBOX_FLAG, RUN_AS_COMPILER_SANDBOX_FLAG,
     RUN_AS_SANDBOX_LAUNCHER_FLAG,
 };
-use ic_config::{
-    embedders::BestEffortResponsesFeature, flag_status::FlagStatus, Config, ConfigSource,
-};
+use ic_config::{flag_status::FlagStatus, Config, ConfigSource};
 use ic_drun::{run_drun, DrunOptions};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::NumBytes;
@@ -65,14 +63,12 @@ async fn drun_main() -> Result<(), String> {
         // For testing enhanced orthogonal persistence in Motoko,
         // enable Wasm Memory64 and re-configure the main memory capacity.
         hypervisor_config.embedders_config.feature_flags.wasm64 = FlagStatus::Enabled;
+        hypervisor_config.embedders_config.max_wasm64_memory_size = MAIN_MEMORY_CAPACITY;
+        // Disable trap backtrace in `drun` to have less implementation-specific test outputs.
         hypervisor_config
             .embedders_config
             .feature_flags
-            .best_effort_responses = BestEffortResponsesFeature::Enabled;
-        hypervisor_config.embedders_config.max_wasm64_memory_size = MAIN_MEMORY_CAPACITY;
-        hypervisor_config.max_canister_memory_size_wasm64 =
-            hypervisor_config.embedders_config.max_wasm64_memory_size
-                + hypervisor_config.embedders_config.max_stable_memory_size;
+            .canister_backtrace = FlagStatus::Disabled;
 
         let cfg = Config::load_with_default(&source, default_config).unwrap_or_else(|err| {
             eprintln!("Failed to load config:\n  {}", err);

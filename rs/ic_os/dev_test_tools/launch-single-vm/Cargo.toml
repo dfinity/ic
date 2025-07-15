@@ -10,6 +10,8 @@ ic-prep = { path = "../../../prep" }
 ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
 ic-system-test-driver = { path = "../../../tests/driver" }
 ic-types = { path = "../../../types/types" }
+config = { path = "../../config", features = ["dev"] }
+config_types = { path = "../../config_types" }
 
 clap = { workspace = true }
 reqwest = { workspace = true }

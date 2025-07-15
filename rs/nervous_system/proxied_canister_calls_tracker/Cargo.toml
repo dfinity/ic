@@ -8,6 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 ic-base-types = { path = "../../types/base_types" }
+ic-cdk = { workspace = true }
 
 [dev-dependencies]
 maplit = "1.0.2"

@@ -23,44 +23,30 @@ use std::{convert::TryFrom, fs, io::Read, path::Path};
 pub enum UpdateImageType {
     Image,
     ImageTest,
-    Sha256,
 }
 
-pub fn get_update_image_url(image_type: UpdateImageType, git_revision: &str) -> String {
-    match image_type {
-        UpdateImageType::Image => {
-            format!(
+pub fn get_public_update_image_url(git_revision: &str) -> String {
+    format!(
                 "http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/update-img/update-img.tar.zst",
                 git_revision
             )
-        }
-        UpdateImageType::ImageTest => {
-            format!(
-                "http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/update-img/update-img-test.tar.zst",
-                git_revision
-            )
-        }
-        UpdateImageType::Sha256 => {
-            format!(
-                "http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/update-img/SHA256SUMS",
-                git_revision
-            )
-        }
-    }
 }
 
-pub async fn fetch_update_file_sha256_with_retry(
-    log: &Logger,
-    version_str: &str,
-    is_test_img: bool,
-) -> String {
+pub fn get_public_update_image_sha_url(git_revision: &str) -> String {
+    format!(
+        "http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/update-img/SHA256SUMS",
+        git_revision
+    )
+}
+
+pub async fn fetch_update_file_sha256_with_retry(log: &Logger, version_str: &str) -> String {
     ic_system_test_driver::retry_with_msg_async!(
         format!("fetch update file sha256 of version {}", version_str),
         log,
         READY_WAIT_TIMEOUT,
         RETRY_BACKOFF,
         || async {
-            match fetch_update_file_sha256(version_str, is_test_img).await {
+            match fetch_update_file_sha256(version_str).await {
                 Err(err) => bail!(err),
                 Ok(sha) => Ok(sha),
             }
@@ -70,12 +56,9 @@ pub async fn fetch_update_file_sha256_with_retry(
     .expect("Failed to fetch sha256 file.")
 }
 
-pub async fn fetch_update_file_sha256(
-    version_str: &str,
-    is_test_img: bool,
-) -> Result<String, String> {
-    let sha_url = get_update_image_url(UpdateImageType::Sha256, version_str);
-    let tmp_dir = tempfile::tempdir().unwrap().into_path();
+pub async fn fetch_update_file_sha256(version_str: &str) -> Result<String, String> {
+    let sha_url = get_public_update_image_sha_url(version_str);
+    let tmp_dir = tempfile::tempdir().unwrap().keep();
     let mut tmp_file = tmp_dir.clone();
     tmp_file.push("SHA256.txt");
 
@@ -88,10 +71,7 @@ pub async fn fetch_update_file_sha256(
         .map_err(|err| format!("Something went wrong reading the file: {:?}", err))?;
     for line in contents.lines() {
         let words: Vec<&str> = line.split(char::is_whitespace).collect();
-        let suffix = match is_test_img {
-            true => "-img-test.tar.zst",
-            false => "-img.tar.zst",
-        };
+        let suffix = "update-img.tar.zst";
         if words.len() == 2 && words[1].ends_with(suffix) {
             return Ok(words[0].to_string());
         }
@@ -231,9 +211,11 @@ async fn bless_replica_version_with_sha(
     let proposal_sender = Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR);
     let test_neuron_id = NeuronId(TEST_NEURON_1_ID);
 
-    let replica_version = match image_type == UpdateImageType::ImageTest {
-        true => ReplicaVersion::try_from(format!("{}-test", target_version)).unwrap(),
-        false => ReplicaVersion::try_from(target_version).unwrap(),
+    let replica_version = match image_type {
+        UpdateImageType::ImageTest => {
+            ReplicaVersion::try_from(format!("{}-test", target_version)).unwrap()
+        }
+        UpdateImageType::Image => ReplicaVersion::try_from(target_version).unwrap(),
     };
 
     let registry_canister = RegistryCanister::new(vec![nns_node.get_public_url()]);
@@ -286,24 +268,17 @@ pub async fn bless_replica_version(
 pub async fn bless_public_replica_version(
     nns_node: &IcNodeSnapshot,
     target_version: &str,
-    image_type: UpdateImageType,
-    url_image_type: UpdateImageType, // normally it is the same as above, unless we want to have bogus url
     logger: &Logger,
 ) {
-    let upgrade_url = get_update_image_url(url_image_type, target_version);
+    let upgrade_url = get_public_update_image_url(target_version);
     info!(logger, "Upgrade URL: {}", upgrade_url);
 
-    let sha256 = fetch_update_file_sha256_with_retry(
-        logger,
-        target_version,
-        image_type == UpdateImageType::ImageTest,
-    )
-    .await;
+    let sha256 = fetch_update_file_sha256_with_retry(logger, target_version).await;
 
     bless_replica_version_with_sha(
         nns_node,
         target_version,
-        image_type,
+        UpdateImageType::Image,
         logger,
         &sha256,
         vec![upgrade_url.clone()],
@@ -327,9 +302,11 @@ pub async fn bless_replica_version_with_urls(
     let blessed_versions = get_blessed_replica_versions(&registry_canister).await;
     info!(logger, "Initial: {:?}", blessed_versions);
 
-    let replica_version = match image_type == UpdateImageType::ImageTest {
-        true => ReplicaVersion::try_from(format!("{}-test", target_version)).unwrap(),
-        false => ReplicaVersion::try_from(target_version).unwrap(),
+    let replica_version = match image_type {
+        UpdateImageType::ImageTest => {
+            ReplicaVersion::try_from(format!("{}-test", target_version)).unwrap()
+        }
+        UpdateImageType::Image => ReplicaVersion::try_from(target_version).unwrap(),
     };
 
     info!(

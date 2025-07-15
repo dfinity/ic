@@ -18,6 +18,7 @@ dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_core = { path = "../../rust_canisters/dfn_core" }
 dfn_http_metrics = { path = "../../rust_canisters/dfn_http_metrics" }
 futures = { workspace = true }
+hex = { workspace = true }
 ic-base-types = { path = "../../types/base_types/" }
 ic-certified-map = "0.3.1"
 ic-cdk = { workspace = true }
@@ -33,10 +34,12 @@ ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/build_metadata" }
 ic-nervous-system-string = { path = "../../nervous_system/string" }
+ic-nervous-system-temporary = { path = "../../nervous_system/temporary" }
 ic-nns-common = { path = "../../nns/common" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-protobuf = { path = "../../protobuf" }
 ic-registry-canister-api = { path = "../../registry/canister/api" }
+ic-registry-canister-chunkify = { path = "../../registry/canister/chunkify" }
 ic-registry-keys = { path = "../../registry/keys" }
 ic-registry-routing-table = { path = "../../registry/routing_table" }
 ic-registry-subnet-features = { path = "../../registry/subnet_features" }
@@ -46,6 +49,7 @@ ic-registry-node-provider-rewards = { path = "../node_provider_rewards" }
 ic-stable-structures = { workspace = true }
 ic-types = { path = "../../types/types" }
 ic-utils = { path = "../../utils" }
+ic-nervous-system-time-helpers = { path = "../../nervous_system/time_helpers" }
 idna = { workspace = true }
 lazy_static = { workspace = true }
 leb128 = "0.2.4"
@@ -55,6 +59,9 @@ on_wire = { path = "../../rust_canisters/on_wire" }
 prost = { workspace = true }
 serde = { workspace = true }
 url = { workspace = true }
+canbench-rs = { version = "0.1.7", optional = true }
+rand = { workspace = true }
+rand_chacha = { workspace = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 getrandom = { version = "0.2", features = ["custom"] }
@@ -77,7 +84,6 @@ ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
 lazy_static = { workspace = true }
-rand = { workspace = true }
 rand_distr = "0.4.0"
 serde_json = { workspace = true }
 
@@ -96,3 +102,7 @@ itertools = { workspace = true }
 registry-canister-protobuf-generator = { path = "./protobuf_generator" }
 tempfile = { workspace = true }
 tokio = { workspace = true }
+
+[features]
+test = []
+canbench-rs = ["dep:canbench-rs"]

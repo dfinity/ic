@@ -1,25 +1,21 @@
-use candid::{candid_method, Decode};
 use ic_base_types::PrincipalId;
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::{
-    api::call::arg_data_raw, caller as ic_cdk_caller, heartbeat, post_upgrade, pre_upgrade,
-    println, query, spawn, update,
+    caller as ic_cdk_caller, heartbeat, init, post_upgrade, pre_upgrade, println, query, spawn,
+    update,
 };
+use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_nervous_system_canisters::cmc::CMCCanister;
 use ic_nervous_system_common::{
     memory_manager_upgrade_storage::{load_protobuf, store_protobuf},
     serve_metrics,
 };
 use ic_nervous_system_runtime::CdkRuntime;
-use ic_nervous_system_time_helpers::now_seconds;
 use ic_nns_common::{
     access_control::{check_caller_is_gtc, check_caller_is_ledger},
     pb::v1::{NeuronId as NeuronIdProto, ProposalId as ProposalIdProto},
     types::{NeuronId, ProposalId},
 };
 use ic_nns_constants::LEDGER_CANISTER_ID;
-#[cfg(feature = "test")]
-use ic_nns_governance::governance::TimeWarp as GovTimeWarp;
 use ic_nns_governance::{
     canister_state::{governance, governance_mut, set_governance, CanisterEnv},
     encode_metrics,
@@ -29,7 +25,9 @@ use ic_nns_governance::{
     storage::{grow_upgrades_memory_to, validate_stable_storage, with_upgrades_memory},
     timer_tasks::schedule_tasks,
 };
-use ic_nns_governance_api::pb::v1::{
+#[cfg(feature = "test")]
+use ic_nns_governance_api::test_api::TimeWarp;
+use ic_nns_governance_api::{
     claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshNeuronFromAccountResponseResult,
     governance::GovernanceCachedMetrics,
     governance_error::ErrorType,
@@ -40,28 +38,27 @@ use ic_nns_governance_api::pb::v1::{
     manage_neuron_response, ClaimOrRefreshNeuronFromAccount,
     ClaimOrRefreshNeuronFromAccountResponse, GetNeuronsFundAuditInfoRequest,
     GetNeuronsFundAuditInfoResponse, Governance as ApiGovernanceProto, GovernanceError,
-    ListKnownNeuronsResponse, ListNeurons, ListNeuronsProto, ListNeuronsResponse,
-    ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse, ListNodeProvidersResponse,
-    ListProposalInfo, ListProposalInfoResponse, ManageNeuronCommandRequest, ManageNeuronRequest,
+    ListKnownNeuronsResponse, ListNeurons, ListNeuronsResponse, ListNodeProviderRewardsRequest,
+    ListNodeProviderRewardsResponse, ListNodeProvidersResponse, ListProposalInfo,
+    ListProposalInfoResponse, ManageNeuronCommandRequest, ManageNeuronRequest,
     ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, Neuron, NeuronInfo,
     NodeProvider, Proposal, ProposalInfo, RestoreAgingSummary, RewardEvent,
     SettleCommunityFundParticipation, SettleNeuronsFundParticipationRequest,
     SettleNeuronsFundParticipationResponse, UpdateNodeProvider, Vote,
 };
-#[cfg(feature = "test")]
-use ic_nns_governance_api::test_api::TimeWarp;
-use prost::Message;
-use rand::{RngCore, SeedableRng};
-use rand_chacha::ChaCha20Rng;
 use std::sync::Arc;
-use std::{boxed::Box, ops::Bound, time::Duration};
+use std::{boxed::Box, time::Duration};
 
-#[cfg(not(feature = "tla"))]
-use ic_nervous_system_canisters::ledger::IcpLedgerCanister;
+#[cfg(feature = "test")]
+use ic_nns_governance::governance::TimeWarp as GovTimeWarp;
+
 use ic_nns_governance::canister_state::{with_governance, CanisterRandomnessGenerator};
 
 #[cfg(feature = "tla")]
 mod tla_ledger;
+
+#[cfg(not(feature = "tla"))]
+use ic_nervous_system_canisters::ledger::IcpLedgerCanister;
 #[cfg(feature = "tla")]
 use tla_ledger::LoggingIcpLedgerCanister as IcpLedgerCanister;
 
@@ -74,31 +71,9 @@ const WASM_PAGES_RESERVED_FOR_UPGRADES_MEMORY: u64 = 65_536;
 pub(crate) const LOG_PREFIX: &str = "[Governance] ";
 
 fn schedule_timers() {
-    schedule_adjust_neurons_storage(Duration::from_nanos(0), Bound::Unbounded);
     schedule_spawn_neurons();
-    schedule_unstake_maturity_of_dissolved_neurons();
-    schedule_neuron_data_validation();
     schedule_vote_processing();
     schedule_tasks();
-}
-
-// The interval before adjusting neuron storage for the next batch of neurons starting from last
-// neuron id scanned in the last batch.
-const ADJUST_NEURON_STORAGE_BATCH_INTERVAL: Duration = Duration::from_secs(5);
-// The interval before adjusting neuron storage for the next round starting from the smallest neuron
-// id.
-const ADJUST_NEURON_STORAGE_ROUND_INTERVAL: Duration = Duration::from_secs(3600);
-
-fn schedule_adjust_neurons_storage(delay: Duration, next: Bound<NeuronIdProto>) {
-    ic_cdk_timers::set_timer(delay, move || {
-        let next = governance_mut().batch_adjust_neurons_storage(next);
-        let next_delay = if next == Bound::Unbounded {
-            ADJUST_NEURON_STORAGE_ROUND_INTERVAL
-        } else {
-            ADJUST_NEURON_STORAGE_BATCH_INTERVAL
-        };
-        schedule_adjust_neurons_storage(next_delay, next);
-    });
 }
 
 const SPAWN_NEURONS_INTERVAL: Duration = Duration::from_secs(60);
@@ -107,20 +82,6 @@ fn schedule_spawn_neurons() {
         spawn(async {
             governance_mut().maybe_spawn_neurons().await;
         });
-    });
-}
-
-const UNSTAKE_MATURITY_OF_DISSOLVED_NEURONS_INTERVAL: Duration = Duration::from_secs(60);
-fn schedule_unstake_maturity_of_dissolved_neurons() {
-    ic_cdk_timers::set_timer_interval(UNSTAKE_MATURITY_OF_DISSOLVED_NEURONS_INTERVAL, || {
-        governance_mut().unstake_maturity_of_dissolved_neurons();
-    });
-}
-
-const NEURON_DATA_VALIDATION_INTERNVAL: Duration = Duration::from_secs(5);
-fn schedule_neuron_data_validation() {
-    ic_cdk_timers::set_timer_interval(NEURON_DATA_VALIDATION_INTERNVAL, || {
-        governance_mut().maybe_run_validations();
     });
 }
 
@@ -145,55 +106,11 @@ fn debug_log(s: &str) {
     }
 }
 
-fn panic_with_probability(probability: f64, message: &str) {
-    // We cannot use the `CanisterEnv::random_u64` method here, since panicking rolls back the
-    // state, which makes sure that the next time still panics, unless some other operation modifies
-    // the `rng` successfully, such as spawning a neuron.
-    let random = ChaCha20Rng::seed_from_u64(now_seconds()).next_u64();
-    let should_panic = (random as f64) / (u64::MAX as f64) <= probability;
-    if should_panic {
-        panic!("{}", message);
-    }
+#[init]
+fn canister_init(governance: ApiGovernanceProto) {
+    canister_init_(governance);
 }
 
-#[export_name = "canister_init"]
-fn canister_init() {
-    ic_cdk::setup();
-
-    let init_bytes = arg_data_raw();
-    let init_result = if init_bytes.starts_with(b"DIDL") {
-        match Decode!(&init_bytes, ApiGovernanceProto) {
-            Err(err) => {
-                println!(
-                    "Error deserializing canister state in initialization: {}.",
-                    err
-                );
-                Err(err.to_string())
-            }
-            Ok(proto) => {
-                canister_init_(proto);
-                Ok(())
-            }
-        }
-    } else {
-        match ApiGovernanceProto::decode(&init_bytes[..]) {
-            Err(err) => {
-                println!(
-                    "Error deserializing canister state in initialization: {}.",
-                    err
-                );
-                Err(err.to_string())
-            }
-            Ok(proto) => {
-                canister_init_(proto);
-                Ok(())
-            }
-        }
-    };
-    init_result.expect("Couldn't initialize canister.");
-}
-
-#[candid_method(init)]
 fn canister_init_(init_payload: ApiGovernanceProto) {
     println!(
         "{}canister_init: Initializing with: economics: \
@@ -204,9 +121,8 @@ fn canister_init_(init_payload: ApiGovernanceProto) {
         init_payload.neurons.len()
     );
 
-    let governance_proto = InternalGovernanceProto::from(init_payload);
     set_governance(Governance::new(
-        governance_proto,
+        init_payload,
         Arc::new(CanisterEnv::new()),
         Arc::new(IcpLedgerCanister::<CdkRuntime>::new(LEDGER_CANISTER_ID)),
         Arc::new(CMCCanister::<CdkRuntime>::new()),
@@ -245,11 +161,10 @@ fn canister_post_upgrade() {
 
     println!(
         "{}canister_post_upgrade: Initializing with: economics: \
-          {:?}, genesis_timestamp_seconds: {}, neuron count: {}, xdr_conversion_rate: {:?}",
+          {:?}, genesis_timestamp_seconds: {}, xdr_conversion_rate: {:?}",
         LOG_PREFIX,
         restored_state.economics,
         restored_state.genesis_timestamp_seconds,
-        restored_state.neurons.len(),
         restored_state.xdr_conversion_rate,
     );
 
@@ -296,13 +211,6 @@ async fn forward_vote(
 #[update(hidden = true)]
 fn transfer_notification() {
     debug_log("neuron_stake_transfer_notification");
-    check_caller_is_ledger();
-    panic!("Method removed. Please use ManageNeuron::ClaimOrRefresh.",)
-}
-
-#[update(hidden = true)]
-fn transfer_notification_pb() {
-    debug_log("neuron_stake_transfer_notification_pb");
     check_caller_is_ledger();
     panic!("Method removed. Please use ManageNeuron::ClaimOrRefresh.",)
 }
@@ -411,7 +319,6 @@ fn get_full_neuron(neuron_id: NeuronId) -> Result<Neuron, GovernanceError> {
     debug_log("get_full_neuron");
     governance()
         .get_full_neuron(&NeuronIdProto::from(neuron_id), &caller())
-        .map(Neuron::from)
         .map_err(GovernanceError::from)
 }
 
@@ -573,62 +480,6 @@ async fn heartbeat() {
 }
 
 // Protobuf interface.
-
-#[export_name = "canister_update manage_neuron_pb"]
-fn manage_neuron_pb() {
-    debug_log("manage_neuron_pb");
-    panic_with_probability(
-        1.0,
-        "manage_neuron_pb is deprecated. Please use manage_neuron instead.",
-    );
-
-    let input = arg_data_raw();
-
-    ic_cdk::spawn(async move {
-        ic_cdk::setup();
-        let request =
-            ManageNeuronRequest::decode(&input[..]).expect("Could not decode ManageNeuronRequest");
-        let res: ManageNeuronResponse = manage_neuron(request).await;
-        let mut buf = Vec::with_capacity(res.encoded_len());
-        res.encode(&mut buf)
-            .map_err(|e| e.to_string())
-            .expect("Could not encode response");
-        ic_cdk::api::call::reply_raw(&buf)
-    })
-}
-
-#[export_name = "canister_update claim_or_refresh_neuron_from_account_pb"]
-fn claim_or_refresh_neuron_from_account_pb() {
-    debug_log("claim_or_refresh_neuron_from_account_pb");
-    panic!("Method removed. Please use ManageNeuron::ClaimOrRefresh.",)
-}
-
-#[export_name = "canister_query list_proposals_pb"]
-fn list_proposals_pb() {
-    debug_log("list_proposals_pb");
-    panic!("Method removed.  Please use list_proposals instead.")
-}
-
-#[export_name = "canister_query list_neurons_pb"]
-fn list_neurons_pb() {
-    debug_log("list_neurons_pb");
-    panic_with_probability(
-        1.0,
-        "list_neurons_pb is deprecated. Please use list_neurons instead.",
-    );
-
-    ic_cdk::setup();
-    let request =
-        ListNeuronsProto::decode(&arg_data_raw()[..]).expect("Could not decode ListNeuronsProto");
-    let candid_request = ListNeurons::from(request);
-    let res: ListNeuronsResponse = list_neurons(candid_request);
-    let mut buf = Vec::with_capacity(res.encoded_len());
-    res.encode(&mut buf)
-        .map_err(|e| e.to_string())
-        .expect("Could not encode response");
-    ic_cdk::api::call::reply_raw(&buf);
-}
-
 #[update]
 fn update_node_provider(req: UpdateNodeProvider) -> Result<(), GovernanceError> {
     debug_log("update_node_provider");
@@ -712,6 +563,21 @@ fn http_request(request: HttpRequest) -> HttpResponse {
 
 fn main() {
     // This block is intentionally left blank.
+}
+
+// A query method to get the TLA traces collected in a test run.
+#[cfg(all(feature = "tla", feature = "test"))]
+#[query(hidden = true)]
+fn get_tla_traces() -> Vec<tla_instrumentation::UpdateTrace> {
+    use ic_nns_governance::governance::tla::TLA_TRACES_MUTEX;
+    let mut traces = TLA_TRACES_MUTEX
+        .as_ref()
+        .expect("TLA_TRACES_MUTEX is None in get_tla_traces")
+        .write()
+        .expect("Couldn't acquire TLA_TRACES_MUTEX write lock in get_tla_traces");
+    let mut result = Vec::new();
+    std::mem::swap(&mut result, &mut *traces);
+    result
 }
 
 // In order for some of the test(s) within this mod to work,

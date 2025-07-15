@@ -84,7 +84,6 @@ DEV_DEPENDENCIES = [
     "//rs/rosetta-api/icp/test_utils",
     "//rs/types/base_types",
     "@crate_index//:futures",
-    "@crate_index//:ic-cdk",
     "@crate_index//:num-traits",
     "@crate_index//:proptest",
     "@crate_index//:prost",
@@ -97,7 +96,7 @@ MACRO_DEV_DEPENDENCIES = []
 ALIASES = {
 }
 
-ROSETTA_VERSION = "2.1.3"
+ROSETTA_VERSION = "2.1.6"
 
 rust_library(
     name = "rosetta-api",
@@ -137,8 +136,10 @@ rust_test(
 )
 
 rust_test_suite_with_extra_srcs(
-    name = "rosetta-api-tests",
-    srcs = glob(["tests/*.rs"]),
+    name = "rosetta-api-cli-tests",
+    srcs = [
+        "tests/rosetta_cli_tests.rs",
+    ],
     aliases = ALIASES,
     data = glob([
         "tests/*.json",
@@ -152,6 +153,7 @@ rust_test_suite_with_extra_srcs(
     },
     extra_srcs = ["tests/test_utils/mod.rs"],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    target_compatible_with = ["@platforms//os:linux"],  # rosetta-cli is not available on MacOS
     version = ROSETTA_VERSION,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

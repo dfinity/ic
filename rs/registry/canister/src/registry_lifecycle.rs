@@ -34,7 +34,7 @@ pub fn canister_post_upgrade(
             1 // Single batch of mutations due to this data migration.
         }
     };
-
+    //
     // When there are no migrations, `mutation_batches_due_to_data_migrations` should be set to `0`.
     // let mutation_batches_due_to_data_migrations = 0;
 
@@ -62,6 +62,9 @@ pub fn canister_post_upgrade(
     }
 }
 
+// This will be used one additional time before being removed, after node_reward_type is enforced
+// for newly added nodes, therefore we are allowing dead code here.
+#[allow(dead_code)]
 fn add_missing_node_types_to_nodes(registry: &Registry) -> Vec<RegistryMutation> {
     let missing_node_types_map = &MISSING_NODE_TYPES_MAP;
 
@@ -250,7 +253,7 @@ mod test {
         }
 
         let nodes_expected = node_additions.len();
-        assert_eq!(nodes_expected, 1418);
+        assert_eq!(nodes_expected, 485);
 
         registry.apply_mutations_for_test(node_additions);
 

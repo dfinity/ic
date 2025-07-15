@@ -3,16 +3,19 @@ use canister_test::Wasm;
 use futures::future::join_all;
 use ic_base_types::PrincipalId;
 use ic_nervous_system_integration_tests::pocket_ic_helpers::{
-    add_wasms_to_sns_wasm, install_canister_with_controllers, NnsInstaller,
+    install_canister_with_controllers, NnsInstaller, SnsWasmCanistersInstaller,
 };
+use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, IDENTITY_CANISTER_ID, LEDGER_CANISTER_ID,
     LEDGER_INDEX_CANISTER_ID, NNS_UI_CANISTER_ID, ROOT_CANISTER_ID, SNS_AGGREGATOR_CANISTER_ID,
     SNS_WASM_CANISTER_ID,
 };
+use ic_nns_governance_api::{neuron::DissolveState, Neuron};
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use icp_ledger::{AccountIdentifier, Tokens};
 use pocket_ic::nonblocking::PocketIc;
+use std::time::SystemTime;
 
 use crate::utils::{check_canister_installed, ALL_SNS_TESTING_CANISTER_IDS};
 
@@ -29,7 +32,8 @@ pub async fn bootstrap_nns(
     pocket_ic: &PocketIc,
     initial_mutations: Vec<RegistryAtomicMutateRequest>,
     ledger_balances: Vec<(AccountIdentifier, Tokens)>,
-    neuron_hotkeys: Vec<PrincipalId>,
+    neuron_controller: PrincipalId,
+    deciding_neuron_id: NeuronId,
 ) {
     // Ensure that all required subnets are present before proceeding to install NNS canisters
     // At the moment this check doesn't make a lot of sense since we are always creating the new PocketIC instance
@@ -45,9 +49,30 @@ pub async fn bootstrap_nns(
     .await;
 
     if !canisters_installed.iter().any(|installed| *installed) {
-        // TODO @rvem: at some point in the future we might want to use
-        // non-default 'neurons_fund_hotkeys' to provide
-        // neuron hotkeys for user-provided identities.
+        const TWELVE_MONTHS_SECONDS: u64 = 30 * 12 * 24 * 60 * 60;
+
+        let voting_power_refreshed_timestamp_seconds = Some(
+            SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
+        );
+
+        let deciding_neuron = Neuron {
+            id: Some(deciding_neuron_id),
+            account: [0u8; 32].to_vec(),
+            controller: Some(neuron_controller),
+            cached_neuron_stake_e8s: 1_000_000_000,
+            maturity_e8s_equivalent: 1_500_000 * 1_00000000,
+            auto_stake_maturity: Some(true),
+            joined_community_fund_timestamp_seconds: Some(1),
+            dissolve_state: Some(DissolveState::DissolveDelaySeconds(TWELVE_MONTHS_SECONDS)),
+            not_for_profit: true,
+            hot_keys: vec![],
+            voting_power_refreshed_timestamp_seconds,
+            ..Default::default()
+        };
+
         let mut nns_installer = NnsInstaller::default();
         nns_installer.with_current_nns_canister_versions();
         nns_installer.with_test_governance_canister();
@@ -56,9 +81,14 @@ pub async fn bootstrap_nns(
         nns_installer.with_index_canister();
         nns_installer.with_custom_registry_mutations(initial_mutations);
         nns_installer.with_ledger_balances(ledger_balances);
-        nns_installer.with_neurons_fund_hotkeys(neuron_hotkeys);
+        nns_installer.with_neurons(vec![deciding_neuron]);
         nns_installer.install(pocket_ic).await;
-        add_wasms_to_sns_wasm(pocket_ic, false).await.unwrap();
+        SnsWasmCanistersInstaller::default()
+            .with_current_sns_canister_versions()
+            .with_nns_neuron(deciding_neuron_id, neuron_controller)
+            .add_wasms_to_sns_wasm(pocket_ic)
+            .await
+            .unwrap();
     } else if !canisters_installed.iter().all(|exists| *exists) {
         panic!("Some NNS canisters are missing, we cannot fix this automatically at the moment");
     }

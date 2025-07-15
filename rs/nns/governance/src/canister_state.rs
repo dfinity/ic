@@ -411,25 +411,24 @@ fn get_effective_payload(
 fn add_proposal_id_to_add_wasm_request(
     payload: &[u8],
     proposal_id: u64,
-) -> Result<Vec<u8>, ic_nns_governance_api::pb::v1::GovernanceError> {
+) -> Result<Vec<u8>, ic_nns_governance_api::GovernanceError> {
     let add_wasm_request = match Decode!([decoder_config()]; payload, AddWasmRequest) {
         Ok(add_wasm_request) => add_wasm_request,
         Err(e) => {
-            return Err(
-                ic_nns_governance_api::pb::v1::GovernanceError::new_with_message(
-                    ic_nns_governance_api::pb::v1::governance_error::ErrorType::InvalidProposal,
-                    format!("Payload must be a valid AddWasmRequest. Error: {e}"),
-                ),
-            );
+            return Err(ic_nns_governance_api::GovernanceError::new_with_message(
+                ic_nns_governance_api::governance_error::ErrorType::InvalidProposal,
+                format!("Payload must be a valid AddWasmRequest. Error: {e}"),
+            ));
         }
     };
 
-    let wasm = add_wasm_request.wasm.ok_or(
-        ic_nns_governance_api::pb::v1::GovernanceError::new_with_message(
-            ic_nns_governance_api::pb::v1::governance_error::ErrorType::InvalidProposal,
-            "Payload must contain a wasm.",
-        ),
-    )?;
+    let wasm =
+        add_wasm_request
+            .wasm
+            .ok_or(ic_nns_governance_api::GovernanceError::new_with_message(
+                ic_nns_governance_api::governance_error::ErrorType::InvalidProposal,
+                "Payload must contain a wasm.",
+            ))?;
 
     let add_wasm_request = AddWasmRequest {
         wasm: Some(SnsWasm {

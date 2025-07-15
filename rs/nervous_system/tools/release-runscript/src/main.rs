@@ -185,7 +185,7 @@ fn run_determine_targets(cmd: DetermineTargets) -> Result<()> {
         "Genesis-Token",
         "Node-Rewards",
     ];
-    let sns_candidates = ["Root", "Governance", "Swap", "Ledger", "Archive", "Index"];
+    let sns_candidates = ["Root", "Governance", "Swap", "Index", "Ledger", "Archive"];
 
     // Prepare vectors for selected releases.
     let mut nns_canisters: Vec<String> = Vec::new();
@@ -509,7 +509,7 @@ fn run_create_forum_post(cmd: CreateForumPost) -> Result<()> {
     let ic = ic_dir();
 
     // --- Generate NNS forum post ---
-    {
+    if !nns_proposal_text_paths.is_empty() {
         let script = ic.join("testnet/tools/nns-tools/cmd.sh");
         let mut args = vec!["generate_forum_post_nns_upgrades"];
         let path_strs: Vec<&str> = nns_proposal_text_paths
@@ -552,7 +552,7 @@ fn run_create_forum_post(cmd: CreateForumPost) -> Result<()> {
     }
 
     // --- Generate SNS forum post ---
-    {
+    if !sns_proposal_text_paths.is_empty() {
         let script = ic.join("testnet/tools/nns-tools/cmd.sh");
         let mut args = vec!["generate_forum_post_sns_wasm_publish"];
         let path_strs: Vec<&str> = sns_proposal_text_paths

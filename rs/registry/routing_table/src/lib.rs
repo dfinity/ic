@@ -55,7 +55,7 @@ impl CanisterIdRange {
     /// * `self.start` if `previous_canister_id` is `None`.
     /// * `self.start` if `previous_canister_id < self.start`.
     /// * `None` if `previous_canister_id >= self.end`
-    ///    or the entire range of 64 bit integers is exhausted.
+    ///   or the entire range of 64 bit integers is exhausted.
     /// * `previous_canister_id + 1` otherwise.
     pub fn generate_canister_id(
         &self,
@@ -312,6 +312,14 @@ impl RoutingTable {
         debug_assert_eq!(self.well_formed(), Ok(()));
 
         Ok(())
+    }
+
+    pub fn assign_canister(&mut self, canister_id: CanisterId, destination: SubnetId) {
+        let range = CanisterIdRange {
+            start: canister_id,
+            end: canister_id,
+        };
+        self.assign_range(range, destination);
     }
 
     /// Assigns a canister ID range to the destination subnet.

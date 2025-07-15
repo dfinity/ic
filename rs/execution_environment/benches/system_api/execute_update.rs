@@ -1,6 +1,14 @@
-///
-/// Benchmark System API performance in `execute_update()`.
-///
+//! Benchmark System API performance in `execute_update()`.
+//!
+//! This benchmark runs nightly in CI, and the results are available in Grafana.
+//! See: `schedule-rust-bench.yml`
+//!
+//! To run the benchmark locally:
+//!
+//! ```shell
+//! bazel run //rs/execution_environment:execute_update_bench
+//! ```
+
 use criterion::{criterion_group, criterion_main, Criterion};
 use execution_environment_bench::{common, wat::*};
 use ic_error_types::ErrorCode;
@@ -867,16 +875,6 @@ pub fn execute_update_bench(c: &mut Criterion) {
             "wasm64/ic0_canister_status()".into(),
             Module::Test.from_ic0("canister_status", NoParams, Result::I32, Wasm64::Enabled),
             517000006,
-        ),
-        common::Benchmark(
-            "wasm32/ic0_mint_cycles()".into(),
-            Module::Test.from_ic0("mint_cycles", Param1(1_i64), Result::I64, Wasm64::Disabled),
-            18000006,
-        ),
-        common::Benchmark(
-            "wasm64/ic0_mint_cycles()".into(),
-            Module::Test.from_ic0("mint_cycles", Param1(1_i64), Result::I64, Wasm64::Enabled),
-            18000006,
         ),
         common::Benchmark(
             "wasm32/ic0_mint_cycles128()".into(),

@@ -8,7 +8,7 @@
 //! The QueryStats feature keeps state in two way:
 //! - The aggregated stats of each canister as part of the canister's [`Metadata`].
 //! - The unaggregated stats are stored in [`RawQueryStats`], which is processed by functions in this
-//!     module, until it can be aggregated into canisters.
+//!   module, until it can be aggregated into canisters.
 //!
 //! The state in [`RawQueryStats`] is a map of
 //! [`NodeId`] -> [`QueryStatsEpoch`] -> [`CanisterId`] -> [`QueryStats`],

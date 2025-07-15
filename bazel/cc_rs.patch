@@ -1,0 +1,28 @@
+# Adjust target naming to match what zig expects.
+#
+# zig does not plan to change their target naming: https://github.com/ziglang/zig/issues/4911
+# and cc-rs is waiting on a 1.0 release to support zig's scheme: https://github.com/rust-lang/cc-rs/pull/986
+# Other related links: https://github.com/bazelbuild/rules_rust/issues/2529
+#                      https://github.com/Asana/cc-rs
+diff --git a/src/lib.rs b/src/lib.rs
+index 260b850..83fa53f 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -2262,6 +2262,17 @@ impl Build {
+ 
+                     let clang_target =
+                         target.llvm_target(&self.get_raw_target()?, version.as_deref());
++
++                    let clang_target = match &clang_target {
++                        std::borrow::Cow::Borrowed("x86_64-unknown-linux-gnu") => {
++                            "x86_64-linux-gnu"
++                        }
++                        std::borrow::Cow::Borrowed("wasm32-unknown-unknown") => {
++                            "wasm32-freestanding-musl"
++                        }
++                        _other => &clang_target,
++                    };
++
+                     cmd.push_cc_arg(format!("--target={clang_target}").into());
+                 }
+             }

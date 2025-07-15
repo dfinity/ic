@@ -12,6 +12,7 @@ pub mod mock;
 pub mod nns;
 mod null_request;
 pub mod pocketic_impl;
+mod registry;
 pub mod sns;
 #[cfg(feature = "test")]
 pub mod state_machine_impl;
@@ -31,6 +32,11 @@ pub trait Request: Send {
     fn method(&self) -> &'static str;
     fn update(&self) -> bool;
     fn payload(&self) -> Result<Vec<u8>, candid::Error>;
+
+    /// See https://internetcomputer.org/docs/references/ic-interface-spec#http-interface
+    fn effective_canister_id(&self) -> Option<Principal> {
+        None
+    }
     type Response: CandidType + DeserializeOwned + Send;
 }
 
@@ -54,12 +60,20 @@ pub trait CallCanisters: sealed::Sealed {
         &self,
         canister_id: impl Into<Principal> + Send,
     ) -> impl Future<Output = Result<CanisterInfo, Self::Error>> + Send;
+}
 
-    // Functions that use 'call' need to be able
-    // to determine if a call to the canister failed due to the canister being stopped.
-    // Matching on a specific error outside of the trait implementation is not viable
-    // since the 'Error' type is different for each trait implementation and thus we can
-    // only match on specific implementations errors in the trait implementation directly.
+pub trait AgentFor: sealed::Sealed {
+    fn agent_for(&self, principal: impl Into<Principal>) -> impl CallCanisters;
+}
+
+// Functions that use 'call' need to be able
+// to determine if a call to the canister failed due to the canister being stopped.
+// Matching on a specific error outside of the trait implementation is not viable
+// since the 'Error' type is different for each trait implementation and thus we can
+// only match on specific implementations errors in the trait implementation directly.
+//
+// We're extending CallCanisters trait to allow this.
+pub trait CallCanistersWithStoppedCanisterError: CallCanisters {
     fn is_canister_stopped_error(&self, err: &Self::Error) -> bool;
 }
 

@@ -49,6 +49,7 @@ pub mod host_memory;
 /// pub for usage in fuzzing
 #[doc(hidden)]
 pub mod linker;
+mod signal_handler;
 mod signal_stack;
 pub mod system_api;
 pub mod system_api_complexity;
@@ -56,7 +57,7 @@ pub mod system_api_complexity;
 use system_api::{ModificationTracking, SystemApiImpl};
 
 #[cfg(test)]
-mod wasmtime_embedder_tests;
+mod tests;
 
 const BAD_SIGNATURE_MESSAGE: &str = "function invocation does not match its signature";
 pub(crate) const WASM_HEAP_MEMORY_NAME: &str = "memory";
@@ -271,7 +272,7 @@ impl WasmtimeEmbedder {
             WasmMemoryType::Wasm32 => {
                 linker::syscalls::<u32>(
                     &mut linker,
-                    self.config.feature_flags.clone(),
+                    self.config.feature_flags,
                     self.config.stable_memory_dirty_page_limit,
                     self.config.stable_memory_accessed_page_limit,
                     main_memory_type,
@@ -280,7 +281,7 @@ impl WasmtimeEmbedder {
             WasmMemoryType::Wasm64 => {
                 linker::syscalls::<u64>(
                     &mut linker,
-                    self.config.feature_flags.clone(),
+                    self.config.feature_flags,
                     self.config.stable_memory_dirty_page_limit,
                     self.config.stable_memory_accessed_page_limit,
                     main_memory_type,
@@ -748,7 +749,7 @@ fn sigsegv_memory_tracker<S>(
         tracked_memories.push((sigsegv_memory_tracker, current_memory_size_in_pages));
     }
 
-    let handler = crate::signal_handler::sigsegv_memory_tracker_handler(tracked_memories);
+    let handler = signal_handler::sigsegv_memory_tracker_handler(tracked_memories);
     // http://man7.org/linux/man-pages/man7/signal-safety.7.html
     unsafe {
         store.set_signal_handler(handler);

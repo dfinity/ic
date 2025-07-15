@@ -87,14 +87,14 @@ pub(super) fn make_chain_key_config() -> ChainKeyConfig {
     };
     let key_config_1 = KeyConfig {
         key_id: MasterPublicKeyId::VetKd(VetKdKeyId::from_str("bls12_381_g2:some_key").unwrap()),
-        pre_signatures_to_create_in_advance: 1,
+        pre_signatures_to_create_in_advance: 0,
         max_queue_size: 3,
     };
     let key_config_2 = KeyConfig {
         key_id: MasterPublicKeyId::VetKd(
             VetKdKeyId::from_str("bls12_381_g2:some_other_key").unwrap(),
         ),
-        pre_signatures_to_create_in_advance: 1,
+        pre_signatures_to_create_in_advance: 0,
         max_queue_size: 3,
     };
 
@@ -124,11 +124,13 @@ pub(super) fn fake_signature_request_args(key_id: MasterPublicKeyId) -> Threshol
         MasterPublicKeyId::Ecdsa(key_id) => ThresholdArguments::Ecdsa(EcdsaArguments {
             key_id,
             message_hash: [0; 32],
+            pre_signature: None,
         }),
         MasterPublicKeyId::Schnorr(key_id) => ThresholdArguments::Schnorr(SchnorrArguments {
             key_id,
             message: Arc::new(vec![1; 48]),
             taproot_tree_root: None,
+            pre_signature: None,
         }),
         MasterPublicKeyId::VetKd(key_id) => ThresholdArguments::VetKd(VetKdArguments {
             key_id: key_id.clone(),

@@ -9,6 +9,7 @@ use crate::{
 };
 use ic_cdk::println;
 use ic_nervous_system_common::{E8, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS};
+use ic_nns_common::pb::v1::ProposalId;
 use icp_ledger::Subaccount;
 use maplit::hashmap;
 use pretty_assertions::assert_eq;
@@ -114,6 +115,7 @@ fn test_neuron_into_api() {
             neuron_type: None,
             potential_voting_power,
             deciding_voting_power,
+            maturity_disbursements_in_progress: Some(vec![]),
         },
     );
 
@@ -147,7 +149,7 @@ fn test_dissolve_state_and_age_conversion() {
                 aging_since_timestamp_seconds: 200,
             },
             StoredDissolveStateAndAge {
-                dissolve_state: Some(NeuronDissolveState::DissolveDelaySeconds(100)),
+                dissolve_state: Some(DissolveState::DissolveDelaySeconds(100)),
                 aging_since_timestamp_seconds: 200,
             },
         ),
@@ -160,7 +162,7 @@ fn test_dissolve_state_and_age_conversion() {
                 aging_since_timestamp_seconds: u64::MAX,
             },
             StoredDissolveStateAndAge {
-                dissolve_state: Some(NeuronDissolveState::DissolveDelaySeconds(100)),
+                dissolve_state: Some(DissolveState::DissolveDelaySeconds(100)),
                 aging_since_timestamp_seconds: u64::MAX,
             },
         ),
@@ -169,7 +171,7 @@ fn test_dissolve_state_and_age_conversion() {
                 when_dissolved_timestamp_seconds: 300,
             },
             StoredDissolveStateAndAge {
-                dissolve_state: Some(NeuronDissolveState::WhenDissolvedTimestampSeconds(300)),
+                dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(300)),
                 aging_since_timestamp_seconds: u64::MAX,
             },
         ),
@@ -199,14 +201,14 @@ fn test_dissolve_state_and_age_conversion_failure() {
         ),
         (
             StoredDissolveStateAndAge {
-                dissolve_state: Some(NeuronDissolveState::WhenDissolvedTimestampSeconds(300)),
+                dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(300)),
                 aging_since_timestamp_seconds: 200,
             },
             "Aging since timestamp must be u64::MAX for dissolving or dissolved neurons",
         ),
         (
             StoredDissolveStateAndAge {
-                dissolve_state: Some(NeuronDissolveState::DissolveDelaySeconds(0)),
+                dissolve_state: Some(DissolveState::DissolveDelaySeconds(0)),
                 aging_since_timestamp_seconds: 200,
             },
             "Dissolve delay must be greater than 0",
@@ -569,8 +571,6 @@ fn test_visibility_when_converting_neuron_to_neuron_info_and_neuron_proto() {
             principal_id,
         );
         assert_eq!(neuron_info.visibility, Some(visibility as i32),);
-
-        assert_eq!(pb::Neuron::from(neuron).visibility, Some(visibility as i32),);
     }
 
     // Case 2: visibility is not set.
@@ -585,11 +585,6 @@ fn test_visibility_when_converting_neuron_to_neuron_info_and_neuron_proto() {
         principal_id,
     );
     assert_eq!(neuron_info.visibility, Some(Visibility::Private as i32),);
-
-    assert_eq!(
-        pb::Neuron::from(neuron).visibility,
-        Some(Visibility::Private as i32),
-    );
 
     // Case 3: Known neurons are always public.
     let neuron = builder
@@ -607,11 +602,6 @@ fn test_visibility_when_converting_neuron_to_neuron_info_and_neuron_proto() {
         principal_id,
     );
     assert_eq!(neuron_info.visibility, Some(Visibility::Public as i32),);
-
-    assert_eq!(
-        pb::Neuron::from(neuron.clone()).visibility,
-        Some(Visibility::Public as i32),
-    );
 }
 
 #[test]
@@ -706,143 +696,6 @@ fn test_adjust_voting_power() {
             0
         );
     }
-}
-
-#[test]
-fn test_conversion_from_old_ballot_storage_full() {
-    let principal_id = PrincipalId::new_user_test_id(42);
-    let created_timestamp_seconds = 1729791574;
-
-    let recent_ballots: Vec<_> = (0..100)
-        .map(|id| BallotInfo {
-            proposal_id: Some(ProposalId { id }),
-            vote: Vote::Yes as i32,
-        })
-        .collect();
-
-    let mut neuron = NeuronBuilder::new(
-        NeuronId { id: 42 },
-        Subaccount::try_from(vec![42u8; 32].as_slice()).unwrap(),
-        principal_id,
-        DissolveStateAndAge::NotDissolving {
-            dissolve_delay_seconds: 12 * ONE_MONTH_SECONDS,
-            aging_since_timestamp_seconds: created_timestamp_seconds + 42,
-        },
-        created_timestamp_seconds, // created
-    )
-    .with_recent_ballots(recent_ballots.clone())
-    .build();
-    neuron.recent_ballots_next_entry_index = None;
-
-    assert_eq!(neuron.recent_ballots, recent_ballots);
-
-    neuron.register_recent_ballot(Topic::NetworkEconomics, &ProposalId { id: 100 }, Vote::No);
-
-    assert_eq!(neuron.recent_ballots_next_entry_index, Some(1));
-
-    let expected_updated_ballots = {
-        let mut recent_ballots = recent_ballots.clone();
-        recent_ballots.reverse();
-        recent_ballots[0] = BallotInfo {
-            proposal_id: Some(ProposalId { id: 100 }),
-            vote: Vote::No as i32,
-        };
-        recent_ballots
-    };
-
-    assert_eq!(neuron.recent_ballots, expected_updated_ballots);
-}
-
-#[test]
-fn test_conversion_from_old_ballot_storage_not_full() {
-    let principal_id = PrincipalId::new_user_test_id(42);
-    let created_timestamp_seconds = 1729791574;
-
-    let recent_ballots: Vec<_> = (0..75)
-        .map(|id| BallotInfo {
-            proposal_id: Some(ProposalId { id }),
-            vote: Vote::Yes as i32,
-        })
-        .collect();
-
-    let mut neuron = NeuronBuilder::new(
-        NeuronId { id: 42 },
-        Subaccount::try_from(vec![42u8; 32].as_slice()).unwrap(),
-        principal_id,
-        DissolveStateAndAge::NotDissolving {
-            dissolve_delay_seconds: 12 * ONE_MONTH_SECONDS,
-            aging_since_timestamp_seconds: created_timestamp_seconds + 42,
-        },
-        created_timestamp_seconds, // created
-    )
-    .with_recent_ballots(recent_ballots.clone())
-    .build();
-    neuron.recent_ballots_next_entry_index = None;
-
-    assert_eq!(neuron.recent_ballots, recent_ballots);
-
-    neuron.register_recent_ballot(Topic::NetworkEconomics, &ProposalId { id: 100 }, Vote::No);
-
-    assert_eq!(neuron.recent_ballots_next_entry_index, Some(76));
-
-    let expected_updated_ballots = {
-        let mut recent_ballots = recent_ballots.clone();
-        recent_ballots.reverse();
-        recent_ballots.push(BallotInfo {
-            proposal_id: Some(ProposalId { id: 100 }),
-            vote: Vote::No as i32,
-        });
-        recent_ballots
-    };
-
-    assert_eq!(neuron.recent_ballots, expected_updated_ballots);
-}
-
-#[test]
-fn test_recent_ballots_accessor_pre_and_post_migration() {
-    let principal_id = PrincipalId::new_user_test_id(42);
-    let created_timestamp_seconds = 1729791574;
-
-    let recent_ballots: Vec<_> = (0..100)
-        .map(|id| BallotInfo {
-            proposal_id: Some(ProposalId { id }),
-            vote: Vote::Yes as i32,
-        })
-        .collect();
-
-    let mut neuron = NeuronBuilder::new(
-        NeuronId { id: 42 },
-        Subaccount::try_from(vec![42u8; 32].as_slice()).unwrap(),
-        principal_id,
-        DissolveStateAndAge::NotDissolving {
-            dissolve_delay_seconds: 12 * ONE_MONTH_SECONDS,
-            aging_since_timestamp_seconds: created_timestamp_seconds + 42,
-        },
-        created_timestamp_seconds, // created
-    )
-    .with_recent_ballots(recent_ballots.clone())
-    .build();
-    neuron.recent_ballots_next_entry_index = None;
-
-    assert_eq!(neuron.sorted_recent_ballots(), recent_ballots);
-
-    neuron.register_recent_ballot(Topic::NetworkEconomics, &ProposalId { id: 100 }, Vote::No);
-    assert_eq!(neuron.recent_ballots_next_entry_index, Some(1));
-
-    let expected_updated_ballots = {
-        let mut recent_ballots = recent_ballots.clone();
-        recent_ballots.insert(
-            0,
-            BallotInfo {
-                proposal_id: Some(ProposalId { id: 100 }),
-                vote: Vote::No as i32,
-            },
-        );
-        recent_ballots.pop();
-        recent_ballots
-    };
-
-    assert_eq!(neuron.sorted_recent_ballots(), expected_updated_ballots);
 }
 
 #[test]

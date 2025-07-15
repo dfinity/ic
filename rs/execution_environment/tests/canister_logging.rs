@@ -503,7 +503,7 @@ fn test_canister_log_record_index_increment_after_node_restart() {
 fn test_logging_in_trapped_wasm_execution() {
     let (env, canister_id, controller) = setup_with_controller(
         wat_canister()
-            .update("test", wat_fn().stable_grow(1).stable_read(0, 70_000))
+            .update("test", wat_fn().stable_grow(1).stable_read(0, 0, 70_000))
             .build_wasm(),
     );
     // advance time so that time does not grow implicitly when executing a round
@@ -684,6 +684,7 @@ fn test_deleting_logs_on_reinstall() {
     );
 
     // Reinstall canister to version #2.
+    let timestamp_2_reinstall = system_time_to_nanos(env.time());
     env.install_wasm_in_mode(
         canister_id,
         CanisterInstallMode::Reinstall,
@@ -706,7 +707,11 @@ fn test_deleting_logs_on_reinstall() {
     let result = fetch_canister_logs(&env, controller, canister_id);
     assert_eq!(
         FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
-        canister_log_response(vec![(5, timestamp_2_update, b"test_2".to_vec())])
+        canister_log_response(vec![
+            (3, timestamp_2_reinstall, b"start_2".to_vec()),
+            (4, timestamp_2_reinstall, b"init_2".to_vec()),
+            (5, timestamp_2_update, b"test_2".to_vec())
+        ])
     );
 }
 

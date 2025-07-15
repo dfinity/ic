@@ -20,6 +20,7 @@ use ic_sns_swap::pb::{
 };
 use ic_sns_wasm::pb::v1::{DeployedSns, ListDeployedSnsesRequest, ListDeployedSnsesResponse};
 use icp_ledger::{AccountIdentifier, Subaccount};
+use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
 use lazy_static::lazy_static;
 use std::{
     collections::VecDeque,
@@ -104,6 +105,13 @@ impl IcpLedger for StubIcpLedger {
     }
 
     fn canister_id(&self) -> CanisterId {
+        unimplemented!()
+    }
+
+    async fn icrc3_get_blocks(
+        &self,
+        _args: Vec<GetBlocksRequest>,
+    ) -> Result<GetBlocksResult, NervousSystemError> {
         unimplemented!()
     }
 }
@@ -239,7 +247,7 @@ impl Environment for MockEnvironment {
         _proposal_id: u64,
         _update: &ExecuteNnsFunction,
     ) -> Result<(), GovernanceError> {
-        unimplemented!();
+        Ok(())
     }
 
     fn heap_growth_potential(&self) -> HeapGrowthPotential {

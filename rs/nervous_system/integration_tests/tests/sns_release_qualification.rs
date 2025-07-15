@@ -55,6 +55,16 @@ async fn test_deployment_with_only_nns_upgrades() {
 }
 
 #[tokio::test]
+async fn test_deployment_with_only_nns_governnace_upgrade() {
+    test_sns_deployment(vec![GOVERNANCE_CANISTER_ID], vec![]).await;
+}
+
+#[tokio::test]
+async fn test_deployment_with_only_sns_wasm_upgrade() {
+    test_sns_deployment(vec![SNS_WASM_CANISTER_ID], vec![]).await;
+}
+
+#[tokio::test]
 async fn test_deployment_with_only_sns_upgrades() {
     let nns_canisters_to_upgrade = vec![];
 

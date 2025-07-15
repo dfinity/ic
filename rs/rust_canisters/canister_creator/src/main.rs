@@ -96,8 +96,6 @@ async fn install_code(wasm_module: Vec<u8>, arg: Vec<u8>) {
                     *canister_id,
                     wasm_module.clone(),
                     arg.clone(),
-                    None,
-                    None,
                 )
                 .encode(),
                 api::Funds::new(INITIAL_CYCLES_BALANCE),

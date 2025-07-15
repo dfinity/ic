@@ -4,15 +4,14 @@ use crate::{
     models::{ConstructionParseRequest, ConstructionParseResponse, ParsedTransaction},
     request_handler::{verify_network_id, RosettaRequestHandler},
     request_types::{
-        AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, ListNeurons, MergeMaturity,
-        NeuronInfo, PublicKeyOrPrincipal, RefreshVotingPower, RegisterVote, RemoveHotKey,
-        RequestType, SetDissolveTimestamp, Spawn, Stake, StakeMaturity, StartDissolve,
-        StopDissolve,
+        AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, ListNeurons, NeuronInfo,
+        PublicKeyOrPrincipal, RefreshVotingPower, RegisterVote, RemoveHotKey, RequestType,
+        SetDissolveTimestamp, Spawn, Stake, StakeMaturity, StartDissolve, StopDissolve,
     },
 };
 use rosetta_core::objects::ObjectMap;
 
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     manage_neuron::{self, Command, NeuronIdOrSubaccount},
     ClaimOrRefreshNeuronFromAccount, ManageNeuron,
 };
@@ -90,9 +89,6 @@ impl RosettaRequestHandler {
                 }
                 RequestType::RegisterVote { neuron_index } => {
                     register_vote(&mut requests, arg, from, neuron_index)?
-                }
-                RequestType::MergeMaturity { neuron_index } => {
-                    merge_maturity(&mut requests, arg, from, neuron_index)?
                 }
                 RequestType::StakeMaturity { neuron_index } => {
                     stake_maturity(&mut requests, arg, from, neuron_index)?
@@ -460,33 +456,6 @@ fn register_vote(
     Ok(())
 }
 
-/// Handle MERGE_MATURITY.
-fn merge_maturity(
-    requests: &mut Vec<Request>,
-    arg: Blob,
-    from: AccountIdentifier,
-    neuron_index: u64,
-) -> Result<(), ApiError> {
-    let manage: ManageNeuron = candid::decode_one(arg.0.as_ref()).map_err(|e| {
-        ApiError::internal_error(format!("Could not decode ManageNeuron argument: {:?}", e))
-    })?;
-    if let Some(Command::MergeMaturity(manage_neuron::MergeMaturity {
-        percentage_to_merge,
-    })) = manage.command
-    {
-        requests.push(Request::MergeMaturity(MergeMaturity {
-            account: from,
-            percentage_to_merge,
-            neuron_index,
-        }));
-    } else {
-        return Err(ApiError::internal_error(
-            "Incompatible manage_neuron command".to_string(),
-        ));
-    }
-    Ok(())
-}
-
 /// Handle STAKE_MATURITY.
 fn stake_maturity(
     requests: &mut Vec<Request>,
@@ -646,6 +615,7 @@ mod tests {
         prop_assert, prop_assert_eq, proptest, strategy::Strategy, test_runner::TestCaseError,
     };
     use rand_chacha::rand_core::OsRng;
+    use rosetta_core::metrics::RosettaMetrics;
     use std::{str::FromStr, time::SystemTime};
     use url::Url;
 
@@ -674,9 +644,16 @@ mod tests {
             true,
             None,
             false,
+            false, // optimize_search_indexes: disabled for tests
         ))
         .unwrap();
-        let handler = RosettaRequestHandler::new("Internet Computer".into(), ledger_client.into());
+        // Create a mock canister ID for testing
+        let mock_canister_id_hex = "00000000000000000101";
+        let handler = RosettaRequestHandler::new(
+            "Internet Computer".into(),
+            ledger_client.into(),
+            RosettaMetrics::new("TKN".into(), mock_canister_id_hex.into()),
+        );
 
         // get the nextwork identifier
         let network_identifier = handler.network_id();

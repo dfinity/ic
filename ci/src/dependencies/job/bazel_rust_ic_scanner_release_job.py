@@ -7,6 +7,7 @@ from model.ic import (
     get_ic_repo_for_rust,
     get_ic_repo_merge_request_base_url,
 )
+from model.log_level import get_log_level
 from notification.notification_config import NotificationConfig
 from notification.notification_creator import NotificationCreator
 from scanner.dependency_scanner import DependencyScanner
@@ -17,7 +18,7 @@ if __name__ == "__main__":
     if REPO_NAME == "dfinity/ic-private":
         logging.basicConfig(level=logging.INFO)
     else:
-        logging.basicConfig(level=logging.WARNING)
+        logging.basicConfig(level=get_log_level())
     scanner_job = ScannerJobType.RELEASE_SCAN
     notify_on_scan_job_succeeded, notify_on_scan_job_failed = {}, {}
     for job_type in ScannerJobType:

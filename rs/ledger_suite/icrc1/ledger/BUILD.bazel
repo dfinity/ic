@@ -17,6 +17,7 @@ package(default_visibility = ["//visibility:public"])
         proc_macro_deps = [
             # Keep sorted.
             "@crate_index//:async-trait",
+            "@crate_index//:test-strategy",
         ],
         rustc_env = {
             "IC_ICRC1_ARCHIVE_WASM_PATH": "$(execpath //rs/ledger_suite/icrc1/archive:archive_canister" + archive_name_suffix + ")",
@@ -113,17 +114,16 @@ package(default_visibility = ["//visibility:public"])
         opt = "z",
         proc_macro_deps = [
             # Keep sorted.
-            "@crate_index//:ic-cdk-macros",
         ],
         service_file = ":ledger.did",
         deps = [
             # Keep sorted.
+            "//packages/ic-http-types",
             "//packages/icrc-ledger-types:icrc_ledger_types",
             "//rs/ledger_suite/common/ledger_canister_core",
             "//rs/ledger_suite/common/ledger_core",
             "//rs/ledger_suite/icrc1",
             "//rs/rust_canisters/canister_log",
-            "//rs/rust_canisters/http_types",
             "//rs/types/base_types",
             "@crate_index//:candid",
             "@crate_index//:ciborium",
@@ -235,21 +235,41 @@ package(default_visibility = ["//visibility:public"])
     ]
 ]
 
-rust_test(
-    name = "ledger_canister_test",
-    crate = ":_wasm_ledger_canister",
-    data = [
-        ":ledger.did",
-    ],
-    env = {
-        "CARGO_MANIFEST_DIR": "rs/ledger_suite/icrc1/ledger",
-    },
-    deps = ["@crate_index//:candid_parser"],
-)
+[
+    rust_test(
+        name = "ledger_canister_test" + name_suffix,
+        crate = ":_wasm_ledger_canister" + name_suffix,
+        crate_features = features,
+        data = [
+            ":ledger.did",
+        ],
+        env = {
+            "CARGO_MANIFEST_DIR": "rs/ledger_suite/icrc1/ledger",
+        },
+        deps = ["@crate_index//:candid_parser"] + extra_deps,
+    )
+    for (name_suffix, features, extra_deps) in [
+        (
+            "",
+            [],
+            [
+                "//rs/ledger_suite/icrc1/tokens_u64",
+            ],
+        ),
+        (
+            "_u256",
+            ["u256-tokens"],
+            [
+                "//rs/ledger_suite/icrc1/tokens_u256",
+            ],
+        ),
+    ]
+]
 
 [
     rust_ic_test(
         name = "ledger_test" + name_suffix,
+        timeout = "long",
         srcs = ["tests/tests.rs"],
         crate_features = features,
         data = [
@@ -387,17 +407,16 @@ rust_test(
         crate_features = features,
         proc_macro_deps = [
             # Keep sorted.
-            "@crate_index//:ic-cdk-macros",
         ],
         results_file = "canbench_results/canbench" + name_suffix + ".yml",
         deps = [
             # Keep sorted.
+            "//packages/ic-http-types",
             "//packages/icrc-ledger-types:icrc_ledger_types",
             "//rs/ledger_suite/common/ledger_canister_core",
             "//rs/ledger_suite/common/ledger_core",
             "//rs/ledger_suite/icrc1",
             "//rs/rust_canisters/canister_log",
-            "//rs/rust_canisters/http_types",
             "//rs/types/base_types",
             "@crate_index//:assert_matches",
             "@crate_index//:candid",

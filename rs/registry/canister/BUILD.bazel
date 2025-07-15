@@ -1,5 +1,6 @@
 load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:canbench.bzl", "rust_canbench")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_ic_test", "rust_ic_test_suite_with_extra_srcs")
 load("//bazel:prost.bzl", "generated_files_check")
@@ -21,10 +22,13 @@ DEPENDENCIES = [
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
     "//rs/nervous_system/string",
+    "//rs/nervous_system/temporary",
+    "//rs/nervous_system/time_helpers",
     "//rs/nns/common",
     "//rs/nns/constants",
     "//rs/protobuf",
     "//rs/registry/canister/api",
+    "//rs/registry/canister/chunkify",
     "//rs/registry/keys",
     "//rs/registry/node_provider_rewards",
     "//rs/registry/routing_table",
@@ -42,6 +46,7 @@ DEPENDENCIES = [
     "@crate_index//:build-info",
     "@crate_index//:candid",
     "@crate_index//:futures",
+    "@crate_index//:hex",
     "@crate_index//:ic-cdk",
     "@crate_index//:ic-certified-map",
     "@crate_index//:ic-metrics-encoder",
@@ -104,10 +109,7 @@ BUILD_DEPENDENCIES = [
 ALIASES = {}
 
 LIB_SRCS = glob(
-    [
-        "gen/**/*.rs",
-        "src/**/*.rs",
-    ],
+    ["src/**/*.rs"],
     exclude = ["**/*tests*/**"],
 )
 
@@ -130,6 +132,33 @@ rust_library(
     deps = DEPENDENCIES + [":build_script"],
 )
 
+rust_library(
+    name = "canister--canbench_feature",
+    srcs = LIB_SRCS,
+    aliases = ALIASES,
+    crate_features = ["canbench-rs"],
+    crate_name = "registry_canister",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.9.0",
+    deps = DEPENDENCIES + [
+        ":build_script",
+        "@crate_index//:canbench-rs",
+        "@crate_index//:rand",
+        "@crate_index//:rand_chacha",
+    ],
+)
+
+rust_library(
+    name = "canister--test_feature",
+    srcs = LIB_SRCS,
+    aliases = ALIASES,
+    crate_features = ["test"],
+    crate_name = "registry_canister",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.9.0",
+    deps = DEPENDENCIES + [":build_script"],
+)
+
 rust_canister(
     name = "registry-canister",
     srcs = ["canister/canister.rs"],
@@ -140,6 +169,20 @@ rust_canister(
     deps = DEPENDENCIES + [
         ":build_script",
         ":canister",
+    ],
+)
+
+rust_canister(
+    name = "registry-canister-test",
+    srcs = ["canister/canister.rs"],
+    aliases = ALIASES,
+    compile_data = ["canister/registry_test.did"],
+    crate_features = ["test"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":canister/registry_test.did",
+    deps = DEPENDENCIES + [
+        ":build_script",
+        ":canister--test_feature",
     ],
 )
 
@@ -155,12 +198,22 @@ rust_ic_test(
     ],
 )
 
+rust_ic_test(
+    name = "registry_canister_test_canister_test",
+    srcs = glob(["canister/*.rs"]),
+    compile_data = ["canister/registry_test.did"],
+    crate_features = ["test"],
+    crate_root = "canister/canister.rs",
+    proc_macro_deps = MACRO_DEPENDENCIES + DEV_MACRO_DEPENDENCIES,
+    deps = DEV_DEPENDENCIES + DEPENDENCIES + [
+        ":build_script",
+        ":canister--test_feature",
+    ],
+)
+
 rust_test(
     name = "registry_canister_test",
-    srcs = glob([
-        "gen/**",
-        "src/**",
-    ]),
+    srcs = glob(["src/**"]),
     proc_macro_deps = DEV_MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
@@ -178,6 +231,7 @@ rust_ic_test_suite_with_extra_srcs(
     data = [
         # Keep sorted.
         ":registry-canister",
+        ":registry-canister-test",
         "//rs/nns/cmc:cycles-minting-canister",
         "//rs/universal_canister/impl:universal_canister.wasm.gz",
     ],
@@ -186,6 +240,7 @@ rust_ic_test_suite_with_extra_srcs(
         "CARGO_MANIFEST_DIR": "rs/registry/canister",
         "CYCLES_MINTING_CANISTER_WASM_PATH": "$(rootpath //rs/nns/cmc:cycles-minting-canister)",
         "REGISTRY_CANISTER_WASM_PATH": "$(rootpath :registry-canister)",
+        "REGISTRY_CANISTER_TEST_WASM_PATH": "$(rootpath :registry-canister-test)",
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
     },
     extra_srcs = glob(["tests/common/*.rs"]),
@@ -210,5 +265,38 @@ generated_files_check(
         "//rs/registry/canister/protobuf_generator:lib",
         "//rs/test_utilities/compare_dirs",
         "@crate_index//:tempfile",
+    ],
+)
+
+# Usage
+# =====
+#
+# For benchmarking (see `canbench/canbench_results.yml`):
+# ```
+# bazel run //rs/registry/canister:registry-canbench
+# ```
+#
+# For updating the results file:
+# ```
+# bazel run //rs/registry/canister:registry-canbench_update
+# ```
+#
+# To run the test:
+# ```
+# bazel test //rs/registry/canister:registry-canbench_test
+# ```
+#
+# Currently, updating the results file is not automated, and there are no tests to avoid
+# regression. For now, we can use it as an example for benchmarking as part
+# of an investigation of potential performance issues, or when we make a change that can affect
+# the performance measured in this benchmark.
+rust_canbench(
+    name = "registry-canbench",
+    srcs = ["canbench/main.rs"],
+    add_test = True,
+    results_file = "canbench/canbench_results.yml",
+    deps = [
+        # Keep sorted.
+        ":canister--canbench_feature",
     ],
 )

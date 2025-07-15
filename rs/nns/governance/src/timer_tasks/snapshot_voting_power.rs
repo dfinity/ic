@@ -29,18 +29,25 @@ impl SnapshotVotingPowerTask {
 
 impl RecurringSyncTask for SnapshotVotingPowerTask {
     fn execute(self) -> (Duration, Self) {
-        let (now_seconds, voting_power_snapshot) = self.governance.with_borrow_mut(|governance| {
-            let now_seconds = governance.env.now();
+        let now_seconds = self
+            .governance
+            .with_borrow(|governance| governance.env.now());
+        if self
+            .snapshots
+            .with_borrow(|snapshots| snapshots.is_latest_snapshot_a_spike(now_seconds))
+        {
+            return (VOTING_POWER_SNAPSHOT_INTERVAL, self);
+        }
+
+        let voting_power_snapshot = self.governance.with_borrow_mut(|governance| {
             let voting_power_economics = governance.voting_power_economics();
-            let voting_power_snapshot = governance
+            governance
                 .neuron_store
                 .compute_voting_power_snapshot_for_standard_proposal(
                     voting_power_economics,
                     now_seconds,
                 )
-                .expect("Voting power snapshot failed");
-
-            (now_seconds, voting_power_snapshot)
+                .expect("Voting power snapshot failed")
         });
 
         self.snapshots.with_borrow_mut(|snapshots| {
@@ -75,6 +82,7 @@ impl RecurringSyncTask for SnapshotVotingPowerTask {
 mod tests {
     use super::*;
 
+    use ic_nervous_system_common::ONE_DAY_SECONDS;
     use ic_nns_common::pb::v1::NeuronId;
     use ic_stable_structures::{
         memory_manager::{MemoryId, MemoryManager},
@@ -84,9 +92,10 @@ mod tests {
     use icp_ledger::Subaccount;
     use std::sync::Arc;
 
+    use ic_nns_governance_api as api;
+
     use crate::{
         neuron::{DissolveStateAndAge, NeuronBuilder},
-        pb::v1::{Governance as GovernanceProto, NetworkEconomics, VotingPowerEconomics},
         test_utils::{MockEnvironment, MockRandomness, StubCMC, StubIcpLedger},
     };
 
@@ -109,9 +118,9 @@ mod tests {
 
     fn new_governance_for_test() -> Governance {
         let mut governance = Governance::new(
-            GovernanceProto {
-                economics: Some(NetworkEconomics {
-                    voting_power_economics: Some(VotingPowerEconomics::DEFAULT),
+            api::Governance {
+                economics: Some(api::NetworkEconomics {
+                    voting_power_economics: Some(api::VotingPowerEconomics::DEFAULT),
                     ..Default::default()
                 }),
                 ..Default::default()
@@ -122,7 +131,7 @@ mod tests {
             Box::new(MockRandomness::new()),
         );
         let dissolve_delay_seconds =
-            VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS;
+            api::VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS;
         governance
             .neuron_store
             .add_neuron(
@@ -148,7 +157,7 @@ mod tests {
     fn test_execute() {
         TEST_VOTING_POWER_SNAPSHOTS.with_borrow(|snapshots| {
             // Before the first snapshot, the latest snapshot timestamp should be None, and we
-            // should not disable early adoption without any snapshots.
+            // should not return any previous ballots.
             assert_eq!(snapshots.latest_snapshot_timestamp_seconds(), None);
             assert_eq!(
                 snapshots.previous_ballots_if_voting_power_spike_detected(u64::MAX, 0),
@@ -156,11 +165,17 @@ mod tests {
             )
         });
 
-        let task = SnapshotVotingPowerTask::new(&TEST_GOVERNANCE, &TEST_VOTING_POWER_SNAPSHOTS);
-        let (delay, _) = task.execute();
+        let mut task = SnapshotVotingPowerTask::new(&TEST_GOVERNANCE, &TEST_VOTING_POWER_SNAPSHOTS);
+        let mut now_seconds = 0;
 
-        assert_eq!(delay, VOTING_POWER_SNAPSHOT_INTERVAL);
-        let now_seconds = TEST_GOVERNANCE.with_borrow(|governance| governance.env.now());
+        for i in 0..7 {
+            now_seconds = i * ONE_DAY_SECONDS;
+            set_time(now_seconds);
+            let (delay, new_task) = task.execute();
+            assert_eq!(delay.as_secs(), ONE_DAY_SECONDS);
+            task = new_task;
+        }
+
         TEST_VOTING_POWER_SNAPSHOTS.with_borrow(|snapshots| {
             // After the first snapshot, the latest snapshot timestamp should be the current time,
             // and we should disable early adoption given a large deciding voting power.
@@ -168,16 +183,45 @@ mod tests {
                 snapshots.latest_snapshot_timestamp_seconds(),
                 Some(now_seconds)
             );
-            let (timestamp, previous_snapshot) = snapshots
-                .previous_ballots_if_voting_power_spike_detected(u64::MAX, 0)
+            let (_timestamp, previous_snapshot) = snapshots
+                .previous_ballots_if_voting_power_spike_detected(u64::MAX, now_seconds)
                 .unwrap();
 
             // We only do some sanity checks here to make sure the task is working as expected.
-            assert_eq!(timestamp, now_seconds);
             let (ballots, total_potential_voting_power) =
                 previous_snapshot.create_ballots_and_total_potential_voting_power();
             assert!(ballots.get(&1).unwrap().voting_power > 0);
             assert!(total_potential_voting_power > 0);
+        });
+
+        // Run the task again after a day, with a doubled voting power.
+        now_seconds += ONE_DAY_SECONDS;
+        set_time(now_seconds);
+        TEST_GOVERNANCE.with_borrow_mut(|governance| {
+            governance
+                .neuron_store
+                .with_neuron_mut(&NeuronId { id: 1 }, |neuron| {
+                    neuron.cached_neuron_stake_e8s *= 2
+                })
+                .unwrap();
+        });
+        let (_, task) = task.execute();
+        TEST_VOTING_POWER_SNAPSHOTS.with_borrow(|snapshots| {
+            assert_eq!(
+                snapshots.latest_snapshot_timestamp_seconds(),
+                Some(now_seconds)
+            );
+        });
+
+        // Run the task again after another day should not do anything since there is a spike in the snapshots.
+        now_seconds += ONE_DAY_SECONDS;
+        set_time(now_seconds);
+        task.execute();
+        TEST_VOTING_POWER_SNAPSHOTS.with_borrow(|snapshots| {
+            assert_eq!(
+                snapshots.latest_snapshot_timestamp_seconds(),
+                Some(now_seconds - ONE_DAY_SECONDS)
+            );
         });
     }
 

@@ -8,31 +8,44 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/interfaces/registry",
     "//rs/nervous_system/canisters",
+    "//rs/nns/constants",
     "//rs/node_rewards/canister/api",
+    "//rs/node_rewards/rewards_calculation",
     "//rs/protobuf",
     "//rs/registry/canister-client",
     "//rs/registry/keys",
     "//rs/registry/node_provider_rewards",
+    "//rs/types/base_types",
     "//rs/types/types",
     "@crate_index//:candid",
+    "@crate_index//:futures",
     "@crate_index//:ic-cdk",
     "@crate_index//:ic-cdk-timers",
+    "@crate_index//:ic-management-canister-types",
     "@crate_index//:ic-stable-structures",
+    "@crate_index//:itertools",
     "@crate_index//:prost",
 ]
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
+    "//packages/pocket-ic",
+    "//rs/nervous_system/agent:test_agent",
+    "//rs/nervous_system/integration_tests:nervous_system_integration_tests",
     "//rs/nns/test_utils",
     "//rs/registry/transport",
     "//rs/state_machine_tests",
     "@crate_index//:candid_parser",
     "@crate_index//:futures-util",
     "@crate_index//:maplit",
+    "@crate_index//:mockall",
+    "@crate_index//:serde_json",
+    "@crate_index//:tokio",
 ]
 
 MACRO_DEPENDENCIES = [
     # Keep sorted.
+    "@crate_index//:async-trait",
 ]
 
 DEV_MACRO_DEPENDENCIES = [
@@ -51,6 +64,7 @@ DEV_DATA = [
     "//rs/nns/handlers/lifeline/impl:lifeline_canister",
     "//rs/nns/handlers/root/impl:root-canister",
     "//rs/nns/sns-wasm:sns-wasm-canister",
+    "//rs/pocket_ic_server:pocket-ic-server",
     "//rs/registry/canister:registry-canister",
 ]
 
@@ -68,13 +82,14 @@ DEV_ENV = {
     "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
     "ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root/impl:root-canister)",
     "SNS_WASM_CANISTER_WASM_PATH": "$(rootpath //rs/nns/sns-wasm:sns-wasm-canister)",
+    "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
 }
 
 LIB_SRCS = glob(
     [
         "src/**/*.rs",
     ],
-    exclude = ["**/*tests*/**"],
+    exclude = ["tests*/**"],
 )
 
 rust_library(

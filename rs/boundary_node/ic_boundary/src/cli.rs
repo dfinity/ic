@@ -6,7 +6,7 @@ use ic_bn_lib::{
         self,
         shed::cli::{ShedSharded, ShedSystem},
     },
-    parse_size,
+    parse_size, parse_size_usize,
     types::RequestType,
 };
 use ic_config::crypto::CryptoConfig;
@@ -242,6 +242,30 @@ pub struct Observability {
     #[clap(env, long)]
     pub obs_log_journald: bool,
 
+    /// Enables Websocket endpoint to subscribe to logs
+    #[clap(env, long)]
+    pub obs_log_websocket: bool,
+
+    /// Websocket broker buffer size (per-topic)
+    #[clap(env, long, default_value = "1000")]
+    pub obs_log_websocket_buffer: usize,
+
+    /// Websocket broker topic idle timeout, after which the topic is removed.
+    #[clap(env, long, default_value = "10m", value_parser = parse_duration)]
+    pub obs_log_websocket_idle_timeout: Duration,
+
+    /// Websocket broker max topics
+    #[clap(env, long, default_value = "100000")]
+    pub obs_log_websocket_max_topics: u64,
+
+    /// Websocket broker max subscribers (per-Topic total)
+    #[clap(env, long, default_value = "1000")]
+    pub obs_log_websocket_max_subscribers_per_topic: usize,
+
+    /// Websocket max subscribers (per-Topic per-IP), 2^16 max
+    #[clap(env, long, default_value = "5")]
+    pub obs_log_websocket_max_subscribers_per_topic_per_ip: u16,
+
     /// Enables logging to /dev/null (to benchmark logging)
     #[clap(env, long)]
     pub obs_log_null: bool,
@@ -316,8 +340,8 @@ pub struct Cache {
     pub cache_size: Option<u64>,
 
     /// Maximum size of a single cached response item in bytes
-    #[clap(env, long, default_value = "10MB", value_parser = parse_size)]
-    pub cache_max_item_size: u64,
+    #[clap(env, long, default_value = "10MB", value_parser = parse_size_usize)]
+    pub cache_max_item_size: usize,
 
     /// Time-to-live for cache entries
     #[clap(env, long, default_value = "1s", value_parser = parse_duration)]

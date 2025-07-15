@@ -13,7 +13,7 @@ use ic_nns_common::{
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, EXCHANGE_RATE_CANISTER_ID, EXCHANGE_RATE_CANISTER_INDEX,
 };
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     manage_neuron_response, ExecuteNnsFunction, MakeProposalRequest, NnsFunction,
     ProposalActionRequest,
 };

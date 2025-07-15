@@ -659,6 +659,7 @@ mod tests {
     use ic_types::{
         batch::ValidationContext,
         consensus::{
+            dkg::DkgSummary,
             idkg::{IDkgPayload, UnmaskedTranscript},
             BlockPayload, Payload, SummaryPayload,
         },
@@ -954,7 +955,7 @@ mod tests {
             Payload::new(
                 ic_types::crypto::crypto_hash,
                 BlockPayload::Summary(SummaryPayload {
-                    dkg: ic_types::consensus::dkg::Summary::fake(),
+                    dkg: DkgSummary::fake(),
                     idkg: idkg_payload,
                 }),
             ),

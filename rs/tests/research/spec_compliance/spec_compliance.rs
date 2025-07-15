@@ -2,14 +2,11 @@ use canister_http::get_universal_vm_address;
 use ic_registry_routing_table::canister_id_into_u64;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::driver::boundary_node::{
-    BoundaryNode, BoundaryNodeVm, BoundaryNodeWithVm,
-};
 use ic_system_test_driver::driver::ic::{InternetComputer, NrOfVCPUs, Subnet, VmResources};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    await_boundary_node_healthy, get_dependency_path, HasPublicApiUrl, HasTopologySnapshot,
-    IcNodeContainer, NnsInstallationBuilder, SubnetSnapshot, TopologySnapshot,
+    get_dependency_path, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+    NnsInstallationBuilder, SubnetSnapshot, TopologySnapshot,
 };
 use ic_system_test_driver::driver::universal_vm::UniversalVm;
 use ic_system_test_driver::util::timeit;
@@ -20,8 +17,6 @@ use std::process::{Command, Stdio};
 use std::thread::{spawn, JoinHandle};
 
 pub const UNIVERSAL_VM_NAME: &str = "httpbin";
-
-const BOUNDARY_NODE_NAME: &str = "boundary-node-1";
 
 const REPLICATION_FACTOR: usize = 2;
 
@@ -37,16 +32,14 @@ const EXCLUDED: &[&str] = &[
 ];
 
 pub fn group_all() -> Vec<&'static str> {
-    [group_01(), group_02(), group_03()].concat()
+    [group_01(), group_02()].concat()
 }
 
 pub fn group_01() -> Vec<&'static str> {
     vec![
-        "($0 ~ /canister history/)",
         "($0 ~ /canister version/)",
         "($0 ~ /canister global timer/)",
         "($0 ~ /canister http/)",
-        "($0 ~ /WebAssembly module validation/)",
     ]
 }
 
@@ -60,11 +53,7 @@ pub fn group_02() -> Vec<&'static str> {
     ]
 }
 
-pub fn group_03() -> Vec<&'static str> {
-    vec!["($0 ~ /NNS canisters/)"]
-}
-
-pub fn setup_impl(env: TestEnv, deploy_bn_and_nns_canisters: bool, http_requests: bool) {
+pub fn setup_impl(env: TestEnv, deploy_nns_canisters: bool, http_requests: bool) {
     use ic_system_test_driver::driver::test_env_api::secs;
     use ic_system_test_driver::util::block_on;
     use std::env;
@@ -74,18 +63,6 @@ pub fn setup_impl(env: TestEnv, deploy_bn_and_nns_canisters: bool, http_requests
         memory_kibibytes: None,
         boot_image_minimal_size_gibibytes: None,
     };
-
-    // If requested, deploy a Boundary Node concurrently with deploying the rest of the testnet:
-    let mut deploy_bn_thread: Option<JoinHandle<BoundaryNodeWithVm>> = None;
-    let cloned_env = env.clone();
-    if deploy_bn_and_nns_canisters {
-        deploy_bn_thread = Some(spawn(move || {
-            BoundaryNode::new(String::from(BOUNDARY_NODE_NAME))
-                .with_vm_resources(vm_resources)
-                .allocate_vm(&cloned_env)
-                .expect("Allocation of BoundaryNode failed.")
-        }));
-    }
 
     // If requested, deploy the httpbin UVM concurrently with deploying the rest of the testnet:
     let mut deploy_httpbin_uvm_thread: Option<JoinHandle<()>> = None;
@@ -131,39 +108,24 @@ pub fn setup_impl(env: TestEnv, deploy_bn_and_nns_canisters: bool, http_requests
                     })
                     .add_nodes(REPLICATION_FACTOR),
             )
+            .with_api_boundary_nodes(1)
             .setup_and_start(&cloned_env)
             .expect("failed to setup IC under test");
     });
-    if deploy_bn_and_nns_canisters {
+    if deploy_nns_canisters {
         let cloned_env: TestEnv = env.clone();
-        timeit(
-            cloned_env.logger(),
-            "installing NNS & starting BN concurrently",
-            move || {
-                std::thread::scope(|s| {
-                    s.spawn(|| {
-                        let nns_node = cloned_env
-                            .topology_snapshot()
-                            .root_subnet()
-                            .nodes()
-                            .next()
-                            .unwrap();
-                        NnsInstallationBuilder::new()
-                            .install(&nns_node, &cloned_env)
-                            .expect("NNS canisters not installed");
-                        info!(cloned_env.logger(), "NNS canisters are installed.");
-                    });
-                    s.spawn(|| {
-                        let allocated_bn = deploy_bn_thread.unwrap().join().unwrap();
-                        allocated_bn
-                            .for_ic(&cloned_env, "")
-                            .use_real_certs_and_dns()
-                            .start(&cloned_env)
-                            .expect("failed to setup BoundaryNode VM");
-                    });
-                });
-            },
-        );
+        timeit(cloned_env.logger(), "installing NNS", move || {
+            let nns_node = cloned_env
+                .topology_snapshot()
+                .root_subnet()
+                .nodes()
+                .next()
+                .unwrap();
+            NnsInstallationBuilder::new()
+                .install(&nns_node, &cloned_env)
+                .expect("NNS canisters not installed");
+            info!(cloned_env.logger(), "NNS canisters are installed.");
+        });
     }
     let cloned_env = env.clone();
     timeit(
@@ -175,6 +137,11 @@ pub fn setup_impl(env: TestEnv, deploy_bn_and_nns_canisters: bool, http_requests
                     .nodes()
                     .for_each(|node| node.await_status_is_healthy().unwrap())
             });
+
+            cloned_env
+                .topology_snapshot()
+                .api_boundary_nodes()
+                .for_each(|api_bn| api_bn.await_status_is_healthy().unwrap());
         },
     );
     if http_requests {
@@ -217,16 +184,6 @@ pub fn setup_impl(env: TestEnv, deploy_bn_and_nns_canisters: bool, http_requests
             },
         );
     }
-    if deploy_bn_and_nns_canisters {
-        let cloned_env = env.clone();
-        timeit(
-            cloned_env.logger(),
-            "waiting until Boundary Node is healthy",
-            move || {
-                await_boundary_node_healthy(&cloned_env, BOUNDARY_NODE_NAME);
-            },
-        );
-    }
 }
 
 fn find_subnet(
@@ -245,7 +202,7 @@ fn find_subnet(
 
 pub fn test_subnet(
     env: TestEnv,
-    use_bn: bool,
+    use_api_bn: bool,
     http_requests: bool,
     test_subnet_type: Option<SubnetType>,
     peer_subnet_type: Option<SubnetType>,
@@ -277,7 +234,7 @@ pub fn test_subnet(
         env,
         test_subnet,
         peer_subnet,
-        use_bn,
+        use_api_bn,
         httpbin_proto,
         httpbin,
         log,
@@ -364,20 +321,20 @@ pub fn with_endpoint(
     env: TestEnv,
     test_subnet: SubnetSnapshot,
     peer_subnet: SubnetSnapshot,
-    use_bn: bool,
+    use_api_bn: bool,
     httpbin_proto: Option<String>,
     httpbin: Option<String>,
     log: Logger,
     excluded_tests: Vec<&str>,
     included_tests: Vec<&str>,
 ) {
-    let endpoint = if use_bn {
-        let boundary_node = env
-            .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
-            .unwrap()
-            .get_snapshot()
-            .unwrap();
-        boundary_node.get_public_url().to_string()
+    let endpoint = if use_api_bn {
+        env.topology_snapshot()
+            .api_boundary_nodes()
+            .next()
+            .expect("No API boundary node found")
+            .get_public_url()
+            .to_string()
     } else {
         test_subnet
             .nodes()

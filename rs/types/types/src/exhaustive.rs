@@ -423,10 +423,7 @@ impl ExhaustiveSet for IDkgMasterPublicKeyId {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
         MasterPublicKeyId::exhaustive_set(rng)
             .into_iter()
-            .filter_map(|key_id| match IDkgMasterPublicKeyId::try_from(key_id) {
-                Ok(idkg_key_id) => Some(idkg_key_id),
-                Err(_) => None,
-            })
+            .filter_map(|key_id| IDkgMasterPublicKeyId::try_from(key_id).ok())
             .collect()
     }
 }

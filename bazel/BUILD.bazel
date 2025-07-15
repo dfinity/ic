@@ -40,6 +40,20 @@ config_setting(
     },
 )
 
+# Allow targets to opt out of hermetic toolchains, in favor of the one provided
+# by the system
+bool_flag(
+    name = "hermetic_cc",
+    build_setting_default = True,
+)
+
+config_setting(
+    name = "use_hermetic_cc",
+    flag_values = {
+        ":hermetic_cc": "True",
+    },
+)
+
 string_flag(
     name = "timeout_value",
     build_setting_default = "10m",

@@ -26,8 +26,11 @@ use std::{convert::TryFrom, sync::Arc};
 mod common;
 use common::*;
 
+/// Slices originate from `REMOTE_SUBNET`.
 pub const SRC_SUBNET: SubnetId = REMOTE_SUBNET;
+/// Slices are consumed by `OWN_SUBNET`.
 pub const DST_SUBNET: SubnetId = OWN_SUBNET;
+
 pub const REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(169);
 
 #[test_strategy::proptest]
@@ -43,7 +46,7 @@ fn slice_unpack_roundtrip(
     let (stream, from, msg_count) = test_slice;
 
     with_test_replica_logger(|log| {
-        let fixture = StateManagerFixture::new(log).with_stream(DST_SUBNET, stream);
+        let fixture = StateManagerFixture::remote(log).with_stream(DST_SUBNET, stream);
 
         let certified_slice = fixture.get_slice(DST_SUBNET, from, msg_count);
         let unpacked = UnpackedStreamSlice::try_from(certified_slice.clone())
@@ -89,7 +92,7 @@ fn slice_garbage_collect(
         stream.push_accept_signal();
         let signals_end = stream.signals_end();
 
-        let fixture = StateManagerFixture::new(log).with_stream(DST_SUBNET, stream);
+        let fixture = StateManagerFixture::remote(log).with_stream(DST_SUBNET, stream);
         let certified_slice = fixture.get_slice(DST_SUBNET, from, msg_count);
 
         if msg_count > 0 {
@@ -105,7 +108,7 @@ fn slice_garbage_collect(
             );
             if msg_count > 1 {
                 let from_middle = from + StreamIndex::from(msg_count as u64 / 2);
-                let msgs_from_middle = (msg_count + 1) / 2;
+                let msgs_from_middle = msg_count.div_ceil(2);
                 // Garbage collecting some messages and no signals should truncate the slice.
                 assert_opt_slices_eq(
                     Some(fixture.get_slice(DST_SUBNET, from_middle, msgs_from_middle)),
@@ -215,7 +218,7 @@ fn slice_take_prefix(
     }
 
     with_test_replica_logger(|log| {
-        let fixture = StateManagerFixture::new(log).with_stream(DST_SUBNET, stream);
+        let fixture = StateManagerFixture::remote(log).with_stream(DST_SUBNET, stream);
         let certified_slice = fixture.get_slice(DST_SUBNET, from, msg_count);
 
         // Taking an unlimited prefix should result in the full slice and no leftover.
@@ -319,7 +322,7 @@ fn invalid_slice(
 
     with_test_replica_logger(|log| {
         let stream_begin = stream.messages_begin();
-        let fixture = StateManagerFixture::new(log).with_stream(DST_SUBNET, stream);
+        let fixture = StateManagerFixture::remote(log).with_stream(DST_SUBNET, stream);
 
         let certified_slice = fixture.get_slice(DST_SUBNET, from, msg_count);
 
@@ -474,7 +477,7 @@ fn slice_accurate_count_bytes(
     }
 
     with_test_replica_logger(|log| {
-        let fixture = StateManagerFixture::new(log).with_stream(DST_SUBNET, stream);
+        let fixture = StateManagerFixture::remote(log).with_stream(DST_SUBNET, stream);
 
         // Verify that we have good estimates for empty, single-message
         // and many-message slices, to ensure that both fixed and
@@ -513,7 +516,7 @@ fn matching_count_bytes(
     }
 
     with_test_replica_logger(|log| {
-        let fixture = StateManagerFixture::new(log).with_stream(DST_SUBNET, stream);
+        let fixture = StateManagerFixture::remote(log).with_stream(DST_SUBNET, stream);
 
         // Verify equality for empty, single-message and many-message slices.
         assert_matching_count_bytes(fixture.get_slice(DST_SUBNET, from, 0));
@@ -577,7 +580,7 @@ fn pool(
         };
         let zero_indices = ExpectedIndices::default();
 
-        let fixture = StateManagerFixture::new(log.clone()).with_stream(DST_SUBNET, stream);
+        let fixture = StateManagerFixture::remote(log.clone()).with_stream(DST_SUBNET, stream);
         let slice = fixture.get_slice(DST_SUBNET, from, msg_count);
         let messages_begin = if msg_count > 0 { Some(from) } else { None };
 
@@ -802,7 +805,8 @@ fn pool_append_same_slice(
         // Increment `signals_end` so we can later safely decrement it without underflow.
         stream.push_accept_signal();
 
-        let fixture = StateManagerFixture::new(log.clone()).with_stream(DST_SUBNET, stream.clone());
+        let fixture =
+            StateManagerFixture::remote(log.clone()).with_stream(DST_SUBNET, stream.clone());
         let slice = fixture.get_slice(DST_SUBNET, from, msg_count);
         let slice_bytes = UnpackedStreamSlice::try_from(slice.clone())
             .unwrap()
@@ -850,7 +854,7 @@ fn pool_append_same_slice(
         // slice (with the new `signals_end`).
         stream.push_accept_signal();
         let new_fixture =
-            StateManagerFixture::new(log.clone()).with_stream(DST_SUBNET, stream.clone());
+            StateManagerFixture::remote(log.clone()).with_stream(DST_SUBNET, stream.clone());
         let new_slice = new_fixture.get_slice(DST_SUBNET, from, msg_count);
 
         pool.append(SRC_SUBNET, new_slice, REGISTRY_VERSION, log)
@@ -917,7 +921,8 @@ fn pool_append_non_empty_to_empty(
         // Increment `signals_end` so we can later safely decrement it without underflow.
         stream.push_accept_signal();
 
-        let fixture = StateManagerFixture::new(log.clone()).with_stream(DST_SUBNET, stream.clone());
+        let fixture =
+            StateManagerFixture::remote(log.clone()).with_stream(DST_SUBNET, stream.clone());
         let slice = fixture.get_slice(DST_SUBNET, from, msg_count);
 
         // Stream position matching slice begin.
@@ -984,7 +989,8 @@ fn pool_append_non_empty_to_non_empty(
         // Increment `signals_end` so we can later safely decrement it without underflow.
         stream.push_accept_signal();
 
-        let fixture = StateManagerFixture::new(log.clone()).with_stream(DST_SUBNET, stream.clone());
+        let fixture =
+            StateManagerFixture::remote(log.clone()).with_stream(DST_SUBNET, stream.clone());
         let slice = fixture.get_slice(DST_SUBNET, from, msg_count);
 
         // Stream position matching slice begin.
@@ -1104,7 +1110,8 @@ fn pool_put_invalid_slice(
         // Increment `signals_end` so we can later safely decrement it without underflow.
         stream.push_accept_signal();
 
-        let fixture = StateManagerFixture::new(log.clone()).with_stream(DST_SUBNET, stream.clone());
+        let fixture =
+            StateManagerFixture::remote(log.clone()).with_stream(DST_SUBNET, stream.clone());
         let slice = fixture.get_slice(DST_SUBNET, from, msg_count);
 
         let stream_position = ExpectedIndices {
@@ -1163,7 +1170,8 @@ fn pool_append_invalid_slice(
         // Increment `signals_end` so we can later safely decrement it without underflow.
         stream.push_accept_signal();
 
-        let fixture = StateManagerFixture::new(log.clone()).with_stream(DST_SUBNET, stream.clone());
+        let fixture =
+            StateManagerFixture::remote(log.clone()).with_stream(DST_SUBNET, stream.clone());
         let prefix_msg_count = (from - stream_begin).get() as usize;
         let prefix = fixture.get_slice(DST_SUBNET, stream_begin, prefix_msg_count);
         let slice = fixture.get_partial_slice(DST_SUBNET, stream_begin, from, msg_count);
@@ -1246,7 +1254,8 @@ fn pool_append_invalid_slice_to_empty(
         // Increment `signals_end` so we can later safely decrement it without underflow.
         stream.push_accept_signal();
 
-        let fixture = StateManagerFixture::new(log.clone()).with_stream(DST_SUBNET, stream.clone());
+        let fixture =
+            StateManagerFixture::remote(log.clone()).with_stream(DST_SUBNET, stream.clone());
         let slice = fixture.get_slice(DST_SUBNET, from, msg_count);
 
         let stream_position = ExpectedIndices {
@@ -1308,7 +1317,7 @@ fn pool_take_slice_respects_signal_limit(
         };
 
         let stream_begin = stream.messages_begin();
-        let fixture = StateManagerFixture::new(log.clone()).with_stream(SRC_SUBNET, stream);
+        let fixture = StateManagerFixture::local(log.clone()).with_stream(SRC_SUBNET, stream);
         let slice = fixture.get_slice(SRC_SUBNET, from, msg_count);
 
         let mut certified_stream_store = MockCertifiedStreamStore::new();

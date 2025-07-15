@@ -1477,6 +1477,8 @@ fn query_cache_future_proof_test() {
         | SystemApiCallId::CanisterSelfSize
         | SystemApiCallId::CanisterStatus
         | SystemApiCallId::CanisterVersion
+        | SystemApiCallId::RootKeySize
+        | SystemApiCallId::RootKeyCopy
         | SystemApiCallId::CertifiedDataSet
         | SystemApiCallId::CostCall
         | SystemApiCallId::CostCreateCanister
@@ -1492,7 +1494,6 @@ fn query_cache_future_proof_test() {
         | SystemApiCallId::GlobalTimerSet
         | SystemApiCallId::InReplicatedExecution
         | SystemApiCallId::IsController
-        | SystemApiCallId::MintCycles
         | SystemApiCallId::MintCycles128
         | SystemApiCallId::MsgArgDataCopy
         | SystemApiCallId::MsgArgDataSize
@@ -1525,6 +1526,12 @@ fn query_cache_future_proof_test() {
         | SystemApiCallId::StableRead
         | SystemApiCallId::StableSize
         | SystemApiCallId::StableWrite
+        | SystemApiCallId::EnvVarCount
+        | SystemApiCallId::EnvVarNameSize
+        | SystemApiCallId::EnvVarNameCopy
+        | SystemApiCallId::EnvVarNameExists
+        | SystemApiCallId::EnvVarValueSize
+        | SystemApiCallId::EnvVarValueCopy
         | SystemApiCallId::Time
         | SystemApiCallId::Trap
         | SystemApiCallId::TryGrowWasmMemory => {

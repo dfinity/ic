@@ -11,6 +11,7 @@ pub mod do_clear_provisional_whitelist;
 pub mod do_create_subnet;
 pub mod do_deploy_guestos_to_all_subnet_nodes;
 pub mod do_deploy_guestos_to_all_unassigned_nodes;
+pub mod do_migrate_canisters;
 pub mod do_recover_subnet;
 pub mod do_remove_api_boundary_nodes;
 pub mod do_remove_node_operators;
@@ -33,5 +34,6 @@ mod node;
 pub mod node_management;
 pub mod prepare_canister_migration;
 pub mod reroute_canister_ranges;
-mod routing_table;
+// TODO after the registry_lifecycle migration relying on this module is done, make private again
+pub(crate) mod routing_table;
 mod subnet;

@@ -3,10 +3,9 @@ use candid::{CandidType, Encode};
 use ic_base_types::SubnetId;
 use ic_icrc1_ledger::{InitArgsBuilder, LedgerArgument};
 use ic_ledger_core::Tokens;
-use ic_nns_constants::SUBNET_RENTAL_CANISTER_ID;
+use ic_nns_constants::{ROOT_CANISTER_ID, SUBNET_RENTAL_CANISTER_ID};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
-    boundary_node::BoundaryNodeVm,
     test_env::TestEnv,
     test_env_api::{
         load_wasm, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
@@ -15,11 +14,14 @@ use ic_system_test_driver::driver::{
 };
 use ic_system_test_driver::nns::{set_authorized_subnetwork_list, update_xdr_per_icp};
 use ic_system_test_driver::sns_client::add_subnet_to_sns_deploy_whitelist;
-use ic_system_test_driver::util::{block_on, create_canister, install_canister, runtime_from_url};
+use ic_system_test_driver::util::{
+    block_on, create_canister, install_canister, runtime_from_url, set_controller,
+};
 use icp_ledger::AccountIdentifier;
 use serde::{Deserialize, Serialize};
 use slog::info;
 use std::collections::HashMap;
+use url::Url;
 
 use std::env;
 
@@ -74,16 +76,9 @@ pub fn nns_dapp_customizations() -> NnsCustomizations {
 
 pub fn install_sns_aggregator(
     env: &TestEnv,
-    boundary_node_name: &str,
+    ic_gateway_url: &Url,
     sns_node: IcNodeSnapshot,
 ) -> Principal {
-    let boundary_node = env
-        .get_deployed_boundary_node(boundary_node_name)
-        .unwrap()
-        .get_snapshot()
-        .unwrap();
-    let farm_url = boundary_node.get_playnet().unwrap();
-
     let sns_agent = sns_node.build_default_agent();
     let sns_aggregator_wasm = load_wasm(env::var("SNS_AGGREGATOR_WASM_PATH").unwrap());
     let logger = env.logger();
@@ -101,9 +96,10 @@ pub fn install_sns_aggregator(
             .unwrap(),
         )
         .await;
+        let ic_gateway_domain = ic_gateway_url.domain().unwrap();
         info!(
             logger,
-            "SNS aggregator: https://{}.{}", sns_aggregator_canister_id, farm_url
+            "SNS aggregator: https://{}.{ic_gateway_domain}", sns_aggregator_canister_id,
         );
         sns_aggregator_canister_id
     })
@@ -115,16 +111,10 @@ pub fn install_sns_aggregator(
 /// would conflict with the Subnet Rental Canister ID on mainnet.
 pub fn install_ii_nns_dapp_and_subnet_rental(
     env: &TestEnv,
-    boundary_node_name: &str,
+    ic_gateway_url: &Url,
     sns_aggregator_canister_id: Option<Principal>,
 ) -> (Principal, Principal) {
-    let boundary_node = env
-        .get_deployed_boundary_node(boundary_node_name)
-        .unwrap()
-        .get_snapshot()
-        .unwrap();
-    let farm_url = boundary_node.get_playnet().unwrap();
-    let https_farm_url = format!("https://{}", farm_url);
+    let ic_gateway_domain = ic_gateway_url.domain().unwrap().to_string();
 
     // deploy the II canister
     let topology = env.topology_snapshot();
@@ -149,6 +139,17 @@ pub fn install_ii_nns_dapp_and_subnet_rental(
         None,
     );
 
+    // set the NNS root canister as a controller of the Subnet Rental Canister
+    let nns_agent = nns_node.build_default_agent();
+    block_on(async move {
+        set_controller(
+            &SUBNET_RENTAL_CANISTER_ID.get().0,
+            &ROOT_CANISTER_ID.get().0,
+            &nns_agent,
+        )
+        .await;
+    });
+
     // deploy the ckETH ledger canister (ICRC1-ledger with "ckETH" as token symbol and name) required by NNS dapp
     let cketh_init_args = InitArgsBuilder::for_tests()
         .with_token_symbol("ckETH".to_string())
@@ -165,7 +166,7 @@ pub fn install_ii_nns_dapp_and_subnet_rental(
     let logger = env.logger();
     block_on(async move {
         let nns_dapp_metadata = vec![
-            ("API_HOST".to_string(), https_farm_url.clone()),
+            ("API_HOST".to_string(), ic_gateway_url.to_string()),
             ("CKETH_INDEX_CANISTER_ID".to_string(), cketh_canister_id.to_string()),
             ("CKETH_LEDGER_CANISTER_ID".to_string(), cketh_canister_id.to_string()),
             ("CYCLES_MINTING_CANISTER_ID".to_string(), "rkp4c-7iaaa-aaaaa-aaaca-cai".to_string()),
@@ -173,14 +174,14 @@ pub fn install_ii_nns_dapp_and_subnet_rental(
             ("FEATURE_FLAGS".to_string(), "{\"ENABLE_CKBTC\":false,\"ENABLE_CKTESTBTC\":false,\"ENABLE_HIDE_ZERO_BALANCE\":true,\"ENABLE_VOTING_INDICATION\":true}".to_string()),
             ("FETCH_ROOT_KEY".to_string(), "true".to_string()),
             ("GOVERNANCE_CANISTER_ID".to_string(), "rrkah-fqaaa-aaaaa-aaaaq-cai".to_string()),
-            ("HOST".to_string(), https_farm_url.clone()),
-            ("IDENTITY_SERVICE_URL".to_string(), format!("https://{}.{}",  ii_canister_id, farm_url)),
+            ("HOST".to_string(), ic_gateway_url.to_string()),
+            ("IDENTITY_SERVICE_URL".to_string(), format!("https://{}.{}",  ii_canister_id, ic_gateway_domain)),
             ("INDEX_CANISTER_ID".to_string(), "ryjl3-tyaaa-aaaaa-aaaba-cai".to_string()),
             ("LEDGER_CANISTER_ID".to_string(), "ryjl3-tyaaa-aaaaa-aaaba-cai".to_string()),
             ("OWN_CANISTER_ID".to_string(), nns_dapp_canister_id.to_string()),
             ("ROBOTS".to_string(), "<meta name=\"robots\" content=\"noindex, nofollow\" />".to_string()),
-            ("SNS_AGGREGATOR_URL".to_string(), sns_aggregator_canister_id.map(|s| format!("https://{}.{}", s, farm_url)).unwrap_or_default()),
-            ("STATIC_HOST".to_string(), https_farm_url),
+            ("SNS_AGGREGATOR_URL".to_string(), sns_aggregator_canister_id.map(|s| format!("https://{}.{}", s, ic_gateway_domain)).unwrap_or_default()),
+            ("STATIC_HOST".to_string(), ic_gateway_url.to_string()),
             ("TVL_CANISTER_ID".to_string(), "".to_string()),
             ("WASM_CANISTER_ID".to_string(), "qaa6y-5yaaa-aaaaa-aaafa-cai".to_string())
         ];
@@ -197,11 +198,11 @@ pub fn install_ii_nns_dapp_and_subnet_rental(
         .await;
         info!(
             logger,
-            "Internet Identity: https://{}.{}", ii_canister_id, farm_url
+            "Internet Identity: https://{}.{}", ii_canister_id, ic_gateway_domain
         );
         info!(
             logger,
-            "NNS frontend dapp: https://{}.{}", nns_dapp_canister_id, farm_url
+            "NNS frontend dapp: https://{}.{}", nns_dapp_canister_id, ic_gateway_domain
         );
         (ii_canister_id, nns_dapp_canister_id)
     })

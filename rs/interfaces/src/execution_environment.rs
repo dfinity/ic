@@ -12,7 +12,7 @@ use ic_types::{
     crypto::{canister_threshold_sig::MasterPublicKey, threshold_sig::ni_dkg::NiDkgId},
     ingress::{IngressStatus, WasmResult},
     messages::{CertificateDelegation, MessageId, Query, SignedIngressContent},
-    Cycles, ExecutionRound, Height, NumInstructions, Randomness, ReplicaVersion, Time,
+    Cycles, ExecutionRound, Height, NodeId, NumInstructions, Randomness, ReplicaVersion, Time,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -162,6 +162,10 @@ pub enum SystemApiCallId {
     CanisterStatus,
     /// Tracker for `ic0.canister_version()`
     CanisterVersion,
+    /// Tracker for `ic0.root_key_size()`
+    RootKeySize,
+    /// Tracker for `ic0.root_key_copy()`
+    RootKeyCopy,
     /// Tracker for `ic0.certified_data_set()`
     CertifiedDataSet,
     /// Tracker for `ic0.cost_call()`
@@ -192,8 +196,6 @@ pub enum SystemApiCallId {
     InReplicatedExecution,
     /// Tracker for `ic0.is_controller()`
     IsController,
-    /// Tracker for `ic0.mint_cycles()`
-    MintCycles,
     /// Tracker for `ic0.mint_cycles128()`
     MintCycles128,
     /// Tracker for `ic0.msg_arg_data_copy()`
@@ -264,6 +266,18 @@ pub enum SystemApiCallId {
     Trap,
     /// Tracker for `__.try_grow_wasm_memory()`
     TryGrowWasmMemory,
+    /// Tracker for `ic0.env_var_count()`
+    EnvVarCount,
+    /// Tracker for `ic0.env_var_name_size()`
+    EnvVarNameSize,
+    /// Tracker for `ic0.env_var_name_copy()`
+    EnvVarNameCopy,
+    /// Tracker for `ic0.env_var_name_exists()`
+    EnvVarNameExists,
+    /// Tracker for `ic0.env_var_value_size()`
+    EnvVarValueSize,
+    /// Tracker for `ic0.env_var_value_copy()`
+    EnvVarValueCopy,
 }
 
 /// System API call counters, i.e. how many times each tracked System API call
@@ -645,6 +659,80 @@ pub trait SystemApi {
 
     /// Canister id of the executing canister.
     fn canister_id(&self) -> ic_types::CanisterId;
+
+    /// Returns the number of environment variables.
+    fn ic0_env_var_count(&self) -> HypervisorResult<usize>;
+
+    /// Returns the size of the environment variable name at the given index.
+    ///
+    /// # Panics
+    ///
+    /// This traps if the index is out of bounds.
+    fn ic0_env_var_name_size(&self, index: usize) -> HypervisorResult<usize>;
+
+    /// Copies the environment variable name at the given index into memory.
+    ///
+    /// # Panics
+    ///
+    /// This traps if the index is out of bounds.
+    fn ic0_env_var_name_copy(
+        &self,
+        index: usize,
+        dst: usize,
+        offset: usize,
+        size: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
+
+    /// Checks if an environment variable with the given name exists.
+    /// Returns 1 if the environment variable with the given name exists, 0 otherwise.
+    ///
+    /// # Panics
+    ///
+    /// This traps if:
+    ///     - the name is too long
+    ///     - the name is not a valid UTF-8 string.
+    fn ic0_env_var_name_exists(
+        &self,
+        name_src: usize,
+        name_size: usize,
+        heap: &[u8],
+    ) -> HypervisorResult<i32>;
+
+    /// Returns the size of the value for the environment variable with the given name.
+    ///
+    ///
+    /// # Panics
+    ///
+    /// This traps if:
+    ///     - the name is too long
+    ///     - the name is not a valid UTF-8 string.
+    ///     - the environment variable with the given name is not found
+    fn ic0_env_var_value_size(
+        &self,
+        name_src: usize,
+        name_size: usize,
+        heap: &[u8],
+    ) -> HypervisorResult<usize>;
+
+    /// Copies the value of the environment variable with the given name into memory.
+    ///
+    ///
+    /// # Panics
+    ///
+    /// This traps if:
+    ///     - the name is too long
+    ///     - the name is not a valid UTF-8 string.
+    ///     - the environment variable with the given name is not found.
+    fn ic0_env_var_value_copy(
+        &self,
+        name_src: usize,
+        name_size: usize,
+        dst: usize,
+        offset: usize,
+        size: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
 
     /// Copies `size` bytes starting from `offset` inside the opaque caller blob
     /// and copies them to heap[dst..dst+size]. The caller is the canister
@@ -1041,6 +1129,19 @@ pub trait SystemApi {
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
 
+    /// Used to look up the size of the root key.
+    fn ic0_root_key_size(&self) -> HypervisorResult<usize>;
+
+    /// Used to copy the root key (starting at `offset` and copying `size` bytes)
+    /// to the calling canister's heap at the location specified by `dst`.
+    fn ic0_root_key_copy(
+        &self,
+        dst: usize,
+        offset: usize,
+        size: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
+
     /// Sets the certified data for the canister.
     /// See: <https://internetcomputer.org/docs/current/references/ic-interface-spec#system-api-certified-data>
     fn ic0_certified_data_set(
@@ -1075,14 +1176,6 @@ pub trait SystemApi {
     /// Returns the current status of the canister.  `1` indicates
     /// running, `2` indicates stopping, and `3` indicates stopped.
     fn ic0_canister_status(&self) -> HypervisorResult<u32>;
-
-    /// Mints the `amount` cycles
-    /// Adds cycles to the canister's balance.
-    ///
-    /// Adds no more cycles than `amount`.
-    ///
-    /// Returns the amount of cycles added to the canister's balance.
-    fn ic0_mint_cycles(&mut self, amount: u64) -> HypervisorResult<u64>;
 
     /// Mints the `amount` cycles
     /// Adds cycles to the canister's balance.
@@ -1287,6 +1380,7 @@ pub struct RegistryExecutionSettings {
     pub provisional_whitelist: ProvisionalWhitelist,
     pub chain_key_settings: BTreeMap<MasterPublicKeyId, ChainKeySettings>,
     pub subnet_size: usize,
+    pub node_ids: BTreeSet<NodeId>,
 }
 
 /// Chain key configuration of execution that comes from the registry.

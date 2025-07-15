@@ -82,7 +82,7 @@ MACRO_DEV_DEPENDENCIES = [
 ALIASES = {
 }
 
-ROSETTA_VERSION = "1.2.0"
+ROSETTA_VERSION = "1.2.4"
 
 rust_library(
     name = "ic-icrc-rosetta",
@@ -110,6 +110,14 @@ rust_test(
     crate = ":ic-icrc-rosetta",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test(
+    name = "storage-operations-tests",
+    srcs = ["src/common/storage/storage_operations_test.rs"],
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + [":ic-icrc-rosetta"],
 )
 
 LOCAL_REPLICA_DATA = [

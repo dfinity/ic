@@ -6,7 +6,9 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 load("//bazel:mainnet-canisters.bzl", "canisters")
 load("//bazel:mainnet-icos-images.bzl", "mainnet_icos_images")
 load("//third_party/jemalloc:repository.bzl", "jemalloc_repository")
+load("//third_party/libfuzzer:repository.bzl", "libfuzzer_repository")
 load("//third_party/lmdb:repository.bzl", "lmdb_repository")
+load("//third_party/openssl:repository.bzl", "openssl_repository")
 
 # We cannot derive the Bazel repository names (e.g. @mainnet_nns_registry_canister) directly
 # from the canister names because we use inconsistent repo names. Same goes for filenames.
@@ -107,10 +109,13 @@ sol_register_toolchains(
 
 http_archive(
     name = "rules_rust",
-    integrity = "sha256-8TBqrAsli3kN8BrZq8arsN8LZUFsdLTvJ/Sqsph4CmQ=",
-    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.56.0/rules_rust-0.56.0.tar.gz"],
+    integrity = "sha256-U8G6x+xI985IxMHGqgBvJ1Fa3SrrBXJZNyJObgDsfOo=",
+    patch_args = ["-p1"],
+    patches = ["//bazel:rules_rust.patch"],
+    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.61.0/rules_rust-0.61.0.tar.gz"],
 )
 
+load("@rules_rust//crate_universe:repositories.bzl", "crate_universe_dependencies")
 load("@rules_rust//rust:repositories.bzl", "rules_rust_dependencies", "rust_register_toolchains")
 load("@rules_rust//tools/rust_analyzer:deps.bzl", "rust_analyzer_dependencies")
 
@@ -118,17 +123,21 @@ rules_rust_dependencies()
 
 rust_analyzer_dependencies()
 
+crate_universe_dependencies()
+
 rust_register_toolchains(
     edition = "2021",
+    strip_level = {"x86_64-unknown-linux-gnu": {
+        "dbg": "none",
+        "fastbuild": "none",
+        "opt": "none",
+    }},
     # The nightly version is required to compile fuzz tests from Bazel.
     # The version below is chosen so that it is in sync with the non-nightly version.
     versions = [
-        "1.84.0",
+        "1.86.0",
         # Use the nightly version from the day before the branch.
-        # -
-        # NB! Due to a regression in the compiler https://github.com/rust-lang/rust/issues/128895, that's
-        # only back-ported to stable, we use a more recent version.
-        "nightly/2024-11-21",
+        "nightly/2025-03-08",
     ],
 )
 
@@ -168,6 +177,10 @@ rules_motoko_dependencies()
 lmdb_repository()
 
 jemalloc_repository()
+
+openssl_repository()
+
+libfuzzer_repository()
 
 http_archive(
     name = "buildifier_prebuilt",
@@ -219,7 +232,7 @@ load("//bazel:rclone.bzl", "rclone_repository")
 
 rclone_repository(name = "rclone")
 
-# trivy binary for upload_artifacts
+# trivy binary for vulnerability scanning
 load("//bazel:trivy.bzl", "trivy_scan")
 
 trivy_scan(name = "trivy")
@@ -265,3 +278,44 @@ load("//bazel:idl2json.bzl", "idl_to_json")
 idl_to_json(name = "idl2json")
 
 mainnet_icos_images()
+
+# Use libsystemd from the host environment
+# Ideally this is pulled hermetically, but as this is only used by infogetty
+# within IC images, we have less compatibility to worry about, and packaging it
+# this way is easier.
+new_local_repository(
+    name = "libsystemd",
+    build_file_content = """
+cc_import(
+    name = "libsystemd-internal",
+    hdrs = glob(["include/systemd/*.h"]),
+    interface_library = "lib/x86_64-linux-gnu/libsystemd.so",
+    system_provided = True,
+    visibility = ["//visibility:private"],
+)
+
+# Use an extra cc_library to hide the depth of the include folder
+cc_library(
+    name = "libsystemd",
+    includes = ["include"],
+    deps = ["libsystemd-internal"],
+    visibility = ["//visibility:public"],
+)
+""",
+    path = "/usr",
+)
+
+# Use libvirt from the host environment
+# Used for managing virtual machines programmatically.
+new_local_repository(
+    name = "libvirt",
+    build_file_content = """
+cc_import(
+    name = "libvirt",
+    hdrs = glob(["include/libvirt/*.h"]),
+    shared_library = "lib/x86_64-linux-gnu/libvirt.so",
+    visibility = ["//visibility:public"],
+)
+""",
+    path = "/usr",
+)

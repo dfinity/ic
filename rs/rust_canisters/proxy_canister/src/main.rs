@@ -6,15 +6,21 @@
 //! otherwise errors out.
 //!
 use candid::Principal;
+use futures::future::join_all;
 use ic_cdk::api::call::RejectionCode;
-use ic_cdk::caller;
-use ic_cdk_macros::{query, update};
+use ic_cdk::api::time;
+use ic_cdk::{caller, spawn};
+use ic_cdk::{query, update};
 use ic_management_canister_types_private::{
     CanisterHttpResponsePayload, HttpHeader, Payload, TransformArgs,
 };
-use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
+use proxy_canister::{
+    RemoteHttpRequest, RemoteHttpResponse, RemoteHttpStressRequest, RemoteHttpStressResponse,
+    ResponseWithRefundedCycles,
+};
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::time::Duration;
 
 thread_local! {
     #[allow(clippy::type_complexity)]
@@ -24,13 +30,102 @@ thread_local! {
 const MAX_TRANSFORM_SIZE: usize = 2_000_000;
 
 #[update]
-async fn send_request(
+async fn send_requests_in_parallel(
+    request: RemoteHttpStressRequest,
+) -> Result<RemoteHttpStressResponse, (RejectionCode, String)> {
+    let start = time();
+    if request.count == 0 {
+        return Err((
+            RejectionCode::CanisterError,
+            "Count cannot be 0".to_string(),
+        ));
+    }
+
+    // This is the maximum size of the queue of canister messages. In our case, it's the highest number of requests we can send in parallel.
+    const MAX_CONCURRENCY: usize = 500;
+
+    let mut all_results: Vec<Result<RemoteHttpResponse, (RejectionCode, String)>> = Vec::new();
+
+    let indices: Vec<u64> = (0..request.count).collect();
+    for chunk in indices.chunks(MAX_CONCURRENCY) {
+        let futures_iter = chunk.iter().map(|_| send_request(request.request.clone()));
+        let chunk_results = join_all(futures_iter).await;
+        all_results.extend(chunk_results);
+    }
+
+    let mut response = None;
+
+    for result in all_results {
+        match result {
+            Ok(rsp) => response = Some(rsp),
+            Err(err) => {
+                return Err(err);
+            }
+        }
+    }
+    let duration_ns = time() - start;
+    Ok(RemoteHttpStressResponse {
+        response: response.unwrap(),
+        duration: Duration::from_nanos(duration_ns),
+    })
+}
+
+#[update]
+pub async fn start_continuous_requests(
     request: RemoteHttpRequest,
 ) -> Result<RemoteHttpResponse, (RejectionCode, String)> {
+    // This request establishes the session to the target server.
+    let _ = send_request(request.clone()).await;
+
+    spawn(async move {
+        run_continuous_request_loop(request).await;
+    });
+
+    Ok(RemoteHttpResponse::new(
+        200,
+        vec![],
+        "Started non-stop sending.".to_string(),
+    ))
+}
+
+// TODO: instead of sequentially awaiting on each batch, try to send the next requests anyway, with backoff.
+// This should improve the overall qps, as the canister message queue is the bottleneck, and it's not being saturated.
+async fn run_continuous_request_loop(request: RemoteHttpRequest) {
+    const BATCH_SIZE: usize = 500;
+    let futures_iter = (0..BATCH_SIZE).map(|_| send_request(request.clone()));
+    let results = join_all(futures_iter).await;
+
+    let mut successes = 0;
+    let mut errors = 0;
+    for result in results {
+        match result {
+            Ok(_resp) => {
+                successes += 1;
+            }
+            Err((rejection_code, msg)) => {
+                errors += 1;
+                println!("Request failed: {:?} - {}", rejection_code, msg);
+            }
+        }
+    }
+    println!(
+        "Finished batch of {} requests => successes: {}, errors: {}",
+        BATCH_SIZE, successes, errors
+    );
+
+    spawn(async move {
+        run_continuous_request_loop(request).await;
+    });
+}
+
+#[update]
+async fn send_request_with_refund_callback(
+    request: RemoteHttpRequest,
+) -> ResponseWithRefundedCycles {
     let RemoteHttpRequest { request, cycles } = request;
     let request_url = request.url.clone();
     println!("send_request making IC call.");
-    match ic_cdk::api::call::call_raw(
+    let result = match ic_cdk::api::call::call_raw(
         Principal::management_canister(),
         "http_request",
         &request.encode(),
@@ -69,7 +164,21 @@ async fn send_request(
             });
             Err((r, m))
         }
+    };
+    let refunded_cycles = ic_cdk::api::call::msg_cycles_refunded();
+    ResponseWithRefundedCycles {
+        result,
+        refunded_cycles,
     }
+}
+
+#[update]
+async fn send_request(
+    request: RemoteHttpRequest,
+) -> Result<RemoteHttpResponse, (RejectionCode, String)> {
+    let ResponseWithRefundedCycles { result, .. } =
+        send_request_with_refund_callback(request).await;
+    result
 }
 
 #[query]

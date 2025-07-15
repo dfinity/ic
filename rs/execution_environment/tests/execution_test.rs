@@ -3,7 +3,6 @@ use candid::Encode;
 use canister_test::CanisterInstallMode;
 use ic_base_types::PrincipalId;
 use ic_config::{
-    embedders::BestEffortResponsesFeature,
     execution_environment::{Config as HypervisorConfig, DEFAULT_WASM_MEMORY_LIMIT},
     subnet_config::{CyclesAccountManagerConfig, SubnetConfig},
 };
@@ -1075,46 +1074,6 @@ fn exceeding_memory_capacity_fails_during_message_execution() {
 }
 
 #[test]
-fn max_canister_memory_respected_even_when_no_memory_allocation_is_set() {
-    let subnet_config = SubnetConfig::new(SubnetType::Application);
-    let env = StateMachine::new_with_config(StateMachineConfig::new(
-        subnet_config,
-        HypervisorConfig {
-            max_canister_memory_size_wasm32: NumBytes::from(10 * MIB),
-            ..Default::default()
-        },
-    ));
-    env.set_checkpoints_enabled(true);
-
-    let now = std::time::SystemTime::now();
-    env.set_time(now);
-
-    let canister_id = create_universal_canister_with_cycles(
-        &env,
-        Some(CanisterSettingsArgsBuilder::new().build()),
-        INITIAL_CYCLES_BALANCE,
-    );
-
-    // Growing the memory by 200 pages exceeds the 10MiB max canister
-    // memory size we set and should fail.
-    let res = env.execute_ingress(
-        canister_id,
-        "update",
-        wasm().stable64_grow(200).reply_int64().build(),
-    );
-    assert_replied_with(res, -1);
-
-    // Growing the memory by 50 pages doesn't exceed the 10MiB max canister
-    // memory size we set and should succeed.
-    let res = env.execute_ingress(
-        canister_id,
-        "update",
-        wasm().stable64_grow(50).reply_int64().build(),
-    );
-    assert_replied_with(res, 0);
-}
-
-#[test]
 fn subnet_memory_reservation_works() {
     let subnet_config = SubnetConfig::new(SubnetType::Application);
     let num_cores = subnet_config.scheduler_config.scheduler_cores as u64;
@@ -1423,92 +1382,6 @@ fn canister_with_memory_allocation_cannot_grow_wasm_memory_above_allocation_wasm
 
     let err = env.execute_ingress(a_id, "update", vec![]).unwrap_err();
     assert_eq!(err.code(), ErrorCode::CanisterOutOfMemory);
-}
-
-#[test]
-fn max_canister_memory_size_is_different_between_wasm32_vs_wasm64() {
-    fn create_wat(memory_increase_in_pages: i64, is_wasm64: bool) -> String {
-        // Wat that grows the memory by parameter and can be formatted to Wasm32 and Wasm64.
-        let mem_declaration = if is_wasm64 {
-            "(memory $memory i64 1 250)"
-        } else {
-            "(memory $memory 1 250)"
-        };
-        let func_msg_decl = if is_wasm64 {
-            "(import \"ic0\" \"msg_reply_data_append\" (func $msg_reply_data_append (param i64 i64)))"
-        } else {
-            "(import \"ic0\" \"msg_reply_data_append\" (func $msg_reply_data_append (param i32 i32)))"
-        };
-        let call_msg_reply_append = if is_wasm64 {
-            "(call $msg_reply_data_append (i64.const 0) (i64.const 1))"
-        } else {
-            "(call $msg_reply_data_append (i32.const 0) (i32.const 1))"
-        };
-        let memory_grow_instruction = if is_wasm64 {
-            format!(
-                "(drop (memory.grow (i64.const {})))",
-                memory_increase_in_pages
-            )
-        } else {
-            format!(
-                "(drop (memory.grow (i32.const {})))",
-                memory_increase_in_pages
-            )
-        };
-        format!(
-            r#"
-            (module
-                (import "ic0" "msg_reply" (func $msg_reply))
-                {}
-                (func $update
-                    {}
-                    {}
-                    (call $msg_reply)
-                )
-                {}
-                (export "canister_update update" (func $update))
-            )"#,
-            func_msg_decl, memory_grow_instruction, call_msg_reply_append, mem_declaration
-        )
-    }
-
-    let subnet_config = SubnetConfig::new(SubnetType::Application);
-    let env = StateMachine::new_with_config(StateMachineConfig::new(
-        subnet_config,
-        HypervisorConfig {
-            max_canister_memory_size_wasm32: NumBytes::from(10 * MIB),
-            max_canister_memory_size_wasm64: NumBytes::from(20 * MIB),
-            ..Default::default()
-        },
-    ));
-
-    // Create wat that grows a Wasm32 canister to the 15 MiB, which is over the Wasm32 limit.
-    // A Wasm page is 64 KiB. Therefore 15 MiB is 240 pages.
-    let num_pages = 240;
-    let wat_32 = create_wat(num_pages, false);
-    // Create wat that grows a Wasm64 canister to the 15 MiB, which is below the Wasm64 limit.
-    let wat_64 = create_wat(num_pages, true);
-
-    let wasm32_canister = create_canister_with_cycles(
-        &env,
-        wat::parse_str(&wat_32).unwrap(),
-        Some(CanisterSettingsArgsBuilder::new().build()),
-        INITIAL_CYCLES_BALANCE,
-    );
-    let wasm64_canister = create_canister_with_cycles(
-        &env,
-        wat::parse_str(&wat_64).unwrap(),
-        Some(CanisterSettingsArgsBuilder::new().build()),
-        INITIAL_CYCLES_BALANCE,
-    );
-
-    // When running, the wasm32 canister should trap because it tries to grow the memory beyond its limit of 15 MiB.
-    // and the Wasm64 canister should succeed because it has a higher limit.
-    let res32 = env.execute_ingress(wasm32_canister, "update", vec![]);
-    let res64 = env.execute_ingress(wasm64_canister, "update", vec![]);
-
-    assert_eq!(res32.unwrap_err().code(), ErrorCode::CanisterOutOfMemory);
-    assert_replied(res64);
 }
 
 #[test]
@@ -2251,7 +2124,7 @@ fn toolchain_error_message() {
     rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister's Wasm module is not valid: Wasmtime \
     failed to validate wasm module wasmtime::Module::validate() failed with \
     multiple memories (at offset 0x14).\n\
-    This is likely an error with the compiler/CDK toolchain being used to \
+    If you are running this canister in a test environment (e.g., dfx), make sure the test environment is up to date. Otherwise, this is likely an error with the compiler/CDK toolchain being used to \
     build the canister. Please report the error to IC devs on the forum: \
     https://forum.dfinity.org and include which language/CDK was used to \
     create the canister."
@@ -2264,17 +2137,12 @@ fn helper_best_effort_responses(
     expected_deadline_seconds: u32,
 ) {
     let subnet_config = SubnetConfig::new(SubnetType::Application);
-    let mut embedders_config = ic_config::embedders::Config::default();
-    embedders_config.feature_flags.best_effort_responses = BestEffortResponsesFeature::Enabled;
 
     let env = StateMachineBuilder::new()
         .with_time(Time::from_secs_since_unix_epoch(start_time_seconds as u64).unwrap())
         .with_config(Some(StateMachineConfig::new(
             subnet_config,
-            HypervisorConfig {
-                embedders_config,
-                ..Default::default()
-            },
+            HypervisorConfig::default(),
         )))
         .build();
 
@@ -3120,4 +2988,34 @@ fn test_canister_liquid_cycle_balance() {
     // The receiver now holds the joint cycles balance of both canisters at the beginning minus some overhead.
     let receiver_balance = env.cycle_balance(callee);
     assert!(receiver_balance > 2 * INITIAL_CYCLES_BALANCE.get() - 100 * B);
+}
+
+/// Test that a message which results in many calls with large payloads (2 GB in
+/// total) hits the instruction limit. This ensures that we don't have messages
+/// over 2GB being sent over the sandbox IPC channel.
+#[test]
+fn large_ipc_call_fails() {
+    let wasm = canister_test::Project::cargo_bin_maybe_from_env("call_loop_canister", &[]);
+    let subnet_config = SubnetConfig::new(SubnetType::System);
+    let instruction_limit = subnet_config.scheduler_config.max_instructions_per_message;
+    let env = StateMachineBuilder::new()
+        .with_config(Some(StateMachineConfig::new(
+            subnet_config,
+            HypervisorConfig::default(),
+        )))
+        .build();
+
+    let canister_id = env
+        .install_canister_with_cycles(wasm.bytes(), vec![], None, INITIAL_CYCLES_BALANCE)
+        .unwrap();
+
+    // Canister takes the number of bytes to send during one message in
+    // megabytes. We send 2 GB total.
+    let err = env
+        .execute_ingress(canister_id, "send_calls", Encode!(&(2 * 1024_u32)).unwrap())
+        .unwrap_err();
+    let expected_error = format!("Error from Canister \
+        rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister exceeded the limit of {instruction_limit} instructions \
+        for single message execution.");
+    err.assert_contains(ErrorCode::CanisterInstructionLimitExceeded, &expected_error);
 }

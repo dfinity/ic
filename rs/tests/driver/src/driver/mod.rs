@@ -1,7 +1,6 @@
 pub mod action_graph;
 pub mod asset_canister;
 pub mod bootstrap;
-pub mod boundary_node;
 pub mod config;
 pub mod constants;
 pub mod context;
@@ -11,6 +10,7 @@ pub mod event;
 pub mod farm;
 pub mod group;
 pub mod ic;
+pub mod ic_gateway_vm;
 pub mod log_events;
 pub mod logger;
 pub mod nested;

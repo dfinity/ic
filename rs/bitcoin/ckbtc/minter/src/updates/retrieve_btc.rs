@@ -22,7 +22,7 @@ use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
 use num_traits::cast::ToPrimitive;
 
-const MAX_CONCURRENT_PENDING_REQUESTS: usize = 1000;
+const MAX_CONCURRENT_PENDING_REQUESTS: usize = 5000;
 
 /// The arguments of the [retrieve_btc] endpoint.
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]

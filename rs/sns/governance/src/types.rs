@@ -1,4 +1,5 @@
 use crate::{
+    following::TOPICS,
     governance::{Governance, TimeWarp, NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER},
     logs::INFO,
     pb::{
@@ -24,16 +25,17 @@ use crate::{
                 self, DisburseMaturityResponse, MergeMaturityResponse, StakeMaturityResponse,
             },
             nervous_system_function::FunctionType,
-            neuron::{Followees, TopicFollowees},
+            neuron::{FolloweesForTopic, TopicFollowees},
             proposal::Action,
             ChunkedCanisterWasm, ClaimSwapNeuronsError, ClaimSwapNeuronsResponse,
             ClaimedSwapNeuronStatus, DefaultFollowees, DeregisterDappCanisters, Empty,
-            ExecuteGenericNervousSystemFunction, GovernanceError, ManageDappCanisterSettings,
-            ManageLedgerParameters, ManageNeuronResponse, ManageSnsMetadata, MintSnsTokens, Motion,
-            NervousSystemFunction, NervousSystemParameters, Neuron, NeuronId, NeuronIds,
-            NeuronPermission, NeuronPermissionList, NeuronPermissionType, ProposalId,
-            RegisterDappCanisters, RewardEvent, SnsVersion, TransferSnsTreasuryFunds,
-            UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote, VotingRewardsParameters,
+            ExecuteGenericNervousSystemFunction, Followee, GovernanceError,
+            ManageDappCanisterSettings, ManageLedgerParameters, ManageNeuronResponse,
+            ManageSnsMetadata, MintSnsTokens, Motion, NervousSystemFunction,
+            NervousSystemParameters, Neuron, NeuronId, NeuronIds, NeuronPermission,
+            NeuronPermissionList, NeuronPermissionType, ProposalId, RegisterDappCanisters,
+            RewardEvent, SnsVersion, TransferSnsTreasuryFunds, UpgradeSnsControlledCanister,
+            UpgradeSnsToNextVersion, Vote, VotingRewardsParameters,
         },
     },
     proposal::ValidGenericNervousSystemFunction,
@@ -58,7 +60,6 @@ use ic_sns_governance_api::format_full_hash;
 use ic_sns_governance_proposal_criticality::{ProposalCriticality, VotingDurationParameters};
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use lazy_static::lazy_static;
-use maplit::btreemap;
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
     convert::TryFrom,
@@ -136,6 +137,9 @@ pub mod native_action_ids {
     /// SetTopicsForCustomProposals Action.
     pub const SET_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION: u64 = 16;
 
+    /// RegisterExtension Action.
+    pub const REGISTER_EXTENSION: u64 = 17;
+
     // When adding something to this list, make sure to update the below function.
     pub fn nervous_system_functions() -> Vec<NervousSystemFunction> {
         vec![
@@ -155,6 +159,7 @@ pub mod native_action_ids {
             NervousSystemFunction::manage_dapp_canister_settings(),
             NervousSystemFunction::advance_sns_target_version(),
             NervousSystemFunction::set_topics_for_custom_proposals(),
+            NervousSystemFunction::register_extension(),
         ]
     }
 }
@@ -1191,6 +1196,15 @@ impl NervousSystemFunction {
         }
     }
 
+    fn register_extension() -> NervousSystemFunction {
+        NervousSystemFunction {
+            id: native_action_ids::REGISTER_EXTENSION,
+            name: "Register SNS extension".to_string(),
+            description: Some("Proposal to register a new SNS extension.".to_string()),
+            function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
+        }
+    }
+
     fn deregister_dapp_canisters() -> NervousSystemFunction {
         NervousSystemFunction {
             id: native_action_ids::DEREGISTER_DAPP_CANISTERS,
@@ -1283,6 +1297,7 @@ impl From<Action> for NervousSystemFunction {
                 NervousSystemFunction::transfer_sns_treasury_funds()
             }
             Action::RegisterDappCanisters(_) => NervousSystemFunction::register_dapp_canisters(),
+            Action::RegisterExtension(_) => NervousSystemFunction::register_extension(),
             Action::DeregisterDappCanisters(_) => {
                 NervousSystemFunction::deregister_dapp_canisters()
             }
@@ -1868,6 +1883,7 @@ impl From<&Action> for u64 {
             }
             Action::ExecuteGenericNervousSystemFunction(proposal) => proposal.function_id,
             Action::RegisterDappCanisters(_) => native_action_ids::REGISTER_DAPP_CANISTERS,
+            Action::RegisterExtension(_) => native_action_ids::REGISTER_EXTENSION,
             Action::DeregisterDappCanisters(_) => native_action_ids::DEREGISTER_DAPP_CANISTERS,
             Action::ManageSnsMetadata(_) => native_action_ids::MANAGE_SNS_METADATA,
             Action::TransferSnsTreasuryFunds(_) => native_action_ids::TRANSFER_SNS_TREASURY_FUNDS,
@@ -2293,30 +2309,56 @@ impl NeuronRecipe {
         Ok(permissions)
     }
 
-    /// Adds `self.followees` entries in `base_followees` that are
-    /// keyed by `function_ids_to_follow`.
-    pub(crate) fn construct_followees(&self) -> BTreeMap<u64, Followees> {
+    pub(crate) fn construct_topic_followees(&self) -> TopicFollowees {
         let Some(followees) = &self.followees else {
-            return btreemap! {};
+            return TopicFollowees::default();
         };
+
         let followees = &followees.neuron_ids;
 
+        // There's a root neuron without any following set up out of the box.
         if followees.is_empty() {
-            btreemap! {}
-        } else {
-            let catch_all = u64::from(&Action::Unspecified(Empty {}));
-            let followees = Followees {
-                followees: followees.clone(),
-            };
-            btreemap! { catch_all => followees }
+            return TopicFollowees::default();
         }
-    }
 
-    // TODO[NNS1-3676]: Provide a proper implementation for this function once new SNSs are
-    // TODO[NNS1-3676]: to begin using topics-based following.
-    pub(crate) fn construct_topic_followees(&self) -> TopicFollowees {
+        let root_neuron_alias = |followee_neuron_index, num_followees| {
+            if num_followees == 1 {
+                "Neuron-basket-main".to_string()
+            } else {
+                // This is not currently used, as each neuron basket has a single root neuron.
+                format!("Followee-{}", followee_neuron_index)
+            }
+        };
+
+        // All other neurons follow on all available topics.
+        let topic_id_to_followees = TOPICS
+            .iter()
+            .map(|topic| {
+                let topic = i32::from(*topic);
+                let num_followees = followees.len();
+
+                let followees = followees
+                    .iter()
+                    .enumerate()
+                    .map(|(followee_neuron_index, followee_neuron_id)| {
+                        let alias = Some(root_neuron_alias(followee_neuron_index, num_followees));
+                        let neuron_id = Some(followee_neuron_id.clone());
+
+                        Followee { neuron_id, alias }
+                    })
+                    .collect();
+
+                let followees_per_topic = FolloweesForTopic {
+                    followees,
+                    topic: Some(topic),
+                };
+
+                (topic, followees_per_topic)
+            })
+            .collect();
+
         TopicFollowees {
-            topic_id_to_followees: btreemap! {},
+            topic_id_to_followees,
         }
     }
 

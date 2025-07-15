@@ -13,6 +13,7 @@ use universal_canister::Ops;
 lazy_static! {
     /// The WASM of the Universal Canister.
     pub static ref UNIVERSAL_CANISTER_WASM: Vec<u8> = get_universal_canister_wasm();
+    pub static ref UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM: Vec<u8> = get_universal_canister_no_heartbeat_wasm();
     pub static ref UNIVERSAL_CANISTER_WASM_SHA256: [u8; 32] = get_universal_canister_wasm_sha256();
     pub static ref UNIVERSAL_CANISTER_SERIALIZED_MODULE: Vec<u8> = get_universal_canister_serialized_module();
 }
@@ -22,6 +23,17 @@ pub fn get_universal_canister_wasm() -> Vec<u8> {
         .expect("UNIVERSAL_CANISTER_WASM_PATH not set");
     std::fs::read(&uc_wasm_path)
         .unwrap_or_else(|e| panic!("Could not read WASM from {:?}: {e:?}", uc_wasm_path))
+}
+
+pub fn get_universal_canister_no_heartbeat_wasm() -> Vec<u8> {
+    let uc_no_heartbeat_wasm_path = std::env::var("UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM_PATH")
+        .expect("UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM_PATH not set");
+    std::fs::read(&uc_no_heartbeat_wasm_path).unwrap_or_else(|e| {
+        panic!(
+            "Could not read WASM from {:?}: {e:?}",
+            uc_no_heartbeat_wasm_path
+        )
+    })
 }
 
 pub fn get_universal_canister_wasm_sha256() -> [u8; 32] {
@@ -668,6 +680,11 @@ impl PayloadBuilder {
         self = self.push_int64(max_amount_high as u64);
         self = self.push_int64(max_amount_low as u64);
         self.0.push(Ops::AcceptCycles128 as u8);
+        self
+    }
+
+    pub fn root_key(mut self) -> Self {
+        self.0.push(Ops::RootKey as u8);
         self
     }
 

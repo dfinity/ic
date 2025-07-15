@@ -13,6 +13,7 @@ filegroup(
 # See rs/nervous_system/feature_test.md
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-http-types",
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/crypto/sha2",
     "//rs/nervous_system/clients",
@@ -21,7 +22,6 @@ DEPENDENCIES = [
     "//rs/nervous_system/runtime",
     "//rs/nns/constants",
     "//rs/nns/handlers/root/interface",
-    "//rs/rust_canisters/http_types",
     "//rs/sns/governance",
     "//rs/sns/init",
     "//rs/sns/root",
@@ -144,6 +144,7 @@ rust_ic_test_suite_with_extra_srcs(
         "//rs/nns/integration_tests:unstoppable-sns-root-canister",
         "//rs/node_rewards/canister:node-rewards-canister",
         "//rs/registry/canister:registry-canister",
+        "//rs/registry/canister:registry-canister-test",
         "//rs/sns/governance:sns-governance-canister",
         "//rs/sns/root:sns-root-canister",
         "//rs/sns/swap:sns-swap-canister",
@@ -155,6 +156,7 @@ rust_ic_test_suite_with_extra_srcs(
         "GOVERNANCE_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister-test)",
         "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method)",
         "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
+        "REGISTRY_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister-test)",
         "ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root/impl:root-canister)",
         "SNS_WASM_CANISTER_WASM_PATH": "$(rootpath :sns-wasm-canister)",
         "MAINNET_SNS_WASM_CANISTER_WASM_PATH": "$(rootpath @mainnet_nns_sns-wasm-canister//file)",

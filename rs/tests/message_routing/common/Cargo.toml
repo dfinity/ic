@@ -8,7 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 candid = { workspace = true }
-ic-cdk = { workspace = true }
+ic-management-canister-types = { workspace = true }
 canister-test = { path = "../../../rust_canisters/canister_test" }
 dfn_candid = { path = "../../../rust_canisters/dfn_candid" }
 futures = { workspace = true }

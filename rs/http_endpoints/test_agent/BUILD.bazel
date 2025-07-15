@@ -1,0 +1,30 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/crypto/tree_hash",
+    "//rs/types/types",
+    "@crate_index//:reqwest",
+    "@crate_index//:serde_cbor",
+    "@crate_index//:slog",
+    "@crate_index//:tokio",
+]
+
+MACRO_DEPENDENCIES = [
+    # Keep sorted.
+]
+
+ALIASES = {}
+
+rust_library(
+    name = "test_agent",
+    testonly = True,
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    crate_name = "ic_http_endpoints_test_agent",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.9.0",
+    deps = DEPENDENCIES,
+)

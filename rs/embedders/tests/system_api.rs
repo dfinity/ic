@@ -1,18 +1,14 @@
 use ic_base_types::{NumBytes, NumSeconds, PrincipalIdBlobParseError};
-use ic_config::{
-    embedders::{BestEffortResponsesFeature, Config as EmbeddersConfig, FeatureFlags},
-    subnet_config::SchedulerConfig,
-};
+use ic_config::{embedders::Config as EmbeddersConfig, subnet_config::SchedulerConfig};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::wasmtime_embedder::system_api::{
-    sandbox_safe_system_state::SandboxSafeSystemState, ApiType, DefaultOutOfInstructionsHandler,
-    NonReplicatedQueryKind, SystemApiImpl,
+    sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateModifications},
+    ApiType, DefaultOutOfInstructionsHandler, SystemApiImpl, MAX_ENV_VAR_NAME_SIZE,
 };
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::{
-    CanisterOutOfCyclesError, ExecutionMode, HypervisorError, HypervisorResult,
-    PerformanceCounterType, StableMemoryApi, SubnetAvailableMemory, SystemApi, SystemApiCallId,
-    TrapCode,
+    CanisterOutOfCyclesError, HypervisorError, HypervisorResult, PerformanceCounterType,
+    StableMemoryApi, SubnetAvailableMemory, SystemApi, SystemApiCallId, TrapCode,
 };
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::replica_logger::no_op_logger;
@@ -38,7 +34,11 @@ use ic_types::{
 };
 use maplit::btreemap;
 use more_asserts::assert_le;
-use std::{collections::BTreeSet, convert::From, rc::Rc};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    convert::From,
+    rc::Rc,
+};
 use strum::IntoEnumIterator;
 
 mod common;
@@ -154,16 +154,14 @@ fn cleanup_api() -> ApiType {
     ApiType::Cleanup {
         caller: PrincipalId::new_anonymous(),
         time: UNIX_EPOCH,
-        execution_mode: ExecutionMode::Replicated,
         call_context_instructions_executed: 0.into(),
     }
 }
 
 fn composite_cleanup_api() -> ApiType {
-    ApiType::Cleanup {
+    ApiType::CompositeCleanup {
         caller: PrincipalId::new_anonymous(),
         time: UNIX_EPOCH,
-        execution_mode: ExecutionMode::NonReplicated,
         call_context_instructions_executed: 0.into(),
     }
 }
@@ -224,6 +222,8 @@ fn is_supported(api_type: SystemApiCallId, context: &str) -> bool {
         SystemApiCallId::Stable64Grow => vec!["*", "s"],
         SystemApiCallId::Stable64Write => vec!["*", "s"],
         SystemApiCallId::Stable64Read => vec!["*", "s"],
+        SystemApiCallId::RootKeySize => vec!["I", "G", "U", "RQ", "Ry", "Rt", "C", "T"],
+        SystemApiCallId::RootKeyCopy => vec!["I", "G", "U", "RQ", "Ry", "Rt", "C", "T"],
         SystemApiCallId::CertifiedDataSet => vec!["I", "G", "U", "Ry", "Rt", "T"],
         SystemApiCallId::DataCertificatePresent => vec!["*"],
         SystemApiCallId::DataCertificateSize => vec!["NRQ", "CQ"],
@@ -241,10 +241,15 @@ fn is_supported(api_type: SystemApiCallId, context: &str) -> bool {
         SystemApiCallId::CostVetkdDeriveKey => vec!["*", "s"],
         SystemApiCallId::DebugPrint => vec!["*", "s"],
         SystemApiCallId::Trap => vec!["*", "s"],
-        SystemApiCallId::MintCycles => vec!["U", "Ry", "Rt", "T"],
         SystemApiCallId::MintCycles128 => vec!["U", "Ry", "Rt", "T"],
         SystemApiCallId::SubnetSelfSize => vec!["*"],
         SystemApiCallId::SubnetSelfCopy => vec!["*"],
+        SystemApiCallId::EnvVarCount => vec!["*"],
+        SystemApiCallId::EnvVarNameSize => vec!["*"],
+        SystemApiCallId::EnvVarNameCopy => vec!["*"],
+        SystemApiCallId::EnvVarNameExists => vec!["*"],
+        SystemApiCallId::EnvVarValueSize => vec!["*"],
+        SystemApiCallId::EnvVarValueCopy => vec!["*"],
     };
     // the semantics of "*" is to cover all modes except for "s"
     matrix.get(&api_type).unwrap().contains(&context)
@@ -681,6 +686,26 @@ fn api_availability_test(
                 context,
             );
         }
+        SystemApiCallId::RootKeySize => {
+            assert_api_availability(
+                |api| api.ic0_root_key_size(),
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
+        SystemApiCallId::RootKeyCopy => {
+            assert_api_availability(
+                |api| api.ic0_root_key_copy(0, 0, 0, &mut [42; 128]),
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
         SystemApiCallId::CertifiedDataSet => {
             assert_api_availability(
                 |mut api| api.ic0_certified_data_set(0, 0, &[42; 128]),
@@ -700,11 +725,6 @@ fn api_availability_test(
                 api_type_enum,
                 context,
             );
-        }
-        SystemApiCallId::MintCycles => {
-            // ic0.mint_cycles is only supported for CMC which is tested separately
-            let mut api = get_system_api(api_type, &system_state, cycles_account_manager);
-            assert_api_not_supported(api.ic0_mint_cycles(0));
         }
         SystemApiCallId::MintCycles128 => {
             // ic0.mint_cycles128 is only supported for CMC which is tested separately
@@ -754,6 +774,75 @@ fn api_availability_test(
         SystemApiCallId::SubnetSelfCopy => {
             assert_api_availability(
                 |api| api.ic0_subnet_self_copy(0, 0, 0, &mut [42; 128]),
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
+        SystemApiCallId::EnvVarCount => {
+            assert_api_availability(
+                |api| api.ic0_env_var_count(),
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
+        SystemApiCallId::EnvVarNameSize => {
+            assert_api_availability(
+                |api| api.ic0_env_var_name_size(0),
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
+        SystemApiCallId::EnvVarNameCopy => {
+            assert_api_availability(
+                |api| api.ic0_env_var_name_copy(0, 0, 0, 0, &mut [0; 128]),
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
+        SystemApiCallId::EnvVarNameExists => {
+            let mut heap = vec![0u8; 64];
+            let var_name = b"TEST_VAR_1";
+            copy_to_heap(&mut heap, var_name);
+            assert_api_availability(
+                |api| api.ic0_env_var_name_exists(0, var_name.len(), &heap.clone()),
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
+        SystemApiCallId::EnvVarValueSize => {
+            let mut heap = vec![0u8; 64];
+            let var_name = b"TEST_VAR_1";
+            copy_to_heap(&mut heap, var_name);
+            assert_api_availability(
+                |api| api.ic0_env_var_value_size(0, var_name.len(), &heap.clone()),
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
+        SystemApiCallId::EnvVarValueCopy => {
+            let mut heap = vec![0u8; 64];
+            let var_name = b"TEST_VAR_1";
+            copy_to_heap(&mut heap, var_name);
+            assert_api_availability(
+                |api| api.ic0_env_var_value_copy(0, var_name.len(), 0, 0, 0, &mut heap.clone()),
                 api_type,
                 &system_state,
                 cycles_account_manager,
@@ -811,16 +900,8 @@ fn system_api_availability() {
                 .with_subnet_type(subnet_type)
                 .build();
 
-            // check ic0.mint_cycles, ic0.mint_cycles128 API availability for CMC
+            // check ic0.mint_cycles128 API availability for CMC
             let cmc_system_state = get_cmc_system_state();
-            assert_api_availability(
-                |mut api| api.ic0_mint_cycles(0),
-                api_type.clone(),
-                &cmc_system_state,
-                cycles_account_manager,
-                SystemApiCallId::MintCycles,
-                context,
-            );
             assert_api_availability(
                 |mut api| api.ic0_mint_cycles128(Cycles::zero(), 0, &mut [0u8; 16]),
                 api_type.clone(),
@@ -1144,7 +1225,6 @@ fn data_certificate_copy() {
             subnet_test_id(1),
             vec![],
             Some(vec![1, 2, 3, 4, 5, 6]),
-            NonReplicatedQueryKind::Pure,
         ),
         &system_state,
         cycles_account_manager,
@@ -2084,74 +2164,53 @@ fn in_replicated_execution_works_correctly() {
 }
 
 #[test]
-fn ic0_call_with_best_effort_response_feature_stages() {
-    use BestEffortResponsesFeature::*;
-
+fn ic0_call_with_best_effort_response() {
     let own_subnet_id = subnet_test_id(0);
-    let other_subnet_id = subnet_test_id(1);
-    for best_effort_responses in [
-        SpecificSubnets(vec![]),
-        SpecificSubnets(vec![other_subnet_id]),
-        SpecificSubnets(vec![own_subnet_id, other_subnet_id]),
-        ApplicationSubnetsOnly,
-        Enabled,
-    ] {
-        for subnet_type in SubnetType::iter() {
-            let mut system_state = SystemStateBuilder::default().build();
-            let mut api = get_system_api_for_best_effort_response_feature_test(
+
+    for subnet_type in SubnetType::iter() {
+        let mut system_state = SystemStateBuilder::default().build();
+        let mut api =
+            get_system_api_for_best_effort_response(own_subnet_id, subnet_type, &system_state);
+
+        // Make a call to something that isn't `IC_00`.
+        api.ic0_call_new(0, 1, 0, 1, 0, 0, 0, 0, &[42; 128])
+            .unwrap();
+        api.ic0_call_with_best_effort_response(13).unwrap();
+        api.ic0_call_perform().unwrap();
+
+        // Propagate system state changes
+        let system_state_modifications = api.take_system_state_modifications();
+        system_state_modifications
+            .apply_changes(
+                UNIX_EPOCH,
+                &mut system_state,
+                &default_network_topology(),
                 own_subnet_id,
-                subnet_type,
-                &best_effort_responses,
-                &system_state,
-            );
+                &no_op_logger(),
+            )
+            .unwrap();
 
-            // Make a call to something that isn't `IC_00`.
-            api.ic0_call_new(0, 1, 0, 1, 0, 0, 0, 0, &[42; 128])
-                .unwrap();
-            api.ic0_call_with_best_effort_response(13).unwrap();
-            api.ic0_call_perform().unwrap();
+        let RequestOrResponse::Request(req) = system_state.output_into_iter().next().unwrap()
+        else {
+            unreachable!();
+        };
+        let callback = system_state
+            .call_context_manager()
+            .unwrap()
+            .callbacks()
+            .values()
+            .next()
+            .unwrap();
 
-            // Propagate system state changes
-            let system_state_modifications = api.take_system_state_modifications();
-            system_state_modifications
-                .apply_changes(
-                    UNIX_EPOCH,
-                    &mut system_state,
-                    &default_network_topology(),
-                    own_subnet_id,
-                    &no_op_logger(),
-                )
-                .unwrap();
-
-            let RequestOrResponse::Request(req) = system_state.output_into_iter().next().unwrap()
-            else {
-                unreachable!();
-            };
-            let callback = system_state
-                .call_context_manager()
-                .unwrap()
-                .callbacks()
-                .values()
-                .next()
-                .unwrap();
-
-            if best_effort_responses.is_enabled_on(&own_subnet_id, subnet_type) {
-                // An actual best-effort request.
-                assert_ne!(req.deadline, NO_DEADLINE);
-                assert_ne!(callback.deadline, NO_DEADLINE);
-            } else {
-                // Silently converted to a guaranteed response request.
-                assert_eq!(req.deadline, NO_DEADLINE);
-                assert_eq!(callback.deadline, NO_DEADLINE);
-            }
-        }
+        // Expect an actual best-effort request.
+        assert_ne!(req.deadline, NO_DEADLINE);
+        assert_ne!(callback.deadline, NO_DEADLINE);
     }
 }
 
-fn get_system_api_for_best_effort_response_feature_test(
+fn get_system_api_for_best_effort_response(
     subnet_id: SubnetId,
     subnet_type: SubnetType,
-    best_effort_responses: &BestEffortResponsesFeature,
     system_state: &SystemState,
 ) -> SystemApiImpl {
     const SUBNET_MEMORY_CAPACITY: i64 = i64::MAX / 2;
@@ -2174,13 +2233,6 @@ fn get_system_api_for_best_effort_response_feature_test(
         api_type.caller(),
         api_type.call_context_id(),
     );
-    let embedders_config = EmbeddersConfig {
-        feature_flags: FeatureFlags {
-            best_effort_responses: best_effort_responses.clone(),
-            ..Default::default()
-        },
-        ..Default::default()
-    };
 
     SystemApiImpl::new(
         api_type,
@@ -2193,10 +2245,281 @@ fn get_system_api_for_best_effort_response_feature_test(
             SUBNET_MEMORY_CAPACITY,
             SUBNET_MEMORY_CAPACITY,
         ),
-        &embedders_config,
+        &EmbeddersConfig::default(),
         Memory::new_for_testing(),
         NumWasmPages::from(0),
         Rc::new(DefaultOutOfInstructionsHandler::default()),
         no_op_logger(),
     )
+}
+
+fn composite_context_does_not_return_state_changes_on_trap_helper(api_type: ApiType) {
+    let cycles_amount = Cycles::from(1_000_000_000_000u128);
+    let max_num_instructions = NumInstructions::from(1 << 30);
+    let cycles_account_manager = CyclesAccountManagerBuilder::new()
+        .with_max_num_instructions(max_num_instructions)
+        .build();
+    let mut api = get_system_api(
+        api_type,
+        &get_system_state_with_cycles(cycles_amount),
+        cycles_account_manager,
+    );
+
+    // Make a call that would add a request in the output queue.
+    api.ic0_call_new(0, 1, 0, 1, 0, 0, 0, 0, &[42; 128])
+        .unwrap();
+    api.ic0_call_perform().unwrap();
+
+    // Call trap explicitly to simulate an error in the execution.
+    let err = api.ic0_trap(0, 0, &[42; 128]).unwrap_err();
+    api.set_execution_error(err);
+
+    // No state changes should be returned.
+    assert_eq!(
+        api.take_system_state_modifications(),
+        SystemStateModifications::default()
+    );
+}
+
+#[test]
+fn composite_queries_do_not_return_state_changes_on_trap() {
+    composite_context_does_not_return_state_changes_on_trap_helper(composite_query_api());
+}
+
+#[test]
+fn composite_replies_do_not_return_state_changes_on_trap() {
+    composite_context_does_not_return_state_changes_on_trap_helper(composite_reply_api());
+}
+
+#[test]
+fn composite_rejects_do_not_return_state_changes_on_trap() {
+    composite_context_does_not_return_state_changes_on_trap_helper(composite_reject_api());
+}
+
+#[test]
+fn test_env_var_name_operations() {
+    let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
+    let mut env_vars = BTreeMap::new();
+    let var_name_1 = "TEST_VAR_1".to_string();
+    let var_name_2 = "TEST_VAR_22".to_string();
+    let var_value_1 = "TEST_VALUE_1".to_string();
+    let var_value_2 = "TEST_VALUE_2".to_string();
+    let non_existing_var = "does_not_exist".to_string();
+
+    env_vars.insert(var_name_1.clone(), var_value_1.clone());
+    env_vars.insert(var_name_2.clone(), var_value_2.clone());
+
+    let api = get_system_api(
+        ApiTypeBuilder::build_update_api(),
+        &SystemStateBuilder::default()
+            .environment_variables(env_vars)
+            .build(),
+        cycles_account_manager,
+    );
+
+    // Test ic0_env_var_count
+    assert_eq!(api.ic0_env_var_count().unwrap(), 2);
+
+    // Test ic0_env_var_name_exists
+    assert_eq!(
+        api.ic0_env_var_name_exists(0, var_name_1.len(), var_name_1.as_bytes())
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        api.ic0_env_var_name_exists(0, var_name_2.len(), var_name_2.as_bytes())
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        api.ic0_env_var_name_exists(0, non_existing_var.len(), non_existing_var.as_bytes())
+            .unwrap(),
+        0
+    );
+
+    // Test ic0_env_var_name_size
+    assert_eq!(api.ic0_env_var_name_size(0).unwrap(), var_name_1.len()); // "TEST_VAR_1"
+    assert_eq!(api.ic0_env_var_name_size(1).unwrap(), var_name_2.len()); // "TEST_VAR_22"
+
+    // Test ic0_env_var_name_size with invalid index
+    assert!(matches!(
+        api.ic0_env_var_name_size(2),
+        Err(HypervisorError::EnvironmentVariableIndexOutOfBounds {
+            index: 2,
+            length: 2
+        })
+    ));
+
+    // Test ic0_env_var_name_copy
+    let mut heap = vec![0u8; 16];
+
+    // Copy first variable name
+    api.ic0_env_var_name_copy(0, 0, 0, var_name_1.len(), &mut heap)
+        .unwrap();
+    assert_eq!(&heap[0..var_name_1.len()], var_name_1.as_bytes());
+
+    // Copy second variable name
+    api.ic0_env_var_name_copy(1, 0, 0, var_name_2.len(), &mut heap)
+        .unwrap();
+    assert_eq!(&heap[0..var_name_2.len()], var_name_2.as_bytes());
+
+    // Test invalid index
+    assert!(matches!(
+        api.ic0_env_var_name_copy(2, 0, 0, 0, &mut heap),
+        Err(HypervisorError::EnvironmentVariableIndexOutOfBounds {
+            index: 2,
+            length: 2
+        })
+    ));
+
+    // Test invalid offset (destination buffer overflow)
+    assert!(matches!(
+        api.ic0_env_var_name_copy(0, 0, 10, var_name_1.len(), &mut heap),
+        Err(HypervisorError::ToolchainContractViolation { .. })
+    ));
+
+    // Test invalid dst (destination buffer overflow)
+    assert!(matches!(
+        api.ic0_env_var_name_copy(0, 10, 0, var_name_1.len(), &mut heap),
+        Err(HypervisorError::ToolchainContractViolation { .. })
+    ));
+
+    // Test invalid size (destination buffer overflow)
+    assert!(matches!(
+        api.ic0_env_var_name_copy(0, 0, 0, 20, &mut heap),
+        Err(HypervisorError::ToolchainContractViolation { .. })
+    ));
+}
+
+// Helper function to copy test data to heap
+fn copy_to_heap(heap: &mut [u8], data: &[u8]) {
+    heap[..data.len()].copy_from_slice(data);
+}
+
+#[test]
+fn test_env_var_value_operations() {
+    let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
+
+    let var_name_1 = "TEST_VAR_1".to_string();
+    let var_name_path = "PATH".to_string();
+    let var_name_empty = "EMPTY_VAR".to_string();
+    let var_value_1 = "Hello World".to_string();
+    let var_value_path = "/usr/local/bin:/usr/bin".to_string();
+    let var_value_empty = "".to_string();
+
+    let mut env_vars = BTreeMap::new();
+    env_vars.insert(var_name_1.clone(), var_value_1.clone());
+    env_vars.insert(var_name_empty.clone(), "".to_string());
+    env_vars.insert(var_name_path.clone(), var_value_path.clone());
+
+    let api = get_system_api(
+        ApiTypeBuilder::build_update_api(),
+        &SystemStateBuilder::default()
+            .environment_variables(env_vars)
+            .build(),
+        cycles_account_manager,
+    );
+    let mut heap = vec![0u8; 256];
+
+    // Test ic0_env_var_count.
+    assert_eq!(api.ic0_env_var_count().unwrap(), 3);
+
+    for (var_name, var_value) in [
+        (var_name_empty, var_value_empty),
+        (var_name_1, var_value_1),
+        (var_name_path, var_value_path),
+    ] {
+        // Test API for the size of the value.
+        copy_to_heap(&mut heap, var_name.as_bytes());
+        assert_eq!(
+            api.ic0_env_var_value_size(0, var_name.len(), &heap)
+                .unwrap(),
+            var_value.len(),
+        );
+
+        // Test API for copying the value.
+        let mut expected_heap = heap.clone();
+        copy_to_heap(&mut expected_heap, var_value.as_bytes());
+        api.ic0_env_var_value_copy(0, var_name.len(), 0, 0, var_value.len(), &mut heap)
+            .unwrap();
+        assert_eq!(expected_heap, heap);
+    }
+
+    // Test non-existent variable
+    let non_existent = "NON_EXISTENT".to_string();
+    copy_to_heap(&mut heap, non_existent.as_bytes());
+    assert_eq!(
+        api.ic0_env_var_value_size(0, non_existent.len(), &heap),
+        Err(HypervisorError::EnvironmentVariableNotFound {
+            name: non_existent.clone()
+        })
+    );
+    assert_eq!(
+        api.ic0_env_var_value_copy(0, non_existent.len(), 0, 0, 0, &mut heap),
+        Err(HypervisorError::EnvironmentVariableNotFound {
+            name: non_existent.clone()
+        })
+    );
+
+    // Test invalid UTF-8 in variable name
+    let invalid_utf8 = &[0xFF, 0xFF];
+    copy_to_heap(&mut heap, invalid_utf8);
+    let result = api.ic0_env_var_value_size(0, invalid_utf8.len(), &heap);
+    let error = result.unwrap_err();
+    assert!(error
+        .to_string()
+        .contains("ic0.env_var_value_size: Variable name is not a valid UTF-8 string."));
+
+    let result = api.ic0_env_var_value_copy(0, invalid_utf8.len(), 0, 0, 0, &mut heap);
+    let error = result.unwrap_err();
+    assert!(error
+        .to_string()
+        .contains("Variable name is not a valid UTF-8 string."));
+
+    // Test name too long
+    let long_name = "A".repeat(MAX_ENV_VAR_NAME_SIZE + 1);
+    copy_to_heap(&mut heap, long_name.as_bytes());
+    let result = api.ic0_env_var_value_size(0, long_name.len(), &heap);
+    let error = result.unwrap_err();
+    assert!(error.to_string().contains("Variable name is too large."));
+
+    let result = api.ic0_env_var_value_copy(0, long_name.len(), 0, 0, 0, &mut heap);
+    let error = result.unwrap_err();
+    assert!(error.to_string().contains("Variable name is too large."));
+}
+
+#[test]
+fn test_env_variables_empty() {
+    let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
+    let env_vars = BTreeMap::new();
+
+    let api = get_system_api(
+        ApiTypeBuilder::build_update_api(),
+        &SystemStateBuilder::default()
+            .environment_variables(env_vars)
+            .build(),
+        cycles_account_manager,
+    );
+
+    // Test ic0_env_var_count with empty variables
+    assert_eq!(api.ic0_env_var_count().unwrap(), 0);
+
+    // Test ic0_env_var_name_size with invalid index on empty variables
+    assert!(matches!(
+        api.ic0_env_var_name_size(0),
+        Err(HypervisorError::EnvironmentVariableIndexOutOfBounds {
+            index: 0,
+            length: 0
+        })
+    ));
+
+    // Test ic0_env_var_name_copy with invalid index on empty variables
+    let mut heap = vec![0u8; 16];
+    assert!(matches!(
+        api.ic0_env_var_name_copy(0, 0, 0, 0, &mut heap),
+        Err(HypervisorError::EnvironmentVariableIndexOutOfBounds {
+            index: 0,
+            length: 0
+        })
+    ));
 }

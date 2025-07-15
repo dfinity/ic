@@ -30,6 +30,7 @@ pub mod v1 {
                 }
                 ErrorCodePublic::CanisterNotFound => ErrorCode::CanisterNotFound,
                 ErrorCodePublic::CanisterSnapshotNotFound => ErrorCode::CanisterSnapshotNotFound,
+                ErrorCodePublic::CanisterSnapshotImmutable => ErrorCode::CanisterSnapshotImmutable,
                 ErrorCodePublic::InsufficientMemoryAllocation => {
                     ErrorCode::InsufficientMemoryAllocation
                 }
@@ -142,6 +143,9 @@ pub mod v1 {
                 ErrorCode::CanisterNotFound => Ok(ErrorCodePublic::CanisterNotFound),
                 ErrorCode::CanisterSnapshotNotFound => {
                     Ok(ErrorCodePublic::CanisterSnapshotNotFound)
+                }
+                ErrorCode::CanisterSnapshotImmutable => {
+                    Ok(ErrorCodePublic::CanisterSnapshotImmutable)
                 }
                 ErrorCode::InsufficientMemoryAllocation => {
                     Ok(ErrorCodePublic::InsufficientMemoryAllocation)

@@ -81,6 +81,7 @@ pub mod registry;
 pub mod replica_config;
 pub mod replica_version;
 pub mod signature;
+pub mod state_manager;
 pub mod state_sync;
 pub mod time;
 pub mod xnet;
@@ -163,6 +164,10 @@ pub fn node_id_into_protobuf(id: NodeId) -> pb::NodeId {
 /// as both `Id` and `pb::NodeId` are defined in other crates.
 pub fn node_id_try_from_option(value: Option<pb::NodeId>) -> Result<NodeId, ProxyDecodeError> {
     let value: pb::NodeId = value.ok_or(ProxyDecodeError::MissingField("NodeId"))?;
+    node_id_try_from_protobuf(value)
+}
+
+pub fn node_id_try_from_protobuf(value: pb::NodeId) -> Result<NodeId, ProxyDecodeError> {
     let principal_id: PrincipalId =
         try_from_option_field(value.principal_id, "NodeId::PrincipalId")?;
     Ok(NodeId::from(principal_id))

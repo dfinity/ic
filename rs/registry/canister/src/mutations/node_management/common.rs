@@ -1,11 +1,12 @@
 use std::{default::Default, str::FromStr};
 
-use crate::{common::LOG_PREFIX, registry::Registry};
+use crate::{common::LOG_PREFIX, registry::Registry, storage::with_chunks};
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_protobuf::registry::{
     node::v1::NodeRecord, node_operator::v1::NodeOperatorRecord, subnet::v1::SubnetListRecord,
 };
+use ic_registry_canister_chunkify::decode_high_capacity_registry_value;
 use ic_registry_keys::{
     make_crypto_node_key, make_crypto_tls_cert_key, make_firewall_rules_record_key,
     make_node_operator_record_key, make_node_record_key, make_subnet_list_record_key,
@@ -13,7 +14,7 @@ use ic_registry_keys::{
 };
 use ic_registry_transport::{
     delete, insert,
-    pb::v1::{RegistryMutation, RegistryValue},
+    pb::v1::{HighCapacityRegistryValue, RegistryMutation, RegistryValue},
     update,
 };
 use ic_types::crypto::KeyPurpose;
@@ -41,6 +42,7 @@ pub fn get_subnet_list_record(registry: &Registry) -> SubnetListRecord {
         value: subnet_list_record_vec,
         version: _,
         deletion_marker: _,
+        timestamp_nanoseconds: _,
     } = registry
         .get(
             make_subnet_list_record_key().as_bytes(),
@@ -254,7 +256,11 @@ pub fn node_exists_with_ipv4(registry: &Registry, ipv4_addr: &str) -> bool {
 }
 
 /// Similar to `get_key_family` on the `RegistryClient`, return a list of
-/// tuples, (ID, value).
+/// tuples, (ID, value).  This strips the prefix from the key and returns the
+/// value as a decoded struct.
+///
+/// This function must return keys in order of their bytes, which should
+/// also be the same order as the string representations.
 pub(crate) fn get_key_family<T: prost::Message + Default>(
     registry: &Registry,
     prefix: &str,
@@ -262,6 +268,8 @@ pub(crate) fn get_key_family<T: prost::Message + Default>(
     get_key_family_iter(registry, prefix).collect()
 }
 
+/// This function must return keys in order of their bytes, which should
+/// also be the same order as the string representations.
 pub(crate) fn get_key_family_iter<'a, T: prost::Message + Default>(
     registry: &'a Registry,
     prefix: &'a str,
@@ -269,35 +277,56 @@ pub(crate) fn get_key_family_iter<'a, T: prost::Message + Default>(
     get_key_family_iter_at_version(registry, prefix, registry.latest_version())
 }
 
-pub fn get_key_family_iter_at_version<'a, T: prost::Message + Default>(
+/// This function must return keys in order of their bytes, which should
+/// also be the same order as the string representations.
+pub(crate) fn get_key_family_iter_at_version<'a, T: prost::Message + Default>(
     registry: &'a Registry,
     prefix: &'a str,
     version: u64,
 ) -> impl Iterator<Item = (String, T)> + 'a {
+    get_key_family_raw_iter_at_version(registry, prefix, version).filter_map(|(id, value)| {
+        let latest_value: Option<T> =
+            with_chunks(|chunks| decode_high_capacity_registry_value::<T, _>(value, chunks));
+
+        let latest_value = latest_value?;
+
+        Some((id, latest_value))
+    })
+}
+
+/// This function must return keys in order of their bytes, which should
+/// also be the same order as the string representations.
+pub(crate) fn get_key_family_raw_iter_at_version<'a>(
+    registry: &'a Registry,
+    prefix: &'a str,
+    version: u64,
+) -> impl Iterator<Item = (String, &'a HighCapacityRegistryValue)> + 'a {
     let prefix_bytes = prefix.as_bytes();
     let start = prefix_bytes.to_vec();
 
+    // Note, using the 'store' which is a BTreeMap is what guarantees the order of keys.
     registry
         .store
         .range(start..)
         .take_while(|(k, _)| k.starts_with(prefix_bytes))
-        .filter_map(move |(k, v)| {
-            v.iter()
-                .rev()
-                .find(|v| v.version <= version)
-                .map(|v| (k, v))
-        })
-        // ...skipping any that have been deleted...
-        .filter(|(_, v)| !v.deletion_marker)
-        // ...and repack them into a tuple of (ID, value).
-        .map(|(k, v)| {
-            let id = k
+        .filter_map(move |(key, values)| {
+            let latest_value: &HighCapacityRegistryValue =
+                values.iter().rev().find(|value| value.version <= version)?;
+
+            if !latest_value.is_present() {
+                return None; // Deleted or otherwise empty value.
+            }
+
+            let id = key
                 .strip_prefix(prefix_bytes)
                 .and_then(|v| std::str::from_utf8(v).ok())
                 .unwrap()
                 .to_string();
-            let value = T::decode(v.value.as_slice()).unwrap();
 
-            (id, value)
+            Some((id, latest_value))
         })
 }
+
+#[path = "common_tests.rs"]
+#[cfg(test)]
+mod tests;

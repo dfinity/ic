@@ -6,14 +6,14 @@ use super::{
     },
 };
 use crate::{
-    canister_snapshots::CanisterSnapshots,
+    canister_snapshots::{CanisterSnapshot, CanisterSnapshots},
     canister_state::{
         queues::{CanisterInput, CanisterQueuesLoopDetector},
         system_state::{push_input, CanisterOutputQueuesIterator},
     },
-    CanisterQueues,
+    CanisterQueues, DroppedMessageMetrics,
 };
-use ic_base_types::PrincipalId;
+use ic_base_types::{PrincipalId, SnapshotId};
 use ic_btc_replica_types::BitcoinAdapterResponse;
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::messaging::{
@@ -1069,11 +1069,11 @@ impl ReplicatedState {
     }
 
     /// Times out all messages with expired deadlines (given the state time) in all
-    /// canister (but not subnet) queues. Returns the number of timed out messages
-    /// and the total amount of attached cycles that was lost.
+    /// canister (but not subnet) queues. Returns the total amount of attached
+    /// cycles that was lost.
     ///
     /// See `CanisterQueues::time_out_messages` for further details.
-    pub fn time_out_messages(&mut self) -> (usize, Cycles) {
+    pub fn time_out_messages(&mut self, metrics: &impl DroppedMessageMetrics) -> Cycles {
         let current_time = self.metadata.time();
         // Because the borrow checker requires us to remove each canister before
         // calling `time_out_messages()` on it and replace it afterwards; and removing
@@ -1091,30 +1091,30 @@ impl ReplicatedState {
             .map(|(canister_id, _)| *canister_id)
             .collect::<Vec<_>>();
 
-        let mut timed_out_messages_count = 0;
         let mut cycles_lost = Cycles::zero();
         for canister_id in canister_ids_with_expired_deadlines {
             let mut canister = self.canister_states.remove(&canister_id).unwrap();
-            let (canister_timed_out_messages, canister_cycles_lost) = canister
-                .system_state
-                .time_out_messages(current_time, &canister_id, &self.canister_states);
-            timed_out_messages_count += canister_timed_out_messages;
+            let canister_cycles_lost = canister.system_state.time_out_messages(
+                current_time,
+                &canister_id,
+                &self.canister_states,
+                metrics,
+            );
             cycles_lost += canister_cycles_lost;
             self.canister_states.insert(canister_id, canister);
         }
 
         if self.subnet_queues.has_expired_deadlines(current_time) {
-            let (subnet_timed_out_messages, subnet_cycles_lost) =
-                self.subnet_queues.time_out_messages(
-                    current_time,
-                    &self.metadata.own_subnet_id.into(),
-                    &self.canister_states,
-                );
-            timed_out_messages_count += subnet_timed_out_messages;
+            let subnet_cycles_lost = self.subnet_queues.time_out_messages(
+                current_time,
+                &self.metadata.own_subnet_id.into(),
+                &self.canister_states,
+                metrics,
+            );
             cycles_lost += subnet_cycles_lost;
         }
 
-        (timed_out_messages_count, cycles_lost)
+        cycles_lost
     }
 
     /// Times out all callbacks with expired deadlines (given the state time) that
@@ -1160,21 +1160,21 @@ impl ReplicatedState {
     /// best-effort message of the canister with the highest best-effort message
     /// memory usage until the total memory usage drops below the limit.
     ///
-    /// Returns the number of messages and message bytes that were shed; along with
-    /// the total amount of attached cycles that was lost.
+    /// Returns the total amount of attached cycles that was lost.
     ///
     /// Time complexity: `O(n * log(n))`.
     pub fn enforce_best_effort_message_limit(
         &mut self,
         limit: NumBytes,
-    ) -> (u64, NumBytes, Cycles) {
+        metrics: &impl DroppedMessageMetrics,
+    ) -> Cycles {
         const ZERO_BYTES: NumBytes = NumBytes::new(0);
 
         // Check if we need to do anything at all before constructing a priority queue.
         let mut memory_usage = self.best_effort_message_memory_taken();
         if memory_usage <= limit {
             // No need to do anything.
-            return (0, 0.into(), Cycles::zero());
+            return Cycles::zero();
         }
 
         // Construct a priority queue of canisters by best-effort message memory usage.
@@ -1198,8 +1198,6 @@ impl ReplicatedState {
             ));
         }
 
-        let mut shed_messages = 0;
-        let mut shed_message_bytes = 0.into();
         let mut cycles_lost = Cycles::zero();
 
         // Shed messages from the canisters with the largest memory usage until we are
@@ -1210,27 +1208,27 @@ impl ReplicatedState {
         while memory_usage > limit && !priority_queue.is_empty() {
             let (memory_usage_before, canister_id) = priority_queue.pop_last().unwrap();
 
-            let (message_shed, memory_usage_after, message_cycles_lost) = if canister_id.get()
-                == self.metadata.own_subnet_id.get()
-            {
-                // Shed from the subnet queues.
-                let (message_shed, message_cycles_lost) = self
-                    .subnet_queues
-                    .shed_largest_message(&canister_id, &self.canister_states);
-                let memory_usage_after =
-                    (self.subnet_queues.best_effort_message_memory_usage() as u64).into();
-                (message_shed, memory_usage_after, message_cycles_lost)
-            } else {
-                // Shed from a canister's queues: remove the canister, shed its largest message,
-                // replace it.
-                let mut canister = self.canister_states.remove(&canister_id).unwrap();
-                let (message_shed, message_cycles_lost) = canister
-                    .system_state
-                    .shed_largest_message(&canister_id, &self.canister_states);
-                let memory_usage_after = canister.system_state.best_effort_message_memory_usage();
-                self.canister_states.insert(canister_id, canister);
-                (message_shed, memory_usage_after, message_cycles_lost)
-            };
+            let (message_shed, memory_usage_after, message_cycles_lost) =
+                if canister_id.get() == self.metadata.own_subnet_id.get() {
+                    // Shed from the subnet queues.
+                    let (message_shed, message_cycles_lost) = self
+                        .subnet_queues
+                        .shed_largest_message(&canister_id, &self.canister_states, metrics);
+                    let memory_usage_after =
+                        (self.subnet_queues.best_effort_message_memory_usage() as u64).into();
+                    (message_shed, memory_usage_after, message_cycles_lost)
+                } else {
+                    // Shed from a canister's queues: remove the canister, shed its largest message,
+                    // replace it.
+                    let mut canister = self.canister_states.remove(&canister_id).unwrap();
+                    let (message_shed, message_cycles_lost) = canister
+                        .system_state
+                        .shed_largest_message(&canister_id, &self.canister_states, metrics);
+                    let memory_usage_after =
+                        canister.system_state.best_effort_message_memory_usage();
+                    self.canister_states.insert(canister_id, canister);
+                    (message_shed, memory_usage_after, message_cycles_lost)
+                };
             debug_assert!(message_shed);
 
             // Replace the canister in the priority queue iff its memory usage is still
@@ -1243,13 +1241,66 @@ impl ReplicatedState {
             debug_assert!(memory_usage_before > memory_usage_after);
             let memory_usage_delta = memory_usage_before - memory_usage_after;
             memory_usage -= memory_usage_delta;
-
-            shed_messages += message_shed as u64;
-            shed_message_bytes += memory_usage_delta;
-            cycles_lost += message_cycles_lost;
             debug_assert_eq!(self.best_effort_message_memory_taken(), memory_usage);
+
+            cycles_lost += message_cycles_lost;
         }
-        (shed_messages, shed_message_bytes, cycles_lost)
+        cycles_lost
+    }
+
+    /// Adds a new snapshot to the list of snapshots.
+    ///
+    /// This function is used by the management canister's TakeSnapshot function to change the state.
+    /// Note that the rest of the logic, e.g. constructing the `snapshot` is done in the calling code.
+    pub fn take_snapshot(
+        &mut self,
+        snapshot_id: SnapshotId,
+        snapshot: Arc<CanisterSnapshot>,
+    ) -> SnapshotId {
+        self.metadata
+            .unflushed_checkpoint_ops
+            .take_snapshot(snapshot.canister_id(), snapshot_id);
+        self.canister_snapshots.push(snapshot_id, snapshot)
+    }
+
+    /// Adds a new snapshot to the list of snapshots.
+    pub fn create_snapshot_from_metadata(
+        &mut self,
+        snapshot_id: SnapshotId,
+        snapshot: Arc<CanisterSnapshot>,
+    ) {
+        self.metadata
+            .unflushed_checkpoint_ops
+            .create_snapshot_from_metadata(snapshot_id);
+        self.canister_snapshots.push(snapshot_id, snapshot);
+    }
+
+    /// This records a data upload event such that the data can be flushed to disk before a checkpoint.
+    pub fn record_snapshot_data_upload(&mut self, snapshot_id: SnapshotId) {
+        self.metadata
+            .unflushed_checkpoint_ops
+            .upload_data(snapshot_id);
+    }
+
+    /// Delete a snapshot from the list of snapshots.
+    pub fn delete_snapshot(&mut self, snapshot_id: SnapshotId) -> Option<Arc<CanisterSnapshot>> {
+        let result = self.canister_snapshots.remove(snapshot_id);
+        if result.is_some() {
+            self.metadata
+                .unflushed_checkpoint_ops
+                .delete_snapshot(snapshot_id)
+        }
+        result
+    }
+
+    /// Delete all snapshots belonging to the given canister id.
+    pub fn delete_snapshots(&mut self, canister_id: CanisterId) {
+        let deleted = self.canister_snapshots.delete_snapshots(canister_id);
+        for snapshot_id in deleted {
+            self.metadata
+                .unflushed_checkpoint_ops
+                .delete_snapshot(snapshot_id);
+        }
     }
 
     /// Splits the replicated state as part of subnet splitting phase 1, retaining
@@ -1304,9 +1355,6 @@ impl ReplicatedState {
         canister_states
             .retain(|canister_id, _| routing_table.route(canister_id.get()) == Some(subnet_id));
 
-        // Retain only the canister snapshots belonging to the local canisters.
-        canister_snapshots.split(|canister_id| canister_states.contains_key(&canister_id));
-
         // All subnet messages (ingress and canister) only remain on subnet A' because:
         //
         //  * Message Routing would drop a response from subnet B to a request it had
@@ -1323,7 +1371,16 @@ impl ReplicatedState {
 
         // Obtain a new metadata state for subnet B. No-op for subnet A' (apart from
         // setting the split marker).
-        let metadata = metadata.split(subnet_id, new_subnet_batch_time)?;
+        let mut metadata = metadata.split(subnet_id, new_subnet_batch_time)?;
+
+        // Retain only the canister snapshots belonging to the local canisters.
+        let deleted =
+            canister_snapshots.split(|canister_id| canister_states.contains_key(&canister_id));
+        for snapshot_id in deleted {
+            metadata
+                .unflushed_checkpoint_ops
+                .delete_snapshot(snapshot_id);
+        }
 
         Ok(Self {
             canister_states,

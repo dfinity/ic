@@ -2,18 +2,14 @@ use crate::{
     gtc_helpers::GenesisTokenCanisterInitPayloadBuilder, registry::invariant_compliant_mutation,
 };
 use canister_test::{Project, Wasm};
-use core::{
-    option::Option::{None, Some},
-    time::Duration,
-};
+use core::option::Option::{None, Some};
 use cycles_minting_canister::CyclesCanisterInitPayload;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_nns_common::init::{LifelineCanisterInitPayload, LifelineCanisterInitPayloadBuilder};
 use ic_nns_constants::{
     ALL_NNS_CANISTER_IDS, CYCLES_LEDGER_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID,
-    ROOT_CANISTER_ID,
 };
-use ic_nns_governance_api::pb::v1::{Governance, NetworkEconomics, Neuron};
+use ic_nns_governance_api::{Governance, NetworkEconomics, Neuron};
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use ic_nns_gtc::pb::v1::Gtc;
 use ic_nns_gtc_accounts::{ECT_ACCOUNTS, SEED_ROUND_ACCOUNTS};
@@ -24,7 +20,7 @@ use ic_utils::byte_slice_fmt::truncate_and_format;
 use icp_ledger::{
     self as ledger,
     account_identifier::{AccountIdentifier, Subaccount},
-    LedgerCanisterInitPayload, Tokens, DEFAULT_TRANSFER_FEE,
+    LedgerCanisterInitPayload, LedgerCanisterInitPayloadBuilder, Tokens,
 };
 use lifeline::LIFELINE_CANISTER_WASM;
 use registry_canister::init::{RegistryCanisterInitPayload, RegistryCanisterInitPayloadBuilder};
@@ -63,25 +59,8 @@ impl NnsInitPayloadsBuilder {
         NnsInitPayloadsBuilder {
             registry: RegistryCanisterInitPayloadBuilder::new(),
             governance: GovernanceCanisterInitPayloadBuilder::new(),
-            ledger: LedgerCanisterInitPayload::builder()
-                .minting_account(GOVERNANCE_CANISTER_ID.get().into())
-                .archive_options(ledger::ArchiveOptions {
-                    trigger_threshold: 2000,
-                    num_blocks_to_archive: 1000,
-                    // 1 GB, which gives us 3 GB space when upgrading
-                    node_max_memory_size_bytes: Some(1024 * 1024 * 1024),
-                    // 128kb
-                    max_message_size_bytes: Some(128 * 1024),
-                    controller_id: ROOT_CANISTER_ID.into(),
-                    more_controller_ids: None,
-                    cycles_for_archive_creation: Some(0),
-                    max_transactions_per_response: None,
-                })
-                .max_message_size_bytes(128 * 1024)
-                // 24 hour transaction window
-                .transaction_window(Duration::from_secs(24 * 60 * 60))
+            ledger: LedgerCanisterInitPayloadBuilder::new_with_mainnet_settings()
                 .send_whitelist(ALL_NNS_CANISTER_IDS.iter().map(|&x| *x).collect())
-                .transfer_fee(DEFAULT_TRANSFER_FEE)
                 .build()
                 .unwrap(),
             root: RootCanisterInitPayloadBuilder::new(),
@@ -308,10 +287,20 @@ pub fn modify_wasm_bytes(wasm_bytes: &[u8], modify_with: u32) -> Vec<u8> {
 // REGISTRY
 
 /// Build Wasm for NNS Registry canister
-pub fn build_registry_wasm() -> Wasm {
-    let features = [];
-    Project::cargo_bin_maybe_from_env("registry-canister", &features)
+pub fn build_registry_wasm_with_features(features: &[&str]) -> Wasm {
+    Project::cargo_bin_maybe_from_env("registry-canister", features)
 }
+
+/// Build Wasm for NNS Registry canister
+pub fn build_registry_wasm() -> Wasm {
+    build_registry_wasm_with_features(&[])
+}
+
+/// Build Wasm for NNS Registry canister
+pub fn build_test_registry_wasm() -> Wasm {
+    build_registry_wasm_with_features(&["test"])
+}
+
 /// Build mainnet Wasm for NNS Registry canister
 pub fn build_mainnet_registry_wasm() -> Wasm {
     let features = [];

@@ -22,8 +22,8 @@ use ic_replicated_state::ReplicatedState;
 use ic_test_utilities::crypto::CryptoReturningOk;
 use ic_test_utilities_consensus::fake::*;
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
-use ic_types::signature::*;
 use ic_types::{artifact::ConsensusMessageId, batch::ValidationContext};
+use ic_types::{consensus::dkg::DkgPayload, signature::*};
 use ic_types::{consensus::*, crypto::*, *};
 use ic_types::{
     crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
@@ -39,8 +39,7 @@ pub struct TestConsensusPool {
     registry_client: Arc<dyn RegistryClient>,
     pool: ConsensusPoolImpl,
     time_source: Arc<dyn TimeSource>,
-    dkg_payload_builder:
-        Box<dyn Fn(&dyn ConsensusPool, Block, &ValidationContext) -> consensus::dkg::Payload>,
+    dkg_payload_builder: Box<dyn Fn(&dyn ConsensusPool, Block, &ValidationContext) -> DkgPayload>,
     membership: Membership,
 }
 
@@ -144,7 +143,7 @@ fn dkg_payload_builder_fn(
     crypto: Arc<CryptoReturningOk>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     dkg_pool: Arc<RwLock<dyn DkgPool>>,
-) -> Box<dyn Fn(&dyn ConsensusPool, Block, &ValidationContext) -> consensus::dkg::Payload> {
+) -> Box<dyn Fn(&dyn ConsensusPool, Block, &ValidationContext) -> DkgPayload> {
     Box::new(move |cons_pool, parent, validation_context| {
         ic_consensus_dkg::create_payload(
             subnet_id,
@@ -271,8 +270,8 @@ impl TestConsensusPool {
         let idkg = block.payload.as_ref().as_idkg().cloned();
         let dkg_payload = (self.dkg_payload_builder)(self, parent.clone(), &block.context);
         let payload = match dkg_payload {
-            dkg::Payload::Summary(dkg) => BlockPayload::Summary(SummaryPayload { dkg, idkg }),
-            dkg::Payload::Data(dkg) => BlockPayload::Data(DataPayload {
+            DkgPayload::Summary(dkg) => BlockPayload::Summary(SummaryPayload { dkg, idkg }),
+            DkgPayload::Data(dkg) => BlockPayload::Data(DataPayload {
                 batch: BatchPayload::default(),
                 dkg,
                 idkg,

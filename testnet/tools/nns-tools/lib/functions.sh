@@ -141,7 +141,7 @@ get_nns_canister_code_location() {
     LEDGER_COMMON="$RUST_DIR/ledger_suite/icp/src "
     LEDGER_COMMON+="$RUST_DIR/ledger_suite/common/ledger_core "
     LEDGER_COMMON+="$RUST_DIR/ledger_suite/common/ledger_canister_core "
-    LEDGER_COMMON+="$IC_REPO/packages/icrc-ledger_types"
+    LEDGER_COMMON+="$IC_REPO/packages/icrc-ledger-types"
     SNS_INIT="$RUST_DIR/sns/init"
     # Map of locations
     code_location__registry="$RUST_DIR/registry/canister"

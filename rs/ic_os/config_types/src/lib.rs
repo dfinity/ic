@@ -26,12 +26,13 @@ use std::collections::HashMap;
 use std::fmt;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::str::FromStr;
+use strum::EnumString;
 use url::Url;
 
-pub const CONFIG_VERSION: &str = "1.1.0";
+pub const CONFIG_VERSION: &str = "1.3.0";
 
 /// List of field names that have been removed and should not be reused.
-pub static RESERVED_FIELD_NAMES: &[&str] = &["DUMMY_RESERVED_VALUE"];
+pub static RESERVED_FIELD_NAMES: &[&str] = &[];
 
 pub type ConfigMap = HashMap<String, String>;
 
@@ -59,6 +60,18 @@ pub struct HostOSConfig {
     pub guestos_settings: GuestOSSettings,
 }
 
+/// The type of the virtual machine running the GuestOS.
+#[derive(Serialize, Deserialize, Copy, Clone, Eq, PartialEq, Debug, EnumString, Default)]
+#[serde(rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
+pub enum GuestVMType {
+    /// This is what runs most of the time, executing the replica, serving requests, etc.
+    #[default]
+    Default,
+    /// The Guest VM brought up temporarily during the GuestOS upgrade process.
+    Upgrade,
+}
+
 /// GuestOS configuration. In production, this struct inherits settings from `HostOSConfig`.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct GuestOSConfig {
@@ -67,6 +80,10 @@ pub struct GuestOSConfig {
     pub network_settings: NetworkSettings,
     pub icos_settings: ICOSSettings,
     pub guestos_settings: GuestOSSettings,
+    #[serde(default)]
+    pub guest_vm_type: GuestVMType,
+    #[serde(default)]
+    pub upgrade_config: GuestOSUpgradeConfig,
 }
 
 #[serde_as]
@@ -85,6 +102,12 @@ pub struct ICOSSettings {
     /// The URL (HTTP) of the NNS node(s).
     pub nns_urls: Vec<Url>,
     pub use_node_operator_private_key: bool,
+    /// Whether SEV-SNP should be enabled. This is configured when the machine is deployed.
+    /// If the value is enabled, we check during deployment that SEV-SNP is supported
+    /// by the hardware. Once deployment is successful, we rely on the hardware supporting
+    /// SEV-SNP.
+    #[serde(default)]
+    pub enable_trusted_execution_environment: bool,
     /// This ssh keys directory contains individual files named `admin`, `backup`, `readonly`.
     /// The contents of these files serve as `authorized_keys` for their respective role account.
     /// This means that, for example, `accounts_ssh_authorized_keys/admin`
@@ -113,8 +136,29 @@ pub struct HostOSSettings {
     pub verbose: bool,
 }
 
+impl Default for HostOSSettings {
+    fn default() -> Self {
+        HostOSSettings {
+            vm_memory: Default::default(),
+            vm_cpu: Default::default(),
+            vm_nr_of_vcpus: default_vm_nr_of_vcpus(),
+            verbose: Default::default(),
+        }
+    }
+}
+
 const fn default_vm_nr_of_vcpus() -> u32 {
     64
+}
+
+/// Config specific to the GuestOS upgrade process.
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Default, Clone)]
+pub struct GuestOSUpgradeConfig {
+    /// IPv6 address of the peer Guest virtual machine.
+    /// Inside the Default VM, it's the address of the Upgrade VM.
+    /// Inside the Upgrade VM, it's the address of the Default VM.
+    #[serde(default)]
+    pub peer_guest_vm_address: Option<Ipv6Addr>,
 }
 
 /// GuestOS-specific settings.
@@ -284,6 +328,7 @@ mod tests {
                 use_nns_public_key: false,
                 nns_urls: vec![],
                 use_node_operator_private_key: false,
+                enable_trusted_execution_environment: false,
                 use_ssh_authorized_keys: false,
                 icos_dev_settings: ICOSDevSettings::default(),
             },

@@ -19,8 +19,8 @@ pub(crate) const SYSTEM_API_CANISTER_CYCLE_BALANCE128: &str = "canister_cycle_ba
 pub(crate) const SYSTEM_API_TIME: &str = "time";
 
 const LABEL_CLASS: &str = "class";
-const LABEL_VALUE_BEST_EFFORT: &str = "best_effort";
-const LABEL_VALUE_GUARANTEED_RESPONSE: &str = "guaranteed_response";
+const LABEL_VALUE_BEST_EFFORT: &str = "best-effort";
+const LABEL_VALUE_GUARANTEED_RESPONSE: &str = "guaranteed response";
 
 pub const SUCCESS_STATUS_LABEL: &str = "success";
 

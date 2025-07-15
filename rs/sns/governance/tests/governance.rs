@@ -312,6 +312,7 @@ fn test_disburse_maturity_succeeds_to_self() {
     env.gov_fixture
         .advance_time_by(6 * ONE_DAY_SECONDS)
         .temporarily_disable_sns_upgrades()
+        .disable_update_cached_metrics()
         .run_periodic_tasks_now();
 
     let neuron = env.gov_fixture.get_neuron(&env.neuron_id);
@@ -422,6 +423,7 @@ fn test_disburse_maturity_succeeds_to_other() {
     // Advance time by a few days, but without triggering disbursal finalization.
     env.gov_fixture
         .advance_time_by(6 * ONE_DAY_SECONDS)
+        .disable_update_cached_metrics()
         .temporarily_disable_sns_upgrades()
         .run_periodic_tasks_now();
 
@@ -517,7 +519,8 @@ fn test_disburse_maturity_succeeds_with_multiple_operations() {
     // Advance time, to trigger disbursal finalization.
     env.gov_fixture
         .advance_time_by(7 * ONE_DAY_SECONDS + 10)
-        .temporarily_disable_sns_upgrades();
+        .temporarily_disable_sns_upgrades()
+        .disable_update_cached_metrics();
 
     let mut remaining_maturity_e8s = earned_maturity_e8s;
     for (i, (percentage, destination)) in percentage_and_destination.iter().enumerate() {
@@ -2779,6 +2782,7 @@ async fn assert_disburse_maturity_with_modulation_disburses_correctly(
     // This is supposed to cause Governance to poll CMC for the maturity modulation.
     canister_fixture
         .temporarily_disable_sns_upgrades()
+        .disable_update_cached_metrics()
         .run_periodic_tasks_now();
 
     // Get the Neuron and assert its maturity is set as expected
@@ -2869,6 +2873,7 @@ async fn test_disburse_maturity_applied_modulation_at_end_of_window() {
     // This is supposed to cause Governance to poll CMC for the maturity modulation.
     canister_fixture
         .temporarily_disable_sns_upgrades()
+        .disable_update_cached_metrics()
         .run_periodic_tasks_now();
 
     let current_basis_points = canister_fixture
@@ -3508,7 +3513,6 @@ fn test_set_following() {
     };
 
     let cleared_topic_following_for_all_non_critical_proposals = [
-        Topic::DaoCommunitySettings,
         Topic::SnsFrameworkManagement,
         Topic::DappCanisterManagement,
         Topic::ApplicationBusinessLogic,
@@ -3740,7 +3744,6 @@ fn test_set_following() {
             ],
             Some(TopicFollowees {
                 topic_id_to_followees: btreemap! {
-                    Topic::DaoCommunitySettings as i32 => FolloweesForTopic { followees: vec![expected_followee.clone()], topic: Some(Topic::DaoCommunitySettings as i32) },
                     Topic::SnsFrameworkManagement as i32 => FolloweesForTopic { followees: vec![expected_followee.clone()], topic: Some(Topic::SnsFrameworkManagement as i32) },
                     Topic::DappCanisterManagement as i32 => FolloweesForTopic { followees: vec![expected_followee.clone()], topic: Some(Topic::DappCanisterManagement as i32) },
                     Topic::ApplicationBusinessLogic as i32 => FolloweesForTopic { followees: vec![expected_followee.clone()], topic: Some(Topic::ApplicationBusinessLogic as i32) },

@@ -17,10 +17,12 @@ dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-cdk = { workspace = true }
-ic_consensus_system_test_utils = { path = "../consensus/utils" }
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
+ic-http-endpoints-test-agent = { path = "../../http_endpoints/test_agent" }
+ic_consensus_system_test_utils = { path = "../consensus/utils" }
 ic-limits = { path = "../../limits" }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
+ic-message = { path = "../test_canisters/message" }
 ic-networking-subnet-update-workload = { path = "./subnet_update_workload" }
 ic-nns-governance-api = { path = "../../nns/governance/api" }
 ic-prep = { path = "../../prep" }
@@ -33,6 +35,7 @@ ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
 ic-types = { path = "../../types/types" }
 ic-utils = { workspace = true }
+itertools = { workspace = true }
 leb128 = { workspace = true }
 proxy_canister = { path = "../../rust_canisters/proxy_canister" }
 rand = { workspace = true }
@@ -55,8 +58,20 @@ name = "ic-systest-canister-http-fault-tolerance"
 path = "canister_http_fault_tolerance_test.rs"
 
 [[bin]]
+name = "ic-systest-canister-http-non-replicated"
+path = "canister_http_non_replicated_test.rs"
+
+[[bin]]
 name = "ic-systest-canister-http-socks"
 path = "canister_http_socks_test.rs"
+
+[[bin]]
+name = "ic-systest-canister-http-stress"
+path = "canister_http_stress_test.rs"
+
+[[bin]]
+name = "ic-systest-canister-http-soak"
+path = "canister_http_soak_test.rs"
 
 [[bin]]
 name = "ic-systest-canister-http"
@@ -67,12 +82,20 @@ name = "ic-systest-canister-http-time-out"
 path = "canister_http_time_out_test.rs"
 
 [[bin]]
+name = "ic-systest-read-state-test"
+path = "read_state_test.rs"
+
+[[bin]]
 name = "ic-systest-firewall-max-connections-test"
 path = "firewall_max_connections_test.rs"
 
 [[bin]]
 name = "ic-systest-firewall-priority-test"
 path = "firewall_priority_test.rs"
+
+[[bin]]
+name = "ic-systest-http-endpoints-public-spec-test"
+path = "http_endpoints_public_spec_test.rs"
 
 [[bin]]
 name = "ic-systest-network-large-test"

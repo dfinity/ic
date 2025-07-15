@@ -2,7 +2,7 @@
 /// Common System API benchmark functions, types, constants.
 ///
 use criterion::{BatchSize, Criterion};
-use ic_config::embedders::{BestEffortResponsesFeature, Config as EmbeddersConfig, FeatureFlags};
+use ic_config::embedders::{Config as EmbeddersConfig, FeatureFlags};
 use ic_config::execution_environment::{
     Config, CANISTER_GUARANTEED_CALLBACK_QUOTA, SUBNET_CALLBACK_SOFT_LIMIT,
 };
@@ -41,7 +41,7 @@ use lazy_static::lazy_static;
 use std::{convert::TryFrom, path::Path, sync::Arc};
 
 pub const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(500_000_000_000);
-// Note: this canister ID is required for the `ic0_mint_cycles()`
+// Note: this canister ID is required for the `ic0_mint_cycles128()`
 pub const LOCAL_CANISTER_ID: u64 = CYCLES_MINTING_CANISTER_INDEX_IN_NNS_SUBNET;
 pub const REMOTE_CANISTER_ID: u64 = 1;
 pub const USER_ID: u64 = 0;
@@ -162,7 +162,6 @@ where
             MAX_NUM_INSTRUCTIONS,
             MAX_NUM_INSTRUCTIONS,
         ),
-        canister_memory_limit: canister_state.memory_limit(NumBytes::new(u64::MAX)),
         wasm_memory_limit: None,
         memory_allocation: canister_state.memory_allocation(),
         canister_guaranteed_callback_quota: CANISTER_GUARANTEED_CALLBACK_QUOTA as u64,
@@ -257,7 +256,6 @@ where
     ));
     let mut embedders_config = EmbeddersConfig {
         feature_flags: FeatureFlags {
-            best_effort_responses: BestEffortResponsesFeature::Enabled,
             wasm64: FlagStatus::Enabled,
             ..FeatureFlags::default()
         },

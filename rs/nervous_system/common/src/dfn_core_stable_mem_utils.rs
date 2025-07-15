@@ -311,20 +311,17 @@ impl Buf for BufferedStableMemReader {
 mod test {
     use super::*;
     use bytes::Buf;
-    use ic_nns_governance_api::pb::v1::{Governance, NetworkEconomics, Neuron};
+    use ic_nns_gtc::pb::v1::{AccountState, Gtc};
     use prost::Message;
 
-    fn allocate_governance(num_neurons: u64) -> Governance {
-        let mut gov = Governance {
-            economics: Some(NetworkEconomics::with_default_values()),
-            ..Default::default()
-        };
+    fn allocate_gtc(num_accounts: u64) -> Gtc {
+        let mut gtc = Gtc::default();
 
-        for i in 0..num_neurons {
-            gov.neurons.insert(i, Neuron::default());
+        for i in 0..num_accounts {
+            gtc.accounts.insert(i.to_string(), AccountState::default());
         }
 
-        gov
+        gtc
     }
 
     #[test]
@@ -351,51 +348,51 @@ mod test {
 
     #[test]
     fn test_buffered_stable_mem_writer() {
-        let gov = allocate_governance(7821);
+        let gtc = allocate_gtc(7821);
         let memory = Arc::new(Mutex::new(vec![]));
         let mut writer = BufferedStableMemWriter::new_test(1024, memory.clone());
 
-        gov.encode(&mut writer).unwrap();
+        gtc.encode(&mut writer).unwrap();
         writer.flush();
 
-        let decoded: Governance = Governance::decode(memory.lock().unwrap().as_slice()).unwrap();
+        let decoded: Gtc = Gtc::decode(memory.lock().unwrap().as_slice()).unwrap();
 
-        assert_eq!(gov, decoded);
+        assert_eq!(gtc, decoded);
     }
 
     #[test]
     fn test_write_large_then_small() {
         let memory = Arc::new(Mutex::new(vec![]));
 
-        let gov1 = allocate_governance(1893);
+        let gtc1 = allocate_gtc(1893);
         {
             let mut writer = BufferedStableMemWriter::new_test(40, memory.clone());
-            gov1.encode(&mut writer).unwrap();
+            gtc1.encode(&mut writer).unwrap();
         }
 
-        let gov2 = allocate_governance(397);
+        let gtc2 = allocate_gtc(397);
         {
             let mut writer = BufferedStableMemWriter::new_test(40, memory.clone());
-            gov2.encode(&mut writer).unwrap();
+            gtc2.encode(&mut writer).unwrap();
         }
 
-        let decoded: Governance = Governance::decode(memory.lock().unwrap().as_slice()).unwrap();
+        let decoded: Gtc = Gtc::decode(memory.lock().unwrap().as_slice()).unwrap();
 
-        assert_eq!(gov2, decoded);
+        assert_eq!(gtc2, decoded);
     }
 
     #[test]
     fn test_buffered_stable_mem_reader() {
-        let gov = allocate_governance(530);
+        let gtc = allocate_gtc(530);
 
         let mut serialized = Vec::new();
-        gov.encode(&mut serialized).unwrap();
+        gtc.encode(&mut serialized).unwrap();
 
         let reader = BufferedStableMemReader::new_test(1024, serialized);
 
-        let decoded = Governance::decode(reader).unwrap();
+        let decoded = Gtc::decode(reader).unwrap();
 
-        assert_eq!(decoded, gov);
+        assert_eq!(decoded, gtc);
     }
 
     #[derive(::prost::Message)]

@@ -11,9 +11,6 @@ on the process that this file is part of, see
 
 ## Changed
 
-* `get_node_providers_monthly_xdr_rewards` can now take an optional paramter to specify the Registry version to use when
-  calculating the rewards.
-
 ## Deprecated
 
 ## Removed

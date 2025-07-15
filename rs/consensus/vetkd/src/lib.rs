@@ -29,7 +29,7 @@ use ic_replicated_state::{
     metadata_state::subnet_call_context_manager::{SignWithThresholdContext, ThresholdArguments},
     ReplicatedState,
 };
-use ic_types::crypto::vetkd::VetKdKeyShareCombinationError;
+use ic_types::crypto::vetkd::{VetKdKeyShareCombinationError, VetKdKeyVerificationError};
 use ic_types::{
     batch::{
         bytes_to_vetkd_payload, vetkd_payload_to_bytes, ConsensusResponse, ValidationContext,
@@ -150,7 +150,7 @@ impl VetKdPayloadBuilderImpl {
 
         let enabled_subnets = self
             .registry
-            .get_chain_key_signing_subnets(registry_version)
+            .get_chain_key_enabled_subnets(registry_version)
             .map_err(|err| {
                 warn!(
                     self.log,
@@ -165,7 +165,7 @@ impl VetKdPayloadBuilderImpl {
             .into_iter()
             .map(|key_config| key_config.key_id)
             // Skip keys that don't need to run NIDKG protocol
-            .filter(|key_id| !key_id.is_idkg_key())
+            .filter(|key_id| key_id.is_vetkd_key())
             // Skip keys that are disabled
             .filter(|key_id| {
                 enabled_subnets
@@ -374,8 +374,13 @@ impl VetKdPayloadBuilderImpl {
                     invalid_artifact(InvalidVetKdPayloadReason::VetKdKeyVerificationError(err))
                 } else {
                     warn!(self.log, "VetKD payload validation failure: {err:?}");
-                    self.metrics
-                        .payload_errors_inc("validation_failed", &context.key_id());
+                    let label = match err {
+                        VetKdKeyVerificationError::ThresholdSigDataNotFound(_) => {
+                            "validation_failed_nidkg_transcript_not_loaded"
+                        }
+                        _ => "validation_failed",
+                    };
+                    self.metrics.payload_errors_inc(label, &context.key_id());
                     validation_failed(VetKdPayloadValidationFailure::VetKdKeyVerificationError(
                         err,
                     ))
@@ -550,13 +555,13 @@ mod tests {
     use ic_interfaces::idkg::IDkgChangeAction;
     use ic_interfaces::p2p::consensus::MutablePool;
     use ic_interfaces::validation::ValidationError;
-    use ic_interfaces_state_manager::StateManagerError;
     use ic_logger::no_op_logger;
     use ic_management_canister_types_private::VetKdKeyId;
     use ic_registry_subnet_features::ChainKeyConfig;
     use ic_registry_subnet_features::KeyConfig;
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_types::consensus::idkg::IDkgMessage;
+    use ic_types::state_manager::StateManagerError;
     use ic_types::subnet_id_into_protobuf;
     use ic_types::time::current_time;
     use ic_types::time::UNIX_EPOCH;
@@ -674,15 +679,15 @@ mod tests {
                     for key_id in config.key_ids() {
                         registry_data_provider
                             .add(
-                                &ic_registry_keys::make_chain_key_signing_subnet_list_key(&key_id),
+                                &ic_registry_keys::make_chain_key_enabled_subnet_list_key(&key_id),
                                 registry.get_latest_version().increment(),
                                 Some(
-                                    ic_protobuf::registry::crypto::v1::ChainKeySigningSubnetList {
+                                    ic_protobuf::registry::crypto::v1::ChainKeyEnabledSubnetList {
                                         subnets: vec![subnet_id_into_protobuf(subnet_test_id(0))],
                                     },
                                 ),
                             )
-                            .expect("Could not add chain key signing subnet list");
+                            .expect("Could not add chain-key enabled subnet list");
                     }
                     registry.update_to_latest_version();
                 }

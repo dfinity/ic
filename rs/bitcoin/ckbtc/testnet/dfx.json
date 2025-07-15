@@ -45,15 +45,6 @@
       "wasm": "../../../../bazel-bin/rs/bitcoin/checker/btc_checker_canister.wasm.gz",
       "candid": "../../checker/btc_checker_canister.did",
       "shrink": false
-    },
-    "kyt": {
-      "type": "custom",
-      "build": [
-        "bazel build //rs/bitcoin/ckbtc/kyt:kyt_canister"
-      ],
-      "wasm": "../../../../bazel-bin/rs/bitcoin/ckbtc/kyt/kyt_canister.wasm",
-      "candid": "../kyt/kyt.did",
-      "shrink": false
     }
   },
   "defaults": {

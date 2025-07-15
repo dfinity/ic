@@ -8,6 +8,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 ### Added
+- The function `PocketIc::start_or_reuse_server` to manually start or reuse a PocketIC server.
+- The function `PocketIcBuilder::with_all_icp_features` to specify that all ICP features (supported by PocketIC) should be enabled.
+
+
+
+## 9.0.2 - 2025-06-06
+
+(Only PocketIC server version bump to v9.0.3.)
+
+
+
+## 9.0.1 - 2025-05-27
+
+(Only PocketIC server version bump to v9.0.2.)
+
+
+
+## 9.0.0 - 2025-04-30
+
+### Changed
+- Bumped `ic-management-canister-types` to v0.3.0.
+
+
+
+## 8.0.0 - 2025-04-23
+
+### Added
 - The function `PocketIc::auto_progress_enabled` to determine whether the automatic progress was enabled for the PocketIC instance.
 - The struct `PocketIcState` encapsulating the state of a PocketIC instance persisted in a temporary directory (`PocketIcState::new`)
   or in a directory on disk (`PocketIcState::new_from_path`).
@@ -21,6 +48,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   This state must be empty if `PocketIcBuilder::with_read_only_state` is used.
 - The function `PocketIc::drop_and_take_state` to drop a PocketIC instance and get its final state if the instance was created
   using `PocketIcBuilder::with_state` or `PocketIcBuilder::with_state_dir`.
+- The type `Time` used by the functions `PocketIc::get_time`, `PocketIc::set_time`, and `PocketIc::set_certified_time`.
 
 ### Removed
 - The module `management_canister` used to contain interface types of the IC management canister. Those types have since been published on crates.io as `ic-management-canister-types`, so PocketIC can depend on that and remove the redundant types.

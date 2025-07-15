@@ -21,8 +21,8 @@ jobs:
         uses: actions/create-github-app-token@v1
         id: app-token
         with:
-          app-id: ${{ vars.PR_AUTOMATION_BOT_PUBLIC_APP_ID }}
-          private-key: ${{ secrets.PR_AUTOMATION_BOT_PUBLIC_PRIVATE_KEY }}
+          app-id: ${{ vars.PR_CREATION_BOT_APP_ID }}
+          private-key: ${{ secrets.PR_CREATION_BOT_PRIVATE_KEY }}
       - name: Checkout
         uses: actions/checkout@v4
         # If this is a pull request, use the HEAD ref instead of the merge commit

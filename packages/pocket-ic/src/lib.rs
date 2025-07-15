@@ -55,8 +55,8 @@
 use crate::{
     common::rest::{
         BlobCompression, BlobId, CanisterHttpRequest, ExtendedSubnetConfigSet, HttpsConfig,
-        InstanceId, MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId, SubnetId,
-        SubnetKind, SubnetSpec, Topology,
+        IcpFeatures, InstanceId, MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId,
+        SubnetId, SubnetKind, SubnetSpec, Topology,
     },
     nonblocking::PocketIc as PocketIcAsync,
 };
@@ -85,7 +85,7 @@ use std::{
     sync::{mpsc::channel, Arc},
     thread,
     thread::JoinHandle,
-    time::{Duration, SystemTime},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use strum_macros::EnumIter;
 use tempfile::TempDir;
@@ -98,7 +98,7 @@ use wslpath::windows_to_wsl;
 pub mod common;
 pub mod nonblocking;
 
-pub const EXPECTED_SERVER_VERSION: &str = "8.0.0";
+pub const EXPECTED_SERVER_VERSION: &str = "9.0.3";
 
 // the default timeout of a PocketIC operation
 const DEFAULT_MAX_REQUEST_TIME_MS: u64 = 300_000;
@@ -138,7 +138,7 @@ impl PocketIcState {
     pub fn into_path(self) -> PathBuf {
         match self.state {
             PocketIcStateKind::StateDir(state_dir) => state_dir,
-            PocketIcStateKind::TempDir(temp_dir) => temp_dir.into_path(),
+            PocketIcStateKind::TempDir(temp_dir) => temp_dir.keep(),
         }
     }
 
@@ -160,6 +160,7 @@ pub struct PocketIcBuilder {
     nonmainnet_features: bool,
     log_level: Option<Level>,
     bitcoind_addr: Option<Vec<SocketAddr>>,
+    icp_features: IcpFeatures,
 }
 
 #[allow(clippy::new_without_default)]
@@ -175,6 +176,7 @@ impl PocketIcBuilder {
             nonmainnet_features: false,
             log_level: None,
             bitcoind_addr: None,
+            icp_features: IcpFeatures::default(),
         }
     }
 
@@ -195,6 +197,7 @@ impl PocketIcBuilder {
             self.nonmainnet_features,
             self.log_level,
             self.bitcoind_addr,
+            self.icp_features,
         )
     }
 
@@ -209,6 +212,7 @@ impl PocketIcBuilder {
             self.nonmainnet_features,
             self.log_level,
             self.bitcoind_addr,
+            self.icp_features,
         )
         .await
     }
@@ -402,6 +406,70 @@ impl PocketIcBuilder {
         self.config = Some(config);
         self
     }
+
+    /// Enables all ICP features supported by PocketIC and implemented by system canisters
+    /// (deployed to the PocketIC instance automatically when creating a new PocketIC instance).
+    pub fn with_all_icp_features(mut self) -> Self {
+        self.icp_features = IcpFeatures::all_icp_features();
+        self
+    }
+}
+
+/// Representation of system time as duration since UNIX epoch
+/// with cross-platform nanosecond precision.
+#[derive(Copy, Clone, PartialEq, PartialOrd)]
+pub struct Time(Duration);
+
+impl Time {
+    /// Number of nanoseconds since UNIX EPOCH.
+    pub fn as_nanos_since_unix_epoch(&self) -> u64 {
+        self.0.as_nanos().try_into().unwrap()
+    }
+
+    pub const fn from_nanos_since_unix_epoch(nanos: u64) -> Self {
+        Time(Duration::from_nanos(nanos))
+    }
+}
+
+impl std::fmt::Debug for Time {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let nanos_since_unix_epoch = self.as_nanos_since_unix_epoch();
+        write!(f, "{}", nanos_since_unix_epoch)
+    }
+}
+
+impl std::ops::Add<Duration> for Time {
+    type Output = Time;
+    fn add(self, dur: Duration) -> Time {
+        Time(self.0 + dur)
+    }
+}
+
+impl From<SystemTime> for Time {
+    fn from(time: SystemTime) -> Self {
+        Self::from_nanos_since_unix_epoch(
+            time.duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+                .try_into()
+                .unwrap(),
+        )
+    }
+}
+
+impl TryFrom<Time> for SystemTime {
+    type Error = String;
+
+    fn try_from(time: Time) -> Result<SystemTime, String> {
+        let nanos = time.as_nanos_since_unix_epoch();
+        let system_time = UNIX_EPOCH + Duration::from_nanos(nanos);
+        let roundtrip: Time = system_time.into();
+        if roundtrip.as_nanos_since_unix_epoch() == nanos {
+            Ok(system_time)
+        } else {
+            Err(format!("Converting UNIX timestamp {} in nanoseconds to SystemTime failed due to losing precision", nanos))
+        }
+    }
 }
 
 /// Main entry point for interacting with PocketIC.
@@ -457,6 +525,7 @@ impl PocketIc {
         nonmainnet_features: bool,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
+        icp_features: IcpFeatures,
     ) -> Self {
         let (tx, rx) = channel();
         let thread = thread::spawn(move || {
@@ -479,6 +548,7 @@ impl PocketIc {
                 nonmainnet_features,
                 log_level,
                 bitcoind_addr,
+                icp_features,
             )
             .await
         });
@@ -596,7 +666,7 @@ impl PocketIc {
     /// Configures the IC to make progress automatically,
     /// i.e., periodically update the time of the IC
     /// to the real time and execute rounds on the subnets.
-    /// Returns the URL at which `/api/v2` requests
+    /// Returns the URL at which `/api` requests
     /// for this instance can be made.
     #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id))]
     pub fn auto_progress(&self) -> Url {
@@ -618,7 +688,7 @@ impl PocketIc {
         runtime.block_on(async { self.pocket_ic.stop_progress().await })
     }
 
-    /// Returns the URL at which `/api/v2` requests
+    /// Returns the URL at which `/api` requests
     /// for this instance can be made if the HTTP
     /// gateway has been started.
     pub fn url(&self) -> Option<Url> {
@@ -631,7 +701,7 @@ impl PocketIc {
     /// and configures the PocketIC instance to make progress automatically, i.e.,
     /// periodically update the time of the PocketIC instance to the real time
     /// and process messages on the PocketIC instance.
-    /// Returns the URL at which `/api/v2` and `/api/v3` requests
+    /// Returns the URL at which `/api` requests
     /// for this instance can be made.
     #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id))]
     pub fn make_live(&mut self, listen_at: Option<u16>) -> Url {
@@ -647,7 +717,7 @@ impl PocketIc {
     /// and configures the PocketIC instance to make progress automatically, i.e.,
     /// periodically update the time of the PocketIC instance to the real time
     /// and process messages on the PocketIC instance.
-    /// Returns the URL at which `/api/v2` and `/api/v3` requests
+    /// Returns the URL at which `/api` requests
     /// for this instance can be made.
     #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id))]
     pub async fn make_live_with_params(
@@ -689,21 +759,21 @@ impl PocketIc {
 
     /// Get the current time of the IC.
     #[instrument(ret, skip(self), fields(instance_id=self.pocket_ic.instance_id))]
-    pub fn get_time(&self) -> SystemTime {
+    pub fn get_time(&self) -> Time {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.get_time().await })
     }
 
     /// Set the current time of the IC, on all subnets.
     #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id, time = ?time))]
-    pub fn set_time(&self, time: SystemTime) {
+    pub fn set_time(&self, time: Time) {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.set_time(time).await })
     }
 
     /// Set the current certified time of the IC, on all subnets.
     #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id, time = ?time))]
-    pub fn set_certified_time(&self, time: SystemTime) {
+    pub fn set_certified_time(&self, time: Time) {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.set_certified_time(time).await })
     }
@@ -1497,6 +1567,7 @@ pub enum ErrorCode {
     CanisterRejectedMessage = 406,
     UnknownManagementMessage = 407,
     InvalidManagementPayload = 408,
+    CanisterSnapshotImmutable = 409,
     // 5xx -- `RejectCode::CanisterError`
     CanisterTrapped = 502,
     CanisterCalledTrap = 503,
@@ -1566,6 +1637,7 @@ impl TryFrom<u64> for ErrorCode {
             406 => Ok(ErrorCode::CanisterRejectedMessage),
             407 => Ok(ErrorCode::UnknownManagementMessage),
             408 => Ok(ErrorCode::InvalidManagementPayload),
+            409 => Ok(ErrorCode::CanisterSnapshotImmutable),
             // 5xx -- `RejectCode::CanisterError`
             502 => Ok(ErrorCode::CanisterTrapped),
             503 => Ok(ErrorCode::CanisterCalledTrap),
@@ -1748,7 +1820,7 @@ async fn download_pocketic_server(
 }
 
 /// Attempt to start a new PocketIC server if it's not already running.
-pub(crate) async fn start_or_reuse_server(server_binary: Option<PathBuf>) -> Url {
+pub async fn start_or_reuse_server(server_binary: Option<PathBuf>) -> Url {
     let default_bin_dir =
         std::env::temp_dir().join(format!("pocket-ic-server-{}", EXPECTED_SERVER_VERSION));
     let default_bin_path = default_bin_dir.join("pocket-ic");

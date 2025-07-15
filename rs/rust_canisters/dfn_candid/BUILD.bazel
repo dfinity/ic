@@ -18,6 +18,7 @@ package(default_visibility = [
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-http-types",
     "//rs/rust_canisters/dfn_core",
     "//rs/rust_canisters/on_wire",
     "//rs/types/base_types",

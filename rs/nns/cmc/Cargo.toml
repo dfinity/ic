@@ -11,14 +11,13 @@ build-info = { workspace = true }
 
 async-trait = { workspace = true }
 candid = { workspace = true }
-dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
-dfn_core = { path = "../../rust_canisters/dfn_core" }
-dfn_http_metrics = { path = "../../rust_canisters/dfn_http_metrics" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 ic-base-types = { path = "../../types/base_types" }
+ic-cdk = { workspace = true }
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
 ic-dummy-getrandom-for-wasm = { path = "../../../packages/ic-dummy-getrandom-for-wasm" }
+ic-http-types = { path = "../../../packages/ic-http-types" }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
 ic-metrics-encoder = "1"
@@ -26,6 +25,7 @@ ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/build_metadata" }
 ic-nervous-system-governance = { path = "../../nervous_system/governance" }
+ic-nervous-system-time-helpers = { path = "../../nervous_system/time_helpers" }
 ic-nns-common = { path = "../../nns/common" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-protobuf = { path = "../../protobuf" }

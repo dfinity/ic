@@ -24,14 +24,12 @@ end::catalog[] */
 use ic_system_test_driver::{
     canister_api::{CallMode, GenericRequest},
     driver::{
-        boundary_node::{BoundaryNode, BoundaryNodeVm},
         ic::{ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
         prometheus_vm::{HasPrometheus, PrometheusVm},
         test_env::TestEnv,
         test_env_api::{
-            HasPublicApiUrl, HasTopologySnapshot, HasVmName, IcNodeContainer,
-            NnsInstallationBuilder, RetrieveIpv4Addr, SubnetSnapshot, READY_WAIT_TIMEOUT,
-            RETRY_BACKOFF,
+            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
+            SubnetSnapshot, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
         },
     },
     util::{
@@ -42,17 +40,11 @@ use ic_system_test_driver::{
 
 use std::time::Duration;
 
-use anyhow::{bail, Context};
+use anyhow::bail;
 use ic_agent::Agent;
-use ic_interfaces_registry::RegistryValue;
-use ic_protobuf::registry::routing_table::v1::RoutingTable as PbRoutingTable;
-use ic_registry_keys::make_routing_table_record_key;
-use ic_registry_nns_data_provider::registry::RegistryCanister;
-use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use slog::{debug, info, Logger};
 
-const BOUNDARY_NODE_NAME: &str = "boundary-node-1";
 const COUNTER_CANISTER_WAT: &str = "rs/tests/counter.wat";
 const CANISTER_METHOD: &str = "write";
 // Duration of each request is placed into one of the two categories - below or above this threshold.
@@ -69,7 +61,6 @@ const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(2); // Thi
 pub fn setup(
     env: TestEnv,
     nodes_app_subnet: usize,
-    use_boundary_node: bool,
     boot_image_minimal_size_gibibytes: Option<ImageSizeGiB>,
 ) {
     let logger = env.logger();
@@ -89,9 +80,10 @@ pub fn setup(
                 .with_default_vm_resources(vm_resources)
                 .add_nodes(nodes_app_subnet),
         )
+        .with_api_boundary_nodes(1)
         .setup_and_start(&env)
         .expect("Failed to setup IC under test.");
-    env.sync_with_prometheus_by_name("", env.get_playnet_url(BOUNDARY_NODE_NAME));
+
     info!(logger, "Step 1: Installing NNS canisters ...");
     let nns_node = env
         .topology_snapshot()
@@ -103,21 +95,6 @@ pub fn setup(
         .install(&nns_node, &env)
         .expect("Could not install NNS canisters.");
 
-    let bn = if use_boundary_node {
-        info!(&logger, "Installing a boundary node ...");
-
-        let bn = BoundaryNode::new(String::from(BOUNDARY_NODE_NAME))
-            .allocate_vm(&env)
-            .unwrap()
-            .for_ic(&env, "");
-
-        bn.start(&env).expect("Failed to setup a universal VM.");
-        info!(&logger, "Installation of the boundary nodes succeeded.");
-        Some(bn)
-    } else {
-        None
-    };
-
     // Await Replicas
     info!(&logger, "Checking readiness of all replica nodes...");
     for subnet in env.topology_snapshot().subnets() {
@@ -127,48 +104,14 @@ pub fn setup(
         }
     }
 
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-
-    if let Some(bn) = bn {
-        info!(&logger, "Polling registry");
-        let registry = RegistryCanister::new(bn.nns_node_urls);
-        let (latest, routes) = rt.block_on(ic_system_test_driver::retry_with_msg_async!(
-            "checking registry",
-            &logger,
-            READY_WAIT_TIMEOUT,
-            RETRY_BACKOFF,
-            || async {
-                let (bytes, latest) = registry.get_value(make_routing_table_record_key().into(), None).await
-                    .context("Failed to `get_value` from registry")?;
-                let routes = PbRoutingTable::decode(bytes.as_slice())
-                    .context("Failed to decode registry routes")?;
-                let routes = RoutingTable::try_from(routes)
-                    .context("Failed to convert registry routes")?;
-                Ok((latest, routes))
-            }
-        ))
-        .expect("Failed to poll registry. This is not a Boundary Node error. It is a test environment issue.");
-        info!(&logger, "Latest registry {latest}: {routes:?}");
-
-        // Await Boundary Node
-        let boundary_node_vm = env
-            .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
-            .unwrap()
-            .get_snapshot()
-            .unwrap();
-
-        info!(
-            &logger,
-            "Boundary node {BOUNDARY_NODE_NAME} has IPv4 {:?} and IPv6 {:?}",
-            boundary_node_vm.block_on_ipv4().unwrap(),
-            boundary_node_vm.ipv6()
-        );
-
-        info!(&logger, "Checking BN health");
-        boundary_node_vm
+    info!(&logger, "Checking readiness of the API boundary node...");
+    for api_bn in env.topology_snapshot().api_boundary_nodes() {
+        api_bn
             .await_status_is_healthy()
-            .expect("Boundary node did not come up healthy.");
+            .expect("API boundary node did not come up healthy.");
     }
+
+    env.sync_with_prometheus();
 }
 
 // Run a test with configurable number of update requests per second,
@@ -180,24 +123,15 @@ pub fn test(
     rps: usize,
     payload_size_bytes: usize,
     duration: Duration,
-    use_boundary_node: bool,
+    use_api_boundary_node: bool,
 ) {
     let log = env.logger();
-    info!(
-        &log,
-        "Checking readiness of all nodes after the IC setup ..."
-    );
-    let top_snapshot = env.topology_snapshot();
-    top_snapshot.subnets().for_each(|subnet| {
-        subnet
-            .nodes()
-            .for_each(|node| node.await_status_is_healthy().unwrap())
-    });
-    info!(&log, "All nodes are ready, IC setup succeeded.");
+
     info!(
         &log,
         "Step 2: Build and install one counter canisters on each subnet ..."
     );
+    let top_snapshot = env.topology_snapshot();
     let app_subnet = top_snapshot
         .subnets()
         .find(|s| s.subnet_type() == SubnetType::Application)
@@ -222,8 +156,8 @@ pub fn test(
     );
     info!(&log, "Step 3: Instantiate and start workloads.");
     // Workload sends messages to canisters via node agents, so we create them.
-    let app_agents = create_agents_for_subnet(&log, use_boundary_node, &env, &app_subnet);
-    let nns_agents = create_agents_for_subnet(&log, use_boundary_node, &env, &nns_subnet);
+    let app_agents = create_agents_for_subnet(&log, use_api_boundary_node, &env, &app_subnet);
+    let nns_agents = create_agents_for_subnet(&log, use_api_boundary_node, &env, &nns_subnet);
     info!(
         &log,
         "Asserting all agents observe the installed canister ..."
@@ -387,20 +321,22 @@ pub fn test(
 
 fn create_agents_for_subnet(
     log: &Logger,
-    use_boundary_node: bool,
+    use_api_boundary_node: bool,
     env: &TestEnv,
     subnet: &SubnetSnapshot,
 ) -> Vec<Agent> {
-    if use_boundary_node {
-        let deployed_boundary_node = env.get_deployed_boundary_node(BOUNDARY_NODE_NAME).unwrap();
-        let boundary_node_vm = deployed_boundary_node.get_snapshot().unwrap();
-        info!(
-            &env.logger(),
-            "Agent for the boundary node with name={:?} will be used for the {:?} subnet workload.",
-            boundary_node_vm.vm_name(),
-            subnet.subnet_type()
-        );
-        vec![boundary_node_vm.build_default_agent()]
+    if use_api_boundary_node {
+        env.topology_snapshot()
+            .api_boundary_nodes()
+            .map(|api_bn| {
+                debug!(
+                    &log,
+                    "Agent for the API boundary node with id={} will be used for the workload.",
+                    api_bn.node_id,
+                );
+                api_bn.build_default_agent()
+            })
+            .collect::<_>()
     } else {
         subnet
             .nodes()

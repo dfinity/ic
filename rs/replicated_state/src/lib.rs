@@ -61,11 +61,6 @@ pub(crate) mod hash;
 pub mod metadata_state;
 pub mod page_map;
 pub mod replicated_state;
-pub mod testing {
-    pub use super::canister_state::system_state::testing::SystemStateTesting;
-    pub use super::canister_state::testing::CanisterQueuesTesting;
-    pub use super::replicated_state::testing::ReplicatedStateTesting;
-}
 pub use canister_state::{
     execution_state::Memory,
     num_bytes_try_from,
@@ -90,4 +85,76 @@ pub use replicated_state::{
 /// to record metrics from there.
 pub trait CheckpointLoadingMetrics {
     fn observe_broken_soft_invariant(&self, msg: String);
+}
+
+pub const KIND_REQUEST: &str = "request";
+pub const KIND_RESPONSE: &str = "response";
+pub const CONTEXT_INBOUND: &str = "inbound";
+pub const CONTEXT_OUTBOUND: &str = "outbound";
+pub const CLASS_GUARANTEED_RESPONSE: &str = "guaranteed response";
+pub const CLASS_BEST_EFFORT: &str = "best-effort";
+
+/// Exposes methods for observing timed out and shed messages.
+pub trait DroppedMessageMetrics {
+    /// Observes a timed out message with the given kind, context and class.
+    fn observe_timed_out_message(
+        &self,
+        kind: &'static str,
+        context: &'static str,
+        class: &'static str,
+    );
+
+    /// Observes a shed message with the given kind and context,
+    fn observe_shed_message(&self, kind: &'static str, context: &'static str, size_bytes: usize);
+}
+
+pub mod testing {
+    pub use super::canister_state::system_state::testing::SystemStateTesting;
+    pub use super::canister_state::testing::CanisterQueuesTesting;
+    pub use super::replicated_state::testing::ReplicatedStateTesting;
+
+    use super::DroppedMessageMetrics;
+    use std::cell::RefCell;
+    use std::collections::BTreeMap;
+
+    #[derive(Default, Debug)]
+    pub struct FakeDropMessageMetrics {
+        pub timed_out_messages:
+            RefCell<BTreeMap<(&'static str, &'static str, &'static str), usize>>,
+        pub shed_messages: RefCell<BTreeMap<(&'static str, &'static str), usize>>,
+        pub shed_message_bytes: RefCell<BTreeMap<(&'static str, &'static str), usize>>,
+    }
+
+    impl DroppedMessageMetrics for FakeDropMessageMetrics {
+        fn observe_timed_out_message(
+            &self,
+            kind: &'static str,
+            context: &'static str,
+            class: &'static str,
+        ) {
+            *self
+                .timed_out_messages
+                .borrow_mut()
+                .entry((kind, context, class))
+                .or_default() += 1;
+        }
+
+        fn observe_shed_message(
+            &self,
+            kind: &'static str,
+            context: &'static str,
+            size_bytes: usize,
+        ) {
+            *self
+                .shed_messages
+                .borrow_mut()
+                .entry((kind, context))
+                .or_default() += 1;
+            *self
+                .shed_message_bytes
+                .borrow_mut()
+                .entry((kind, context))
+                .or_default() += size_bytes;
+        }
+    }
 }

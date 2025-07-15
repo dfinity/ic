@@ -291,9 +291,9 @@ impl TryFrom<pb::TaskQueue> for TaskQueue {
 /// Condition for `OnLowWasmMemoryHook` is satisfied if the following holds:
 ///
 /// 1. In the case of `memory_allocation`
-///     `wasm_memory_threshold >= min(memory_allocation - memory_usage_without_wasm_memory, wasm_memory_limit) - wasm_memory_usage`
+///    `wasm_memory_threshold >= min(memory_allocation - memory_usage_without_wasm_memory, wasm_memory_limit) - wasm_memory_usage`
 /// 2. Without memory allocation
-///     `wasm_memory_threshold >= wasm_memory_limit - wasm_memory_usage`
+///    `wasm_memory_threshold >= wasm_memory_limit - wasm_memory_usage`
 ///
 /// Note: if `wasm_memory_limit` is not set, its default value is 4 GiB.
 pub fn is_low_wasm_memory_hook_condition_satisfied(

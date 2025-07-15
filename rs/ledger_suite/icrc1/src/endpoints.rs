@@ -49,7 +49,7 @@ impl<Tokens: TokensType> TryFrom<EndpointsTransferError<Tokens>> for TransferErr
             CTE::AllowanceChanged { .. } => {
                 return Err("AllowanceChanged error should not happen for transfer".to_string());
             }
-            CTE::SelfApproval { .. } => {
+            CTE::SelfApproval => {
                 return Err("SelfApproval error should not happen for transfer".to_string());
             }
             CTE::BadBurn { min_burn_amount } => TE::BadBurn {
@@ -91,7 +91,7 @@ impl<Tokens: TokensType> TryFrom<EndpointsTransferError<Tokens>> for ApproveErro
             CTE::AllowanceChanged { current_allowance } => AE::AllowanceChanged {
                 current_allowance: current_allowance.into(),
             },
-            CTE::SelfApproval { .. } => {
+            CTE::SelfApproval => {
                 return Err("self-approvals are not allowed".to_string());
             }
             CTE::BadBurn { .. } => {
@@ -131,7 +131,7 @@ impl<Tokens: TokensType> TryFrom<EndpointsTransferError<Tokens>> for TransferFro
             CTE::AllowanceChanged { .. } => {
                 return Err("AllowanceChanged not implemented for TransferFromError".to_string());
             }
-            CTE::SelfApproval { .. } => {
+            CTE::SelfApproval => {
                 return Err("self approval not implemented for TransferFromError".to_string());
             }
             CTE::BadBurn { min_burn_amount } => TFE::BadBurn {

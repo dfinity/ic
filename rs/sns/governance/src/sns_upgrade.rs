@@ -441,10 +441,7 @@ impl Version {
         if results.iter().any(|r| r.is_err()) {
             Err(results
                 .into_iter()
-                .flat_map(|result| match result {
-                    Ok(_) => None,
-                    Err(e) => Some(e),
-                })
+                .flat_map(|result| result.err())
                 .collect::<Vec<_>>())
         } else {
             Ok(())

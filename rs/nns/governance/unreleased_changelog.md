@@ -9,8 +9,6 @@ on the process that this file is part of, see
 
 ## Added
 
-* A timer task is added to take daily snapshots of voting power for standard proposals.
-
 ## Changed
 
 ## Deprecated
@@ -18,7 +16,5 @@ on the process that this file is part of, see
 ## Removed
 
 ## Fixed
-
-* Turned off `DisburseMaturity` that was incorrectly turned on before.
 
 ## Security

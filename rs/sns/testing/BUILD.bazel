@@ -1,3 +1,4 @@
+load("@rules_pkg//:pkg.bzl", "pkg_tar")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
 
@@ -30,6 +31,7 @@ DEPENDENCIES = [
     "@crate_index//:clap",
     "@crate_index//:dfx-core",
     "@crate_index//:futures",
+    "@crate_index//:hex",
     "@crate_index//:ic-agent",
     "@crate_index//:ic-management-canister-types",
     "@crate_index//:k256",
@@ -37,6 +39,7 @@ DEPENDENCIES = [
     "@crate_index//:rand",
     "@crate_index//:rand_chacha",
     "@crate_index//:reqwest",
+    "@crate_index//:rust_decimal",
     "@crate_index//:slog",
     "@crate_index//:tempfile",
     "@crate_index//:thiserror",
@@ -97,9 +100,18 @@ DEV_ENV = {
 }
 
 rust_binary(
-    name = "cli",
+    name = "sns-testing",
     testonly = True,
-    srcs = ["src/main.rs"],
+    srcs = ["src/bin/main.rs"],
+    deps = DEPENDENCIES + [
+        ":sns_testing",
+    ],
+)
+
+rust_binary(
+    name = "sns-testing-init",
+    testonly = True,
+    srcs = ["src/bin/init.rs"],
     data = DEV_DATA,
     env = DEV_ENV,
     deps = DEPENDENCIES + [
@@ -116,7 +128,16 @@ rust_library(
 )
 
 rust_test(
+    name = "sns_testing_test",
+    srcs = glob(["src/**/*.rs"]),
+    deps = DEPENDENCIES,
+)
+
+rust_test(
     name = "sns_testing_ci",
+    # the test sometimes times out on CI with default timeout
+    # of "moderate" (5 minutes) - 2025-07-01
+    timeout = "long",
     srcs = ["tests/sns_testing_ci.rs"],
     data = DEV_DATA,
     env = DEV_ENV,
@@ -134,5 +155,56 @@ rust_canister(
         "@crate_index//:candid",
         "@crate_index//:ic-cdk",
         "@crate_index//:serde",
+    ],
+)
+
+genrule(
+    name = "_sns_testing_env",
+    testonly = True,
+    srcs = DEV_DATA,  # Include the dependencies to be resolved by rootpath in DEV_ENV.
+    outs = ["sns_testing_env.sh"],
+    cmd = "\n".join([
+        'echo \'export %s="%s"\' >> $@' % (key, value)
+        for key, value in DEV_ENV.items()
+    ]),
+)
+
+pkg_tar(
+    name = "sns_testing_env",
+    testonly = True,
+    srcs = ["_sns_testing_env"],
+    extension = "tar",
+)
+
+pkg_tar(
+    name = "sns_testing_dependencies",
+    testonly = True,
+    srcs = DEV_DATA,
+    extension = "tar",
+    strip_prefix = "/",
+)
+
+pkg_tar(
+    name = "sns_testing_bin",
+    testonly = True,
+    srcs = [
+        ":sns-testing",
+        ":sns-testing-init",
+        "dfx.json",
+        # TODO: Add the README.md file to the tarball once if is re-written in terms of the bundle.
+        # "README.md",
+    ],
+    extension = "tar",
+)
+
+pkg_tar(
+    name = "sns_testing_bundle",
+    testonly = True,
+    extension = "tar.gz",
+    strip_prefix = "/",
+    deps = [
+        ":sns_testing_bin",
+        ":sns_testing_dependencies",
+        ":sns_testing_env",
     ],
 )

@@ -15,7 +15,8 @@ use ic_logger::{info, ReplicaLogger};
 use ic_management_canister_types_private::{
     CanisterStatusType, CreateCanisterArgs, InstallChunkedCodeArgs, InstallCodeArgsV2,
     LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, UninstallCodeArgs, UpdateSettingsArgs, IC_00,
+    ProvisionalCreateCanisterWithCyclesArgs, RenameCanisterArgs, UninstallCodeArgs,
+    UpdateSettingsArgs, IC_00,
 };
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
@@ -36,6 +37,9 @@ use ic_wasm_types::WasmEngineError;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
+/// The ICP mainnet root key.
+const IC_ROOT_KEY: &[u8; 133] = b"\x30\x81\x82\x30\x1d\x06\x0d\x2b\x06\x01\x04\x01\x82\xdc\x7c\x05\x03\x01\x02\x01\x06\x0c\x2b\x06\x01\x04\x01\x82\xdc\x7c\x05\x03\x02\x01\x03\x61\x00\x81\x4c\x0e\x6e\xc7\x1f\xab\x58\x3b\x08\xbd\x81\x37\x3c\x25\x5c\x3c\x37\x1b\x2e\x84\x86\x3c\x98\xa4\xf1\xe0\x8b\x74\x23\x5d\x14\xfb\x5d\x9c\x0c\xd5\x46\xd9\x68\x5f\x91\x3a\x0c\x0b\x2c\xc5\x34\x15\x83\xbf\x4b\x43\x92\xe4\x67\xdb\x96\xd6\x5b\x9b\xb4\xcb\x71\x71\x12\xf8\x47\x2e\x0d\x5a\x4d\x14\x50\x5f\xfd\x74\x84\xb0\x12\x91\x09\x1c\x5f\x87\xb9\x88\x83\x46\x3f\x98\x09\x1a\x0b\xaa\xae";
+
 /// The information that canisters can see about their own status.
 #[derive(Copy, Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub enum CanisterStatusView {
@@ -47,8 +51,8 @@ pub enum CanisterStatusView {
 impl CanisterStatusView {
     pub fn from_canister_status_type(status: CanisterStatusType) -> Self {
         match status {
-            CanisterStatusType::Running { .. } => Self::Running,
-            CanisterStatusType::Stopping { .. } => Self::Stopping,
+            CanisterStatusType::Running => Self::Running,
+            CanisterStatusType::Stopping => Self::Stopping,
             CanisterStatusType::Stopped => Self::Stopped,
         }
     }
@@ -244,6 +248,8 @@ impl SystemStateModifications {
             }
             Ok(Ic00Method::LoadCanisterSnapshot) => LoadCanisterSnapshotArgs::decode(payload)
                 .map(|record| record.get_sender_canister_version()),
+            Ok(Ic00Method::RenameCanister) => RenameCanisterArgs::decode(payload)
+                .map(|record| record.get_sender_canister_version()),
             Ok(Ic00Method::SignWithECDSA)
             | Ok(Ic00Method::CanisterStatus)
             | Ok(Ic00Method::CanisterInfo)
@@ -255,7 +261,6 @@ impl SystemStateModifications {
             | Ok(Ic00Method::HttpRequest)
             | Ok(Ic00Method::SetupInitialDKG)
             | Ok(Ic00Method::ECDSAPublicKey)
-            | Ok(Ic00Method::ComputeInitialIDkgDealings)
             | Ok(Ic00Method::ReshareChainKey)
             | Ok(Ic00Method::SchnorrPublicKey)
             | Ok(Ic00Method::SignWithSchnorr)
@@ -595,6 +600,7 @@ pub struct SandboxSafeSystemState {
     memory_allocation: MemoryAllocation,
     wasm_memory_threshold: NumBytes,
     compute_allocation: ComputeAllocation,
+    environment_variables: BTreeMap<String, String>,
     initial_cycles_balance: Cycles,
     initial_reserved_balance: Cycles,
     reserved_balance_limit: Option<Cycles>,
@@ -631,6 +637,7 @@ impl SandboxSafeSystemState {
         memory_allocation: MemoryAllocation,
         wasm_memory_threshold: NumBytes,
         compute_allocation: ComputeAllocation,
+        environment_variables: BTreeMap<String, String>,
         initial_cycles_balance: Cycles,
         initial_reserved_balance: Cycles,
         reserved_balance_limit: Option<Cycles>,
@@ -662,6 +669,7 @@ impl SandboxSafeSystemState {
             dirty_page_overhead,
             freeze_threshold,
             memory_allocation,
+            environment_variables,
             wasm_memory_threshold,
             compute_allocation,
             system_state_modifications: SystemStateModifications {
@@ -780,6 +788,7 @@ impl SandboxSafeSystemState {
             system_state.memory_allocation,
             system_state.wasm_memory_threshold,
             compute_allocation,
+            system_state.environment_variables.clone().into(),
             system_state.balance(),
             system_state.reserved_balance(),
             system_state.reserved_balance_limit(),
@@ -817,6 +826,10 @@ impl SandboxSafeSystemState {
 
     pub fn canister_version(&self) -> u64 {
         self.canister_version
+    }
+
+    pub fn environment_variables(&self) -> &BTreeMap<String, String> {
+        &self.environment_variables
     }
 
     pub fn set_global_timer(&mut self, timer: CanisterTimer) {
@@ -1246,7 +1259,8 @@ impl SandboxSafeSystemState {
 
             ApiType::InspectMessage { .. }
             | ApiType::ReplicatedQuery { .. }
-            | ApiType::NonReplicatedQuery { .. } => {
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::CompositeQuery { .. } => {
                 // Queries do not check the freezing threshold because the state
                 // changes are disarded anyways.
                 false
@@ -1254,7 +1268,10 @@ impl SandboxSafeSystemState {
 
             ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
-            | ApiType::Cleanup { .. } => {
+            | ApiType::Cleanup { .. }
+            | ApiType::CompositeReplyCallback { .. }
+            | ApiType::CompositeRejectCallback { .. }
+            | ApiType::CompositeCleanup { .. } => {
                 // Response callbacks are specified to not check the freezing
                 // threshold.
                 false
@@ -1320,9 +1337,9 @@ impl SandboxSafeSystemState {
     /// Condition for `OnLowWasmMemoryHook` is satisfied if the following holds:
     ///
     /// 1. In the case of `memory_allocation`
-    ///     `wasm_memory_threshold >= min(memory_allocation - memory_usage_without_wasm_memory, wasm_memory_limit) - wasm_memory_usage`
+    ///    `wasm_memory_threshold >= min(memory_allocation - memory_usage_without_wasm_memory, wasm_memory_limit) - wasm_memory_usage`
     /// 2. Without memory allocation
-    ///     `wasm_memory_threshold >= wasm_memory_limit - wasm_memory_usage`
+    ///    `wasm_memory_threshold >= wasm_memory_limit - wasm_memory_usage`
     ///
     /// Note: if `wasm_memory_limit` is not set, its default value is 4 GiB.
     pub fn update_status_of_low_wasm_memory_hook_condition(
@@ -1362,7 +1379,11 @@ impl SandboxSafeSystemState {
 
             ApiType::InspectMessage { .. }
             | ApiType::ReplicatedQuery { .. }
-            | ApiType::NonReplicatedQuery { .. } => {
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::CompositeQuery { .. }
+            | ApiType::CompositeReplyCallback { .. }
+            | ApiType::CompositeRejectCallback { .. }
+            | ApiType::CompositeCleanup { .. } => {
                 // Queries do not reserve storage cycles because the state
                 // changes are discarded anyways.
                 false
@@ -1393,6 +1414,15 @@ impl SandboxSafeSystemState {
         } else {
             false
         }
+    }
+
+    pub fn get_root_key(&self) -> Vec<u8> {
+        let root_subnet_id = self.network_topology.nns_subnet_id;
+        self.network_topology
+            .subnets
+            .get(&root_subnet_id)
+            .map(|subnet_topology| subnet_topology.public_key.clone())
+            .unwrap_or(IC_ROOT_KEY.to_vec())
     }
 
     pub fn get_subnet_id(&self) -> SubnetId {
@@ -1520,6 +1550,7 @@ mod tests {
             MemoryAllocation::BestEffort,
             NumBytes::new(0),
             ComputeAllocation::default(),
+            Default::default(),
             Cycles::new(1_000_000),
             Cycles::zero(),
             None,
@@ -1571,6 +1602,7 @@ mod tests {
             MemoryAllocation::BestEffort,
             NumBytes::new(wasm_memory_threshold),
             ComputeAllocation::default(),
+            Default::default(),
             Cycles::new(1_000_000),
             Cycles::zero(),
             None,

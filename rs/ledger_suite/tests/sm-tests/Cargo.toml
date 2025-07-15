@@ -16,9 +16,9 @@ futures = { workspace = true }
 hex = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
-ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
 ic-config = { path = "../../../config" }
 ic-error-types = { path = "../../../../packages/ic-error-types" }
+ic-http-types = { path = "../../../../packages/ic-http-types" }
 ic-icrc1 = { path = "../../icrc1" }
 ic-icrc1-ledger = { path = "../../icrc1/ledger" }
 ic-icrc1-test-utils = { path = "../../icrc1/test_utils" }
@@ -37,6 +37,7 @@ icp-ledger = { path = "../../icp" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 icrc1-test-env = { git = "https://github.com/dfinity/ICRC-1", rev = "26a80d777e079644cd69e883e18dad1a201f5b1a" }
 icrc1-test-suite = { git = "https://github.com/dfinity/ICRC-1", rev = "26a80d777e079644cd69e883e18dad1a201f5b1a" }
+num-bigint = { workspace = true }
 num-traits = { workspace = true }
 proptest = { workspace = true }
 

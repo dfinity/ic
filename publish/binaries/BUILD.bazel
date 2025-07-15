@@ -1,6 +1,6 @@
+load("@os_info//:defs.bzl", "os_info")
 load("//bazel:defs.bzl", "gzip_compress")
-load("//ci/src/artifacts:upload.bzl", "upload_artifacts")
-load("//publish:defs.bzl", "checksum_rule", "release_nostrip_binary", "release_strip_binary", "release_strip_binary_test")
+load("//publish:defs.bzl", "artifact_bundle", "release_nostrip_binary", "release_strip_binary", "release_strip_binary_test")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
 
@@ -16,7 +16,6 @@ ALL_BINARIES = {
     "ic-backup": "//rs/backup:ic-backup",
     "ic-boundary": "//rs/boundary_node/ic_boundary:ic-boundary",
     "ic-boundary-tls": "//rs/boundary_node/ic_boundary:ic-boundary-tls",
-    "ic-starter": "//rs/starter:ic-starter",
     "ic-https-outcalls-adapter": "//rs/https_outcalls/adapter:ic-outcalls-adapter-with-http",
     "ic-https-outcalls-adapter-https-only": "//rs/https_outcalls/adapter:ic-https-outcalls-adapter",
     "ic-consensus-pool-util": "//rs/artifact_pool:ic-consensus-pool-util",
@@ -43,6 +42,7 @@ ALL_BINARIES = {
 
 # test binaries or binaries using test utils
 TESTONLY_BINARIES = [
+    # Keep sorted
     "drun",
     "e2e-test-driver",
     "ic-admin",
@@ -51,11 +51,10 @@ TESTONLY_BINARIES = [
     "ic-https-outcalls-adapter",
     "ic-nns-init",
     "ic-prep",
-    "ic-starter",
     "ic-test-state-machine",
     "pocket-ic",
-    "types-test",
     "replicated-state-test",
+    "types-test",
 ]
 
 # We don't strip the more complex binaries
@@ -117,36 +116,31 @@ filegroup(
     srcs = [name + ".gz" for name in ALL_BINARIES],
 )
 
-checksum_rule(
-    name = "compute_checksums",
-    inputs = [":binaries"],
-)
-
-upload_artifacts(
-    name = "upload",
+artifact_bundle(
+    name = "bundle",
     testonly = True,
-    inputs = [":binaries"],
-    remote_subdir = "binaries/" + select({
-        "@platforms//cpu:x86_64": "x86_64",
-        "@platforms//cpu:arm64": "arm64",
-        "//conditions:default": "unknown",
-    }) + "-" + select({
-        "@platforms//os:linux": "linux",
-        "@platforms//os:osx": "darwin",
-        "//conditions:default": "unknown",
-    }),
+    inputs = [
+        ":binaries",
+        "//rs/sns/testing:sns_testing_bundle",
+    ],
+    prefix = "binaries/" + os_info,
+    visibility = ["//visibility:public"],
 )
 
 # https://dfinity.atlassian.net/browse/IDX-2599
 # various places in the source code, and possibly other repositories reference
 # the legacy upload path. Unwinding it without a will involve an unpredictable amount of time.
-upload_artifacts(
-    name = "legacy_upload",
-    testonly = True,
+artifact_bundle(
+    name = "bundle-legacy",
     inputs = [":binaries"],
-    remote_subdir = "release",
-    target_compatible_with = ["@platforms//os:linux"],
-    visibility = ["//testnet/tools:__pkg__"],
+    prefix = "release",
+    # only create the bundle for a single platform since we don't prefix
+    # os_info
+    target_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+    visibility = ["//visibility:public"],
 )
 
 BINS_TO_TEST = [":" + name for name in ALL_BINARIES]

@@ -44,6 +44,7 @@ rand = { workspace = true }
 rand_chacha = { workspace = true }
 rayon = { workspace = true }
 serde = { workspace = true }
+serde_bytes = { workspace = true }
 slog = { workspace = true }
 static_assertions = { workspace = true }
 strum = { workspace = true }
@@ -62,7 +63,9 @@ proptest = { workspace = true, optional = true }
 assert_matches = { workspace = true }
 criterion = { workspace = true }
 criterion-time = { path = "../criterion_time" }
+ic-crypto-test-utils-canister-threshold-sigs = { path = "../crypto/test_utils/canister_threshold_sigs" }
 ic-crypto-test-utils-keys = { path = "../crypto/test_utils/keys" }
+ic-crypto-test-utils-reproducible-rng = { path = "../crypto/test_utils/reproducible_rng" }
 ic-ed25519 = { path = "../../packages/ic-ed25519" }
 ic-test-utilities-io = { path = "../test_utilities/io" }
 ic-test-utilities-metrics = { path = "../test_utilities/metrics" }

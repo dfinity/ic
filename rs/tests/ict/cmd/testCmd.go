@@ -17,6 +17,7 @@ type Config struct {
 	isFuzzyMatch         bool
 	isDryRun             bool
 	keepAlive            bool
+	k8s                  bool
 	filterTests          string
 	farmBaseUrl          string
 	requiredHostFeatures string
@@ -64,6 +65,9 @@ func TestCommandWithConfig(cfg *Config) func(cmd *cobra.Command, args []string) 
 		if len(cfg.requiredHostFeatures) > 0 {
 			command = append(command, "--test_arg=--set-required-host-features="+cfg.requiredHostFeatures)
 		}
+		if cfg.k8s {
+			command = append(command, "--k8s")
+		}
 		if cfg.keepAlive {
 			keepAlive := fmt.Sprintf("--test_timeout=%s", strconv.Itoa(DEFAULT_TEST_KEEPALIVE_MINS*60))
 			command = append(command, keepAlive)
@@ -97,6 +101,7 @@ func NewTestCmd() *cobra.Command {
 		RunE:    TestCommandWithConfig(&cfg),
 	}
 	testCmd.Flags().BoolVarP(&cfg.isFuzzyMatch, "fuzzy", "", false, "Use fuzzy matching to find similar target names. Default: substring match.")
+	testCmd.Flags().BoolVarP(&cfg.k8s, "k8s", "", false, "Run system test on k8s.")
 	testCmd.Flags().BoolVarP(&cfg.isDryRun, "dry-run", "n", false, "Print raw Bazel command to be invoked without execution.")
 	testCmd.Flags().BoolVarP(&cfg.keepAlive, "keepalive", "k", false, fmt.Sprintf("Keep test system alive for %d minutes.", DEFAULT_TEST_KEEPALIVE_MINS))
 	testCmd.PersistentFlags().StringVarP(&cfg.filterTests, "include-tests", "i", "", "Execute only those test functions which contain a substring.")

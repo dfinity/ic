@@ -39,28 +39,23 @@ done
 
 log "Bazel wrapper starting"
 
-# All args, including the command
-bazel_args=( "$@" )
-
 # We've asserted there are no startup options, so this must be the command (like "build" or "run")
-# stored here again for easy access
 bazel_command="$1"
+shift
 
+# Extra args we'll be injecting
+bazel_args=( )
 
-# Unless explicitly provided, we set a default --repository_cache to a volume mounted inside our runners
-# Only for Linux builds since there `/cache` is mounted to host local storage.
-if [[ ! " ${bazel_args[*]} " =~ [[:space:]]--repository_cache[[:space:]] ]] && [[ "$(uname)" == "Linux" ]]; then
-    log "setting default repository cache"
-    bazel_args+=(--repository_cache=/cache/bazel)
-fi
+# Setup zig-cache
+mkdir -p /tmp/zig-cache
 
 # Add some options for build-like commands
 if [[ $bazel_command == "build" ]] || [[ $bazel_command == "test" ]]; then
     command_timestamp=$(date +%s)
     bazel_args+=(
 
-        # write execlogs, mostly for build reproducibility checks
-        --execution_log_json_file="$BAZEL_ACTION_METRICS_OUT/execlog-$command_timestamp.json"
+        # write execlog, mostly for build reproducibility checks
+        --execution_log_compact_file="$BAZEL_ACTION_METRICS_OUT/execlog-$command_timestamp.zst"
 
         --verbose_failures=true
 
@@ -77,6 +72,10 @@ if [[ $bazel_command == "build" ]] || [[ $bazel_command == "test" ]]; then
         # Write build events to the dedicated tempdir
         --build_event_binary_file="$BAZEL_ACTION_METRICS_OUT/bazel-bep-$command_timestamp.pb"
         --profile="$BAZEL_ACTION_METRICS_OUT/profile-$command_timestamp.json"
+        # Associate each action in the profile with a target label.
+        # This helps analysis tools like https://github.com/EngFlow/bazel_invocation_analyzer
+        # break down bottlenecks.
+        --experimental_profile_include_target_label
     )
 
     if [ -n "${BUILDBUDDY_LINKS:-}" ]; then
@@ -129,10 +128,13 @@ startup_options=(
     --output_base=/var/tmp/bazel-output # Output base wiped after run
 )
 
-log bazel "${startup_options[@]}" "${bazel_args[@]}"
+# Add the original arguments back
+bazel_args+=( "$@" )
+
+log bazel "${startup_options[@]}" "$bazel_command" "${bazel_args[@]}"
 
 if [[ $bazel_command == "build" ]] || [[ $bazel_command == "test" ]]; then
-    bazel_bes "${startup_options[@]}" "${bazel_args[@]}"
+    bazel_bes "${startup_options[@]}" "$bazel_command" "${bazel_args[@]}"
 else
-    bazel "${startup_options[@]}" "${bazel_args[@]}"
+    bazel "${startup_options[@]}" "$bazel_command" "${bazel_args[@]}"
 fi

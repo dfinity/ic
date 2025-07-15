@@ -1,5 +1,5 @@
 {
-  "image": "ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89",
+  "image": "ghcr.io/dfinity/ic-build@sha256:02165696a5201b1a347a28e548c32dc9590d60975c22be26ac1ea7e72573523d",
   "remoteUser": "ubuntu",
   "privileged": true,
   "runArgs": [
@@ -14,7 +14,7 @@
   ],
   "workspaceMount": "source=${localWorkspaceFolder},target=/ic,type=bind",
   "workspaceFolder": "/ic",
-  "initializeCommand": "mkdir -p ~/.aws ~/.ssh ~/.cache/cargo ~/.local/share/fish && touch ~/.zsh_history ~/.bash_history",
+  "initializeCommand": "mkdir -p ~/.aws ~/.ssh ~/.cache/cargo ~/.cache/zig-cache ~/.local/share/fish && touch ~/.zsh_history ~/.bash_history",
   "containerEnv": {
     "CARGO_TARGET_DIR": "/home/ubuntu/.cache/cargo",
     "USER": "${localEnv:USER}"
@@ -23,6 +23,11 @@
     {
       "source": "${localEnv:HOME}/.cache",
       "target": "/home/ubuntu/.cache",
+      "type": "bind"
+    },
+    {
+      "source": "${localEnv:HOME}/.cache/zig-cache",
+      "target": "/tmp/zig-cache",
       "type": "bind"
     },
     {

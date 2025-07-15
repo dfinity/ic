@@ -22,14 +22,14 @@ use ic_nns_governance::{
             claim_or_refresh::{By, MemoAndController},
             ClaimOrRefresh, Command,
         },
-        neuron, proposal, ExecuteNnsFunction, Governance as GovernanceProto, GovernanceError,
-        InstallCode, ManageNeuron, Motion, NetworkEconomics, Neuron, Proposal,
+        proposal, ExecuteNnsFunction, GovernanceError, InstallCode, ManageNeuron, Motion, Proposal,
     },
 };
-use ic_nns_governance_api::pb::v1::{
-    manage_neuron_response::Command as CommandResponse, ManageNeuronResponse,
+use ic_nns_governance_api::{
+    self as api, manage_neuron_response::Command as CommandResponse, ManageNeuronResponse,
 };
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
+use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
 use maplit::btreemap;
 use std::convert::TryFrom;
 use std::sync::Arc;
@@ -83,6 +83,13 @@ impl IcpLedger for DegradedEnv {
     fn canister_id(&self) -> CanisterId {
         unimplemented!()
     }
+
+    async fn icrc3_get_blocks(
+        &self,
+        _args: Vec<GetBlocksRequest>,
+    ) -> Result<GetBlocksResult, NervousSystemError> {
+        unimplemented!()
+    }
 }
 
 #[async_trait]
@@ -100,26 +107,26 @@ fn principal(i: u64) -> PrincipalId {
 
 /// Constructs a fixture with 2 neurons of different stakes and no
 /// following. Neuron 2 has a greater stake.
-fn fixture_two_neurons_second_is_bigger() -> GovernanceProto {
-    GovernanceProto {
-        economics: Some(NetworkEconomics::default()),
+fn fixture_two_neurons_second_is_bigger() -> api::Governance {
+    api::Governance {
+        economics: Some(api::NetworkEconomics::default()),
         neurons: btreemap! {
-            1 => Neuron {
+            1 => api::Neuron {
                 id: Some(NeuronId {id: 1}),
                 controller: Some(principal(1)),
                 cached_neuron_stake_e8s: 23,
                 account: b"a__4___8__12__16__20__24__28__32".to_vec(),
                 // One year
-                dissolve_state: Some(neuron::DissolveState::DissolveDelaySeconds(31557600)),
+                dissolve_state: Some(api::neuron::DissolveState::DissolveDelaySeconds(31557600)),
                 ..Default::default()
             },
-            2 => Neuron {
+            2 => api::Neuron {
                 id: Some(NeuronId {id: 2}),
                 controller: Some(principal(2)),
                 cached_neuron_stake_e8s: 5100,
                 account:  b"b__4___8__12__16__20__24__28__32".to_vec(),
                 // One year
-                dissolve_state: Some(neuron::DissolveState::DissolveDelaySeconds(31557600)),
+                dissolve_state: Some(api::neuron::DissolveState::DissolveDelaySeconds(31557600)),
                 ..Default::default()
              },
         },

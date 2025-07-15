@@ -2,7 +2,6 @@
 //! here, so that Bazel does not recompile the whole production crate each time the tests are run.
 //! The name of this file is indeed too generic; feel free to factor specific tests out into
 //! more appropriate locations, or create new file modules for them, whatever makes more sense.
-
 use super::test_helpers::{
     basic_governance_proto, canister_status_for_test,
     canister_status_from_management_canister_for_test, DoNothingLedger, A_MOTION_PROPOSAL,
@@ -51,6 +50,8 @@ use ic_sns_governance_api::pb::v1::topics::Topic;
 use ic_sns_governance_token_valuation::{Token, ValuationFactors};
 use ic_sns_test_utils::itest_helpers::UserInfo;
 use ic_test_utilities_types::ids::canister_test_id;
+use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
+use icrc_ledger_types::icrc3::blocks::GetBlocksResult;
 use maplit::btreemap;
 use pretty_assertions::assert_eq;
 use proptest::prelude::{prop_assert, proptest};
@@ -84,6 +85,15 @@ impl ICRC1Ledger for AlwaysSucceedingLedger {
 
     fn canister_id(&self) -> CanisterId {
         CanisterId::from_u64(42)
+    }
+
+    async fn icrc3_get_blocks(
+        &self,
+        _args: Vec<GetBlocksRequest>,
+    ) -> Result<GetBlocksResult, NervousSystemError> {
+        Err(NervousSystemError {
+            error_message: "Not Implemented".to_string(),
+        })
     }
 }
 
@@ -161,6 +171,13 @@ async fn test_perform_transfer_sns_treasury_funds_execution_fails_when_another_c
         }
 
         fn canister_id(&self) -> CanisterId {
+            unimplemented!()
+        }
+
+        async fn icrc3_get_blocks(
+            &self,
+            _args: Vec<GetBlocksRequest>,
+        ) -> Result<GetBlocksResult, NervousSystemError> {
             unimplemented!()
         }
     }
@@ -289,6 +306,13 @@ async fn test_neuron_operations_exclude_one_another() {
         }
 
         fn canister_id(&self) -> CanisterId {
+            unimplemented!()
+        }
+
+        async fn icrc3_get_blocks(
+            &self,
+            _args: Vec<GetBlocksRequest>,
+        ) -> Result<GetBlocksResult, NervousSystemError> {
             unimplemented!()
         }
     }
@@ -647,7 +671,7 @@ proptest! {
 ) {
         // To make the math easy, we'll do the same trick we did in the previous test, where increase the `adjusted_wait_for_quiet_deadline_increase_seconds`
         // by the smallest time where any flip in the vote will cause a deadline increase.
-        let adjusted_wait_for_quiet_deadline_increase_seconds = wait_for_quiet_deadline_increase_seconds + (initial_voting_period_seconds + 1) / 2;
+        let adjusted_wait_for_quiet_deadline_increase_seconds = wait_for_quiet_deadline_increase_seconds + initial_voting_period_seconds.div_ceil(2);
         // We'll also use the `time` parameter to tell us what fraction of the `initial_voting_period_seconds` to test at.
         let now_seconds = (time * initial_voting_period_seconds as f32) as u64;
         let mut proposal = ProposalData {
@@ -680,8 +704,8 @@ proptest! {
             .wait_for_quiet_state
             .unwrap()
             .current_deadline_timestamp_seconds;
-        dbg!(new_deadline , initial_voting_period_seconds + wait_for_quiet_deadline_increase_seconds + (now_seconds + 1) / 2);
-        prop_assert!(new_deadline == initial_voting_period_seconds + wait_for_quiet_deadline_increase_seconds + (now_seconds + 1) / 2);
+        dbg!(new_deadline , initial_voting_period_seconds + wait_for_quiet_deadline_increase_seconds + now_seconds.div_ceil(2));
+        prop_assert!(new_deadline == initial_voting_period_seconds + wait_for_quiet_deadline_increase_seconds + now_seconds.div_ceil(2));
     }
 }
 
@@ -1520,8 +1544,6 @@ fn setup_env_for_sns_upgrade_to_next_version_test(
                     canister_id: canister_id.get(),
                     wasm_module: vec![9, 8, 7, 6, 5, 4, 3, 2],
                     arg: Encode!().unwrap(),
-                    compute_allocation: None,
-                    memory_allocation: None, // local const in install_code()
                     sender_canister_version: None,
                 })
                 .unwrap(),
@@ -4746,7 +4768,7 @@ fn test_list_topics() {
                     function_1,
                 ],
             },
-            is_critical: false,
+            is_critical: true,
         },
         TopicInfo {
             topic: Topic::SnsFrameworkManagement,
@@ -4947,6 +4969,18 @@ fn test_list_topics() {
                         name: "Set topics for custom proposals".to_string(),
                         description: Some(
                             "Proposal to set the topics for custom SNS proposals.".to_string(),
+                        ),
+                        function_type: Some(
+                            FunctionType::NativeNervousSystemFunction(
+                                Empty {},
+                            ),
+                        ),
+                    },
+                    NervousSystemFunction {
+                        id: 17,
+                        name: "Register SNS extension".to_string(),
+                        description: Some(
+                            "Proposal to register a new SNS extension.".to_string(),
                         ),
                         function_type: Some(
                             FunctionType::NativeNervousSystemFunction(

@@ -4,6 +4,7 @@ use crate::numeric::LedgerBurnIndex;
 use crate::state::{transactions, transactions::EthWithdrawalRequest};
 use crate::tx::{SignedEip1559TransactionRequest, TransactionPrice};
 use candid::{CandidType, Deserialize, Nat, Principal};
+use evm_rpc_client::BlockTag;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use minicbor::{Decode, Encode};
 use std::fmt::{Display, Formatter};
@@ -132,6 +133,16 @@ pub enum CandidBlockTag {
     /// <https://www.alchemy.com/overviews/ethereum-commitment-levels#what-are-ethereum-commitment-levels>
     #[cbor(n(2))]
     Finalized,
+}
+
+impl From<CandidBlockTag> for BlockTag {
+    fn from(block_tag: CandidBlockTag) -> BlockTag {
+        match block_tag {
+            CandidBlockTag::Latest => BlockTag::Latest,
+            CandidBlockTag::Safe => BlockTag::Safe,
+            CandidBlockTag::Finalized => BlockTag::Finalized,
+        }
+    }
 }
 
 impl From<EthWithdrawalRequest> for RetrieveEthRequest {

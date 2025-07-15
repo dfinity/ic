@@ -1,20 +1,21 @@
 use crate::stable_memory::{RegistryDataStableMemory, StorableRegistryKey, StorableRegistryValue};
 use crate::CanisterRegistryClient;
 use async_trait::async_trait;
+use ic_cdk::println;
 use ic_interfaces_registry::{
     empty_zero_registry_record, RegistryClientResult, RegistryClientVersionedResult,
-    RegistryTransportRecord, ZERO_REGISTRY_VERSION,
+    RegistryRecord, ZERO_REGISTRY_VERSION,
 };
 use ic_nervous_system_canisters::registry::Registry;
 use ic_registry_transport::pb::v1::RegistryDelta;
 use ic_types::registry::RegistryClientError;
 use ic_types::RegistryVersion;
 use std::cmp::Ordering;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::marker::PhantomData;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering as AtomicOrdering;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock, RwLockReadGuard};
 
 /// This implementation of CanisterRegistryClient uses StableMemory to store a copy of the
 /// Registry data in the canister.  An implementation of RegistryDataStableMemory trait that
@@ -26,26 +27,54 @@ pub struct StableCanisterRegistryClient<S: RegistryDataStableMemory> {
     latest_version: AtomicU64,
     // Registry client to interact with the canister
     registry: Arc<dyn Registry>,
+    // A map holding the mapping between timestamps and registry versions.
+    timestamp_to_versions_map: Arc<RwLock<BTreeMap<u64, HashSet<RegistryVersion>>>>,
 }
 
 impl<S: RegistryDataStableMemory> StableCanisterRegistryClient<S> {
     pub fn new(registry: Arc<dyn Registry>) -> Self {
+        let timestamp_to_versions_map = S::with_registry_map(|local_registry| {
+            local_registry.iter().fold(
+                BTreeMap::new(),
+                |mut acc: std::collections::BTreeMap<u64, HashSet<RegistryVersion>>, (k, _)| {
+                    acc.entry(k.timestamp_nanoseconds)
+                        .or_default()
+                        .insert(RegistryVersion::from(k.version));
+                    acc
+                },
+            )
+        });
+
         Self {
             _stable_memory: PhantomData,
             latest_version: AtomicU64::new(0),
+            timestamp_to_versions_map: Arc::new(RwLock::new(timestamp_to_versions_map)),
             registry,
         }
+    }
+
+    pub fn timestamp_to_versions_map(
+        &self,
+    ) -> RwLockReadGuard<BTreeMap<u64, HashSet<RegistryVersion>>> {
+        self.timestamp_to_versions_map.read().unwrap()
     }
 
     fn add_deltas(&self, deltas: Vec<RegistryDelta>) -> Result<(), String> {
         for delta in deltas {
             let string_key = std::str::from_utf8(&delta.key[..]).map_err(|e| format!("{e:?}"))?;
+            let mut highest_version_inserted = self.get_latest_version();
 
             S::with_registry_map_mut(|local_registry| {
                 for v in delta.values {
                     let registry_version = RegistryVersion::from(v.version);
-                    let key =
-                        StorableRegistryKey::new(string_key.to_string(), registry_version.get());
+                    highest_version_inserted =
+                        std::cmp::max(highest_version_inserted, registry_version);
+
+                    let key = StorableRegistryKey {
+                        key: string_key.to_string(),
+                        version: registry_version.get(),
+                        timestamp_nanoseconds: v.timestamp_nanoseconds,
+                    };
                     let value = StorableRegistryValue(if v.deletion_marker {
                         None
                     } else {
@@ -53,8 +82,20 @@ impl<S: RegistryDataStableMemory> StableCanisterRegistryClient<S> {
                     });
 
                     local_registry.insert(key, value);
+
+                    self.timestamp_to_versions_map
+                        .write()
+                        .unwrap()
+                        .entry(v.timestamp_nanoseconds)
+                        .or_default()
+                        .insert(registry_version);
                 }
             });
+            // Update the latest version if the inserted version is higher than the current one.
+            if highest_version_inserted > self.get_latest_version() {
+                self.latest_version
+                    .store(highest_version_inserted.get(), AtomicOrdering::SeqCst);
+            }
         }
         Ok(())
     }
@@ -69,7 +110,10 @@ impl<S: RegistryDataStableMemory> StableCanisterRegistryClient<S> {
             return Err(RegistryClientError::VersionNotAvailable { version });
         }
 
-        let start_range = StorableRegistryKey::new(key_prefix.to_string(), Default::default());
+        let start_range = StorableRegistryKey {
+            key: key_prefix.to_string(),
+            ..Default::default()
+        };
 
         let mut effective_records = BTreeMap::new();
         S::with_registry_map(|map| {
@@ -104,14 +148,21 @@ impl<S: RegistryDataStableMemory> CanisterRegistryClient for StableCanisterRegis
             return Err(RegistryClientError::VersionNotAvailable { version });
         }
 
-        let start_range = StorableRegistryKey::new(key.to_string(), Default::default());
-        let end_range = StorableRegistryKey::new(key.to_string(), version.get());
+        let start_range = StorableRegistryKey {
+            key: key.to_string(),
+            ..Default::default()
+        };
+        let end_range = StorableRegistryKey {
+            key: key.to_string(),
+            version: version.get(),
+            timestamp_nanoseconds: u64::MAX,
+        };
 
         let result = S::with_registry_map(|map| {
             map.range(start_range..=end_range)
                 .rev()
                 .find(|(stored_key, _)| stored_key.key == key)
-                .map(|(_, value)| RegistryTransportRecord {
+                .map(|(_, value)| RegistryRecord {
                     key: key.to_string(),
                     version,
                     value: value.0,
@@ -163,14 +214,13 @@ impl<S: RegistryDataStableMemory> CanisterRegistryClient for StableCanisterRegis
 
             match current_local_version.cmp(&remote_latest_version) {
                 Ordering::Less => {
-                    ic_cdk::println!(
+                    println!(
                         "Registry version local {} < remote {}",
-                        current_local_version,
-                        remote_latest_version
+                        current_local_version, remote_latest_version
                     );
                 }
                 Ordering::Equal => {
-                    ic_cdk::println!(
+                    println!(
                         "Local Registry version {} is up to date",
                         current_local_version
                     );
@@ -190,18 +240,9 @@ impl<S: RegistryDataStableMemory> CanisterRegistryClient for StableCanisterRegis
                 .await
                 .map_err(|e| format!("{:?}", e))?;
 
-            // Update the local version to the latest remote version for this iteration.
-            current_local_version = RegistryVersion::new(
-                remote_deltas
-                    .iter()
-                    .flat_map(|delta| delta.values.iter().map(|v| v.version))
-                    .max()
-                    .unwrap_or(current_local_version.get()),
-            );
-
-            self.latest_version
-                .store(current_local_version.get(), AtomicOrdering::SeqCst);
             self.add_deltas(remote_deltas)?;
+            // add_deltas updates latest version based on what was inserted.
+            current_local_version = self.get_latest_version();
         }
         Ok(current_local_version)
     }

@@ -3,7 +3,7 @@ use crate::{
     models::seconds::Seconds, request_types::*,
 };
 use candid::Decode;
-use ic_nns_governance_api::pb::v1::manage_neuron::{self, configure, Command, Configure};
+use ic_nns_governance_api::manage_neuron::{self, configure, Command, Configure};
 use ic_types::PrincipalId;
 use icp_ledger::Tokens;
 use std::convert::{TryFrom, TryInto};
@@ -48,8 +48,6 @@ pub enum Request {
     Spawn(Spawn),
     #[serde(rename = "REGISTER_VOTE")]
     RegisterVote(RegisterVote),
-    #[serde(rename = "MERGE_MATURITY")]
-    MergeMaturity(MergeMaturity),
     #[serde(rename = "STAKE_MATURITY")]
     StakeMaturity(StakeMaturity),
     #[serde(rename = "NEURON_INFO")]
@@ -125,11 +123,6 @@ impl Request {
                     neuron_index: *neuron_index,
                 })
             }
-            Request::MergeMaturity(MergeMaturity { neuron_index, .. }) => {
-                Ok(RequestType::MergeMaturity {
-                    neuron_index: *neuron_index,
-                })
-            }
             Request::StakeMaturity(StakeMaturity { neuron_index, .. }) => {
                 Ok(RequestType::StakeMaturity {
                     neuron_index: *neuron_index,
@@ -186,7 +179,6 @@ impl Request {
                 Request::AddHotKey(o) => builder.add_hot_key(o),
                 Request::RemoveHotKey(o) => builder.remove_hotkey(o),
                 Request::Spawn(o) => builder.spawn(o),
-                Request::MergeMaturity(o) => builder.merge_maturity(o),
                 Request::RegisterVote(o) => builder.register_vote(o),
                 Request::StakeMaturity(o) => builder.stake_maturity(o),
                 Request::NeuronInfo(o) => builder.neuron_info(o),
@@ -215,7 +207,6 @@ impl Request {
                 | Request::RemoveHotKey(_)
                 | Request::Spawn(_)
                 | Request::RegisterVote(_)
-                | Request::MergeMaturity(_)
                 | Request::StakeMaturity(_)
                 | Request::ListNeurons(_) // not neuron management but we need it signed.
                 | Request::NeuronInfo(_) // not neuron management but we need it signed.
@@ -249,7 +240,7 @@ impl TryFrom<&models::Request> for Request {
             {
                 Decode!(
                     &payload.update_content().arg.0,
-                    ic_nns_governance_api::pb::v1::ManageNeuron
+                    ic_nns_governance_api::ManageNeuron
                 )
                 .map_err(|e| {
                     ApiError::invalid_request(format!("Could not parse manage_neuron: {}", e))
@@ -431,20 +422,6 @@ impl TryFrom<&models::Request> for Request {
                     }))
                 } else {
                     Err(ApiError::invalid_request("Invalid register vote request."))
-                }
-            }
-            RequestType::MergeMaturity { neuron_index } => {
-                if let Some(Command::MergeMaturity(manage_neuron::MergeMaturity {
-                    percentage_to_merge,
-                })) = manage_neuron()?
-                {
-                    Ok(Request::MergeMaturity(MergeMaturity {
-                        account,
-                        percentage_to_merge,
-                        neuron_index: *neuron_index,
-                    }))
-                } else {
-                    Err(ApiError::invalid_request("Invalid merge maturity request."))
                 }
             }
             RequestType::StakeMaturity { neuron_index } => {

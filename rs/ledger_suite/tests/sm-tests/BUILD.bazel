@@ -5,6 +5,7 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "//packages/ic-error-types",
+    "//packages/ic-http-types",
     "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/config",
@@ -16,7 +17,6 @@ DEPENDENCIES = [
     "//rs/ledger_suite/icrc1/test_utils",
     "//rs/registry/subnet_type",
     "//rs/rosetta-api/icp/test_utils",
-    "//rs/rust_canisters/http_types",
     "//rs/state_machine_tests",
     "//rs/types/base_types",
     "//rs/types/management_canister_types",
@@ -31,6 +31,7 @@ DEPENDENCIES = [
     "@crate_index//:ic-agent",
     "@crate_index//:icrc1-test-env",
     "@crate_index//:icrc1-test-suite",
+    "@crate_index//:num-bigint",
     "@crate_index//:num-traits",
     "@crate_index//:proptest",
 ]

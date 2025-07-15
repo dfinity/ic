@@ -1,7 +1,6 @@
-pub mod config_ini;
-pub mod deployment_json;
 pub mod generate_testnet_config;
-pub mod update_config;
+pub mod hostos;
+pub mod setupos;
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -15,7 +14,6 @@ pub static DEFAULT_SETUPOS_DEPLOYMENT_JSON_PATH: &str = "/data/deployment.json";
 
 pub static DEFAULT_SETUPOS_HOSTOS_CONFIG_OBJECT_PATH: &str = "/var/ic/config/config-hostos.json";
 
-// TODO(NODE-1518): remove unused constants
 pub static DEFAULT_HOSTOS_CONFIG_INI_FILE_PATH: &str = "/boot/config/config.ini";
 pub static DEFAULT_HOSTOS_DEPLOYMENT_JSON_PATH: &str = "/boot/config/deployment.json";
 pub static DEFAULT_HOSTOS_CONFIG_OBJECT_PATH: &str = "/boot/config/config.json";
@@ -47,6 +45,8 @@ pub fn deserialize_config<T: for<'de> Deserialize<'de>, P: AsRef<Path>>(file_pat
 #[cfg(test)]
 mod tests {
     use config_types::*;
+    use std::net::Ipv6Addr;
+    use std::str::FromStr;
 
     #[test]
     fn test_serialize_and_deserialize() {
@@ -69,6 +69,7 @@ mod tests {
             use_nns_public_key: true,
             nns_urls: vec!["http://localhost".parse().unwrap()],
             use_node_operator_private_key: true,
+            enable_trusted_execution_environment: true,
             use_ssh_authorized_keys: false,
             icos_dev_settings,
         };
@@ -106,6 +107,10 @@ mod tests {
             network_settings: network_settings.clone(),
             icos_settings: icos_settings.clone(),
             guestos_settings: guestos_settings.clone(),
+            guest_vm_type: GuestVMType::Default,
+            upgrade_config: GuestOSUpgradeConfig {
+                peer_guest_vm_address: Some(Ipv6Addr::from_str("2001:db8::1").unwrap()),
+            },
         };
 
         fn serialize_and_deserialize<T>(config: &T)
@@ -154,7 +159,7 @@ mod tests {
             "mgmt_mac": "EC:2A:72:31:A2:0C",
             "deployment_environment": "Mainnet",
             "logging": {
-                "elasticsearch_hosts": "elasticsearch.ch1-obsdev1.dfinity.network:443",
+                "elasticsearch_hosts": "elasticsearch.testnet.dfinity.network:443",
                 "elasticsearch_tags": "tag1 tag2"
             },
             "use_nns_public_key": true,

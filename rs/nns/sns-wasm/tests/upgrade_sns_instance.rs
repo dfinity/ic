@@ -62,7 +62,6 @@ fn upgrade_governance_sns_canister_via_sns_wasms() {
 fn test_governance_restarts_root_if_root_cannot_stop_during_upgrade() {
     let canister_type = SnsCanisterType::Root;
 
-    state_test_helpers::reduce_state_machine_logging_unless_env_set();
     let machine = StateMachineBuilder::new().with_current_time().build();
 
     let nns_init_payload = NnsInitPayloadsBuilder::new()
@@ -208,7 +207,6 @@ fn test_governance_restarts_root_if_root_cannot_stop_during_upgrade() {
 }
 
 fn run_upgrade_test(canister_type: SnsCanisterType) {
-    state_test_helpers::reduce_state_machine_logging_unless_env_set();
     let machine = StateMachineBuilder::new().with_current_time().build();
 
     let nns_init_payload = NnsInitPayloadsBuilder::new()
@@ -705,7 +703,6 @@ fn upgrade_archive_sns_canister_via_sns_wasms() {
 
 #[test]
 fn test_out_of_sync_version_still_allows_upgrade_to_succeed() {
-    state_test_helpers::reduce_state_machine_logging_unless_env_set();
     let machine = StateMachineBuilder::new().with_current_time().build();
 
     let nns_init_payload = NnsInitPayloadsBuilder::new()
@@ -987,7 +984,6 @@ fn test_out_of_sync_version_still_allows_upgrade_to_succeed() {
 
 #[test]
 fn insert_upgrade_path_entries_only_callable_by_governance_when_access_controls_enabled() {
-    state_test_helpers::reduce_state_machine_logging_unless_env_set();
     let machine = StateMachineBuilder::new().with_current_time().build();
 
     let nns_init_payload = NnsInitPayloadsBuilder::new()
@@ -1021,7 +1017,6 @@ fn insert_upgrade_path_entries_only_callable_by_governance_when_access_controls_
 
 #[test]
 fn insert_upgrade_path_entries_callable_by_anyone_when_access_controls_disabled() {
-    state_test_helpers::reduce_state_machine_logging_unless_env_set();
     let machine = StateMachineBuilder::new().with_current_time().build();
 
     let nns_init_payload = NnsInitPayloadsBuilder::new()

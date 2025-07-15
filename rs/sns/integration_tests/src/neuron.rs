@@ -20,11 +20,13 @@ use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     itest_helpers::{forward_call_via_universal_canister, set_up_universal_canister, NnsCanisters},
 };
+use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
+
 use ic_sns_governance::{
     governance::Governance,
     neuron::{NeuronState, DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER},
     pb::v1::{
-        governance::{self, SnsMetadata},
+        governance::{self, GovernanceCachedMetrics, SnsMetadata},
         governance_error::ErrorType,
         manage_neuron::{
             claim_or_refresh::{By, MemoAndController},
@@ -1199,6 +1201,15 @@ async fn zero_total_reward_shares() {
         fn canister_id(&self) -> CanisterId {
             CanisterId::from_u64(1)
         }
+
+        async fn icrc3_get_blocks(
+            &self,
+            _args: Vec<GetBlocksRequest>,
+        ) -> Result<GetBlocksResult, NervousSystemError> {
+            Err(NervousSystemError {
+                error_message: "Not Implemented".to_string(),
+            })
+        }
     }
 
     let environment = NativeEnvironment::default();
@@ -1288,6 +1299,11 @@ async fn zero_total_reward_shares() {
             name: Some("ServiceNervousSystemTest".to_string()),
             description: Some("A project testing the SNS".to_string()),
         }),
+        metrics: Some(GovernanceCachedMetrics {
+            // This disables refreshing the cached metrics in periodic tasks.
+            timestamp_seconds: u64::MAX,
+            ..Default::default()
+        }),
         ..Default::default()
     };
     let mut governance = Governance::new(
@@ -1370,6 +1386,15 @@ async fn couple_of_neurons_who_voted_get_rewards() {
 
         fn canister_id(&self) -> CanisterId {
             CanisterId::from_u64(1)
+        }
+
+        async fn icrc3_get_blocks(
+            &self,
+            _args: Vec<GetBlocksRequest>,
+        ) -> Result<GetBlocksResult, NervousSystemError> {
+            Err(NervousSystemError {
+                error_message: "Not Implemented".to_string(),
+            })
         }
     }
 
@@ -1506,6 +1531,13 @@ async fn couple_of_neurons_who_voted_get_rewards() {
             name: Some("foo bar baz".to_string()),
             description: Some("foo bar baz".to_string()),
         }),
+
+        metrics: Some(GovernanceCachedMetrics {
+            // This disables refreshing the cached metrics in periodic tasks.
+            timestamp_seconds: u64::MAX,
+            ..Default::default()
+        }),
+
         ..Default::default()
     };
     let mut governance = Governance::new(

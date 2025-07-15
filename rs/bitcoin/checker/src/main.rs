@@ -10,9 +10,9 @@ use ic_btc_checker::{
 };
 use ic_btc_interface::Txid;
 use ic_canister_log::{export as export_logs, log};
-use ic_canisters_http_types as http;
 use ic_cdk::api::call::RejectionCode;
 use ic_cdk::api::management_canister::http_request::{HttpResponse, TransformArgs};
+use ic_http_types as http;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::fmt;
@@ -292,6 +292,7 @@ fn http_request(req: http::HttpRequest) -> http::HttpResponse {
 
         http::HttpResponseBuilder::ok()
             .header("Content-Type", "text/plain; version=0.0.4")
+            .header("Cache-Control", "no-store")
             .with_body_and_content_length(writer.into_inner())
             .build()
     } else if req.path() == "/logs" {

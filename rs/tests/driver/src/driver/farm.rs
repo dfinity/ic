@@ -15,6 +15,7 @@ use ic_crypto_sha2::Sha256;
 use reqwest::blocking::{multipart, Client, RequestBuilder};
 use serde::de::Error;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use slog::info;
 use slog::{error, warn, Logger};
 use std::fmt;
 use std::io::Write;
@@ -161,6 +162,11 @@ impl Farm {
         path: P,
         filename: &str,
     ) -> FarmResult<FileId> {
+        let size = std::fs::metadata(&path).map_err(FarmError::IoError)?.len();
+        info!(
+            self.logger,
+            "Uploading file: {} of size {} bytes ...", filename, size
+        );
         let rb = self
             .post(&format!("group/{}/file", group_name))
             .timeout(TIMEOUT_SETTINGS_LONG.max_http_timeout);
@@ -506,6 +512,8 @@ pub enum HostFeature {
     AmdSevSnp,
     SnsLoadTest,
     Performance,
+    Dell,
+    Supermicro,
 }
 
 impl Serialize for HostFeature {
@@ -527,6 +535,8 @@ impl Serialize for HostFeature {
             HostFeature::AmdSevSnp => serializer.serialize_str(AMD_SEV_SNP),
             HostFeature::SnsLoadTest => serializer.serialize_str(SNS_LOAD_TEST),
             HostFeature::Performance => serializer.serialize_str(PERFORMANCE),
+            HostFeature::Dell => serializer.serialize_str(DLL),
+            HostFeature::Supermicro => serializer.serialize_str(SPM),
         }
     }
 }
@@ -534,6 +544,8 @@ impl Serialize for HostFeature {
 const AMD_SEV_SNP: &str = "AMD-SEV-SNP";
 const SNS_LOAD_TEST: &str = "SNS-load-test";
 const PERFORMANCE: &str = "performance";
+const DLL: &str = "dll";
+const SPM: &str = "spm";
 
 impl<'de> Deserialize<'de> for HostFeature {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -541,27 +553,28 @@ impl<'de> Deserialize<'de> for HostFeature {
         D: Deserializer<'de>,
     {
         let input: String = Deserialize::deserialize(deserializer)?;
-        if let Some(("", dc)) = input.split_once("dc=") {
-            Ok(HostFeature::DC(dc.to_owned()))
-        } else if let Some(("", host)) = input.split_once("host=") {
-            Ok(HostFeature::Host(host.to_owned()))
-        } else if input == AMD_SEV_SNP {
-            Ok(HostFeature::AmdSevSnp)
-        } else if input == SNS_LOAD_TEST {
-            Ok(HostFeature::SnsLoadTest)
-        } else if input == PERFORMANCE {
-            Ok(HostFeature::Performance)
-        } else {
-            Err(Error::unknown_variant(
-                &input,
-                &[
-                    "dc=<dc-name>",
-                    "host=<host-name>",
-                    AMD_SEV_SNP,
-                    SNS_LOAD_TEST,
-                    PERFORMANCE,
-                ],
-            ))
+        match input.split_once('=') {
+            Some(("dc", dc)) => Ok(HostFeature::DC(dc.to_owned())),
+            Some(("host", host)) => Ok(HostFeature::Host(host.to_owned())),
+            _ => match input.as_str() {
+                AMD_SEV_SNP => Ok(HostFeature::AmdSevSnp),
+                SNS_LOAD_TEST => Ok(HostFeature::SnsLoadTest),
+                PERFORMANCE => Ok(HostFeature::Performance),
+                DLL => Ok(HostFeature::Dell),
+                SPM => Ok(HostFeature::Supermicro),
+                _ => Err(Error::unknown_variant(
+                    &input,
+                    &[
+                        "dc=<dc-name>",
+                        "host=<host-name>",
+                        AMD_SEV_SNP,
+                        SNS_LOAD_TEST,
+                        PERFORMANCE,
+                        DLL,
+                        SPM,
+                    ],
+                )),
+            },
         }
     }
 }

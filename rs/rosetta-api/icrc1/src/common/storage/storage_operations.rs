@@ -1,7 +1,8 @@
-use crate::common::storage::types::RosettaBlock;
+use crate::common::storage::types::{RosettaBlock, RosettaCounter};
 use crate::MetadataEntry;
 use anyhow::{bail, Context};
 use candid::Nat;
+use ic_base_types::PrincipalId;
 use ic_ledger_core::tokens::Zero;
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
 use icrc_ledger_types::icrc1::account::Account;
@@ -11,6 +12,133 @@ use rusqlite::{named_params, params, CachedStatement, Params};
 use serde_bytes::ByteBuf;
 use std::collections::{BTreeMap, HashMap};
 use std::str::FromStr;
+use tracing::info;
+
+/// Gets the current value of a counter from the database.
+/// Returns None if the counter doesn't exist.
+pub fn get_counter_value(
+    connection: &Connection,
+    counter: &RosettaCounter,
+) -> anyhow::Result<Option<i64>> {
+    let mut stmt = connection.prepare_cached("SELECT value FROM counters WHERE name = ?1")?;
+    let mut rows = stmt.query(params![counter.name()])?;
+
+    match rows.next()? {
+        Some(row) => Ok(Some(row.get(0)?)),
+        None => Ok(None),
+    }
+}
+
+/// Sets the value of a counter in the database.
+/// Creates the counter if it doesn't exist, updates it if it does.
+pub fn set_counter_value(
+    connection: &Connection,
+    counter: &RosettaCounter,
+    value: i64,
+) -> anyhow::Result<()> {
+    connection
+        .prepare_cached("INSERT OR REPLACE INTO counters (name, value) VALUES (?1, ?2)")?
+        .execute(params![counter.name(), value])?;
+    Ok(())
+}
+
+/// Increments a counter by the specified amount.
+/// Creates the counter with the increment value if it doesn't exist.
+pub fn increment_counter(
+    connection: &Connection,
+    counter: &RosettaCounter,
+    increment: i64,
+) -> anyhow::Result<()> {
+    connection
+        .prepare_cached(
+            "INSERT INTO counters (name, value) VALUES (?1, ?2) 
+             ON CONFLICT(name) DO UPDATE SET value = value + ?2",
+        )?
+        .execute(params![counter.name(), increment])?;
+    Ok(())
+}
+
+/// Checks if a counter flag is set (value > 0).
+/// Returns false if the counter doesn't exist.
+pub fn is_counter_flag_set(
+    connection: &Connection,
+    counter: &RosettaCounter,
+) -> anyhow::Result<bool> {
+    if !counter.is_flag() {
+        bail!("Counter {} is not a flag counter", counter.name());
+    }
+
+    Ok(get_counter_value(connection, counter)?.unwrap_or(0) > 0)
+}
+
+/// Sets a counter flag to true (value = 1).
+/// Only works with flag counters.
+pub fn set_counter_flag(connection: &Connection, counter: &RosettaCounter) -> anyhow::Result<()> {
+    if !counter.is_flag() {
+        bail!("Counter {} is not a flag counter", counter.name());
+    }
+
+    set_counter_value(connection, counter, 1)
+}
+
+/// Initializes a counter with its default value if it doesn't exist.
+/// For SyncedBlocks, this sets it to the current block count.
+pub fn initialize_counter_if_missing(
+    connection: &Connection,
+    counter: &RosettaCounter,
+) -> anyhow::Result<()> {
+    match counter {
+        RosettaCounter::SyncedBlocks => {
+            // Set to current block count if not exists
+            connection
+                .prepare_cached(
+                    "INSERT OR IGNORE INTO counters (name, value) VALUES (?1, (SELECT COUNT(*) FROM blocks))"
+                )?
+                .execute(params![counter.name()])?;
+        }
+        RosettaCounter::CollectorBalancesFixed => {
+            // Set to default value if not exists
+            connection
+                .prepare_cached("INSERT OR IGNORE INTO counters (name, value) VALUES (?1, ?2)")?
+                .execute(params![counter.name(), counter.default_value()])?;
+        }
+    }
+    Ok(())
+}
+
+// Helper function to resolve the fee collector account from a block
+pub fn get_fee_collector_from_block(
+    rosetta_block: &RosettaBlock,
+    connection: &Connection,
+) -> anyhow::Result<Option<Account>> {
+    // First check if the fee collector is directly specified in the block
+    if let Some(fee_collector) = rosetta_block.get_fee_collector() {
+        return Ok(Some(fee_collector));
+    }
+
+    // If not, check if there's a fee_collector_block_index that points to another block
+    if let Some(fee_collector_block_index) = rosetta_block.get_fee_collector_block_index() {
+        let referenced_block = get_block_at_idx(connection, fee_collector_block_index)?
+            .with_context(|| {
+                format!(
+                    "Block at index {} has fee_collector_block_index {} but there is no block at that index",
+                    rosetta_block.index, fee_collector_block_index
+                )
+            })?;
+
+        if let Some(fee_collector) = referenced_block.get_fee_collector() {
+            return Ok(Some(fee_collector));
+        } else {
+            bail!(
+                "Block at index {} has fee_collector_block_index {} but that block has no fee_collector set",
+                rosetta_block.index, fee_collector_block_index
+            );
+        }
+    }
+
+    // No fee collector found
+    Ok(None)
+}
 
 pub fn store_metadata(
     connection: &mut Connection,
@@ -193,7 +321,9 @@ pub fn update_account_balances(connection: &mut Connection) -> anyhow::Result<()
                         &mut account_balances_cache,
                     )?;
 
-                    if let Some(collector) = rosetta_block.get_fee_collector() {
+                    if let Some(collector) =
+                        get_fee_collector_from_block(&rosetta_block, connection)?
+                    {
                         credit(
                             collector,
                             fee,
@@ -320,6 +450,17 @@ pub fn store_blocks(
                 expires_at,
             ),
         };
+
+        // SQLite doesn't support unsigned 64-bit integers. We need to convert the timestamps to signed
+        // 64-bit integers before storing them.
+        // TODO: Change the timestamps to a text type. Keeping timestamps as signed integers can cause
+        // issues if someone tries to compare them directly in the DB.
+        let timestamp = rosetta_block.get_timestamp();
+        let timestamp_i64 = convert_timestamp_to_db(timestamp);
+        let transaction_created_at_time_i64 =
+            transaction.created_at_time.map(convert_timestamp_to_db);
+        let approval_expires_at_i64 = approval_expires_at.map(convert_timestamp_to_db);
+
         insert_tx.prepare_cached(
         "INSERT OR IGNORE INTO blocks (idx, hash, serialized_block, parent_hash, timestamp,tx_hash,operation_type,from_principal,from_subaccount,to_principal,to_subaccount,spender_principal,spender_subaccount,memo,amount,expected_allowance,fee,transaction_created_at_time,approval_expires_at) VALUES (:idx, :hash, :serialized_block, :parent_hash, :timestamp,:tx_hash,:operation_type,:from_principal,:from_subaccount,:to_principal,:to_subaccount,:spender_principal,:spender_subaccount,:memo,:amount,:expected_allowance,:fee,:transaction_created_at_time,:approval_expires_at)")?
                     .execute(named_params! {
@@ -327,7 +468,7 @@ pub fn store_blocks(
                         ":hash":rosetta_block.clone().get_block_hash().as_slice().to_vec(),
                         ":serialized_block":rosetta_block.block,
                         ":parent_hash":rosetta_block.get_parent_hash().clone().map(|hash| hash.as_slice().to_vec()),
-                        ":timestamp":rosetta_block.get_timestamp(),
+                        ":timestamp":timestamp_i64,
                         ":tx_hash":rosetta_block.clone().get_transaction_hash().as_slice().to_vec(),
                         ":operation_type":operation_type,
                         ":from_principal":from_principal.map(|x| x.as_slice().to_vec()),
@@ -340,12 +481,25 @@ pub fn store_blocks(
                         ":amount":amount.to_string(),
                         ":expected_allowance":expected_allowance.map(|ea| ea.to_string()),
                         ":fee":fee.map(|fee| fee.to_string()),
-                        ":transaction_created_at_time":transaction.created_at_time,
-                        ":approval_expires_at":approval_expires_at
+                        ":transaction_created_at_time":transaction_created_at_time_i64,
+                        ":approval_expires_at":approval_expires_at_i64
                     })?;
     }
     insert_tx.commit()?;
     Ok(())
+}
+
+// Helper function to convert u64 timestamp to i64 for database storage
+fn convert_timestamp_to_db(timestamp: u64) -> i64 {
+    // Check if timestamp exceeds i64::MAX
+    if timestamp > i64::MAX as u64 {
+        // For values exceeding i64::MAX, we need to preserve the lower bits
+        // but represent them as a negative number in two's complement
+        ((timestamp & 0x7fffffffffffffff) as i64) | i64::MIN
+    } else {
+        // Safe conversion when within i64 range
+        timestamp as i64
+    }
 }
 
 // Returns a RosettaBlock if the block index exists in the database, else returns None.
@@ -436,11 +590,8 @@ pub fn get_blockchain_gaps(
 }
 
 pub fn get_block_count(connection: &Connection) -> anyhow::Result<u64> {
-    let command = r#"SELECT value FROM counters WHERE name IS "SyncedBlocks""#;
-    let mut stmt = connection.prepare_cached(command)?;
-    let mut rows = stmt.query(params![])?;
-    let count: u64 = rows.next()?.unwrap().get(0)?;
-    Ok(count)
+    let count = get_counter_value(connection, &RosettaCounter::SyncedBlocks)?.unwrap_or(0);
+    Ok(count as u64)
 }
 
 // Returns icrc1 Transactions if the transaction hash exists in the database, else returns None.
@@ -520,6 +671,56 @@ pub fn get_account_balance_at_block_idx(
         .transpose()?)
 }
 
+/// Gets the aggregated balance of all subaccounts for a given principal at a specific block index.
+/// Returns the sum of all subaccount balances for the principal.
+pub fn get_aggregated_balance_for_principal_at_block_idx(
+    connection: &Connection,
+    principal: &PrincipalId,
+    block_idx: u64,
+) -> anyhow::Result<Nat> {
+    // Query to get the latest balance for each subaccount of the principal at or before the given block index
+    let mut stmt = connection.prepare_cached(
+        "SELECT a1.subaccount, a1.amount
+         FROM account_balances a1
+         WHERE a1.principal = :principal
+         AND a1.block_idx = (
+             SELECT MAX(a2.block_idx)
+             FROM account_balances a2
+             WHERE a2.principal = a1.principal
+             AND a2.subaccount = a1.subaccount
+             AND a2.block_idx <= :block_idx
+         )",
+    )?;
+
+    let rows = stmt.query_map(
+        named_params! {
+            ":principal": principal.as_slice(),
+            ":block_idx": block_idx
+        },
+        |row| {
+            let amount_str: String = row.get(1)?;
+            Nat::from_str(&amount_str).map_err(|_| {
+                rusqlite::Error::InvalidColumnType(
+                    1,
+                    "amount".to_string(),
+                    rusqlite::types::Type::Text,
+                )
+            })
+        },
+    )?;
+
+    let mut total_balance = Nat(BigUint::zero());
+    for balance_result in rows {
+        let balance = balance_result?;
+        total_balance = Nat(total_balance
+            .0
+            .checked_add(&balance.0)
+            .with_context(|| "Overflow while aggregating balances")?);
+    }
+
+    Ok(total_balance)
+}
+
 pub fn get_blocks_by_custom_query<P>(
     connection: &Connection,
     sql_query: String,
@@ -533,10 +734,11 @@ where
 }
 
 pub fn reset_blocks_counter(connection: &Connection) -> anyhow::Result<()> {
-    connection
-        .prepare_cached("UPDATE counters SET value = (SELECT COUNT(*) FROM blocks) WHERE name IS 'SyncedBlocks'")?
-        .execute(params![])?;
-    Ok(())
+    let block_count: i64 = connection
+        .prepare_cached("SELECT COUNT(*) FROM blocks")?
+        .query_row(params![], |row| row.get(0))?;
+
+    set_counter_value(connection, &RosettaCounter::SyncedBlocks, block_count)
 }
 
 fn read_single_block<P>(
@@ -575,4 +777,46 @@ where
         result.push(block?);
     }
     Ok(result)
+}
+
+/// Repairs account balances for databases created before the fee collector block index fix.
+/// This function clears the account_balances table and rebuilds it from scratch using the
+/// corrected fee collector resolution logic by reprocessing all blocks.
+///
+/// This function checks if the repair has already been performed by looking for a
+/// "CollectorBalancesFixed" entry in the counters table. If found, it skips the repair.
+/// If the repair is performed successfully, it adds the counter entry to prevent future runs.
+///
+/// This is safe to run multiple times - it will produce the same correct result each time.
+pub fn repair_fee_collector_balances(connection: &mut Connection) -> anyhow::Result<()> {
+    // Check if the repair has already been performed
+    if is_counter_flag_set(connection, &RosettaCounter::CollectorBalancesFixed)? {
+        // Repair has already been performed, skip it
+        return Ok(());
+    }
+
+    // Get block count for logging
+    let block_count = connection
+        .prepare_cached("SELECT COUNT(*) FROM blocks")?
+        .query_map(params![], |row| row.get::<_, i64>(0))?
+        .next()
+        .unwrap()?;
+
+    info!("Starting balance reconciliation...");
+    connection.execute("DELETE FROM account_balances", params![])?;
+
+    if block_count > 0 {
+        info!("Reprocessing all blocks...");
+        update_account_balances(connection)?;
+        info!("Successfully reprocessed all blocks");
+    } else {
+        info!("No blocks to process (empty database)");
+    }
+
+    // Mark the repair as completed by setting the flag
+    set_counter_flag(connection, &RosettaCounter::CollectorBalancesFixed)?;
+
+    info!("Balance reconciliation completed successfully");
+
+    Ok(())
 }

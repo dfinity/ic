@@ -1,6 +1,8 @@
-use crate::eth_rpc::{Hash, HttpResponsePayload, ResponseTransform};
+use crate::eth_rpc::Hash;
 use crate::numeric::{BlockNumber, GasAmount, Wei, WeiPerGas};
+use evm_rpc_client::TransactionReceipt as EvmTransactionReceipt;
 use minicbor::{Decode, Encode};
+use num_traits::ToPrimitive;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 
@@ -40,9 +42,22 @@ impl TransactionReceipt {
     }
 }
 
-impl HttpResponsePayload for TransactionReceipt {
-    fn response_transform() -> Option<ResponseTransform> {
-        Some(ResponseTransform::TransactionReceipt)
+impl From<EvmTransactionReceipt> for TransactionReceipt {
+    fn from(transaction_receipt: EvmTransactionReceipt) -> Self {
+        Self {
+            block_hash: Hash(transaction_receipt.block_hash.into()),
+            block_number: BlockNumber::from(transaction_receipt.block_number),
+            effective_gas_price: WeiPerGas::from(transaction_receipt.effective_gas_price),
+            gas_used: GasAmount::from(transaction_receipt.gas_used),
+            status: TransactionStatus::try_from(
+                transaction_receipt
+                    .status
+                    .and_then(|s| s.as_ref().0.to_u8())
+                    .expect("EvmTransactionReceipt.status should be Some(0) or Some(1)"),
+            )
+            .expect("EvmTransactionReceipt.status should be Some(0) or Some(1)"),
+            transaction_hash: Hash(transaction_receipt.transaction_hash.into()),
+        }
     }
 }
 

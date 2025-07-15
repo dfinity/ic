@@ -9,3 +9,5 @@ documentation.workspace = true
 [dependencies]
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-stable-structures = { workspace = true }
+lazy_static = { workspace = true }
+prost = { workspace = true }

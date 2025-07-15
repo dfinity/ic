@@ -34,7 +34,6 @@ rust_library(
         "//rs/ic_os/config_types",
         "@crate_index//:anyhow",
         "@crate_index//:macaddr",
-        "@crate_index//:thiserror",
     ],
 )
 

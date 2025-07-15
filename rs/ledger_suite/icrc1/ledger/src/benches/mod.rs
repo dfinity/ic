@@ -14,6 +14,7 @@ mod benches_u64;
 
 pub const NUM_OPERATIONS: u32 = 10_000;
 pub const NUM_GET_BLOCKS: u32 = 100;
+pub const MAX_LIST_ALLOWANCES: usize = 500;
 
 pub fn upgrade() {
     let _p = canbench_rs::bench_scope("upgrade");

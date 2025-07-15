@@ -1103,8 +1103,6 @@ fn add_environment_mock_calls_for_initiate_upgrade(
                     canister_id: canister_id.get(),
                     wasm_module: vec![9, 8, 7, 6, 5, 4, 3, 2],
                     arg: Encode!().unwrap(),
-                    compute_allocation: None,
-                    memory_allocation: None,
                     sender_canister_version: None,
                 })
                 .unwrap(),

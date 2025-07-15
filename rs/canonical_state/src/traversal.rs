@@ -47,7 +47,7 @@ mod tests {
         test_visitors::{NoopVisitor, TraceEntry as E, TracingVisitor},
     };
     use ic_base_types::{NumBytes, NumSeconds};
-    use ic_certification_version::all_supported_versions;
+    use ic_certification_version::{all_supported_versions, CertificationVersion::*};
     use ic_management_canister_types_private::Global;
     use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
     use ic_registry_subnet_features::SubnetFeatures;
@@ -332,7 +332,7 @@ mod tests {
     }
 
     #[test]
-    fn test_traverse_xnet_stream_header() {
+    fn test_traverse_streams() {
         use ic_replicated_state::metadata_state::Stream;
         use ic_types::xnet::{StreamIndex, StreamIndexedQueue};
 
@@ -349,9 +349,15 @@ mod tests {
             StreamIndex::new(11),
         );
 
-        let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
+        let own_subnet_id = subnet_test_id(1);
+        let other_subnet_id = subnet_test_id(5);
+        let mut state = ReplicatedState::new(own_subnet_id, SubnetType::Application);
+
+        // Loopback stream and remote stream. Loopback stream is not output for versions
+        // V20 and greater.
         state.modify_streams(move |streams| {
-            streams.insert(subnet_test_id(5), stream);
+            streams.insert(own_subnet_id, stream.clone());
+            streams.insert(other_subnet_id, stream);
         });
 
         // Test all certification versions.
@@ -380,7 +386,20 @@ mod tests {
                     E::EndSubtree, // request_status
                     edge("streams"),
                     E::StartSubtree,
-                    edge(subnet_test_id(5).get_ref().to_vec()),
+                ]),
+                // For versions before V20, the loopback stream is also encoded.
+                (certification_version < V20).then_some(vec![
+                    edge(own_subnet_id.get_ref().to_vec()),
+                    E::StartSubtree,
+                    edge("header"),
+                    E::VisitBlob(encode_stream_header(&header, certification_version)),
+                    edge("messages"),
+                    E::StartSubtree,
+                    E::EndSubtree, // messages
+                    E::EndSubtree, // stream
+                ]),
+                Some(vec![
+                    edge(other_subnet_id.get_ref().to_vec()),
                     E::StartSubtree,
                     edge("header"),
                     E::VisitBlob(encode_stream_header(&header, certification_version)),

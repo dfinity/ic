@@ -7,6 +7,7 @@ use std::{
 
 use ic_base_types::{CanisterId, NumBytes, PrincipalId, SubnetId};
 use ic_config::{
+    embedders::Config as HypervisorConfig,
     flag_status::FlagStatus,
     subnet_config::{SchedulerConfig, SubnetConfig},
 };
@@ -441,8 +442,6 @@ impl SchedulerTest {
             canister_id: target.get(),
             wasm_module,
             arg: encode_message_id_as_payload(message_id),
-            compute_allocation: None,
-            memory_allocation: None,
             sender_canister_version: None,
         };
 
@@ -664,6 +663,7 @@ pub(crate) struct SchedulerTestBuilder {
     subnet_type: SubnetType,
     batch_time: Time,
     scheduler_config: SchedulerConfig,
+    hypervisor_config: HypervisorConfig,
     initial_canister_cycles: Cycles,
     subnet_guaranteed_response_message_memory: u64,
     subnet_callback_soft_limit: usize,
@@ -691,6 +691,7 @@ impl Default for SchedulerTestBuilder {
             subnet_type,
             batch_time: UNIX_EPOCH,
             scheduler_config,
+            hypervisor_config: config.embedders_config,
             initial_canister_cycles: Cycles::new(1_000_000_000_000_000_000),
             subnet_guaranteed_response_message_memory: config
                 .guaranteed_response_message_memory_capacity
@@ -820,6 +821,8 @@ impl SchedulerTestBuilder {
 
         state.metadata.network_topology.subnets = generate_subnets(
             vec![self.own_subnet_id, self.nns_subnet_id],
+            self.nns_subnet_id,
+            None,
             self.own_subnet_id,
             self.subnet_type,
             registry_settings.subnet_size,
@@ -949,6 +952,7 @@ impl SchedulerTestBuilder {
         );
         let scheduler = SchedulerImpl::new(
             self.scheduler_config,
+            self.hypervisor_config,
             self.own_subnet_id,
             ingress_history_writer,
             Arc::new(exec_env),
@@ -988,11 +992,11 @@ impl SchedulerTestBuilder {
 /// A test message can be constructed using the helper functions defined below:
 /// - `ingress(5)`: a message that uses 5 instructions.
 /// - `ingress(5).dirty_pages(1): a message that uses 5 instructions and
-///    modifies one page.
+///   modifies one page.
 /// - `ingress(5).call(other_side(callee, 3), on_response(8))`: a message
-///    that uses 5 instructions and calls a canister with id `callee`.
-///    The called message uses 3 instructions. The response handler  uses
-///    8 instructions.
+///   that uses 5 instructions and calls a canister with id `callee`.
+///   The called message uses 3 instructions. The response handler  uses
+///   8 instructions.
 #[derive(Clone, Debug)]
 pub(crate) struct TestMessage {
     // The canister id is optional and is inferred from the context if not
@@ -1445,9 +1449,13 @@ impl TestWasmExecutorCore {
             ApiType::PreUpgrade { .. }
             | ApiType::ReplicatedQuery { .. }
             | ApiType::NonReplicatedQuery { .. }
+            | ApiType::CompositeQuery { .. }
+            | ApiType::CompositeReplyCallback { .. }
+            | ApiType::CompositeRejectCallback { .. }
             | ApiType::InspectMessage { .. }
             | ApiType::Start { .. }
-            | ApiType::Cleanup { .. } => {
+            | ApiType::Cleanup { .. }
+            | ApiType::CompositeCleanup { .. } => {
                 unreachable!("The test Wasm executor does not support {}", input.api_type)
             }
         }

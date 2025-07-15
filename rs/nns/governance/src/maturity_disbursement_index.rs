@@ -2,6 +2,7 @@ use std::collections::BTreeSet;
 
 use crate::storage::validate_stable_btree_map;
 
+use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
 use ic_stable_structures::{Memory, StableBTreeMap};
 
 type TimestampSeconds = u64;
@@ -26,6 +27,15 @@ impl<M: Memory> MaturityDisbursementIndex<M> {
 
     pub fn num_entries(&self) -> usize {
         self.finalization_timestamp_neuron_id_to_null.len() as usize
+    }
+
+    pub fn contains_entry(
+        &self,
+        neuron_id: NeuronId,
+        finalization_timestamp: TimestampSeconds,
+    ) -> bool {
+        self.finalization_timestamp_neuron_id_to_null
+            .contains_key(&(finalization_timestamp, neuron_id))
     }
 
     /// Adds (finalization_timestamp, neuron_id) pairs to the index, returns a list of timestamps
@@ -80,11 +90,13 @@ impl<M: Memory> MaturityDisbursementIndex<M> {
             .collect()
     }
 
-    /// Returns the next finalization timestamp for a neuron, if any.
-    pub fn get_next_finalization_timestamp(&self) -> Option<TimestampSeconds> {
+    /// Returns the next entry of the index.
+    pub fn get_next_entry(&self) -> Option<(TimestampSeconds, NeuronIdProto)> {
         self.finalization_timestamp_neuron_id_to_null
             .first_key_value()
-            .map(|((finalization_timestamp, _neuron_id), _)| finalization_timestamp)
+            .map(|((finalization_timestamp, neuron_id), _)| {
+                (finalization_timestamp, NeuronIdProto::from_u64(neuron_id))
+            })
     }
 
     /// Validates that some of the data in stable storage can be read, in order to prevent broken

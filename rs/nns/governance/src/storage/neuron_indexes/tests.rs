@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
-    pb::v1::{neuron::Followees, KnownNeuronData},
+    pb::v1::{Followees, KnownNeuronData},
 };
 use assert_matches::assert_matches;
 use ic_nervous_system_governance::index::{

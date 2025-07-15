@@ -49,10 +49,10 @@ const RESERVED_CLEANUP_INSTRUCTIONS_IN_PERCENT: u64 = 5;
 
 /// The algorithm for executing the response callback works with two canisters:
 /// - `clean_canister`: the canister state from the current replicated state
-///    without any changes by the ongoing execution.
+///   without any changes by the ongoing execution.
 /// - `helper.canister()`: the canister state that contains changes done by
-///    the ongoing execution. This state is re-created in each entry point of
-///    the algorithm by applying the state changes to `clean_canister`.
+///   the ongoing execution. This state is re-created in each entry point of
+///   the algorithm by applying the state changes to `clean_canister`.
 ///
 /// Summary of the algorithm:
 /// 1. The main entry point is `execute_response()` that takes `clean_canister`
@@ -991,7 +991,6 @@ pub fn execute_response(
             helper.refund_for_sent_cycles(),
             call_context_id,
             call_context.has_responded(),
-            execution_parameters.execution_mode.clone(),
             call_context.instructions_executed(),
         ),
         Payload::Reject(context) => ApiType::reject_callback(
@@ -1001,7 +1000,6 @@ pub fn execute_response(
             helper.refund_for_sent_cycles(),
             call_context_id,
             call_context.has_responded(),
-            execution_parameters.execution_mode.clone(),
             call_context.instructions_executed(),
         ),
     };
@@ -1078,7 +1076,6 @@ fn execute_response_cleanup(
         ApiType::Cleanup {
             caller: original.call_origin.get_principal(),
             time: original.time,
-            execution_mode: execution_parameters.execution_mode.clone(),
             call_context_instructions_executed: original.instructions_executed,
         },
         helper.canister().execution_state.as_ref().unwrap(),

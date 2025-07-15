@@ -51,7 +51,6 @@ const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(2); // Thi
 // config.query_execution_threads * (1 sec / <avg latency in secs for executing a single query to the counter canister>)
 // The avg. latency in seconds for a query to the counter canister is 1 ms, according to latest data from execution.
 const RPS: usize = 100;
-const USE_BOUNDARY_NODE: bool = false;
 const WORKLOAD_RUNTIME: Duration = Duration::from_secs(5 * 60);
 // Timeout parameters
 const TASK_TIMEOUT_DELTA: Duration = Duration::from_secs(10 * 60);
@@ -148,7 +147,6 @@ fn main() -> Result<()> {
         setup(
             env,
             SMALL_APP_SUBNET_MAX_SIZE,
-            USE_BOUNDARY_NODE,
             // Since this is a long-running test, it accumulates a lot of disk space.
             // This is why we increase the default of 50 GiB to 500 GiB.
             Some(ImageSizeGiB::new(500)),

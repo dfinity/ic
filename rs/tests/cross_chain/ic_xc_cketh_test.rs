@@ -342,6 +342,7 @@ fn minter_init_args(ecdsa_key_id: &EcdsaKeyId, cketh_ledger: Principal) -> Minte
         minimum_withdrawal_amount: Nat::from(30_000_000_000_000_000_u64),
         next_transaction_nonce: Nat::from(0_u8),
         last_scraped_block_number: Nat::from(0_u8),
+        evm_rpc_id: None,
     }
 }
 

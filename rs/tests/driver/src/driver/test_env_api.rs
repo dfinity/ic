@@ -139,7 +139,6 @@ use super::{
 };
 use crate::{
     driver::{
-        boundary_node::BoundaryNodeVm,
         constants::{self, kibana_link, GROUP_TTL, SSH_USERNAME},
         farm::{Farm, GroupSpec},
         log_events,
@@ -163,7 +162,7 @@ use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID,
 };
-use ic_nns_governance_api::pb::v1::Neuron;
+use ic_nns_governance_api::Neuron;
 use ic_nns_init::read_initial_mutations_from_local_store_dir;
 use ic_nns_test_utils::{common::NnsInitPayloadsBuilder, itest_helpers::NnsCanisters};
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
@@ -871,6 +870,14 @@ impl IcNodeSnapshot {
             })
     }
 
+    pub fn is_api_boundary_node(&self) -> bool {
+        let registry_version = self.registry_version;
+        self.local_registry
+            .get_api_boundary_node_ids(registry_version)
+            .unwrap()
+            .contains(&self.node_id)
+    }
+
     pub fn effective_canister_id(&self) -> PrincipalId {
         match self.subnet_id() {
             Some(subnet_id) => {
@@ -1165,7 +1172,7 @@ impl<T: HasTestEnv> HasIcDependencies for T {
 pub fn get_elasticsearch_hosts() -> Result<Vec<String>> {
     let dep_rel_path = "elasticsearch_hosts";
     let hosts = read_dependency_to_string(dep_rel_path)
-        .unwrap_or_else(|_| "elasticsearch.ch1-obsdev1.dfinity.network:443".to_string());
+        .unwrap_or_else(|_| "elasticsearch.testnet.dfinity.network:443".to_string());
     parse_elasticsearch_hosts(Some(hosts))
 }
 
@@ -1556,9 +1563,14 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
     }
 
     fn status(&self) -> Result<HttpStatusResponse> {
+        block_on(self.status_async())
+    }
+
+    async fn status_async(&self) -> Result<HttpStatusResponse> {
         let url = self.get_public_url();
         let addr = self.get_public_addr();
-        let client = reqwest::blocking::Client::builder()
+
+        let client = reqwest::Client::builder()
             .danger_accept_invalid_certs(self.uses_snake_oil_certs())
             .timeout(READY_RESPONSE_TIMEOUT);
         let client = match (self.uses_dns(), url.domain()) {
@@ -1569,11 +1581,13 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
             .build()
             .expect("cannot build a reqwest client")
             .get(url.join("api/v2/status").expect("failed to join URLs"))
-            .send()?;
+            .send()
+            .await?;
 
         let status = response.status();
         let body = response
             .bytes()
+            .await
             .expect("failed to convert a response to bytes")
             .to_vec();
         if status.is_client_error() || status.is_server_error() {
@@ -1592,7 +1606,11 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
 
     /// The status-endpoint reports `healthy`.
     fn status_is_healthy(&self) -> Result<bool> {
-        match self.status() {
+        block_on(self.status_is_healthy_async())
+    }
+
+    async fn status_is_healthy_async(&self) -> Result<bool> {
+        match self.status_async().await {
             Ok(s) if s.replica_health_status.is_some() => {
                 let healthy = Some(ReplicaHealthStatus::Healthy) == s.replica_health_status;
                 if !healthy {
@@ -1619,16 +1637,26 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
 
     /// Waits until the is_healthy() returns true
     fn await_status_is_healthy(&self) -> Result<()> {
-        retry_with_msg!(
+        block_on(self.await_status_is_healthy_async())
+    }
+
+    async fn await_status_is_healthy_async(&self) -> Result<()> {
+        retry_with_msg_async!(
             &format!("await_status_is_healthy of {}", self.get_public_url()),
-            self.test_env().logger(),
+            &self.test_env().logger(),
             READY_WAIT_TIMEOUT,
             RETRY_BACKOFF,
-            || {
-                self.status_is_healthy()
-                    .and_then(|s| if !s { bail!("Not ready!") } else { Ok(()) })
+            || async {
+                self.status_is_healthy_async().await.and_then(|s| {
+                    if !s {
+                        bail!("Not ready!")
+                    } else {
+                        Ok(())
+                    }
+                })
             }
         )
+        .await
     }
 
     /// Checks if the Orchestrator dashboard endpoint is accessible
@@ -1742,7 +1770,16 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
 impl HasPublicApiUrl for IcNodeSnapshot {
     fn get_public_url(&self) -> Url {
         let node_record = self.raw_node_record();
-        IcNodeSnapshot::http_endpoint_to_url(&node_record.http.expect("Node doesn't have URL"))
+
+        // API boundary nodes listen on port 443, while replicas listen on port 8080
+        if self.is_api_boundary_node() {
+            match self.get_ip_addr() {
+                IpAddr::V4(ipv4) => Url::parse(&format!("https://{}", ipv4)).unwrap(),
+                IpAddr::V6(ipv6) => Url::parse(&format!("https://[{}]", ipv6)).unwrap(),
+            }
+        } else {
+            IcNodeSnapshot::http_endpoint_to_url(&node_record.http.expect("Node doesn't have URL"))
+        }
     }
 
     fn get_public_addr(&self) -> SocketAddr {
@@ -1750,8 +1787,13 @@ impl HasPublicApiUrl for IcNodeSnapshot {
         let connection_endpoint = node_record.http.expect("Node doesn't have URL");
         SocketAddr::new(
             IpAddr::from_str(&connection_endpoint.ip_addr).expect("Missing IP address in the node"),
-            connection_endpoint.port as u16,
+            0,
         )
+    }
+
+    fn uses_snake_oil_certs(&self) -> bool {
+        let node_record = self.raw_node_record();
+        node_record.domain.is_some()
     }
 
     async fn try_build_default_agent_async(&self) -> Result<Agent, AgentError> {
@@ -2406,17 +2448,6 @@ impl TestEnvAttribute for InitialReplicaVersion {
     fn attribute_name() -> String {
         "initial_replica_version".to_string()
     }
-}
-
-pub fn await_boundary_node_healthy(env: &TestEnv, boundary_node_name: &str) {
-    let boundary_node = env
-        .get_deployed_boundary_node(boundary_node_name)
-        .unwrap()
-        .get_snapshot()
-        .unwrap();
-    boundary_node
-        .await_status_is_healthy()
-        .expect("BN did not come up!");
 }
 
 pub fn emit_group_event(log: &slog::Logger, group: &str) {

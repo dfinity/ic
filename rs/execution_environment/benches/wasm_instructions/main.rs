@@ -1,10 +1,14 @@
 //!
 //! Benchmark Wasm instructions using `execute_update()`.
 //!
+//! This benchmark runs nightly in CI, and the results are available in Grafana.
+//! See: `schedule-rust-bench.yml`
+//!
 //! To run a specific benchmark:
 //!
-//!     bazel run //rs/execution_environment:wasm_instructions_bench -- --sample-size 10 i32.div
-//!
+//! ```shell
+//! bazel run //rs/execution_environment:wasm_instructions_bench -- --sample-size 10 i32.div
+//! ```
 
 use std::time::Duration;
 

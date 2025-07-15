@@ -4,7 +4,7 @@ use canister_test::*;
 use dfn_protobuf::protobuf;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_client_sender::Sender;
-use ic_canisters_http_types::{HttpRequest, HttpResponse};
+use ic_http_types::{HttpRequest, HttpResponse};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
 use ic_ledger_core::{

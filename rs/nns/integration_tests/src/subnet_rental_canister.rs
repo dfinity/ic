@@ -6,7 +6,7 @@ use ic_nns_constants::{
     EXCHANGE_RATE_CANISTER_ID, EXCHANGE_RATE_CANISTER_INDEX, LEDGER_CANISTER_ID,
     SUBNET_RENTAL_CANISTER_ID,
 };
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     manage_neuron_response::{Command as CommandResponse, RegisterVoteResponse},
     ExecuteNnsFunction, MakeProposalRequest, NnsFunction, ProposalActionRequest, Vote,
 };
@@ -14,7 +14,7 @@ use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     neuron_helpers::{get_neuron_1, get_neuron_2},
     state_test_helpers::{
-        create_canister_at_specified_id, ledger_account_balance, nns_cast_vote,
+        create_canister_at_specified_id, ledger_account_balance, nns_cast_vote_or_panic,
         nns_governance_get_proposal_info_as_anonymous, nns_governance_make_proposal,
         nns_wait_for_proposal_execution, nns_wait_for_proposal_failure, setup_nns_canisters,
         setup_subnet_rental_canister_with_correct_canister_id, state_machine_builder_for_nns_tests,
@@ -54,7 +54,6 @@ pub struct SubnetRentalProposalPayload {
 pub struct RentalRequest {
     pub user: PrincipalId,
     pub initial_cost_icp: Tokens,
-    pub refundable_icp: Tokens,
     pub locked_amount_icp: Tokens,
     pub locked_amount_cycles: u128,
     pub initial_proposal_id: u64,
@@ -234,8 +233,10 @@ fn subnet_rental_request_lifecycle() {
     // at last midnight is unchanged
     assert_eq!(price, price3);
 
-    // user makes the initial transfer at price3
     let renter = *TEST_USER1_PRINCIPAL;
+    // check balance before user sends funds
+    let balance_before = check_balance(&state_machine, renter, None);
+    // user makes the initial transfer at price3
     send_icp_to_rent_subnet(&state_machine, renter);
 
     let large_neuron = get_neuron_1();
@@ -292,7 +293,7 @@ fn subnet_rental_request_lifecycle() {
     assert_eq!(proposal_info.decided_timestamp_seconds, 0);
 
     // large neuron votes and thus the proposal should be executed now
-    let response = nns_cast_vote(
+    let response = nns_cast_vote_or_panic(
         &state_machine,
         large_neuron.principal_id,
         large_neuron.neuron_id,
@@ -323,28 +324,14 @@ fn subnet_rental_request_lifecycle() {
     let RentalRequest {
         user,
         initial_cost_icp,
-        refundable_icp,
         locked_amount_icp,
         initial_proposal_id,
         creation_time_nanos,
         rental_condition_id,
         last_locking_time_nanos,
-
-        locked_amount_cycles: _,
+        ..
     } = rental_requests[0];
     assert_eq!(user, renter);
-    assert!(
-        initial_cost_icp.get_e8s() - initial_cost_icp.get_e8s() / 10 <= refundable_icp.get_e8s(),
-        "initial cost = {}; refundable = {}",
-        initial_cost_icp,
-        refundable_icp
-    );
-    assert!(
-        refundable_icp <= initial_cost_icp,
-        "initial cost = {}; refundable = {}",
-        initial_cost_icp,
-        refundable_icp
-    );
     assert!(locked_amount_icp.get_e8s() <= initial_cost_icp.get_e8s() / 10);
     assert_eq!(initial_proposal_id, proposal_id.id);
     assert!(proposal_time.as_nanos_since_unix_epoch() <= creation_time_nanos);
@@ -354,7 +341,6 @@ fn subnet_rental_request_lifecycle() {
     assert_eq!(initial_cost_icp, price3);
 
     // test user aborts rental request and gets refund
-    let balance_before = check_balance(&state_machine, renter, None);
     state_machine
         .execute_ingress_as(
             renter,
@@ -365,8 +351,10 @@ fn subnet_rental_request_lifecycle() {
         .unwrap();
     let balance_after = check_balance(&state_machine, renter, None);
     assert_eq!(
-        balance_before.get_e8s() + refundable_icp.get_e8s(),
-        balance_after.get_e8s() + DEFAULT_TRANSFER_FEE.get_e8s(),
+        balance_after.get_e8s(),
+        balance_before.get_e8s()
+            - initial_cost_icp.get_e8s() / 10
+            - DEFAULT_TRANSFER_FEE.get_e8s() * 2,
     );
 
     // afterwards there should be no more rental requests

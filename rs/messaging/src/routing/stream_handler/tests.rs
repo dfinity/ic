@@ -17,7 +17,7 @@ use ic_test_utilities_metrics::{
     fetch_histogram_stats, fetch_histogram_vec_count, fetch_int_counter, fetch_int_counter_vec,
     fetch_int_gauge_vec, metric_vec, nonzero_values, HistogramStats, MetricVec,
 };
-use ic_test_utilities_state::{new_canister_state, register_callback};
+use ic_test_utilities_state::{register_callback, CanisterStateBuilder};
 use ic_test_utilities_types::ids::{user_test_id, SUBNET_12, SUBNET_23, SUBNET_27};
 use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
 use ic_test_utilities_types::xnet::StreamHeaderBuilder;
@@ -575,19 +575,6 @@ fn legacy_induct_loopback_stream_with_zero_subnet_wasm_custom_sections_limit() {
             MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2,
         ),
         subnet_wasm_custom_sections_memory_capacity: NumBytes::new(0),
-        ..Default::default()
-    });
-}
-
-/// Tests that canister memory limit is ignored by
-/// `StreamHandlerImpl::induct_loopback_stream()` for system subnets.
-#[test]
-fn system_subnet_induct_loopback_stream_ignores_canister_memory_limit() {
-    // A stream handler with a canister memory limit that only allows up to 3 reservations.
-    induct_loopback_stream_ignores_memory_limit_impl(HypervisorConfig {
-        max_canister_memory_size_wasm32: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2),
-        // For consistency reasons in case this test is run against Wasm64 canisters.
-        max_canister_memory_size_wasm64: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2),
         ..Default::default()
     });
 }
@@ -4035,12 +4022,15 @@ fn with_test_setup_and_config(
         state.metadata.network_topology.routing_table = routing_table;
 
         // Generate testing canister using `LOCAL_CANISTER` as the canister ID.
-        let mut canister_state = new_canister_state(
-            *LOCAL_CANISTER,
-            user_test_id(24).get(),
-            *INITIAL_CYCLES,
-            NumSeconds::from(100_000),
-        );
+        let mut canister_state = CanisterStateBuilder::new()
+            .with_canister_id(*LOCAL_CANISTER)
+            .with_controller(user_test_id(24).get())
+            .with_cycles(*INITIAL_CYCLES)
+            .with_freezing_threshold(NumSeconds::from(100_000))
+            // the smallest possible memory allocation (0 means best-effort)
+            // to ensure that stream handler is oblivious to canister memory allocation
+            .with_memory_allocation(1)
+            .build();
 
         // Generates messages from `MessageBuilder`, makes a reservation for message in
         // the input queue and registers a `CallbackId` in the `canister_state` if it is

@@ -6,7 +6,6 @@ use crate::mock::JsonRpcMethod;
 use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_cketh_minter::endpoints::events::{Event, EventPayload, GetEventsResult};
 use ic_cketh_minter::endpoints::{
     AddCkErc20Token, Eip1559TransactionPriceArg, MinterInfo, RetrieveEthStatus, WithdrawalArg,
@@ -19,6 +18,7 @@ use ic_cketh_minter::{
     lifecycle::{init::InitArg as MinterInitArgs, EthereumNetwork, MinterArg},
 };
 use ic_ethereum_types::Address;
+use ic_http_types::{HttpRequest, HttpResponse};
 use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
 use ic_management_canister_types_private::{CanisterHttpResponsePayload, CanisterStatusType};
 use ic_state_machine_tests::{
@@ -36,18 +36,12 @@ use std::time::Duration;
 
 pub mod ckerc20;
 pub mod events;
-#[cfg(feature = "evm-rpc")]
 mod evm_rpc_provider;
 pub mod flow;
 pub mod mock;
-#[cfg(not(feature = "evm-rpc"))]
-mod provider;
 pub mod response;
 
-#[cfg(feature = "evm-rpc")]
 pub use evm_rpc_provider::JsonRpcProvider;
-#[cfg(not(feature = "evm-rpc"))]
-pub use provider::JsonRpcProvider;
 
 #[cfg(test)]
 mod tests;
@@ -108,7 +102,7 @@ pub struct CkEthSetup {
     pub caller: PrincipalId,
     pub ledger_id: CanisterId,
     pub minter_id: CanisterId,
-    pub evm_rpc_id: Option<CanisterId>,
+    pub evm_rpc_id: CanisterId,
     pub support_subaccount: bool,
 }
 
@@ -126,9 +120,11 @@ impl AsRef<CkEthSetup> for CkEthSetup {
 
 impl CkEthSetup {
     pub fn new(env: Arc<StateMachine>) -> Self {
+        // Create minter canister first to match canister ID and Ethereum address hardcoded in tests.
         let minter_id =
             env.create_canister_with_cycles(None, Cycles::new(100_000_000_000_000), None);
         let ledger_id = env.create_canister(None);
+        let evm_rpc_id = env.create_canister(None);
 
         env.install_existing_canister(
             ledger_id,
@@ -145,15 +141,16 @@ impl CkEthSetup {
             .unwrap(),
         )
         .unwrap();
-        let minter_id = install_minter(&env, ledger_id, minter_id);
-        let caller = PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID);
+        let minter_id = install_minter(&env, ledger_id, minter_id, evm_rpc_id);
+        install_evm_rpc(&env, evm_rpc_id);
 
+        let caller = PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID);
         let cketh = Self {
             env,
             caller,
             ledger_id,
             minter_id,
-            evm_rpc_id: None,
+            evm_rpc_id,
             support_subaccount: false,
         };
 
@@ -161,34 +158,8 @@ impl CkEthSetup {
             Address::from_str(MINTER_ADDRESS).unwrap(),
             Address::from_str(&cketh.minter_address()).unwrap()
         );
+
         cketh
-    }
-
-    fn new_with_evm_rpc(env: Arc<StateMachine>) -> Self {
-        // install ckETH first to keep the same canisterID and minter Ethereum address.
-        let mut cketh = Self::new(env);
-        let evm_rpc_id = cketh.env.create_canister(None);
-        install_evm_rpc(&cketh.env, evm_rpc_id);
-        cketh.upgrade_minter(UpgradeArg {
-            evm_rpc_id: Some(evm_rpc_id.into()),
-            ..Default::default()
-        });
-        cketh.evm_rpc_id = Some(evm_rpc_id);
-        cketh.env.tick();
-        cketh.env.tick(); //to load tECDSA key and minter's address
-        cketh
-    }
-
-    pub fn default_with_maybe_evm_rpc() -> Self {
-        Self::maybe_evm_rpc(Arc::new(new_state_machine()))
-    }
-
-    pub fn maybe_evm_rpc(env: Arc<StateMachine>) -> Self {
-        if use_evm_rpc_canister() {
-            CkEthSetup::new_with_evm_rpc(env)
-        } else {
-            CkEthSetup::new(env)
-        }
     }
 
     pub fn add_support_for_subaccount(self) -> Self {
@@ -625,11 +596,7 @@ impl CkEthSetup {
     }
 
     pub fn max_logs_block_range(&self) -> u64 {
-        if self.evm_rpc_id.is_none() {
-            798
-        } else {
-            499
-        }
+        499
     }
 
     pub fn received_eth_event_topic(&self) -> serde_json::Value {
@@ -637,16 +604,12 @@ impl CkEthSetup {
     }
 
     fn json_topic(&self, topic: String) -> serde_json::Value {
-        if self.evm_rpc_id.is_none() {
-            serde_json::Value::String(topic)
-        } else {
-            // The EVM-RPC canister models topics as `opt vec vec text`, see
-            // https://github.com/internet-computer-protocol/evm-rpc-canister/blob/3cce151d4c1338d83e6741afa354ccf11dff41e8/candid/evm_rpc.did#L69.
-            // This means that a simple topic such as `["0x257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435"]`
-            // must actually be represented as `[["0x257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435"]].
-            // The JSON-RPC providers seem to be able to handle both formats.
-            serde_json::Value::Array(vec![serde_json::Value::String(topic)])
-        }
+        // The EVM-RPC canister models topics as `opt vec vec text`, see
+        // https://github.com/internet-computer-protocol/evm-rpc-canister/blob/3cce151d4c1338d83e6741afa354ccf11dff41e8/candid/evm_rpc.did#L69.
+        // This means that a simple topic such as `["0x257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435"]`
+        // must actually be represented as `[["0x257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435"]].
+        // The JSON-RPC providers seem to be able to handle both formats.
+        serde_json::Value::Array(vec![serde_json::Value::String(topic)])
     }
 
     fn eth_get_logs_response_size_initial_estimate(&self) -> u64 {
@@ -655,40 +618,20 @@ impl CkEthSetup {
     }
 
     pub fn all_eth_get_logs_response_size_estimates(&self) -> Vec<u64> {
-        if self.evm_rpc_id.is_none() {
-            vec![
-                self.eth_get_logs_response_size_initial_estimate(),
-                2048 + HEADER_SIZE_LIMIT,
-                4096 + HEADER_SIZE_LIMIT,
-                8192 + HEADER_SIZE_LIMIT,
-                16_384 + HEADER_SIZE_LIMIT,
-                32_768 + HEADER_SIZE_LIMIT,
-                65_536 + HEADER_SIZE_LIMIT,
-                131_072 + HEADER_SIZE_LIMIT,
-                262_144 + HEADER_SIZE_LIMIT,
-                524_288 + HEADER_SIZE_LIMIT,
-                1_048_576 + HEADER_SIZE_LIMIT,
-                2_000_000,
-            ]
-        } else {
-            // The EVM RPC canister has a different adjustment mechanism for the response size limit.
-            // In contrast to the ckETH minter, the HEADER_SIZE_LIMIT is not added to the adjusted response size,
-            // which simply consists in doubling the estimate (the result is capped by 2_000_000 - HEADER_SIZE_LIMIT).
-            let initial_estimate = self.eth_get_logs_response_size_initial_estimate();
-            vec![
-                initial_estimate,
-                initial_estimate << 1,
-                initial_estimate << 2,
-                initial_estimate << 3,
-                initial_estimate << 4,
-                initial_estimate << 5,
-                initial_estimate << 6,
-                initial_estimate << 7,
-                initial_estimate << 8,
-                initial_estimate << 9,
-                2_000_000 - HEADER_SIZE_LIMIT,
-            ]
-        }
+        let initial_estimate = self.eth_get_logs_response_size_initial_estimate();
+        vec![
+            initial_estimate,
+            initial_estimate << 1,
+            initial_estimate << 2,
+            initial_estimate << 3,
+            initial_estimate << 4,
+            initial_estimate << 5,
+            initial_estimate << 6,
+            initial_estimate << 7,
+            initial_estimate << 8,
+            initial_estimate << 9,
+            2_000_000,
+        ]
     }
 }
 
@@ -733,7 +676,12 @@ fn evm_rpc_wasm() -> Vec<u8> {
     )
 }
 
-fn install_minter(env: &StateMachine, ledger_id: CanisterId, minter_id: CanisterId) -> CanisterId {
+fn install_minter(
+    env: &StateMachine,
+    ledger_id: CanisterId,
+    minter_id: CanisterId,
+    evm_rpc_id: CanisterId,
+) -> CanisterId {
     let args = MinterInitArgs {
         ecdsa_key_name: "master_ecdsa_public_key".parse().unwrap(),
         ethereum_network: EthereumNetwork::Mainnet,
@@ -743,6 +691,7 @@ fn install_minter(env: &StateMachine, ledger_id: CanisterId, minter_id: Canister
         ethereum_contract_address: Some(ETH_HELPER_CONTRACT_ADDRESS.to_string()),
         minimum_withdrawal_amount: CKETH_MINIMUM_WITHDRAWAL_AMOUNT.into(),
         last_scraped_block_number: LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into(),
+        evm_rpc_id: Some(evm_rpc_id.into()),
     };
     let minter_arg = MinterArg::InitArg(args);
     env.install_existing_canister(minter_id, minter_wasm(), Encode!(&minter_arg).unwrap())
@@ -763,10 +712,6 @@ fn assert_reply(result: WasmResult) -> Vec<u8> {
             panic!("Expected a successful reply, got a reject: {}", reject)
         }
     }
-}
-
-pub fn use_evm_rpc_canister() -> bool {
-    std::env::var("EVM_RPC_CANISTER_WASM_PATH").is_ok()
 }
 
 pub struct LedgerBalance {

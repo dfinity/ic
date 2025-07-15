@@ -31,11 +31,11 @@ pub fn is_called_if_reply_traps(env: TestEnv) {
                         ),
                     )
                     .await,
-                Err(AgentError::CertifiedReject(RejectResponse{
+                Err(AgentError::CertifiedReject {reject: RejectResponse{
                     reject_code,
                     reject_message,
                     ..
-                })) if reject_code == RejectCode::CanisterError
+                }, .. }) if reject_code == RejectCode::CanisterError
                     // Verify that the error message being returned is the original.
                     && reject_message.contains("called `ic0.trap` with message")
             );
@@ -115,11 +115,11 @@ pub fn changes_are_discarded_if_trapped(env: TestEnv) {
                             )
                     )
                     .await,
-                Err(AgentError::CertifiedReject(RejectResponse {
+                Err(AgentError::CertifiedReject { reject: RejectResponse {
                     reject_code,
                     reject_message,
                     ..
-                })) if reject_code == RejectCode::CanisterError
+                }, ..}) if reject_code == RejectCode::CanisterError
                     // Verify that the original error message as well as the on_cleanup error is
                     // returned.
                     && reject_message.contains("called `ic0.trap` with message: 'in on_reply")

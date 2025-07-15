@@ -20,7 +20,7 @@ jobs:
         run: |
           set -euxo pipefail
 
-          DOWNLOAD_PREFIX="http://download.dfinity.systems/ic/$GITHUB_SHA"
+          DOWNLOAD_PREFIX="https://download.dfinity.systems/ic/$GITHUB_SHA"
 
           curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/setup-os/disk-img/disk-img.tar.zst" -o setup-os-img.tar.zst
           curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/guest-os/update-img/update-img.tar.zst" -o update-os-img.tar.zst
@@ -47,7 +47,6 @@ jobs:
             "governance-canister.wasm"
             "governance-canister_test.wasm"
             "ic-ckbtc-minter.wasm"
-            "ic-ckbtc-kyt.wasm"
             "identity-canister.wasm"
             "ledger-canister.wasm"
             "ledger-canister_notify-method.wasm"
@@ -59,7 +58,6 @@ jobs:
             "sns-root-canister.wasm"
             "sns-swap-canister.wasm"
             "sns-wasm-canister.wasm"
-            "wasm.wasm"
           )
 
           mkdir canisters && pushd canisters

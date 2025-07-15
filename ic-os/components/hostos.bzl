@@ -4,12 +4,8 @@ Enumerate every component file dependency for HostOS
 
 component_files = {
     # hostos-scripts
-    Label("hostos-scripts/generate-guestos-config/generate-guestos-config.sh"): "/opt/ic/bin/generate-guestos-config.sh",
-    Label("hostos-scripts/generate-guestos-config/generate-guestos-config.service"): "/etc/systemd/system/generate-guestos-config.service",
     Label("hostos-scripts/guestos/guestos.service"): "/etc/systemd/system/guestos.service",
-    Label("hostos-scripts/guestos/start-guestos.sh"): "/opt/ic/bin/start-guestos.sh",
-    Label("hostos-scripts/guestos/stop-guestos.sh"): "/opt/ic/bin/stop-guestos.sh",
-    Label("hostos-scripts/guestos/guestos.xml.template"): "/opt/ic/share/guestos.xml.template",
+    Label("hostos-scripts/guestos/upgrade-guestos.service"): "/etc/systemd/system/upgrade-guestos.service",
     Label("hostos-scripts/libvirt/setup-libvirt.sh"): "/opt/ic/bin/setup-libvirt.sh",
     Label("hostos-scripts/libvirt/setup-libvirt.service"): "/etc/systemd/system/setup-libvirt.service",
     Label("hostos-scripts/misc/setup-var.sh"): "/opt/ic/bin/setup-var.sh",
@@ -25,15 +21,16 @@ component_files = {
     Label("hostos-scripts/monitoring/monitor-power.sh"): "/opt/ic/bin/monitor-power.sh",
     Label("hostos-scripts/monitoring/monitor-power.service"): "/etc/systemd/system/monitor-power.service",
     Label("hostos-scripts/monitoring/monitor-power.timer"): "/etc/systemd/system/monitor-power.timer",
-    Label("hostos-scripts/build-bootstrap-config-image.sh"): "/opt/ic/bin/build-bootstrap-config-image.sh",
     Label("hostos-scripts/verbose-logging/verbose-logging.sh"): "/opt/ic/bin/verbose-logging.sh",
     Label("hostos-scripts/verbose-logging/verbose-logging.service"): "/etc/systemd/system/verbose-logging.service",
     Label("hostos-scripts/verbose-logging/logrotate.d/verbose-logging"): "/etc/logrotate.d/verbose-logging",
+    Label("hostos-scripts/grub-upgrader/grub-upgrader.sh"): "/opt/ic/bin/grub-upgrader.sh",
+    Label("hostos-scripts/grub-upgrader/grub-upgrader.service"): "/etc/systemd/system/grub-upgrader.service",
 
     # early-boot
     Label("early-boot/relabel-machine-id/relabel-machine-id.sh"): "/opt/ic/bin/relabel-machine-id.sh",
     Label("early-boot/relabel-machine-id/relabel-machine-id.service"): "/etc/systemd/system/relabel-machine-id.service",
-    Label("early-boot/setup-hostname/hostos/setup-hostname.sh"): "/opt/ic/bin/setup-hostname.sh",
+    Label("early-boot/setup-hostname/setup-hostname.sh"): "/opt/ic/bin/setup-hostname.sh",
     Label("early-boot/setup-hostname/hostos/setup-hostname.service"): "/etc/systemd/system/setup-hostname.service",
     Label("early-boot/setup-hostname/hostname-empty"): "/etc/hostname",
     Label("early-boot/save-machine-id/save-machine-id.sh"): "/opt/ic/bin/save-machine-id.sh",
@@ -47,9 +44,9 @@ component_files = {
     Label("early-boot/initramfs-tools/hostos/set-machine-id/set-machine-id"): "/etc/initramfs-tools/scripts/init-bottom/set-machine-id/set-machine-id",
 
     # misc
+    Label("misc/config/config.sh"): "/opt/ic/bin/config.sh",
     Label("misc/logging.sh"): "/opt/ic/bin/logging.sh",
     Label("misc/metrics.sh"): "/opt/ic/bin/metrics.sh",
-    Label("misc/fetch-property.sh"): "/opt/ic/bin/fetch-property.sh",
     Label("misc/vsock/vsock-agent.service"): "/etc/systemd/system/vsock-agent.service",
     Label("misc/vsock/10-vhost-vsock.rules"): "/etc/udev/rules.d/10-vhost-vsock.rules",
     Label("misc/chrony/chrony.conf"): "/etc/chrony/chrony.conf",
@@ -57,6 +54,8 @@ component_files = {
     Label("misc/hostos/sudoers"): "/etc/sudoers",
     Label("misc/hostos/ic-node.conf"): "/etc/tmpfiles.d/ic-node.conf",
     Label("misc/hostos/20-ipmi.rules"): "/etc/udev/rules.d/20-ipmi.rules",
+    Label("misc/guestos-recovery/guestos-recovery-upgrader/guestos-recovery-upgrader.sh"): "/opt/ic/bin/guestos-recovery-upgrader.sh",
+    Label("misc/guestos-recovery/guestos-recovery-upgrader/guestos-recovery-upgrader.service"): "/etc/systemd/system/guestos-recovery-upgrader.service",
 
     # monitoring
     Label("monitoring/systemd-user/user@.service"): "/etc/systemd/system/user@.service",
@@ -73,6 +72,8 @@ component_files = {
     Label("monitoring/logrotate/override.conf"): "/etc/systemd/system/logrotate.service.d/override.conf",
     Label("misc/log-config/log-config-hostos.service"): "/etc/systemd/system/log-config.service",
     Label("misc/log-config/log-config.sh"): "/opt/ic/bin/log-config.sh",
+    Label("monitoring/grub-version/grub-version.sh"): "/opt/ic/bin/grub-version.sh",
+    Label("monitoring/grub-version/grub-version.service"): "/etc/systemd/system/grub-version.service",
 
     # networking
     Label("networking/generate-network-config/hostos/generate-network-config.service"): "/etc/systemd/system/generate-network-config.service",
@@ -95,7 +96,4 @@ component_files = {
     Label("upgrade/systemd-generators/hostos/mount-generator"): "/etc/systemd/system-generators/mount-generator",
     Label("upgrade/systemd-generators/systemd-gpt-auto-generator"): "/etc/systemd/system-generators/systemd-gpt-auto-generator",
     Label("upgrade/install-upgrade.sh"): "/opt/ic/bin/install-upgrade.sh",
-
-    # TODO(NODE-1518): delete update-config.service after switch to new icos config
-    Label("misc/update-config/update-hostos-config.service"): "/etc/systemd/system/update-config.service",
 }

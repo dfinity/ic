@@ -140,6 +140,7 @@ use std::{
     io,
     time::{Duration, SystemTime},
 };
+use storage::VOTING_POWER_SNAPSHOTS;
 use timer_tasks::encode_timer_task_metrics;
 
 #[cfg(any(test, feature = "canbench-rs"))]
@@ -200,16 +201,10 @@ pub const DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS: u64 = 1725148800;
 // leave this here indefinitely, but it will just be clutter after a modest
 // amount of time.
 thread_local! {
-    static ALLOW_ACTIVE_NEURONS_IN_STABLE_MEMORY: Cell<bool> = const { Cell::new(true) };
-
-    static MIGRATE_ACTIVE_NEURONS_TO_STABLE_MEMORY: Cell<bool> = const { Cell::new(true) };
-
     static DISABLE_NF_FUND_PROPOSALS: Cell<bool>
         = const { Cell::new(cfg!(not(any(feature = "canbench-rs", feature = "test")))) };
 
-    static IS_DISBURSE_MATURITY_ENABLED: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
-
-    static USE_NODE_PROVIDER_REWARD_CANISTER: Cell<bool>
+    static ENABLE_FULFILL_SUBNET_RENTAL_REQUEST_PROPOSALS: Cell<bool>
         = const { Cell::new(cfg!(feature = "test")) };
 }
 
@@ -218,38 +213,6 @@ thread_local! {
     // begun. (This occurs in one of the prune_some_following functions.)
     static CURRENT_PRUNE_FOLLOWING_FULL_CYCLE_START_TIMESTAMP_SECONDS: Cell<u64> =
         const { Cell::new(0) };
-}
-
-pub fn allow_active_neurons_in_stable_memory() -> bool {
-    ALLOW_ACTIVE_NEURONS_IN_STABLE_MEMORY.get()
-}
-
-/// Only integration tests should use this.
-#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_enable_allow_active_neurons_in_stable_memory() -> Temporary {
-    Temporary::new(&ALLOW_ACTIVE_NEURONS_IN_STABLE_MEMORY, true)
-}
-
-/// Only integration tests should use this.
-#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_disable_allow_active_neurons_in_stable_memory() -> Temporary {
-    Temporary::new(&ALLOW_ACTIVE_NEURONS_IN_STABLE_MEMORY, false)
-}
-
-pub fn migrate_active_neurons_to_stable_memory() -> bool {
-    MIGRATE_ACTIVE_NEURONS_TO_STABLE_MEMORY.get()
-}
-
-/// Only integration tests should use this.
-#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_enable_migrate_active_neurons_to_stable_memory() -> Temporary {
-    Temporary::new(&MIGRATE_ACTIVE_NEURONS_TO_STABLE_MEMORY, true)
-}
-
-/// Only integration tests should use this.
-#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_disable_migrate_active_neurons_to_stable_memory() -> Temporary {
-    Temporary::new(&MIGRATE_ACTIVE_NEURONS_TO_STABLE_MEMORY, false)
 }
 
 pub fn are_nf_fund_proposals_disabled() -> bool {
@@ -268,34 +231,18 @@ pub fn temporarily_disable_nf_fund_proposals() -> Temporary {
     Temporary::new(&DISABLE_NF_FUND_PROPOSALS, true)
 }
 
-pub fn is_disburse_maturity_enabled() -> bool {
-    IS_DISBURSE_MATURITY_ENABLED.get()
-}
-
-/// Only integration tests should use this.
-#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_enable_disburse_maturity() -> Temporary {
-    Temporary::new(&IS_DISBURSE_MATURITY_ENABLED, true)
-}
-
-/// Only integration tests should use this.
-#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_disable_disburse_maturity() -> Temporary {
-    Temporary::new(&IS_DISBURSE_MATURITY_ENABLED, false)
-}
-
-pub fn use_node_provider_reward_canister() -> bool {
-    USE_NODE_PROVIDER_REWARD_CANISTER.get()
+pub fn are_fulfill_subnet_rental_request_proposals_enabled() -> bool {
+    ENABLE_FULFILL_SUBNET_RENTAL_REQUEST_PROPOSALS.get()
 }
 
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_enable_node_provider_reward_canister() -> Temporary {
-    Temporary::new(&USE_NODE_PROVIDER_REWARD_CANISTER, true)
+pub fn temporarily_enable_fulfill_subnet_rental_request_proposals() -> Temporary {
+    Temporary::new(&ENABLE_FULFILL_SUBNET_RENTAL_REQUEST_PROPOSALS, true)
 }
 
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_disable_node_provider_reward_canister() -> Temporary {
-    Temporary::new(&USE_NODE_PROVIDER_REWARD_CANISTER, false)
+pub fn temporarily_disable_fulfill_subnet_rental_request_proposals() -> Temporary {
+    Temporary::new(&ENABLE_FULFILL_SUBNET_RENTAL_REQUEST_PROPOSALS, false)
 }
 
 pub fn decoder_config() -> DecoderConfig {
@@ -466,11 +413,6 @@ pub fn encode_metrics(
         "Total number of neurons that have been locked for disburse operations.",
     )?;
     w.encode_gauge(
-        "governance_heap_neuron_count",
-        governance.neuron_store.heap_neuron_store_len() as f64,
-        "The number of neurons in NNS Governance canister's heap memory.",
-    )?;
-    w.encode_gauge(
         "governance_stable_memory_neuron_count",
         governance.neuron_store.stable_neuron_store_len() as f64,
         "The number of neurons in NNS Governance canister's stable memory.",
@@ -524,13 +466,7 @@ pub fn encode_metrics(
         .proposals
         .values()
         // Exclude ManageNeuron proposals.
-        .filter(|proposal_data| {
-            proposal_data
-                .proposal
-                .as_ref()
-                .map(|proposal| !proposal.is_manage_neuron())
-                .unwrap_or_default()
-        })
+        .filter(|proposal_data| !proposal_data.is_manage_neuron())
         .next_back();
     let mut total_deciding_voting_power = 0.0;
     let mut total_potential_voting_power = 0.0;
@@ -561,6 +497,18 @@ pub fn encode_metrics(
         "governance_total_potential_voting_power",
         total_potential_voting_power,
         "The total amount of potential voting power (in the most recent proposal).",
+    )?;
+
+    let proposals_using_previous_voting_power_snapshots = governance
+        .heap_data
+        .proposals
+        .values()
+        .filter(|proposal| proposal.previous_ballots_timestamp_seconds.is_some())
+        .count();
+    w.encode_gauge(
+        "governance_proposals_using_previous_voting_power_snapshots",
+        proposals_using_previous_voting_power_snapshots as f64,
+        "The number of proposals that are using previous voting power snapshots.",
     )?;
 
     // Neuron Indexes
@@ -599,13 +547,11 @@ pub fn encode_metrics(
         account_id_index_len as f64,
         "Total number of entries in the account_id index",
     )?;
-    if is_disburse_maturity_enabled() {
-        w.encode_gauge(
-            "governance_maturity_disbursement_index_len",
-            maturity_disbursement_index_len as f64,
-            "Total number of entries in the maturity disbursement index",
-        )?;
-    }
+    w.encode_gauge(
+        "governance_maturity_disbursement_index_len",
+        maturity_disbursement_index_len as f64,
+        "Total number of entries in the maturity disbursement index",
+    )?;
 
     let mut builder = w.gauge_vec(
         "governance_proposal_deadline_timestamp_seconds",
@@ -654,6 +600,17 @@ pub fn encode_metrics(
     // Timer tasks
     encode_timer_task_metrics(w)?;
 
+    // Voting power snapshots
+    let latest_snapshot_is_spike = VOTING_POWER_SNAPSHOTS.with_borrow(|voting_power_snapshots| {
+        voting_power_snapshots.is_latest_snapshot_a_spike(now_seconds())
+    });
+
+    w.encode_gauge(
+        "governance_voting_power_snapshots_latest_snapshot_is_spike",
+        if latest_snapshot_is_spike { 1.0 } else { 0.0 },
+        "Indicates whether the latest voting power snapshot is a spike compared to previous snapshots.",
+    )?;
+
     // Periodically Calculated (almost entirely detailed neuron breakdowns/rollups)
 
     if let Some(metrics) = &governance.heap_data.metrics {
@@ -693,6 +650,7 @@ pub fn encode_metrics(
             dissolving_neurons_e8s_buckets_ect,
             not_dissolving_neurons_e8s_buckets_seed,
             not_dissolving_neurons_e8s_buckets_ect,
+            spawning_neurons_count,
 
             // Non-self-authenticating neurons.
             total_voting_power_non_self_authenticating_controller: _,
@@ -955,6 +913,12 @@ pub fn encode_metrics(
                 w,
             )?;
         }
+
+        w.encode_gauge(
+            "governance_spawning_neurons_count",
+            *spawning_neurons_count as f64,
+            "The number of neurons that are in the \"spawning\" state.",
+        )?;
     }
 
     Ok(())

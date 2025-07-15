@@ -4,10 +4,10 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-http-types",
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/bitcoin/ckbtc/minter",
     "//rs/ledger_suite/icrc1",
-    "//rs/rust_canisters/http_types",
     "@crate_index//:candid",
     "@crate_index//:ic-agent",
     "@crate_index//:num-traits",

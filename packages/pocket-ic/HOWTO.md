@@ -15,7 +15,7 @@ Using a value of the `PocketIc` struct, you interact with the IC itself, e.g. vi
 ```rust
 // IC interface excerpt
 fn root_key(&self) -> Option<Vec<u8>>
-fn set_time(&self, time: SystemTime)
+fn set_time(&self, time: Time)
 fn create_canister(&self) -> CanisterId
 fn install_canister(&self, canister_id: CanisterId, wasm_module: Vec<u8>, ...)  
 ...
@@ -433,6 +433,9 @@ async fn test_canister_http_live() {
         .unwrap();
     let http_response = Decode!(&res, HttpResponse).unwrap();
     assert_eq!(http_response.body, b"...");
+
+    // Explicitly drop async instance.
+    pic.drop().await;
 }
 ```
 
@@ -579,7 +582,7 @@ Now we create a PocketIC instance configured with the Bitcoin subnet and the `bi
 Because the `bitcoind` process uses the real time, we set the time of the PocketIC instance to be the current time:
 
 ```rust
-    pic.set_time(SystemTime::now());
+    pic.set_time(SystemTime::now().into());
 ```
 
 Next we deploy the bitcoin testnet canister (canister ID `g4xu7-jiaaa-aaaan-aaaaq-cai`) on the bitcoin subnet and configure it with `Network::Regtest`
@@ -661,3 +664,100 @@ To test the VetKd feature, you need to create a PocketIC instance with II or fid
         .with_nonmainnet_features(true) // the VetKd feature is not available on mainnet yet
         .build();
 ```
+
+## Running multiple tests from the same state
+
+To speed up running a test suite, it is possible to run multiple tests from the same state
+that is only created once at the very beginning and then reused by the individual tests
+without interference between the individual tests.
+An example of a such setup:
+
+```rust
+use std::sync::OnceLock;
+
+const MAINNET_CANISTER_ID: Principal =
+    Principal::from_slice(&[0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x01]);
+
+static POCKET_IC_STATE: OnceLock<PocketIcState> = OnceLock::new();
+
+fn init_state() -> &'static PocketIcState {
+    POCKET_IC_STATE.get_or_init(|| {
+        // create an empty PocketIC state to be set up later
+        let state = PocketIcState::new();
+        // create a PocketIC instance used to set up the state
+        let pic = PocketIcBuilder::new()
+            .with_nns_subnet()
+            .with_state(state)
+            .build();
+
+        // set up the state to be used in multiple tests later
+        pic.create_canister_with_id(None, None, MAINNET_CANISTER_ID)
+            .unwrap();
+
+        // serialize and expose the state
+        pic.drop_and_take_state().unwrap()
+    })
+}
+
+#[test]
+fn pocket_ic_init_state_1() {
+    // mount the state set up before
+    let pic1 = PocketIcBuilder::new()
+        .with_read_only_state(init_state())
+        .build();
+
+    // assert that the state is properly set up
+    assert!(pic1.canister_exists(MAINNET_CANISTER_ID));
+}
+
+#[test]
+fn pocket_ic_init_state_2() {
+    // mount the state set up before
+    let pic2 = PocketIcBuilder::new()
+        .with_read_only_state(init_state())
+        .build();
+
+    // assert that the state is properly set up
+    assert!(pic2.canister_exists(MAINNET_CANISTER_ID));
+}
+```
+
+## Time
+
+The `pocket-ic` crate defines the type `Time` to represent the time of a PocketIC instance
+with nanosecond precision on all supported platforms (Windows, MacOS, Linux).
+The PocketIC time is used in the functions `PocketIc::get_time`, `PocketIc::set_time`, and `PocketIc::set_certified_time`.
+
+A PocketIC time can be created from a UNIX timestamp in nanoseconds using
+the function `Time::from_nanos_since_unix_epoch` and converted back to
+a UNIX timestamp in nanoseconds using the function `Time::as_nanos_since_unix_epoch`.
+
+A `system_time: SystemTime` can be converted into `Time` using `system_into.into()`.
+A `time: Time` can be converted into `SystemTime` using `time.try_into()`
+which fails with an error if the conversion would lead to loss of precision (e.g., on Windows).
+
+Finally, PocketIC times can be compared (for both equality and ordering)
+and a `Duration` can be added to a PocketIC time.
+
+## Nonmainnet features
+
+To test a new feature that has not (yet) been rolled out to the ICP mainnet,
+the `PocketIcBuilder::with_nonmainnet_features` pattern should be used when creating a new PocketIC instance.
+
+```rust
+    // We create a PocketIC instance with features enabled that are not yet available on the ICP mainnet.
+    let pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_nonmainnet_features(true)
+        .build();
+```
+
+To use a new management canister endpoint that is not yet supported by a dedicated (Rust) PocketIC library function,
+the generic PocketIC library API, e.g., `PocketIc::update_call_with_effective_principal` should be used:
+- the `canister_id` argument should be the management canister principal (`aaaaa-aa`),
+- the `effective_principal` argument should be the actual canister or subnet to which the call is targetted
+  (e.g., `RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec())` for a `canister_id` of type `Principal`;
+  in particular, `RawEffectivePrincipal::None` must not be used),
+- and the `payload` argument should be the Candid-encoded binary input to the new management canister endpoint
+  (the type of the `payload` argument can either be obtained from a corresponding branch of the public `ic-management-canister-types` crate
+  or be defined manually).

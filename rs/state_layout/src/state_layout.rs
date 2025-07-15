@@ -29,7 +29,7 @@ use ic_types::{
     LongExecutionMode, MemoryAllocation, NumInstructions, PrincipalId, SnapshotId, Time,
 };
 use ic_utils::thread::maybe_parallel_map;
-use ic_wasm_types::{CanisterModule, WasmHash};
+use ic_wasm_types::{CanisterModule, MemoryMappableWasmFile, WasmHash};
 use prometheus::{Histogram, IntCounterVec, IntGauge};
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::{identity, From, TryFrom, TryInto};
@@ -182,6 +182,7 @@ pub struct CanisterStateBits {
     pub next_snapshot_id: u64,
     pub snapshots_memory_usage: NumBytes,
     pub task_queue: TaskQueue,
+    pub environment_variables: BTreeMap<String, String>,
 }
 
 /// This struct contains bits of the `CanisterSnapshot` that are not already
@@ -470,6 +471,23 @@ impl TipHandler {
         }
         Ok(())
     }
+
+    /// Moves the entire canister directory from one canister id to another.
+    pub fn move_canister_directory(
+        &mut self,
+        height: Height,
+        src: CanisterId,
+        dst: CanisterId,
+    ) -> Result<(), LayoutError> {
+        let tip = self.tip(height)?;
+        let src_path = tip.canister(&src)?.raw_path();
+        let dst_path = tip.canister(&dst)?.raw_path();
+        std::fs::rename(&src_path, &dst_path).map_err(|err| LayoutError::IoError {
+            path: src_path,
+            message: "Failed to rename canister".to_string(),
+            io_err: err,
+        })
+    }
 }
 
 enum CheckpointRemovalRequest {
@@ -720,18 +738,18 @@ impl StateLayout {
     /// the scratchpad is properly marked as unverified before transitioning it into a checkpoint.
     pub fn promote_scratchpad_to_unverified_checkpoint<T>(
         &self,
-        scratchpad_layout: CheckpointLayout<RwPolicy<'_, T>>,
+        scratchpad_layout: CheckpointLayout<RwPolicy<T>>,
         height: Height,
-    ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
+    ) -> Result<CheckpointLayout<RwPolicy<T>>, LayoutError> {
         scratchpad_layout.create_unverified_checkpoint_marker()?;
         self.scratchpad_to_checkpoint(scratchpad_layout, height)
     }
 
     fn scratchpad_to_checkpoint<T>(
         &self,
-        layout: CheckpointLayout<RwPolicy<'_, T>>,
+        layout: CheckpointLayout<RwPolicy<T>>,
         height: Height,
-    ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
+    ) -> Result<CheckpointLayout<RwPolicy<T>>, LayoutError> {
         // The scratchpad must have an unverified marker before it is promoted to a checkpoint.
         debug_assert!(!layout.is_checkpoint_verified());
         debug_assert_eq!(height, layout.height());
@@ -755,7 +773,7 @@ impl StateLayout {
             message: "Could not sync checkpoints".to_string(),
             io_err: err,
         })?;
-        self.checkpoint_in_verification(height)
+        self.checkpoint(height)
     }
 
     pub fn clone_checkpoint(&self, from: Height, to: Height) -> Result<(), LayoutError> {
@@ -778,7 +796,10 @@ impl StateLayout {
 
     /// Returns the layout of the checkpoint with the given height.
     /// If the checkpoint is not found, an error is returned.
-    fn checkpoint(&self, height: Height) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
+    fn checkpoint<T>(&self, height: Height) -> Result<CheckpointLayout<T>, LayoutError>
+    where
+        T: AccessPolicy,
+    {
         let cp_name = Self::checkpoint_name(height);
         let path = self.checkpoints().join(cp_name);
         if !path.exists() {
@@ -1576,17 +1597,16 @@ fn parse_and_sort_checkpoint_heights(names: &[String]) -> Result<Vec<Height>, La
     Ok(heights)
 }
 
-struct CheckpointLayoutImpl<Permissions: AccessPolicy> {
+struct CheckpointLayoutImpl {
     root: PathBuf,
     height: Height,
     // The StateLayout is used to make sure we never remove the CheckpointLayout when still in use.
     // Is not None for CheckpointLayout pointing to "real" checkpoints, that is checkpoints in
     // StateLayout's root/checkpoints/..., that are tracked by StateLayout
     state_layout: Option<StateLayout>,
-    permissions_tag: PhantomData<Permissions>,
 }
 
-impl<Permissions: AccessPolicy> Drop for CheckpointLayoutImpl<Permissions> {
+impl Drop for CheckpointLayoutImpl {
     fn drop(&mut self) {
         if let Some(state_layout) = &self.state_layout {
             state_layout.remove_checkpoint_ref(self.height)
@@ -1594,11 +1614,22 @@ impl<Permissions: AccessPolicy> Drop for CheckpointLayoutImpl<Permissions> {
     }
 }
 
-pub struct CheckpointLayout<Permissions: AccessPolicy>(Arc<CheckpointLayoutImpl<Permissions>>);
+pub struct CheckpointLayout<Permissions: AccessPolicy>(
+    Arc<CheckpointLayoutImpl>,
+    PhantomData<Permissions>,
+);
 
+// TODO(MR-676) prevent cloning when Permissions is intentinally non-cloneable
 impl<Permissions: AccessPolicy> Clone for CheckpointLayout<Permissions> {
     fn clone(&self) -> Self {
-        Self(self.0.clone())
+        CheckpointLayout(self.0.clone(), PhantomData)
+    }
+}
+
+impl<Permissions: ReadPolicy> CheckpointLayout<Permissions> {
+    /// Clone CheckpointLayout removing all access but ReadOnly.
+    pub fn as_readonly(&self) -> CheckpointLayout<ReadOnly> {
+        CheckpointLayout(Arc::clone(&self.0), PhantomData)
     }
 }
 
@@ -1620,22 +1651,26 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
         state_layout: StateLayout,
     ) -> Result<Self, LayoutError> {
         Permissions::check_dir(&root)?;
-        Ok(Self(Arc::new(CheckpointLayoutImpl::<Permissions> {
-            root,
-            height,
-            state_layout: Some(state_layout),
-            permissions_tag: PhantomData,
-        })))
+        Ok(Self(
+            Arc::new(CheckpointLayoutImpl {
+                root,
+                height,
+                state_layout: Some(state_layout),
+            }),
+            PhantomData,
+        ))
     }
 
     pub fn new_untracked(root: PathBuf, height: Height) -> Result<Self, LayoutError> {
         Permissions::check_dir(&root)?;
-        Ok(Self(Arc::new(CheckpointLayoutImpl::<Permissions> {
-            root,
-            height,
-            state_layout: None,
-            permissions_tag: PhantomData,
-        })))
+        Ok(Self(
+            Arc::new(CheckpointLayoutImpl {
+                root,
+                height,
+                state_layout: None,
+            }),
+            PhantomData,
+        ))
     }
 
     pub fn system_metadata(&self) -> ProtoFileWith<pb_metadata::SystemMetadata, Permissions> {
@@ -1704,6 +1739,34 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
             .into_iter()
             .flatten()
             .collect())
+    }
+
+    pub fn all_existing_wasm_files(&self) -> Result<Vec<WasmFile<Permissions>>, LayoutError> {
+        let canister_wasm_files = self
+            .canister_ids()?
+            .into_iter()
+            .map(|id| {
+                let canister = self.canister(&id)?;
+                Ok(canister.wasm())
+            })
+            .collect::<Result<Vec<_>, LayoutError>>()?;
+
+        let snapshot_wasm_files = self
+            .snapshot_ids()?
+            .into_iter()
+            .map(|id| {
+                let snapshot = self.snapshot(&id)?;
+                Ok(snapshot.wasm())
+            })
+            .collect::<Result<Vec<_>, LayoutError>>()?;
+
+        let wasm_files = canister_wasm_files
+            .into_iter()
+            .chain(snapshot_wasm_files)
+            .filter(|wasm| wasm.raw_path().exists())
+            .collect();
+
+        Ok(wasm_files)
     }
 
     /// Directory where the snapshot for `snapshot_id` is stored.
@@ -2094,7 +2157,11 @@ impl<Permissions: AccessPolicy> CanisterLayout<Permissions> {
     }
 
     pub fn wasm(&self) -> WasmFile<Permissions> {
-        self.canister_root.join(WASM_FILE).into()
+        WasmFile {
+            path: self.canister_root.join(WASM_FILE),
+            permissions_tag: PhantomData,
+            _checkpoint: self.checkpoint.clone(),
+        }
     }
 
     pub fn canister(
@@ -2180,7 +2247,11 @@ impl<Permissions: AccessPolicy> SnapshotLayout<Permissions> {
     }
 
     pub fn wasm(&self) -> WasmFile<Permissions> {
-        self.snapshot_root.join(WASM_FILE).into()
+        WasmFile {
+            path: self.snapshot_root.join(WASM_FILE),
+            permissions_tag: PhantomData,
+            _checkpoint: self.checkpoint.clone(),
+        }
     }
 
     pub fn snapshot(
@@ -2431,26 +2502,65 @@ where
 /// A value of type `WasmFile` declares that some path should contain
 /// a Wasm module and provides a way to read it from disk or write it
 /// to disk.
-pub struct WasmFile<Permissions> {
+pub struct WasmFile<Permissions: AccessPolicy> {
     path: PathBuf,
     permissions_tag: PhantomData<Permissions>,
+    // Keep checkpoint alive so that the WasmFile can be loaded asynchronously.
+    _checkpoint: Option<CheckpointLayout<Permissions>>,
 }
 
-impl<T> WasmFile<T> {
+impl<Permissions: AccessPolicy> WasmFile<Permissions> {
     pub fn raw_path(&self) -> &Path {
         &self.path
     }
+}
+
+impl<T> MemoryMappableWasmFile for WasmFile<T>
+where
+    T: ReadPolicy,
+{
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+/// Checks that the given wasm file can be memory-mapped successfully.
+pub fn try_mmap_wasm_file(
+    wasm_file_layout: &dyn MemoryMappableWasmFile,
+) -> Result<(), LayoutError> {
+    wasm_file_layout
+        .mmap_file()
+        .map_err(|err| LayoutError::IoError {
+            path: wasm_file_layout.path().to_path_buf(),
+            message: "Failed to validate wasm file".to_string(),
+            io_err: err,
+        })?;
+    Ok(())
 }
 
 impl<T> WasmFile<T>
 where
     T: ReadPolicy,
 {
-    pub fn deserialize(&self, module_hash: WasmHash) -> Result<CanisterModule, LayoutError> {
-        CanisterModule::new_from_file(self.path.clone(), module_hash).map_err(|err| {
+    /// Lazily loads a Wasm file with a known `module_hash` and optionally a known file `len`.
+    ///
+    /// If the file length is already known before calling this function,
+    /// passing it into the function avoids fetching the file's metadata, which can
+    /// be a relatively expensive operation when dealing with a large number of files.
+    /// This is similar to providing the `module_hash` upfront to avoid recomputing it.
+    pub fn lazy_load_with_module_hash(
+        self,
+        module_hash: WasmHash,
+        len: Option<usize>,
+    ) -> Result<CanisterModule, LayoutError>
+    where
+        T: Send + Sync + 'static,
+    {
+        let path = self.path.clone();
+        CanisterModule::new_from_file(Box::new(self), module_hash, len).map_err(|err| {
             LayoutError::IoError {
-                path: self.path.clone(),
-                message: "Failed to read file contents".to_string(),
+                path,
+                message: "Failed to load wasm file lazily".to_string(),
                 io_err: err,
             }
         })
@@ -2531,15 +2641,6 @@ where
     }
 }
 
-impl<Permissions> From<PathBuf> for WasmFile<Permissions> {
-    fn from(path: PathBuf) -> Self {
-        Self {
-            path,
-            permissions_tag: PhantomData,
-        }
-    }
-}
-
 impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
     fn from(item: CanisterStateBits) -> Self {
         Self {
@@ -2604,6 +2705,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             next_snapshot_id: item.next_snapshot_id,
             snapshots_memory_usage: item.snapshots_memory_usage.get(),
             tasks: Some((&item.task_queue).into()),
+            environment_variables: item.environment_variables.into_iter().collect(),
         }
     }
 }
@@ -2745,6 +2847,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             next_snapshot_id: value.next_snapshot_id,
             snapshots_memory_usage: NumBytes::from(value.snapshots_memory_usage),
             task_queue,
+            environment_variables: value.environment_variables.into_iter().collect(),
         })
     }
 }

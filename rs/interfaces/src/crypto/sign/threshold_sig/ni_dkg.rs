@@ -80,7 +80,7 @@ pub trait NiDkgAlgorithm {
     ///   [`NiDkgAlgorithm::load_transcript`]  must be called prior to calling
     ///   this method.
     /// * [`DkgCreateDealingError::TransientInternalError`] if there is a transient internal error,
-    ///    e.g., an RPC error when calling a remote CSP vault.
+    ///   e.g., an RPC error when calling a remote CSP vault.
     fn create_dealing(&self, config: &NiDkgConfig) -> Result<NiDkgDealing, DkgCreateDealingError>;
 
     /// Verifies a non-interactive DKG dealing.

@@ -20,9 +20,9 @@ rust_test_suite(
     srcs = glob(["tests/**/*.rs"]),
     deps = [
         ":vetkd",
-        "//packages/ic-vetkd-utils",
         "//rs/crypto/internal/crypto_lib/bls12_381/type",
         "//rs/crypto/internal/crypto_lib/bls12_381/vetkd",
+        "@crate_index//:ic-vetkeys",
         "@crate_index//:rand",
         "@crate_index//:rand_chacha",
     ],

@@ -20,7 +20,7 @@ USER root:root
 
 RUN mkdir -p /boot/config \
              /boot/efi \
-             /boot/grub
+             /grub
 COPY etc /etc
 
 # Deactivate motd, it tries creating $HOME/.cache/motd.legal-displayed,
@@ -137,6 +137,7 @@ RUN ln -sf /bin/bash /usr/bin/sh
 RUN addgroup --system nonconfidential && \
     addgroup --system ic-csp-vault-socket && \
     addgroup --system vsock && \
+    addgroup --system ic-consensus-pool && \
     addgroup --system ic-registry-local-store
 
 # The "ic-csp-vault" account. Used to run `ic-crypto-csp` binary and access the crypto key material.
@@ -156,6 +157,7 @@ RUN adduser --system --disabled-password --home /var/lib/ic --group --no-create-
     adduser ic-replica backup && \
     adduser ic-replica ic-csp-vault-socket && \
     adduser ic-replica nonconfidential && \
+    adduser ic-replica ic-consensus-pool && \
     adduser ic-replica ic-registry-local-store && \
     adduser ic-replica ic-http-adapter && \
     adduser ic-replica vsock
@@ -169,6 +171,7 @@ RUN chsh -s /bin/bash backup && \
     chown backup:backup /var/lib/backup && \
     usermod -d /var/lib/backup backup && \
     adduser backup systemd-journal && \
+    adduser backup ic-consensus-pool && \
     adduser backup ic-registry-local-store
 
 # The "read-only" user account. May read everything besides crypto.
@@ -176,6 +179,7 @@ RUN adduser --system --disabled-password --home /var/lib/readonly --shell /bin/b
     adduser readonly backup && \
     adduser readonly nonconfidential && \
     adduser readonly systemd-journal && \
+    adduser readonly ic-consensus-pool && \
     adduser readonly ic-registry-local-store
 
 # The omnipotent "admin" account. May read everything and crucially can also
@@ -184,6 +188,7 @@ RUN adduser --system --disabled-password --home /var/lib/admin --shell /bin/bash
     chown admin:staff /var/lib/admin && \
     adduser admin backup && \
     adduser admin nonconfidential && \
+    adduser admin ic-consensus-pool && \
     adduser admin ic-registry-local-store && \
     adduser admin systemd-journal && \
     adduser admin vsock && \

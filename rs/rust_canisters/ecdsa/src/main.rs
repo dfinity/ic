@@ -1,6 +1,6 @@
 use candid::{candid_method, CandidType, Encode};
 use ic_cdk::api::{call::call_raw, print};
-use ic_cdk_macros::update;
+use ic_cdk::update;
 use ic_management_canister_types_private::{
     DerivationPath, EcdsaCurve, EcdsaKeyId, Method as Ic00Method, SignWithECDSAArgs, IC_00,
 };

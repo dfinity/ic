@@ -7,9 +7,7 @@ use ic_icp_rosetta_client::RosettaClient;
 use ic_ledger_core::block::BlockType;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_constants::LEDGER_CANISTER_ID;
-use ic_nns_governance_api::pb::v1::GovernanceError;
-use ic_nns_governance_api::pb::v1::ListNeurons;
-use ic_nns_governance_api::pb::v1::ListNeuronsResponse;
+use ic_nns_governance_api::{GovernanceError, ListNeurons, ListNeuronsResponse};
 use ic_rosetta_api::convert::to_hash;
 use icp_ledger::GetBlocksArgs;
 use icp_ledger::QueryEncodedBlocksResponse;
@@ -194,7 +192,7 @@ pub async fn list_neurons(agent: &Agent) -> ListNeuronsResponse {
     .unwrap()
 }
 
-pub async fn update_neuron(agent: &Agent, neuron: ic_nns_governance_api::pb::v1::Neuron) {
+pub async fn update_neuron(agent: &Agent, neuron: ic_nns_governance_api::Neuron) {
     let result = Decode!(
         &agent
             .update(&GOVERNANCE_CANISTER_ID.into(), "update_neuron")

@@ -1,5 +1,5 @@
 /* tag::catalog[]
-Title:: HTTP requests from canisters to remote IPv4 service through socks proxy on boundary node.
+Title:: HTTP requests from canisters to remote IPv4 service through socks proxy on API boundary node.
 
 Goal:: Ensure that only system subnets with the feature enabled can access IPv4 endpoints.
 
@@ -25,9 +25,7 @@ use ic_management_canister_types_private::{HttpMethod, TransformContext, Transfo
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::driver::test_env_api::{HasPublicApiUrl, RetrieveIpv4Addr};
 use ic_system_test_driver::driver::{
-    boundary_node::{BoundaryNode, BoundaryNodeVm},
     ic::{InternetComputer, Subnet},
     test_env::TestEnv,
     test_env_api::{get_dependency_path, READY_WAIT_TIMEOUT, RETRY_BACKOFF},
@@ -39,8 +37,7 @@ use proxy_canister::UnvalidatedCanisterHttpRequestArgs;
 use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
 use slog::info;
 
-const BN_NAME: &str = "socks-bn";
-
+// NOTE: This test is currently non-functional because API boundary nodes running GuestOS on Farm VMs do not support IPv4.
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
@@ -54,7 +51,6 @@ pub fn setup(env: TestEnv) {
     let logger = env.logger();
 
     // Set up Universal VM with HTTP Bin testing service
-
     UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
         .with_config_img(get_dependency_path(
             "rs/tests/networking/canister_http/http_uvm_config_image.zst",
@@ -66,17 +62,9 @@ pub fn setup(env: TestEnv) {
     canister_http::start_httpbin_on_uvm(&env);
     info!(&logger, "Started Universal VM!");
 
-    // Create raw BN vm to get ipv6 address with which we configure IC.
-    let bn_vm = BoundaryNode::new(BN_NAME.to_string())
-        .allocate_vm(&env)
-        .unwrap();
-    let bn_ipv6 = bn_vm.ipv6();
-
-    info!(&logger, "Created raw BN with IP {}!", bn_ipv6);
-
     // Create IC with injected socks proxy.
     InternetComputer::new()
-        .with_socks_proxy(format!("socks5://[{bn_ipv6}]:1080"))
+        // .with_socks_proxy(format!("socks5://[{ipv6}]:1080"))
         .add_subnet(
             Subnet::new(SubnetType::System)
                 .with_features(SubnetFeatures {
@@ -99,30 +87,6 @@ pub fn setup(env: TestEnv) {
 
     await_nodes_healthy(&env);
     install_nns_canisters(&env);
-
-    // Start BN.
-    bn_vm
-        .for_ic(&env, "")
-        .start(&env)
-        .expect("failed to setup BoundaryNode VM");
-
-    let boundary_node_vm = env
-        .get_deployed_boundary_node(BN_NAME)
-        .unwrap()
-        .get_snapshot()
-        .unwrap();
-
-    info!(
-        &logger,
-        "Boundary node {BN_NAME} has IPv4 {:?} and IPv6 {:?}",
-        boundary_node_vm.block_on_ipv4().unwrap(),
-        boundary_node_vm.ipv6()
-    );
-
-    info!(&logger, "Checking BN health");
-    boundary_node_vm
-        .await_status_is_healthy()
-        .expect("Boundary node did not come up healthy.");
 }
 
 pub fn test(env: TestEnv) {
@@ -168,6 +132,7 @@ pub fn test(env: TestEnv) {
                             }),
                             method: HttpMethod::GET,
                             max_response_bytes: None,
+                            is_replicated: None,
                         },
                         cycles: 500_000_000_000,
                     },
@@ -221,6 +186,7 @@ pub fn test(env: TestEnv) {
                             }),
                             method: HttpMethod::GET,
                             max_response_bytes: None,
+                            is_replicated: None,
                         },
                         cycles: 500_000_000_000,
                     },

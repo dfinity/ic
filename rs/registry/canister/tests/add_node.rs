@@ -380,6 +380,7 @@ fn init_mutation_with_node_allowance(node_allowance: u64) -> RegistryAtomicMutat
         dc_id: "".into(),
         rewardable_nodes: BTreeMap::new(),
         ipv6: None,
+        max_rewardable_nodes: BTreeMap::new(),
     };
     RegistryAtomicMutateRequest {
         mutations: vec![RegistryMutation {

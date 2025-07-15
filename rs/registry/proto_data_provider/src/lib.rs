@@ -1,9 +1,9 @@
 use bytes::{Buf, BufMut};
-use ic_interfaces_registry::{RegistryDataProvider, RegistryTransportRecord, RegistryValue};
+use ic_interfaces_registry::{RegistryDataProvider, RegistryRecord, RegistryValue};
 use ic_registry_common_proto::pb::proto_registry::v1::{ProtoRegistry, ProtoRegistryRecord};
-use ic_registry_transport::insert;
 use ic_registry_transport::pb::v1::registry_mutation::Type;
 use ic_registry_transport::pb::v1::{RegistryAtomicMutateRequest, RegistryMutation};
+use ic_registry_transport::upsert;
 use ic_sys::fs::write_atomically;
 use ic_types::{registry::RegistryDataProviderError, RegistryVersion};
 use std::collections::HashMap;
@@ -203,7 +203,7 @@ impl ProtoRegistryDataProvider {
 
         for record in records {
             let version = record.version;
-            let mutation = insert(record.key, record.value.or_else(|| Some(vec![])).unwrap());
+            let mutation = upsert(record.key, record.value.or_else(|| Some(vec![])).unwrap());
 
             if let Some(mutations_vec) = mutations_by_version.get_mut(&version) {
                 mutations_vec.push(mutation);
@@ -248,13 +248,13 @@ impl RegistryDataProvider for ProtoRegistryDataProvider {
     fn get_updates_since(
         &self,
         version: RegistryVersion,
-    ) -> Result<Vec<RegistryTransportRecord>, RegistryDataProviderError> {
+    ) -> Result<Vec<RegistryRecord>, RegistryDataProviderError> {
         let records = self.records.read().unwrap();
 
         let records = records
             .iter()
             .filter(|r| r.version > version.get())
-            .map(|r| RegistryTransportRecord {
+            .map(|r| RegistryRecord {
                 key: r.key.clone(),
                 version: RegistryVersion::new(r.version),
                 value: r.value.to_owned(),

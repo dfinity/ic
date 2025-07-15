@@ -16,6 +16,7 @@ filegroup(
 # See rs/nervous_system/feature_test.md
 BASE_DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-http-types",
     "//rs/crypto/sha2",
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
@@ -26,10 +27,10 @@ BASE_DEPENDENCIES = [
     "//rs/nns/constants",
     "//rs/nns/handlers/root/interface",
     "//rs/protobuf",
+    "//rs/registry/canister",
     "//rs/registry/keys",
     "//rs/registry/routing_table",
     "//rs/registry/transport",
-    "//rs/rust_canisters/http_types",
     "//rs/rust_canisters/on_wire",
     "//rs/types/base_types",
     "//rs/types/management_canister_types",
@@ -53,7 +54,6 @@ DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES
 MACRO_DEPENDENCIES = [
     # Keep sorted.
     "//rs/nervous_system/common/build_metadata",
-    "@crate_index//:ic-cdk-macros",
 ]
 
 BUILD_DEPENDENCIES = [
@@ -79,7 +79,6 @@ DEV_DEPENDENCIES = [
         "//rs/types/types",
         "//rs/test_utilities",
         "//rs/test_utilities/compare_dirs",
-        "//rs/registry/canister",
         "@crate_index//:tempfile",
         "@crate_index//:assert_matches",
         "@crate_index//:hex",
@@ -209,6 +208,7 @@ rust_ic_test_suite(
         "//rs/nns/sns-wasm:sns-wasm-canister",
         "//rs/node_rewards/canister:node-rewards-canister",
         "//rs/registry/canister:registry-canister",
+        "//rs/registry/canister:registry-canister-test",
         "//rs/universal_canister/impl:universal_canister.wasm.gz",
     ],
     env = {
@@ -220,6 +220,7 @@ rust_ic_test_suite(
         "LIFELINE_WASM_PATH": "$(rootpath //rs/nns/handlers/lifeline/impl:lifeline_canister)",
         "NODE_REWARDS_CANISTER_WASM_PATH": "$(rootpath //rs/node_rewards/canister:node-rewards-canister)",
         "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
+        "REGISTRY_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister-test)",
         "ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root/impl:root-canister)",
         "SNS_WASM_CANISTER_WASM_PATH": "$(rootpath //rs/nns/sns-wasm:sns-wasm-canister)",
         "UPGRADE_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root/impl:upgrade-test-canister)",

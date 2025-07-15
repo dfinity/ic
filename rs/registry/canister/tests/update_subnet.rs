@@ -3,7 +3,8 @@ use candid::Encode;
 use dfn_candid::candid;
 use ic_base_types::{subnet_id_try_from_protobuf, PrincipalId, SubnetId};
 use ic_management_canister_types_private::{
-    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
+    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
+    VetKdKeyId,
 };
 use ic_nns_test_utils::registry::TEST_ID;
 use ic_nns_test_utils::{
@@ -13,9 +14,11 @@ use ic_nns_test_utils::{
     },
     registry::{get_value_or_panic, invariant_compliant_mutation_as_atomic_req},
 };
-use ic_protobuf::registry::crypto::v1::ChainKeySigningSubnetList;
-use ic_protobuf::registry::subnet::v1::{ChainKeyConfig as ChainKeyConfigPb, SubnetRecord};
-use ic_registry_keys::{make_chain_key_signing_subnet_list_key, make_subnet_record_key};
+use ic_protobuf::registry::crypto::v1::ChainKeyEnabledSubnetList;
+use ic_protobuf::registry::subnet::v1::{
+    CanisterCyclesCostSchedule, ChainKeyConfig as ChainKeyConfigPb, SubnetRecord,
+};
+use ic_registry_keys::{make_chain_key_enabled_subnet_list_key, make_subnet_record_key};
 use ic_registry_subnet_features::{
     ChainKeyConfig as ChainKeyConfigInternal, DEFAULT_ECDSA_MAX_QUEUE_SIZE,
 };
@@ -149,6 +152,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_a_subnets_co
             ssh_readonly_access: vec![],
             ssh_backup_access: vec![],
             chain_key_config: None,
+            canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
         };
 
         // An attacker got a canister that is trying to pass for the governance
@@ -271,6 +275,8 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
                             ssh_readonly_access: vec![],
                             ssh_backup_access: vec![],
                             chain_key_config: None,
+                            canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal
+                                as i32,
                         }
                         .encode_to_vec(),
                     )],
@@ -361,6 +367,7 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
                 ssh_readonly_access: vec!["pub_key_0".to_string()],
                 ssh_backup_access: vec!["pub_key_1".to_string()],
                 chain_key_config: None,
+                canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
             }
         );
 
@@ -381,6 +388,15 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
 fn test_subnets_configuration_schnorr_fields_are_updated_correctly() {
     let key_id = MasterPublicKeyId::Schnorr(SchnorrKeyId {
         algorithm: SchnorrAlgorithm::Bip340Secp256k1,
+        name: "key_id_1".to_string(),
+    });
+    test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id);
+}
+
+#[test]
+fn test_subnets_configuration_vetkd_fields_are_updated_correctly() {
+    let key_id = MasterPublicKeyId::VetKd(VetKdKeyId {
+        curve: VetKdCurve::Bls12_381_G2,
         name: "key_id_1".to_string(),
     });
     test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id);
@@ -436,6 +452,7 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
             ssh_readonly_access: vec![],
             ssh_backup_access: vec![],
             chain_key_config: None,
+            canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
         };
 
         // Just create the registry canister and wait until the subnet_handler ID is
@@ -471,7 +488,11 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
         let chain_key_config = ChainKeyConfig {
             key_configs: vec![KeyConfig {
                 key_id: Some(key_id.clone()),
-                pre_signatures_to_create_in_advance: Some(10),
+                pre_signatures_to_create_in_advance: Some(if key_id.requires_pre_signatures() {
+                    10
+                } else {
+                    0
+                }),
                 max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
             }],
             signature_request_timeout_ns,
@@ -609,9 +630,9 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
             // Inspect the signing subnet list
             {
                 let new_signing_subnet_list: Vec<_> =
-                    get_value_or_panic::<ChainKeySigningSubnetList>(
+                    get_value_or_panic::<ChainKeyEnabledSubnetList>(
                         &registry,
-                        make_chain_key_signing_subnet_list_key(&key_id).as_bytes(),
+                        make_chain_key_enabled_subnet_list_key(&key_id).as_bytes(),
                     )
                     .await
                     .subnets

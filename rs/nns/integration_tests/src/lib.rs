@@ -31,9 +31,6 @@ mod cycles_minting_canister_with_exchange_rate_canister;
 mod node_provider_remuneration;
 
 #[cfg(test)]
-mod governance_mem_test;
-
-#[cfg(test)]
 mod governance_get_build_metadata_test;
 
 #[cfg(test)]
@@ -100,13 +97,13 @@ mod update_unassigned_nodes_config;
 mod wait_for_quiet;
 
 #[cfg(test)]
-mod governance_migrations;
-
-#[cfg(test)]
 mod governance_neurons;
 
 #[cfg(test)]
 mod governance_time_warp;
+
+#[cfg(test)]
+mod governance_proposals;
 
 #[cfg(test)]
 mod known_neurons;
@@ -148,4 +145,4 @@ mod upgrade_canisters_with_golden_nns_state;
 mod create_service_nervous_system;
 
 #[cfg(test)]
-mod node_provider_remuneration_migration;
+mod registry_get_chunk;

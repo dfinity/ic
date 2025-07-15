@@ -1,12 +1,7 @@
 use super::*;
 use crate::{
-    allow_active_neurons_in_stable_memory,
     neuron::{DissolveStateAndAge, NeuronBuilder},
     pb::v1::{KnownNeuronData, NeuronType},
-    temporarily_disable_allow_active_neurons_in_stable_memory,
-    temporarily_disable_migrate_active_neurons_to_stable_memory,
-    temporarily_enable_allow_active_neurons_in_stable_memory,
-    temporarily_enable_migrate_active_neurons_to_stable_memory,
 };
 use ic_base_types::PrincipalId;
 use ic_nervous_system_common::{E8, ONE_DAY_SECONDS, ONE_YEAR_SECONDS};
@@ -16,28 +11,14 @@ use maplit::{btreemap, hashmap};
 use pretty_assertions::assert_eq;
 use std::{collections::BTreeMap, str::FromStr};
 
-fn create_test_neuron_builder(
-    id: u64,
-    dissolve_state_and_age: DissolveStateAndAge,
-) -> NeuronBuilder {
-    // Among the required neuron fields, only the id and dissolve state and age are meaningful
-    // for neuron metrics tests.
-    NeuronBuilder::new(
-        NeuronId { id },
-        Subaccount::try_from([0u8; 32].as_ref()).unwrap(),
-        PrincipalId::new_user_test_id(123),
-        dissolve_state_and_age,
-        123_456_789,
-    )
-}
-
-fn test_compute_metrics_helper() {
+#[test]
+fn test_compute_metrics() {
     let mut neuron_store = NeuronStore::new(BTreeMap::new());
     let now = neuron_store.now();
 
     neuron_store
         .add_neuron(
-            create_test_neuron_builder(
+            NeuronBuilder::new_for_test(
                 1,
                 DissolveStateAndAge::NotDissolving {
                     dissolve_delay_seconds: 1,
@@ -51,7 +32,7 @@ fn test_compute_metrics_helper() {
         .unwrap();
     neuron_store
         .add_neuron(
-            create_test_neuron_builder(
+            NeuronBuilder::new_for_test(
                 2,
                 DissolveStateAndAge::NotDissolving {
                     dissolve_delay_seconds: ONE_YEAR_SECONDS,
@@ -67,7 +48,7 @@ fn test_compute_metrics_helper() {
         .unwrap();
     neuron_store
         .add_neuron(
-            create_test_neuron_builder(
+            NeuronBuilder::new_for_test(
                 3,
                 DissolveStateAndAge::NotDissolving {
                     dissolve_delay_seconds: ONE_YEAR_SECONDS * 4,
@@ -80,7 +61,7 @@ fn test_compute_metrics_helper() {
         .unwrap();
     neuron_store
         .add_neuron(
-            create_test_neuron_builder(
+            NeuronBuilder::new_for_test(
                 4,
                 DissolveStateAndAge::NotDissolving {
                     dissolve_delay_seconds: ONE_YEAR_SECONDS * 4,
@@ -93,7 +74,7 @@ fn test_compute_metrics_helper() {
         .unwrap();
     neuron_store
         .add_neuron(
-            create_test_neuron_builder(
+            NeuronBuilder::new_for_test(
                 5,
                 DissolveStateAndAge::NotDissolving {
                     dissolve_delay_seconds: ONE_YEAR_SECONDS * 8,
@@ -106,7 +87,7 @@ fn test_compute_metrics_helper() {
         .unwrap();
     neuron_store
         .add_neuron(
-            create_test_neuron_builder(
+            NeuronBuilder::new_for_test(
                 6,
                 DissolveStateAndAge::NotDissolving {
                     dissolve_delay_seconds: 5,
@@ -119,7 +100,7 @@ fn test_compute_metrics_helper() {
         .unwrap();
     neuron_store
         .add_neuron(
-            create_test_neuron_builder(
+            NeuronBuilder::new_for_test(
                 7,
                 DissolveStateAndAge::NotDissolving {
                     dissolve_delay_seconds: 5,
@@ -132,7 +113,7 @@ fn test_compute_metrics_helper() {
         .unwrap();
     neuron_store
         .add_neuron(
-            create_test_neuron_builder(
+            NeuronBuilder::new_for_test(
                 8,
                 DissolveStateAndAge::DissolvingOrDissolved {
                     when_dissolved_timestamp_seconds: now + ONE_YEAR_SECONDS,
@@ -146,7 +127,7 @@ fn test_compute_metrics_helper() {
         .unwrap();
     neuron_store
         .add_neuron(
-            create_test_neuron_builder(
+            NeuronBuilder::new_for_test(
                 9,
                 DissolveStateAndAge::DissolvingOrDissolved {
                     when_dissolved_timestamp_seconds: now + ONE_YEAR_SECONDS * 3,
@@ -160,7 +141,7 @@ fn test_compute_metrics_helper() {
         .unwrap();
     neuron_store
         .add_neuron(
-            create_test_neuron_builder(
+            NeuronBuilder::new_for_test(
                 10,
                 DissolveStateAndAge::DissolvingOrDissolved {
                     when_dissolved_timestamp_seconds: now + ONE_YEAR_SECONDS * 5,
@@ -172,7 +153,7 @@ fn test_compute_metrics_helper() {
         .unwrap();
     neuron_store
         .add_neuron(
-            create_test_neuron_builder(
+            NeuronBuilder::new_for_test(
                 11,
                 DissolveStateAndAge::DissolvingOrDissolved {
                     when_dissolved_timestamp_seconds: now + ONE_YEAR_SECONDS * 5,
@@ -184,7 +165,7 @@ fn test_compute_metrics_helper() {
         .unwrap();
     neuron_store
         .add_neuron(
-            create_test_neuron_builder(
+            NeuronBuilder::new_for_test(
                 12,
                 DissolveStateAndAge::DissolvingOrDissolved {
                     when_dissolved_timestamp_seconds: now + ONE_YEAR_SECONDS * 7,
@@ -196,7 +177,7 @@ fn test_compute_metrics_helper() {
         .unwrap();
     neuron_store
         .add_neuron(
-            create_test_neuron_builder(
+            NeuronBuilder::new_for_test(
                 13,
                 DissolveStateAndAge::DissolvingOrDissolved {
                     when_dissolved_timestamp_seconds: now - ONE_YEAR_SECONDS,
@@ -208,7 +189,7 @@ fn test_compute_metrics_helper() {
         .unwrap();
     neuron_store
         .add_neuron(
-            create_test_neuron_builder(
+            NeuronBuilder::new_for_test(
                 14,
                 DissolveStateAndAge::DissolvingOrDissolved {
                     when_dissolved_timestamp_seconds: now - ONE_YEAR_SECONDS,
@@ -220,7 +201,7 @@ fn test_compute_metrics_helper() {
         .unwrap();
     neuron_store
         .add_neuron(
-            create_test_neuron_builder(
+            NeuronBuilder::new_for_test(
                 15,
                 DissolveStateAndAge::DissolvingOrDissolved {
                     when_dissolved_timestamp_seconds: 1,
@@ -233,13 +214,27 @@ fn test_compute_metrics_helper() {
     // This neuron is inactive - not founded and dissolved "long ago".
     neuron_store
         .add_neuron(
-            create_test_neuron_builder(
+            NeuronBuilder::new_for_test(
                 16,
                 DissolveStateAndAge::DissolvingOrDissolved {
                     when_dissolved_timestamp_seconds: now - ONE_YEAR_SECONDS,
                 },
             )
             .with_cached_neuron_stake_e8s(0)
+            .build(),
+        )
+        .unwrap();
+    // This neuron is spawning.
+    neuron_store
+        .add_neuron(
+            NeuronBuilder::new_for_test(
+                17,
+                DissolveStateAndAge::DissolvingOrDissolved {
+                    when_dissolved_timestamp_seconds: now + 1,
+                },
+            )
+            .with_cached_neuron_stake_e8s(100_000_000)
+            .with_spawn_at_timestamp_seconds(now + 1)
             .build(),
         )
         .unwrap();
@@ -263,34 +258,17 @@ fn test_compute_metrics_helper() {
             16 => 6087000000.0,
         },
         not_dissolving_neurons_count_buckets: hashmap! {0 => 3, 2 => 1, 8 => 2, 16 => 1},
-        dissolved_neurons_count: if allow_active_neurons_in_stable_memory() {
-            // This is accurate.
-            4
-        } else {
-            // This is the incorrect behavior when inactive neurons are migrated to stable
-            // memory, which will be fixed once `allow_active_neurons_in_stable_memory` is
-            // turned on.
-            3
-        },
+        dissolved_neurons_count: 4,
         dissolved_neurons_e8s: 5770000000,
         garbage_collectable_neurons_count: 1,
         neurons_with_invalid_stake_count: 1,
-        total_staked_e8s: 39_894_000_100,
-        neurons_with_less_than_6_months_dissolve_delay_count:
-            if allow_active_neurons_in_stable_memory() {
-                // This is accurate.
-                7
-            } else {
-                // This is the incorrect behavior when inactive neurons are migrated to stable
-                // memory, which will be fixed once `allow_active_neurons_in_stable_memory` is
-                // turned on.
-                6
-            },
-        neurons_with_less_than_6_months_dissolve_delay_e8s: 5870000100,
+        total_staked_e8s: 39_994_000_100,
+        neurons_with_less_than_6_months_dissolve_delay_count: 8,
+        neurons_with_less_than_6_months_dissolve_delay_e8s: 5970000100,
         community_fund_total_staked_e8s: 234_000_000,
         community_fund_total_maturity_e8s_equivalent: 450_988_012,
         neurons_fund_total_active_neurons: 1,
-        total_locked_e8s: 34_124_000_100,
+        total_locked_e8s: 34_224_000_100,
         total_maturity_e8s_equivalent: 450_988_012,
         total_staked_maturity_e8s_equivalent: 200_000_000_u64,
         dissolving_neurons_staked_maturity_e8s_equivalent_buckets: hashmap! {
@@ -317,6 +295,7 @@ fn test_compute_metrics_helper() {
         dissolving_neurons_e8s_buckets_ect: hashmap! { 6 => 568000000.0 },
         not_dissolving_neurons_e8s_buckets_seed: hashmap! { 0 => 100000000.0 },
         not_dissolving_neurons_e8s_buckets_ect: hashmap! { 2 => 234000000.0 },
+        spawning_neurons_count: 1,
         // Some garbage values, because this test was written before this feature.
         non_self_authenticating_controller_neuron_subset_metrics: NeuronSubsetMetrics::default(),
         public_neuron_subset_metrics: NeuronSubsetMetrics::default(),
@@ -338,33 +317,6 @@ fn test_compute_metrics_helper() {
     );
 }
 
-// In this stage, no active neurons can be in stable memory.
-#[test]
-fn test_compute_metrics() {
-    let _t1 = temporarily_disable_allow_active_neurons_in_stable_memory();
-    let _t2 = temporarily_disable_migrate_active_neurons_to_stable_memory();
-
-    test_compute_metrics_helper();
-}
-
-// Migration stage 1: allow active neurons in stable memory, but not migrating yet.
-#[test]
-fn test_compute_metrics_allow_active_neurons_in_stable_memory() {
-    let _t1 = temporarily_enable_allow_active_neurons_in_stable_memory();
-    let _t2 = temporarily_disable_migrate_active_neurons_to_stable_memory();
-
-    test_compute_metrics_helper();
-}
-
-// Migration stage 2: allow active neurons in stable memory and new active neurons are in stable memory.
-#[test]
-fn test_compute_metrics_migrate_active_neurons_to_stable_memory() {
-    let _t1 = temporarily_enable_allow_active_neurons_in_stable_memory();
-    let _t2 = temporarily_enable_migrate_active_neurons_to_stable_memory();
-
-    test_compute_metrics_helper();
-}
-
 #[test]
 fn test_compute_metrics_inactive_neuron_in_heap() {
     // Step 1: prepare 3 neurons with different dissolved time: 1 day ago, 13 days ago, and 30
@@ -374,7 +326,7 @@ fn test_compute_metrics_inactive_neuron_in_heap() {
 
     neuron_store
         .add_neuron(
-            create_test_neuron_builder(
+            NeuronBuilder::new_for_test(
                 1,
                 DissolveStateAndAge::DissolvingOrDissolved {
                     when_dissolved_timestamp_seconds: now - ONE_DAY_SECONDS,
@@ -386,7 +338,7 @@ fn test_compute_metrics_inactive_neuron_in_heap() {
         .unwrap();
     neuron_store
         .add_neuron(
-            create_test_neuron_builder(
+            NeuronBuilder::new_for_test(
                 2,
                 DissolveStateAndAge::DissolvingOrDissolved {
                     when_dissolved_timestamp_seconds: now - 13 * ONE_DAY_SECONDS,
@@ -398,7 +350,7 @@ fn test_compute_metrics_inactive_neuron_in_heap() {
         .unwrap();
     neuron_store
         .add_neuron(
-            create_test_neuron_builder(
+            NeuronBuilder::new_for_test(
                 3,
                 DissolveStateAndAge::DissolvingOrDissolved {
                     when_dissolved_timestamp_seconds: now - 30 * ONE_DAY_SECONDS,

@@ -1,0 +1,27 @@
+[package]
+name = "canlog"
+version = "0.1.1"
+description = "Crate for managing canister logs"
+license = "Apache-2.0"
+readme = "README.md"
+include = ["src", "Cargo.toml", "CHANGELOG.md", "LICENSE", "README.md"]
+repository = "https://github.com/dfinity/ic"
+authors.workspace = true
+edition.workspace = true
+documentation = "https://docs.rs/canlog"
+
+[dependencies]
+candid = { workspace = true }
+canlog_derive = { version = "=0.1.0", path = "../canlog_derive", optional = true }
+ic-canister-log = "0.2.0"
+ic-cdk = { workspace = true }
+regex = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+canlog_derive = { path = "../canlog_derive" }
+
+[features]
+derive = ["dep:canlog_derive"]

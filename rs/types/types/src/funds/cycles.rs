@@ -38,7 +38,7 @@ impl Cycles {
     }
 
     pub const fn from_parts(high: u64, low: u64) -> Self {
-        Self((high as u128) << 64 | low as u128)
+        Self(((high as u128) << 64) | low as u128)
     }
 
     pub const fn zero() -> Self {

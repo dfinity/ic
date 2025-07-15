@@ -17,7 +17,6 @@ DEPENDENCIES = [
 ]
 
 MACRO_DEPENDENCIES = [
-    "@crate_index//:ic_cdk_macros_next",
 ]
 
 rust_library(

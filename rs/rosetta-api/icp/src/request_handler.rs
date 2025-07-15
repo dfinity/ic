@@ -12,6 +12,7 @@ use crate::{
     errors::{ApiError, Details},
     ledger_client::{
         list_known_neurons_response::ListKnownNeuronsResponse,
+        minimum_dissolve_delay_response::MinimumDissolveDelayResponse,
         pending_proposals_response::PendingProposalsResponse,
         proposal_info_response::ProposalInfoResponse, LedgerAccess,
     },
@@ -32,7 +33,7 @@ use ic_ledger_canister_blocks_synchronizer::{
 };
 use ic_ledger_core::block::BlockType;
 use ic_nns_common::pb::v1::NeuronId;
-use ic_nns_governance_api::pb::v1::manage_neuron::NeuronIdOrSubaccount;
+use ic_nns_governance_api::manage_neuron::NeuronIdOrSubaccount;
 use ic_types::{crypto::DOMAIN_IC_REQUEST, messages::MessageId, CanisterId};
 use icp_ledger::{Block, BlockIndex};
 use rosetta_core::{
@@ -46,6 +47,8 @@ use std::{
 };
 use strum::IntoEnumIterator;
 
+use rosetta_core::metrics::RosettaMetrics;
+
 /// The maximum amount of blocks to retrieve in a single search.
 const MAX_SEARCH_LIMIT: usize = 10_000;
 
@@ -53,6 +56,7 @@ const MAX_SEARCH_LIMIT: usize = 10_000;
 pub struct RosettaRequestHandler {
     blockchain: String,
     ledger: Arc<dyn LedgerAccess + Send + Sync>,
+    rosetta_metrics: RosettaMetrics,
 }
 
 // construction requests are implemented in their own module.
@@ -60,20 +64,35 @@ impl RosettaRequestHandler {
     pub fn new<T: 'static + LedgerAccess + Send + Sync>(
         blockchain: String,
         ledger: Arc<T>,
+        rosetta_metrics: RosettaMetrics,
     ) -> Self {
-        Self { blockchain, ledger }
+        Self {
+            blockchain,
+            ledger,
+            rosetta_metrics,
+        }
     }
 
     pub fn new_with_default_blockchain<T: 'static + LedgerAccess + Send + Sync>(
         ledger: Arc<T>,
     ) -> Self {
-        Self::new(crate::DEFAULT_BLOCKCHAIN.to_string(), ledger)
+        let canister_id = ledger.ledger_canister_id();
+        let canister_id_str = hex::encode(canister_id.get().into_vec());
+        Self::new(
+            crate::DEFAULT_BLOCKCHAIN.to_string(),
+            ledger,
+            RosettaMetrics::new(crate::DEFAULT_TOKEN_SYMBOL.to_string(), canister_id_str),
+        )
     }
 
     pub fn network_id(&self) -> NetworkIdentifier {
         let canister_id = self.ledger.ledger_canister_id();
         let net_id = hex::encode(canister_id.get().into_vec());
         NetworkIdentifier::new(self.blockchain.clone(), net_id)
+    }
+
+    pub fn rosetta_metrics(&self) -> RosettaMetrics {
+        self.rosetta_metrics.clone()
     }
 
     /// Get an Account Balance
@@ -189,6 +208,16 @@ impl RosettaRequestHandler {
                 let pending_proposals_response = PendingProposalsResponse::from(pending_proposals);
                 Ok(CallResponse::new(
                     ObjectMap::try_from(pending_proposals_response)?,
+                    false,
+                ))
+            }
+            "get_minimum_dissolve_delay" => {
+                let minimum_dissolve_delay = self.ledger.minimum_dissolve_delay().await?;
+                let minimum_dissolve_delay_response = MinimumDissolveDelayResponse {
+                    neuron_minimum_dissolve_delay_to_vote_seconds: minimum_dissolve_delay,
+                };
+                Ok(CallResponse::new(
+                    ObjectMap::try_from(minimum_dissolve_delay_response)?,
                     false,
                 ))
             }
@@ -640,6 +669,18 @@ impl RosettaRequestHandler {
         Ok(network_status)
     }
 
+    pub fn assert_has_indexed_field(
+        &self,
+        request: &models::SearchTransactionsRequest,
+    ) -> Result<(), ApiError> {
+        let has_indexed_field =
+            request.transaction_identifier.is_some() || request.account_identifier.is_some();
+        if !has_indexed_field {
+            return Err(ApiError::invalid_request("At least one of transaction_identifier, type_, or account_identifier must be provided to perform an efficient search".to_owned()));
+        }
+        Ok(())
+    }
+
     /// Search for a transaction given its hash
     pub async fn search_transactions(
         &self,
@@ -685,7 +726,6 @@ impl RosettaRequestHandler {
                 "Currency not supported in search/transactions endpoint".to_owned(),
             ));
         }
-
         let block_storage = self.ledger.read_blocks().await;
 
         let block_with_highest_block_index = block_storage
@@ -848,13 +888,13 @@ impl RosettaRequestHandler {
     ) -> Result<NeuronInfoResponse, ApiError> {
         let res = self.ledger.neuron_info(neuron_id, verified).await?;
 
-        use ic_nns_governance_api::pb::v1::NeuronState as PbNeuronState;
-        let state = match PbNeuronState::try_from(res.state).ok() {
-            Some(PbNeuronState::NotDissolving) => NeuronState::NotDissolving,
-            Some(PbNeuronState::Spawning) => NeuronState::Spawning,
-            Some(PbNeuronState::Dissolving) => NeuronState::Dissolving,
-            Some(PbNeuronState::Dissolved) => NeuronState::Dissolved,
-            Some(PbNeuronState::Unspecified) | None => {
+        use ic_nns_governance_api::NeuronState as GovernanceNeuronState;
+        let state = match GovernanceNeuronState::from_repr(res.state) {
+            Some(GovernanceNeuronState::NotDissolving) => NeuronState::NotDissolving,
+            Some(GovernanceNeuronState::Spawning) => NeuronState::Spawning,
+            Some(GovernanceNeuronState::Dissolving) => NeuronState::Dissolving,
+            Some(GovernanceNeuronState::Dissolved) => NeuronState::Dissolved,
+            Some(GovernanceNeuronState::Unspecified) | None => {
                 return Err(ApiError::internal_error(format!(
                     "unsupported neuron state code: {}",
                     res.state

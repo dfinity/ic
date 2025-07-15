@@ -65,7 +65,10 @@ runs:
       if: success() || failure()
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ github.job }}-bep
+        # NOTE: github.action provides a unique identify for the artifact name
+        # in case the action is called several times:
+        #   https://docs.github.com/en/actions/reference/accessing-contextual-information-about-workflow-runs#github-context
+        name: ${{ github.job }}-${{ github.action }}-bep
         retention-days: 14
         if-no-files-found: ignore
         compression-level: 9
@@ -74,51 +77,72 @@ runs:
           ${{ steps.metrics-tmpdir.outputs.dir }}/profile-*.json
 
 
-      # Remove unnecessary entries from the JSON execlogs and create a CSV out of them
-    - name: Clean up execlogs
+    # We use execlog2csv to process the proto-based execution logs and convert them
+    # to CSV for easier processing
+    - name: Install execlog2csv
       shell: bash
       if: (success() || failure()) && inputs.execlogs-artifact-name != ''
       run: |
-        execlogs_json_in='${{ steps.metrics-tmpdir.outputs.dir }}/execlogs.json'
-        find '${{ steps.metrics-tmpdir.outputs.dir }}' -name 'execlog-*.json' \
-          -exec cat {} \; > "$execlogs_json_in"
+        cd $(mktemp -d)
 
-        execlogs_csv_out='${{ steps.metrics-tmpdir.outputs.dir }}/execlogs.csv'
-        if ! [ -s "$execlogs_json_in" ]; then
-          echo "no execlogs found"
-          exit 0
+        version="0.0.2" # execlog2csv version
+
+        # for more platforms see artifacts list:
+        # https://github.com/dfinity/execlog2csv/releases/latest
+        if [[ $(uname -m) == "x86_64" ]]; then
+          arch="amd64"
+        elif [[ $(uname -m) == "aarch64" ]]; then
+          arch="arm64"
+        else
+          echo "unexpected architecture: '$(uname -m)'"
+          exit 1
         fi
 
-        # this filters out some entries from the input JSON execlogs. Without this,
-        # jq takes 3+ minutes to parse the execlogs.
-        # Effectively removes a full line of "commandArgs", and takes care of skipping
-        # multiple lines for some multiline array values we don't care about
-        prog='
-          BEGIN { arr = 0; }
-          arr == 1 && /  }],?/ { arr = 0; next }
-          arr == 1 { next }
-          /  "commandArgs":.*/ { next }
-          /  "environmentVariables": \[\{/ { arr = 1; next; }
-          /  "inputs": \[\{/ { arr = 1; next; }
-          { print }
-          '
+        if [[ $(uname) == "Linux" ]]; then
+          os="linux"
+        elif [[ $(uname) == "Darwin" ]]; then
+          os="darwin"
+        else
+          echo "unexpected os: '$(uname -m)'"
+          exit 1
+        fi
 
-        # Turns the JSON execlogs into a CSV with the following columns:
-        #   <label>,<output path>,<hash>
-        # only the target labels matching "whitelist_pat" are considered
-        whitelist_pat='^//'
-        time (cat "$execlogs_json_in" \
-          | awk "$prog" \
-          | jq -cMr --arg whitelist_pat "$whitelist_pat" \
-              'select(.targetLabel | test($whitelist_pat)) | .targetLabel as $targetLabel | .actualOutputs | map(. | $targetLabel+","+.path+","+.digest.hash) | .[]' \
-          >"$execlogs_csv_out")
+        filename="execlog2csv_${version}_${os}_${arch}"
+        echo "filename: $filename"
+        dl_url="https://github.com/dfinity/execlog2csv/releases/download/v$version/$filename.zip"
+        echo "downloading '$dl_url'"
+        curl -SLO "$dl_url"
+        unzip "$filename.zip"
+        sudo mv "./execlog2csv_v$version" /usr/local/bin/execlog2csv
+        rm "$filename.zip"
+        execlog2csv --help
+
+    - name: Convert execlogs to CSV
+      shell: bash
+      if: (success() || failure()) && inputs.execlogs-artifact-name != ''
+      run: |
+        execlog="$(mktemp)"
+        trap "rm -f $execlog" INT TERM EXIT
+        # The goal is to have as few non-reproducible bazel targets as possible.
+        # So we forbid all of them except for the following known ones:
+        excludes=(
+          ^@@crate_index__cranelift-assembler-x64 # has a non reproducible generated-files.rs in its OUT_DIR.
+          ^@@crate_index__cranelift-isle          # has a non reproducible isle_tests.rs in its OUT_DIR.
+          ^@@crate_index__secp256k1-sys           # has non reproducible object files, like lax_der_parsing.o, in it OUT_DIR.
+          ^@@crate_index__num-traits              # has non reproducible autcfg files in its OUT_DIR. See: https://github.com/rust-num/num-traits/pull/355.
+        )
+        for execlog_zst in $(find '${{ steps.metrics-tmpdir.outputs.dir }}' -name 'execlog-*.zst'); do
+          zstd -f -d "$execlog_zst" -o "$execlog"
+          execlog2csv \
+            --input_execlog="$execlog" \
+            --exclude "${excludes[*]}"
+        done > '${{ steps.metrics-tmpdir.outputs.dir }}/execlogs.csv'
 
     - name: Upload execution log
       if: (success() || failure()) && inputs.execlogs-artifact-name != ''
       uses: actions/upload-artifact@v4
       with:
         name: ${{ inputs.execlogs-artifact-name }}
-        if-no-files-found: ignore
         path: |
           ${{ steps.metrics-tmpdir.outputs.dir }}/execlogs.csv
 
