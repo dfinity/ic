@@ -33,8 +33,8 @@ pub struct DirectBoot {
     pub kernel: NamedTempFile,
     /// The initrd file
     pub initrd: NamedTempFile,
-    /// The OVMF.fd file
-    pub ovmf: NamedTempFile,
+    /// The OVMF_SEV.fd file
+    pub ovmf_sev: NamedTempFile,
     /// Kernel command line parameters
     pub kernel_cmdline: String,
 }
@@ -44,7 +44,7 @@ impl DirectBoot {
         DirectBootConfig {
             kernel: self.kernel.path().to_path_buf(),
             initrd: self.initrd.path().to_path_buf(),
-            ovmf: self.ovmf.path().to_path_buf(),
+            ovmf_sev: self.ovmf_sev.path().to_path_buf(),
             kernel_cmdline: self.kernel_cmdline.clone(),
         }
     }
@@ -116,7 +116,7 @@ pub async fn prepare_direct_boot(
         .with_context(|| format!("Could not mount boot partition {boot_alternative}"))?;
 
     let boot_args_path = boot_partition.mount_point().join("boot_args");
-    let ovmf_path = boot_partition.mount_point().join("OVMF.fd");
+    let ovmf_sev_path = boot_partition.mount_point().join("OVMF_SEV.fd");
     // Older GuestOS releases do not have the boot_args and OVMF.fd files. If the files exist,
     // we have a modern enough GuestOS that supports direct boot. If not, abandon direct boot by
     // returning None.
@@ -131,7 +131,7 @@ pub async fn prepare_direct_boot(
         );
         return Ok(None);
     }
-    if !ovmf_path.exists() {
+    if !ovmf_sev_path.exists() {
         println!(
             "No OVMF.fd file found in boot partition {boot_alternative}. Cannot prepare \
              direct boot."
@@ -144,7 +144,7 @@ pub async fn prepare_direct_boot(
 
     let kernel = NamedTempFile::new()?;
     let initrd = NamedTempFile::new()?;
-    let ovmf = NamedTempFile::new()?;
+    let ovmf_sev = NamedTempFile::new()?;
 
     tokio::fs::copy(boot_partition.mount_point().join("vmlinuz"), &kernel)
         .await
@@ -152,7 +152,7 @@ pub async fn prepare_direct_boot(
     tokio::fs::copy(boot_partition.mount_point().join("initrd.img"), &initrd)
         .await
         .context("Could not copy initrd.img")?;
-    tokio::fs::copy(ovmf_path, &ovmf)
+    tokio::fs::copy(ovmf_sev_path, &ovmf_sev)
         .await
         .context("Could not copy OVMF.fd")?;
 
@@ -167,7 +167,7 @@ pub async fn prepare_direct_boot(
     Ok(Some(DirectBoot {
         kernel,
         initrd,
-        ovmf,
+        ovmf_sev,
         kernel_cmdline: boot_args,
     }))
 }

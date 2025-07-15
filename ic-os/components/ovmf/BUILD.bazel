@@ -5,7 +5,7 @@ package(default_visibility = ["//visibility:public"])
 # with filenames containing non-ASCII characters. Because of all these reasons, we use a genrule instead.
 genrule(
     name = "ovmf_sev",
-    outs = ["OVMF.fd"],
+    outs = ["OVMF_SEV.fd"],
     cmd = """
         REPOSITORY=https://github.com/tianocore/edk2.git
         TAG=edk2-stable202505

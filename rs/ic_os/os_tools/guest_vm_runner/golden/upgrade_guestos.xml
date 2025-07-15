@@ -24,7 +24,7 @@
   <os type='efi'>
     <type arch='x86_64' machine='pc-q35-9.2'>hvm</type>
     <boot dev='hd'/>
-    <loader readonly='yes'>/tmp/OVMF.fd</loader>
+    <loader readonly='yes'>/tmp/OVMF_SEV.fd</loader>
     <kernel>/tmp/test-kernel</kernel>
     <initrd>/tmp/test-initrd</initrd>
     <cmdline>security=selinux selinux=1 enforcing=0</cmdline>
