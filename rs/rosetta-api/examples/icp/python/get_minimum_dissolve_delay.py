@@ -42,7 +42,7 @@ def main():
         print(json.dumps(response, indent=2))
         return
 
-    # Extract minumum dissolve delay from the response
+    # Extract minimum dissolve delay from the response
     if "result" in response and "neuron_minimum_dissolve_delay_to_vote_seconds" in response["result"]:
         dissove_seconds = response["result"]["neuron_minimum_dissolve_delay_to_vote_seconds"]
         print("Neuron minimum dissolve delay to vote in seconds:", dissove_seconds)
