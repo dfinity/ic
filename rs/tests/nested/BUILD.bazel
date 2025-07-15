@@ -124,7 +124,7 @@ system_test_nns(
     },
     extra_head_nns_tags = [],
     flaky = True,  # flakiness rate of 5% over the month from 2025-02-11 till 2025-03-11.
-    tags = ["manual"],  # TODO: remove after next release that includes the deployment.json changes
+    tags = ["long_test"],
     test_driver_target = ":hostos_upgrade_test_bin",
     test_timeout = "eternal",
     use_empty_image = True,
