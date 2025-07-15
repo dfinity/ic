@@ -43,14 +43,6 @@ fn test_record_voting_power_snapshot() {
     assert_eq!(snapshots.latest_snapshot_timestamp_seconds(), Some(1));
     // We should return previous ballots if the deciding voting power is more than 1.5 times the
     // minimum voting power in the first snapshot.
-    assert_eq!(
-        snapshots.previous_ballots_if_voting_power_spike_detected(149, 1),
-        None
-    );
-    assert_eq!(
-        snapshots.previous_ballots_if_voting_power_spike_detected(151, 1),
-        Some((1, voting_power_snapshot(vec![90], 100)))
-    );
     assert!(!snapshots.is_latest_snapshot_a_spike(1));
 
     for i in 0..6 {
@@ -63,14 +55,6 @@ fn test_record_voting_power_snapshot() {
         assert_eq!(
             snapshots.latest_snapshot_timestamp_seconds(),
             Some(timestamp_seconds)
-        );
-        assert_eq!(
-            snapshots.previous_ballots_if_voting_power_spike_detected(149, timestamp_seconds),
-            None
-        );
-        assert_eq!(
-            snapshots.previous_ballots_if_voting_power_spike_detected(151, timestamp_seconds),
-            Some((1, voting_power_snapshot(vec![90], 100)))
         );
         assert!(!snapshots.is_latest_snapshot_a_spike(timestamp_seconds));
     }

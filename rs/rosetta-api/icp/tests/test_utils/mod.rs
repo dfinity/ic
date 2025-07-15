@@ -1,6 +1,8 @@
 #![allow(clippy::disallowed_types)]
 use async_trait::async_trait;
-use ic_ledger_canister_blocks_synchronizer::blocks::{Blocks, HashedBlock, RosettaBlocksMode};
+use ic_ledger_canister_blocks_synchronizer::blocks::{
+    Blocks, HashedBlock, RosettaBlocksMode, RosettaDbConfig,
+};
 use ic_ledger_canister_core::ledger::LedgerTransaction;
 use ic_ledger_core::{block::BlockType, timestamp::TimeStamp};
 use ic_nns_governance_api::{manage_neuron::NeuronIdOrSubaccount, KnownNeuron, ProposalInfo};
@@ -43,7 +45,9 @@ pub struct TestLedger {
 impl TestLedger {
     pub fn new() -> Self {
         Self {
-            blockchain: RwLock::new(Blocks::new_in_memory(false).unwrap()),
+            blockchain: RwLock::new(
+                Blocks::new_in_memory(RosettaDbConfig::default_disabled()).unwrap(),
+            ),
             canister_id: CanisterId::unchecked_from_principal(
                 PrincipalId::from_str("5v3p4-iyaaa-aaaaa-qaaaa-cai").unwrap(),
             ),

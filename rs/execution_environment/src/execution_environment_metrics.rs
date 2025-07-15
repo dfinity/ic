@@ -310,7 +310,8 @@ impl ExecutionEnvironmentMetrics {
                     | ic00::Method::ReadCanisterSnapshotMetadata
                     | ic00::Method::ReadCanisterSnapshotData
                     | ic00::Method::UploadCanisterSnapshotMetadata
-                    | ic00::Method::UploadCanisterSnapshotData => String::from("fast"),
+                    | ic00::Method::UploadCanisterSnapshotData
+                    | ic00::Method::RenameCanister => String::from("fast"),
 
                     // "Slow" management methods that might require several execution
                     // rounds to be completed, either due to using DTS or due to
@@ -324,7 +325,6 @@ impl ExecutionEnvironmentMetrics {
                     | ic00::Method::SignWithECDSA
                     | ic00::Method::SignWithSchnorr
                     | ic00::Method::VetKdDeriveKey
-                    | ic00::Method::ComputeInitialIDkgDealings
                     | ic00::Method::ReshareChainKey
                     | ic00::Method::BitcoinSendTransactionInternal
                     | ic00::Method::BitcoinGetSuccessors => String::from("slow"),

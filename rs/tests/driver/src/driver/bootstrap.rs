@@ -28,7 +28,7 @@ use anyhow::{bail, Context, Result};
 use config::generate_testnet_config::{
     generate_testnet_config, GenerateTestnetConfigArgs, Ipv6ConfigType,
 };
-use config::guestos_bootstrap_image::BootstrapOptions;
+use config::hostos::guestos_bootstrap_image::BootstrapOptions;
 use config_types::DeploymentEnvironment;
 use ic_base_types::NodeId;
 use ic_prep_lib::{
@@ -703,7 +703,7 @@ fn create_setupos_config_image(
         .arg(cpu)
         .arg("--nr-of-vcpus")
         .arg((HOSTOS_VCPUS_PER_VM / 2).to_string())
-        .arg("--nns-url")
+        .arg("--nns-urls")
         .arg(nns_url.to_string())
         .arg("--nns-public-key")
         .arg(nns_public_key)

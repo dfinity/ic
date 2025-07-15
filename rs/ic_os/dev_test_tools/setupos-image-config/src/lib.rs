@@ -12,7 +12,8 @@ use clap::Args;
 use tempfile::TempDir;
 use url::Url;
 
-use config::deployment_json::DeploymentSettings;
+use config::setupos::deployment_json::DeploymentSettings;
+use config_types::DeploymentEnvironment;
 use partition_tools::{ext::ExtPartition, Partition};
 
 #[derive(Args)]
@@ -48,7 +49,7 @@ pub struct ConfigIni {
 #[derive(Args)]
 pub struct DeploymentConfig {
     #[arg(long)]
-    pub nns_url: Option<Url>,
+    pub nns_urls: Option<Url>,
 
     #[arg(long, allow_hyphen_values = true)]
     pub nns_public_key: Option<String>,
@@ -68,7 +69,7 @@ pub struct DeploymentConfig {
     pub mgmt_mac: Option<String>,
 
     #[arg(long)]
-    pub deployment_environment: Option<String>,
+    pub deployment_environment: Option<DeploymentEnvironment>,
 
     #[arg(long)]
     pub elasticsearch_hosts: Option<String>,
@@ -152,32 +153,32 @@ pub async fn update_deployment(path: &Path, cfg: &DeploymentConfig) -> Result<()
         deployment_json.deployment.mgmt_mac = Some(mgmt_mac.to_owned());
     }
 
-    if let Some(nns_url) = &cfg.nns_url {
-        deployment_json.nns.url = vec![nns_url.clone()];
+    if let Some(nns_urls) = &cfg.nns_urls {
+        deployment_json.nns.urls = vec![nns_urls.clone()];
     }
 
     if let Some(memory) = cfg.memory_gb {
-        deployment_json.resources.memory = memory;
+        deployment_json.vm_resources.memory = memory;
     }
 
     if let Some(cpu) = &cfg.cpu {
-        deployment_json.resources.cpu = Some(cpu.to_owned());
+        deployment_json.vm_resources.cpu = cpu.to_owned();
     }
 
     if let Some(nr_of_vcpus) = &cfg.nr_of_vcpus {
-        deployment_json.resources.nr_of_vcpus = Some(nr_of_vcpus.to_owned());
+        deployment_json.vm_resources.nr_of_vcpus = nr_of_vcpus.to_owned();
     }
 
     if let Some(deployment_environment) = &cfg.deployment_environment {
-        deployment_json.deployment.name = deployment_environment.to_owned();
+        deployment_json.deployment.deployment_environment = deployment_environment.to_owned();
     }
 
     if let Some(elasticsearch_hosts) = &cfg.elasticsearch_hosts {
-        deployment_json.logging.hosts = elasticsearch_hosts.to_owned();
+        deployment_json.logging.elasticsearch_hosts = Some(elasticsearch_hosts.to_owned());
     }
 
     if let Some(elasticsearch_tags) = &cfg.elasticsearch_tags {
-        deployment_json.logging.tags = Some(elasticsearch_tags.to_owned());
+        deployment_json.logging.elasticsearch_tags = Some(elasticsearch_tags.to_owned());
     }
 
     let mut f = File::create(path).context("failed to open deployment config file")?;

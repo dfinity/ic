@@ -8,6 +8,7 @@ use crate::{
     metrics::MeasurementScope,
     util::process_responses,
 };
+use ic_config::embedders::Config as HypervisorConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_crypto_prng::{Csprng, RandomnessPurpose::ExecutionThread};
@@ -27,8 +28,7 @@ use ic_management_canister_types_private::{
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::{
     canister_state::{
-        execution_state::NextScheduledMethod, execution_state::WasmExecutionMode,
-        system_state::CyclesUseCase, NextExecution,
+        execution_state::NextScheduledMethod, system_state::CyclesUseCase, NextExecution,
     },
     num_bytes_try_from,
     page_map::PageAllocatorFileDescriptor,
@@ -142,6 +142,7 @@ impl SchedulerRoundLimits {
 /// Scheduler Implementation
 pub(crate) struct SchedulerImpl {
     config: SchedulerConfig,
+    hypervisor_config: HypervisorConfig,
     own_subnet_id: SubnetId,
     ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
     exec_env: Arc<ExecutionEnvironment>,
@@ -159,6 +160,7 @@ impl SchedulerImpl {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         config: SchedulerConfig,
+        hypervisor_config: HypervisorConfig,
         own_subnet_id: SubnetId,
         ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
         exec_env: Arc<ExecutionEnvironment>,
@@ -173,6 +175,7 @@ impl SchedulerImpl {
         let scheduler_cores = config.scheduler_cores as u32;
         Self {
             config,
+            hypervisor_config,
             thread_pool: RefCell::new(scoped_threadpool::Pool::new(scheduler_cores)),
             own_subnet_id,
             ingress_history_writer,
@@ -1085,14 +1088,7 @@ impl SchedulerImpl {
         for canister_id in canister_ids {
             let canister = state.canister_states.get(canister_id).unwrap();
 
-            let wasm_execution_mode = canister
-                .execution_state
-                .as_ref()
-                .map_or(WasmExecutionMode::Wasm32, |es| es.wasm_execution_mode);
-
-            if let Err(err) = canister
-                .check_invariants(self.exec_env.max_canister_memory_size(wasm_execution_mode))
-            {
+            if let Err(err) = canister.check_invariants(&self.hypervisor_config) {
                 let msg = format!(
                     "{}: At Round {} @ time {}, canister {} has invalid state after execution. Invariant check failed with err: {}",
                     CANISTER_INVARIANT_BROKEN,
@@ -2262,7 +2258,6 @@ fn get_instructions_limits_for_subnet_message(
             | HttpRequest
             | SetupInitialDKG
             | SignWithECDSA
-            | ComputeInitialIDkgDealings
             | ReshareChainKey
             | SchnorrPublicKey
             | SignWithSchnorr
@@ -2294,7 +2289,8 @@ fn get_instructions_limits_for_subnet_message(
             | ReadCanisterSnapshotMetadata
             | ReadCanisterSnapshotData
             | UploadCanisterSnapshotMetadata
-            | UploadCanisterSnapshotData => default_limits,
+            | UploadCanisterSnapshotData
+            | RenameCanister => default_limits,
             InstallCode | InstallChunkedCode => InstructionLimits::new(
                 dts,
                 config.max_instructions_per_install_code,

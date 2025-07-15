@@ -91,6 +91,9 @@ pub struct EcdsaArguments {
     pub key_id: ::core::option::Option<super::super::super::types::v1::EcdsaKeyId>,
     #[prost(bytes = "vec", tag = "2")]
     pub message_hash: ::prost::alloc::vec::Vec<u8>,
+    #[prost(message, optional, tag = "3")]
+    pub pre_signature:
+        ::core::option::Option<super::super::super::types::v1::EcdsaMatchedPreSignature>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SchnorrArguments {
@@ -100,6 +103,9 @@ pub struct SchnorrArguments {
     pub message: ::prost::alloc::vec::Vec<u8>,
     #[prost(bytes = "vec", optional, tag = "3")]
     pub taproot_tree_root: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    #[prost(message, optional, tag = "4")]
+    pub pre_signature:
+        ::core::option::Option<super::super::super::types::v1::SchnorrMatchedPreSignature>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct VetKdArguments {
@@ -156,6 +162,23 @@ pub struct SignWithThresholdContextTree {
     pub callback_id: u64,
     #[prost(message, optional, tag = "2")]
     pub context: ::core::option::Option<SignWithThresholdContext>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PreSignatureStashTree {
+    #[prost(message, optional, tag = "1")]
+    pub key_id: ::core::option::Option<super::super::super::types::v1::MasterPublicKeyId>,
+    #[prost(message, optional, tag = "2")]
+    pub key_transcript:
+        ::core::option::Option<super::super::super::registry::subnet::v1::IDkgTranscript>,
+    #[prost(message, repeated, tag = "3")]
+    pub pre_signatures: ::prost::alloc::vec::Vec<PreSignatureIdPair>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PreSignatureIdPair {
+    #[prost(uint64, tag = "1")]
+    pub pre_sig_id: u64,
+    #[prost(message, optional, tag = "2")]
+    pub pre_signature: ::core::option::Option<super::super::super::types::v1::PreSignature>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct HttpHeader {
@@ -373,6 +396,8 @@ pub struct SubnetCallContextManager {
     pub reshare_chain_key_contexts: ::prost::alloc::vec::Vec<ReshareChainKeyContextTree>,
     #[prost(message, repeated, tag = "18")]
     pub sign_with_threshold_contexts: ::prost::alloc::vec::Vec<SignWithThresholdContextTree>,
+    #[prost(message, repeated, tag = "19")]
+    pub pre_signature_stashes: ::prost::alloc::vec::Vec<PreSignatureStashTree>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubnetMetrics {
