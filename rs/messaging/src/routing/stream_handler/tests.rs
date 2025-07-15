@@ -4705,9 +4705,9 @@ fn simulate_canister_migration(
     complete_canister_migration(state, migrated_canister, to_subnet)
 }
 
-/// Simulates the migration of the given canister between to `to_subnet` by recording the corresponding
-/// entry in `state`'s `canister_migrations` and updating its routing table.
-fn simulate_single_canister_migration(
+/// Simulates the subnet splitting related migration of the given canister between `from_subnet` and
+/// `to_subnet` by updating `state`'s routing table (but no `canister_migrations` entry).
+fn simulate_manual_canister_migration(
     state: ReplicatedState,
     migrated_canister: CanisterId,
     to_subnet: SubnetId,
