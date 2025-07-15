@@ -19,6 +19,7 @@ use ic_nervous_system_proto::pb::v1::{
 };
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nervous_system_runtime::{CdkRuntime, Runtime};
+use ic_sns_root::pb::v1::{RegisterExtensionRequest, RegisterExtensionResponse};
 use ic_sns_root::{
     logs::{ERROR, INFO},
     pb::v1::{
@@ -246,6 +247,27 @@ fn change_canister(request: ChangeCanisterRequest) {
             }
         };
     });
+}
+
+#[candid_method(update)]
+#[update]
+async fn register_extension(request: RegisterExtensionRequest) -> RegisterExtensionResponse {
+    log!(INFO, "register_extension");
+    assert_eq_governance_canister_id(PrincipalId(ic_cdk::api::caller()));
+
+    let canister_id = request.try_into()?;
+
+    let root_canister_id = PrincipalId(ic_cdk::api::id());
+
+    let result = SnsRootCanister::register_extension(
+        &STATE,
+        &ManagementCanisterClientImpl::<CanisterRuntime>::new(None),
+        root_canister_id,
+        canister_id,
+    )
+    .await;
+
+    RegisterExtensionResponse::from(result)
 }
 
 /// This function is deprecated, and `register_dapp_canisters` should be used
