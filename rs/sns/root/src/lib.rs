@@ -3,13 +3,14 @@ use crate::{
     pb::v1::{
         set_dapp_controllers_response, CanisterCallError, ListSnsCanistersResponse,
         ManageDappCanisterSettingsRequest, ManageDappCanisterSettingsResponse,
-        RegisterDappCanistersRequest, RegisterDappCanistersResponse, SetDappControllersRequest,
-        SetDappControllersResponse, SnsRootCanister,
+        RegisterDappCanistersRequest, RegisterDappCanistersResponse, RegisterExtensionRequest,
+        RegisterExtensionResponse, SetDappControllersRequest, SetDappControllersResponse,
+        SnsRootCanister,
     },
     types::Environment,
 };
 use async_trait::async_trait;
-use candid::{Decode, Encode, Nat};
+use candid::{Decode, Encode, Nat, Principal};
 use futures::{future::join_all, join};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
@@ -21,6 +22,7 @@ use ic_nervous_system_clients::{
 };
 use ic_nervous_system_runtime::{CdkRuntime, Runtime};
 use ic_sns_swap::pb::v1::GetCanisterStatusRequest;
+use maplit::btreeset;
 use std::{
     cell::RefCell,
     collections::{BTreeSet, HashSet},
@@ -34,8 +36,8 @@ pub mod logs;
 pub mod pb;
 pub mod types;
 
-// The number of dapp canisters that can be registered with the SNS Root
-const DAPP_CANISTER_REGISTRATION_LIMIT: usize = 100;
+// The number of dapp amd extension canisters that can be registered with the SNS Root
+const DAPP_AND_EXTENSION_CANISTER_REGISTRATION_LIMIT: usize = 100;
 
 impl From<(i32, String)> for CanisterCallError {
     fn from((code, description): (i32, String)) -> Self {
@@ -351,6 +353,7 @@ impl SnsRootCanister {
             dapps: self.dapp_canister_ids.clone(),
             archives: self.archive_canister_ids.clone(),
             index: self.index_canister_id,
+            extensions: self.extension_canister_ids.clone(),
         }
     }
 
@@ -395,6 +398,36 @@ impl SnsRootCanister {
         }
     }
 
+    /// Returns `(framework_canisters, dapps, extensions)`.
+    fn sns_canister_ids(
+        self_ref: &'static LocalKey<RefCell<Self>>,
+        root_canister_id: PrincipalId,
+    ) -> (Vec<PrincipalId>, Vec<PrincipalId>, Vec<PrincipalId>) {
+        let ListSnsCanistersResponse {
+            root,
+            governance,
+            ledger,
+            swap,
+            dapps,
+            archives,
+            index,
+            extensions,
+        } = self_ref.with_borrow(|state| state.list_sns_canisters(root_canister_id.0));
+
+        let framework_canisters = vec![
+            root.unwrap(),
+            governance.unwrap(),
+            ledger.unwrap(),
+            index.unwrap(),
+            swap.unwrap(),
+        ]
+        .into_iter()
+        .chain(archives.into_iter())
+        .collect();
+
+        (framework_canisters, dapps, extensions)
+    }
+
     // Helper function for `register_dapp_canisters`. Instead of panicking when
     // some of the input canisters can't be registered, this function
     // returns a list of errors.
@@ -421,61 +454,21 @@ impl SnsRootCanister {
             .into_iter()
             .collect::<Vec<_>>();
 
-        let (sns_canister_ids, dapps) = {
-            let ListSnsCanistersResponse {
-                root,
-                governance,
-                ledger,
-                swap,
-                dapps,
-                archives,
-                index,
-            } = self_ref.with(|s| {
-                let s = s.borrow();
-                s.list_sns_canisters(root_canister_id)
-            });
-            let sns_canister_ids: Vec<PrincipalId> = vec![
-                root.unwrap(),
-                governance.unwrap(),
-                ledger.unwrap(),
-                index.unwrap(),
-                // Swap is controlled by the NNS, so this is just a precaution
-                swap.unwrap(),
-            ]
-            .into_iter()
-            .chain(archives.into_iter())
-            .collect();
-            (sns_canister_ids, dapps)
-        };
-
         let mut errors = Vec::new();
 
-        let canisters_registered_count = dapps.len();
-
-        let available_registrations =
-            DAPP_CANISTER_REGISTRATION_LIMIT.saturating_sub(canisters_registered_count);
-
-        for canister_to_register in canisters_to_register.iter().take(available_registrations) {
-            match Self::register_canister(
+        for canister_to_register in canisters_to_register {
+            let result = Self::register_canister(
                 self_ref,
                 management_canister_client,
                 root_canister_id,
-                &sns_canister_ids[..],
-                &dapps[..],
-                *canister_to_register,
+                canister_to_register,
                 testflight,
             )
-            .await
-            {
-                Ok(_) => {}
-                Err(reason) => {
-                    errors.push((*canister_to_register, reason));
-                }
-            }
-        }
+            .await;
 
-        for excess_canister in canisters_to_register.iter().skip(available_registrations) {
-            errors.push((*excess_canister, format!("Dapp Canister registration limit of {} was reached. No more canisters can be registered until a current canister is deregistered.", DAPP_CANISTER_REGISTRATION_LIMIT)));
+            if let Err(reason) = result {
+                errors.push((canister_to_register, reason));
+            }
         }
 
         if !errors.is_empty() {
@@ -485,20 +478,148 @@ impl SnsRootCanister {
         }
     }
 
+    pub async fn register_extension(
+        self_ref: &'static LocalKey<RefCell<Self>>,
+        management_canister_client: &impl ManagementCanisterClient,
+        root_canister_id: PrincipalId,
+        request: RegisterExtensionRequest,
+    ) -> Result<(), String> {
+        let (sns_canister_ids, dapps, extensions) =
+            Self::sns_canister_ids(self_ref, root_canister_id);
+
+        let canisters_registered_count = dapps.len().saturating_add(extensions.len());
+
+        if canisters_registered_count >= DAPP_AND_EXTENSION_CANISTER_REGISTRATION_LIMIT {
+            Err(format!(
+                "Canister registration limit of {} was reached. No more canisters can be \
+                 registered until a current dapp canister or extension is deregistered.",
+                DAPP_AND_EXTENSION_CANISTER_REGISTRATION_LIMIT
+            ))?;
+        }
+
+        let RegisterExtensionRequest { canister_id } = request;
+
+        let Some(canister_id) = canister_id else {
+            return Err("RegisterExtensionRequest.canister_id must be set.".to_string());
+        };
+
+        // Reject if canister_id is one of the distinguished canisters in the SNS.
+        if sns_canister_ids.contains(&canister_id) {
+            Err("Canister is a distinguished SNS canister can so cannot be registered")?;
+        }
+
+        // Do nothing if canister_to_register is already registered.
+        if extensions.contains(&canister_id) {
+            log!(
+                INFO,
+                "Attempting to register {} as an extension, but it is already registered.",
+                canister_id
+            );
+            return Ok(());
+        }
+
+        if dapps.contains(&canister_id) {
+            Err(format!(
+                "{} is a registered dapp canister and cannot be registered as an extension.",
+                canister_id
+            ))?;
+        }
+
+        let golvernance_canister_id = self_ref.with_borrow(|state| state.governance_canister_id());
+
+        // Unlike regular dapp canisters, extensions should be controlled by both the root canister
+        // and the SNS governance canisters. The former is responsible for upgrading the extension,
+        // while the latter is responsible for calling its update functions (which are typically
+        // covered by SNS proposals).
+        let expected_controllers = btreeset! {
+            root_canister_id,
+            governance_canister_id,
+        };
+
+        // Remove all controllers except for Root and Governance. This successds only if the
+        // Root is already a controller.
+        management_canister_client
+            .update_settings(UpdateSettings {
+                canister_id,
+                settings: CanisterSettings {
+                    controllers: Some(expected_controllers.iter().copied().collect()),
+                    ..Default::default()
+                },
+                sender_canister_version: management_canister_client.canister_version(),
+            })
+            .await
+            .map_err(|err| format!("Controller change failed: {err:?}"))?;
+
+        // Verify that the extension is now controlled only by Root and Governance.
+        {
+            let canister_id = CanisterId::unchecked_from_principal(canister_id);
+
+            let canister_status = management_canister_client
+                .canister_status(canister_id.into())
+                .await
+                .map_err(|err| format!("Canister status unavailable: {err:?}"))?;
+
+            let controllers = canister_status
+                .controllers()
+                .iter()
+                .copied()
+                .collect::<BTreeSet<_>>();
+
+            if controllers != expected_controllers {
+                let controllers = controllers
+                    .iter()
+                    .map(|p| p.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+
+                Err(format!(
+                    "Extension canister must be controlled by Root ({}) and Governance ({}) \
+                         of this SNS. However, despite the update_settings call seemingly \
+                         succeeding, extension canister ({}) is still controlled by {}.",
+                    root_canister_id, governance_canister_id, canister_id, controllers,
+                ))?;
+            }
+        }
+
+        self_ref.with_borrow_mut(|state| {
+            state.extension_canister_ids.push(canister_id);
+        });
+
+        Ok(())
+    }
+
     /// Register a single canister.
     async fn register_canister(
         self_ref: &'static LocalKey<RefCell<SnsRootCanister>>,
         management_canister_client: &impl ManagementCanisterClient,
         root_canister_id: ic_cdk::api::management_canister::main::CanisterId,
-        sns_canister_ids: &[PrincipalId],
-        dapps: &[PrincipalId],
         canister_to_register: PrincipalId,
         testflight: bool,
     ) -> Result<(), String> {
+        let (sns_canister_ids, dapps, extensions) =
+            Self::sns_canister_ids(self_ref, root_canister_id);
+
+        let canisters_registered_count = dapps.len().saturating_add(extensions.len());
+
+        if canisters_registered_count >= DAPP_AND_EXTENSION_CANISTER_REGISTRATION_LIMIT {
+            Err(format!(
+                "Canister registration limit of {} was reached. No more canisters can be \
+                 registered until a current dapp canister or extension is deregistered.",
+                DAPP_AND_EXTENSION_CANISTER_REGISTRATION_LIMIT
+            ))?;
+        }
+
         // Reject if canister_to_register is one of the distinguished canisters in the SNS.
         if sns_canister_ids.contains(&canister_to_register) {
             Err("Canister is a distinguished SNS canister can so cannot be registered")?;
         }
+
+        if extensions.contains(&canister_to_register) {
+            Err(format!(
+                "{canister_to_register} is a registered extension canister and cannot be registered as a dapp canister."
+            ))?;
+        }
+
         // Do nothing if canister_to_register is already registered.
         if dapps.contains(&canister_to_register) {
             log!(
