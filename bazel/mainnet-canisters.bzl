@@ -34,6 +34,9 @@ def canister_deps():
             tag = canisterinfo.get("tag", None)
             if tag == None:
                 fail("no rev and tag for canister: " + canister_key)
+        else:
+            repository = None
+            tag = None
 
         sha256 = canisterinfo.get("sha256", None)
         if sha256 == None:
