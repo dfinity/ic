@@ -925,8 +925,13 @@ impl StreamHandlerImpl {
                 Reject(RejectReason::CanisterMigrating, msg)
             }
 
+            // Best-effort response to canister hosted by other subnet. May occur
+            // legitimately if the canister was migrated after having timed out the
+            // matching callback.
             Some(_) if msg.is_best_effort() && matches!(msg, RequestOrResponse::Response(_)) => {
-                Accept(msg.cycles())
+                        self.observe_inducted_message_status(msg_type, LABEL_VALUE_DROPPED);
+                        // Cycles were lost.
+                        Accept(msg_cycles)
             }
 
             // Receiver is not and was not (according to `migrating_canisters`) recently
