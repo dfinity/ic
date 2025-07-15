@@ -3711,6 +3711,75 @@ fn test_ecdsa_public_key_api_is_enabled() {
 }
 
 #[test]
+fn test_schnorr_public_key_api_is_enabled() {
+    let test_cases = [
+        (
+            make_bip340_key("correct_key"),
+            make_bip340_key("nonexistent_key_id"),
+        ),
+        (
+            make_ed25519_key("correct_key"),
+            make_ed25519_key("nonexistent_key_id"),
+        ),
+    ];
+
+    for (key_id, nonexistent_key_id) in test_cases {
+        let own_subnet = subnet_test_id(1);
+        let nns_subnet = subnet_test_id(2);
+        let nns_canister = canister_test_id(0x10);
+        let mut test = ExecutionTestBuilder::new()
+            .with_own_subnet_id(own_subnet)
+            .with_nns_subnet_id(nns_subnet)
+            .with_caller(nns_subnet, nns_canister)
+            .with_chain_key(key_id.clone())
+            .build();
+
+        let nonexistent_key_id = into_inner_schnorr(nonexistent_key_id);
+        test.inject_call_to_ic00(
+            Method::SchnorrPublicKey,
+            ic00::SchnorrPublicKeyArgs {
+                canister_id: None,
+                derivation_path: DerivationPath::default(),
+                key_id: nonexistent_key_id.clone(),
+            }
+            .encode(),
+            Cycles::new(0),
+        );
+        test.inject_call_to_ic00(
+            Method::SchnorrPublicKey,
+            ic00::SchnorrPublicKeyArgs {
+                canister_id: None,
+                derivation_path: DerivationPath::default(),
+                key_id: into_inner_schnorr(key_id),
+            }
+            .encode(),
+            Cycles::new(0),
+        );
+        test.execute_all();
+
+        // Check, that call fails for a key that doesn't exist
+        let response = test.xnet_messages()[0].clone();
+        assert_eq!(
+            get_reject_message(response),
+            format!(
+                "Subnet {} does not hold threshold key schnorr:{}.",
+                own_subnet, nonexistent_key_id
+            ),
+        );
+
+        // NOTE: Since the public keys delivered to execution by the test framework
+        // are not well formed points, the deserialization of this function will
+        // fail. However, the fact that we get this error message indicates, that we
+        // requested a key that actually exists.
+        let response = test.xnet_messages()[1].clone();
+        assert_eq!(
+            get_reject_message(response),
+            "InternalError(\"InvalidPoint\")",
+        );
+    }
+}
+
+#[test]
 fn test_vetkd_public_key_api_is_enabled() {
     let key_id = make_vetkd_key("correct_key");
     let own_subnet = subnet_test_id(1);
