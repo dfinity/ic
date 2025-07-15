@@ -139,11 +139,7 @@ impl RegistryHelper {
             RegistryPollingStrategy::OnlyOnInit => {}
         }
 
-        self.registry_replicator
-            .get_latest_local_version()
-            .map_err(|err| {
-                RecoveryError::RegistryError(format!("Failed to poll the newest registry: {}", err))
-            })
+        Ok(self.registry_client().get_latest_version())
     }
 
     /// Polls the [RegistryReplicator] for the most recent version of the registry and then

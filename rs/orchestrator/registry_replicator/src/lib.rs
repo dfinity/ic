@@ -393,8 +393,8 @@ impl RegistryReplicator {
         Ok(future)
     }
 
-    /// Requests latest version and certified changes from the
-    /// [`RegistryCanister`] and applies changes to [`LocalStore`] accordingly.
+    /// Requests latest version and certified changes from the [`RegistryCanister`] and applies
+    /// changes to [`LocalStore`] and [`RegistryClient`] accordingly.
     ///
     /// Note that we will poll at most 1000 oldest registry versions (see the implementation of
     /// `get_certified_changes_since` of `RegistryCanister`), so multiple polls might be necessary
@@ -409,14 +409,10 @@ impl RegistryReplicator {
             self.poll_delay,
         )
         .poll()
-        .await
-    }
+        .await?;
 
-    /// Returns the latest registry version available *locally*.
-    pub fn get_latest_local_version(&self) -> Result<RegistryVersion, RegistryClientError> {
-        self.registry_client.poll_once()?;
-
-        Ok(self.registry_client.get_latest_version())
+        // Update the registry client with the latest changes.
+        self.registry_client.poll_once().map_err(|e| e.to_string())
     }
 
     /// Set the local registry data to what is contained in the provided local
