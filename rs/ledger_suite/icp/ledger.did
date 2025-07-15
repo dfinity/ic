@@ -497,6 +497,11 @@ type Allowances = vec record {
     expires_at: opt nat64;
 };
 
+type TipOfChainRes = record {
+    certification: opt blob;
+    tip_index: BlockIndex;
+};
+
 service: (LedgerCanisterPayload) -> {
     // Transfers tokens from a subaccount of the caller to the destination address.
     // The source address is computed from the principal of the caller and the specified subaccount.
@@ -553,6 +558,8 @@ service: (LedgerCanisterPayload) -> {
     icrc10_supported_standards : () -> (vec record { name : text; url : text }) query;
 
     get_allowances : (GetAllowancesArgs) -> (Allowances) query;
+
+    tip_of_chain : () -> (TipOfChainRes) query;
 
     is_ledger_ready: () -> (bool) query;
 }

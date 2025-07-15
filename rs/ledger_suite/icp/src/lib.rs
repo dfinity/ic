@@ -1109,6 +1109,7 @@ pub struct Archives {
 }
 
 /// Argument returned by the tip_of_chain endpoint
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub struct TipOfChainRes {
     pub certification: Option<Vec<u8>>,
     pub tip_index: BlockIndex,
