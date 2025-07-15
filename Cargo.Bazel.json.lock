@@ -1,5 +1,5 @@
 {
-  "checksum": "ec7398dac344c1157c0afe41acd5db2d095b2594d0993f4df498bece5d774370",
+  "checksum": "92175ca951f861a10b2c1d029fc386ecbfee0c80b297e34474a0468957d1503e",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -21148,6 +21148,10 @@
             {
               "id": "static_assertions 1.1.0",
               "target": "static_assertions"
+            },
+            {
+              "id": "stoppable_thread 0.2.1",
+              "target": "stoppable_thread"
             },
             {
               "id": "strum 0.26.3",
@@ -72664,6 +72668,44 @@
       ],
       "license_file": null
     },
+    "stoppable_thread 0.2.1": {
+      "name": "stoppable_thread",
+      "version": "0.2.1",
+      "package_url": "https://github.com/mbr/stoppable_thread-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/stoppable_thread/0.2.1/download",
+          "sha256": "e6700c1ed393aa9c1fff950032a64a4856436dadee820641ce1b914cab65019f"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "stoppable_thread",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "stoppable_thread",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2015",
+        "version": "0.2.1"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
     "str_stack 0.1.0": {
       "name": "str_stack",
       "version": "0.1.0",
@@ -93082,6 +93124,7 @@
     "socks5-impl 0.6.1",
     "ssh2 0.9.4",
     "static_assertions 1.1.0",
+    "stoppable_thread 0.2.1",
     "strum 0.26.3",
     "strum_macros 0.26.4",
     "stubborn-io 0.3.2",

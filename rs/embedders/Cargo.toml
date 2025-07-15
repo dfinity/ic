@@ -43,6 +43,7 @@ serde = { workspace = true }
 serde_bytes = { workspace = true }
 slog = { workspace = true }
 slog-term = { workspace = true }
+stoppable_thread = "0.2.1"
 tempfile = { workspace = true }
 serfaultfd = { version = "0.8.1", features = ["linux5_7"] }
 wasm-encoder = { workspace = true }

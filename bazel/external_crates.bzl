@@ -1278,6 +1278,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "static_assertions": crate.spec(
                 version = "1.1.0",
             ),
+            "stoppable_thread": crate.spec(
+                version = "0.2.1",
+            ),
             "strum": crate.spec(
                 version = "^0.26.3",
                 default_features = False,

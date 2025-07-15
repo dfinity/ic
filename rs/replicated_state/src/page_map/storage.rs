@@ -283,9 +283,7 @@ impl StorageImpl {
                 .or_insert(start_page_index..last_page_index);
             // For each shard the lowest height version is a base, if it can be loaded fast.
             // It can be mmapped fast if it contains a single range, hence one mmap.
-            if base_path.is_none()
-                && !shards_with_overlays.contains(&shard)
-                && overlay.index_iter().count() == 1
+            if false && !shards_with_overlays.contains(&shard) && overlay.index_iter().count() == 1
             {
                 base_overlays.push(overlay);
             } else {

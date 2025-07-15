@@ -40,7 +40,7 @@ use crate::wasm_utils::instrumentation::{
 use crate::{
     serialized_module::SerializedModuleBytes, wasm_utils::validation::wasmtime_validation_config,
 };
-use std::{sync::MutexGuard, thread};
+use std::sync::MutexGuard;
 use userfaultfd::{Event, FaultKind, ReadWrite, RegisterMode, UffdBuilder};
 
 use super::InstanceRunResult;
@@ -707,7 +707,13 @@ fn sigsegv_memory_tracker<S>(
     memories: HashMap<CanisterMemoryType, MemorySigSegvInfo>,
     store: &mut wasmtime::Store<S>,
     log: ReplicaLogger,
-) -> HashMap<CanisterMemoryType, Arc<Mutex<SigsegvMemoryTracker>>> {
+) -> HashMap<
+    CanisterMemoryType,
+    (
+        Arc<Mutex<SigsegvMemoryTracker>>,
+        stoppable_thread::StoppableHandle<()>,
+    ),
+> {
     let mut result = HashMap::new();
     for (
         mem_type,
@@ -748,8 +754,13 @@ fn sigsegv_memory_tracker<S>(
                 .expect("failed to instantiate SIGSEGV memory tracker"),
             ))
         };
+        let sigsegv_memory_tracker_clone = Arc::clone(&sigsegv_memory_tracker);
 
-        println!("Current memory size in pages: {}", size / PAGE_SIZE);
+        println!(
+            "Current memory size for {} in pages: {}",
+            mem_type,
+            size / PAGE_SIZE
+        );
 
         let uffd = UffdBuilder::new()
             .close_on_exec(true)
@@ -770,15 +781,13 @@ fn sigsegv_memory_tracker<S>(
         )
         .expect("Failed to register region");
 
-        result.insert(mem_type, Arc::clone(&sigsegv_memory_tracker));
-
-        thread::spawn(move || {
-            loop {
+        let handle = stoppable_thread::spawn(move |stopped| {
+            while !stopped.get() {
                 let event = uffd.read_event().expect("Failed to read uffd event");
 
                 if let Some(Event::Pagefault { addr, rw, kind }) = event {
                     println!(
-                        "Page fault at for mem_type {}, address: {:p}",
+                        "Page fault for mem_type {}, at address: {:p}",
                         mem_type, addr
                     );
 
@@ -809,37 +818,39 @@ fn sigsegv_memory_tracker<S>(
                         }
                     }
 
-                    // We need to handle page faults in units of pages(!). So, round faulting
-                    // address down to page boundary.
-                    let fault_addr = (addr as usize & !(PAGE_SIZE - 1)) as *mut libc::c_void;
+                    // // We need to handle page faults in units of pages(!). So, round faulting
+                    // // address down to page boundary.
+                    // let fault_addr = (addr as usize & !(PAGE_SIZE - 1)) as *mut libc::c_void;
 
                     match (kind, rw) {
                         (FaultKind::Missing, ReadWrite::Read) => {
                             println!("[handler] Handling missing page fault for read access");
 
-                            let size = uffd_handler(&memory_tracker, &uffd, rw, addr);
+                            let res = uffd_handler(&memory_tracker, &uffd, rw, addr);
 
-                            if let Some(size) = size {
-                                // Undocumented requirement: write-protect ioctl on the region
-                                // can only happen after a missing page fault has been handled
-                                // (as opposed to performing it right after registration but
-                                // before any page fault).
-                                uffd.write_protect(fault_addr, size)
-                                    .expect("write_protect failed");
-
-                                uffd.wake(fault_addr, size).expect("wake failed");
+                            if let Some((start_addr, size)) = res {
+                                if memory_tracker.dirty_page_tracking() == DirtyPageTracking::Track
+                                {
+                                    // Undocumented requirement: write-protect ioctl on the region
+                                    // can only happen after a missing page fault has been handled
+                                    // (as opposed to performing it right after registration but
+                                    // before any page fault).
+                                    uffd.write_protect(start_addr, size)
+                                        .expect("write_protect failed");
+                                }
+                                uffd.wake(start_addr, size).expect("wake failed");
                             }
                         }
                         (FaultKind::Missing, ReadWrite::Write) => {
                             println!("[handler] Handling missing page fault for write access");
 
-                            let size = uffd_handler(&memory_tracker, &uffd, rw, addr);
+                            let res = uffd_handler(&memory_tracker, &uffd, rw, addr);
 
-                            if let Some(size) = size {
-                                uffd.wake(fault_addr, size).expect("wake failed");
+                            println!("[handler] Missing page for write access res: {:?}", res);
+
+                            if let Some((start_addr, size)) = res {
+                                uffd.wake(start_addr, size).expect("wake failed");
                             }
-                            // break out of the loop, as we don't need to keep tracking a dirty page.
-                            break;
                         }
                         (FaultKind::WriteProtected, ReadWrite::Read) => {
                             unreachable!("Should not receive notification");
@@ -848,20 +859,24 @@ fn sigsegv_memory_tracker<S>(
                             println!(
                                 "[handler] Handling write-protect page fault for write access"
                             );
-                            let size = uffd_handler(&memory_tracker, &uffd, rw, addr);
+                            let res = uffd_handler(&memory_tracker, &uffd, rw, addr);
 
-                            if let Some(size) = size {
-                                // If the page is already dirty, we can remove write protection.
-                                uffd.remove_write_protection(fault_addr, size, true)
-                                    .expect("remove_write_protection failed");
+                            if let Some((start_addr, size)) = res {
+                                if memory_tracker.dirty_page_tracking() == DirtyPageTracking::Track
+                                {
+                                    // If the page is already dirty, we can remove write protection.
+                                    uffd.remove_write_protection(start_addr, size, false)
+                                        .expect("remove_write_protection failed");
+                                }
+                                uffd.wake(start_addr, size).expect("wake failed");
                             }
-                            // break out of the loop, as we don't need to keep tracking a dirty page.
-                            break;
                         }
                     }
                 }
             }
         });
+
+        result.insert(mem_type, (sigsegv_memory_tracker_clone, handle));
     }
 
     // let handler = crate::signal_handler::sigsegv_memory_tracker_handler(tracked_memories);
@@ -935,7 +950,13 @@ pub struct PageAccessResults {
 /// Encapsulates a Wasmtime instance on the Internet Computer.
 pub struct WasmtimeInstance {
     instance: wasmtime::Instance,
-    memory_trackers: HashMap<CanisterMemoryType, Arc<Mutex<SigsegvMemoryTracker>>>,
+    memory_trackers: HashMap<
+        CanisterMemoryType,
+        (
+            Arc<Mutex<SigsegvMemoryTracker>>,
+            stoppable_thread::StoppableHandle<()>,
+        ),
+    >,
     signal_stack: WasmtimeSignalStack,
     log: ReplicaLogger,
     instance_stats: InstanceStats,
@@ -954,6 +975,12 @@ pub struct WasmtimeInstance {
 
 impl WasmtimeInstance {
     pub fn into_store_data(self) -> StoreData {
+        // Big hack incoming. Need to do this here because having a `Drop` conflicts
+        // with consuming `self` in this method.
+        // Stop the uffd handler threads.
+        for (_, handle) in self.memory_trackers.into_values() {
+            handle.stop().join().unwrap();
+        }
         self.store.into_data()
     }
 
@@ -1013,6 +1040,7 @@ impl WasmtimeInstance {
                             .memory_trackers
                             .get(&CanisterMemoryType::Heap)
                             .unwrap()
+                            .0
                             .lock()
                             .unwrap();
                         let speculatively_dirty_pages = tracker.take_speculatively_dirty_pages();
@@ -1033,6 +1061,7 @@ impl WasmtimeInstance {
                 .memory_trackers
                 .get(&CanisterMemoryType::Heap)
                 .unwrap()
+                .0
                 .lock()
                 .unwrap();
 
@@ -1068,6 +1097,7 @@ impl WasmtimeInstance {
                 .memory_trackers
                 .get(&CanisterMemoryType::Stable)
                 .unwrap()
+                .0
                 .lock()
                 .unwrap();
 
@@ -1252,7 +1282,7 @@ impl WasmtimeInstance {
                     error: format!("No {} memory tracker", memory_type),
                 }
             })?;
-            let tracker = tracker.lock().unwrap();
+            let tracker = tracker.0.lock().unwrap();
             let page_map = tracker.page_map();
             let accessed_pages = tracker.accessed_pages().borrow();
             let heap_memory = heap_memory.data(&self.store);

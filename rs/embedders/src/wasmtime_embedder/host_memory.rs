@@ -12,8 +12,8 @@ use ic_sys::PAGE_SIZE;
 use ic_types::MAX_STABLE_MEMORY_IN_BYTES;
 use libc::c_void;
 use libc::MAP_FAILED;
-use libc::{mmap, munmap};
-use libc::{MAP_ANON, MAP_PRIVATE, PROT_READ, PROT_WRITE};
+use libc::{mmap, mprotect, munmap};
+use libc::{MAP_ANON, MAP_PRIVATE, PROT_NONE, PROT_READ, PROT_WRITE};
 use wasmtime::{LinearMemory, MemoryType};
 use wasmtime_environ::WASM32_MAX_SIZE;
 
@@ -164,7 +164,7 @@ impl MmapMemory {
             mmap(
                 ptr::null_mut(),
                 size_in_bytes,
-                PROT_READ | PROT_WRITE,
+                PROT_NONE,
                 MAP_PRIVATE | MAP_ANON,
                 -1,
                 0,
@@ -175,6 +175,21 @@ impl MmapMemory {
             MAP_FAILED,
             "mmap failed: size={} {}",
             size_in_bytes,
+            Error::last_os_error()
+        );
+
+        let result = unsafe {
+            mprotect(
+                (start as *mut u8).add(prologue_guard_size_in_bytes) as *mut c_void,
+                mem_size_in_bytes,
+                PROT_READ | PROT_WRITE,
+            )
+        };
+        assert_eq!(
+            result,
+            0,
+            "mprotect failed: size={} {}",
+            mem_size_in_bytes,
             Error::last_os_error()
         );
 
