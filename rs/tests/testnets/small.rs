@@ -56,9 +56,9 @@ fn main() -> Result<()> {
 }
 
 pub fn setup(env: TestEnv) {
-    PrometheusVm::default()
-        .start(&env)
-        .expect("Failed to start prometheus VM");
+    // PrometheusVm::default()
+    //     .start(&env)
+    //     .expect("Failed to start prometheus VM");
     let vector_vm = VectorVm::new();
     vector_vm.start(&env).expect("Failed to start Vector VM");
     InternetComputer::new()
@@ -72,13 +72,13 @@ pub fn setup(env: TestEnv) {
         env.topology_snapshot(),
         NnsCustomizations::default(),
     );
-    IcGatewayVm::new(IC_GATEWAY_VM_NAME)
-        .start(&env)
-        .expect("failed to setup ic-gateway");
-    let ic_gateway = env.get_deployed_ic_gateway(IC_GATEWAY_VM_NAME).unwrap();
-    let ic_gateway_url = ic_gateway.get_public_url();
-    let ic_gateway_domain = ic_gateway_url.domain().unwrap();
-    env.sync_with_prometheus_by_name("", Some(ic_gateway_domain.to_string()));
+    // IcGatewayVm::new(IC_GATEWAY_VM_NAME)
+    //     .start(&env)
+    //     .expect("failed to setup ic-gateway");
+    // let ic_gateway = env.get_deployed_ic_gateway(IC_GATEWAY_VM_NAME).unwrap();
+    // let ic_gateway_url = ic_gateway.get_public_url();
+    // let ic_gateway_domain = ic_gateway_url.domain().unwrap();
+    // env.sync_with_prometheus_by_name("", Some(ic_gateway_domain.to_string()));
     vector_vm
         .sync_targets(&env)
         .expect("Failed to sync Vector targets");

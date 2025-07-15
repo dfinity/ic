@@ -12,6 +12,7 @@ docker run -d --name vector \
     --entrypoint vector \
     -e VECTOR_WATCH_CONFIG=true \
     -v /etc/vector/generated-config:/etc/vector/generated-config \
+    --network host \
     vector-with-log-fetcher:image \
     --config-dir /etc/vector/config \
     --config-dir /etc/vector/generated-config

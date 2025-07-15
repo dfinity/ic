@@ -248,7 +248,6 @@ uvm_config_image(
     name = "vector_with_log_fetcher_image",
     srcs = [
         ":vector-with-log-fetcher.tar",
-        ":ubuntu_test_runtime.tar",
         ":vector_activate.sh"
     ],
     tags = ["manual"],

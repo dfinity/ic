@@ -13,7 +13,7 @@ use crate::{
     driver::{
         prometheus_vm::{SCP_RETRY_BACKOFF, SCP_RETRY_TIMEOUT},
         test_env::TestEnvAttribute,
-        test_env_api::{HasTopologySnapshot, IcNodeContainer, SshSession},
+        test_env_api::{HasTopologySnapshot, IcNodeContainer, RetrieveIpv4Addr, SshSession},
         test_setup::GroupSetup,
         universal_vm::UniversalVms,
     },
@@ -126,9 +126,11 @@ impl VectorVm {
 
         info!(logger, "Spawning vector vm for log fetching.");
 
-        self.universal_vm.clone().start(env)?;
+        self.universal_vm.start(env)?;
+        let deployed_vm = env.get_deployed_universal_vm(&self.universal_vm.name)?;
+        let ipv4 = deployed_vm.block_on_ipv4()?;
 
-        info!(logger, "Spawned vector vm.");
+        info!(logger, "Spawned vector vm. IP: {}", ipv4);
         Ok(())
     }
 
@@ -230,8 +232,7 @@ impl VectorVm {
             };
 
             let from = file.path();
-            let to =
-                Path::new("/etc/vector/generated-config").join(file.path().file_name().unwrap());
+            let to = Path::new("/etc/vector/config").join(file.path().file_name().unwrap());
             let size = std::fs::metadata(&from).unwrap().len();
             retry_with_msg!(
                 format!("scp {from:?} to {}:{to:?}", self.universal_vm.name),
