@@ -222,7 +222,7 @@ mod tests {
         boot_args_b: String,
         create_boot_args_files: bool,
         create_kernel_files: bool,
-        create_ovmf_file: bool,
+        create_ovmf_sev_file: bool,
     }
 
     impl TestSetupBuilder {
@@ -234,7 +234,7 @@ mod tests {
                 boot_args_b: "args_b".to_string(),
                 create_boot_args_files: true,
                 create_kernel_files: true,
-                create_ovmf_file: true,
+                create_ovmf_sev_file: true,
             }
         }
 
@@ -259,8 +259,8 @@ mod tests {
             self
         }
 
-        fn without_ovmf(mut self) -> Self {
-            self.create_ovmf_file = false;
+        fn without_ovmf_sev(mut self) -> Self {
+            self.create_ovmf_sev_file = false;
             self
         }
 
@@ -277,14 +277,14 @@ mod tests {
                 "SHOULD NOT BE USED",
                 self.create_boot_args_files,
                 self.create_kernel_files,
-                self.create_ovmf_file,
+                self.create_ovmf_sev_file,
             );
             let b_boot_partition = create_boot_partition(
                 "SHOULD NOT BE USED",
                 &self.boot_args_b,
                 self.create_boot_args_files,
                 self.create_kernel_files,
-                self.create_ovmf_file,
+                self.create_ovmf_sev_file,
             );
 
             let mut partitions = HashMap::new();
@@ -353,7 +353,7 @@ mod tests {
         boot_args_b: &str,
         create_boot_args: bool,
         create_kernel_files: bool,
-        create_ovmf_file: bool,
+        create_ovmf_sev_file: bool,
     ) -> Arc<TempDir> {
         let boot_dir = Arc::new(TempDir::new().expect("Failed to create temp dir"));
 
@@ -368,8 +368,8 @@ mod tests {
             fs::write(boot_dir.path().join("initrd.img"), b"fake initrd").unwrap();
         }
 
-        if create_ovmf_file {
-            fs::write(boot_dir.path().join("OVMF.fd"), b"fake OVMF").unwrap();
+        if create_ovmf_sev_file {
+            fs::write(boot_dir.path().join("OVMF_SEV.fd"), b"fake OVMF").unwrap();
         }
 
         boot_dir
@@ -582,7 +582,7 @@ mod tests {
     async fn test_missing_ovmf_file() {
         let setup = TestSetupBuilder::new()
             .with_grubenv(BootAlternative::B, BootCycle::Stable)
-            .without_ovmf()
+            .without_ovmf_sev()
             .build();
 
         let result = setup
