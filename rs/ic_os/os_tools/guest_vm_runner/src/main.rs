@@ -4,12 +4,13 @@ use crate::guest_vm_config::{
 };
 use crate::mount::PartitionProvider;
 use crate::systemd_notifier::SystemdNotifier;
-use anyhow::{anyhow, bail, Context, Error, Result};
+use anyhow::{bail, Context, Error, Result};
 use clap::{Parser, ValueEnum};
 use config_types::{HostOSConfig, Ipv6Config};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{calculate_deterministic_mac, IpVariant, MacAddr6Ext};
 use ic_metrics_tool::{Metric, MetricsWriter};
+use std::fmt::{Debug, Formatter};
 use std::io::Write;
 use std::path::Path;
 use std::sync::Arc;
@@ -74,8 +75,21 @@ pub async fn main() -> Result<()> {
     let termination_token = CancellationToken::new();
     setup_signal_handler(termination_token.clone()).context("Failed to setup signal handler")?;
 
-    let mut service = GuestVmService::new(args.vm_type)?;
-    service.run(termination_token).await
+    loop {
+        match GuestVmService::create_and_run(args.vm_type, termination_token.clone()).await {
+            // If the VM started and stopped regularly, we exit with success.
+            Ok(()) => return Ok(()),
+            // If the VM started but stopped, we restart it. Note that we recreate the entire
+            // service in order to start the VM with fresh config.
+            Err(GuestVmServiceError::VirtualMachineStopped) => {
+                println!("Guest VM stopped, restarting");
+                continue;
+            }
+            // If we encounter an unexpected error, we exit with the error and let systemd restart
+            // the service.
+            Err(GuestVmServiceError::Other(err)) => return Err(err),
+        }
+    }
 }
 
 fn setup_signal_handler(termination_token: CancellationToken) -> Result<()> {
@@ -196,6 +210,30 @@ impl Drop for VirtualMachine {
     }
 }
 
+#[derive(thiserror::Error)]
+pub enum GuestVmServiceError {
+    /// This can happen because QEMU stopped/crashed or because the GuestOS requested reboot.
+    #[error("Virtual machine stopped")]
+    VirtualMachineStopped,
+    #[error("{0}")]
+    Other(#[from] Error),
+}
+
+impl From<std::io::Error> for GuestVmServiceError {
+    fn from(e: std::io::Error) -> Self {
+        Self::Other(e.into())
+    }
+}
+
+impl Debug for GuestVmServiceError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::VirtualMachineStopped => write!(f, "VirtualMachineStopped"),
+            Self::Other(e) => e.fmt(f),
+        }
+    }
+}
+
 /// Service responsible for managing the GuestOS virtual machine lifecycle
 pub struct GuestVmService {
     metrics_writer: MetricsWriter,
@@ -237,8 +275,20 @@ impl GuestVmService {
         })
     }
 
+    #[cfg(target_os = "linux")]
+    pub async fn create_and_run(
+        guest_vm_type: GuestVMType,
+        termination_token: CancellationToken,
+    ) -> Result<(), GuestVmServiceError> {
+        let mut guest_vm_service = Self::new(guest_vm_type)?;
+        guest_vm_service.run(termination_token).await
+    }
+
     /// Runs the GuestOS service
-    pub async fn run(&mut self, termination_token: CancellationToken) -> Result<()> {
+    pub async fn run(
+        &mut self,
+        termination_token: CancellationToken,
+    ) -> Result<(), GuestVmServiceError> {
         let virtual_machine = match self.start_virtual_machine().await {
             Ok(virtual_machine) => {
                 self.metrics_writer
@@ -257,7 +307,7 @@ impl GuestVmService {
                         0.0,
                         "GuestOS virtual machine define state",
                     )])?;
-                return Err(err);
+                return Err(err.into());
             }
         };
 
@@ -463,7 +513,7 @@ impl GuestVmService {
         &self,
         vm: &VirtualMachine,
         termination_token: CancellationToken,
-    ) -> Result<()> {
+    ) -> Result<(), GuestVmServiceError> {
         tokio::select! {
             biased;
             // Wait for either VM shutdown event or stop signal
@@ -472,16 +522,7 @@ impl GuestVmService {
                 Ok(())
             },
             _ = vm.wait_for_shutdown() => {
-                self.metrics_writer.write_metrics(&[Metric::with_annotation(
-                    "hostos_guestos_service_unexpected_shutdown",
-                    1.0,
-                    "GuestOS virtual machine unexpected shutdown"
-                )])?;
-
-                // Notify systemd we're stopping
-                self.systemd_notifier.notify_stopping("GuestOS VM stopped unexpectedly.")?;
-
-                Err(anyhow!("GuestOS VM stopped unexpectedly"))
+                Err(GuestVmServiceError::VirtualMachineStopped)
             }
         }
     }
@@ -555,7 +596,7 @@ mod tests {
 
     /// A running service and methods to interact with it from the test code.
     struct TestServiceInstance {
-        task: JoinHandle<Result<()>>,
+        task: JoinHandle<Result<(), GuestVmServiceError>>,
         vm_domain_name: String,
         libvirt_connection: Connect,
         console_file: NamedTempFile,
@@ -575,14 +616,13 @@ mod tests {
             };
         }
 
-        async fn wait_for_systemd_stopping(&mut self) {
-            tokio::select! {
-                biased;
-                _ = self.systemd_notifier.await_stopping() => {/*success*/},
-                result = &mut self.task => {
-                    panic!("Service stopped before notifying about stopping. Status: {result:?}");
+        async fn wait_for_vm_shutdown(&mut self) {
+            loop {
+                if Domain::lookup_by_name(&self.libvirt_connection, &self.vm_domain_name).is_err() {
+                    return;
                 }
-            };
+                sleep(Duration::from_millis(100)).await;
+            }
         }
 
         fn get_domain(&self) -> Domain {
@@ -660,17 +700,6 @@ mod tests {
                 .captures(&vm_config)
                 .expect("Kernel cmdline not found in VM config")[1]
                 .to_string()
-        }
-
-        async fn assert_no_systemd_stopping_notification(&mut self) {
-            tokio::select! {
-                _ = self.systemd_notifier.await_stopping() => {
-                    panic!("Expected service to stop without systemd stopping notification");
-                }
-                result = &mut self.task => {
-                    result.expect("Service panicked").expect("Service failed with error")
-                }
-            }
         }
 
         #[allow(dead_code)] // Remove once used
@@ -820,11 +849,14 @@ mod tests {
 
         nix::sys::signal::raise(SIGTERM).expect("Failed to send SIGTERM");
 
-        // The service should not notify systemd when stopping after receiving SIGTERM
-        service.assert_no_systemd_stopping_notification().await;
-
-        // The domain should be destroyed
-        service.assert_vm_not_exists();
+        tokio::time::timeout(Duration::from_secs(2), service.wait_for_vm_shutdown())
+            .await
+            .expect("VM did not shut down within 2 seconds");
+        service
+            .task
+            .await
+            .expect("Could not join task")
+            .expect("Task did not return Ok(())");
     }
 
     #[tokio::test]
@@ -837,18 +869,10 @@ mod tests {
         // Kill the VM
         service.get_domain().destroy().unwrap();
 
-        // The service should notify systemd about stopping
-        service.wait_for_systemd_stopping().await;
-
-        service.assert_metrics_contains("hostos_guestos_service_unexpected_shutdown 1");
-
-        assert!(service
-            .task
-            .await
-            .unwrap()
-            .unwrap_err()
-            .to_string()
-            .contains("GuestOS VM stopped unexpectedly"));
+        assert!(matches!(
+            service.task.await.unwrap().unwrap_err(),
+            GuestVmServiceError::VirtualMachineStopped
+        ));
     }
 
     #[tokio::test]
@@ -885,13 +909,14 @@ mod tests {
         service2.wait_for_systemd_ready().await;
 
         // Assert that the first service was stopped
-        assert!(tokio::time::timeout(Duration::from_secs(1), service1.task)
-            .await
-            .unwrap()
-            .unwrap()
-            .expect_err("Stopped VM service did not return error")
-            .to_string()
-            .contains("GuestOS VM stopped unexpectedly"));
+        assert!(matches!(
+            tokio::time::timeout(Duration::from_secs(1), service1.task)
+                .await
+                .unwrap()
+                .unwrap()
+                .expect_err("Stopped VM service did not return error"),
+            GuestVmServiceError::VirtualMachineStopped
+        ));
     }
 
     #[tokio::test]

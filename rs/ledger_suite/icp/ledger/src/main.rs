@@ -1130,6 +1130,12 @@ fn tip_of_chain_() {
     reply_raw(&res)
 }
 
+#[query(name = "tip_of_chain")]
+#[candid_method(query, rename = "tip_of_chain")]
+fn tip_of_chain_candid() -> TipOfChainRes {
+    tip_of_chain()
+}
+
 #[export_name = "canister_query get_archive_index_pb"]
 fn get_archive_index_() {
     ic_cdk::setup();
