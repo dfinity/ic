@@ -590,7 +590,7 @@ class RosettaClient:
 
     def get_minimum_dissolve_delay(self, verbose=False):
         """
-        Returns the minumum dissolve delay of a neuron that still allows it to vote.
+        Returns the minimum dissolve delay of a neuron that still allows it to vote.
 
         Args:
             verbose (bool, optional): Whether to print verbose output. Defaults to False.

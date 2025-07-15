@@ -2,7 +2,7 @@
 """
 Get Minimum Dissolve Delay for Neuron Example
 
-This script demonstrates how to get the minumum dissolve delay of a neuron
+This script demonstrates how to get the minimum dissolve delay of a neuron
 that still allows it to vote on NNS proposals.
 
 Examples:
