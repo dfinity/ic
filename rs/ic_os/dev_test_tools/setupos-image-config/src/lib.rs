@@ -259,7 +259,7 @@ pub async fn update_hostos_boot_args(
 
     // Step 4: Set up loop device for HostOS image
     println!("Setting up loop device for HostOS image...");
-    let loop_output = Command::new("losetup")
+    let loop_output = Command::new("/usr/sbin/losetup")
         .args(["-f", "--show", "-P", hostos_img_path.to_str().unwrap()])
         .output()
         .context("failed to set up loop device")?;
@@ -280,12 +280,14 @@ pub async fn update_hostos_boot_args(
 
     // Ensure we clean up the loop device
     let cleanup_loop = || {
-        let _ = Command::new("losetup").args(["-d", &loop_device]).output();
+        let _ = Command::new("/usr/sbin/losetup")
+            .args(["-d", &loop_device])
+            .output();
     };
 
     // Step 5: Activate LVM
     println!("Activating LVM...");
-    let lvm_output = Command::new("vgchange")
+    let lvm_output = Command::new("/usr/sbin/vgchange")
         .args(["-ay", "hostlvm"])
         .output()
         .context("failed to activate LVM")?;
@@ -306,7 +308,7 @@ pub async fn update_hostos_boot_args(
 
     // Mount boot partition A
     println!("Mounting boot partition A...");
-    let mount_a_output = Command::new("mount")
+    let mount_a_output = Command::new("/usr/bin/mount")
         .args(["/dev/hostlvm/A_boot", mount_point_a.to_str().unwrap()])
         .output()
         .context("failed to mount boot partition A")?;
@@ -321,13 +323,13 @@ pub async fn update_hostos_boot_args(
 
     // Mount boot partition B
     println!("Mounting boot partition B...");
-    let mount_b_output = Command::new("mount")
+    let mount_b_output = Command::new("/usr/bin/mount")
         .args(["/dev/hostlvm/B_boot", mount_point_b.to_str().unwrap()])
         .output()
         .context("failed to mount boot partition B")?;
 
     if !mount_b_output.status.success() {
-        let _ = Command::new("umount")
+        let _ = Command::new("/usr/bin/umount")
             .args([mount_point_a.to_str().unwrap()])
             .output();
         cleanup_loop();
@@ -379,16 +381,18 @@ pub async fn update_hostos_boot_args(
 
     // Step 7: Unmount partitions
     println!("Unmounting boot partitions...");
-    let _ = Command::new("umount")
+    let _ = Command::new("/usr/bin/umount")
         .args([mount_point_a.to_str().unwrap()])
         .output();
-    let _ = Command::new("umount")
+    let _ = Command::new("/usr/bin/umount")
         .args([mount_point_b.to_str().unwrap()])
         .output();
 
     // Step 8: Deactivate LVM
     println!("Deactivating LVM...");
-    let _ = Command::new("vgchange").args(["-an", "hostlvm"]).output();
+    let _ = Command::new("/usr/sbin/vgchange")
+        .args(["-an", "hostlvm"])
+        .output();
 
     // Step 9: Clean up loop device
     cleanup_loop();

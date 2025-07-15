@@ -50,7 +50,10 @@ genrule(
         $(location //rs/ic_os/dev_test_tools/setupos-image-config:setupos-inject-config) --image-path disk.img --hostos-recovery-upgrader-boot-parameter "$${HOSTOS_RECOVERY_HASH:-default_recovery_hash}"
         tar --zstd -Scf $@ disk.img
     """,
-    tags = ["manual"],
+    tags = [
+        "manual",
+        "no-sandbox",  # such that the test can loop devices and LVM tools
+    ],
     target_compatible_with = ["@platforms//os:linux"],
     tools = ["//rs/ic_os/dev_test_tools/setupos-image-config:setupos-inject-config"],
     visibility = [
