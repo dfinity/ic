@@ -12,14 +12,17 @@ use ic_transport_types::EnvelopeContent::{Call, ReadState};
 use pocket_ic::common::rest::{BlockmakerConfigs, RawSubnetBlockmaker, TickConfigs};
 use pocket_ic::{
     common::rest::{
-        BlobCompression, CanisterHttpReply, CanisterHttpResponse, CreateInstanceResponse,
-        ExtendedSubnetConfigSet, InstanceConfig, MockCanisterHttpResponse, RawEffectivePrincipal,
-        RawMessageId, SubnetKind,
+        BlobCompression, CanisterHttpReply, CanisterHttpResponse, MockCanisterHttpResponse,
+        RawEffectivePrincipal, RawMessageId, SubnetKind,
     },
+    query_candid, update_candid, DefaultEffectiveCanisterIdError, ErrorCode, IngressStatusResult,
+    PocketIc, PocketIcBuilder, PocketIcState, RejectCode, Time,
+};
+#[cfg(not(windows))]
+use pocket_ic::{
+    common::rest::{CreateInstanceResponse, ExtendedSubnetConfigSet, InstanceConfig},
     nonblocking::PocketIc as PocketIcAsync,
-    query_candid, start_server, update_candid, DefaultEffectiveCanisterIdError, ErrorCode,
-    IngressStatusResult, PocketIc, PocketIcBuilder, PocketIcState, RejectCode, StartServerParams,
-    Time,
+    start_server, StartServerParams,
 };
 use reqwest::blocking::Client;
 use reqwest::header::CONTENT_LENGTH;
