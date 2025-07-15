@@ -456,6 +456,11 @@ impl NodeRegistration {
         Ok(())
     }
 
+    /// Fetches the registry to select a random NNS URL and the corresponding TLS configuration. If
+    /// the registry is not available, it falls back to the NNS URL from the node config, (obviously)
+    /// without TLS configuration.
+    /// Then builds an IC agent with the selected NNS URL and TLS configuration, using the provided
+    /// identity to sign messages.
     fn get_https_agent_to_random_nns_url<I: 'static + Identity>(
         &self,
         identity: I,
@@ -516,7 +521,8 @@ impl NodeRegistration {
         urls.pop()
     }
 
-    // Returns one random NNS url from registry.
+    // Returns one random NNS url from registry and the corresponding TLS configuration that allows
+    // to connect with HTTPS.
     fn get_random_nns_url_and_rustls_config_from_registry(
         &self,
     ) -> Option<(Url, rustls::ClientConfig)> {
