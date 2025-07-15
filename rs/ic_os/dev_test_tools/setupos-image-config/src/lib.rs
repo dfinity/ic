@@ -200,14 +200,20 @@ pub async fn update_hostos_boot_args(
     println!("Extracting HostOS image from SetupOS data partition...");
     let mut data_partition = ExtPartition::open(setupos_image_path.to_owned(), Some(4)).await?;
 
-    let hostos_compressed_path = work_dir.join("host-os.img.tar.zst");
-    let hostos_compressed_content = data_partition
-        .read_file(Path::new("/host-os.img.tar.zst"))
+    // Extract all files from data partition to temp directory
+    let data_extract_dir = work_dir.join("data_partition");
+    fs::create_dir_all(&data_extract_dir).context("failed to create data partition extract dir")?;
+    data_partition
+        .copy_files_to(&data_extract_dir)
         .await
-        .context("failed to read host-os.img.tar.zst from data partition")?;
+        .context("failed to extract data partition contents")?;
 
-    fs::write(&hostos_compressed_path, hostos_compressed_content)
-        .context("failed to write host-os.img.tar.zst to temp directory")?;
+    let hostos_compressed_path = work_dir.join("host-os.img.tar.zst");
+    let source_hostos_path = data_extract_dir.join("host-os.img.tar.zst");
+
+    // Copy the binary file directly
+    fs::copy(&source_hostos_path, &hostos_compressed_path)
+        .context("failed to copy host-os.img.tar.zst to work directory")?;
 
     data_partition.close().await?;
 

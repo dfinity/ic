@@ -176,7 +176,7 @@ system_test_nns(
     test_timeout = "eternal",
     use_empty_image = True,
     uses_guestos_dev = True,
-    uses_setupos_dev = True,
+    uses_setupos_recovery = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + IC_GATEWAY_RUNTIME_DEPS,
     deps = RUNNER_DEPENDENCIES,
 )

@@ -181,6 +181,7 @@ def system_test(
         uses_guestos_dev_test = False,
         uses_setupos_dev = False,
         uses_setupos_mainnet = False,
+        uses_setupos_recovery = False,
         uses_hostos_dev_test = False,
         uses_hostos_mainnet_update_img = False,
         use_empty_image = False,
@@ -217,6 +218,7 @@ def system_test(
       uses_hostos_dev_test: the test uses ic-os/hostos/envs/dev:update-img-test (will be also automatically added as dependency).
       uses_hostos_mainnet_update_img: the test uses mainnet HostOS update image version marked in mainnet-icos-revisions.json.
       uses_setupos_mainnet: the test uses mainnet SetupOS image version marked in mainnet-icos-revisions.json.
+      uses_setupos_recovery: the test uses the SetupOS recovery image with HostOS boot parameters for testing guestos-recovery-upgrader scenarios.
       use_empty_image: the test uses the empty disk image: //rs/tests/nested:empty_disk_image.tar.zst (will be also automatically added as dependency)
       env: environment variables to set in the test (subject to Make variable expansion)
       env_inherit: specifies additional environment variables to inherit from
@@ -287,6 +289,11 @@ def system_test(
 
     if uses_setupos_dev:
         icos_images["ENV_DEPS__SETUPOS_DISK_IMG"] = "//ic-os/setupos:test-img.tar.zst"
+        _env_deps["ENV_DEPS__SETUPOS_BUILD_CONFIG"] = "//ic-os:dev-tools/build-setupos-config-image.sh"
+        _env_deps["ENV_DEPS__SETUPOS_CREATE_CONFIG"] = "//rs/ic_os/dev_test_tools/setupos-image-config:setupos-create-config"
+
+    if uses_setupos_recovery:
+        icos_images["ENV_DEPS__SETUPOS_DISK_IMG"] = "//ic-os/setupos:recovery-img.tar.zst"
         _env_deps["ENV_DEPS__SETUPOS_BUILD_CONFIG"] = "//ic-os:dev-tools/build-setupos-config-image.sh"
         _env_deps["ENV_DEPS__SETUPOS_CREATE_CONFIG"] = "//rs/ic_os/dev_test_tools/setupos-image-config:setupos-create-config"
 

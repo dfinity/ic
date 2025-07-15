@@ -40,19 +40,19 @@ genrule(
     ],
 )
 
-# Postprocess SetupOS mainnet into a "test" image for use in nested tests
+# Postprocess SetupOS dev into a "recovery" image for use in the recovery_upgrader_test nested test
 genrule(
-    name = "mainnet-test-img",
-    srcs = ["@mainnet_setupos_disk_image//file"],
-    outs = ["mainnet-test-img.tar.zst"],
+    name = "recovery-img",
+    srcs = ["//ic-os/setupos/envs/dev:disk-img.tar.zst"],
+    outs = ["recovery-img.tar.zst"],
     cmd = """
         tar -xf $<
-        $(location //rs/ic_os/dev_test_tools/setupos-disable-checks) --image-path disk.img
+        $(location //rs/ic_os/dev_test_tools/setupos-image-config:setupos-inject-config) --image-path disk.img --hostos-recovery-upgrader-boot-parameter "$${HOSTOS_RECOVERY_HASH:-default_recovery_hash}"
         tar --zstd -Scf $@ disk.img
     """,
     tags = ["manual"],
     target_compatible_with = ["@platforms//os:linux"],
-    tools = ["//rs/ic_os/dev_test_tools/setupos-disable-checks"],
+    tools = ["//rs/ic_os/dev_test_tools/setupos-image-config:setupos-inject-config"],
     visibility = [
         "//rs:ic-os-pkg",
         "//rs:system-tests-pkg",

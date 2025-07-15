@@ -271,6 +271,7 @@ impl ExtPartition {
             .filter(|error| !error.contains("Ext2 directory already exists"))
             .filter(|error| !error.contains("rm: File not found"))
             .filter(|error| !error.contains("Invalid argument while changing ownership"))
+            .filter(|error| !error.contains("Operation not permitted while changing ownership"))
             .join("\n");
         if !out.status.success() || !errors.is_empty() {
             bail!("debugfs failed:\n{errors}");
