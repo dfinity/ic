@@ -11,6 +11,36 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-07-08: Proposal 137282
+
+http://dashboard.internetcomputer.org/proposal/137282
+
+## Added
+
+* Added `SnsGovernance.get_metrics_replicated`, enabling other canisters to fetch SNS metrics.
+  `SnsGovernance.get_metrics` is a replicated query and thus cannot be called by canisters.
+
+* Extended SNS metrics with treasury metrics.
+
+* Extended SNS metrics with voting power metrics.
+
+* Extended SNS metrics with the genesis timestamp.
+
+
+# 2025-06-27: Proposal 137172
+
+http://dashboard.internetcomputer.org/proposal/137172
+
+## Added
+
+The `get_metrics` function response now includes the number of *executed* proposal (in addition
+to the number of submitted proposals).
+
+## Fixed
+
+Fixed a bug in the decoder of Candid `Nat` values as `u64`.
+
+
 # 2025-06-20: Proposal 137082
 
 http://dashboard.internetcomputer.org/proposal/137082

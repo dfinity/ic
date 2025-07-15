@@ -197,9 +197,7 @@ use ic_interfaces::{
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_replicated_state::{
-    metadata_state::subnet_call_context_manager::ThresholdArguments, ReplicatedState,
-};
+use ic_replicated_state::ReplicatedState;
 use ic_types::{
     artifact::IDkgMessageId, consensus::idkg::IDkgBlockReader,
     crypto::canister_threshold_sig::error::IDkgRetainKeysError, malicious_flags::MaliciousFlags,
@@ -350,23 +348,16 @@ impl IDkgImpl {
                 .metadata
                 .subnet_call_context_manager
                 .pre_signature_stashes;
+
+            // Retain all stashed key transcripts
             for stash in pre_signature_stashes.values() {
                 active_transcripts.insert(stash.key_transcript.as_ref().clone());
             }
 
+            // Retain transcripts paired with ongoing requests
             for request in state.signature_request_contexts().values() {
-                match &request.args {
-                    ThresholdArguments::Ecdsa(ecdsa) => {
-                        for transcript in ecdsa.iter_idkg_transcripts() {
-                            active_transcripts.insert(transcript.clone());
-                        }
-                    }
-                    ThresholdArguments::Schnorr(schnorr) => {
-                        for transcript in schnorr.iter_idkg_transcripts() {
-                            active_transcripts.insert(transcript.clone());
-                        }
-                    }
-                    ThresholdArguments::VetKd(_) => continue,
+                for transcript in request.iter_idkg_transcripts() {
+                    active_transcripts.insert(transcript.clone());
                 }
             }
         }

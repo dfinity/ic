@@ -26,7 +26,7 @@
     <partition>/machine</partition>
   </resource>
   <os>
-    <type arch='x86_64' machine='pc-q35-5.0'>hvm</type>
+    <type arch='x86_64' machine='pc-q35-9.2'>hvm</type>
     <loader readonly='yes' type='pflash'>/usr/share/OVMF/OVMF_CODE_4M.fd</loader>
     <nvram>/var/lib/libvirt/qemu/nvram/guestos_VARS.fd</nvram>
     <boot dev='hd'/>
@@ -43,15 +43,16 @@
     <timer name='pit' tickpolicy='delay'/>
     <timer name='hpet' present='no'/>
   </clock>
-  <on_poweroff>restart</on_poweroff>
-  <on_reboot>restart</on_reboot>
-  <on_crash>restart</on_crash>
+  <!-- Destroy the VM in all these cases and let the guest_vm_runner restart it -->
+  <on_poweroff>destroy</on_poweroff>
+  <on_reboot>destroy</on_reboot>
+  <on_crash>destroy</on_crash>
   <pm>
     <suspend-to-mem enabled='no'/>
     <suspend-to-disk enabled='no'/>
   </pm>
   <devices>
-    <emulator>/usr/local/bin/qemu-system-x86_64</emulator>
+    <emulator>/usr/bin/qemu-system-x86_64</emulator>
     <disk type='block' device='disk'>
       <driver name='qemu' type='raw' cache='none' discard='unmap'/>
       <source dev='/dev/hostlvm/guestos' index='1'/>

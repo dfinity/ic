@@ -239,6 +239,14 @@ impl CanisterHttpPoolManagerImpl {
         };
 
         for (id, context) in http_requests {
+            if let Replication::NonReplicated(delegated_node_id) = context.replication {
+                if delegated_node_id != self.replica_config.node_id {
+                    // If the request is delegated to another node, we do not make a request.
+                    // The delegated node will handle it.
+                    continue;
+                }
+            }
+
             if !request_ids_already_made.contains(&id) {
                 let timeout = context.time + Duration::from_secs(5 * 60);
                 if let Err(err) = self
@@ -343,7 +351,11 @@ impl CanisterHttpPoolManagerImpl {
             return Vec::new();
         };
 
-        let active_callback_ids = self.active_callback_ids();
+        let active_contexts = &self
+            .latest_state()
+            .metadata
+            .subnet_call_context_manager
+            .canister_http_request_contexts;
         let next_callback_id = self.next_callback_id();
 
         let key_from_share =
@@ -366,8 +378,18 @@ impl CanisterHttpPoolManagerImpl {
                     ));
                 }
 
-                if !active_callback_ids.contains(&share.content.id) {
-                    return Some(CanisterHttpChangeAction::RemoveUnvalidated(share.clone()));
+                match active_contexts.get(&share.content.id) {
+                    Some(context) => {
+                        if matches!(context.replication, Replication::NonReplicated(node_id) if node_id != share.signature.signer) {
+                            return Some(CanisterHttpChangeAction::HandleInvalid(
+                                share.clone(),
+                                "Share signed by node that is not the delegated node for the request".to_string(),
+                            ));
+                        }
+                    }
+                    None => {
+                        return Some(CanisterHttpChangeAction::RemoveUnvalidated(share.clone()));
+                    }
                 }
 
                 let node_is_in_committee = self
@@ -466,6 +488,10 @@ impl CanisterHttpPoolManagerImpl {
             .keys()
             .copied()
             .collect()
+    }
+
+    fn latest_state(&self) -> Arc<ReplicatedState> {
+        self.state_reader.get_latest_state().get_ref().clone()
     }
 
     fn next_callback_id(&self) -> CallbackId {

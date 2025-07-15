@@ -74,7 +74,11 @@ pub fn recertify_registry(registry: &Registry) {
         &labeled_hash(b"delta", &registry.changelog().root_hash()),
     );
 
-    set_certified_data(&root_hash);
+    // For benchmarks, we still want the above to execute, except that we cannot actually set the
+    // certified data as the benchmarks are executed within a query call.
+    if !cfg!(feature = "canbench-rs") {
+        set_certified_data(&root_hash);
+    }
 }
 
 #[cfg(all(not(target_arch = "wasm32"), not(test)))]

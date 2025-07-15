@@ -875,23 +875,6 @@ pub struct EcdsaArguments {
     pub pre_signature: Option<EcdsaMatchedPreSignature>,
 }
 
-impl EcdsaArguments {
-    pub fn iter_idkg_transcripts(&self) -> impl Iterator<Item = &IDkgTranscript> {
-        let refs = if let Some(pre_sig) = &self.pre_signature {
-            vec![
-                pre_sig.pre_signature.kappa_unmasked(),
-                pre_sig.pre_signature.lambda_masked(),
-                pre_sig.pre_signature.kappa_times_lambda(),
-                pre_sig.pre_signature.key_times_lambda(),
-                pre_sig.key_transcript.as_ref(),
-            ]
-        } else {
-            vec![]
-        };
-        refs.into_iter()
-    }
-}
-
 impl From<&EcdsaArguments> for pb_metadata::EcdsaArguments {
     fn from(args: &EcdsaArguments) -> Self {
         Self {
@@ -966,20 +949,6 @@ pub struct SchnorrArguments {
     pub message: Arc<Vec<u8>>,
     pub taproot_tree_root: Option<Arc<Vec<u8>>>,
     pub pre_signature: Option<SchnorrMatchedPreSignature>,
-}
-
-impl SchnorrArguments {
-    pub fn iter_idkg_transcripts(&self) -> impl Iterator<Item = &IDkgTranscript> {
-        let refs = if let Some(pre_sig) = &self.pre_signature {
-            vec![
-                pre_sig.pre_signature.blinder_unmasked(),
-                pre_sig.key_transcript.as_ref(),
-            ]
-        } else {
-            vec![]
-        };
-        refs.into_iter()
-    }
 }
 
 impl From<&SchnorrArguments> for pb_metadata::SchnorrArguments {
@@ -1216,6 +1185,37 @@ impl SignWithThresholdContext {
             ThresholdArguments::VetKd(args) => args,
             _ => panic!("VetKd arguments not found."),
         }
+    }
+
+    /// Return all IDkgTranscripts included in this context
+    pub fn iter_idkg_transcripts(&self) -> impl Iterator<Item = &IDkgTranscript> {
+        let refs = match &self.args {
+            ThresholdArguments::Ecdsa(args) => args
+                .pre_signature
+                .as_ref()
+                .map(|pre_sig| {
+                    vec![
+                        pre_sig.pre_signature.kappa_unmasked(),
+                        pre_sig.pre_signature.lambda_masked(),
+                        pre_sig.pre_signature.kappa_times_lambda(),
+                        pre_sig.pre_signature.key_times_lambda(),
+                        &pre_sig.key_transcript,
+                    ]
+                })
+                .unwrap_or_default(),
+            ThresholdArguments::Schnorr(args) => args
+                .pre_signature
+                .as_ref()
+                .map(|pre_sig| {
+                    vec![
+                        pre_sig.pre_signature.blinder_unmasked(),
+                        &pre_sig.key_transcript,
+                    ]
+                })
+                .unwrap_or_default(),
+            ThresholdArguments::VetKd(_) => vec![],
+        };
+        refs.into_iter()
     }
 }
 
