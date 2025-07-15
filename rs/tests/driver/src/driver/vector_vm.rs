@@ -64,13 +64,19 @@ id_key = "__CURSOR"
 fn get_general_transforms_toml() -> String {
     format!(
         r#"
+# Colleting all the logs for debugging
+[sinks.local_file]
+type = "file"
+inputs = [ "*-transform" ]
+path = /etc/config/vector/debug.log
+
 [transforms.to_json]
 type = "remap"
-inputs = [ "*-transforms" ]
+inputs = [ "*-transform" ]
 source = """
 message_parsed = parse_json!(del(.message))
 
-. = merge(., message_parsed )
+. = merge!(., message_parsed)
 
 if .MESSAGE == null {{
   .MESSAGE = ""
@@ -88,7 +94,7 @@ if is_json(string!(.MESSAGE)) {{
   }}
 }}
 
-.timestamp = from_unix_timestamp!(to_int(del(.__REALTIME_TIMESTAMP)) * 1000, unit: "nanoseconds")
+.timestamp = from_unix_timestamp!(to_int!(del(.__REALTIME_TIMESTAMP)) * 1000, unit: "nanoseconds")
 """
 "#
     )
@@ -110,7 +116,7 @@ impl VectorVm {
                 .with_vm_resources(VmResources {
                     vcpus: Some(NrOfVCPUs::new(2)),
                     memory_kibibytes: Some(AmountOfMemoryKiB::new(16780000)), // 16GiB
-                    boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(1)), // Logs are pushed to elastic
+                    boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(10)), // Logs are pushed to elastic
                 })
                 .enable_ipv4(),
         }
@@ -237,7 +243,7 @@ impl VectorVm {
             retry_with_msg!(
                 format!("scp {from:?} to {}:{to:?}", self.universal_vm.name),
                 env.logger(),
-                SCP_RETRY_TIMEOUT,
+                std::time::Duration::from_secs(1000),
                 SCP_RETRY_BACKOFF,
                 || {
                     let mut remote_file = session.scp_send(&to, 0o644, size, None)?;
