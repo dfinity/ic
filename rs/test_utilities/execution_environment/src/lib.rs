@@ -2314,7 +2314,7 @@ impl ExecutionTestBuilder {
                     key_id,
                     MasterPublicKey {
                         algorithm_id: AlgorithmId::EcdsaSecp256k1,
-                        public_key: b"abababab".to_vec(),
+                        public_key: ECDSA_PUB_KEY.to_vec(),
                     },
                 ),
                 MasterPublicKeyId::Schnorr(_) => (
