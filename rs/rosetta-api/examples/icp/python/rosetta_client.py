@@ -596,7 +596,7 @@ class RosettaClient:
             verbose (bool, optional): Whether to print verbose output. Defaults to False.
 
         Returns:
-            dict: Information about minumum dissolve delay of a neuron.
+            dict: Information about minimum dissolve delay of a neuron.
 
         """
         payload = {
