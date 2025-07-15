@@ -94,6 +94,8 @@ pub struct RegistryReplicator {
 }
 
 impl RegistryReplicator {
+    /// Creates a new instance of the registry replicator.
+    /// This function will not return until the local store is initialized.
     async fn new_impl(
         logger: ReplicaLogger,
         node_id: Option<NodeId>,
@@ -140,6 +142,9 @@ impl RegistryReplicator {
         }
     }
 
+    /// Creates a new instance of the registry replicator from the local store path, NNS URLs and
+    /// root public key.
+    /// This function will not return until the local store is initialized.
     pub async fn new(
         logger: ReplicaLogger,
         local_store_path: &PathBuf,
@@ -159,6 +164,8 @@ impl RegistryReplicator {
         .await
     }
 
+    /// Creates a new instance of the registry replicator from the node configuration.
+    /// This function will not return until the local store is initialized.
     pub async fn new_from_config(
         logger: ReplicaLogger,
         node_id: Option<NodeId>,
@@ -178,6 +185,9 @@ impl RegistryReplicator {
         .await
     }
 
+    /// Creates a new instance of the registry replicator from the node configuration and a custom
+    /// metrics address.
+    /// This function will not return until the local store is initialized.
     pub async fn new_with_metrics_runtime(
         logger: ReplicaLogger,
         node_id: Option<NodeId>,
