@@ -1,0 +1,16 @@
+type ledger_type = variant {
+    ICRC1;
+    ICP;
+};
+
+type init_args = record {
+    ledger_canister: principal;
+    ledger_type: ledger_type;
+    is_mint: bool;
+};
+
+service: (init_args) -> {
+    "account_identifier": () -> (text) query;
+    "transfer_icrc1": (to_principal: principal) -> ();
+    "transfer_icp": (to_account_identifier: text) -> ();
+}

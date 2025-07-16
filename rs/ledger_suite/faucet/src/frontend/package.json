@@ -1,0 +1,33 @@
+{
+  "name": "frontend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "setup": "npm i && dfx canister create token-faucet-backend && dfx generate token-faucet-backend && dfx deploy",
+    "start": "VITE_TOKEN_SYMBOL=TICRC1 vite --port 3000",
+    "start:icp": "VITE_TOKEN_SYMBOL=TESTICP vite --port 3000",
+    "start:icrc1": "VITE_TOKEN_SYMBOL=TICRC1 vite --port 3000",
+    "prebuild": "dfx generate testicp-backend",
+    "build": "tsc && vite build",
+    "build:icp": "VITE_TOKEN_SYMBOL=TESTICP npm run build",
+    "build:icrc1": "VITE_TOKEN_SYMBOL=TICRC1 npm run build",
+    "format": "prettier --write \"src/**/*.{json,js,jsx,ts,tsx,css,scss}\""
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^5.16.5",
+    "cross-fetch": "^3.1.6",
+    "dotenv": "^16.3.1",
+    "sass": "^1.63.6",
+    "typescript": "^5.1.3",
+    "vite": "^4.3.9",
+    "vite-plugin-environment": "^1.1.3",
+    "vitest": "^2.0.5"
+  },
+  "dependencies": {
+    "@dfinity/agent": "^2.1.3",
+    "@dfinity/candid": "^2.1.3",
+    "@dfinity/principal": "^2.1.3",
+    "lit-html": "^2.8.0"
+  }
+}
