@@ -197,7 +197,30 @@ pub async fn update_hostos_boot_args(
     // Preemptively clean up any existing loop devices and LVM state to avoid conflicts.
     println!("Cleaning up any existing loop devices and LVM state...");
 
-    // Step 1: Force removal of hostlvm volume group and all associated metadata
+    // Step 1: Unmount any mounted hostlvm devices first
+    println!("Unmounting any mounted hostlvm devices...");
+
+    // Find all mounted hostlvm devices
+    let mount_output = Command::new("mount").output();
+
+    if let Ok(output) = mount_output {
+        let mount_text = String::from_utf8_lossy(&output.stdout);
+        for line in mount_text.lines() {
+            if line.contains("/dev/mapper/hostlvm-") {
+                if let Some(mount_point) = line.split_whitespace().nth(2) {
+                    println!("Unmounting hostlvm device from: {}", mount_point);
+                    let _ = Command::new("sudo")
+                        .args(["umount", "-f", mount_point])
+                        .output();
+                }
+            }
+        }
+    }
+
+    // Wait for unmounts to complete
+    thread::sleep(Duration::from_millis(500));
+
+    // Step 2: Force removal of hostlvm volume group and all associated metadata
     println!("Force removing hostlvm volume group...");
     let _ = Command::new("sudo")
         .args(["/usr/sbin/vgchange", "-an", "hostlvm"])
@@ -219,7 +242,7 @@ pub async fn update_hostos_boot_args(
         }
     }
 
-    // Step 2: Find and aggressively clean up loop devices
+    // Step 3: Find and aggressively clean up loop devices
     let losetup_output = Command::new("sudo")
         .args(["/usr/sbin/losetup", "-a"])
         .output();
@@ -267,7 +290,7 @@ pub async fn update_hostos_boot_args(
         }
     }
 
-    // Step 3: Completely clear LVM metadata and cache
+    // Step 4: Completely clear LVM metadata and cache
     println!("Clearing LVM metadata and cache...");
 
     // Try to remove the hostlvm VG completely
@@ -292,7 +315,7 @@ pub async fn update_hostos_boot_args(
     // Give time for cleanup to complete
     thread::sleep(Duration::from_secs(2));
 
-    // Step 4: Verify cleanup was successful
+    // Step 5: Verify cleanup was successful
     println!("Verifying cleanup...");
     let verify_pvscan = Command::new("sudo").args(["/usr/sbin/pvscan"]).output();
 
