@@ -1,0 +1,19 @@
+[
+    {
+        "match": "**/*",
+
+        // Provides a base set of security headers that will work for most dapps.
+        // Any headers you manually specify will override the headers provided by the policy.
+        // See 'dfx info security-policy' to see the policy and for advice on how to harden the headers.
+        // Once you improved the headers for your dapp, set the security policy to "hardened" to disable the warning.
+        // Options are: "hardened" | "standard" | "disabled".
+        "security_policy": "standard",
+
+        // Uncomment to disable the warning about using the
+        // standard security policy, if you understand the risk
+        // "disable_security_policy_warning": true,
+
+        // Uncomment to redirect all requests from .raw.icp0.io to .icp0.io
+        // "allow_raw_access": false
+    },
+]

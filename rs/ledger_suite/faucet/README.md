@@ -24,16 +24,33 @@ dfx start --background
 
 ### 2. Deploy Canisters
 
+Choose which token type you want to deploy:
+
+#### For ICP Token Faucet
 ```bash
-# Deploy all canisters
-dfx deploy
+just deploy-icp
+```
+
+#### For ICRC1 Token Faucet  
+```bash
+just deploy-icrc1
 ```
 
 This will deploy:
 - Test ledger canisters with the faucet backend set as the minting account.
 - Faucet backend canisters connected to their respective ledgers
 
-### 3. Request Test Tokens
+### 3. Using the Web UI
+
+After deployment, you can use the web interface to request tokens:
+
+Open your browser to `http://nqoci-rqaaa-aaaap-qp53q-cai.localhost:4943/` to access the ICP token faucet interface.
+
+Open your browser to `http://pwwqf-yaaaa-aaaap-qp5wq-cai.localhost:4943/` to access the ICRC1 token faucet interface.
+
+### 4. Command Line Usage (Alternative)
+
+If you prefer using the command line instead of the web UI:
 
 #### For ICRC1 Tokens
 
