@@ -46,7 +46,7 @@ pub(crate) fn check_hostos_version(node: &NestedVm) -> String {
         .expect("Could not reach HostOS VM.");
     let mut channel = session.channel_session().unwrap();
 
-    channel.exec("cat /boot/version.txt").unwrap();
+    channel.exec("cat /opt/ic/share/version.txt").unwrap();
     let mut s = String::new();
     channel.read_to_string(&mut s).unwrap();
     channel.close().ok();
