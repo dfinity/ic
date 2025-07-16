@@ -3,6 +3,7 @@
 members = [
     "packages/canlog",
     "packages/canlog_derive",
+    "packages/canscan",
     "packages/ic-dummy-getrandom-for-wasm",
     "packages/ic-ed25519",
     "packages/ic-error-types",
