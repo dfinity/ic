@@ -41,8 +41,7 @@ use ic_types::{
                 IDkgMaskedTranscriptOrigin, IDkgReceivers, IDkgTranscript, IDkgTranscriptId,
                 IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin,
             },
-            EcdsaPreSignatureQuadruple, SchnorrPreSignatureTranscript, ThresholdEcdsaSigInputs,
-            ThresholdSchnorrSigInputs,
+            SchnorrPreSignatureTranscript, ThresholdEcdsaSigInputs, ThresholdSchnorrSigInputs,
         },
         threshold_sig::ni_dkg::{
             NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
