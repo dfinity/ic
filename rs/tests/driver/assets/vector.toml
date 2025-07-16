@@ -60,14 +60,15 @@ if exe == null {
     return true
 }
 
+allow = true
 # Filter noisy logs, still present in `debug.log`
 for_each(["/usr/local/bin/filebeat"]) -> |_, k| {
     if exe == k {
-        return false
+        allow = false
     }
 }
 
-return true
+return allow
 """
 
 # The templated values will be passed in as parameters
