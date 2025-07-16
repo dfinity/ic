@@ -104,7 +104,7 @@ fn test_absent_after_delete() {
 }
 
 #[test]
-fn test_timestamp_to_registry_versions_mapping_correct() {
+fn test_correctly_maps_timestamp_to_registry_versions() {
     add_dummy_data();
     let (client, _) = client_for_tests();
 
@@ -120,6 +120,22 @@ fn test_timestamp_to_registry_versions_mapping_correct() {
     let actual = client.timestamp_to_versions_map().clone();
 
     assert_eq!(actual, expected);
+}
+
+#[test]
+fn test_latest_registry_version_before_correct() {
+    add_dummy_data();
+    let (client, _) = client_for_tests();
+
+    assert_eq!(
+        Err(RegistryClientError::NoVersionsBefore {
+            timestamp_nanoseconds: 0
+        }),
+        client.latest_registry_version_before(0)
+    );
+    assert_eq!(Ok((2, v(39779))), client.latest_registry_version_before(2));
+    assert_eq!(Ok((2, v(39779))), client.latest_registry_version_before(3));
+    assert_eq!(Ok((6, v(39972))), client.latest_registry_version_before(10));
 }
 
 #[test]

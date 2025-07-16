@@ -89,12 +89,6 @@ pub trait CanisterRegistryClient: Send + Sync {
         version: RegistryVersion,
     ) -> Result<Vec<(String, Vec<u8>)>, RegistryClientError>;
 
-    fn get_key_family_entries_before_timestamp(
-        &self,
-        key_prefix: &str,
-        timestamp: &UnixTsNanos,
-    ) -> BTreeMap<(String, UnixTsNanos, RegistryVersion), Option<Vec<u8>>>;
-
     /// Returns a particular value for a key at a given version.
     fn get_value(&self, key: &str, version: RegistryVersion) -> RegistryClientResult<Vec<u8>> {
         self.get_versioned_value(key, version).map(|vr| vr.value)
@@ -105,14 +99,22 @@ pub trait CanisterRegistryClient: Send + Sync {
     /// value no less than `t`.
     fn get_latest_version(&self) -> RegistryVersion;
 
+    /// Returns the most recent `RegistryVersion` and its corresponding timestamp
+    /// that is less than or equal to the provided `timestamp_nanoseconds`.
+    fn latest_registry_version_before(
+        &self,
+        timestamp_nanoseconds: UnixTsNanos,
+    ) -> Result<(UnixTsNanos, RegistryVersion), RegistryClientError>;
+
     /// Updates the local version to the latest from the Registry. This may execute
     /// over multiple messages.  It should generally be scheduled in a timer, but if it's never called
     /// the local registry data will not be in sync with the data in the Registry canister.
     async fn sync_registry_stored(&self) -> Result<RegistryVersion, String>;
 
-    /// Returns a map of timestamps to registry versions, where the keys are the timestamps
-    /// when the versions were first added to the registry.
-    fn timestamp_to_versions_map(&self) -> BTreeMap<u64, HashSet<RegistryVersion>>;
+    /// Returns a map from timestamps in nanoseconds to a set of `RegistryVersion`s.
+    /// Each key represents the timestamps when the registry versions have been added,
+    /// and the associated value is the set of all registry versions introduced at that timestamp.
+    fn timestamp_to_versions_map(&self) -> BTreeMap<UnixTsNanos, HashSet<RegistryVersion>>;
 }
 
 // Helpers

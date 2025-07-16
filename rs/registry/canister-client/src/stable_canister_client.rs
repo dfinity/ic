@@ -184,28 +184,6 @@ impl<S: RegistryDataStableMemory> CanisterRegistryClient for StableCanisterRegis
         self.get_key_family_base(key_prefix, version, Box::new(|k, v| (k, v.unwrap())))
     }
 
-    fn get_key_family_entries_before_timestamp(
-        &self,
-        key_prefix: &str,
-        timestamp: &UnixTsNanos,
-    ) -> BTreeMap<(String, UnixTsNanos, RegistryVersion), Option<Vec<u8>>> {
-        let start_range = StorableRegistryKey {
-            key: key_prefix.to_string(),
-            ..Default::default()
-        };
-
-        S::with_registry_map(|map| {
-            map.range(start_range..)
-                .filter(|(k, _)| k.timestamp_nanoseconds <= *timestamp)
-                .take_while(|(k, _)| k.key.starts_with(key_prefix))
-                .map(|(k, v)| {
-                    let version = RegistryVersion::from(k.version);
-                    ((k.key, k.timestamp_nanoseconds, version), v.0)
-                })
-                .collect::<BTreeMap<_, _>>()
-        })
-    }
-
     fn get_value(&self, key: &str, version: RegistryVersion) -> RegistryClientResult<Vec<u8>> {
         self.get_versioned_value(key, version).map(|vr| vr.value)
     }
@@ -222,6 +200,28 @@ impl<S: RegistryDataStableMemory> CanisterRegistryClient for StableCanisterRegis
             self.latest_version.store(latest, AtomicOrdering::SeqCst);
         }
         RegistryVersion::new(latest)
+    }
+
+    fn latest_registry_version_before(
+        &self,
+        timestamp_nanoseconds: UnixTsNanos,
+    ) -> Result<(UnixTsNanos, RegistryVersion), RegistryClientError> {
+        self.timestamp_to_versions_map
+            .read()
+            .unwrap()
+            .range(..=timestamp_nanoseconds)
+            .next_back()
+            .map(|(ts, versions)| {
+                let max_version = versions
+                    .iter()
+                    .max()
+                    .expect("Expected at least one registry version at timestamp");
+
+                (*ts, *max_version)
+            })
+            .ok_or(RegistryClientError::NoVersionsBefore {
+                timestamp_nanoseconds,
+            })
     }
 
     async fn sync_registry_stored(&self) -> Result<RegistryVersion, String> {

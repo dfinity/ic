@@ -13,9 +13,7 @@ use ic_registry_keys::{
 use ic_types::registry::RegistryClientError;
 use indexmap::IndexMap;
 use rewards_calculation::rewards_calculator_results::DayUTC;
-use rewards_calculation::types::{
-    NodeType, ProviderRewardableNodes, Region, RewardableNode, UnixTsNanos,
-};
+use rewards_calculation::types::{NodeType, ProviderRewardableNodes, Region, RewardableNode};
 use std::collections::{BTreeMap, HashMap};
 use std::str::FromStr;
 use std::sync::Arc;
@@ -50,48 +48,44 @@ struct NodeOperatorData {
     region: Region,
 }
 
-enum RegistryRecordState {
-    Present(UnixTsNanos),
-    Deleted(UnixTsNanos),
-}
-
-struct RegistryRecordWithStates {
-    key: String,
-    value: Vec<u8>,
-    registry_record_states: Vec<RegistryRecordState>,
-}
-
 impl RegistryQuerier {
     pub fn new(registry_client: Arc<dyn CanisterRegistryClient>) -> Self {
         RegistryQuerier { registry_client }
     }
 
-    pub fn subnets_list(&self) -> Vec<SubnetId> {
+    ///  Returns a list of all subnets present in the registry at the specified version.
+    pub fn subnets_list(&self, version: RegistryVersion) -> Vec<SubnetId> {
         let record = self
-            .get_value::<SubnetListRecord>(make_subnet_list_record_key().as_str())
+            .get_versioned_value::<SubnetListRecord>(
+                make_subnet_list_record_key().as_str(),
+                version,
+            )
             .expect("Failed to get subnets list");
 
         record
             .subnets
             .into_iter()
-            .map(|s| SubnetId::from(PrincipalId::try_from(s.clone().as_slice()).unwrap()))
+            .map(|s| {
+                SubnetId::from(PrincipalId::try_from(s.as_slice()).expect("Invalid subnet ID"))
+            })
             .collect()
     }
 
-    pub fn get_rewards_table(&self) -> NodeRewardsTable {
-        self.get_value::<NodeRewardsTable>(NODE_REWARDS_TABLE_KEY)
+    /// Returns the NodeRewardsTable at the specified version.
+    pub fn get_rewards_table(&self, version: RegistryVersion) -> NodeRewardsTable {
+        self.get_versioned_value::<NodeRewardsTable>(NODE_REWARDS_TABLE_KEY, version)
             .expect("Failed to get NodeRewardsTable")
     }
 
-    /// Computes the set of rewardable nodes grouped by node provider for the given UTC day range.
+    /// Computes the set of rewardable nodes, grouped by node provider, for the given range of UTC days.
     ///
-    /// A node is considered rewardable for a given UTC day if it was registered in the registry
-    /// at the start of that day and has not been removed prior.
-    /// This means:
-    /// - Nodes begin earning rewards starting from the UTC day they are registered.
-    /// - Nodes stop earning rewards the UTC day after they are removed from the registry.
+    /// A node is considered rewardable on a specific UTC day if it is present in the registry
+    /// at the end of that day.
+    /// Specifically:
+    /// - A node becomes rewardable starting from the UTC day it is registered.
+    /// - A node stops being rewardable on the UTC day it is removed from the registry.
     ///
-    /// Nodes removed before the `from` day or without a reward type are skipped.
+    /// Nodes without a specified `node_reward_type` are excluded from the rewardable set.
     pub fn get_rewardable_nodes_per_provider(
         &self,
         from: DayUTC,
@@ -103,14 +97,14 @@ impl RegistryQuerier {
         let nodes_in_range = self.nodes_in_registry(from, to)?;
         let node_operators_data = self.node_operators_data(to);
 
-        for (node_id, node_record, rewardable_days) in nodes_in_range {
+        for (node_id, (node_record, rewardable_days)) in nodes_in_range {
             let node_operator_id: PrincipalId = node_record.node_operator_id.try_into().unwrap();
             let Some(some_node_operator_data) = node_operators_data.get(&node_operator_id) else {
                 // Reward only node operators that are registered in the registry at the end of the period
                 continue;
             };
             let Some(some_reward_type) = node_record.node_reward_type else {
-                // If the node does not have a reward type, we skip it.
+                // If the node does not have a node_reward_type, we skip it.
                 continue;
             };
 
@@ -158,14 +152,10 @@ impl RegistryQuerier {
         Ok(value)
     }
 
-    fn get_value<T: RegistryValue + Default>(&self, key: &str) -> Result<T, RegistryClientError> {
-        self.get_versioned_value::<T>(key, self.registry_client.get_latest_version())
-    }
-
     fn get_family_entries_of_version<T: RegistryEntry + Default>(
         &self,
         version: RegistryVersion,
-    ) -> IndexMap<String, (u64, T)> {
+    ) -> IndexMap<String, T> {
         let prefix_length = T::KEY_PREFIX.len();
 
         self.registry_client
@@ -187,10 +177,7 @@ impl RegistryQuerier {
                 r.as_ref().map(|v| {
                     (
                         key[prefix_length..].to_string(),
-                        (
-                            r.version.get(),
-                            T::decode(v.as_slice()).expect("Invalid registry value"),
-                        ),
+                        T::decode(v.as_slice()).expect("Invalid registry value"),
                     )
                 })
             })
@@ -207,130 +194,37 @@ impl RegistryQuerier {
         &self,
         from: DayUTC,
         to: DayUTC,
-    ) -> Result<Vec<(NodeId, NodeRecord, Vec<DayUTC>)>, RegistryClientError> {
-        let start_ts = from.unix_ts_at_day_start();
-        let end_ts = to.unix_ts_at_day_end();
-        let prefix_length = NodeRecord::KEY_PREFIX.len();
+    ) -> Result<BTreeMap<NodeId, (NodeRecord, Vec<DayUTC>)>, RegistryClientError> {
+        let mut result: BTreeMap<NodeId, (NodeRecord, Vec<DayUTC>)> = BTreeMap::new();
+        let days = from
+            .days_until(&to)
+            .expect("Failed to get days between from and to");
 
-        let nodes_registry_changes = self.collect_nodes_registry_states(start_ts, end_ts)?;
+        for day in days {
+            let end_of_day = day.unix_ts_at_day_end();
+            let (_, last_version_for_day) = self
+                .registry_client
+                .latest_registry_version_before(end_of_day)?;
 
-        let result = nodes_registry_changes
-            .into_iter()
-            .map(
-                |RegistryRecordWithStates {
-                     key,
-                     value,
-                     registry_record_states: registry_changes,
-                 }| {
-                    let node_id = NodeId::from(
-                        PrincipalId::from_str(&key[prefix_length..])
-                            .expect("Failed to parse node id"),
-                    );
-                    let node_record =
-                        NodeRecord::decode(value.as_slice()).expect("Failed to decode node record");
-                    let days_in_registry =
-                        self.expand_registry_changes_to_presence_days(&registry_changes, end_ts);
+            let nodes_for_day =
+                self.get_family_entries_of_version::<NodeRecord>(last_version_for_day);
 
-                    (node_id, node_record, days_in_registry)
-                },
-            )
-            .collect();
+            for (node_key, node_record) in nodes_for_day {
+                let node_id = NodeId::from(
+                    PrincipalId::from_str(&node_key).expect("Failed to parse node id"),
+                );
+
+                result
+                    .entry(node_id)
+                    .and_modify(|(record, days)| {
+                        *record = node_record.clone();
+                        days.push(day);
+                    })
+                    .or_insert((node_record, vec![day]));
+            }
+        }
 
         Ok(result)
-    }
-
-    fn collect_nodes_registry_states(
-        &self,
-        start_ts: UnixTsNanos,
-        end_ts: UnixTsNanos,
-    ) -> Result<Vec<RegistryRecordWithStates>, RegistryClientError> {
-        let mut changes = IndexMap::new();
-        let node_entries = self
-            .registry_client
-            .get_key_family_entries_before_timestamp(NodeRecord::KEY_PREFIX, &end_ts);
-
-        for ((node_key, version_ts, _), maybe_value) in node_entries {
-            if version_ts < start_ts {
-                if let Some(value) = maybe_value {
-                    // If the value is present before the start_ts, we add it as a present since start_ts.
-                    changes.insert(
-                        node_key,
-                        (value, vec![RegistryRecordState::Present(start_ts)]),
-                    );
-                } else {
-                    changes.shift_remove(&node_key);
-                }
-            } else {
-                match changes.get_mut(&node_key) {
-                    Some((present_value, registry_changes)) => {
-                        if let Some(value) = maybe_value {
-                            *present_value = value;
-                            if let Some(RegistryRecordState::Deleted(_)) = registry_changes.last() {
-                                // If the last change was a deletion, it means the node was re-added.
-                                registry_changes.push(RegistryRecordState::Present(version_ts));
-                            }
-                        } else {
-                            // If the value is None, it means the node was deleted at this version.
-                            registry_changes.push(RegistryRecordState::Deleted(version_ts));
-                        }
-                    }
-                    None => {
-                        // If the key is not present, the node was added inside the reward period.
-                        if let Some(value) = maybe_value {
-                            changes.insert(
-                                node_key,
-                                (value, vec![RegistryRecordState::Present(version_ts)]),
-                            );
-                        }
-                    }
-                }
-            }
-        }
-
-        Ok(changes
-            .into_iter()
-            .map(
-                |(key, (value, registry_changes))| RegistryRecordWithStates {
-                    key,
-                    value,
-                    registry_record_states: registry_changes,
-                },
-            )
-            .collect())
-    }
-
-    fn expand_registry_changes_to_presence_days(
-        &self,
-        changes: &[RegistryRecordState],
-        end_ts: UnixTsNanos,
-    ) -> Vec<DayUTC> {
-        let mut days = Vec::new();
-        let mut current_start: Option<DayUTC> = None;
-
-        for change in changes {
-            match change {
-                RegistryRecordState::Present(ts) => {
-                    current_start = Some(DayUTC::from(*ts));
-                }
-                RegistryRecordState::Deleted(ts) => {
-                    if let Some(start) = current_start.take() {
-                        let days_between = start
-                            .days_until(&DayUTC::from(*ts))
-                            .expect("Failed to get days between");
-                        days.extend(days_between);
-                    }
-                }
-            }
-        }
-
-        if let Some(start) = current_start {
-            let days_between = start
-                .days_until(&DayUTC::from(end_ts))
-                .expect("Failed to get days between");
-            days.extend(days_between);
-        }
-
-        days
     }
 
     fn node_operators_data(&self, day: DayUTC) -> HashMap<PrincipalId, NodeOperatorData> {
@@ -345,7 +239,7 @@ impl RegistryQuerier {
         let node_operators = self
             .get_family_entries_of_version::<NodeOperatorRecord>(version_before_end_ts)
             .into_iter()
-            .map(|(_, (_, node_operator_record))| {
+            .map(|(_, node_operator_record)| {
                 (
                     PrincipalId::try_from(node_operator_record.node_operator_principal_id.clone())
                         .expect("Failed to parse PrincipalId"),
@@ -364,8 +258,7 @@ impl RegistryQuerier {
                     .try_into()
                     .expect("Failed to parse PrincipalId");
                 let dc_id = node_operator_record.dc_id.clone();
-                let (_, data_center_record) =
-                    data_centers.get(&dc_id).expect("Failed to find dc_id");
+                let data_center_record = data_centers.get(&dc_id).expect("Failed to find dc_id");
                 let region = Region(data_center_record.region.clone());
 
                 let node_operator_data = NodeOperatorData {

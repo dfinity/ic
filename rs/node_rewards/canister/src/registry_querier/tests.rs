@@ -1,19 +1,24 @@
 use crate::registry_querier::RegistryQuerier;
 use chrono::{DateTime, NaiveDateTime, Utc};
-use ic_base_types::{NodeId, PrincipalId};
+use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_nervous_system_canisters::registry::RegistryCanister;
 use ic_protobuf::registry::dc::v1::DataCenterRecord;
 use ic_protobuf::registry::node::v1::{NodeRecord, NodeRewardType};
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
+use ic_protobuf::registry::node_rewards::v2::{NodeRewardRate, NodeRewardRates, NodeRewardsTable};
+use ic_protobuf::registry::subnet::v1::SubnetListRecord;
 use ic_registry_canister_client::{
     test_registry_data_stable_memory_impl, RegistryDataStableMemory, StableCanisterRegistryClient,
     StorableRegistryKey, StorableRegistryValue,
 };
 use ic_registry_keys::{
-    DATA_CENTER_KEY_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_RECORD_KEY_PREFIX,
+    make_subnet_list_record_key, DATA_CENTER_KEY_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX,
+    NODE_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY,
 };
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
+use indexmap::IndexMap;
+use maplit::btreemap;
 use rewards_calculation::rewards_calculator_results::DayUTC;
 use rewards_calculation::types::ProviderRewardableNodes;
 use std::cell::RefCell;
@@ -30,7 +35,7 @@ thread_local! {
 
 test_registry_data_stable_memory_impl!(DummyState, STATE);
 
-pub fn dt_to_timestamp_nanos(datetime_str: &str) -> u64 {
+pub fn ts(datetime_str: &str) -> u64 {
     let dt = format!("{} 00:00:00", datetime_str);
     let naive =
         NaiveDateTime::parse_from_str(&dt, "%Y-%m-%d %H:%M:%S").expect("Invalid date format");
@@ -46,64 +51,60 @@ pub fn add_record_helper(
 ) {
     STATE.with_borrow_mut(|map| {
         map.insert(
-            StorableRegistryKey::new(
-                key.to_string(),
-                version,
-                dt_to_timestamp_nanos(datetime_str),
-            ),
+            StorableRegistryKey::new(key.to_string(), version, ts(datetime_str)),
             StorableRegistryValue(value.map(|v| v.encode_to_vec())),
         );
     });
 }
 
+fn generate_node_key_value(
+    id: u64,
+    node_type: NodeRewardType,
+    node_operator_id: u64,
+) -> (String, NodeRecord) {
+    let value = NodeRecord {
+        node_reward_type: Some(node_type as i32),
+        node_operator_id: PrincipalId::new_user_test_id(node_operator_id).to_vec(),
+        ..NodeRecord::default()
+    };
+    let key = format!(
+        "{}{}",
+        NODE_RECORD_KEY_PREFIX,
+        PrincipalId::new_node_test_id(id)
+    );
+
+    (key, value)
+}
+fn generate_node_operator_key_value(
+    id: u64,
+    node_provider_id: u64,
+    dc_id: String,
+) -> (String, NodeOperatorRecord) {
+    let principal_id = PrincipalId::new_user_test_id(id);
+    let node_provider = PrincipalId::new_user_test_id(node_provider_id);
+    let value = NodeOperatorRecord {
+        node_operator_principal_id: principal_id.to_vec(),
+        node_provider_principal_id: node_provider.to_vec(),
+        dc_id,
+        ..NodeOperatorRecord::default()
+    };
+    let key = format!("{}{}", NODE_OPERATOR_RECORD_KEY_PREFIX, principal_id);
+
+    (key, value)
+}
+
+fn generate_dc_key_value(dc_id: String) -> (String, DataCenterRecord) {
+    let value = DataCenterRecord {
+        id: dc_id.clone(),
+        region: "A".to_string(),
+        ..DataCenterRecord::default()
+    };
+    let key = format!("{}{}", DATA_CENTER_KEY_PREFIX, dc_id);
+
+    (key, value)
+}
+
 fn add_dummy_data() {
-    fn generate_node_key_value(
-        id: u64,
-        node_type: NodeRewardType,
-        node_operator_id: u64,
-    ) -> (String, NodeRecord) {
-        let value = NodeRecord {
-            node_reward_type: Some(node_type as i32),
-            node_operator_id: PrincipalId::new_user_test_id(node_operator_id).to_vec(),
-            ..NodeRecord::default()
-        };
-        let key = format!(
-            "{}{}",
-            NODE_RECORD_KEY_PREFIX,
-            PrincipalId::new_node_test_id(id)
-        );
-
-        (key, value)
-    }
-    fn generate_node_operator_key_value(
-        id: u64,
-        node_provider_id: u64,
-        dc_id: String,
-    ) -> (String, NodeOperatorRecord) {
-        let principal_id = PrincipalId::new_user_test_id(id);
-        let node_provider = PrincipalId::new_user_test_id(node_provider_id);
-        let value = NodeOperatorRecord {
-            node_operator_principal_id: principal_id.to_vec(),
-            node_provider_principal_id: node_provider.to_vec(),
-            dc_id,
-            ..NodeOperatorRecord::default()
-        };
-        let key = format!("{}{}", NODE_OPERATOR_RECORD_KEY_PREFIX, principal_id);
-
-        (key, value)
-    }
-
-    fn generate_dc_key_value(dc_id: String) -> (String, DataCenterRecord) {
-        let value = DataCenterRecord {
-            id: dc_id.clone(),
-            region: "A".to_string(),
-            ..DataCenterRecord::default()
-        };
-        let key = format!("{}{}", DATA_CENTER_KEY_PREFIX, dc_id);
-
-        (key, value)
-    }
-
     let dc_1_id = "X".to_string();
     let node_1_id = 1;
     let node_2_id = 2;
@@ -149,13 +150,176 @@ fn node_rewardable_days(rewardable_nodes: &ProviderRewardableNodes, node_id: u64
 }
 
 #[test]
+fn test_subnets_list_returns_expected_subnets() {
+    let client = client_for_tests();
+    let subnet_1: SubnetId = PrincipalId::new_subnet_test_id(1).into();
+    let subnet_2: SubnetId = PrincipalId::new_subnet_test_id(2).into();
+
+    let key = make_subnet_list_record_key();
+    let version = 39670;
+    let deleted_version = version + 1;
+    let subnets_record = SubnetListRecord {
+        subnets: vec![subnet_1.get().to_vec(), subnet_2.get().to_vec()],
+    };
+    add_record_helper(&key, version, Some(subnets_record), "2025-07-13");
+    add_record_helper(
+        &key,
+        deleted_version,
+        None::<SubnetListRecord>,
+        "2025-07-13",
+    );
+
+    let got = client.subnets_list(version.into());
+
+    let expected: Vec<SubnetId> = vec![subnet_1, subnet_2];
+
+    assert_eq!(got, expected);
+
+    let got = client.subnets_list(deleted_version.into());
+
+    let expected: Vec<SubnetId> = vec![];
+
+    assert_eq!(got, expected);
+}
+
+#[test]
+fn test_get_rewards_table_returns_correct_record() {
+    let client = client_for_tests();
+    let version = 39670;
+
+    let table = NodeRewardsTable {
+        table: btreemap! {
+            "REGION_A".to_string() => NodeRewardRates {
+                rates: btreemap! {
+                    NodeRewardType::Type1.to_string() => NodeRewardRate{
+                        xdr_permyriad_per_node_per_month: 1000,
+                        reward_coefficient_percent: None,
+                    }
+                },
+            }
+        },
+    };
+
+    add_record_helper(
+        NODE_REWARDS_TABLE_KEY,
+        version,
+        Some(table.clone()),
+        "2025-07-13",
+    );
+
+    let result = client.get_rewards_table(version.into());
+
+    assert_eq!(result, table);
+}
+
+#[test]
+fn test_get_family_entries_of_version_returns_expected_records() {
+    let client = client_for_tests();
+
+    // === NodeOperatorRecord ===
+    let no_id = 10;
+    let version = 39667.into();
+    let no_result = client.get_family_entries_of_version::<NodeOperatorRecord>(version);
+    let (_, no_expected) = generate_node_operator_key_value(no_id, 20, "X".to_string());
+    let expected_no_k = PrincipalId::new_user_test_id(no_id).to_string();
+    let no_got = no_result.get(&expected_no_k).unwrap();
+    assert_eq!(no_result.len(), 1);
+    assert_eq!(no_got, &no_expected);
+
+    // === NodeRecord ===
+    let node_1_id = 1;
+    let node_2_id = 2;
+    let node_3_id = 3;
+    let (_, node_1_v) = generate_node_key_value(node_1_id, NodeRewardType::Type0, no_id);
+    let (_, node_2_v) = generate_node_key_value(node_2_id, NodeRewardType::Type1, no_id);
+    let (_, node_3_v) = generate_node_key_value(node_3_id, NodeRewardType::Type2, no_id);
+
+    let version = 39664.into(); // This version has node_2 and node_1.
+    let got = client.get_family_entries_of_version::<NodeRecord>(version);
+    let expected: IndexMap<_, _> = btreemap! {
+        PrincipalId::new_node_test_id(node_1_id).to_string() => node_1_v.clone(),
+        PrincipalId::new_node_test_id(node_2_id).to_string() => node_2_v.clone(),
+    }
+    .into_iter()
+    .collect();
+    assert_eq!(expected, got);
+
+    let version = 39666.into(); // This version has node_1 deleted.
+    let got = client.get_family_entries_of_version::<NodeRecord>(version);
+    let expected: IndexMap<_, _> = btreemap! {
+        PrincipalId::new_node_test_id(node_2_id).to_string() => node_2_v.clone(),
+    }
+    .into_iter()
+    .collect();
+    assert_eq!(expected, got);
+
+    let version = 39667.into(); // This version node_3 was added.
+    let got = client.get_family_entries_of_version::<NodeRecord>(version);
+    let expected: IndexMap<_, _> = btreemap! {
+        PrincipalId::new_node_test_id(node_2_id).to_string() => node_2_v.clone(),
+        PrincipalId::new_node_test_id(node_3_id).to_string() => node_3_v.clone(),
+    }
+    .into_iter()
+    .collect();
+    assert_eq!(expected, got);
+}
+
+#[test]
+fn test_nodes_in_registry_returns_expected_days() {
+    let client = client_for_tests();
+
+    // Time range where:
+    // - node_1 exists until 2025-07-07
+    // - node_2 is always present
+    // - node_3 appears on 2025-07-11
+    let from = ts("2025-07-03").into();
+    let to = ts("2025-07-12").into();
+
+    let nodes_map = client
+        .nodes_in_registry(from, to)
+        .expect("nodes_in_registry failed");
+
+    let node_1_id = NodeId::from(PrincipalId::new_node_test_id(1));
+    let node_2_id = NodeId::from(PrincipalId::new_node_test_id(2));
+    let node_3_id = NodeId::from(PrincipalId::new_node_test_id(3));
+
+    let (_, node_1_days) = &nodes_map[&node_1_id];
+    let expected_node_1_days: Vec<DayUTC> = vec![
+        ts("2025-07-03").into(),
+        ts("2025-07-04").into(),
+        ts("2025-07-05").into(),
+        ts("2025-07-06").into(),
+        ts("2025-07-07").into(),
+    ];
+    assert_eq!(node_1_days, &expected_node_1_days);
+
+    let (_, node_2_days) = &nodes_map[&node_2_id];
+    let expected_node_2_days: Vec<DayUTC> = vec![
+        ts("2025-07-04").into(),
+        ts("2025-07-05").into(),
+        ts("2025-07-06").into(),
+        ts("2025-07-07").into(),
+        ts("2025-07-08").into(),
+        ts("2025-07-09").into(),
+        ts("2025-07-10").into(),
+        ts("2025-07-11").into(),
+        ts("2025-07-12").into(),
+    ];
+    assert_eq!(node_2_days, &expected_node_2_days);
+
+    let (_, node_3_days) = &nodes_map[&node_3_id];
+    let expected_node_3_days: Vec<DayUTC> = vec![ts("2025-07-11").into(), ts("2025-07-12").into()];
+    assert_eq!(node_3_days, &expected_node_3_days);
+}
+
+#[test]
 fn test_rewardable_nodes_deleted_nodes() {
     let client = client_for_tests();
 
     // Define the range for which we want to check rewardable nodes.
     // This is *after* node_1 was deleted.
-    let from = dt_to_timestamp_nanos("2025-07-12");
-    let to = dt_to_timestamp_nanos("2025-07-14");
+    let from = ts("2025-07-12");
+    let to = ts("2025-07-14");
 
     let mut rewardables = client
         .get_rewardable_nodes_per_provider(from.into(), to.into())
@@ -195,8 +359,8 @@ fn test_rewardable_nodes_rewardables_till_deleted() {
     // - The active time of node_1 (until deletion on 2025-07-08),
     // - Node_2's full active range,
     // - Node_3's creation (on 2025-07-11).
-    let from = dt_to_timestamp_nanos("2025-07-03");
-    let to = dt_to_timestamp_nanos("2025-07-12");
+    let from = ts("2025-07-03");
+    let to = ts("2025-07-12");
 
     let mut rewardables = client
         .get_rewardable_nodes_per_provider(from.into(), to.into())
@@ -213,7 +377,7 @@ fn test_rewardable_nodes_rewardables_till_deleted() {
     assert_eq!(node_1_rewardable_days.first(), Some(&from.into()));
     assert_eq!(
         node_1_rewardable_days.last(),
-        Some(&dt_to_timestamp_nanos("2025-07-08").into())
+        Some(&ts("2025-07-07").into())
     );
 
     // Node 2 is active throughout the whole range.
@@ -221,7 +385,7 @@ fn test_rewardable_nodes_rewardables_till_deleted() {
 
     assert_eq!(
         node_2_rewardable_days.first(),
-        Some(&dt_to_timestamp_nanos("2025-07-04").into())
+        Some(&ts("2025-07-04").into())
     );
     assert_eq!(node_2_rewardable_days.last(), Some(&to.into()));
 
@@ -230,40 +394,9 @@ fn test_rewardable_nodes_rewardables_till_deleted() {
 
     assert_eq!(
         node_3_rewardable_days.first(),
-        Some(&dt_to_timestamp_nanos("2025-07-11").into())
+        Some(&ts("2025-07-11").into())
     );
     assert_eq!(node_3_rewardable_days.last(), Some(&to.into()));
-}
-
-#[test]
-fn test_rewardable_nodes_node_appears_mid_range() {
-    let client = client_for_tests();
-
-    // Range spans before and after node_3 is created on 2025-07-11.
-    let from = dt_to_timestamp_nanos("2025-07-10");
-    let to = dt_to_timestamp_nanos("2025-07-14");
-
-    let mut rewardables = client
-        .get_rewardable_nodes_per_provider(from.into(), to.into())
-        .expect("Failed to fetch rewardables");
-
-    let np_1_id = PrincipalId::new_user_test_id(20);
-    let np_1_rewardables = rewardables
-        .remove(&np_1_id)
-        .expect("Expected rewardables for node provider");
-
-    let node_3_rewardable_days = node_rewardable_days(&np_1_rewardables, 3);
-
-    assert_eq!(
-        node_3_rewardable_days.first(),
-        Some(&dt_to_timestamp_nanos("2025-07-11").into()),
-        "Node 3 should become rewardable on 2025-07-11"
-    );
-    assert_eq!(
-        node_3_rewardable_days.last(),
-        Some(&to.into()),
-        "Node 3 should remain rewardable until end of the range"
-    );
 }
 
 #[test]
@@ -280,13 +413,13 @@ fn test_node_re_registered_after_deletion() {
         ..NodeRecord::default()
     };
 
-    add_record_helper(&node_key, 39668, Some(node_record), "2025-07-10");
+    add_record_helper(&node_key, 39668, Some(node_record), "2025-07-11");
 
     let client = client_for_tests();
 
     // Range that includes both the deletion and re-registration periods
-    let from = dt_to_timestamp_nanos("2025-07-07");
-    let to = dt_to_timestamp_nanos("2025-07-12");
+    let from = ts("2025-07-07");
+    let to = ts("2025-07-12");
 
     let mut rewardables = client
         .get_rewardable_nodes_per_provider(from.into(), to.into())
@@ -300,12 +433,10 @@ fn test_node_re_registered_after_deletion() {
     let node_1_rewardable_days = node_rewardable_days(&np_1_rewardables, node_1_id);
 
     let expected_days: Vec<DayUTC> = vec![
-        dt_to_timestamp_nanos("2025-07-07").into(),
-        dt_to_timestamp_nanos("2025-07-08").into(),
-        // On 2025-07-08, node_1 was deleted, so it should not be rewardable the 2025-07-09.
-        dt_to_timestamp_nanos("2025-07-10").into(),
-        dt_to_timestamp_nanos("2025-07-11").into(),
-        dt_to_timestamp_nanos("2025-07-12").into(),
+        ts("2025-07-07").into(),
+        // On 2025-07-08, node_1 was deleted, so it should not be rewardable until the 2025-07-11.
+        ts("2025-07-11").into(),
+        ts("2025-07-12").into(),
     ];
 
     assert_eq!(node_1_rewardable_days, expected_days);
