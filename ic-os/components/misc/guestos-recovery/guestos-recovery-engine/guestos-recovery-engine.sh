@@ -2,7 +2,6 @@
 
 set -e
 
-readonly VERSION=""
 readonly EXPECTED_RECOVERY_HASH=""
 
 # Completes the recovery process by downloading and applying the recovery artifacts
@@ -34,7 +33,7 @@ verify_file_hash() {
 
 download_recovery_artifact() {
     local base_url="$1"
-    local recovery_url="${base_url}/ic/${VERSION}/guest-os/recovery-artifacts/recovery.tar.zst"
+    local recovery_url="${base_url}/ic/${EXPECTED_RECOVERY_HASH}/recovery.tar.zst"
 
     echo "Attempting to download recovery artifact from $recovery_url"
 
