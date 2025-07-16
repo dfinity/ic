@@ -83,9 +83,7 @@ const REBOOT_TIME_FILENAME: &str = "reboot_time.txt";
 /// ```
 ///
 #[async_trait]
-pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send>:
-    Send + Sync
-{
+pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send + Sync {
     type UpgradeType;
 
     /// Return the currently prepared version, if there is one. Default is None.
