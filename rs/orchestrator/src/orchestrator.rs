@@ -382,19 +382,22 @@ impl Orchestrator {
 
             loop {
                 match tokio::time::timeout(UPGRADE_TIMEOUT, upgrade.check_for_upgrade()).await {
-                    Ok(Ok(OrchestratorControlFlow::Assigned(subnet_id))) => {
-                        *maybe_subnet_id.write().unwrap() = Some(subnet_id);
+                    Ok(Ok(control_flow)) => {
                         upgrade.metrics.failed_consecutive_upgrade_checks.reset();
-                    }
-                    Ok(Ok(OrchestratorControlFlow::Unassigned)) => {
-                        *maybe_subnet_id.write().unwrap() = None;
-                        upgrade.metrics.failed_consecutive_upgrade_checks.reset();
-                    }
-                    Ok(Ok(OrchestratorControlFlow::Stop)) => {
-                        upgrade.metrics.failed_consecutive_upgrade_checks.reset();
-                        // Wake up all orchestrator tasks and instruct them to stop.
-                        cancellation_token.cancel();
-                        break;
+
+                        match control_flow {
+                            OrchestratorControlFlow::Assigned(subnet_id) => {
+                                *maybe_subnet_id.write().unwrap() = Some(subnet_id);
+                            }
+                            OrchestratorControlFlow::Unassigned => {
+                                *maybe_subnet_id.write().unwrap() = None;
+                            }
+                            OrchestratorControlFlow::Stop => {
+                                // Wake up all orchestrator tasks and instruct them to stop.
+                                cancellation_token.cancel();
+                                break;
+                            }
+                        }
                     }
                     Ok(Err(err)) => {
                         warn!(log, "Check for upgrade failed: {err}");

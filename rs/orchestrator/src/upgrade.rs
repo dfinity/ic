@@ -541,7 +541,7 @@ impl Upgrade {
 }
 
 #[async_trait]
-impl ImageUpgrader<ReplicaVersion, Option<SubnetId>> for Upgrade {
+impl ImageUpgrader<ReplicaVersion> for Upgrade {
     type UpgradeType = OrchestratorControlFlow;
 
     fn get_prepared_version(&self) -> Option<&ReplicaVersion> {
