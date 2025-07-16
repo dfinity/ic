@@ -1,7 +1,6 @@
 use std::{
     collections::BTreeMap,
     fs::File,
-    io::{Read, Write},
     net::{IpAddr, SocketAddr},
     path::Path,
 };
@@ -196,8 +195,8 @@ impl VectorVm {
         info!(log, "Syncing vector targets.");
         let snapshot = env.topology_snapshot();
 
-        let mut sources = BTreeMap::new();
-        let mut transforms = BTreeMap::new();
+        let mut sources: BTreeMap<String, VectorSource> = BTreeMap::new();
+        let mut transforms: BTreeMap<String, VectorTransform> = BTreeMap::new();
 
         let nodes = snapshot
             .subnets()
@@ -266,17 +265,15 @@ impl VectorVm {
         )
         .map_err(anyhow::Error::from)?;
 
-        let deployed_prometheus_vm = env
+        let deployed_vm = env
             .get_deployed_universal_vm(&self.universal_vm.name)
             .unwrap();
-        let session = deployed_prometheus_vm
-            .block_on_ssh_session()
-            .unwrap_or_else(|e| {
-                panic!(
-                    "Failed to setup SSH session to {} because: {e:?}!",
-                    self.universal_vm.name
-                )
-            });
+        let session = deployed_vm.block_on_ssh_session().unwrap_or_else(|e| {
+            panic!(
+                "Failed to setup SSH session to {} because: {e:?}!",
+                self.universal_vm.name
+            )
+        });
 
         for file in vector_local_dir.read_dir().map_err(anyhow::Error::from)? {
             let file = match file {
@@ -310,7 +307,19 @@ impl VectorVm {
             });
         }
 
-        touch_spawn_file(&session)?;
+        deployed_vm
+            .block_on_bash_script_from_session(
+                &session,
+                r#"
+docker run -d --name vector \
+    -v /etc/vector/config:/etc/vector/config \
+    --network host \
+    --entrypoint vector \
+    vector-with-log-fetcher:image
+    -w --config-dir /etc/vector/config
+        "#,
+            )
+            .expect("Failed to start docker container for vector");
 
         emit_kibana_url_event(&log, &infra_group_name);
 
@@ -318,21 +327,6 @@ impl VectorVm {
 
         Ok(())
     }
-}
-
-fn touch_spawn_file(session: &ssh2::Session) -> anyhow::Result<()> {
-    let mut channel = session.channel_session()?;
-    channel.exec("touch /etc/vector/config/spawn_vector")?;
-    channel.flush()?;
-    channel.send_eof()?;
-    let mut _stdout = Vec::new();
-    channel.read_to_end(&mut _stdout)?;
-    channel.wait_close()?;
-
-    channel
-        .exit_signal()
-        .map(|_| ())
-        .map_err(anyhow::Error::from)
 }
 
 fn emit_kibana_url_event(log: &slog::Logger, network_name: &str) {

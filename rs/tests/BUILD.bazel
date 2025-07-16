@@ -242,7 +242,6 @@ oci_tar(
 
 exports_files([
     "vector_activate.sh",
-    "vector_run.sh",
 ])
 
 uvm_config_image(
@@ -250,7 +249,6 @@ uvm_config_image(
     srcs = [
         ":vector-with-log-fetcher.tar",
         ":vector_activate.sh",
-        ":vector_run.sh",
     ],
     remap_paths = {
         "vector_activate.sh": "activate",
