@@ -51,6 +51,9 @@ impl TryFrom<ListSnsCanistersResponse> for SnsCanisters {
             archive: archives.into_iter().map(ArchiveCanister::new).collect(),
         };
 
+        let extensions =
+            extensions.map_or_else(Vec::new, |extensions| extensions.extension_canister_ids);
+
         Ok(Self {
             sns,
             dapps,

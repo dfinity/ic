@@ -653,14 +653,14 @@ impl SnsInitPayload {
         };
 
         // TODO: Support specifying extensions at SNS initialization.
-        let extension_canister_ids = vec![];
+        let extensions = Some(vec![].into());
 
         SnsRootCanister {
             governance_canister_id: Some(sns_canister_ids.governance),
             ledger_canister_id: Some(sns_canister_ids.ledger),
             swap_canister_id: Some(sns_canister_ids.swap),
             dapp_canister_ids,
-            extension_canister_ids,
+            extensions,
             archive_canister_ids: vec![],
             index_canister_id: Some(sns_canister_ids.index),
             testflight,
