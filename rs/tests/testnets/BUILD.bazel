@@ -77,12 +77,15 @@ system_test(
 
 system_test_nns(
     name = "small",
+    env = {
+        "VECTOR_VM_PATH": "$(rootpath //rs/tests:vector_with_log_fetcher_image)",
+    },
     tags = [
         "dynamic_testnet",
         "manual",
     ],
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE + [
-        "//rs/tests:vector_with_log_fetcher_image"
+        "//rs/tests:vector_with_log_fetcher_image",
     ],
     deps = [
         # Keep sorted.
@@ -91,9 +94,6 @@ system_test_nns(
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
     ],
-    env = {
-        "VECTOR_VM_PATH": "$(rootpath //rs/tests:vector_with_log_fetcher_image)",
-    }
 )
 
 system_test_nns(

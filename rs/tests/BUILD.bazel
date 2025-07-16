@@ -236,13 +236,13 @@ oci_tar(
     name = "vector-with-log-fetcher.tar",
     image = "@vector-with-log-fetcher",
     repo_tags = [
-        "vector-with-log-fetcher:image"
-    ]
+        "vector-with-log-fetcher:image",
+    ],
 )
 
 exports_files([
     "vector_activate.sh",
-    "vector_run.sh"
+    "vector_run.sh",
 ])
 
 uvm_config_image(
@@ -250,10 +250,10 @@ uvm_config_image(
     srcs = [
         ":vector-with-log-fetcher.tar",
         ":vector_activate.sh",
-        ":vector_run.sh"
+        ":vector_run.sh",
     ],
-    tags = ["manual"],
     remap_paths = {
         "vector_activate.sh": "activate",
     },
+    tags = ["manual"],
 )
