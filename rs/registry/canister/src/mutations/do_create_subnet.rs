@@ -506,22 +506,6 @@ impl From<CanisterCyclesCostSchedule> for CanisterCyclesCostSchedulePb {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
-pub struct EcdsaInitialConfig {
-    pub quadruples_to_create_in_advance: u32,
-    pub keys: Vec<EcdsaKeyRequest>,
-    /// Must be optional for registry candid backwards compatibility.
-    pub max_queue_size: Option<u32>,
-    pub signature_request_timeout_ns: Option<u64>,
-    pub idkg_key_rotation_period_ms: Option<u64>,
-}
-
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
-pub struct EcdsaKeyRequest {
-    pub key_id: EcdsaKeyId,
-    pub subnet_id: Option<PrincipalId>,
-}
-
 impl From<CreateSubnetPayload> for SubnetRecord {
     fn from(val: CreateSubnetPayload) -> Self {
         SubnetRecord {
