@@ -21,7 +21,7 @@ impl Partition for FatPartition {
         let _ = mcopy().context("mcopy is needed to open FAT partitions")?;
         let mut offset = None;
         if let Some(index) = index {
-            offset = Some(gpt::check_offset(&image, index).await?);
+            offset = Some(gpt::get_partition_offset(&image, index).await?);
         }
         Ok(FatPartition {
             offset_bytes: offset,
