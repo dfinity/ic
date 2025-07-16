@@ -59,7 +59,7 @@ pub fn setup(env: TestEnv) {
     PrometheusVm::default()
         .start(&env)
         .expect("Failed to start prometheus VM");
-    let vector_vm = VectorVm::new();
+    let mut vector_vm = VectorVm::new();
     vector_vm.start(&env).expect("Failed to start Vector VM");
     InternetComputer::new()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))

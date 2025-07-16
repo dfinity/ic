@@ -41,7 +41,7 @@ const NODE_REGISTRATION_BACKOFF: Duration = Duration::from_secs(5);
 /// Prepare the environment for nested tests.
 /// SetupOS -> HostOS -> GuestOS
 pub fn config(env: TestEnv, mainnet_config: bool) {
-    let vector = VectorVm::new();
+    let mut vector = VectorVm::new();
     vector.start(&env).expect("Failed to start Vector VM");
 
     let principal =
@@ -68,11 +68,11 @@ pub fn config(env: TestEnv, mainnet_config: bool) {
         .start(&env)
         .expect("failed to setup ic-gateway");
 
+    setup_nested_vm(env.clone(), HOST_VM_NAME);
+
     vector
         .sync_targets(&env)
         .expect("Failed to sync Vector targets");
-
-    setup_nested_vm(env, HOST_VM_NAME);
 }
 
 /// Allow the nested GuestOS to install and launch, and check that it can

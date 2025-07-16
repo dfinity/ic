@@ -5,8 +5,7 @@ use std::{
     path::Path,
 };
 
-use ic_types::PrincipalId;
-use serde::{Deserialize, Serialize};
+use serde::{ser::SerializeStruct, Deserialize, Serialize, Serializer};
 use slog::{info, warn};
 
 use crate::{
@@ -47,6 +46,8 @@ fn get_vector_toml() -> String {
 
 pub struct VectorVm {
     universal_vm: UniversalVm,
+    sources: BTreeMap<String, VectorSource>,
+    transforms: BTreeMap<String, VectorTransform>,
 }
 
 impl Default for VectorVm {
@@ -69,6 +70,8 @@ impl VectorVm {
                     memory_kibibytes: Some(AmountOfMemoryKiB::new(16780000)), // 16GiB
                     boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(30)),
                 }),
+            sources: BTreeMap::new(),
+            transforms: BTreeMap::new(),
         }
     }
 
@@ -88,13 +91,32 @@ impl VectorVm {
         Ok(())
     }
 
-    pub fn sync_targets(&self, env: &TestEnv) -> anyhow::Result<()> {
+    pub fn add_custom_target(
+        &mut self,
+        target_id: String,
+        ip: IpAddr,
+        labels: Option<BTreeMap<String, String>>,
+    ) {
+        let source = VectorSource::new(target_id.clone(), ip);
+        let source_key = format!("{}-source", target_id);
+
+        let mut extended_labels = labels.unwrap_or_default();
+        extended_labels.extend([
+            (IC_NODE.to_string(), target_id.clone()),
+            (ADDRESS.to_string(), ip.to_string()),
+        ]);
+
+        let transform = VectorTransform::new(source_key.clone(), extended_labels);
+
+        self.sources.insert(source_key, source);
+        self.transforms
+            .insert(format!("{}-transform", target_id), transform);
+    }
+
+    pub fn sync_targets(&mut self, env: &TestEnv) -> anyhow::Result<()> {
         let log = env.logger();
         info!(log, "Syncing vector targets.");
         let snapshot = env.topology_snapshot();
-
-        let mut sources: BTreeMap<String, VectorSource> = BTreeMap::new();
-        let mut transforms: BTreeMap<String, VectorTransform> = BTreeMap::new();
 
         let nodes = snapshot
             .subnets()
@@ -102,23 +124,16 @@ impl VectorVm {
             .chain(snapshot.unassigned_nodes())
             .chain(snapshot.api_boundary_nodes());
 
-        let infra_group_name = GroupSetup::read_attribute(env).infra_group_name;
         for node in nodes {
             let node_id = node.node_id.get();
             let ip = node.get_ip_addr();
 
-            let source = VectorSource::new(node_id, ip);
-            let source_key = format!("{}-source", node_id);
-
             let labels = [
-                (IC_NODE, node_id.to_string()),
-                (ADDRESS, ip.to_string()),
                 // We don't have host os in these tests so this is the only job.
                 // It is here to keep consistency between mainnet and testnet logs.
                 (JOB, "node_exporter".to_string()),
                 (IS_API_BN, node.is_api_boundary_node().to_string()),
                 (IS_MALICIOUS, node.is_malicious().to_string()),
-                (IC, infra_group_name.clone()),
             ]
             .into_iter()
             .chain(match node.subnet_id() {
@@ -128,11 +143,15 @@ impl VectorVm {
             .map(|(key, val)| (key.to_string(), val))
             .collect();
 
-            let transform = VectorTransform::new(source_key.clone(), labels);
-            let transform_key = format!("{}-transform", node_id);
+            self.add_custom_target(node_id.to_string(), ip, Some(labels));
+        }
 
-            sources.insert(source_key, source);
-            transforms.insert(transform_key, transform);
+        // For all targets add an IC label
+        let infra_group_name = GroupSetup::read_attribute(env).infra_group_name;
+        for transform in self.transforms.values_mut() {
+            transform
+                .labels
+                .insert(IC.to_string(), infra_group_name.clone());
         }
 
         let vector_local_dir = env.get_path("vector");
@@ -145,11 +164,11 @@ impl VectorVm {
         let mut generated_config = BTreeMap::new();
         generated_config.insert(
             "sources".to_string(),
-            serde_json::to_value(&sources).unwrap(),
+            serde_json::to_value(&self.sources).unwrap(),
         );
         generated_config.insert(
             "transforms".to_string(),
-            serde_json::to_value(&transforms).unwrap(),
+            serde_json::to_value(&self.transforms).unwrap(),
         );
 
         std::fs::write(
@@ -256,7 +275,7 @@ struct VectorSource {
 }
 
 impl VectorSource {
-    pub fn new(node_id: PrincipalId, ip: IpAddr) -> Self {
+    pub fn new(target_id: String, ip: IpAddr) -> Self {
         let socket = SocketAddr::new(ip, 19531);
 
         let command = [
@@ -264,9 +283,9 @@ impl VectorSource {
             "--url",
             &format!("http://{}/entries?follow", socket),
             "--name",
-            &format!("{}-node_exporter", node_id),
+            &format!("{}-node_exporter", target_id),
             "--cursor-path",
-            &format!("/data/{}-node_exporter/checkpoint.txt", node_id),
+            &format!("/data/{}-node_exporter/checkpoint.txt", target_id),
         ]
         .iter()
         .map(|s| s.to_string())
@@ -289,12 +308,10 @@ struct VectorStreaming {
     respawn_on_exit: bool,
 }
 
-#[derive(Serialize)]
 struct VectorTransform {
-    #[serde(rename = "type")]
     _type: String,
     inputs: Vec<String>,
-    source: String,
+    labels: BTreeMap<String, String>,
 }
 
 impl VectorTransform {
@@ -302,13 +319,30 @@ impl VectorTransform {
         Self {
             _type: "remap".to_string(),
             inputs: vec![input_key],
-            source: labels
-                .into_iter()
-                // Might be dangerous as the tag value is coming from an outside source and
-                // is not escaped.
-                .map(|(k, v)| format!(".{} = \"{}\"", k, v))
-                .collect::<Vec<String>>()
-                .join("\n"),
+            labels,
         }
+    }
+
+    fn calculate_source(&self) -> String {
+        self.labels
+            .iter()
+            // Might be dangerous as the tag value is coming from an outside source and
+            // is not escaped.
+            .map(|(k, v)| format!(".{} = \"{}\"", k, v))
+            .collect::<Vec<String>>()
+            .join("\n")
+    }
+}
+
+impl Serialize for VectorTransform {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut s = serializer.serialize_struct("VectorTransform", 3)?;
+        s.serialize_field("type", &self._type)?;
+        s.serialize_field("inputs", &self.inputs)?;
+        s.serialize_field("source", &self.calculate_source())?;
+        s.end()
     }
 }
