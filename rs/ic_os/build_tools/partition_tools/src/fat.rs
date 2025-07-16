@@ -17,7 +17,7 @@ pub struct FatPartition {
 impl Partition for FatPartition {
     /// Open a fat3 partition for writing, via mtools. There is nothing to do
     /// here, as mtools works in place.
-    async fn open(image: PathBuf, index: Option<usize>) -> Result<Self> {
+    async fn open(image: PathBuf, index: Option<u32>) -> Result<Self> {
         let _ = mcopy().context("mcopy is needed to open FAT partitions")?;
         let mut offset = None;
         if let Some(index) = index {

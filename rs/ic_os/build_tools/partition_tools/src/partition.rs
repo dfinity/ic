@@ -7,7 +7,7 @@ use async_trait::async_trait;
 pub trait Partition: Sized {
     /// Open a partition for writing. If `index` is Some, the `index`th partition (1-based) in the
     /// disk image is opened.
-    async fn open(image: PathBuf, index: Option<usize>) -> Result<Self>;
+    async fn open(image: PathBuf, index: Option<u32>) -> Result<Self>;
 
     /// Open a partition for writing using explicit offset and length
     async fn open_range(image: PathBuf, offset_bytes: u64, length_bytes: u64) -> Result<Self>;
