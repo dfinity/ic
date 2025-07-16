@@ -55,7 +55,6 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::{
-        execution_state::WasmExecutionMode,
         system_state::{CyclesUseCase, PausedExecutionId},
         NextExecution,
     },
@@ -397,8 +396,6 @@ impl ExecutionEnvironment {
             own_subnet_type,
             config.max_controllers,
             compute_capacity,
-            config.max_canister_memory_size_wasm32,
-            config.max_canister_memory_size_wasm64,
             config.rate_limiting_of_instructions,
             config.allocatable_compute_capacity_in_percent,
             config.rate_limiting_of_heap_delta,
@@ -704,6 +701,7 @@ impl ExecutionEnvironment {
                                     ThresholdArguments::Ecdsa(EcdsaArguments {
                                         key_id: args.key_id,
                                         message_hash: args.message_hash,
+                                        pre_signature: None,
                                     }),
                                     args.derivation_path.into_inner(),
                                     registry_settings
@@ -1193,6 +1191,7 @@ impl ExecutionEnvironment {
                                                 Arc::new(v.merkle_root_hash.into_vec())
                                             }
                                         }),
+                                        pre_signature: None,
                                     }),
                                     args.derivation_path.into_inner(),
                                     registry_settings
@@ -2051,15 +2050,6 @@ impl ExecutionEnvironment {
         )
     }
 
-    /// Returns the maximum amount of memory that can be utilized by a single
-    /// canister.
-    pub fn max_canister_memory_size(&self, wasm_execution_mode: WasmExecutionMode) -> NumBytes {
-        match wasm_execution_mode {
-            WasmExecutionMode::Wasm32 => self.config.max_canister_memory_size_wasm32,
-            WasmExecutionMode::Wasm64 => self.config.max_canister_memory_size_wasm64,
-        }
-    }
-
     /// Returns the subnet memory capacity.
     pub fn subnet_memory_capacity(&self) -> NumBytes {
         self.config.subnet_memory_capacity
@@ -2074,17 +2064,8 @@ impl ExecutionEnvironment {
         execution_mode: ExecutionMode,
         subnet_memory_saturation: ResourceSaturation,
     ) -> ExecutionParameters {
-        let wasm_execution_mode = match &canister.execution_state {
-            // The canister is not already installed, so we do not know what kind of canister it is.
-            // Therefore we can assume it is Wasm64 because Wasm64 can have a larger memory limit.
-            None => WasmExecutionMode::Wasm64,
-            Some(execution_state) => execution_state.wasm_execution_mode,
-        };
-        let max_memory_size = self.max_canister_memory_size(wasm_execution_mode);
-
         ExecutionParameters {
             instruction_limits,
-            canister_memory_limit: canister.memory_limit(max_memory_size),
             wasm_memory_limit: canister.wasm_memory_limit(),
             memory_allocation: canister.memory_allocation(),
             canister_guaranteed_callback_quota: self.config.canister_guaranteed_callback_quota

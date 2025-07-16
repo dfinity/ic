@@ -137,11 +137,13 @@ mod tests {
             MasterPublicKeyId::Ecdsa(key_id) => ThresholdArguments::Ecdsa(EcdsaArguments {
                 key_id: key_id.clone(),
                 message_hash: [0; 32],
+                pre_signature: None,
             }),
             MasterPublicKeyId::Schnorr(key_id) => ThresholdArguments::Schnorr(SchnorrArguments {
                 key_id: key_id.clone(),
                 message: Arc::new(vec![1; 64]),
                 taproot_tree_root: None,
+                pre_signature: None,
             }),
             MasterPublicKeyId::VetKd(_) => panic!("vetKD does not have pre-signatures"),
         };
