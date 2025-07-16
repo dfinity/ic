@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MESSAGE_CANISTER_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -28,7 +28,6 @@ system_test(
         "k8s",
         "long_test",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
     uses_guestos_dev = True,
     runtime_deps = GRAFANA_RUNTIME_DEPS,
@@ -50,7 +49,6 @@ system_test(
         "k8s",
         "long_test",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev = True,
     runtime_deps = GRAFANA_RUNTIME_DEPS,
     deps = [
@@ -70,7 +68,6 @@ system_test(
         "experimental_system_test_colocation",
         "k8s",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -111,7 +108,6 @@ system_test(
     tags = [
         "k8s",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev = True,
     uses_guestos_dev_test = True,
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
@@ -131,7 +127,6 @@ system_test_nns(
     tags = [
         "k8s",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -157,7 +152,6 @@ system_test(
     tags = [
         "k8s",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -179,7 +173,6 @@ system_test_nns(
     tags = [
         "k8s",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -199,7 +192,6 @@ system_test_nns(
     tags = [
         "k8s",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -226,6 +218,7 @@ system_test_nns(
 
 system_test_nns(
     name = "subnet_splitting_test",
+    env = MESSAGE_CANISTER_ENV,
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
         "experimental_system_test_colocation",
@@ -233,9 +226,8 @@ system_test_nns(
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_splitting",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
-        GUESTOS_RUNTIME_DEPS + [
+        GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + [
             "//rs/tests:recovery/binaries",
         ],
     deps = [
@@ -260,7 +252,6 @@ system_test(
     tags = [
         "k8s",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev = True,
     uses_guestos_dev_test = True,
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
@@ -283,7 +274,6 @@ system_test(
     tags = [
         "k8s",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev = True,
     uses_guestos_dev_test = True,
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
@@ -313,7 +303,6 @@ system_test(
     tags = [
         "k8s",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev = True,
     uses_guestos_dev_test = True,
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
@@ -347,7 +336,6 @@ system_test_nns(
         "experimental_system_test_colocation",
         "manual",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS + [
         "//rs/tests:jaeger_uvm_config_image",
@@ -368,13 +356,13 @@ system_test_nns(
 
 system_test_nns(
     name = "adding_nodes_to_subnet_test",
+    env = MESSAGE_CANISTER_ENV,
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/nns/constants",

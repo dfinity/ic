@@ -181,7 +181,6 @@ impl InstructionLimits {
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct ExecutionParameters {
     pub instruction_limits: InstructionLimits,
-    pub canister_memory_limit: NumBytes,
     // The limit on the Wasm memory set by the developer in canister settings.
     pub wasm_memory_limit: Option<NumBytes>,
     pub memory_allocation: MemoryAllocation,
@@ -837,9 +836,6 @@ pub enum CostReturnCode {
 /// A struct to gather the relevant fields that correspond to a canister's
 /// memory consumption.
 struct MemoryUsage {
-    /// Upper limit on how much the memory the canister could use.
-    limit: NumBytes,
-
     /// The Wasm memory limit set by the developer in canister settings.
     wasm_memory_limit: Option<NumBytes>,
 
@@ -872,9 +868,6 @@ struct MemoryUsage {
 
 impl MemoryUsage {
     fn new(
-        log: ReplicaLogger,
-        canister_id: CanisterId,
-        limit: NumBytes,
         wasm_memory_limit: Option<NumBytes>,
         current_usage: NumBytes,
         stable_memory_usage: NumBytes,
@@ -883,22 +876,7 @@ impl MemoryUsage {
         subnet_available_memory: SubnetAvailableMemory,
         memory_allocation: MemoryAllocation,
     ) -> Self {
-        // A canister's current usage should never exceed its limit. This is
-        // most probably a bug. Panicking here due to this inconsistency has the
-        // danger of putting the entire subnet in a crash loop. Log an error
-        // message to page the on-call team and try to stumble along.
-        if current_usage > limit {
-            error!(
-                log,
-                "[EXC-BUG] Canister {}: current_usage {} > limit {}",
-                canister_id,
-                current_usage,
-                limit
-            );
-        }
-
         Self {
-            limit,
             wasm_memory_limit,
             current_usage,
             stable_memory_usage,
@@ -983,7 +961,7 @@ impl MemoryUsage {
             .current_usage
             .get()
             .overflowing_add(execution_bytes.get());
-        if overflow || new_usage > self.limit.get() {
+        if overflow {
             return Err(HypervisorError::OutOfMemory);
         }
 
@@ -1239,9 +1217,6 @@ impl SystemApiImpl {
             .expect("Wasm memory size is larger than maximal allowed.");
 
         let memory_usage = MemoryUsage::new(
-            log.clone(),
-            sandbox_safe_system_state.canister_id,
-            execution_parameters.canister_memory_limit,
             execution_parameters.wasm_memory_limit,
             canister_current_memory_usage,
             stable_memory_usage,
@@ -2166,6 +2141,65 @@ impl SystemApi for SystemApiImpl {
             size,
             summarize(heap, dst, size)
         );
+        result
+    }
+
+    fn ic0_env_var_name_exists(
+        &self,
+        name_src: usize,
+        name_size: usize,
+        heap: &[u8],
+    ) -> HypervisorResult<i32> {
+        let result = match &self.api_type {
+            ApiType::Start { .. } => Err(self.error_for("ic0_env_var_name_exists")),
+            ApiType::Init { .. }
+            | ApiType::SystemTask { .. }
+            | ApiType::Update { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::CompositeQuery { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::CompositeCleanup { .. }
+            | ApiType::CompositeReplyCallback { .. }
+            | ApiType::CompositeRejectCallback { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::RejectCallback { .. }
+            | ApiType::InspectMessage { .. } => {
+                if name_size > MAX_ENV_VAR_NAME_SIZE {
+                    return Err(HypervisorError::UserContractViolation {
+                        error: "ic0.env_var_name_exists: Variable name is too large.".to_string(),
+                        suggestion: "".to_string(),
+                        doc_link: "".to_string(),
+                    });
+                }
+
+                let name_bytes = valid_subslice(
+                    "ic0.env_var_name_exists heap",
+                    InternalAddress::new(name_src),
+                    InternalAddress::new(name_size),
+                    heap,
+                )?;
+
+                let name = std::str::from_utf8(name_bytes).map_err(|_| {
+                    HypervisorError::UserContractViolation {
+                        error:
+                            "ic0.env_var_name_exists: Variable name is not a valid UTF-8 string."
+                                .to_string(),
+                        suggestion:
+                            "Provide a valid UTF-8 string for the environment variable name."
+                                .to_string(),
+                        doc_link: "".to_string(),
+                    }
+                })?;
+                Ok(self
+                    .sandbox_safe_system_state
+                    .environment_variables()
+                    .contains_key(name) as i32)
+            }
+        };
+
+        trace_syscall!(self, EnvVarNameExists, result);
         result
     }
 

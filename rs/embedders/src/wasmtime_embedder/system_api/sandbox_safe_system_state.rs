@@ -15,7 +15,8 @@ use ic_logger::{info, ReplicaLogger};
 use ic_management_canister_types_private::{
     CanisterStatusType, CreateCanisterArgs, InstallChunkedCodeArgs, InstallCodeArgsV2,
     LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, UninstallCodeArgs, UpdateSettingsArgs, IC_00,
+    ProvisionalCreateCanisterWithCyclesArgs, RenameCanisterArgs, UninstallCodeArgs,
+    UpdateSettingsArgs, IC_00,
 };
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
@@ -247,6 +248,8 @@ impl SystemStateModifications {
             }
             Ok(Ic00Method::LoadCanisterSnapshot) => LoadCanisterSnapshotArgs::decode(payload)
                 .map(|record| record.get_sender_canister_version()),
+            Ok(Ic00Method::RenameCanister) => RenameCanisterArgs::decode(payload)
+                .map(|record| record.get_sender_canister_version()),
             Ok(Ic00Method::SignWithECDSA)
             | Ok(Ic00Method::CanisterStatus)
             | Ok(Ic00Method::CanisterInfo)
@@ -258,7 +261,6 @@ impl SystemStateModifications {
             | Ok(Ic00Method::HttpRequest)
             | Ok(Ic00Method::SetupInitialDKG)
             | Ok(Ic00Method::ECDSAPublicKey)
-            | Ok(Ic00Method::ComputeInitialIDkgDealings)
             | Ok(Ic00Method::ReshareChainKey)
             | Ok(Ic00Method::SchnorrPublicKey)
             | Ok(Ic00Method::SignWithSchnorr)
@@ -786,7 +788,7 @@ impl SandboxSafeSystemState {
             system_state.memory_allocation,
             system_state.wasm_memory_threshold,
             compute_allocation,
-            system_state.environment_variables.clone(),
+            system_state.environment_variables.clone().into(),
             system_state.balance(),
             system_state.reserved_balance(),
             system_state.reserved_balance_limit(),

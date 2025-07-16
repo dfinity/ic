@@ -19,7 +19,7 @@ genrule(
 #!/usr/bin/env bash
 set -euo pipefail
 
-which ansible || sudo pip install ansible==6.6.0
+which ansible || sudo pip install ansible==11.7.0
 
 PREFIX='exec'
 if [ \\$$# -gt 0 ]; then

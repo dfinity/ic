@@ -409,6 +409,9 @@ impl From<pb_api::proposal::Action> for pb::proposal::Action {
             pb_api::proposal::Action::UpdateCanisterSettings(v) => {
                 pb::proposal::Action::UpdateCanisterSettings(v.into())
             }
+            pb_api::proposal::Action::FulfillSubnetRentalRequest(v) => {
+                pb::proposal::Action::FulfillSubnetRentalRequest(v.into())
+            }
         }
     }
 }
@@ -451,6 +454,9 @@ impl From<pb_api::ProposalActionRequest> for pb::proposal::Action {
             }
             pb_api::ProposalActionRequest::UpdateCanisterSettings(v) => {
                 pb::proposal::Action::UpdateCanisterSettings(v.into())
+            }
+            pb_api::ProposalActionRequest::FulfillSubnetRentalRequest(v) => {
+                pb::proposal::Action::FulfillSubnetRentalRequest(v.into())
             }
         }
     }
@@ -1432,6 +1438,8 @@ impl From<pb_api::ProposalData> for pb::ProposalData {
             neurons_fund_data: item.neurons_fund_data.map(|x| x.into()),
             total_potential_voting_power: item.total_potential_voting_power,
             topic: item.topic,
+            // This is not intended to be initialized from outside of canister.
+            previous_ballots_timestamp_seconds: None,
         }
     }
 }
@@ -2533,6 +2541,26 @@ impl From<pb_api::UpdateCanisterSettings> for pb::UpdateCanisterSettings {
     }
 }
 
+impl From<pb::FulfillSubnetRentalRequest> for pb_api::FulfillSubnetRentalRequest {
+    fn from(item: pb::FulfillSubnetRentalRequest) -> Self {
+        Self {
+            user: item.user,
+            node_ids: Some(item.node_ids),
+            replica_version_id: Some(item.replica_version_id),
+        }
+    }
+}
+
+impl From<pb_api::FulfillSubnetRentalRequest> for pb::FulfillSubnetRentalRequest {
+    fn from(item: pb_api::FulfillSubnetRentalRequest) -> Self {
+        Self {
+            user: item.user,
+            node_ids: item.node_ids.unwrap_or_default(),
+            replica_version_id: item.replica_version_id.unwrap_or_default(),
+        }
+    }
+}
+
 impl From<pb::update_canister_settings::CanisterSettings>
     for pb_api::update_canister_settings::CanisterSettings
 {
@@ -2731,6 +2759,7 @@ impl From<pb::governance::GovernanceCachedMetrics> for pb_api::governance::Gover
                 .total_voting_power_non_self_authenticating_controller,
             total_staked_e8s_non_self_authenticating_controller: item
                 .total_staked_e8s_non_self_authenticating_controller,
+            spawning_neurons_count: item.spawning_neurons_count,
             non_self_authenticating_controller_neuron_subset_metrics: item
                 .non_self_authenticating_controller_neuron_subset_metrics
                 .map(|x| x.into()),
@@ -2794,6 +2823,7 @@ impl From<pb_api::governance::GovernanceCachedMetrics> for pb::governance::Gover
                 .total_voting_power_non_self_authenticating_controller,
             total_staked_e8s_non_self_authenticating_controller: item
                 .total_staked_e8s_non_self_authenticating_controller,
+            spawning_neurons_count: item.spawning_neurons_count,
             non_self_authenticating_controller_neuron_subset_metrics: item
                 .non_self_authenticating_controller_neuron_subset_metrics
                 .map(|x| x.into()),

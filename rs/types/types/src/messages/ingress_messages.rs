@@ -15,8 +15,8 @@ use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInfoRequest, ClearChunkStoreArgs, DeleteCanisterSnapshotArgs,
     InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
     Method, Payload, ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs,
-    StoredChunksArgs, TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadCanisterSnapshotDataArgs,
-    UploadCanisterSnapshotMetadataArgs, UploadChunkArgs, IC_00,
+    RenameCanisterArgs, StoredChunksArgs, TakeCanisterSnapshotArgs, UpdateSettingsArgs,
+    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs, UploadChunkArgs, IC_00,
 };
 use ic_protobuf::{
     log::ingress_message_log_entry::v1::IngressMessageLogEntry,
@@ -576,6 +576,10 @@ pub fn extract_effective_canister_id(
                 Err(err) => Err(ParseIngressError::InvalidSubnetPayload(err.to_string())),
             }
         }
+        Ok(Method::RenameCanister) => match RenameCanisterArgs::decode(ingress.arg()) {
+            Ok(record) => Ok(Some(record.get_canister_id())),
+            Err(err) => Err(ParseIngressError::InvalidSubnetPayload(err.to_string())),
+        },
 
         Ok(Method::CreateCanister)
         | Ok(Method::SetupInitialDKG)
@@ -584,7 +588,6 @@ pub fn extract_effective_canister_id(
         | Ok(Method::RawRand)
         | Ok(Method::ECDSAPublicKey)
         | Ok(Method::SignWithECDSA)
-        | Ok(Method::ComputeInitialIDkgDealings)
         | Ok(Method::ReshareChainKey)
         | Ok(Method::SchnorrPublicKey)
         | Ok(Method::SignWithSchnorr)
