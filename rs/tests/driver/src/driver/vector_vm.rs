@@ -1,6 +1,7 @@
 use std::{
     collections::BTreeMap,
     fs::File,
+    io::{Read, Write},
     net::{IpAddr, SocketAddr},
     path::Path,
 };
@@ -13,7 +14,7 @@ use crate::{
     driver::{
         prometheus_vm::{SCP_RETRY_BACKOFF, SCP_RETRY_TIMEOUT},
         test_env::TestEnvAttribute,
-        test_env_api::{HasTopologySnapshot, IcNodeContainer, RetrieveIpv4Addr, SshSession},
+        test_env_api::{HasTopologySnapshot, IcNodeContainer, SshSession},
         test_setup::GroupSetup,
         universal_vm::UniversalVms,
     },
@@ -257,6 +258,21 @@ impl VectorVm {
                     self.universal_vm.name
                 )
             });
+        }
+
+        let mut channel = session.channel_session()?;
+        channel.exec("touch /etc/vector/config/spawn_vector")?;
+        channel.flush()?;
+        channel.send_eof()?;
+        let mut _stdout = Vec::new();
+        channel.read_to_end(&mut _stdout)?;
+        channel.wait_close()?;
+
+        if let Err(e) = channel.exit_signal() {
+            panic!(
+                "Failed to create a `spawn_vector` file due to error: {:?}",
+                e
+            );
         }
 
         info!(log, "Vector targets sync complete.");

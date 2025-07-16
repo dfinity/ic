@@ -7,13 +7,11 @@ set -euo pipefail
 find /config -name *.tar -exec docker load -i {} \;
 
 mkdir -p /etc/vector/config
+cp /config/vector_run.sh /etc/vector/config/vector_run.sh
 chown 1000:1000 /etc/vector/config
 
 docker run -d --name vector \
-    --entrypoint vector \
-    -e VECTOR_WATCH_CONFIG=true \
+    --entrypoint /etc/vector/config/vector_run.sh \
     -v /etc/vector/config:/etc/vector/config \
     --network host \
-    --restart on-failure \
-    vector-with-log-fetcher:image \
-    --config-dir /etc/vector/config \
+    vector-with-log-fetcher:image 
