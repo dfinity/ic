@@ -226,29 +226,65 @@ fn test_minting_account() {
 }
 
 #[test]
-fn test_anonymous_transfers() {
+fn test_icp_anonymous_transfers() {
     const INITIAL_BALANCE: u64 = 10_000_000;
     const TRANSFER_AMOUNT: u64 = 1_000_000;
     let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
     let anon = PrincipalId::new_anonymous();
     let (env, canister_id) = setup(
         ledger_wasm(),
         encode_init_args,
-        vec![(Account::from(p1.0), INITIAL_BALANCE)],
+        vec![
+            (Account::from(p1.0), INITIAL_BALANCE),
+            (Account::from(anon.0), INITIAL_BALANCE),
+        ],
     );
 
-    assert_eq!(INITIAL_BALANCE, total_supply(&env, canister_id));
-    assert_eq!(INITIAL_BALANCE, balance_of(&env, canister_id, p1.0));
-    assert_eq!(0u64, balance_of(&env, canister_id, anon.0));
+    let mut expected_total_supply = INITIAL_BALANCE * 2;
+    let mut expected_balance_p1 = INITIAL_BALANCE;
+    let mut expected_balance_p2 = 0;
+    let mut expected_balance_anon = INITIAL_BALANCE;
+
+    let check_expected_balances_and_total_supply =
+        |expected_total_supply: &u64,
+         expected_balance_p1: &u64,
+         expected_balance_p2: &u64,
+         expected_balance_anon: &u64| {
+            assert_eq!(expected_total_supply, &total_supply(&env, canister_id));
+            assert_eq!(expected_balance_p1, &balance_of(&env, canister_id, p1.0));
+            assert_eq!(expected_balance_p2, &balance_of(&env, canister_id, p2.0));
+            assert_eq!(
+                expected_balance_anon,
+                &balance_of(&env, canister_id, anon.0)
+            );
+        };
+
+    // Check initial balances and total supply
+    check_expected_balances_and_total_supply(
+        &expected_total_supply,
+        &expected_balance_p1,
+        &expected_balance_p2,
+        &expected_balance_anon,
+    );
 
     // Transfer to the account of the anonymous principal using `icrc1_transfer` succeeds
-    // The expected block index after the transfer is 1 (0 is the initial mint to `p1`).
-    let mut expected_block_index = 1u64;
+    // The expected block index after the transfer is 2 (0 and 1 are the initial mints to `p1` and `anon`).
+    let mut expected_block_index = 2u64;
     assert_eq!(
         transfer(&env, canister_id, p1.0, anon.0, TRANSFER_AMOUNT).expect("transfer failed"),
         expected_block_index
     );
     expected_block_index += 1;
+    expected_total_supply -= FEE;
+    expected_balance_p1 -= TRANSFER_AMOUNT + FEE;
+    expected_balance_anon += TRANSFER_AMOUNT;
+    check_expected_balances_and_total_supply(
+        &expected_total_supply,
+        &expected_balance_p1,
+        &expected_balance_p2,
+        &expected_balance_anon,
+    );
 
     // Transfer to the account of the anonymous principal using the ICP-specific `transfer` succeeds
     let transfer_args = icp_ledger::TransferArgs {
@@ -273,35 +309,40 @@ fn test_anonymous_transfers() {
     )
     .expect("failed to decode transfer response");
     assert_eq!(result, Ok(expected_block_index));
+    expected_block_index += 1;
+    expected_total_supply -= FEE;
+    expected_balance_p1 -= TRANSFER_AMOUNT + FEE;
+    expected_balance_anon += TRANSFER_AMOUNT;
+    check_expected_balances_and_total_supply(
+        &expected_total_supply,
+        &expected_balance_p1,
+        &expected_balance_p2,
+        &expected_balance_anon,
+    );
 
-    // Transfer from the account of the anonymous principal using `icrc1_transfer` fails
-    let transfer_arg = TransferArg {
-        from_subaccount: None,
-        to: Account::from(p1.0),
-        fee: None,
-        created_at_time: None,
-        amount: Nat::from(TRANSFER_AMOUNT),
-        memo: None,
-    };
-    let transfer_error = env
-        .execute_ingress_as(
-            anon,
-            canister_id,
-            "icrc1_transfer",
-            Encode!(&transfer_arg).unwrap(),
-        )
-        .unwrap_err();
-    assert!(transfer_error
-        .description()
-        .contains("Anonymous principal cannot hold tokens on the ledger."));
+    // Transfer from the account of the anonymous principal using `icrc1_transfer` succeeds
+    assert_eq!(
+        transfer(&env, canister_id, anon.0, p2.0, TRANSFER_AMOUNT).expect("transfer failed"),
+        expected_block_index
+    );
+    expected_block_index += 1;
+    expected_total_supply -= FEE;
+    expected_balance_anon -= TRANSFER_AMOUNT + FEE;
+    expected_balance_p2 += TRANSFER_AMOUNT;
+    check_expected_balances_and_total_supply(
+        &expected_total_supply,
+        &expected_balance_p1,
+        &expected_balance_p2,
+        &expected_balance_anon,
+    );
 
-    // Transfer from the account of the anonymous principal using the ICP-specific `transfer` fails
+    // Transfer from the account of the anonymous principal using the ICP-specific `transfer` succeeds
     let transfer_args = icp_ledger::TransferArgs {
         memo: icp_ledger::Memo(0u64),
         amount: Tokens::from_e8s(TRANSFER_AMOUNT),
         fee: Tokens::from_e8s(FEE),
         from_subaccount: None,
-        to: AccountIdentifier::new(p1, None).to_address(),
+        to: AccountIdentifier::new(p2, None).to_address(),
         created_at_time: None,
     };
     let response = env.execute_ingress_as(
@@ -310,58 +351,23 @@ fn test_anonymous_transfers() {
         "transfer",
         Encode!(&transfer_args).unwrap(),
     );
-    assert!(response.is_err());
-    if let Err(err) = response {
-        assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
-        assert!(err.description().contains("Canister called `ic0.trap` with message: 'Panicked at 'Sending from 2vxsx-fae is not allowed'"));
-    }
-
-    assert_eq!(INITIAL_BALANCE - FEE * 2, total_supply(&env, canister_id));
-    assert_eq!(
-        INITIAL_BALANCE - (TRANSFER_AMOUNT + FEE) * 2,
-        balance_of(&env, canister_id, p1.0)
+    let result = Decode!(
+        &response
+        .expect("failed to transfer funds")
+        .bytes(),
+        Result<BlockIndex, TransferError>
+    )
+    .expect("failed to decode transfer response");
+    assert_eq!(result, Ok(expected_block_index));
+    expected_total_supply -= FEE;
+    expected_balance_anon -= TRANSFER_AMOUNT + FEE;
+    expected_balance_p2 += TRANSFER_AMOUNT;
+    check_expected_balances_and_total_supply(
+        &expected_total_supply,
+        &expected_balance_p1,
+        &expected_balance_p2,
+        &expected_balance_anon,
     );
-    assert_eq!(TRANSFER_AMOUNT * 2, balance_of(&env, canister_id, anon.0));
-}
-
-#[test]
-fn test_anonymous_approval() {
-    const INITIAL_BALANCE: u64 = 10_000_000;
-    const APPROVE_AMOUNT: u64 = 1_000_000;
-    let p1 = PrincipalId::new_user_test_id(1);
-    let anon = PrincipalId::new_anonymous();
-    let (env, canister_id) = setup(
-        ledger_wasm(),
-        encode_init_args,
-        vec![(Account::from(anon.0), INITIAL_BALANCE)],
-    );
-
-    assert_eq!(INITIAL_BALANCE, total_supply(&env, canister_id));
-    assert_eq!(0, balance_of(&env, canister_id, p1.0));
-    assert_eq!(INITIAL_BALANCE, balance_of(&env, canister_id, anon.0));
-
-    // Approve transfers for p1 from the account of the anonymous principal
-    let approve_args = ApproveArgs {
-        from_subaccount: None,
-        spender: p1.0.into(),
-        amount: Nat::from(APPROVE_AMOUNT),
-        fee: None,
-        memo: None,
-        expires_at: None,
-        expected_allowance: None,
-        created_at_time: None,
-    };
-    let approve_error = env
-        .execute_ingress_as(
-            anon,
-            canister_id,
-            "icrc2_approve",
-            Encode!(&approve_args).unwrap(),
-        )
-        .unwrap_err();
-    assert!(approve_error
-        .description()
-        .contains("Anonymous principal cannot approve token transfers on the ledger."));
 }
 
 #[test]
@@ -450,6 +456,16 @@ fn test_tx_deduplication() {
 #[test]
 fn test_mint_burn() {
     ic_ledger_suite_state_machine_tests::test_mint_burn(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_anonymous_transfers() {
+    ic_ledger_suite_state_machine_tests::test_anonymous_transfers(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_anonymous_approval() {
+    ic_ledger_suite_state_machine_tests::test_anonymous_approval(ledger_wasm(), encode_init_args);
 }
 
 #[test]
