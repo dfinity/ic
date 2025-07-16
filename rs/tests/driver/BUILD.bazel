@@ -9,7 +9,7 @@ bool_flag(
 )
 
 exports_files([
-    "assets/vector.toml"
+    "assets/vector.toml",
 ])
 
 rust_library(

@@ -14,6 +14,7 @@ use ic_system_test_driver::{
         nested::NestedVms,
         test_env::TestEnv,
         test_env_api::*,
+        vector_vm::VectorVm,
     },
     retry_with_msg, retry_with_msg_async,
     util::block_on,
@@ -40,6 +41,9 @@ const NODE_REGISTRATION_BACKOFF: Duration = Duration::from_secs(5);
 /// Prepare the environment for nested tests.
 /// SetupOS -> HostOS -> GuestOS
 pub fn config(env: TestEnv, mainnet_config: bool) {
+    let vector = VectorVm::new();
+    vector.start(&env).expect("Failed to start Vector VM");
+
     let principal =
         PrincipalId::from_str("7532g-cd7sa-3eaay-weltl-purxe-qliyt-hfuto-364ru-b3dsz-kw5uz-kqe")
             .unwrap();
@@ -63,6 +67,10 @@ pub fn config(env: TestEnv, mainnet_config: bool) {
     IcGatewayVm::new(IC_GATEWAY_VM_NAME)
         .start(&env)
         .expect("failed to setup ic-gateway");
+
+    vector
+        .sync_targets(&env)
+        .expect("Failed to sync Vector targets");
 
     setup_nested_vm(env, HOST_VM_NAME);
 }
