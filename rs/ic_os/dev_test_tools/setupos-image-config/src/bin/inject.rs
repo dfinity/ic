@@ -42,10 +42,12 @@ async fn main() -> Result<(), Error> {
 
     // Print previous config.ini
     println!("Previous config.ini:\n---");
-    let previous_config = config
-        .read_file(Path::new("/config.ini"))
-        .await
-        .context("failed to print previous config")?;
+    let previous_config = String::from_utf8(
+        config
+            .read_file(Path::new("/config.ini"))
+            .await
+            .context("failed to print previous config")?,
+    )?;
     println!("{previous_config}");
 
     // Update config.ini
@@ -60,10 +62,12 @@ async fn main() -> Result<(), Error> {
 
     // Print updated config.ini
     println!("Updated config.ini:\n---");
-    let updated_config = config
-        .read_file(Path::new("/config.ini"))
-        .await
-        .context("failed to read updated config")?;
+    let updated_config = String::from_utf8(
+        config
+            .read_file(Path::new("/config.ini"))
+            .await
+            .context("failed to read updated config")?,
+    )?;
     println!("{updated_config}");
 
     // Update node_operator_private_key.pem
@@ -75,19 +79,23 @@ async fn main() -> Result<(), Error> {
 
         // Print updated node_operator_private_key.pem
         println!("Updated node_operator_private_key.pem:\n---");
-        let updated_key = config
-            .read_file(Path::new("/node_operator_private_key.pem"))
-            .await
-            .context("failed to read updated node operator private key")?;
+        let updated_key = String::from_utf8(
+            config
+                .read_file(Path::new("/node_operator_private_key.pem"))
+                .await
+                .context("failed to read updated node operator private key")?,
+        )?;
         println!("{updated_key}");
     }
 
     // Print previous public keys
     println!("Previous ssh_authorized_keys/admin:\n---");
-    let previous_admin_keys = config
-        .read_file(Path::new("ssh_authorized_keys/admin"))
-        .await
-        .context("failed to print previous config")?;
+    let previous_admin_keys = String::from_utf8(
+        config
+            .read_file(Path::new("ssh_authorized_keys/admin"))
+            .await
+            .context("failed to print previous config")?,
+    )?;
     println!("{previous_admin_keys}");
 
     // Update SSH keys
@@ -104,10 +112,12 @@ async fn main() -> Result<(), Error> {
 
         // Print updated SSH keys
         println!("Updated ssh_authorized_keys/admin:\n---");
-        let updated_admin_keys = config
-            .read_file(Path::new("/ssh_authorized_keys/admin"))
-            .await
-            .context("failed to read updated admin keys")?;
+        let updated_admin_keys = String::from_utf8(
+            config
+                .read_file(Path::new("/ssh_authorized_keys/admin"))
+                .await
+                .context("failed to read updated admin keys")?,
+        )?;
         println!("{updated_admin_keys}");
     }
 
@@ -119,10 +129,11 @@ async fn main() -> Result<(), Error> {
 
     // Print previous deployment.json
     println!("Previous deployment.json:\n---");
-    let previous_deployment = data
-        .read_file(Path::new("/deployment.json"))
-        .await
-        .context("failed to print previous deployment config")?;
+    let previous_deployment = String::from_utf8(
+        data.read_file(Path::new("/deployment.json"))
+            .await
+            .context("failed to print previous deployment config")?,
+    )?;
     println!("{previous_deployment}");
 
     // Update deployment.json
@@ -138,10 +149,11 @@ async fn main() -> Result<(), Error> {
 
     // Print updated deployment.json
     println!("Updated deployment.json:\n---");
-    let updated_deployment = data
-        .read_file(Path::new("/deployment.json"))
-        .await
-        .context("failed to read updated deployment config")?;
+    let updated_deployment = String::from_utf8(
+        data.read_file(Path::new("/deployment.json"))
+            .await
+            .context("failed to read updated deployment config")?,
+    )?;
     println!("{updated_deployment}");
 
     // Update NNS key
@@ -156,10 +168,11 @@ async fn main() -> Result<(), Error> {
 
         // Print updated NNS key
         println!("Updated nns_public_key.pem:\n---");
-        let updated_nns_key = data
-            .read_file(Path::new("/nns_public_key.pem"))
-            .await
-            .context("failed to read updated nns key")?;
+        let updated_nns_key = String::from_utf8(
+            data.read_file(Path::new("/nns_public_key.pem"))
+                .await
+                .context("failed to read updated nns key")?,
+        )?;
         println!("{updated_nns_key}");
     }
 
