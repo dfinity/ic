@@ -8,6 +8,10 @@ bool_flag(
     build_setting_default = False,
 )
 
+exports_files([
+    "assets/vector.toml"
+])
+
 rust_library(
     name = "ic-system-test-driver",
     testonly = True,
@@ -17,6 +21,7 @@ rust_library(
     },
     compile_data = [
         "//ic-os/components:ic/generate-ic-config/ic.json5.template",
+        ":assets/vector.toml",
     ],
     crate_name = "ic_system_test_driver",
     proc_macro_deps = [

@@ -39,112 +39,10 @@ const IC: &str = "ic";
 const ELASTICSEARCH_URL: &str = "https://elasticsearch.testnet.dfinity.network";
 const ELASTICSEARCH_INDEX: &str = "testnet-vector-push";
 
-fn get_sinks_toml() -> String {
-    format!(
-        r#"
-[sinks.elastic]
-type = "elasticsearch"
-inputs = ["filter_spam"]
-endpoints = ["{ELASTICSEARCH_URL}"]
-mode = "bulk"
-compression = "gzip"
-id_key = "__CURSOR"
+const VECTOR_TOML: &[u8] = include_bytes!("../../assets/vector.toml");
 
-  [sinks.elastic.bulk]
-  index = "{ELASTICSEARCH_INDEX}-%Y-%m-%d"
-
-  [sinks.elastic.buffer]
-  type = "disk"
-  max_size = 268435488 # 256 MB least we can have
-  when_full = "block"
-    
-"#
-    )
-}
-
-fn get_general_transforms_toml() -> String {
-    r#"
-# Colleting all the logs for debugging
-[sinks.local_file]
-type = "file"
-inputs = [ "*-transform" ]
-path = "/etc/vector/config/debug.log"
-     [sinks.local_file.encoding]
-     codec = "json"
-
-[transforms.to_json]
-type = "remap"
-inputs = [ "*-transform" ]
-source = """
-message_parsed = parse_json!(del(.message))
-preserved_fields = {}
-
-for_each(["address", "ic_node", "job", "ic_subnet", "is_api_bn", "is_malicious", "ic"]) -> |_, k| {
-  v = get!(., [k])
-  if v != null {
-    preserved_fields = set!(preserved_fields, [k], v)
-  }
-}
-
-preserved_fields_message = {}
-for_each(["__CURSOR", "_HOSTNAME", "MESSAGE", "__REALTIME_TIMESTAMP", "_EXE"]) -> |_, k| {
-  v = get!(message_parsed, [k])
-  if v != null {
-    preserved_fields_message = set!(preserved_fields_message, [k], v)
-  }
-}
-
-. = merge(preserved_fields, preserved_fields_message)
-
-if .MESSAGE == null {{
-  .MESSAGE = "Message was empty in the log-fetcher. Ask DRE-team for closer look."
-}}
-
-if is_json(string!(.MESSAGE)) {{
-  parsed_message = parse_json!(string!(.MESSAGE))
-  v = get!(parsed_message, ["log_entry"])
-  if v != null {
-    # These will be related to regular nodes
-    .MESSAGE = v.message
-    .PRIORITY = v.level
-    .utc_time = v.utc_time
-    .crate_ = v.crate_
-    .module = v.module
-  } else {
-    # These will be related to api boundary nodes
-    . = merge!(., parsed_message)
-    v = get!(., ["message"])
-    if v != null {
-        .MESSAGE = .message
-    } else {
-        .MESSAGE = "Log contained no message field"
-    }
-  }
-}}
-
-.timestamp = from_unix_timestamp!(to_int!(del(.__REALTIME_TIMESTAMP)) * 1000, unit: "nanoseconds")
-"""
-
-[transforms.filter_spam]
-type = "filter"
-inputs = [ "to_json" ]
-condition = """
-exe = get!(., ["_EXE"])
-if exe == null {
-    return true
-}
-
-# Filter noisy logs, still present in `debug.log`
-for_each(["/usr/local/bin/filebeat"]) -> |_, k| {
-    if exe == k {
-        return false
-    }
-}
-
-return true
-"""
-"#
-    .to_string()
+fn get_vector_toml() -> String {
+    String::from_utf8(VECTOR_TOML.to_vec()).unwrap()
 }
 
 pub struct VectorVm {
@@ -241,12 +139,7 @@ impl VectorVm {
         info!(log, "Writing vector config to {vector_local_dir:?}");
         std::fs::create_dir_all(&vector_local_dir).map_err(anyhow::Error::from)?;
 
-        std::fs::write(
-            vector_local_dir.join("general_transforms.toml"),
-            get_general_transforms_toml(),
-        )
-        .map_err(anyhow::Error::from)?;
-        std::fs::write(vector_local_dir.join("sinks.toml"), get_sinks_toml())
+        std::fs::write(vector_local_dir.join("vector.toml"), get_vector_toml())
             .map_err(anyhow::Error::from)?;
 
         let mut generated_config = BTreeMap::new();
@@ -310,14 +203,19 @@ impl VectorVm {
         deployed_vm
             .block_on_bash_script_from_session(
                 &session,
-                r#"
+                &format!(
+                    r#"
 docker run -d --name vector \
     -v /etc/vector/config:/etc/vector/config \
     --network host \
     --entrypoint vector \
+    -e ELASTICSEARCH_URL="{}" \
+    -e ELASTICSEARCH_INDEX="{}" \
     vector-with-log-fetcher:image \
     -w --config-dir /etc/vector/config
         "#,
+                    ELASTICSEARCH_URL, ELASTICSEARCH_INDEX
+                ),
             )
             .expect("Failed to start docker container for vector");
 
