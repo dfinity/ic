@@ -101,7 +101,7 @@ Note that the original proposal https://dashboard.internetcomputer.org/proposal/
 .. `address = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"`: address of the ERC-20 smart contract on Ethereum mainnet. The address MUST be a valid Ethereum address corresponding to an ERC-20 smart contract as specified in https://eips.ethereum.org/EIPS/eip-20[EIP-20].
 . `ledger_init_arg`: Initialization arguments for the ledger that will be spawned off by the orchestrator.
 .. `decimals = 6`: number of decimals to used by the ledger. This SHOULD be the same number as the one returned by `decimals()` on the ERC-20 smart contract.
-.. `transfer_fee = 10_000`: cost of a user transaction on the ledger (e.g., `icrc1_transfer`, `icrc2_approve`, etc.). The goal of this fee is that it should be high enough to prevent spam (and in the future to pay for the cycles consumption), but low enough to encourage users from using the ckERC20 token.
+.. `transfer_fee = 10_000`: cost of a user transaction on the ledger (e.g., `icrc1_transfer`, `icrc2_approve`, etc.). The goal of this fee is that it should be high enough to prevent spam (and in the future to pay for the cycles consumption), but low enough to encourage users to use the ckERC20 token.
 ... This number SHOULD be a power of 10 (e.g., 1, 10, 100, 1_000, 10_000, etc.) to ease any user's mental arithmetic.
 ... This number SHOULD be between the equivalent of 0.001 USD to 0.01 USD.
 .. `token_symbol = "ckUSDC"`: symbol of the twin ERC-20 token on the IC. This MUST be an ASCII string of at most 20 characters starting with the `ck` prefix. The symbol MUST be unique among all ckERC20 tokens. This SHOULD correspond to the `symbol()` of the ERC-20 smart contract prefixed with `ck`.
