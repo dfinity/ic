@@ -914,6 +914,7 @@ mod tests {
             fn builder() -> SetupBuilder {
                 SetupBuilder {
                     check_keys_with_registry_result: None,
+                    current_node_public_keys_result: None,
                     rotate_idkg_dealing_encryption_keys_result: None,
                     logger: None,
                     without_ecdsa_subnet_config: false,
@@ -924,6 +925,8 @@ mod tests {
 
         struct SetupBuilder {
             check_keys_with_registry_result: Option<Result<(), CheckKeysWithRegistryError>>,
+            current_node_public_keys_result:
+                Option<Result<CurrentNodePublicKeys, CurrentNodePublicKeysError>>,
             rotate_idkg_dealing_encryption_keys_result:
                 Option<Result<IDkgKeyRotationResult, IDkgDealingEncryptionKeyRotationError>>,
             logger: Option<ReplicaLogger>,
@@ -937,6 +940,17 @@ mod tests {
                 check_keys_with_registry_result: Result<(), CheckKeysWithRegistryError>,
             ) -> Self {
                 self.check_keys_with_registry_result = Some(check_keys_with_registry_result);
+                self
+            }
+
+            fn with_current_node_public_keys_result(
+                mut self,
+                current_node_public_keys_result: Result<
+                    CurrentNodePublicKeys,
+                    CurrentNodePublicKeysError,
+                >,
+            ) -> Self {
+                self.current_node_public_keys_result = Some(current_node_public_keys_result);
                 self
             }
 
@@ -1027,6 +1041,13 @@ mod tests {
                         .expect_check_keys_with_registry()
                         .times(1)
                         .return_const(check_keys_with_registry_result);
+                }
+                if let Some(current_node_public_keys_result) = self.current_node_public_keys_result
+                {
+                    key_handler
+                        .expect_current_node_public_keys()
+                        .times(1)
+                        .return_const(current_node_public_keys_result);
                 }
                 if let Some(rotate_idkg_dealing_encryption_keys_result) =
                     self.rotate_idkg_dealing_encryption_keys_result
@@ -1254,6 +1275,11 @@ mod tests {
             let in_memory_logger = InMemoryReplicaLogger::new();
             let setup = Setup::builder()
                 .with_check_keys_with_registry_result(Ok(()))
+                .with_current_node_public_keys_result(Err(
+                    CurrentNodePublicKeysError::TransientInternalError(
+                        "error getting current node public keys".to_string(),
+                    ),
+                ))
                 .with_rotate_idkg_dealing_encryption_keys_result(Ok(
                     IDkgKeyRotationResult::IDkgDealingEncPubkeyNeedsRegistration(
                         KeyRotationOutcome::KeyRotated {
