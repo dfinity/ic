@@ -1482,16 +1482,13 @@ pub fn load_wasm<P: AsRef<Path>>(p: P) -> Vec<u8> {
     wasm_bytes
 }
 
-pub trait SshSession {
-    /// Return the test environment associated with this object.
-    fn get_env(&self) -> &TestEnv;
-
+pub trait SshSession: HasTestEnv {
     /// Return the address of the SSH server to connect to.
     fn get_host_ip(&self) -> Result<IpAddr>;
 
     /// Return an SSH session to the machine referenced from self authenticating with the given user.
     fn get_ssh_session(&self) -> Result<Session> {
-        get_ssh_session_from_env(self.get_env(), self.get_host_ip()?)
+        get_ssh_session_from_env(&self.test_env(), self.get_host_ip()?)
             .context("Failed to get SSH session")
     }
 
@@ -2078,10 +2075,6 @@ pub fn get_ssh_session_from_env(env: &TestEnv, ip: IpAddr) -> Result<Session> {
 }
 
 impl SshSession for IcNodeSnapshot {
-    fn get_env(&self) -> &TestEnv {
-        &self.env
-    }
-
     fn get_host_ip(&self) -> Result<IpAddr> {
         let node_record = self.raw_node_record();
         let connection_endpoint = node_record.http.unwrap();

@@ -379,10 +379,6 @@ impl DeployedUniversalVm {
 }
 
 impl SshSession for DeployedUniversalVm {
-    fn get_env(&self) -> &TestEnv {
-        &self.env
-    }
-
     fn get_host_ip(&self) -> Result<IpAddr> {
         Ok(self.get_vm()?.ipv6.into())
     }

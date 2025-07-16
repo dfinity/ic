@@ -185,10 +185,6 @@ impl NestedVms for TestEnv {
 }
 
 impl SshSession for NestedVm {
-    fn get_env(&self) -> &TestEnv {
-        &self.env
-    }
-
     fn get_host_ip(&self) -> Result<IpAddr> {
         Ok(self.get_vm()?.ipv6.into())
     }
@@ -219,11 +215,13 @@ pub struct GuestSsh {
     ip: Ipv6Addr,
 }
 
-impl SshSession for GuestSsh {
-    fn get_env(&self) -> &TestEnv {
-        &self.env
+impl HasTestEnv for GuestSsh {
+    fn test_env(&self) -> TestEnv {
+        self.env.clone()
     }
+}
 
+impl SshSession for GuestSsh {
     fn get_host_ip(&self) -> Result<IpAddr> {
         Ok(self.ip.into())
     }
