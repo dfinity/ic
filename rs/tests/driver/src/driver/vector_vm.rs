@@ -45,7 +45,7 @@ fn get_sinks_toml() -> String {
         r#"
 [sinks.elastic]
 type = "elasticsearch"
-inputs = ["to_json"]
+inputs = ["filter_spam"]
 endpoints = ["{ELASTICSEARCH_URL}"]
 mode = "bulk"
 compression = "gzip"
@@ -103,10 +103,46 @@ if .MESSAGE == null {{
 
 if is_json(string!(.MESSAGE)) {{
   parsed_message = parse_json!(string!(.MESSAGE))
-  . = merge!(., parsed_message)
+  v = get!(parsed_message, ["log_entry"])
+  if v != null {
+    # These will be related to regular nodes
+    .MESSAGE = v.message
+    .PRIORITY = v.level
+    .utc_time = v.utc_time
+    .crate_ = v.crate_
+    .module = v.module
+  } else {
+    # These will be related to api boundary nodes
+    . = merge!(., parsed_message)
+    v = get!(., ["message"])
+    if v != null {
+        .MESSAGE = .message
+    } else {
+        .MESSAGE = "Log contained no message field"
+    }
+  }
 }}
 
 .timestamp = from_unix_timestamp!(to_int!(del(.__REALTIME_TIMESTAMP)) * 1000, unit: "nanoseconds")
+"""
+
+[transforms.filter_spam]
+type = "filter"
+inputs = [ "to_json" ]
+condition = """
+exe = get!(., ["_EXE"])
+if exe == null {
+    return true
+}
+
+# Filter noisy logs, still present in `debug.log`
+for_each(["/usr/local/bin/filebeat"]) -> |_, k| {
+    if exe == k {
+        return false
+    }
+}
+
+return true
 """
 "#
     .to_string()
