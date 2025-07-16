@@ -29,7 +29,7 @@ impl DeviceTrait for MappedDevice {
 }
 
 /// Represents a linear segment for device mapping. A linear segment maps `len` sectors
-/// start at `start` from `device`.
+/// starting at `start` from `device`.
 pub struct LinearSegment {
     source: Box<dyn DeviceTrait>,
     start: Sectors,
@@ -256,6 +256,7 @@ impl MappedDevice {
         )
     }
 
+    /// Creates a non-persistent snapshot device with 8-sector chunks.
     pub fn create_snapshot(
         device_mapper: Arc<DM>,
         name: &'static str,

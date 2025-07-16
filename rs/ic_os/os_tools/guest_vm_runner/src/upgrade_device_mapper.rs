@@ -44,6 +44,7 @@ pub fn create_mapped_device_for_upgrade(base_device: &Path) -> Result<MappedDevi
         .context("Could not find partition 10")?;
 
     let dev_mapper = Arc::new(DM::new().context("Failed to create device mapper instance")?);
+    // In case the devices were not cleaned up properly before, we clean them up now.
     cleanup_devices(&dev_mapper);
 
     create_device_for_upgrade(
@@ -114,6 +115,8 @@ fn create_device_for_upgrade(
     .context("Failed to create upgrade device")
 }
 
+/// Cleans up the device mapper devices to ensure that the upgrade device can be created without
+/// conflicts.
 fn cleanup_devices(dev_mapper: &DM) {
     let devices = match dev_mapper.list_devices() {
         Ok(devices) => devices,
