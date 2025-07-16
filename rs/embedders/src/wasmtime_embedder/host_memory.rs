@@ -8,12 +8,14 @@ use std::sync::{
 };
 
 use anyhow::bail;
+use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
 use ic_sys::PAGE_SIZE;
 use ic_types::MAX_STABLE_MEMORY_IN_BYTES;
 use libc::c_void;
 use libc::MAP_FAILED;
 use libc::{mmap, mprotect, munmap};
 use libc::{MAP_ANON, MAP_PRIVATE, PROT_NONE, PROT_READ, PROT_WRITE};
+use userfaultfd::{RegisterMode, Uffd, UffdBuilder};
 use wasmtime::{LinearMemory, MemoryType};
 use wasmtime_environ::WASM32_MAX_SIZE;
 
@@ -42,13 +44,32 @@ impl Deref for MemoryPageSize {
     }
 }
 
+pub(crate) struct CreatedWasmtimeMemory {
+    current_size: MemoryPageSize,
+    uffd: Arc<Uffd>,
+}
+
+impl CreatedWasmtimeMemory {
+    pub(crate) fn new(current_size: MemoryPageSize, uffd: Arc<Uffd>) -> Self {
+        Self { current_size, uffd }
+    }
+
+    pub(crate) fn into_parts(self) -> (MemoryPageSize, Arc<Uffd>) {
+        (self.current_size, self.uffd)
+    }
+
+    pub(crate) fn current_size(&self) -> &MemoryPageSize {
+        &self.current_size
+    }
+}
+
 pub struct WasmtimeMemoryCreator {
-    created_memories: Arc<Mutex<HashMap<MemoryStart, (MemoryPageSize, usize)>>>,
+    created_memories: Arc<Mutex<HashMap<MemoryStart, CreatedWasmtimeMemory>>>,
 }
 
 impl WasmtimeMemoryCreator {
     pub(crate) fn new(
-        created_memories: Arc<Mutex<HashMap<MemoryStart, (MemoryPageSize, usize)>>>,
+        created_memories: Arc<Mutex<HashMap<MemoryStart, CreatedWasmtimeMemory>>>,
     ) -> Self {
         Self { created_memories }
     }
@@ -90,17 +111,30 @@ unsafe impl wasmtime::MemoryCreator for WasmtimeMemoryCreator {
             max
         );
 
-        let mem = MmapMemory::new(reserved_size, guard_size);
+        let uffd = Arc::new(
+            UffdBuilder::new()
+                .close_on_exec(true)
+                .non_blocking(true)
+                .user_mode_only(true)
+                .create()
+                .expect("Failed to create userfaultfd"),
+        );
+        println!(
+            "Created userfaultfd: {:?}, size {}",
+            uffd,
+            max * WASM_PAGE_SIZE as usize
+        );
+        let mem = MmapMemory::new(reserved_size, guard_size, min, &uffd);
 
         match self.created_memories.lock() {
             Err(err) => Err(format!("Error locking map of created memories: {:?}", err)),
             Ok(mut created_memories) => {
-                let new_memory = WasmtimeMemory::new(mem, min, max);
+                let new_memory = WasmtimeMemory::new(mem, min, max, Arc::clone(&uffd));
                 created_memories.insert(
                     MemoryStart(LinearMemory::as_ptr(&new_memory) as usize),
-                    (
+                    CreatedWasmtimeMemory::new(
                         MemoryPageSize(Arc::clone(&new_memory.used)),
-                        new_memory.max_size_in_pages,
+                        Arc::clone(&uffd),
                     ),
                 );
                 Ok(Box::new(new_memory))
@@ -130,7 +164,12 @@ unsafe impl Send for MmapMemory {}
 unsafe impl Sync for MmapMemory {}
 
 impl MmapMemory {
-    pub fn new(mem_size_in_bytes: usize, guard_size_in_bytes: usize) -> Self {
+    pub fn new(
+        mem_size_in_bytes: usize,
+        guard_size_in_bytes: usize,
+        previously_grown: usize,
+        uffd: &Arc<Uffd>,
+    ) -> Self {
         assert!(
             guard_size_in_bytes >= MIN_GUARD_REGION_SIZE,
             "Requested guard size {} is smaller than required size {}",
@@ -178,24 +217,42 @@ impl MmapMemory {
             Error::last_os_error()
         );
 
-        let result = unsafe {
-            mprotect(
-                (start as *mut u8).add(prologue_guard_size_in_bytes) as *mut c_void,
-                mem_size_in_bytes,
-                PROT_READ | PROT_WRITE,
-            )
-        };
-        assert_eq!(
-            result,
-            0,
-            "mprotect failed: size={} {}",
-            mem_size_in_bytes,
-            Error::last_os_error()
-        );
-
         // SAFETY: The allocated region includes the prologue guard region.
         let wasm_memory =
             unsafe { (start as *mut u8).add(prologue_guard_size_in_bytes) as *mut c_void };
+
+        println!(
+            "Created memory region at {:?} with size {}",
+            wasm_memory, size_in_bytes
+        );
+
+        if previously_grown > 0 {
+            println!(
+                "Protecting wasm memory at {:?} with size {} during memory creation",
+                wasm_memory,
+                previously_grown * WASM_PAGE_SIZE_IN_BYTES
+            );
+            let result = unsafe {
+                mprotect(
+                    wasm_memory,
+                    previously_grown * WASM_PAGE_SIZE_IN_BYTES,
+                    PROT_READ | PROT_WRITE,
+                )
+            };
+            assert_eq!(
+                result,
+                0,
+                "mprotect failed: size={} {}",
+                previously_grown * WASM_PAGE_SIZE_IN_BYTES,
+                Error::last_os_error()
+            );
+            uffd.register_with_mode(
+                wasm_memory,
+                previously_grown * WASM_PAGE_SIZE_IN_BYTES,
+                RegisterMode::MISSING | RegisterMode::WRITE_PROTECT,
+            )
+            .expect("Failed to register region for userfaultfd");
+        }
 
         Self {
             start,
@@ -224,14 +281,21 @@ pub struct WasmtimeMemory {
     mem: MmapMemory,
     max_size_in_pages: usize,
     used: MemoryPageSize,
+    uffd: Arc<Uffd>,
 }
 
 impl WasmtimeMemory {
-    fn new(mem: MmapMemory, min_size_in_pages: usize, max_size_in_pages: usize) -> Self {
+    fn new(
+        mem: MmapMemory,
+        min_size_in_pages: usize,
+        max_size_in_pages: usize,
+        uffd: Arc<Uffd>,
+    ) -> Self {
         Self {
             mem,
             max_size_in_pages,
             used: MemoryPageSize(Arc::new(AtomicUsize::new(min_size_in_pages))),
+            uffd,
         }
     }
 }
@@ -271,7 +335,39 @@ unsafe impl LinearMemory for WasmtimeMemory {
                     Some(new_pages)
                 }
             }) {
-            Ok(_) => Ok(()),
+            Ok(prev_pages) => {
+                println!(
+                    "Protecting wasm memory at {:?} with size {} during memory grow",
+                    self.mem.wasm_memory, new_size
+                );
+                let result =
+                    unsafe { mprotect(self.mem.wasm_memory, new_size, PROT_READ | PROT_WRITE) };
+                assert_eq!(
+                    result,
+                    0,
+                    "mprotect failed: size={} {}",
+                    new_size,
+                    Error::last_os_error()
+                );
+
+                println!(
+                    "Registering new pages with userfaultfd at mem {:?}, size {}",
+                    self.mem.wasm_memory, new_size
+                );
+                if prev_pages > 0 {
+                    self.uffd
+                        .unregister(self.mem.wasm_memory, prev_pages * WASM_PAGE_SIZE as usize)
+                        .expect("Failed to unregister region for userfaultfd");
+                }
+                self.uffd
+                    .register_with_mode(
+                        self.mem.wasm_memory,
+                        new_size,
+                        RegisterMode::MISSING | RegisterMode::WRITE_PROTECT,
+                    )
+                    .expect("Failed to register region for userfaultfd");
+                Ok(())
+            }
             Err(prev_pages) => bail!(
                 "Unable to grow wasm memory from {} pages to {} pages",
                 prev_pages,

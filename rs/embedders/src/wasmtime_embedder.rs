@@ -33,15 +33,18 @@ use ic_wasm_types::{BinaryEncodedWasm, WasmEngineError};
 use memory_tracker::{uffd_handler, DirtyPageTracking, PageBitmap, SigsegvMemoryTracker};
 use signal_stack::WasmtimeSignalStack;
 
-use crate::wasm_utils::instrumentation::{
-    WasmMemoryType, ACCESSED_PAGES_COUNTER_GLOBAL_NAME, DIRTY_PAGES_COUNTER_GLOBAL_NAME,
-    INSTRUCTIONS_COUNTER_GLOBAL_NAME,
-};
 use crate::{
     serialized_module::SerializedModuleBytes, wasm_utils::validation::wasmtime_validation_config,
 };
+use crate::{
+    wasm_utils::instrumentation::{
+        WasmMemoryType, ACCESSED_PAGES_COUNTER_GLOBAL_NAME, DIRTY_PAGES_COUNTER_GLOBAL_NAME,
+        INSTRUCTIONS_COUNTER_GLOBAL_NAME,
+    },
+    wasmtime_embedder::host_memory::CreatedWasmtimeMemory,
+};
 use std::sync::MutexGuard;
-use userfaultfd::{Event, FaultKind, ReadWrite, RegisterMode, UffdBuilder};
+use userfaultfd::{Event, FaultKind, ReadWrite, Uffd};
 
 use super::InstanceRunResult;
 
@@ -211,7 +214,7 @@ pub struct WasmtimeEmbedder {
     // `SigsegvMemoryTracker` is created it will look up the corresponding memory in the map
     // and remove it. So memories will only be in this map for the time between module
     // instantiation and creation of the corresponding `SigsegvMemoryTracker`.
-    created_memories: Arc<Mutex<HashMap<MemoryStart, (MemoryPageSize, usize)>>>,
+    created_memories: Arc<Mutex<HashMap<MemoryStart, CreatedWasmtimeMemory>>>,
 }
 
 impl WasmtimeEmbedder {
@@ -601,7 +604,7 @@ impl WasmtimeEmbedder {
             }
             let start = MemoryStart(instance_memory.data_ptr(&store) as usize);
             let mut created_memories = self.created_memories.lock().unwrap();
-            let (current_size, max_size) = match created_memories.remove(&start) {
+            let memory = match created_memories.remove(&start) {
                 None => {
                     error!(
                         self.log,
@@ -615,12 +618,13 @@ impl WasmtimeEmbedder {
                 }
                 Some(current_memory_size_in_pages) => current_memory_size_in_pages,
             };
+            let (current_size, uffd) = memory.into_parts();
             memories_to_track.insert(
                 memory_info.memory_type,
                 MemorySigSegvInfo {
                     instance_memory,
                     current_memory_size_in_pages: current_size,
-                    max_memory_size_in_pages: max_size,
+                    uffd,
                     page_map: memory_info.memory.page_map.clone(),
                     dirty_page_tracking: memory_info.dirty_page_tracking,
                 },
@@ -647,7 +651,7 @@ impl WasmtimeEmbedder {
         bytemap_name: &str,
         instance: &Instance,
         mut store: &mut Store<StoreData>,
-        created_memories: &mut HashMap<MemoryStart, (MemoryPageSize, usize)>,
+        created_memories: &mut HashMap<MemoryStart, CreatedWasmtimeMemory>,
         canister_id: CanisterId,
     ) -> HypervisorResult<()> {
         let memory =
@@ -671,10 +675,10 @@ impl WasmtimeEmbedder {
                     ),
                 ))
             }
-            Some((instance_memory, (current_memory_size_in_pages, _))) => {
+            Some((instance_memory, created_memory)) => {
                 let addr = instance_memory.data_ptr(store) as usize;
                 let size_in_bytes =
-                    current_memory_size_in_pages.load(Ordering::SeqCst) * WASM_PAGE_SIZE_IN_BYTES;
+                    created_memory.current_size().load(Ordering::SeqCst) * WASM_PAGE_SIZE_IN_BYTES;
                 use nix::sys::mman;
                 // SAFETY: This is the array we created in the host_memory creator, so we know it is a valid memory region that we own.
                 unsafe {
@@ -698,8 +702,8 @@ impl WasmtimeEmbedder {
 pub struct MemorySigSegvInfo {
     instance_memory: wasmtime::Memory,
     current_memory_size_in_pages: MemoryPageSize,
-    max_memory_size_in_pages: usize,
     page_map: PageMap,
+    uffd: Arc<Uffd>,
     dirty_page_tracking: DirtyPageTracking,
 }
 
@@ -720,8 +724,8 @@ fn sigsegv_memory_tracker<S>(
         MemorySigSegvInfo {
             instance_memory,
             current_memory_size_in_pages,
-            max_memory_size_in_pages,
             page_map,
+            uffd,
             dirty_page_tracking,
         },
     ) in memories
@@ -762,26 +766,26 @@ fn sigsegv_memory_tracker<S>(
         //     size / PAGE_SIZE
         // );
 
-        let uffd = UffdBuilder::new()
-            .close_on_exec(true)
-            .non_blocking(true)
-            .user_mode_only(true)
-            .create()
-            .expect("Failed to create userfaultfd");
+        // let uffd = UffdBuilder::new()
+        //     .close_on_exec(true)
+        //     .non_blocking(true)
+        //     .user_mode_only(true)
+        //     .create()
+        //     .expect("Failed to create userfaultfd");
         // println!(
         //     "Created userfaultfd: {:?} for mem_type {}, size {}",
         //     uffd,
         //     mem_type,
         //     max_memory_size_in_pages * WASM_PAGE_SIZE_IN_BYTES
         // );
-        uffd.register_with_mode(
-            base,
-            max_memory_size_in_pages * WASM_PAGE_SIZE_IN_BYTES,
-            RegisterMode::MISSING | RegisterMode::WRITE_PROTECT,
-        )
-        .expect("Failed to register region");
+        // uffd.register_with_mode(
+        //     base,
+        //     max_memory_size_in_pages * WASM_PAGE_SIZE_IN_BYTES,
+        //     RegisterMode::MISSING | RegisterMode::WRITE_PROTECT,
+        // )
+        // .expect("Failed to register region");
         // println!(
-        //     "Registering uffd at: {:?} for mem_type {}, size {}",
+        //     "Registered uffd region at {:?} for mem_type: {} size {}",
         //     base,
         //     mem_type,
         //     max_memory_size_in_pages * WASM_PAGE_SIZE_IN_BYTES
