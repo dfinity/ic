@@ -14,4 +14,4 @@ docker run -d --name vector \
     --entrypoint /etc/vector/config/vector_run.sh \
     -v /etc/vector/config:/etc/vector/config \
     --network host \
-    vector-with-log-fetcher:image 
+    vector-with-log-fetcher:image

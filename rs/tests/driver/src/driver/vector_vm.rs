@@ -34,7 +34,7 @@ const IC_SUBNET: &str = "ic_subnet";
 const ADDRESS: &str = "address";
 const JOB: &str = "job";
 const IS_API_BN: &str = "is_api_bn";
-const IS_MALICIOUS: &str = "is_mallicious";
+const IS_MALICIOUS: &str = "is_malicious";
 const IC: &str = "ic";
 
 const ELASTICSEARCH_URL: &str = "https://elasticsearch.testnet.dfinity.network";
@@ -78,23 +78,32 @@ type = "remap"
 inputs = [ "*-transform" ]
 source = """
 message_parsed = parse_json!(del(.message))
+preserved_fields = {}
 
-. = merge!(., message_parsed)
+for_each(["address", "ic_node", "job", "ic_subnet", "is_api_bn", "is_malicious", "ic"]) -> |_, k| {
+  v = get!(., [k])
+  if v != null {
+    preserved_fields = set!(preserved_fields, [k], v)
+  }
+}
+
+preserved_fields_message = {}
+for_each(["__CURSOR", "_HOSTNAME", "MESSAGE", "__REALTIME_TIMESTAMP", "_EXE"]) -> |_, k| {
+  v = get!(message_parsed, [k])
+  if v != null {
+    preserved_fields_message = set!(preserved_fields_message, [k], v)
+  }
+}
+
+. = merge(preserved_fields, preserved_fields_message)
 
 if .MESSAGE == null {{
-  .MESSAGE = ""
+  .MESSAGE = "Message was empty in the log-fetcher. Ask DRE-team for closer look."
 }}
 
 if is_json(string!(.MESSAGE)) {{
-  parsed_message = parse_json!(string!(del(.MESSAGE)))
-  v = get!(parsed_message, ["log_entry"])
-  if v != null {{
-    .MESSAGE = v.message
-    .PRIORITY = v.level
-    .utc_time = v.utc_time
-    .crate_ = v.crate_
-    .module = v.module
-  }}
+  parsed_message = parse_json!(string!(.MESSAGE))
+  . = merge!(., parsed_message)
 }}
 
 .timestamp = from_unix_timestamp!(to_int!(del(.__REALTIME_TIMESTAMP)) * 1000, unit: "nanoseconds")
