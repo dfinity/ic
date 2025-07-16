@@ -70,6 +70,31 @@ pub fn config(env: TestEnv, mainnet_config: bool) {
 
     setup_nested_vm(env.clone(), HOST_VM_NAME);
 
+    let vm = env.get_nested_vm(HOST_VM_NAME).unwrap_or_else(|e| {
+        panic!(
+            "Expected nested vm {HOST_VM_NAME} to exist, but got error: {:?}",
+            e
+        )
+    });
+
+    let network = vm.get_nested_network().unwrap();
+
+    for (suffix, ip) in [
+        ("-node_exporter", network.guest_ip),
+        ("-host_node_exporter", network.host_ip),
+    ] {
+        vector.add_custom_target(
+            format!("{HOST_VM_NAME}-{suffix}"),
+            ip.into(),
+            Some(
+                [("job", "node_exporter")]
+                    .into_iter()
+                    .map(|(k, v)| (k.to_string(), v.to_string()))
+                    .collect(),
+            ),
+        );
+    }
+
     vector
         .sync_targets(&env)
         .expect("Failed to sync Vector targets");
