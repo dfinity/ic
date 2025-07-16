@@ -80,9 +80,7 @@ prepare_guestos_upgrade() {
 
     workdir="$(mktemp -d)"
     grubdir="${workdir}/grub"
-    bootdir="${workdir}/boot"
-    rootdir="${workdir}/root"
-    mkdir "${grubdir}" "${bootdir}" "${rootdir}"
+    mkdir "${grubdir}"
     echo "Created temporary directories in $workdir"
 
     mount -o rw,sync "${lodev}p${GRUB_PARTITION_NUM}" "${grubdir}"
