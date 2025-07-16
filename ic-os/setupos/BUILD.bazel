@@ -51,7 +51,7 @@ genrule(
         tar --zstd -Scf $@ disk.img
     """,
     tags = [
-        "manual",
+        # "manual", # TODO: remove comment
         "no-sandbox",  # such that the test can loop devices and LVM tools
     ],
     target_compatible_with = ["@platforms//os:linux"],
