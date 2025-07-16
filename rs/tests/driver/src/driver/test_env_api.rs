@@ -184,7 +184,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     malicious_behaviour::MaliciousBehaviour,
     messages::{HttpStatusResponse, ReplicaHealthStatus},
-    NodeId, RegistryVersion, ReplicaVersion, SubnetId,
+    NodeId, RegistryVersion, SubnetId,
 };
 use ic_utils::interfaces::ManagementCanister;
 use icp_ledger::{AccountIdentifier, LedgerCanisterInitPayload, Tokens};
@@ -1138,22 +1138,16 @@ impl HasRegistryLocalStore for TestEnv {
     }
 }
 
-pub trait HasIcDependencies {
+pub trait HasFarmUrl {
     fn get_farm_url(&self) -> Result<Url>;
-    fn get_initial_replica_version(&self) -> Result<ReplicaVersion>;
 }
 
-impl<T: HasTestEnv> HasIcDependencies for T {
+impl<T: HasTestEnv> HasFarmUrl for T {
     fn get_farm_url(&self) -> Result<Url> {
         let dep_rel_path = "farm_base_url";
         let url = read_dependency_to_string(dep_rel_path)
             .unwrap_or_else(|_| FarmBaseUrl::read_attribute(&self.test_env()).to_string());
         Ok(Url::parse(&url)?)
-    }
-
-    fn get_initial_replica_version(&self) -> Result<ReplicaVersion> {
-        let initial_replica_version = InitialReplicaVersion::read_attribute(&self.test_env());
-        Ok(initial_replica_version.version)
     }
 }
 
@@ -2507,17 +2501,6 @@ impl From<FarmBaseUrl> for Url {
 impl TestEnvAttribute for FarmBaseUrl {
     fn attribute_name() -> String {
         "farm_url".to_string()
-    }
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct InitialReplicaVersion {
-    pub version: ReplicaVersion,
-}
-
-impl TestEnvAttribute for InitialReplicaVersion {
-    fn attribute_name() -> String {
-        "initial_replica_version".to_string()
     }
 }
 
