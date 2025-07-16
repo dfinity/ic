@@ -457,7 +457,7 @@ impl SnsRootCanister {
         let mut errors = Vec::new();
 
         for canister_to_register in canisters_to_register {
-            let result = Self::register_canister(
+            let result = Self::register_dapp_canister(
                 self_ref,
                 management_canister_client,
                 root_canister_id,
@@ -606,7 +606,7 @@ impl SnsRootCanister {
     }
 
     /// Register a single canister.
-    async fn register_canister(
+    async fn register_dapp_canister(
         self_ref: &'static LocalKey<RefCell<SnsRootCanister>>,
         management_canister_client: &impl ManagementCanisterClient,
         root_canister_id: PrincipalId,
@@ -686,10 +686,9 @@ impl SnsRootCanister {
             }
         }
         // Add canister_to_register to self.dapp_canister_ids.
-        self_ref.with(|s| {
-            let mut s = s.borrow_mut();
+        self_ref.with_borrow_mut(|state| {
             let canister_to_register = PrincipalId::from(canister_to_register);
-            s.dapp_canister_ids.push(canister_to_register);
+            state.dapp_canister_ids.push(canister_to_register);
         });
         Ok(())
     }
