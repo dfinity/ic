@@ -5,7 +5,7 @@ use anyhow::{anyhow, ensure, Context, Result};
 use async_trait::async_trait;
 use tokio::process::Command;
 
-use crate::partition;
+use crate::gpt;
 use crate::Partition;
 
 pub struct FatPartition {
@@ -21,7 +21,7 @@ impl Partition for FatPartition {
         let _ = mcopy().context("mcopy is needed to open FAT partitions")?;
         let mut offset = None;
         if let Some(index) = index {
-            offset = Some(partition::check_offset(&image, index).await?);
+            offset = Some(gpt::check_offset(&image, index).await?);
         }
         Ok(FatPartition {
             offset_bytes: offset,

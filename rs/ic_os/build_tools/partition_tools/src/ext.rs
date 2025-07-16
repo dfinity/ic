@@ -11,7 +11,7 @@ use tokio::io::{self, AsyncSeekExt, AsyncWriteExt, SeekFrom};
 use tokio::process::Command;
 
 use crate::exes::{debugfs, faketime};
-use crate::partition;
+use crate::gpt;
 use crate::Partition;
 
 const STORE_NAME: &str = "backing_store";
@@ -29,8 +29,8 @@ impl Partition for ExtPartition {
         let _ = debugfs().context("debugfs is needed to open ext4 partitions")?;
 
         if let Some(index) = index {
-            let offset = partition::check_offset(&image, index).await?;
-            let length = partition::check_length(&image, index).await?;
+            let offset = gpt::check_offset(&image, index).await?;
+            let length = gpt::check_length(&image, index).await?;
             Self::open_range(image, offset, length).await
         } else {
             // open_range is several times slower than fs::copy, therefore we use fs::copy

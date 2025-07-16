@@ -9,6 +9,7 @@ edition = "2021"
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 clap = { workspace = true }
+gpt = { workspace = true }
 tar = { workspace = true }
 indoc = "1.0.9"
 itertools = { workspace = true }
