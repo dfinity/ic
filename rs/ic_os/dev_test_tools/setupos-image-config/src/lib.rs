@@ -575,11 +575,11 @@ pub async fn update_hostos_boot_args(
     println!("dmsetup info output:");
     println!("{}", String::from_utf8_lossy(&dmsetup_info_output.stdout));
 
-    // Try to manually create device nodes for the logical volumes
+    // Try to manually create device nodes for the logical volumes (A_boot only)
     println!("=== MANUALLY CREATING DEVICE NODES ===");
 
-    // Get the device mapper names and create device nodes
-    let dm_devices = ["hostlvm-A_boot", "hostlvm-B_boot"];
+    // Get the device mapper names and create device nodes (only A_boot needed)
+    let dm_devices = ["hostlvm-A_boot"];
 
     for dm_name in &dm_devices {
         // Get major:minor for this device
@@ -666,11 +666,9 @@ pub async fn update_hostos_boot_args(
         }
     }
 
-    // Step 6: Mount and modify boot partitions
+    // Step 6: Mount and modify boot partition A only
     let mount_point_a = work_dir.join("boot_a");
-    let mount_point_b = work_dir.join("boot_b");
     fs::create_dir_all(&mount_point_a).context("failed to create mount point A")?;
-    fs::create_dir_all(&mount_point_b).context("failed to create mount point B")?;
 
     // Debug: Check if LVM logical volumes exist and are accessible
     println!("=== DEBUGGING LVM LOGICAL VOLUMES ===");
@@ -708,34 +706,20 @@ pub async fn update_hostos_boot_args(
         println!("/dev/hostlvm/ directory does not exist");
     }
 
-    // Try to find the actual device paths using different naming conventions
+    // Try to find the actual device path for A_boot only (we only need A)
     let possible_a_boot_paths = vec![
         "/dev/hostlvm/A_boot",
         "/dev/mapper/hostlvm-A_boot",
         "/dev/mapper/hostlvm-A--boot",
     ];
 
-    let possible_b_boot_paths = vec![
-        "/dev/hostlvm/B_boot",
-        "/dev/mapper/hostlvm-B_boot",
-        "/dev/mapper/hostlvm-B--boot",
-    ];
-
-    println!("Checking possible device paths:");
+    println!("Checking possible device paths for A_boot:");
     let mut a_boot_path = None;
-    let mut b_boot_path = None;
 
     for path in &possible_a_boot_paths {
         println!("  {} exists: {}", path, Path::new(path).exists());
         if Path::new(path).exists() && a_boot_path.is_none() {
             a_boot_path = Some(path.to_string());
-        }
-    }
-
-    for path in &possible_b_boot_paths {
-        println!("  {} exists: {}", path, Path::new(path).exists());
-        if Path::new(path).exists() && b_boot_path.is_none() {
-            b_boot_path = Some(path.to_string());
         }
     }
 
@@ -746,16 +730,7 @@ pub async fn update_hostos_boot_args(
         )
     })?;
 
-    let b_boot_path = b_boot_path.ok_or_else(|| {
-        anyhow::anyhow!(
-            "Could not find B_boot device node. Checked paths: {:?}",
-            possible_b_boot_paths
-        )
-    })?;
-
-    println!("Using device paths:");
-    println!("  A_boot: {}", a_boot_path);
-    println!("  B_boot: {}", b_boot_path);
+    println!("Using device path for A_boot: {}", a_boot_path);
 
     // Check what filesystem type is on the partitions
     let file_output = Command::new("sudo")
@@ -791,24 +766,6 @@ pub async fn update_hostos_boot_args(
         );
     }
 
-    // Mount boot partition B using sudo mount
-    println!("Mounting boot partition B...");
-    let mount_b_output = Command::new("sudo")
-        .args(["mount", &b_boot_path, mount_point_b.to_str().unwrap()])
-        .output()
-        .context("failed to run mount command for boot partition B")?;
-
-    if !mount_b_output.status.success() {
-        // Clean up mount A on failure
-        let _ = Command::new("sudo")
-            .args(["umount", mount_point_a.to_str().unwrap()])
-            .output();
-        bail!(
-            "Failed to mount boot partition B: {}",
-            String::from_utf8_lossy(&mount_b_output.stderr)
-        );
-    }
-
     // Function to modify boot_args file
     let modify_boot_args = |boot_args_path: &Path| -> Result<(), Error> {
         let mut content =
@@ -840,22 +797,15 @@ pub async fn update_hostos_boot_args(
         Ok(())
     };
 
-    // Modify boot_args in both partitions
+    // Modify boot_args in partition A only
     println!("Modifying boot_args in partition A...");
     let boot_args_a_path = mount_point_a.join("boot_args");
     modify_boot_args(&boot_args_a_path)?;
 
-    println!("Modifying boot_args in partition B...");
-    let boot_args_b_path = mount_point_b.join("boot_args");
-    modify_boot_args(&boot_args_b_path)?;
-
-    // Step 7: Unmount partitions using sudo umount
-    println!("Unmounting boot partitions...");
+    // Step 7: Unmount partition A using sudo umount
+    println!("Unmounting boot partition A...");
     let _ = Command::new("sudo")
         .args(["umount", mount_point_a.to_str().unwrap()])
-        .output();
-    let _ = Command::new("sudo")
-        .args(["umount", mount_point_b.to_str().unwrap()])
         .output();
 
     // Step 10: Repackage the HostOS image
