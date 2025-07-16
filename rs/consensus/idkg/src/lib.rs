@@ -608,34 +608,42 @@ fn compute_bouncer(
 
 #[cfg(test)]
 mod tests {
-    use std::sync::RwLock;
+    use std::{collections::BTreeMap, sync::RwLock};
+
+    use crate::test_utils::create_transcript;
 
     use self::test_utils::TestIDkgBlockReader;
 
     use super::*;
     use ic_logger::no_op_logger;
+    use ic_management_canister_types_private::MasterPublicKeyId;
     use ic_test_utilities::state_manager::RefMockStateManager;
-    use ic_test_utilities_consensus::idkg::{request_id, FakeCertifiedStateSnapshot};
+    use ic_test_utilities_consensus::idkg::{
+        fake_ecdsa_idkg_master_public_key_id, fake_master_public_key_ids_for_all_algorithms,
+        fake_master_public_key_ids_for_all_idkg_algorithms, fake_pre_signature_stash,
+        fake_signature_request_context_from_id, request_id, FakeCertifiedStateSnapshot,
+    };
     use ic_types::{
         consensus::idkg::{
             complaint_prefix, dealing_prefix, dealing_support_prefix, ecdsa_sig_share_prefix,
             opening_prefix, schnorr_sig_share_prefix, vetkd_key_share_prefix, IDkgArtifactIdData,
-            RequestId, SigShareIdData,
+            PreSigId, RequestId, SigShareIdData, TranscriptRef,
         },
         crypto::{canister_threshold_sig::idkg::IDkgTranscriptId, CryptoHash},
+        messages::CallbackId,
     };
     use ic_types_test_utils::ids::{NODE_1, NODE_2, SUBNET_1, SUBNET_2};
 
     #[test]
     fn test_get_active_transcripts() {
-        let block_reader = TestIDkgBlockReader::new();
+        let mut block_reader = TestIDkgBlockReader::new();
         let logger = no_op_logger();
         let metrics = IDkgClientMetrics::new(MetricsRegistry::new());
 
-        let state = ic_test_utilities_state::get_initial_state(0, 0);
+        let mut state = ic_test_utilities_state::get_initial_state(0, 0);
         let expected_state_snapshot = Arc::new(RwLock::new(FakeCertifiedStateSnapshot {
             height: Height::from(1),
-            state: Arc::new(state),
+            state: Arc::new(state.clone()),
         }));
         let expected_state_snapshot_clone = expected_state_snapshot.clone();
 
@@ -654,6 +662,79 @@ mod tests {
                 .unwrap();
 
         assert!(transcripts.is_empty());
+
+        // Add some transcripts to the blockchain
+        let chain_transcripts = 3;
+        for i in 0..chain_transcripts {
+            let height = Height::from(1);
+            let key_id = fake_ecdsa_idkg_master_public_key_id();
+            let transcript_id = IDkgTranscriptId::new(SUBNET_1, i, height);
+            let transcript = create_transcript(&key_id, transcript_id, &[NODE_1, NODE_2]);
+            let transcript_ref = TranscriptRef {
+                height,
+                transcript_id,
+            };
+            block_reader.add_transcript(transcript_ref, transcript);
+        }
+
+        let transcripts =
+            get_active_transcripts(&block_reader, state_manager.as_ref(), &metrics, &logger)
+                .unwrap();
+        assert_eq!(transcripts.len() as u64, chain_transcripts);
+
+        // Create some pre-signature stashes
+        let mut stashes = BTreeMap::new();
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
+            stashes.insert(key_id.inner().clone(), fake_pre_signature_stash(&key_id, 5));
+        }
+        let stashed_transcripts = stashes.len() as u64;
+        state
+            .metadata
+            .subnet_call_context_manager
+            .pre_signature_stashes = stashes;
+        expected_state_snapshot.write().unwrap().state = Arc::new(state.clone());
+
+        let transcripts =
+            get_active_transcripts(&block_reader, state_manager.as_ref(), &metrics, &logger)
+                .unwrap();
+        assert_eq!(
+            transcripts.len() as u64,
+            chain_transcripts + stashed_transcripts
+        );
+
+        // Create some paired signature requests
+        let mut contexts = BTreeMap::new();
+        let mut context_transcripts = 0;
+        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+            let callback_id = CallbackId::from(context_transcripts);
+            let pre_sig_id = PreSigId(context_transcripts);
+            let request_id = RequestId {
+                callback_id,
+                height: Height::from(1),
+            };
+            match &key_id {
+                MasterPublicKeyId::Ecdsa(_) => context_transcripts += 5, // quadruple + key transcript
+                MasterPublicKeyId::Schnorr(_) => context_transcripts += 2, // blinder + key transcript
+                MasterPublicKeyId::VetKd(_) => {}                          // No IDkgTranscripts
+            }
+            contexts.insert(
+                callback_id,
+                fake_signature_request_context_from_id(key_id, pre_sig_id, request_id).1,
+            );
+        }
+        state
+            .metadata
+            .subnet_call_context_manager
+            .sign_with_threshold_contexts = contexts;
+        expected_state_snapshot.write().unwrap().state = Arc::new(state.clone());
+
+        let transcripts =
+            get_active_transcripts(&block_reader, state_manager.as_ref(), &metrics, &logger)
+                .unwrap();
+        assert_eq!(
+            transcripts.len() as u64,
+            chain_transcripts + stashed_transcripts + context_transcripts
+        );
     }
 
     #[test]
