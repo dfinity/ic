@@ -92,7 +92,6 @@ type TestnetConfig struct {
 type Summary struct {
 	FarmGroup            interface{}   `json:"farm"`
 	KibanaUrl            interface{}   `json:"kibana_url"`
-	KibanaUrlNew         interface{}   `json:"kibana_url_new"`
 	IcTopology           interface{}   `json:"ic_topology"`
 	VmConsoleLinks       []interface{} `json:"vm_console_links"`
 	IcGatewayARecords    interface{}   `json:"ic_gateway_a_records"`
@@ -123,9 +122,11 @@ func (summary *Summary) add_event(event *TestDriverEvent) {
 	} else if event.EventName == INFRA_GROUP_NAME_CREATED_EVENT {
 		summary.FarmGroup = event.Body
 	} else if event.EventName == KIBANA_URL_CREATED_EVENT {
-		summary.KibanaUrl = event.Body
+		if summary.KibanaUrl == nil {
+			summary.KibanaUrl = event.Body
+		}
 	} else if event.EventName == KIBANA_URL_CREATED_NEW_EVENT {
-		summary.KibanaUrlNew = event.Body
+		summary.KibanaUrl = event.Body
 	}
 }
 
