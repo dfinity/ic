@@ -33,6 +33,10 @@ use std::sync::Arc;
 use std::{collections::BTreeMap, marker::PhantomData};
 use LazyTree::Blob;
 
+/// The maximum number of disjoint ranges a single leaf of the routing table can contain.
+/// Changes to this constant require a new certification version.
+const MAX_RANGES_PER_ROUTING_TABLE_LEAF: usize = 5;
+
 /// A simple map from a label to a tree. It should be mostly used for static
 /// subtrees where all the labels are known in advance.
 #[derive(Default)]
@@ -424,11 +428,9 @@ pub fn replicated_state_as_lazy_tree(state: &ReplicatedState) -> LazyTree<'_> {
     let inverted_routing_table = Arc::new(invert_routing_table(
         &state.metadata.network_topology.routing_table,
     ));
-    // As of V21, the routing table is broken down into groups of at most 5 ranges.
-    const MAX_RANGES_PER_LEAF: usize = 5;
     let split_routing_table = Arc::new(split_inverted_routing_table(
         &inverted_routing_table,
-        MAX_RANGES_PER_LEAF,
+        MAX_RANGES_PER_ROUTING_TABLE_LEAF,
     ));
 
     fork(

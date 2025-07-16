@@ -91,7 +91,7 @@ mod tests {
         nominal_cycles::NominalCycles,
         time::CoarseTime,
         xnet::{RejectReason, StreamFlags, StreamIndex, StreamIndexedQueue},
-        CryptoHashOfPartialState, Cycles, Time,
+        CanisterId, CryptoHashOfPartialState, Cycles, Time,
     };
     use ic_wasm_types::CanisterModule;
     use maplit::btreemap;
@@ -292,18 +292,28 @@ mod tests {
                 },
             };
 
-            let mut routing_table = RoutingTable::new();
-            routing_table
-                .insert(
-                    CanisterIdRange {
-                        start: canister_id,
-                        end: canister_id,
-                    },
-                    own_subnet_id,
-                )
-                .unwrap();
+            fn id_range(from: u64, to: u64) -> CanisterIdRange {
+                CanisterIdRange {
+                    start: CanisterId::from_u64(from),
+                    end: CanisterId::from_u64(to),
+                }
+            }
+
+            // More than 5 ranges for the same subnet to capture sharding of the routing table.
+            let routing_table = RoutingTable::try_from(btreemap! {
+                CanisterIdRange {start: canister_id, end: canister_id} => own_subnet_id,
+                id_range(1000, 2000) => own_subnet_id,
+                id_range(3000, 3001) => own_subnet_id,
+                id_range(4000, 4010) => own_subnet_id,
+                id_range(4100, 5000) => own_subnet_id,
+                id_range(5002, 5002) => other_subnet_id,
+                id_range(6000, 7000) => own_subnet_id,
+            })
+            .unwrap();
+
             state.metadata.network_topology.subnets = btreemap! {
                 own_subnet_id => Default::default(),
+                other_subnet_id => Default::default(),
             };
             state.metadata.network_topology.routing_table = Arc::new(routing_table);
             state.metadata.prev_state_hash =
@@ -364,11 +374,11 @@ mod tests {
         // BACKWARD COMPATIBILITY CODE FOR OLD CERTIFICATION VERSIONS THAT
         // NEED TO BE SUPPORTED.
         let expected_hashes: [&str; 5] = [
-            "2F2CB05EC73A0E96F04982E6DB14FBC1D50CB3662B83F404A0E57BCC75384D91",
-            "587D8CAE032491FB9400989BFFC4F055FA8741936873B95F092953C66268F543",
-            "2941BBB941D41EBB2908B92200A9361646C213CD4E12F61628DF0AA6715F74AB",
-            "4677DFA14CC8B349B1F0D88651CD961FE8DF2E905C3C886B9116972D798B1C1E",
-            "C752C895D2DF30FED51D908F611E7BF1FA8A62B0005CADDB21ACBD7E1E3A2D5C",
+            "CB4DB4435FBC2523AA796405460E9C7D7CDBD4AF03CA4085AE60387134F76AAC",
+            "32737514B5DDD50BA5F98E28B36B40543A5EFFFCFF98E1F9FD464026BE50F051",
+            "47C3A071B293B4723FCACB17F2FD2FD75F68C010E333007ACC0EF425D92765FB",
+            "3F9441CBAC0A00718BA6CB2D4D1B6FF7FF96F42051567365B670ACFC08AB96EA",
+            "9D9C8D991198BCD0BCAA627F409181D08ADD8CA442730393D5A27FA1042D2477",
         ];
         assert_eq!(expected_hashes.len(), all_supported_versions().count());
 
