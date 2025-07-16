@@ -19,7 +19,7 @@ struct Cli {
 }
 
 const GUESTOS_PATH: &str = "/guest-os.img.tar.zst";
-const SETUPOS_DATA_INDEX: usize = 4;
+const SETUPOS_DATA_INDEX: u32 = 4;
 
 #[tokio::main]
 async fn main() -> Result<()> {
