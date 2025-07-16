@@ -772,11 +772,11 @@ fn sigsegv_memory_tracker<S>(
             "Created userfaultfd: {:?} for mem_type {}, size {}",
             uffd,
             mem_type,
-            max_memory_size_in_pages * PAGE_SIZE
+            max_memory_size_in_pages * WASM_PAGE_SIZE_IN_BYTES
         );
         uffd.register_with_mode(
             base,
-            max_memory_size_in_pages * PAGE_SIZE,
+            max_memory_size_in_pages * WASM_PAGE_SIZE_IN_BYTES,
             RegisterMode::MISSING | RegisterMode::WRITE_PROTECT,
         )
         .expect("Failed to register region");
