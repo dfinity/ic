@@ -109,7 +109,7 @@ pub struct VectorVm {
 impl VectorVm {
     pub fn new() -> Self {
         Self {
-            universal_vm: UniversalVm::new("VectorVm".to_string())
+            universal_vm: UniversalVm::new("vector".to_string())
                 .with_config_img(
                     std::env::var("VECTOR_VM_PATH")
                         .expect("VECTOR_VM_PATH not set")
@@ -118,9 +118,8 @@ impl VectorVm {
                 .with_vm_resources(VmResources {
                     vcpus: Some(NrOfVCPUs::new(2)),
                     memory_kibibytes: Some(AmountOfMemoryKiB::new(16780000)), // 16GiB
-                    boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(10)), // Logs are pushed to elastic
-                })
-                .enable_ipv4(),
+                    boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(30)),
+                }),
         }
     }
 
@@ -135,10 +134,8 @@ impl VectorVm {
         info!(logger, "Spawning vector vm for log fetching.");
 
         self.universal_vm.start(env)?;
-        let deployed_vm = env.get_deployed_universal_vm(&self.universal_vm.name)?;
-        let ipv4 = deployed_vm.block_on_ipv4()?;
 
-        info!(logger, "Spawned vector vm. IP: {}", ipv4);
+        info!(logger, "Spawned vector vm");
         Ok(())
     }
 
@@ -245,7 +242,7 @@ impl VectorVm {
             retry_with_msg!(
                 format!("scp {from:?} to {}:{to:?}", self.universal_vm.name),
                 env.logger(),
-                std::time::Duration::from_secs(1000),
+                SCP_RETRY_TIMEOUT,
                 SCP_RETRY_BACKOFF,
                 || {
                     let mut remote_file = session.scp_send(&to, 0o644, size, None)?;

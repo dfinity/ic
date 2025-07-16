@@ -56,7 +56,6 @@ pub enum ImageType {
     IcOsImage,
     PrometheusImage,
     UniversalImage,
-    VectorImage,
 }
 
 impl From<DiskImage> for ImageLocation {
