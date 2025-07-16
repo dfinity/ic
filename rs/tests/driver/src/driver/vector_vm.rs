@@ -68,7 +68,9 @@ fn get_general_transforms_toml() -> String {
 [sinks.local_file]
 type = "file"
 inputs = [ "*-transform" ]
-path = /etc/config/vector/debug.log
+path = "/etc/vector/config/debug.log"
+     [sinks.local_file.encoding]
+     codec = "json"
 
 [transforms.to_json]
 type = "remap"
@@ -273,6 +275,7 @@ struct VectorSource {
     command: Vec<String>,
     mode: String,
     streaming: VectorStreaming,
+    include_stderr: bool,
 }
 
 impl VectorSource {
@@ -299,6 +302,7 @@ impl VectorSource {
             streaming: VectorStreaming {
                 respawn_on_exit: true,
             },
+            include_stderr: false,
         }
     }
 }
