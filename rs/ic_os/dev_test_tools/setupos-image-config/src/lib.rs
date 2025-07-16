@@ -194,13 +194,126 @@ pub async fn update_hostos_boot_args(
     setupos_image_path: &Path,
     boot_parameter: &str,
 ) -> Result<(), Error> {
-    // Preemptively deactivate any lingering LVM VGs to avoid conflicts.
+    // Preemptively clean up any existing loop devices and LVM state to avoid conflicts.
+    println!("Cleaning up any existing loop devices and LVM state...");
+
+    // Step 1: Force removal of hostlvm volume group and all associated metadata
+    println!("Force removing hostlvm volume group...");
     let _ = Command::new("sudo")
         .args(["/usr/sbin/vgchange", "-an", "hostlvm"])
         .output();
+
+    // Wait for VG deactivation
+    thread::sleep(Duration::from_millis(500));
+
+    // Remove all device mapper devices for hostlvm
+    let dmsetup_remove_output = Command::new("sudo")
+        .args(["dmsetup", "remove_all", "--force"])
+        .output();
+    if let Ok(output) = dmsetup_remove_output {
+        if !output.status.success() {
+            println!(
+                "dmsetup remove_all warning: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+    }
+
+    // Step 2: Find and aggressively clean up loop devices
+    let losetup_output = Command::new("sudo")
+        .args(["/usr/sbin/losetup", "-a"])
+        .output();
+
+    if let Ok(output) = losetup_output {
+        let losetup_text = String::from_utf8_lossy(&output.stdout);
+        println!("Existing loop devices: {}", losetup_text);
+
+        // Clean up any loop devices we find
+        for line in losetup_text.lines() {
+            if let Some(device) = line.split(':').next() {
+                println!("Cleaning up existing loop device: {}", device);
+
+                // Force deactivate any LVM on this device
+                let _ = Command::new("sudo")
+                    .args(["/usr/sbin/vgchange", "-an", "hostlvm"])
+                    .output();
+
+                // Try to remove any PVs on this device
+                let pv_partition = format!("{}p3", device);
+                let _ = Command::new("sudo")
+                    .args(["/usr/sbin/pvremove", "--force", "--force", &pv_partition])
+                    .output();
+
+                // Wait a moment for LVM operations to complete
+                thread::sleep(Duration::from_millis(200));
+
+                // Detach the loop device
+                let detach_output = Command::new("sudo")
+                    .args(["/usr/sbin/losetup", "-d", device])
+                    .output();
+
+                if let Ok(output) = detach_output {
+                    if !output.status.success() {
+                        println!(
+                            "Failed to detach {}: {}",
+                            device,
+                            String::from_utf8_lossy(&output.stderr)
+                        );
+                    } else {
+                        println!("Successfully detached: {}", device);
+                    }
+                }
+            }
+        }
+    }
+
+    // Step 3: Completely clear LVM metadata and cache
+    println!("Clearing LVM metadata and cache...");
+
+    // Try to remove the hostlvm VG completely
+    let _ = Command::new("sudo")
+        .args(["/usr/sbin/vgremove", "--force", "hostlvm"])
+        .output();
+
+    // Clear all LVM caches and rescan
     let _ = Command::new("sudo")
         .args(["/usr/sbin/pvscan", "--cache"])
         .output();
+
+    let _ = Command::new("sudo")
+        .args(["/usr/sbin/vgscan", "--mknodes"])
+        .output();
+
+    // Remove any stale device mapper nodes
+    let _ = Command::new("sudo")
+        .args(["rm", "-f", "/dev/mapper/hostlvm-*"])
+        .output();
+
+    // Give time for cleanup to complete
+    thread::sleep(Duration::from_secs(2));
+
+    // Step 4: Verify cleanup was successful
+    println!("Verifying cleanup...");
+    let verify_pvscan = Command::new("sudo").args(["/usr/sbin/pvscan"]).output();
+
+    if let Ok(output) = verify_pvscan {
+        let stdout_text = String::from_utf8_lossy(&output.stdout);
+        let stderr_text = String::from_utf8_lossy(&output.stderr);
+
+        if stdout_text.contains("hostlvm") || stderr_text.contains("hostlvm") {
+            println!("Warning: hostlvm still detected in pvscan output:");
+            println!("stdout: {}", stdout_text);
+            println!("stderr: {}", stderr_text);
+
+            // Try one more aggressive cleanup
+            let _ = Command::new("sudo")
+                .args(["/usr/sbin/vgremove", "--force", "--force", "hostlvm"])
+                .output();
+            thread::sleep(Duration::from_secs(1));
+        } else {
+            println!("Cleanup verification successful - no hostlvm VG detected");
+        }
+    }
 
     // Create temporary directory for extraction
     let temp_dir = TempDir::new().context("failed to create temporary directory")?;
@@ -311,15 +424,26 @@ pub async fn update_hostos_boot_args(
     impl Drop for LoopDeviceGuard {
         fn drop(&mut self) {
             println!("Cleaning up loop device {}...", &self.device_path);
+
+            // Deactivate LVM volume group first
             let _ = Command::new("sudo")
                 .args(["/usr/sbin/vgchange", "-an", "hostlvm"])
                 .output();
+
+            // Wait a moment for LVM to release
+            thread::sleep(Duration::from_millis(500));
+
+            // Remove the loop device
             let _ = Command::new("sudo")
                 .args(["/usr/sbin/losetup", "-d", &self.device_path])
                 .output();
+
+            // Clear LVM cache to remove stale references
             let _ = Command::new("sudo")
                 .args(["/usr/sbin/pvscan", "--cache"])
                 .output();
+
+            println!("Loop device {} cleanup completed", &self.device_path);
         }
     }
 
@@ -543,12 +667,38 @@ pub async fn update_hostos_boot_args(
 
     println!("Found partition: {}", pv_path);
 
+    // Clear LVM cache and try to remove any conflicting devices before activation
+    println!("Clearing LVM cache and checking for conflicts...");
+    let _ = Command::new("sudo")
+        .args(["/usr/sbin/vgchange", "-an", "hostlvm"])
+        .output();
+    let _ = Command::new("sudo")
+        .args(["/usr/sbin/pvscan", "--cache"])
+        .output();
+
+    // Try to activate the specific physical volume
+    println!("Attempting to activate LVM with volume group hostlvm...");
     let lvm_output = Command::new("sudo")
         .args(["/usr/sbin/vgchange", "-ay", "hostlvm"])
         .output()
         .context("failed to activate LVM")?;
 
     if !lvm_output.status.success() {
+        println!(
+            "LVM activation failed, stderr: {}",
+            String::from_utf8_lossy(&lvm_output.stderr)
+        );
+        println!(
+            "LVM activation failed, stdout: {}",
+            String::from_utf8_lossy(&lvm_output.stdout)
+        );
+
+        // Try to get more info about what LVM sees
+        let pvs_output = Command::new("sudo").args(["/usr/sbin/pvs"]).output();
+        if let Ok(output) = pvs_output {
+            println!("Current PVs: {}", String::from_utf8_lossy(&output.stdout));
+        }
+
         bail!(
             "LVM activation failed: {}\nAvailable partitions: {:?}",
             String::from_utf8_lossy(&lvm_output.stderr),
@@ -752,10 +902,16 @@ pub async fn update_hostos_boot_args(
         println!("{}", String::from_utf8_lossy(&blkid_output.stderr));
     }
 
-    // Mount boot partition A using sudo mount
-    println!("Mounting boot partition A...");
+    // Mount boot partition A using sudo mount with explicit read-write permissions
+    println!("Mounting boot partition A with read-write permissions...");
     let mount_a_output = Command::new("sudo")
-        .args(["mount", &a_boot_path, mount_point_a.to_str().unwrap()])
+        .args([
+            "mount",
+            "-o",
+            "rw",
+            &a_boot_path,
+            mount_point_a.to_str().unwrap(),
+        ])
         .output()
         .context("failed to run mount command for boot partition A")?;
 
@@ -764,6 +920,36 @@ pub async fn update_hostos_boot_args(
             "Failed to mount boot partition A: {}",
             String::from_utf8_lossy(&mount_a_output.stderr)
         );
+    }
+
+    // Debug: Check mount status and permissions
+    println!("=== DEBUGGING MOUNT STATUS ===");
+    let mount_check_output = Command::new("bash")
+        .args(["-c", &format!("mount | grep {}", a_boot_path)])
+        .output();
+    if let Ok(output) = mount_check_output {
+        println!("Mount status: {}", String::from_utf8_lossy(&output.stdout));
+    }
+
+    let mount_point_perms_output = Command::new("ls")
+        .args(["-la", mount_point_a.to_str().unwrap()])
+        .output()
+        .context("failed to check mount point permissions")?;
+    println!("Mount point permissions:");
+    println!(
+        "{}",
+        String::from_utf8_lossy(&mount_point_perms_output.stdout)
+    );
+
+    // Check boot_args file permissions specifically
+    let boot_args_path = mount_point_a.join("boot_args");
+    if boot_args_path.exists() {
+        let file_perms_output = Command::new("ls")
+            .args(["-la", boot_args_path.to_str().unwrap()])
+            .output()
+            .context("failed to check boot_args file permissions")?;
+        println!("boot_args file permissions:");
+        println!("{}", String::from_utf8_lossy(&file_perms_output.stdout));
     }
 
     // Function to modify boot_args file
@@ -792,7 +978,29 @@ pub async fn update_hostos_boot_args(
 
         println!("Modified boot_args content:\n{}", content);
 
-        fs::write(boot_args_path, content).context("failed to write modified boot_args file")?;
+        // Write the file using sudo to avoid permission issues
+        // Write temp file in work directory, not in mount point
+        let temp_file_path = work_dir.join("boot_args_modified.tmp");
+        fs::write(&temp_file_path, &content).context("failed to write temporary boot_args file")?;
+
+        let cp_output = Command::new("sudo")
+            .args([
+                "cp",
+                temp_file_path.to_str().unwrap(),
+                boot_args_path.to_str().unwrap(),
+            ])
+            .output()
+            .context("failed to copy modified boot_args file with sudo")?;
+
+        if !cp_output.status.success() {
+            bail!(
+                "Failed to copy modified boot_args file: {}",
+                String::from_utf8_lossy(&cp_output.stderr)
+            );
+        }
+
+        // Clean up temporary file
+        let _ = fs::remove_file(&temp_file_path);
 
         Ok(())
     };
