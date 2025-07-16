@@ -194,21 +194,16 @@ pub async fn update_hostos_boot_args(
     setupos_image_path: &Path,
     boot_parameter: &str,
 ) -> Result<(), Error> {
-    // Preemptively clean up any existing loop devices and LVM state to avoid conflicts.
+    // Clean up any existing loop devices and LVM state
     println!("Cleaning up any existing loop devices and LVM state...");
 
-    // Step 1: Unmount any mounted hostlvm devices first
-    println!("Unmounting any mounted hostlvm devices...");
-
-    // Find all mounted hostlvm devices
+    // Unmount any mounted hostlvm devices
     let mount_output = Command::new("mount").output();
-
     if let Ok(output) = mount_output {
         let mount_text = String::from_utf8_lossy(&output.stdout);
         for line in mount_text.lines() {
             if line.contains("/dev/mapper/hostlvm-") {
                 if let Some(mount_point) = line.split_whitespace().nth(2) {
-                    println!("Unmounting hostlvm device from: {}", mount_point);
                     let _ = Command::new("sudo")
                         .args(["umount", "-f", mount_point])
                         .output();
@@ -217,136 +212,45 @@ pub async fn update_hostos_boot_args(
         }
     }
 
-    // Wait for unmounts to complete
-    thread::sleep(Duration::from_millis(500));
-
-    // Step 2: Force removal of hostlvm volume group and all associated metadata
-    println!("Force removing hostlvm volume group...");
+    // Deactivate and remove hostlvm volume group
     let _ = Command::new("sudo")
         .args(["/usr/sbin/vgchange", "-an", "hostlvm"])
         .output();
-
-    // Wait for VG deactivation
-    thread::sleep(Duration::from_millis(500));
-
-    // Remove all device mapper devices for hostlvm
-    let dmsetup_remove_output = Command::new("sudo")
-        .args(["dmsetup", "remove_all", "--force"])
+    let _ = Command::new("sudo")
+        .args(["/usr/sbin/vgremove", "--force", "hostlvm"])
         .output();
-    if let Ok(output) = dmsetup_remove_output {
-        if !output.status.success() {
-            println!(
-                "dmsetup remove_all warning: {}",
-                String::from_utf8_lossy(&output.stderr)
-            );
-        }
-    }
 
-    // Step 3: Find and aggressively clean up loop devices
+    // Clean up existing loop devices
     let losetup_output = Command::new("sudo")
         .args(["/usr/sbin/losetup", "-a"])
         .output();
 
     if let Ok(output) = losetup_output {
         let losetup_text = String::from_utf8_lossy(&output.stdout);
-        println!("Existing loop devices: {}", losetup_text);
-
-        // Clean up any loop devices we find
         for line in losetup_text.lines() {
             if let Some(device) = line.split(':').next() {
-                println!("Cleaning up existing loop device: {}", device);
-
-                // Force deactivate any LVM on this device
                 let _ = Command::new("sudo")
-                    .args(["/usr/sbin/vgchange", "-an", "hostlvm"])
-                    .output();
-
-                // Try to remove any PVs on this device
-                let pv_partition = format!("{}p3", device);
-                let _ = Command::new("sudo")
-                    .args(["/usr/sbin/pvremove", "--force", "--force", &pv_partition])
-                    .output();
-
-                // Wait a moment for LVM operations to complete
-                thread::sleep(Duration::from_millis(200));
-
-                // Detach the loop device
-                let detach_output = Command::new("sudo")
                     .args(["/usr/sbin/losetup", "-d", device])
                     .output();
-
-                if let Ok(output) = detach_output {
-                    if !output.status.success() {
-                        println!(
-                            "Failed to detach {}: {}",
-                            device,
-                            String::from_utf8_lossy(&output.stderr)
-                        );
-                    } else {
-                        println!("Successfully detached: {}", device);
-                    }
-                }
             }
         }
     }
 
-    // Step 4: Completely clear LVM metadata and cache
-    println!("Clearing LVM metadata and cache...");
-
-    // Try to remove the hostlvm VG completely
-    let _ = Command::new("sudo")
-        .args(["/usr/sbin/vgremove", "--force", "hostlvm"])
-        .output();
-
-    // Clear all LVM caches and rescan
+    // Clear LVM cache
     let _ = Command::new("sudo")
         .args(["/usr/sbin/pvscan", "--cache"])
         .output();
 
-    let _ = Command::new("sudo")
-        .args(["/usr/sbin/vgscan", "--mknodes"])
-        .output();
-
-    // Remove any stale device mapper nodes
-    let _ = Command::new("sudo")
-        .args(["rm", "-f", "/dev/mapper/hostlvm-*"])
-        .output();
-
-    // Give time for cleanup to complete
-    thread::sleep(Duration::from_secs(2));
-
-    // Step 5: Verify cleanup was successful
-    println!("Verifying cleanup...");
-    let verify_pvscan = Command::new("sudo").args(["/usr/sbin/pvscan"]).output();
-
-    if let Ok(output) = verify_pvscan {
-        let stdout_text = String::from_utf8_lossy(&output.stdout);
-        let stderr_text = String::from_utf8_lossy(&output.stderr);
-
-        if stdout_text.contains("hostlvm") || stderr_text.contains("hostlvm") {
-            println!("Warning: hostlvm still detected in pvscan output:");
-            println!("stdout: {}", stdout_text);
-            println!("stderr: {}", stderr_text);
-
-            // Try one more aggressive cleanup
-            let _ = Command::new("sudo")
-                .args(["/usr/sbin/vgremove", "--force", "--force", "hostlvm"])
-                .output();
-            thread::sleep(Duration::from_secs(1));
-        } else {
-            println!("Cleanup verification successful - no hostlvm VG detected");
-        }
-    }
+    thread::sleep(Duration::from_secs(1));
 
     // Create temporary directory for extraction
     let temp_dir = TempDir::new().context("failed to create temporary directory")?;
     let work_dir = temp_dir.path();
 
-    // Step 1: Extract host-os.img.tar.zst from data partition
+    // Extract host-os.img.tar.zst from data partition
     println!("Extracting HostOS image from SetupOS data partition...");
     let mut data_partition = ExtPartition::open(setupos_image_path.to_owned(), Some(4)).await?;
 
-    // Extract all files from data partition to temp directory
     let data_extract_dir = work_dir.join("data_partition");
     fs::create_dir_all(&data_extract_dir).context("failed to create data partition extract dir")?;
     data_partition
@@ -357,13 +261,12 @@ pub async fn update_hostos_boot_args(
     let hostos_compressed_path = work_dir.join("host-os.img.tar.zst");
     let source_hostos_path = data_extract_dir.join("host-os.img.tar.zst");
 
-    // Copy the binary file directly
     fs::copy(&source_hostos_path, &hostos_compressed_path)
         .context("failed to copy host-os.img.tar.zst to work directory")?;
 
     data_partition.close().await?;
 
-    // Step 2: Decompress .zst file
+    // Decompress .zst file
     println!("Decompressing HostOS image...");
     let hostos_tar_path = work_dir.join("host-os.img.tar");
     let output = Command::new("zstd")
@@ -383,7 +286,7 @@ pub async fn update_hostos_boot_args(
         );
     }
 
-    // Step 3: Extract tar file
+    // Extract tar file
     println!("Extracting HostOS tar archive...");
     let hostos_img_path = work_dir.join("disk.img");
     let output = Command::new("tar")
@@ -403,18 +306,14 @@ pub async fn update_hostos_boot_args(
         );
     }
 
-    // Step 4: Verify disk image before setting up loop device
-    println!("Verifying disk image...");
+    // Verify disk image
     let metadata = fs::metadata(&hostos_img_path).context("failed to get disk image metadata")?;
-    println!("Disk image size: {} bytes", metadata.len());
-
     if metadata.len() == 0 {
         bail!("Disk image is empty");
     }
 
-    // Step 4: Set up loop device for HostOS image using sudo
+    // Set up loop device for HostOS image
     println!("Setting up loop device for HostOS image...");
-
     let loop_output = Command::new("sudo")
         .args([
             "/usr/sbin/losetup",
@@ -437,36 +336,21 @@ pub async fn update_hostos_boot_args(
         .context("invalid loop device output")?
         .trim()
         .to_string();
-    println!("Using loop device: {}", loop_device);
 
-    // Ensure we clean up the loop device using a scope guard (RAII)
+    // Cleanup guard for loop device
     struct LoopDeviceGuard {
         device_path: String,
     }
 
     impl Drop for LoopDeviceGuard {
         fn drop(&mut self) {
-            println!("Cleaning up loop device {}...", &self.device_path);
-
-            // Deactivate LVM volume group first
             let _ = Command::new("sudo")
                 .args(["/usr/sbin/vgchange", "-an", "hostlvm"])
                 .output();
-
-            // Wait a moment for LVM to release
             thread::sleep(Duration::from_millis(500));
-
-            // Remove the loop device
             let _ = Command::new("sudo")
                 .args(["/usr/sbin/losetup", "-d", &self.device_path])
                 .output();
-
-            // Clear LVM cache to remove stale references
-            let _ = Command::new("sudo")
-                .args(["/usr/sbin/pvscan", "--cache"])
-                .output();
-
-            println!("Loop device {} cleanup completed", &self.device_path);
         }
     }
 
@@ -474,459 +358,64 @@ pub async fn update_hostos_boot_args(
         device_path: loop_device.clone(),
     };
 
-    // Force kernel to re-read partition table
-    println!("Forcing partition table re-read...");
-    let reread_output = Command::new("sudo")
+    // Force partition table re-read
+    let _ = Command::new("sudo")
         .args(["/usr/sbin/blockdev", "--rereadpt", &loop_device])
-        .output()
-        .context("failed to run blockdev --rereadpt")?;
+        .output();
 
-    if !reread_output.status.success() {
-        println!(
-            "blockdev --rereadpt warning: {}",
-            String::from_utf8_lossy(&reread_output.stderr)
-        );
-        // Try alternative method using sfdisk
-        println!("Trying alternative method with sfdisk...");
-        let sfdisk_output = Command::new("sudo")
-            .args(["/usr/sbin/sfdisk", "-R", &loop_device])
-            .output()
-            .context("failed to run sfdisk -R")?;
-
-        if !sfdisk_output.status.success() {
-            println!(
-                "sfdisk -R warning: {}",
-                String::from_utf8_lossy(&sfdisk_output.stderr)
-            );
-        }
-
-        // Try kpartx as last resort
-        println!("Trying kpartx to create partition mappings...");
-        let kpartx_output = Command::new("sudo")
-            .args(["kpartx", "-av", &loop_device])
-            .output();
-
-        if let Ok(output) = kpartx_output {
-            if output.status.success() {
-                println!("kpartx output: {}", String::from_utf8_lossy(&output.stdout));
-            } else {
-                println!(
-                    "kpartx warning: {}",
-                    String::from_utf8_lossy(&output.stderr)
-                );
-            }
-        } else {
-            println!("kpartx not available");
-        }
-    }
-
-    // Give kernel time to detect partitions and manually create device nodes
     thread::sleep(Duration::from_secs(2));
 
-    // Since udev isn't available in this build environment, manually create device nodes
-    println!("Manually creating partition device nodes...");
-
-    // Parse lsblk output to get major:minor numbers for partitions
-    let lsblk_output = Command::new("lsblk")
-        .args(["-r", "-n", "-o", "NAME,MAJ:MIN", &loop_device])
-        .output()
-        .context("failed to run lsblk for device numbers")?;
-
-    let lsblk_text = String::from_utf8_lossy(&lsblk_output.stdout);
-    println!("lsblk device info:\n{}", lsblk_text);
-
-    // Create device nodes for each partition
-    for line in lsblk_text.lines() {
-        if line.contains("part") || line.contains("p") {
-            let parts: Vec<&str> = line.split_whitespace().collect();
-            if parts.len() >= 2 {
-                let name = parts[0];
-                let maj_min = parts[1];
-
-                if let Some((major, minor)) = maj_min.split_once(':') {
-                    let device_path = format!("/dev/{}", name);
-
-                    println!(
-                        "Creating device node: {} ({}:{})",
-                        device_path, major, minor
-                    );
-
-                    let mknod_output = Command::new("sudo")
-                        .args(["mknod", &device_path, "b", major, minor])
-                        .output()
-                        .context("failed to create device node with mknod")?;
-
-                    if !mknod_output.status.success() {
-                        println!(
-                            "mknod warning for {}: {}",
-                            device_path,
-                            String::from_utf8_lossy(&mknod_output.stderr)
-                        );
-                    } else {
-                        println!("Successfully created: {}", device_path);
-                    }
-                }
-            }
-        }
-    }
-
-    // Give time for device nodes to be available
-    thread::sleep(Duration::from_secs(1));
-
-    // Debug: Check the disk image partition table
-    println!("=== DEBUGGING DISK IMAGE PARTITION TABLE ===");
-    let fdisk_output = Command::new("sudo")
-        .args(["/usr/sbin/fdisk", "-l", &hostos_img_path.to_string_lossy()])
-        .output()
-        .context("failed to run fdisk on disk image")?;
-    println!("fdisk -l output for disk image:");
-    println!("{}", String::from_utf8_lossy(&fdisk_output.stdout));
-    if !fdisk_output.stderr.is_empty() {
-        println!("fdisk errors:");
-        println!("{}", String::from_utf8_lossy(&fdisk_output.stderr));
-    }
-
-    let fdisk_loop_output = Command::new("sudo")
-        .args(["/usr/sbin/fdisk", "-l", &loop_device])
-        .output()
-        .context("failed to run fdisk on loop device")?;
-    println!("fdisk -l output for loop device:");
-    println!("{}", String::from_utf8_lossy(&fdisk_loop_output.stdout));
-    if !fdisk_loop_output.stderr.is_empty() {
-        println!("fdisk errors for loop device:");
-        println!("{}", String::from_utf8_lossy(&fdisk_loop_output.stderr));
-    }
-
-    // Debug: Check lsblk output for the loop device
-    println!("=== DEBUGGING LSBLK OUTPUT ===");
-    let lsblk_output = Command::new("lsblk")
-        .args([&loop_device])
-        .output()
-        .context("failed to run lsblk")?;
-    println!("lsblk output for {}:", loop_device);
-    println!("{}", String::from_utf8_lossy(&lsblk_output.stdout));
-    if !lsblk_output.stderr.is_empty() {
-        println!("lsblk errors:");
-        println!("{}", String::from_utf8_lossy(&lsblk_output.stderr));
-    }
-
-    // Debug: Check if partitions were created
-    println!("=== DEBUGGING PARTITION CREATION ===");
-    for i in 1..=10 {
-        let partition_path = format!("{}p{}", loop_device, i);
-        if Path::new(&partition_path).exists() {
-            println!("Found partition: {}", partition_path);
-            if let Ok(metadata) = fs::metadata(&partition_path) {
-                println!(
-                    "  Partition {} size/type: {:?}",
-                    partition_path,
-                    metadata.file_type()
-                );
-            }
-        }
-    }
-
-    // Debug: Check what LVM can see
-    println!("=== DEBUGGING LVM DETECTION ===");
-    let pvscan_output = Command::new("sudo")
-        .args(["/usr/sbin/pvscan"])
-        .output()
-        .context("failed to run pvscan")?;
-    println!("pvscan output:");
-    println!("{}", String::from_utf8_lossy(&pvscan_output.stdout));
-    if !pvscan_output.stderr.is_empty() {
-        println!("pvscan errors:");
-        println!("{}", String::from_utf8_lossy(&pvscan_output.stderr));
-    }
-
-    let vgscan_output = Command::new("sudo")
-        .args(["/usr/sbin/vgscan"])
-        .output()
-        .context("failed to run vgscan")?;
-    println!("vgscan output:");
-    println!("{}", String::from_utf8_lossy(&vgscan_output.stdout));
-    if !vgscan_output.stderr.is_empty() {
-        println!("vgscan errors:");
-        println!("{}", String::from_utf8_lossy(&vgscan_output.stderr));
-    }
-
-    // Step 5: Activate LVM
+    // Activate LVM
     println!("Activating LVM...");
-
-    // First, ensure LVM sees the physical volume using a simple retry loop
     let pv_path = format!("{}p3", loop_device);
-    let mut retry_count = 0;
-    let max_retries = 5;
 
-    while retry_count < max_retries && !Path::new(&pv_path).exists() {
-        println!(
-            "Waiting for partition {} to appear (attempt {}/{})",
-            pv_path,
-            retry_count + 1,
-            max_retries
-        );
+    // Wait for partition to appear
+    let mut retry_count = 0;
+    while retry_count < 5 && !Path::new(&pv_path).exists() {
         thread::sleep(Duration::from_millis(1000));
         retry_count += 1;
     }
 
     if !Path::new(&pv_path).exists() {
-        // Debug: List what's actually in /dev/
-        println!("=== DEBUGGING /dev/ CONTENTS ===");
-        if let Ok(output) = Command::new("ls").args(["-la", "/dev/loop*"]).output() {
-            println!("ls -la /dev/loop*:");
-            println!("{}", String::from_utf8_lossy(&output.stdout));
-        }
-
-        bail!(
-            "LVM physical volume partition {} does not exist after {} retries. Available partitions: {:?}",
-            pv_path,
-            max_retries,
-            (1..=10)
-                .map(|i| format!("{}p{}", loop_device, i))
-                .filter(|p| Path::new(p).exists())
-                .collect::<Vec<_>>()
-        );
+        bail!("LVM physical volume partition {} does not exist", pv_path);
     }
 
-    println!("Found partition: {}", pv_path);
-
-    // Clear LVM cache and try to remove any conflicting devices before activation
-    println!("Clearing LVM cache and checking for conflicts...");
-    let _ = Command::new("sudo")
-        .args(["/usr/sbin/vgchange", "-an", "hostlvm"])
-        .output();
-    let _ = Command::new("sudo")
-        .args(["/usr/sbin/pvscan", "--cache"])
-        .output();
-
-    // Try to activate the specific physical volume
-    println!("Attempting to activate LVM with volume group hostlvm...");
     let lvm_output = Command::new("sudo")
         .args(["/usr/sbin/vgchange", "-ay", "hostlvm"])
         .output()
         .context("failed to activate LVM")?;
 
     if !lvm_output.status.success() {
-        println!(
-            "LVM activation failed, stderr: {}",
+        bail!(
+            "LVM activation failed: {}",
             String::from_utf8_lossy(&lvm_output.stderr)
         );
-        println!(
-            "LVM activation failed, stdout: {}",
-            String::from_utf8_lossy(&lvm_output.stdout)
-        );
-
-        // Try to get more info about what LVM sees
-        let pvs_output = Command::new("sudo").args(["/usr/sbin/pvs"]).output();
-        if let Ok(output) = pvs_output {
-            println!("Current PVs: {}", String::from_utf8_lossy(&output.stdout));
-        }
-
-        bail!(
-            "LVM activation failed: {}\nAvailable partitions: {:?}",
-            String::from_utf8_lossy(&lvm_output.stderr),
-            (1..=10)
-                .map(|i| format!("{}p{}", loop_device, i))
-                .filter(|p| Path::new(p).exists())
-                .collect::<Vec<_>>()
-        );
     }
 
-    // Debug: Check device mapper status and manually create device nodes if needed
-    println!("=== DEBUGGING DEVICE MAPPER STATUS ===");
-    let dmsetup_output = Command::new("sudo")
-        .args(["dmsetup", "ls"])
-        .output()
-        .context("failed to run dmsetup ls")?;
-    println!("dmsetup ls output:");
-    println!("{}", String::from_utf8_lossy(&dmsetup_output.stdout));
-
-    let dmsetup_info_output = Command::new("sudo")
-        .args(["dmsetup", "info"])
-        .output()
-        .context("failed to run dmsetup info")?;
-    println!("dmsetup info output:");
-    println!("{}", String::from_utf8_lossy(&dmsetup_info_output.stdout));
-
-    // Try to manually create device nodes for the logical volumes (A_boot only)
-    println!("=== MANUALLY CREATING DEVICE NODES ===");
-
-    // Get the device mapper names and create device nodes (only A_boot needed)
-    let dm_devices = ["hostlvm-A_boot"];
-
-    for dm_name in &dm_devices {
-        // Get major:minor for this device
-        let dmsetup_table_output = Command::new("sudo")
-            .args(["dmsetup", "table", dm_name])
-            .output();
-
-        if let Ok(output) = dmsetup_table_output {
-            if output.status.success() {
-                println!("dmsetup table {} output:", dm_name);
-                println!("{}", String::from_utf8_lossy(&output.stdout));
-
-                // Get device info including major:minor
-                let dmsetup_info_dev_output = Command::new("sudo")
-                    .args(["dmsetup", "info", dm_name])
-                    .output();
-
-                if let Ok(info_output) = dmsetup_info_dev_output {
-                    let info_text = String::from_utf8_lossy(&info_output.stdout);
-                    println!("dmsetup info {} output:", dm_name);
-                    println!("{}", info_text);
-
-                    // Extract major:minor from the output
-                    if let Some(major_line) =
-                        info_text.lines().find(|l| l.contains("Major, minor:"))
-                    {
-                        if let Some(major_minor) = major_line.split(':').nth(1) {
-                            let parts: Vec<&str> = major_minor.trim().split(',').collect();
-                            if parts.len() == 2 {
-                                if let (Ok(major), Ok(minor)) = (
-                                    parts[0].trim().parse::<u32>(),
-                                    parts[1].trim().parse::<u32>(),
-                                ) {
-                                    let device_path = format!("/dev/mapper/{}", dm_name);
-
-                                    println!(
-                                        "Creating device node: {} ({}:{})",
-                                        device_path, major, minor
-                                    );
-                                    let mknod_output = Command::new("sudo")
-                                        .args([
-                                            "mknod",
-                                            &device_path,
-                                            "b",
-                                            &major.to_string(),
-                                            &minor.to_string(),
-                                        ])
-                                        .output();
-
-                                    match mknod_output {
-                                        Ok(output) => {
-                                            if output.status.success() {
-                                                println!(
-                                                    "Successfully created device node: {}",
-                                                    device_path
-                                                );
-                                            } else {
-                                                println!(
-                                                    "mknod failed for {}: {}",
-                                                    device_path,
-                                                    String::from_utf8_lossy(&output.stderr)
-                                                );
-                                            }
-                                        }
-                                        Err(err) => {
-                                            println!(
-                                                "Failed to run mknod for {}: {}",
-                                                device_path, err
-                                            );
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            } else {
-                println!(
-                    "dmsetup table failed for {}: {}",
-                    dm_name,
-                    String::from_utf8_lossy(&output.stderr)
-                );
-            }
-        }
-    }
-
-    // Step 6: Mount and modify boot partition A only
+    // Mount and modify boot partition A
+    println!("Mounting and modifying boot partition...");
     let mount_point_a = work_dir.join("boot_a");
     fs::create_dir_all(&mount_point_a).context("failed to create mount point A")?;
 
-    // Debug: Check if LVM logical volumes exist and are accessible
-    println!("=== DEBUGGING LVM LOGICAL VOLUMES ===");
-    let lvs_output = Command::new("sudo")
-        .args(["/usr/sbin/lvs", "hostlvm"])
-        .output()
-        .context("failed to run lvs")?;
-    println!("lvs output:");
-    println!("{}", String::from_utf8_lossy(&lvs_output.stdout));
-    if !lvs_output.stderr.is_empty() {
-        println!("lvs errors:");
-        println!("{}", String::from_utf8_lossy(&lvs_output.stderr));
-    }
-
-    // Check what device nodes actually exist in /dev/mapper/ and /dev/hostlvm/
-    println!("=== DEBUGGING DEVICE MAPPER NODES ===");
-
-    // List /dev/mapper/ contents
-    let mapper_output = Command::new("ls")
-        .args(["-la", "/dev/mapper/"])
-        .output()
-        .context("failed to list /dev/mapper/")?;
-    println!("ls -la /dev/mapper/:");
-    println!("{}", String::from_utf8_lossy(&mapper_output.stdout));
-
-    // List /dev/hostlvm/ contents if it exists
-    if Path::new("/dev/hostlvm/").exists() {
-        let hostlvm_output = Command::new("ls")
-            .args(["-la", "/dev/hostlvm/"])
-            .output()
-            .context("failed to list /dev/hostlvm/")?;
-        println!("ls -la /dev/hostlvm/:");
-        println!("{}", String::from_utf8_lossy(&hostlvm_output.stdout));
-    } else {
-        println!("/dev/hostlvm/ directory does not exist");
-    }
-
-    // Try to find the actual device path for A_boot only (we only need A)
+    // Find A_boot device path
     let possible_a_boot_paths = vec![
         "/dev/hostlvm/A_boot",
         "/dev/mapper/hostlvm-A_boot",
         "/dev/mapper/hostlvm-A--boot",
     ];
 
-    println!("Checking possible device paths for A_boot:");
     let mut a_boot_path = None;
-
     for path in &possible_a_boot_paths {
-        println!("  {} exists: {}", path, Path::new(path).exists());
-        if Path::new(path).exists() && a_boot_path.is_none() {
+        if Path::new(path).exists() {
             a_boot_path = Some(path.to_string());
+            break;
         }
     }
 
-    let a_boot_path = a_boot_path.ok_or_else(|| {
-        anyhow::anyhow!(
-            "Could not find A_boot device node. Checked paths: {:?}",
-            possible_a_boot_paths
-        )
-    })?;
+    let a_boot_path =
+        a_boot_path.ok_or_else(|| anyhow::anyhow!("Could not find A_boot device node"))?;
 
-    println!("Using device path for A_boot: {}", a_boot_path);
-
-    // Check what filesystem type is on the partitions
-    let file_output = Command::new("sudo")
-        .args(["file", "-s", &a_boot_path])
-        .output()
-        .context("failed to run file -s on A_boot")?;
-    println!("file -s {} output:", a_boot_path);
-    println!("{}", String::from_utf8_lossy(&file_output.stdout));
-
-    // Try to determine filesystem type with blkid
-    let blkid_output = Command::new("sudo")
-        .args(["/usr/sbin/blkid", &a_boot_path])
-        .output()
-        .context("failed to run blkid on A_boot")?;
-    println!("blkid {} output:", a_boot_path);
-    println!("{}", String::from_utf8_lossy(&blkid_output.stdout));
-    if !blkid_output.stderr.is_empty() {
-        println!("blkid errors:");
-        println!("{}", String::from_utf8_lossy(&blkid_output.stderr));
-    }
-
-    // Mount boot partition A using sudo mount with explicit read-write permissions
-    println!("Mounting boot partition A with read-write permissions...");
+    // Mount boot partition A
     let mount_a_output = Command::new("sudo")
         .args([
             "mount",
@@ -936,7 +425,7 @@ pub async fn update_hostos_boot_args(
             mount_point_a.to_str().unwrap(),
         ])
         .output()
-        .context("failed to run mount command for boot partition A")?;
+        .context("failed to mount boot partition A")?;
 
     if !mount_a_output.status.success() {
         bail!(
@@ -945,101 +434,54 @@ pub async fn update_hostos_boot_args(
         );
     }
 
-    // Debug: Check mount status and permissions
-    println!("=== DEBUGGING MOUNT STATUS ===");
-    let mount_check_output = Command::new("bash")
-        .args(["-c", &format!("mount | grep {}", a_boot_path)])
-        .output();
-    if let Ok(output) = mount_check_output {
-        println!("Mount status: {}", String::from_utf8_lossy(&output.stdout));
-    }
-
-    let mount_point_perms_output = Command::new("ls")
-        .args(["-la", mount_point_a.to_str().unwrap()])
-        .output()
-        .context("failed to check mount point permissions")?;
-    println!("Mount point permissions:");
-    println!(
-        "{}",
-        String::from_utf8_lossy(&mount_point_perms_output.stdout)
-    );
-
-    // Check boot_args file permissions specifically
-    let boot_args_path = mount_point_a.join("boot_args");
-    if boot_args_path.exists() {
-        let file_perms_output = Command::new("ls")
-            .args(["-la", boot_args_path.to_str().unwrap()])
-            .output()
-            .context("failed to check boot_args file permissions")?;
-        println!("boot_args file permissions:");
-        println!("{}", String::from_utf8_lossy(&file_perms_output.stdout));
-    }
-
-    // Function to modify boot_args file
-    let modify_boot_args = |boot_args_path: &Path| -> Result<(), Error> {
-        let mut content =
-            fs::read_to_string(boot_args_path).context("failed to read boot_args file")?;
-
-        println!("Original boot_args content:\n{}", content);
-
-        // Add hash parameter to both BOOT_ARGS_A and BOOT_ARGS_B lines
-        let hash_param = format!(" hash={}", boot_parameter);
-
-        // Process BOOT_ARGS_A line
-        if let Some(start) = content.find("BOOT_ARGS_A=\"") {
-            if let Some(end) = content[start..].find("\"\n").map(|i| start + i) {
-                content.insert_str(end, &hash_param);
-            }
-        }
-
-        // Process BOOT_ARGS_B line (need to search again after modification)
-        if let Some(start) = content.find("BOOT_ARGS_B=\"") {
-            if let Some(end) = content[start..].find("\"\n").map(|i| start + i) {
-                content.insert_str(end, &hash_param);
-            }
-        }
-
-        println!("Modified boot_args content:\n{}", content);
-
-        // Write the file using sudo to avoid permission issues
-        // Write temp file in work directory, not in mount point
-        let temp_file_path = work_dir.join("boot_args_modified.tmp");
-        fs::write(&temp_file_path, &content).context("failed to write temporary boot_args file")?;
-
-        let cp_output = Command::new("sudo")
-            .args([
-                "cp",
-                temp_file_path.to_str().unwrap(),
-                boot_args_path.to_str().unwrap(),
-            ])
-            .output()
-            .context("failed to copy modified boot_args file with sudo")?;
-
-        if !cp_output.status.success() {
-            bail!(
-                "Failed to copy modified boot_args file: {}",
-                String::from_utf8_lossy(&cp_output.stderr)
-            );
-        }
-
-        // Clean up temporary file
-        let _ = fs::remove_file(&temp_file_path);
-
-        Ok(())
-    };
-
-    // Modify boot_args in partition A only
-    println!("Modifying boot_args in partition A...");
+    // Modify boot_args file
     let boot_args_a_path = mount_point_a.join("boot_args");
-    modify_boot_args(&boot_args_a_path)?;
+    let mut content =
+        fs::read_to_string(&boot_args_a_path).context("failed to read boot_args file")?;
 
-    // Step 7: Unmount partition A using sudo umount
-    println!("Unmounting boot partition A...");
+    let hash_param = format!(" hash={}", boot_parameter);
+
+    // Add hash parameter to both BOOT_ARGS_A and BOOT_ARGS_B lines
+    if let Some(start) = content.find("BOOT_ARGS_A=\"") {
+        if let Some(end) = content[start..].find("\"\n").map(|i| start + i) {
+            content.insert_str(end, &hash_param);
+        }
+    }
+
+    if let Some(start) = content.find("BOOT_ARGS_B=\"") {
+        if let Some(end) = content[start..].find("\"\n").map(|i| start + i) {
+            content.insert_str(end, &hash_param);
+        }
+    }
+
+    // Write modified content using temporary file
+    let temp_file_path = work_dir.join("boot_args_modified.tmp");
+    fs::write(&temp_file_path, &content).context("failed to write temporary boot_args file")?;
+
+    let cp_output = Command::new("sudo")
+        .args([
+            "cp",
+            temp_file_path.to_str().unwrap(),
+            boot_args_a_path.to_str().unwrap(),
+        ])
+        .output()
+        .context("failed to copy modified boot_args file")?;
+
+    if !cp_output.status.success() {
+        bail!(
+            "Failed to copy modified boot_args file: {}",
+            String::from_utf8_lossy(&cp_output.stderr)
+        );
+    }
+
+    let _ = fs::remove_file(&temp_file_path);
+
+    // Unmount partition A
     let _ = Command::new("sudo")
         .args(["umount", mount_point_a.to_str().unwrap()])
         .output();
 
-    // Step 10: Repackage the HostOS image
+    // Repackage the HostOS image
     println!("Repackaging HostOS image...");
     let repack_tar_output = Command::new("tar")
         .args([
@@ -1059,7 +501,7 @@ pub async fn update_hostos_boot_args(
         );
     }
 
-    // Step 11: Compress the tar file
+    // Compress the tar file
     println!("Compressing HostOS image...");
     let compress_output = Command::new("zstd")
         .args([
@@ -1078,14 +520,13 @@ pub async fn update_hostos_boot_args(
         );
     }
 
-    // Step 12: Write the modified HostOS image back to data partition
+    // Write the modified HostOS image back to data partition
     println!("Writing modified HostOS image back to SetupOS...");
     let modified_content =
         fs::read(&hostos_compressed_path).context("failed to read modified host-os.img.tar.zst")?;
 
     let mut data_partition = ExtPartition::open(setupos_image_path.to_owned(), Some(4)).await?;
 
-    // Write using a temporary file
     let temp_file = work_dir.join("temp_hostos.tar.zst");
     fs::write(&temp_file, &modified_content).context("failed to write temp file")?;
 
