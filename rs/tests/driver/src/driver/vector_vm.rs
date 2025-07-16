@@ -315,7 +315,7 @@ docker run -d --name vector \
     -v /etc/vector/config:/etc/vector/config \
     --network host \
     --entrypoint vector \
-    vector-with-log-fetcher:image
+    vector-with-log-fetcher:image \
     -w --config-dir /etc/vector/config
         "#,
             )
