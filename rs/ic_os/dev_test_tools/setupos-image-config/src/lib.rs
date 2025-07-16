@@ -195,6 +195,14 @@ pub async fn update_hostos_boot_args(
     setupos_image_path: &Path,
     boot_parameter: &str,
 ) -> Result<(), Error> {
+    // Preemptively deactivate any lingering LVM VGs to avoid conflicts.
+    let _ = Command::new("sudo")
+        .args(["/usr/sbin/vgchange", "-an", "hostlvm"])
+        .output();
+    let _ = Command::new("sudo")
+        .args(["/usr/sbin/pvscan", "--cache"])
+        .output();
+
     // Create temporary directory for extraction
     let temp_dir = TempDir::new().context("failed to create temporary directory")?;
     let work_dir = temp_dir.path();
@@ -295,6 +303,30 @@ pub async fn update_hostos_boot_args(
         .trim()
         .to_string();
     println!("Using loop device: {}", loop_device);
+
+    // Ensure we clean up the loop device using a scope guard (RAII)
+    struct LoopDeviceGuard {
+        device_path: String,
+    }
+
+    impl Drop for LoopDeviceGuard {
+        fn drop(&mut self) {
+            println!("Cleaning up loop device {}...", &self.device_path);
+            let _ = Command::new("sudo")
+                .args(["/usr/sbin/vgchange", "-an", "hostlvm"])
+                .output();
+            let _ = Command::new("sudo")
+                .args(["/usr/sbin/losetup", "-d", &self.device_path])
+                .output();
+            let _ = Command::new("sudo")
+                .args(["/usr/sbin/pvscan", "--cache"])
+                .output();
+        }
+    }
+
+    let _loop_guard = LoopDeviceGuard {
+        device_path: loop_device.clone(),
+    };
 
     // Force kernel to re-read partition table
     println!("Forcing partition table re-read...");
@@ -472,16 +504,6 @@ pub async fn update_hostos_boot_args(
         println!("{}", String::from_utf8_lossy(&vgscan_output.stderr));
     }
 
-    // Ensure we clean up the loop device
-    let cleanup_loop = {
-        let loop_device = loop_device.clone();
-        move || {
-            let _ = Command::new("sudo")
-                .args(["/usr/sbin/losetup", "-d", &loop_device])
-                .output();
-        }
-    };
-
     // Step 5: Activate LVM
     println!("Activating LVM...");
 
@@ -509,7 +531,6 @@ pub async fn update_hostos_boot_args(
             println!("{}", String::from_utf8_lossy(&output.stdout));
         }
 
-        cleanup_loop();
         bail!(
             "LVM physical volume partition {} does not exist after {} retries. Available partitions: {:?}",
             pv_path,
@@ -529,7 +550,6 @@ pub async fn update_hostos_boot_args(
         .context("failed to activate LVM")?;
 
     if !lvm_output.status.success() {
-        cleanup_loop();
         bail!(
             "LVM activation failed: {}\nAvailable partitions: {:?}",
             String::from_utf8_lossy(&lvm_output.stderr),
@@ -560,7 +580,6 @@ pub async fn update_hostos_boot_args(
         Err(err) => {
             // Clean up mount A on failure
             let _ = mount_a.unmount(UnmountFlags::empty());
-            cleanup_loop();
             bail!("Failed to mount boot partition B: {}", err);
         }
     };
@@ -609,15 +628,6 @@ pub async fn update_hostos_boot_args(
     println!("Unmounting boot partitions...");
     let _ = mount_a.unmount(UnmountFlags::empty());
     let _ = mount_b.unmount(UnmountFlags::empty());
-
-    // Step 8: Deactivate LVM
-    println!("Deactivating LVM...");
-    let _ = Command::new("sudo")
-        .args(["/usr/sbin/vgchange", "-an", "hostlvm"])
-        .output();
-
-    // Step 9: Clean up loop device
-    cleanup_loop();
 
     // Step 10: Repackage the HostOS image
     println!("Repackaging HostOS image...");

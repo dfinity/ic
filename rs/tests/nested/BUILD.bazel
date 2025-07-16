@@ -170,7 +170,10 @@ system_test_nns(
     env = MAINNET_ENV,
     extra_head_nns_tags = [],
     flaky = True,
-    tags = ["long_test"],
+    tags = [
+        "long_test",
+        "no-sandbox",  # such that the test can loop devices and LVM tools
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_driver_target = ":recovery_upgrader_test_bin",
     test_timeout = "eternal",
