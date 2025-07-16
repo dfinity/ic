@@ -389,7 +389,7 @@ pub fn recovery_upgrader_test(env: TestEnv) {
     let logger = env.logger();
 
     // start the nested VM and wait for it to join the network
-    let initial_topology = env.topology_snapshot();
+    let _initial_topology = env.topology_snapshot();
     start_nested_vm(env.clone());
     // NOTE: Don't wait for the node to join the network, because recovery-upgrader will run before the node joins
     // info!(logger, "Waiting for node to join ...");
