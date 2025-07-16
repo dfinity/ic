@@ -7,11 +7,12 @@ use std::{
 };
 
 use ic_types::PrincipalId;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use slog::{info, warn};
 
 use crate::{
     driver::{
+        log_events::LogEvent,
         prometheus_vm::{SCP_RETRY_BACKOFF, SCP_RETRY_TIMEOUT},
         test_env::TestEnvAttribute,
         test_env_api::{HasTopologySnapshot, IcNodeContainer, SshSession},
@@ -260,25 +261,47 @@ impl VectorVm {
             });
         }
 
-        let mut channel = session.channel_session()?;
-        channel.exec("touch /etc/vector/config/spawn_vector")?;
-        channel.flush()?;
-        channel.send_eof()?;
-        let mut _stdout = Vec::new();
-        channel.read_to_end(&mut _stdout)?;
-        channel.wait_close()?;
+        touch_spawn_file(&session)?;
 
-        if let Err(e) = channel.exit_signal() {
-            panic!(
-                "Failed to create a `spawn_vector` file due to error: {:?}",
-                e
-            );
-        }
+        emit_kibana_url_event(&log, &infra_group_name);
 
         info!(log, "Vector targets sync complete.");
 
         Ok(())
     }
+}
+
+fn touch_spawn_file(session: &ssh2::Session) -> anyhow::Result<()> {
+    let mut channel = session.channel_session()?;
+    channel.exec("touch /etc/vector/config/spawn_vector")?;
+    channel.flush()?;
+    channel.send_eof()?;
+    let mut _stdout = Vec::new();
+    channel.read_to_end(&mut _stdout)?;
+    channel.wait_close()?;
+
+    channel
+        .exit_signal()
+        .map(|_| ())
+        .map_err(anyhow::Error::from)
+}
+
+fn emit_kibana_url_event(log: &slog::Logger, network_name: &str) {
+    #[derive(Serialize, Deserialize)]
+    pub struct KibanaUrl {
+        message: String,
+        url: String,
+    }
+
+    let event = LogEvent::new(
+        "kibana_url_created_new_event".to_string(),
+        KibanaUrl {
+            message: "Pulled replica logs will appear in Kibana".to_string(),
+            url: format!("https://kibana.testnet.dfinity.network/app/discover#/?_g=(filters:!(),refreshInterval:(pause:!t,value:60000),time:(from:now-5h,to:now%2B5h))&_a=(columns:!(MESSAGE,ic_subnet,ic_node),filters:!(('$state':(store:appState),meta:(alias:!n,disabled:!f,field:ic,index:testnet-vector-push,key:ic,negate:!f,params:(query:{network_name}),type:phrase),query:(match_phrase:(ic:{network_name})))),hideChart:!f,index:testnet-vector-push,interval:auto,query:(language:kuery,query:''),sort:!(!(timestamp,desc)))")
+        }
+    );
+
+    event.emit_log(log);
 }
 
 #[derive(Serialize)]
