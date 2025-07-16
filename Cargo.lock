@@ -2110,6 +2110,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "canscan-test-canister"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "ic-cdk 0.17.2",
+]
+
+[[package]]
 name = "cargo-platform"
 version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"

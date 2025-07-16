@@ -10,7 +10,7 @@ DEPENDENCIES = [
     "@crate_index//:clap",
     "@crate_index//:derive_more",
     "@crate_index//:flate2",
-    "@crate_index//:parse_display",
+    "@crate_index//:parse-display",
     "@crate_index//:wasmparser",
 ]
 

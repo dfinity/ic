@@ -455,6 +455,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "dashmap": crate.spec(
                 version = "^5.3.4",
             ),
+            "derive_more": crate.spec(
+                version = "^2.0.1",
+                features = ["from"],
+            ),
             "derive-new": crate.spec(
                 version = "^0.7.0",
             ),
@@ -947,6 +951,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "parking_lot": crate.spec(
                 version = "^0.12.1",
+            ),
+            "parse-display": crate.spec(
+                version = "^0.10.0",
             ),
             "paste": crate.spec(
                 version = "^1.0.15",
