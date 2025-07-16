@@ -1237,7 +1237,13 @@ struct ProposeToFulfillSubnetRentalRequestCmd {
 
 impl ProposalTitle for ProposeToFulfillSubnetRentalRequestCmd {
     fn title(&self) -> String {
-        format!("Fulfill Subnet Rental Request for {}", self.user)
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => format!(
+                "Fulfill Subnet Rental Request for {}",
+                self.user.to_string().split('-').next().unwrap_or("")
+            ),
+        }
     }
 }
 
