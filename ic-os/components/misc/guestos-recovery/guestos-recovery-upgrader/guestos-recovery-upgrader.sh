@@ -167,26 +167,14 @@ install_upgrade() {
 
     echo "Writing boot image to ${boot_target}..."
     dd if="$tmpdir/boot.img" of="${boot_target}" bs=1M status=progress
-    if [ $? -ne 0 ]; then
-        echo "ERROR: Failed to write boot image"
-        exit 1
-    fi
     echo "Boot image written successfully"
 
     echo "Writing root image to ${root_target}..."
     dd if="$tmpdir/root.img" of="${root_target}" bs=1M status=progress
-    if [ $? -ne 0 ]; then
-        echo "ERROR: Failed to write root image"
-        exit 1
-    fi
     echo "Root image written successfully"
 
     echo "Wiping var partition header on ${var_target}..."
     dd if=/dev/zero of="${var_target}" bs=1M count=16 status=progress
-    if [ $? -ne 0 ]; then
-        echo "ERROR: Failed to wipe var partition header"
-        exit 1
-    fi
     echo "Var partition header wiped successfully"
 
     echo "Updating grubenv to prepare for next boot..."
