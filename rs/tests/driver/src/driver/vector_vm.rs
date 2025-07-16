@@ -232,12 +232,11 @@ docker run -d --name vector \
     -v /etc/vector/config:/etc/vector/config \
     --network host \
     --entrypoint vector \
-    -e ELASTICSEARCH_URL="{}" \
-    -e ELASTICSEARCH_INDEX="{}" \
+    -e ELASTICSEARCH_URL="{ELASTICSEARCH_URL}" \
+    -e ELASTICSEARCH_INDEX="{ELASTICSEARCH_INDEX}" \
     vector-with-log-fetcher:image \
     -w --config-dir /etc/vector/config
         "#,
-                        ELASTICSEARCH_URL, ELASTICSEARCH_INDEX
                     ),
                 )
                 .expect("Failed to start docker container for vector");
