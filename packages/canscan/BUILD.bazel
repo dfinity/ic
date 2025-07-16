@@ -36,5 +36,11 @@ rust_doc_test(
 rust_test(
     name = "canscan-test",
     srcs = glob(["src/**/*.rs"]),
+    data = [
+        "//packages/canscan/test_canister:test_canister.wasm.gz",
+    ],
+    env = {
+        "TEST_WASM": "$(rootpath //packages/canscan/test_canister:test_canister.wasm.gz)",
+    },
     deps = DEPENDENCIES + TEST_DEPENDENCIES,
 )

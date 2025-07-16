@@ -15,7 +15,7 @@ anyhow = { workspace = true }
 candid = { workspace = true }
 candid_parser = { workspace = true }
 clap = { workspace = true }
-derive_more = "2.0.1"
+derive_more = { version = "2.0.1", features = ["from"] }
 flate2 = { workspace = true }
 parse-display = "0.10.0"
 wasmparser = { workspace = true }

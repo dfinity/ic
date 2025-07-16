@@ -9,9 +9,9 @@ fn should_succeed() {
             "--wasm",
             "../target/wasm32-unknown-unknown/canister-release/test_canister.wasm",
             "--candid",
-            "../test_canister/test_canister.did",
+            "../test_canister/canister.did",
             "--hidden",
-            "update:setApiKey"
+            "update:setApiKey",
         ])
         .assert()
         .success()
@@ -26,9 +26,9 @@ fn should_fail_with_incorrect_path() {
             "--wasm",
             "test_canister.wasm",
             "--candid",
-            "../test_canister/test_canister.did",
+            "../test_canister/canister.did",
             "--hidden",
-            "query:setApiKey"
+            "query:setApiKey",
         ])
         .assert()
         .failure()
@@ -43,7 +43,7 @@ fn should_fail_without_hidden_argument() {
             "--wasm",
             "../target/wasm32-unknown-unknown/canister-release/test_canister.wasm",
             "--candid",
-            "../test_canister/test_canister.did",
+            "../test_canister/canister.did",
         ])
         .assert()
         .failure()
@@ -58,7 +58,7 @@ fn should_fail_with_incorrect_hidden_argument() {
             "--wasm",
             "../target/wasm32-unknown-unknown/canister-release/test_canister.wasm",
             "--candid",
-            "../test_canister/test_canister.did",
+            "../test_canister/canister.did",
             "--hidden",
             "query:setApiKey"
         ])

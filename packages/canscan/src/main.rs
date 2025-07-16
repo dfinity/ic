@@ -1,28 +1,37 @@
 mod candid;
+mod config;
 mod wasm;
 
 use candid::CandidParser;
 use canscan::CanisterEndpoint;
 use clap::{arg, Parser};
+use config::ConfigParser;
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 use wasm::WasmParser;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
-    /// Path to the canister WASM file
+    /// Path to the canister WASM file.
     #[arg(long)]
     wasm: PathBuf,
-    /// Path to the canister Candid interface file
+    /// Path to the canister Candid interface file.
     #[arg(long)]
     candid: PathBuf,
-    /// Whitelist of allowed hidden methods
+    /// Optionally specify hidden endpoints, i.e., endpoints that are exposed by the canister but
+    /// not present in the Candid interface file.
     #[arg(long)]
     hidden: Vec<CanisterEndpoint>,
+    /// Config file.
+    #[arg(long)]
+    config: Option<PathBuf>,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
+
+    let config = ConfigParser::new(args.config, args.hidden).parse()?;
 
     let wasm_endpoints = WasmParser::new(args.wasm)
         .parse()
@@ -32,7 +41,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .parse()
         .map_err(|e| format!("ERROR: Failed to parse Candid file: {e}"))?;
 
-    let missing_endpoints = candid_endpoints.difference(&wasm_endpoints);
+    let missing_endpoints = candid_endpoints
+        .difference(&wasm_endpoints)
+        .collect::<BTreeSet<_>>();
     missing_endpoints.iter().for_each(|endpoint| {
         eprintln!(
             "ERROR: The following endpoint is missing from the WASM exports section: {endpoint}"
@@ -40,10 +51,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     let unexpected_endpoints = wasm_endpoints
-        .difference(&candid_endpoints)
-        .into_iter()
-        .filter(|endpoint| !args.hidden.contains(endpoint))
-        .collect::<Vec<_>>();
+        .iter()
+        .filter(|endpoint| {
+            !candid_endpoints.contains(endpoint) && !config.hidden().contains(endpoint)
+        })
+        .collect::<BTreeSet<_>>();
     unexpected_endpoints.iter().for_each(|endpoint| {
         eprintln!(
             "ERROR: The following endpoint is unexpected in the WASM exports section: {endpoint}"

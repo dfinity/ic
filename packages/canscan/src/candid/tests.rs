@@ -6,7 +6,7 @@ use std::path::PathBuf;
 #[test]
 fn should_parse_candid_file() {
     let endpoints = CandidParser::new(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../test_canister/test_canister.did"),
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../test_canister/canister.did"),
     )
     .parse()
     .expect("Failed to parse Candid");
