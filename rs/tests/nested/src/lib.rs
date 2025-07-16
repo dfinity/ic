@@ -121,7 +121,22 @@ pub fn registration(env: TestEnv) {
     let num_unassigned_nodes = initial_topology.unassigned_nodes().count();
     assert_eq!(num_unassigned_nodes, 0);
 
-    start_nested_vm(env);
+    start_nested_vm(env.clone());
+
+    // Assert that the GuestOS was started with direct kernel boot.
+    let guest_kernel_cmdline = env
+        .get_nested_vm(HOST_VM_NAME)
+        .expect("Unable to find HostOS node.")
+        .get_guest_ssh()
+        .unwrap()
+        .block_on_bash_script("cat /proc/cmdline")
+        .expect("Could not read /proc/cmdline from GuestOS");
+    assert!(
+        guest_kernel_cmdline.contains("initrd=initrd"),
+        "GuestOS kernel command line does not contain 'initrd=initrd'. This is likely caused by \
+         the guest not being started with direct kernel boot but rather with the GRUB \
+         bootloader. guest_kernel_cmdline: '{guest_kernel_cmdline}'"
+    );
 
     // If the node is able to join successfully, the registry will be updated,
     // and the new node ID will enter the unassigned pool.
