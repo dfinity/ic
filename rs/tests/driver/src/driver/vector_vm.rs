@@ -64,8 +64,7 @@ id_key = "__CURSOR"
 }
 
 fn get_general_transforms_toml() -> String {
-    format!(
-        r#"
+    r#"
 # Colleting all the logs for debugging
 [sinks.local_file]
 type = "file"
@@ -101,11 +100,17 @@ if is_json(string!(.MESSAGE)) {{
 .timestamp = from_unix_timestamp!(to_int!(del(.__REALTIME_TIMESTAMP)) * 1000, unit: "nanoseconds")
 """
 "#
-    )
+    .to_string()
 }
 
 pub struct VectorVm {
     universal_vm: UniversalVm,
+}
+
+impl Default for VectorVm {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl VectorVm {
@@ -151,12 +156,11 @@ impl VectorVm {
 
         let nodes = snapshot
             .subnets()
-            .map(|s| s.nodes())
-            .flatten()
+            .flat_map(|s| s.nodes())
             .chain(snapshot.unassigned_nodes())
             .chain(snapshot.api_boundary_nodes());
 
-        let infra_group_name = GroupSetup::read_attribute(&env).infra_group_name;
+        let infra_group_name = GroupSetup::read_attribute(env).infra_group_name;
         for node in nodes {
             let node_id = node.node_id.get();
             let ip = node.get_ip_addr();
@@ -318,7 +322,7 @@ impl VectorSource {
     pub fn new(node_id: PrincipalId, ip: IpAddr) -> Self {
         let socket = SocketAddr::new(ip, 19531);
 
-        let command = vec![
+        let command = [
             "/log-fetcher",
             "--url",
             &format!("http://{}/entries?follow", socket),
