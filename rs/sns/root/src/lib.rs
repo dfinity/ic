@@ -1,7 +1,7 @@
 use crate::{
     logs::{ERROR, INFO},
     pb::v1::{
-        set_dapp_controllers_response, CanisterCallError, ListSnsCanistersResponse,
+        set_dapp_controllers_response, CanisterCallError, Extensions, ListSnsCanistersResponse,
         ManageDappCanisterSettingsRequest, ManageDappCanisterSettingsResponse,
         RegisterDappCanistersRequest, RegisterDappCanistersResponse, SetDappControllersRequest,
         SetDappControllersResponse, SnsRootCanister,
@@ -348,7 +348,7 @@ impl SnsRootCanister {
             dapps: self.dapp_canister_ids.clone(),
             archives: self.archive_canister_ids.clone(),
             index: self.index_canister_id,
-            extensions: self.extension_canister_ids.clone(),
+            extensions: self.extensions.clone(),
         }
     }
 
@@ -419,6 +419,11 @@ impl SnsRootCanister {
         .into_iter()
         .chain(archives)
         .collect();
+
+        let extensions = extensions
+            .map_or_else(Vec::new, |ext| ext.extension_canister_ids)
+            .into_iter()
+            .collect();
 
         (framework_canisters, dapps, extensions)
     }
@@ -587,7 +592,14 @@ impl SnsRootCanister {
         }
 
         self_ref.with_borrow_mut(|state| {
-            state.extension_canister_ids.push(canister_id);
+            if let Some(extensions) = state.extensions.as_mut() {
+                extensions.extension_canister_ids.push(canister_id);
+            } else {
+                let extension_canister_ids = vec![canister_id];
+                state.extensions.replace(Extensions {
+                    extension_canister_ids,
+                });
+            }
         });
 
         Ok(())
@@ -1110,7 +1122,7 @@ mod tests {
             ledger_canister_id: Some(PrincipalId::new_user_test_id(2)),
             swap_canister_id: Some(PrincipalId::new_user_test_id(3)),
             dapp_canister_ids: vec![],
-            extension_canister_ids: vec![],
+            extensions: Some(vec![].into()),
             archive_canister_ids: vec![],
             index_canister_id: Some(PrincipalId::new_user_test_id(4)),
             testflight,
@@ -2390,7 +2402,7 @@ mod tests {
             dapp_canister_ids: vec![PrincipalId::new_user_test_id(4)],
             archive_canister_ids: vec![PrincipalId::new_user_test_id(5)],
             index_canister_id: Some(PrincipalId::new_user_test_id(6)),
-            extension_canister_ids: vec![PrincipalId::new_user_test_id(7)],
+            extensions: Some(vec![PrincipalId::new_user_test_id(7)].into()),
             ..Default::default()
         };
         let sns_root_canister_id = PrincipalId::new_user_test_id(5);
@@ -2407,7 +2419,7 @@ mod tests {
                 dapps: state.dapp_canister_ids,
                 archives: state.archive_canister_ids,
                 index: state.index_canister_id,
-                extensions: state.extension_canister_ids,
+                extensions: state.extensions,
             }
         )
     }
@@ -2928,7 +2940,7 @@ mod tests {
                 ledger_canister_id: Some(PrincipalId::new_user_test_id(2)),
                 swap_canister_id: Some(PrincipalId::new_user_test_id(3)),
                 dapp_canister_ids: vec![],
-                extension_canister_ids: vec![],
+                extensions: Some(Extensions { extension_canister_ids: vec![] }),
                 archive_canister_ids: vec![],
                 index_canister_id: Some(PrincipalId::new_user_test_id(4)),
                 testflight: false,
@@ -3081,7 +3093,7 @@ mod tests {
                 ledger_canister_id: Some(PrincipalId::new_user_test_id(2)),
                 swap_canister_id: Some(PrincipalId::new_user_test_id(3)),
                 dapp_canister_ids: EXPECTED_DAPP_CANISTERS_PRINCIPAL_IDS.with(|i| i.clone()),
-                extension_canister_ids: vec![],
+                extensions: Some(Extensions { extension_canister_ids: vec![] }),
                 archive_canister_ids: vec![],
                 index_canister_id: Some(PrincipalId::new_user_test_id(4)),
                 testflight: false,
@@ -3311,7 +3323,7 @@ mod tests {
                 ledger_canister_id: Some(PrincipalId::new_user_test_id(2)),
                 swap_canister_id: Some(PrincipalId::new_user_test_id(3)),
                 dapp_canister_ids: vec![],
-                extension_canister_ids: vec![],
+                extensions: Some(Extensions { extension_canister_ids: vec![] }),
                 archive_canister_ids: EXPECTED_ARCHIVE_CANISTERS_PRINCIPAL_IDS.with(|i| i.clone()),
                 index_canister_id: Some(PrincipalId::new_user_test_id(4)),
                 testflight: false,

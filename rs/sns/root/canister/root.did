@@ -113,7 +113,7 @@ type ListSnsCanistersResponse = record {
   index : opt principal;
   governance : opt principal;
   dapps : vec principal;
-  extensions : vec principal;
+  extensions : opt Extensions;
   archives : vec principal;
 };
 
@@ -168,9 +168,13 @@ type SetDappControllersResponse = record {
   failed_updates : vec FailedUpdate;
 };
 
+type Extensions = record {
+  extension_canister_ids : vec principal;
+};
+
 type SnsRootCanister = record {
   dapp_canister_ids : vec principal;
-  extension_canister_ids : vec principal;
+  extensions : opt Extensions;
   testflight : bool;
   archive_canister_ids : vec principal;
   governance_canister_id : opt principal;

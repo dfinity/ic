@@ -5,7 +5,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use serde::{Deserialize, Serialize};
 
 use crate::pb::v1::{
-    register_extension_response, CanisterCallError, RegisterExtensionRequest,
+    register_extension_response, CanisterCallError, Extensions, RegisterExtensionRequest,
     RegisterExtensionResponse,
 };
 
@@ -98,6 +98,20 @@ impl From<Result<(), CanisterCallError>> for RegisterExtensionResponse {
             Err(err) => RegisterExtensionResponse {
                 result: Some(Result::Err(err)),
             },
+        }
+    }
+}
+
+// impl Default for Extensions {
+//     fn default() -> Self {
+//         Self { extension_canister_ids: vec![] }
+//     }
+// }
+
+impl From<Vec<PrincipalId>> for Extensions {
+    fn from(extension_canister_ids: Vec<PrincipalId>) -> Self {
+        Self {
+            extension_canister_ids,
         }
     }
 }

@@ -29,8 +29,8 @@ pub struct SnsRootCanister {
     #[prost(message, repeated, tag = "3")]
     pub dapp_canister_ids: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
     /// Extension canister IDs.
-    #[prost(message, repeated, tag = "11")]
-    pub extension_canister_ids: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
+    #[prost(message, optional, tag = "11")]
+    pub extensions: ::core::option::Option<Extensions>,
     /// Required.
     ///
     /// The swap canister ID.
@@ -238,6 +238,18 @@ pub struct CanisterCallError {
     ::prost::Message,
 )]
 pub struct ListSnsCanistersRequest {}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct Extensions {
+    #[prost(message, repeated, tag = "1")]
+    pub extension_canister_ids: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
+}
 /// Response struct for the ListSnsCanisters API on the
 /// SNS Root canister. ListSnsCanisters will return Principals
 /// of all the associated canisters in an SNS.
@@ -264,8 +276,8 @@ pub struct ListSnsCanistersResponse {
     pub archives: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
     #[prost(message, optional, tag = "7")]
     pub index: ::core::option::Option<::ic_base_types::PrincipalId>,
-    #[prost(message, repeated, tag = "8")]
-    pub extensions: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
+    #[prost(message, optional, tag = "8")]
+    pub extensions: ::core::option::Option<Extensions>,
 }
 #[derive(
     candid::CandidType,

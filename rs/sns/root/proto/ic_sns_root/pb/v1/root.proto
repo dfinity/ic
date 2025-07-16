@@ -27,7 +27,7 @@ message SnsRootCanister {
   repeated ic_base_types.pb.v1.PrincipalId dapp_canister_ids = 3;
 
   // Extension canister IDs.
-  repeated ic_base_types.pb.v1.PrincipalId extension_canister_ids = 11;
+  optional Extensions extensions = 11;
 
   // Required.
   //
@@ -113,6 +113,10 @@ message ListSnsCanistersRequest {
   // This struct intentionally left blank (for now).
 }
 
+message Extensions {
+  repeated ic_base_types.pb.v1.PrincipalId extension_canister_ids = 1;
+}
+
 // Response struct for the ListSnsCanisters API on the
 // SNS Root canister. ListSnsCanisters will return Principals
 // of all the associated canisters in an SNS.
@@ -124,7 +128,7 @@ message ListSnsCanistersResponse {
   repeated ic_base_types.pb.v1.PrincipalId dapps = 5;
   repeated ic_base_types.pb.v1.PrincipalId archives = 6;
   ic_base_types.pb.v1.PrincipalId index = 7;
-  repeated ic_base_types.pb.v1.PrincipalId extensions = 8;
+  optional Extensions extensions = 8;
 }
 
 enum LogVisibility {
