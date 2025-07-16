@@ -14035,7 +14035,9 @@ version = "0.9.0"
 dependencies = [
  "bincode",
  "ic-base-types",
+ "ic-crypto-test-utils-canister-threshold-sigs",
  "ic-crypto-test-utils-ni-dkg",
+ "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-tree-hash",
  "ic-interfaces",
  "ic-interfaces-state-manager",
