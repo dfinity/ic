@@ -1497,7 +1497,7 @@ pub trait SshSession: HasTestEnv {
         let ip = self.get_host_ip()?;
         retry_with_msg!(
             format!("get_ssh_session to {ip}"),
-            self.get_env().logger(),
+            self.test_env().logger(),
             SSH_RETRY_TIMEOUT,
             RETRY_BACKOFF,
             || { self.get_ssh_session() }
