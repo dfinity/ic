@@ -9,7 +9,7 @@ use ic_interfaces::{
     validation::ValidationError,
 };
 use ic_interfaces_state_manager::StateReader;
-use ic_logger::{error, warn, ReplicaLogger};
+use ic_logger::{debug, error, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
@@ -160,7 +160,7 @@ impl QueryStatsPayloadBuilderImpl {
             Some(stats) => stats,
             None => {
                 return {
-                    warn!(
+                    debug!(
                         every_n_seconds => 30,
                         self.log,
                         "Current stats are uninitialized. This warning should go away after some minutes if the replica is processing query calls."
