@@ -44,7 +44,7 @@ use tokio_util::sync::CancellationToken;
 const CHECK_INTERVAL_SECS: Duration = Duration::from_secs(10);
 
 pub struct Orchestrator {
-    pub logger: ReplicaLogger,
+    logger: ReplicaLogger,
     _metrics_runtime: MetricsHttpEndpoint,
     upgrade: Option<Upgrade>,
     hostos_upgrade: Option<HostosUpgrader>,

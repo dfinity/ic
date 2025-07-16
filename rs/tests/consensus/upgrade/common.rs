@@ -311,7 +311,7 @@ pub fn start_node(logger: &Logger, app_node: &IcNodeSnapshot) {
 }
 
 async fn assert_registry_replicator_stopped(node: IcNodeSnapshot) {
-    const MESSAGE: &str = r"Task \`registry_replicator\` finished gracefully";
+    const MESSAGE: &str = r"Orchestrator shut down gracefully";
 
     let script = format!("journalctl -f | grep -q \"{}\"", MESSAGE);
 
