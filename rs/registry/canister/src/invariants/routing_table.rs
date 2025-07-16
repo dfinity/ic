@@ -1,4 +1,7 @@
-use crate::invariants::common::{InvariantCheckError, RegistrySnapshot};
+use crate::{
+    flags::is_routing_table_single_entry_obsolete,
+    invariants::common::{InvariantCheckError, RegistrySnapshot},
+};
 
 use std::convert::TryFrom;
 
@@ -22,26 +25,28 @@ pub(crate) fn check_routing_table_invariants(
 
 // Return routing table from snapshot
 fn get_routing_table(snapshot: &RegistrySnapshot) -> RoutingTable {
-    // TODO(NNS1-3781): Remove this once we have sharded table supported by all clients.
-    let rt_from_routing_table_record =
-        match snapshot.get(make_routing_table_record_key().as_bytes()) {
-            Some(routing_table_bytes) => {
-                let routing_table_proto =
-                    pbRoutingTable::decode(routing_table_bytes.as_slice()).unwrap();
-                RoutingTable::try_from(routing_table_proto).unwrap()
-            }
-            None => panic!("No routing table in snapshot"),
-        };
-
     // If there are shards, they should match the routing table record.
     let shards = get_routing_table_shards(snapshot);
     let rt_from_shards = RoutingTable::try_from(shards).unwrap();
-    assert_eq!(
-        rt_from_shards, rt_from_routing_table_record,
-        "Routing tables from shards and routing table record do not match."
-    );
 
-    rt_from_routing_table_record
+    if !is_routing_table_single_entry_obsolete() {
+        // TODO(NNS1-3781): Remove this once we have sharded table supported by all clients.
+        let rt_from_routing_table_record =
+            match snapshot.get(make_routing_table_record_key().as_bytes()) {
+                Some(routing_table_bytes) => {
+                    let routing_table_proto =
+                        pbRoutingTable::decode(routing_table_bytes.as_slice()).unwrap();
+                    RoutingTable::try_from(routing_table_proto).unwrap()
+                }
+                None => panic!("No routing table in snapshot"),
+            };
+        assert_eq!(
+            rt_from_shards, rt_from_routing_table_record,
+            "Routing tables from shards and routing table record do not match."
+        );
+    }
+
+    rt_from_shards
 }
 
 fn get_routing_table_shards(snapshot: &RegistrySnapshot) -> Vec<pbRoutingTable> {
