@@ -11,7 +11,6 @@ use std::{
 
 use anyhow::{bail, Context, Error};
 use clap::Args;
-use sys_mount::{Mount, Unmount, UnmountFlags};
 use tempfile::TempDir;
 use url::Url;
 
@@ -560,29 +559,255 @@ pub async fn update_hostos_boot_args(
         );
     }
 
+    // Debug: Check device mapper status and manually create device nodes if needed
+    println!("=== DEBUGGING DEVICE MAPPER STATUS ===");
+    let dmsetup_output = Command::new("sudo")
+        .args(["dmsetup", "ls"])
+        .output()
+        .context("failed to run dmsetup ls")?;
+    println!("dmsetup ls output:");
+    println!("{}", String::from_utf8_lossy(&dmsetup_output.stdout));
+
+    let dmsetup_info_output = Command::new("sudo")
+        .args(["dmsetup", "info"])
+        .output()
+        .context("failed to run dmsetup info")?;
+    println!("dmsetup info output:");
+    println!("{}", String::from_utf8_lossy(&dmsetup_info_output.stdout));
+
+    // Try to manually create device nodes for the logical volumes
+    println!("=== MANUALLY CREATING DEVICE NODES ===");
+
+    // Get the device mapper names and create device nodes
+    let dm_devices = ["hostlvm-A_boot", "hostlvm-B_boot"];
+
+    for dm_name in &dm_devices {
+        // Get major:minor for this device
+        let dmsetup_table_output = Command::new("sudo")
+            .args(["dmsetup", "table", dm_name])
+            .output();
+
+        if let Ok(output) = dmsetup_table_output {
+            if output.status.success() {
+                println!("dmsetup table {} output:", dm_name);
+                println!("{}", String::from_utf8_lossy(&output.stdout));
+
+                // Get device info including major:minor
+                let dmsetup_info_dev_output = Command::new("sudo")
+                    .args(["dmsetup", "info", dm_name])
+                    .output();
+
+                if let Ok(info_output) = dmsetup_info_dev_output {
+                    let info_text = String::from_utf8_lossy(&info_output.stdout);
+                    println!("dmsetup info {} output:", dm_name);
+                    println!("{}", info_text);
+
+                    // Extract major:minor from the output
+                    if let Some(major_line) =
+                        info_text.lines().find(|l| l.contains("Major, minor:"))
+                    {
+                        if let Some(major_minor) = major_line.split(':').nth(1) {
+                            let parts: Vec<&str> = major_minor.trim().split(',').collect();
+                            if parts.len() == 2 {
+                                if let (Ok(major), Ok(minor)) = (
+                                    parts[0].trim().parse::<u32>(),
+                                    parts[1].trim().parse::<u32>(),
+                                ) {
+                                    let device_path = format!("/dev/mapper/{}", dm_name);
+
+                                    println!(
+                                        "Creating device node: {} ({}:{})",
+                                        device_path, major, minor
+                                    );
+                                    let mknod_output = Command::new("sudo")
+                                        .args([
+                                            "mknod",
+                                            &device_path,
+                                            "b",
+                                            &major.to_string(),
+                                            &minor.to_string(),
+                                        ])
+                                        .output();
+
+                                    match mknod_output {
+                                        Ok(output) => {
+                                            if output.status.success() {
+                                                println!(
+                                                    "Successfully created device node: {}",
+                                                    device_path
+                                                );
+                                            } else {
+                                                println!(
+                                                    "mknod failed for {}: {}",
+                                                    device_path,
+                                                    String::from_utf8_lossy(&output.stderr)
+                                                );
+                                            }
+                                        }
+                                        Err(err) => {
+                                            println!(
+                                                "Failed to run mknod for {}: {}",
+                                                device_path, err
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                println!(
+                    "dmsetup table failed for {}: {}",
+                    dm_name,
+                    String::from_utf8_lossy(&output.stderr)
+                );
+            }
+        }
+    }
+
     // Step 6: Mount and modify boot partitions
     let mount_point_a = work_dir.join("boot_a");
     let mount_point_b = work_dir.join("boot_b");
     fs::create_dir_all(&mount_point_a).context("failed to create mount point A")?;
     fs::create_dir_all(&mount_point_b).context("failed to create mount point B")?;
 
-    // Mount boot partition A using sys-mount
-    println!("Mounting boot partition A...");
-    let mount_a = Mount::new("/dev/hostlvm/A_boot", mount_point_a.as_path())
-        .context("failed to mount boot partition A")?;
+    // Debug: Check if LVM logical volumes exist and are accessible
+    println!("=== DEBUGGING LVM LOGICAL VOLUMES ===");
+    let lvs_output = Command::new("sudo")
+        .args(["/usr/sbin/lvs", "hostlvm"])
+        .output()
+        .context("failed to run lvs")?;
+    println!("lvs output:");
+    println!("{}", String::from_utf8_lossy(&lvs_output.stdout));
+    if !lvs_output.stderr.is_empty() {
+        println!("lvs errors:");
+        println!("{}", String::from_utf8_lossy(&lvs_output.stderr));
+    }
 
-    // Mount boot partition B using sys-mount
-    println!("Mounting boot partition B...");
-    let mount_b = Mount::new("/dev/hostlvm/B_boot", mount_point_b.as_path());
+    // Check what device nodes actually exist in /dev/mapper/ and /dev/hostlvm/
+    println!("=== DEBUGGING DEVICE MAPPER NODES ===");
 
-    let mount_b = match mount_b {
-        Ok(mount) => mount,
-        Err(err) => {
-            // Clean up mount A on failure
-            let _ = mount_a.unmount(UnmountFlags::empty());
-            bail!("Failed to mount boot partition B: {}", err);
+    // List /dev/mapper/ contents
+    let mapper_output = Command::new("ls")
+        .args(["-la", "/dev/mapper/"])
+        .output()
+        .context("failed to list /dev/mapper/")?;
+    println!("ls -la /dev/mapper/:");
+    println!("{}", String::from_utf8_lossy(&mapper_output.stdout));
+
+    // List /dev/hostlvm/ contents if it exists
+    if Path::new("/dev/hostlvm/").exists() {
+        let hostlvm_output = Command::new("ls")
+            .args(["-la", "/dev/hostlvm/"])
+            .output()
+            .context("failed to list /dev/hostlvm/")?;
+        println!("ls -la /dev/hostlvm/:");
+        println!("{}", String::from_utf8_lossy(&hostlvm_output.stdout));
+    } else {
+        println!("/dev/hostlvm/ directory does not exist");
+    }
+
+    // Try to find the actual device paths using different naming conventions
+    let possible_a_boot_paths = vec![
+        "/dev/hostlvm/A_boot",
+        "/dev/mapper/hostlvm-A_boot",
+        "/dev/mapper/hostlvm-A--boot",
+    ];
+
+    let possible_b_boot_paths = vec![
+        "/dev/hostlvm/B_boot",
+        "/dev/mapper/hostlvm-B_boot",
+        "/dev/mapper/hostlvm-B--boot",
+    ];
+
+    println!("Checking possible device paths:");
+    let mut a_boot_path = None;
+    let mut b_boot_path = None;
+
+    for path in &possible_a_boot_paths {
+        println!("  {} exists: {}", path, Path::new(path).exists());
+        if Path::new(path).exists() && a_boot_path.is_none() {
+            a_boot_path = Some(path.to_string());
         }
-    };
+    }
+
+    for path in &possible_b_boot_paths {
+        println!("  {} exists: {}", path, Path::new(path).exists());
+        if Path::new(path).exists() && b_boot_path.is_none() {
+            b_boot_path = Some(path.to_string());
+        }
+    }
+
+    let a_boot_path = a_boot_path.ok_or_else(|| {
+        anyhow::anyhow!(
+            "Could not find A_boot device node. Checked paths: {:?}",
+            possible_a_boot_paths
+        )
+    })?;
+
+    let b_boot_path = b_boot_path.ok_or_else(|| {
+        anyhow::anyhow!(
+            "Could not find B_boot device node. Checked paths: {:?}",
+            possible_b_boot_paths
+        )
+    })?;
+
+    println!("Using device paths:");
+    println!("  A_boot: {}", a_boot_path);
+    println!("  B_boot: {}", b_boot_path);
+
+    // Check what filesystem type is on the partitions
+    let file_output = Command::new("sudo")
+        .args(["file", "-s", &a_boot_path])
+        .output()
+        .context("failed to run file -s on A_boot")?;
+    println!("file -s {} output:", a_boot_path);
+    println!("{}", String::from_utf8_lossy(&file_output.stdout));
+
+    // Try to determine filesystem type with blkid
+    let blkid_output = Command::new("sudo")
+        .args(["/usr/sbin/blkid", &a_boot_path])
+        .output()
+        .context("failed to run blkid on A_boot")?;
+    println!("blkid {} output:", a_boot_path);
+    println!("{}", String::from_utf8_lossy(&blkid_output.stdout));
+    if !blkid_output.stderr.is_empty() {
+        println!("blkid errors:");
+        println!("{}", String::from_utf8_lossy(&blkid_output.stderr));
+    }
+
+    // Mount boot partition A using sudo mount
+    println!("Mounting boot partition A...");
+    let mount_a_output = Command::new("sudo")
+        .args(["mount", &a_boot_path, mount_point_a.to_str().unwrap()])
+        .output()
+        .context("failed to run mount command for boot partition A")?;
+
+    if !mount_a_output.status.success() {
+        bail!(
+            "Failed to mount boot partition A: {}",
+            String::from_utf8_lossy(&mount_a_output.stderr)
+        );
+    }
+
+    // Mount boot partition B using sudo mount
+    println!("Mounting boot partition B...");
+    let mount_b_output = Command::new("sudo")
+        .args(["mount", &b_boot_path, mount_point_b.to_str().unwrap()])
+        .output()
+        .context("failed to run mount command for boot partition B")?;
+
+    if !mount_b_output.status.success() {
+        // Clean up mount A on failure
+        let _ = Command::new("sudo")
+            .args(["umount", mount_point_a.to_str().unwrap()])
+            .output();
+        bail!(
+            "Failed to mount boot partition B: {}",
+            String::from_utf8_lossy(&mount_b_output.stderr)
+        );
+    }
 
     // Function to modify boot_args file
     let modify_boot_args = |boot_args_path: &Path| -> Result<(), Error> {
@@ -624,10 +849,14 @@ pub async fn update_hostos_boot_args(
     let boot_args_b_path = mount_point_b.join("boot_args");
     modify_boot_args(&boot_args_b_path)?;
 
-    // Step 7: Unmount partitions using sys-mount
+    // Step 7: Unmount partitions using sudo umount
     println!("Unmounting boot partitions...");
-    let _ = mount_a.unmount(UnmountFlags::empty());
-    let _ = mount_b.unmount(UnmountFlags::empty());
+    let _ = Command::new("sudo")
+        .args(["umount", mount_point_a.to_str().unwrap()])
+        .output();
+    let _ = Command::new("sudo")
+        .args(["umount", mount_point_b.to_str().unwrap()])
+        .output();
 
     // Step 10: Repackage the HostOS image
     println!("Repackaging HostOS image...");
