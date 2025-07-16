@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
-load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "IC_GATEWAY_RUNTIME_DEPS", "MAINNET_ENV")
+load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "IC_GATEWAY_RUNTIME_DEPS", "MAINNET_ENV", "VECTOR_ENV", "VECTOR_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -78,9 +78,7 @@ rust_binary(
 # Tests if current commit is "upgradeable" and can be used as an upgrade image
 system_test_nns(
     name = "guestos_upgrade_smoke_test",
-    env = MAINNET_ENV | {
-        "VECTOR_VM_PATH": "$(rootpath //rs/tests:vector_with_log_fetcher_image)",
-    },
+    env = MAINNET_ENV | VECTOR_ENV,
     extra_head_nns_tags = [],
     flaky = True,
     tags = ["long_test"],
@@ -90,9 +88,7 @@ system_test_nns(
     uses_guestos_dev = True,
     uses_guestos_dev_test = True,
     uses_setupos_dev = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + IC_GATEWAY_RUNTIME_DEPS + [
-        "//rs/tests:vector_with_log_fetcher_image",
-    ],
+    runtime_deps = GUESTOS_RUNTIME_DEPS + IC_GATEWAY_RUNTIME_DEPS + VECTOR_RUNTIME_DEPS,
     deps = RUNNER_DEPENDENCIES,
 )
 
