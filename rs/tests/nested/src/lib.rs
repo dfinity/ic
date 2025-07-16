@@ -68,6 +68,11 @@ pub fn config(env: TestEnv, mainnet_config: bool) {
         .start(&env)
         .expect("failed to setup ic-gateway");
 
+    // Initial sync to scrape the network.
+    vector
+        .sync_targets(&env)
+        .expect("Failed to sync Vector targets");
+
     setup_nested_vm(env.clone(), HOST_VM_NAME);
 
     let vm = env.get_nested_vm(HOST_VM_NAME).unwrap_or_else(|e| {
@@ -79,15 +84,15 @@ pub fn config(env: TestEnv, mainnet_config: bool) {
 
     let network = vm.get_nested_network().unwrap();
 
-    for (suffix, ip) in [
-        ("-node_exporter", network.guest_ip),
-        ("-host_node_exporter", network.host_ip),
+    for (job, ip) in [
+        ("node_exporter", network.guest_ip),
+        ("host_node_exporter", network.host_ip),
     ] {
         vector.add_custom_target(
-            format!("{HOST_VM_NAME}-{suffix}"),
+            format!("{HOST_VM_NAME}-{job}"),
             ip.into(),
             Some(
-                [("job", "node_exporter")]
+                [("job", job)]
                     .into_iter()
                     .map(|(k, v)| (k.to_string(), v.to_string()))
                     .collect(),
@@ -95,6 +100,7 @@ pub fn config(env: TestEnv, mainnet_config: bool) {
         );
     }
 
+    // Additional sync to generate new config for the nested vm.
     vector
         .sync_targets(&env)
         .expect("Failed to sync Vector targets");
