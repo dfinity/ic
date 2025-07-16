@@ -1,0 +1,24 @@
+type RpcAccess = variant {
+  Authenticated : record {
+    auth : RpcAuth;
+    publicUrl : opt text;
+  };
+  Unauthenticated : record {
+    publicUrl : text;
+  };
+};
+
+type RpcAuth = variant {
+  BearerToken : record { url : text };
+  UrlParameter : record { urlPattern : text };
+};
+
+type RpcEndpoint = record {
+  url : text;
+  headers : opt vec HttpHeader
+};
+
+type HttpHeader = record {
+  value : text;
+  name : text
+};

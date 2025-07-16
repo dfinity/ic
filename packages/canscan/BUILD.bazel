@@ -1,0 +1,40 @@
+load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_binary", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:anyhow",
+    "@crate_index//:candid",
+    "@crate_index//:candid_parser",
+    "@crate_index//:clap",
+    "@crate_index//:derive_more",
+    "@crate_index//:flate2",
+    "@crate_index//:parse_display",
+    "@crate_index//:wasmparser",
+]
+
+TEST_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:assert_cmd",
+    "@crate_index//:predicates",
+    "@crate_index//:maplit",
+]
+
+rust_binary(
+    name = "canscan",
+    srcs = glob(["src/**/*.rs"]),
+    version = "0.1.0",
+    deps = DEPENDENCIES,
+)
+
+rust_doc_test(
+    name = "canscan-doc-test",
+    crate = ":canscan",
+)
+
+rust_test(
+    name = "canscan-test",
+    srcs = glob(["src/**/*.rs"]),
+    deps = DEPENDENCIES + TEST_DEPENDENCIES,
+)

@@ -1,0 +1,5 @@
+service : () -> {
+    getBalance : (owner: opt principal) -> (nat) query;
+    send : (sender: opt principal, recipient: principal, amount: nat) -> (bool);
+}
+
