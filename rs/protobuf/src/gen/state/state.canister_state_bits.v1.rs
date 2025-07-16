@@ -690,8 +690,6 @@ pub struct CanisterStateBits {
     /// Captures the memory usage of all snapshots associated with a canister.
     #[prost(uint64, tag = "52")]
     pub snapshots_memory_usage: u64,
-    #[prost(int64, tag = "48")]
-    pub priority_credit: i64,
     #[prost(enumeration = "LongExecutionMode", tag = "49")]
     pub long_execution_mode: i32,
     #[prost(uint64, optional, tag = "50")]

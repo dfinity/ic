@@ -49,14 +49,6 @@ pub struct SchedulerState {
     /// in the vector d that corresponds to this canister.
     pub accumulated_priority: AccumulatedPriority,
 
-    /// Keeps the current priority credit of this Canister, accumulated during the
-    /// long execution.
-    ///
-    /// During the long execution, the Canister is temporarily credited with priority
-    /// to slightly boost the long execution priority. Only when the long execution
-    /// is done, then the `accumulated_priority` is decreased by the `priority_credit`.
-    pub priority_credit: AccumulatedPriority,
-
     /// Long execution mode: Opportunistic (default) or Prioritized
     pub long_execution_mode: LongExecutionMode,
 
@@ -92,7 +84,6 @@ impl Default for SchedulerState {
             last_full_execution_round: 0.into(),
             compute_allocation: ComputeAllocation::default(),
             accumulated_priority: AccumulatedPriority::default(),
-            priority_credit: AccumulatedPriority::default(),
             long_execution_mode: LongExecutionMode::default(),
             heap_delta_debit: 0.into(),
             install_code_debit: 0.into(),
