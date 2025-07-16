@@ -23,8 +23,12 @@ LIB_DEPENDENCIES = [
     "//rs/interfaces/adapter_client",
     "//rs/interfaces/registry",
     "//rs/interfaces/state_manager",
+    "//rs/ledger_suite/icp:icp_ledger",
+    "//rs/ledger_suite/icp/index:ic-icp-index",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
+    "//rs/nns/cmc",
+    "//rs/nns/common",
     "//rs/nns/constants",
     "//rs/protobuf",
     "//rs/registry/canister",
@@ -137,9 +141,17 @@ cargo_build_script(
     name = "build_script",
     srcs = ["build.rs"],
     aliases = ALIASES,
-    build_script_env = {"REGISTRY_CANISTER_WASM_PATH": "$(location @mainnet_nns_registry_canister//file)"},
+    build_script_env = {
+        "REGISTRY_CANISTER_WASM_PATH": "$(location @mainnet_nns_registry_canister//file)",
+        "CYCLES_MINTING_CANISTER_WASM_PATH": "$(location @mainnet_nns_cycles-minting-canister//file)",
+        "ICP_LEDGER_CANISTER_WASM_PATH": "$(location @mainnet_icp_ledger_canister//file)",
+        "ICP_INDEX_CANISTER_WASM_PATH": "$(location @mainnet_icp_index_canister//file)",
+    },
     data = [
         "templates/dashboard.html",
+        "@mainnet_icp_index_canister//file",
+        "@mainnet_icp_ledger_canister//file",
+        "@mainnet_nns_cycles-minting-canister//file",
         "@mainnet_nns_registry_canister//file",
     ],  # build script data (e.g. template files) goes here
     deps = BUILD_DEPENDENCIES,
@@ -168,11 +180,19 @@ rust_library(
     ] + glob([
         "src/state_api/**/*.rs",
     ]),
-    compile_data = ["@mainnet_nns_registry_canister//file"],
+    compile_data = [
+        "@mainnet_nns_registry_canister//file",
+        "@mainnet_nns_cycles-minting-canister//file",
+        "@mainnet_icp_ledger_canister//file",
+        "@mainnet_icp_index_canister//file",
+    ],
     crate_name = "pocket_ic_server",
     proc_macro_deps = MACRO_DEPENDENCIES,
     rustc_env = {
         "REGISTRY_CANISTER_WASM_PATH": "$(location @mainnet_nns_registry_canister//file)",
+        "CYCLES_MINTING_CANISTER_WASM_PATH": "$(location @mainnet_nns_cycles-minting-canister//file)",
+        "ICP_LEDGER_CANISTER_WASM_PATH": "$(location @mainnet_icp_ledger_canister//file)",
+        "ICP_INDEX_CANISTER_WASM_PATH": "$(location @mainnet_icp_index_canister//file)",
     },
     version = "9.0.3",
     deps = LIB_DEPENDENCIES + [":build_script"],
@@ -223,7 +243,9 @@ rust_library(
 
 rust_test(
     name = "spec_test",
-    size = "medium",
+    # the test sometimes times out on CI with default timeout
+    # of "moderate" (5 minutes) - 2025-07-03
+    timeout = "long",
     srcs = [
         "tests/common.rs",
         "tests/spec_test.rs",

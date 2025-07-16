@@ -15,7 +15,7 @@ struct Cli {
     #[arg(long)]
     input: PathBuf,
     #[arg(long)]
-    index: Option<usize>,
+    index: Option<u32>,
     #[arg(long)]
     output: PathBuf,
     #[arg(long)]

@@ -325,7 +325,6 @@ impl ExecutionEnvironmentMetrics {
                     | ic00::Method::SignWithECDSA
                     | ic00::Method::SignWithSchnorr
                     | ic00::Method::VetKdDeriveKey
-                    | ic00::Method::ComputeInitialIDkgDealings
                     | ic00::Method::ReshareChainKey
                     | ic00::Method::BitcoinSendTransactionInternal
                     | ic00::Method::BitcoinGetSuccessors => String::from("slow"),
