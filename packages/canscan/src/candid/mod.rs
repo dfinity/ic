@@ -1,7 +1,7 @@
+use crate::types::{CanisterEndpoint, CanisterEndpoints};
 use anyhow::{Error, Result};
 use candid::types::{FuncMode, Function, TypeInner};
 use candid_parser::utils::CandidSource;
-use canscan::{CanisterEndpoint, CanisterEndpoints};
 use std::path::PathBuf;
 
 #[cfg(test)]

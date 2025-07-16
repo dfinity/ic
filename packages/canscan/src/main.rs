@@ -1,13 +1,14 @@
 mod candid;
 mod config;
+mod types;
 mod wasm;
 
 use candid::CandidParser;
-use canscan::CanisterEndpoint;
 use clap::{arg, Parser};
 use config::ConfigParser;
 use std::collections::BTreeSet;
 use std::path::PathBuf;
+use types::CanisterEndpoint;
 use wasm::WasmParser;
 
 #[derive(Parser, Debug)]

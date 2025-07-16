@@ -1,5 +1,5 @@
+use crate::types::{CanisterEndpoint, CanisterEndpoints};
 use anyhow::Result;
-use canscan::{CanisterEndpoint, CanisterEndpoints};
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 

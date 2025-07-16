@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_doc_test", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_doc_test", "rust_test", "rust_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -29,18 +29,25 @@ rust_binary(
 )
 
 rust_doc_test(
-    name = "canscan-doc-test",
+    name = "doc_tests",
     crate = ":canscan",
 )
 
 rust_test(
-    name = "canscan-test",
-    srcs = glob(["src/**/*.rs"]),
+    name = "unit_tests",
+    crate = ":canscan",
+    deps = DEPENDENCIES + TEST_DEPENDENCIES,
+)
+
+rust_test_suite(
+    name = "integration_tests",
+    srcs = ["tests/tests.rs"],
     data = [
+        "//packages/canscan/test_canister:canister.did",
         "//packages/canscan/test_canister:test_canister.wasm.gz",
     ],
     env = {
         "TEST_WASM": "$(rootpath //packages/canscan/test_canister:test_canister.wasm.gz)",
     },
-    deps = DEPENDENCIES + TEST_DEPENDENCIES,
+    deps = [":canscan"] + DEPENDENCIES + TEST_DEPENDENCIES,
 )

@@ -1,12 +1,11 @@
-use crate::candid::CandidParser;
-use canscan::CanisterEndpoint;
+use crate::{candid::CandidParser, types::CanisterEndpoint};
 use maplit::btreeset;
 use std::path::PathBuf;
 
 #[test]
 fn should_parse_candid_file() {
     let endpoints = CandidParser::new(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../test_canister/canister.did"),
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("test_canister/canister.did"),
     )
     .parse()
     .expect("Failed to parse Candid");
@@ -24,7 +23,7 @@ fn should_parse_candid_file() {
 #[test]
 fn should_fail_to_parse_candid_file() {
     let result = CandidParser::new(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/candid/invalid.did"),
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("test_resources/candid/invalid.did"),
     )
     .parse();
 

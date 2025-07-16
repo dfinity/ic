@@ -1,8 +1,8 @@
 #[cfg(test)]
 mod tests;
 
+use crate::types::{CanisterEndpoint, CanisterEndpoints};
 use anyhow::{Error, Result};
-use canscan::{CanisterEndpoint, CanisterEndpoints};
 use flate2::read::GzDecoder;
 use std::{
     fs::File,

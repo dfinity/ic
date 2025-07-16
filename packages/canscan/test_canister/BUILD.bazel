@@ -1,9 +1,10 @@
 load("//bazel:canisters.bzl", "rust_canister")
+exports_files(["canister.did"], visibility = ["//packages/canscan:__pkg__"])
 
 rust_canister(
     name = "test_canister",
-    srcs = ["src/canister.rs"],
-    service_file = ":canister.did",
+    srcs = ["src/main.rs"],
+    service_file = "canister.did",
     deps = [
         # Keep sorted.
         "@crate_index//:candid",
