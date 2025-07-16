@@ -48,6 +48,7 @@ pub struct VectorVm {
     universal_vm: UniversalVm,
     sources: BTreeMap<String, VectorSource>,
     transforms: BTreeMap<String, VectorTransform>,
+    container_running: bool,
 }
 
 impl Default for VectorVm {
@@ -72,6 +73,7 @@ impl VectorVm {
                 }),
             sources: BTreeMap::new(),
             transforms: BTreeMap::new(),
+            container_running: false,
         }
     }
 
@@ -219,11 +221,13 @@ impl VectorVm {
             });
         }
 
-        deployed_vm
-            .block_on_bash_script_from_session(
-                &session,
-                &format!(
-                    r#"
+        if !self.container_running {
+            info!(log, "Issuing command to run vector container.");
+            deployed_vm
+                .block_on_bash_script_from_session(
+                    &session,
+                    &format!(
+                        r#"
 docker run -d --name vector \
     -v /etc/vector/config:/etc/vector/config \
     --network host \
@@ -233,12 +237,14 @@ docker run -d --name vector \
     vector-with-log-fetcher:image \
     -w --config-dir /etc/vector/config
         "#,
-                    ELASTICSEARCH_URL, ELASTICSEARCH_INDEX
-                ),
-            )
-            .expect("Failed to start docker container for vector");
+                        ELASTICSEARCH_URL, ELASTICSEARCH_INDEX
+                    ),
+                )
+                .expect("Failed to start docker container for vector");
+            emit_kibana_url_event(&log, &infra_group_name);
 
-        emit_kibana_url_event(&log, &infra_group_name);
+            self.container_running = true;
+        }
 
         info!(log, "Vector targets sync complete.");
 
