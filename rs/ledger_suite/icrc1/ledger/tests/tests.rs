@@ -12,7 +12,9 @@ use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_ledger_hash_of::{HashOf, HASH_LENGTH};
 use ic_ledger_suite_state_machine_tests::archiving::icrc_archives;
 use ic_ledger_suite_state_machine_tests::fee_collector::BlockRetrieval;
-use ic_ledger_suite_state_machine_tests::in_memory_ledger::verify_ledger_state;
+use ic_ledger_suite_state_machine_tests::in_memory_ledger::{
+    verify_ledger_state, AllowancesRecentlyPurged,
+};
 use ic_ledger_suite_state_machine_tests::{
     get_all_ledger_and_archive_blocks, send_approval, send_transfer_from, AllowanceProvider,
     ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY, BLOB_META_VALUE, DECIMAL_PLACES, FEE, INT_META_KEY,
@@ -1522,7 +1524,7 @@ fn test_icrc3_get_blocks() {
     // multiple ranges
     check_icrc3_get_blocks(vec![(2, 3), (1, 2), (0, 10), (10, 5)]);
 
-    verify_ledger_state::<Tokens>(&env, ledger_id, None);
+    verify_ledger_state::<Tokens>(&env, ledger_id, None, AllowancesRecentlyPurged::Yes);
 }
 
 #[test]

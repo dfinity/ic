@@ -151,7 +151,7 @@ use crate::{
     retry_with_msg, retry_with_msg_async,
     util::{block_on, create_agent},
 };
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use async_trait::async_trait;
 use canister_test::{RemoteTestRuntime, Runtime};
 use ic_agent::{export::Principal, Agent, AgentError};
@@ -1482,12 +1482,27 @@ pub fn load_wasm<P: AsRef<Path>>(p: P) -> Vec<u8> {
     wasm_bytes
 }
 
-pub trait SshSession {
+pub trait SshSession: HasTestEnv {
+    /// Return the address of the SSH server to connect to.
+    fn get_host_ip(&self) -> Result<IpAddr>;
+
     /// Return an SSH session to the machine referenced from self authenticating with the given user.
-    fn get_ssh_session(&self) -> Result<Session>;
+    fn get_ssh_session(&self) -> Result<Session> {
+        get_ssh_session_from_env(&self.test_env(), self.get_host_ip()?)
+            .context("Failed to get SSH session")
+    }
 
     /// Try a number of times to establish an SSH session to the machine referenced from self authenticating with the given user.
-    fn block_on_ssh_session(&self) -> Result<Session>;
+    fn block_on_ssh_session(&self) -> Result<Session> {
+        let ip = self.get_host_ip()?;
+        retry_with_msg!(
+            format!("get_ssh_session to {ip}"),
+            self.test_env().logger(),
+            SSH_RETRY_TIMEOUT,
+            RETRY_BACKOFF,
+            || { self.get_ssh_session() }
+        )
+    }
 
     fn block_on_bash_script(&self, script: &str) -> Result<String> {
         let session = self.block_on_ssh_session()?;
@@ -2060,24 +2075,10 @@ pub fn get_ssh_session_from_env(env: &TestEnv, ip: IpAddr) -> Result<Session> {
 }
 
 impl SshSession for IcNodeSnapshot {
-    fn get_ssh_session(&self) -> Result<Session> {
+    fn get_host_ip(&self) -> Result<IpAddr> {
         let node_record = self.raw_node_record();
         let connection_endpoint = node_record.http.unwrap();
-        let ip_addr = IpAddr::from_str(&connection_endpoint.ip_addr)?;
-        get_ssh_session_from_env(&self.env, ip_addr)
-    }
-
-    fn block_on_ssh_session(&self) -> Result<Session> {
-        let node_record = self.raw_node_record();
-        let connection_endpoint = node_record.http.unwrap();
-        let ip_addr = IpAddr::from_str(&connection_endpoint.ip_addr)?;
-        retry_with_msg!(
-            format!("get_ssh_session to {}", ip_addr.to_string()),
-            self.env.logger(),
-            SSH_RETRY_TIMEOUT,
-            RETRY_BACKOFF,
-            || { self.get_ssh_session() }
-        )
+        IpAddr::from_str(&connection_endpoint.ip_addr).context("Failed to parse IP address")
     }
 }
 

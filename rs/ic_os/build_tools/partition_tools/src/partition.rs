@@ -22,11 +22,16 @@ pub trait Partition: Sized {
     async fn write_file(&mut self, input: &Path, output: &Path) -> Result<()>;
 
     /// Read a file from a given partition
-    async fn read_file(&mut self, input: &Path) -> Result<String>;
+    async fn read_file(&mut self, input: &Path) -> Result<Vec<u8>>;
 
     /// Copy all files from a partition to the output directory. `output` must point to an existing
     /// directory.
     async fn copy_files_to(&mut self, output: &Path) -> Result<()>;
+
+    /// Copy a single file from a partition to the output destination. The path
+    /// leading to `to` must already exist. If `to` is a directory, the filename
+    /// from `from` will be used.
+    async fn copy_file_to(&mut self, from: &Path, to: &Path) -> Result<()>;
 }
 
 /// Use fdisk to check the byte offset of a given partition
