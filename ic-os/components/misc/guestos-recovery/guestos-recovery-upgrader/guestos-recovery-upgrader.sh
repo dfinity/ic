@@ -200,6 +200,10 @@ guestos_upgrade_cleanup() {
         umount "${grubdir}"
         echo "Unmounted ${grubdir}"
     fi
+    if [ -n "${lodev}" ]; then
+        losetup -d "${lodev}"
+        echo "Detached loop device ${lodev}"
+    fi
     if [ -n "${workdir}" ] && [ -d "${workdir}" ]; then
         rm -rf "${workdir}"
         echo "Removed temporary directory ${workdir}"
