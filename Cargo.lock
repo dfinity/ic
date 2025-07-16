@@ -21552,6 +21552,7 @@ dependencies = [
  "config_types",
  "partition_tools",
  "serde_json",
+ "sys-mount",
  "tempfile",
  "tokio",
  "url",

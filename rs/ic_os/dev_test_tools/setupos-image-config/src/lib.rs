@@ -9,6 +9,7 @@ use std::{
 
 use anyhow::{bail, Context, Error};
 use clap::Args;
+use sys_mount::{Mount, Unmount, UnmountFlags};
 use tempfile::TempDir;
 use url::Url;
 
@@ -282,8 +283,47 @@ pub async fn update_hostos_boot_args(
         .context("invalid loop device output")?
         .trim()
         .to_string();
-
     println!("Using loop device: {}", loop_device);
+
+    // Debug: Check if partitions were created
+    println!("=== DEBUGGING PARTITION CREATION ===");
+    for i in 1..=10 {
+        let partition_path = format!("{}p{}", loop_device, i);
+        if Path::new(&partition_path).exists() {
+            println!("Found partition: {}", partition_path);
+            if let Ok(metadata) = fs::metadata(&partition_path) {
+                println!(
+                    "  Partition {} size/type: {:?}",
+                    partition_path,
+                    metadata.file_type()
+                );
+            }
+        }
+    }
+
+    // Debug: Check what LVM can see
+    println!("=== DEBUGGING LVM DETECTION ===");
+    let pvscan_output = Command::new("sudo")
+        .args(["/usr/sbin/pvscan"])
+        .output()
+        .context("failed to run pvscan")?;
+    println!("pvscan output:");
+    println!("{}", String::from_utf8_lossy(&pvscan_output.stdout));
+    if !pvscan_output.stderr.is_empty() {
+        println!("pvscan errors:");
+        println!("{}", String::from_utf8_lossy(&pvscan_output.stderr));
+    }
+
+    let vgscan_output = Command::new("sudo")
+        .args(["/usr/sbin/vgscan"])
+        .output()
+        .context("failed to run vgscan")?;
+    println!("vgscan output:");
+    println!("{}", String::from_utf8_lossy(&vgscan_output.stdout));
+    if !vgscan_output.stderr.is_empty() {
+        println!("vgscan errors:");
+        println!("{}", String::from_utf8_lossy(&vgscan_output.stderr));
+    }
 
     // Ensure we clean up the loop device
     let cleanup_loop = {
@@ -316,46 +356,24 @@ pub async fn update_hostos_boot_args(
     fs::create_dir_all(&mount_point_a).context("failed to create mount point A")?;
     fs::create_dir_all(&mount_point_b).context("failed to create mount point B")?;
 
-    // Mount boot partition A
+    // Mount boot partition A using sys-mount
     println!("Mounting boot partition A...");
-    let mount_a_output = Command::new("sudo")
-        .args([
-            "/usr/bin/mount",
-            "/dev/hostlvm/A_boot",
-            mount_point_a.to_str().unwrap(),
-        ])
-        .output()
+    let mount_a = Mount::new("/dev/hostlvm/A_boot", mount_point_a.as_path())
         .context("failed to mount boot partition A")?;
 
-    if !mount_a_output.status.success() {
-        cleanup_loop();
-        bail!(
-            "Failed to mount boot partition A: {}",
-            String::from_utf8_lossy(&mount_a_output.stderr)
-        );
-    }
-
-    // Mount boot partition B
+    // Mount boot partition B using sys-mount
     println!("Mounting boot partition B...");
-    let mount_b_output = Command::new("sudo")
-        .args([
-            "/usr/bin/mount",
-            "/dev/hostlvm/B_boot",
-            mount_point_b.to_str().unwrap(),
-        ])
-        .output()
-        .context("failed to mount boot partition B")?;
+    let mount_b = Mount::new("/dev/hostlvm/B_boot", mount_point_b.as_path());
 
-    if !mount_b_output.status.success() {
-        let _ = Command::new("sudo")
-            .args(["/usr/bin/umount", mount_point_a.to_str().unwrap()])
-            .output();
-        cleanup_loop();
-        bail!(
-            "Failed to mount boot partition B: {}",
-            String::from_utf8_lossy(&mount_b_output.stderr)
-        );
-    }
+    let mount_b = match mount_b {
+        Ok(mount) => mount,
+        Err(err) => {
+            // Clean up mount A on failure
+            let _ = mount_a.unmount(UnmountFlags::empty());
+            cleanup_loop();
+            bail!("Failed to mount boot partition B: {}", err);
+        }
+    };
 
     // Function to modify boot_args file
     let modify_boot_args = |boot_args_path: &Path| -> Result<(), Error> {
@@ -397,14 +415,10 @@ pub async fn update_hostos_boot_args(
     let boot_args_b_path = mount_point_b.join("boot_args");
     modify_boot_args(&boot_args_b_path)?;
 
-    // Step 7: Unmount partitions
+    // Step 7: Unmount partitions using sys-mount
     println!("Unmounting boot partitions...");
-    let _ = Command::new("sudo")
-        .args(["/usr/bin/umount", mount_point_a.to_str().unwrap()])
-        .output();
-    let _ = Command::new("sudo")
-        .args(["/usr/bin/umount", mount_point_b.to_str().unwrap()])
-        .output();
+    let _ = mount_a.unmount(UnmountFlags::empty());
+    let _ = mount_b.unmount(UnmountFlags::empty());
 
     // Step 8: Deactivate LVM
     println!("Deactivating LVM...");
