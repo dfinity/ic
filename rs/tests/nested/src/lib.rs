@@ -344,7 +344,10 @@ pub fn upgrade_guestos(env: TestEnv) {
 
         let guest_launch_measurements =
             get_ic_os_launch_measurements_test().expect("no launch measurements");
-        info!(logger, "Launch measurements: {:?}", launch_measurements);
+        info!(
+            logger,
+            "Launch measurements: {:?}", guest_launch_measurements
+        );
 
         // check that GuestOS is on the expected version (initial version)
         let client = Client::builder()
