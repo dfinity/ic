@@ -1,5 +1,7 @@
 mod candid;
 mod config;
+#[cfg(test)]
+mod test_utils;
 mod types;
 mod wasm;
 
