@@ -226,8 +226,8 @@ fn test_nodes_in_registry_returns_expected_days() {
     // - node_1 exists until 2025-07-07
     // - node_2 is always present
     // - node_3 appears on 2025-07-11
-    let from = ts("2025-07-03");
-    let to = ts("2025-07-16");
+    let from = ts("2025-07-03").into();
+    let to = ts("2025-07-16").into();
 
     let nodes_map = client.nodes_in_registry_between(from, to);
 

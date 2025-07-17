@@ -69,11 +69,10 @@ impl RegistryQuerier {
 
     /// Computes the set of rewardable nodes, grouped by node provider, for the given range of UTC days.
     ///
-    /// A node is considered rewardable on a specific UTC day if it is present in the registry
-    /// at the end of that day.
+    /// A node is considered rewardable on a specific UTC day if it exists in the registry on that day.
     /// Specifically:
     /// - A node becomes rewardable starting from the UTC day it is registered.
-    /// - A node stops being rewardable on the UTC day it is removed from the registry.
+    /// - A node keeps being rewardable, until and included, the UTC day when it is removed from the registry.
     ///
     /// Nodes without a specified `node_reward_type` are excluded from the rewardable set.
     pub fn get_rewardable_nodes_per_provider(
@@ -82,10 +81,7 @@ impl RegistryQuerier {
     ) -> Result<BTreeMap<PrincipalId, ProviderRewardableNodes>, RegistryClientError> {
         let mut rewardable_nodes_per_provider: BTreeMap<_, ProviderRewardableNodes> =
             BTreeMap::new();
-        let start_ts = reward_period.from.unix_ts_at_day_start();
-        let end_ts = reward_period.to.unix_ts_at_day_end();
-
-        let nodes_in_range = self.nodes_in_registry_between(start_ts, end_ts);
+        let nodes_in_range = self.nodes_in_registry_between(reward_period.from, reward_period.to);
 
         for (node_id, (node_record, latest_version, rewardable_days)) in nodes_in_range {
             let node_operator_id: PrincipalId = node_record
@@ -134,17 +130,19 @@ impl RegistryQuerier {
     }
 
     /// Returns a map of all nodes that were present in the registry
-    /// at any time between `start_ts` and `end_ts`.
+    /// at any time between the start of `day_start` and end of `day_end`.
     ///
     /// For each node, includes:
-    /// - the most recent `NodeRecord` before the end time,
+    /// - the most recent `NodeRecord` before the end of `day_end`,
     /// - the corresponding `RegistryVersion`,
-    /// - the sorted list of `DayUTC`s the node is considered registered.
+    /// - the sorted list of `DayUTC`s the node is registered.
     fn nodes_in_registry_between(
         &self,
-        start_ts: UnixTsNanos,
-        end_ts: UnixTsNanos,
+        day_start: DayUTC,
+        day_end: DayUTC,
     ) -> BTreeMap<NodeId, (NodeRecord, RegistryVersion, Vec<DayUTC>)> {
+        let start_ts = day_start.unix_ts_at_day_start();
+        let end_ts = day_end.unix_ts_at_day_end();
         let prefix_length = NODE_RECORD_KEY_PREFIX.len();
 
         // Fetch all mutations for NodeRecord keys within the specified time range
