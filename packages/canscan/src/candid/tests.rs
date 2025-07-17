@@ -13,7 +13,6 @@ fn should_parse_candid_file() {
             CanisterEndpoint::Query("getBalance".to_string()),
             CanisterEndpoint::Update("send".to_string()),
         }
-        .into()
     );
 }
 

@@ -25,7 +25,6 @@ impl WasmParser {
 
         let payloads = Parser::new(0)
             .parse_all(&buf)
-            .into_iter()
             .collect::<std::result::Result<Vec<_>, _>>()
             .map_err(Error::from)?;
 
@@ -57,7 +56,7 @@ fn read_wasm_file(path: &Path) -> Result<Vec<u8>> {
     let mut reader = BufReader::new(file);
     let mut buf = Vec::new();
 
-    if path.extension().map_or(false, |ext| ext == "gz") {
+    if path.extension().is_some_and(|ext| ext == "gz") {
         let mut gz = GzDecoder::new(reader);
         gz.read_to_end(&mut buf)?;
     } else {
@@ -68,17 +67,17 @@ fn read_wasm_file(path: &Path) -> Result<Vec<u8>> {
 }
 
 fn try_from_wasm_export(Export { name, kind, .. }: Export) -> Option<CanisterEndpoint> {
-    const CANISTER_QUERY_PREFIX: &'static str = "canister_query ";
-    const CANISTER_UPDATE_PREFIX: &'static str = "canister_update ";
+    const CANISTER_QUERY_PREFIX: &str = "canister_query ";
+    const CANISTER_UPDATE_PREFIX: &str = "canister_update ";
 
     if kind != ExternalKind::Func {
         return None;
     }
-    if let Some(query) = name.strip_prefix(CANISTER_QUERY_PREFIX) {
-        Some(CanisterEndpoint::Query(query.to_string()))
-    } else if let Some(update) = name.strip_prefix(CANISTER_UPDATE_PREFIX) {
-        Some(CanisterEndpoint::Update(update.to_string()))
-    } else {
-        None
-    }
+
+    name.strip_prefix(CANISTER_QUERY_PREFIX)
+        .map(|q| CanisterEndpoint::Query(q.to_string()))
+        .or_else(|| {
+            name.strip_prefix(CANISTER_UPDATE_PREFIX)
+                .map(|u| CanisterEndpoint::Update(u.to_string()))
+        })
 }

@@ -50,7 +50,7 @@ impl ConfigParser {
             config = config.hidden(endpoint);
         }
 
-        if let Some(path) = self.path {
+        if let Some(_path) = self.path {
             todo!()
         }
 

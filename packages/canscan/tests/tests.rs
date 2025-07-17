@@ -6,7 +6,7 @@ use std::path::PathBuf;
 #[test]
 fn should_succeed() {
     Command::new(get_runfile_path("canscan"))
-        .args(&[
+        .args([
             "--wasm",
             &get_runfile_path("test_canister/test_canister.wasm.gz"),
             "--candid",
@@ -22,7 +22,7 @@ fn should_succeed() {
 #[test]
 fn should_fail_with_incorrect_path() {
     Command::new(get_runfile_path("canscan"))
-        .args(&[
+        .args([
             "--wasm",
             &get_runfile_path("test_canister/test_canister.wasm.gz"),
             "--candid",
@@ -38,7 +38,7 @@ fn should_fail_with_incorrect_path() {
 #[test]
 fn should_fail_without_hidden_argument() {
     Command::new(get_runfile_path("canscan"))
-        .args(&[
+        .args([
             "--wasm",
             &get_runfile_path("test_canister/test_canister.wasm.gz"),
             "--candid",
@@ -52,7 +52,7 @@ fn should_fail_without_hidden_argument() {
 #[test]
 fn should_fail_with_incorrect_hidden_argument() {
     Command::new(get_runfile_path("canscan"))
-        .args(&[
+        .args([
             "--wasm",
             &get_runfile_path("test_canister/test_canister.wasm.gz"),
             "--candid",

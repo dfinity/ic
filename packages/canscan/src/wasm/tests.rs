@@ -15,7 +15,6 @@ fn should_parse_wasm_file() {
             CanisterEndpoint::Update("send".to_string()),
             CanisterEndpoint::Update("setApiKey".to_string()),
         }
-        .into()
     );
 }
 
@@ -32,6 +31,5 @@ fn should_parse_compressed_wasm_file() {
             CanisterEndpoint::Update("send".to_string()),
             CanisterEndpoint::Update("setApiKey".to_string()),
         }
-        .into()
     );
 }
