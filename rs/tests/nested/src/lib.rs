@@ -321,17 +321,17 @@ pub fn recovery_upgrader_test(env: TestEnv) {
         .expect("guest didn't come up as expected");
 
         // Create test file on host and sleep for 10 minutes
-        info!(
-            logger,
-            "SSH'ing into host to create test file and sleep for 10 minutes"
-        );
+        info!(logger, "SSH'ing into host to create test file");
         let session = host
             .block_on_ssh_session()
             .expect("Could not reach HostOS VM.");
         let mut channel = session.channel_session().unwrap();
 
-        // Create the test file with dummy contents and sleep for 10 minutes
-        channel.exec("echo 'This is a test file created during recovery upgrader test' > /tmp/test.txt && sleep 600").unwrap();
+        channel
+            .exec(
+                "echo 'This is a test file created during recovery upgrader test' > /tmp/test.txt",
+            )
+            .unwrap();
         let mut s = String::new();
         channel.read_to_string(&mut s).unwrap();
         channel.close().ok();
@@ -339,12 +339,14 @@ pub fn recovery_upgrader_test(env: TestEnv) {
 
         assert!(
             channel.exit_status().unwrap() == 0,
-            "Creating test file and sleeping failed."
+            "Creating test file failed."
         );
         info!(
             logger,
             "Successfully created /tmp/test.txt on host and started 10-minute sleep"
         );
+
+        std::thread::sleep(Duration::from_secs(10 * 60));
 
         let new_version = retry_with_msg_async!(
             "Waiting until the guest returns a version",
