@@ -39,7 +39,6 @@ use ic_registry_canister_api::IPv4Config;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::malicious_behavior::MaliciousBehavior;
-use ic_types::ReplicaVersion;
 use slog::{info, warn, Logger};
 use std::{
     collections::BTreeMap,
@@ -96,7 +95,6 @@ pub fn init_ic(
     let dummy_hash = "60958ccac3e5dfa6ae74aa4f8d6206fd33a5fc9546b8abaad65e3f1c4023c5bf".to_string();
 
     let replica_version = get_guestos_img_version()?;
-    let replica_version = ReplicaVersion::try_from(replica_version.clone())?;
     info!(
         logger,
         "Replica Version that is passed is: {:?}", &replica_version

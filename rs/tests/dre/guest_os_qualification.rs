@@ -3,6 +3,7 @@ use ic_system_test_driver::driver::{
     group::SystemTestGroup,
     test_env_api::{get_current_branch_version, get_mainnet_nns_revision},
 };
+use ic_types::ReplicaVersion;
 use os_qualification_utils::{
     defs::QualificationExecutor,
     steps::{
@@ -23,10 +24,13 @@ const OVERALL_TIMEOUT: Duration = Duration::from_secs(4 * 60 * 60);
 pub fn main() -> anyhow::Result<()> {
     // setup env variable for config
     let old_version = match std::env::var("OLD_VERSION") {
-        Ok(v) => v,
-        Err(_) => get_mainnet_nns_revision(),
+        Ok(v) => ReplicaVersion::try_from(v)?,
+        Err(_) => get_mainnet_nns_revision()?,
     };
-    let new_version = std::env::var("NEW_VERSION").ok();
+    let new_version = std::env::var("NEW_VERSION")
+        .ok()
+        .map(|v| ReplicaVersion::try_from(v))
+        .transpose()?;
 
     let config = IcConfig {
         subnets: Some(vec![
@@ -49,7 +53,7 @@ pub fn main() -> anyhow::Result<()> {
         // the old version. If we didn't specify the new version
         // it means that we are running from the tip of the branch
         // and images will not be present.
-        initial_version: new_version.is_some().then_some(old_version.clone()),
+        initial_version: new_version.is_some().then_some(old_version.to_string()),
     };
 
     // If both versions are specified do:

@@ -29,7 +29,7 @@ use ic_system_test_driver::{
     driver::{test_env::TestEnv, test_env_api::*},
     util::{block_on, MessageCanister},
 };
-use ic_types::SubnetId;
+use ic_types::{ReplicaVersion, SubnetId};
 use ic_utils::interfaces::ManagementCanister;
 use slog::{info, Logger};
 use std::collections::BTreeMap;
@@ -40,7 +40,7 @@ const ALLOWED_FAILURES: usize = 1;
 pub const UP_DOWNGRADE_OVERALL_TIMEOUT: Duration = Duration::from_secs(25 * 60);
 pub const UP_DOWNGRADE_PER_TEST_TIMEOUT: Duration = Duration::from_secs(20 * 60);
 
-pub fn bless_target_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> String {
+pub fn bless_target_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> ReplicaVersion {
     let logger = env.logger();
 
     let target_version = get_guestos_update_img_version().expect("target IC version");
@@ -56,6 +56,7 @@ pub fn bless_target_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> String 
         vec![upgrade_url.to_string()],
     ));
     info!(&logger, "Blessed target version");
+
     target_version
 }
 
@@ -95,7 +96,7 @@ pub fn get_chain_key_canister_and_public_key<'a>(
 pub fn upgrade(
     env: &TestEnv,
     nns_node: &IcNodeSnapshot,
-    upgrade_version: &str,
+    upgrade_version: &ReplicaVersion,
     subnet_type: SubnetType,
     ecdsa_canister_key: Option<&(MessageCanister, BTreeMap<MasterPublicKeyId, Vec<u8>>)>,
 ) -> (IcNodeSnapshot, Principal, String) {
@@ -237,7 +238,7 @@ fn upgrade_to(
     nns_node: &IcNodeSnapshot,
     subnet_id: SubnetId,
     subnet_node: &IcNodeSnapshot,
-    target_version: &str,
+    target_version: &ReplicaVersion,
     logger: &Logger,
 ) {
     info!(
@@ -246,7 +247,7 @@ fn upgrade_to(
     );
     block_on(deploy_guestos_to_all_subnet_nodes(
         nns_node,
-        &ic_types::ReplicaVersion::try_from(target_version).unwrap(),
+        target_version,
         subnet_id,
     ));
     assert_assigned_replica_version(subnet_node, target_version, logger.clone());

@@ -41,6 +41,7 @@ use ic_system_test_driver::driver::test_env_api::{
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{block_on, runtime_from_url, MetricsFetcher};
+use ic_types::ReplicaVersion;
 use slog::{info, Logger};
 use std::collections::BTreeMap;
 use std::time::Duration;
@@ -267,15 +268,10 @@ async fn upgrade_to(
     nns_node: &IcNodeSnapshot,
     subnet_id: ic_types::SubnetId,
     subnet_node: &IcNodeSnapshot,
-    target_version: &str,
+    target_version: &ReplicaVersion,
     logger: &Logger,
 ) {
-    deploy_guestos_to_all_subnet_nodes(
-        nns_node,
-        &ic_types::ReplicaVersion::try_from(target_version).unwrap(),
-        subnet_id,
-    )
-    .await;
+    deploy_guestos_to_all_subnet_nodes(nns_node, target_version, subnet_id).await;
     assert_assigned_replica_version(subnet_node, target_version, logger.clone());
 }
 

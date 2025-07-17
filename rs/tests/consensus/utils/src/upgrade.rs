@@ -19,28 +19,28 @@ use prost::Message;
 use slog::{info, Logger};
 use std::{convert::TryFrom, fs, io::Read, path::Path};
 
-pub fn get_public_update_image_url(git_revision: &str) -> String {
+pub fn get_public_update_image_url(git_revision: &ReplicaVersion) -> String {
     format!(
                 "http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/update-img/update-img.tar.zst",
                 git_revision
             )
 }
 
-pub fn get_public_update_image_sha_url(git_revision: &str) -> String {
+pub fn get_public_update_image_sha_url(git_revision: &ReplicaVersion) -> String {
     format!(
         "http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/update-img/SHA256SUMS",
         git_revision
     )
 }
 
-pub async fn fetch_update_file_sha256_with_retry(log: &Logger, version_str: &str) -> String {
+pub async fn fetch_update_file_sha256_with_retry(log: &Logger, version: &ReplicaVersion) -> String {
     ic_system_test_driver::retry_with_msg_async!(
-        format!("fetch update file sha256 of version {}", version_str),
+        format!("fetch update file sha256 of version {}", version),
         log,
         READY_WAIT_TIMEOUT,
         RETRY_BACKOFF,
         || async {
-            match fetch_update_file_sha256(version_str).await {
+            match fetch_update_file_sha256(version).await {
                 Err(err) => bail!(err),
                 Ok(sha) => Ok(sha),
             }
@@ -50,8 +50,8 @@ pub async fn fetch_update_file_sha256_with_retry(log: &Logger, version_str: &str
     .expect("Failed to fetch sha256 file.")
 }
 
-pub async fn fetch_update_file_sha256(version_str: &str) -> Result<String, String> {
-    let sha_url = get_public_update_image_sha_url(version_str);
+pub async fn fetch_update_file_sha256(version: &ReplicaVersion) -> Result<String, String> {
+    let sha_url = get_public_update_image_sha_url(version);
     let tmp_dir = tempfile::tempdir().unwrap().keep();
     let mut tmp_file = tmp_dir.clone();
     tmp_file.push("SHA256.txt");
@@ -88,19 +88,20 @@ pub async fn get_blessed_replica_versions(
 }
 
 /// Reads the replica version from an unassigned node.
-pub fn fetch_unassigned_node_version(endpoint: &IcNodeSnapshot) -> Result<String> {
+pub fn fetch_unassigned_node_version(endpoint: &IcNodeSnapshot) -> Result<ReplicaVersion> {
     let sess = endpoint.block_on_ssh_session()?;
     let version_file = Path::new("/opt/ic/share/version.txt");
     let mut chan = sess.scp_recv(version_file)?.0;
     let mut version = String::new();
     chan.read_to_string(&mut version)?;
     version.retain(|c| !c.is_whitespace());
-    Ok(version)
+
+    Ok(ReplicaVersion::try_from(version)?)
 }
 
 pub fn assert_assigned_replica_version(
     node: &IcNodeSnapshot,
-    expected_version: &str,
+    expected_version: &ReplicaVersion,
     logger: Logger,
 ) {
     assert_assigned_replica_version_with_time(node, expected_version, logger, 600, 10)
@@ -110,7 +111,7 @@ pub fn assert_assigned_replica_version(
 /// Panics if the timeout is reached while waiting.
 pub fn assert_assigned_replica_version_with_time(
     node: &IcNodeSnapshot,
-    expected_version: &str,
+    expected_version: &ReplicaVersion,
     logger: Logger,
     total_secs: u64,
     backoff_secs: u64,
@@ -141,7 +142,7 @@ pub fn assert_assigned_replica_version_with_time(
         secs(total_secs),
         secs(backoff_secs),
         || match get_assigned_replica_version(node) {
-            Ok(ver) if ver == expected_version => {
+            Ok(ver) if &ver == expected_version => {
                 state = State::Finished;
                 Ok(())
             }
@@ -178,22 +179,21 @@ pub fn assert_assigned_replica_version_with_time(
 }
 
 /// Gets the replica version from the node if it is healthy.
-pub fn get_assigned_replica_version(node: &IcNodeSnapshot) -> Result<String, String> {
+pub fn get_assigned_replica_version(node: &IcNodeSnapshot) -> Result<ReplicaVersion, String> {
     let version = match node.status() {
         Ok(status) if Some(ReplicaHealthStatus::Healthy) == status.replica_health_status => status,
         Ok(status) => return Err(format!("Replica is not healthy: {:?}", status)),
         Err(err) => return Err(err.to_string()),
     }
-    .impl_version;
-    match version {
-        Some(ver) => Ok(ver),
-        None => Err("No version found in status".to_string()),
-    }
+    .impl_version
+    .ok_or("No version found in status".to_string())?;
+
+    ReplicaVersion::try_from(version).map_err(|_| "Invalid replica version".to_string())
 }
 
 async fn bless_replica_version_with_sha(
     nns_node: &IcNodeSnapshot,
-    target_version: &str,
+    target_version: &ReplicaVersion,
     logger: &Logger,
     sha256: &String,
     upgrade_url: Vec<String>,
@@ -204,8 +204,6 @@ async fn bless_replica_version_with_sha(
     let proposal_sender = Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR);
     let test_neuron_id = NeuronId(TEST_NEURON_1_ID);
 
-    let replica_version = ReplicaVersion::try_from(target_version).unwrap();
-
     let registry_canister = RegistryCanister::new(vec![nns_node.get_public_url()]);
     let blessed_versions = get_blessed_replica_versions(&registry_canister).await;
     info!(logger, "Initial: {:?}", blessed_versions);
@@ -213,7 +211,7 @@ async fn bless_replica_version_with_sha(
     info!(
         logger,
         "Blessing replica version {} with sha256 {} and upgrade urls: {:?}",
-        replica_version,
+        target_version,
         sha256,
         &upgrade_url
     );
@@ -222,7 +220,7 @@ async fn bless_replica_version_with_sha(
         &governance_canister,
         proposal_sender.clone(),
         test_neuron_id,
-        Some(replica_version),
+        Some(target_version),
         Some(sha256.clone()),
         upgrade_url,
         vec![],
@@ -236,7 +234,7 @@ async fn bless_replica_version_with_sha(
 
 pub async fn bless_replica_version(
     nns_node: &IcNodeSnapshot,
-    target_version: &str,
+    target_version: &ReplicaVersion,
     logger: &Logger,
     sha256: &String,
     upgrade_url: Vec<String>,
@@ -246,7 +244,7 @@ pub async fn bless_replica_version(
 
 pub async fn bless_public_replica_version(
     nns_node: &IcNodeSnapshot,
-    target_version: &str,
+    target_version: &ReplicaVersion,
     logger: &Logger,
 ) {
     let upgrade_url = get_public_update_image_url(target_version);
@@ -266,7 +264,7 @@ pub async fn bless_public_replica_version(
 
 pub async fn bless_replica_version_with_urls(
     nns_node: &IcNodeSnapshot,
-    target_version: &str,
+    target_version: &ReplicaVersion,
     release_package_urls: Vec<String>,
     sha256: String,
     logger: &Logger,
@@ -279,18 +277,16 @@ pub async fn bless_replica_version_with_urls(
     let blessed_versions = get_blessed_replica_versions(&registry_canister).await;
     info!(logger, "Initial: {:?}", blessed_versions);
 
-    let replica_version = ReplicaVersion::try_from(target_version).unwrap();
-
     info!(
         logger,
-        "Blessing replica version {} with sha256 {}", replica_version, sha256
+        "Blessing replica version {} with sha256 {}", target_version, sha256
     );
 
     let proposal_id = submit_update_elected_replica_versions_proposal(
         &governance_canister,
         proposal_sender.clone(),
         test_neuron_id,
-        Some(replica_version),
+        Some(target_version),
         Some(sha256),
         release_package_urls,
         vec![],

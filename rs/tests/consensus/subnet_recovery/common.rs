@@ -302,7 +302,6 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     let logger = env.logger();
 
     let initial_version = get_guestos_img_version().unwrap();
-    let initial_version = ReplicaVersion::try_from(initial_version).unwrap();
     info!(logger, "IC_VERSION_ID: {initial_version:?}");
     let topology_snapshot = env.topology_snapshot();
 
@@ -446,14 +445,13 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     let working_version = if version_is_broken {
         get_guestos_update_img_version().unwrap()
     } else {
-        initial_version.to_string()
+        initial_version
     };
 
     let subnet_args = AppSubnetRecoveryArgs {
         keep_downloaded_state: Some(cfg.chain_key),
         subnet_id,
-        upgrade_version: version_is_broken
-            .then(|| ReplicaVersion::try_from(working_version.clone()).unwrap()),
+        upgrade_version: version_is_broken.then(|| working_version.clone()),
         upgrade_image_url: get_guestos_update_img_url().ok(),
         upgrade_image_hash: get_guestos_update_img_sha256().ok(),
         replacement_nodes: Some(unassigned_nodes_ids.clone()),
@@ -544,7 +542,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         );
     }
 
-    assert_subnet_is_healthy(&all_app_nodes, working_version, app_can_id, msg, &logger);
+    assert_subnet_is_healthy(&all_app_nodes, &working_version, app_can_id, msg, &logger);
 
     for node in all_app_nodes {
         let height = block_on(get_node_metrics(&logger, &node.get_ip_addr()))

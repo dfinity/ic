@@ -47,9 +47,7 @@ use ic_system_test_driver::{
     },
     util::{block_on, get_nns_node, runtime_from_url},
 };
-use ic_types::ReplicaVersion;
 use slog::info;
-use std::convert::TryFrom;
 
 fn setup(env: TestEnv) {
     InternetComputer::new()
@@ -94,8 +92,7 @@ fn test(env: TestEnv) {
         .to_string();
     info!(logger, "Upgrade URL: {}", upgrade_url);
     let target_version = get_guestos_update_img_version().unwrap();
-    let new_replica_version = ReplicaVersion::try_from(target_version.clone()).unwrap();
-    info!(logger, "Target replica version: {}", new_replica_version);
+    info!(logger, "Target replica version: {}", target_version);
 
     let registry_canister = RegistryCanister::new(vec![nns_node.get_public_url()]);
 
@@ -119,7 +116,7 @@ fn test(env: TestEnv) {
             &governance_canister,
             proposal_sender.clone(),
             test_neuron_id,
-            Some(new_replica_version.clone()),
+            Some(&target_version),
             Some(sha256),
             vec![upgrade_url],
             vec![],
@@ -141,7 +138,7 @@ fn test(env: TestEnv) {
             &governance_canister,
             proposal_sender.clone(),
             test_neuron_id,
-            target_version.clone(),
+            &target_version,
         )
         .await;
         vote_execute_proposal_assert_executed(&governance_canister, proposal2_id).await;
@@ -156,7 +153,7 @@ fn test(env: TestEnv) {
     ic_system_test_driver::retry_with_msg!(
         format!(
             "check if unassigned node {} is at version {}",
-            unassigned_node.node_id, target_version
+            unassigned_node.node_id, &target_version
         ),
         env.logger(),
         secs(900),
@@ -168,7 +165,10 @@ fn test(env: TestEnv) {
         }
     )
     .expect("Unassigned node was not updated!");
-    info!(logger, "Unassigned node was updated to: {}", target_version);
+    info!(
+        logger,
+        "Unassigned node was updated to: {}", &target_version
+    );
 }
 
 fn main() -> Result<()> {

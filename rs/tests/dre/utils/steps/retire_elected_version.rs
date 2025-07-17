@@ -11,6 +11,7 @@ use ic_system_test_driver::{
     },
     util::runtime_from_url,
 };
+use ic_types::ReplicaVersion;
 use itertools::Itertools;
 use slog::info;
 
@@ -18,7 +19,7 @@ use super::Step;
 
 #[derive(Clone)]
 pub struct RetireElectedVersions {
-    pub versions: Vec<String>,
+    pub versions: Vec<ReplicaVersion>,
 }
 
 // Retire only if the version uses "disk-img"
@@ -34,7 +35,7 @@ impl Step for RetireElectedVersions {
         let mut versions_to_unelect = self
             .versions
             .iter()
-            .filter(|version| elected_versions.contains(version))
+            .filter(|version| elected_versions.iter().any(|v| v == version.as_ref()))
             .cloned()
             .collect_vec();
 
@@ -59,7 +60,7 @@ impl Step for RetireElectedVersions {
             let record = replica_versions
                 .iter()
                 .find_map(|(key, rec)| {
-                    if key.eq(r) {
+                    if key == r.as_ref() {
                         return Some(rec);
                     }
                     None

@@ -34,10 +34,9 @@ use ic_system_test_driver::driver::{
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::block_on;
-use ic_types::{Height, ReplicaVersion};
+use ic_types::Height;
 use slog::info;
 use ssh2::Session;
-use std::convert::TryFrom;
 
 const DKG_INTERVAL: u64 = 9;
 const SUBNET_SIZE: usize = 4;
@@ -85,7 +84,7 @@ fn test(test_env: TestEnv) {
     let subnet_id = test_env.topology_snapshot().root_subnet_id();
     block_on(deploy_guestos_to_all_subnet_nodes(
         &nns_node,
-        &ReplicaVersion::try_from(target_version.clone()).expect("Wrong format of the version"),
+        &target_version,
         subnet_id,
     ));
     info!(logger, "Upgrade started");

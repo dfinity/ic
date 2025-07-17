@@ -89,7 +89,7 @@ fn run_unit_test(
 
 fn download_mainnet_binary(
     binary_name: &str,
-    version: &str,
+    version: &ReplicaVersion,
     target_dir: &Path,
     log: &Logger,
 ) -> PathBuf {
@@ -101,7 +101,7 @@ fn download_mainnet_binary(
         || async {
             download_binary(
                 log,
-                ReplicaVersion::try_from(version).unwrap(),
+                version,
                 binary_name.into(),
                 target_dir,
             )
@@ -148,7 +148,7 @@ enum TestType {
     SelfTestOnly,
     Bidirectional {
         published_binary: String,
-        mainnet_version: String,
+        mainnet_version: ReplicaVersion,
     },
 }
 
@@ -201,7 +201,7 @@ impl TestCase {
 
     fn bidirectional_test(
         &self,
-        mainnet_version: &str,
+        mainnet_version: &ReplicaVersion,
         published_binary_name: &str,
         logger: &Logger,
     ) {
@@ -236,8 +236,8 @@ impl TestCase {
 fn test(env: TestEnv) {
     let logger = env.logger();
 
-    let mainnet_nns_version = get_mainnet_nns_revision();
-    let mainnet_application_subnet_version = get_mainnet_application_subnet_revision();
+    let mainnet_nns_version = get_mainnet_nns_revision().unwrap();
+    let mainnet_application_subnet_version = get_mainnet_application_subnet_revision().unwrap();
 
     info!(
         logger,

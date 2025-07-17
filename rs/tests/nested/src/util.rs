@@ -65,7 +65,7 @@ pub(crate) fn check_hostos_version(node: &NestedVm) -> String {
 /// Submit a proposal to elect a new GuestOS version
 pub(crate) async fn elect_guestos_version(
     nns_node: &IcNodeSnapshot,
-    target_version: ReplicaVersion,
+    target_version: &ReplicaVersion,
     sha256: String,
     upgrade_urls: Vec<String>,
 ) {
@@ -132,14 +132,17 @@ pub(crate) async fn update_unassigned_nodes(
         &governance_canister,
         proposal_sender,
         test_neuron_id,
-        target_version.to_string(),
+        target_version,
     )
     .await;
     vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;
 }
 
 /// Get the current GuestOS version from the metrics endpoint of the guest.
-pub async fn check_guestos_version(client: &Client, ipv6_address: &Ipv6Addr) -> Result<String> {
+pub async fn check_guestos_version(
+    client: &Client,
+    ipv6_address: &Ipv6Addr,
+) -> Result<ReplicaVersion> {
     let url = format!("https://[{ipv6_address}]:9100/metrics");
 
     let response = client
@@ -156,10 +159,13 @@ pub async fn check_guestos_version(client: &Client, ipv6_address: &Ipv6Addr) -> 
     let re =
         Regex::new(r#"guestos_version\{version="([^"]+)""#).context("Failed to compile regex")?;
 
-    re.captures(&body)
+    let capture = re
+        .captures(&body)
         .and_then(|caps| caps.get(1))
         .map(|m| m.as_str().to_string())
-        .context("Version string not found in response")
+        .context("Version string not found in response")?;
+
+    Ok(ReplicaVersion::try_from(capture)?)
 }
 
 /// Submit a proposal to elect a new HostOS version
@@ -320,7 +326,7 @@ pub async fn wait_for_guest_version(
     logger: &Logger,
     timeout: Duration,
     backoff: Duration,
-) -> Result<String> {
+) -> Result<ReplicaVersion> {
     retry_with_msg_async_quiet!(
         "Waiting until the guest returns a version",
         logger,
@@ -329,16 +335,13 @@ pub async fn wait_for_guest_version(
         || async {
             let current_version = check_guestos_version(client, guest_ipv6)
                 .await
-                .unwrap_or("unavailable".to_string());
-            if current_version != "unavailable" {
-                info!(
-                    logger,
-                    "SUCCESS: Guest reported version '{}'", current_version
-                );
-                Ok(current_version)
-            } else {
-                bail!("FAIL: Guest version is still unavailable")
-            }
+                .expect("Unable to check GuestOS version");
+            info!(
+                logger,
+                "SUCCESS: Guest reported version '{}'", current_version
+            );
+
+            Ok(current_version)
         }
     )
     .await
@@ -348,7 +351,7 @@ pub async fn wait_for_guest_version(
 pub async fn wait_for_expected_guest_version(
     client: &Client,
     guest_ipv6: &Ipv6Addr,
-    expected_version: &str,
+    expected_version: &ReplicaVersion,
     logger: &Logger,
     timeout: Duration,
     backoff: Duration,
@@ -364,16 +367,16 @@ pub async fn wait_for_expected_guest_version(
         || async {
             let current_version = check_guestos_version(client, guest_ipv6)
                 .await
-                .unwrap_or("unavailable".to_string());
-            if current_version == expected_version {
-                info!(
-                    logger,
-                    "SUCCESS: Guest is now on expected version '{}'", current_version
-                );
-                Ok(())
-            } else {
+                .expect("Unable to check GuestOS version");
+            if &current_version != expected_version {
                 bail!("FAIL: Guest is still on version '{}'", current_version)
             }
+            info!(
+                logger,
+                "SUCCESS: Guest is now on expected version '{}'", current_version
+            );
+
+            Ok(())
         }
     )
     .await

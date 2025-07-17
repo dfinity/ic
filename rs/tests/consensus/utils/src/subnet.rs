@@ -13,6 +13,7 @@ use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_system_test_driver::util::*;
 use ic_system_test_driver::{driver::test_env_api::*, util::runtime_from_url};
+use ic_types::ReplicaVersion;
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use slog::{info, Logger};
 use std::collections::BTreeMap;
@@ -22,7 +23,7 @@ use std::time::Duration;
 /// and running the given version, canisters can be installed and messages can be written and read.
 pub fn assert_subnet_is_healthy(
     subnet: &Vec<IcNodeSnapshot>,
-    target_version: String,
+    target_version: &ReplicaVersion,
     can_id: Principal,
     msg: &str,
     logger: &Logger,
@@ -32,7 +33,7 @@ pub fn assert_subnet_is_healthy(
         "Confirm that ALL nodes are now healthy and running on the new version {target_version}"
     );
     for node in subnet {
-        assert_assigned_replica_version(node, &target_version, logger.clone());
+        assert_assigned_replica_version(node, target_version, logger.clone());
         info!(
             logger,
             "Healthy upgrade of assigned node {} to {}", node.node_id, target_version

@@ -194,7 +194,7 @@ impl Recovery {
             if let Some(version) = args.replica_version {
                 block_on(download_binary(
                     &logger,
-                    version,
+                    &version,
                     String::from("ic-admin"),
                     &binary_dir,
                 ))?;

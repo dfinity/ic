@@ -486,10 +486,10 @@ pub async fn submit_update_elected_replica_versions_proposal(
     governance: &Canister<'_>,
     sender: Sender,
     neuron_id: NeuronId,
-    version: Option<ReplicaVersion>,
+    version: Option<&ReplicaVersion>,
     sha256: Option<String>,
     upgrade_urls: Vec<String>,
-    versions_to_unelect: Vec<String>,
+    versions_to_unelect: Vec<ReplicaVersion>,
 ) -> ProposalId {
     submit_external_update_proposal_allowing_error(
         governance,
@@ -497,10 +497,10 @@ pub async fn submit_update_elected_replica_versions_proposal(
         neuron_id,
         NnsFunction::ReviseElectedGuestosVersions,
         ReviseElectedGuestosVersionsPayload {
-            replica_version_to_elect: version.clone().map(String::from),
+            replica_version_to_elect: version.map(String::from),
             release_package_sha256_hex: sha256.clone(),
             release_package_urls: upgrade_urls,
-            replica_versions_to_unelect: versions_to_unelect.clone(),
+            replica_versions_to_unelect: versions_to_unelect.iter().map(String::from).collect(),
             guest_launch_measurement_sha256_hex: None,
         },
         match (version, sha256, versions_to_unelect.is_empty()) {
@@ -654,7 +654,7 @@ pub async fn submit_update_unassigned_node_version_proposal(
     governance: &Canister<'_>,
     sender: Sender,
     neuron_id: NeuronId,
-    version: String,
+    version: &ReplicaVersion,
 ) -> ProposalId {
     submit_external_update_proposal_allowing_error(
         governance,
@@ -662,9 +662,9 @@ pub async fn submit_update_unassigned_node_version_proposal(
         neuron_id,
         NnsFunction::DeployGuestosToAllUnassignedNodes,
         DeployGuestosToAllUnassignedNodesPayload {
-            elected_replica_version: version.clone(),
+            elected_replica_version: version.to_string(),
         },
-        format!("Update unassigned nodes version to: {}", version.clone()),
+        format!("Update unassigned nodes version to: {}", version),
         "".to_string(),
     )
     .await
@@ -773,7 +773,7 @@ pub async fn submit_update_api_boundary_node_version_proposal(
     sender: Sender,
     neuron_id: NeuronId,
     node_ids: Vec<NodeId>,
-    version: String,
+    version: &ReplicaVersion,
 ) -> ProposalId {
     submit_external_update_proposal_allowing_error(
         governance,
@@ -782,7 +782,7 @@ pub async fn submit_update_api_boundary_node_version_proposal(
         NnsFunction::DeployGuestosToSomeApiBoundaryNodes,
         UpdateApiBoundaryNodesVersionPayload {
             node_ids: node_ids.clone(),
-            version: version.clone(),
+            version: version.to_string(),
         },
         format!(
             "Update API boundary nodes ({}) to version {}",

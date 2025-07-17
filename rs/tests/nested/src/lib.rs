@@ -17,7 +17,7 @@ use ic_system_test_driver::{
     retry_with_msg,
     util::block_on,
 };
-use ic_types::{hostos_version::HostosVersion, ReplicaVersion};
+use ic_types::hostos_version::HostosVersion;
 use reqwest::Client;
 
 use slog::info;
@@ -211,8 +211,8 @@ pub fn upgrade_hostos(env: TestEnv) {
     let logger = env.logger();
 
     let target_version_str = get_hostos_update_img_version().unwrap();
-    let target_version =
-        HostosVersion::try_from(target_version_str.trim()).expect("Invalid target hostos version");
+    let target_version = HostosVersion::try_from(target_version_str.to_string())
+        .expect("Invalid target hostos version");
 
     let update_image_url =
         get_hostos_update_img_url().expect("Invalid target hostos update image URL");
@@ -497,9 +497,8 @@ pub fn upgrade_guestos(env: TestEnv) {
             .to_string();
         info!(logger, "GuestOS upgrade image URL: {}", upgrade_url);
 
-        let target_version_str =
+        let target_version =
             get_guestos_update_img_version().expect("Failed to get target replica version");
-        let target_version = ReplicaVersion::try_from(target_version_str.as_str()).unwrap();
         info!(logger, "Target replica version: {}", target_version);
 
         let sha256 = get_guestos_update_img_sha256().expect("no SHA256 hash");
@@ -523,7 +522,7 @@ pub fn upgrade_guestos(env: TestEnv) {
         .expect("guest didn't come up as expected");
 
         // elect the new GuestOS version (upgrade version)
-        elect_guestos_version(&nns_node, target_version.clone(), sha256, vec![upgrade_url]).await;
+        elect_guestos_version(&nns_node, &target_version, sha256, vec![upgrade_url]).await;
 
         // check that the registry was updated after blessing the new guestos version
         let reg_ver2 = registry_canister.get_latest_version().await.unwrap();
@@ -559,7 +558,7 @@ pub fn upgrade_guestos(env: TestEnv) {
         wait_for_expected_guest_version(
             &client,
             &guest_ipv6,
-            &target_version_str,
+            &target_version,
             &logger,
             Duration::from_secs(7 * 60), // Long wait for GuestOS upgrade to apply and reboot
             Duration::from_secs(5),
