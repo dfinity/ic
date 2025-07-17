@@ -55,8 +55,6 @@ def _run_system_test(ctx):
                 export ENV_DEPS__HOSTOS_UPDATE_IMG_SHA="${{ENV_DEPS__HOSTOS_UPDATE_IMG_TEST_HASH:-}}"
             fi
 
-            export
-
             # clean up the env for the test
             unset RUN_SCRIPT_ICOS_IMAGES RUN_SCRIPT_UPLOAD_SYSTEST_DEP RUN_SCRIPT_HOSTOS_UPDATE_IMG_TEST
 

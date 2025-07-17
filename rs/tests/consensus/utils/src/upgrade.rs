@@ -41,7 +41,7 @@ pub fn get_public_update_image_sha_url(git_revision: &str) -> String {
 
 pub fn get_public_update_image_guest_launch_measurements(git_revision: &str) -> String {
     format!(
-        "http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/launch-measurements.json",
+        "http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/update-img/launch-measurements.json",
         git_revision
     )
 }
