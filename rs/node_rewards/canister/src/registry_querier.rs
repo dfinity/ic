@@ -233,7 +233,7 @@ impl RegistryQuerier {
             return Ok(None);
         };
 
-        let data_center_key = make_data_center_record_key(&node_operator_record.dc_id.as_str());
+        let data_center_key = make_data_center_record_key(node_operator_record.dc_id.as_str());
         let Some(data_center_record) = self
             .registry_client
             .get_value(data_center_key.as_str(), version)?
