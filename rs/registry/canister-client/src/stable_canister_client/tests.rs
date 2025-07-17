@@ -123,22 +123,6 @@ fn test_correctly_maps_timestamp_to_registry_versions() {
 }
 
 #[test]
-fn test_latest_registry_version_before_correct() {
-    add_dummy_data();
-    let (client, _) = client_for_tests();
-
-    assert_eq!(
-        Err(RegistryClientError::NoVersionsBefore {
-            timestamp_nanoseconds: 0
-        }),
-        client.latest_registry_version_before(0)
-    );
-    assert_eq!(Ok((2, v(39779))), client.latest_registry_version_before(2));
-    assert_eq!(Ok((2, v(39779))), client.latest_registry_version_before(3));
-    assert_eq!(Ok((6, v(39972))), client.latest_registry_version_before(10));
-}
-
-#[test]
 fn empty_registry_should_report_zero_as_latest_version() {
     let (client, _) = client_for_tests();
 

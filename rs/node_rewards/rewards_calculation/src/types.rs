@@ -30,6 +30,12 @@ pub struct RewardPeriod {
     pub to: DayUTC,
 }
 
+impl RewardPeriod {
+    pub fn days(&self) -> Vec<DayUTC> {
+        self.from.days_until(&self.to).expect("Always valid days")
+    }
+}
+
 impl Display for RewardPeriod {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
