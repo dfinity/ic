@@ -957,7 +957,7 @@ impl IdleMessaging {
             }
         }
     */
-    pub(super) fn to_executing(mut self, time: Time) -> Result<ExecutingMessaging, Self> {
+    pub(super) fn to_executing(mut self, time: Time) -> Result<ExecutionMessaging, Self> {
         match self.status {
             // Switch to execution mode for a new message if any.
             // TODO: extend this with execution tasks.
@@ -965,7 +965,7 @@ impl IdleMessaging {
                 aborted_execution: None,
                 mut idle_status,
             } => match pop_input(&mut self.queues, &mut idle_status.call_context_manager) {
-                Some(input) => Ok(ExecutingMessaging::for_message_or_task(
+                Some(input) => Ok(ExecutionMessaging::for_message_or_task(
                     CanisterMessageOrTask::Message(input),
                     self.queues,
                     idle_status,
@@ -984,7 +984,7 @@ impl IdleMessaging {
             CanisterStatusV2::Idle {
                 aborted_execution: Some(AbortedExecution { input, .. }),
                 idle_status,
-            } => Ok(ExecutingMessaging::for_message_or_task(
+            } => Ok(ExecutionMessaging::for_message_or_task(
                 input,
                 self.queues,
                 idle_status,
@@ -1005,15 +1005,15 @@ impl IdleMessaging {
                         outstanding_callbacks,
                     },
                 paused_execution_id,
-            } => Ok(ExecutingMessaging {
+            } => Ok(ExecutionMessaging {
                 input,
                 queues: self.queues,
                 idle_status,
                 call_context,
                 call_context_id,
                 outstanding_callbacks,
-                paused_execution_id: Some(paused_execution_id)
-            })
+                paused_execution_id: Some(paused_execution_id),
+            }),
         }
     }
 }
@@ -1077,7 +1077,7 @@ fn to_reject_response(
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
-pub struct ExecutingMessaging {
+pub struct ExecutionMessaging {
     input: CanisterMessageOrTask,
     #[validate_eq(CompareWithValidateEq)]
     queues: CanisterQueues,
@@ -1088,7 +1088,7 @@ pub struct ExecutingMessaging {
     paused_execution_id: Option<PausedExecutionId>,
 }
 
-impl ExecutingMessaging {
+impl ExecutionMessaging {
     fn for_message_or_task(
         input: CanisterMessageOrTask,
         queues: CanisterQueues,

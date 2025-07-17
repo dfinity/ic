@@ -6,7 +6,7 @@ mod tests;
 
 use crate::canister_state::queues::CanisterOutputQueuesIterator;
 use crate::canister_state::system_state::{
-    ExecutingMessaging, ExecutionTask, IdleMessaging, SystemState, SystemStateV2,
+    ExecutionMessaging, ExecutionTask, IdleMessaging, SystemState, SystemStateV2,
 };
 use crate::{InputQueueType, MessageMemoryUsage, StateError};
 pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions};
@@ -157,26 +157,47 @@ pub struct CanisterStateV2 {
 }
 
 #[derive(Clone, Debug)]
-pub struct ExecutingCanisterState {
+pub struct ExecutionCanisterState {
     /// See `SystemState` for documentation.
     pub system_state: SystemStateV2,
 
-    pub messaging: ExecutingMessaging,
+    pub messaging: ExecutionMessaging,
 
     /// See `ExecutionState` for documentation.
-    ///
-    /// This may or may not exist depending on whether or not the canister has
-    /// an actual wasm module. A valid canister is not required to contain a
-    /// Wasm module. Canisters without Wasm modules can exist as a store of
-    /// ICP; temporarily when they are being upgraded, etc.
-    pub execution_state: Option<ExecutionState>,
+    pub execution_state: ExecutionState,
 
     /// See `SchedulerState` for documentation.
     pub scheduler_state: SchedulerState,
 }
 
 impl CanisterStateV2 {
-    //    pub fn
+    pub fn to_executing(self, time: Time) -> Result<ExecutionCanisterState, Self> {
+        match self {
+            Self {
+                execution_state: None,
+                ..
+            } => Err(self),
+            Self {
+                system_state,
+                messaging,
+                execution_state: Some(execution_state),
+                scheduler_state,
+            } => match messaging.to_executing(time) {
+                Ok(messaging) => Ok(ExecutionCanisterState {
+                    system_state,
+                    messaging,
+                    execution_state,
+                    scheduler_state,
+                }),
+                Err(messaging) => Err(Self {
+                    system_state,
+                    messaging,
+                    execution_state: Some(execution_state),
+                    scheduler_state,
+                }),
+            },
+        }
+    }
 }
 
 impl CanisterState {
@@ -242,15 +263,7 @@ impl CanisterState {
             input_queue_type,
         )
     }
-    /*
-        /// See `SystemState::pop_input` for documentation.
-        ///
-        /// The function is public as we pop directly from the Canister state in
-        /// `SchedulerImpl::execute_canisters_on_thread()`
-        pub fn pop_input(&mut self) -> Option<CanisterMessage> {
-            self.system_state.pop_input()
-        }
-    */
+    
     /// See `SystemState::has_input` for documentation.
     pub fn has_input(&self) -> bool {
         self.system_state.has_input()
