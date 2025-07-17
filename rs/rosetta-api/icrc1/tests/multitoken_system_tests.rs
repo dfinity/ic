@@ -223,9 +223,7 @@ impl SetupBuilder {
                 // to the ledger will return an out-of-cycles error.
                 pocket_ic
                     .update_canister_settings(
-                        ic_management_canister_types::CanisterId::from(
-                            icrc1_ledger.canister_id.clone(),
-                        ),
+                        ic_management_canister_types::CanisterId::from(icrc1_ledger.canister_id),
                         None,
                         ic_management_canister_types::CanisterSettings {
                             freezing_threshold: Some(Nat::from(u64::MAX - 2)),
