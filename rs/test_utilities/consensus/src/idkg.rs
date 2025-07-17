@@ -6,8 +6,7 @@ use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
 use ic_interfaces_state_manager::{CertifiedStateSnapshot, Labeled};
 use ic_management_canister_types_private::{
-    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
-    VetKdKeyId,
+    EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdKeyId,
 };
 use ic_replicated_state::{
     metadata_state::subnet_call_context_manager::{
