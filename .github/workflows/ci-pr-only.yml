@@ -32,14 +32,6 @@ jobs:
         with:
           run: bazel test //:insta_tests
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-      - name: Run Bazel Build Fuzzers Archives
-        id: bazel-build-fuzzers-archives
-        if: steps.filter.outputs.fuzzers == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd "${GITHUB_WORKSPACE}"/bin/fuzzing/
-          ./build-all-fuzzers.sh --zip
   bazel-build-fuzzers-archives:
     name: Bazel Build Fuzzers Archives
     timeout-minutes: 90
