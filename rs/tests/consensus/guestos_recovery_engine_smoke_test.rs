@@ -36,17 +36,31 @@ use ic_system_test_driver::{
 use slog::info;
 use ssh2::Session;
 
-fn verify_content(ssh_session: &Session, file_path: &str, expected_content: &str) -> Result<()> {
+fn verify_content(
+    ssh_session: &Session,
+    actual_file_path: &str,
+    expected_b64_path: &str,
+) -> Result<()> {
     // Protobuf files are binary files, and since we deserialize them into UTF-8 strings,
     // we read their base64 encoding and compare those.
-    let content = execute_bash_command(ssh_session, format!("base64 {} | tr -d '\\n'", file_path))
-        .map_err(|e| anyhow!(e))?;
+    let actual_b64 = execute_bash_command(
+        ssh_session,
+        format!("base64 {} | tr -d '\\n'", actual_file_path),
+    )
+    .map_err(|e| anyhow!(e))?;
+    let expected_b64 = std::fs::read_to_string(expected_b64_path).map_err(|e| {
+        anyhow!(
+            "Failed to read expected content from {}: {}",
+            expected_b64_path,
+            e
+        )
+    })?;
     ensure!(
-        content == expected_content,
+        actual_b64 == expected_b64,
         "Unexpected content in {}. Actual: {}. Expected: {}.",
-        file_path,
-        content,
-        expected_content
+        actual_file_path,
+        actual_b64,
+        expected_b64
     );
     Ok(())
 }
@@ -129,11 +143,11 @@ pub fn test(env: TestEnv) {
     let log = env.logger();
     info!(log, "Running recovery engine test...");
 
-    let expected_cup_proto = std::env::var("RECOVERY_CUP_CONTENT_B64")
+    let expected_cup_proto_path = std::env::var("RECOVERY_CUP_CONTENT_B64")
         .expect("RECOVERY_CUP_CONTENT_B64 environment variable not found");
-    let expected_local_store_1 = std::env::var("RECOVERY_STORE_CONTENT1_B64")
+    let expected_local_store_1_path = std::env::var("RECOVERY_STORE_CONTENT1_B64")
         .expect("RECOVERY_STORE_CONTENT1_B64 environment variable not found");
-    let expected_local_store_2 = std::env::var("RECOVERY_STORE_CONTENT2_B64")
+    let expected_local_store_2_path = std::env::var("RECOVERY_STORE_CONTENT2_B64")
         .expect("RECOVERY_STORE_CONTENT2_B64 environment variable not found");
 
     let node = env
@@ -155,7 +169,7 @@ pub fn test(env: TestEnv) {
         verify_content(
             &ssh_session,
             "/var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb",
-            &expected_cup_proto,
+            &expected_cup_proto_path,
         )
     })
     .unwrap();
@@ -163,14 +177,14 @@ pub fn test(env: TestEnv) {
     verify_content(
         &ssh_session,
         "/var/lib/ic/data/ic_registry_local_store/0001020304/05/06/07.pb",
-        &expected_local_store_1,
+        &expected_local_store_1_path,
     )
     .unwrap();
 
     verify_content(
         &ssh_session,
         "/var/lib/ic/data/ic_registry_local_store/08090a0b0c/0d/0e/0f.pb",
-        &expected_local_store_2,
+        &expected_local_store_2_path,
     )
     .unwrap();
 
