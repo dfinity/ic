@@ -184,6 +184,24 @@ impl<S: RegistryDataStableMemory> CanisterRegistryClient for StableCanisterRegis
         self.get_key_family_base(key_prefix, version, Box::new(|k, v| (k, v.unwrap())))
     }
 
+    fn registry(&self) -> BTreeMap<(String, RegistryVersion, UnixTsNanos), Option<Vec<u8>>> {
+        S::with_registry_map(|registry| {
+            registry
+                .iter()
+                .map(|(k, v)| {
+                    (
+                        (
+                            k.key,
+                            RegistryVersion::from(k.version),
+                            k.timestamp_nanoseconds,
+                        ),
+                        v.0,
+                    )
+                })
+                .collect()
+        })
+    }
+
     fn get_value(&self, key: &str, version: RegistryVersion) -> RegistryClientResult<Vec<u8>> {
         self.get_versioned_value(key, version).map(|vr| vr.value)
     }
@@ -200,28 +218,6 @@ impl<S: RegistryDataStableMemory> CanisterRegistryClient for StableCanisterRegis
             self.latest_version.store(latest, AtomicOrdering::SeqCst);
         }
         RegistryVersion::new(latest)
-    }
-
-    fn latest_registry_version_before(
-        &self,
-        timestamp_nanoseconds: UnixTsNanos,
-    ) -> Result<(UnixTsNanos, RegistryVersion), RegistryClientError> {
-        self.timestamp_to_versions_map
-            .read()
-            .unwrap()
-            .range(..=timestamp_nanoseconds)
-            .next_back()
-            .map(|(ts, versions)| {
-                let max_version = versions
-                    .iter()
-                    .max()
-                    .expect("Expected at least one registry version at timestamp");
-
-                (*ts, *max_version)
-            })
-            .ok_or(RegistryClientError::NoVersionsBefore {
-                timestamp_nanoseconds,
-            })
     }
 
     async fn sync_registry_stored(&self) -> Result<RegistryVersion, String> {

@@ -99,13 +99,6 @@ pub trait CanisterRegistryClient: Send + Sync {
     /// value no less than `t`.
     fn get_latest_version(&self) -> RegistryVersion;
 
-    /// Returns the most recent `RegistryVersion` and its corresponding timestamp
-    /// that is less than or equal to the provided `timestamp_nanoseconds`.
-    fn latest_registry_version_before(
-        &self,
-        timestamp_nanoseconds: UnixTsNanos,
-    ) -> Result<(UnixTsNanos, RegistryVersion), RegistryClientError>;
-
     /// Updates the local version to the latest from the Registry. This may execute
     /// over multiple messages.  It should generally be scheduled in a timer, but if it's never called
     /// the local registry data will not be in sync with the data in the Registry canister.
@@ -115,6 +108,14 @@ pub trait CanisterRegistryClient: Send + Sync {
     /// Each key represents the timestamps when the registry versions have been added,
     /// and the associated value is the set of all registry versions introduced at that timestamp.
     fn timestamp_to_versions_map(&self) -> BTreeMap<UnixTsNanos, HashSet<RegistryVersion>>;
+
+    /// Returns a map containing all the mutations of the registry
+    ///
+    /// The map is keyed by a tuple of (key, version, timestamp) where:
+    /// - `key` is the registry key
+    /// - `version` is the version of the mutation
+    /// - `timestamp` is the timestamp in nanoseconds when the mutation was made
+    fn registry(&self) -> BTreeMap<(String, RegistryVersion, UnixTsNanos), Option<Vec<u8>>>;
 }
 
 // Helpers
