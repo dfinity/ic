@@ -2303,7 +2303,7 @@ impl Governance {
             .env
             .call_canister(
                 self.proto.root_canister_id_or_panic(),
-                "register_canister",
+                "register_extension",
                 payload,
             )
             .await

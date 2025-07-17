@@ -9,26 +9,21 @@ use clap::Parser;
 use core::convert::From;
 use cycles_minting_canister::{CanisterSettingsArgs, CreateCanister, SubnetSelection};
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
-use ic_management_canister_types_private::{BoundedVec, CanisterInstallMode};
+use ic_management_canister_types_private::BoundedVec;
 use ic_nervous_system_agent::{
-    management_canister::{self, delete_canister, stop_canister},
-    nns,
+    management_canister,
     sns::{self, governance::SubmittedProposal, root::SnsCanisters, Sns},
-    CallCanisters, CanisterInfo, Request,
+    CallCanisters, Request,
 };
 use ic_nns_constants::CYCLES_LEDGER_CANISTER_ID;
 use ic_sns_governance_api::pb::v1::{
-    get_proposal_response,
-    proposal::{self, Action},
-    ChunkedCanisterWasm, ExtensionInit, PreciseValue, Proposal, ProposalData, ProposalId,
-    RegisterExtension, UpgradeSnsControlledCanister,
+    proposal::Action, ChunkedCanisterWasm, ExtensionInit, PreciseValue, Proposal, ProposalId,
+    RegisterExtension,
 };
 use ic_wasm::{metadata, utils::parse_wasm};
-use itertools::{Either, Itertools};
 use maplit::btreemap;
 use serde::Deserialize;
 use std::{
-    collections::BTreeSet,
     fs::File,
     io::{Read, Write},
     path::{Path, PathBuf},
@@ -275,8 +270,11 @@ pub async fn find_sns<C: CallCanisters>(
     let root_canister = sns::root::RootCanister { canister_id };
 
     let response = root_canister.list_sns_canisters(agent).await?;
-    let SnsCanisters { sns, dapps } =
-        SnsCanisters::try_from(response).map_err(UpgradeSnsControlledCanisterError::Client)?;
+    let SnsCanisters {
+        sns,
+        dapps: _,
+        extensions: _,
+    } = SnsCanisters::try_from(response).map_err(UpgradeSnsControlledCanisterError::Client)?;
 
     Ok(Some(sns))
 }
@@ -505,17 +503,4 @@ fn format_full_hash(hash: &[u8]) -> String {
         .map(|b| format!("{:02x}", b))
         .collect::<Vec<_>>()
         .join("")
-}
-
-fn suggested_install_command(wasm_path_str: &Path, candid_arg: &Option<String>) -> String {
-    let arg_suggestion = if let Some(candid_arg) = candid_arg {
-        format!(" --argument '{}'", candid_arg)
-    } else {
-        "".to_string()
-    };
-    format!(
-        "dfx canister install --mode auto --wasm {} CANISTER_NAME{}",
-        wasm_path_str.display(),
-        arg_suggestion,
-    )
 }

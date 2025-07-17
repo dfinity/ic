@@ -110,6 +110,7 @@ DEV_DATA = [
     "//rs/registry/canister:registry-canister",
     "//rs/registry/canister:registry-canister-test",
     "//rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister",
+    "//rs/sns/governance:sns-governance-canister",
     "//rs/sns/governance:sns-governance-canister-test",
     "//rs/sns/root:sns-root-canister",
     "//rs/sns/swap:sns-swap-canister",
@@ -160,7 +161,8 @@ DEV_ENV = {
     "GENESIS_TOKEN_CANISTER_WASM_PATH": "$(rootpath //rs/nns/gtc:genesis-token-canister)",
     "SNS_WASM_CANISTER_WASM_PATH": "$(rootpath //rs/nns/sns-wasm:sns-wasm-canister)",
     "NODE_REWARDS_CANISTER_WASM_PATH": "$(rootpath //rs/node_rewards/canister:node-rewards-canister)",
-    "SNS_GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/sns/governance:sns-governance-canister-test)",
+    "SNS_GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/sns/governance:sns-governance-canister)",
+    "SNS_GOVERNANCE_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/sns/governance:sns-governance-canister-test)",
     "MAINNET_SNS_GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath @mainnet_sns-governance-canister//file)",
     "SNS_ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/sns/root:sns-root-canister)",
     "MAINNET_SNS_ROOT_CANISTER_WASM_PATH": "$(rootpath @mainnet_sns-root-canister//file)",
@@ -347,13 +349,17 @@ rust_test(
     deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
 )
 
-
 exports_files(
     [
-        "kong_backend.wasm",
-        "kongswap-adaptor-canister.wasm",
+        "kongswap-adaptor-canister.wasm.gz",
     ],
 )
+
+# Uncomment once the repo is public.
+# "KONGSWAP_ADAPTOR_CANISTER_WASM_PATH": "$(rootpath :kongswap-adaptor-canister.wasm.gz)",
+
+# Uncomment once the repo is public.
+# data = DEV_DATA + ["@kong_backend_canister//file", "kongswap-adaptor-canister.wasm.gz"],
 
 rust_test(
     name = "sns_extension_test",
@@ -362,10 +368,10 @@ rust_test(
         "tests/sns_extension_test.rs",
     ],
     aliases = ALIASES,
-    data = DEV_DATA + [":kong_backend.wasm", "kongswap-adaptor-canister.wasm"],
+    data = DEV_DATA + ["@kong_backend_canister//file", "kongswap-adaptor-canister.wasm.gz"],
     env = DEV_ENV | {
-        "KONG_BACKEND_CANISTER_WASM_PATH": "$(rootpath :kong_backend.wasm)",
-        "KONGSWAP_ADAPTOR_CANISTER_WASM_PATH": "$(rootpath :kongswap-adaptor-canister.wasm)",
+        "KONG_BACKEND_CANISTER_WASM_PATH": "$(rootpath @kong_backend_canister//file)",
+        "KONGSWAP_ADAPTOR_CANISTER_WASM_PATH": "$(rootpath :kongswap-adaptor-canister.wasm.gz)",
         "RUST_TEST_NOCAPTURE": "1"
     },
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
