@@ -13,13 +13,13 @@ SYSTEM_TESTNET_RUNTIME_DEPS = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + VECT
 
 system_test(
     name = "single_large_node",
+    env = VECTOR_ENV,
     tags = [
         "dynamic_testnet",
         "k8s",
         "manual",
     ],
     visibility = ["//visibility:public"],  # public because part of top-level manual test suite
-    env = VECTOR_ENV,
     runtime_deps = SYSTEM_TESTNET_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -31,12 +31,12 @@ system_test(
 
 system_test(
     name = "single_app_large_node",
+    env = VECTOR_ENV,
     tags = [
         "dynamic_testnet",
         "k8s",
         "manual",
     ],
-    env = VECTOR_ENV,
     runtime_deps = SYSTEM_TESTNET_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -48,12 +48,12 @@ system_test(
 
 system_test_nns(
     name = "single_app_large_node_with_nns",
+    env = VECTOR_ENV,
     tags = [
         "dynamic_testnet",
         "k8s",
         "manual",
     ],
-    env = VECTOR_ENV,
     runtime_deps = SYSTEM_TESTNET_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -66,12 +66,12 @@ system_test_nns(
 
 system_test(
     name = "single_app_small_node",
+    env = VECTOR_ENV,
     tags = [
         "dynamic_testnet",
         "k8s",
         "manual",
     ],
-    env = VECTOR_ENV,
     runtime_deps = SYSTEM_TESTNET_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -88,7 +88,7 @@ system_test_nns(
         "dynamic_testnet",
         "manual",
     ],
-    runtime_deps = SYSTEM_TESTNET_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE,  
+    runtime_deps = SYSTEM_TESTNET_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE,
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
@@ -100,12 +100,12 @@ system_test_nns(
 
 system_test_nns(
     name = "small_bitcoin",
+    env = VECTOR_ENV,
     tags = [
         "dynamic_testnet",
         "manual",
     ],
-    env = VECTOR_ENV,
-    runtime_deps = SYSTEM_TESTNET_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE, 
+    runtime_deps = SYSTEM_TESTNET_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE,
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
@@ -118,11 +118,11 @@ system_test_nns(
 
 system_test_nns(
     name = "small_high_perf",
+    env = VECTOR_ENV,
     tags = [
         "dynamic_testnet",
         "manual",
     ],
-    env = VECTOR_ENV,
     runtime_deps = SYSTEM_TESTNET_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE,
     deps = [
         # Keep sorted.
@@ -236,11 +236,11 @@ system_test_nns(
 
 system_test_nns(
     name = "medium",
+    env = VECTOR_ENV,
     tags = [
         "dynamic_testnet",
         "manual",
     ],
-    env = VECTOR_ENV,
     runtime_deps = SYSTEM_TESTNET_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE,
     deps = [
         # Keep sorted.
