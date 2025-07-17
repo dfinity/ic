@@ -51,7 +51,7 @@ def generate_recovery_archive(name, seed, server_hostname):
 
     native.filegroup(
         name = name + "_recovery.tar.zst",
-        srcs = [":guestos_recovery_archive"],
+        srcs = ["recovery.tar.zst"],
         visibility = [
             "//rs:system-tests-pkg",
         ],
@@ -59,7 +59,7 @@ def generate_recovery_archive(name, seed, server_hostname):
 
     native.filegroup(
         name = name + "_cup.proto.b64",
-        srcs = [":guestos_recovery_archive"],
+        srcs = ["cup.proto.b64"],
         visibility = [
             "//rs:system-tests-pkg",
         ],
@@ -67,7 +67,7 @@ def generate_recovery_archive(name, seed, server_hostname):
 
     native.filegroup(
         name = name + "_ic_registry_local_store_content1.b64",
-        srcs = [":guestos_recovery_archive"],
+        srcs = ["ic_registry_local_store_content1.b64"],
         visibility = [
             "//rs:system-tests-pkg",
         ],
@@ -75,7 +75,7 @@ def generate_recovery_archive(name, seed, server_hostname):
 
     native.filegroup(
         name = name + "_ic_registry_local_store_content2.b64",
-        srcs = [":guestos_recovery_archive"],
+        srcs = ["ic_registry_local_store_content2.b64"],
         visibility = [
             "//rs:system-tests-pkg",
         ],
@@ -83,7 +83,7 @@ def generate_recovery_archive(name, seed, server_hostname):
 
     native.filegroup(
         name = name + "_guestos-recovery-engine.sh",
-        srcs = [":guestos_recovery_archive"],
+        srcs = ["guestos-recovery-engine.sh"],
         visibility = [
             "//rs:ic-os-pkg",
         ],
