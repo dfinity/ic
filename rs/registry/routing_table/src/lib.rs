@@ -4,6 +4,7 @@ use candid::CandidType;
 use ic_base_types::{CanisterId, CanisterIdError, PrincipalId, SubnetId};
 use ic_protobuf::proxy::ProxyDecodeError;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
 use std::convert::TryInto;
 use std::fmt::{Display, Formatter};
 use std::{collections::BTreeMap, convert::TryFrom};
@@ -139,6 +140,7 @@ pub enum WellFormedError {
     CanisterIdRangeNotSortedOrNotDisjoint(String),
     RoutingTableEmptyRange(String),
     RoutingTableNotDisjoint(String),
+    RoutingTableMissingSubnet(String),
     RoutingTableNotOptimized,
     CanisterMigrationsEmptyRange(String),
     CanisterMigrationsNotDisjoint(String),
@@ -234,7 +236,12 @@ impl CanisterIdRanges {
 
     /// Returns `true` if this `CanisterIdRanges` contains the given `canister_id`.
     pub fn contains(&self, canister_id: &CanisterId) -> bool {
-        self.0.iter().any(|range| range.contains(canister_id))
+        debug_assert!(self.well_formed().is_ok());
+        match self.0.binary_search_by_key(canister_id, |r| r.end) {
+            Ok(_) => true,                                // end of one of the (inclusive) ranges
+            Err(index) if index >= self.0.len() => false, // past the last range
+            Err(index) => self.0[index].contains(canister_id), // can only be in this one range
+        }
     }
 }
 
@@ -261,13 +268,21 @@ pub fn routing_table_insert_subnet(
 ///
 /// INVARIANT: `self.well_formed() == Ok(())`
 #[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
-pub struct RoutingTable(BTreeMap<CanisterIdRange, SubnetId>);
+pub struct RoutingTable {
+    ranges: BTreeMap<CanisterIdRange, SubnetId>,
+    subnets: BTreeSet<SubnetId>,
+}
 
 impl TryFrom<BTreeMap<CanisterIdRange, SubnetId>> for RoutingTable {
     type Error = WellFormedError;
 
-    fn try_from(map: BTreeMap<CanisterIdRange, SubnetId>) -> Result<Self, WellFormedError> {
-        let mut t: RoutingTable = Self(map);
+    fn try_from(maps: BTreeMap<CanisterIdRange, SubnetId>) -> Result<Self, WellFormedError> {
+        let subnets = maps.values().cloned().collect();
+
+        let mut t: RoutingTable = Self {
+            ranges: maps,
+            subnets,
+        };
         t.validate()?;
         t.optimize();
         Ok(t)
@@ -299,14 +314,16 @@ impl RoutingTable {
             )));
         }
 
-        if !are_disjoint(std::iter::once(&canister_id_range), self.0.keys()) {
+        if !are_disjoint(std::iter::once(&canister_id_range), self.ranges.keys()) {
             return Err(WellFormedError::RoutingTableNotDisjoint(format!(
                 "Routing table cannot insert an overlapping range: {:?}",
                 canister_id_range
             )));
         }
 
-        self.0.insert(canister_id_range, subnet_id);
+        self.ranges.insert(canister_id_range, subnet_id);
+
+        self.subnets.insert(subnet_id);
 
         self.optimize();
         debug_assert_eq!(self.well_formed(), Ok(()));
@@ -342,7 +359,7 @@ impl RoutingTable {
         let r_start = canister_id_into_u64(range.start);
         let r_end = canister_id_into_u64(range.end);
 
-        let left_bound = match self.0.range(..=range).next_back() {
+        let left_bound = match self.ranges.range(..=range).next_back() {
             Some((k, _)) => *k,
             None => range,
         };
@@ -351,7 +368,7 @@ impl RoutingTable {
         let mut to_remove: Vec<CanisterIdRange> = vec![];
         let mut to_add: Vec<(CanisterIdRange, SubnetId)> = vec![];
 
-        for (k, v) in self.0.range(left_bound..=right_bound) {
+        for (k, v) in self.ranges.range(left_bound..=right_bound) {
             let k_start = canister_id_into_u64(k.start);
             let k_end = canister_id_into_u64(k.end);
 
@@ -408,12 +425,13 @@ impl RoutingTable {
         debug_assert!(to_add.len() <= 2);
 
         for k in to_remove.iter() {
-            self.0.remove(k);
+            self.ranges.remove(k);
         }
         for (k, v) in to_add {
-            self.0.insert(k, v);
+            self.ranges.insert(k, v);
         }
-        self.0.insert(range, destination);
+        self.subnets.insert(destination);
+        self.ranges.insert(range, destination);
     }
 
     /// Assigns canister ID ranges to the destination subnet.
@@ -426,6 +444,7 @@ impl RoutingTable {
         for range in ranges.iter() {
             self.assign_range(*range, destination);
         }
+        self.subnets.insert(destination);
         self.optimize();
         debug_assert_eq!(self.well_formed(), Ok(()));
         Ok(())
@@ -436,8 +455,8 @@ impl RoutingTable {
     ///
     /// Complexity: O(N)
     pub fn optimize(&mut self) {
-        let mut entries: Vec<(CanisterIdRange, SubnetId)> = Vec::with_capacity(self.0.len());
-        for (range, subnet) in std::mem::take(&mut self.0).into_iter() {
+        let mut entries: Vec<(CanisterIdRange, SubnetId)> = Vec::with_capacity(self.ranges.len());
+        for (range, subnet) in std::mem::take(&mut self.ranges).into_iter() {
             if let Some((last_range, last_subnet)) = entries.last_mut() {
                 let last_range_end = canister_id_into_u64(last_range.end);
                 let range_start = canister_id_into_u64(range.start);
@@ -449,7 +468,7 @@ impl RoutingTable {
             }
             entries.push((range, subnet));
         }
-        self.0 = entries.into_iter().collect();
+        self.ranges = entries.into_iter().collect();
         debug_assert_eq!(self.well_formed(), Ok(()));
     }
 
@@ -465,17 +484,18 @@ impl RoutingTable {
 
     /// Removes all canister ID ranges mapped to the specified subnet.
     pub fn remove_subnet(&mut self, subnet_id_to_remove: SubnetId) {
-        self.0
+        self.ranges
             .retain(|_range, subnet_id| *subnet_id != subnet_id_to_remove);
+        self.subnets.remove(&subnet_id_to_remove);
         debug_assert_eq!(self.well_formed(), Ok(()));
     }
 
     pub fn iter(&self) -> impl std::iter::Iterator<Item = (&CanisterIdRange, &SubnetId)> {
-        self.0.iter()
+        self.ranges.iter()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
+        self.ranges.is_empty()
     }
 
     /// Returns Ok if the routing table is valid (ranges are non-empty, disjoint
@@ -486,12 +506,21 @@ impl RoutingTable {
         // Used to track the end of the previous end used to check that the
         // ranges are disjoint.
         let mut previous_end: Option<CanisterId> = None;
-        for range in self.0.keys() {
+        for (range, subnet) in self.ranges.iter() {
             // Check that ranges are non-empty (ranges are closed).
             if range.start > range.end {
                 return Err(RoutingTableEmptyRange(format!(
                     "start {} is greater than end {}",
                     range.start, range.end
+                )));
+            }
+
+            // Check that each subnet that has canisters assigned is also in the list of subnets.
+            // The reverse, subnets without ranges, is allowed.
+            if !self.subnets.contains(subnet) {
+                return Err(RoutingTableMissingSubnet(format!(
+                    "subnet {} has a range assigned but is not in the list of subnets",
+                    subnet,
                 )));
             }
 
@@ -536,15 +565,16 @@ impl RoutingTable {
         // future, if this assumption does not hold, the list of existing
         // subnets should be taken from the rest of the registry (which should
         // be the absolute source of truth).
-        if let Some(subnet_id) = self.0.values().find(|x| x.get() == principal_id) {
-            return Some(*subnet_id);
+        let subnet_id = principal_id.into();
+        if self.subnets.contains(&subnet_id) {
+            return Some(subnet_id);
         }
 
         // If the `principal_id` was not a subnet, it must be a `CanisterId` (otherwise
         // we can't route to it).
         match CanisterId::try_from(principal_id) {
             Ok(canister_id) => {
-                lookup_in_ranges(&self.0, canister_id).map(|(_range, subnet_id)| subnet_id)
+                lookup_in_ranges(&self.ranges, canister_id).map(|(_range, subnet_id)| subnet_id)
             }
             // Cannot route to any subnet as we couldn't convert to a `CanisterId`.
             Err(_) => None,
@@ -554,7 +584,7 @@ impl RoutingTable {
     /// Returns the corresponding `CanisterIdRange` and `SubnetId` that the given `canister_id` is assigned to
     /// or `None` if an assignment cannot be found.
     pub fn lookup_entry(&self, canister_id: CanisterId) -> Option<(CanisterIdRange, SubnetId)> {
-        lookup_in_ranges(&self.0, canister_id)
+        lookup_in_ranges(&self.ranges, canister_id)
     }
 
     /// Find all canister ranges that are assigned to subnet_id.
@@ -574,7 +604,7 @@ impl IntoIterator for RoutingTable {
     type IntoIter = std::collections::btree_map::IntoIter<CanisterIdRange, SubnetId>;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.0.into_iter()
+        self.ranges.into_iter()
     }
 }
 
