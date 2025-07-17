@@ -300,7 +300,7 @@ impl FulfillSubnetRentalRequest {
             )
         })?;
         let user = Principal::from(user);
-        let new_subnet_id = Principal::from(new_subnet_id.get());
+        let subnet_id = Principal::from(new_subnet_id.get());
         let proposal_id = proposal_id.id;
 
         // Assemble the request.
@@ -309,12 +309,12 @@ impl FulfillSubnetRentalRequest {
         #[derive(CandidType, Deserialize, Serialize)]
         struct CreateRentalAgreementPayload {
             user: Principal,
-            new_subnet_id: Principal,
+            subnet_id: Principal,
             proposal_id: u64,
         }
-        let handle_subnet_created_request = Encode!(&CreateRentalAgreementPayload {
+        let request = Encode!(&CreateRentalAgreementPayload {
             user,
-            new_subnet_id,
+            subnet_id,
             proposal_id,
         })
         .unwrap();
@@ -322,16 +322,16 @@ impl FulfillSubnetRentalRequest {
         // Send the request.
         env.call_canister_method(
             SUBNET_RENTAL_CANISTER_ID,
-            "handle_subnet_created",
-            handle_subnet_created_request,
+            "execute_create_rental_agreement",
+            request,
         )
         .await
-        // Handle the response.
+        // Handle call error.
         .map_err(|(code, message)| {
             GovernanceError::new_with_message(
                 ErrorType::External,
                 format!(
-                    "Unable to call SubnetRentalCanister.handle_subnet_created: {:?}: {}",
+                    "Unable to call SubnetRentalCanister.execute_create_rental_agreement: {:?}: {}",
                     code, message,
                 ),
             )
