@@ -6,10 +6,7 @@ use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|data: &[u8]| {
     let decoded: Result<pb::Block, ProxyDecodeError> = pb::Block::proxy_decode(data);
-    match decoded {
-        Ok(b) => {
-            let _d = ic_types::consensus::Block::try_from(b);
-        }
-        Err(_e) => (),
+    if let Ok(b) = decoded {
+        let _d = ic_types::consensus::Block::try_from(b);
     }
 });
