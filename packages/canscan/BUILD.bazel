@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_test", "rust_binary")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_doc_test", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
@@ -18,8 +18,8 @@ DEPENDENCIES = [
 TEST_DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:assert_cmd",
-    "@crate_index//:predicates",
     "@crate_index//:maplit",
+    "@crate_index//:predicates",
 ]
 
 rust_binary(
@@ -37,7 +37,7 @@ rust_doc_test(
 rust_test(
     name = "unit_tests",
     crate = ":canscan",
-    data = ["//packages/canscan/test_resources:test_resources"],
+    data = ["//packages/canscan/test_resources"],
     deps = DEPENDENCIES + TEST_DEPENDENCIES,
 )
 
@@ -45,7 +45,7 @@ rust_test(
     name = "integration_tests",
     srcs = glob(["tests/**/*.rs"]),
     data = [
-        "//packages/canscan:canscan",
+        "//packages/canscan",
         "//packages/canscan/test_canister:candid",
         "//packages/canscan/test_canister:test_canister.wasm.gz",
     ],
