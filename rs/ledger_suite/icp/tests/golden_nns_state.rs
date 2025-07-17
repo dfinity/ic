@@ -4,7 +4,7 @@ use ic_base_types::CanisterId;
 use ic_ledger_core::block::BlockType;
 use ic_ledger_core::Tokens;
 use ic_ledger_suite_state_machine_tests::in_memory_ledger::{
-    BlockConsumer, BurnsWithoutSpender, InMemoryLedger,
+    AllowancesRecentlyPurged, BlockConsumer, BurnsWithoutSpender, InMemoryLedger,
 };
 use ic_ledger_suite_state_machine_tests::metrics::{parse_metric, retrieve_metrics};
 use ic_ledger_suite_state_machine_tests::{generate_transactions, TransactionGenerationParameters};
@@ -24,7 +24,7 @@ use ic_state_machine_tests::{ErrorCode, StateMachine, UserError};
 use icp_ledger::{
     AccountIdentifier, Archives, Block, FeatureFlags, LedgerCanisterPayload, UpgradeArgs,
 };
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 /// The number of instructions that can be executed in a single canister upgrade as per
 /// https://internetcomputer.org/docs/current/developer-docs/smart-contracts/maintain/resource-limits#resource-constraints-and-limits
@@ -105,12 +105,14 @@ impl LedgerState {
         &mut self,
         state_machine: &StateMachine,
         canister_id: CanisterId,
+        allowances_recently_purged: AllowancesRecentlyPurged,
     ) {
         let num_ledger_blocks = icp_ledger_tip(state_machine, canister_id) + 1;
         self.in_memory_ledger.verify_balances_and_allowances(
             state_machine,
             canister_id,
             num_ledger_blocks,
+            allowances_recently_purged,
         );
     }
 
@@ -132,6 +134,7 @@ impl LedgerState {
         burns_without_spender: Option<BurnsWithoutSpender<AccountIdentifier>>,
         previous_ledger_state: Option<LedgerState>,
         should_verify_balances_and_allowances: bool,
+        allowances_recently_purged: AllowancesRecentlyPurged,
     ) -> Self {
         let num_blocks_to_fetch = previous_ledger_state
             .as_ref()
@@ -150,7 +153,11 @@ impl LedgerState {
                 num_blocks_to_fetch,
             );
         if should_verify_balances_and_allowances {
-            ledger_state.verify_balances_and_allowances(state_machine, ledger_id);
+            ledger_state.verify_balances_and_allowances(
+                state_machine,
+                ledger_id,
+                allowances_recently_purged,
+            );
         }
         // Verify parity between the blocks in the ledger+archive, and those in the index
         LedgerState::verify_ledger_archive_index_block_parity(
@@ -235,12 +242,16 @@ impl LedgerState {
 fn should_create_state_machine_with_golden_nns_state() {
     let mut setup = Setup::new();
 
+    // Advance the time to make sure the ledger gets the current time for checking allowances.
+    setup.state_machine.advance_time(Duration::from_secs(1u64));
+    setup.state_machine.tick();
+
     // Perform upgrade and downgrade testing
     // (verify ledger balances and allowances, parity between ledger+archives and index)
     // Verifying the balances requires the ledger having the (currently test-only) allowance
     // endpoint for retrieving allowances based on AccountIdentifier pair key, so this check needs
     // to be skipped for a ledger running the mainnet production version of the ledger.
-    setup.perform_upgrade_downgrade_testing(false);
+    setup.perform_upgrade_downgrade_testing(false, AllowancesRecentlyPurged::No);
 
     // Upgrade all the canisters to the latest version
     setup.upgrade_to_master();
@@ -248,7 +259,7 @@ fn should_create_state_machine_with_golden_nns_state() {
     setup.upgrade_to_master();
 
     // Perform upgrade and downgrade testing
-    setup.perform_upgrade_downgrade_testing(true);
+    setup.perform_upgrade_downgrade_testing(true, AllowancesRecentlyPurged::Yes);
 
     // Downgrade all the canisters to the mainnet version
     // For breaking changes, e.g., if mainnet is running a version with balances and allowances in
@@ -258,7 +269,7 @@ fn should_create_state_machine_with_golden_nns_state() {
 
     // Verify ledger balance and allowance state
     // As before, the allowance check needs to be skipped for the mainnet version of the ledger.
-    setup.perform_upgrade_downgrade_testing(false);
+    setup.perform_upgrade_downgrade_testing(false, AllowancesRecentlyPurged::Yes);
 }
 
 struct Wasms {
@@ -347,6 +358,7 @@ impl Setup {
     pub fn perform_upgrade_downgrade_testing(
         &mut self,
         should_verify_balances_and_allowances: bool,
+        allowances_recently_purged: AllowancesRecentlyPurged,
     ) {
         self.previous_ledger_state = Some(LedgerState::verify_state_and_generate_transactions(
             &self.state_machine,
@@ -355,6 +367,7 @@ impl Setup {
             None,
             self.previous_ledger_state.take(),
             should_verify_balances_and_allowances,
+            allowances_recently_purged,
         ));
     }
 

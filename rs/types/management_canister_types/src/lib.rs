@@ -87,7 +87,6 @@ pub enum Method {
     StopCanister,
     UninstallCode,
     UpdateSettings,
-    ComputeInitialIDkgDealings,
     ReshareChainKey,
 
     // Schnorr interface.

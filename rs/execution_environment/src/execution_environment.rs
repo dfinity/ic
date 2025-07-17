@@ -37,11 +37,11 @@ use ic_limits::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX_SI
 use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_management_canister_types_private::{
     CanisterChangeOrigin, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInfoRequest,
-    CanisterInfoResponse, CanisterStatusType, ClearChunkStoreArgs, ComputeInitialIDkgDealingsArgs,
-    CreateCanisterArgs, DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse,
-    EmptyBlob, InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs,
-    LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs,
-    Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
+    CanisterInfoResponse, CanisterStatusType, ClearChunkStoreArgs, CreateCanisterArgs,
+    DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EmptyBlob,
+    InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
+    MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs, Payload as Ic00Payload,
+    ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
     ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs, RenameCanisterArgs,
     ReshareChainKeyArgs, SchnorrAlgorithm, SchnorrPublicKeyArgs, SchnorrPublicKeyResponse,
     SetupInitialDKGArgs, SignWithECDSAArgs, SignWithSchnorrArgs, SignWithSchnorrAux,
@@ -55,7 +55,6 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::{
-        execution_state::WasmExecutionMode,
         system_state::{CyclesUseCase, PausedExecutionId},
         NextExecution,
     },
@@ -397,8 +396,6 @@ impl ExecutionEnvironment {
             own_subnet_type,
             config.max_controllers,
             compute_capacity,
-            config.max_canister_memory_size_wasm32,
-            config.max_canister_memory_size_wasm64,
             config.rate_limiting_of_instructions,
             config.allocatable_compute_capacity_in_percent,
             config.rate_limiting_of_heap_delta,
@@ -704,6 +701,7 @@ impl ExecutionEnvironment {
                                     ThresholdArguments::Ecdsa(EcdsaArguments {
                                         key_id: args.key_id,
                                         message_hash: args.message_hash,
+                                        pre_signature: None,
                                     }),
                                     args.derivation_path.into_inner(),
                                     registry_settings
@@ -1098,42 +1096,6 @@ impl ExecutionEnvironment {
                 }
             }
 
-            Ok(Ic00Method::ComputeInitialIDkgDealings) => {
-                let cycles = msg.take_cycles();
-                match &msg {
-                    CanisterCall::Request(request) => {
-                        match ComputeInitialIDkgDealingsArgs::decode(request.method_payload()) {
-                            Ok(args) => match get_master_public_key(
-                                &chain_key_data.master_public_keys,
-                                self.own_subnet_id,
-                                &args.key_id,
-                            ) {
-                                Ok(_) => self
-                                    .compute_initial_idkg_dealings(&mut state, args, request)
-                                    .map_or_else(
-                                        |err| ExecuteSubnetMessageResult::Finished {
-                                            response: Err(err),
-                                            refund: cycles,
-                                        },
-                                        |()| ExecuteSubnetMessageResult::Processing,
-                                    ),
-                                Err(err) => ExecuteSubnetMessageResult::Finished {
-                                    response: Err(err),
-                                    refund: cycles,
-                                },
-                            },
-                            Err(err) => ExecuteSubnetMessageResult::Finished {
-                                response: Err(err),
-                                refund: cycles,
-                            },
-                        }
-                    }
-                    CanisterCall::Ingress(_) => {
-                        self.reject_unexpected_ingress(Ic00Method::ComputeInitialIDkgDealings)
-                    }
-                }
-            }
-
             Ok(Ic00Method::SchnorrPublicKey) => {
                 let cycles = msg.take_cycles();
                 match &msg {
@@ -1229,6 +1191,7 @@ impl ExecutionEnvironment {
                                                 Arc::new(v.merkle_root_hash.into_vec())
                                             }
                                         }),
+                                        pre_signature: None,
                                     }),
                                     args.derivation_path.into_inner(),
                                     registry_settings
@@ -2087,15 +2050,6 @@ impl ExecutionEnvironment {
         )
     }
 
-    /// Returns the maximum amount of memory that can be utilized by a single
-    /// canister.
-    pub fn max_canister_memory_size(&self, wasm_execution_mode: WasmExecutionMode) -> NumBytes {
-        match wasm_execution_mode {
-            WasmExecutionMode::Wasm32 => self.config.max_canister_memory_size_wasm32,
-            WasmExecutionMode::Wasm64 => self.config.max_canister_memory_size_wasm64,
-        }
-    }
-
     /// Returns the subnet memory capacity.
     pub fn subnet_memory_capacity(&self) -> NumBytes {
         self.config.subnet_memory_capacity
@@ -2110,17 +2064,8 @@ impl ExecutionEnvironment {
         execution_mode: ExecutionMode,
         subnet_memory_saturation: ResourceSaturation,
     ) -> ExecutionParameters {
-        let wasm_execution_mode = match &canister.execution_state {
-            // The canister is not already installed, so we do not know what kind of canister it is.
-            // Therefore we can assume it is Wasm64 because Wasm64 can have a larger memory limit.
-            None => WasmExecutionMode::Wasm64,
-            Some(execution_state) => execution_state.wasm_execution_mode,
-        };
-        let max_memory_size = self.max_canister_memory_size(wasm_execution_mode);
-
         ExecutionParameters {
             instruction_limits,
-            canister_memory_limit: canister.memory_limit(max_memory_size),
             wasm_memory_limit: canister.wasm_memory_limit(),
             memory_allocation: canister.memory_allocation(),
             canister_guaranteed_callback_quota: self.config.canister_guaranteed_callback_quota
@@ -3378,36 +3323,6 @@ impl ExecutionEnvironment {
                 batch_time: state.metadata.batch_time,
                 matched_pre_signature: None,
                 nonce: None,
-            }),
-        );
-        Ok(())
-    }
-
-    // TODO(CRP-2613): Remove this function after migrating registry to `reshare_chain_key`
-    fn compute_initial_idkg_dealings(
-        &self,
-        state: &mut ReplicatedState,
-        args: ComputeInitialIDkgDealingsArgs,
-        request: &Request,
-    ) -> Result<(), UserError> {
-        let nodes = args.get_set_of_nodes()?;
-        let registry_version = args.get_registry_version();
-
-        if !args.key_id.is_idkg_key() {
-            return Err(UserError::new(
-                ErrorCode::CanisterRejectedMessage,
-                "This key is not an idkg key",
-            ));
-        }
-
-        state.metadata.subnet_call_context_manager.push_context(
-            SubnetCallContext::ReshareChainKey(ReshareChainKeyContext {
-                request: request.clone(),
-                key_id: args.key_id,
-                nodes,
-                registry_version,
-                time: state.time(),
-                target_id: NiDkgTargetId::new([0; 32]),
             }),
         );
         Ok(())
