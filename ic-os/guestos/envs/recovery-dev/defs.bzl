@@ -1,4 +1,23 @@
+"""
+Helper function to generate a dummy recovery archive for testing purposes.
+"""
+
 def generate_recovery_archive(name, seed, server_hostname):
+    """
+    Generates a dummy recovery archive for testing purposes. This is done with a genrule that outputs a tarball
+    containing a dummy CUP and local store content, along with the modified recovery engine script that should
+    be included in the disk image. It also outputs the base64-encoded contents of the CUP and local store files
+    to be passed to the system test to verify the recovery process.
+
+    Args:
+        name: The name of the genrule target.
+        seed: A seed string used to generate dummy data.
+        server_hostname: The hostname of the server where the recovery files will be hosted.
+    Returns:
+        This function does not return anything, but it defines one target for generating the recovery archive and
+        one target for each of the output files.
+        It does not return anything.
+    """
     native.genrule(
         name = name,
         srcs = [
