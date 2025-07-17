@@ -179,5 +179,8 @@ upload_artifacts(
 # Test suite for super-fast tests (should only take a couple seconds to run).
 test_suite(
     name = "insta_tests",
-    tests = [ "//bazel:buildifier_test", "//bazel:gazelle_test"],
+    tests = [
+        "//bazel:buildifier_test",
+        "//bazel:gazelle_test",
+    ],
 )
