@@ -89,7 +89,7 @@ pub fn fake_pre_signature_stash(key_id: &IDkgMasterPublicKeyId, size: u64) -> Pr
     let env = CanisterThresholdSigTestEnvironment::new(4, rng);
     let (dealers, receivers) =
         env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
-    let alg = key_id_to_algorithm_id(key_id);
+    let alg = AlgorithmId::from(key_id.inner());
     let key = generate_key_transcript(&env, &dealers, &receivers, alg, rng);
     let mut pre_signatures = BTreeMap::new();
     for i in 0..size {
@@ -119,29 +119,6 @@ pub fn fake_pre_signature_stash(key_id: &IDkgMasterPublicKeyId, size: u64) -> Pr
     }
 }
 
-fn ecdsa_curve_to_algorithm_id(curve: EcdsaCurve) -> AlgorithmId {
-    match curve {
-        EcdsaCurve::Secp256k1 => AlgorithmId::ThresholdEcdsaSecp256k1,
-    }
-}
-
-fn schnorr_algorithm_to_algorithm_id(alg: SchnorrAlgorithm) -> AlgorithmId {
-    match alg {
-        SchnorrAlgorithm::Bip340Secp256k1 => AlgorithmId::ThresholdSchnorrBip340,
-        SchnorrAlgorithm::Ed25519 => AlgorithmId::ThresholdEd25519,
-    }
-}
-
-fn key_id_to_algorithm_id(key_id: &IDkgMasterPublicKeyId) -> AlgorithmId {
-    match key_id.inner() {
-        MasterPublicKeyId::Ecdsa(ecdsa_key_id) => ecdsa_curve_to_algorithm_id(ecdsa_key_id.curve),
-        MasterPublicKeyId::Schnorr(schnorr_key_id) => {
-            schnorr_algorithm_to_algorithm_id(schnorr_key_id.algorithm)
-        }
-        MasterPublicKeyId::VetKd(_) => unreachable!("Not an IDkgMasterPublicKeyId"),
-    }
-}
-
 fn fake_ecdsa_matched_pre_signature(
     key_id: &EcdsaKeyId,
     height: Height,
@@ -151,7 +128,7 @@ fn fake_ecdsa_matched_pre_signature(
     let env = CanisterThresholdSigTestEnvironment::new(4, rng);
     let (dealers, receivers) =
         env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
-    let alg = ecdsa_curve_to_algorithm_id(key_id.curve);
+    let alg = AlgorithmId::from(key_id.curve);
     let key_transcript = generate_key_transcript(&env, &dealers, &receivers, alg, rng);
     let pre_sig =
         generate_ecdsa_presig_quadruple(&env, &dealers, &receivers, alg, &key_transcript, rng);
@@ -172,7 +149,7 @@ fn fake_schnorr_matched_pre_signature(
     let env = CanisterThresholdSigTestEnvironment::new(4, rng);
     let (dealers, receivers) =
         env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
-    let alg = schnorr_algorithm_to_algorithm_id(key_id.algorithm);
+    let alg = AlgorithmId::from(key_id.algorithm);
     let key_transcript = generate_key_transcript(&env, &dealers, &receivers, alg, rng);
     let blinder_unmasked_params =
         setup_unmasked_random_params(&env, alg, &dealers, &receivers, rng);
@@ -526,21 +503,6 @@ pub fn fake_master_public_key_ids_for_all_algorithms() -> Vec<MasterPublicKeyId>
         .collect()
 }
 
-pub fn algorithm_for_key_id(key_id: &IDkgMasterPublicKeyId) -> AlgorithmId {
-    match key_id.inner() {
-        MasterPublicKeyId::Ecdsa(ecdsa_key_id) => match ecdsa_key_id.curve {
-            EcdsaCurve::Secp256k1 => AlgorithmId::ThresholdEcdsaSecp256k1,
-        },
-        MasterPublicKeyId::Schnorr(schnorr_key_id) => match schnorr_key_id.algorithm {
-            SchnorrAlgorithm::Bip340Secp256k1 => AlgorithmId::ThresholdSchnorrBip340,
-            SchnorrAlgorithm::Ed25519 => AlgorithmId::ThresholdEd25519,
-        },
-        MasterPublicKeyId::VetKd(vetkd_key_id) => match vetkd_key_id.curve {
-            VetKdCurve::Bls12_381_G2 => AlgorithmId::Placeholder,
-        },
-    }
-}
-
 /// Creates a TranscriptID for tests
 pub fn create_transcript_id(id: u64) -> IDkgTranscriptId {
     let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(314159));
@@ -579,7 +541,7 @@ pub fn create_sig_inputs_with_height(
         transcript_type: IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareMasked(
             key_masked_id,
         )),
-        algorithm_id: algorithm_for_key_id(&idkg_key_id),
+        algorithm_id: AlgorithmId::from(idkg_key_id.inner()),
         internal_transcript_raw: vec![],
     };
     create_sig_inputs_with_args(caller, &receivers, key_unmasked, height, &idkg_key_id)
@@ -621,10 +583,7 @@ pub fn create_ecdsa_sig_inputs_with_args(
         algorithm_id.is_threshold_ecdsa(),
         "Expected tECDSA algorithm"
     );
-    assert_eq!(
-        algorithm_id,
-        algorithm_for_key_id(&MasterPublicKeyId::Ecdsa(key_id.clone()).try_into().unwrap())
-    );
+    assert_eq!(algorithm_id, AlgorithmId::from(key_id.curve));
     let kappa_unmasked_id = transcript_id(20);
     let lambda_masked_id = transcript_id(30);
     let key_unmasked_id = key_unmasked.transcript_id;
@@ -737,14 +696,7 @@ pub fn create_schnorr_sig_inputs_with_args(
         algorithm_id.is_threshold_schnorr(),
         "Expected tSchnorr algorithm"
     );
-    assert_eq!(
-        algorithm_id,
-        algorithm_for_key_id(
-            &MasterPublicKeyId::Schnorr(key_id.clone())
-                .try_into()
-                .unwrap()
-        )
-    );
+    assert_eq!(algorithm_id, AlgorithmId::from(key_id.algorithm));
     let blinder_unmasked_id = transcript_id(10);
     let mut idkg_transcripts = BTreeMap::new();
 
