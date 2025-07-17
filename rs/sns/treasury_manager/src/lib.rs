@@ -1,6 +1,9 @@
 use candid::{CandidType, Nat, Principal};
 use serde::{Deserialize, Serialize, Serializer};
-use std::{collections::BTreeMap, fmt::Display};
+use std::{
+    collections::BTreeMap,
+    fmt::{self, Display},
+};
 
 #[derive(CandidType, Clone, Debug, Deserialize)]
 pub struct TreasuryManagerInit {
@@ -33,12 +36,12 @@ impl Balance {
         }
     }
 
-    pub fn zero(account: Option<Account>, name: Option<String>) -> Self {
+    fn zero(account: Option<Account>, name: Option<String>) -> Self {
         Self::new(0, account, name)
     }
 }
 
-#[derive(CandidType, Clone, Debug, Deserialize, PartialEq)]
+#[derive(CandidType, Clone, Debug, Default, Deserialize, PartialEq)]
 pub struct BalanceBook {
     pub treasury_owner: Option<Balance>,
     pub treasury_manager: Option<Balance>,
@@ -46,6 +49,9 @@ pub struct BalanceBook {
     pub fee_collector: Option<Balance>,
     pub payees: Option<Balance>,
     pub payers: Option<Balance>,
+    /// An account in which items are entered temporarily before allocation to the correct
+    /// or final account, e.g., due to transient errors.
+    pub suspense: Option<Balance>,
 }
 
 impl BalanceBook {
@@ -57,6 +63,7 @@ impl BalanceBook {
             fee_collector: None,
             payees: None,
             payers: None,
+            suspense: None,
         }
     }
 
@@ -81,6 +88,11 @@ impl BalanceBook {
 
     pub fn with_fee_collector(mut self, account: Option<Account>, name: Option<String>) -> Self {
         self.fee_collector = Some(Balance::zero(account, name));
+        self
+    }
+
+    pub fn with_suspense(mut self, name: Option<String>) -> Self {
+        self.suspense = Some(Balance::zero(None, name));
         self
     }
 
@@ -152,6 +164,59 @@ pub enum ErrorKind {
     Generic { generic_error_name: String },
 }
 
+impl Error {
+    pub fn new_precondition(message: impl ToString) -> Self {
+        Self {
+            code: 1,
+            message: message.to_string(),
+            kind: ErrorKind::Precondition {},
+        }
+    }
+
+    pub fn new_postcondition(message: String) -> Self {
+        Self {
+            code: 2,
+            message,
+            kind: ErrorKind::Postcondition {},
+        }
+    }
+
+    pub fn new_call(method: String, canister_id: Principal, message: String) -> Self {
+        Self {
+            code: 3,
+            message,
+            kind: ErrorKind::Call {
+                method,
+                canister_id,
+            },
+        }
+    }
+
+    pub fn new_backend(message: String) -> Self {
+        Self {
+            code: 4,
+            message,
+            kind: ErrorKind::Backend {},
+        }
+    }
+
+    pub fn new_temporarily_unavailable(message: String) -> Self {
+        Self {
+            code: 5,
+            message,
+            kind: ErrorKind::TemporarilyUnavailable {},
+        }
+    }
+
+    pub fn new_generic(code: u64, generic_error_name: String, message: String) -> Self {
+        Self {
+            code,
+            message,
+            kind: ErrorKind::Generic { generic_error_name },
+        }
+    }
+}
+
 pub trait TreasuryManager {
     /// Implements the `deposit` API function.
     fn deposit(
@@ -213,8 +278,8 @@ pub struct AuditTrailRequest {}
 
 #[derive(CandidType, Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Step {
-    index: usize,
-    is_final: bool,
+    pub index: usize,
+    pub is_final: bool,
 }
 
 impl Display for Step {
@@ -248,8 +313,8 @@ impl Operation {
 
 #[derive(CandidType, Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 pub struct TreasuryManagerOperation {
-    operation: Operation,
-    step: Step,
+    pub operation: Operation,
+    pub step: Step,
 }
 
 impl TreasuryManagerOperation {
@@ -296,19 +361,16 @@ impl TreasuryManagerOperation {
     }
 }
 
+impl Display for TreasuryManagerOperation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "TreasuryManager.{}-{}", self.operation.name(), self.step)
+    }
+}
+
 /// To be used for ledger transaction memos.
 impl From<TreasuryManagerOperation> for Vec<u8> {
     fn from(operation: TreasuryManagerOperation) -> Self {
-        const PREFIX: &str = "TreasuryManager";
-
-        format!(
-            "{}.{}-{}",
-            PREFIX,
-            operation.operation.name(),
-            operation.step,
-        )
-        .as_bytes()
-        .to_vec()
+        operation.to_string().as_bytes().to_vec()
     }
 }
 
@@ -316,7 +378,7 @@ impl From<TreasuryManagerOperation> for Vec<u8> {
 /// However, for generality, any call from the Treasury Manager can be recorded in the audit trail,
 /// even if it is not related to any literal ledger transaction, e.g., adding a token to a DEX
 /// for the first time, or checking the latest ledger metadata.
-#[derive(CandidType, Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(CandidType, Clone, Deserialize, PartialEq, Serialize)]
 pub struct Transaction {
     pub timestamp_ns: u64,
     pub canister_id: Principal,
@@ -325,6 +387,39 @@ pub struct Transaction {
     pub purpose: String,
 
     pub treasury_manager_operation: TreasuryManagerOperation,
+}
+
+impl Display for Transaction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}-{} {} {}",
+            self.treasury_manager_operation,
+            match &self.result {
+                Ok(_) => "✓",
+                Err(_) => "✗",
+            },
+            self.canister_id,
+            self.purpose,
+        )
+    }
+}
+
+impl fmt::Debug for Transaction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Transaction")
+            .field("timestamp_ns", &self.timestamp_ns)
+            // This is the 1st motivation for this hand-crafted Debug impl.
+            .field("canister_id", &self.canister_id.to_string())
+            .field("result", &self.result)
+            .field("purpose", &self.purpose)
+            // This is the 2nd motivation for this hand-crafted Debug impl.
+            .field(
+                "treasury_manager_operation",
+                &self.treasury_manager_operation.to_string(),
+            )
+            .finish()
+    }
 }
 
 #[derive(CandidType, Clone, Debug, Deserialize, PartialEq)]

@@ -2051,6 +2051,7 @@ mod tests {
                     args: ThresholdArguments::Ecdsa(EcdsaArguments {
                         key_id: fake_ecdsa_key_id(),
                         message_hash,
+                        pre_signature: None,
                     }),
                     pseudo_random_id: [1; 32],
                     derivation_path: Arc::new(vec![]),
@@ -2189,6 +2190,7 @@ mod tests {
                         key_id: fake_schnorr_key_id(schnorr_algorithm(algorithm)),
                         message: Arc::new(message.clone()),
                         taproot_tree_root: None,
+                        pre_signature: None,
                     }),
                     pseudo_random_id: [1; 32],
                     derivation_path: Arc::new(vec![]),

@@ -1,3 +1,8 @@
+use ic_crypto_test_utils_canister_threshold_sigs::{
+    generate_ecdsa_presig_quadruple, generate_key_transcript, setup_unmasked_random_params,
+    CanisterThresholdSigTestEnvironment, IDkgParticipants,
+};
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
 use ic_interfaces_state_manager::{CertifiedStateSnapshot, Labeled};
 use ic_management_canister_types_private::{
@@ -6,8 +11,9 @@ use ic_management_canister_types_private::{
 };
 use ic_replicated_state::{
     metadata_state::subnet_call_context_manager::{
-        EcdsaArguments, ReshareChainKeyContext, SchnorrArguments, SignWithThresholdContext,
-        ThresholdArguments, VetKdArguments,
+        EcdsaArguments, EcdsaMatchedPreSignature, PreSignatureStash, ReshareChainKeyContext,
+        SchnorrArguments, SchnorrMatchedPreSignature, SignWithThresholdContext, ThresholdArguments,
+        VetKdArguments,
     },
     ReplicatedState,
 };
@@ -21,7 +27,7 @@ use ic_types::{
     consensus::{
         certification::Certification,
         idkg::{
-            common::{PreSignatureRef, ThresholdSigInputsRef},
+            common::{PreSignature, PreSignatureRef, ThresholdSigInputsRef},
             ecdsa::{PreSignatureQuadrupleRef, ThresholdEcdsaSigInputsRef},
             schnorr::{PreSignatureTranscriptRef, ThresholdSchnorrSigInputsRef},
             HasIDkgMasterPublicKeyId, IDkgMasterPublicKeyId, IDkgPayload, IDkgReshareRequest,
@@ -35,7 +41,7 @@ use ic_types::{
                 IDkgMaskedTranscriptOrigin, IDkgReceivers, IDkgTranscript, IDkgTranscriptId,
                 IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin,
             },
-            ThresholdEcdsaSigInputs, ThresholdSchnorrSigInputs,
+            SchnorrPreSignatureTranscript, ThresholdEcdsaSigInputs, ThresholdSchnorrSigInputs,
         },
         threshold_sig::ni_dkg::{
             NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
@@ -78,16 +84,128 @@ pub fn empty_response() -> ConsensusResponse {
     ConsensusResponse::new(CallbackId::from(0), Payload::Data(vec![]))
 }
 
-fn fake_signature_request_args(key_id: MasterPublicKeyId, height: Height) -> ThresholdArguments {
+pub fn fake_pre_signature_stash(key_id: &IDkgMasterPublicKeyId, size: u64) -> PreSignatureStash {
+    let rng = &mut reproducible_rng();
+    let env = CanisterThresholdSigTestEnvironment::new(4, rng);
+    let (dealers, receivers) =
+        env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
+    let alg = key_id_to_algorithm_id(key_id);
+    let key = generate_key_transcript(&env, &dealers, &receivers, alg, rng);
+    let mut pre_signatures = BTreeMap::new();
+    for i in 0..size {
+        let pre_signature = match key_id.inner() {
+            MasterPublicKeyId::Ecdsa(_) => {
+                let pre_sig =
+                    generate_ecdsa_presig_quadruple(&env, &dealers, &receivers, alg, &key, rng);
+                PreSignature::Ecdsa(Arc::new(pre_sig))
+            }
+            MasterPublicKeyId::Schnorr(_) => {
+                let blinder_params =
+                    setup_unmasked_random_params(&env, alg, &dealers, &receivers, rng);
+                let blinder_transcript = env
+                    .nodes
+                    .run_idkg_and_create_and_verify_transcript(&blinder_params, rng);
+                PreSignature::Schnorr(Arc::new(
+                    SchnorrPreSignatureTranscript::new(blinder_transcript).unwrap(),
+                ))
+            }
+            MasterPublicKeyId::VetKd(_) => panic!("Not an IDkgMasterPublicKeyId"),
+        };
+        pre_signatures.insert(PreSigId(i), pre_signature);
+    }
+    PreSignatureStash {
+        key_transcript: Arc::new(key),
+        pre_signatures,
+    }
+}
+
+fn ecdsa_curve_to_algorithm_id(curve: EcdsaCurve) -> AlgorithmId {
+    match curve {
+        EcdsaCurve::Secp256k1 => AlgorithmId::ThresholdEcdsaSecp256k1,
+    }
+}
+
+fn schnorr_algorithm_to_algorithm_id(alg: SchnorrAlgorithm) -> AlgorithmId {
+    match alg {
+        SchnorrAlgorithm::Bip340Secp256k1 => AlgorithmId::ThresholdSchnorrBip340,
+        SchnorrAlgorithm::Ed25519 => AlgorithmId::ThresholdEd25519,
+    }
+}
+
+fn key_id_to_algorithm_id(key_id: &IDkgMasterPublicKeyId) -> AlgorithmId {
+    match key_id.inner() {
+        MasterPublicKeyId::Ecdsa(ecdsa_key_id) => ecdsa_curve_to_algorithm_id(ecdsa_key_id.curve),
+        MasterPublicKeyId::Schnorr(schnorr_key_id) => {
+            schnorr_algorithm_to_algorithm_id(schnorr_key_id.algorithm)
+        }
+        MasterPublicKeyId::VetKd(_) => unreachable!("Not an IDkgMasterPublicKeyId"),
+    }
+}
+
+fn fake_ecdsa_matched_pre_signature(
+    key_id: &EcdsaKeyId,
+    height: Height,
+    id: PreSigId,
+) -> EcdsaMatchedPreSignature {
+    let rng = &mut reproducible_rng();
+    let env = CanisterThresholdSigTestEnvironment::new(4, rng);
+    let (dealers, receivers) =
+        env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
+    let alg = ecdsa_curve_to_algorithm_id(key_id.curve);
+    let key_transcript = generate_key_transcript(&env, &dealers, &receivers, alg, rng);
+    let pre_sig =
+        generate_ecdsa_presig_quadruple(&env, &dealers, &receivers, alg, &key_transcript, rng);
+    EcdsaMatchedPreSignature {
+        id,
+        height,
+        pre_signature: Arc::new(pre_sig),
+        key_transcript: Arc::new(key_transcript),
+    }
+}
+
+fn fake_schnorr_matched_pre_signature(
+    key_id: &SchnorrKeyId,
+    height: Height,
+    id: PreSigId,
+) -> SchnorrMatchedPreSignature {
+    let rng = &mut reproducible_rng();
+    let env = CanisterThresholdSigTestEnvironment::new(4, rng);
+    let (dealers, receivers) =
+        env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
+    let alg = schnorr_algorithm_to_algorithm_id(key_id.algorithm);
+    let key_transcript = generate_key_transcript(&env, &dealers, &receivers, alg, rng);
+    let blinder_unmasked_params =
+        setup_unmasked_random_params(&env, alg, &dealers, &receivers, rng);
+    let blinder_transcript = env
+        .nodes
+        .run_idkg_and_create_and_verify_transcript(&blinder_unmasked_params, rng);
+    let pre_sig = SchnorrPreSignatureTranscript::new(blinder_transcript).unwrap();
+    SchnorrMatchedPreSignature {
+        id,
+        height,
+        pre_signature: Arc::new(pre_sig),
+        key_transcript: Arc::new(key_transcript),
+    }
+}
+
+fn fake_signature_request_args(
+    key_id: MasterPublicKeyId,
+    height: Height,
+    pre_sig_id: Option<PreSigId>,
+) -> ThresholdArguments {
     match key_id {
         MasterPublicKeyId::Ecdsa(key_id) => ThresholdArguments::Ecdsa(EcdsaArguments {
-            key_id,
             message_hash: [0; 32],
+            pre_signature: pre_sig_id
+                .map(|id| fake_ecdsa_matched_pre_signature(&key_id, height, id)),
+            key_id,
         }),
         MasterPublicKeyId::Schnorr(key_id) => ThresholdArguments::Schnorr(SchnorrArguments {
-            key_id,
             message: Arc::new(vec![1; 48]),
             taproot_tree_root: None,
+            pre_signature: pre_sig_id
+                .map(|id| fake_schnorr_matched_pre_signature(&key_id, height, id)),
+            key_id,
         }),
         MasterPublicKeyId::VetKd(key_id) => ThresholdArguments::VetKd(VetKdArguments {
             key_id: key_id.clone(),
@@ -105,7 +223,7 @@ pub fn fake_signature_request_context(
 ) -> SignWithThresholdContext {
     SignWithThresholdContext {
         request: RequestBuilder::new().build(),
-        args: fake_signature_request_args(key_id, Height::from(0)),
+        args: fake_signature_request_args(key_id, Height::from(0), None),
         derivation_path: Arc::new(vec![]),
         batch_time: UNIX_EPOCH,
         pseudo_random_id,
@@ -122,7 +240,7 @@ pub fn fake_signature_request_context_with_pre_sig(
     let height = Height::from(1);
     let context = SignWithThresholdContext {
         request: RequestBuilder::new().build(),
-        args: fake_signature_request_args(key_id.into(), height),
+        args: fake_signature_request_args(key_id.into(), height, pre_signature),
         derivation_path: Arc::new(vec![]),
         batch_time: UNIX_EPOCH,
         pseudo_random_id: [request_id.callback_id.get() as u8; 32],
@@ -140,7 +258,7 @@ pub fn fake_signature_request_context_from_id(
     let height = request_id.height;
     let context = SignWithThresholdContext {
         request: RequestBuilder::new().build(),
-        args: fake_signature_request_args(key_id, height),
+        args: fake_signature_request_args(key_id, height, Some(pre_sig_id)),
         derivation_path: Arc::new(vec![]),
         batch_time: UNIX_EPOCH,
         pseudo_random_id: [request_id.callback_id.get() as u8; 32],

@@ -1,5 +1,6 @@
 use crate::extensions::{ExtensionKind, ValidatedRegisterExtension};
 use crate::icrc_ledger_helper::ICRCLedgerHelper;
+use crate::pb::sns_root_types::{register_extension_response, CanisterCallError};
 use crate::pb::v1::governance::GovernanceCachedMetrics;
 use crate::pb::v1::{valuation, Metrics, RegisterExtension, TreasuryMetrics, VotingPowerMetrics};
 use crate::proposal::TreasuryAccount;
@@ -26,8 +27,8 @@ use crate::{
     pb::{
         sns_root_types::{
             ManageDappCanisterSettingsRequest, ManageDappCanisterSettingsResponse,
-            RegisterDappCanistersRequest, RegisterDappCanistersResponse, SetDappControllersRequest,
-            SetDappControllersResponse,
+            RegisterDappCanistersRequest, RegisterDappCanistersResponse, RegisterExtensionRequest,
+            RegisterExtensionResponse, SetDappControllersRequest, SetDappControllersResponse,
         },
         v1::{
             claim_swap_neurons_response::SwapNeuron,
@@ -2284,6 +2285,71 @@ impl Governance {
         }
     }
 
+    async fn register_extension_with_root(
+        &self,
+        extension_canister_id: CanisterId,
+    ) -> Result<(), GovernanceError> {
+        let payload = candid::Encode!(&RegisterExtensionRequest {
+            canister_id: Some(extension_canister_id.get()),
+        })
+        .map_err(|err| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidPrincipal,
+                format!("Could not encode RegisterExtensionRequest: {err:?}"),
+            )
+        })?;
+
+        let reply = self
+            .env
+            .call_canister(
+                self.proto.root_canister_id_or_panic(),
+                "register_canister",
+                payload,
+            )
+            .await
+            .map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!("Canister method call failed: {err:?}"),
+                )
+            })?;
+
+        let RegisterExtensionResponse { result } =
+            candid::Decode!(&reply, RegisterExtensionResponse).map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!("Could not decode RegisterExtensionResponse: {err:?}"),
+                )
+            })?;
+
+        if let Some(register_extension_response::Result::Err(CanisterCallError {
+            code,
+            description,
+        })) = result
+        {
+            let code = if let Some(code) = code {
+                code.to_string()
+            } else {
+                "<no code>".to_string()
+            };
+            return Err(GovernanceError::new_with_message(
+                ErrorType::External,
+                format!(
+                    "Root.register_extension failed with code {}: {}",
+                    code, description
+                ),
+            ));
+        }
+
+        log!(
+            INFO,
+            "Root.register_extension succeeded for canister {}",
+            extension_canister_id.get()
+        );
+
+        Ok(())
+    }
+
     async fn perform_register_extension(
         &mut self,
         register_extension: RegisterExtension,
@@ -2309,11 +2375,12 @@ impl Governance {
             ));
         };
 
-        // Step 1. Register the extension as a dapp canister.
-        self.perform_register_dapp_canisters(RegisterDappCanisters {
-            canister_ids: vec![store_canister_id.get()],
-        })
-        .await?;
+        // Use the store canister to install the extension itself.
+        let extension_canister_id = store_canister_id;
+
+        // Step 1. Register the extension with Root.
+        self.register_extension_with_root(extension_canister_id)
+            .await?;
 
         // Step 2. Validate the init arguments.
         if spec.kind != ExtensionKind::TreasuryManager {
@@ -2323,13 +2390,15 @@ impl Governance {
             ));
         }
 
+        let treasury_manager_canister_id = extension_canister_id;
+
         let (arg, sns_amount_e8s, icp_amount_e8s) = self.construct_treasury_manager_init(init)?;
 
-        self.deposit_treasury_manager(store_canister_id, sns_amount_e8s, icp_amount_e8s)
+        self.deposit_treasury_manager(treasury_manager_canister_id, sns_amount_e8s, icp_amount_e8s)
             .await?;
 
         self.upgrade_non_root_canister(
-            store_canister_id,
+            treasury_manager_canister_id,
             Wasm::Chunked {
                 wasm_module_hash,
                 store_canister_id,
@@ -2645,7 +2714,7 @@ impl Governance {
 
     async fn upgrade_non_root_canister(
         &mut self,
-        target_canister_id: CanisterId,
+        canister_id: CanisterId,
         wasm: Wasm,
         arg: Vec<u8>,
         mode: CanisterInstallMode,
@@ -2661,7 +2730,7 @@ impl Governance {
             let stop_before_installing = true;
 
             let mut change_canister_arg =
-                ChangeCanisterRequest::new(stop_before_installing, mode, target_canister_id)
+                ChangeCanisterRequest::new(stop_before_installing, mode, canister_id)
                     .with_arg(arg)
                     .with_mode(mode);
 
