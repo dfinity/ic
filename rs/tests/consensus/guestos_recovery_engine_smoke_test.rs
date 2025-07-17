@@ -57,10 +57,9 @@ fn verify_content(
     })?;
     ensure!(
         actual_b64 == expected_b64,
-        "Unexpected content in {}. Actual: {}. Expected: {}.",
+        "Unexpected content in {}: (base-64 encoded) {}",
         actual_file_path,
         actual_b64,
-        expected_b64
     );
     Ok(())
 }
