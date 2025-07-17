@@ -55,7 +55,6 @@ artifact_bundle(
 
 generate_recovery_archive(
     name = "guestos_recovery_archive",
-    seed = "SEED", # TODO: static for now
-    server_hostname = "mydomain.local123456123456", # TODO: ???
+    seed = "SEED",  # TODO: static for now
+    server_hostname = "mydomain.local123456123456",  # TODO: ???
 )
-

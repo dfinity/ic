@@ -2,7 +2,7 @@ def generate_recovery_archive(name, seed, server_hostname):
     native.genrule(
         name = name,
         srcs = [
-            "//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.sh"
+            "//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.sh",
         ],
         outs = [
             "recovery.tar.zst",
@@ -88,4 +88,3 @@ def generate_recovery_archive(name, seed, server_hostname):
             "//rs:ic-os-pkg",
         ],
     )
-
