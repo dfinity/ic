@@ -21,7 +21,6 @@ use ic_prep_lib::{
     node::{Node, NodeConfiguration, NodeIndex},
     subnet_configuration::{SubnetConfig, SubnetIndex, SubnetRunningState},
 };
-use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{Height, PrincipalId, ReplicaVersion};
