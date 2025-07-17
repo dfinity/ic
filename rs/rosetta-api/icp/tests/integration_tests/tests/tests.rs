@@ -22,6 +22,7 @@ use pocket_ic::{nonblocking::PocketIc, PocketIcBuilder};
 use rosetta_core::objects::ObjectMap;
 use serde::Deserialize;
 use std::path::PathBuf;
+use std::process::Command;
 use std::thread::sleep;
 use std::time::{Duration, SystemTime};
 use tempfile::TempDir;
@@ -1323,4 +1324,28 @@ async fn test_network_status_single_genesis_transaction() {
         network_status.genesis_block_identifier,
         genesis_block.block_identifier
     );
+}
+
+#[test]
+fn test_configure_test_and_canister_id_returns_error() {
+    let output = Command::new(get_rosetta_path())
+        .args(&["--test", "--canister-id", "different-canister-id"])
+        .output()
+        .expect("Failed to execute binary");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("Cannot specify both --test and --canister-id"));
+}
+
+#[test]
+fn test_configure_test_and_token_symbol_returns_error() {
+    let output = Command::new(get_rosetta_path())
+        .args(&["--test", "--token-symbol", "X"])
+        .output()
+        .expect("Failed to execute binary");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("Cannot specify both --test and --token-symbol"));
 }

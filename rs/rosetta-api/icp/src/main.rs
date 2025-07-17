@@ -18,6 +18,9 @@ use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{Layer, Registry};
 use url::Url;
 
+const TESTICP_CANISTER_ID: &str = "xafvr-biaaa-aaaai-aql5q-cai";
+const TESTICP_TOKEN_SYMBOL: &str = "TESTICP";
+
 #[derive(Debug, Parser)]
 #[clap(version)]
 struct Opt {
@@ -33,7 +36,7 @@ struct Opt {
     /// Id of the ICP ledger canister.
     #[clap(short = 'c', long = "canister-id")]
     ic_canister_id: Option<String>,
-    #[clap(short = 't', long = "token-sybol")]
+    #[clap(short = 't', long = "token-symbol")]
     token_symbol: Option<String>,
     /// Id of the governance canister to use for neuron management.
     #[clap(short = 'g', long = "governance-canister-id")]
@@ -81,6 +84,13 @@ struct Opt {
     )]
     optimize_search_indexes: bool,
 
+    /// Use test configuration (sets canister ID and token symbol for testing)
+    #[clap(
+        long = "test",
+        help = "Use test configuration with TESTICP canister and token"
+    )]
+    test: bool,
+
     #[cfg(feature = "rosetta-blocks")]
     #[clap(long = "enable-rosetta-blocks")]
     enable_rosetta_blocks: bool,
@@ -88,12 +98,7 @@ struct Opt {
 
 impl Opt {
     fn default_url(&self) -> Url {
-        let url = if self.mainnet {
-            "https://ic0.app"
-        } else {
-            "https://exchanges.testnet.dfinity.network"
-        };
-        Url::parse(url).unwrap()
+        Url::parse("https://ic0.app").unwrap()
     }
 
     fn ic_url(&self) -> Result<Url, String> {
@@ -145,9 +150,35 @@ fn init_logging(level: Level) -> std::io::Result<WorkerGuard> {
     Ok(guard)
 }
 
+fn configure_from_args(opt: Opt) -> Result<Opt, String> {
+    if opt.test {
+        // If the --test option is enabled, --canister-id and --token-symbol
+        // cannot be set as they are automatically populated.
+        if opt.ic_canister_id.is_some() {
+            return Err(format!("Cannot specify both --test and --canister-id. When using --test, the canister ID is automatically set to {}", TESTICP_CANISTER_ID));
+        }
+        if opt.token_symbol.is_some() {
+            return Err(format!("Cannot specify both --test and --token-symbol with a different value. When using --test, the token symbol is automatically set to {}", TESTICP_TOKEN_SYMBOL));
+        }
+
+        return Ok(Opt {
+            ic_canister_id: Some(TESTICP_CANISTER_ID.to_string()),
+            token_symbol: Some(TESTICP_TOKEN_SYMBOL.to_string()),
+            ..opt
+        });
+    } else {
+        Ok(opt)
+    }
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let opt = Opt::parse();
+
+    let opt = configure_from_args(opt).unwrap_or_else(|e| {
+        eprintln!("{}", e);
+        std::process::exit(1);
+    });
 
     let _guard = init_logging(opt.log_level)?;
 
@@ -168,7 +199,17 @@ async fn main() -> std::io::Result<()> {
     let url = opt.ic_url().unwrap();
     info!("Internet Computer URL set to {}", url);
 
-    let (root_key, canister_id, governance_canister_id) = if opt.mainnet {
+    let canister_id = match opt.ic_canister_id {
+        Some(cid) => CanisterId::unchecked_from_principal(PrincipalId::from_str(&cid[..]).unwrap()),
+        None => ic_nns_constants::LEDGER_CANISTER_ID,
+    };
+
+    let governance_canister_id = match opt.governance_canister_id {
+        Some(cid) => CanisterId::unchecked_from_principal(PrincipalId::from_str(&cid[..]).unwrap()),
+        None => ic_nns_constants::GOVERNANCE_CANISTER_ID,
+    };
+
+    let root_key = if opt.mainnet {
         let root_key = match opt.root_key {
             Some(root_key_path) => parse_threshold_sig_key(root_key_path.as_path())?,
             None => {
@@ -179,50 +220,21 @@ async fn main() -> std::io::Result<()> {
             }
         };
 
-        let canister_id = match opt.ic_canister_id {
-            Some(cid) => {
-                CanisterId::unchecked_from_principal(PrincipalId::from_str(&cid[..]).unwrap())
-            }
-            None => ic_nns_constants::LEDGER_CANISTER_ID,
-        };
-
-        let governance_canister_id = match opt.governance_canister_id {
-            Some(cid) => {
-                CanisterId::unchecked_from_principal(PrincipalId::from_str(&cid[..]).unwrap())
-            }
-            None => ic_nns_constants::GOVERNANCE_CANISTER_ID,
-        };
-
-        (Some(root_key), canister_id, governance_canister_id)
+        Some(root_key)
     } else {
-        let root_key = match opt.root_key {
+        match opt.root_key {
             Some(root_key_path) => Some(parse_threshold_sig_key(root_key_path.as_path())?),
             None => {
                 warn!("Data certificate will not be verified due to missing root key");
                 None
             }
-        };
-
-        let canister_id = match opt.ic_canister_id {
-            Some(cid) => {
-                CanisterId::unchecked_from_principal(PrincipalId::from_str(&cid[..]).unwrap())
-            }
-            None => ic_nns_constants::LEDGER_CANISTER_ID,
-        };
-
-        let governance_canister_id = match opt.governance_canister_id {
-            Some(cid) => {
-                CanisterId::unchecked_from_principal(PrincipalId::from_str(&cid[..]).unwrap())
-            }
-            None => ic_nns_constants::GOVERNANCE_CANISTER_ID,
-        };
-
-        (root_key, canister_id, governance_canister_id)
+        }
     };
 
     let token_symbol = opt
         .token_symbol
         .unwrap_or_else(|| DEFAULT_TOKEN_SYMBOL.to_string());
+
     info!("Token symbol set to {}", token_symbol);
 
     let store_location: Option<&Path> = match opt.store_type.as_ref() {
