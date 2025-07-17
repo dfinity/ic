@@ -1,15 +1,16 @@
 use assert_cmd::Command;
 use predicates::str::contains;
+use std::env;
+use std::path::PathBuf;
 
 #[test]
 fn should_succeed() {
-    Command::cargo_bin("canscan")
-        .unwrap()
+    Command::new(get_runfile_path("canscan"))
         .args(&[
             "--wasm",
-            "../../target/wasm32-unknown-unknown/canister-release/canscan-test-canister.wasm",
+            &get_runfile_path("test_canister/test_canister.wasm.gz"),
             "--candid",
-            "test_canister/canister.did",
+            &get_runfile_path("test_canister/test_canister.did"),
             "--hidden",
             "update:setApiKey",
         ])
@@ -20,30 +21,28 @@ fn should_succeed() {
 
 #[test]
 fn should_fail_with_incorrect_path() {
-    Command::cargo_bin("canscan")
-        .unwrap()
+    Command::new(get_runfile_path("canscan"))
         .args(&[
             "--wasm",
-            "canscan-test-canister.wasm",
+            &get_runfile_path("test_canister/test_canister.wasm.gz"),
             "--candid",
-            "test_canister/canister.did",
+            "test_canister/test_canister.did",
             "--hidden",
             "query:setApiKey",
         ])
         .assert()
         .failure()
-        .stderr(contains("Failed to parse WASM: No such file or directory"));
+        .stderr(contains("ERROR: Failed to parse Candid file: Cannot open"));
 }
 
 #[test]
 fn should_fail_without_hidden_argument() {
-    Command::cargo_bin("canscan")
-        .unwrap()
+    Command::new(get_runfile_path("canscan"))
         .args(&[
             "--wasm",
-            "../../target/wasm32-unknown-unknown/canister-release/canscan-test-canister.wasm",
+            &get_runfile_path("test_canister/test_canister.wasm.gz"),
             "--candid",
-            "test_canister/canister.did",
+            &get_runfile_path("test_canister/test_canister.did"),
         ])
         .assert()
         .failure()
@@ -52,17 +51,29 @@ fn should_fail_without_hidden_argument() {
 
 #[test]
 fn should_fail_with_incorrect_hidden_argument() {
-    Command::cargo_bin("canscan")
-        .unwrap()
+    Command::new(get_runfile_path("canscan"))
         .args(&[
             "--wasm",
-            "../../target/wasm32-unknown-unknown/canister-release/canscan-test-canister.wasm",
+            &get_runfile_path("test_canister/test_canister.wasm.gz"),
             "--candid",
-            "test_canister/canister.did",
+            &get_runfile_path("test_canister/test_canister.did"),
             "--hidden",
             "query:setApiKey"
         ])
         .assert()
         .failure()
         .stderr(contains("ERROR: The following endpoint is unexpected in the WASM exports section: update:setApiKey"));
+}
+
+pub fn get_runfile_path(path: &str) -> String {
+    [
+        env::var("RUNFILES_DIR").unwrap().as_str(),
+        "_main/packages/canscan/",
+        path,
+    ]
+    .iter()
+    .collect::<PathBuf>()
+    .to_str()
+    .unwrap()
+    .to_string()
 }

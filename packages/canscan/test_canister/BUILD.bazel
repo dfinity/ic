@@ -3,10 +3,16 @@ load("//bazel:canisters.bzl", "rust_canister")
 rust_canister(
     name = "test_canister",
     srcs = ["src/main.rs"],
-    service_file = ":canister.did",
+    service_file = ":test_canister.did",
     deps = [
         # Keep sorted.
         "@crate_index//:candid",
         "@crate_index//:ic-cdk",
     ],
+)
+
+filegroup(
+    name = "candid",
+    srcs = ["test_canister.did"],
+    visibility = ["//visibility:public"],
 )
