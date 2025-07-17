@@ -1186,6 +1186,37 @@ impl SignWithThresholdContext {
             _ => panic!("VetKd arguments not found."),
         }
     }
+
+    /// Return all IDkgTranscripts included in this context
+    pub fn iter_idkg_transcripts(&self) -> impl Iterator<Item = &IDkgTranscript> {
+        let refs = match &self.args {
+            ThresholdArguments::Ecdsa(args) => args
+                .pre_signature
+                .as_ref()
+                .map(|pre_sig| {
+                    vec![
+                        pre_sig.pre_signature.kappa_unmasked(),
+                        pre_sig.pre_signature.lambda_masked(),
+                        pre_sig.pre_signature.kappa_times_lambda(),
+                        pre_sig.pre_signature.key_times_lambda(),
+                        &pre_sig.key_transcript,
+                    ]
+                })
+                .unwrap_or_default(),
+            ThresholdArguments::Schnorr(args) => args
+                .pre_signature
+                .as_ref()
+                .map(|pre_sig| {
+                    vec![
+                        pre_sig.pre_signature.blinder_unmasked(),
+                        &pre_sig.key_transcript,
+                    ]
+                })
+                .unwrap_or_default(),
+            ThresholdArguments::VetKd(_) => vec![],
+        };
+        refs.into_iter()
+    }
 }
 
 impl From<&SignWithThresholdContext> for pb_metadata::SignWithThresholdContext {

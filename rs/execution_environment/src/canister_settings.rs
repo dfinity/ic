@@ -455,7 +455,7 @@ pub(crate) fn validate_canister_settings(
 ) -> Result<ValidatedCanisterSettings, CanisterManagerError> {
     let old_memory_bytes = canister_memory_allocation.allocated_bytes(canister_memory_usage);
     let new_memory_bytes = match settings.memory_allocation {
-        None => canister_memory_usage,
+        None => old_memory_bytes,
         Some(new_memory_allocation) => {
             // The new memory allocation cannot be lower than the current canister
             // memory usage.

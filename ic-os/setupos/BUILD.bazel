@@ -58,3 +58,20 @@ genrule(
         "//rs:system-tests-pkg",
     ],
 )
+
+# Extract the GuestOS image from SetupOS
+genrule(
+    name = "mainnet-guest-img",
+    srcs = ["@mainnet_setupos_disk_image//file"],
+    outs = ["mainnet-guest-img.tar.zst"],
+    cmd = """
+        $(location //rs/ic_os/build_tools/partition_tools:extract-guestos) --image $< $@
+    """,
+    tags = ["manual"],
+    target_compatible_with = ["@platforms//os:linux"],
+    tools = ["//rs/ic_os/build_tools/partition_tools:extract-guestos"],
+    visibility = [
+        "//rs:ic-os-pkg",
+        "//rs:system-tests-pkg",
+    ],
+)
