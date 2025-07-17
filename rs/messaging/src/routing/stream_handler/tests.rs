@@ -17,7 +17,7 @@ use ic_test_utilities_metrics::{
     fetch_histogram_stats, fetch_histogram_vec_count, fetch_int_counter, fetch_int_counter_vec,
     fetch_int_gauge_vec, metric_vec, nonzero_values, HistogramStats, MetricVec,
 };
-use ic_test_utilities_state::{new_canister_state, register_callback};
+use ic_test_utilities_state::{register_callback, CanisterStateBuilder};
 use ic_test_utilities_types::ids::{user_test_id, SUBNET_12, SUBNET_23, SUBNET_27};
 use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
 use ic_test_utilities_types::xnet::StreamHeaderBuilder;
@@ -575,19 +575,6 @@ fn legacy_induct_loopback_stream_with_zero_subnet_wasm_custom_sections_limit() {
             MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2,
         ),
         subnet_wasm_custom_sections_memory_capacity: NumBytes::new(0),
-        ..Default::default()
-    });
-}
-
-/// Tests that canister memory limit is ignored by
-/// `StreamHandlerImpl::induct_loopback_stream()` for system subnets.
-#[test]
-fn system_subnet_induct_loopback_stream_ignores_canister_memory_limit() {
-    // A stream handler with a canister memory limit that only allows up to 3 reservations.
-    induct_loopback_stream_ignores_memory_limit_impl(HypervisorConfig {
-        max_canister_memory_size_wasm32: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2),
-        // For consistency reasons in case this test is run against Wasm64 canisters.
-        max_canister_memory_size_wasm64: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2),
         ..Default::default()
     });
 }
@@ -1775,6 +1762,85 @@ fn induct_stream_slices_reject_response_from_old_host_subnet_is_accepted() {
             ]);
             metrics.assert_eq_critical_errors(CriticalErrorCounts {
                 sender_subnet_mismatch: 2,
+                ..CriticalErrorCounts::default()
+            });
+        },
+    );
+}
+
+/// During single canister migration, we enforce that the canister has no ongoing calls.
+/// However, we might generate local timeout for best effort request and receive a response
+/// after the migration. In this case we silently drop the response.
+#[test]
+fn induct_best_effort_response_to_migrated_away_canister_is_ok() {
+    with_test_setup(
+        btreemap![],
+        btreemap![REMOTE_SUBNET => StreamSliceConfig {
+            messages: vec![
+                 BestEffortResponse(*REMOTE_CANISTER, *LOCAL_CANISTER, CoarseTime::from_secs_since_unix_epoch(123)),
+            ],
+            ..StreamSliceConfig::default()
+        }],
+        |stream_handler, state, slices, metrics| {
+            let state = simulate_manual_canister_migration(
+                state,
+                *LOCAL_CANISTER,
+                CANISTER_MIGRATION_SUBNET,
+            );
+            let mut available_guaranteed_response_memory =
+                stream_handler.available_guaranteed_response_memory(&state);
+
+            stream_handler.induct_stream_slices(
+                state,
+                slices,
+                &mut available_guaranteed_response_memory,
+            );
+            metrics.assert_inducted_xnet_messages_eq(&[(
+                LABEL_VALUE_TYPE_RESPONSE,
+                LABEL_VALUE_DROPPED,
+                1,
+            )]);
+            metrics.assert_eq_critical_errors(CriticalErrorCounts {
+                ..CriticalErrorCounts::default()
+            });
+        },
+    );
+}
+
+/// Guaranteed responses must be delivered; failure to do so is a critical error.
+#[test]
+fn induct_guaranteed_response_to_migrated_away_canister_is_error() {
+    with_test_setup(
+        btreemap![],
+        btreemap![REMOTE_SUBNET => StreamSliceConfig {
+            messages: vec![
+                Response(*REMOTE_CANISTER, *LOCAL_CANISTER),
+            ],
+            ..StreamSliceConfig::default()
+        }],
+        |stream_handler, state, slices, metrics| {
+            let state = simulate_manual_canister_migration(
+                state,
+                *LOCAL_CANISTER,
+                CANISTER_MIGRATION_SUBNET,
+            );
+            let mut available_guaranteed_response_memory =
+                stream_handler.available_guaranteed_response_memory(&state);
+
+            stream_handler.induct_stream_slices(
+                state,
+                slices,
+                &mut available_guaranteed_response_memory,
+            );
+
+            metrics.assert_inducted_xnet_messages_eq(&[(
+                LABEL_VALUE_TYPE_RESPONSE,
+                LABEL_VALUE_RECEIVER_SUBNET_MISMATCH,
+                1,
+            )]);
+
+            metrics.assert_eq_critical_errors(CriticalErrorCounts {
+                receiver_subnet_mismatch: 1,
                 ..CriticalErrorCounts::default()
             });
         },
@@ -4035,12 +4101,15 @@ fn with_test_setup_and_config(
         state.metadata.network_topology.routing_table = routing_table;
 
         // Generate testing canister using `LOCAL_CANISTER` as the canister ID.
-        let mut canister_state = new_canister_state(
-            *LOCAL_CANISTER,
-            user_test_id(24).get(),
-            *INITIAL_CYCLES,
-            NumSeconds::from(100_000),
-        );
+        let mut canister_state = CanisterStateBuilder::new()
+            .with_canister_id(*LOCAL_CANISTER)
+            .with_controller(user_test_id(24).get())
+            .with_cycles(*INITIAL_CYCLES)
+            .with_freezing_threshold(NumSeconds::from(100_000))
+            // the smallest possible memory allocation (0 means best-effort)
+            // to ensure that stream handler is oblivious to canister memory allocation
+            .with_memory_allocation(1)
+            .build();
 
         // Generates messages from `MessageBuilder`, makes a reservation for message in
         // the input queue and registers a `CallbackId` in the `canister_state` if it is
@@ -4613,7 +4682,7 @@ fn complete_canister_migration(
     state
 }
 
-/// Simulates the migration of the given canister between `from_subnet` and
+/// Simulates the subnet splitting related migration of the given canister between `from_subnet` and
 /// `to_subnet` by recording the corresponding entry in `state`'s
 /// `canister_migrations` and updating its routing table.
 fn simulate_canister_migration(
@@ -4623,5 +4692,15 @@ fn simulate_canister_migration(
     to_subnet: SubnetId,
 ) -> ReplicatedState {
     let state = prepare_canister_migration(state, migrated_canister, from_subnet, to_subnet);
+    complete_canister_migration(state, migrated_canister, to_subnet)
+}
+
+/// Simulates the subnet splitting related migration of the given canister between `from_subnet` and
+/// `to_subnet` by updating `state`'s routing table (but no `canister_migrations` entry).
+fn simulate_manual_canister_migration(
+    state: ReplicatedState,
+    migrated_canister: CanisterId,
+    to_subnet: SubnetId,
+) -> ReplicatedState {
     complete_canister_migration(state, migrated_canister, to_subnet)
 }

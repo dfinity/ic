@@ -80,9 +80,7 @@ prepare_guestos_upgrade() {
 
     workdir="$(mktemp -d)"
     grubdir="${workdir}/grub"
-    bootdir="${workdir}/boot"
-    rootdir="${workdir}/root"
-    mkdir "${grubdir}" "${bootdir}" "${rootdir}"
+    mkdir "${grubdir}"
     echo "Created temporary directories in $workdir"
 
     mount -o rw,sync "${lodev}p${GRUB_PARTITION_NUM}" "${grubdir}"
@@ -169,26 +167,14 @@ install_upgrade() {
 
     echo "Writing boot image to ${boot_target}..."
     dd if="$tmpdir/boot.img" of="${boot_target}" bs=1M status=progress
-    if [ $? -ne 0 ]; then
-        echo "ERROR: Failed to write boot image"
-        exit 1
-    fi
     echo "Boot image written successfully"
 
     echo "Writing root image to ${root_target}..."
     dd if="$tmpdir/root.img" of="${root_target}" bs=1M status=progress
-    if [ $? -ne 0 ]; then
-        echo "ERROR: Failed to write root image"
-        exit 1
-    fi
     echo "Root image written successfully"
 
     echo "Wiping var partition header on ${var_target}..."
     dd if=/dev/zero of="${var_target}" bs=1M count=16 status=progress
-    if [ $? -ne 0 ]; then
-        echo "ERROR: Failed to wipe var partition header"
-        exit 1
-    fi
     echo "Var partition header wiped successfully"
 
     echo "Updating grubenv to prepare for next boot..."
@@ -213,6 +199,10 @@ guestos_upgrade_cleanup() {
     if [ -n "${grubdir}" ] && mountpoint -q "${grubdir}"; then
         umount "${grubdir}"
         echo "Unmounted ${grubdir}"
+    fi
+    if [ -n "${lodev}" ]; then
+        losetup -d "${lodev}"
+        echo "Detached loop device ${lodev}"
     fi
     if [ -n "${workdir}" ] && [ -d "${workdir}" ]; then
         rm -rf "${workdir}"

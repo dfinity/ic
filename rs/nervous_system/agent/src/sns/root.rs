@@ -21,6 +21,7 @@ pub struct RootCanister {
 pub struct SnsCanisters {
     pub sns: Sns,
     pub dapps: Vec<PrincipalId>,
+    pub extensions: Vec<PrincipalId>,
 }
 
 impl TryFrom<ListSnsCanistersResponse> for SnsCanisters {
@@ -35,6 +36,7 @@ impl TryFrom<ListSnsCanistersResponse> for SnsCanisters {
             index: Some(index_canister_id),
             archives,
             dapps,
+            extensions,
         } = src
         else {
             return Err(format!("Some SNS canisters were missing: {:?}", src));
@@ -49,7 +51,14 @@ impl TryFrom<ListSnsCanistersResponse> for SnsCanisters {
             archive: archives.into_iter().map(ArchiveCanister::new).collect(),
         };
 
-        Ok(Self { sns, dapps })
+        let extensions =
+            extensions.map_or_else(Vec::new, |extensions| extensions.extension_canister_ids);
+
+        Ok(Self {
+            sns,
+            dapps,
+            extensions,
+        })
     }
 }
 

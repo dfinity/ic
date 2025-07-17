@@ -92,7 +92,7 @@ fn get_transformer(key: &str) -> Transformers {
     } else if key.starts_with(&make_blessed_replica_versions_key()) {
         BlessedReplicaVersions::transformers()
     } else if key.starts_with(&make_routing_table_record_key()) {
-        // TODO: Remove this once the routing table is fully migrated to the new format and
+        // TODO(NNS1-3781): Remove this once the routing table is fully migrated to the new format and
         // there is no real reason to need to modify routing_table record.
         RoutingTable::transformers()
     } else if key.starts_with(CANISTER_RANGES_PREFIX) {

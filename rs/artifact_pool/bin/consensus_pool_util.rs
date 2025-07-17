@@ -24,7 +24,7 @@ use std::path::PathBuf;
 fn main() {
     let mut app = Command::new("ic-consensus-pool-util")
         .version("0.1")
-        .about("IC Consensus Pool Unitity")
+        .about("IC Consensus Pool Utility")
         .subcommand(
             Command::new("export").about("Export data to stdout").arg(
                 Arg::new("artifact")

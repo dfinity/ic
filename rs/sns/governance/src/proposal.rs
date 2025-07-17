@@ -1,5 +1,6 @@
 use crate::cached_upgrade_steps::render_two_versions_as_markdown_table;
 use crate::pb::v1::{AdvanceSnsTargetVersion, SetTopicsForCustomProposals, Topic};
+use crate::treasury::assess_treasury_balance;
 use crate::types::Wasm;
 use crate::{
     canister_control::perform_execute_generic_nervous_system_function_validate_and_render_call,
@@ -703,7 +704,7 @@ fn locally_validate_and_render_transfer_sns_treasury_funds(
 /// The only thing that implements this is Token.
 // treasury_account could be moved to impl Token if TREASURY_SUBACCOUNT_NONCE where defined in
 // another crate instead of this one.
-trait TreasuryAccount {
+pub trait TreasuryAccount {
     fn treasury_account(self, sns_governance_canister_id: CanisterId) -> Result<Account, String>;
 }
 
@@ -781,11 +782,13 @@ where
 
     // Get valuation of the tokens in the treasury.
     let token = action.token()?;
-    let treasury_account = token.treasury_account(env.canister_id())?;
-    let valuation = token
-        .assess_balance(sns_ledger_canister_id, swap_canister_id, treasury_account)
-        .await
-        .map_err(|valuation_error| format!("Unable to validate amount: {:?}", valuation_error))?;
+    let valuation = assess_treasury_balance(
+        token,
+        env.canister_id(),
+        sns_ledger_canister_id,
+        swap_canister_id,
+    )
+    .await?;
 
     // From valuation, determine limit on the total from the past 7 days.
     let max_tokens = MyTokenProposalAction::recent_amount_total_upper_bound_tokens(&valuation)

@@ -1,5 +1,5 @@
 use crate::allowances::list_allowances;
-use crate::in_memory_ledger::{verify_ledger_state, InMemoryLedger};
+use crate::in_memory_ledger::{verify_ledger_state, AllowancesRecentlyPurged, InMemoryLedger};
 use crate::metrics::{parse_metric, retrieve_metrics};
 use assert_matches::assert_matches;
 use candid::{CandidType, Decode, Encode, Int, Nat, Principal};
@@ -2497,6 +2497,7 @@ pub fn test_upgrade_serialization<Tokens>(
                         &env,
                         ledger_id,
                         tx_index as u64,
+                        AllowancesRecentlyPurged::Yes,
                     );
                 };
                 add_tx_and_verify();
@@ -2547,7 +2548,12 @@ pub fn test_upgrade_serialization<Tokens>(
                     // This will also verify the ledger blocks.
                     // The current implementation of the InMemoryLedger cannot get blocks
                     // for the ICP ledger. This part of the test runs only for the ICRC1 ledger.
-                    verify_ledger_state::<Tokens>(&env, ledger_id, None);
+                    verify_ledger_state::<Tokens>(
+                        &env,
+                        ledger_id,
+                        None,
+                        AllowancesRecentlyPurged::Yes,
+                    );
                 }
 
                 Ok(())

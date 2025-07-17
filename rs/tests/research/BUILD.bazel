@@ -42,7 +42,6 @@ symlink_dirs(
     target_compatible_with = ["@platforms//os:linux"],
     targets = {
         "//rs/universal_canister/impl:universal_canister_no_heartbeat.wasm.gz": "test-data",
-        "//rs/tests:wabt-tests": "test-data",
     },
     visibility = [
         "//rs:system-tests-pkg",

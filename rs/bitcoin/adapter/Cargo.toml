@@ -55,5 +55,5 @@ harness = false
 
 [[bin]]
 name = "adapter-stress-test"
-path = "src/stress_test.rs"
+path = "bin/adapter-stress-test.rs"
 required-features = ["tower"]

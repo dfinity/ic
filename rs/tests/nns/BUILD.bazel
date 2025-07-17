@@ -44,6 +44,8 @@ system_test(
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
+        "//rs/nns/governance/api",
+        "//rs/nns/test_utils",
         "//rs/registry/nns_data_provider",
         "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",

@@ -4,8 +4,6 @@ use anyhow::Result;
 pub trait SystemdNotifier: Send + Sync {
     /// Notifies systemd that the service is ready to accept connections.
     fn notify_ready(&self) -> Result<()>;
-    /// Notifies systemd that the service is stopping with the given status message.
-    fn notify_stopping(&self, status: &str) -> Result<()>;
 }
 
 /// Default implementation that calls systemd.
@@ -18,18 +16,6 @@ impl SystemdNotifier for DefaultSystemdNotifier {
         systemd::daemon::notify(false, [(systemd::daemon::STATE_READY, "1")].iter())?;
         Ok(())
     }
-
-    fn notify_stopping(&self, status: &str) -> Result<()> {
-        systemd::daemon::notify(
-            false,
-            [
-                (systemd::daemon::STATE_STOPPING, "1"),
-                (systemd::daemon::STATE_STATUS, status),
-            ]
-            .iter(),
-        )?;
-        Ok(())
-    }
 }
 
 #[cfg(all(test, feature = "integration_tests"))]
@@ -40,14 +26,12 @@ pub(crate) mod testing {
     /// Mock implementation that records the notifications.
     pub struct MockSystemdNotifier {
         ready: (Sender<bool>, Receiver<bool>),
-        stopping: (Sender<bool>, Receiver<bool>),
     }
 
     impl MockSystemdNotifier {
         pub fn new() -> Self {
             Self {
                 ready: channel(false),
-                stopping: channel(false),
             }
         }
 
@@ -55,12 +39,6 @@ pub(crate) mod testing {
         /// before, the function returns immediately.
         pub async fn await_ready(&self) {
             self.ready.1.clone().wait_for(|x| *x).await.unwrap();
-        }
-
-        /// Wait until `self.notify_stopping()` is called. If it has already been called
-        /// before, the function returns immediately.
-        pub async fn await_stopping(&self) {
-            self.stopping.1.clone().wait_for(|x| *x).await.unwrap();
         }
     }
 
@@ -70,14 +48,6 @@ pub(crate) mod testing {
                 .0
                 .send(true)
                 .expect("Failed to send ready notification");
-            Ok(())
-        }
-
-        fn notify_stopping(&self, _status: &str) -> Result<()> {
-            self.stopping
-                .0
-                .send(true)
-                .expect("Failed to send stopping notification");
             Ok(())
         }
     }

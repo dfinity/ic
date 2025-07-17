@@ -107,6 +107,9 @@ impl From<ProposalActionRequest> for Action {
             ProposalActionRequest::InstallCode(v) => Action::InstallCode(v.into()),
             ProposalActionRequest::StopOrStartCanister(v) => Action::StopOrStartCanister(v),
             ProposalActionRequest::UpdateCanisterSettings(v) => Action::UpdateCanisterSettings(v),
+            ProposalActionRequest::FulfillSubnetRentalRequest(v) => {
+                Action::FulfillSubnetRentalRequest(v)
+            }
         }
     }
 }

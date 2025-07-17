@@ -12,6 +12,7 @@ use crate::{
     errors::{ApiError, Details},
     ledger_client::{
         list_known_neurons_response::ListKnownNeuronsResponse,
+        minimum_dissolve_delay_response::MinimumDissolveDelayResponse,
         pending_proposals_response::PendingProposalsResponse,
         proposal_info_response::ProposalInfoResponse, LedgerAccess,
     },
@@ -207,6 +208,16 @@ impl RosettaRequestHandler {
                 let pending_proposals_response = PendingProposalsResponse::from(pending_proposals);
                 Ok(CallResponse::new(
                     ObjectMap::try_from(pending_proposals_response)?,
+                    false,
+                ))
+            }
+            "get_minimum_dissolve_delay" => {
+                let minimum_dissolve_delay = self.ledger.minimum_dissolve_delay().await?;
+                let minimum_dissolve_delay_response = MinimumDissolveDelayResponse {
+                    neuron_minimum_dissolve_delay_to_vote_seconds: minimum_dissolve_delay,
+                };
+                Ok(CallResponse::new(
+                    ObjectMap::try_from(minimum_dissolve_delay_response)?,
                     false,
                 ))
             }

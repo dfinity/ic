@@ -16,6 +16,7 @@ pub fn hypervisor_config(canister_sandboxing: bool) -> HypervisorConfig {
                 rate_limiting_of_debug_prints: FlagStatus::Disabled,
                 wasm64: FlagStatus::Enabled,
                 canister_backtrace: FlagStatus::Enabled,
+                environment_variables: FlagStatus::Enabled,
                 ..FeatureFlags::default()
             },
             ..EmbeddersConfig::default()
@@ -25,6 +26,7 @@ pub fn hypervisor_config(canister_sandboxing: bool) -> HypervisorConfig {
         query_stats_epoch_length: 60,
         canister_snapshot_download: FlagStatus::Enabled,
         canister_snapshot_upload: FlagStatus::Enabled,
+        environment_variables: FlagStatus::Enabled,
         ..HypervisorConfig::default()
     }
 }

@@ -141,7 +141,6 @@ impl CanisterManager {
             | Ok(Ic00Method::ECDSAPublicKey)
             | Ok(Ic00Method::SetupInitialDKG)
             | Ok(Ic00Method::SignWithECDSA)
-            | Ok(Ic00Method::ComputeInitialIDkgDealings)
             | Ok(Ic00Method::ReshareChainKey)
             | Ok(Ic00Method::SchnorrPublicKey)
             | Ok(Ic00Method::SignWithSchnorr)
@@ -325,8 +324,7 @@ impl CanisterManager {
         }
         if let Some(environment_variables) = settings.environment_variables() {
             if self.environment_variables_flag == FlagStatus::Enabled {
-                canister.system_state.environment_variables =
-                    environment_variables.get_environment_variables().clone();
+                canister.system_state.environment_variables = environment_variables.clone();
             }
         }
     }
@@ -865,6 +863,7 @@ impl CanisterManager {
                 .egress_payload_size,
             wasm_memory_limit.map(|x| x.get()),
             wasm_memory_threshold.get(),
+            canister.system_state.environment_variables.clone(),
         ))
     }
 

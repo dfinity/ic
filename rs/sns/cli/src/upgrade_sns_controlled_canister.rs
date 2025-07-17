@@ -323,11 +323,19 @@ pub async fn find_sns<C: CallCanisters>(
         let root_canister = sns::root::RootCanister { canister_id };
 
         let response = root_canister.list_sns_canisters(agent).await?;
-        let SnsCanisters { sns, dapps } =
-            SnsCanisters::try_from(response).map_err(UpgradeSnsControlledCanisterError::Client)?;
+        let SnsCanisters {
+            sns,
+            dapps,
+            extensions,
+        } = response
+            .try_into()
+            .map_err(UpgradeSnsControlledCanisterError::Client)?;
+
+        let mut sns_controlled_canisters = dapps;
+        sns_controlled_canisters.extend(extensions.iter());
 
         // Check that the target is indeed controlled by this SNS.
-        if !BTreeSet::from_iter(&dapps[..]).contains(&target_canister_id.get()) {
+        if !BTreeSet::from_iter(&sns_controlled_canisters[..]).contains(&target_canister_id.get()) {
             return Err(UpgradeSnsControlledCanisterError::Client(format!(
                 "{} is not one of the canisters controlled by the SNS with Root canister {}",
                 target_canister_id.get(),

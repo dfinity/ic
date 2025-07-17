@@ -16,16 +16,14 @@ type GenVetkdParams = record {
   input_size : nat64;
   context_size : nat64;
 };
-type Result = variant { Ok : SignWithEcdsaResponse; Err : text };
-type Result_1 = variant { Ok : VetKDDeriveKeyResult; Err : text };
+type ManualReply = record { signature : blob };
+type ManualReply_1 = record { encrypted_key : blob };
 type SchnorrAlgorithm = variant { ed25519; bip340secp256k1 };
 type SchnorrKeyId = record { algorithm : SchnorrAlgorithm; name : text };
-type SignWithEcdsaResponse = record { signature : blob };
 type VetKDCurve = variant { bls12_381_g2 };
-type VetKDDeriveKeyResult = record { encrypted_key : blob };
 type VetKDKeyId = record { name : text; curve : VetKDCurve };
 service : {
-  gen_ecdsa_sig : (GenEcdsaParams) -> (Result);
-  gen_schnorr_sig : (GenSchnorrParams) -> (Result);
-  gen_vetkd_key : (GenVetkdParams) -> (Result_1);
+  gen_ecdsa_sig : (GenEcdsaParams) -> (ManualReply);
+  gen_schnorr_sig : (GenSchnorrParams) -> (ManualReply);
+  gen_vetkd_key : (GenVetkdParams) -> (ManualReply_1);
 }

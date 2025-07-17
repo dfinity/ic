@@ -26,7 +26,7 @@ def image_deps(mode, malicious = False):
 
         # Extra files to be added to rootfs and bootfs
         "bootfs": {
-            "//ic-os/components/ovmf:ovmf_sev": "/OVMF.fd:0644",
+            "//ic-os/components/ovmf:ovmf_sev": "/OVMF_SEV.fd:0644",
         },
         "rootfs": {
             # additional files to install

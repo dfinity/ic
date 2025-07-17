@@ -1,5 +1,3 @@
-use std::time::SystemTime;
-
 use candid::{CandidType, Encode};
 use canister_test::Wasm;
 use futures::future::join_all;
@@ -17,6 +15,7 @@ use ic_nns_governance_api::{neuron::DissolveState, Neuron};
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use icp_ledger::{AccountIdentifier, Tokens};
 use pocket_ic::nonblocking::PocketIc;
+use std::time::SystemTime;
 
 use crate::utils::{check_canister_installed, ALL_SNS_TESTING_CANISTER_IDS};
 

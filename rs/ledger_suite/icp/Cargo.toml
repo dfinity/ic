@@ -20,6 +20,7 @@ ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-ledger-canister-core = { path = "../common/ledger_canister_core" }
 ic-ledger-core = { path = "../common/ledger_core" }
 ic-ledger-hash-of = { path = "../../../packages/ic-ledger-hash-of" }
+ic-nns-constants = { path = "../../nns/constants" }
 ic-stable-structures = { workspace = true }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 lazy_static = { workspace = true }

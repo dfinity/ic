@@ -1134,7 +1134,6 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
             | Method::RawRand
             | Method::SetupInitialDKG
             | Method::SignWithECDSA
-            | Method::ComputeInitialIDkgDealings
             | Method::ReshareChainKey
             | Method::SchnorrPublicKey
             | Method::SignWithSchnorr

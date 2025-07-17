@@ -484,6 +484,13 @@ enum NnsFunction {
 
   // The proposal requests a subnet rental.
   NNS_FUNCTION_SUBNET_RENTAL_REQUEST = 52;
+
+  // STOP! Adding to NnsFunction is NOT the standard way to add new proposal
+  // types. Instead, add to the Proposal.action oneof DIRECTLY. The problem with
+  // NnsFunction is that it leads to proposals with opaque blobs (specifically,
+  // within the ExecuteNnsFunction.payload field). Such things are considered
+  // "bad practice":
+  // https://protobuf.dev/best-practices/api/#dont-encode-data-in-a-string
 }
 
 // Payload of a proposal that calls a function on another NNS
@@ -684,6 +691,8 @@ message Proposal {
     StopOrStartCanister stop_or_start_canister = 26;
     // Update the settings of a canister that is controlled by the NNS.
     UpdateCanisterSettings update_canister_settings = 27;
+    // Create a rented subnet.
+    FulfillSubnetRentalRequest fulfill_subnet_rental_request = 28;
   }
 }
 
@@ -1882,6 +1891,12 @@ message UpdateCanisterSettings {
 
   // The settings to update. Required.
   optional CanisterSettings settings = 2;
+}
+
+message FulfillSubnetRentalRequest {
+  ic_base_types.pb.v1.PrincipalId user = 1;
+  repeated ic_base_types.pb.v1.PrincipalId node_ids = 3;
+  string replica_version_id = 2;
 }
 
 // This represents the whole NNS governance system. It contains all

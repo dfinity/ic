@@ -23,11 +23,11 @@ use tracing_subscriber;
 
 // Seems trivial but helps with readability when using indexes.
 const NEURON_INDEX: [u64; 4] = [0, 1, 2, 3];
+const NON_VOTING_NEURON_INDEX: u64 = 100;
 const VOTE_YES: i32 = Vote::Yes as i32;
 const VOTE_NO: i32 = Vote::No as i32;
 const VOTE_UNSPECIFIED: i32 = Vote::Unspecified as i32;
 
-const DISSOLVE_DELAY_6_MONTHS: u64 = 60 * 60 * 24 * 31 * 6 + 100;
 const INITIAL_BALANCE: u64 = 100_000_000_000;
 
 lazy_static! {
@@ -46,8 +46,37 @@ fn test_neuron_voting() {
             Principal::from(GOVERNANCE_CANISTER_ID),
         );
 
+        let minimum_dissolve_delay = env
+            .rosetta_client
+            .get_minimum_dissolve_delay(env.network_identifier.clone())
+            .await
+            .expect("failed to get the minimum dissolve delay")
+            .expect("optional dissolve delay not provided");
+
         // Create neurons
-        let neuron_ids = create_neurons(&env, INITIAL_BALANCE / 10, DISSOLVE_DELAY_6_MONTHS).await;
+        let neuron_ids = create_neurons(&env, INITIAL_BALANCE / 10, minimum_dissolve_delay).await;
+
+        // Create a neuron that cannot vote due to too short dissolve delay.
+        let non_voting_neuron_id = create_neuron_with_dissolve(
+            &env,
+            INITIAL_BALANCE / 10,
+            NON_VOTING_NEURON_INDEX,
+            minimum_dissolve_delay - 1,
+        )
+        .await;
+
+        // The neuron should not be able to submit a proposal.
+        let result = governance_client
+            .submit_proposal(
+                TEST_IDENTITY.sender().unwrap(),
+                non_voting_neuron_id.into(),
+                "dummy title",
+                "test summary",
+                "dummy text",
+            )
+            .await;
+        let error_string = result.unwrap_err().to_string();
+        assert!(error_string.contains("Neuron's dissolve delay is too short."));
 
         // Ensure no proposals exist initially
         assert!(env
@@ -67,7 +96,8 @@ fn test_neuron_voting() {
                     &format!("test summary {}", i),
                     &format!("dummy text {}", i),
                 )
-                .await;
+                .await
+                .expect("failed to submit proposal");
         }
 
         // Ensure all proposals are pending and have the expected details
@@ -119,6 +149,11 @@ fn test_neuron_voting() {
             .iter()
             .map(|proposal| proposal.id.unwrap().id)
             .collect::<Vec<u64>>();
+
+        // Verify that a neuron with smaller than minimum delay cannot vote.
+        let result = register_vote(&env, proposal_ids[0], NON_VOTING_NEURON_INDEX, Vote::No).await;
+        let error_string = result.unwrap_err().to_string();
+        assert!(error_string.contains("Neuron not authorized to vote on proposal."));
 
         // Vote on the first proposal and verify the YES vote was correctly registered
         register_vote(&env, proposal_ids[0], NEURON_INDEX[1], Vote::Yes)

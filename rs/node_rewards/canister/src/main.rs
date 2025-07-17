@@ -4,7 +4,8 @@ use ic_cdk::{init, post_upgrade, pre_upgrade, spawn, update};
 use ic_nervous_system_canisters::registry::RegistryCanister;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_node_rewards_canister::canister::NodeRewardsCanister;
-use ic_node_rewards_canister::storage::{RegistryStoreStableMemoryBorrower, METRICS_MANAGER};
+use ic_node_rewards_canister::storage::clear_registry_store;
+use ic_node_rewards_canister::storage::RegistryStoreStableMemoryBorrower;
 use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
 };
@@ -39,12 +40,22 @@ fn pre_upgrade() {}
 
 #[post_upgrade]
 fn post_upgrade() {
+    // TODO: After this has been deployed, delete.
+    clear_registry_store();
+    ic_cdk_timers::set_timer(Duration::from_secs(0), || {
+        spawn(async move {
+            let store = REGISTRY_STORE.with(|s| s.clone());
+            store
+                .sync_registry_stored()
+                .await
+                .expect("Could not sync registry store!");
+        });
+    });
+    //
     schedule_timers();
 }
 
 fn schedule_timers() {
-    let _metrics_manager = METRICS_MANAGER.with(|m| m.clone());
-
     schedule_registry_sync();
 }
 

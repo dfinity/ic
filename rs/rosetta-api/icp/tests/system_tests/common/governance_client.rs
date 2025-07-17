@@ -28,7 +28,7 @@ impl GovernanceClient {
         title: &str,
         summary: &str,
         motion_text: &str,
-    ) -> ProposalId {
+    ) -> Result<ProposalId, String> {
         let proposal = MakeProposalRequest {
             title: Some(title.to_string()),
             summary: summary.to_string(),
@@ -72,12 +72,12 @@ impl GovernanceClient {
                 .call()
                 .await
                 .expect("Error while calling endpoint.");
-            proposal_id.unwrap()
+            Ok(proposal_id.unwrap())
         } else {
-            panic!(
+            Err(format!(
                 "Making Proposal was unsuccessful --> Response : {:?}",
                 manage_neuron_res
-            )
+            ))
         }
     }
 

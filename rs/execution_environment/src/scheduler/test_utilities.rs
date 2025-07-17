@@ -7,6 +7,7 @@ use std::{
 
 use ic_base_types::{CanisterId, NumBytes, PrincipalId, SubnetId};
 use ic_config::{
+    embedders::Config as HypervisorConfig,
     flag_status::FlagStatus,
     subnet_config::{SchedulerConfig, SubnetConfig},
 };
@@ -662,6 +663,7 @@ pub(crate) struct SchedulerTestBuilder {
     subnet_type: SubnetType,
     batch_time: Time,
     scheduler_config: SchedulerConfig,
+    hypervisor_config: HypervisorConfig,
     initial_canister_cycles: Cycles,
     subnet_guaranteed_response_message_memory: u64,
     subnet_callback_soft_limit: usize,
@@ -689,6 +691,7 @@ impl Default for SchedulerTestBuilder {
             subnet_type,
             batch_time: UNIX_EPOCH,
             scheduler_config,
+            hypervisor_config: config.embedders_config,
             initial_canister_cycles: Cycles::new(1_000_000_000_000_000_000),
             subnet_guaranteed_response_message_memory: config
                 .guaranteed_response_message_memory_capacity
@@ -949,6 +952,7 @@ impl SchedulerTestBuilder {
         );
         let scheduler = SchedulerImpl::new(
             self.scheduler_config,
+            self.hypervisor_config,
             self.own_subnet_id,
             ingress_history_writer,
             Arc::new(exec_env),

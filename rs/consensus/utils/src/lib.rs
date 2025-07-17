@@ -652,12 +652,14 @@ mod tests {
                 MasterPublicKeyId::Ecdsa(key_id) => ThresholdArguments::Ecdsa(EcdsaArguments {
                     message_hash: [0; 32],
                     key_id: key_id.clone(),
+                    pre_signature: None,
                 }),
                 MasterPublicKeyId::Schnorr(key_id) => {
                     ThresholdArguments::Schnorr(SchnorrArguments {
                         message: Arc::new(vec![1; 64]),
                         key_id: key_id.clone(),
                         taproot_tree_root: None,
+                        pre_signature: None,
                     })
                 }
                 MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),

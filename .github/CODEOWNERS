@@ -45,6 +45,7 @@ go_deps.bzl               @dfinity/idx
 /packages/canlog_derive/                @dfinity/cross-chain-team
 /packages/icrc-cbor/                    @dfinity/finint @dfinity/cross-chain-team
 /packages/icrc-ledger-agent/            @dfinity/finint
+/packages/icrc-ledger-client/           @dfinity/finint
 /packages/icrc-ledger-types/            @dfinity/finint
 /packages/ic-ledger-hash-of/            @dfinity/finint
 /packages/pocket-ic/                    @dfinity/pocket-ic

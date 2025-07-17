@@ -107,7 +107,7 @@ async fn main() -> Result<(), Error> {
     fs::write(
         temp_boot_args.path(),
         munge(
-            bootfs.read_file(boot_args_path).await?.as_str(),
+            std::str::from_utf8(&bootfs.read_file(boot_args_path).await?)?,
             true,
             cli.defeat_installer,
         )
