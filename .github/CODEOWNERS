@@ -147,6 +147,7 @@ go_deps.bzl               @dfinity/idx
 /rs/interfaces/certified_stream_store/                  @dfinity/ic-message-routing-owners
 /rs/interfaces/registry/                                @dfinity/governance-team
 /rs/interfaces/src/canister_http.rs                     @dfinity/consensus
+/rs/interfaces/src/consensus                            @dfinity/consensus
 /rs/interfaces/src/consensus.rs                         @dfinity/consensus
 /rs/interfaces/src/consensus_pool.rs                    @dfinity/consensus
 /rs/interfaces/src/crypto.rs                            @dfinity/crypto-team

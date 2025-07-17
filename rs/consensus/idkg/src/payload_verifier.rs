@@ -99,7 +99,6 @@ pub enum IDkgPayloadValidationFailure {
 /// Reasons for why an idkg payload might be invalid.
 pub enum InvalidIDkgPayloadReason {
     // wrapper of other errors
-    RegistryClientError(RegistryClientError),
     UnexpectedSummaryPayload(IDkgPayloadError),
     UnexpectedDataPayload(Option<IDkgPayloadError>),
     InvalidChainCacheError(InvalidChainCacheError),
@@ -180,12 +179,6 @@ impl From<IDkgVerifyInitialDealingsError> for InvalidIDkgPayloadReason {
 impl From<RegistryClientError> for IDkgPayloadValidationFailure {
     fn from(err: RegistryClientError) -> Self {
         IDkgPayloadValidationFailure::RegistryClientError(err)
-    }
-}
-
-impl From<RegistryClientError> for InvalidIDkgPayloadReason {
-    fn from(err: RegistryClientError) -> Self {
-        InvalidIDkgPayloadReason::RegistryClientError(err)
     }
 }
 
@@ -316,7 +309,8 @@ fn validate_summary_payload(
         InvalidIDkgPayloadReason::ConsensusRegistryVersionNotFound(height),
     )?;
     let chain_key_config =
-        get_idkg_chain_key_config_if_enabled(subnet_id, registry_version, registry_client)?;
+        get_idkg_chain_key_config_if_enabled(subnet_id, registry_version, registry_client)
+            .map_err(IDkgPayloadValidationFailure::from)?;
     if chain_key_config.is_none() {
         if summary_payload.is_some() {
             return Err(InvalidIDkgPayloadReason::ChainKeyConfigNotFound.into());
@@ -460,7 +454,7 @@ fn validate_data_payload(
         signatures,
     };
 
-    let idkg_payload = create_data_payload_helper(
+    match create_data_payload_helper(
         subnet_id,
         context,
         parent_block,
@@ -472,13 +466,21 @@ fn validate_data_payload(
         registry_client,
         None,
         &ic_logger::replica_logger::no_op_logger(),
-    )
-    .map_err(|err| InvalidIDkgPayloadReason::UnexpectedDataPayload(Some(err)))?;
-
-    if idkg_payload.as_ref() == data_payload {
-        Ok(())
-    } else {
-        Err(InvalidIDkgPayloadReason::DataPayloadMismatch.into())
+    ) {
+        Ok(idkg_payload) => {
+            if idkg_payload.as_ref() == data_payload {
+                Ok(())
+            } else {
+                Err(InvalidIDkgPayloadReason::DataPayloadMismatch.into())
+            }
+        }
+        Err(IDkgPayloadError::RegistryClientError(err)) => {
+            Err(IDkgPayloadValidationFailure::RegistryClientError(err).into())
+        }
+        Err(IDkgPayloadError::StateManagerError(err)) => {
+            Err(IDkgPayloadValidationFailure::StateManagerError(err).into())
+        }
+        Err(err) => Err(InvalidIDkgPayloadReason::UnexpectedDataPayload(Some(err)).into()),
     }
 }
 
