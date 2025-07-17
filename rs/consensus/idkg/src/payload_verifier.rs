@@ -78,20 +78,28 @@ use std::{collections::BTreeMap, convert::TryFrom};
 // The fields are only read by the `Debug` implementation.
 // The `dead_code` lint ignores `Debug` impls, see: https://github.com/rust-lang/rust/issues/88900.
 #[allow(dead_code)]
-/// Reasons for why an idkg payload might be invalid.
+/// Possible failures which could occur while validating an idkg payload. They don't imply that the
+/// payload is invalid.
 pub enum IDkgPayloadValidationFailure {
     RegistryClientError(RegistryClientError),
     StateManagerError(StateManagerError),
+    ThresholdEcdsaSigInputsError(ecdsa::ThresholdEcdsaSigInputsError),
+    ThresholdSchnorrSigInputsError(schnorr::ThresholdSchnorrSigInputsError),
+    TranscriptParamsError(idkg::TranscriptParamsError),
+    ThresholdEcdsaVerifyCombinedSignatureError(ThresholdEcdsaVerifyCombinedSignatureError),
+    ThresholdSchnorrVerifyCombinedSignatureError(ThresholdSchnorrVerifyCombinedSigError),
+    IDkgVerifyTranscriptError(IDkgVerifyTranscriptError),
+    IDkgVerifyInitialDealingsError(IDkgVerifyInitialDealingsError),
 }
 
 #[derive(Debug)]
 // The fields are only read by the `Debug` implementation.
 // The `dead_code` lint ignores `Debug` impls, see: https://github.com/rust-lang/rust/issues/88900.
 #[allow(dead_code)]
-/// Possible failures which could occur while validating an idkg payload. They don't imply that the
-/// payload is invalid.
+/// Reasons for why an idkg payload might be invalid.
 pub enum InvalidIDkgPayloadReason {
     // wrapper of other errors
+    RegistryClientError(RegistryClientError),
     UnexpectedSummaryPayload(IDkgPayloadError),
     UnexpectedDataPayload(Option<IDkgPayloadError>),
     InvalidChainCacheError(InvalidChainCacheError),
@@ -175,9 +183,69 @@ impl From<RegistryClientError> for IDkgPayloadValidationFailure {
     }
 }
 
+impl From<RegistryClientError> for InvalidIDkgPayloadReason {
+    fn from(err: RegistryClientError) -> Self {
+        InvalidIDkgPayloadReason::RegistryClientError(err)
+    }
+}
+
 impl From<StateManagerError> for IDkgPayloadValidationFailure {
     fn from(err: StateManagerError) -> Self {
         IDkgPayloadValidationFailure::StateManagerError(err)
+    }
+}
+
+impl From<IDkgVerifyInitialDealingsError> for IDkgPayloadValidationFailure {
+    fn from(err: IDkgVerifyInitialDealingsError) -> Self {
+        IDkgPayloadValidationFailure::IDkgVerifyInitialDealingsError(err)
+    }
+}
+
+impl From<IDkgVerifyTranscriptError> for IDkgPayloadValidationFailure {
+    fn from(err: IDkgVerifyTranscriptError) -> Self {
+        IDkgPayloadValidationFailure::IDkgVerifyTranscriptError(err)
+    }
+}
+
+impl From<ThresholdSchnorrVerifyCombinedSigError> for IDkgPayloadValidationFailure {
+    fn from(err: ThresholdSchnorrVerifyCombinedSigError) -> Self {
+        IDkgPayloadValidationFailure::ThresholdSchnorrVerifyCombinedSignatureError(err)
+    }
+}
+
+impl From<ThresholdEcdsaVerifyCombinedSignatureError> for IDkgPayloadValidationFailure {
+    fn from(err: ThresholdEcdsaVerifyCombinedSignatureError) -> Self {
+        IDkgPayloadValidationFailure::ThresholdEcdsaVerifyCombinedSignatureError(err)
+    }
+}
+
+impl From<ThresholdSchnorrVerifyCombinedSigError> for InvalidIDkgPayloadReason {
+    fn from(err: ThresholdSchnorrVerifyCombinedSigError) -> Self {
+        InvalidIDkgPayloadReason::ThresholdSchnorrVerifyCombinedSignatureError(err)
+    }
+}
+
+impl From<ThresholdEcdsaVerifyCombinedSignatureError> for InvalidIDkgPayloadReason {
+    fn from(err: ThresholdEcdsaVerifyCombinedSignatureError) -> Self {
+        InvalidIDkgPayloadReason::ThresholdEcdsaVerifyCombinedSignatureError(err)
+    }
+}
+
+impl From<idkg::TranscriptParamsError> for IDkgPayloadValidationFailure {
+    fn from(err: idkg::TranscriptParamsError) -> Self {
+        IDkgPayloadValidationFailure::TranscriptParamsError(err)
+    }
+}
+
+impl From<schnorr::ThresholdSchnorrSigInputsError> for IDkgPayloadValidationFailure {
+    fn from(err: schnorr::ThresholdSchnorrSigInputsError) -> Self {
+        IDkgPayloadValidationFailure::ThresholdSchnorrSigInputsError(err)
+    }
+}
+
+impl From<ecdsa::ThresholdEcdsaSigInputsError> for IDkgPayloadValidationFailure {
+    fn from(err: ecdsa::ThresholdEcdsaSigInputsError) -> Self {
+        IDkgPayloadValidationFailure::ThresholdEcdsaSigInputsError(err)
     }
 }
 
@@ -248,8 +316,7 @@ fn validate_summary_payload(
         InvalidIDkgPayloadReason::ConsensusRegistryVersionNotFound(height),
     )?;
     let chain_key_config =
-        get_idkg_chain_key_config_if_enabled(subnet_id, registry_version, registry_client)
-            .map_err(IDkgPayloadValidationFailure::from)?;
+        get_idkg_chain_key_config_if_enabled(subnet_id, registry_version, registry_client)?;
     if chain_key_config.is_none() {
         if summary_payload.is_some() {
             return Err(InvalidIDkgPayloadReason::ChainKeyConfigNotFound.into());
@@ -476,12 +543,8 @@ fn validate_transcript_refs(
                 let config = prev_configs
                     .get(transcript_id)
                     .ok_or(NewTranscriptMissingParams(*transcript_id))?;
-                let params = config
-                    .translate(block_reader)
-                    .map_err(TranscriptParamsError)?;
-                crypto
-                    .verify_transcript(&params, transcript)
-                    .map_err(IDkgVerifyTranscriptError)?;
+                let params = config.translate(block_reader)?;
+                crypto.verify_transcript(&params, transcript)?;
                 count += 1;
             } else {
                 return Err(NewTranscriptNotFound(*transcript_id).into());
@@ -520,14 +583,8 @@ fn validate_reshare_dealings(
                 if let ic_types::messages::Payload::Data(data) = &response.payload {
                     let initial_dealings = decode_initial_dealings(data)?;
                     let transcript_id = config.as_ref().transcript_id;
-                    let param = config
-                        .as_ref()
-                        .translate(block_reader)
-                        .map_err(InvalidIDkgPayloadReason::from)?;
-
-                    crypto
-                        .verify_initial_dealings(&param, &initial_dealings)
-                        .map_err(InvalidIDkgPayloadReason::from)?;
+                    let param = config.as_ref().translate(block_reader)?;
+                    crypto.verify_initial_dealings(&param, &initial_dealings)?;
                     new_dealings.insert(transcript_id, initial_dealings.dealings().clone());
                 }
             } else {
@@ -572,7 +629,6 @@ fn validate_new_signature_agreements(
     prev_payload: &idkg::IDkgPayload,
     curr_payload: &idkg::IDkgPayload,
 ) -> Result<BTreeMap<CallbackId, CombinedSignature>, IDkgValidationError> {
-    use InvalidIDkgPayloadReason::*;
     let mut new_signatures = BTreeMap::new();
     let context_map = state
         .signature_request_contexts()
@@ -595,23 +651,18 @@ fn validate_new_signature_agreements(
                     .map_err(InvalidIDkgPayloadReason::NewSignatureBuildInputsError)?;
                 match input_ref {
                     ThresholdSigInputsRef::Ecdsa(input_ref) => {
-                        let input = input_ref
-                            .translate(block_reader)
-                            .map_err(InvalidIDkgPayloadReason::from)?;
+                        let input = input_ref.translate(block_reader)?;
                         let reply = SignWithECDSAReply::decode(data).map_err(|err| {
                             InvalidIDkgPayloadReason::DecodingError(format!("{:?}", err))
                         })?;
                         let signature = ThresholdEcdsaCombinedSignature {
                             signature: reply.signature,
                         };
-                        ThresholdEcdsaSigVerifier::verify_combined_sig(crypto, &input, &signature)
-                            .map_err(ThresholdEcdsaVerifyCombinedSignatureError)?;
+                        ThresholdEcdsaSigVerifier::verify_combined_sig(crypto, &input, &signature)?;
                         new_signatures.insert(*id, CombinedSignature::Ecdsa(signature));
                     }
                     ThresholdSigInputsRef::Schnorr(input_ref) => {
-                        let input = input_ref
-                            .translate(block_reader)
-                            .map_err(InvalidIDkgPayloadReason::from)?;
+                        let input = input_ref.translate(block_reader)?;
                         let reply = SignWithSchnorrReply::decode(data).map_err(|err| {
                             InvalidIDkgPayloadReason::DecodingError(format!("{:?}", err))
                         })?;
@@ -620,8 +671,7 @@ fn validate_new_signature_agreements(
                         };
                         ThresholdSchnorrSigVerifier::verify_combined_sig(
                             crypto, &input, &signature,
-                        )
-                        .map_err(ThresholdSchnorrVerifyCombinedSignatureError)?;
+                        )?;
                         new_signatures.insert(*id, CombinedSignature::Schnorr(signature));
                     }
                     ThresholdSigInputsRef::VetKd(_) => {

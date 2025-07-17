@@ -9,6 +9,7 @@ pub mod consensus;
 pub mod consensus_pool;
 pub mod crypto;
 pub mod dkg;
+pub mod errors;
 pub mod execution_environment;
 pub mod idkg;
 pub mod ingress_manager;
