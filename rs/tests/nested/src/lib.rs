@@ -1,3 +1,4 @@
+use std::io::Read;
 use std::str::FromStr;
 use std::time::Duration;
 
@@ -276,6 +277,97 @@ pub fn upgrade_hostos(env: TestEnv) {
     info!(logger, "Version found is: '{}'", new_version);
 
     assert!(new_version != original_version);
+}
+
+/// Test the guestos-recovery-upgrader component: tests upgrading the GuestOS
+/// from the HostOS based on injected version/hash boot parameters
+pub fn recovery_upgrader_test(env: TestEnv) {
+    let logger = env.logger();
+
+    start_nested_vm(env.clone());
+
+    let host = env
+        .get_nested_vm(HOST_VM_NAME)
+        .expect("Unable to find HostOS node.");
+    let guest_ipv6 = host
+        .get_nested_network()
+        .expect("Unable to get nested network")
+        .guest_ip;
+
+    block_on(async {
+        let client = Client::builder()
+            .danger_accept_invalid_certs(true)
+            .build()
+            .expect("Failed to build HTTP client");
+
+        let original_version = retry_with_msg_async!(
+            "Waiting until the guest returns a version",
+            &logger,
+            Duration::from_secs(10 * 60), // long wait for setupOS to to install
+            Duration::from_secs(5),
+            || async {
+                let current_version = check_guestos_version(&client, &guest_ipv6)
+                    .await
+                    .unwrap_or("unavailable".to_string());
+                if current_version != "unavailable" {
+                    info!(logger, "Guest reported version '{}'", current_version);
+                    Ok(current_version)
+                } else {
+                    bail!("Guest version is still unavailable")
+                }
+            }
+        )
+        .await
+        .expect("guest didn't come up as expected");
+
+        // Create test file on host and sleep for 10 minutes
+        info!(
+            logger,
+            "SSH'ing into host to create test file and sleep for 10 minutes"
+        );
+        let session = host
+            .block_on_ssh_session()
+            .expect("Could not reach HostOS VM.");
+        let mut channel = session.channel_session().unwrap();
+
+        // Create the test file with dummy contents and sleep for 10 minutes
+        channel.exec("echo 'This is a test file created during recovery upgrader test' > /tmp/test.txt && sleep 600").unwrap();
+        let mut s = String::new();
+        channel.read_to_string(&mut s).unwrap();
+        channel.close().ok();
+        channel.wait_close().ok();
+
+        assert!(
+            channel.exit_status().unwrap() == 0,
+            "Creating test file and sleeping failed."
+        );
+        info!(
+            logger,
+            "Successfully created /tmp/test.txt on host and started 10-minute sleep"
+        );
+
+        let new_version = retry_with_msg_async!(
+            "Waiting until the guest returns a version",
+            &logger,
+            Duration::from_secs(5 * 60),
+            Duration::from_secs(5),
+            || async {
+                let current_version = check_guestos_version(&client, &guest_ipv6)
+                    .await
+                    .unwrap_or("unavailable".to_string());
+                if current_version != "unavailable" {
+                    info!(logger, "Guest reported version '{}'", current_version);
+                    Ok(current_version)
+                } else {
+                    bail!("Guest version is still unavailable")
+                }
+            }
+        )
+        .await
+        .expect("guest didn't come up as expected");
+
+        assert!(new_version != original_version);
+    });
 }
 
 /// Upgrade unassigned guestOS VMs to the target version, and verify that each one
