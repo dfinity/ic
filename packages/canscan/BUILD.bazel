@@ -44,11 +44,6 @@ rust_test(
 rust_test(
     name = "integration_tests",
     srcs = glob(["tests/**/*.rs"]),
-    data = [
-        "//packages/canscan/test_canister:test_canister",
-        "//packages/canscan/test_resources:test_resources",
-    ],
-    deps = [":canscan"] + DEPENDENCIES + TEST_DEPENDENCIES + [
-        "//packages/canscan/test_resources:test_resources",
-    ],
+    data = ["//packages/canscan/test_canister:test_canister.wasm.gz"],
+    deps = [":canscan"] + DEPENDENCIES + TEST_DEPENDENCIES,
 )
