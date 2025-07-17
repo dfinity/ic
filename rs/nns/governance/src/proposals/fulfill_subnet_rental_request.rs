@@ -38,29 +38,32 @@ impl FulfillSubnetRentalRequest {
         let mut defects = vec![];
 
         if user.is_none() {
-            defects.push(
-                "`FulfillSubnetRentalRequest.user` is required (but was not supplied).".to_string(),
-            );
+            defects.push("The `user` field is null.".to_string());
         }
 
         if node_ids.is_empty() {
-            defects.push(
-                "`FulfillSubnetRentalRequest.node_ids` must be nonempty (but was empty)."
-                    .to_string(),
-            );
+            defects.push("The `node_ids` field is empty.".to_string());
         } else if node_ids.len() >= ABSURDLY_LARGE_NUMBER_OF_NODES_IN_A_SUBNET {
             defects.push(format!(
-                "`FulfillSubnetRentalRequest.node_ids` must not be of an absurd \
-                 length (but was of length {}).",
+                "The `node_ids` field has too many elements (had {}).",
                 node_ids.len(),
             ));
         }
 
         if !is_potential_full_git_commit_id(replica_version_id) {
             defects.push(format!(
-                "`FulfillSubnetRentalRequest.replica_version_id` must be potentially a full \
-                 git commit ID (i.e. a hexidecimal string of length 40), but was {:?}",
+                "The `replica_version_id` is not a 40 character hexidecimal string (it was {:?})",
                 replica_version_id,
+            ));
+        }
+
+        if !defects.is_empty() {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!(
+                    "FulfillSubnetRentalRequest is invalid for the following reason(s):\n  - {}",
+                    defects.join("\n  - "),
+                ),
             ));
         }
 
@@ -76,3 +79,6 @@ fn is_potential_full_git_commit_id(s: &str) -> bool {
 
     s.chars().all(|character| character.is_ascii_hexdigit())
 }
+
+#[cfg(test)]
+mod tests;

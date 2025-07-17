@@ -534,6 +534,10 @@ impl ExecutionState {
             + self.stable_memory.page_map.num_delta_pages();
         NumBytes::from((delta_pages * PAGE_SIZE) as u64)
     }
+
+    pub(crate) fn wasm_execution_mode(&self) -> WasmExecutionMode {
+        self.wasm_execution_mode
+    }
 }
 
 /// An enum that represents the possible visibility levels a custom section

@@ -302,28 +302,6 @@ pub struct SubnetFeatures {
     #[prost(bool, optional, tag = "9")]
     pub sev_enabled: ::core::option::Option<bool>,
 }
-/// Per subnet ECDSA configuration
-///
-/// Deprecated; please use ChainKeyConfig instead.
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct EcdsaConfig {
-    /// Number of quadruples to create in advance.
-    #[prost(uint32, tag = "1")]
-    pub quadruples_to_create_in_advance: u32,
-    /// Identifiers for threshold ECDSA keys held by the subnet.
-    #[prost(message, repeated, tag = "3")]
-    pub key_ids: ::prost::alloc::vec::Vec<super::super::super::types::v1::EcdsaKeyId>,
-    /// The maximum number of signature requests that can be enqueued at once.
-    #[prost(uint32, tag = "4")]
-    pub max_queue_size: u32,
-    /// Signature requests will timeout after the given number of nano seconds.
-    #[prost(uint64, optional, tag = "5")]
-    pub signature_request_timeout_ns: ::core::option::Option<u64>,
-    /// Key rotation period of a single node in milliseconds.
-    /// If none is specified key rotation is disabled.
-    #[prost(uint64, optional, tag = "6")]
-    pub idkg_key_rotation_period_ms: ::core::option::Option<u64>,
-}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct KeyConfig {
     /// The key's identifier.

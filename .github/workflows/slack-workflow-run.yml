@@ -8,6 +8,7 @@ on:
       - master
       - master-private
       - rc--*
+      - ic-mainnet-revisions
     tags:
       - release-*
     workflows:
@@ -22,6 +23,7 @@ on:
       - PocketIC Windows
       - Sync IC private from IC public
       - Update IC versions file
+      - Bazel Test All
 
 jobs:
   slack-workflow-run:
@@ -33,6 +35,7 @@ jobs:
         shell: bash
         run: |
           TRIGGERING_WORKFLOW_NAME="${{ github.event.workflow_run.name }}"
+          TRIGGERING_WORKFLOW_BRANCH="${{ github.event.workflow_run.head_branch }}"
           CHANNEL="eng-idx-alerts"
           FULL_MESSAGE="nothing"
 
@@ -63,6 +66,8 @@ jobs:
           if [[ "$TRIGGERING_WORKFLOW_NAME" == "Schedule Rust Benchmarks" ]]; then
             CHANNEL="eng-crypto-alerts"
           elif [[ "$TRIGGERING_WORKFLOW_NAME" == "Update IC versions file" ]]; then
+            CHANNEL="eng-consensus-alerts"
+          elif [[ "$TRIGGERING_WORKFLOW_NAME" == "Bazel Test All" ]] && [[ "$TRIGGERING_WORKFLOW_BRANCH" == "ic-mainnet-revisions" ]]; then
             CHANNEL="eng-consensus-alerts"
           fi
 
