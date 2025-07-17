@@ -36,10 +36,9 @@ use ic_system_test_driver::driver::pot_dsl::{PotSetupFn, SysTestFn};
 use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    get_ic_os_launch_measurements, get_ic_os_launch_measurements_test,
-    get_ic_os_update_img_test_sha256, get_ic_os_update_img_test_url, get_mainnet_nns_revision,
-    read_dependency_from_env_to_string, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-    IcNodeSnapshot,
+    get_ic_os_launch_measurements_test, get_ic_os_update_img_test_sha256,
+    get_ic_os_update_img_test_url, get_mainnet_nns_revision, read_dependency_from_env_to_string,
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{block_on, runtime_from_url, MetricsFetcher};

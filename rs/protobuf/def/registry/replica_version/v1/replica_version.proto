@@ -24,11 +24,16 @@ message ReplicaVersionRecord {
 }
 
 message GuestLaunchMeasurements {
+  // A list of valid SEV-SNP measurements. One release can have multiple valid
+  // measurements, e.g. depending on the kernel command line used to launch the
+  // guest.
   repeated GuestLaunchMeasurement guest_launch_measurements = 1;
 }
 
 message GuestLaunchMeasurement {
+  // SEV-SNP measurement (48 bytes)
   bytes measurement = 1;
+  // Metadata about how the measurement was obtained
   GuestLaunchMeasurementMetadata metadata = 2;
 }
 

@@ -21,6 +21,7 @@ use ic_prep_lib::{
     node::{Node, NodeConfiguration, NodeIndex},
     subnet_configuration::{SubnetConfig, SubnetIndex, SubnetRunningState},
 };
+use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{Height, PrincipalId, ReplicaVersion};
@@ -227,6 +228,7 @@ fn main() -> Result<()> {
         Some(root_subnet_idx),
         valid_args.release_package_download_url,
         valid_args.release_package_sha256_hex,
+        /*guest_launch_measurements = */ None,
         valid_args.provisional_whitelist,
         valid_args.initial_node_operator,
         valid_args.initial_node_provider,
