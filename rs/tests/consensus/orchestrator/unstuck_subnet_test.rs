@@ -75,7 +75,7 @@ fn test(test_env: TestEnv) {
     let upgrade_url = get_ic_os_update_img_url().unwrap();
     // Note: we're pulling a wrong hash on purpose to simulate a failed upgrade
     let sha256 = get_ic_os_update_img_test_sha256().unwrap();
-    let guest_launch_measurements = get_ic_os_launch_measurements().unwrap();
+    let guest_launch_measurements = get_ic_os_launch_measurements_test().unwrap();
     block_on(bless_replica_version(
         &nns_node,
         &target_version,

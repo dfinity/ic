@@ -1,5 +1,4 @@
 use anyhow::{bail, Context, Result};
-use futures::{FutureExt, StreamExt, TryStreamExt};
 use ic_canister_client::Sender;
 use ic_http_utils::file_downloader::FileDownloader;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
@@ -42,7 +41,7 @@ pub fn get_public_update_image_sha_url(git_revision: &str) -> String {
 
 pub fn get_public_update_image_guest_launch_measurements(git_revision: &str) -> String {
     format!(
-        "http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/sev-measurements.json",
+        "http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/launch-measurements.json",
         git_revision
     )
 }

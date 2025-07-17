@@ -41,7 +41,7 @@ artifact_bundle(
     testonly = True,
     inputs = [
         icos_images.disk_image,
-        icos_images.sev_measurements,
+        icos_images.launch_measurements,
     ],
     prefix = "guest-os/disk-img-dev",
     visibility = ["//visibility:public"],

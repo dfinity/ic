@@ -166,7 +166,7 @@ use ic_nns_governance_api::Neuron;
 use ic_nns_init::read_initial_mutations_from_local_store_dir;
 use ic_nns_test_utils::{common::NnsInitPayloadsBuilder, itest_helpers::NnsCanisters};
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
-use ic_protobuf::registry::replica_version::v1::{GuestLaunchMeasurement, GuestLaunchMeasurements};
+use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
 use ic_protobuf::registry::{
     node::v1 as pb_node,
     replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
@@ -1223,6 +1223,12 @@ pub fn get_ic_os_update_img_test_sha256() -> Result<String> {
 pub fn get_ic_os_launch_measurements() -> Result<GuestLaunchMeasurements> {
     read_guest_launch_measurements(Path::new(&std::env::var(
         "ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS",
+    )?))
+}
+
+pub fn get_ic_os_launch_measurements_test() -> Result<GuestLaunchMeasurements> {
+    read_guest_launch_measurements(Path::new(&std::env::var(
+        "ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_TEST",
     )?))
 }
 
