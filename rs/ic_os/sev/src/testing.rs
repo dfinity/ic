@@ -9,6 +9,7 @@ pub const MOCK_CACHE_FILENAME: &str = "vcek_eabe711026ad4d9e45ab0a53cf339471c9f3
 /// AMD KDS URL corresponding to mock_firmware()
 pub const MOCK_AMD_KEY_SERVER_URL: &str = "https://kdsintf.amd.com/vcek/v1/Milan/eabe711026ad4d9e45ab0a53cf339471c9f3e42d5ca9d947fafdd517695e6aa1b2376f0d953c4c62c96e4f9c10d36207733bd2b43f46304629979b52e7227a03?blSPL=03&teeSPL=00&snpSPL=23&ucodeSPL=213";
 
+/// Fetched from [MOCK_AMD_KEY_SERVER_URL]
 pub const MOCK_AMD_KEY_SERVER_RESPONSE: &[u8] =
     include_bytes!("../fixtures/mock_amd_key_server_response.crt");
 
