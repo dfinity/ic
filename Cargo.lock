@@ -14035,7 +14035,9 @@ version = "0.9.0"
 dependencies = [
  "bincode",
  "ic-base-types",
+ "ic-crypto-test-utils-canister-threshold-sigs",
  "ic-crypto-test-utils-ni-dkg",
+ "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-tree-hash",
  "ic-interfaces",
  "ic-interfaces-state-manager",
@@ -18167,12 +18169,16 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "clap 4.5.27",
+ "gpt",
  "indoc",
  "itertools 0.12.1",
  "pcre2",
+ "tar",
  "tempfile",
  "tokio",
  "which 6.0.3",
+ "zstd",
 ]
 
 [[package]]
@@ -18668,6 +18674,7 @@ dependencies = [
  "ic-https-outcalls-adapter",
  "ic-https-outcalls-adapter-client",
  "ic-https-outcalls-service",
+ "ic-icp-index",
  "ic-interfaces",
  "ic-interfaces-adapter-client",
  "ic-interfaces-registry",

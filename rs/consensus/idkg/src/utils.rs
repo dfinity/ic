@@ -12,9 +12,7 @@ use ic_interfaces::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{warn, ReplicaLogger};
-use ic_management_canister_types_private::{
-    EcdsaCurve, MasterPublicKeyId, SchnorrAlgorithm, VetKdCurve,
-};
+use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_protobuf::registry::subnet::v1 as pb;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_features::ChainKeyConfig;
@@ -40,7 +38,7 @@ use ic_types::{
             MasterPublicKey,
         },
         vetkd::{VetKdArgs, VetKdDerivationContext},
-        AlgorithmId, ExtendedDerivationPath,
+        ExtendedDerivationPath,
     },
     messages::CallbackId,
     registry::RegistryClientError,
@@ -469,21 +467,6 @@ pub fn inspect_idkg_chain_key_initializations(
     Ok(initial_dealings_per_key_id)
 }
 
-pub(crate) fn algorithm_for_key_id(key_id: &IDkgMasterPublicKeyId) -> AlgorithmId {
-    match key_id.inner() {
-        MasterPublicKeyId::Ecdsa(ecdsa_key_id) => match ecdsa_key_id.curve {
-            EcdsaCurve::Secp256k1 => AlgorithmId::ThresholdEcdsaSecp256k1,
-        },
-        MasterPublicKeyId::Schnorr(schnorr_key_id) => match schnorr_key_id.algorithm {
-            SchnorrAlgorithm::Bip340Secp256k1 => AlgorithmId::ThresholdSchnorrBip340,
-            SchnorrAlgorithm::Ed25519 => AlgorithmId::ThresholdEd25519,
-        },
-        MasterPublicKeyId::VetKd(vetkd_key_id) => match vetkd_key_id.curve {
-            VetKdCurve::Bls12_381_G2 => AlgorithmId::Placeholder,
-        },
-    }
-}
-
 pub fn get_idkg_chain_key_config_if_enabled(
     subnet_id: SubnetId,
     registry_version: RegistryVersion,
@@ -637,7 +620,7 @@ pub(crate) fn update_purge_height(cell: &RefCell<Height>, new_height: Height) ->
 
 #[cfg(test)]
 mod tests {
-    use super::{algorithm_for_key_id, *};
+    use super::*;
     use crate::test_utils::{
         create_available_pre_signature_with_key_transcript, set_up_idkg_payload,
         IDkgPayloadTestHelper,
@@ -663,7 +646,7 @@ mod tests {
             idkg::{IDkgPayload, UnmaskedTranscript},
             BlockPayload, Payload, SummaryPayload,
         },
-        crypto::CryptoHashOf,
+        crypto::{AlgorithmId, CryptoHashOf},
         time::UNIX_EPOCH,
     };
     use pb::ChainKeyInitialization;
@@ -1007,7 +990,7 @@ mod tests {
             &env,
             &dealers,
             &receivers,
-            algorithm_for_key_id(&key_id),
+            AlgorithmId::from(key_id.inner()),
             &mut rng,
         );
         let old_key_transcript =
@@ -1067,7 +1050,7 @@ mod tests {
             &env,
             &dealers,
             &receivers,
-            algorithm_for_key_id(&key_id),
+            AlgorithmId::from(key_id.inner()),
             &mut rng,
         );
         let key_transcript_ref =
