@@ -152,9 +152,21 @@ impl From<ecdsa::ThresholdEcdsaSigInputsError> for InvalidIDkgPayloadReason {
     }
 }
 
+impl From<ecdsa::ThresholdEcdsaSigInputsError> for IDkgPayloadValidationFailure {
+    fn from(err: ecdsa::ThresholdEcdsaSigInputsError) -> Self {
+        IDkgPayloadValidationFailure::ThresholdEcdsaSigInputsError(err)
+    }
+}
+
 impl From<schnorr::ThresholdSchnorrSigInputsError> for InvalidIDkgPayloadReason {
     fn from(err: schnorr::ThresholdSchnorrSigInputsError) -> Self {
         InvalidIDkgPayloadReason::ThresholdSchnorrSigInputsError(err)
+    }
+}
+
+impl From<schnorr::ThresholdSchnorrSigInputsError> for IDkgPayloadValidationFailure {
+    fn from(err: schnorr::ThresholdSchnorrSigInputsError) -> Self {
+        IDkgPayloadValidationFailure::ThresholdSchnorrSigInputsError(err)
     }
 }
 
@@ -164,33 +176,15 @@ impl From<idkg::TranscriptParamsError> for InvalidIDkgPayloadReason {
     }
 }
 
+impl From<idkg::TranscriptParamsError> for IDkgPayloadValidationFailure {
+    fn from(err: idkg::TranscriptParamsError) -> Self {
+        IDkgPayloadValidationFailure::TranscriptParamsError(err)
+    }
+}
+
 impl From<IDkgVerifyTranscriptError> for InvalidIDkgPayloadReason {
     fn from(err: IDkgVerifyTranscriptError) -> Self {
         InvalidIDkgPayloadReason::IDkgVerifyTranscriptError(err)
-    }
-}
-
-impl From<IDkgVerifyInitialDealingsError> for InvalidIDkgPayloadReason {
-    fn from(err: IDkgVerifyInitialDealingsError) -> Self {
-        InvalidIDkgPayloadReason::IDkgVerifyInitialDealingsError(err)
-    }
-}
-
-impl From<RegistryClientError> for IDkgPayloadValidationFailure {
-    fn from(err: RegistryClientError) -> Self {
-        IDkgPayloadValidationFailure::RegistryClientError(err)
-    }
-}
-
-impl From<StateManagerError> for IDkgPayloadValidationFailure {
-    fn from(err: StateManagerError) -> Self {
-        IDkgPayloadValidationFailure::StateManagerError(err)
-    }
-}
-
-impl From<IDkgVerifyInitialDealingsError> for IDkgPayloadValidationFailure {
-    fn from(err: IDkgVerifyInitialDealingsError) -> Self {
-        IDkgPayloadValidationFailure::IDkgVerifyInitialDealingsError(err)
     }
 }
 
@@ -200,9 +194,21 @@ impl From<IDkgVerifyTranscriptError> for IDkgPayloadValidationFailure {
     }
 }
 
-impl From<ThresholdSchnorrVerifyCombinedSigError> for IDkgPayloadValidationFailure {
-    fn from(err: ThresholdSchnorrVerifyCombinedSigError) -> Self {
-        IDkgPayloadValidationFailure::ThresholdSchnorrVerifyCombinedSignatureError(err)
+impl From<IDkgVerifyInitialDealingsError> for InvalidIDkgPayloadReason {
+    fn from(err: IDkgVerifyInitialDealingsError) -> Self {
+        InvalidIDkgPayloadReason::IDkgVerifyInitialDealingsError(err)
+    }
+}
+
+impl From<IDkgVerifyInitialDealingsError> for IDkgPayloadValidationFailure {
+    fn from(err: IDkgVerifyInitialDealingsError) -> Self {
+        IDkgPayloadValidationFailure::IDkgVerifyInitialDealingsError(err)
+    }
+}
+
+impl From<ThresholdEcdsaVerifyCombinedSignatureError> for InvalidIDkgPayloadReason {
+    fn from(err: ThresholdEcdsaVerifyCombinedSignatureError) -> Self {
+        InvalidIDkgPayloadReason::ThresholdEcdsaVerifyCombinedSignatureError(err)
     }
 }
 
@@ -218,27 +224,21 @@ impl From<ThresholdSchnorrVerifyCombinedSigError> for InvalidIDkgPayloadReason {
     }
 }
 
-impl From<ThresholdEcdsaVerifyCombinedSignatureError> for InvalidIDkgPayloadReason {
-    fn from(err: ThresholdEcdsaVerifyCombinedSignatureError) -> Self {
-        InvalidIDkgPayloadReason::ThresholdEcdsaVerifyCombinedSignatureError(err)
+impl From<ThresholdSchnorrVerifyCombinedSigError> for IDkgPayloadValidationFailure {
+    fn from(err: ThresholdSchnorrVerifyCombinedSigError) -> Self {
+        IDkgPayloadValidationFailure::ThresholdSchnorrVerifyCombinedSignatureError(err)
     }
 }
 
-impl From<idkg::TranscriptParamsError> for IDkgPayloadValidationFailure {
-    fn from(err: idkg::TranscriptParamsError) -> Self {
-        IDkgPayloadValidationFailure::TranscriptParamsError(err)
+impl From<RegistryClientError> for IDkgPayloadValidationFailure {
+    fn from(err: RegistryClientError) -> Self {
+        IDkgPayloadValidationFailure::RegistryClientError(err)
     }
 }
 
-impl From<schnorr::ThresholdSchnorrSigInputsError> for IDkgPayloadValidationFailure {
-    fn from(err: schnorr::ThresholdSchnorrSigInputsError) -> Self {
-        IDkgPayloadValidationFailure::ThresholdSchnorrSigInputsError(err)
-    }
-}
-
-impl From<ecdsa::ThresholdEcdsaSigInputsError> for IDkgPayloadValidationFailure {
-    fn from(err: ecdsa::ThresholdEcdsaSigInputsError) -> Self {
-        IDkgPayloadValidationFailure::ThresholdEcdsaSigInputsError(err)
+impl From<StateManagerError> for IDkgPayloadValidationFailure {
+    fn from(err: StateManagerError) -> Self {
+        IDkgPayloadValidationFailure::StateManagerError(err)
     }
 }
 
