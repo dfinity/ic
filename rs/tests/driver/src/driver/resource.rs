@@ -14,7 +14,7 @@ use crate::driver::test_env::{TestEnv, TestEnvAttribute};
 use crate::driver::test_env_api::{
     get_empty_disk_img_sha256, get_empty_disk_img_url, get_ic_os_img_sha256, get_ic_os_img_url,
     get_mainnet_ic_os_img_url, get_malicious_ic_os_img_sha256, get_malicious_ic_os_img_url,
-    HasIcDependencies,
+    get_recovery_ic_os_img_sha256, get_recovery_ic_os_img_url, HasIcDependencies,
 };
 use crate::driver::test_setup::{GroupSetup, InfraProvider};
 use crate::driver::universal_vm::UniversalVm;
@@ -173,6 +173,15 @@ pub fn get_resource_request(
             (
                 test_env.get_mainnet_ic_os_img_sha256()?,
                 get_mainnet_ic_os_img_url()?,
+            )
+        } else if config.use_recovery_image {
+            warn!(
+                test_env.logger(),
+                "Using recovery guestos image for IC config."
+            );
+            (
+                get_recovery_ic_os_img_sha256()?,
+                get_recovery_ic_os_img_url()?,
             )
         } else {
             info!(
