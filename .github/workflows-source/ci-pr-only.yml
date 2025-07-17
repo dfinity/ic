@@ -40,6 +40,18 @@ anchors:
     if: ${{ github.event_name != 'merge_group' }}
 
 jobs:
+  insta-tests:
+    name: Quick Feedback Tests
+    <<: *dind-small-setup
+    <<: *skip-merge-group
+    steps:
+      - <<: *checkout
+      - name: Run insta-tests
+        uses: ./.github/actions/bazel
+        with:
+          run: bazel test //:insta_tests
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+
   bazel-build-fuzzers-archives:
     name: Bazel Build Fuzzers Archives
     <<: *dind-large-setup
