@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+- The function `PocketIc::start_or_reuse_server` to manually start or reuse a PocketIC server.
+- The function `PocketIcBuilder::with_all_icp_features` to specify that all ICP features (supported by PocketIC) should be enabled.
+
+
+
 ## 9.0.2 - 2025-06-06
 
 (Only PocketIC server version bump to v9.0.3.)

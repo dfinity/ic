@@ -55,8 +55,8 @@
 use crate::{
     common::rest::{
         BlobCompression, BlobId, CanisterHttpRequest, ExtendedSubnetConfigSet, HttpsConfig,
-        InstanceId, MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId, SubnetId,
-        SubnetKind, SubnetSpec, Topology,
+        IcpFeatures, InstanceId, MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId,
+        SubnetId, SubnetKind, SubnetSpec, Topology,
     },
     nonblocking::PocketIc as PocketIcAsync,
 };
@@ -138,7 +138,7 @@ impl PocketIcState {
     pub fn into_path(self) -> PathBuf {
         match self.state {
             PocketIcStateKind::StateDir(state_dir) => state_dir,
-            PocketIcStateKind::TempDir(temp_dir) => temp_dir.into_path(),
+            PocketIcStateKind::TempDir(temp_dir) => temp_dir.keep(),
         }
     }
 
@@ -160,6 +160,7 @@ pub struct PocketIcBuilder {
     nonmainnet_features: bool,
     log_level: Option<Level>,
     bitcoind_addr: Option<Vec<SocketAddr>>,
+    icp_features: IcpFeatures,
 }
 
 #[allow(clippy::new_without_default)]
@@ -175,6 +176,7 @@ impl PocketIcBuilder {
             nonmainnet_features: false,
             log_level: None,
             bitcoind_addr: None,
+            icp_features: IcpFeatures::default(),
         }
     }
 
@@ -195,6 +197,7 @@ impl PocketIcBuilder {
             self.nonmainnet_features,
             self.log_level,
             self.bitcoind_addr,
+            self.icp_features,
         )
     }
 
@@ -209,6 +212,7 @@ impl PocketIcBuilder {
             self.nonmainnet_features,
             self.log_level,
             self.bitcoind_addr,
+            self.icp_features,
         )
         .await
     }
@@ -402,6 +406,13 @@ impl PocketIcBuilder {
         self.config = Some(config);
         self
     }
+
+    /// Enables all ICP features supported by PocketIC and implemented by system canisters
+    /// (deployed to the PocketIC instance automatically when creating a new PocketIC instance).
+    pub fn with_all_icp_features(mut self) -> Self {
+        self.icp_features = IcpFeatures::all_icp_features();
+        self
+    }
 }
 
 /// Representation of system time as duration since UNIX epoch
@@ -514,6 +525,7 @@ impl PocketIc {
         nonmainnet_features: bool,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
+        icp_features: IcpFeatures,
     ) -> Self {
         let (tx, rx) = channel();
         let thread = thread::spawn(move || {
@@ -536,6 +548,7 @@ impl PocketIc {
                 nonmainnet_features,
                 log_level,
                 bitcoind_addr,
+                icp_features,
             )
             .await
         });
@@ -1807,7 +1820,7 @@ async fn download_pocketic_server(
 }
 
 /// Attempt to start a new PocketIC server if it's not already running.
-pub(crate) async fn start_or_reuse_server(server_binary: Option<PathBuf>) -> Url {
+pub async fn start_or_reuse_server(server_binary: Option<PathBuf>) -> Url {
     let default_bin_dir =
         std::env::temp_dir().join(format!("pocket-ic-server-{}", EXPECTED_SERVER_VERSION));
     let default_bin_path = default_bin_dir.join("pocket-ic");

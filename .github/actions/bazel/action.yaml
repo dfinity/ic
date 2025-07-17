@@ -16,14 +16,6 @@ inputs:
 runs:
   using: "composite"
   steps:
-    # Freshly deployed k8s machines require ownership correctly set
-    # Avoiding: 'Failed to fetch registry file ... /cache/bazel/content_addressable/sha256 (Permission denied)'
-    - name: Prepare worker cache
-      shell: bash
-      run: |
-        if [ -e /cache ]; then
-          sudo find /cache \( -not -user $(id -u) -or -not -group $(id -g) \) -exec chown $(id -u):$(id -g) {} +
-        fi
 
     # Create a known tempdir where build events will be written
     - id: metrics-tmpdir
@@ -73,7 +65,10 @@ runs:
       if: success() || failure()
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ github.job }}-bep
+        # NOTE: github.action provides a unique identify for the artifact name
+        # in case the action is called several times:
+        #   https://docs.github.com/en/actions/reference/accessing-contextual-information-about-workflow-runs#github-context
+        name: ${{ github.job }}-${{ github.action }}-bep
         retention-days: 14
         if-no-files-found: ignore
         compression-level: 9

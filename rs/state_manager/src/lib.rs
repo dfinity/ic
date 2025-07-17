@@ -1153,6 +1153,7 @@ struct CreateCheckpointResult {
 }
 
 impl StateManagerImpl {
+    /// Finish all asynchronous checkpointing operations, including checkpoint verification and manifest computation.
     pub fn flush_tip_channel(&self) {
         flush_tip_channel(&self.tip_channel)
     }
@@ -1411,10 +1412,32 @@ impl StateManagerImpl {
             DeallocatorThread::new("StateDeallocator", Duration::from_millis(1));
 
         for checkpoint_layout in checkpoint_layouts_to_compute_manifest {
+            // Find the largest height where both the `manifest` and the `checkpoint_layout` are available;
+            // build the manifest data from this height.
+            let manifest_delta = states
+                .read()
+                .states_metadata
+                .iter()
+                .rev()
+                .filter(|(height, _)| **height < checkpoint_layout.height())
+                .find_map(|(height, metadata)| match metadata {
+                    StateMetadata {
+                        checkpoint_layout: Some(checkpoint_layout),
+                        bundled_manifest: Some(bundled_manifest),
+                        ..
+                    } => Some(crate::manifest::ManifestDelta {
+                        base_manifest: bundled_manifest.manifest.clone(),
+                        base_height: *height,
+                        target_height: checkpoint_layout.height(),
+                        base_checkpoint: checkpoint_layout.clone(),
+                    }),
+                    _ => None,
+                });
+
             tip_channel
                 .send(TipRequest::ComputeManifest {
                     checkpoint_layout,
-                    manifest_delta: None,
+                    manifest_delta,
                     states: states.clone(),
                     persist_metadata_guard: persist_metadata_guard.clone(),
                 })
@@ -1442,6 +1465,7 @@ impl StateManagerImpl {
             latest_height_update_time: Arc::new(Mutex::new(Instant::now())),
         }
     }
+
     /// Returns the Page Allocator file descriptor factory. This will then be
     /// used down the line in hypervisor and state to pass to the page allocators
     /// that are instantiated by the page maps
@@ -2251,9 +2275,17 @@ impl StateManagerImpl {
                 .metrics
                 .checkpoint_metrics
                 .make_checkpoint_step_duration
-                .with_label_values(&["wait_for_manifest_and_flush"])
+                .with_label_values(&["flush_prev_async_checkpointing"])
                 .start_timer();
-            // We need the previous manifest computation to complete because:
+            // At this point, some asynchronous operations related to previous checkpointing may still be in progress.
+            // These operations do not block execution, but we must ensure they complete before continuing with the new checkpoint.
+            // Specifically, these operations include:
+            //   1) Serializing protos to the unverified checkpoint,
+            //   2) Validating replicated state and finalizing the checkpoint,
+            //   3) Computing manifest for the checkpoint,
+            //   4) Resetting the tip and merging the overlays.
+            //
+            // In particular, we need the previous manifest computation to complete because:
             //   1) We need it to speed up the next manifest computation using ManifestDelta
             //   2) We don't want to run too much ahead of the latest ready manifest.
             self.flush_tip_channel();
@@ -2320,11 +2352,7 @@ impl StateManagerImpl {
             })
             .expect("Failed to send Validate request");
 
-        // On the NNS subnet we never allow incremental manifest computation
-        let is_nns = self.own_subnet_id == state.metadata.network_topology.nns_subnet_id;
-        let manifest_delta = if is_nns {
-            None
-        } else {
+        let manifest_delta = {
             let _timer = self
                 .metrics
                 .checkpoint_metrics
@@ -2377,7 +2405,10 @@ impl StateManagerImpl {
         };
 
         let elapsed = start.elapsed();
-        info!(self.log, "Created checkpoint @{} in {:?}", height, elapsed);
+        info!(
+            self.log,
+            "Created unverified checkpoint @{} in {:?}", height, elapsed
+        );
         self.metrics
             .checkpoint_op_duration
             .with_label_values(&["create"])
@@ -3733,6 +3764,38 @@ impl PageAllocatorFileDescriptorImpl {
                     err
                 )
             }
+        }
+    }
+}
+
+pub mod testing {
+    use super::*;
+
+    pub trait StateManagerTesting {
+        /// Testing only: Purges the `manifest` at `height` in `states.states_metadata`.
+        fn purge_manifest(&mut self, height: Height) -> bool;
+    }
+
+    impl StateManagerTesting for StateManagerImpl {
+        fn purge_manifest(&mut self, height: Height) -> bool {
+            let mut guard = self.states.write();
+            let purged = match guard.states_metadata.get_mut(&height) {
+                Some(metadata) => {
+                    metadata.bundled_manifest = None;
+                    true
+                }
+                None => false,
+            };
+            if purged {
+                release_lock_and_persist_metadata(
+                    &self.log,
+                    &self.metrics,
+                    &self.state_layout,
+                    guard,
+                    &self.persist_metadata_guard,
+                );
+            }
+            purged
         }
     }
 }

@@ -2,6 +2,7 @@ use super::*;
 use crate::{
     checkpoint::make_unvalidated_checkpoint,
     flush_canister_snapshots_and_page_maps,
+    manifest::RehashManifest,
     state_sync::types::{FileInfo, Manifest},
     tip::{flush_tip_channel, spawn_tip_thread},
     CheckpointMetrics, ManifestMetrics, StateManagerMetrics, NUMBER_OF_CHECKPOINT_THREADS,
@@ -522,6 +523,7 @@ fn compute_manifest(
         &last_checkpoint_layout,
         1024,
         None,
+        RehashManifest::No,
     )
     .expect("failed to compute manifest");
 

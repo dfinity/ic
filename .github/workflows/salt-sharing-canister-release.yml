@@ -32,9 +32,9 @@ jobs:
       labels: dind-large
 
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:e4862aca9dfa7e342f44cb4ba48923de4306099d26b067ee285f5e0ebe87162a
+      image: ghcr.io/dfinity/ic-build@sha256:30313b29353a3e4d5c11f23ee9ba7e2b5a7a36b9aaebc098c5ca4183cfccad2f
       options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
+        -e NODE_NAME --privileged --cgroupns host -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
 
     steps:
       - uses: actions/checkout@v4
@@ -42,7 +42,7 @@ jobs:
       - name: build
         run: |
           TARGET='//rs/boundary_node/salt_sharing:salt_sharing_canister'
-          bazel build --config=ci ${TARGET}
+          bazel build ${TARGET}
 
           OUTPUT='bazel-bin/rs/boundary_node/salt_sharing/salt_sharing_canister.wasm.gz'
           mv ${OUTPUT} salt_sharing_canister.wasm.gz
