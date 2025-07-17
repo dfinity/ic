@@ -284,7 +284,6 @@ def icos_build(
                 srcs = ["//ic-os/components/ovmf:ovmf_sev", boot_args, ":extracted_initrd.img", ":extracted_vmlinuz"],
                 visibility = visibility,
                 cmd = r"""
-                    echo $$PATH
                     source $(location """ + boot_args + """)
                     # Create GuestLaunchMeasurements JSON
                     (for cmdline in "$$BOOT_ARGS_A" "$$BOOT_ARGS_B"; do
