@@ -178,7 +178,12 @@ mod tests {
                 gateway: "2001:db8::1".parse().unwrap(),
             });
 
-        let guestos_config = generate_guestos_config(&hostos_config, GuestVMType::Upgrade).unwrap();
+        let guestos_config = generate_guestos_config(
+            &hostos_config,
+            GuestVMType::Upgrade,
+            &mut HostSevCertificateProvider::new_disabled(),
+        )
+        .unwrap();
 
         if let Ipv6Config::Fixed(fixed) = &guestos_config.network_settings.ipv6_config {
             assert_eq!(fixed.address, "2001:db8::6802:94ff:feef:2978/64");
