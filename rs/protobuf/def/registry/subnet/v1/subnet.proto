@@ -317,8 +317,14 @@ message ChainKeyConfig {
   // Signature requests will timeout after the given number of nano seconds.
   optional uint64 signature_request_timeout_ns = 2;
   // Key rotation period of a single node in milliseconds.
-  // If none is specified key rotation is disabled.
+  // If none is specified, key rotation is disabled.
   optional uint64 idkg_key_rotation_period_ms = 3;
+
+  // Maximum number of pre-signature transcripts that can be created inside the
+  // replicated state.
+  // If none is specified, pre-signature transcripts are stored in the blocks
+  // instead.
+  optional uint32 max_pre_signature_transcripts_in_creation = 4;
 }
 
 // How to charge canisters for their use of computational resources (such as

@@ -136,9 +136,15 @@ pub(crate) struct ProposeToUpdateSubnetCmd {
 
     /// Configuration for chain key:
     /// idkg key rotation period of a single node in milliseconds.
-    /// If none is specified key rotation is disabled.
+    /// If none is specified, key rotation is disabled.
     #[clap(long)]
     pub idkg_key_rotation_period_ms: Option<u64>,
+
+    /// Configuration for chain key:
+    /// Maximum number of pre-signature transcripts that can be created inside the replicated state.
+    /// If none is specified, pre-signature transcripts are stored in the blocks instead.
+    #[clap(long)]
+    pub max_pre_signature_transcripts_in_creation: Option<u32>,
 
     /// The features that are enabled and disabled on the subnet.
     #[clap(long)]
@@ -223,9 +229,10 @@ impl ProposeToUpdateSubnetCmd {
         subnet_id: SubnetId,
         subnet_record: SubnetRecord,
     ) -> do_update_subnet::UpdateSubnetPayload {
-        let chain_key_config = if self.chain_key_configs_to_generate.is_none()
+        let chain_key_config = if self.signature_request_timeout_ns.is_none()
             && self.idkg_key_rotation_period_ms.is_none()
-            && self.signature_request_timeout_ns.is_none()
+            && self.max_pre_signature_transcripts_in_creation.is_none()
+            && self.chain_key_configs_to_generate.is_none()
         {
             None
         } else {
@@ -238,6 +245,13 @@ impl ProposeToUpdateSubnetCmd {
                 .chain_key_config
                 .as_ref()
                 .and_then(|c| c.idkg_key_rotation_period_ms));
+
+            let max_pre_signature_transcripts_in_creation = self
+                .max_pre_signature_transcripts_in_creation
+                .or(subnet_record
+                    .chain_key_config
+                    .as_ref()
+                    .and_then(|c| c.max_pre_signature_transcripts_in_creation));
 
             let mut key_ids_to_configs = subnet_record
                 .chain_key_config
@@ -267,6 +281,7 @@ impl ProposeToUpdateSubnetCmd {
                 key_configs,
                 signature_request_timeout_ns,
                 idkg_key_rotation_period_ms,
+                max_pre_signature_transcripts_in_creation,
             })
         };
 
@@ -415,6 +430,7 @@ mod tests {
             chain_key_signing_disable: None,
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
+            max_pre_signature_transcripts_in_creation: None,
             features: None,
             ssh_readonly_access: None,
             ssh_backup_access: None,
@@ -448,6 +464,7 @@ mod tests {
                 ],
                 signature_request_timeout_ns: Some(111_111),
                 idkg_key_rotation_period_ms: Some(111),
+                max_pre_signature_transcripts_in_creation: Some(1),
             }),
             ..Default::default()
         };
@@ -477,6 +494,7 @@ mod tests {
 
         let signature_request_timeout_ns = Some(222_222);
         let idkg_key_rotation_period_ms = Some(222);
+        let max_pre_signature_transcripts_in_creation = Some(2);
 
         // Run code under test
         let cmd = ProposeToUpdateSubnetCmd {
@@ -485,6 +503,7 @@ mod tests {
             chain_key_signing_disable,
             signature_request_timeout_ns,
             idkg_key_rotation_period_ms,
+            max_pre_signature_transcripts_in_creation,
             ..empty_propose_to_update_subnet_cmd(subnet_id)
         };
 
@@ -543,6 +562,7 @@ mod tests {
                     ],
                     signature_request_timeout_ns: Some(222_222),
                     idkg_key_rotation_period_ms: Some(222),
+                    max_pre_signature_transcripts_in_creation: Some(2),
                 }),
                 chain_key_signing_enable: Some(vec![MasterPublicKeyId::Ecdsa(EcdsaKeyId {
                     curve: EcdsaCurve::Secp256k1,
@@ -587,12 +607,14 @@ mod tests {
 
         let signature_request_timeout_ns = Some(111);
         let idkg_key_rotation_period_ms = Some(222);
+        let max_pre_signature_transcripts_in_creation = Some(333);
 
         // Run code under test
         let cmd = ProposeToUpdateSubnetCmd {
             chain_key_configs_to_generate,
             signature_request_timeout_ns,
             idkg_key_rotation_period_ms,
+            max_pre_signature_transcripts_in_creation,
             ..empty_propose_to_update_subnet_cmd(subnet_id)
         };
 
@@ -628,6 +650,7 @@ mod tests {
                     ],
                     signature_request_timeout_ns: Some(111),
                     idkg_key_rotation_period_ms: Some(222),
+                    max_pre_signature_transcripts_in_creation: Some(333),
                 }),
                 ..make_empty_update_payload(subnet_id)
             },
@@ -648,8 +671,9 @@ mod tests {
                     pre_signatures_to_create_in_advance: 111_111,
                     max_queue_size: 222_222,
                 }],
-                signature_request_timeout_ns: Some(888_888),
-                idkg_key_rotation_period_ms: Some(999_999),
+                signature_request_timeout_ns: Some(777_777),
+                idkg_key_rotation_period_ms: Some(888_888),
+                max_pre_signature_transcripts_in_creation: Some(999_999),
             }),
             ..Default::default()
         };
@@ -673,14 +697,16 @@ mod tests {
         .to_string();
         let chain_key_configs_to_generate = Some(chain_key_configs_to_generate);
 
-        let signature_request_timeout_ns = Some(888);
-        let idkg_key_rotation_period_ms = Some(999);
+        let signature_request_timeout_ns = Some(777);
+        let idkg_key_rotation_period_ms = Some(888);
+        let max_pre_signature_transcripts_in_creation = Some(999);
 
         // Run code under test
         let cmd = ProposeToUpdateSubnetCmd {
             chain_key_configs_to_generate,
             signature_request_timeout_ns,
             idkg_key_rotation_period_ms,
+            max_pre_signature_transcripts_in_creation,
             ..empty_propose_to_update_subnet_cmd(subnet_id)
         };
 
@@ -717,8 +743,9 @@ mod tests {
                             max_queue_size: Some(444),
                         },
                     ],
-                    signature_request_timeout_ns: Some(888),
-                    idkg_key_rotation_period_ms: Some(999),
+                    signature_request_timeout_ns: Some(777),
+                    idkg_key_rotation_period_ms: Some(888),
+                    max_pre_signature_transcripts_in_creation: Some(999),
                 }),
                 ..make_empty_update_payload(subnet_id)
             },
