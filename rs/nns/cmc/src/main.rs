@@ -329,6 +329,8 @@ pub struct StateV2 {
     /// Maintain a count of how many cycles have been minted in the last hour.
     pub base_limiter: limiter::Limiter,
 
+    /// Maintain a count of how many cycles have been minted by the Subnet Rental Canister
+    /// in the last month.
     pub subnet_rental_canister_limiter: limiter::Limiter,
 
     pub total_cycles_minted: Cycles,
