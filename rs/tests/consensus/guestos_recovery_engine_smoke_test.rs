@@ -48,16 +48,15 @@ const UPSTREAMS: [&str; 2] = ["download.dfinity.systems", "download.dfinity.netw
 
 fn get_env_var_dependency_path(env_var: &str) -> PathBuf {
     get_dependency_path(
-        std::env::var(env_var).expect(&format!("{} environment variable not found", env_var)),
+        std::env::var(env_var)
+            .unwrap_or_else(|_| panic!("{} environment variable not found", env_var)),
     )
 }
 
 fn read_env_var_path_to_string(env_var: &str) -> String {
     let dependency_path = get_env_var_dependency_path(env_var);
-    std::fs::read_to_string(get_env_var_dependency_path(env_var)).expect(&format!(
-        "Failed to read content from {:?}",
-        dependency_path
-    ))
+    std::fs::read_to_string(get_env_var_dependency_path(env_var))
+        .unwrap_or_else(|_| panic!("Failed to read content from {:?}", dependency_path))
 }
 
 fn setup_upstream_uvm(env: &TestEnv) -> Ipv6Addr {
