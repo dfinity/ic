@@ -652,12 +652,12 @@ pub struct RegisterDappCanisters {
     PartialEq,
     ::prost::Message,
 )]
-pub struct PreciseValue {
-    #[prost(oneof = "precise_value::PreciseValue", tags = "1, 2, 3, 4, 5, 6, 7")]
-    pub precise_value: ::core::option::Option<precise_value::PreciseValue>,
+pub struct Precise {
+    #[prost(oneof = "precise::Value", tags = "1, 2, 3, 4, 5, 6, 7")]
+    pub value: ::core::option::Option<precise::Value>,
 }
-/// Nested message and enum types in `PreciseValue`.
-pub mod precise_value {
+/// Nested message and enum types in `Precise`.
+pub mod precise {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
@@ -666,7 +666,7 @@ pub mod precise_value {
         PartialEq,
         ::prost::Oneof,
     )]
-    pub enum PreciseValue {
+    pub enum Value {
         #[prost(bool, tag = "1")]
         Bool(bool),
         #[prost(bytes, tag = "2")]
@@ -693,7 +693,7 @@ pub mod precise_value {
 )]
 pub struct PreciseArray {
     #[prost(message, repeated, tag = "1")]
-    pub array: ::prost::alloc::vec::Vec<PreciseValue>,
+    pub array: ::prost::alloc::vec::Vec<Precise>,
 }
 #[derive(
     candid::CandidType,
@@ -705,7 +705,7 @@ pub struct PreciseArray {
 )]
 pub struct PreciseMap {
     #[prost(btree_map = "string, message", tag = "1")]
-    pub map: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, PreciseValue>,
+    pub map: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, Precise>,
 }
 #[derive(
     candid::CandidType,
@@ -717,7 +717,7 @@ pub struct PreciseMap {
 )]
 pub struct ExtensionInit {
     #[prost(message, optional, tag = "1")]
-    pub value: ::core::option::Option<PreciseValue>,
+    pub value: ::core::option::Option<Precise>,
 }
 #[derive(
     candid::CandidType,
