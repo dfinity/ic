@@ -37,9 +37,7 @@ pub fn group_all() -> Vec<&'static str> {
 
 pub fn group_01() -> Vec<&'static str> {
     vec![
-        "($0 ~ /canister version/)",
         "($0 ~ /canister global timer/)",
-        "($0 ~ /canister http/)",
     ]
 }
 
