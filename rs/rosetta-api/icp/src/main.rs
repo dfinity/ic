@@ -71,7 +71,7 @@ struct ParsedNetworkConfig {
 }
 
 impl ParsedNetworkConfig {
-    fn from_config(config: &NetworkConfig, mainnet: bool) -> Result<Self, String> {
+    fn from_config(config: NetworkConfig, mainnet: bool) -> Result<Self, String> {
         let url_str = match &config.ic_url {
             Some(url_str) => url_str.as_str(),
             None => {
@@ -84,7 +84,7 @@ impl ParsedNetworkConfig {
         };
         let ic_url = Url::parse(url_str).map_err(|e| format!("Unable to parse --ic-url: {}", e))?;
 
-        let root_key = match &config.root_key {
+        let root_key = match config.root_key {
             Some(root_key_path) => Some(
                 parse_threshold_sig_key(root_key_path.as_path())
                     .map_err(|e| format!("Unable to parse root key from file: {}", e))?,
@@ -131,7 +131,7 @@ struct ParsedCanisterConfig {
 }
 
 impl ParsedCanisterConfig {
-    fn from_config(config: &CanisterConfig) -> Result<Self, String> {
+    fn from_config(config: CanisterConfig) -> Result<Self, String> {
         let ledger_canister_id = CanisterId::unchecked_from_principal(
             PrincipalId::from_str(&config.ledger_canister_id).map_err(|e| {
                 format!(
@@ -152,7 +152,7 @@ impl ParsedCanisterConfig {
 
         Ok(Self {
             ledger_canister_id,
-            token_symbol: config.token_symbol.clone(),
+            token_symbol: config.token_symbol,
             governance_canister_id,
         })
     }
@@ -264,7 +264,7 @@ async fn main() -> std::io::Result<()> {
     info!("Listening on {}:{}", opt.server.address, listen_port);
     let addr = format!("{}:{}", opt.server.address, listen_port);
 
-    let network_config = ParsedNetworkConfig::from_config(&opt.network, opt.mainnet)
+    let network_config = ParsedNetworkConfig::from_config(opt.network, opt.mainnet)
         .unwrap_or_else(|e| {
             error!("Configuration error: {}", e);
             std::process::exit(1);
@@ -275,7 +275,7 @@ async fn main() -> std::io::Result<()> {
         warn!("Data certificate will not be verified due to missing root key");
     }
 
-    let canister_config = ParsedCanisterConfig::from_config(&opt.canister).unwrap_or_else(|e| {
+    let canister_config = ParsedCanisterConfig::from_config(opt.canister).unwrap_or_else(|e| {
         error!("Configuration error: {}", e);
         std::process::exit(1);
     });
