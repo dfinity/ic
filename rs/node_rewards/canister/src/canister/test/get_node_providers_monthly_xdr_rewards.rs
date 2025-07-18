@@ -37,7 +37,7 @@ thread_local! {
         StableBTreeMap::init(mgr.get(MemoryId::new(0)))
     });
     // Dummy value b/c we can't do direct assignment using values defined above.
-    static CANISTER: RefCell<NodeRewardsCanister> = RefCell::new(NodeRewardsCanister::new(
+    static CANISTER: RefCell<NodeRewardsCanister<StableCanisterRegistryClient<TestState>> > = RefCell::new(NodeRewardsCanister::new(
          Arc::new(StableCanisterRegistryClient::<TestState>::new(Arc::new(FakeRegistry::default()))),
     ));
 }

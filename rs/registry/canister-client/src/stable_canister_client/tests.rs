@@ -104,7 +104,7 @@ fn test_absent_after_delete() {
 }
 
 #[test]
-fn test_timestamp_to_registry_versions_mapping_correct() {
+fn test_correctly_maps_timestamp_to_registry_versions() {
     add_dummy_data();
     let (client, _) = client_for_tests();
 
