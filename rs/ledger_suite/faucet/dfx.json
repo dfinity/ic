@@ -1,0 +1,41 @@
+{
+  "canisters": {
+    "testicp-ledger": {
+      "type": "custom",
+      "candid": "https://github.com/dfinity/ic/releases/download/ledger-suite-icp-2025-07-04/ledger.did",
+      "wasm": "https://github.com/dfinity/ic/releases/download/ledger-suite-icp-2025-07-04/ledger-canister_notify-method.wasm.gz",
+      "init_arg": "(variant { Init = record { send_whitelist = vec {}; token_symbol = opt \"TESTICP\"; transfer_fee = opt record { e8s = 10_000 : nat64 }; minting_account = \"758099e73766819962c02911ac58e9a15043f8d8599ffb22d0232c1614ac90db\"; initial_values = vec {}; token_name = opt \"Test ICP\"; } })",
+      "specified_id": "xafvr-biaaa-aaaai-aql5q-cai"
+    },
+    "ticrc1-ledger": {
+      "type": "custom",
+      "candid": "https://github.com/dfinity/ic/releases/download/ledger-suite-icrc-2025-06-19/ledger.did",
+      "wasm": "https://github.com/dfinity/ic/releases/download/ledger-suite-icrc-2025-06-19/ic-icrc1-ledger.wasm.gz",
+      "init_arg": "(variant { Init = record { token_symbol = \"TICRC1\"; token_name = \"ICRC1 Test Token\"; minting_account = record { owner = principal \"rmxgg-6iaaa-aaaac-qa7xa-cai\"; }; transfer_fee = 1000; metadata = vec {}; initial_balances = vec { }; archive_options = record { num_blocks_to_archive = 1000; trigger_threshold = 2000; controller_id = principal \"ut6oh-icu54-nm6rq-go6mt-m242r-lmqyn-4k5ji-c65yo-txz6n-aow7w-6qe\"; cycles_for_archive_creation = opt 10_000_000_000_000; } } })",
+      "specified_id": "3jkp5-oyaaa-aaaaj-azwqa-cai"
+    },
+    "testicp-backend": {
+      "type": "rust",
+      "package": "backend",
+      "candid": "./src/backend/backend.did",
+      "init_arg": "(record { ledger_canister = principal \"xafvr-biaaa-aaaai-aql5q-cai\"; ledger_type = variant { ICP }; is_mint = true; })",
+      "specified_id": "ucua5-2qaaa-aaaao-qkeia-cai"
+    },
+    "ticrc1-backend": {
+      "type": "rust",
+      "package": "backend",
+      "candid": "./src/backend/backend.did",
+      "init_arg": "(record { ledger_canister = principal \"3jkp5-oyaaa-aaaaj-azwqa-cai\"; ledger_type = variant { ICRC1 }; is_mint = true; })",
+      "specified_id": "rmxgg-6iaaa-aaaac-qa7xa-cai"
+    }
+  },
+  "defaults": {
+    "build": {
+      "args": "",
+      "packtool": ""
+    }
+  },
+  "output_env_file": ".env",
+  "dfx": "0.28.0",
+  "version": 1
+}
