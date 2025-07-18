@@ -53,8 +53,12 @@ fn test_neuron_voting() {
             .expect("failed to get the minimum dissolve delay")
             .expect("optional dissolve delay not provided");
 
+        // Set the dissolve delay for voting neurons to be slightly above the minimum to account
+        // for timing issues.
+        let neuron_dissolve_delay = minimum_dissolve_delay + 100;
+
         // Create neurons
-        let neuron_ids = create_neurons(&env, INITIAL_BALANCE / 10, minimum_dissolve_delay).await;
+        let neuron_ids = create_neurons(&env, INITIAL_BALANCE / 10, neuron_dissolve_delay).await;
 
         // Create a neuron that cannot vote due to too short dissolve delay.
         let non_voting_neuron_id = create_neuron_with_dissolve(
