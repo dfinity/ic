@@ -1,5 +1,5 @@
 {
-  "checksum": "7d83ac9f56534bc4a6f63ff9dcb96c288484f5cc71e0401f847e854de542f83e",
+  "checksum": "7850a50f0c11437e494fc10169bb989fe38e2c71bd596ee1d3fea574ed0b1a5c",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -14898,6 +14898,110 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "const-random 0.1.18": {
+      "name": "const-random",
+      "version": "0.1.18",
+      "package_url": "https://github.com/tkaitchuck/constrandom",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/const-random/0.1.18/download",
+          "sha256": "87e00182fe74b066627d63b85fd550ac2998d4b0bd86bfed477a0ae4c7c71359"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "const_random",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "const_random",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2018",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "const-random-macro 0.1.16",
+              "target": "const_random_macro"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.1.18"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "const-random-macro 0.1.16": {
+      "name": "const-random-macro",
+      "version": "0.1.16",
+      "package_url": "https://github.com/tkaitchuck/constrandom",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/const-random-macro/0.1.16/download",
+          "sha256": "f9d839f2a20b0aee515dc581a6172f2321f96cab76c1a38a4c584a194955390e"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "const_random_macro",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "const_random_macro",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "getrandom 0.2.10",
+              "target": "getrandom"
+            },
+            {
+              "id": "once_cell 1.21.3",
+              "target": "once_cell"
+            },
+            {
+              "id": "tiny-keccak 2.0.2",
+              "target": "tiny_keccak"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.1.16"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "const_panic 0.2.12": {
       "name": "const_panic",
       "version": "0.2.12",
@@ -21146,6 +21250,10 @@
               "target": "rusqlite"
             },
             {
+              "id": "rust-ini 0.21.2",
+              "target": "ini"
+            },
+            {
               "id": "rust_decimal 1.36.0",
               "target": "rust_decimal"
             },
@@ -21972,6 +22080,60 @@
         },
         "edition": "2018",
         "version": "0.2.4"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "dlv-list 0.5.2": {
+      "name": "dlv-list",
+      "version": "0.5.2",
+      "package_url": "https://github.com/sgodwincs/dlv-list-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/dlv-list/0.5.2/download",
+          "sha256": "442039f5147480ba31067cb00ada1adae6892028e40e45fc5de7b7df6dcc1b5f"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "dlv_list",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "dlv_list",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "const-random 0.1.18",
+              "target": "const_random"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.5.2"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -51854,6 +52016,64 @@
       ],
       "license_file": "LICENSE-MIT"
     },
+    "ordered-multimap 0.7.3": {
+      "name": "ordered-multimap",
+      "version": "0.7.3",
+      "package_url": "https://github.com/sgodwincs/ordered-multimap-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ordered-multimap/0.7.3/download",
+          "sha256": "49203cdcae0030493bad186b28da2fa25645fa276a51b6fec8010d281e02ef79"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ordered_multimap",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ordered_multimap",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "dlv-list 0.5.2",
+              "target": "dlv_list"
+            },
+            {
+              "id": "hashbrown 0.14.5",
+              "target": "hashbrown"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.7.3"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
     "os_str_bytes 6.6.1": {
       "name": "os_str_bytes",
       "version": "6.6.1",
@@ -64449,6 +64669,63 @@
         },
         "edition": "2018",
         "version": "0.28.0"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
+    "rust-ini 0.21.2": {
+      "name": "rust-ini",
+      "version": "0.21.2",
+      "package_url": "https://github.com/zonyitoo/rust-ini",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/rust-ini/0.21.2/download",
+          "sha256": "e7295b7ce3bf4806b419dc3420745998b447178b7005e2011947b38fc5aa6791"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ini",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ini",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "cfg-if 1.0.0",
+              "target": "cfg_if"
+            },
+            {
+              "id": "ordered-multimap 0.7.3",
+              "target": "ordered_multimap"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.21.2"
       },
       "license": "MIT",
       "license_ids": [
@@ -77284,16 +77561,20 @@
           ],
           "selects": {
             "aarch64-apple-darwin": [
-              "sha3"
+              "sha3",
+              "shake"
             ],
             "aarch64-unknown-linux-gnu": [
-              "sha3"
+              "sha3",
+              "shake"
             ],
             "x86_64-apple-darwin": [
-              "sha3"
+              "sha3",
+              "shake"
             ],
             "x86_64-unknown-linux-gnu": [
-              "sha3"
+              "sha3",
+              "shake"
             ]
           }
         },
@@ -93252,6 +93533,7 @@
     "rstest 0.19.0",
     "rusb 0.9.3",
     "rusqlite 0.28.0",
+    "rust-ini 0.21.2",
     "rust_decimal 1.36.0",
     "rust_decimal_macros 1.36.0",
     "rustc-demangle 0.1.23",
