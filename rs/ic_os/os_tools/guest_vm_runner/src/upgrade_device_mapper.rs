@@ -1,6 +1,6 @@
 use crate::device_mapping::{BaseDevice, LinearSegment, MappedDevice, TempDevice};
 use anyhow::{bail, ensure, Context, Result};
-use devicemapper::{DevId, DmName, DmOptions, Sectors, DM};
+use devicemapper::{Bytes, DevId, DmName, DmOptions, Sectors, DM};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -90,7 +90,7 @@ fn create_device_for_upgrade(
         Box::new(readonly_data_partition_device),
         Box::new(
             // TODO: Is 512MB a good size for the snapshot?
-            TempDevice::new(Sectors(1024 * 1024))
+            TempDevice::new(Bytes(512 * 1024 * 1024).sectors())
                 .context("Failed to create temporary device for copy-on-write")?,
         ),
     )

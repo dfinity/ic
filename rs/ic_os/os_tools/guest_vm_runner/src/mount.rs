@@ -98,6 +98,9 @@ pub struct GptPartitionProvider {
 }
 
 impl GptPartitionProvider {
+    /// Creates a new [GptPartitionProvider] for the given device.
+    /// The `device` must be a block device or a disk image with a valid GPT partition table and
+    /// must be valid for the entire lifetime of the constructed object.
     pub fn new(device: PathBuf) -> Result<Self> {
         #[cfg(target_os = "linux")]
         return Self::with_mounter(device, Box::new(LoopDeviceMounter));

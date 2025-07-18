@@ -224,6 +224,7 @@ impl Debug for MappedDevice {
 
 impl MappedDevice {
     /// Creates a linear device mapping from multiple segments.
+    /// Devices in `segments` must stay valid for the lifetime of the mapping.
     pub fn create_linear(
         device_mapper: Arc<DM>,
         name: &'static str,
@@ -257,6 +258,7 @@ impl MappedDevice {
     }
 
     /// Creates a non-persistent snapshot device with 8-sector chunks.
+    /// `source` must stay valid for the lifetime of the snapshot.
     pub fn create_snapshot(
         device_mapper: Arc<DM>,
         name: &'static str,
