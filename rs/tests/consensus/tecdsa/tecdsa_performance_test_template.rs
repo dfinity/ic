@@ -168,7 +168,7 @@ pub fn setup(env: TestEnv) {
     };
 
     InternetComputer::new()
-        .with_required_host_features(vec![HostFeature::Performance, , HostFeature::Dell])
+        .with_required_host_features(vec![HostFeature::Performance, HostFeature::Dell])
         .add_subnet(
             Subnet::new(SubnetType::System)
                 .with_default_vm_resources(vm_resources)
