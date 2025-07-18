@@ -1178,7 +1178,9 @@ pub fn get_mainnet_application_subnet_revision() -> String {
         .expect("could not read mainnet application subnet version from environment")
 }
 
-// Initial version
+// The following are helpers for tests that use ICOS images. Each artifact has the triplet (version, URL, hash).
+
+/// Pull the version of the initial GuestOS image from the environment.
 pub fn get_ic_os_img_version() -> Result<String> {
     // TODO: Until the version can be passed directly in the env variable, resolve it from a file, instead.
     if let Ok(from_file) = read_dependency_from_env_to_string("ENV_DEPS__GUESTOS_DISK_IMG_VERSION")
@@ -1189,24 +1191,30 @@ pub fn get_ic_os_img_version() -> Result<String> {
     }
 }
 
-// Image URL
+/// Pull the URL of the initial GuestOS image from the environment.
 pub fn get_ic_os_img_url() -> Result<Url> {
     let url = std::env::var("ENV_DEPS__GUESTOS_DISK_IMG_URL")?;
     Ok(Url::parse(&url)?)
 }
 
-// Image Hash
+/// Pull the hash of the initial GuestOS image from the environment.
 pub fn get_ic_os_img_sha256() -> Result<String> {
     Ok(std::env::var("ENV_DEPS__GUESTOS_DISK_IMG_HASH")?)
 }
 
-// Initial update URL
+/// Pull the URL of the initial GuestOS update image from the environment.
+///
+/// With the initial image, there is also a corresponding initial update image.
+/// The version is shared, so only the URL and hash are provided.
 pub fn get_ic_os_initial_update_img_url() -> Result<Url> {
     let url = std::env::var("ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_URL")?;
     Ok(Url::parse(&url)?)
 }
 
-// Initial update Hash
+/// Pull the hash of the initial GuestOS update image from the environment.
+///
+/// With the initial image, there is also a corresponding initial update image.
+/// The version is shared, so only the URL and hash are provided.
 pub fn get_ic_os_initial_update_img_sha256(env: &TestEnv) -> Result<String> {
     // TODO: Until the update hash is stored in the repo, resolve from the passed URL, instead.
     if let Ok(from_url) = fetch_sha256(
@@ -1220,7 +1228,7 @@ pub fn get_ic_os_initial_update_img_sha256(env: &TestEnv) -> Result<String> {
     }
 }
 
-// Target version
+/// Pull the version of the target GuestOS update image from the environment.
 pub fn get_ic_os_update_img_version() -> Result<String> {
     // TODO: Until the version can be passed directly in the env variable, resolve it from a file, instead.
     if let Ok(from_file) =
@@ -1232,13 +1240,13 @@ pub fn get_ic_os_update_img_version() -> Result<String> {
     }
 }
 
-// Update URL
+/// Pull the URL of the target GuestOS update image from the environment.
 pub fn get_ic_os_update_img_url() -> Result<Url> {
     let url = std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_URL")?;
     Ok(Url::parse(&url)?)
 }
 
-// Update Hash
+/// Pull the hash of the target GuestOS update image from the environment.
 pub fn get_ic_os_update_img_sha256(env: &TestEnv) -> Result<String> {
     // TODO: Until the update hash is stored in the repo, resolve from the passed URL, instead.
     if let Ok(from_url) = fetch_sha256(
@@ -1252,7 +1260,7 @@ pub fn get_ic_os_update_img_sha256(env: &TestEnv) -> Result<String> {
     }
 }
 
-// Initial version
+/// Pull the version of the initial SetupOS image from the environment.
 pub fn get_setupos_img_version() -> Result<String> {
     // TODO: Until the version can be passed directly in the env variable, resolve it from a file, instead.
     if let Ok(from_file) = read_dependency_from_env_to_string("ENV_DEPS__SETUPOS_DISK_IMG_VERSION")
@@ -1263,18 +1271,18 @@ pub fn get_setupos_img_version() -> Result<String> {
     }
 }
 
-// Image URL
+/// Pull the URL of the initial SetupOS image from the environment.
 pub fn get_setupos_img_url() -> Result<Url> {
     let url = std::env::var("ENV_DEPS__SETUPOS_DISK_IMG_URL")?;
     Ok(Url::parse(&url)?)
 }
 
-// Image Hash
+/// Pull the hash of the initial SetupOS image from the environment.
 pub fn get_setupos_img_sha256() -> Result<String> {
     Ok(std::env::var("ENV_DEPS__SETUPOS_DISK_IMG_HASH")?)
 }
 
-// Update version
+/// Pull the version of the target HostOS update image from the environment.
 pub fn get_hostos_update_img_version() -> Result<String> {
     // TODO: Until the version can be passed directly in the env variable, resolve it from a file, instead.
     if let Ok(from_file) = read_dependency_from_env_to_string("ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION")
@@ -1285,13 +1293,13 @@ pub fn get_hostos_update_img_version() -> Result<String> {
     }
 }
 
-// Update URL
+/// Pull the URL of the target HostOS update image from the environment.
 pub fn get_hostos_update_img_url() -> Result<Url> {
     let url = std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_URL")?;
     Ok(Url::parse(&url)?)
 }
 
-// Update Hash
+/// Pull the hash of the target HostOS update image from the environment.
 pub fn get_hostos_update_img_sha256() -> Result<String> {
     Ok(std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_HASH")?)
 }
