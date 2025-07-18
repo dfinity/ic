@@ -320,33 +320,103 @@ pub fn recovery_upgrader_test(env: TestEnv) {
         .await
         .expect("guest didn't come up as expected");
 
-        // Create test file on host and sleep for 10 minutes
-        info!(logger, "SSH'ing into host to create test file");
+        info!(logger, "Retrieving the current boot ID from the host before we update boot_args so we can determine when it rebooted...");
+        let retrieve_host_boot_id = || {
+            host.block_on_bash_script("journalctl -q --list-boots | tail -n1 | awk '{print $2}'")
+                .unwrap()
+                .trim()
+                .to_string()
+        };
+        let host_boot_id_pre_reboot = retrieve_host_boot_id();
+        info!(
+            logger,
+            "Host boot ID pre reboot: '{}'", host_boot_id_pre_reboot
+        );
+
+        // First, let's check if the boot_args file exists and see its current content
+        info!(logger, "Checking current boot_args file content");
+        let current_boot_args = host
+            .block_on_bash_script("cat /boot/boot_args")
+            .expect("Failed to read /boot/boot_args file");
+        info!(logger, "Current boot_args content:\n{}", current_boot_args);
+
+        // Remount /boot as read-write and update the boot_args file
+        info!(
+            logger,
+            "Remounting /boot as read-write and updating boot_args file"
+        );
+        let update_result = host.block_on_bash_script(
+            "sudo mount -o remount,rw /boot && sudo sed -i 's/\\(BOOT_ARGS_A=\".*\\)enforcing=0\"/\\1enforcing=0 recovery=1 version=e915efecc8af90993ccfc499721ebe826aadba60 hash=5e1e45\"/' /boot/boot_args && sudo mount -o remount,ro /boot"
+        );
+
+        match update_result {
+            Ok(output) => {
+                info!(
+                    logger,
+                    "Boot_args file updated successfully. Output: {}", output
+                );
+            }
+            Err(e) => {
+                panic!("Failed to update boot_args file: {}", e);
+            }
+        }
+
+        // Verify the update worked
+        info!(logger, "Verifying boot_args file was updated");
+        let updated_boot_args = host
+            .block_on_bash_script("cat /boot/boot_args")
+            .expect("Failed to read updated /boot/boot_args file");
+        info!(logger, "Updated boot_args content:\n{}", updated_boot_args);
+
+        // Now reboot the host
+        info!(logger, "Rebooting the host");
         let session = host
             .block_on_ssh_session()
-            .expect("Could not reach HostOS VM.");
+            .expect("Could not reach HostOS VM for reboot.");
         let mut channel = session.channel_session().unwrap();
 
-        channel
-            .exec(
-                "echo 'This is a test file created during recovery upgrader test' > /tmp/test.txt",
-            )
-            .unwrap();
+        // Execute reboot - connection will be terminated
+        match channel.exec("reboot") {
+            Ok(()) => {
+                info!(logger, "Reboot command sent successfully");
+            }
+            Err(e) => {
+                info!(logger, "Reboot command execution: {}", e);
+            }
+        }
+
+        // These operations may fail due to connection termination from reboot - that's expected
         let mut s = String::new();
-        channel.read_to_string(&mut s).unwrap();
+        let _ = channel.read_to_string(&mut s);
         channel.close().ok();
         channel.wait_close().ok();
 
-        assert!(
-            channel.exit_status().unwrap() == 0,
-            "Creating test file failed."
-        );
-        info!(
-            logger,
-            "Successfully created /tmp/test.txt on host and started 10-minute sleep"
-        );
+        info!(logger, "Waiting for host to reboot...");
 
-        std::thread::sleep(Duration::from_secs(10 * 60));
+        retry_with_msg!(
+            format!(
+                "Waiting until the host's boot ID changes from its pre reboot value of '{}'",
+                host_boot_id_pre_reboot
+            ),
+            logger.clone(),
+            Duration::from_secs(5 * 60),
+            Duration::from_secs(5),
+            || {
+                let host_boot_id = retrieve_host_boot_id();
+                if host_boot_id != host_boot_id_pre_reboot {
+                    info!(
+                        logger,
+                        "Host boot ID changed from '{}' to '{}'",
+                        host_boot_id_pre_reboot,
+                        host_boot_id
+                    );
+                    Ok(())
+                } else {
+                    bail!("Host boot ID is still '{}'", host_boot_id_pre_reboot)
+                }
+            }
+        )
+        .unwrap();
 
         let new_version = retry_with_msg_async!(
             "Waiting until the guest returns a version",
