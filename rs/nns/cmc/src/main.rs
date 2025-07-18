@@ -281,12 +281,6 @@ pub struct StateV1 {
     pub update_exchange_rate_canister_state: Option<UpdateExchangeRateState>,
 }
 
-impl StateV1 {
-    fn state_version() -> StateVersion {
-        StateVersion(1)
-    }
-}
-
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct StateV2 {
     pub ledger_canister_id: CanisterId,
