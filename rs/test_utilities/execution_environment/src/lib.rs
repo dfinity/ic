@@ -901,7 +901,7 @@ impl ExecutionTest {
         Ok(())
     }
 
-    /// Installs the given canister with the given Wasm binary.
+    /// Upgrades the given canister with the given Wasm binary.
     pub fn upgrade_canister(
         &mut self,
         canister_id: CanisterId,
@@ -910,7 +910,7 @@ impl ExecutionTest {
         self.upgrade_canister_with_args(canister_id, wasm_binary, vec![])
     }
 
-    /// Installs the given canister with the given Wasm binary and post-upgrade args.
+    /// Upgrades the given canister with the given Wasm binary and post-upgrade args.
     pub fn upgrade_canister_with_args(
         &mut self,
         canister_id: CanisterId,
