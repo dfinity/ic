@@ -32,7 +32,7 @@ use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgs,
     CanisterSettingsArgsBuilder, CanisterStatusType, CanisterUpgradeOptions, EmptyBlob,
     InstallCodeArgs, InstallCodeArgsV2, LogVisibilityV2, MasterPublicKeyId, Method, Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, UpdateSettingsArgs,
+    ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm, UpdateSettingsArgs,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -89,6 +89,29 @@ mod wat_canister;
 pub use wat_canister::{wat_canister, wat_fn, WatCanisterBuilder, WatFnCode};
 
 const INITIAL_CANISTER_CYCLES: Cycles = Cycles::new(1_000_000_000_000);
+
+// These are well formed example public keys.
+// We need to have well formed keys for the "*_public_key" tests, otherwise crypto will
+// return an error and we can't test the happy path.
+const ECDSA_PUB_KEY: [u8; 33] = [
+    2, 249, 172, 52, 95, 107, 230, 219, 81, 225, 197, 97, 44, 221, 181, 158, 114, 195, 208, 212,
+    147, 201, 148, 209, 32, 53, 207, 19, 37, 126, 59, 31, 167,
+];
+const SCHNORR_BIP340_PUB_KEY: [u8; 33] = [
+    3, 122, 101, 26, 46, 94, 243, 209, 239, 99, 232, 76, 76, 76, 170, 2, 159, 164, 164, 58, 52,
+    122, 145, 228, 216, 74, 142, 132, 104, 83, 213, 27, 225,
+];
+const SCHNORR_ED29915_PUB_KEY: [u8; 32] = [
+    108, 8, 36, 190, 179, 118, 33, 188, 202, 110, 236, 194, 55, 237, 27, 196, 230, 76, 156, 89,
+    220, 184, 83, 68, 170, 127, 156, 200, 39, 142, 227, 31,
+];
+const VETKD_PUB_KEY: [u8; 96] = [
+    173, 134, 232, 255, 132, 89, 18, 240, 34, 160, 131, 138, 80, 45, 118, 63, 222, 165, 71, 201,
+    148, 143, 140, 178, 14, 167, 115, 141, 213, 44, 28, 56, 220, 180, 198, 202, 154, 194, 159, 154,
+    198, 144, 252, 90, 215, 104, 28, 180, 25, 34, 184, 223, 251, 214, 93, 148, 191, 241, 65, 245,
+    251, 91, 102, 36, 236, 204, 3, 191, 133, 15, 34, 32, 82, 223, 136, 140, 249, 177, 228, 114, 3,
+    85, 109, 117, 34, 39, 28, 187, 135, 155, 46, 244, 184, 194, 191, 177,
+];
 
 /// A helper to create subnets.
 pub fn generate_subnets(
@@ -2186,6 +2209,14 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_environment_variables_flag(
+        mut self,
+        environment_variables_flag: FlagStatus,
+    ) -> Self {
+        self.execution_config.environment_variables = environment_variables_flag;
+        self
+    }
+
     pub fn build(self) -> ExecutionTest {
         let own_range = CanisterIdRange {
             start: CanisterId::from(CANISTER_IDS_PER_SUBNET),
@@ -2283,21 +2314,30 @@ impl ExecutionTestBuilder {
                     key_id,
                     MasterPublicKey {
                         algorithm_id: AlgorithmId::EcdsaSecp256k1,
-                        public_key: b"abababab".to_vec(),
+                        public_key: ECDSA_PUB_KEY.to_vec(),
                     },
                 ),
-                MasterPublicKeyId::Schnorr(_) => (
-                    key_id,
-                    MasterPublicKey {
-                        algorithm_id: AlgorithmId::SchnorrSecp256k1,
-                        public_key: b"cdcdcdcd".to_vec(),
-                    },
-                ),
+                MasterPublicKeyId::Schnorr(ref schnorr) => match schnorr.algorithm {
+                    SchnorrAlgorithm::Bip340Secp256k1 => (
+                        key_id,
+                        MasterPublicKey {
+                            algorithm_id: AlgorithmId::SchnorrSecp256k1,
+                            public_key: SCHNORR_BIP340_PUB_KEY.to_vec(),
+                        },
+                    ),
+                    SchnorrAlgorithm::Ed25519 => (
+                        key_id,
+                        MasterPublicKey {
+                            algorithm_id: AlgorithmId::Ed25519,
+                            public_key: SCHNORR_ED29915_PUB_KEY.to_vec(),
+                        },
+                    ),
+                },
                 MasterPublicKeyId::VetKd(_) => (
                     key_id,
                     MasterPublicKey {
                         algorithm_id: AlgorithmId::VetKD,
-                        public_key: b"efefefef".to_vec(),
+                        public_key: VETKD_PUB_KEY.to_vec(),
                     },
                 ),
             })

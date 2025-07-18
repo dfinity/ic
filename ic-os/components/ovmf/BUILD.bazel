@@ -5,17 +5,18 @@ package(default_visibility = ["//visibility:public"])
 # with filenames containing non-ASCII characters. Because of all these reasons, we use a genrule instead.
 genrule(
     name = "ovmf_sev",
-    outs = ["OVMF.fd"],
+    outs = ["OVMF_SEV.fd"],
     cmd = """
         REPOSITORY=https://github.com/tianocore/edk2.git
-        TAG=edk2-stable202505
+        COMMIT=6951dfe7d59d144a3a980bd7eda699db2d8554ac # edk2-stable202505
 
         out="$$(realpath $@)"
         workdir="$$(mktemp -d)"
         trap "rm -rf $$workdir" EXIT
         cd "$$workdir"
-        git clone --depth 1 --branch $$TAG $$REPOSITORY
+        git clone "$$REPOSITORY"
         cd edk2
+        git checkout "$$COMMIT"
         git submodule update --init \
             BaseTools/Source/C/BrotliCompress/brotli \
             MdePkg/Library/MipiSysTLib/mipisyst \

@@ -48,7 +48,6 @@ serde_json = { workspace = true }
 slog = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }
-wabt-tests = { path = "../idx/wabt-tests" }
 
 [[bin]]
 name = "ic-systest-canister-http-correctness"

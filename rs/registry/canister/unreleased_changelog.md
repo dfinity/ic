@@ -9,9 +9,6 @@ on the process that this file is part of, see
 
 ## Added
 
-* There is now a `canister_cycles_cost_schedule` field in `CreateSubnetPayload`.
-  This isn't used yet, but it will be in the not too distant future.
-
 ## Changed
 
 ## Deprecated

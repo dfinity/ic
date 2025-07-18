@@ -141,7 +141,6 @@ impl CanisterManager {
             | Ok(Ic00Method::ECDSAPublicKey)
             | Ok(Ic00Method::SetupInitialDKG)
             | Ok(Ic00Method::SignWithECDSA)
-            | Ok(Ic00Method::ComputeInitialIDkgDealings)
             | Ok(Ic00Method::ReshareChainKey)
             | Ok(Ic00Method::SchnorrPublicKey)
             | Ok(Ic00Method::SignWithSchnorr)
@@ -325,8 +324,7 @@ impl CanisterManager {
         }
         if let Some(environment_variables) = settings.environment_variables() {
             if self.environment_variables_flag == FlagStatus::Enabled {
-                canister.system_state.environment_variables =
-                    environment_variables.get_environment_variables().clone();
+                canister.system_state.environment_variables = environment_variables.clone();
             }
         }
     }
@@ -366,8 +364,6 @@ impl CanisterManager {
             canister.system_state.reserved_balance_limit(),
         )?;
 
-        let is_controllers_change = validated_settings.controllers().is_some();
-
         let old_usage = canister.memory_usage();
         let old_mem = canister.memory_allocation().allocated_bytes(old_usage);
         let old_compute_allocation = canister.scheduler_state.compute_allocation.as_percent();
@@ -402,13 +398,37 @@ impl CanisterManager {
         }
 
         canister.system_state.canister_version += 1;
-        if is_controllers_change {
-            let new_controllers = canister.system_state.controllers.iter().copied().collect();
-            canister.system_state.add_canister_change(
-                timestamp_nanos,
-                origin,
-                CanisterChangeDetails::controllers_change(new_controllers),
-            );
+        let new_controllers = match validated_settings.controllers() {
+            Some(_) => Some(canister.system_state.controllers.iter().copied().collect()),
+            None => None,
+        };
+
+        match self.environment_variables_flag {
+            FlagStatus::Enabled => {
+                let new_environment_variables_hash = validated_settings
+                    .environment_variables()
+                    .map(|environment_variables| environment_variables.hash());
+
+                if new_environment_variables_hash.is_some() || new_controllers.is_some() {
+                    canister.system_state.add_canister_change(
+                        timestamp_nanos,
+                        origin,
+                        CanisterChangeDetails::settings_change(
+                            new_controllers,
+                            new_environment_variables_hash,
+                        ),
+                    );
+                }
+            }
+            FlagStatus::Disabled => {
+                if let Some(new_controllers) = new_controllers {
+                    canister.system_state.add_canister_change(
+                        timestamp_nanos,
+                        origin,
+                        CanisterChangeDetails::controllers_change(new_controllers),
+                    );
+                }
+            }
         }
 
         Ok(())
@@ -843,6 +863,7 @@ impl CanisterManager {
                 .egress_payload_size,
             wasm_memory_limit.map(|x| x.get()),
             wasm_memory_threshold.get(),
+            canister.system_state.environment_variables.clone(),
         ))
     }
 

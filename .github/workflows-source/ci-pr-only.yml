@@ -17,7 +17,7 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:c30de392a5104df90509a118170d07e3b797775e226adf5246c7271cb88f434b
+    image: ghcr.io/dfinity/ic-build@sha256:30313b29353a3e4d5c11f23ee9ba7e2b5a7a36b9aaebc098c5ca4183cfccad2f
   container: &container
     container:
       <<: *image
@@ -40,6 +40,18 @@ anchors:
     if: ${{ github.event_name != 'merge_group' }}
 
 jobs:
+  insta-tests:
+    name: Quick Feedback Tests
+    <<: *dind-small-setup
+    <<: *skip-merge-group
+    steps:
+      - <<: *checkout
+      - name: Run insta-tests
+        uses: ./.github/actions/bazel
+        with:
+          run: bazel test //:insta_tests
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+
   bazel-build-fuzzers-archives:
     name: Bazel Build Fuzzers Archives
     <<: *dind-large-setup

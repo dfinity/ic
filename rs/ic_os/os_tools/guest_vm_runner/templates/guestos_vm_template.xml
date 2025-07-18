@@ -1,6 +1,6 @@
 <domain type='{{cpu_domain}}' id='1'>
-  <name>guestos</name>
-  <uuid>fd897da5-8017-41c8-8575-a706dba30766</uuid>
+  <name>{{domain_name}}</name>
+  <uuid>{{domain_uuid}}</uuid>
   <metadata>
     <libosinfo:libosinfo xmlns:libosinfo="http://libosinfo.org/xmlns/libvirt/domain/1.0">
       <libosinfo:os id="http://ubuntu.com/ubuntu/20.04"/>
@@ -41,14 +41,20 @@
   <os type='efi'>
     <type arch='x86_64' machine='pc-q35-9.2'>hvm</type>
     <boot dev='hd'/>
+
+    {#- We must only use the SEV firmware if SEV is enabled, otherwise we must use the non-SEV firmware shipped with
+    the HostOS -#}
+    {% if direct_boot.is_some() && enable_sev %}
+    <loader readonly='yes'>{{direct_boot.as_ref().unwrap().ovmf_sev.display()}}</loader>
+    {%- else %}
+    <loader readonly='yes' type='pflash'>/usr/share/OVMF/OVMF_CODE_4M.fd</loader>
+    <nvram>/var/lib/libvirt/qemu/nvram/{{domain_name}}_VARS.fd</nvram>
+    {%- endif %}
+
     {%- if let Some(direct_boot) = direct_boot %}
-    <loader readonly='yes'>{{ovmf_path.display()}}</loader>
     <kernel>{{direct_boot.kernel.display()}}</kernel>
     <initrd>{{direct_boot.initrd.display()}}</initrd>
     <cmdline>{{direct_boot.kernel_cmdline}}</cmdline>
-    {%- else %}
-    <loader readonly='yes' type='pflash'>/usr/share/OVMF/OVMF_CODE_4M.fd</loader>
-    <nvram>/var/lib/libvirt/qemu/nvram/guestos_VARS.fd</nvram>
     {%- endif %}
   </os>
   <features>
@@ -60,9 +66,10 @@
     <timer name='pit' tickpolicy='delay'/>
     <timer name='hpet' present='no'/>
   </clock>
-  <on_poweroff>restart</on_poweroff>
-  <on_reboot>restart</on_reboot>
-  <on_crash>restart</on_crash>
+  <!-- Destroy the VM in all these cases and let the guest_vm_runner restart it -->
+  <on_poweroff>destroy</on_poweroff>
+  <on_reboot>destroy</on_reboot>
+  <on_crash>destroy</on_crash>
   <pm>
     <suspend-to-mem enabled='no'/>
     <suspend-to-disk enabled='no'/>
@@ -71,7 +78,7 @@
     <emulator>/usr/bin/qemu-system-x86_64</emulator>
     <disk type='block' device='disk'>
       <driver name='qemu' type='raw' cache='none' discard='unmap'/>
-      <source dev='/dev/hostlvm/guestos' index='1'/>
+      <source dev='{{disk_device}}' index='1'/>
       <backingStore/>
       <target dev='vda' bus='virtio'/>
       <alias name='virtio-disk0'/>
@@ -167,7 +174,7 @@
         <model name='isa-serial'/>
       </target>
       <alias name='serial0'/>
-      <log file='/var/log/libvirt/qemu/guestos-serial.log' append='off'/>
+      <log file='{{console_log_path}}' append='off'/>
     </serial>
     <console type='pty' tty='/dev/pts/3'>
       <source path='/dev/pts/3'/>

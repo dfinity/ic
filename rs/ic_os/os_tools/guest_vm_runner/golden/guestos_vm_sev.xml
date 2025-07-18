@@ -32,7 +32,7 @@
   <os type='efi'>
     <type arch='x86_64' machine='pc-q35-9.2'>hvm</type>
     <boot dev='hd'/>
-    <loader readonly='yes'>/tmp/OVMF.fd</loader>
+    <loader readonly='yes'>/tmp/OVMF_SEV.fd</loader>
     <kernel>/tmp/test-kernel</kernel>
     <initrd>/tmp/test-initrd</initrd>
     <cmdline>security=selinux selinux=1 enforcing=0</cmdline>
@@ -46,9 +46,10 @@
     <timer name='pit' tickpolicy='delay'/>
     <timer name='hpet' present='no'/>
   </clock>
-  <on_poweroff>restart</on_poweroff>
-  <on_reboot>restart</on_reboot>
-  <on_crash>restart</on_crash>
+  <!-- Destroy the VM in all these cases and let the guest_vm_runner restart it -->
+  <on_poweroff>destroy</on_poweroff>
+  <on_reboot>destroy</on_reboot>
+  <on_crash>destroy</on_crash>
   <pm>
     <suspend-to-mem enabled='no'/>
     <suspend-to-disk enabled='no'/>

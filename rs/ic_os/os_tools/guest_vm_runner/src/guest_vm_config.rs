@@ -1,3 +1,4 @@
+use crate::{GuestVMType, GUESTOS_DEVICE};
 use anyhow::{Context, Result};
 use askama::Template;
 use config::hostos::guestos_bootstrap_image::BootstrapOptions;
@@ -10,7 +11,11 @@ use std::path::{Path, PathBuf};
 // See build.rs
 include!(concat!(env!("OUT_DIR"), "/guestos_vm_template.rs"));
 
-const DEFAULT_OVMF_PATH: &str = "/usr/share/ovmf/OVMF.fd";
+const DEFAULT_GUEST_VM_DOMAIN_NAME: &str = "guestos";
+const UPGRADE_GUEST_VM_DOMAIN_NAME: &str = "upgrade-guestos";
+
+const DEFAULT_SERIAL_LOG_PATH: &str = "/var/log/libvirt/qemu/guestos-serial.log";
+const UPGRADE_SERIAL_LOG_PATH: &str = "/var/log/libvirt/qemu/upgrade-guestos-serial.log";
 
 #[derive(Debug)]
 pub struct DirectBootConfig {
@@ -18,15 +23,19 @@ pub struct DirectBootConfig {
     pub kernel: PathBuf,
     /// The initrd file
     pub initrd: PathBuf,
-    /// The OVMF.fd file
-    pub ovmf: PathBuf,
+    /// The OVMF_SEV.fd file
+    pub ovmf_sev: PathBuf,
     /// Kernel command line parameters
     pub kernel_cmdline: String,
 }
 
-pub fn assemble_config_media(hostos_config: &HostOSConfig, media_path: &Path) -> Result<()> {
-    let guestos_config =
-        generate_guestos_config(hostos_config).context("Failed to generate GuestOS config")?;
+pub fn assemble_config_media(
+    hostos_config: &HostOSConfig,
+    guest_vm_type: GuestVMType,
+    media_path: &Path,
+) -> Result<()> {
+    let guestos_config = generate_guestos_config(hostos_config, guest_vm_type.to_config_type())
+        .context("Failed to generate GuestOS config")?;
 
     let bootstrap_options = make_bootstrap_options(hostos_config, guestos_config)?;
 
@@ -72,12 +81,17 @@ pub fn generate_vm_config(
     config: &HostOSConfig,
     media_path: &Path,
     direct_boot: Option<DirectBootConfig>,
+    guest_vm_type: GuestVMType,
 ) -> Result<String> {
+    let node_type = match guest_vm_type {
+        GuestVMType::Default => NodeType::GuestOS,
+        GuestVMType::Upgrade => NodeType::UpgradeGuestOS,
+    };
     let mac_address = calculate_deterministic_mac(
         &config.icos_settings.mgmt_mac,
         config.icos_settings.deployment_environment,
         IpVariant::V6,
-        NodeType::GuestOS,
+        node_type,
     );
 
     let cpu_domain = if config.hostos_settings.vm_cpu == "qemu" {
@@ -86,24 +100,42 @@ pub fn generate_vm_config(
         "kvm"
     };
 
-    let ovmf_path = if let Some(direct_boot) = &direct_boot {
-        &direct_boot.ovmf
-    } else {
-        Path::new(DEFAULT_OVMF_PATH)
-    };
-
     GuestOSTemplateProps {
+        domain_name: vm_domain_name(guest_vm_type).to_string(),
+        domain_uuid: vm_domain_uuid(guest_vm_type).to_string(),
+        disk_device: GUESTOS_DEVICE.to_string(),
         cpu_domain: cpu_domain.to_string(),
+        console_log_path: serial_log_path(guest_vm_type).display().to_string(),
         vm_memory: config.hostos_settings.vm_memory,
         nr_of_vcpus: config.hostos_settings.vm_nr_of_vcpus,
         mac_address,
         config_media_path: media_path.to_path_buf(),
-        ovmf_path: ovmf_path.to_path_buf(),
         direct_boot,
         enable_sev: config.icos_settings.enable_trusted_execution_environment,
     }
     .render()
     .context("Failed to render GuestOS VM XML template")
+}
+
+pub fn vm_domain_name(guest_vm_type: GuestVMType) -> &'static str {
+    match guest_vm_type {
+        GuestVMType::Default => DEFAULT_GUEST_VM_DOMAIN_NAME,
+        GuestVMType::Upgrade => UPGRADE_GUEST_VM_DOMAIN_NAME,
+    }
+}
+
+pub fn vm_domain_uuid(guest_vm_type: GuestVMType) -> &'static str {
+    match guest_vm_type {
+        GuestVMType::Default => "fd897da5-8017-41c8-8575-a706dba30766",
+        GuestVMType::Upgrade => "1ea49839-7f46-4560-a4c7-fce677bbfbbd",
+    }
+}
+
+pub fn serial_log_path(guest_vm_type: GuestVMType) -> &'static Path {
+    match guest_vm_type {
+        GuestVMType::Default => Path::new(DEFAULT_SERIAL_LOG_PATH),
+        GuestVMType::Upgrade => Path::new(UPGRADE_SERIAL_LOG_PATH),
+    }
 }
 
 #[cfg(test)]
@@ -166,7 +198,8 @@ mod tests {
         config.icos_settings.use_ssh_authorized_keys = true;
         config.icos_settings.use_node_operator_private_key = true;
 
-        let guestos_config = generate_guestos_config(&config).unwrap();
+        let guestos_config =
+            generate_guestos_config(&config, config_types::GuestVMType::Default).unwrap();
 
         let options = make_bootstrap_options(&config, guestos_config.clone()).unwrap();
 
@@ -194,10 +227,11 @@ mod tests {
     }
 
     fn test_vm_config(
+        filename: &str,
         hostos_settings: HostOSSettings,
         enable_trusted_execution_environment: bool,
         enable_direct_boot: bool,
-        filename: &str,
+        guest_vm_type: GuestVMType,
     ) {
         let mut mint = Mint::new(goldenfiles_path());
         let mut config = create_test_hostos_config();
@@ -210,21 +244,27 @@ mod tests {
             Some(DirectBootConfig {
                 kernel: PathBuf::from("/tmp/test-kernel"),
                 initrd: PathBuf::from("/tmp/test-initrd"),
-                ovmf: PathBuf::from("/tmp/OVMF.fd"),
+                ovmf_sev: PathBuf::from("/tmp/OVMF_SEV.fd"),
                 kernel_cmdline: "security=selinux selinux=1 enforcing=0".to_string(),
             })
         } else {
             None
         };
 
-        let vm_config =
-            generate_vm_config(&config, Path::new("/tmp/config.img"), direct_boot).unwrap();
+        let vm_config = generate_vm_config(
+            &config,
+            Path::new("/tmp/config.img"),
+            direct_boot,
+            guest_vm_type,
+        )
+        .unwrap();
         std::fs::write(mint.new_goldenpath(filename).unwrap(), vm_config).unwrap();
     }
 
     #[test]
     fn test_generate_vm_config_qemu() {
         test_vm_config(
+            "guestos_vm_qemu.xml",
             HostOSSettings {
                 vm_memory: 490,
                 vm_cpu: "qemu".to_string(),
@@ -233,13 +273,30 @@ mod tests {
             },
             /*enable_trusted_execution_environment=*/ false,
             /*enable_direct_boot=*/ true,
-            "guestos_vm_qemu.xml",
+            GuestVMType::Default,
+        );
+    }
+
+    #[test]
+    fn test_generate_vm_config_upgrade_guestos() {
+        test_vm_config(
+            "upgrade_guestos.xml",
+            HostOSSettings {
+                vm_memory: 490,
+                vm_cpu: "qemu".to_string(),
+                vm_nr_of_vcpus: 64,
+                ..HostOSSettings::default()
+            },
+            /*enable_trusted_execution_environment=*/ true,
+            /*enable_direct_boot=*/ true,
+            GuestVMType::Upgrade,
         );
     }
 
     #[test]
     fn test_generate_vm_config_kvm() {
         test_vm_config(
+            "guestos_vm_kvm.xml",
             HostOSSettings {
                 vm_memory: 490,
                 vm_cpu: "kvm".to_string(),
@@ -248,13 +305,14 @@ mod tests {
             },
             /*enable_trusted_execution_environment=*/ false,
             /*enable_direct_boot=*/ false,
-            "guestos_vm_kvm.xml",
+            GuestVMType::Default,
         );
     }
 
     #[test]
     fn test_generate_vm_config_sev() {
         test_vm_config(
+            "guestos_vm_sev.xml",
             HostOSSettings {
                 vm_memory: 490,
                 vm_cpu: "kvm".to_string(),
@@ -263,7 +321,7 @@ mod tests {
             },
             /*enable_trusted_execution_environment=*/ true,
             /*enable_direct_boot=*/ true,
-            "guestos_vm_sev.xml",
+            GuestVMType::Default,
         );
     }
 
@@ -273,7 +331,7 @@ mod tests {
         let media_path = temp_dir.path().join("config.img");
         let config = create_test_hostos_config();
 
-        let result = assemble_config_media(&config, &media_path);
+        let result = assemble_config_media(&config, GuestVMType::Upgrade, &media_path);
 
         assert!(
             result.is_ok(),
