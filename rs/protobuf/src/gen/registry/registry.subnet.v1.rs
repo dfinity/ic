@@ -333,9 +333,15 @@ pub struct ChainKeyConfig {
     #[prost(uint64, optional, tag = "2")]
     pub signature_request_timeout_ns: ::core::option::Option<u64>,
     /// Key rotation period of a single node in milliseconds.
-    /// If none is specified key rotation is disabled.
+    /// If none is specified, key rotation is disabled.
     #[prost(uint64, optional, tag = "3")]
     pub idkg_key_rotation_period_ms: ::core::option::Option<u64>,
+    /// Maximum number of pre-signature transcripts that can be created inside the
+    /// replicated state.
+    /// If none is specified, pre-signature transcripts are stored in the blocks
+    /// instead.
+    #[prost(uint32, optional, tag = "4")]
+    pub max_pre_signature_transcripts_in_creation: ::core::option::Option<u32>,
 }
 #[derive(
     serde::Serialize,

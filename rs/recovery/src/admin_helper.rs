@@ -207,6 +207,14 @@ impl AdminHelper {
             if let Some(signature_request_timeout_ns) = config.signature_request_timeout_ns {
                 ic_admin.add_argument("signature-request-timeout-ns", signature_request_timeout_ns);
             }
+            if let Some(max_pre_signature_transcripts_in_creation) =
+                config.max_pre_signature_transcripts_in_creation
+            {
+                ic_admin.add_argument(
+                    "max-pre-signature-transcripts-in-creation",
+                    max_pre_signature_transcripts_in_creation,
+                );
+            }
         }
 
         if !replacement_nodes.is_empty() {
@@ -479,6 +487,7 @@ mod tests {
             ],
             signature_request_timeout_ns: Some(123_456),
             idkg_key_rotation_period_ms: Some(321_654),
+            max_pre_signature_transcripts_in_creation: Some(123_654),
         };
         let result = fake_admin_helper_with_neuron_args()
             .get_propose_to_update_recovery_cup_command(
@@ -514,6 +523,7 @@ mod tests {
                 {\"subnet_id\":\"mklno-zzmhy-zutel-oujwg-dzcli-h6nfy-2serg-gnwru-vuwck-hcxit-wqe\",\"key_id\":\"vetkd:Bls12_381_G2:test_key_3\",\"pre_signatures_to_create_in_advance\":\"0\",\"max_queue_size\":\"32\"}]' \
             --idkg-key-rotation-period-ms 321654 \
             --signature-request-timeout-ns 123456 \
+            --max-pre-signature-transcripts-in-creation 123654 \
             --replacement-nodes \"nqpqw-cp42a-rmdsx-fpui3-ncne5-kzq6o-m67an-w25cx-zu636-lcf2v-fqe\" \
             --registry-store-uri https://fake_registry_store_uri.com/ \
             --registry-store-hash fake_registry_store_hash \
