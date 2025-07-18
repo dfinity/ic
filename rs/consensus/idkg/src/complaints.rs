@@ -977,7 +977,7 @@ impl<'a> Action<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{test_utils::*, utils::algorithm_for_key_id};
+    use crate::test_utils::*;
     use assert_matches::assert_matches;
     use ic_consensus_utils::crypto::SignVerify;
     use ic_crypto_test_utils_canister_threshold_sigs::CanisterThresholdSigTestEnvironment;
@@ -1915,7 +1915,7 @@ mod tests {
             with_test_replica_logger(|logger| {
                 let env = CanisterThresholdSigTestEnvironment::new(3, &mut rng);
                 let (_, _, transcript) =
-                    create_corrupted_transcript(&env, &mut rng, algorithm_for_key_id(&key_id));
+                    create_corrupted_transcript(&env, &mut rng, AlgorithmId::from(key_id.inner()));
 
                 let crypto = env
                     .nodes

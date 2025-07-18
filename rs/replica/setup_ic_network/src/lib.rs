@@ -156,11 +156,7 @@ impl Bouncers {
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     ) -> Self {
         let ingress = Arc::new(IngressBouncer::new(time_source.clone()));
-        let consensus = Arc::new(ConsensusBouncer::new(
-            metrics_registry,
-            message_router,
-            state_reader.clone(),
-        ));
+        let consensus = Arc::new(ConsensusBouncer::new(metrics_registry, message_router));
         let dkg = Arc::new(DkgBouncer::new(metrics_registry));
         let certifier = Arc::new(CertifierBouncer::new(
             metrics_registry,

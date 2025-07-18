@@ -139,7 +139,10 @@ install_binary() {
     local DEST=$DEST_FOLDER/$DOWNLOAD_NAME
 
     PLATFORM=$(uname | tr '[[:upper:]]' '[[:lower:]]')
-    curl "https://download.dfinity.systems/ic/${GIT_HASH}/binaries/x86_64-${PLATFORM}/${DOWNLOAD_NAME}.gz" | zcat >"$DEST"
+    local TEMP_GZ=$(mktemp)
+    curl "https://download.dfinity.systems/ic/${GIT_HASH}/binaries/x86_64-${PLATFORM}/${DOWNLOAD_NAME}.gz" -o "$TEMP_GZ"
+    gunzip -c "$TEMP_GZ" >"$DEST"
+    rm "$TEMP_GZ"
 
     chmod +x "$DEST"
 }

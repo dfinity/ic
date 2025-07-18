@@ -25,11 +25,13 @@ use ic_consensus_system_test_utils::upgrade::{
 use ic_consensus_threshold_sig_system_test_utils::run_chain_key_signature_test;
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::util::create_agent;
 use ic_system_test_driver::{
     driver::{test_env::TestEnv, test_env_api::*},
     util::{block_on, MessageCanister},
 };
 use ic_types::SubnetId;
+use ic_utils::interfaces::ManagementCanister;
 use slog::{info, Logger};
 use std::collections::BTreeMap;
 use std::time::Duration;
@@ -168,6 +170,15 @@ pub fn upgrade(
         msg
     ));
     info!(logger, "Could store and read message '{}'", msg);
+
+    // Create canister snapshot before upgrading.
+    block_on(async {
+        let agent = create_agent(subnet_node.get_public_url().as_str())
+            .await
+            .expect("Failed to create agent");
+        let mgr = ManagementCanister::create(&agent);
+        mgr.take_canister_snapshot(&can_id, None).await.unwrap();
+    });
 
     stop_node(&logger, &faulty_node);
 

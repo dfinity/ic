@@ -61,7 +61,7 @@ impl<'a> ICRCLedgerHelper<'a> {
             blocks => {
                 return Err(format!(
                     "Error parsing response from {}.icrc3_get_blocks: expected a single block,
-                 got {} blocks.",
+                     got {} blocks.",
                     self.ledger.canister_id(),
                     blocks.len(),
                 ))
@@ -105,25 +105,41 @@ fn decode_nat_to_u64(value: Nat) -> Result<u64, String> {
     let u64_digit_components = value.0.to_u64_digits();
 
     match &u64_digit_components[..] {
+        [] => Ok(0),
         [val] => Ok(*val),
-        vals => Err(format!(
-            "Error parsing a Nat value `{:?}` to u64: expected a single u64 value, got {:?}",
+        _ => Err(format!(
+            "Nat value `{:?}` is too large, max supported value: {}",
             &value,
-            vals.len(),
+            u64::MAX,
         )),
     }
 }
 
 #[test]
 fn test_decoding_nat() {
-    let num_nat = Nat::from(1234_u64);
-    let decoding_result = decode_nat_to_u64(num_nat.clone());
+    let test_cases = [
+        (Nat::from(0_u64), Ok(0_u64)),
+        (Nat::from(1_u64), Ok(1_u64)),
+        (Nat::from(1234_u64), Ok(1234_u64)),
+        (Nat::from(1_000_000_000_u64), Ok(1_000_000_000_u64)),
+        (Nat::from(u64::MAX), Ok(u64::MAX)),
+        (
+            Nat::from(u64::MAX) + Nat::from(1_u64),
+            Err(format!(
+                "Nat value `Nat(18446744073709551616)` is too large, max supported value: {}",
+                u64::MAX
+            )),
+        ),
+    ];
 
-    assert!(
-        matches!(decoding_result, Ok(value) if value == 1234_u64),
-        "Decoding {:?} to u64 failed",
-        num_nat
-    );
+    for (num_nat, expected) in test_cases {
+        let decoding_result = decode_nat_to_u64(num_nat.clone());
+        assert_eq!(
+            decoding_result, expected,
+            "Decoding {:?} to u64 failed",
+            num_nat
+        );
+    }
 }
 
 #[test]

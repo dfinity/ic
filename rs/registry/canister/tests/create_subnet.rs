@@ -39,7 +39,8 @@ use prost::Message;
 use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder,
     mutations::do_create_subnet::{
-        CreateSubnetPayload, InitialChainKeyConfig, KeyConfig, KeyConfigRequest,
+        CanisterCyclesCostSchedule, CreateSubnetPayload, InitialChainKeyConfig, KeyConfig,
+        KeyConfigRequest,
     },
 };
 use std::convert::TryFrom;
@@ -411,6 +412,8 @@ fn make_create_subnet_payload(node_ids: Vec<NodeId>) -> CreateSubnetPayload {
         ssh_readonly_access: vec![],
         ssh_backup_access: vec![],
         chain_key_config: None,
+        canister_cycles_cost_schedule: Some(CanisterCyclesCostSchedule::Normal),
+
         // Unused section follows
         ingress_bytes_per_block_soft_cap: Default::default(),
         gossip_max_artifact_streams_per_peer: Default::default(),

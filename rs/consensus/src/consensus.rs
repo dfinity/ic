@@ -47,7 +47,7 @@ use ic_interfaces::{
     time_source::TimeSource,
 };
 use ic_interfaces_registry::{RegistryClient, POLLING_PERIOD};
-use ic_interfaces_state_manager::{StateManager, StateReader};
+use ic_interfaces_state_manager::StateManager;
 use ic_logger::{debug, error, info, trace, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
@@ -595,7 +595,6 @@ fn add_to_validated<T: ConsensusMessageHashable>(timestamp: Time, msg: Option<T>
 /// Implements the BouncerFactory interfaces for Consensus.
 pub struct ConsensusBouncer {
     message_routing: Arc<dyn MessageRouting>,
-    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     metrics: BouncerMetrics,
 }
 
@@ -604,12 +603,10 @@ impl ConsensusBouncer {
     pub fn new(
         metrics_registry: &MetricsRegistry,
         message_routing: Arc<dyn MessageRouting>,
-        state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     ) -> Self {
         ConsensusBouncer {
             metrics: BouncerMetrics::new(metrics_registry, "consensus_pool"),
             message_routing,
-            state_reader,
         }
     }
 }
@@ -619,11 +616,7 @@ impl<Pool: ConsensusPool> BouncerFactory<ConsensusMessageId, Pool> for Consensus
     fn new_bouncer(&self, pool: &Pool) -> Bouncer<ConsensusMessageId> {
         let _timer = self.metrics.update_duration.start_timer();
 
-        new_bouncer(
-            pool,
-            self.message_routing.expected_batch_height(),
-            self.state_reader.latest_certified_height(),
-        )
+        new_bouncer(pool, self.message_routing.expected_batch_height())
     }
 
     fn refresh_period(&self) -> Duration {

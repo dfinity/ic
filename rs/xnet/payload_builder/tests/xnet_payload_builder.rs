@@ -26,6 +26,7 @@ use ic_test_utilities_types::ids::{
     NODE_1, NODE_2, NODE_3, NODE_4, NODE_42, NODE_5, SUBNET_1, SUBNET_2, SUBNET_3, SUBNET_4,
     SUBNET_5,
 };
+use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::batch::{ValidationContext, XNetPayload};
 use ic_types::time::UNIX_EPOCH;
 use ic_types::xnet::{
@@ -41,6 +42,8 @@ use ic_xnet_payload_builder::{
 use maplit::btreemap;
 use mockall::predicate::{always, eq};
 use proptest::prelude::*;
+use rand::rngs::StdRng;
+use rand::SeedableRng;
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::sync::{Arc, Mutex};
@@ -69,7 +72,7 @@ impl XNetPayloadBuilderFixture {
     fn new(fixture: StateManagerFixture) -> Self {
         let state_manager = Arc::new(fixture.state_manager);
         let registry = get_registry_for_test();
-        let rng = Arc::new(None);
+        let rng = Arc::new(Some(Mutex::new(StdRng::seed_from_u64(42))));
         let certified_slice_pool = Arc::new(Mutex::new(CertifiedSlicePool::new(
             Arc::clone(&state_manager) as Arc<_>,
             &fixture.metrics,
@@ -83,6 +86,7 @@ impl XNetPayloadBuilderFixture {
             Arc::clone(&state_manager) as Arc<_>,
             registry,
             rng,
+            Some(0), // Always try to add one more slice.
             slice_pool,
             refill_task_handle,
             metrics,
@@ -272,13 +276,20 @@ fn in_slice(
     remote_state_manager.get_partial_slice(OWN_SUBNET, witness_from, msg_from, msg_count)
 }
 
-/// Creates a matching outgoing stream for the given stream and slice begin
-/// index.
-fn out_stream(in_stream: &Stream, messages_begin: StreamIndex) -> Stream {
-    Stream::new(
-        StreamIndexedQueue::with_begin(in_stream.signals_end()),
-        messages_begin,
-    )
+/// Creates an empty stream with the given `messages_begin` and `signals_end`
+/// indices.
+fn out_stream(messages_begin: StreamIndex, signals_end: StreamIndex) -> Stream {
+    Stream::new(StreamIndexedQueue::with_begin(messages_begin), signals_end)
+}
+
+/// Creates a stream with the given `messages_begin` and `signals_end` indices
+/// with one message enqueued.
+fn out_stream_with_message(messages_begin: StreamIndex, signals_end: StreamIndex) -> Stream {
+    let mut stream = out_stream(messages_begin, signals_end);
+    stream.push(ic_types::messages::RequestOrResponse::Request(
+        RequestBuilder::new().build().into(),
+    ));
+    stream
 }
 
 /// Tests that the payload builder does not include messages in a stream slice that
@@ -368,8 +379,8 @@ fn get_xnet_payload_respects_signal_limit(
 #[test_strategy::proptest]
 fn get_xnet_payload_slice_alignment(
     #[strategy(arb_stream_slice(
-        5, // min_size
-        10, // max_size
+        3, // min_size
+        5, // max_size
         0, // min_signal_count
         10, // max_signal_count
     ))]
@@ -393,11 +404,13 @@ fn get_xnet_payload_slice_alignment(
         //  * One with `signals_end` just after `from` (so there's an extra message).
         //  * One with `signals_end` just after `from + msg_count` (so we've already
         //    seen all messages).
-        state_manager = state_manager.with_stream(SUBNET_1, out_stream(&stream, from.decrement()));
-        state_manager = state_manager.with_stream(SUBNET_2, out_stream(&stream, from.increment()));
+        state_manager =
+            state_manager.with_stream(SUBNET_1, out_stream(stream.signals_end(), from.decrement()));
+        state_manager =
+            state_manager.with_stream(SUBNET_2, out_stream(stream.signals_end(), from.increment()));
         state_manager = state_manager.with_stream(
             SUBNET_3,
-            out_stream(&stream, from + (msg_count as u64 + 1).into()),
+            out_stream(stream.signals_end(), from + (msg_count as u64 + 1).into()),
         );
 
         // Create payload builder with the 3 slices pooled.
@@ -452,45 +465,80 @@ fn get_xnet_payload_slice_alignment(
     });
 }
 
+/// Creates an `XNetPayloadBuilderFixture` with two slices pooled; both slices
+/// produce valid header-only slices (by having one new, valid signal).
+fn xnet_payload_builder_with_valid_empty_slices(
+    test_slice1: (Stream, StreamIndex, usize),
+    test_slice2: (Stream, StreamIndex, usize),
+    log: ReplicaLogger,
+) -> (XNetPayloadBuilderFixture, usize, usize) {
+    let (mut stream1, from1, msg_count1) = test_slice1;
+    let (mut stream2, from2, msg_count2) = test_slice2;
+
+    let mut state_manager = StateManagerFixture::local(log.clone());
+
+    // Create a matching outgoing stream with a message within `state_manager` for
+    // each slice.
+    state_manager = state_manager.with_stream(
+        SUBNET_1,
+        out_stream_with_message(stream1.signals_end(), from1),
+    );
+    state_manager = state_manager.with_stream(
+        SUBNET_2,
+        out_stream_with_message(stream2.signals_end(), from2),
+    );
+
+    // Need at least one signal in each slice, so header-only slices are valid.
+    stream1.push_accept_signal();
+    stream2.push_accept_signal();
+
+    // Create payload builder with the 2 slices pooled.
+    let xnet_payload_builder = XNetPayloadBuilderFixture::new(state_manager);
+    let mut slice_bytes = 0;
+    slice_bytes += xnet_payload_builder.pool_slice(SUBNET_1, &stream1, from1, msg_count1, &log);
+    slice_bytes += xnet_payload_builder.pool_slice(SUBNET_2, &stream2, from2, msg_count2, &log);
+
+    // Compute the byte size of the 2 header-only slices.
+    let header_only_slice_1 = in_slice(&stream1, from1, from1, 0, &log);
+    let header_only_slice_2 = in_slice(&stream2, from2, from2, 0, &log);
+    let header_bytes = UnpackedStreamSlice::try_from(header_only_slice_1)
+        .unwrap()
+        .count_bytes()
+        + UnpackedStreamSlice::try_from(header_only_slice_2)
+            .unwrap()
+            .count_bytes();
+
+    (xnet_payload_builder, header_bytes, slice_bytes)
+}
+
 /// Tests payload building with a byte limit just under the total slice
 /// size.
 #[test_strategy::proptest]
-fn get_xnet_payload_byte_limit_exceeded(
+fn get_xnet_payload_just_under_byte_limit(
     #[strategy(arb_stream_slice(
-        10, // min_size
-        15, // max_size
+        1, // min_size
+        3, // max_size
         0, // min_signal_count
         10, // max_signal_count
     ))]
     test_slice1: (Stream, StreamIndex, usize),
     #[strategy(arb_stream_slice(
-        10, // min_size
-        15, // max_size
+        1, // min_size
+        3, // max_size
         0, // min_signal_count
         10, // max_signal_count
     ))]
     test_slice2: (Stream, StreamIndex, usize),
 ) {
-    let (stream1, from1, msg_count1) = test_slice1;
-    let (stream2, from2, msg_count2) = test_slice2;
+    let msg_count1 = test_slice1.2;
+    let msg_count2 = test_slice2.2;
 
     with_test_replica_logger(|log| {
-        let mut state_manager = StateManagerFixture::local(log.clone());
-
-        // Create a matching outgoing stream within `state_manager` for each slice.
-        state_manager = state_manager.with_stream(SUBNET_1, out_stream(&stream1, from1));
-        state_manager = state_manager.with_stream(SUBNET_2, out_stream(&stream2, from2));
-
-        // Create payload builder with the 2 slices pooled.
-        let xnet_payload_builder = XNetPayloadBuilderFixture::new(state_manager);
-        let mut slice_bytes_sum = 0;
-        slice_bytes_sum +=
-            xnet_payload_builder.pool_slice(SUBNET_1, &stream1, from1, msg_count1, &log);
-        slice_bytes_sum +=
-            xnet_payload_builder.pool_slice(SUBNET_2, &stream2, from2, msg_count2, &log);
+        let (xnet_payload_builder, _, slice_bytes) =
+            xnet_payload_builder_with_valid_empty_slices(test_slice1, test_slice2, log);
 
         // Build a payload with a byte limit just under the total size of the 2 slices.
-        let payload = xnet_payload_builder.get_xnet_payload(slice_bytes_sum - 1).0;
+        let payload = xnet_payload_builder.get_xnet_payload(slice_bytes - 1).0;
 
         // Payload should contain 2 slices.
         assert_eq!(
@@ -521,13 +569,81 @@ fn get_xnet_payload_byte_limit_exceeded(
     });
 }
 
+/// Tests payload building with a byte limit somewhere in-between the total size
+/// of the two slices' headers and the total size of the two slices.
+#[test_strategy::proptest]
+fn get_xnet_payload_byte_limit_exceeded(
+    #[strategy(arb_stream_slice(
+        1, // min_size
+        3, // max_size
+        0, // min_signal_count
+        10, // max_signal_count
+    ))]
+    test_slice1: (Stream, StreamIndex, usize),
+    #[strategy(arb_stream_slice(
+        1, // min_size
+        3, // max_size
+        0, // min_signal_count
+        10, // max_signal_count
+    ))]
+    test_slice2: (Stream, StreamIndex, usize),
+    #[strategy(0..100usize)] message_bytes_percentage: usize,
+) {
+    let msg_count1 = test_slice1.2;
+    let msg_count2 = test_slice2.2;
+
+    with_test_replica_logger(|log| {
+        let (xnet_payload_builder, header_bytes, slice_bytes) =
+            xnet_payload_builder_with_valid_empty_slices(test_slice1, test_slice2, log);
+
+        // Build a payload with a byte limit somewhere in-between the size of the
+        // headers and full slice size minus 1 (so one message is always left out).
+        let byte_limit =
+            header_bytes + (slice_bytes - header_bytes - 1) * message_bytes_percentage / 100;
+        let payload = xnet_payload_builder.get_xnet_payload(byte_limit).0;
+
+        // Payload should contain 2 slices.
+        assert_eq!(
+            2,
+            payload.len(),
+            "Expecting 2 slices in payload, got {}",
+            payload.len()
+        );
+        // And between zero and `msg_count1 + msg_count2 - 1` messages.
+        let msg_count: usize = payload
+            .values()
+            .map(|slice| slice.messages().map_or(0, |m| m.len()))
+            .sum();
+        assert!(
+            msg_count < msg_count1 + msg_count2,
+            "Expected fewer than {} + {} messages, got {}",
+            msg_count1,
+            msg_count2,
+            msg_count
+        );
+
+        assert_eq!(
+            metric_vec(&[(&[(LABEL_STATUS, STATUS_SUCCESS)], 1)]),
+            xnet_payload_builder.build_payload_counts()
+        );
+        assert_eq!(
+            HistogramStats {
+                count: 2,
+                sum: msg_count as f64
+            },
+            xnet_payload_builder.slice_messages_stats()
+        );
+        assert_eq!(2, xnet_payload_builder.slice_payload_size_stats().count);
+    });
+}
+
 /// Tests payload building with a byte limit too small even for an empty
 /// slice.
 #[test_strategy::proptest]
 fn get_xnet_payload_byte_limit_too_small(
     #[strategy(arb_stream_slice(
-        10, // min_size
-        15, // max_size
+        0, // min_size
+        3, // max_size
         0, // min_signal_count
         10, // max_signal_count
     ))]
@@ -539,7 +655,8 @@ fn get_xnet_payload_byte_limit_too_small(
         let mut state_manager = StateManagerFixture::local(log.clone());
 
         // Create a matching outgoing stream within `state_manager` for each slice.
-        state_manager = state_manager.with_stream(REMOTE_SUBNET, out_stream(&stream, from));
+        state_manager =
+            state_manager.with_stream(REMOTE_SUBNET, out_stream(stream.signals_end(), from));
 
         // Create payload builder with the slice pooled.
         let xnet_payload_builder = XNetPayloadBuilderFixture::new(state_manager);
@@ -750,14 +867,14 @@ fn system_subnet_stream_throttling(
 fn validate_xnet_payload(
     #[strategy(arb_stream_slice(
         0, // min_size
-        10, // max_size
+        3, // max_size
         0, // min_signal_count
         10, // max_signal_count
     ))]
     test_slice1: (Stream, StreamIndex, usize),
     #[strategy(arb_stream_slice(
         0, // min_size
-        10, // max_size
+        3, // max_size
         0, // min_signal_count
         10, // max_signal_count
     ))]
@@ -771,8 +888,10 @@ fn validate_xnet_payload(
         let mut state_manager = StateManagerFixture::local(log.clone());
 
         // Create a matching outgoing stream within `state_manager` for each slice.
-        state_manager = state_manager.with_stream(SUBNET_1, out_stream(&stream1, from1));
-        state_manager = state_manager.with_stream(SUBNET_2, out_stream(&stream2, from2));
+        state_manager =
+            state_manager.with_stream(SUBNET_1, out_stream(stream1.signals_end(), from1));
+        state_manager =
+            state_manager.with_stream(SUBNET_2, out_stream(stream2.signals_end(), from2));
 
         // Create payload builder with the 2 slices pooled.
         let fixture = XNetPayloadBuilderFixture::new(state_manager);
@@ -850,8 +969,8 @@ enum FakeXNetClientError {
 #[test_strategy::proptest]
 fn refill_pool_empty(
     #[strategy(arb_stream_slice(
-        10, // min_size
-        15, // max_size
+        3, // min_size
+        5, // max_size
         0, // min_signal_count
         10, // max_signal_count
     ))]
@@ -951,8 +1070,8 @@ fn refill_pool_empty(
 #[test_strategy::proptest]
 fn refill_pool_append(
     #[strategy(arb_stream_slice(
-        10, // min_size
-        15, // max_size
+        3, // min_size
+        5, // max_size
         0, // min_signal_count
         10, // max_signal_count
     ))]
@@ -1080,8 +1199,8 @@ fn refill_pool_append(
 #[test_strategy::proptest]
 fn refill_pool_put_invalid_slice(
     #[strategy(arb_stream_slice(
-        10, // min_size
-        15, // max_size
+        3, // min_size
+        5, // max_size
         0, // min_signal_count
         10, // max_signal_count
     ))]
@@ -1179,8 +1298,8 @@ fn refill_pool_put_invalid_slice(
 #[test_strategy::proptest]
 fn refill_pool_append_invalid_slice(
     #[strategy(arb_stream_slice(
-        10, // min_size
-        15, // max_size
+        3, // min_size
+        5, // max_size
         0, // min_signal_count
         10, // max_signal_count
     ))]

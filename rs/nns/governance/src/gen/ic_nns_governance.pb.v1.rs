@@ -427,7 +427,7 @@ pub struct Proposal {
     /// take.
     #[prost(
         oneof = "proposal::Action",
-        tags = "10, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 24, 25, 26, 27"
+        tags = "10, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 24, 25, 26, 27, 28"
     )]
     pub action: ::core::option::Option<proposal::Action>,
 }
@@ -527,6 +527,9 @@ pub mod proposal {
         /// Update the settings of a canister that is controlled by the NNS.
         #[prost(message, tag = "27")]
         UpdateCanisterSettings(super::UpdateCanisterSettings),
+        /// Create a rented subnet.
+        #[prost(message, tag = "28")]
+        FulfillSubnetRentalRequest(super::FulfillSubnetRentalRequest),
     }
 }
 /// Empty message to use in oneof fields that represent empty
@@ -567,7 +570,7 @@ pub struct ManageNeuron {
     pub neuron_id_or_subaccount: ::core::option::Option<manage_neuron::NeuronIdOrSubaccount>,
     #[prost(
         oneof = "manage_neuron::Command",
-        tags = "2, 3, 4, 5, 6, 7, 8, 9, 10, 13, 14, 15, 16, 17"
+        tags = "2, 3, 4, 5, 6, 7, 8, 9, 10, 13, 14, 15, 16, 17, 18"
     )]
     pub command: ::core::option::Option<manage_neuron::Command>,
 }
@@ -1086,6 +1089,37 @@ pub mod manage_neuron {
         pub to_account_identifier:
             ::core::option::Option<::icp_ledger::protobuf::AccountIdentifier>,
     }
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct SetFollowing {
+        #[prost(message, repeated, tag = "1")]
+        pub topic_following: ::prost::alloc::vec::Vec<set_following::FolloweesForTopic>,
+    }
+    /// Nested message and enum types in `SetFollowing`.
+    pub mod set_following {
+        #[derive(
+            candid::CandidType,
+            candid::Deserialize,
+            serde::Serialize,
+            comparable::Comparable,
+            Clone,
+            PartialEq,
+            ::prost::Message,
+        )]
+        pub struct FolloweesForTopic {
+            #[prost(message, repeated, tag = "1")]
+            pub followees: ::prost::alloc::vec::Vec<::ic_nns_common::pb::v1::NeuronId>,
+            #[prost(enumeration = "super::super::Topic", optional, tag = "2")]
+            pub topic: ::core::option::Option<i32>,
+        }
+    }
     /// The ID of the neuron to manage. This can either be a subaccount or a neuron ID.
     #[derive(
         candid::CandidType,
@@ -1141,6 +1175,8 @@ pub mod manage_neuron {
         RefreshVotingPower(RefreshVotingPower),
         #[prost(message, tag = "17")]
         DisburseMaturity(DisburseMaturity),
+        #[prost(message, tag = "18")]
+        SetFollowing(SetFollowing),
     }
 }
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
@@ -1412,6 +1448,12 @@ pub struct ProposalData {
     /// The topic of the proposal.
     #[prost(enumeration = "Topic", optional, tag = "23")]
     pub topic: ::core::option::Option<i32>,
+    /// When a voting power spike is detected, ballots are created using a previous snapshot of the
+    /// voting power, and this field indicates the timestamp at which the snapshot was taken. This
+    /// field should not be set in normal circumstances, and if it is set, it is an indicator that a
+    /// bug might have caused the voting power spike.
+    #[prost(uint64, optional, tag = "24")]
+    pub previous_ballots_timestamp_seconds: ::core::option::Option<u64>,
 }
 /// This structure contains data for settling the Neurons' Fund participation in an SNS token swap.
 #[derive(
@@ -2694,6 +2736,23 @@ pub mod update_canister_settings {
         }
     }
 }
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct FulfillSubnetRentalRequest {
+    #[prost(message, optional, tag = "1")]
+    pub user: ::core::option::Option<::ic_base_types::PrincipalId>,
+    #[prost(message, repeated, tag = "3")]
+    pub node_ids: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
+    #[prost(string, tag = "2")]
+    pub replica_version_id: ::prost::alloc::string::String,
+}
 /// This represents the whole NNS governance system. It contains all
 /// information about the NNS governance system that must be kept
 /// across upgrades of the NNS governance system.
@@ -2969,6 +3028,8 @@ pub mod governance {
         pub not_dissolving_neurons_e8s_buckets_seed: ::std::collections::HashMap<u64, f64>,
         #[prost(map = "uint64, double", tag = "35")]
         pub not_dissolving_neurons_e8s_buckets_ect: ::std::collections::HashMap<u64, f64>,
+        #[prost(uint64, tag = "42")]
+        pub spawning_neurons_count: u64,
         /// Deprecated. Use non_self_authenticating_controller_neuron_subset_metrics instead.
         #[prost(uint64, optional, tag = "36")]
         pub total_voting_power_non_self_authenticating_controller: ::core::option::Option<u64>,

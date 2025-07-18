@@ -11,14 +11,14 @@
 
   tasks:
     - name: Check action
-      fail:
+      ansible.builtin.fail:
         msg: "\"'ic_git_revision' not given.\""
       when: ic_git_revision is not defined
 
     - name: Generate scrape configurations for [host_node_exporter, node_exporter, orchestrator, replica]
       vars:
         ic: "{{ ic_deployment_name }}"
-      uri:
+      ansible.builtin.uri:
         url: "{{ multiservice_discovery_server }}/"
         method: POST
         body_format: json
@@ -35,7 +35,7 @@
     - name: Generate scrape configurations for [boundary_nodes]
       vars:
         ic: "{{ ic_deployment_name }}"
-      uri:
+      ansible.builtin.uri:
         url: "{{ multiservice_discovery_server }}/add_boundary_node"
         method: POST
         body_format: json

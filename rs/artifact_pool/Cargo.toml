@@ -55,4 +55,4 @@ harness = false
 
 [[bin]]
 name = "ic-consensus-pool-util"
-path = "src/bin/consensus_pool_util.rs"
+path = "bin/consensus_pool_util.rs"

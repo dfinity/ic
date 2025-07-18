@@ -58,7 +58,7 @@ pub async fn fetch_update_file_sha256_with_retry(log: &Logger, version_str: &str
 
 pub async fn fetch_update_file_sha256(version_str: &str) -> Result<String, String> {
     let sha_url = get_public_update_image_sha_url(version_str);
-    let tmp_dir = tempfile::tempdir().unwrap().into_path();
+    let tmp_dir = tempfile::tempdir().unwrap().keep();
     let mut tmp_file = tmp_dir.clone();
     tmp_file.push("SHA256.txt");
 

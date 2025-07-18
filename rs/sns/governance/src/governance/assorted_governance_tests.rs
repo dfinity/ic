@@ -4976,6 +4976,18 @@ fn test_list_topics() {
                             ),
                         ),
                     },
+                    NervousSystemFunction {
+                        id: 17,
+                        name: "Register SNS extension".to_string(),
+                        description: Some(
+                            "Proposal to register a new SNS extension.".to_string(),
+                        ),
+                        function_type: Some(
+                            FunctionType::NativeNervousSystemFunction(
+                                Empty {},
+                            ),
+                        ),
+                    },
                 ],
                 custom_functions: vec![],
             },

@@ -557,7 +557,9 @@ fn distribute_rewards_with_stable_neurons() -> BenchResult {
             .unwrap();
     }
 
-    bench_fn(|| governance.distribute_rewards(Tokens::new(10_000_000, 0).unwrap()))
+    bench_fn(|| {
+        governance.distribute_voting_rewards_to_neurons(Tokens::new(10_000_000, 0).unwrap())
+    })
 }
 
 #[bench(raw)]

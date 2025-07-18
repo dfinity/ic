@@ -62,7 +62,6 @@ impl TransactionIdentifier {
             | RequestType::RemoveHotKey { .. }
             | RequestType::Spawn { .. }
             | RequestType::RegisterVote { .. }
-            | RequestType::MergeMaturity { .. }
             | RequestType::StakeMaturity { .. }
             | RequestType::NeuronInfo { .. }
             | RequestType::ListNeurons { .. }

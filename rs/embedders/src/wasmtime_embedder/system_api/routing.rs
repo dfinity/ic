@@ -7,14 +7,14 @@ use ic_error_types::UserError;
 use ic_management_canister_types_private::{
     BitcoinGetBalanceArgs, BitcoinGetBlockHeadersArgs, BitcoinGetCurrentFeePercentilesArgs,
     BitcoinGetUtxosArgs, BitcoinSendTransactionArgs, CanisterIdRecord, CanisterInfoRequest,
-    ClearChunkStoreArgs, ComputeInitialIDkgDealingsArgs, DeleteCanisterSnapshotArgs,
-    ECDSAPublicKeyArgs, InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs,
-    LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs,
-    Payload, ProvisionalTopUpCanisterArgs, ReadCanisterSnapshotDataArgs,
-    ReadCanisterSnapshotMetadataArgs, ReshareChainKeyArgs, SchnorrPublicKeyArgs, SignWithECDSAArgs,
-    SignWithSchnorrArgs, StoredChunksArgs, SubnetInfoArgs, TakeCanisterSnapshotArgs,
-    UninstallCodeArgs, UpdateSettingsArgs, UploadCanisterSnapshotDataArgs,
-    UploadCanisterSnapshotMetadataArgs, UploadChunkArgs, VetKdDeriveKeyArgs, VetKdPublicKeyArgs,
+    ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs, InstallChunkedCodeArgs,
+    InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, MasterPublicKeyId,
+    Method as Ic00Method, NodeMetricsHistoryArgs, Payload, ProvisionalTopUpCanisterArgs,
+    ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs, RenameCanisterArgs,
+    ReshareChainKeyArgs, SchnorrPublicKeyArgs, SignWithECDSAArgs, SignWithSchnorrArgs,
+    StoredChunksArgs, SubnetInfoArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs,
+    UpdateSettingsArgs, UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
+    UploadChunkArgs, VetKdDeriveKeyArgs, VetKdPublicKeyArgs,
 };
 use ic_replicated_state::NetworkTopology;
 use itertools::Itertools;
@@ -197,15 +197,6 @@ pub(super) fn resolve_destination(
                 ChainKeySubnetKind::HoldsEnabledKey,
             )
         }
-        Ok(Ic00Method::ComputeInitialIDkgDealings) => {
-            let args = ComputeInitialIDkgDealingsArgs::decode(payload)?;
-            route_chain_key_message(
-                &args.key_id,
-                network_topology,
-                &Some(args.subnet_id),
-                ChainKeySubnetKind::OnlyHoldsKey,
-            )
-        }
         Ok(Ic00Method::ReshareChainKey) => {
             let args = ReshareChainKeyArgs::decode(payload)?;
             route_chain_key_message(
@@ -337,6 +328,11 @@ pub(super) fn resolve_destination(
                 Ic00Method::UploadCanisterSnapshotData,
                 network_topology,
             )
+        }
+        Ok(Ic00Method::RenameCanister) => {
+            let args = RenameCanisterArgs::decode(payload)?;
+            let canister_id = args.get_canister_id();
+            route_canister_id(canister_id, Ic00Method::RenameCanister, network_topology)
         }
         Err(_) => Err(ResolveDestinationError::MethodNotFound(
             method_name.to_string(),
@@ -548,19 +544,6 @@ mod tests {
         NetworkTopology::default()
     }
 
-    fn compute_initial_idkg_dealings_request(
-        key_id: MasterPublicKeyId,
-        subnet_id: SubnetId,
-    ) -> Vec<u8> {
-        let args = ComputeInitialIDkgDealingsArgs::new(
-            key_id,
-            subnet_id,
-            vec![node_test_id(0)].into_iter().collect(),
-            RegistryVersion::from(100),
-        );
-        Encode!(&args).unwrap()
-    }
-
     fn reshare_chain_key_request(key_id: MasterPublicKeyId, subnet_id: SubnetId) -> Vec<u8> {
         let args = ReshareChainKeyArgs::new(
             key_id,
@@ -758,131 +741,6 @@ mod tests {
     }
 
     #[test]
-    fn resolve_compute_initial_idkg_dealings() {
-        for (network_topology, key_id) in [
-            (network_with_ecdsa_subnets(), ecdsa_master_key_id(1)),
-            (network_with_schnorr_subnets(), schnorr_master_key_id(1)),
-        ] {
-            assert_eq!(
-                resolve_destination(
-                    &network_topology,
-                    &Ic00Method::ComputeInitialIDkgDealings.to_string(),
-                    &compute_initial_idkg_dealings_request(key_id.clone(), subnet_test_id(1)),
-                    subnet_test_id(2),
-                )
-                .unwrap(),
-                PrincipalId::new_subnet_test_id(1)
-            );
-        }
-    }
-
-    #[test]
-    fn resolve_compute_initial_idkg_dealings_key_not_held_error() {
-        for (network_topology, key_id) in [
-            (network_with_ecdsa_subnets(), ecdsa_master_key_id(1)),
-            (network_with_schnorr_subnets(), schnorr_master_key_id(1)),
-        ] {
-            assert_matches!(
-                resolve_destination(
-                    &network_topology,
-                    &Ic00Method::ComputeInitialIDkgDealings.to_string(),
-                    &compute_initial_idkg_dealings_request(key_id.clone(), subnet_test_id(2)),
-                    subnet_test_id(2),
-                )
-                .unwrap_err(),
-                ResolveDestinationError::ChainKeyError(err) => assert_eq!(
-                    err,
-                    format!(
-                        "Requested unknown threshold key {} on subnet {}, subnet has keys: []",
-                        key_id,
-                        subnet_test_id(2),
-                    )
-                )
-            );
-        }
-    }
-
-    #[test]
-    fn resolve_compute_initial_idkg_dealings_unknown_subnet_error() {
-        for (network_topology, key_id) in [
-            (network_with_ecdsa_subnets(), ecdsa_master_key_id(1)),
-            (network_with_schnorr_subnets(), schnorr_master_key_id(1)),
-        ] {
-            assert_matches!(
-                resolve_destination(
-                    &network_topology,
-                    &Ic00Method::ComputeInitialIDkgDealings.to_string(),
-                    &compute_initial_idkg_dealings_request(key_id.clone(), subnet_test_id(3)),
-                    subnet_test_id(2),
-                )
-                .unwrap_err(),
-                ResolveDestinationError::ChainKeyError(err) => assert_eq!(
-                    err,
-                    format!(
-                        "Requested threshold key {} from unknown subnet {}",
-                        key_id,
-                        subnet_test_id(3),
-                    )
-                )
-            );
-        }
-    }
-
-    #[test]
-    fn resolve_compute_initial_idkg_dealings_wrong_subnet_error() {
-        for (network_topology, key_id) in [
-            (network_with_ecdsa_subnets(), ecdsa_master_key_id(1)),
-            (network_with_schnorr_subnets(), schnorr_master_key_id(1)),
-        ] {
-            assert_matches!(
-                    resolve_destination(
-                        &network_topology,
-                        &Ic00Method::ComputeInitialIDkgDealings.to_string(),
-                        // Subnet 2 doesn't have the requested key.
-                        &compute_initial_idkg_dealings_request(key_id.clone(), subnet_test_id(2)),
-                        subnet_test_id(2),
-                    )
-                    .unwrap_err(),
-                    ResolveDestinationError::ChainKeyError(err) => assert_eq!(
-                        err,
-                        format!(
-                            "Requested unknown threshold key {} on subnet {}, subnet has keys: []",
-                            key_id,
-                            subnet_test_id(2),
-                    )
-                )
-            );
-        }
-    }
-
-    #[test]
-    fn resolve_compute_initial_idkg_dealings_subnet_not_found_error() {
-        for (network_topology, key_id) in [
-            (network_with_ecdsa_subnets(), ecdsa_master_key_id(1)),
-            (network_with_schnorr_subnets(), schnorr_master_key_id(1)),
-        ] {
-            assert_matches!(
-                resolve_destination(
-                    &network_topology,
-                    &Ic00Method::ComputeInitialIDkgDealings.to_string(),
-                    // Subnet 3 doesn't exist
-                    &compute_initial_idkg_dealings_request(key_id.clone(), subnet_test_id(3)),
-                    subnet_test_id(2),
-                )
-                .unwrap_err(),
-                ResolveDestinationError::ChainKeyError(err) => assert_eq!(
-                    err,
-                    format!(
-                        "Requested threshold key {} from unknown subnet {}",
-                        key_id,
-                        subnet_test_id(3),
-                    )
-                )
-            );
-        }
-    }
-
-    #[test]
     fn resolve_chain_key_request() {
         for (network_topology, method, payload) in [
             (
@@ -975,25 +833,6 @@ mod tests {
                     &network_topology,
                     &method.to_string(),
                     &payload,
-                    subnet_test_id(1),
-                )
-                .unwrap(),
-                PrincipalId::new_subnet_test_id(0)
-            );
-        }
-    }
-
-    #[test]
-    fn resolve_chain_key_initial_dealings_works_with_disabled_keys() {
-        for (network_topology, key_id) in [
-            (network_with_ecdsa_subnets(), ecdsa_master_key_id(1)),
-            (network_with_schnorr_subnets(), schnorr_master_key_id(1)),
-        ] {
-            assert_eq!(
-                resolve_destination(
-                    &network_topology,
-                    &Ic00Method::ComputeInitialIDkgDealings.to_string(),
-                    &compute_initial_idkg_dealings_request(key_id, subnet_test_id(0)),
                     subnet_test_id(1),
                 )
                 .unwrap(),

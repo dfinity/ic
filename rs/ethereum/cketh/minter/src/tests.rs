@@ -18,25 +18,12 @@ fn test_evm_rpc_id_staging_value() {
 }
 
 mod eth_get_logs {
-    use crate::eth_rpc::{into_nat, Quantity};
-    use crate::numeric::{BlockNumber, LogIndex};
-    use ic_ethereum_types::Address;
+    use evm_rpc_client::{Hex, Hex20, Hex32};
     use std::str::FromStr;
 
     #[test]
-    fn should_convert_quantity_to_nat() {
-        let quantity = Quantity::new(0x4b85a0fcd); //20_272_779_213 wei
-        let nat = into_nat(quantity);
-        assert_eq!(nat.to_string(), "20_272_779_213")
-    }
-
-    #[test]
     fn deserialize_get_logs() {
-        use crate::eth_rpc::*;
-
-        fn hash_from_hex(s: &str) -> Hash {
-            Hash(hex::decode(s).unwrap().try_into().unwrap())
-        }
+        use evm_rpc_client::LogEntry;
 
         let logs: Vec<LogEntry> = serde_json::from_str(r#"[
  {
@@ -45,26 +32,26 @@ mod eth_get_logs {
       "0x2a2607d40f4a6feb97c36e0efd57e0aa3e42e0332af4fceb78f21b7dffcbd657"
     ],
     "data": "0x00000000000000000000000055654e7405fcb336386ea8f36954a211b2cda764000000000000000000000000000000000000000000000000002386f26fc100000000000000000000000000000000000000000000000000000000000000000060000000000000000000000000000000000000000000000000000000000000003f62327071372d71677a7a692d74623564622d72357363692d637736736c2d6e646f756c2d666f7435742d347a7732702d657a6677692d74616a32792d76716500",
-    "blockNumber": "0x3aa4f4",
+    "blockNumber": 3843316,
     "transactionHash": "0x5618f72c485bd98a3df58d900eabe9e24bfaa972a6fe5227e02233fad2db1154",
-    "transactionIndex": "0x6",
+    "transactionIndex": 6,
     "blockHash": "0x908e6b84d26d71421bfaa08e7966e0afcef3883a28a53a0a7a31104caf1e94c2",
-    "logIndex": "0x8",
+    "logIndex": 8,
     "removed": false
   }]"#).unwrap();
         assert_eq!(
             logs,
             vec![LogEntry {
-                address: Address::from_str("0x7e41257f7b5c3dd3313ef02b1f4c864fe95bec2b").unwrap(),
+                address: Hex20::from_str("0x7e41257f7b5c3dd3313ef02b1f4c864fe95bec2b").unwrap(),
                 topics: vec![
-                   FixedSizeData::from_str("0x2a2607d40f4a6feb97c36e0efd57e0aa3e42e0332af4fceb78f21b7dffcbd657").unwrap(),
+                   Hex32::from_str("0x2a2607d40f4a6feb97c36e0efd57e0aa3e42e0332af4fceb78f21b7dffcbd657").unwrap(),
                 ],
-                data: Data(hex::decode("00000000000000000000000055654e7405fcb336386ea8f36954a211b2cda764000000000000000000000000000000000000000000000000002386f26fc100000000000000000000000000000000000000000000000000000000000000000060000000000000000000000000000000000000000000000000000000000000003f62327071372d71677a7a692d74623564622d72357363692d637736736c2d6e646f756c2d666f7435742d347a7732702d657a6677692d74616a32792d76716500").unwrap()),
-                block_number: Some(BlockNumber::new(0x3aa4f4)),
-                transaction_hash: Some(hash_from_hex("5618f72c485bd98a3df58d900eabe9e24bfaa972a6fe5227e02233fad2db1154")),
-                transaction_index: Some(Quantity::new(0x06)),
-                block_hash: Some(hash_from_hex("908e6b84d26d71421bfaa08e7966e0afcef3883a28a53a0a7a31104caf1e94c2")),
-                log_index: Some(LogIndex::from(0x08_u8)),
+                data: Hex::from_str("0x00000000000000000000000055654e7405fcb336386ea8f36954a211b2cda764000000000000000000000000000000000000000000000000002386f26fc100000000000000000000000000000000000000000000000000000000000000000060000000000000000000000000000000000000000000000000000000000000003f62327071372d71677a7a692d74623564622d72357363692d637736736c2d6e646f756c2d666f7435742d347a7732702d657a6677692d74616a32792d76716500").unwrap(),
+                block_number: Some(0x3aa4f4_u32.into()),
+                transaction_hash: Some(Hex32::from_str("0x5618f72c485bd98a3df58d900eabe9e24bfaa972a6fe5227e02233fad2db1154").unwrap()),
+                transaction_index: Some(0x06_u8.into()),
+                block_hash: Some(Hex32::from_str("0x908e6b84d26d71421bfaa08e7966e0afcef3883a28a53a0a7a31104caf1e94c2").unwrap()),
+                log_index: Some(0x08_u8.into()),
                 removed: false,
             }]
         );

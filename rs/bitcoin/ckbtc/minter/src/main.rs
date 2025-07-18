@@ -212,7 +212,8 @@ fn estimate_withdrawal_fee(arg: EstimateFeeArg) -> WithdrawalFee {
         ic_ckbtc_minter::estimate_retrieve_btc_fee(
             &s.available_utxos,
             arg.amount,
-            s.last_fee_per_vbyte[50],
+            s.estimate_median_fee_per_vbyte()
+                .expect("Bitcoin current fee percentiles not retrieved yet."),
         )
     })
 }

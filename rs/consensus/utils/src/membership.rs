@@ -183,6 +183,11 @@ impl Membership {
         &self,
         height: Height,
     ) -> Result<Vec<NodeId>, MembershipError> {
+        // IMPORTANT: if this ever becomes something else, we should make sure that:
+        // 1. Shares from non committee nodes are not included in the payload
+        //    this should be enforced already by the pool validator, though it might
+        //    make sense for the payload builder to check too.
+        // 2. Non replicated request should only be sent to committee nodes.
         self.get_nodes(height)
     }
 

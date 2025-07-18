@@ -5,6 +5,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## Unreleased
 
+### Removed
+- Removed deprecated `MERGE_MATURITY` neuron management operation.
+
+## [2.1.6] - 2025-06-27
+### Added
+- Enhanced transaction search capabilities with database indexing optimizations for improved performance ([#5739](https://github.com/dfinity/ic/pull/5739))
+- Extended search_transactions method in Rosetta client to support filtering by transaction_hash and operation_type ([#5739](https://github.com/dfinity/ic/pull/5739))
+- Optional CLI flag --optimize-search-indexes to enable database indexing optimizations for transaction search ([#5739](https://github.com/dfinity/ic/pull/5739))
+
+### Changed
+- Enhanced test framework to support transfer_from transactions in valid_transactions_strategy ([#5592](https://github.com/dfinity/ic/pull/5592))
+- Marked ICP Rosetta system tests as flaky to address test stability issues ([#5746](https://github.com/dfinity/ic/pull/5746))
+
 ## [2.1.5] - 2025-06-13
 ### Fixed
 - Fixed heartbeat during initial sync to prevent premature watchdog timeouts ([#5293](https://github.com/dfinity/ic/pull/5293))

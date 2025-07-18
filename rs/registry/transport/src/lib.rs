@@ -580,6 +580,7 @@ mod tests {
                 value,
                 version,
                 deletion_marker,
+                timestamp_nanoseconds: 0,
             }
         };
 
@@ -599,6 +600,7 @@ mod tests {
             value: vec![],
             version,
             deletion_marker,
+            timestamp_nanoseconds: 0,
         };
 
         let high_capacity_delete = HighCapacityRegistryValue {

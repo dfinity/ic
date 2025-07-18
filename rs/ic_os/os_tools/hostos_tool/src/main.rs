@@ -1,14 +1,12 @@
-use std::path::Path;
-
 use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand};
-
 use config::{deserialize_config, DEFAULT_HOSTOS_CONFIG_OBJECT_PATH};
 use config_types::{HostOSConfig, Ipv6Config};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{calculate_deterministic_mac, IpVariant, MacAddr6Ext};
 use network::generate_network_config;
 use network::systemd::DEFAULT_SYSTEMD_NETWORK_DIR;
+use std::path::Path;
 use utils::to_cidr;
 
 #[derive(Subcommand)]
@@ -31,7 +29,7 @@ pub enum Commands {
 
 #[derive(Parser)]
 struct HostOSArgs {
-    #[arg(short, long, default_value_t = DEFAULT_HOSTOS_CONFIG_OBJECT_PATH.to_string(), value_name = "FILE")]
+    #[arg(long, default_value_t = DEFAULT_HOSTOS_CONFIG_OBJECT_PATH.to_string(), value_name = "FILE")]
     hostos_config_object_path: String,
 
     #[command(subcommand)]
@@ -42,7 +40,7 @@ pub fn main() -> Result<()> {
     #[cfg(not(target_os = "linux"))]
     {
         eprintln!("ERROR: this only runs on Linux.");
-        std::process::exit(1);
+        std::process::exit(1)
     }
 
     let opts = HostOSArgs::parse();

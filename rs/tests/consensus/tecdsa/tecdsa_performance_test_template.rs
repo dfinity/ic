@@ -68,7 +68,7 @@ use ic_system_test_driver::generic_workload_engine::metrics::{
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{
-    block_on, get_app_subnet_and_node, get_nns_node, MessageCanister,
+    block_on, get_app_subnet_and_node, get_nns_node, MessageCanister, SignerCanister,
 };
 use ic_types::Height;
 use slog::{error, info};
@@ -99,7 +99,14 @@ const PRE_SIGNATURES_TO_CREATE: u32 = 30;
 const MAX_QUEUE_SIZE: u32 = 10;
 const CANISTER_COUNT: usize = 4;
 const SIGNATURE_REQUESTS_PER_SECOND: f64 = 2.5;
-const SCHNORR_MSG_SIZE_BYTES: usize = 2_096_000; // 2MiB minus some message overhead
+
+const SMALL_MSG_SIZE_BYTES: usize = 32;
+#[allow(dead_code)]
+const LARGE_MSG_SIZE_BYTES: usize = 10_484_000; // 10MiB minus some message overhead
+
+// By default, we keep a small message size, to avoid permanent heavy test load.
+// Change to LARGE_MSG_SIZE_BYTES to test large signature requests.
+const MSG_SIZE_BYTES: usize = SMALL_MSG_SIZE_BYTES;
 
 const BENCHMARK_REPORT_FILE: &str = "benchmark/benchmark.json";
 
@@ -236,10 +243,10 @@ pub fn tecdsa_performance_test(
         run_chain_key_signature_test(&nns_canister, &log, &key_id, public_key);
     }
 
-    info!(log, "Step 2: Installing Message canisters");
+    info!(log, "Step 2: Installing Signer canisters");
     let principals = (0..CANISTER_COUNT)
         .map(|_| {
-            block_on(MessageCanister::new_with_cycles(
+            block_on(SignerCanister::new_with_cycles(
                 &app_agent,
                 app_node.effective_canister_id(),
                 u128::MAX,
@@ -250,11 +257,41 @@ pub fn tecdsa_performance_test(
     let mut requests = vec![];
     for principal in principals {
         for key_id in make_key_ids() {
-            requests.push(ChainSignatureRequest::new(
+            // The derivation path can vary either in length or in size of the elements.
+            // For simplicity, we test one derivation element of maximum size. We could
+            // also test a big number of small elements, but this would imply a larger
+            // serialization overhead (as it would include the length of each element),
+            // which we would need to account for in the LARGE_MSG_SIZE_BYTES constant.
+            //
+            // For Schnorr, we test a large message and a keep the derivation path small,
+            // as the latter is tested in ECDSA.
+            //
+            // For VetKD, we can vary either the context size or the input size. For simplicity,
+            // we test a large input size.
+
+            let (method_name, payload) = match key_id.clone() {
+                MasterPublicKeyId::Ecdsa(key_id) => {
+                    ChainSignatureRequest::large_ecdsa_method_and_payload(1, MSG_SIZE_BYTES, key_id)
+                }
+                MasterPublicKeyId::Schnorr(key_id) => {
+                    ChainSignatureRequest::large_schnorr_method_and_payload(
+                        MSG_SIZE_BYTES,
+                        1,
+                        0,
+                        key_id,
+                    )
+                }
+                MasterPublicKeyId::VetKd(key_id) => {
+                    ChainSignatureRequest::large_vetkd_method_and_payload(MSG_SIZE_BYTES, 0, key_id)
+                }
+            };
+
+            requests.push(ChainSignatureRequest {
                 principal,
+                method_name,
                 key_id,
-                SCHNORR_MSG_SIZE_BYTES,
-            ))
+                payload,
+            });
         }
     }
 

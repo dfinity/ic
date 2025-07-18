@@ -17,10 +17,9 @@ use crate::{
     },
     request_types::{
         ChangeAutoStakeMaturityMetadata, DisburseMetadata, FollowMetadata, KeyMetadata,
-        ListNeuronsMetadata, MergeMaturityMetadata, NeuronIdentifierMetadata, NeuronInfoMetadata,
-        PublicKeyOrPrincipal, RegisterVoteMetadata, RequestResultMetadata,
-        SetDissolveTimestampMetadata, SpawnMetadata, StakeMaturityMetadata, Status,
-        STATUS_COMPLETED,
+        ListNeuronsMetadata, NeuronIdentifierMetadata, NeuronInfoMetadata, PublicKeyOrPrincipal,
+        RegisterVoteMetadata, RequestResultMetadata, SetDissolveTimestampMetadata, SpawnMetadata,
+        StakeMaturityMetadata, Status, STATUS_COMPLETED,
     },
     transaction_id::TransactionIdentifier,
 };
@@ -239,14 +238,6 @@ pub fn operations_to_requests(
                         .map(principal_id_from_public_key_or_principal)
                         .transpose()?,
                 )?;
-            }
-            OperationType::MergeMaturity => {
-                let MergeMaturityMetadata {
-                    neuron_index,
-                    percentage_to_merge,
-                } = o.metadata.clone().try_into()?;
-                validate_neuron_management_op()?;
-                state.merge_maturity(account, neuron_index, percentage_to_merge)?;
             }
             OperationType::RegisterVote => {
                 let RegisterVoteMetadata {

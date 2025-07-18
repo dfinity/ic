@@ -6,6 +6,10 @@ edition.workspace = true
 description.workspace = true
 documentation.workspace = true
 
+[lib]
+name = "ic_btc_checker"
+path = "lib/lib.rs"
+
 [[bin]]
 name = "ic-btc-checker-canister"
 path = "src/main.rs"

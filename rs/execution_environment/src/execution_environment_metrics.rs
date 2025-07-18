@@ -7,9 +7,12 @@ use ic_management_canister_types_private as ic00;
 use ic_metrics::buckets::{decimal_buckets, decimal_buckets_with_zero};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeCallId;
-use ic_types::CanisterId;
+use ic_types::canister_http::{CanisterHttpRequestContext, MAX_CANISTER_HTTP_RESPONSE_BYTES};
+use ic_types::messages::Response;
+use ic_types::{CanisterId, Cycles};
 use prometheus::{Histogram, HistogramVec, IntCounter};
 use std::str::FromStr;
+use std::sync::Arc;
 
 pub const FINISHED_OUTCOME_LABEL: &str = "finished";
 pub const SUBMITTED_OUTCOME_LABEL: &str = "submitted";
@@ -57,6 +60,21 @@ pub(crate) struct ExecutionEnvironmentMetrics {
     /// Critical error for attempting to execute new message
     /// while already in progress a long-running message.
     pub(crate) long_execution_already_in_progress: IntCounter,
+
+    /// Metrics for HTTP outcalls costs.
+    /// This is
+    pub(crate) http_outcalls_metrics: HttpOutcallMetrics,
+}
+
+pub(crate) struct HttpOutcallMetrics {
+    pub(crate) old_price: Histogram,
+    pub(crate) new_price: Histogram,
+    pub(crate) price_increase: Histogram,
+    pub(crate) price_decrease: Histogram,
+    pub(crate) price_ratio: Histogram,
+    pub(crate) request_size: Histogram,
+    pub(crate) max_response_bytes: Histogram,
+    pub(crate) payload_size: Histogram,
 }
 
 impl ExecutionEnvironmentMetrics {
@@ -109,6 +127,52 @@ impl ExecutionEnvironmentMetrics {
                 "Total number of intra-subnet messages that exceed the 2 MiB limit for inter-subnet messages."
             ),
             long_execution_already_in_progress: metrics_registry.error_counter("execution_environment_long_execution_already_in_progress"),
+            // The minimum price of an outcall is ~50 million cycles, while the maximum price is ~30 billion.
+            http_outcalls_metrics: HttpOutcallMetrics {
+                old_price: metrics_registry.histogram(
+                    "execution_http_outcalls_old_price",
+                    "Old price of HTTP outcalls, in B cycles.",
+                    // Buckets: 10M, 20M, 50M, 100M, 200M, 500M, 1B, 2B, 5B, 10B, 20B, 50B
+                    decimal_buckets(-2, 1),
+                ),
+                new_price: metrics_registry.histogram(
+                    "execution_http_outcalls_new_price",
+                    "New price of HTTP outcalls, in B cycles.",
+                    decimal_buckets(-2, 1),
+                ),
+                price_increase: metrics_registry.histogram(
+                    "execution_http_outcalls_price_increase",
+                    "Increase in price of HTTP outcalls, in B cycles.",
+                    decimal_buckets(-2, 1),
+                ),
+                price_decrease: metrics_registry.histogram(
+                    "execution_http_outcalls_price_decrease",
+                    "Decrease in price of HTTP outcalls, in B cycles.",
+                    decimal_buckets(-2, 1),
+                ),
+                // The ratio can go from 1/1000 to 1000.
+                price_ratio: metrics_registry.histogram(
+                    "execution_http_outcalls_price_ratio",
+                    "Ratio of new to old price of HTTP outcalls.",
+                    decimal_buckets(-3, 3),
+                ),
+                request_size: metrics_registry.histogram(
+                    "execution_http_outcalls_request_size",
+                    "Size of HTTP outcall requests, in bytes.",
+                    // Buckets: 0B, 1B, 2B, 5B, ... 1MB, 2MB, 5MB
+                    decimal_buckets_with_zero(0, 6),
+                ),
+                max_response_bytes: metrics_registry.histogram(
+                    "execution_http_outcalls_max_response_bytes",
+                    "Maximum size of HTTP outcall responses, in bytes.",
+                    decimal_buckets_with_zero(0, 6),
+                ),
+                payload_size: metrics_registry.histogram(
+                    "execution_http_outcalls_payload_size",
+                    "Size of HTTP outcall payloads, in bytes.",
+                    decimal_buckets_with_zero(0, 6),
+                ),
+            },
         }
     }
 
@@ -152,6 +216,54 @@ impl ExecutionEnvironmentMetrics {
         };
 
         self.observe_message_with_label(method_name, duration, outcome_label, status_label)
+    }
+
+    pub(crate) fn observe_http_outcall_request(
+        &self,
+        context: &CanisterHttpRequestContext,
+        response: &Arc<Response>,
+    ) {
+        self.http_outcalls_metrics
+            .request_size
+            .observe(context.variable_parts_size().get() as f64);
+
+        let max_response_size = match context.max_response_bytes {
+            Some(response_size) => response_size.get(),
+            // Defaults to maximum response size.
+            None => MAX_CANISTER_HTTP_RESPONSE_BYTES,
+        };
+
+        self.http_outcalls_metrics
+            .max_response_bytes
+            .observe(max_response_size as f64);
+
+        self.http_outcalls_metrics
+            .payload_size
+            .observe(response.payload_size_bytes().get() as f64);
+    }
+
+    pub(crate) fn observe_http_outcall_price_change(&self, old_price: Cycles, new_price: Cycles) {
+        self.http_outcalls_metrics
+            .old_price
+            .observe(old_price.get() as f64 / 1_000_000_000.0);
+        self.http_outcalls_metrics
+            .new_price
+            .observe(new_price.get() as f64 / 1_000_000_000.0);
+        if new_price > old_price {
+            self.http_outcalls_metrics
+                .price_increase
+                .observe((new_price - old_price).get() as f64 / 1_000_000_000.0);
+        } else {
+            self.http_outcalls_metrics
+                .price_decrease
+                .observe((old_price - new_price).get() as f64 / 1_000_000_000.0);
+        }
+        if old_price.get() > 0 {
+            // the price is always > 0; just being extra sure we don't panic.
+            self.http_outcalls_metrics
+                .price_ratio
+                .observe(new_price.get() as f64 / old_price.get() as f64);
+        }
     }
 
     /// Helper function to observe the duration and count of subnet messages.
@@ -198,7 +310,8 @@ impl ExecutionEnvironmentMetrics {
                     | ic00::Method::ReadCanisterSnapshotMetadata
                     | ic00::Method::ReadCanisterSnapshotData
                     | ic00::Method::UploadCanisterSnapshotMetadata
-                    | ic00::Method::UploadCanisterSnapshotData => String::from("fast"),
+                    | ic00::Method::UploadCanisterSnapshotData
+                    | ic00::Method::RenameCanister => String::from("fast"),
 
                     // "Slow" management methods that might require several execution
                     // rounds to be completed, either due to using DTS or due to
@@ -212,7 +325,6 @@ impl ExecutionEnvironmentMetrics {
                     | ic00::Method::SignWithECDSA
                     | ic00::Method::SignWithSchnorr
                     | ic00::Method::VetKdDeriveKey
-                    | ic00::Method::ComputeInitialIDkgDealings
                     | ic00::Method::ReshareChainKey
                     | ic00::Method::BitcoinSendTransactionInternal
                     | ic00::Method::BitcoinGetSuccessors => String::from("slow"),

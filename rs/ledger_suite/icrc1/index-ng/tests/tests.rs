@@ -20,6 +20,7 @@ use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc1::transfer::{BlockIndex, TransferArg, TransferError};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
+use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
 use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
 use icrc_ledger_types::icrc3::transactions::{Mint, Transaction, Transfer};
 use num_traits::cast::ToPrimitive;
@@ -149,6 +150,32 @@ fn icrc1_transfer(
         })
 }
 
+fn icrc2_transfer_from(
+    env: &StateMachine,
+    ledger_id: CanisterId,
+    caller: PrincipalId,
+    arg: TransferFromArgs,
+) -> BlockIndex {
+    let req = Encode!(&arg).expect("Failed to encode TransferFromArgs");
+    let res = env
+        .execute_ingress_as(caller, ledger_id, "icrc2_transfer_from", req)
+        .unwrap_or_else(|e| {
+            panic!(
+                "Failed to transfer tokens. caller:{} arg:{:?} error:{}",
+                caller, arg, e
+            )
+        })
+        .bytes();
+    Decode!(&res, Result<BlockIndex, TransferFromError>)
+        .expect("Failed to decode Result<BlockIndex, TransferFromError>")
+        .unwrap_or_else(|e| {
+            panic!(
+                "Failed to transfer tokens. caller:{} arg:{:?} error:{}",
+                caller, arg, e
+            )
+        })
+}
+
 fn apply_arg_with_caller(
     env: &StateMachine,
     ledger_id: CanisterId,
@@ -166,6 +193,12 @@ fn apply_arg_with_caller(
             ledger_id,
             PrincipalId(arg.caller.sender().unwrap()),
             transfer_arg,
+        ),
+        LedgerEndpointArg::TransferFromArg(transfer_from_arg) => icrc2_transfer_from(
+            env,
+            ledger_id,
+            PrincipalId(arg.caller.sender().unwrap()),
+            transfer_from_arg,
         ),
     }
 }

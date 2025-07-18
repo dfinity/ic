@@ -9,18 +9,14 @@ on the process that this file is part of, see
 
 ## Added
 
-## Changed
+* Minor improvements on voting power spike detection mechanism.
 
-* Task execution metrics are added for `neuron_data_validation` and
-  `unstake_maturity_of_dissolved_neurons` timer tasks.
+## Changed
 
 ## Deprecated
 
 ## Removed
 
 ## Fixed
-
-* The `account_identifier_to_disburse_to` in the maturity disbursement now contains a 32-byte
-  address rather than the 28-byte one without checksum.
 
 ## Security

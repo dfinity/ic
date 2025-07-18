@@ -175,9 +175,11 @@ rust_ic_test(
     srcs = ["tests/dts.rs"],
     data = DATA + [
         "//rs/universal_canister/impl:universal_canister.wasm.gz",
+        "//rs/universal_canister/impl:universal_canister_no_heartbeat.wasm.gz",
     ],
     env = ENV | {
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
+        "UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister_no_heartbeat.wasm.gz)",
         "RUST_TEST_THREADS": "4",
     },
     tags = [
@@ -231,7 +233,7 @@ rust_ic_bench(
     srcs = ["benches/system_api/execute_inspect_message.rs"],
     data = DATA,
     env = ENV,
-    with_test = True,
+    test_name = "execute_inspect_message_bench_test",
     deps = ["//rs/execution_environment/benches/lib:execution_environment_bench"] + BENCH_DEPENDENCIES,
 )
 
@@ -240,7 +242,7 @@ rust_ic_bench(
     srcs = ["benches/system_api/execute_query.rs"],
     data = DATA,
     env = ENV,
-    with_test = True,
+    test_name = "execute_query_bench_test",
     deps = ["//rs/execution_environment/benches/lib:execution_environment_bench"] + BENCH_DEPENDENCIES,
 )
 
@@ -249,7 +251,7 @@ rust_ic_bench(
     srcs = ["benches/system_api/execute_update.rs"],
     data = DATA,
     env = ENV,
-    with_test = True,
+    test_name = "execute_update_bench_test",
     deps = ["//rs/execution_environment/benches/lib:execution_environment_bench"] + BENCH_DEPENDENCIES,
 )
 

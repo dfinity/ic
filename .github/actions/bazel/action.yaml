@@ -16,14 +16,6 @@ inputs:
 runs:
   using: "composite"
   steps:
-    # Freshly deployed k8s machines require ownership correctly set
-    # Avoiding: 'Failed to fetch registry file ... /cache/bazel/content_addressable/sha256 (Permission denied)'
-    - name: Prepare worker cache
-      shell: bash
-      run: |
-        if [ -e /cache ]; then
-          sudo find /cache \( -not -user $(id -u) -or -not -group $(id -g) \) -exec chown $(id -u):$(id -g) {} +
-        fi
 
     # Create a known tempdir where build events will be written
     - id: metrics-tmpdir
@@ -73,13 +65,57 @@ runs:
       if: success() || failure()
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ github.job }}-bep
+        # NOTE: github.action provides a unique identify for the artifact name
+        # in case the action is called several times:
+        #   https://docs.github.com/en/actions/reference/accessing-contextual-information-about-workflow-runs#github-context
+        name: ${{ github.job }}-${{ github.action }}-bep
         retention-days: 14
         if-no-files-found: ignore
         compression-level: 9
         path: |
           ${{ steps.metrics-tmpdir.outputs.dir }}/bazel-bep-*.pb.gpg
           ${{ steps.metrics-tmpdir.outputs.dir }}/profile-*.json
+
+
+    # We use execlog2csv to process the proto-based execution logs and convert them
+    # to CSV for easier processing
+    - name: Install execlog2csv
+      shell: bash
+      if: (success() || failure()) && inputs.execlogs-artifact-name != ''
+      run: |
+        cd $(mktemp -d)
+
+        version="0.0.2" # execlog2csv version
+
+        # for more platforms see artifacts list:
+        # https://github.com/dfinity/execlog2csv/releases/latest
+        if [[ $(uname -m) == "x86_64" ]]; then
+          arch="amd64"
+        elif [[ $(uname -m) == "aarch64" ]]; then
+          arch="arm64"
+        else
+          echo "unexpected architecture: '$(uname -m)'"
+          exit 1
+        fi
+
+        if [[ $(uname) == "Linux" ]]; then
+          os="linux"
+        elif [[ $(uname) == "Darwin" ]]; then
+          os="darwin"
+        else
+          echo "unexpected os: '$(uname -m)'"
+          exit 1
+        fi
+
+        filename="execlog2csv_${version}_${os}_${arch}"
+        echo "filename: $filename"
+        dl_url="https://github.com/dfinity/execlog2csv/releases/download/v$version/$filename.zip"
+        echo "downloading '$dl_url'"
+        curl -SLO "$dl_url"
+        unzip "$filename.zip"
+        sudo mv "./execlog2csv_v$version" /usr/local/bin/execlog2csv
+        rm "$filename.zip"
+        execlog2csv --help
 
     - name: Convert execlogs to CSV
       shell: bash
@@ -97,10 +133,9 @@ runs:
         )
         for execlog_zst in $(find '${{ steps.metrics-tmpdir.outputs.dir }}' -name 'execlog-*.zst'); do
           zstd -f -d "$execlog_zst" -o "$execlog"
-          bazel run //bazel:execution_log_compact_to_csv \
-            $([[ "$(uname)" == "Linux" ]] && echo '--repository_cache=/cache/bazel') -- \
+          execlog2csv \
             --input_execlog="$execlog" \
-            --exclude ${excludes[*]}
+            --exclude "${excludes[*]}"
         done > '${{ steps.metrics-tmpdir.outputs.dir }}/execlogs.csv'
 
     - name: Upload execution log

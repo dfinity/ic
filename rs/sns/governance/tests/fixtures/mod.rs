@@ -10,7 +10,7 @@ use ic_sns_governance::{
     governance::{Governance, ValidGovernanceProto},
     pb::v1::{
         get_neuron_response, get_proposal_response,
-        governance::{MaturityModulation, Mode, SnsMetadata, Version},
+        governance::{GovernanceCachedMetrics, MaturityModulation, Mode, SnsMetadata, Version},
         manage_neuron::{
             self, AddNeuronPermissions, MergeMaturity, RegisterVote, RemoveNeuronPermissions,
         },
@@ -450,6 +450,19 @@ impl GovernanceCanisterFixture {
     /// orthogonal to this test scenario, as they would require setting up mock responses.
     pub fn temporarily_disable_sns_upgrades(&mut self) -> &mut Self {
         assert!(self.governance.acquire_upgrade_periodic_task_lock());
+        self
+    }
+
+    /// Ensures that the cached metrics are not updated during the test. Siuable for tests that
+    /// do not care about the cached metrics. Only needs to be called once per test.
+    pub fn disable_update_cached_metrics(&mut self) -> &mut Self {
+        self.governance
+            .proto
+            .metrics
+            .replace(GovernanceCachedMetrics {
+                timestamp_seconds: u64::MAX,
+                ..Default::default()
+            });
         self
     }
 

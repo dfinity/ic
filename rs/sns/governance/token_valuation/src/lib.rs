@@ -12,11 +12,9 @@ use icrc_ledger_types::icrc1::account::Account;
 use mockall::automock;
 use num_traits::cast::ToPrimitive;
 use rust_decimal::Decimal;
-use std::{
-    fmt::Debug,
-    marker::PhantomData,
-    time::{Duration, SystemTime},
-};
+#[cfg(target_arch = "wasm32")]
+use std::time::Duration;
+use std::{fmt::Debug, marker::PhantomData, time::SystemTime};
 
 pub async fn try_get_icp_balance_valuation(account: Account) -> Result<Valuation, ValuationError> {
     let timestamp = now();
@@ -59,7 +57,10 @@ pub async fn try_get_sns_token_balance_valuation(
 }
 
 fn now() -> SystemTime {
-    SystemTime::UNIX_EPOCH + Duration::from_nanos(ic_cdk::api::time())
+    #[cfg(target_arch = "wasm32")]
+    return SystemTime::UNIX_EPOCH + Duration::from_nanos(ic_cdk::api::time());
+    #[cfg(not(target_arch = "wasm32"))]
+    SystemTime::now()
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]

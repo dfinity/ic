@@ -1,4 +1,4 @@
-use ic_base_types::NumSeconds;
+use ic_base_types::{EnvironmentVariables, NumSeconds};
 use ic_btc_replica_types::BitcoinAdapterRequestWrapper;
 use ic_management_canister_types_private::{
     CanisterStatusType, EcdsaCurve, EcdsaKeyId, LogVisibilityV2, MasterPublicKeyId,
@@ -464,6 +464,14 @@ impl SystemStateBuilder {
 
     pub fn wasm_memory_limit(mut self, wasm_memory_limit: Option<NumBytes>) -> Self {
         self.system_state.wasm_memory_limit = wasm_memory_limit;
+        self
+    }
+
+    pub fn environment_variables(
+        mut self,
+        environment_variables: BTreeMap<String, String>,
+    ) -> Self {
+        self.system_state.environment_variables = EnvironmentVariables::new(environment_variables);
         self
     }
 

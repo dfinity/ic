@@ -301,6 +301,20 @@ impl StorageClient {
         storage_operations::get_account_balance_at_highest_block_idx(&open_connection, account)
     }
 
+    // Retrieves the aggregated balance of all subaccounts for a given principal at a specific block height
+    pub fn get_aggregated_balance_for_principal_at_block_idx(
+        &self,
+        principal: &ic_base_types::PrincipalId,
+        block_idx: u64,
+    ) -> anyhow::Result<Nat> {
+        let open_connection = self.storage_connection.lock().unwrap();
+        storage_operations::get_aggregated_balance_for_principal_at_block_idx(
+            &open_connection,
+            principal,
+            block_idx,
+        )
+    }
+
     pub fn get_block_count(&self) -> anyhow::Result<u64> {
         let open_connection = self.storage_connection.lock().unwrap();
         storage_operations::get_block_count(&open_connection)

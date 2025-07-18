@@ -266,34 +266,13 @@ fn compute_min_withdrawal_amount(
 /// None if the Bitcoin canister is unavailable or does not have enough data for
 /// an estimate yet.
 pub async fn estimate_fee_per_vbyte() -> Option<MillisatoshiPerByte> {
-    /// The default fee we use on regtest networks if there are not enough data
-    /// to compute the median fee.
-    const DEFAULT_FEE: MillisatoshiPerByte = 5_000;
-
     let btc_network = state::read_state(|s| s.btc_network);
     match management::get_current_fees(btc_network).await {
         Ok(fees) => {
             if btc_network == Network::Regtest {
-                return Some(DEFAULT_FEE);
+                return state::read_state(|s| s.estimate_median_fee_per_vbyte());
             }
-            if fees.len() >= 100 {
-                state::mutate_state(|s| {
-                    s.last_fee_per_vbyte.clone_from(&fees);
-                    s.fee_based_retrieve_btc_min_amount = compute_min_withdrawal_amount(
-                        fees[50],
-                        s.retrieve_btc_min_amount,
-                        s.check_fee,
-                    );
-                });
-                Some(fees[50])
-            } else {
-                log!(
-                    P0,
-                    "[estimate_fee_per_vbyte]: not enough data points ({}) to compute the fee",
-                    fees.len()
-                );
-                None
-            }
+            state::mutate_state(|s| s.update_median_fee_per_vbyte(fees))
         }
         Err(err) => {
             log!(
@@ -667,8 +646,6 @@ async fn finalize_requests() {
     let key_name = state::read_state(|s| s.ecdsa_key_name.clone());
 
     for (old_txid, submitted_tx) in maybe_finalized_transactions {
-        let mut utxos: BTreeSet<_> = submitted_tx.used_utxos.iter().cloned().collect();
-
         let tx_fee_per_vbyte = match submitted_tx.fee_per_vbyte {
             Some(prev_fee) => {
                 // Ensure that the fee is at least min relay fee higher than the previous
@@ -683,9 +660,9 @@ async fn finalize_requests() {
             .iter()
             .map(|req| (req.address.clone(), req.amount))
             .collect();
-
-        let (unsigned_tx, change_output, used_utxos) = match build_unsigned_transaction(
-            &mut utxos,
+        let input_utxos = submitted_tx.used_utxos;
+        let (unsigned_tx, change_output) = match build_unsigned_transaction_from_inputs(
+            &input_utxos,
             outputs,
             main_address.clone(),
             tx_fee_per_vbyte,
@@ -705,12 +682,6 @@ async fn finalize_requests() {
         };
 
         let outpoint_account = state::read_state(|s| filter_output_accounts(s, &unsigned_tx));
-
-        assert!(
-            utxos.is_empty(),
-            "build_unsigned_transaction didn't use all inputs"
-        );
-        assert_eq!(used_utxos.len(), submitted_tx.used_utxos.len());
 
         let new_txid = unsigned_tx.txid();
 
@@ -756,7 +727,7 @@ async fn finalize_requests() {
                 );
                 let new_tx = state::SubmittedBtcTransaction {
                     requests: submitted_tx.requests,
-                    used_utxos,
+                    used_utxos: input_utxos,
                     txid: new_txid,
                     submitted_at: ic_cdk::api::time(),
                     change_output: Some(change_output),
@@ -1009,13 +980,33 @@ pub enum BuildTxError {
 /// ```
 ///
 pub fn build_unsigned_transaction(
-    minter_utxos: &mut BTreeSet<Utxo>,
+    available_utxos: &mut BTreeSet<Utxo>,
     outputs: Vec<(BitcoinAddress, Satoshi)>,
     main_address: BitcoinAddress,
     fee_per_vbyte: u64,
 ) -> Result<(tx::UnsignedTransaction, state::ChangeOutput, Vec<Utxo>), BuildTxError> {
     assert!(!outputs.is_empty());
+    let amount = outputs.iter().map(|(_, amount)| amount).sum::<u64>();
+    let inputs = utxos_selection(amount, available_utxos, outputs.len());
+    match build_unsigned_transaction_from_inputs(&inputs, outputs, main_address, fee_per_vbyte) {
+        Ok((tx, change)) => Ok((tx, change, inputs)),
+        Err(err) => {
+            // Undo mutation to available_utxos in the error case
+            for utxo in inputs {
+                assert!(available_utxos.insert(utxo));
+            }
+            Err(err)
+        }
+    }
+}
 
+fn build_unsigned_transaction_from_inputs(
+    input_utxos: &[Utxo],
+    outputs: Vec<(BitcoinAddress, Satoshi)>,
+    main_address: BitcoinAddress,
+    fee_per_vbyte: u64,
+) -> Result<(tx::UnsignedTransaction, state::ChangeOutput), BuildTxError> {
+    assert!(!outputs.is_empty());
     /// Having a sequence number lower than (0xffffffff - 1) signals the use of replacement by fee.
     /// It allows us to increase the fee of a transaction already sent to the mempool.
     /// The rbf option is used in `resubmit_retrieve_btc`.
@@ -1024,25 +1015,15 @@ pub fn build_unsigned_transaction(
 
     let amount = outputs.iter().map(|(_, amount)| amount).sum::<u64>();
 
-    let input_utxos = utxos_selection(amount, minter_utxos, outputs.len());
-
     if input_utxos.is_empty() {
         return Err(BuildTxError::NotEnoughFunds);
     }
 
-    // This guard returns the selected UTXOs back to the available_utxos set if
-    // we fail to build the transaction.
-    let utxos_guard = guard(input_utxos, |utxos| {
-        for utxo in utxos {
-            minter_utxos.insert(utxo);
-        }
-    });
-
-    let inputs_value = utxos_guard.iter().map(|u| u.value).sum::<u64>();
+    let inputs_value = input_utxos.iter().map(|u| u.value).sum::<u64>();
 
     debug_assert!(inputs_value >= amount);
 
-    let minter_fee = evaluate_minter_fee(utxos_guard.len() as u64, (outputs.len() + 1) as u64);
+    let minter_fee = evaluate_minter_fee(input_utxos.len() as u64, (outputs.len() + 1) as u64);
 
     let change = inputs_value - amount;
     let change_output = state::ChangeOutput {
@@ -1068,7 +1049,7 @@ pub fn build_unsigned_transaction(
     );
 
     let mut unsigned_tx = tx::UnsignedTransaction {
-        inputs: utxos_guard
+        inputs: input_utxos
             .iter()
             .map(|utxo| tx::UnsignedInput {
                 previous_output: utxo.outpoint.clone(),
@@ -1111,11 +1092,7 @@ pub fn build_unsigned_transaction(
         fee + unsigned_tx.outputs.iter().map(|u| u.value).sum::<u64>()
     );
 
-    Ok((
-        unsigned_tx,
-        change_output,
-        ScopeGuard::into_inner(utxos_guard),
-    ))
+    Ok((unsigned_tx, change_output))
 }
 
 pub fn evaluate_minter_fee(num_inputs: u64, num_outputs: u64) -> Satoshi {

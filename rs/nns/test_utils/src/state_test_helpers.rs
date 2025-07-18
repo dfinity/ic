@@ -62,7 +62,7 @@ use ic_registry_transport::{
     deserialize_get_latest_version_response,
     pb::v1::{
         HighCapacityRegistryGetChangesSinceResponse, HighCapacityRegistryGetValueResponse,
-        RegistryGetChangesSinceRequest, RegistryGetChangesSinceResponse, RegistryGetValueRequest,
+        RegistryGetChangesSinceRequest, RegistryGetValueRequest,
     },
 };
 use ic_sns_governance::pb::v1::{
@@ -149,17 +149,6 @@ pub fn registry_latest_version(state_machine: &StateMachine) -> Result<u64, Stri
     )?;
     deserialize_get_latest_version_response(response)
         .map_err(|e| format!("Could not decode response {e:?}"))
-}
-
-// TODO(NNS1-3679): Replace with high-capacity version.
-pub fn registry_get_changes_since(
-    state_machine: &StateMachine,
-    sender: PrincipalId,
-    version: u64,
-) -> RegistryGetChangesSinceResponse {
-    let result = registry_high_capacity_get_changes_since(state_machine, sender, version);
-
-    RegistryGetChangesSinceResponse::try_from(result).unwrap()
 }
 
 pub fn registry_high_capacity_get_changes_since(

@@ -3,7 +3,6 @@ import argparse
 import hashlib
 import json
 import logging
-import os
 import pathlib
 import subprocess
 import tempfile
@@ -221,10 +220,7 @@ def update_mainnet_revisions_canisters_file(repo_root: pathlib.Path, logger: log
     cmd = [
         "bazel",
         "run",
-        "--config=ci",
     ]
-    if os.environ.get("CI"):
-        cmd.append("--repository_cache=/cache/bazel")
     cmd.append("//rs/nervous_system/tools/sync-with-released-nervous-system-wasms")
 
     logger.info("Running command: %s", " ".join(cmd))

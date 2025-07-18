@@ -143,6 +143,8 @@ rust_library(
     deps = DEPENDENCIES + [
         ":build_script",
         "@crate_index//:canbench-rs",
+        "@crate_index//:rand",
+        "@crate_index//:rand_chacha",
     ],
 )
 

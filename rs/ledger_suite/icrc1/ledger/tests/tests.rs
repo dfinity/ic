@@ -12,7 +12,9 @@ use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_ledger_hash_of::{HashOf, HASH_LENGTH};
 use ic_ledger_suite_state_machine_tests::archiving::icrc_archives;
 use ic_ledger_suite_state_machine_tests::fee_collector::BlockRetrieval;
-use ic_ledger_suite_state_machine_tests::in_memory_ledger::verify_ledger_state;
+use ic_ledger_suite_state_machine_tests::in_memory_ledger::{
+    verify_ledger_state, AllowancesRecentlyPurged,
+};
 use ic_ledger_suite_state_machine_tests::{
     get_all_ledger_and_archive_blocks, send_approval, send_transfer_from, AllowanceProvider,
     ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY, BLOB_META_VALUE, DECIMAL_PLACES, FEE, INT_META_KEY,
@@ -264,6 +266,14 @@ fn encode_upgrade_args() -> LedgerArgument {
 #[test]
 fn test_metadata() {
     ic_ledger_suite_state_machine_tests::test_metadata(ledger_wasm(), encode_init_args)
+}
+
+#[test]
+fn test_icrc3_supported_block_types() {
+    ic_ledger_suite_state_machine_tests::test_icrc3_supported_block_types(
+        ledger_wasm(),
+        encode_init_args,
+    );
 }
 
 #[test]
@@ -607,8 +617,25 @@ fn test_icrc106_set_index_in_install() {
 }
 
 #[test]
+fn test_icrc106_set_index_in_install_with_mainnet_ledger_wasm() {
+    ic_ledger_suite_state_machine_tests::icrc_106::test_icrc106_set_index_in_install_with_mainnet_ledger_wasm(
+        ledger_mainnet_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
 fn test_icrc106_set_index_in_upgrade() {
     ic_ledger_suite_state_machine_tests::icrc_106::test_icrc106_set_index_in_upgrade(
+        ledger_wasm(),
+        encode_init_args,
+        encode_icrc106_upgrade_args,
+    );
+}
+
+#[test]
+fn test_icrc106_set_hardcoded_index_in_upgrade() {
+    ic_ledger_suite_state_machine_tests::icrc_106::test_icrc106_set_hardcoded_index_in_upgrade(
         ledger_wasm(),
         encode_init_args,
         encode_icrc106_upgrade_args,
@@ -1497,7 +1524,7 @@ fn test_icrc3_get_blocks() {
     // multiple ranges
     check_icrc3_get_blocks(vec![(2, 3), (1, 2), (0, 10), (10, 5)]);
 
-    verify_ledger_state::<Tokens>(&env, ledger_id, None);
+    verify_ledger_state::<Tokens>(&env, ledger_id, None, AllowancesRecentlyPurged::Yes);
 }
 
 #[test]

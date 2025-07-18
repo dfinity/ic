@@ -98,8 +98,11 @@ pub(crate) fn check_subnet_invariants(
             system_subnet_count += 1;
         }
     }
-    // There is at least one system subnet
-    if system_subnet_count < 1 {
+    // There is at least one system subnet. Note that we disable this invariant for benchmarks, as
+    // the code to set up "invariants compliant" registry mostly depends on "test-only" code, and
+    // it's very difficult to conform canbench benchmarks to test-only code. It's also risky to move
+    // those "test-only" code towards "non-test-only" code.
+    if system_subnet_count < 1 && !cfg!(feature = "canbench-rs") {
         return Err(InvariantCheckError {
             msg: "no system subnet".to_string(),
             source: None,

@@ -346,7 +346,8 @@ async fn validate_slice() {
             SliceValidationResult::Valid {
                 messages_end: EXPECTED.message_index.increment(),
                 signals_end: EXPECTED.signal_index,
-                byte_size: 1
+                message_count: 1,
+                byte_size: 1,
             },
             validate_slice_with_messages(expected_message, expected_message + 1)
         );
@@ -514,7 +515,8 @@ async fn validate_slice_above_msg_limit() {
             SliceValidationResult::Valid {
                 messages_end: expected_message.into(),
                 signals_end: (signal_index + 1).into(),
-                byte_size: 1
+                message_count: 0,
+                byte_size: 1,
             },
             validate_slice(expected_message, expected_message, signal_index + 1, &state),
         );
@@ -532,7 +534,8 @@ async fn validate_slice_above_msg_limit() {
             SliceValidationResult::Valid {
                 messages_end: (expected_message + 1).into(),
                 signals_end: signal_index.into(),
-                byte_size: 1
+                message_count: 1,
+                byte_size: 1,
             },
             validate_slice(expected_message, expected_message + 1, signal_index, &state),
         );
@@ -603,6 +606,7 @@ async fn validate_slice_above_signal_limit() {
             SliceValidationResult::Valid {
                 messages_end: slice_end.into(),
                 signals_end: SIGNALS_END.into(),
+                message_count: MAX_STREAM_MESSAGES / 2,
                 byte_size: 1,
             }
         );
@@ -616,6 +620,7 @@ async fn validate_slice_above_signal_limit() {
             SliceValidationResult::Valid {
                 messages_end: slice_end.into(),
                 signals_end: SIGNALS_END.into(),
+                message_count: 20,
                 byte_size: 1,
             }
         );

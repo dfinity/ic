@@ -1,0 +1,44 @@
+name: Upload Artifacts
+description: |
+  Run an artifact upload command and set a step summary. This expects the upload command to write one line per artifact to stdout.
+inputs:
+  credentials-content:
+    required: true
+  upload-command:
+    required: true
+  name:
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Write AWS credentials
+      shell: bash
+      run: |
+        credentials_dir="${HOME}/.aws/credentials"
+        if ! [ -e "$credentials_dir" ]; then
+          echo "writing credentials"
+          mkdir -p "$(dirname "${credentials_dir}")"
+          echo '${{ inputs.credentials-content }}' >"$credentials_dir"
+        fi
+
+    - name: Upload to S3
+      uses: ./.github/actions/bazel
+      with:
+        run: |
+          echo uploading artifacts to remote storage
+          upload_output=$(mktemp) # used in summary
+
+          ${{ inputs.upload-command }} >"$upload_output"
+
+          n_uploaded=$(wc -l <"$upload_output")
+          echo "'$n_uploaded' artifacts uploaded"
+
+          # the upload list can get quite big, so we wrap it in details/summary
+          {
+            echo '<details><summary>Uploaded '"$n_uploaded"' Artifacts for ${{ inputs.name }}</summary>';
+            cat "$upload_output"
+            echo '</details>';
+          } >>"$GITHUB_STEP_SUMMARY"
+
+          rm "$upload_output"

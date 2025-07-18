@@ -233,7 +233,8 @@ rust_ic_bench(
     compile_data = glob(["benches/test-data/*"]),
     data = DATA + UNIVERSAL_CANISTER_TEST_DEPS,
     env = ENV | UNIVERSAL_CANISTER_TEST_ENV,
-    with_test = True,
+    test_name = "compilation_bench_test",
+    test_timeout = "long",
     deps = [
         ":embedders",
         ":embedders_bench",

@@ -26,6 +26,11 @@ Success::
     . module_hash is absent for empty canisters;
     . module_hash is a blob for non-empty canisters;
     . controllers are always present for existing canisters and consist of a list of principals
+. Read state requests for the full paths /request_status/R/status and /request_status/R/reply succeed
+. Read state requests for the path /request_status/R are rejected with 403 if signed by a different
+  principal than who made the original request with request ID R;
+. Read state requests for two paths /request_status/R and /request_status/S with two different request
+  IDs R and S are rejected with 400 (while requesting each of the two paths in isolation would succeed);
 
 end::catalog[] */
 
@@ -33,14 +38,18 @@ use std::collections::BTreeSet;
 
 use anyhow::Result;
 use assert_matches::assert_matches;
+use candid::{Encode, Principal};
 use canister_test::{Canister, Wasm};
+use ic_agent::agent::CallResponse;
 use ic_agent::hash_tree::Label;
 use ic_agent::identity::AnonymousIdentity;
-use ic_agent::{lookup_value, Agent, AgentError, Certificate, Identity};
+use ic_agent::{lookup_value, Agent, AgentError, Certificate, Identity, RequestId};
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
+use ic_message::ForwardParams;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::util::{
     agent_with_identity, block_on, get_identity, random_ed25519_identity, runtime_from_url,
+    MessageCanister,
 };
 use ic_system_test_driver::{
     driver::{
@@ -53,7 +62,47 @@ use ic_system_test_driver::{
 };
 use ic_types::{CanisterId, PrincipalId};
 use slog::info;
-use wabt_tests::with_custom_sections;
+
+/// Encodes an unsigned integer into its binary representation using `leb128`.
+fn enc_leb128(x: usize) -> Vec<u8> {
+    let mut buf = [0; 1024];
+    let mut writable = &mut buf[..];
+    let num_bytes =
+        leb128::write::unsigned(&mut writable, x.try_into().unwrap()).expect("Should write number");
+    buf[..num_bytes].to_vec()
+}
+
+struct CustomSection {
+    name: Vec<u8>,
+    content: Vec<u8>,
+}
+
+/// Encodes a WASM custom section with a given name and content into its binary representation,
+/// following the WebAssembly standard: https://webassembly.github.io/spec/core/binary/modules.html#custom-section
+fn encode_custom_section(custom_section: CustomSection) -> Vec<u8> {
+    let mut name = custom_section.name;
+    let mut content = custom_section.content;
+    let mut name_len_leb128 = enc_leb128(name.len());
+    let mut section_len_leb128 = enc_leb128(name_len_leb128.len() + name.len() + content.len());
+    let mut buf = vec![0x00]; // Custom sections have the id 0.
+    buf.append(&mut section_len_leb128);
+    buf.append(&mut name_len_leb128);
+    buf.append(&mut name);
+    buf.append(&mut content);
+    buf
+}
+
+/// Creates a valid WASM binary with the provided custom sections.
+fn wasm_with_custom_sections(custom_sections: Vec<CustomSection>) -> Wasm {
+    // We start with the trivial WASM represented as `(module)` in the WebAssembly textual representation (WAT)
+    let mut buf = vec![0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00];
+    // and append the binary representations of the individual custom sections
+    // (which are self-contained and can thus be simply appended).
+    for custom_section in custom_sections {
+        buf.append(&mut encode_custom_section(custom_section));
+    }
+    Wasm::from_bytes(buf)
+}
 
 /// Sets up a testnet with
 /// 1. System subnet with a single node
@@ -255,11 +304,6 @@ fn test_invalid_path_rejected(env: TestEnv) {
     }
 }
 
-/// Create a wasm with custom metadata sections
-fn wasm_with_custom_sections(sections: Vec<(Vec<u8>, Vec<u8>)>) -> Wasm {
-    Wasm::from_bytes(with_custom_sections(sections))
-}
-
 /// Look up the value of the given metadata section for the given canister
 fn lookup_metadata(
     env: &TestEnv,
@@ -310,8 +354,9 @@ fn test_metadata_path(env: TestEnv) {
         metadata_sections
             .iter()
             .cloned()
-            .map(|(section_name, content)| {
-                ([b"icp:public ".to_vec(), section_name].concat(), content)
+            .map(|(section_name, content)| CustomSection {
+                name: [b"icp:public ".to_vec(), section_name].concat(),
+                content,
             })
             .collect(),
     );
@@ -321,8 +366,9 @@ fn test_metadata_path(env: TestEnv) {
         metadata_sections
             .iter()
             .cloned()
-            .map(|(section_name, content)| {
-                ([b"icp:private ".to_vec(), section_name].concat(), content)
+            .map(|(section_name, content)| CustomSection {
+                name: [b"icp:private ".to_vec(), section_name].concat(),
+                content,
             })
             .collect(),
     );
@@ -457,6 +503,104 @@ fn test_module_hash_and_controllers<F>(
     );
 }
 
+/// Make an update call by forwarding a "raw_rand" request through the message canister
+fn make_update_call(agent: &Agent, canister_id: &Principal) -> (RequestId, Vec<u8>) {
+    let update = agent
+        .update(canister_id, "forward")
+        .with_arg(
+            Encode!(&ForwardParams {
+                receiver: Principal::management_canister(),
+                method: "raw_rand".to_string(),
+                cycles: u64::MAX.into(),
+                payload: Encode!().unwrap(),
+            })
+            .unwrap(),
+        )
+        .sign()
+        .unwrap();
+
+    let request_id = update.request_id;
+    let CallResponse::Response(result) =
+        block_on(agent.update_signed(*canister_id, update.signed_update)).unwrap()
+    else {
+        panic!("Failed to get response");
+    };
+
+    (request_id, result)
+}
+
+fn test_request_path(env: TestEnv) {
+    let node = get_first_app_node(&env);
+    let effective_canister_id = node.effective_canister_id();
+    let agent = node.build_default_agent();
+
+    let canister_id = block_on(async {
+        let mcan = MessageCanister::new_with_cycles(&agent, effective_canister_id, u128::MAX).await;
+        mcan.canister_id()
+    });
+
+    let (request_id, result) = make_update_call(&agent, &canister_id);
+
+    // Status should be "replied"
+    let status_path = vec![
+        "request_status".into(),
+        (*request_id).into(),
+        "status".into(),
+    ];
+    let cert = read_state(&env, vec![status_path.clone()]).unwrap();
+    let value = lookup_value(&cert, status_path).unwrap();
+    assert_eq!(
+        String::from("replied"),
+        String::from_utf8(value.to_vec()).unwrap()
+    );
+
+    let reply_path = vec![
+        "request_status".into(),
+        (*request_id).into(),
+        "reply".into(),
+    ];
+    let cert = read_state(&env, vec![reply_path.clone()]).unwrap();
+    let value = lookup_value(&cert, reply_path).unwrap();
+    // Sanity check that at least 32 bytes were returned
+    assert!(value.len() > 32);
+    assert_eq!(value.to_vec(), result);
+}
+
+fn test_request_path_access(env: TestEnv) {
+    let node = get_first_app_node(&env);
+    let effective_canister_id = node.effective_canister_id();
+    let agent = node.build_default_agent();
+
+    let canister_id = block_on(async {
+        let mcan = MessageCanister::new_with_cycles(&agent, effective_canister_id, u128::MAX).await;
+        mcan.canister_id()
+    });
+
+    let (request_id1, _) = make_update_call(&agent, &canister_id);
+    let (request_id2, _) = make_update_call(&agent, &canister_id);
+
+    for request_id in [request_id1, request_id2] {
+        let paths = vec![vec!["request_status".into(), (*request_id).into()]];
+
+        // Lookup should succeed for default identity
+        let result = read_state_with_identity(&env, paths.clone(), get_identity());
+        assert!(result.is_ok());
+
+        // Lookup should fail for identity that didn't make the request
+        let result = read_state_with_identity(&env, paths, random_ed25519_identity());
+        assert_matches!(result, Err(AgentError::HttpError(payload)) if payload.status == 403);
+    }
+
+    let (request_id2, _) = make_update_call(&agent, &canister_id);
+    // Reading both requests at the same time should fail
+    let paths = vec![
+        vec!["request_status".into(), (*request_id1).into()],
+        vec!["request_status".into(), (*request_id2).into()],
+    ];
+    let result = read_state_with_identity(&env, paths.clone(), get_identity());
+    assert_matches!(result, Err(AgentError::HttpError(payload)) if payload.status == 400);
+}
+
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
@@ -468,6 +612,8 @@ fn main() -> Result<()> {
         .add_test(systest!(test_invalid_path_rejected))
         .add_test(systest!(test_metadata_path))
         .add_test(systest!(test_canister_path))
+        .add_test(systest!(test_request_path))
+        .add_test(systest!(test_request_path_access))
         .execute_from_args()?;
     Ok(())
 }

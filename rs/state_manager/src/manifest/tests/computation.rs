@@ -4,7 +4,7 @@ use crate::manifest::{
     hash::ManifestHash, manifest_hash, manifest_hash_v1, manifest_hash_v2, meta_manifest_hash,
     validate_chunk, validate_manifest, validate_manifest_internal_consistency,
     validate_meta_manifest, validate_sub_manifest, ChunkValidationError, DiffScript, ManifestDelta,
-    ManifestMetrics, ManifestValidationError, StateSyncVersion, DEFAULT_CHUNK_SIZE,
+    ManifestMetrics, ManifestValidationError, RehashManifest, StateSyncVersion, DEFAULT_CHUNK_SIZE,
     MAX_FILE_SIZE_TO_GROUP,
 };
 use crate::state_sync::types::{
@@ -295,6 +295,7 @@ fn test_simple_manifest_computation() {
             &CheckpointLayout::new_untracked(root.to_path_buf(), Height::new(0)).unwrap(),
             1024,
             None,
+            RehashManifest::No,
         )
         .expect("failed to compute manifest");
 
@@ -312,6 +313,7 @@ fn test_simple_manifest_computation() {
                 &CheckpointLayout::new_untracked(root.to_path_buf(), Height::new(0)).unwrap(),
                 1024,
                 None,
+                RehashManifest::No,
             )
             .expect("failed to compute manifest");
 
@@ -354,6 +356,7 @@ fn test_manifest_computation_skips_marker_file() {
         &CheckpointLayout::new_untracked(root.to_path_buf(), Height::new(0)).unwrap(),
         1024,
         None,
+        RehashManifest::No,
     )
     .expect("failed to compute manifest");
 
@@ -367,6 +370,7 @@ fn test_manifest_computation_skips_marker_file() {
         &CheckpointLayout::new_untracked(root.to_path_buf(), Height::new(0)).unwrap(),
         1024,
         None,
+        RehashManifest::No,
     )
     .expect("failed to compute manifest");
     // The manifest computation should ignore the marker files and produce identical manifest.
@@ -745,6 +749,7 @@ fn test_diff_manifest() {
         &CheckpointLayout::new_untracked(root.to_path_buf(), Height::new(0)).unwrap(),
         1024 * 1024,
         None,
+        RehashManifest::No,
     )
     .expect("failed to compute manifest");
 
@@ -761,6 +766,7 @@ fn test_diff_manifest() {
         &CheckpointLayout::new_untracked(root.to_path_buf(), Height::new(0)).unwrap(),
         1024 * 1024,
         None,
+        RehashManifest::No,
     )
     .expect("failed to compute manifest");
 
@@ -813,6 +819,7 @@ fn test_filter_all_zero_chunks() {
         &CheckpointLayout::new_untracked(root.to_path_buf(), Height::new(0)).unwrap(),
         1024 * 1024,
         None,
+        RehashManifest::No,
     )
     .expect("failed to compute manifest");
 
@@ -930,6 +937,7 @@ fn test_hash_plan() {
         &CheckpointLayout::new_untracked(root.to_path_buf(), Height::new(0)).unwrap(),
         max_chunk_size,
         None,
+        RehashManifest::No,
     )
     .expect("failed to compute manifest");
 
@@ -947,6 +955,7 @@ fn test_hash_plan() {
         &CheckpointLayout::new_untracked(root.to_path_buf(), Height::new(0)).unwrap(),
         max_chunk_size,
         None,
+        RehashManifest::No,
     )
     .expect("failed to compute manifest");
 
@@ -1121,6 +1130,7 @@ fn test_dirty_pages_to_dirty_chunks_accounts_for_hardlinks() {
         &CheckpointLayout::new_untracked(checkpoint0.to_path_buf(), Height::new(0)).unwrap(),
         max_chunk_size,
         None,
+        RehashManifest::No,
     )
     .expect("failed to compute manifest");
     let dirty_chunks = dirty_pages_to_dirty_chunks(
@@ -1301,6 +1311,7 @@ fn test_file_index_independent_file_hash() {
             &CheckpointLayout::new_untracked(root.to_path_buf(), Height::new(0)).unwrap(),
             1024,
             None,
+            RehashManifest::No,
         )
         .expect("failed to compute manifest");
 

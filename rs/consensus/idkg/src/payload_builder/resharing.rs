@@ -189,7 +189,6 @@ mod tests {
             create_reshare_request, set_up_idkg_payload, TestIDkgBlockReader,
             TestIDkgTranscriptBuilder,
         },
-        utils::algorithm_for_key_id,
     };
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::{
@@ -200,7 +199,10 @@ mod tests {
     use ic_management_canister_types_private::ComputeInitialIDkgDealingsResponse;
     use ic_test_utilities_consensus::idkg::*;
     use ic_test_utilities_types::ids::subnet_test_id;
-    use ic_types::consensus::idkg::{IDkgMasterPublicKeyId, IDkgPayload};
+    use ic_types::{
+        consensus::idkg::{IDkgMasterPublicKeyId, IDkgPayload},
+        crypto::AlgorithmId,
+    };
 
     fn set_up(
         key_ids: Vec<IDkgMasterPublicKeyId>,
@@ -248,7 +250,7 @@ mod tests {
             initial_dealings.insert(
                 i,
                 dummy_initial_idkg_dealing_for_tests(
-                    algorithm_for_key_id(key_id),
+                    AlgorithmId::from(key_id.inner()),
                     &mut reproducible_rng(),
                 ),
             );
@@ -324,7 +326,10 @@ mod tests {
                 .ongoing_xnet_reshares
                 .get(&request)
                 .expect("should exist");
-            assert_eq!(params.as_ref().algorithm_id, algorithm_for_key_id(&key_id));
+            assert_eq!(
+                params.as_ref().algorithm_id,
+                AlgorithmId::from(key_id.inner())
+            );
 
             assert!(payload.xnet_reshare_agreements.is_empty());
         }
@@ -348,14 +353,17 @@ mod tests {
                 .ongoing_xnet_reshares
                 .get(&request)
                 .expect("should exist");
-            assert_eq!(params.as_ref().algorithm_id, algorithm_for_key_id(&key_id));
+            assert_eq!(
+                params.as_ref().algorithm_id,
+                AlgorithmId::from(key_id.inner())
+            );
             let params_2 = payload
                 .ongoing_xnet_reshares
                 .get(&request_2)
                 .expect("should exist");
             assert_eq!(
                 params_2.as_ref().algorithm_id,
-                algorithm_for_key_id(&key_id)
+                AlgorithmId::from(key_id.inner())
             );
             assert!(payload.xnet_reshare_agreements.is_empty());
         }
@@ -426,7 +434,10 @@ mod tests {
             .unwrap()
             .as_ref()
             .clone();
-        assert_eq!(reshare_params_1.algorithm_id, algorithm_for_key_id(&key_id));
+        assert_eq!(
+            reshare_params_1.algorithm_id,
+            AlgorithmId::from(key_id.inner())
+        );
         let dealings_1 = dummy_dealings(reshare_params_1.transcript_id, &reshare_params_1.dealers);
         transcript_builder.add_dealings(reshare_params_1.transcript_id, dealings_1.clone());
         update_completed_reshare_requests(
@@ -460,7 +471,10 @@ mod tests {
             .unwrap()
             .as_ref()
             .clone();
-        assert_eq!(reshare_params_2.algorithm_id, algorithm_for_key_id(&key_id));
+        assert_eq!(
+            reshare_params_2.algorithm_id,
+            AlgorithmId::from(key_id.inner())
+        );
         let dealings_2 = dummy_dealings(reshare_params_2.transcript_id, &reshare_params_2.dealers);
         transcript_builder.add_dealings(reshare_params_2.transcript_id, dealings_2.clone());
         update_completed_reshare_requests(

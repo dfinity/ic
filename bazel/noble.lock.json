@@ -1669,6 +1669,36 @@
 			"arch": "amd64",
 			"dependencies": [
 				{
+					"key": "liblzma5_5.6.1-p-really5.4.5-1build0.1_amd64",
+					"name": "liblzma5",
+					"version": "5.6.1+really5.4.5-1build0.1"
+				},
+				{
+					"key": "libc6_2.39-0ubuntu8.3_amd64",
+					"name": "libc6",
+					"version": "2.39-0ubuntu8.3"
+				},
+				{
+					"key": "libgcc-s1_14-20240412-0ubuntu1_amd64",
+					"name": "libgcc-s1",
+					"version": "14-20240412-0ubuntu1"
+				},
+				{
+					"key": "gcc-14-base_14-20240412-0ubuntu1_amd64",
+					"name": "gcc-14-base",
+					"version": "14-20240412-0ubuntu1"
+				}
+			],
+			"key": "xz-utils_5.6.1-p-really5.4.5-1build0.1_amd64",
+			"name": "xz-utils",
+			"sha256": "d9e9aa167ef1108f81c7007917b35c7a1edc09c49752ccd4558f03dc2a044b11",
+			"url": "https://snapshot.ubuntu.com/ubuntu/20240923T000000Z/pool/main/x/xz-utils/xz-utils_5.6.1+really5.4.5-1build0.1_amd64.deb",
+			"version": "5.6.1+really5.4.5-1build0.1"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [
+				{
 					"key": "zlib1g_1-1.3.dfsg-3.1ubuntu2.1_amd64",
 					"name": "zlib1g",
 					"version": "1:1.3.dfsg-3.1ubuntu2.1"

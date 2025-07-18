@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "MAINNET_ENV", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "MAINNET_ENV", "MESSAGE_CANISTER_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -27,7 +27,7 @@ rust_library(
     ],
 )
 
-BACKUP_RUNTIME_DEPS = UNIVERSAL_CANISTER_RUNTIME_DEPS + [
+BACKUP_RUNTIME_DEPS = MESSAGE_CANISTER_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS + [
     # Keep sorted.
     "//rs/backup:ic-backup",
     "//rs/canister_sandbox:canister_sandbox",
@@ -36,7 +36,7 @@ BACKUP_RUNTIME_DEPS = UNIVERSAL_CANISTER_RUNTIME_DEPS + [
     "//rs/replay:ic-replay",
 ]
 
-BACKUP_ENV = UNIVERSAL_CANISTER_ENV | {
+BACKUP_ENV = MESSAGE_CANISTER_ENV | UNIVERSAL_CANISTER_ENV | {
     "IC_BACKUP_PATH": "$(rootpath //rs/backup:ic-backup)",
     "IC_REPLAY_PATH": "$(rootpath //rs/replay:ic-replay)",
     "COMPILER_SANDBOX_PATH": "$(rootpath //rs/canister_sandbox:compiler_sandbox)",
@@ -52,7 +52,6 @@ system_test_nns(
         "experimental_system_test_colocation",
         "long_test",  # since it takes longer than 5 minutes.
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",  # this test often times out with the default 15 minute timeout so we allow more time
     uses_guestos_dev_test = True,
     runtime_deps =
@@ -75,7 +74,6 @@ system_test_nns(
         "experimental_system_test_colocation",
         "long_test",  # since it takes longer than 5 minutes.
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",  # this test often times out with the default 15 minute timeout so we allow more time
     uses_guestos_dev_test = True,
     runtime_deps =

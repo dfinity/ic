@@ -1,21 +1,19 @@
-use crate::eth_rpc::{Data, FixedSizeData, Hash, LogEntry, Quantity, HEADER_SIZE_LIMIT};
-use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
+use crate::eth_rpc::Hash;
 use crate::lifecycle::EthereumNetwork;
 use crate::logs::{PrintProxySink, INFO, TRACE_HTTP};
-use crate::numeric::{BlockNumber, GasAmount, LogIndex, TransactionCount, WeiPerGas};
+use crate::numeric::TransactionCount;
 use crate::state::State;
 use candid::Nat;
 use evm_rpc_client::{
     Block, BlockTag, ConsensusStrategy, EthSepoliaService, EvmRpcClient, FeeHistory,
-    FeeHistoryArgs, GetLogsArgs, GetTransactionCountArgs as EvmGetTransactionCountArgs, Hex20,
-    HttpOutcallError, IcRuntime, LogEntry as EvmLogEntry, MultiRpcResult as EvmMultiRpcResult,
-    Nat256, OverrideRpcConfig, RpcConfig as EvmRpcConfig, RpcError, RpcService as EvmRpcService,
-    RpcServices as EvmRpcServices, SendRawTransactionStatus,
-    TransactionReceipt as EvmTransactionReceipt, ValidationError,
+    FeeHistoryArgs, GetLogsArgs, GetLogsRpcConfig as EvmGetLogsRpcConfig,
+    GetTransactionCountArgs as EvmGetTransactionCountArgs, Hex20, HttpOutcallError, IcRuntime,
+    LogEntry, MultiRpcResult as EvmMultiRpcResult, Nat256, OverrideRpcConfig,
+    RpcConfig as EvmRpcConfig, RpcError, RpcService as EvmRpcService,
+    RpcServices as EvmRpcServices, SendRawTransactionStatus, TransactionReceipt, ValidationError,
 };
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
-use num_traits::ToPrimitive;
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::Infallible;
 use std::fmt::{Debug, Display};
@@ -25,6 +23,12 @@ pub mod responses;
 #[cfg(test)]
 mod tests;
 
+// This constant is our approximation of the expected header size.
+// The HTTP standard doesn't define any limit, and many implementations limit
+// the headers size to 8 KiB. We chose a lower limit because headers observed on most providers
+// fit in the constant defined below, and if there is spike, then the payload size adjustment
+// should take care of that.
+const HEADER_SIZE_LIMIT: u64 = 2 * 1024;
 // We expect most of the calls to contain zero events.
 const ETH_GET_LOGS_INITIAL_RESPONSE_SIZE_ESTIMATE: u64 = 100;
 const TOTAL_NUMBER_OF_PROVIDERS: u8 = 4;
@@ -36,6 +40,13 @@ pub struct EthRpcClient {
 
 impl EthRpcClient {
     pub fn from_state(state: &State) -> Self {
+        fn rpc_config(strategy: ConsensusStrategy) -> EvmRpcConfig {
+            EvmRpcConfig {
+                response_consensus: Some(strategy),
+                ..EvmRpcConfig::default()
+            }
+        }
+
         let chain = state.ethereum_network();
         let evm_rpc_id = state.evm_rpc_id();
         const MIN_ATTACHED_CYCLES: u128 = 500_000_000_000;
@@ -57,29 +68,27 @@ impl EthRpcClient {
             min_threshold <= TOTAL_NUMBER_OF_PROVIDERS,
             "BUG: min_threshold too high"
         );
-        let threshold_strategy = EvmRpcConfig {
-            response_consensus: Some(ConsensusStrategy::Threshold {
-                total: Some(TOTAL_NUMBER_OF_PROVIDERS),
-                min: min_threshold,
-            }),
-            ..EvmRpcConfig::default()
+        let response_consensus = ConsensusStrategy::Threshold {
+            total: Some(TOTAL_NUMBER_OF_PROVIDERS),
+            min: min_threshold,
         };
         let evm_rpc_client = EvmRpcClient::builder_for_ic(TRACE_HTTP)
             .with_providers(providers)
             .with_evm_canister_id(evm_rpc_id)
             .with_min_attached_cycles(MIN_ATTACHED_CYCLES)
             .with_override_rpc_config(OverrideRpcConfig {
-                eth_get_block_by_number: Some(threshold_strategy.clone()),
-                eth_get_logs: Some(EvmRpcConfig {
+                eth_get_block_by_number: Some(rpc_config(response_consensus.clone())),
+                eth_get_logs: Some(EvmGetLogsRpcConfig {
                     response_size_estimate: Some(
                         ETH_GET_LOGS_INITIAL_RESPONSE_SIZE_ESTIMATE + HEADER_SIZE_LIMIT,
                     ),
-                    ..threshold_strategy.clone()
+                    response_consensus: Some(response_consensus.clone()),
+                    ..Default::default()
                 }),
-                eth_fee_history: Some(threshold_strategy.clone()),
-                eth_get_transaction_receipt: Some(threshold_strategy.clone()),
-                eth_get_transaction_count: Some(threshold_strategy.clone()),
-                eth_send_raw_transaction: Some(threshold_strategy),
+                eth_fee_history: Some(rpc_config(response_consensus.clone())),
+                eth_get_transaction_receipt: Some(rpc_config(response_consensus.clone())),
+                eth_get_transaction_count: Some(rpc_config(response_consensus.clone())),
+                eth_send_raw_transaction: Some(rpc_config(response_consensus)),
             })
             .build();
 
@@ -90,80 +99,75 @@ impl EthRpcClient {
         &self,
         params: GetLogsArgs,
     ) -> Result<Vec<LogEntry>, MultiCallError<Vec<LogEntry>>> {
-        self.evm_rpc_client
-            .eth_get_logs(params)
-            .await
-            .reduce()
-            .into()
+        let evm_rpc_result = self.evm_rpc_client.eth_get_logs(params).await;
+        ReducedResult::from_internal(evm_rpc_result).result
     }
 
     pub async fn eth_get_block_by_number(
         &self,
         block: BlockTag,
     ) -> Result<Block, MultiCallError<Block>> {
-        convert_multirpcresult(self.evm_rpc_client.eth_get_block_by_number(block).await)
+        let evm_rpc_result = self.evm_rpc_client.eth_get_block_by_number(block).await;
+        ReducedResult::from_internal(evm_rpc_result).result
     }
 
     pub async fn eth_get_transaction_receipt(
         &self,
         tx_hash: Hash,
     ) -> Result<Option<TransactionReceipt>, MultiCallError<Option<TransactionReceipt>>> {
-        self.evm_rpc_client
+        let evm_rpc_result = self
+            .evm_rpc_client
             .eth_get_transaction_receipt(tx_hash.to_string())
-            .await
-            .reduce()
-            .into()
+            .await;
+        ReducedResult::from_internal(evm_rpc_result).result
     }
 
     pub async fn eth_fee_history(
         &self,
         params: FeeHistoryArgs,
     ) -> Result<FeeHistory, MultiCallError<FeeHistory>> {
-        self.evm_rpc_client
-            .eth_fee_history(params)
-            .await
-            .reduce()
-            .into()
+        let evm_rpc_result = self.evm_rpc_client.eth_fee_history(params).await;
+        ReduceWithStrategy::<StrictMajorityByKey>::reduce(evm_rpc_result).result
     }
 
     pub async fn eth_send_raw_transaction(
         &self,
         raw_signed_transaction_hex: String,
     ) -> Result<SendRawTransactionStatus, MultiCallError<SendRawTransactionStatus>> {
-        self.evm_rpc_client
+        let evm_rpc_result = self
+            .evm_rpc_client
             .eth_send_raw_transaction(raw_signed_transaction_hex)
-            .await
-            .reduce()
-            .into()
+            .await;
+        ReduceWithStrategy::<AnyOf>::reduce(evm_rpc_result).result
     }
 
     pub async fn eth_get_finalized_transaction_count(
         &self,
         address: Address,
     ) -> Result<TransactionCount, MultiCallError<TransactionCount>> {
-        convert_multirpcresult(
-            self.evm_rpc_client
-                .eth_get_transaction_count(EvmGetTransactionCountArgs {
-                    address: Hex20::from(address.into_bytes()),
-                    block: BlockTag::Finalized,
-                })
-                .await
-                .map(&|tx_count: Nat256| TransactionCount::from(tx_count)),
-        )
+        let evm_rpc_result = self
+            .evm_rpc_client
+            .eth_get_transaction_count(EvmGetTransactionCountArgs {
+                address: Hex20::from(address.into_bytes()),
+                block: BlockTag::Finalized,
+            })
+            .await
+            .map(&|tx_count: Nat256| TransactionCount::from(tx_count));
+        ReducedResult::from_internal(evm_rpc_result).result
     }
 
     pub async fn eth_get_latest_transaction_count(
         &self,
         address: Address,
     ) -> Result<TransactionCount, MultiCallError<TransactionCount>> {
-        let results = self
+        let evm_rpc_result = self
             .evm_rpc_client
             .eth_get_transaction_count(EvmGetTransactionCountArgs {
                 address: Hex20::from(address.into_bytes()),
                 block: BlockTag::Latest,
             })
             .await;
-        ReduceWithStrategy::<MinByKey>::reduce(results).into()
+        ReduceWithStrategy::<MinByKey>::reduce(evm_rpc_result).result
     }
 }
 
@@ -173,12 +177,6 @@ impl EthRpcClient {
 pub struct MultiCallResults<T> {
     ok_results: BTreeMap<EvmRpcService, T>,
     errors: BTreeMap<EvmRpcService, RpcError>,
-}
-
-impl<T> From<ReducedResult<T>> for Result<T, MultiCallError<T>> {
-    fn from(value: ReducedResult<T>) -> Self {
-        value.result
-    }
 }
 
 impl<T> Default for MultiCallResults<T> {
@@ -247,17 +245,6 @@ impl<T> MultiCallResults<T> {
 }
 
 impl<T: PartialEq> MultiCallResults<T> {
-    /// Expects all results to be ok or return the following error:
-    /// * MultiCallError::ConsistentJsonRpcError: all errors are the same JSON-RPC error.
-    /// * MultiCallError::ConsistentHttpOutcallError: all errors are the same HTTP outcall error.
-    /// * MultiCallError::InconsistentResults if there are different errors.
-    fn all_ok(self) -> Result<BTreeMap<EvmRpcService, T>, MultiCallError<T>> {
-        if self.errors.is_empty() {
-            return Ok(self.ok_results);
-        }
-        Err(self.expect_error())
-    }
-
     /// Expects at least 2 ok results to be ok or return the following error:
     /// * MultiCallError::ConsistentJsonRpcError: all errors are the same JSON-RPC error.
     /// * MultiCallError::ConsistentHttpOutcallError: all errors are the same HTTP outcall error.
@@ -281,21 +268,9 @@ impl<T: PartialEq> MultiCallResults<T> {
         let distinct_errors: BTreeSet<_> = self.errors.values().collect();
         match distinct_errors.len() {
             0 => panic!("BUG: expect errors should be non-empty"),
-            1 => match distinct_errors.into_iter().next().unwrap().clone() {
-                RpcError::HttpOutcallError(error) => {
-                    MultiCallError::ConsistentHttpOutcallError(error)
-                }
-                RpcError::JsonRpcError(error) => MultiCallError::ConsistentJsonRpcError {
-                    code: error.code,
-                    message: error.message,
-                },
-                RpcError::ProviderError(error) => {
-                    MultiCallError::ConsistentEvmRpcCanisterError(error.to_string())
-                }
-                RpcError::ValidationError(error) => {
-                    MultiCallError::ConsistentEvmRpcCanisterError(error.to_string())
-                }
-            },
+            1 => {
+                MultiCallError::ConsistentError(distinct_errors.into_iter().next().unwrap().clone())
+            }
             _ => MultiCallError::InconsistentResults(self),
         }
     }
@@ -303,38 +278,8 @@ impl<T: PartialEq> MultiCallResults<T> {
 
 #[derive(Eq, PartialEq, Debug)]
 pub enum MultiCallError<T> {
-    ConsistentHttpOutcallError(HttpOutcallError),
-    ConsistentJsonRpcError { code: i64, message: String },
-    ConsistentEvmRpcCanisterError(String),
+    ConsistentError(RpcError),
     InconsistentResults(MultiCallResults<T>),
-}
-
-fn convert_multirpcresult<T>(result: EvmMultiRpcResult<T>) -> Result<T, MultiCallError<T>> {
-    match result {
-        EvmMultiRpcResult::Consistent(Ok(t)) => Ok(t),
-        EvmMultiRpcResult::Consistent(Err(RpcError::HttpOutcallError(e))) => {
-            Err(MultiCallError::ConsistentHttpOutcallError(e))
-        }
-        EvmMultiRpcResult::Consistent(Err(RpcError::JsonRpcError(e))) => {
-            Err(MultiCallError::ConsistentJsonRpcError {
-                code: e.code,
-                message: e.message,
-            })
-        }
-        EvmMultiRpcResult::Consistent(Err(RpcError::ProviderError(e))) => {
-            Err(MultiCallError::ConsistentEvmRpcCanisterError(e.to_string()))
-        }
-        EvmMultiRpcResult::Consistent(Err(RpcError::ValidationError(e))) => {
-            Err(MultiCallError::ConsistentEvmRpcCanisterError(e.to_string()))
-        }
-        EvmMultiRpcResult::Inconsistent(results) => {
-            let mut multi_results = MultiCallResults::new();
-            results.into_iter().for_each(|(provider, result)| {
-                multi_results.insert_once(provider, result);
-            });
-            Err(MultiCallError::InconsistentResults(multi_results))
-        }
-    }
 }
 
 #[derive(Eq, PartialEq, Debug)]
@@ -358,17 +303,12 @@ impl<T> ReducedResult<T> {
         reduction: R,
     ) -> ReducedResult<U> {
         let result = match self.result {
-            Ok(t) => fallible_op(t)
-                .map_err(|e| MultiCallError::<U>::ConsistentEvmRpcCanisterError(e.to_string())),
-            Err(MultiCallError::ConsistentHttpOutcallError(e)) => {
-                Err(MultiCallError::<U>::ConsistentHttpOutcallError(e))
-            }
-            Err(MultiCallError::ConsistentJsonRpcError { code, message }) => {
-                Err(MultiCallError::<U>::ConsistentJsonRpcError { code, message })
-            }
-            Err(MultiCallError::ConsistentEvmRpcCanisterError(e)) => {
-                Err(MultiCallError::<U>::ConsistentEvmRpcCanisterError(e))
-            }
+            Ok(t) => fallible_op(t).map_err(|e| {
+                MultiCallError::<U>::ConsistentError(RpcError::ValidationError(
+                    ValidationError::Custom(e.to_string()),
+                ))
+            }),
+            Err(MultiCallError::ConsistentError(e)) => Err(MultiCallError::ConsistentError(e)),
             Err(MultiCallError::InconsistentResults(results)) => {
                 reduction(results.map(fallible_op, &|e| {
                     RpcError::ValidationError(ValidationError::Custom(e.to_string()))
@@ -382,37 +322,14 @@ impl<T> ReducedResult<T> {
         let result = match value {
             EvmMultiRpcResult::Consistent(result) => match result {
                 Ok(t) => Ok(t),
-                Err(e) => match e {
-                    RpcError::ProviderError(e) => {
-                        Err(MultiCallError::ConsistentEvmRpcCanisterError(e.to_string()))
-                    }
-                    RpcError::HttpOutcallError(e) => {
-                        Err(MultiCallError::ConsistentHttpOutcallError(e))
-                    }
-                    RpcError::JsonRpcError(e) => Err(MultiCallError::ConsistentJsonRpcError {
-                        code: e.code,
-                        message: e.message,
-                    }),
-                    RpcError::ValidationError(e) => {
-                        Err(MultiCallError::ConsistentEvmRpcCanisterError(e.to_string()))
-                    }
-                },
+                Err(e) => Err(MultiCallError::ConsistentError(e)),
             },
-            EvmMultiRpcResult::Inconsistent(results) => {
-                let mut multi_results = MultiCallResults::new();
-                results.into_iter().for_each(|(provider, result)| {
-                    multi_results.insert_once(provider, result);
-                });
-                Err(MultiCallError::InconsistentResults(multi_results))
-            }
+            EvmMultiRpcResult::Inconsistent(results) => Err(MultiCallError::InconsistentResults(
+                MultiCallResults::from_non_empty_iter(results),
+            )),
         };
         Self { result }
     }
-}
-
-trait Reduce {
-    type Item;
-    fn reduce(self) -> ReducedResult<Self::Item>;
 }
 
 trait ReduceWithStrategy<S> {
@@ -421,46 +338,15 @@ trait ReduceWithStrategy<S> {
 }
 
 pub enum MinByKey {}
+pub enum AnyOf {}
+pub enum StrictMajorityByKey {}
 
-impl Reduce for EvmMultiRpcResult<Vec<EvmLogEntry>> {
-    type Item = Vec<LogEntry>;
-
-    fn reduce(self) -> ReducedResult<Self::Item> {
-        fn map_logs(logs: Vec<EvmLogEntry>) -> Result<Vec<LogEntry>, String> {
-            logs.into_iter().map(map_single_log).collect()
-        }
-
-        fn map_single_log(log: EvmLogEntry) -> Result<LogEntry, String> {
-            Ok(LogEntry {
-                address: Address::new(log.address.into()),
-                topics: log
-                    .topics
-                    .into_iter()
-                    .map(|t| FixedSizeData(t.into()))
-                    .collect(),
-                data: Data(log.data.into()),
-                block_number: log.block_number.map(BlockNumber::from),
-                transaction_hash: log.transaction_hash.map(|h| Hash(h.into())),
-                transaction_index: log
-                    .transaction_index
-                    .map(|i| Quantity::from_be_bytes(i.into_be_bytes())),
-                block_hash: log.block_hash.map(|h| Hash(h.into())),
-                log_index: log.log_index.map(LogIndex::from),
-                removed: log.removed,
-            })
-        }
-
-        ReducedResult::from_internal(self)
-            .map_reduce(&map_logs, MultiCallResults::reduce_with_equality)
-    }
-}
-
-impl Reduce for EvmMultiRpcResult<Option<FeeHistory>> {
+impl ReduceWithStrategy<StrictMajorityByKey> for EvmMultiRpcResult<FeeHistory> {
     type Item = FeeHistory;
 
     fn reduce(self) -> ReducedResult<Self::Item> {
         ReducedResult::from_internal(self).map_reduce(
-            &|fee_history| fee_history.ok_or("No fee history available".to_string()),
+            &|fee_history| Ok::<FeeHistory, Infallible>(fee_history),
             |results| {
                 results.reduce_with_strict_majority_by_key(|fee_history| {
                     Nat::from(fee_history.oldest_block.clone())
@@ -470,40 +356,7 @@ impl Reduce for EvmMultiRpcResult<Option<FeeHistory>> {
     }
 }
 
-impl Reduce for EvmMultiRpcResult<Option<EvmTransactionReceipt>> {
-    type Item = Option<TransactionReceipt>;
-
-    fn reduce(self) -> ReducedResult<Self::Item> {
-        fn map_transaction_receipt(
-            receipt: Option<EvmTransactionReceipt>,
-        ) -> Result<Option<TransactionReceipt>, String> {
-            receipt
-                .map(|evm_receipt| {
-                    Ok(TransactionReceipt {
-                        block_hash: Hash(evm_receipt.block_hash.into()),
-                        block_number: BlockNumber::from(evm_receipt.block_number),
-                        effective_gas_price: WeiPerGas::from(evm_receipt.effective_gas_price),
-                        gas_used: GasAmount::from(evm_receipt.gas_used),
-                        status: TransactionStatus::try_from(
-                            evm_receipt
-                                .status
-                                .and_then(|s| s.as_ref().0.to_u8())
-                                .ok_or("invalid transaction status")?,
-                        )?,
-                        transaction_hash: Hash(evm_receipt.transaction_hash.into()),
-                    })
-                })
-                .transpose()
-        }
-
-        ReducedResult::from_internal(self).map_reduce(
-            &map_transaction_receipt,
-            MultiCallResults::reduce_with_equality,
-        )
-    }
-}
-
-impl Reduce for EvmMultiRpcResult<SendRawTransactionStatus> {
+impl ReduceWithStrategy<AnyOf> for EvmMultiRpcResult<SendRawTransactionStatus> {
     type Item = SendRawTransactionStatus;
 
     fn reduce(self) -> ReducedResult<Self::Item> {
@@ -533,8 +386,10 @@ impl<T> MultiCallError<T> {
         predicate: P,
     ) -> bool {
         match self {
-            MultiCallError::ConsistentHttpOutcallError(error) => predicate(error),
-            MultiCallError::ConsistentJsonRpcError { .. } => false,
+            MultiCallError::ConsistentError(RpcError::HttpOutcallError(error)) => predicate(error),
+            MultiCallError::ConsistentError(RpcError::JsonRpcError { .. }) => false,
+            MultiCallError::ConsistentError(RpcError::ProviderError(_)) => false,
+            MultiCallError::ConsistentError(RpcError::ValidationError(_)) => false,
             MultiCallError::InconsistentResults(results) => {
                 results
                     .errors
@@ -546,36 +401,11 @@ impl<T> MultiCallError<T> {
                         | RpcError::ValidationError(_) => false,
                     })
             }
-            MultiCallError::ConsistentEvmRpcCanisterError(_) => false,
         }
     }
 }
 
 impl<T: Debug + PartialEq> MultiCallResults<T> {
-    pub fn reduce_with_equality(self) -> Result<T, MultiCallError<T>> {
-        let mut results = self.all_ok()?.into_iter();
-        let (base_node_provider, base_result) = results
-            .next()
-            .expect("BUG: MultiCallResults is guaranteed to be non-empty");
-        let mut inconsistent_results: Vec<_> = results
-            .filter(|(_provider, result)| result != &base_result)
-            .collect();
-        if !inconsistent_results.is_empty() {
-            inconsistent_results.push((base_node_provider, base_result));
-            let error = MultiCallError::InconsistentResults(MultiCallResults::from_non_empty_iter(
-                inconsistent_results
-                    .into_iter()
-                    .map(|(provider, result)| (provider, Ok(result))),
-            ));
-            log!(
-                INFO,
-                "[reduce_with_equality]: inconsistent results {error:?}"
-            );
-            return Err(error);
-        }
-        Ok(base_result)
-    }
-
     pub fn reduce_with_min_by_key<F: FnMut(&T) -> K, K: Ord>(
         self,
         extractor: F,

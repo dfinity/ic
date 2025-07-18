@@ -897,7 +897,7 @@ impl Debug for Action<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{test_utils::*, utils::algorithm_for_key_id};
+    use crate::test_utils::*;
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_canister_threshold_sigs::{
         generate_key_transcript, generate_tecdsa_protocol_inputs,
@@ -1410,7 +1410,7 @@ mod tests {
                     &env,
                     &dealers,
                     &receivers,
-                    algorithm_for_key_id(&key_id),
+                    AlgorithmId::from(key_id.inner()),
                     &mut rng,
                 );
                 let derivation_path = ExtendedDerivationPath {
@@ -1427,7 +1427,7 @@ mod tests {
                             &[0; 32],
                             Randomness::from([0; 32]),
                             &derivation_path,
-                            algorithm_for_key_id(&key_id),
+                            AlgorithmId::from(key_id.inner()),
                             &mut rng,
                         );
 
@@ -1446,7 +1446,7 @@ mod tests {
                             Randomness::from([0; 32]),
                             None,
                             &derivation_path,
-                            algorithm_for_key_id(&key_id),
+                            AlgorithmId::from(key_id.inner()),
                             &mut rng,
                         );
                         (
@@ -2051,6 +2051,7 @@ mod tests {
                     args: ThresholdArguments::Ecdsa(EcdsaArguments {
                         key_id: fake_ecdsa_key_id(),
                         message_hash,
+                        pre_signature: None,
                     }),
                     pseudo_random_id: [1; 32],
                     derivation_path: Arc::new(vec![]),
@@ -2189,6 +2190,7 @@ mod tests {
                         key_id: fake_schnorr_key_id(schnorr_algorithm(algorithm)),
                         message: Arc::new(message.clone()),
                         taproot_tree_root: None,
+                        pre_signature: None,
                     }),
                     pseudo_random_id: [1; 32],
                     derivation_path: Arc::new(vec![]),

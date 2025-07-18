@@ -5,7 +5,6 @@ DEPENDENCIES = [
     "//rs/boundary_node/rate_limits/api:rate_limits_api",
     "@crate_index//:anyhow",
     "@crate_index//:candid",
-    "@crate_index//:clap",
     "@crate_index//:ic-agent",
     "@crate_index//:k256",
     "@crate_index//:regex",
@@ -13,7 +12,6 @@ DEPENDENCIES = [
     "@crate_index//:serde_yaml",
     "@crate_index//:tokio",
     "@crate_index//:tracing",
-    "@crate_index//:tracing-subscriber",
     "@crate_index//:uuid",
 ]
 
@@ -23,7 +21,11 @@ rust_binary(
     proc_macro_deps = [],
     version = "0.1.0",
     visibility = ["//rs:release-pkg"],
-    deps = DEPENDENCIES + ["//rs/boundary_node/rate_limits/canister_client:rate-limiting-canister-client-lib"],
+    deps = DEPENDENCIES + [
+        "//rs/boundary_node/rate_limits/canister_client:rate-limiting-canister-client-lib",
+        "@crate_index//:clap",
+        "@crate_index//:tracing-subscriber",
+    ],
 )
 
 rust_library(

@@ -1450,7 +1450,10 @@ fn test_hash_to_g2_matches_draft() {
     );
 }
 
-fn random_node_indexes<R: rand::Rng>(rng: &mut R, count: usize) -> Vec<NodeIndex> {
+fn random_node_indexes<R: rand::Rng>(
+    rng: &mut R,
+    count: usize,
+) -> std::collections::BTreeSet<NodeIndex> {
     let mut set = std::collections::BTreeSet::new();
 
     while set.len() != count {
@@ -1458,7 +1461,7 @@ fn random_node_indexes<R: rand::Rng>(rng: &mut R, count: usize) -> Vec<NodeIndex
         set.insert(r);
     }
 
-    set.iter().cloned().collect()
+    set
 }
 
 #[test]
@@ -1480,7 +1483,7 @@ fn should_g1_interpolation_at_zero_work() -> Result<(), InterpolationError> {
             node_shares.push(g_p_r);
         }
 
-        let coefficients = LagrangeCoefficients::at_zero(&node_ids)?;
+        let coefficients = LagrangeCoefficients::at_zero(&NodeIndices::from_set(&node_ids));
         let g0 = coefficients.interpolate_g1(&node_shares)?;
         assert_eq!(g0, pk);
     }
@@ -1507,7 +1510,7 @@ fn should_g2_interpolation_at_zero_work() -> Result<(), InterpolationError> {
             node_shares.push(g_p_r);
         }
 
-        let coefficients = LagrangeCoefficients::at_zero(&node_ids)?;
+        let coefficients = LagrangeCoefficients::at_zero(&NodeIndices::from_set(&node_ids));
         let g0 = coefficients.interpolate_g2(&node_shares)?;
         assert_eq!(g0, pk);
     }

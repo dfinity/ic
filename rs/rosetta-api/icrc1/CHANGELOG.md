@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [1.2.4] - 2025-07-07
+### Added
+- Allow retrieving the aggregate balance of a ICRC1 token account ([#5773](https://github.com/dfinity/ic/pull/5773))
+
 ## [1.2.3] - 2025-05-27
 ### Fixed
 - Fixed fee collector balance calculation for transfers using fee_collector_block_index ([#5304](https://github.com/dfinity/ic/pull/5304))
@@ -63,7 +67,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.0.2] - 2024-05-08
 ### Fixes
-- Replacing internal crypto library `ic_canister_client_sender` with `ic_crypto_ed25519` 
+- Replacing internal crypto library `ic_canister_client_sender` with `ic_crypto_ed25519`
   and `ic_crypto_ecdsa_secp256k1`.
 ### Changed
 - `/block` endpoint is changed to return the latest block if no index or hash is provided.

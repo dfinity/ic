@@ -645,7 +645,6 @@ mod test {
             signatures::update_signature_agreements,
         },
         test_utils::*,
-        utils::algorithm_for_key_id,
     };
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_canister_threshold_sigs::{
@@ -730,7 +729,7 @@ mod test {
                 env.nodes.ids(),
                 env.nodes.ids(),
                 registry_version,
-                algorithm_for_key_id(&key_id),
+                AlgorithmId::from(key_id.inner()),
             ));
         curr_payload.single_key_transcript_mut().next_in_creation =
             idkg::KeyTranscriptCreation::Created(transcript_ref_0);
@@ -830,7 +829,10 @@ mod test {
 
         // Create completed dealings for request 1.
         let reshare_params = payload.ongoing_xnet_reshares.get(&req_1).unwrap().as_ref();
-        assert_eq!(reshare_params.algorithm_id, algorithm_for_key_id(&key_id));
+        assert_eq!(
+            reshare_params.algorithm_id,
+            AlgorithmId::from(key_id.inner())
+        );
         let dealings = dummy_dealings(reshare_params.transcript_id, &reshare_params.dealers);
         transcript_builder.add_dealings(reshare_params.transcript_id, dealings);
         update_completed_reshare_requests(
@@ -864,7 +866,10 @@ mod test {
 
         // Create another request and dealings
         let reshare_params = payload.ongoing_xnet_reshares.get(&req_2).unwrap().as_ref();
-        assert_eq!(reshare_params.algorithm_id, algorithm_for_key_id(&key_id));
+        assert_eq!(
+            reshare_params.algorithm_id,
+            AlgorithmId::from(key_id.inner())
+        );
         let dealings = dummy_dealings(reshare_params.transcript_id, &reshare_params.dealers);
         transcript_builder.add_dealings(reshare_params.transcript_id, dealings);
         let mut prev_payload = payload.clone();
@@ -1271,7 +1276,7 @@ mod test {
                 dealers,
                 receivers,
                 registry_version,
-                algorithm_for_key_id(&master_public_key_id),
+                AlgorithmId::from(master_public_key_id.inner()),
             );
             env.nodes.run_idkg_and_create_and_verify_transcript(
                 &param.as_ref().translate(&block_reader).unwrap(),

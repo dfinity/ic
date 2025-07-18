@@ -211,6 +211,9 @@ message RegistryValue {
 
   // If true, this change represents a deletion.
   bool deletion_marker = 3;
+
+  // The timestamp at which the registry mutation happened.
+  uint64 timestamp_nanoseconds = 4;
 }
 
 // A sequence of changes made to a key in the registry.

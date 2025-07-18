@@ -400,6 +400,9 @@ def _disk_image_impl(ctx):
     if ctx.attr.expanded_size:
         args.extend(["-s", ctx.attr.expanded_size])
 
+    if ctx.attr.populate_b_partitions:
+        args.extend(["--populate-b-partitions"])
+
     for partition_file in ctx.files.partitions:
         args.append(partition_file.path)
     inputs.extend(ctx.files.partitions)
@@ -426,6 +429,7 @@ disk_image = _icos_build_rule(
             allow_files = True,
         ),
         "expanded_size": attr.string(),
+        "populate_b_partitions": attr.bool(default = False),
         "_tool": attr.label(
             default = "//toolchains/sysimage:build_disk_image",
             executable = True,
@@ -459,6 +463,9 @@ def _disk_image_no_tar_impl(ctx):
     if ctx.attr.expanded_size:
         args.extend(["-s", ctx.attr.expanded_size])
 
+    if ctx.attr.populate_b_partitions:
+        args.extend(["--populate-b-partitions"])
+
     for partition_file in ctx.files.partitions:
         args.append(partition_file.path)
     inputs.extend(ctx.files.partitions)
@@ -485,6 +492,7 @@ disk_image_no_tar = _icos_build_rule(
             allow_files = True,
         ),
         "expanded_size": attr.string(),
+        "populate_b_partitions": attr.bool(default = False),
         "_tool": attr.label(
             default = "//toolchains/sysimage:build_disk_image",
             executable = True,

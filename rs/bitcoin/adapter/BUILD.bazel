@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test", "rust_test_suite")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("//bazel:defs.bzl", "rust_bench")
 
 DEPENDENCIES = [
@@ -30,47 +30,21 @@ DEPENDENCIES = [
     "@crate_index//:tower",
 ]
 
-MACRO_DEPENDENCIES = []
-
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/bitcoin/adapter/test_utils",
-    "//rs/bitcoin/client",
-    "//rs/bitcoin/replica_types",
-    "//rs/interfaces/adapter_client",
-    "//rs/test_utilities/logger",
-    "@crate_index//:bitcoincore-rpc",
-    "@crate_index//:bitcoind",
-    "@crate_index//:criterion",
-    "@crate_index//:ic-btc-interface",
-    "@crate_index//:tempfile",
-]
-
-MACRO_DEV_DEPENDENCIES = []
-
 rust_library(
     name = "adapter",
     srcs = glob(
         ["src/**"],
-        exclude = [
-            "src/main.rs",
-            "src/cli.rs",
-            "src/stress_test.rs",
-        ],
     ),
     crate_name = "ic_btc_adapter",
-    proc_macro_deps = MACRO_DEPENDENCIES,
     visibility = ["//rs/pocket_ic_server:__subpackages__"],
     deps = DEPENDENCIES,
 )
 
 rust_binary(
     name = "ic-btc-adapter",
-    srcs = [
-        "src/cli.rs",
-        "src/main.rs",
-    ],
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    srcs = glob(
+        ["bin/ic-btc-adapter/**"],
+    ),
     visibility = ["//rs:release-pkg"],
     deps = DEPENDENCIES + [
         ":adapter",
@@ -79,15 +53,18 @@ rust_binary(
     ],
 )
 
+# not a rust_test because it's meant to be run manually.
 rust_binary(
     name = "adapter-stress-test",
-    srcs = ["src/stress_test.rs"],
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + [
-        ":adapter",
-        "//rs/monitoring/adapter_metrics/server",
+    srcs = ["bin/adapter-stress-test.rs"],
+    deps = [
+        "//rs/bitcoin/service",
+        "@crate_index//:bitcoin",
         "@crate_index//:clap",
         "@crate_index//:hyper-util",
+        "@crate_index//:tokio",
+        "@crate_index//:tonic",
+        "@crate_index//:tower",
     ],
 )
 
@@ -99,13 +76,19 @@ rust_test(
     ],
     crate = ":adapter",
     tags = ["requires-network"],
-    deps = DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/bitcoin/adapter/test_utils",
+        "//rs/bitcoin/replica_types",
+        "@crate_index//:ic-btc-interface",
+        "@crate_index//:tempfile",
+    ],
 )
 
-rust_test_suite(
-    name = "adapter_integration",
+rust_test(
+    name = "adapter_integration_test",
     timeout = "long",
-    srcs = glob(["tests/**/*.rs"]),
+    srcs = ["tests/integration.rs"],
     data = [
         # Keep sorted.
         "//:bitcoind",
@@ -121,15 +104,41 @@ rust_test_suite(
         "TESTNET_HEADERS_DATA_PATH": "$(rootpath @bitcoin_adapter_testnet_headers//file)",
         "TESTNET_BLOCKS_DATA_PATH": "$(rootpath @bitcoin_adapter_testnet_blocks//file)",
     },
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = ["requires-network"],
-    deps = [":adapter"] + DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [
+        ":adapter",
+        "//rs/bitcoin/adapter/test_utils",
+        "//rs/bitcoin/client",
+        "//rs/bitcoin/replica_types",
+        "//rs/config",
+        "//rs/interfaces/adapter_client",
+        "//rs/monitoring/logger",
+        "//rs/monitoring/metrics",
+        "@crate_index//:bitcoin",
+        "@crate_index//:bitcoincore-rpc",
+        "@crate_index//:bitcoind",
+        "@crate_index//:ic-btc-interface",
+        "@crate_index//:tempfile",
+        "@crate_index//:tokio",
+    ],
 )
 
 rust_bench(
     name = "e2e_bench",
     testonly = True,
     srcs = ["benches/e2e.rs"],
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":adapter"],
+    deps = DEPENDENCIES + [
+        # Keep sorted.
+        ":adapter",
+        "//rs/bitcoin/adapter/test_utils",
+        "//rs/bitcoin/client",
+        "//rs/bitcoin/replica_types",
+        "//rs/interfaces/adapter_client",
+        "//rs/test_utilities/logger",
+        "@crate_index//:bitcoincore-rpc",
+        "@crate_index//:bitcoind",
+        "@crate_index//:criterion",
+        "@crate_index//:ic-btc-interface",
+        "@crate_index//:tempfile",
+    ],
 )

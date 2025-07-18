@@ -3,7 +3,12 @@ use http::{Method, StatusCode};
 use reqwest::{Client, Request};
 use serde::{Deserialize, Serialize};
 use slog::{error, info, Logger};
-use std::{fs, path::Path, time::Duration};
+use std::{
+    fs,
+    net::{Ipv4Addr, Ipv6Addr},
+    path::Path,
+    time::Duration,
+};
 use url::Url;
 
 use crate::{
@@ -14,7 +19,7 @@ use crate::{
         test_env::{TestEnv, TestEnvAttribute},
         test_env_api::{
             get_dependency_path, AcquirePlaynetCertificate, CreatePlaynetDnsRecords,
-            HasTopologySnapshot, SshSession,
+            HasTopologySnapshot, RetrieveIpv4Addr, SshSession,
         },
         test_setup::InfraProvider,
         universal_vm::{DeployedUniversalVm, UniversalVm, UniversalVms},
@@ -30,6 +35,7 @@ const IMAGE_PATH: &str = "rs/tests/ic_gateway_uvm_config_image.zst";
 const IC_GATEWAY_VMS_DIR: &str = "ic_gateway_vms";
 const PLAYNET_FILE: &str = "playnet.json";
 const IC_GATEWAY_AAAA_RECORDS_CREATED_EVENT_NAME: &str = "ic_gateway_aaaa_records_created_event";
+const IC_GATEWAY_A_RECORDS_CREATED_EVENT_NAME: &str = "ic_gateway_a_records_created_event";
 const READY_TIMEOUT: Duration = Duration::from_secs(60);
 const RETRY_INTERVAL: Duration = Duration::from_secs(5);
 
@@ -66,9 +72,15 @@ impl Default for IcGatewayVm {
 impl IcGatewayVm {
     /// Creates a new IC Gateway VM with the specified name.
     pub fn new(name: &str) -> Self {
-        let universal_vm =
-            UniversalVm::new(name.to_string()).with_config_img(get_dependency_path(IMAGE_PATH));
+        let universal_vm = UniversalVm::new(name.to_string())
+            .with_config_img(get_dependency_path(IMAGE_PATH))
+            .enable_ipv4();
         Self { universal_vm }
+    }
+
+    pub fn disable_ipv4(mut self) -> Self {
+        self.universal_vm.has_ipv4 = false;
+        self
     }
 
     /// Starts the IC Gateway VM, configuring DNS and certificates.
@@ -82,16 +94,22 @@ impl IcGatewayVm {
         let allocated_vm = deployed_vm.get_vm()?;
 
         // Get IPv6 address and API node URLs
-        let vm_ipv6 = allocated_vm.ipv6.to_string();
+        let vm_ipv6: Ipv6Addr = allocated_vm.ipv6;
         let api_nodes_urls = self.get_api_nodes_urls(env);
 
         // Handle playnet configuration and DNS records
-        let playnet = self.load_or_create_playnet(env, &vm_ipv6)?;
+        let vm_ipv4: Option<Ipv4Addr> = self
+            .universal_vm
+            .has_ipv4
+            .then(|| deployed_vm.block_on_ipv4())
+            .transpose()?;
+
+        let playnet = self.load_or_create_playnet(env, vm_ipv6, vm_ipv4)?;
         let ic_gateway_fqdn = playnet.playnet_cert.playnet.clone();
         self.configure_dns_records(env, &playnet, &ic_gateway_fqdn)?;
 
-        // Emit log event for AAAA records
-        emit_ic_gateway_aaaa_records_event(&logger, &ic_gateway_fqdn, playnet.aaaa_records.clone());
+        // Emit log events for A and AAAA records
+        emit_ic_gateway_records_event(&logger, &ic_gateway_fqdn, &playnet);
 
         // Save playnet configuration and start the gateway
         let playnet_url = Url::parse(&format!("https://{}", ic_gateway_fqdn))?;
@@ -128,7 +146,12 @@ impl IcGatewayVm {
     }
 
     /// Loads existing playnet configuration or creates a new one.
-    fn load_or_create_playnet(&self, env: &TestEnv, uvm_ipv6: &str) -> Result<Playnet> {
+    fn load_or_create_playnet(
+        &self,
+        env: &TestEnv,
+        uvm_ipv6: Ipv6Addr,
+        uvm_ipv4: Option<Ipv4Addr>,
+    ) -> Result<Playnet> {
         let logger = env.logger();
         let playnet_file = env.get_json_path(PLAYNET_FILE);
 
@@ -149,7 +172,10 @@ impl IcGatewayVm {
             }
         };
 
-        playnet.aaaa_records.push(uvm_ipv6.to_string());
+        playnet.aaaa_records.push(uvm_ipv6);
+        if let Some(ipv4) = uvm_ipv4 {
+            playnet.a_records.push(ipv4);
+        }
 
         // Write/overwrite file
         env.write_json_object(PLAYNET_FILE, &playnet)?;
@@ -164,29 +190,31 @@ impl IcGatewayVm {
         playnet: &Playnet,
         ic_gateway_fqdn: &str,
     ) -> Result<()> {
-        let records = match InfraProvider::read_attribute(env) {
-            InfraProvider::Farm => vec![
-                DnsRecord {
-                    name: "".to_string(),
-                    record_type: DnsRecordType::AAAA,
-                    records: playnet.aaaa_records.clone(),
-                },
-                DnsRecord {
-                    name: "*".to_string(),
-                    record_type: DnsRecordType::CNAME,
-                    records: vec![ic_gateway_fqdn.to_string()],
-                },
-                DnsRecord {
-                    name: "*.raw".to_string(),
-                    record_type: DnsRecordType::CNAME,
-                    records: vec![ic_gateway_fqdn.to_string()],
-                },
-            ],
+        let mut records = match InfraProvider::read_attribute(env) {
+            InfraProvider::Farm => {
+                vec![
+                    DnsRecord {
+                        name: "".to_string(),
+                        record_type: DnsRecordType::AAAA,
+                        records: playnet.aaaa_records.iter().map(|r| r.to_string()).collect(),
+                    },
+                    DnsRecord {
+                        name: "*".to_string(),
+                        record_type: DnsRecordType::CNAME,
+                        records: vec![ic_gateway_fqdn.to_string()],
+                    },
+                    DnsRecord {
+                        name: "*.raw".to_string(),
+                        record_type: DnsRecordType::CNAME,
+                        records: vec![ic_gateway_fqdn.to_string()],
+                    },
+                ]
+            }
             _ => vec![
                 DnsRecord {
                     name: ic_gateway_fqdn.to_string(),
                     record_type: DnsRecordType::AAAA,
-                    records: playnet.aaaa_records.clone(),
+                    records: playnet.aaaa_records.iter().map(|r| r.to_string()).collect(),
                 },
                 DnsRecord {
                     name: format!("{}.{}", "*", ic_gateway_fqdn),
@@ -200,6 +228,14 @@ impl IcGatewayVm {
                 },
             ],
         };
+
+        if !playnet.a_records.is_empty() {
+            records.push(DnsRecord {
+                name: "".to_string(),
+                record_type: DnsRecordType::A,
+                records: playnet.a_records.iter().map(|r| r.to_string()).collect(),
+            })
+        }
 
         env.create_playnet_dns_records(records);
 
@@ -263,30 +299,41 @@ docker run --name=ic-gateway -d \
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct Playnet {
     playnet_cert: PlaynetCertificate,
-    aaaa_records: Vec<String>,
-    a_records: Vec<String>,
+    aaaa_records: Vec<Ipv6Addr>,
+    a_records: Vec<Ipv4Addr>,
 }
 
-/// Emits a log event for IC gateway AAAA records.
-pub fn emit_ic_gateway_aaaa_records_event(
-    log: &slog::Logger,
-    ic_gateway_fqdn: &str,
-    aaaa_records: Vec<String>,
-) {
+/// Emits log events for IC gateway A and AAAA records.
+fn emit_ic_gateway_records_event(log: &slog::Logger, ic_gateway_fqdn: &str, playnet: &Playnet) {
+    #[derive(Deserialize, Serialize)]
+    struct IcGatewayARecords {
+        url: String,
+        a_records: Vec<Ipv4Addr>,
+    }
+
     #[derive(Deserialize, Serialize)]
     struct IcGatewayAAAARecords {
         url: String,
-        aaaa_records: Vec<String>,
+        aaaa_records: Vec<Ipv6Addr>,
     }
 
-    let event = log_events::LogEvent::new(
+    let event_a_record = log_events::LogEvent::new(
+        IC_GATEWAY_A_RECORDS_CREATED_EVENT_NAME.to_string(),
+        IcGatewayARecords {
+            url: ic_gateway_fqdn.to_string(),
+            a_records: playnet.a_records.clone(),
+        },
+    );
+    event_a_record.emit_log(log);
+
+    let event_aaaa_record = log_events::LogEvent::new(
         IC_GATEWAY_AAAA_RECORDS_CREATED_EVENT_NAME.to_string(),
         IcGatewayAAAARecords {
             url: ic_gateway_fqdn.to_string(),
-            aaaa_records,
+            aaaa_records: playnet.aaaa_records.clone(),
         },
     );
-    event.emit_log(log);
+    event_aaaa_record.emit_log(log);
 }
 
 /// Trait for interacting with IC Gateway VMs in a test environment.

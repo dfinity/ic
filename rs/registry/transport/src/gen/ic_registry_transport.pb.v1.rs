@@ -149,6 +149,9 @@ pub struct RegistryValue {
     /// If true, this change represents a deletion.
     #[prost(bool, tag = "3")]
     pub deletion_marker: bool,
+    /// The timestamp at which the registry mutation happened.
+    #[prost(uint64, tag = "4")]
+    pub timestamp_nanoseconds: u64,
 }
 /// A sequence of changes made to a key in the registry.
 #[derive(Clone, PartialEq, ::prost::Message)]

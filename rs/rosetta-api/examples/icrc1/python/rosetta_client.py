@@ -164,7 +164,7 @@ class RosettaClient:
         account = {"address": principal}
 
         if subaccount:
-            account["metadata"] = {"sub_account": subaccount}
+            account["sub_account"] = {"address": subaccount}
 
         if verbose:
             print(f"Created account identifier: {json.dumps(account, indent=2)}")
@@ -260,6 +260,48 @@ class RosettaClient:
         account_identifier = self.create_account_identifier(principal=principal, subaccount=subaccount, verbose=verbose)
 
         payload = {"network_identifier": self.network, "account_identifier": account_identifier}
+
+        balance_response = self.send_request("/account/balance", payload, verbose)
+
+        # If response doesn't include currency information, add our discovered token info
+        if "balances" in balance_response and balance_response["balances"]:
+            for balance in balance_response["balances"]:
+                if "currency" not in balance:
+                    # Use token_override if set, otherwise use discovered token_info
+                    if self.token_override:
+                        balance["currency"] = self.token_override
+                    else:
+                        balance["currency"] = self.token_info
+
+        return balance_response
+
+    def get_aggregated_balance(self, principal, verbose=False):
+        """
+        Get the aggregated balance of all subaccounts for a principal.
+
+        This method returns the sum of balances across all subaccounts
+        of the specified principal.
+
+        Args:
+            principal (str): The principal identifier.
+            verbose (bool): Whether to print verbose output.
+
+        Returns:
+            dict: The aggregated balance information.
+
+        """
+        if not principal:
+            raise ValueError("Principal ID is required")
+
+        # Create account identifier without subaccount (principal only)
+        account_identifier = self.create_account_identifier(principal=principal, subaccount=None, verbose=verbose)
+
+        # Add the aggregate_all_subaccounts flag to metadata
+        payload = {
+            "network_identifier": self.network,
+            "account_identifier": account_identifier,
+            "metadata": {"aggregate_all_subaccounts": True},
+        }
 
         balance_response = self.send_request("/account/balance", payload, verbose)
 
