@@ -65,7 +65,7 @@ struct NetworkConfig {
 struct CanisterConfig {
     /// Id of the ICP ledger canister.
     #[clap(short = 'c', long = "canister-id")]
-    canister_id: Option<String>,
+    ledger_canister_id: Option<String>,
     #[clap(short = 't', long = "token-symbol")]
     token_symbol: Option<String>,
     /// Id of the governance canister to use for neuron management.
@@ -210,7 +210,7 @@ async fn main() -> std::io::Result<()> {
             }
         };
 
-        let canister_id = match opt.canister.canister_id {
+        let canister_id = match opt.canister.ledger_canister_id {
             Some(cid) => {
                 CanisterId::unchecked_from_principal(PrincipalId::from_str(&cid[..]).unwrap())
             }
@@ -234,7 +234,7 @@ async fn main() -> std::io::Result<()> {
             }
         };
 
-        let canister_id = match opt.canister.canister_id {
+        let canister_id = match opt.canister.ledger_canister_id {
             Some(cid) => {
                 CanisterId::unchecked_from_principal(PrincipalId::from_str(&cid[..]).unwrap())
             }
