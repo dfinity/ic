@@ -1,4 +1,3 @@
-use std::io::Read;
 use std::str::FromStr;
 use std::time::Duration;
 
@@ -105,6 +104,34 @@ pub fn config(env: TestEnv, mainnet_config: bool) {
     vector
         .sync_targets(&env)
         .expect("Failed to sync Vector targets");
+}
+
+/// Simplified setup for tests that only need a nested VM without full IC infrastructure.
+/// This is much faster than the full config() setup.
+pub fn simple_nested_vm_config(env: TestEnv) {
+    let principal =
+        PrincipalId::from_str("7532g-cd7sa-3eaay-weltl-purxe-qliyt-hfuto-364ru-b3dsz-kw5uz-kqe")
+            .unwrap();
+
+    // Setup minimal IC - just one fast single node subnet
+    InternetComputer::new()
+        .add_fast_single_node_subnet(SubnetType::System)
+        .with_api_boundary_nodes(1)
+        .with_node_provider(principal)
+        .with_node_operator(principal)
+        .setup_and_start(&env)
+        .expect("failed to setup minimal IC");
+
+    // Install minimal NNS (needed for public key)
+    install_nns_and_check_progress(env.topology_snapshot());
+
+    // Setup IC Gateway (required for nested VM setup)
+    IcGatewayVm::new(IC_GATEWAY_VM_NAME)
+        .start(&env)
+        .expect("failed to setup ic-gateway");
+
+    // Setup the nested VM (this is what the test actually needs)
+    setup_nested_vm(env.clone(), HOST_VM_NAME);
 }
 
 /// Allow the nested GuestOS to install and launch, and check that it can
