@@ -114,10 +114,10 @@ sol_register_toolchains(
 
 http_archive(
     name = "rules_rust",
-    integrity = "sha256-U8G6x+xI985IxMHGqgBvJ1Fa3SrrBXJZNyJObgDsfOo=",
+    integrity = "sha256-ydWjnLPhzqys6Y8Z8J1hxLVQNLw0pWW9z3zYDrTEEq8=",
     patch_args = ["-p1"],
     patches = ["//bazel:rules_rust.patch"],
-    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.61.0/rules_rust-0.61.0.tar.gz"],
+    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.62.0/rules_rust-0.62.0.tar.gz"],
 )
 
 load("@rules_rust//crate_universe:repositories.bzl", "crate_universe_dependencies")
