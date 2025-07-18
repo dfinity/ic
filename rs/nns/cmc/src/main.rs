@@ -196,6 +196,7 @@ struct StateVersion(u64);
 ///   because they are no longer needed.
 type State = StateV2;
 
+// TODO(NNS1-3980): remove this code when we no longer support version 1.
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct StateV1 {
     pub ledger_canister_id: CanisterId,
@@ -407,6 +408,7 @@ impl State {
                 // Since the version 1 is the latest version and also the first one encoded along
                 // with the state version, this should never happen. When we have a higher version
                 // than 1, we should add migration code here.
+                // TODO(NNS1-3980): remove this code when we no longer support version 1.
                 if stored_state_version == StateVersion(1) {
                     let state = deserializer.get_value::<StateV1>().unwrap();
                     deserializer.done().unwrap();
@@ -448,6 +450,7 @@ impl State {
     }
 }
 
+// TODO(NNS1-3980): remove this code when we no longer support version 1.
 fn migrate_v1(p0: StateV1) -> State {
     let StateV1 {
         ledger_canister_id,
@@ -3942,6 +3945,7 @@ mod tests {
         );
     }
 
+    /// TODO(NNS1-3980): Remove this test once the migration is no longer needed.
     #[test]
     fn test_migrate_v1_to_v2() {
         // Create a StateV1 with some test data
