@@ -827,7 +827,7 @@ impl ExecutionTest {
         self.install_canister_with_args(canister_id, wasm_binary, vec![])
     }
 
-    /// Installs the given Wasm binary in the given canister with the given args.
+    /// Installs the given Wasm binary in the given canister with the given init args.
     pub fn install_canister_with_args(
         &mut self,
         canister_id: CanisterId,
@@ -867,7 +867,7 @@ impl ExecutionTest {
         self.reinstall_canister_with_args(canister_id, wasm_binary, vec![])
     }
 
-    /// Re-installs the given canister with the given Wasm binary and the given args..
+    /// Re-installs the given canister with the given Wasm binary and the given init args.
     pub fn reinstall_canister_with_args(
         &mut self,
         canister_id: CanisterId,
