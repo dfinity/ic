@@ -214,7 +214,7 @@ def system_test(
       For example: [ "performance" ]
       uses_guestos_dev: the test uses ic-os/guestos/envs/dev (will be also automatically added as dependency).
       uses_guestos_dev_test: the test uses //ic-os/guestos/envs/dev:update-img-test (will be also automatically added as dependency).
-      uses_guestos_recovery_dev: the test uses //ic-os/guestos/envs/recovery-dev (will be also automatically added as dependency).
+      uses_guestos_recovery_dev: the test uses //ic-os/guestos/envs/recovery-dev:disk-img.tar.zst (will be also automatically added as dependency).
       uses_setupos_dev: the test uses ic-os/setupos/envs/dev (will be also automatically added as dependency).
       uses_hostos_dev_test: the test uses ic-os/hostos/envs/dev:update-img-test (will be also automatically added as dependency).
       uses_hostos_mainnet_update_img: the test uses mainnet HostOS update image version marked in mainnet-icos-revisions.json.
@@ -298,12 +298,6 @@ def system_test(
     if uses_guestos_recovery_dev:
         _guestos_recovery_dev = "//ic-os/guestos/envs/recovery-dev:"
         icos_images["ENV_DEPS__GUESTOS_RECOVERY_DISK_IMG"] = _guestos_recovery_dev + "disk-img.tar.zst"
-
-        _env_deps["RECOVERY_ARCHIVE_PATH"] = _guestos_recovery_dev + "guestos_recovery_archive_recovery.tar.zst"
-
-        _env_deps["RECOVERY_CUP_CONTENT_B64"] = _guestos_recovery_dev + "guestos_recovery_archive_cup.proto.b64"
-        _env_deps["RECOVERY_STORE_CONTENT1_B64"] = _guestos_recovery_dev + "guestos_recovery_archive_ic_registry_local_store_content1.b64"
-        _env_deps["RECOVERY_STORE_CONTENT2_B64"] = _guestos_recovery_dev + "guestos_recovery_archive_ic_registry_local_store_content2.b64"
 
     if malicious:
         _guestos_malicous = "//ic-os/guestos/envs/dev-malicious:"

@@ -21,6 +21,8 @@ Success::
 
 end::catalog[] */
 
+use std::{net::Ipv6Addr, path::PathBuf};
+
 use anyhow::{anyhow, ensure, Result};
 use ic_consensus_system_test_utils::ssh_access::execute_bash_command;
 use ic_registry_subnet_type::SubnetType;
@@ -29,36 +31,158 @@ use ic_system_test_driver::{
         group::SystemTestGroup,
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
-        test_env_api::{secs, HasTopologySnapshot, IcNodeContainer, SshSession},
+        test_env_api::{
+            get_dependency_path, secs, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
+            SshSession,
+        },
+        universal_vm::{UniversalVm, UniversalVms},
     },
     retry_with_msg, systest,
 };
 use slog::info;
 use ssh2::Session;
 
-fn verify_content(
-    ssh_session: &Session,
-    actual_file_path: &str,
-    expected_b64_path: &str,
-) -> Result<()> {
+const UNIVERSAL_VM_NAME: &str = "upstream";
+
+const UPSTREAMS: [&str; 2] = ["download.dfinity.systems", "download.dfinity.network"];
+
+fn get_env_var_dependency_path(env_var: &str) -> PathBuf {
+    get_dependency_path(
+        std::env::var(env_var).expect(&format!("{} environment variable not found", env_var)),
+    )
+}
+
+fn read_env_var_path_to_string(env_var: &str) -> String {
+    let dependency_path = get_env_var_dependency_path(env_var);
+    std::fs::read_to_string(get_env_var_dependency_path(env_var)).expect(&format!(
+        "Failed to read content from {:?}",
+        dependency_path
+    ))
+}
+
+fn setup_upstream_uvm(env: &TestEnv) -> Ipv6Addr {
+    UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
+        .with_config_img(get_env_var_dependency_path(
+            "GUESTOS_RECOVERY_ENGINE_UVM_CONFIG_PATH",
+        ))
+        .start(env)
+        .expect("failed to setup universal VM");
+
+    let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
+    let server_ipv6 = deployed_universal_vm.get_vm().unwrap().ipv6;
+
+    let recovery_hash = read_env_var_path_to_string("RECOVERY_HASH_PATH");
+
+    let logger = env.logger();
+    info!(
+        logger,
+        "Setting up archive server UVM at {} with upstreams: {:?} and recovery hash: {}",
+        server_ipv6,
+        UPSTREAMS,
+        recovery_hash
+    );
+    info!(
+        logger,
+        "{}",
+        deployed_universal_vm
+            .block_on_bash_script(
+                &format!(
+                    r#"
+                        # Impersonate the upstreams where the recovery artifacts are normally stored.
+                        DOMAINS="{}"
+                        COMMON_NAME="{}"
+                        RECOVERY_HASH="{}"
+
+                        # Generate TLS certificates for the upstreams.
+                        mkdir /tmp/certs
+                        cd /tmp/certs
+                        cp /config/minica.pem .
+                        cp /config/minica-key.pem .
+                        docker load -i /config/minica.tar
+                        docker run -v "$(pwd)":/output minica:image --domains "$DOMAINS"
+                        sudo mv $COMMON_NAME/cert.pem $COMMON_NAME/key.pem .
+                        sudo chmod 644 cert.pem key.pem
+
+
+                        # Serve the recovery artifacts with a static file server.
+                        mkdir /tmp/web
+                        cd /tmp/web
+                        sudo mv /config/recovery.tar.zst .
+                        docker load -i /config/static-file-server.tar
+                        docker run -d \
+                                   -p 443:8080 \
+                                   -e TLS_CERT=/certs/cert.pem \
+                                   -e TLS_KEY=/certs/key.pem \
+                                   -e URL_PREFIX=/ic/$RECOVERY_HASH \
+                                   -v /tmp/certs:/certs \
+                                   -v "$(pwd)":/web \
+                                   static-file-server:image
+                    "#,
+                    UPSTREAMS.join(","),
+                    UPSTREAMS[0],
+                    recovery_hash,
+                )
+            )
+            .unwrap(),
+    );
+
+    server_ipv6
+}
+
+fn spoof_node_dns(env: &TestEnv, node: &IcNodeSnapshot, server_ipv6: &Ipv6Addr) {
+    let logger = env.logger();
+    info!(
+        logger,
+        "Spoofing node DNS to point to the archive server UVM..."
+    );
+
+    let ssh_session = node.block_on_ssh_session().unwrap();
+    // File-system is read-only, so we modify /etc/hosts in a temporary file and replace the
+    // original with a bind mount.
+    let mut command = String::from(
+        r#"
+            sudo cp /etc/hosts /tmp/hosts
+        "#,
+    );
+    for upstream in UPSTREAMS {
+        command.push_str(&format!(
+            r#"
+                echo "{} {}" | sudo tee -a /tmp/hosts > /dev/null
+            "#,
+            server_ipv6, upstream
+        ));
+    }
+    // Match the original /etc/hosts file permissions.
+    command.push_str(
+        r#"
+            sudo chown --reference=/etc/hosts /tmp/hosts
+            sudo chmod --reference=/etc/hosts /tmp/hosts
+
+            sudo mount --bind /tmp/hosts /etc/hosts
+        "#,
+    );
+
+    info!(
+        logger,
+        "{}",
+        execute_bash_command(&ssh_session, command)
+            .map_err(|e| anyhow!("Failed to spoof DNS for node {}: {}", node.node_id, e))
+            .unwrap()
+    );
+}
+
+fn verify_content(ssh_session: &Session, remote_file_path: &str, expected_b64: &str) -> Result<()> {
     // Protobuf files are binary files, and since we deserialize them into UTF-8 strings,
     // we read their base64 encoding and compare those.
     let actual_b64 = execute_bash_command(
         ssh_session,
-        format!("base64 {} | tr -d '\\n'", actual_file_path),
+        format!("base64 {} | tr -d '\\n'", remote_file_path),
     )
     .map_err(|e| anyhow!(e))?;
-    let expected_b64 = std::fs::read_to_string(expected_b64_path).map_err(|e| {
-        anyhow!(
-            "Failed to read expected content from {}: {}",
-            expected_b64_path,
-            e
-        )
-    })?;
     ensure!(
         actual_b64 == expected_b64,
         "Unexpected content in {}: (base-64 encoded) {}",
-        actual_file_path,
+        remote_file_path,
         actual_b64,
     );
     Ok(())
@@ -131,23 +255,31 @@ fn verify_permissions_recursively(
 }
 
 pub fn setup(env: TestEnv) {
+    let server_ipv6 = setup_upstream_uvm(&env);
+
     InternetComputer::new()
         .use_recovery_image()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
+
+    let node = env
+        .topology_snapshot()
+        .subnets()
+        .flat_map(|s| s.nodes())
+        .next()
+        .unwrap();
+
+    spoof_node_dns(&env, &node, &server_ipv6);
 }
 
 pub fn test(env: TestEnv) {
     let log = env.logger();
     info!(log, "Running recovery engine test...");
 
-    let expected_cup_proto_path = std::env::var("RECOVERY_CUP_CONTENT_B64")
-        .expect("RECOVERY_CUP_CONTENT_B64 environment variable not found");
-    let expected_local_store_1_path = std::env::var("RECOVERY_STORE_CONTENT1_B64")
-        .expect("RECOVERY_STORE_CONTENT1_B64 environment variable not found");
-    let expected_local_store_2_path = std::env::var("RECOVERY_STORE_CONTENT2_B64")
-        .expect("RECOVERY_STORE_CONTENT2_B64 environment variable not found");
+    let expected_cup_b64 = read_env_var_path_to_string("RECOVERY_CUP_B64_PATH");
+    let expected_local_store_1_b64 = read_env_var_path_to_string("RECOVERY_STORE_1_B64_PATH");
+    let expected_local_store_2_b64 = read_env_var_path_to_string("RECOVERY_STORE_2_B64_PATH");
 
     let node = env
         .topology_snapshot()
@@ -168,7 +300,7 @@ pub fn test(env: TestEnv) {
         verify_content(
             &ssh_session,
             "/var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb",
-            &expected_cup_proto_path,
+            &expected_cup_b64,
         )
     })
     .unwrap();
@@ -176,14 +308,14 @@ pub fn test(env: TestEnv) {
     verify_content(
         &ssh_session,
         "/var/lib/ic/data/ic_registry_local_store/0001020304/05/06/07.pb",
-        &expected_local_store_1_path,
+        &expected_local_store_1_b64,
     )
     .unwrap();
 
     verify_content(
         &ssh_session,
         "/var/lib/ic/data/ic_registry_local_store/08090a0b0c/0d/0e/0f.pb",
-        &expected_local_store_2_path,
+        &expected_local_store_2_b64,
     )
     .unwrap();
 
