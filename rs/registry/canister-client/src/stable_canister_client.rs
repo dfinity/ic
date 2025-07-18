@@ -1,6 +1,4 @@
-use crate::stable_memory::{
-    RegistryDataStableMemory, StorableRegistryKey, StorableRegistryValue, UnixTsNanos,
-};
+use crate::stable_memory::{RegistryDataStableMemory, StorableRegistryKey, StorableRegistryValue};
 use crate::CanisterRegistryClient;
 use async_trait::async_trait;
 use ic_cdk::println;
@@ -184,24 +182,6 @@ impl<S: RegistryDataStableMemory> CanisterRegistryClient for StableCanisterRegis
         self.get_key_family_base(key_prefix, version, Box::new(|k, v| (k, v.unwrap())))
     }
 
-    fn registry(&self) -> BTreeMap<(String, RegistryVersion, UnixTsNanos), Option<Vec<u8>>> {
-        S::with_registry_map(|registry| {
-            registry
-                .iter()
-                .map(|(k, v)| {
-                    (
-                        (
-                            k.key,
-                            RegistryVersion::from(k.version),
-                            k.timestamp_nanoseconds,
-                        ),
-                        v.0,
-                    )
-                })
-                .collect()
-        })
-    }
-
     fn get_value(&self, key: &str, version: RegistryVersion) -> RegistryClientResult<Vec<u8>> {
         self.get_versioned_value(key, version).map(|vr| vr.value)
     }
@@ -267,9 +247,7 @@ impl<S: RegistryDataStableMemory> CanisterRegistryClient for StableCanisterRegis
 
     fn with_registry_map<R>(
         &self,
-        callback: impl for<'b> FnOnce(
-            Box<dyn Iterator<Item = (String, RegistryVersion, UnixTsNanos, Option<Vec<u8>>)> + 'b>,
-        ) -> R,
+        callback: impl for<'b> FnOnce(Box<dyn Iterator<Item = crate::RegistryRecord> + 'b>) -> R,
     ) -> R {
         S::with_registry_map(|registry| {
             let result = Box::new(registry.iter().map(|(k, v)| {

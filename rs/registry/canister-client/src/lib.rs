@@ -109,21 +109,18 @@ pub trait CanisterRegistryClient {
     /// and the associated value is the set of all registry versions introduced at that timestamp.
     fn timestamp_to_versions_map(&self) -> BTreeMap<UnixTsNanos, HashSet<RegistryVersion>>;
 
-    /// Returns a map containing all the mutations of the registry
-    ///
-    /// The map is keyed by a tuple of (key, version, timestamp) where:
-    /// - `key` is the registry key
-    /// - `version` is the version of the mutation
-    /// - `timestamp` is the timestamp in nanoseconds when the mutation was made
-    fn registry(&self) -> BTreeMap<(String, RegistryVersion, UnixTsNanos), Option<Vec<u8>>>;
-
     fn with_registry_map<R>(
         &self,
-        callback: impl for<'b> FnOnce(
-            Box<dyn Iterator<Item = (String, RegistryVersion, UnixTsNanos, Option<Vec<u8>>)> + 'b>,
-        ) -> R,
+        callback: impl for<'b> FnOnce(Box<dyn Iterator<Item = RegistryRecord> + 'b>) -> R,
     ) -> R;
 }
+
+pub type RegistryRecord = (
+    String,          // Key
+    RegistryVersion, // Version
+    UnixTsNanos,     // Timestamp when the version was added
+    Option<Vec<u8>>, // Value
+);
 
 // Helpers
 
