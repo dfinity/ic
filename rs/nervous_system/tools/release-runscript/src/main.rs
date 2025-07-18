@@ -541,8 +541,8 @@ fn run_create_forum_post(cmd: CreateForumPost) -> Result<()> {
             nns_proposal_ids.iter().fold(String::new(), |mut acc, id| {
                 let _ = write!(
                     acc,
-                    "\n  - https://dashboard.internetcomputer.org/proposal/{}",
-                    id
+                    "\n  - [Proposal {}](https://dashboard.internetcomputer.org/proposal/{})",
+                    id, id
                 );
                 acc
             })
