@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -244,21 +244,28 @@ system_test_nns(
     ],
 )
 
-# Run this test with
-#     bazel test \
-#         --test_env=RECOVERY_CUP_CONTENT_B64 \
-#         --test_env=RECOVERY_STORE_CONTENT1_B64 \
-#         --test_env=RECOVERY_STORE_CONTENT2_B64 \
-#         //rs/tests/consensus:guestos_recovery_engine_smoke_test`
 system_test(
     name = "guestos_recovery_engine_smoke_test",
+    env = {
+        "GUESTOS_RECOVERY_ENGINE_UVM_CONFIG_PATH": "$(rootpath //rs/tests:guestos_recovery_engine_uvm_config_image)",
+
+        "RECOVERY_HASH_PATH": "$(rootpath //ic-os/guestos/envs/recovery-dev:recovery_archive_recovery_hash.txt)",
+        "RECOVERY_CUP_B64_PATH": "$(rootpath //ic-os/guestos/envs/recovery-dev:recovery_archive_cup.proto.b64)",
+        "RECOVERY_STORE_1_B64_PATH": "$(rootpath //ic-os/guestos/envs/recovery-dev:recovery_archive_ic_registry_local_store_1.b64)",
+        "RECOVERY_STORE_2_B64_PATH": "$(rootpath //ic-os/guestos/envs/recovery-dev:recovery_archive_ic_registry_local_store_2.b64)",
+    },
     tags = [
         "k8s",
-        "manual",
-        "system_test_large",
     ],
-    uses_guestos_recovery = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS,
+    uses_guestos_recovery_dev = True,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + [
+        "//rs/tests:guestos_recovery_engine_uvm_config_image",
+
+        "//ic-os/guestos/envs/recovery-dev:recovery_archive_recovery_hash.txt",
+        "//ic-os/guestos/envs/recovery-dev:recovery_archive_cup.proto.b64",
+        "//ic-os/guestos/envs/recovery-dev:recovery_archive_ic_registry_local_store_1.b64",
+        "//ic-os/guestos/envs/recovery-dev:recovery_archive_ic_registry_local_store_2.b64",
+    ],
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",

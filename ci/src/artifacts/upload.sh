@@ -4,7 +4,6 @@ set -eEuo pipefail
 
 BUNDLE="${1:?No bundle to upload}"
 DRY_RUN="${DRY_RUN:-}"
-IS_GUESTOS_RECOVERY_ENGINE_SMOKE_TEST="${IS_GUESTOS_RECOVERY_ENGINE_SMOKE_TEST:-}"
 
 # Multipart upload does not work trough Cloudflare for some reason.
 # Just disabling it with `--s3-upload-cutoff` for now.
@@ -15,20 +14,6 @@ rclone_common_flags=(
     --s3-no-check-bucket
     --config /dev/null # don't use a config file
 )
-
-# During the GuestOS recovery engine smoke test, we are overwriting an
-# existing archive, so we need to disable the immutable flag. We also
-# want to ensure the underlying test uses the most recent version available,
-# so we disable the cache.
-if [[ $IS_GUESTOS_RECOVERY_ENGINE_SMOKE_TEST == "1" ]]; then
-    rclone_common_flags+=(
-        --header-upload="Cache-Control: no-cache"
-    )
-
-    immutable_flag=""
-else
-    immutable_flag="--immutable"
-fi
 
 log() {
     echo "$@" >&2
@@ -64,7 +49,7 @@ upload() {
         copy \
         --files-from <(echo "$(basename "$artifact_localpath")") \
         --no-traverse \
-        $immutable_flag \
+        --immutable \
         "$(dirname "$artifact_localpath")" \
         ":s3:dfinity-download-public/$bucket_dirname"
     log "done uploading to AWS"
@@ -80,7 +65,7 @@ upload() {
         copy \
         --files-from <(echo "$(basename "$artifact_localpath")") \
         --no-traverse \
-        $immutable_flag \
+        --immutable \
         "$(dirname "$artifact_localpath")" \
         ":s3:dfinity-download-public/$bucket_dirname"
     log "done uploading to Cloudflare"

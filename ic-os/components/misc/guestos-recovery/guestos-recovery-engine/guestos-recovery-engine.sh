@@ -2,7 +2,6 @@
 
 set -e
 
-readonly VERSION=""
 readonly EXPECTED_RECOVERY_HASH=""
 
 # Completes the recovery process by downloading and applying the recovery artifacts
@@ -34,7 +33,7 @@ verify_file_hash() {
 
 download_recovery_artifact() {
     local base_url="$1"
-    local recovery_url="${base_url}/ic/${VERSION}/guest-os/recovery-artifacts/recovery.tar.zst"
+    local recovery_url="${base_url}/ic/${EXPECTED_RECOVERY_HASH}/recovery.tar.zst"
 
     echo "Attempting to download recovery artifact from $recovery_url"
 
@@ -76,14 +75,14 @@ fi
 echo "Recovery artifact verified successfully"
 
 echo "Extracting recovery artifact..."
-tar zxf "recovery.tar.zst"
+tar --zstd -xf "recovery.tar.zst"
 
 echo "Preparing recovery artifacts..."
 OWNER_UID=$(sudo stat -c '%u' /var/lib/ic/data/ic_registry_local_store)
 GROUP_UID=$(sudo stat -c '%g' /var/lib/ic/data/ic_registry_local_store)
 
 mkdir ic_registry_local_store
-tar zxf "ic_registry_local_store.tar.zst" -C ic_registry_local_store
+tar --zstd -xf "ic_registry_local_store.tar.zst" -C ic_registry_local_store
 sudo chown -R "$OWNER_UID:$GROUP_UID" ic_registry_local_store
 
 OWNER_UID=$(sudo stat -c '%u' /var/lib/ic/data/cups)
