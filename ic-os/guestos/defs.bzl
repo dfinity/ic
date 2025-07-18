@@ -25,7 +25,9 @@ def image_deps(mode, malicious = False):
         "dockerfile": "//ic-os/guestos/context:Dockerfile",
 
         # Extra files to be added to rootfs and bootfs
-        "bootfs": {},
+        "bootfs": {
+            "//ic-os/components/ovmf:ovmf_sev": "/OVMF_SEV.fd:0644",
+        },
         "rootfs": {
             # additional files to install
             # Required by the IC protocol

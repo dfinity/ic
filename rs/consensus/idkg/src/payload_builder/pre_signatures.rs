@@ -1,7 +1,4 @@
-use crate::{
-    payload_builder::IDkgPayloadError, pre_signer::IDkgTranscriptBuilder,
-    utils::algorithm_for_key_id,
-};
+use crate::{payload_builder::IDkgPayloadError, pre_signer::IDkgTranscriptBuilder};
 use ic_logger::{debug, error, ReplicaLogger};
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_subnet_features::ChainKeyConfig;
@@ -15,7 +12,7 @@ use ic_types::{
         HasIDkgMasterPublicKeyId, IDkgMasterPublicKeyId, IDkgUIDGenerator, PreSigId,
         TranscriptAttributes, UnmaskedTranscriptWithAttributes,
     },
-    crypto::canister_threshold_sig::idkg::IDkgTranscript,
+    crypto::{canister_threshold_sig::idkg::IDkgTranscript, AlgorithmId},
     messages::CallbackId,
     Height, NodeId, RegistryVersion,
 };
@@ -426,7 +423,7 @@ fn new_random_config(
         dealers,
         receivers,
         summary_registry_version,
-        algorithm_for_key_id(key_id),
+        AlgorithmId::from(key_id.inner()),
     )
 }
 
@@ -447,7 +444,7 @@ pub fn new_random_unmasked_config(
         dealers,
         receivers,
         summary_registry_version,
-        algorithm_for_key_id(key_id),
+        AlgorithmId::from(key_id.inner()),
     )
 }
 
@@ -533,7 +530,7 @@ pub(super) mod test_utils {
 
 #[cfg(test)]
 pub(super) mod tests {
-    use super::{algorithm_for_key_id, test_utils::*, *};
+    use super::{test_utils::*, *};
     use crate::test_utils::{
         create_available_pre_signature, create_available_pre_signature_with_key_transcript,
         into_idkg_contexts, set_up_idkg_payload, IDkgPayloadTestHelper, TestIDkgBlockReader,
@@ -628,7 +625,7 @@ pub(super) mod tests {
                     MasterPublicKeyId::Schnorr(transcript.key_id.clone())
                 );
                 let config = transcript.blinder_unmasked_config.as_ref();
-                assert_eq!(config.algorithm_id, algorithm_for_key_id(key_id));
+                assert_eq!(config.algorithm_id, AlgorithmId::from(key_id.inner()));
                 assert_eq!(config.registry_version, registry_version);
                 assert_eq!(config.dealers, config.receivers);
                 assert_eq!(config.dealers, BTreeSet::from(*nodes));
@@ -1043,7 +1040,7 @@ pub(super) mod tests {
             .expect("Translating should succeed");
         assert_eq!(
             translated.blinder_unmasked().algorithm_id,
-            algorithm_for_key_id(&key_id)
+            AlgorithmId::from(key_id.inner())
         );
     }
 
@@ -1078,7 +1075,7 @@ pub(super) mod tests {
             &env,
             &dealers,
             &receivers,
-            algorithm_for_key_id(&key_id),
+            AlgorithmId::from(key_id.inner()),
             &mut rng,
         );
         let key_transcript2 =
@@ -1185,7 +1182,7 @@ pub(super) mod tests {
             &env,
             &dealers,
             &receivers,
-            algorithm_for_key_id(&key_id),
+            AlgorithmId::from(key_id.inner()),
             &mut rng,
         );
         let other_key_transcript =
