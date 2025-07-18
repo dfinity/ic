@@ -157,7 +157,7 @@ pub fn setup(env: TestEnv) {
     info!(env.logger(), "Running the test with key ids: {:?}", key_ids);
 
     PrometheusVm::default()
-        .with_required_host_features(vec![HostFeature::Performance])
+        .with_required_host_features(vec![HostFeature::Performance, HostFeature::Supermicro])
         .start(&env)
         .expect("Failed to start prometheus VM");
 
@@ -168,7 +168,7 @@ pub fn setup(env: TestEnv) {
     };
 
     InternetComputer::new()
-        .with_required_host_features(vec![HostFeature::Performance])
+        .with_required_host_features(vec![HostFeature::Performance, , HostFeature::Dell])
         .add_subnet(
             Subnet::new(SubnetType::System)
                 .with_default_vm_resources(vm_resources)
