@@ -21,7 +21,7 @@ pub use stable_memory::{RegistryDataStableMemory, StorableRegistryKey, StorableR
 /// method to retrieve the "timestamp" that a version was first added to the local
 /// canister.
 #[async_trait]
-pub trait CanisterRegistryClient: Send + Sync {
+pub trait CanisterRegistryClient {
     /// The following holds:
     ///
     /// (1) ∀ k: get_value(k, get_latest_version()).is_ok()
@@ -116,13 +116,20 @@ pub trait CanisterRegistryClient: Send + Sync {
     /// - `version` is the version of the mutation
     /// - `timestamp` is the timestamp in nanoseconds when the mutation was made
     fn registry(&self) -> BTreeMap<(String, RegistryVersion, UnixTsNanos), Option<Vec<u8>>>;
+
+    fn with_registry_map<R>(
+        &self,
+        callback: impl for<'b> FnOnce(
+            Box<dyn Iterator<Item = (String, RegistryVersion, UnixTsNanos, Option<Vec<u8>>)> + 'b>,
+        ) -> R,
+    ) -> R;
 }
 
 // Helpers
 
 /// Get the decoded value of a key from the registry.
-pub fn get_decoded_value<T: prost::Message + Default>(
-    registry_client: &dyn CanisterRegistryClient,
+pub fn get_decoded_value<T: prost::Message + Default, S: CanisterRegistryClient>(
+    registry_client: &S,
     key: &str,
     version: RegistryVersion,
 ) -> RegistryClientResult<T> {

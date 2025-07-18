@@ -34,7 +34,7 @@ thread_local! {
 
 test_registry_data_stable_memory_impl!(DummyState, STATE);
 
-pub fn ts(datetime_str: &str) -> u64 {
+fn ts(datetime_str: &str) -> u64 {
     let dt = format!("{} 00:00:00", datetime_str);
     let naive =
         NaiveDateTime::parse_from_str(&dt, "%Y-%m-%d %H:%M:%S").expect("Invalid date format");
@@ -42,15 +42,19 @@ pub fn ts(datetime_str: &str) -> u64 {
     datetime.timestamp_nanos_opt().unwrap() as u64
 }
 
-pub fn add_record_helper(
+fn add_record_helper(
     key: &str,
     version: u64,
     value: Option<impl ::prost::Message>,
     datetime_str: &str,
 ) {
+    add_record_helper_ts(key, version, value, ts(datetime_str));
+}
+
+fn add_record_helper_ts(key: &str, version: u64, value: Option<impl ::prost::Message>, ts: u64) {
     STATE.with_borrow_mut(|map| {
         map.insert(
-            StorableRegistryKey::new(key.to_string(), version, ts(datetime_str)),
+            StorableRegistryKey::new(key.to_string(), version, ts),
             StorableRegistryValue(value.map(|v| v.encode_to_vec())),
         );
     });
@@ -130,10 +134,14 @@ fn add_dummy_data() {
     add_record_helper(&node_1_k, 39666, None::<NodeRecord>, "2025-07-08");
     add_record_helper(&node_3_k, 39667, Some(node_3_v.clone()), "2025-07-11");
     add_record_helper(&node_3_k, 39670, None::<NodeRecord>, "2025-07-13");
-    add_record_helper(&node_3_k, 39675, Some(node_3_v), "2025-07-15");
+    add_record_helper(&node_3_k, 39675, Some(node_3_v.clone()), "2025-07-15");
+
+    // Removed and re-added node_3 same day
+    add_record_helper_ts(&node_3_k, 39676, None::<NodeRecord>, ts("2025-07-16") + 1);
+    add_record_helper_ts(&node_3_k, 39677, Some(node_3_v), ts("2025-07-16") + 2);
 }
 
-fn client_for_tests() -> RegistryQuerier {
+fn client_for_tests() -> RegistryQuerier<StableCanisterRegistryClient<DummyState>> {
     add_dummy_data();
 
     RegistryQuerier {

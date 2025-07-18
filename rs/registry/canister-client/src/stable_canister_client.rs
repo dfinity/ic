@@ -264,6 +264,25 @@ impl<S: RegistryDataStableMemory> CanisterRegistryClient for StableCanisterRegis
     fn timestamp_to_versions_map(&self) -> BTreeMap<u64, HashSet<RegistryVersion>> {
         self.timestamp_to_versions_map.read().unwrap().clone()
     }
+
+    fn with_registry_map<R>(
+        &self,
+        callback: impl for<'b> FnOnce(
+            Box<dyn Iterator<Item = (String, RegistryVersion, UnixTsNanos, Option<Vec<u8>>)> + 'b>,
+        ) -> R,
+    ) -> R {
+        S::with_registry_map(|registry| {
+            let result = Box::new(registry.iter().map(|(k, v)| {
+                (
+                    k.key,
+                    RegistryVersion::from(k.version),
+                    k.timestamp_nanoseconds,
+                    v.0,
+                )
+            }));
+            callback(result)
+        })
+    }
 }
 
 #[cfg(test)]
