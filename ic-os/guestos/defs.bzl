@@ -105,14 +105,14 @@ def image_deps(mode, malicious = False):
 
     # Update recovery component_files
     # Service files must be added to components instead of rootfs so that the service is enabled by the Dockerfile
-    if "recovery-dev" in mode:
-        local_component_files.update({
-            Label("//ic-os/guestos/envs/recovery-dev:guestos_recovery_archive_guestos-recovery-engine.sh"): "/opt/ic/bin/guestos-recovery-engine.sh",
-            Label("//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.service"): "/etc/systemd/system/guestos-recovery-engine.service",
-        })
-    elif "recovery" in mode:
+    if "recovery" == mode:
         local_component_files.update({
             Label("//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.sh"): "/opt/ic/bin/guestos-recovery-engine.sh",
+            Label("//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.service"): "/etc/systemd/system/guestos-recovery-engine.service",
+        })
+    if "recovery-dev" == mode:
+        local_component_files.update({
+            Label("//ic-os/guestos/envs/recovery-dev:recovery_archive_guestos-recovery-engine.sh"): "/opt/ic/bin/guestos-recovery-engine.sh",
             Label("//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.service"): "/etc/systemd/system/guestos-recovery-engine.service",
         })
 
