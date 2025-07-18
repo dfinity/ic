@@ -91,6 +91,16 @@ impl BalanceBook {
         self
     }
 
+    pub fn with_payees(mut self, account: Option<Account>, name: Option<String>) -> Self {
+        self.payees = Some(Balance::zero(account, name));
+        self
+    }
+
+    pub fn with_payers(mut self, account: Option<Account>, name: Option<String>) -> Self {
+        self.payers = Some(Balance::zero(account, name));
+        self
+    }
+
     pub fn with_suspense(mut self, name: Option<String>) -> Self {
         self.suspense = Some(Balance::zero(None, name));
         self
