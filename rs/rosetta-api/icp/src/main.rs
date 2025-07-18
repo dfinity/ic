@@ -33,10 +33,32 @@ struct ServerConfig {
 }
 
 #[derive(Debug, Parser)]
+#[clap(next_help_heading = "Storage Configuration")]
+struct StorageConfig {
+    /// Supported options: sqlite, sqlite-in-memory
+    #[clap(long = "store-type", default_value = "sqlite")]
+    store_type: String,
+    #[clap(long = "store-location", default_value = "/data")]
+    location: PathBuf,
+    #[clap(long = "store-max-blocks")]
+    max_blocks: Option<u64>,
+    /// Enable optimization for search/transactions by creating additional indexes
+    #[clap(
+        long = "optimize-search-indexes",
+        help = "Create additional indexes to optimize transaction search performance. May increase the database size by ~30%."
+    )]
+    optimize_indexes: bool,
+}
+
+#[derive(Debug, Parser)]
 #[clap(version)]
 struct Opt {
     #[clap(flatten)]
     server: ServerConfig,
+    
+    #[clap(flatten)]
+    storage: StorageConfig,
+    
     /// Id of the ICP ledger canister.
     #[clap(short = 'c', long = "canister-id")]
     ic_canister_id: Option<String>,
@@ -54,13 +76,6 @@ struct Opt {
     log_level: Level,
     #[clap(long = "root-key")]
     root_key: Option<PathBuf>,
-    /// Supported options: sqlite, sqlite-in-memory
-    #[clap(long = "store-type", default_value = "sqlite")]
-    store_type: String,
-    #[clap(long = "store-location", default_value = "/data")]
-    store_location: PathBuf,
-    #[clap(long = "store-max-blocks")]
-    store_max_blocks: Option<u64>,
     #[clap(long = "exit-on-sync")]
     exit_on_sync: bool,
     #[clap(long = "offline")]
@@ -80,13 +95,6 @@ struct Opt {
         help = "Timeout in seconds for sync watchdog"
     )]
     watchdog_timeout_seconds: u64,
-
-    /// Enable optimization for search/transactions by creating additional indexes
-    #[clap(
-        long = "optimize-search-indexes",
-        help = "Create additional indexes to optimize transaction search performance. May increase the database size by ~30%."
-    )]
-    optimize_search_indexes: bool,
 
     #[cfg(feature = "rosetta-blocks")]
     #[clap(long = "enable-rosetta-blocks")]
@@ -232,8 +240,8 @@ async fn main() -> std::io::Result<()> {
         .unwrap_or_else(|| DEFAULT_TOKEN_SYMBOL.to_string());
     info!("Token symbol set to {}", token_symbol);
 
-    let store_location: Option<&Path> = match opt.store_type.as_ref() {
-        "sqlite" => Some(&opt.store_location),
+    let store_location: Option<&Path> = match opt.storage.store_type.as_ref() {
+        "sqlite" => Some(&opt.storage.location),
         "sqlite-in-memory" | "in-memory" => {
             info!("Using in-memory block store");
             None
@@ -245,7 +253,6 @@ async fn main() -> std::io::Result<()> {
     };
 
     let Opt {
-        store_max_blocks,
         offline,
         exit_on_sync,
         mainnet,
@@ -253,7 +260,6 @@ async fn main() -> std::io::Result<()> {
         expose_metrics,
         blockchain,
         watchdog_timeout_seconds,
-        optimize_search_indexes,
         ..
     } = opt;
 
@@ -272,11 +278,11 @@ async fn main() -> std::io::Result<()> {
         token_symbol,
         governance_canister_id,
         store_location,
-        store_max_blocks,
+        opt.storage.max_blocks,
         offline,
         root_key,
         enable_rosetta_blocks,
-        optimize_search_indexes,
+        opt.storage.optimize_indexes,
     )
     .await
     .map_err(|e| {
