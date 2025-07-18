@@ -120,6 +120,16 @@ impl GptPartitionProvider {
     }
 }
 
+impl Drop for GptPartitionProvider {
+    fn drop(&mut self) {
+        debug_assert!(
+            self.device.exists(),
+            "Device {} does not exist",
+            self.device.display()
+        );
+    }
+}
+
 #[async_trait]
 impl PartitionProvider for GptPartitionProvider {
     async fn mount_partition(

@@ -76,7 +76,7 @@ fn create_device_for_upgrade(
         dev_mapper.clone(),
         DATA_PARTITION_DM_NAME,
         vec![LinearSegment::slice(
-            Box::new(base_device),
+            Box::new(base_device.clone()),
             data_partition_start,
             data_partition_len,
         )?],
@@ -102,7 +102,7 @@ fn create_device_for_upgrade(
         UPGRADE_DM_NAME,
         vec![
             // Read-write section: GPT + first 9 partitions
-            LinearSegment::prefix(Box::new(base_device), data_partition_start)?,
+            LinearSegment::prefix(Box::new(base_device.clone()), data_partition_start)?,
             // Read-only section: data partition
             LinearSegment::full(Box::new(data_partition_snapshot_device)),
             // Read-write section: whatever is left at the end of the device (backup GPT)
@@ -168,9 +168,10 @@ mod tests {
     static DM_MUTEX: Mutex<()> = Mutex::new(());
 
     struct TestSetup {
-        backing_file: TempPath,
-        gpt: GptDisk<File>,
         device: MappedDevice,
+        gpt: GptDisk<File>,
+        loop_device: LoopDeviceWrapper,
+        backing_file: TempPath,
     }
 
     fn create_test_setup() -> TestSetup {
@@ -182,19 +183,20 @@ mod tests {
 
         let backing_file = backing_file.into_temp_path();
 
-        let base = LoopDeviceWrapper(
+        let loop_device = LoopDeviceWrapper(
             LoopControl::open()
                 .expect("Failed to open loop control")
                 .next_free()
                 .expect("Failed to find free loop device"),
         );
-        base.attach_file(&backing_file)
+        loop_device
+            .attach_file(&backing_file)
             .expect("Failed to attach file to loop device");
-        let base_path = base.path().expect("Failed to get loop device path");
+        let loop_device_path = loop_device.path().expect("Failed to get loop device path");
 
         let mut gpt = GptConfig::new()
             .writable(true)
-            .create(&base_path)
+            .create(&loop_device_path)
             .expect("Failed to open GPT disk");
         for partition in 1..=10 {
             gpt.add_partition(
@@ -208,12 +210,13 @@ mod tests {
         }
         gpt.write_inplace().expect("Could not write GPT to device");
 
-        let device =
-            create_mapped_device_for_upgrade(&base_path).expect("Failed to create mapped device");
+        let device = create_mapped_device_for_upgrade(&loop_device_path)
+            .expect("Failed to create mapped device");
         TestSetup {
-            backing_file,
-            gpt,
             device,
+            gpt,
+            loop_device,
+            backing_file,
         }
     }
 

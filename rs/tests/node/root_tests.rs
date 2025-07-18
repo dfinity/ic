@@ -42,7 +42,7 @@ EOF
             # The udev daemon is necessary so that the devices created in the test are properly
             # picked up. dmsetup must be available in the container image for this to work.
             /usr/lib/systemd/systemd-udevd --daemon
-            /upgrade_device_mapper_test
+            RUST_BACKTRACE=1 /upgrade_device_mapper_test
         "
     "#,
         )

@@ -16,6 +16,20 @@ use tempfile::{NamedTempFile, TempPath};
 pub trait DeviceTrait: Send + Sync {
     fn len(&self) -> Sectors;
     fn device(&self) -> Device;
+
+    fn assert_valid(&self) {
+        let len: u64 = std::fs::read_to_string(format!("/sys/dev/block/{}/size", self.device()))
+            .expect("Could not read size from sysfs")
+            .trim()
+            .parse()
+            .expect("Could not parse size");
+        assert_eq!(
+            len,
+            self.len().0,
+            "Device {} has unexpected size",
+            self.device()
+        );
+    }
 }
 
 impl DeviceTrait for MappedDevice {
@@ -80,13 +94,15 @@ impl LinearSegment {
 }
 
 /// Base devices are managed externally. The struct just holds information about the device.
-#[derive(Copy, Clone)]
+#[derive(Clone)] // Clone just copies the device information, not the actual device.
 pub struct BaseDevice {
     len: Sectors,
     device: Device,
 }
 
 impl BaseDevice {
+    /// Creates a new BaseDevice from a block device file path.
+    /// The device behind the path must be valid for the lifetime of the constructed object.
     pub fn from_path(path: &Path) -> Result<Self> {
         let device_len = Self::get_device_len(path).context("Could not get block device size")?;
         let device = devnode_to_devno(path)
@@ -110,6 +126,15 @@ impl BaseDevice {
         let mut val = 0;
         unsafe { blkgetsize64(file.as_raw_fd(), &mut val) }.context("blkgetsize64 failed")?;
         Ok(Bytes(val as u128).sectors())
+    }
+}
+
+impl Drop for BaseDevice {
+    fn drop(&mut self) {
+        #[cfg(debug_assertions)]
+        {
+            self.assert_valid()
+        }
     }
 }
 
@@ -186,7 +211,23 @@ pub struct LoopDeviceWrapper(pub LoopDevice);
 
 impl Drop for LoopDeviceWrapper {
     fn drop(&mut self) {
+        #[cfg(debug_assertions)]
+        {
+            let major = self.major().expect("Could not get major number");
+            let minor = self.minor().expect("Could not get minor number");
+            let backing_file_path = std::fs::read_to_string(format!(
+                "/sys/dev/block/{major}:{minor}/loop/backing_file"
+            ))
+            .expect("Could not read backing file from sysfs");
+
+            assert!(
+                Path::new(backing_file_path.trim()).exists(),
+                "LoopDeviceWrapper backing file does not exist: {backing_file_path}"
+            );
+        }
+
         if let Err(err) = self.0.detach() {
+            debug_assert!(false, "Failed to detach loop device: {err}");
             eprintln!("Failed to detach loop device: {err}");
         }
     }
@@ -210,7 +251,7 @@ pub struct MappedDevice {
     len: Sectors,
     device_mapper: Arc<DM>,
     device: Device,
-    _dependencies: Vec<Box<dyn Send + Sync>>,
+    _dependencies: Vec<Box<dyn DeviceTrait>>,
 }
 
 impl Debug for MappedDevice {
@@ -285,7 +326,7 @@ impl MappedDevice {
         name: &'static str,
         table: &[(u64, u64, String, String)],
         len: Sectors,
-        dependencies: Vec<Box<dyn Send + Sync>>,
+        dependencies: Vec<Box<dyn DeviceTrait>>,
     ) -> Result<MappedDevice> {
         let dm_name = DmName::new(name).expect("Illegal DmName");
         let device = dm
@@ -323,10 +364,17 @@ impl MappedDevice {
 
 impl Drop for MappedDevice {
     fn drop(&mut self) {
+        #[cfg(debug_assertions)]
+        {
+            for dep in &self._dependencies {
+                dep.assert_valid();
+            }
+        }
         if let Err(err) = self.device_mapper.device_remove(
             &DevId::Name(DmName::new(self.name).unwrap()),
             DmOptions::default(),
         ) {
+            debug_assert!(false, "Failed to remove device mapper device: {err}");
             eprintln!("Failed to remove device mapper device: {err}");
         }
     }
