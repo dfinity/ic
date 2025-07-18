@@ -9,7 +9,7 @@ use ic_types::{
 };
 use ic_utils_lru_cache::LruCache;
 use prometheus::{Histogram, IntCounter, IntGauge};
-use std::{collections::BTreeMap, mem::size_of_val, sync::Mutex, time::Duration};
+use std::{collections::BTreeMap, sync::Mutex, time::Duration};
 
 use crate::metrics::duration_histogram;
 
@@ -138,12 +138,8 @@ pub(crate) struct EntryKey {
 }
 
 impl MemoryDiskBytes for EntryKey {
-    fn memory_bytes(&self) -> usize {
-        size_of_val(self) + self.method_name.len() + self.method_payload.len()
-    }
-
-    fn disk_bytes(&self) -> usize {
-        0
+    fn heap_bytes(&self) -> usize {
+        self.method_name.heap_bytes() + self.method_payload.heap_bytes()
     }
 }
 
@@ -169,6 +165,12 @@ pub(crate) struct EntryEnv {
     pub batch_time: Time,
     /// A vector of evaluated canister IDs with their versions, balances and stats.
     pub canisters_versions_balances_stats: Vec<(CanisterId, u64, Cycles, QueryStats)>,
+}
+
+impl MemoryDiskBytes for EntryEnv {
+    fn heap_bytes(&self) -> usize {
+        self.canisters_versions_balances_stats.heap_bytes()
+    }
 }
 
 impl EntryEnv {
@@ -210,12 +212,8 @@ pub(crate) struct EntryValue {
 }
 
 impl MemoryDiskBytes for EntryValue {
-    fn memory_bytes(&self) -> usize {
-        size_of_val(self) + self.result.memory_bytes()
-    }
-
-    fn disk_bytes(&self) -> usize {
-        0
+    fn heap_bytes(&self) -> usize {
+        self.env.heap_bytes() + self.result.heap_bytes()
     }
 }
 
@@ -380,12 +378,8 @@ pub(crate) struct QueryCache {
 }
 
 impl MemoryDiskBytes for QueryCache {
-    fn memory_bytes(&self) -> usize {
-        size_of_val(self) + self.cache.lock().unwrap().memory_bytes()
-    }
-
-    fn disk_bytes(&self) -> usize {
-        0
+    fn heap_bytes(&self) -> usize {
+        self.cache.lock().unwrap().heap_bytes()
     }
 }
 
