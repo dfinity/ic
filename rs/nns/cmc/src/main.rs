@@ -547,12 +547,12 @@ impl Default for State {
     }
 }
 
-enum CyclesMintingLimiterSwitch {
+enum CyclesMintingLimiterSelector {
     BaseLimit,
     SubnetRentalLimit,
 }
 
-impl CyclesMintingLimiterSwitch {
+impl CyclesMintingLimiterSelector {
     fn check_and_add_cycles(
         &self,
         state: &mut State,
@@ -560,12 +560,12 @@ impl CyclesMintingLimiterSwitch {
         cycles_to_mint: Cycles,
     ) -> Result<(), String> {
         match self {
-            CyclesMintingLimiterSwitch::BaseLimit => state.base_limiter.check_and_add_cycles(
+            CyclesMintingLimiterSelector::BaseLimit => state.base_limiter.check_and_add_cycles(
                 now,
                 cycles_to_mint,
                 state.base_cycles_limit,
             ),
-            CyclesMintingLimiterSwitch::SubnetRentalLimit => state
+            CyclesMintingLimiterSelector::SubnetRentalLimit => state
                 .subnet_rental_canister_limiter
                 .check_and_add_cycles(now, cycles_to_mint, state.subnet_rental_cycles_limit),
         }
@@ -1324,9 +1324,9 @@ async fn notify_top_up(
     let limiter_to_use =
         if caller == src_canister_principal && canister_id.get() == src_canister_principal {
             // caller and destination needs to be src_canister_principal to get alternate limiter
-            CyclesMintingLimiterSwitch::SubnetRentalLimit
+            CyclesMintingLimiterSelector::SubnetRentalLimit
         } else {
-            CyclesMintingLimiterSwitch::BaseLimit
+            CyclesMintingLimiterSelector::BaseLimit
         };
 
     let (amount, from) = fetch_transaction(
@@ -2161,7 +2161,7 @@ async fn do_transaction_notification(
             canister_id,
             from,
             tn.amount,
-            CyclesMintingLimiterSwitch::BaseLimit,
+            CyclesMintingLimiterSelector::BaseLimit,
         )
         .await;
 
@@ -2341,7 +2341,7 @@ async fn process_top_up(
     canister_id: CanisterId,
     from: AccountIdentifier,
     amount: Tokens,
-    limiter_to_use: CyclesMintingLimiterSwitch,
+    limiter_to_use: CyclesMintingLimiterSelector,
 ) -> Result<Cycles, NotifyError> {
     let cycles = tokens_to_cycles(amount)?;
 
@@ -2471,7 +2471,7 @@ async fn deposit_cycles(
     canister_id: CanisterId,
     cycles: Cycles,
     mint_cycles: bool,
-    limiter_to_use: CyclesMintingLimiterSwitch,
+    limiter_to_use: CyclesMintingLimiterSelector,
 ) -> Result<(), String> {
     if mint_cycles {
         ensure_balance(cycles, limiter_to_use)?;
@@ -2506,7 +2506,7 @@ async fn do_mint_cycles(
     };
     // Always use base cycles limit for minting cycles, since the Subnet Rental Canister
     // doesn't call endpoints using this function.
-    ensure_balance(cycles, CyclesMintingLimiterSwitch::BaseLimit)?;
+    ensure_balance(cycles, CyclesMintingLimiterSelector::BaseLimit)?;
 
     let arg = CyclesLedgerDepositArgs {
         to: account,
@@ -2605,7 +2605,7 @@ async fn do_create_canister(
 
     // Always use base cycles limit for minting cycles, since the Subnet Rental Canister
     // doesn't call endpoints using this function.
-    ensure_balance(cycles, CyclesMintingLimiterSwitch::BaseLimit)?;
+    ensure_balance(cycles, CyclesMintingLimiterSelector::BaseLimit)?;
 
     let canister_settings = settings
         .map(|mut settings| {
@@ -2663,7 +2663,7 @@ async fn do_create_canister(
 /// the minting limit is checked and enforced before minting, otherwise, the minting limit is ignored.
 fn ensure_balance(
     cycles: Cycles,
-    limiter_to_use: CyclesMintingLimiterSwitch,
+    limiter_to_use: CyclesMintingLimiterSelector,
 ) -> Result<(), String> {
     let now = now_system_time();
 
