@@ -54,10 +54,10 @@ fn setup(env: TestEnv) {
     install_nns_and_check_progress(env.topology_snapshot());
 }
 
-// Tests an upgrade of the app subnet to the branch version
+// Tests an upgrade of the app subnet to the target version
 fn upgrade_app_subnet(env: TestEnv) {
     let nns_node = env.get_first_healthy_system_node_snapshot();
-    let branch_version = bless_target_version(&env, &nns_node);
+    let target_version = bless_target_version(&env, &nns_node);
     let agent = nns_node.with_default_agent(|agent| async move { agent });
     let ecdsa_state = get_chain_key_canister_and_public_key(
         &env,
@@ -70,7 +70,7 @@ fn upgrade_app_subnet(env: TestEnv) {
     upgrade(
         &env,
         &nns_node,
-        &branch_version,
+        &target_version,
         SubnetType::Application,
         Some(&ecdsa_state),
     );

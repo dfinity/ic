@@ -137,10 +137,10 @@ pub fn upgrade_hostos(env: TestEnv) {
 
     let target_version_str = get_hostos_update_img_version().unwrap();
     let target_version =
-        HostosVersion::try_from(target_version_str.trim()).expect("Invalid mainnet hostos version");
+        HostosVersion::try_from(target_version_str.trim()).expect("Invalid target hostos version");
 
     let update_image_url =
-        get_hostos_update_img_url().expect("Invalid mainnet hostos update image URL");
+        get_hostos_update_img_url().expect("Invalid target hostos update image URL");
     info!(logger, "HostOS update image URL: '{}'", update_image_url);
     let update_image_sha256 = get_hostos_update_img_sha256().unwrap();
 

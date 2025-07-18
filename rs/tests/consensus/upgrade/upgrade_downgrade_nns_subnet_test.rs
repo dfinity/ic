@@ -36,7 +36,7 @@ fn setup(env: TestEnv) {
     install_nns_and_check_progress(env.topology_snapshot());
 }
 
-// Tests an upgrade of the NNS subnet to the branch version and a downgrade back to the mainnet version
+// Tests an upgrade of the NNS subnet to the target version and a downgrade back to the initial version
 fn upgrade_downgrade_nns_subnet(env: TestEnv) {
     let nns_node = env.get_first_healthy_system_node_snapshot();
     let target_version = bless_target_version(&env, &nns_node);
