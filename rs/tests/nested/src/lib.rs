@@ -345,8 +345,9 @@ pub fn recovery_upgrader_test(env: TestEnv) {
             logger,
             "Remounting /boot as read-write and updating boot_args file"
         );
+        // TODO: need the guestos update image hash
         let update_result = host.block_on_bash_script(
-            "sudo mount -o remount,rw /boot && sudo sed -i 's/\\(BOOT_ARGS_A=\".*\\)enforcing=0\"/\\1enforcing=0 recovery=1 version=e915efecc8af90993ccfc499721ebe826aadba60 hash=5e1e45\"/' /boot/boot_args && sudo mount -o remount,ro /boot"
+            "sudo mount -o remount,rw /boot && sudo sed -i 's/\\(BOOT_ARGS_A=\".*\\)enforcing=0\"/\\1enforcing=0 recovery=1 version=e915efecc8af90993ccfc499721ebe826aadba60 hash=12e130\"/' /boot/boot_args && sudo mount -o remount,ro /boot"
         );
 
         match update_result {
