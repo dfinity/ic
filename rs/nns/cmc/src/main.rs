@@ -2157,14 +2157,15 @@ async fn do_transaction_notification(
 
         // Always use base cycles limit for minting cycles, since the Subnet Rental Canister
         // doesn't call this endpoint.
-        match process_top_up(
+        let process_top_up_result = process_top_up(
             canister_id,
             from,
             tn.amount,
             CyclesMintingLimiterSwitch::BaseLimit,
         )
-        .await
-        {
+        .await;
+
+        match process_top_up_result {
             Ok(cycles) => (
                 Ok(CyclesResponse::ToppedUp(())),
                 Some(NotificationStatus::NotifiedTopUp(Ok(cycles))),
