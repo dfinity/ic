@@ -170,7 +170,7 @@ mod tests {
     struct TestSetup {
         device: MappedDevice,
         gpt: GptDisk<File>,
-        loop_device: LoopDeviceWrapper,
+        _loop_device: LoopDeviceWrapper,
         backing_file: TempPath,
     }
 
@@ -215,7 +215,7 @@ mod tests {
         TestSetup {
             device,
             gpt,
-            loop_device,
+            _loop_device: loop_device,
             backing_file,
         }
     }

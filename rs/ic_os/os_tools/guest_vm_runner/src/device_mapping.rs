@@ -17,6 +17,7 @@ pub trait DeviceTrait: Send + Sync {
     fn len(&self) -> Sectors;
     fn device(&self) -> Device;
 
+    #[cfg(debug_assertions)]
     fn assert_valid(&self) {
         let len: u64 = std::fs::read_to_string(format!("/sys/dev/block/{}/size", self.device()))
             .expect("Could not read size from sysfs")
