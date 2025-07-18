@@ -264,8 +264,8 @@ async fn main() -> std::io::Result<()> {
     info!("Listening on {}:{}", opt.server.address, listen_port);
     let addr = format!("{}:{}", opt.server.address, listen_port);
 
-    let network_config = ParsedNetworkConfig::from_config(opt.network, opt.mainnet)
-        .unwrap_or_else(|e| {
+    let network_config =
+        ParsedNetworkConfig::from_config(opt.network, opt.mainnet).unwrap_or_else(|e| {
             error!("Configuration error: {}", e);
             std::process::exit(1);
         });
