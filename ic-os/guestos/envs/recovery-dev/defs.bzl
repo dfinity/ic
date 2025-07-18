@@ -5,9 +5,9 @@ Helper function to generate a dummy recovery archive for testing purposes.
 def generate_dummy_recovery_archive(name, seed):
     """
     Generates a dummy recovery archive for testing purposes. This is done with a genrule that outputs a tarball
-    containing a dummy CUP and local store, along with the modified recovery engine script that should
-    be included in the disk image. It also outputs the base64-encoded contents of the CUP and local store files
-    to be passed to the system test to verify the recovery process.
+    containing a dummy CUP and local store, along with the hash of this tarball and the modified recovery engine
+    script that should be included in the disk image. It also outputs the base64-encoded contents of the CUP and
+    local store files to be passed to the system test to verify the recovery process.
 
     Args:
         name: The name of the genrule target.
