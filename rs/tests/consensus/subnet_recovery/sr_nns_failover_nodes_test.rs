@@ -94,7 +94,7 @@ pub fn test(env: TestEnv) {
     let topo_broken_ic = env.topology_snapshot_by_name("broken");
     let topo_restore_ic = env.topology_snapshot_by_name("restore");
 
-    let ic_version = get_ic_os_img_version().unwrap();
+    let ic_version = get_guestos_img_version().unwrap();
     let ic_version = ReplicaVersion::try_from(ic_version).unwrap();
     info!(logger, "IC_VERSION_ID: {:?}", ic_version);
 

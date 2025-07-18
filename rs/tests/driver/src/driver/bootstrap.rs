@@ -14,8 +14,8 @@ use crate::{
         resource::{AllocatedVm, HOSTOS_MEMORY_KIB_PER_VM, HOSTOS_VCPUS_PER_VM},
         test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
         test_env_api::{
-            get_dependency_path_from_env, get_elasticsearch_hosts, get_ic_os_img_version,
-            get_ic_os_initial_update_img_sha256, get_ic_os_initial_update_img_url,
+            get_dependency_path_from_env, get_elasticsearch_hosts, get_guestos_img_version,
+            get_guestos_initial_update_img_sha256, get_guestos_initial_update_img_url,
             get_malicious_ic_os_update_img_sha256, get_malicious_ic_os_update_img_url,
             get_setupos_img_sha256, get_setupos_img_url, HasTopologySnapshot, HasVmName,
             IcNodeContainer, InitialReplicaVersion, NodesInfo,
@@ -96,7 +96,7 @@ pub fn init_ic(
     // is not supported anymore.
     let dummy_hash = "60958ccac3e5dfa6ae74aa4f8d6206fd33a5fc9546b8abaad65e3f1c4023c5bf".to_string();
 
-    let replica_version = get_ic_os_img_version()?;
+    let replica_version = get_guestos_img_version()?;
     let replica_version = ReplicaVersion::try_from(replica_version.clone())?;
     let initial_replica_version = InitialReplicaVersion {
         version: replica_version.clone(),
@@ -194,8 +194,8 @@ pub fn init_ic(
             )
         } else {
             (
-                get_ic_os_initial_update_img_sha256(test_env)?,
-                get_ic_os_initial_update_img_url()?,
+                get_guestos_initial_update_img_sha256(test_env)?,
+                get_guestos_initial_update_img_url()?,
             )
         }
     };

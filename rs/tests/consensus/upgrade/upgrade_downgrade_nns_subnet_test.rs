@@ -12,7 +12,7 @@ use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::HasPublicApiUrl;
 use ic_system_test_driver::driver::test_env_api::{
-    get_ic_os_img_version, GetFirstHealthyNodeSnapshot, HasTopologySnapshot,
+    get_guestos_img_version, GetFirstHealthyNodeSnapshot, HasTopologySnapshot,
 };
 use ic_system_test_driver::systest;
 use ic_types::Height;
@@ -42,7 +42,7 @@ fn upgrade_downgrade_nns_subnet(env: TestEnv) {
     let target_version = bless_target_version(&env, &nns_node);
     let (faulty_node, can_id, msg) =
         upgrade(&env, &nns_node, &target_version, SubnetType::System, None);
-    let initial_version = get_ic_os_img_version().expect("Failed to find initial version");
+    let initial_version = get_guestos_img_version().expect("Failed to find initial version");
     upgrade(&env, &nns_node, &initial_version, SubnetType::System, None);
     // Make sure we can still read the message stored before the first upgrade
     assert!(can_read_msg_with_retries(

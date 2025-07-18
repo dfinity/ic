@@ -22,7 +22,7 @@ use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    get_ic_os_img_version, GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot,
+    get_guestos_img_version, GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot,
     IcNodeContainer, SubnetSnapshot,
 };
 use ic_system_test_driver::generic_workload_engine::engine::Engine;
@@ -117,7 +117,7 @@ fn upgrade_downgrade_app_subnet(env: TestEnv) {
         SubnetType::Application,
         None,
     );
-    let initial_version = get_ic_os_img_version().expect("target IC version");
+    let initial_version = get_guestos_img_version().expect("target IC version");
     upgrade(
         &env,
         &nns_node,

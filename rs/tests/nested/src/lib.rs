@@ -305,17 +305,17 @@ pub fn upgrade_guestos(env: TestEnv) {
         let original_version = get_setupos_img_version().expect("Failed to find initial version");
 
         // determine new GuestOS version
-        let upgrade_url = get_ic_os_update_img_url()
+        let upgrade_url = get_guestos_update_img_url()
             .expect("no image URL")
             .to_string();
         info!(logger, "GuestOS upgrade image URL: {}", upgrade_url);
 
         let target_version_str =
-            get_ic_os_update_img_version().expect("Failed to get target replica version");
+            get_guestos_update_img_version().expect("Failed to get target replica version");
         let target_version = ReplicaVersion::try_from(target_version_str.as_str()).unwrap();
         info!(logger, "Target replica version: {}", target_version);
 
-        let sha256 = get_ic_os_update_img_sha256(&env).expect("no SHA256 hash");
+        let sha256 = get_guestos_update_img_sha256(&env).expect("no SHA256 hash");
         info!(logger, "Update image SHA256: {}", sha256);
 
         // check that GuestOS is on the expected version (initial version)

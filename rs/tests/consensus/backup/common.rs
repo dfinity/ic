@@ -103,11 +103,11 @@ pub fn test(env: TestEnv) {
     let nns_node = get_nns_node(&env.topology_snapshot());
     info!(log, "Elect the target replica version");
     let binary_version = get_current_branch_version().expect("tip-of-branch IC version");
-    let target_version = get_ic_os_update_img_version().expect("target IC version");
+    let target_version = get_guestos_update_img_version().expect("target IC version");
 
     // Bless target version
-    let sha256 = get_ic_os_update_img_sha256(&env).unwrap();
-    let upgrade_url = get_ic_os_update_img_url().unwrap();
+    let sha256 = get_guestos_update_img_sha256(&env).unwrap();
+    let upgrade_url = get_guestos_update_img_url().unwrap();
     block_on(bless_replica_version(
         &nns_node,
         &target_version,

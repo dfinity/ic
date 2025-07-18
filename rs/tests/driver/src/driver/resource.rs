@@ -12,7 +12,7 @@ use crate::driver::ic::{ImageSizeGiB, VmAllocationStrategy, VmResources};
 use crate::driver::nested::NestedNode;
 use crate::driver::test_env::{TestEnv, TestEnvAttribute};
 use crate::driver::test_env_api::{
-    get_empty_disk_img_sha256, get_empty_disk_img_url, get_ic_os_img_sha256, get_ic_os_img_url,
+    get_empty_disk_img_sha256, get_empty_disk_img_url, get_guestos_img_sha256, get_guestos_img_url,
     get_malicious_ic_os_img_sha256, get_malicious_ic_os_img_url,
 };
 use crate::driver::test_setup::{GroupSetup, InfraProvider};
@@ -169,7 +169,7 @@ pub fn get_resource_request(
                 test_env.logger(),
                 "Using guestos image from environment for IC config."
             );
-            (get_ic_os_img_sha256()?, get_ic_os_img_url()?)
+            (get_guestos_img_sha256()?, get_guestos_img_url()?)
         }
     };
     let mut res_req = ResourceRequest::new(ImageType::IcOsImage, ic_os_img_url, ic_os_img_sha256);
