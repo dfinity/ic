@@ -61,6 +61,19 @@ struct NetworkConfig {
 }
 
 #[derive(Debug, Parser)]
+#[clap(next_help_heading = "Canister Configuration")]
+struct CanisterConfig {
+    /// Id of the ICP ledger canister.
+    #[clap(short = 'c', long = "canister-id")]
+    canister_id: Option<String>,
+    #[clap(short = 't', long = "token-symbol")]
+    token_symbol: Option<String>,
+    /// Id of the governance canister to use for neuron management.
+    #[clap(short = 'g', long = "governance-canister-id")]
+    governance_canister_id: Option<String>,
+}
+
+#[derive(Debug, Parser)]
 #[clap(version)]
 struct Opt {
     #[clap(flatten)]
@@ -72,14 +85,9 @@ struct Opt {
     #[clap(flatten)]
     network: NetworkConfig,
     
-    /// Id of the ICP ledger canister.
-    #[clap(short = 'c', long = "canister-id")]
-    ic_canister_id: Option<String>,
-    #[clap(short = 't', long = "token-sybol")]
-    token_symbol: Option<String>,
-    /// Id of the governance canister to use for neuron management.
-    #[clap(short = 'g', long = "governance-canister-id")]
-    governance_canister_id: Option<String>,
+    #[clap(flatten)]
+    canister: CanisterConfig,
+    
     #[clap(short = 'l', long = "log-config-file")]
     log_config_file: Option<PathBuf>,
     #[clap(short = 'L', long = "log-level", default_value = "INFO")]
@@ -202,14 +210,14 @@ async fn main() -> std::io::Result<()> {
             }
         };
 
-        let canister_id = match opt.ic_canister_id {
+        let canister_id = match opt.canister.canister_id {
             Some(cid) => {
                 CanisterId::unchecked_from_principal(PrincipalId::from_str(&cid[..]).unwrap())
             }
             None => ic_nns_constants::LEDGER_CANISTER_ID,
         };
 
-        let governance_canister_id = match opt.governance_canister_id {
+        let governance_canister_id = match opt.canister.governance_canister_id {
             Some(cid) => {
                 CanisterId::unchecked_from_principal(PrincipalId::from_str(&cid[..]).unwrap())
             }
@@ -226,14 +234,14 @@ async fn main() -> std::io::Result<()> {
             }
         };
 
-        let canister_id = match opt.ic_canister_id {
+        let canister_id = match opt.canister.canister_id {
             Some(cid) => {
                 CanisterId::unchecked_from_principal(PrincipalId::from_str(&cid[..]).unwrap())
             }
             None => ic_nns_constants::LEDGER_CANISTER_ID,
         };
 
-        let governance_canister_id = match opt.governance_canister_id {
+        let governance_canister_id = match opt.canister.governance_canister_id {
             Some(cid) => {
                 CanisterId::unchecked_from_principal(PrincipalId::from_str(&cid[..]).unwrap())
             }
@@ -244,6 +252,7 @@ async fn main() -> std::io::Result<()> {
     };
 
     let token_symbol = opt
+        .canister
         .token_symbol
         .unwrap_or_else(|| DEFAULT_TOKEN_SYMBOL.to_string());
     info!("Token symbol set to {}", token_symbol);
