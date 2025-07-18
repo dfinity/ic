@@ -1843,9 +1843,13 @@ pub async fn start_or_reuse_server(server_binary: Option<PathBuf>) -> Url {
             let os = "darwin";
             #[cfg(not(target_os = "macos"))]
             let os = "linux";
+            #[cfg(target_arch = "aarch64")]
+            let arch = "arm64";
+            #[cfg(not(target_arch = "aarch64"))]
+            let arch = "x86_64";
             let server_url = format!(
-                "https://github.com/dfinity/pocketic/releases/download/{}/pocket-ic-x86_64-{}.gz",
-                EXPECTED_SERVER_VERSION, os
+                "https://github.com/dfinity/pocketic/releases/download/{}/pocket-ic-{}-{}.gz",
+                EXPECTED_SERVER_VERSION, arch, os
             );
             println!("Failed to validate PocketIC server binary: `{}`. Going to download PocketIC server {} from {} to the local path {}. To avoid downloads during test execution, please specify the path to the (ungzipped and executable) PocketIC server {} using the function `PocketIcBuilder::with_server_binary` or using the `POCKET_IC_BIN` environment variable.", e, EXPECTED_SERVER_VERSION, server_url, default_bin_path.display(), EXPECTED_SERVER_VERSION);
             if let Err(e) = download_pocketic_server(server_url, out).await {
