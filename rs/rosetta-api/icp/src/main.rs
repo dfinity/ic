@@ -2,9 +2,11 @@ use clap::Parser;
 use ic_crypto_utils_threshold_sig_der::{
     parse_threshold_sig_key, parse_threshold_sig_key_from_der,
 };
+use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
 use ic_rosetta_api::request_handler::RosettaRequestHandler;
 use ic_rosetta_api::rosetta_server::{RosettaApiServer, RosettaApiServerOpt};
 use ic_rosetta_api::{ledger_client, DEFAULT_BLOCKCHAIN, DEFAULT_TOKEN_SYMBOL};
+use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::{CanisterId, PrincipalId};
 use rosetta_core::metrics::RosettaMetrics;
 use std::{path::Path, path::PathBuf, str::FromStr, sync::Arc};
@@ -17,6 +19,20 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{Layer, Registry};
 use url::Url;
+
+const TEST_LEDGER_CANISTER_ID: &str = "xafvr-biaaa-aaaai-aql5q-cai";
+const TEST_TOKEN_SYMBOL: &str = "TESTICP";
+
+#[derive(Debug, Clone, clap::ValueEnum, PartialEq, Default)]
+enum Environment {
+    #[clap(help = "Production ledger canister on mainnet")]
+    Production,
+    #[clap(help = "Test ledger canister on mainnet")]
+    Test,
+    #[clap(name = "deprecated-testnet", help = "Testnet environment (deprecated)")]
+    #[default]
+    DeprecatedTestnet,
+}
 
 #[derive(Debug, Parser)]
 #[clap(next_help_heading = "Server Configuration")]
@@ -60,6 +76,48 @@ struct NetworkConfig {
     root_key: Option<PathBuf>,
 }
 
+#[derive(Debug)]
+struct ParsedNetworkConfig {
+    pub ic_url: Url,
+    pub root_key: Option<ThresholdSigPublicKey>,
+}
+
+impl ParsedNetworkConfig {
+    fn from_config(config: NetworkConfig, environment: &Environment) -> Result<Self, String> {
+        const DEPRECATED_TESTNET_URL: &str = "https://exchanges.testnet.dfinity.network";
+        const MAINNET_URL: &str = "https://ic0.app";
+        const MAINNET_ROOT_KEY: &str = r#"MIGCMB0GDSsGAQQBgtx8BQMBAgEGDCsGAQQBgtx8BQMCAQNhAIFMDm7HH6tYOwi9gTc8JVw8NxsuhIY8mKTx4It0I10U+12cDNVG2WhfkToMCyzFNBWDv0tDkuRn25bWW5u0y3FxEvhHLg1aTRRQX/10hLASkQkcX4e5iINGP5gJGguqrg=="#;
+
+        let url_str = match &config.ic_url {
+            Some(url_str) => url_str.as_str(),
+            None => match environment {
+                Environment::DeprecatedTestnet => DEPRECATED_TESTNET_URL,
+                Environment::Production | Environment::Test => MAINNET_URL,
+            },
+        };
+        let ic_url = Url::parse(url_str).map_err(|e| format!("Unable to parse --ic-url: {}", e))?;
+
+        let root_key = match config.root_key {
+            Some(root_key_path) => Some(
+                parse_threshold_sig_key(root_key_path.as_path())
+                    .map_err(|e| format!("Unable to parse root key from file: {}", e))?,
+            ),
+            None => {
+                match environment {
+                    Environment::Production | Environment::Test => {
+                        // The mainnet root key
+                        let decoded = base64::decode(MAINNET_ROOT_KEY).unwrap();
+                        Some(parse_threshold_sig_key_from_der(&decoded).unwrap())
+                    }
+                    Environment::DeprecatedTestnet => None,
+                }
+            }
+        };
+
+        Ok(Self { ic_url, root_key })
+    }
+}
+
 #[derive(Debug, Parser)]
 #[clap(next_help_heading = "Canister Configuration")]
 struct CanisterConfig {
@@ -73,9 +131,73 @@ struct CanisterConfig {
     governance_canister_id: Option<String>,
 }
 
+#[derive(Debug)]
+struct ParsedCanisterConfig {
+    pub ledger_canister_id: CanisterId,
+    pub token_symbol: String,
+    pub governance_canister_id: CanisterId,
+}
+
+impl ParsedCanisterConfig {
+    fn from_config(config: CanisterConfig, environment: &Environment) -> Result<Self, String> {
+        // Apply environment preset defaults when no explicit value provided
+        let ledger_canister_id = match config.ledger_canister_id {
+            Some(explicit_value) => CanisterId::unchecked_from_principal(
+                PrincipalId::from_str(&explicit_value).map_err(|e| {
+                    format!("Invalid ledger canister ID '{}': {}", explicit_value, e)
+                })?,
+            ),
+            None => match environment {
+                Environment::Test => CanisterId::unchecked_from_principal(
+                    PrincipalId::from_str(TEST_LEDGER_CANISTER_ID).map_err(|e| {
+                        format!(
+                            "Invalid test ledger canister ID '{}': {}",
+                            TEST_LEDGER_CANISTER_ID, e
+                        )
+                    })?,
+                ),
+                Environment::Production | Environment::DeprecatedTestnet => LEDGER_CANISTER_ID,
+            },
+        };
+
+        let token_symbol = match config.token_symbol {
+            Some(explicit_value) => explicit_value,
+            None => match environment {
+                Environment::Test => TEST_TOKEN_SYMBOL.to_string(),
+                Environment::Production | Environment::DeprecatedTestnet => {
+                    DEFAULT_TOKEN_SYMBOL.to_string()
+                }
+            },
+        };
+
+        let governance_canister_id = match config.governance_canister_id {
+            Some(explicit_value) => CanisterId::unchecked_from_principal(
+                PrincipalId::from_str(&explicit_value).map_err(|e| {
+                    format!("Invalid governance canister ID '{}': {}", explicit_value, e)
+                })?,
+            ),
+            None => GOVERNANCE_CANISTER_ID,
+        };
+
+        Ok(Self {
+            ledger_canister_id,
+            token_symbol,
+            governance_canister_id,
+        })
+    }
+}
+
 #[derive(Debug, Parser)]
 #[clap(version)]
 struct Opt {
+    #[clap(
+        short = 'e',
+        long = "environment",
+        default_value = "deprecated-testnet",
+        help = "Environment preset that configures network and canister settings."
+    )]
+    environment: Environment,
+
     #[clap(flatten)]
     server: ServerConfig,
 
@@ -115,24 +237,6 @@ struct Opt {
     #[cfg(feature = "rosetta-blocks")]
     #[clap(long = "enable-rosetta-blocks")]
     enable_rosetta_blocks: bool,
-}
-
-impl Opt {
-    fn default_url(&self) -> Url {
-        let url = if self.mainnet {
-            "https://ic0.app"
-        } else {
-            "https://exchanges.testnet.dfinity.network"
-        };
-        Url::parse(url).unwrap()
-    }
-
-    fn ic_url(&self) -> Result<Url, String> {
-        match self.network.ic_url.as_ref() {
-            None => Ok(self.default_url()),
-            Some(s) => Url::parse(s).map_err(|e| format!("Unable to parse --ic-url: {}", e)),
-        }
-    }
 }
 
 fn init_logging(level: Level) -> std::io::Result<WorkerGuard> {
@@ -186,6 +290,26 @@ async fn main() -> std::io::Result<()> {
         warn!("--log-config-file is deprecated and ignored")
     }
 
+    // Check for conflicting flags
+    if opt.mainnet && opt.environment != Environment::DeprecatedTestnet {
+        eprintln!("Cannot specify both --mainnet and --environment flags. Please use --environment production instead of --mainnet.");
+        std::process::exit(1);
+    }
+
+    // Handle mainnet flag by treating it as environment production
+    let environment = if opt.mainnet {
+        warn!("--mainnet flag is deprecated. Please use --environment production instead.");
+        Environment::Production
+    } else {
+        opt.environment
+    };
+
+    if environment == Environment::DeprecatedTestnet {
+        warn!(
+            "deprecated-testnet environment is deprecated. Please use --environment test instead."
+        );
+    }
+
     let pkg_name = env!("CARGO_PKG_NAME");
     let pkg_version = env!("CARGO_PKG_VERSION");
     info!("Starting {}, pkg_version: {}", pkg_name, pkg_version);
@@ -196,66 +320,25 @@ async fn main() -> std::io::Result<()> {
     };
     info!("Listening on {}:{}", opt.server.address, listen_port);
     let addr = format!("{}:{}", opt.server.address, listen_port);
-    let url = opt.ic_url().unwrap();
-    info!("Internet Computer URL set to {}", url);
 
-    let (root_key, canister_id, governance_canister_id) = if opt.mainnet {
-        let root_key = match opt.network.root_key {
-            Some(root_key_path) => parse_threshold_sig_key(root_key_path.as_path())?,
-            None => {
-                // The mainnet root key
-                let root_key_text = r#"MIGCMB0GDSsGAQQBgtx8BQMBAgEGDCsGAQQBgtx8BQMCAQNhAIFMDm7HH6tYOwi9gTc8JVw8NxsuhIY8mKTx4It0I10U+12cDNVG2WhfkToMCyzFNBWDv0tDkuRn25bWW5u0y3FxEvhHLg1aTRRQX/10hLASkQkcX4e5iINGP5gJGguqrg=="#;
-                let decoded = base64::decode(root_key_text).unwrap();
-                parse_threshold_sig_key_from_der(&decoded).unwrap()
-            }
-        };
+    let network_config = ParsedNetworkConfig::from_config(opt.network, &environment)
+        .unwrap_or_else(|e| {
+            error!("Configuration error: {}", e);
+            std::process::exit(1);
+        });
+    info!("Internet Computer URL set to {}", network_config.ic_url);
 
-        let canister_id = match opt.canister.ledger_canister_id {
-            Some(cid) => {
-                CanisterId::unchecked_from_principal(PrincipalId::from_str(&cid[..]).unwrap())
-            }
-            None => ic_nns_constants::LEDGER_CANISTER_ID,
-        };
+    if network_config.root_key.is_none() {
+        warn!("Data certificate will not be verified due to missing root key");
+    }
 
-        let governance_canister_id = match opt.canister.governance_canister_id {
-            Some(cid) => {
-                CanisterId::unchecked_from_principal(PrincipalId::from_str(&cid[..]).unwrap())
-            }
-            None => ic_nns_constants::GOVERNANCE_CANISTER_ID,
-        };
+    let canister_config = ParsedCanisterConfig::from_config(opt.canister, &environment)
+        .unwrap_or_else(|e| {
+            error!("Configuration error: {}", e);
+            std::process::exit(1);
+        });
 
-        (Some(root_key), canister_id, governance_canister_id)
-    } else {
-        let root_key = match opt.network.root_key {
-            Some(root_key_path) => Some(parse_threshold_sig_key(root_key_path.as_path())?),
-            None => {
-                warn!("Data certificate will not be verified due to missing root key");
-                None
-            }
-        };
-
-        let canister_id = match opt.canister.ledger_canister_id {
-            Some(cid) => {
-                CanisterId::unchecked_from_principal(PrincipalId::from_str(&cid[..]).unwrap())
-            }
-            None => ic_nns_constants::LEDGER_CANISTER_ID,
-        };
-
-        let governance_canister_id = match opt.canister.governance_canister_id {
-            Some(cid) => {
-                CanisterId::unchecked_from_principal(PrincipalId::from_str(&cid[..]).unwrap())
-            }
-            None => ic_nns_constants::GOVERNANCE_CANISTER_ID,
-        };
-
-        (root_key, canister_id, governance_canister_id)
-    };
-
-    let token_symbol = opt
-        .canister
-        .token_symbol
-        .unwrap_or_else(|| DEFAULT_TOKEN_SYMBOL.to_string());
-    info!("Token symbol set to {}", token_symbol);
+    info!("Token symbol set to {}", canister_config.token_symbol);
 
     let store_location: Option<&Path> = match opt.storage.store_type.as_ref() {
         "sqlite" => Some(&opt.storage.location),
@@ -272,7 +355,6 @@ async fn main() -> std::io::Result<()> {
     let Opt {
         offline,
         exit_on_sync,
-        mainnet,
         not_whitelisted,
         expose_metrics,
         blockchain,
@@ -289,21 +371,25 @@ async fn main() -> std::io::Result<()> {
         enable_rosetta_blocks = opt.enable_rosetta_blocks;
     }
 
+    // Determine effective mainnet setting based on the environment
+    let effective_mainnet =
+        environment == Environment::Production || environment == Environment::Test;
+
     let client = ledger_client::LedgerClient::new(
-        url,
-        canister_id,
-        token_symbol,
-        governance_canister_id,
+        network_config.ic_url,
+        canister_config.ledger_canister_id,
+        canister_config.token_symbol,
+        canister_config.governance_canister_id,
         store_location,
         opt.storage.max_blocks,
         offline,
-        root_key,
+        network_config.root_key,
         enable_rosetta_blocks,
         opt.storage.optimize_indexes,
     )
     .await
     .map_err(|e| {
-        let msg = if mainnet && !not_whitelisted && e.is_internal_error_403() {
+        let msg = if effective_mainnet && !not_whitelisted && e.is_internal_error_403() {
             ", You may not be whitelisted; please try running the Rosetta server again with the '--not_whitelisted' flag"
         } else {""};
         (e, msg)
@@ -311,7 +397,7 @@ async fn main() -> std::io::Result<()> {
     .unwrap_or_else(|(e, is_403)| panic!("Failed to initialize ledger client{}: {:?}", is_403, e));
 
     let ledger = Arc::new(client);
-    let canister_id_str = canister_id.to_string();
+    let canister_id_str = canister_config.ledger_canister_id.to_string();
     let rosetta_metrics = RosettaMetrics::new("ICP".to_string(), canister_id_str);
     let req_handler = RosettaRequestHandler::new(blockchain, ledger.clone(), rosetta_metrics);
 
@@ -335,7 +421,7 @@ async fn main() -> std::io::Result<()> {
     serv.run(RosettaApiServerOpt {
         exit_on_sync,
         offline,
-        mainnet,
+        mainnet: effective_mainnet,
         not_whitelisted,
     })
     .await
