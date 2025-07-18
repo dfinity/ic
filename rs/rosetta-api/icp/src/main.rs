@@ -19,17 +19,24 @@ use tracing_subscriber::{Layer, Registry};
 use url::Url;
 
 #[derive(Debug, Parser)]
-#[clap(version)]
-struct Opt {
+#[clap(next_help_heading = "Server Configuration")]
+struct ServerConfig {
     #[clap(short = 'a', long = "address", default_value = "0.0.0.0")]
-    listen_address: String,
-    /// The listen port of Rosetta. If not set then the port used will be 8081 unless --listen-port-file is
+    address: String,
+    /// The listen port of Rosetta. If not set then the port used will be 8081 unless --port-file is
     /// defined in which case a random port is used.
     #[clap(short = 'p', long = "port")]
-    listen_port: Option<u16>,
+    port: Option<u16>,
     /// File where the port will be written. Useful when the port is set to 0 because a random port will be picked.
     #[clap(short = 'P', long = "port-file")]
-    listen_port_file: Option<PathBuf>,
+    port_file: Option<PathBuf>,
+}
+
+#[derive(Debug, Parser)]
+#[clap(version)]
+struct Opt {
+    #[clap(flatten)]
+    server: ServerConfig,
     /// Id of the ICP ledger canister.
     #[clap(short = 'c', long = "canister-id")]
     ic_canister_id: Option<String>,
@@ -158,13 +165,13 @@ async fn main() -> std::io::Result<()> {
     let pkg_name = env!("CARGO_PKG_NAME");
     let pkg_version = env!("CARGO_PKG_VERSION");
     info!("Starting {}, pkg_version: {}", pkg_name, pkg_version);
-    let listen_port = match (opt.listen_port, &opt.listen_port_file) {
+    let listen_port = match (opt.server.port, &opt.server.port_file) {
         (None, None) => 8081,
         (None, Some(_)) => 0, // random port
         (Some(p), _) => p,
     };
-    info!("Listening on {}:{}", opt.listen_address, listen_port);
-    let addr = format!("{}:{}", opt.listen_address, listen_port);
+    info!("Listening on {}:{}", opt.server.address, listen_port);
+    let addr = format!("{}:{}", opt.server.address, listen_port);
     let url = opt.ic_url().unwrap();
     info!("Internet Computer URL set to {}", url);
 
@@ -294,7 +301,7 @@ async fn main() -> std::io::Result<()> {
         ledger,
         req_handler,
         addr,
-        opt.listen_port_file,
+        opt.server.port_file,
         expose_metrics,
         watchdog_timeout_seconds,
     )
