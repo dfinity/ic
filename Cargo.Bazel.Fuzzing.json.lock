@@ -1,5 +1,5 @@
 {
-  "checksum": "7d83ac9f56534bc4a6f63ff9dcb96c288484f5cc71e0401f847e854de542f83e",
+  "checksum": "89c4ba19619531711c72deaff193fe8d1ef92a0be2fa0b64d2bacb54b9c9349b",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -7065,7 +7065,7 @@
             "-Zstrict-init-checks",
             "-Zsanitizer=address",
             "-Zexternal-clangrt",
-            "-Clink-arg=bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__nightly_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-nightly_rt.asan.a"
+            "-Clink-arg=bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.asan.a"
           ],
           "selects": {}
         },
@@ -7950,7 +7950,7 @@
             "-Zstrict-init-checks",
             "-Zsanitizer=address",
             "-Zexternal-clangrt",
-            "-Clink-arg=bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__nightly_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-nightly_rt.asan.a"
+            "-Clink-arg=bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.asan.a"
           ],
           "selects": {}
         },
@@ -8069,7 +8069,7 @@
             "-Zstrict-init-checks",
             "-Zsanitizer=address",
             "-Zexternal-clangrt",
-            "-Clink-arg=bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__nightly_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-nightly_rt.asan.a"
+            "-Clink-arg=bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.asan.a"
           ],
           "selects": {}
         },
@@ -8221,7 +8221,7 @@
             "-Zstrict-init-checks",
             "-Zsanitizer=address",
             "-Zexternal-clangrt",
-            "-Clink-arg=bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__nightly_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-nightly_rt.asan.a"
+            "-Clink-arg=bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.asan.a"
           ],
           "selects": {}
         },
@@ -11949,7 +11949,7 @@
             "-Zstrict-init-checks",
             "-Zsanitizer=address",
             "-Zexternal-clangrt",
-            "-Clink-arg=bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__nightly_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-nightly_rt.asan.a"
+            "-Clink-arg=bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.asan.a"
           ],
           "selects": {}
         },
@@ -35098,7 +35098,7 @@
             "-Zstrict-init-checks",
             "-Zsanitizer=address",
             "-Zexternal-clangrt",
-            "-Clink-arg=bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__nightly_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-nightly_rt.asan.a"
+            "-Clink-arg=bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.asan.a"
           ],
           "selects": {}
         },
@@ -85823,7 +85823,7 @@
             "-Zstrict-init-checks",
             "-Zsanitizer=address",
             "-Zexternal-clangrt",
-            "-Clink-arg=bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__nightly_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-nightly_rt.asan.a"
+            "-Clink-arg=bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.asan.a"
           ],
           "selects": {}
         },
