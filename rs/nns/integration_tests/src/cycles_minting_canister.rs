@@ -19,7 +19,7 @@ use ic_management_canister_types_private::{
     CanisterSettingsArgsBuilder, CanisterStatusResultV2,
 };
 use ic_nervous_system_clients::canister_status::CanisterStatusResult;
-use ic_nervous_system_common::{E8, ONE_TRILLION};
+use ic_nervous_system_common::{E8, ONE_MONTH_SECONDS, ONE_TRILLION};
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL,
     TEST_USER2_PRINCIPAL, TEST_USER3_PRINCIPAL,
@@ -60,6 +60,9 @@ use std::time::Duration;
 
 const CYCLES_LEDGER_FEE: u128 = 100_000_000;
 const CYCLES_MINTING_LIMIT: u128 = 150e15 as u128;
+
+// per month
+const SUBNET_RENTAL_CYCLES_MINTING_LIMIT: u128 = 500e15 as u128;
 
 /// Test that the CMC's `icp_xdr_conversion_rate` can be updated via Governance
 /// proposal.
@@ -1767,7 +1770,7 @@ fn cmc_notify_top_up_not_rate_limited_by_invalid_top_up() {
 }
 
 #[test]
-fn test_cmc_topups_from_subnet_rental_canister_do_not_affect_limit() {
+fn test_cmc_subnet_rental_topups_use_separate_limit() {
     let state_machine = state_machine_builder_for_nns_tests().build();
 
     let account = AccountIdentifier::new(*TEST_USER1_PRINCIPAL, None);
@@ -1785,37 +1788,36 @@ fn test_cmc_topups_from_subnet_rental_canister_do_not_affect_limit() {
 
     // Conversion rate in tests is 100 XDR per ICP, and cycles cost 1 XDR per trillion cycles.
     // To get the ICP needed to mint maximum cycles, we divide by 1 trillion and then by 100.
-    let tokens = CYCLES_MINTING_LIMIT as u64 / ONE_TRILLION / 100;
+    let src_limit_cost = SUBNET_RENTAL_CYCLES_MINTING_LIMIT as u64 / ONE_TRILLION / 100;
+    let base_limit_cost = CYCLES_MINTING_LIMIT as u64 / ONE_TRILLION / 100;
 
-    // First top-up should succeed since it's 90P - less than the 150P/hr limit.
+    // First top-up should succeed as it's 500,000T cycles, which is at the limit for SRC.
     let cycles = notify_top_up_as(
         &state_machine,
         SUBNET_RENTAL_CANISTER_ID,
-        Tokens::new(tokens * 2, 0).unwrap(),
+        Tokens::new(src_limit_cost, 0).unwrap(),
         SUBNET_RENTAL_CANISTER_ID.get(),
     )
     .unwrap();
-    assert_eq!(cycles, Cycles::new(CYCLES_MINTING_LIMIT * 2));
+    assert_eq!(cycles, Cycles::new(SUBNET_RENTAL_CYCLES_MINTING_LIMIT));
 
-    // Second top-up should also succeed immediately, because the caller and recipient are
-    // the Subnet Rental Canister, which is exempt from the rate limit.
+    // Second top up should fail.
     let cycles = notify_top_up_as(
         &state_machine,
         SUBNET_RENTAL_CANISTER_ID,
-        Tokens::new(tokens * 2, 0).unwrap(),
+        Tokens::new(1, 0).unwrap(),
         SUBNET_RENTAL_CANISTER_ID.get(),
     )
-    .unwrap();
-    assert_eq!(cycles, Cycles::new(CYCLES_MINTING_LIMIT * 2));
+    .unwrap_err();
+    assert_matches!(cycles, NotifyError::Refunded { reason, .. } if reason.contains("try again later"));
 
     // Next topups
 
-    // Third top-up should succeed since the limit isn't used at all.
-    state_machine.advance_time(Duration::from_secs(3000));
+    // Third top-up should succeed since it uses a different limit.
     let cycles = notify_top_up(
         &state_machine,
         GOVERNANCE_CANISTER_ID,
-        Tokens::new(tokens, 0).unwrap(),
+        Tokens::new(base_limit_cost, 0).unwrap(),
     )
     .unwrap();
     assert_eq!(cycles, Cycles::new(CYCLES_MINTING_LIMIT));
@@ -1825,20 +1827,45 @@ fn test_cmc_topups_from_subnet_rental_canister_do_not_affect_limit() {
     let error = notify_top_up(
         &state_machine,
         GOVERNANCE_CANISTER_ID,
-        Tokens::new(tokens, 0).unwrap(),
+        Tokens::new(base_limit_cost, 0).unwrap(),
     )
     .unwrap_err();
     assert_matches!(error, NotifyError::Refunded { reason, .. } if reason.contains("try again later"));
+
+    // Advance time by 1 hour, to show base limit is reset, but the SRC limit is not
+
+    state_machine.advance_time(Duration::from_secs(4000));
+    // Fifth top-up should succeed since the base limit is reset.
+    let cycles = notify_top_up(
+        &state_machine,
+        GOVERNANCE_CANISTER_ID,
+        Tokens::new(base_limit_cost, 0).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(cycles, Cycles::new(CYCLES_MINTING_LIMIT));
+
+    // Another attempt to top up the SRC should still fail
+    let error = notify_top_up_as(
+        &state_machine,
+        SUBNET_RENTAL_CANISTER_ID,
+        Tokens::new(1, 0).unwrap(),
+        SUBNET_RENTAL_CANISTER_ID.get(),
+    )
+    .unwrap_err();
+    assert_matches!(error, NotifyError::Refunded { reason, .. } if reason.contains("try again later"));
+
+    // Advance time by 1 month, show you can now mint again to SRC
+    state_machine.advance_time(Duration::from_secs(ONE_MONTH_SECONDS));
 
     // Finally, another top-up from the Subnet Rental Canister should succeed
     let cycles = notify_top_up_as(
         &state_machine,
         SUBNET_RENTAL_CANISTER_ID,
-        Tokens::new(tokens * 2, 0).unwrap(),
+        Tokens::new(src_limit_cost, 0).unwrap(),
         SUBNET_RENTAL_CANISTER_ID.get(),
     )
     .unwrap();
-    assert_eq!(cycles, Cycles::new(CYCLES_MINTING_LIMIT * 2));
+    assert_eq!(cycles, Cycles::new(SUBNET_RENTAL_CYCLES_MINTING_LIMIT));
 }
 
 #[test]
