@@ -412,7 +412,7 @@ impl State {
                 if stored_state_version == StateVersion(1) {
                     let state = deserializer.get_value::<StateV1>().unwrap();
                     deserializer.done().unwrap();
-                    return Ok(migrate_v1(state));
+                    return Ok(migrate_v1_to_v2(state));
                 }
                 return Err(format!(
                     "[cycles] ERROR: stored state version {:?} is lesser than the current state \
@@ -451,7 +451,7 @@ impl State {
 }
 
 // TODO(NNS1-3980): remove this code when we no longer support version 1.
-fn migrate_v1(p0: StateV1) -> State {
+fn migrate_v1_to_v2(p0: StateV1) -> State {
     let StateV1 {
         ledger_canister_id,
         governance_canister_id,
@@ -474,6 +474,13 @@ fn migrate_v1(p0: StateV1) -> State {
         update_exchange_rate_canister_state,
     } = p0;
 
+    // new fields with default value
+    let subnet_rental_cycles_limit = Cycles::from(SUBNET_RENTAL_DEFAULT_CYCLES_LIMIT);
+    let subnet_rental_canister_limiter = limiter::Limiter::new(
+        Duration::from_secs(ONE_HOUR_SECONDS),
+        Duration::from_secs(ONE_MONTH_SECONDS),
+    );
+
     StateV2 {
         ledger_canister_id,
         governance_canister_id,
@@ -487,12 +494,9 @@ fn migrate_v1(p0: StateV1) -> State {
         recent_icp_xdr_rates,
         cycles_per_xdr,
         base_cycles_limit: cycles_limit, // renamed
-        subnet_rental_cycles_limit: Cycles::from(SUBNET_RENTAL_DEFAULT_CYCLES_LIMIT), // new field with default value
-        base_limiter: limiter,                                                        //renamed
-        subnet_rental_canister_limiter: limiter::Limiter::new(
-            Duration::from_secs(ONE_HOUR_SECONDS),
-            Duration::from_secs(ONE_MONTH_SECONDS),
-        ),
+        subnet_rental_cycles_limit,
+        base_limiter: limiter, // renamed                                                     //renamed
+        subnet_rental_canister_limiter,
         total_cycles_minted,
         blocks_notified,
         last_purged_notification,
@@ -3987,7 +3991,7 @@ mod tests {
         };
 
         // Perform migration
-        let v2_state = migrate_v1(v1_state.clone());
+        let v2_state = migrate_v1_to_v2(v1_state.clone());
 
         // Verify all existing fields are preserved
         assert_eq!(v2_state.ledger_canister_id, v1_state.ledger_canister_id);
