@@ -69,6 +69,16 @@ async fn get_mainnet_canister_git_commit_id_and_module_hash(
     Ok((git_commit_id, module_hash))
 }
 
+/// This function fetches the given canister's module hash deployed on the ICP mainnet (based on `canister_id`)
+/// and then finds a git tag in the given `canister_repository` (e.g., `dfinity/cycles-ledger`)
+/// which contains a release asset whose name matches `canister_name`
+/// and whose sha256 hash matches the module hash deployed on the ICP mainnet
+/// (the sha256 hash is fetched from a dedicated release asset whose name has the form `{canister_name}.sha256`).
+/// To find the git tag, the function proceeds as follows:
+///   - it crawls all git tags of the given `canister_repository`;
+///   - for every git tag, it lists all release assets and looks for a release asset whose name has the form `{canister_name}.sha256`:
+///     if that release asset contains the expected module hash (as deployed on the ICP mainnet),
+///     then the corresponding tag is returned.
 async fn get_mainnet_canister_git_tag_and_module_hash(
     agent: &Agent,
     canister_id: CanisterId,
@@ -108,6 +118,8 @@ async fn get_mainnet_canister_git_tag_and_module_hash(
 
     let token = std::env::var("GITHUB_TOKEN").expect("Set GITHUB_TOKEN env var");
 
+    // GitHub API requires all requests to provide a user-agent header
+    // so we fix an arbitrary value of this header here.
     let client = Client::builder()
         .user_agent("sync-with-released-nervous-system-wasms")
         .build()?;
@@ -121,34 +133,66 @@ async fn get_mainnet_canister_git_tag_and_module_hash(
         .json()
         .await?;
 
-    for tag in tags.iter() {
-        let release_url = format!(
-            "{}/repos/{}/releases/tags/{}",
-            GITHUB_API, canister_repository, tag.name
-        );
-        let res = client.get(&release_url).bearer_auth(&token).send().await?;
+    for tag in tags {
+        let check_tag = async {
+            let release_url = format!(
+                "{}/repos/{}/releases/tags/{}",
+                GITHUB_API, canister_repository, tag.name
+            );
+            let res = client.get(&release_url).bearer_auth(&token).send().await?;
 
-        if res.status().is_success() {
-            let release: Release = res.json().await?;
+            // not every tag must have a release so we do not report an error if it does not
+            if res.status().is_success() {
+                let release: Release = res.json().await?;
 
-            let canister_sha256_name = format!("{}.sha256", canister_name);
-            let canister_sha256_url = release
-                .assets
-                .iter()
-                .find(|asset| asset.name == canister_sha256_name)
-                .map(|asset| asset.browser_download_url.clone());
-            if let Some(canister_sha256_url) = canister_sha256_url {
-                let canister_sha256 = client
-                    .get(canister_sha256_url)
-                    .bearer_auth(&token)
-                    .send()
-                    .await?
-                    .text()
-                    .await?;
-                if canister_sha256.starts_with(&module_hash) {
-                    return Ok((release.tag_name, module_hash));
+                if release.tag_name != tag.name {
+                    return Err(anyhow!(
+                        "Unexpected release tag {}, expected {}",
+                        release.tag_name,
+                        tag.name
+                    ));
+                }
+
+                let canister_sha256_name = format!("{canister_name}.sha256");
+                let canister_sha256_url = release
+                    .assets
+                    .iter()
+                    .find(|asset| asset.name == canister_sha256_name)
+                    .map(|asset| asset.browser_download_url.clone());
+                if let Some(canister_sha256_url) = canister_sha256_url {
+                    let canister_sha256 = client
+                        .get(canister_sha256_url)
+                        .bearer_auth(&token)
+                        .send()
+                        .await?
+                        .text()
+                        .await?;
+                    if module_hash.len() != 64 {
+                        return Err(anyhow!(
+                            "Unexpected sha256 length {}",
+                            canister_sha256.len()
+                        ));
+                    }
+                    // The asset `{canister_name}.sha256` has the form:
+                    // `a2a0c65a94559aed373801a149bf4a31b176cb8cbabf77465eb25143ae880f37  cycles-ledger.wasm.gz`
+                    // so we check if it starts with the expected module hash
+                    // (having checked its length before to avoid trivial matches if the expected module hash was empty due to a bug).
+                    if canister_sha256.starts_with(&module_hash) {
+                        return Ok(true);
+                    }
                 }
             }
+
+            Ok(false)
+        };
+
+        match check_tag.await {
+            Ok(true) => return Ok((tag.name, module_hash)),
+            Ok(false) => (),
+            Err(e) => eprintln!(
+                "Error while checking the GitHub tag {} for canister {}: {}",
+                tag.name, canister_name, e
+            ),
         }
     }
 
@@ -181,7 +225,7 @@ async fn main() -> Result<()> {
                 get_mainnet_canister_git_commit_id_and_module_hash(&agent, *canister_id).await?;
             Ok(CanisterUpdate {
                 canister_name,
-                new_git_hash,
+                new_git_ref: GitRef::Rev(new_git_hash),
                 new_sha256,
             })
         })
@@ -241,7 +285,7 @@ async fn main() -> Result<()> {
 
                 Ok(CanisterUpdate {
                     canister_name,
-                    new_git_hash,
+                    new_git_ref: GitRef::Rev(new_git_hash),
                     new_sha256,
                 })
             })
@@ -266,22 +310,20 @@ async fn main() -> Result<()> {
                 canister_filename.clone(),
             )
             .await?;
-            Ok(ExternalCanisterUpdate {
+            Ok(CanisterUpdate {
                 canister_name,
-                new_tag,
+                new_git_ref: GitRef::Tag(new_tag),
                 new_sha256,
             })
         })
-        .collect::<Vec<Result<ExternalCanisterUpdate>>>()
+        .collect::<Vec<Result<CanisterUpdate>>>()
         .await
         .into_iter()
-        .collect::<Result<Vec<ExternalCanisterUpdate>>>()?;
+        .collect::<Result<Vec<CanisterUpdate>>>()?;
 
-    update_mainnet_canisters_bzl_file(
-        &workspace_file_path,
-        canister_updates,
-        external_canister_updates,
-    )?;
+    canister_updates.extend(external_canister_updates);
+
+    update_mainnet_canisters_bzl_file(&workspace_file_path, canister_updates)?;
 
     Ok(())
 }
@@ -300,23 +342,21 @@ fn get_agent(ic_url: &str) -> Result<Agent> {
 }
 
 #[derive(Clone, Debug)]
-struct CanisterUpdate {
-    canister_name: String,
-    new_git_hash: String,
-    new_sha256: String,
+enum GitRef {
+    Rev(String),
+    Tag(String),
 }
 
 #[derive(Clone, Debug)]
-struct ExternalCanisterUpdate {
+struct CanisterUpdate {
     canister_name: String,
-    new_tag: String,
+    new_git_ref: GitRef,
     new_sha256: String,
 }
 
 fn update_mainnet_canisters_bzl_file(
     canisters_json: &Path,
     updates: Vec<CanisterUpdate>,
-    external_updates: Vec<ExternalCanisterUpdate>,
 ) -> Result<()> {
     if updates.is_empty() {
         println!("No updates to apply");
@@ -338,22 +378,18 @@ fn update_mainnet_canisters_bzl_file(
     // For each update, insert the new canister values into the map. Note that this
     // does not remove e.g. outdated canisters.
     for canister in &updates {
-        let rev = serde_json::Value::String(canister.new_git_hash.clone());
         let sha256 = serde_json::Value::String(canister.new_sha256.clone());
         let mut entry = serde_json::Map::new();
-        let _ = entry.insert("rev".to_string(), rev);
-        let _ = entry.insert("sha256".to_string(), sha256);
-        let entry = serde_json::Value::Object(entry);
-        let _prev = m.insert(canister.canister_name.clone(), entry);
-    }
-
-    // For each external update, insert the new canister values into the map. Note that this
-    // does not remove e.g. outdated canisters.
-    for canister in &external_updates {
-        let new_tag = serde_json::Value::String(canister.new_tag.clone());
-        let sha256 = serde_json::Value::String(canister.new_sha256.clone());
-        let mut entry = serde_json::Map::new();
-        let _ = entry.insert("tag".to_string(), new_tag);
+        match &canister.new_git_ref {
+            GitRef::Rev(new_git_hash) => {
+                let rev = serde_json::Value::String(new_git_hash.clone());
+                let _ = entry.insert("rev".to_string(), rev);
+            }
+            GitRef::Tag(new_git_tag) => {
+                let tag = serde_json::Value::String(new_git_tag.clone());
+                let _ = entry.insert("tag".to_string(), tag);
+            }
+        }
         let _ = entry.insert("sha256".to_string(), sha256);
         let entry = serde_json::Value::Object(entry);
         let _prev = m.insert(canister.canister_name.clone(), entry);
