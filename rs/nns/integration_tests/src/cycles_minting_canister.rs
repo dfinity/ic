@@ -1773,7 +1773,7 @@ fn cmc_notify_top_up_not_rate_limited_by_invalid_top_up() {
 fn test_cmc_subnet_rental_topups_use_separate_limit() {
     let state_machine = state_machine_builder_for_nns_tests().build();
 
-    let account = AccountIdentifier::new(*TEST_USER1_PRINCIPAL, None);
+    let unprivilieged_user_account = AccountIdentifier::new(*TEST_USER1_PRINCIPAL, None);
     let subnet_rental_canister_account =
         AccountIdentifier::new(SUBNET_RENTAL_CANISTER_ID.get(), None);
     // The only requirement here is to have sufficient funds to run the test. Other than that,
@@ -1782,7 +1782,7 @@ fn test_cmc_subnet_rental_topups_use_separate_limit() {
     let nns_init_payloads = NnsInitPayloadsBuilder::new()
         .with_test_neurons()
         .with_ledger_account(subnet_rental_canister_account, balance)
-        .with_ledger_account(account, balance)
+        .with_ledger_account(unprivilieged_user_account, balance)
         .build();
     setup_nns_canisters(&state_machine, nns_init_payloads);
 
