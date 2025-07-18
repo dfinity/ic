@@ -1136,6 +1136,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "rustc-hash": crate.spec(
                 version = "^1.1.0",
             ),
+            "rust-ini": crate.spec(
+                version = "^0.21.2",
+            ),
             "rustls": crate.spec(
                 version = "^0.23.18",
                 default_features = False,
