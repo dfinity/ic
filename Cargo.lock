@@ -22391,6 +22391,7 @@ dependencies = [
  "ic-nervous-system-common-test-keys",
  "ic-nns-common",
  "ic-nns-constants",
+ "reqwest 0.12.15",
  "rgb",
  "serde",
  "serde_json",
