@@ -2,6 +2,7 @@ use clap::Parser;
 use ic_crypto_utils_threshold_sig_der::{
     parse_threshold_sig_key, parse_threshold_sig_key_from_der,
 };
+use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
 use ic_rosetta_api::request_handler::RosettaRequestHandler;
 use ic_rosetta_api::rosetta_server::{RosettaApiServer, RosettaApiServerOpt};
 use ic_rosetta_api::{ledger_client, DEFAULT_BLOCKCHAIN, DEFAULT_TOKEN_SYMBOL};
@@ -19,8 +20,19 @@ use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{Layer, Registry};
 use url::Url;
 
-const DEFAULT_LEDGER_CANISTER_ID: &str = "ryjl3-tyaaa-aaaaa-aaaba-cai";
-const DEFAULT_GOVERNANCE_CANISTER_ID: &str = "rrkah-fqaaa-aaaaa-aaaaq-cai";
+const TEST_LEDGER_CANISTER_ID: &str = "xafvr-biaaa-aaaai-aql5q-cai";
+const TEST_TOKEN_SYMBOL: &str = "TESTICP";
+
+#[derive(Debug, Clone, clap::ValueEnum, PartialEq, Default)]
+enum Environment {
+    #[clap(help = "Production ledger canister on mainnet")]
+    Production,
+    #[clap(help = "Test ledger canister on mainnet")]
+    Test,
+    #[clap(name = "deprecated-testnet", help = "Testnet environment (deprecated)")]
+    #[default]
+    DeprecatedTestnet,
+}
 
 #[derive(Debug, Parser)]
 #[clap(next_help_heading = "Server Configuration")]
@@ -71,14 +83,17 @@ struct ParsedNetworkConfig {
 }
 
 impl ParsedNetworkConfig {
-    fn from_config(config: NetworkConfig, mainnet: bool) -> Result<Self, String> {
+    fn from_config(config: NetworkConfig, environment: &Environment) -> Result<Self, String> {
+        const DEPRECATED_TESTNET_URL: &str = "https://exchanges.testnet.dfinity.network";
+        const MAINNET_URL: &str = "https://ic0.app";
+        const MAINNET_ROOT_KEY: &str = r#"MIGCMB0GDSsGAQQBgtx8BQMBAgEGDCsGAQQBgtx8BQMCAQNhAIFMDm7HH6tYOwi9gTc8JVw8NxsuhIY8mKTx4It0I10U+12cDNVG2WhfkToMCyzFNBWDv0tDkuRn25bWW5u0y3FxEvhHLg1aTRRQX/10hLASkQkcX4e5iINGP5gJGguqrg=="#;
+
         let url_str = match &config.ic_url {
             Some(url_str) => url_str.as_str(),
             None => {
-                if mainnet {
-                    "https://ic0.app"
-                } else {
-                    "https://exchanges.testnet.dfinity.network"
+                match environment {
+                    Environment::DeprecatedTestnet => DEPRECATED_TESTNET_URL,
+                    Environment::Production | Environment::Test => MAINNET_URL,
                 }
             }
         };
@@ -89,13 +104,16 @@ impl ParsedNetworkConfig {
                 parse_threshold_sig_key(root_key_path.as_path())
                     .map_err(|e| format!("Unable to parse root key from file: {}", e))?,
             ),
-            None if mainnet => {
-                // The mainnet root key
-                let root_key_text = r#"MIGCMB0GDSsGAQQBgtx8BQMBAgEGDCsGAQQBgtx8BQMCAQNhAIFMDm7HH6tYOwi9gTc8JVw8NxsuhIY8mKTx4It0I10U+12cDNVG2WhfkToMCyzFNBWDv0tDkuRn25bWW5u0y3FxEvhHLg1aTRRQX/10hLASkQkcX4e5iINGP5gJGguqrg=="#;
-                let decoded = base64::decode(root_key_text).unwrap();
-                Some(parse_threshold_sig_key_from_der(&decoded).unwrap())
+            None => {
+                match environment {
+                    Environment::Production | Environment::Test => {
+                        // The mainnet root key
+                        let decoded = base64::decode(MAINNET_ROOT_KEY).unwrap();
+                        Some(parse_threshold_sig_key_from_der(&decoded).unwrap())
+                    }
+                    Environment::DeprecatedTestnet => None,
+                }
             }
-            None => None,
         };
 
         Ok(Self { ic_url, root_key })
@@ -106,21 +124,13 @@ impl ParsedNetworkConfig {
 #[clap(next_help_heading = "Canister Configuration")]
 struct CanisterConfig {
     /// Id of the ICP ledger canister.
-    #[clap(
-        short = 'c',
-        long = "canister-id",
-        default_value = DEFAULT_LEDGER_CANISTER_ID
-    )]
-    ledger_canister_id: String,
-    #[clap(short = 't', long = "token-symbol", default_value = DEFAULT_TOKEN_SYMBOL)]
-    token_symbol: String,
+    #[clap(short = 'c', long = "canister-id")]
+    ledger_canister_id: Option<String>,
+    #[clap(short = 't', long = "token-symbol")]
+    token_symbol: Option<String>,
     /// Id of the governance canister to use for neuron management.
-    #[clap(
-        short = 'g',
-        long = "governance-canister-id",
-        default_value = DEFAULT_GOVERNANCE_CANISTER_ID
-    )]
-    governance_canister_id: String,
+    #[clap(short = 'g', long = "governance-canister-id")]
+    governance_canister_id: Option<String>,
 }
 
 #[derive(Debug)]
@@ -131,28 +141,54 @@ struct ParsedCanisterConfig {
 }
 
 impl ParsedCanisterConfig {
-    fn from_config(config: CanisterConfig) -> Result<Self, String> {
-        let ledger_canister_id = CanisterId::unchecked_from_principal(
-            PrincipalId::from_str(&config.ledger_canister_id).map_err(|e| {
-                format!(
-                    "Invalid ledger canister ID '{}': {}",
-                    config.ledger_canister_id, e
+    fn from_config(config: CanisterConfig, environment: &Environment) -> Result<Self, String> {
+        // Apply environment preset defaults when no explicit value provided
+        let ledger_canister_id = match config.ledger_canister_id {
+            Some(explicit_value) => {
+                CanisterId::unchecked_from_principal(
+                    PrincipalId::from_str(&explicit_value).map_err(|e| {
+                        format!("Invalid ledger canister ID '{}': {}", explicit_value, e)
+                    })?,
                 )
-            })?,
-        );
+            }
+            None => {
+                match environment {
+                    Environment::Test => {
+                        CanisterId::unchecked_from_principal(
+                            PrincipalId::from_str(TEST_LEDGER_CANISTER_ID).map_err(|e| {
+                                format!("Invalid test ledger canister ID '{}': {}", TEST_LEDGER_CANISTER_ID, e)
+                            })?,
+                        )
+                    }
+                    Environment::Production | Environment::DeprecatedTestnet => LEDGER_CANISTER_ID,
+                }
+            }
+        };
 
-        let governance_canister_id = CanisterId::unchecked_from_principal(
-            PrincipalId::from_str(&config.governance_canister_id).map_err(|e| {
-                format!(
-                    "Invalid governance canister ID '{}': {}",
-                    config.governance_canister_id, e
+        let token_symbol = match config.token_symbol {
+            Some(explicit_value) => explicit_value,
+            None => {
+                match environment {
+                    Environment::Test => TEST_TOKEN_SYMBOL.to_string(),
+                    Environment::Production | Environment::DeprecatedTestnet => DEFAULT_TOKEN_SYMBOL.to_string(),
+                }
+            }
+        };
+
+        let governance_canister_id = match config.governance_canister_id {
+            Some(explicit_value) => {
+                CanisterId::unchecked_from_principal(
+                    PrincipalId::from_str(&explicit_value).map_err(|e| {
+                        format!("Invalid governance canister ID '{}': {}", explicit_value, e)
+                    })?,
                 )
-            })?,
-        );
+            }
+            None => GOVERNANCE_CANISTER_ID,
+        };
 
         Ok(Self {
             ledger_canister_id,
-            token_symbol: config.token_symbol,
+            token_symbol,
             governance_canister_id,
         })
     }
@@ -161,6 +197,14 @@ impl ParsedCanisterConfig {
 #[derive(Debug, Parser)]
 #[clap(version)]
 struct Opt {
+    #[clap(
+        short = 'e',
+        long = "environment",
+        default_value = "deprecated-testnet",
+        help = "Environment preset that configures network and canister settings."
+    )]
+    environment: Environment,
+
     #[clap(flatten)]
     server: ServerConfig,
 
@@ -253,6 +297,24 @@ async fn main() -> std::io::Result<()> {
         warn!("--log-config-file is deprecated and ignored")
     }
 
+    // Check for conflicting flags
+    if opt.mainnet && opt.environment != Environment::DeprecatedTestnet {
+        error!("Cannot specify both --mainnet and --environment flags. Please use --environment production instead of --mainnet.");
+        std::process::exit(1);
+    }
+
+    // Handle mainnet flag by treating it as environment production
+    let environment = if opt.mainnet {
+        warn!("--mainnet flag is deprecated. Please use --environment production instead.");
+        Environment::Production
+    } else {
+        opt.environment
+    };
+
+    if environment == Environment::DeprecatedTestnet {
+        warn!("deprecated-testnet environment is deprecated. Please use --environment test instead.");
+    }
+
     let pkg_name = env!("CARGO_PKG_NAME");
     let pkg_version = env!("CARGO_PKG_VERSION");
     info!("Starting {}, pkg_version: {}", pkg_name, pkg_version);
@@ -265,7 +327,7 @@ async fn main() -> std::io::Result<()> {
     let addr = format!("{}:{}", opt.server.address, listen_port);
 
     let network_config =
-        ParsedNetworkConfig::from_config(opt.network, opt.mainnet).unwrap_or_else(|e| {
+        ParsedNetworkConfig::from_config(opt.network, &environment).unwrap_or_else(|e| {
             error!("Configuration error: {}", e);
             std::process::exit(1);
         });
@@ -275,7 +337,7 @@ async fn main() -> std::io::Result<()> {
         warn!("Data certificate will not be verified due to missing root key");
     }
 
-    let canister_config = ParsedCanisterConfig::from_config(opt.canister).unwrap_or_else(|e| {
+    let canister_config = ParsedCanisterConfig::from_config(opt.canister, &environment).unwrap_or_else(|e| {
         error!("Configuration error: {}", e);
         std::process::exit(1);
     });
@@ -297,7 +359,6 @@ async fn main() -> std::io::Result<()> {
     let Opt {
         offline,
         exit_on_sync,
-        mainnet,
         not_whitelisted,
         expose_metrics,
         blockchain,
@@ -314,6 +375,9 @@ async fn main() -> std::io::Result<()> {
         enable_rosetta_blocks = opt.enable_rosetta_blocks;
     }
 
+    // Determine effective mainnet setting based on the environment
+    let effective_mainnet = environment == Environment::Production || environment == Environment::Test;
+
     let client = ledger_client::LedgerClient::new(
         network_config.ic_url,
         canister_config.ledger_canister_id,
@@ -328,7 +392,7 @@ async fn main() -> std::io::Result<()> {
     )
     .await
     .map_err(|e| {
-        let msg = if mainnet && !not_whitelisted && e.is_internal_error_403() {
+        let msg = if effective_mainnet && !not_whitelisted && e.is_internal_error_403() {
             ", You may not be whitelisted; please try running the Rosetta server again with the '--not_whitelisted' flag"
         } else {""};
         (e, msg)
@@ -360,7 +424,7 @@ async fn main() -> std::io::Result<()> {
     serv.run(RosettaApiServerOpt {
         exit_on_sync,
         offline,
-        mainnet,
+        mainnet: effective_mainnet,
         not_whitelisted,
     })
     .await
