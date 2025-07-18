@@ -212,9 +212,7 @@ mod tests {
         writeln!(temp_file, "domain=example.com")?;
         writeln!(temp_file, "verbose=false")?;
 
-        let temp_file_path = temp_file.path();
-
-        let config_ini_settings = get_config_ini_settings(temp_file_path)?;
+        let config_ini_settings = get_config_ini_settings(temp_file.path())?;
 
         assert_eq!(
             config_ini_settings.ipv6_prefix,
@@ -246,8 +244,7 @@ mod tests {
         writeln!(temp_file, "ipv4_gateway=212.71.124.177")?;
         writeln!(temp_file, "ipv4_prefix_length=28")?;
 
-        let temp_file_path = temp_file.path();
-        let result = get_config_ini_settings(temp_file_path);
+        let result = get_config_ini_settings(temp_file.path());
         assert!(result.is_err());
 
         // Test invalid IPv6 prefix
@@ -258,14 +255,13 @@ mod tests {
         writeln!(temp_file, "ipv4_gateway=192.168.1.254")?;
         writeln!(temp_file, "ipv4_prefix_length=24")?;
 
-        let temp_file_path = temp_file.path();
-        let result = get_config_ini_settings(temp_file_path);
+        let result = get_config_ini_settings(temp_file.path());
         assert!(result.is_err());
 
         // Test missing prefix
         let mut temp_file = NamedTempFile::new()?;
         writeln!(temp_file, "ipv6_gateway=2001:db8:85a3:0000::1")?;
-        let result = get_config_ini_settings(temp_file_path);
+        let result = get_config_ini_settings(temp_file.path());
         assert!(result.is_err());
 
         Ok(())
