@@ -1,0 +1,15 @@
+[package]
+name = "canscan-test-canister"
+version = "0.1.0"
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[[bin]]
+name = "canscan-test-canister"
+path = "src/main.rs"
+
+[dependencies]
+candid = { workspace = true }
+ic-cdk = { workspace = true }

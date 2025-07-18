@@ -43,6 +43,7 @@ go_deps.bzl               @dfinity/idx
 # [Packages]
 /packages/canlog/                       @dfinity/cross-chain-team
 /packages/canlog_derive/                @dfinity/cross-chain-team
+/packages/canscan/                      @dfinity/cross-chain-team
 /packages/icrc-cbor/                    @dfinity/finint @dfinity/cross-chain-team
 /packages/icrc-ledger-agent/            @dfinity/finint
 /packages/icrc-ledger-client/           @dfinity/finint
