@@ -259,6 +259,7 @@ rust_canister(
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":canister/governance.did",
     visibility = ["//visibility:public"],
+    did_git_test_enable_also_reverse = True,
     deps = DEPENDENCIES + [
         ":build_script",
         ":governance",
