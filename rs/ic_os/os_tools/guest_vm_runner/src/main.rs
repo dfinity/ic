@@ -1,18 +1,21 @@
+use crate::device_mapping::MappedDevice;
 use crate::guest_direct_boot::{prepare_direct_boot, DirectBoot};
 use crate::guest_vm_config::{
     assemble_config_media, generate_vm_config, serial_log_path, vm_domain_name,
 };
 use crate::mount::PartitionProvider;
 use crate::systemd_notifier::SystemdNotifier;
+use crate::upgrade_device_mapper::create_mapped_device_for_upgrade;
 use anyhow::{bail, Context, Error, Result};
 use clap::{Parser, ValueEnum};
 use config_types::{HostOSConfig, Ipv6Config};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{calculate_deterministic_mac, IpVariant, MacAddr6Ext};
 use ic_metrics_tool::{Metric, MetricsWriter};
+use nix::unistd::getuid;
 use std::fmt::{Debug, Formatter};
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 use tempfile::NamedTempFile;
@@ -26,10 +29,12 @@ use virt::error::{ErrorDomain, ErrorNumber};
 use virt::sys::{VIR_DOMAIN_DESTROY_GRACEFUL, VIR_DOMAIN_NONE, VIR_DOMAIN_RUNNING};
 
 mod boot_args;
+mod device_mapping;
 mod guest_direct_boot;
 mod guest_vm_config;
 mod mount;
 mod systemd_notifier;
+mod upgrade_device_mapper;
 
 const DEFAULT_METRICS_FILE_PATH: &str =
     "/run/node_exporter/collector_textfile/hostos_guestos_service.prom";
@@ -65,6 +70,11 @@ struct Args {
 
 #[tokio::main]
 pub async fn main() -> Result<()> {
+    // TODO: We could replace this with Linux capabilities but this works well for now.
+    if !getuid().is_root() {
+        bail!("This program requires root privileges.");
+    }
+
     let args = Args::parse();
 
     match args.vm_type {
@@ -241,8 +251,11 @@ pub struct GuestVmService {
     hostos_config: HostOSConfig,
     systemd_notifier: Arc<dyn SystemdNotifier>,
     console_tty: Box<dyn Write + Send + Sync>,
-    partition_provider: Box<dyn PartitionProvider>,
     guest_vm_type: GuestVMType,
+    disk_device: PathBuf,
+    partition_provider: Box<dyn PartitionProvider>,
+    // Partition provider uses the mapped device, so it must be declared after it.
+    _upgrade_mapped_device: Option<MappedDevice>,
 }
 
 impl GuestVmService {
@@ -264,6 +277,20 @@ impl GuestVmService {
             .open(CONSOLE_TTY_PATH)
             .context("Failed to open console")?;
 
+        // If this is an Upgrade VM, create a mapped device which protects the data partition of the
+        // Guest device.
+        let upgrade_mapped_device = (guest_vm_type == GuestVMType::Upgrade)
+            .then(|| {
+                create_mapped_device_for_upgrade(Path::new(GUESTOS_DEVICE))
+                    .context("Cannot create mapped device")
+            })
+            .transpose()?;
+
+        let disk_device = upgrade_mapped_device
+            .as_ref()
+            .map(|x| x.path())
+            .unwrap_or(Path::new(GUESTOS_DEVICE));
+
         Ok(Self {
             metrics_writer,
             libvirt_connection,
@@ -271,7 +298,12 @@ impl GuestVmService {
             guest_vm_type,
             systemd_notifier: Arc::new(systemd_notifier::DefaultSystemdNotifier),
             console_tty: Box::new(console_tty),
-            partition_provider: Box::new(mount::GptPartitionProvider::new(GUESTOS_DEVICE.into())?),
+            partition_provider: Box::new(
+                mount::GptPartitionProvider::new(disk_device.to_path_buf())
+                    .context("Failed to create partition provider")?,
+            ),
+            disk_device: disk_device.to_path_buf(),
+            _upgrade_mapped_device: upgrade_mapped_device,
         })
     }
 
@@ -349,6 +381,7 @@ impl GuestVmService {
             &self.hostos_config,
             config_media.path(),
             direct_boot.as_ref().map(DirectBoot::to_config),
+            &self.disk_device,
             self.guest_vm_type,
         )
         .context("Failed to generate GuestOS VM config")?;
@@ -761,6 +794,8 @@ mod tests {
                     .unwrap(),
                 ),
                 guest_vm_type,
+                _upgrade_mapped_device: None,
+                disk_device: GUESTOS_DEVICE.into(),
             };
 
             // Start the service in the background

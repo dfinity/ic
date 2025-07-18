@@ -29,3 +29,7 @@ path = "ipv4_integration_test.rs"
 [[bin]]
 name = "reboot_toy"
 path = "reboot_toy.rs"
+
+[[bin]]
+name = "root_tests"
+path = "root_tests.rs"

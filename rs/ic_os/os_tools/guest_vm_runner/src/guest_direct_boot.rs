@@ -203,7 +203,7 @@ fn refresh_grubenv(grub_env: &mut GrubEnv) -> Result<bool> {
     Ok(changed)
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(feature = "skip_default_tests")))]
 mod tests {
     use super::*;
     use crate::mount::testing::MockPartitionProvider;
