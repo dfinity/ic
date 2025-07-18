@@ -257,16 +257,16 @@ def system_test(
     _env_deps["ENV_DEPS__IC_VERSION_FILE"] = _guestos + "version.txt"
 
     # Guardrails for specifying source and target images
-    if uses_guestos_img and uses_guestos_mainnet_img:
+    if int(uses_guestos_img) + int(uses_guestos_mainnet_img) >= 2:
         fail("More than one initial GuestOS (disk) image was specified!")
 
-    if uses_guestos_update and uses_guestos_test_update and uses_guestos_mainnet_update:
+    if int(uses_guestos_update) + int(uses_guestos_test_update) + int(uses_guestos_mainnet_update) >= 2:
         fail("More than one target GuestOS (upgrade) image was specified!")
 
-    if uses_setupos_img and uses_setupos_mainnet_img:
+    if int(uses_setupos_img) + int(uses_setupos_mainnet_img) >= 2:
         fail("More than one initial SetupOS (disk) image was provided!")
 
-    if uses_hostos_update and uses_hostos_test_update and uses_hostos_mainnet_update:
+    if int(uses_hostos_update) + int(uses_hostos_test_update) + int(uses_hostos_mainnet_update) >= 2:
         fail("More than one target HostOS (upgrade) image was specified!")
 
     icos_images = dict()
