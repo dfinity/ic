@@ -90,12 +90,10 @@ impl ParsedNetworkConfig {
 
         let url_str = match &config.ic_url {
             Some(url_str) => url_str.as_str(),
-            None => {
-                match environment {
-                    Environment::DeprecatedTestnet => DEPRECATED_TESTNET_URL,
-                    Environment::Production | Environment::Test => MAINNET_URL,
-                }
-            }
+            None => match environment {
+                Environment::DeprecatedTestnet => DEPRECATED_TESTNET_URL,
+                Environment::Production | Environment::Test => MAINNET_URL,
+            },
         };
         let ic_url = Url::parse(url_str).map_err(|e| format!("Unable to parse --ic-url: {}", e))?;
 
@@ -144,45 +142,40 @@ impl ParsedCanisterConfig {
     fn from_config(config: CanisterConfig, environment: &Environment) -> Result<Self, String> {
         // Apply environment preset defaults when no explicit value provided
         let ledger_canister_id = match config.ledger_canister_id {
-            Some(explicit_value) => {
-                CanisterId::unchecked_from_principal(
-                    PrincipalId::from_str(&explicit_value).map_err(|e| {
-                        format!("Invalid ledger canister ID '{}': {}", explicit_value, e)
-                    })?,
-                )
-            }
-            None => {
-                match environment {
-                    Environment::Test => {
-                        CanisterId::unchecked_from_principal(
-                            PrincipalId::from_str(TEST_LEDGER_CANISTER_ID).map_err(|e| {
-                                format!("Invalid test ledger canister ID '{}': {}", TEST_LEDGER_CANISTER_ID, e)
-                            })?,
+            Some(explicit_value) => CanisterId::unchecked_from_principal(
+                PrincipalId::from_str(&explicit_value).map_err(|e| {
+                    format!("Invalid ledger canister ID '{}': {}", explicit_value, e)
+                })?,
+            ),
+            None => match environment {
+                Environment::Test => CanisterId::unchecked_from_principal(
+                    PrincipalId::from_str(TEST_LEDGER_CANISTER_ID).map_err(|e| {
+                        format!(
+                            "Invalid test ledger canister ID '{}': {}",
+                            TEST_LEDGER_CANISTER_ID, e
                         )
-                    }
-                    Environment::Production | Environment::DeprecatedTestnet => LEDGER_CANISTER_ID,
-                }
-            }
+                    })?,
+                ),
+                Environment::Production | Environment::DeprecatedTestnet => LEDGER_CANISTER_ID,
+            },
         };
 
         let token_symbol = match config.token_symbol {
             Some(explicit_value) => explicit_value,
-            None => {
-                match environment {
-                    Environment::Test => TEST_TOKEN_SYMBOL.to_string(),
-                    Environment::Production | Environment::DeprecatedTestnet => DEFAULT_TOKEN_SYMBOL.to_string(),
+            None => match environment {
+                Environment::Test => TEST_TOKEN_SYMBOL.to_string(),
+                Environment::Production | Environment::DeprecatedTestnet => {
+                    DEFAULT_TOKEN_SYMBOL.to_string()
                 }
-            }
+            },
         };
 
         let governance_canister_id = match config.governance_canister_id {
-            Some(explicit_value) => {
-                CanisterId::unchecked_from_principal(
-                    PrincipalId::from_str(&explicit_value).map_err(|e| {
-                        format!("Invalid governance canister ID '{}': {}", explicit_value, e)
-                    })?,
-                )
-            }
+            Some(explicit_value) => CanisterId::unchecked_from_principal(
+                PrincipalId::from_str(&explicit_value).map_err(|e| {
+                    format!("Invalid governance canister ID '{}': {}", explicit_value, e)
+                })?,
+            ),
             None => GOVERNANCE_CANISTER_ID,
         };
 
@@ -312,7 +305,9 @@ async fn main() -> std::io::Result<()> {
     };
 
     if environment == Environment::DeprecatedTestnet {
-        warn!("deprecated-testnet environment is deprecated. Please use --environment test instead.");
+        warn!(
+            "deprecated-testnet environment is deprecated. Please use --environment test instead."
+        );
     }
 
     let pkg_name = env!("CARGO_PKG_NAME");
@@ -326,8 +321,8 @@ async fn main() -> std::io::Result<()> {
     info!("Listening on {}:{}", opt.server.address, listen_port);
     let addr = format!("{}:{}", opt.server.address, listen_port);
 
-    let network_config =
-        ParsedNetworkConfig::from_config(opt.network, &environment).unwrap_or_else(|e| {
+    let network_config = ParsedNetworkConfig::from_config(opt.network, &environment)
+        .unwrap_or_else(|e| {
             error!("Configuration error: {}", e);
             std::process::exit(1);
         });
@@ -337,10 +332,11 @@ async fn main() -> std::io::Result<()> {
         warn!("Data certificate will not be verified due to missing root key");
     }
 
-    let canister_config = ParsedCanisterConfig::from_config(opt.canister, &environment).unwrap_or_else(|e| {
-        error!("Configuration error: {}", e);
-        std::process::exit(1);
-    });
+    let canister_config = ParsedCanisterConfig::from_config(opt.canister, &environment)
+        .unwrap_or_else(|e| {
+            error!("Configuration error: {}", e);
+            std::process::exit(1);
+        });
 
     info!("Token symbol set to {}", canister_config.token_symbol);
 
@@ -376,7 +372,8 @@ async fn main() -> std::io::Result<()> {
     }
 
     // Determine effective mainnet setting based on the environment
-    let effective_mainnet = environment == Environment::Production || environment == Environment::Test;
+    let effective_mainnet =
+        environment == Environment::Production || environment == Environment::Test;
 
     let client = ledger_client::LedgerClient::new(
         network_config.ic_url,
