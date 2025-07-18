@@ -51,6 +51,16 @@ struct StorageConfig {
 }
 
 #[derive(Debug, Parser)]
+#[clap(next_help_heading = "Network Configuration")]
+struct NetworkConfig {
+    /// The URL of the replica to connect to.
+    #[clap(long = "ic-url")]
+    ic_url: Option<String>,
+    #[clap(long = "root-key")]
+    root_key: Option<PathBuf>,
+}
+
+#[derive(Debug, Parser)]
 #[clap(version)]
 struct Opt {
     #[clap(flatten)]
@@ -58,6 +68,9 @@ struct Opt {
     
     #[clap(flatten)]
     storage: StorageConfig,
+    
+    #[clap(flatten)]
+    network: NetworkConfig,
     
     /// Id of the ICP ledger canister.
     #[clap(short = 'c', long = "canister-id")]
@@ -67,15 +80,10 @@ struct Opt {
     /// Id of the governance canister to use for neuron management.
     #[clap(short = 'g', long = "governance-canister-id")]
     governance_canister_id: Option<String>,
-    /// The URL of the replica to connect to.
-    #[clap(long = "ic-url")]
-    ic_url: Option<String>,
     #[clap(short = 'l', long = "log-config-file")]
     log_config_file: Option<PathBuf>,
     #[clap(short = 'L', long = "log-level", default_value = "INFO")]
     log_level: Level,
-    #[clap(long = "root-key")]
-    root_key: Option<PathBuf>,
     #[clap(long = "exit-on-sync")]
     exit_on_sync: bool,
     #[clap(long = "offline")]
@@ -112,7 +120,7 @@ impl Opt {
     }
 
     fn ic_url(&self) -> Result<Url, String> {
-        match self.ic_url.as_ref() {
+        match self.network.ic_url.as_ref() {
             None => Ok(self.default_url()),
             Some(s) => Url::parse(s).map_err(|e| format!("Unable to parse --ic-url: {}", e)),
         }
@@ -184,7 +192,7 @@ async fn main() -> std::io::Result<()> {
     info!("Internet Computer URL set to {}", url);
 
     let (root_key, canister_id, governance_canister_id) = if opt.mainnet {
-        let root_key = match opt.root_key {
+        let root_key = match opt.network.root_key {
             Some(root_key_path) => parse_threshold_sig_key(root_key_path.as_path())?,
             None => {
                 // The mainnet root key
@@ -210,7 +218,7 @@ async fn main() -> std::io::Result<()> {
 
         (Some(root_key), canister_id, governance_canister_id)
     } else {
-        let root_key = match opt.root_key {
+        let root_key = match opt.network.root_key {
             Some(root_key_path) => Some(parse_threshold_sig_key(root_key_path.as_path())?),
             None => {
                 warn!("Data certificate will not be verified due to missing root key");
