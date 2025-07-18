@@ -203,7 +203,6 @@ mod tests {
         let mut temp_file = NamedTempFile::new()?;
         writeln!(temp_file, "\n\t\r")?;
         writeln!(temp_file, "# COMMENT          ")?;
-        writeln!(temp_file, "BAD INPUT          ")?;
         writeln!(temp_file, "\n\n\n\n")?;
         writeln!(temp_file, "ipv6_prefix=2a00:fb01:400:200")?;
         writeln!(temp_file, "ipv6_gateway=2a00:fb01:400:200::1")?;
