@@ -2881,6 +2881,13 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
              be rejected.",
         )?;
         w.encode_gauge(
+            "cmc_subnet_rental_limiter_cycles",
+            state.subnet_rental_canister_limiter.get_count().get() as f64,
+            "The amount of cycles minted in the recent past for the Subnet Rental Canister. \
+             If someone tries to mint N cycles, but N + the value of this metric exceeds \
+             cmc_subnet_rental_cycles_limit, then the request will be rejected.",
+        )?;
+        w.encode_gauge(
             "cmc_subnet_rental_cycles_limit",
             state.subnet_rental_cycles_limit.get() as f64,
             "The maximum amount of cycles that can be minted in the recent past for the Subnet \

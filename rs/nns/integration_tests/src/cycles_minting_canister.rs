@@ -1776,7 +1776,7 @@ fn test_cmc_subnet_rental_topups_use_separate_limit() {
     let account = AccountIdentifier::new(*TEST_USER1_PRINCIPAL, None);
     let subnet_rental_canister_account =
         AccountIdentifier::new(SUBNET_RENTAL_CANISTER_ID.get(), None);
-    // The only requirement here is to have sufficient funds. Other than that,
+    // The only requirement here is to have sufficient funds to run the test. Other than that,
     // the precise number here does not matter.
     let balance = Tokens::new(1e6 as u64, 0).unwrap();
     let nns_init_payloads = NnsInitPayloadsBuilder::new()
@@ -1788,14 +1788,15 @@ fn test_cmc_subnet_rental_topups_use_separate_limit() {
 
     // Conversion rate in tests is 100 XDR per ICP, and cycles cost 1 XDR per trillion cycles.
     // To get the ICP needed to mint maximum cycles, we divide by 1 trillion and then by 100.
-    let src_limit_cost = SUBNET_RENTAL_CYCLES_MINTING_LIMIT as u64 / ONE_TRILLION / 100;
-    let base_limit_cost = CYCLES_MINTING_LIMIT as u64 / ONE_TRILLION / 100;
+    let subnet_rental_limit_cost_icp =
+        SUBNET_RENTAL_CYCLES_MINTING_LIMIT as u64 / ONE_TRILLION / 100;
+    let base_limit_cost_icp = CYCLES_MINTING_LIMIT as u64 / ONE_TRILLION / 100;
 
     // First top-up should succeed as it's 500,000T cycles, which is at the limit for SRC.
     let cycles = notify_top_up_as(
         &state_machine,
         SUBNET_RENTAL_CANISTER_ID,
-        Tokens::new(src_limit_cost, 0).unwrap(),
+        Tokens::new(subnet_rental_limit_cost_icp, 0).unwrap(),
         SUBNET_RENTAL_CANISTER_ID.get(),
     )
     .unwrap();
@@ -1817,7 +1818,7 @@ fn test_cmc_subnet_rental_topups_use_separate_limit() {
     let cycles = notify_top_up(
         &state_machine,
         GOVERNANCE_CANISTER_ID,
-        Tokens::new(base_limit_cost, 0).unwrap(),
+        Tokens::new(base_limit_cost_icp, 0).unwrap(),
     )
     .unwrap();
     assert_eq!(cycles, Cycles::new(CYCLES_MINTING_LIMIT));
@@ -1827,7 +1828,7 @@ fn test_cmc_subnet_rental_topups_use_separate_limit() {
     let error = notify_top_up(
         &state_machine,
         GOVERNANCE_CANISTER_ID,
-        Tokens::new(base_limit_cost, 0).unwrap(),
+        Tokens::new(base_limit_cost_icp, 0).unwrap(),
     )
     .unwrap_err();
     assert_matches!(error, NotifyError::Refunded { reason, .. } if reason.contains("try again later"));
@@ -1839,7 +1840,7 @@ fn test_cmc_subnet_rental_topups_use_separate_limit() {
     let cycles = notify_top_up(
         &state_machine,
         GOVERNANCE_CANISTER_ID,
-        Tokens::new(base_limit_cost, 0).unwrap(),
+        Tokens::new(base_limit_cost_icp, 0).unwrap(),
     )
     .unwrap();
     assert_eq!(cycles, Cycles::new(CYCLES_MINTING_LIMIT));
@@ -1861,7 +1862,7 @@ fn test_cmc_subnet_rental_topups_use_separate_limit() {
     let cycles = notify_top_up_as(
         &state_machine,
         SUBNET_RENTAL_CANISTER_ID,
-        Tokens::new(src_limit_cost, 0).unwrap(),
+        Tokens::new(subnet_rental_limit_cost_icp, 0).unwrap(),
         SUBNET_RENTAL_CANISTER_ID.get(),
     )
     .unwrap();
