@@ -370,26 +370,21 @@ pub fn recovery_upgrader_test(env: TestEnv) {
 
         // Now reboot the host
         info!(logger, "Rebooting the host");
-        let session = host
-            .block_on_ssh_session()
-            .expect("Could not reach HostOS VM for reboot.");
-        let mut channel = session.channel_session().unwrap();
-
-        // Execute reboot - connection will be terminated
-        match channel.exec("reboot") {
-            Ok(()) => {
-                info!(logger, "Reboot command sent successfully");
+        let reboot_result = host.block_on_bash_script("sudo reboot");
+        match reboot_result {
+            Ok(output) => {
+                info!(
+                    logger,
+                    "Reboot command sent successfully. Output: {}", output
+                );
             }
             Err(e) => {
-                info!(logger, "Reboot command execution: {}", e);
+                info!(
+                    logger,
+                    "Reboot command execution (connection may be terminated by reboot): {}", e
+                );
             }
         }
-
-        // These operations may fail due to connection termination from reboot - that's expected
-        let mut s = String::new();
-        let _ = channel.read_to_string(&mut s);
-        channel.close().ok();
-        channel.wait_close().ok();
 
         info!(logger, "Waiting for host to reboot...");
 
