@@ -120,8 +120,6 @@ function process_bootstrap() {
     sync
 }
 
-MAX_TRIES=10
-
 get_guestos_version
 
 write_metric_attr "guestos_boot_action" \
@@ -130,52 +128,39 @@ write_metric_attr "guestos_boot_action" \
     "GuestOS boot action" \
     "gauge"
 
-# /boot/config/CONFIGURED serves as a tag to indicate that the one-time bootstrap configuration has been completed.
-# If the `/boot/config/CONFIGURED` file is not present, the boot sequence will
-# search for a virtual USB stick (the bootstrap config image)
-# containing the injected configuration files, and create the file.
-if [ -f /boot/config/CONFIGURED ]; then
-    echo "Bootstrap completed already"
+# Bootstrap configuration will run on every boot to ensure the system is properly configured
+# with the latest configuration from the CONFIG device or bootstrap tar file.
+
+echo "Starting bootstrap configuration process"
+echo "Locating CONFIG device"
+DEV="$(find_config_devices)"
+
+# Check whether we were provided with a CONFIG device -- on "real"
+# VM deployments this will be the method used to inject bootstrap information
+# into the system.
+# But even if nothing can be mounted, just try and see if something usable
+# is there already -- this might be useful when operating this thing as a
+# docker container instead of full-blown VM.
+if [ "${DEV}" != "" ]; then
+    echo "Found CONFIG device at ${DEV}"
+    mount -t vfat -o ro "${DEV}" /mnt
 fi
 
-while [ ! -f /boot/config/CONFIGURED ]; do
-    echo "Locating CONFIG device"
-    DEV="$(find_config_devices)"
+if [ -e /mnt/ic-bootstrap.tar ]; then
+    echo "Processing bootstrap config"
+    process_bootstrap /mnt/ic-bootstrap.tar /boot/config /var/lib/ic
+    echo "Successfully processed bootstrap config"
+else
+    echo "No registration configuration provided to bootstrap IC node -- continuing without"
+    echo "Bootstrap configuration will be attempted again on next boot"
+fi
 
-    # Check whether we were provided with a CONFIG device -- on "real"
-    # VM deployments this will be the method used to inject bootstrap information
-    # into the system.
-    # But even if nothing can be mounted, just try and see if something usable
-    # is there already -- this might be useful when operating this thing as a
-    # docker container instead of full-blown VM.
-    if [ "${DEV}" != "" ]; then
-        echo "Found CONFIG device at ${DEV}"
-        mount -t vfat -o ro "${DEV}" /mnt
-    fi
+# Fix up permissions. This is actually the wrong place.
+chown ic-replica:nogroup -R /var/lib/ic/data
 
-    if [ -e /mnt/ic-bootstrap.tar ]; then
-        echo "Processing bootstrap config"
-        process_bootstrap /mnt/ic-bootstrap.tar /boot/config /var/lib/ic
-        echo "Successfully processed bootstrap config"
-        touch /boot/config/CONFIGURED
-    else
-        MAX_TRIES=$(("${MAX_TRIES}" - 1))
-        if [ "${MAX_TRIES}" == 0 ]; then
-            echo "No registration configuration provided to bootstrap IC node -- continuing without"
-            exit 1
-        else
-            echo "Retrying to find bootstrap config"
-            sleep 1
-        fi
-    fi
-
-    # Fix up permissions. This is actually the wrong place.
-    chown ic-replica:nogroup -R /var/lib/ic/data
-
-    if [ "${DEV}" != "" ]; then
-        umount /mnt
-    fi
-done
+if [ "${DEV}" != "" ]; then
+    umount /mnt
+fi
 
 node_operator_private_key_exists=0
 if [ -f "/var/lib/ic/data/node_operator_private_key.pem" ]; then
