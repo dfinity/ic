@@ -162,13 +162,9 @@ fn spoof_node_dns(env: &TestEnv, node: &IcNodeSnapshot, server_ipv6: &Ipv6Addr) 
         "#,
     );
 
-    info!(
-        logger,
-        "{}",
-        execute_bash_command(&ssh_session, command)
-            .map_err(|e| anyhow!("Failed to spoof DNS for node {}: {}", node.node_id, e))
-            .unwrap()
-    );
+    execute_bash_command(&ssh_session, command)
+        .map_err(|e| anyhow!("Failed to spoof DNS for node {}: {}", node.node_id, e))
+        .unwrap();
 }
 
 fn verify_content(ssh_session: &Session, remote_file_path: &str, expected_b64: &str) -> Result<()> {
