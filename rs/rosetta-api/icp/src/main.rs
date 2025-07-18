@@ -78,16 +78,16 @@ struct CanisterConfig {
 struct Opt {
     #[clap(flatten)]
     server: ServerConfig,
-    
+
     #[clap(flatten)]
     storage: StorageConfig,
-    
+
     #[clap(flatten)]
     network: NetworkConfig,
-    
+
     #[clap(flatten)]
     canister: CanisterConfig,
-    
+
     #[clap(short = 'l', long = "log-config-file")]
     log_config_file: Option<PathBuf>,
     #[clap(short = 'L', long = "log-level", default_value = "INFO")]
