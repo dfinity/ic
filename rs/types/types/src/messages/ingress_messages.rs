@@ -588,7 +588,6 @@ pub fn extract_effective_canister_id(
         | Ok(Method::RawRand)
         | Ok(Method::ECDSAPublicKey)
         | Ok(Method::SignWithECDSA)
-        | Ok(Method::ComputeInitialIDkgDealings)
         | Ok(Method::ReshareChainKey)
         | Ok(Method::SchnorrPublicKey)
         | Ok(Method::SignWithSchnorr)

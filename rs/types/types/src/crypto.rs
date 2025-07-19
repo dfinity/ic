@@ -13,6 +13,10 @@ pub use hash::DOMAIN_IC_REQUEST;
 
 mod sign;
 
+use ic_management_canister_types_private::EcdsaCurve;
+use ic_management_canister_types_private::MasterPublicKeyId;
+use ic_management_canister_types_private::SchnorrAlgorithm;
+use ic_management_canister_types_private::VetKdCurve;
 pub use sign::{Signable, SignableMock};
 
 pub mod error;
@@ -259,6 +263,41 @@ impl From<i32> for AlgorithmId {
             19 => AlgorithmId::ThresholdEd25519,
             20 => AlgorithmId::VetKD,
             _ => AlgorithmId::Placeholder,
+        }
+    }
+}
+
+impl From<EcdsaCurve> for AlgorithmId {
+    fn from(curve: EcdsaCurve) -> Self {
+        match curve {
+            EcdsaCurve::Secp256k1 => AlgorithmId::ThresholdEcdsaSecp256k1,
+        }
+    }
+}
+
+impl From<SchnorrAlgorithm> for AlgorithmId {
+    fn from(schnorr_algorithm: SchnorrAlgorithm) -> Self {
+        match schnorr_algorithm {
+            SchnorrAlgorithm::Bip340Secp256k1 => AlgorithmId::ThresholdSchnorrBip340,
+            SchnorrAlgorithm::Ed25519 => AlgorithmId::ThresholdEd25519,
+        }
+    }
+}
+
+impl From<VetKdCurve> for AlgorithmId {
+    fn from(curve: VetKdCurve) -> Self {
+        match curve {
+            VetKdCurve::Bls12_381_G2 => AlgorithmId::VetKD,
+        }
+    }
+}
+
+impl From<&MasterPublicKeyId> for AlgorithmId {
+    fn from(key_id: &MasterPublicKeyId) -> Self {
+        match key_id {
+            MasterPublicKeyId::Ecdsa(ecdsa) => AlgorithmId::from(ecdsa.curve),
+            MasterPublicKeyId::Schnorr(schnorr) => AlgorithmId::from(schnorr.algorithm),
+            MasterPublicKeyId::VetKd(vetkd) => AlgorithmId::from(vetkd.curve),
         }
     }
 }
