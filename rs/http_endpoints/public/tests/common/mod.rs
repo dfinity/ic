@@ -65,7 +65,7 @@ use std::{collections::BTreeMap, convert::Infallible, net::SocketAddr, sync::Arc
 use tokio::{
     net::{TcpSocket, TcpStream},
     sync::{
-        mpsc::{channel, unbounded_channel, Sender, UnboundedReceiver},
+        mpsc::{channel, Receiver, Sender},
         watch,
     },
 };
@@ -366,7 +366,7 @@ mock! {
 
 pub struct HttpEndpointHandles {
     pub ingress_filter: IngressFilterHandle,
-    pub ingress_rx: UnboundedReceiver<UnvalidatedArtifactMutation<SignedIngress>>,
+    pub ingress_rx: Receiver<UnvalidatedArtifactMutation<SignedIngress>>,
     pub query_execution: QueryExecutionHandle,
     pub terminal_state_ingress_messages: Sender<(MessageId, Height)>,
     pub certified_height_watcher: watch::Sender<Height>,
@@ -470,8 +470,7 @@ impl HttpEndpointBuilder {
         let sig_verifier = Arc::new(temp_crypto_component_with_fake_registry(node_test_id(0)));
         let crypto = Arc::new(CryptoReturningOk::default());
 
-        #[allow(clippy::disallowed_methods)]
-        let (ingress_tx, ingress_rx) = unbounded_channel();
+        let (ingress_tx, ingress_rx) = channel(100000);
 
         let log = no_op_logger();
 
