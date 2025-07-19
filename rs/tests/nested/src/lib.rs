@@ -27,8 +27,8 @@ use slog::info;
 mod util;
 use util::{
     check_guestos_version, check_hostos_version, elect_guestos_version, elect_hostos_version,
-    get_blessed_guestos_versions, get_unassigned_nodes_config, setup_nested_vm, start_nested_vm,
-    update_nodes_hostos_version, update_unassigned_nodes,
+    get_blessed_guestos_versions, get_unassigned_nodes_config, setup_nested_vm,
+    simple_setup_nested_vm, start_nested_vm, update_nodes_hostos_version, update_unassigned_nodes,
 };
 
 use anyhow::bail;
@@ -104,6 +104,11 @@ pub fn config(env: TestEnv, mainnet_config: bool) {
     vector
         .sync_targets(&env)
         .expect("Failed to sync Vector targets");
+}
+/// Minimal setup that only creates a nested VM without any IC infrastructure.
+/// This is much faster than the full config() setup.
+pub fn simple_config(env: TestEnv) {
+    simple_setup_nested_vm(env.clone(), HOST_VM_NAME);
 }
 
 /// Allow the nested GuestOS to install and launch, and check that it can
@@ -276,6 +281,165 @@ pub fn upgrade_hostos(env: TestEnv) {
     info!(logger, "Version found is: '{}'", new_version);
 
     assert!(new_version != original_version);
+}
+
+/// Test the guestos-recovery-upgrader component: tests upgrading the GuestOS
+/// from the HostOS based on injected version/hash boot parameters
+pub fn recovery_upgrader_test(env: TestEnv) {
+    let logger = env.logger();
+
+    start_nested_vm(env.clone());
+
+    let host = env
+        .get_nested_vm(HOST_VM_NAME)
+        .expect("Unable to find HostOS node.");
+    let guest_ipv6 = host
+        .get_nested_network()
+        .expect("Unable to get nested network")
+        .guest_ip;
+
+    block_on(async {
+        let client = Client::builder()
+            .danger_accept_invalid_certs(true)
+            .build()
+            .expect("Failed to build HTTP client");
+
+        let original_version = retry_with_msg_async!(
+            "Waiting until the guest returns a version",
+            &logger,
+            Duration::from_secs(10 * 60), // long wait for setupOS to to install
+            Duration::from_secs(5),
+            || async {
+                let current_version = check_guestos_version(&client, &guest_ipv6)
+                    .await
+                    .unwrap_or("unavailable".to_string());
+                if current_version != "unavailable" {
+                    info!(logger, "Guest reported version '{}'", current_version);
+                    Ok(current_version)
+                } else {
+                    bail!("Guest version is still unavailable")
+                }
+            }
+        )
+        .await
+        .expect("guest didn't come up as expected");
+
+        info!(logger, "Retrieving the current boot ID from the host before we update boot_args so we can determine when it rebooted...");
+        let retrieve_host_boot_id = || {
+            host.block_on_bash_script("journalctl -q --list-boots | tail -n1 | awk '{print $2}'")
+                .unwrap()
+                .trim()
+                .to_string()
+        };
+        let host_boot_id_pre_reboot = retrieve_host_boot_id();
+        info!(
+            logger,
+            "Host boot ID pre reboot: '{}'", host_boot_id_pre_reboot
+        );
+
+        // First, let's check if the boot_args file exists and see its current content
+        info!(logger, "Checking current boot_args file content");
+        let current_boot_args = host
+            .block_on_bash_script("cat /boot/boot_args")
+            .expect("Failed to read /boot/boot_args file");
+        info!(logger, "Current boot_args content:\n{}", current_boot_args);
+
+        // Remount /boot as read-write and update the boot_args file
+        info!(
+            logger,
+            "Remounting /boot as read-write and updating boot_args file"
+        );
+        // TODO: need the guestos update image hash
+        let update_result = host.block_on_bash_script(
+            "sudo mount -o remount,rw /boot && sudo sed -i 's/\\(BOOT_ARGS_A=\".*\\)enforcing=0\"/\\1enforcing=0 recovery=1 version=e915efecc8af90993ccfc499721ebe826aadba60 hash=12e130\"/' /boot/boot_args && sudo mount -o remount,ro /boot"
+        );
+
+        match update_result {
+            Ok(output) => {
+                info!(
+                    logger,
+                    "Boot_args file updated successfully. Output: {}", output
+                );
+            }
+            Err(e) => {
+                panic!("Failed to update boot_args file: {}", e);
+            }
+        }
+
+        // Verify the update worked
+        info!(logger, "Verifying boot_args file was updated");
+        let updated_boot_args = host
+            .block_on_bash_script("cat /boot/boot_args")
+            .expect("Failed to read updated /boot/boot_args file");
+        info!(logger, "Updated boot_args content:\n{}", updated_boot_args);
+
+        // Now reboot the host
+        info!(logger, "Rebooting the host");
+        let reboot_result = host.block_on_bash_script("sudo reboot");
+        match reboot_result {
+            Ok(output) => {
+                info!(
+                    logger,
+                    "Reboot command sent successfully. Output: {}", output
+                );
+            }
+            Err(e) => {
+                info!(
+                    logger,
+                    "Reboot command execution (connection may be terminated by reboot): {}", e
+                );
+            }
+        }
+
+        info!(logger, "Waiting for host to reboot...");
+
+        retry_with_msg!(
+            format!(
+                "Waiting until the host's boot ID changes from its pre reboot value of '{}'",
+                host_boot_id_pre_reboot
+            ),
+            logger.clone(),
+            Duration::from_secs(5 * 60),
+            Duration::from_secs(5),
+            || {
+                let host_boot_id = retrieve_host_boot_id();
+                if host_boot_id != host_boot_id_pre_reboot {
+                    info!(
+                        logger,
+                        "Host boot ID changed from '{}' to '{}'",
+                        host_boot_id_pre_reboot,
+                        host_boot_id
+                    );
+                    Ok(())
+                } else {
+                    bail!("Host boot ID is still '{}'", host_boot_id_pre_reboot)
+                }
+            }
+        )
+        .unwrap();
+
+        let new_version = retry_with_msg_async!(
+            "Waiting until the guest returns a version",
+            &logger,
+            Duration::from_secs(5 * 60),
+            Duration::from_secs(5),
+            || async {
+                let current_version = check_guestos_version(&client, &guest_ipv6)
+                    .await
+                    .unwrap_or("unavailable".to_string());
+                if current_version != "unavailable" {
+                    info!(logger, "Guest reported version '{}'", current_version);
+                    Ok(current_version)
+                } else {
+                    bail!("Guest version is still unavailable")
+                }
+            }
+        )
+        .await
+        .expect("guest didn't come up as expected");
+
+        assert!(new_version != original_version);
+    });
 }
 
 /// Upgrade unassigned guestOS VMs to the target version, and verify that each one
