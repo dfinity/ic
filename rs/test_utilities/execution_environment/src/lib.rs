@@ -824,12 +824,18 @@ impl ExecutionTest {
         canister_id: CanisterId,
         wasm_binary: Vec<u8>,
     ) -> Result<(), UserError> {
-        let args = InstallCodeArgs::new(
-            CanisterInstallMode::Install,
-            canister_id,
-            wasm_binary,
-            vec![],
-        );
+        self.install_canister_with_args(canister_id, wasm_binary, vec![])
+    }
+
+    /// Installs the given Wasm binary in the given canister with the given init args.
+    pub fn install_canister_with_args(
+        &mut self,
+        canister_id: CanisterId,
+        wasm_binary: Vec<u8>,
+        args: Vec<u8>,
+    ) -> Result<(), UserError> {
+        let args =
+            InstallCodeArgs::new(CanisterInstallMode::Install, canister_id, wasm_binary, args);
         let result = self.install_code(args)?;
         assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
         Ok(())
@@ -858,11 +864,21 @@ impl ExecutionTest {
         canister_id: CanisterId,
         wasm_binary: Vec<u8>,
     ) -> Result<(), UserError> {
+        self.reinstall_canister_with_args(canister_id, wasm_binary, vec![])
+    }
+
+    /// Re-installs the given canister with the given Wasm binary and the given init args.
+    pub fn reinstall_canister_with_args(
+        &mut self,
+        canister_id: CanisterId,
+        wasm_binary: Vec<u8>,
+        args: Vec<u8>,
+    ) -> Result<(), UserError> {
         let args = InstallCodeArgs::new(
             CanisterInstallMode::Reinstall,
             canister_id,
             wasm_binary,
-            vec![],
+            args,
         );
         let result = self.install_code(args)?;
         assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
@@ -885,18 +901,24 @@ impl ExecutionTest {
         Ok(())
     }
 
-    /// Installs the given canister with the given Wasm binary.
+    /// Upgrades the given canister with the given Wasm binary.
     pub fn upgrade_canister(
         &mut self,
         canister_id: CanisterId,
         wasm_binary: Vec<u8>,
     ) -> Result<(), UserError> {
-        let args = InstallCodeArgs::new(
-            CanisterInstallMode::Upgrade,
-            canister_id,
-            wasm_binary,
-            vec![],
-        );
+        self.upgrade_canister_with_args(canister_id, wasm_binary, vec![])
+    }
+
+    /// Upgrades the given canister with the given Wasm binary and post-upgrade args.
+    pub fn upgrade_canister_with_args(
+        &mut self,
+        canister_id: CanisterId,
+        wasm_binary: Vec<u8>,
+        args: Vec<u8>,
+    ) -> Result<(), UserError> {
+        let args =
+            InstallCodeArgs::new(CanisterInstallMode::Upgrade, canister_id, wasm_binary, args);
         let result = self.install_code(args)?;
         assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
         Ok(())
