@@ -67,6 +67,10 @@
     "sha256": "a2a0c65a94559aed373801a149bf4a31b176cb8cbabf77465eb25143ae880f37",
     "tag": "cycles-ledger-v1.0.5"
   },
+  "cycles_ledger_index": {
+    "rev": "2190613d3b5bcd9b74c382b22d151580b8ac271a",
+    "sha256": "d615ea66e7ec7e39a3912889ffabfabb9b6f200584b9656789c3578fae1afac7"
+  },
   "genesis-token": {
     "rev": "02571e8215fa3e77da791e693cc238b2de3beae9",
     "sha256": "f897870b7b6d6c15f657496bc731b0e341c34468ddbb8fa0722ec7beb6b51cee"
