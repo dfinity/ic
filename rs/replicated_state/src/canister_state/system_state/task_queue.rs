@@ -250,7 +250,7 @@ impl TaskQueue {
         self.paused_or_aborted_task = Some(aborted_task);
     }
 }
-
+/*
 impl From<&TaskQueue> for pb::TaskQueue {
     fn from(item: &TaskQueue) -> Self {
         Self {
@@ -287,7 +287,7 @@ impl TryFrom<pb::TaskQueue> for TaskQueue {
         })
     }
 }
-
+*/
 /// Condition for `OnLowWasmMemoryHook` is satisfied if the following holds:
 ///
 /// 1. In the case of `memory_allocation`
