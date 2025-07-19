@@ -122,6 +122,7 @@ fn test(env: TestEnv) {
             Some(new_replica_version.clone()),
             Some(sha256),
             vec![upgrade_url],
+            get_ic_os_launch_measurements().expect("Could not get guest launch measurements"),
             vec![],
         )
         .await;

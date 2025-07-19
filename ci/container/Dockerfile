@@ -186,6 +186,9 @@ RUN cargo install cargo-audit --version ${CARGO_AUDIT_VERSION}
 # Add zshrc generated from zsh-newuser-install (option 2)
 COPY --chown=ubuntu:ubuntu ./ci/container/files/zshrc /home/ubuntu/.zshrc
 
+# For measuring GuestOS releases
+RUN pip3 install sev-snp-measure --break-system-packages
+
 # Whitelist some SSH keys
 COPY --chmod=0700 ./ci/container/files/known_hosts /etc/ssh/ssh_known_hosts
 

@@ -176,6 +176,7 @@ pub fn run_ic_prep() -> (TempDir, IcPrepStateDir) {
         /* nns_subnet_index= */ Some(0),
         /* release_package_url= */ None,
         /* release_package_sha256_hex */ None,
+        /* guest_launch_measurements */ None,
         Some(ProvisionalWhitelist::All),
         None,
         None,

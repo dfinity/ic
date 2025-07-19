@@ -14,7 +14,7 @@ use ic_nns_test_utils::{
     itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
     registry::get_value_or_panic,
 };
-use ic_protobuf::registry::replica_version::v1::BlessedReplicaVersions;
+use ic_protobuf::registry::replica_version::v1::{BlessedReplicaVersions, GuestLaunchMeasurements};
 use ic_registry_keys::make_blessed_replica_versions_key;
 use ic_types::ReplicaVersion;
 use registry_canister::mutations::{
@@ -69,7 +69,7 @@ fn test_submit_and_accept_update_elected_replica_versions_proposal() {
                     .map(|_| vec!["http://release_package.tar.zst".to_string()])
                     .unwrap_or_default(),
                 replica_version_to_elect: elect,
-                guest_launch_measurement_sha256_hex: None,
+                guest_launch_measurements: GuestLaunchMeasurements::default(),
                 replica_versions_to_unelect: unelect.iter().map(|s| s.to_string()).collect(),
             };
         let bless_version_payload = |version_id: &str| -> ReviseElectedGuestosVersionsPayload {
