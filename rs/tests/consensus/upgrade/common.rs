@@ -17,6 +17,7 @@ use ic_agent::Agent;
 use ic_consensus_system_test_utils::rw_message::{
     can_read_msg, cert_state_makes_progress_with_retries, store_message,
 };
+use ic_consensus_system_test_utils::ssh_access::execute_bash_command;
 use ic_consensus_system_test_utils::subnet::enable_chain_key_signing_on_subnet;
 use ic_consensus_system_test_utils::upgrade::{
     assert_assigned_replica_version, bless_replica_version, deploy_guestos_to_all_subnet_nodes,
@@ -122,6 +123,7 @@ pub fn upgrade(
     upgrade_version: &str,
     subnet_type: SubnetType,
     ecdsa_canister_key: Option<&(MessageCanister, BTreeMap<MasterPublicKeyId, Vec<u8>>)>,
+    assert_graceful_orchestrator_tasks_exits: bool,
 ) -> (IcNodeSnapshot, Principal, String) {
     let logger = env.logger();
     let (subnet_id, subnet_node, faulty_node, redundant_nodes) =
@@ -183,7 +185,14 @@ pub fn upgrade(
     stop_node(&logger, &faulty_node);
 
     info!(logger, "Upgrade to version {}", upgrade_version);
-    upgrade_to(nns_node, subnet_id, &subnet_node, upgrade_version, &logger);
+    upgrade_to(
+        nns_node,
+        subnet_id,
+        &subnet_node,
+        upgrade_version,
+        assert_graceful_orchestrator_tasks_exits,
+        &logger,
+    );
 
     // Killing redundant nodes should not prevent the `faulty_node` from upgrading
     // and catching up after restarting.
@@ -244,6 +253,7 @@ fn upgrade_to(
     subnet_id: SubnetId,
     subnet_node: &IcNodeSnapshot,
     target_version: &str,
+    assert_graceful_orchestrator_tasks_exits: bool,
     logger: &Logger,
 ) {
     info!(
@@ -255,6 +265,18 @@ fn upgrade_to(
         &ic_types::ReplicaVersion::try_from(target_version).unwrap(),
         subnet_id,
     ));
+
+    if assert_graceful_orchestrator_tasks_exits {
+        info!(
+            logger,
+            "Checking if the node {} has produced a log \
+            indicating that the orchestrator has gracefully shut down the tasks",
+            subnet_node.get_ip_addr(),
+        );
+        block_on(assert_registry_replicator_stopped(subnet_node.clone()));
+        info!(logger, "The orchestrator shut down the tasks gracefully");
+    }
+
     assert_assigned_replica_version(subnet_node, target_version, logger.clone());
     info!(
         logger,
@@ -286,4 +308,16 @@ pub fn start_node(logger: &Logger, app_node: &IcNodeSnapshot) {
         .await_status_is_healthy()
         .expect("Node not healthy");
     info!(logger, "Node started: {}", app_node.get_ip_addr());
+}
+
+async fn assert_registry_replicator_stopped(node: IcNodeSnapshot) {
+    const MESSAGE: &str = r"Task \`registry_replicator\` finished gracefully";
+
+    let script = format!("journalctl -f | grep -q \"{}\"", MESSAGE);
+
+    let ssh_session = node
+        .block_on_ssh_session()
+        .expect("Failed to establish SSH session");
+
+    execute_bash_command(&ssh_session, script).expect("Didn't find the appropriate log entry");
 }

@@ -1,6 +1,7 @@
 use clap::Parser;
 use ic_logger::{info, new_replica_logger_from_config};
 use ic_registry_replicator::{args::RegistryReplicatorArgs, RegistryReplicator};
+use tokio_util::sync::CancellationToken;
 
 #[tokio::main]
 async fn main() {
@@ -21,7 +22,7 @@ async fn main() {
 
     info!(logger, "Start polling registry.");
     registry_replicator
-        .start_polling(nns_urls, nns_pub_key)
+        .start_polling(nns_urls, nns_pub_key, CancellationToken::new())
         .await
         .expect("Failed to start registry replicator")
         .await;
