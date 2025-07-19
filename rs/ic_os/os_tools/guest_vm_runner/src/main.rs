@@ -12,6 +12,7 @@ use config_types::{HostOSConfig, Ipv6Config};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{calculate_deterministic_mac, IpVariant, MacAddr6Ext};
 use ic_metrics_tool::{Metric, MetricsWriter};
+use ic_sev::HostSevCertificateProvider;
 use nix::unistd::getuid;
 use std::fmt::{Debug, Formatter};
 use std::io::Write;
@@ -46,6 +47,8 @@ const UPGRADE_GUESTOS_SERVICE_NAME: &str = "upgrade-guestos.service";
 
 const CONSOLE_TTY_PATH: &str = "/dev/tty1";
 const GUESTOS_DEVICE: &str = "/dev/hostlvm/guestos";
+
+const SEV_CERTIFICATE_CACHE_DIR: &str = "/var/ic/sev/certificates";
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, ValueEnum)]
 pub enum GuestVMType {
@@ -252,6 +255,7 @@ pub struct GuestVmService {
     systemd_notifier: Arc<dyn SystemdNotifier>,
     console_tty: Box<dyn Write + Send + Sync>,
     guest_vm_type: GuestVMType,
+    sev_certificate_provider: HostSevCertificateProvider,
     disk_device: PathBuf,
     partition_provider: Box<dyn PartitionProvider>,
     // Partition provider uses the mapped device, so it must be declared after it.
@@ -277,6 +281,14 @@ impl GuestVmService {
             .open(CONSOLE_TTY_PATH)
             .context("Failed to open console")?;
 
+        let sev_certificate_provider = HostSevCertificateProvider::new(
+            PathBuf::from(SEV_CERTIFICATE_CACHE_DIR),
+            hostos_config
+                .icos_settings
+                .enable_trusted_execution_environment,
+        )
+        .context("Could not initialize SEV certificate provider")?;
+
         // If this is an Upgrade VM, create a mapped device which protects the data partition of the
         // Guest device.
         let upgrade_mapped_device = (guest_vm_type == GuestVMType::Upgrade)
@@ -298,6 +310,7 @@ impl GuestVmService {
             guest_vm_type,
             systemd_notifier: Arc::new(systemd_notifier::DefaultSystemdNotifier),
             console_tty: Box::new(console_tty),
+            sev_certificate_provider,
             partition_provider: Box::new(
                 mount::GptPartitionProvider::new(disk_device.to_path_buf())
                     .context("Failed to create partition provider")?,
@@ -374,8 +387,13 @@ impl GuestVmService {
             )
         }
 
-        assemble_config_media(&self.hostos_config, self.guest_vm_type, config_media.path())
-            .context("Failed to assemble config media")?;
+        assemble_config_media(
+            &self.hostos_config,
+            self.guest_vm_type,
+            &mut self.sev_certificate_provider,
+            config_media.path(),
+        )
+        .context("Failed to assemble config media")?;
 
         let vm_config = generate_vm_config(
             &self.hostos_config,
@@ -591,6 +609,7 @@ mod tests {
         DeploymentEnvironment, DeterministicIpv6Config, HostOSSettings, ICOSSettings,
         NetworkSettings,
     };
+    use ic_sev::testing::mock_host_sev_certificate_provider;
     use nix::sys::signal::SIGTERM;
     use regex::Regex;
     use std::fs::File;
@@ -636,6 +655,7 @@ mod tests {
         metrics_file: NamedTempFile,
         systemd_notifier: Arc<MockSystemdNotifier>,
         termination_token: CancellationToken,
+        _sev_certificate_cache_dir: TempDir,
     }
 
     impl TestServiceInstance {
@@ -780,6 +800,9 @@ mod tests {
             let metrics_file = NamedTempFile::new().expect("Failed to create metrics file");
             let systemd_notifier = Arc::new(MockSystemdNotifier::new());
             let termination_token = CancellationToken::new();
+            let (sev_certificate_provider, sev_certificate_cache_dir) =
+                mock_host_sev_certificate_provider()
+                    .expect("Failed to create mock SEV cert provider");
             let mut service = GuestVmService {
                 metrics_writer: MetricsWriter::new(metrics_file.path().to_path_buf()),
                 libvirt_connection: self.libvirt_connection.clone(),
@@ -794,8 +817,9 @@ mod tests {
                     .unwrap(),
                 ),
                 guest_vm_type,
-                _upgrade_mapped_device: None,
+                sev_certificate_provider,
                 disk_device: GUESTOS_DEVICE.into(),
+                _upgrade_mapped_device: None,
             };
 
             // Start the service in the background
@@ -810,6 +834,7 @@ mod tests {
                 termination_token,
                 libvirt_connection: self.libvirt_connection.clone(),
                 vm_domain_name: vm_domain_name(guest_vm_type).to_string(),
+                _sev_certificate_cache_dir: sev_certificate_cache_dir,
             }
         }
     }
