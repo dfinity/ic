@@ -261,13 +261,6 @@ impl CandidCallBuilder<UpdateSettings> {
         self
     }
 
-    pub fn with_controller<P: AsRef<[u8]>>(mut self, controller: P) -> Self {
-        let mut settings = self.args.settings;
-        settings.controller = Some(Principal::try_from(controller.as_ref()).unwrap());
-        self.args.settings = settings;
-        self
-    }
-
     pub fn with_controllers<P: AsRef<[u8]>>(mut self, controllers: Vec<P>) -> Self {
         let mut settings = self.args.settings;
         settings.controller = None;
