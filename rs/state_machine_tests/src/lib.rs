@@ -1384,8 +1384,10 @@ impl StateMachineBuilder {
             sm.replica_logger.clone(),
         ));
 
-        let mut adapters_config = AdaptersConfig::default();
-        adapters_config.bitcoin_testnet_uds_path = bitcoin_testnet_uds_path;
+        let adapters_config = AdaptersConfig {
+            bitcoin_testnet_uds_path: bitcoin_testnet_uds_path,
+            ..Default::default()
+        };
         let bitcoin_clients = setup_bitcoin_adapter_clients(
             sm.replica_logger.clone(),
             &sm.metrics_registry,

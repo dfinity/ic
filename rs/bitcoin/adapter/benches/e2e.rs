@@ -99,7 +99,7 @@ fn e2e(criterion: &mut Criterion) {
         network: ic_btc_interface::Network::Regtest,
     };
 
-    let wrapped = BitcoinAdapterRequestWrapper::GetSuccessorsRequest(get_successors_request);
+    let wrapped = BitcoinAdapterRequestWrapper::GetBtcSuccessorsRequest(get_successors_request);
 
     // Benchmark from the sending of the deserialised request through to receiving the response and its deserialisation.
     criterion.bench_function("e2e", |bench| {
