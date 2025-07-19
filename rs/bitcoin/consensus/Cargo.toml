@@ -39,4 +39,5 @@ mockall = { workspace = true }
 proptest = { workspace = true }
 
 [features]
+default = [ "proptest" ]
 proptest = []
