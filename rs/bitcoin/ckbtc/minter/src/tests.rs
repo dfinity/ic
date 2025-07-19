@@ -856,6 +856,7 @@ proptest! {
 
             assert_eq!(i as usize, state.longest_resubmission_chain_size());
             state.check_invariants().expect("violated invariants after transaction resubmission");
+            assert_eq!(state.oldest_retrieve_btc_submitted_transaction_timestamp(), Some(submitted_at));
         }
 
         for txid in &txids {
@@ -867,6 +868,7 @@ proptest! {
             prop_assert_eq!(&state.replacement_txid, &BTreeMap::new());
             prop_assert_eq!(&state.rev_replacement_txid, &BTreeMap::new());
             state.check_invariants().expect("violated invariants after transaction finalization");
+            assert_eq!(state.oldest_retrieve_btc_submitted_transaction_timestamp(), None);
         }
     }
 
