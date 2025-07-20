@@ -12,7 +12,7 @@ use ic_system_test_driver::{
 };
 use ic_tests_ckbtc::{
     adapter::{fund_with_btc, get_alice_and_bob_wallets, get_blackhole_address, AdapterProxy},
-    adapter_test_setup, subnet_sys,
+    btc_adapter_test_setup, subnet_sys,
     utils::{ensure_wallet, get_btc_client},
 };
 use slog::info;
@@ -188,7 +188,7 @@ fn test_send_tx(env: TestEnv) {
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_setup(adapter_test_setup)
+        .with_setup(btc_adapter_test_setup)
         .add_test(systest!(test_received_blocks))
         .add_test(systest!(test_receives_new_3rd_party_txs))
         .add_test(systest!(test_send_tx))

@@ -1,11 +1,18 @@
-use bitcoin::{block::Header, consensus::deserialize, Address, Amount, Block};
-use bitcoincore_rpc::{json::ListUnspentResultEntry, Auth, Client, RpcApi};
+use bitcoin::{
+    block::Header,
+    consensus::deserialize,
+    dogecoin::Address,
+    dogecoin::{Block, Network as DogeNetwork},
+    Amount,
+};
 use candid::{Encode, Principal};
+use dogecoincore_rpc::{json::ListUnspentResultEntry, Auth, Client, RpcApi};
 use ic_agent::{agent::RejectCode, Agent, AgentError};
+use ic_btc_interface::Network;
 use ic_config::execution_environment::BITCOIN_MAINNET_CANISTER_ID;
 use ic_management_canister_types_private::{
-    BitcoinGetSuccessorsArgs, BitcoinGetSuccessorsRequestInitial, BitcoinGetSuccessorsResponse,
-    BitcoinGetSuccessorsResponsePartial, BitcoinNetwork, BitcoinSendTransactionInternalArgs,
+    DogecoinGetSuccessorsArgs, DogecoinGetSuccessorsRequestInitial, DogecoinGetSuccessorsResponse,
+    DogecoinGetSuccessorsResponsePartial, DogecoinSendTransactionInternalArgs,
     Method as Ic00Method, Payload,
 };
 use ic_system_test_driver::{
@@ -19,10 +26,10 @@ use std::{str::FromStr, time::Duration};
 
 use crate::{utils::UNIVERSAL_VM_NAME, TokenType};
 
-/// A proxy to make requests to the bitcoin adapter
+/// A proxy to make requests to the dogecoin adapter
 ///
 /// Under the hood, this is a messaging canister that has privileged access to make
-/// bitcoin calls to the management canister and simply proxies the calls from the
+/// dogecoin calls to the management canister and simply proxies the calls from the
 /// agent.
 /// This allows to make arbitrary calls to the adapter, but they will go through the
 /// entire replica code path.
@@ -34,12 +41,12 @@ pub struct AdapterProxy<'a> {
 
 impl<'a> AdapterProxy<'a> {
     pub async fn new(agent: &'a Agent, log: Logger) -> Self {
-        let bitcoin_principal_id = PrincipalId::from_str(BITCOIN_MAINNET_CANISTER_ID).unwrap();
-        let bitcoin_principal = bitcoin_principal_id.into();
+        let dogecoin_principal_id = PrincipalId::from_str(BITCOIN_MAINNET_CANISTER_ID).unwrap();
+        let dogecoin_principal = dogecoin_principal_id.into();
 
         let mgr = ManagementCanister::create(agent);
 
-        match mgr.canister_status(&bitcoin_principal).await {
+        match mgr.canister_status(&dogecoin_principal).await {
             Ok((status,)) => {
                 if status.status != CanisterStatus::Running {
                     panic!("Message canister in unexpected status");
@@ -52,11 +59,11 @@ impl<'a> AdapterProxy<'a> {
                     // Since we need to install the messaging canister at a
                     // specific PrincipalId, we need to install it manually here
                     mgr.create_canister()
-                        .as_provisional_create_with_specified_id(bitcoin_principal)
+                        .as_provisional_create_with_specified_id(dogecoin_principal)
                         .call_and_wait()
                         .await
                         .expect("Failed to provision id");
-                    mgr.install_code(&(bitcoin_principal), &MESSAGE_CANISTER_WASM)
+                    mgr.install_code(&(dogecoin_principal), &MESSAGE_CANISTER_WASM)
                         .call_and_wait()
                         .await
                         .expect("Failed to install code");
@@ -65,19 +72,19 @@ impl<'a> AdapterProxy<'a> {
             },
         };
 
-        let msg_can = MessageCanister::from_canister_id(agent, bitcoin_principal_id.into());
+        let msg_can = MessageCanister::from_canister_id(agent, dogecoin_principal_id.into());
         Self { msg_can, log }
     }
 
-    /// Make a `bitcoin_get_succesors` call
+    /// Make a `dogecoin_get_succesors` call
     pub async fn get_successors(
         &self,
         anchor: Vec<u8>,
         headers: Vec<Vec<u8>>,
     ) -> Result<(Vec<Block>, Vec<Header>), AgentError> {
         let get_successors_request =
-            BitcoinGetSuccessorsArgs::Initial(BitcoinGetSuccessorsRequestInitial {
-                network: BitcoinNetwork::Regtest,
+            DogecoinGetSuccessorsArgs::Initial(DogecoinGetSuccessorsRequestInitial {
+                network: Network::Regtest,
                 anchor,
                 processed_block_hashes: headers,
             });
@@ -91,27 +98,29 @@ impl<'a> AdapterProxy<'a> {
             )
             .await?;
 
-        let result = BitcoinGetSuccessorsResponse::decode(&result)
+        let result = DogecoinGetSuccessorsResponse::decode(&result)
             .expect("Failed to decode response of get_successors_response");
 
         info!(self.log, "Got get_successor_response");
 
         let (blocks, next) = match result {
-            BitcoinGetSuccessorsResponse::Complete(response) => (response.blocks, response.next),
-            BitcoinGetSuccessorsResponse::Partial(response) => self.follow_up(response).await?,
-            BitcoinGetSuccessorsResponse::FollowUp(_) => panic!("Received an unexpected follow up"),
+            DogecoinGetSuccessorsResponse::Complete(response) => (response.blocks, response.next),
+            DogecoinGetSuccessorsResponse::Partial(response) => self.follow_up(response).await?,
+            DogecoinGetSuccessorsResponse::FollowUp(_) => {
+                panic!("Received an unexpected follow up")
+            }
         };
 
         let blocks = blocks
             .iter()
             .map(|block| {
-                deserialize::<Block>(block).expect("Failed to deserialize a bitcoin block")
+                deserialize::<Block>(block).expect("Failed to deserialize a dogecoin block")
             })
             .collect();
         let next = next
             .iter()
             .map(|next| {
-                deserialize::<Header>(next).expect("Failed to deserialize a bitcoin header")
+                deserialize::<Header>(next).expect("Failed to deserialize a dogecoin header")
             })
             .collect();
 
@@ -119,10 +128,10 @@ impl<'a> AdapterProxy<'a> {
         Ok((blocks, next))
     }
 
-    /// Make a `bitcoin_send_tx` call
+    /// Make a `dogecoin_send_tx` call
     pub async fn send_tx(&self, transaction: Vec<u8>) -> Result<(), AgentError> {
-        let send_tx_request = BitcoinSendTransactionInternalArgs {
-            network: BitcoinNetwork::Mainnet,
+        let send_tx_request = DogecoinSendTransactionInternalArgs {
+            network: Network::Mainnet,
             transaction,
         };
 
@@ -183,7 +192,7 @@ impl<'a> AdapterProxy<'a> {
 
     async fn follow_up(
         &self,
-        initial: BitcoinGetSuccessorsResponsePartial,
+        initial: DogecoinGetSuccessorsResponsePartial,
     ) -> Result<(Vec<Vec<u8>>, Vec<Vec<u8>>), AgentError> {
         let mgr = Principal::management_canister();
 
@@ -193,12 +202,12 @@ impl<'a> AdapterProxy<'a> {
         // Make the follow up calls in parallel
         let follow_ups = (0..initial.remaining_follow_ups)
             .map(|idx| {
-                Encode!(&BitcoinGetSuccessorsArgs::FollowUp(idx))
+                Encode!(&DogecoinGetSuccessorsArgs::FollowUp(idx))
                     .expect("Failed to encode follow up request")
             })
             .map(|request| {
                 self.msg_can
-                    .forward_to(&mgr, "bitcoin_get_successors", request)
+                    .forward_to(&mgr, "dogecoin_get_successors", request)
             });
         let results = futures::future::join_all(follow_ups).await;
 
@@ -224,13 +233,14 @@ pub fn get_alice_and_bob_wallets(env: &TestEnv) -> (Client, Client, Address, Add
 
 fn get_test_wallet(env: &TestEnv, name: &str) -> (Client, Address) {
     let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
-    let bitcoind_addr = deployed_universal_vm.get_vm().unwrap().ipv6;
+    let dogecoind_addr = deployed_universal_vm.get_vm().unwrap().ipv6;
 
     let client = Client::new(
+        DogeNetwork::Regtest,
         format!(
             "http://[{}]:{}/wallet/{}",
-            bitcoind_addr,
-            TokenType::Bitcoin.rpc_port(),
+            dogecoind_addr,
+            TokenType::Dogecoin.rpc_port(),
             name
         )
         .as_str(),
@@ -262,7 +272,7 @@ fn get_test_wallet(env: &TestEnv, name: &str) -> (Client, Address) {
         .expect("Failed to create wallet");
     }
 
-    let address = client.get_new_address(None, None).unwrap().assume_checked();
+    let address = client.get_new_address(None, None).unwrap();
     (client, address)
 }
 

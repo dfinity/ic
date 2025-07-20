@@ -688,10 +688,10 @@ type PageNumber = u8;
 /// };
 /// ```
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
-pub enum GetSuccessorsRequest {
+pub enum GetSuccessorsRequest<Initial> {
     /// A request containing the hashes of blocks we'd like to retrieve succeessors for.
     #[serde(rename = "initial")]
-    Initial(GetSuccessorsRequestInitial),
+    Initial(Initial),
 
     /// A follow-up request to retrieve the `FollowUp` response associated with the given page.
     #[serde(rename = "follow_up")]

@@ -4133,6 +4133,28 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fea41bba32d969b513997752735605054bc0dfa92b4c56bf1189f2e174be7a10"
 
 [[package]]
+name = "dogecoincore-rpc"
+version = "0.19.0"
+source = "git+http://github.com/dfinity/rust-bitcoincore-rpc?rev=4ccf4bb69d09c55fe0d9b5819c490bd70a8a8a70#4ccf4bb69d09c55fe0d9b5819c490bd70a8a8a70"
+dependencies = [
+ "dogecoincore-rpc-json",
+ "jsonrpc 0.18.0",
+ "log",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "dogecoincore-rpc-json"
+version = "0.19.0"
+source = "git+http://github.com/dfinity/rust-bitcoincore-rpc?rev=4ccf4bb69d09c55fe0d9b5819c490bd70a8a8a70#4ccf4bb69d09c55fe0d9b5819c490bd70a8a8a70"
+dependencies = [
+ "bitcoin 0.32.99",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "downcast"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -14569,6 +14591,7 @@ dependencies = [
  "candid",
  "canister-test",
  "dfn_candid",
+ "dogecoincore-rpc",
  "futures",
  "ic-agent",
  "ic-base-types",

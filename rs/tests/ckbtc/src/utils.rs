@@ -412,7 +412,24 @@ pub fn get_btc_client(env: &TestEnv) -> Client {
         &format!(
             "http://[{}]:{}",
             deployed_universal_vm.get_vm().unwrap().ipv6,
-            crate::BITCOIND_RPC_PORT
+            crate::TokenType::Bitcoin.rpc_port(),
+        ),
+        Auth::UserPass(
+            crate::BITCOIND_RPC_USER.to_string(),
+            crate::BITCOIND_RPC_PASSWORD.to_string(),
+        ),
+    )
+    .unwrap()
+}
+
+/// Create a client for dogecoind.
+pub fn get_doge_client(env: &TestEnv) -> Client {
+    let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
+    Client::new(
+        &format!(
+            "http://[{}]:{}",
+            deployed_universal_vm.get_vm().unwrap().ipv6,
+            crate::TokenType::Dogecoin.rpc_port(),
         ),
         Auth::UserPass(
             crate::BITCOIND_RPC_USER.to_string(),

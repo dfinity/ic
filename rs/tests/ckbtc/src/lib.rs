@@ -47,6 +47,7 @@ use std::{
 };
 
 pub mod adapter;
+pub mod doge_adapter;
 pub mod utils;
 
 pub const TEST_KEY_LOCAL: &str = "an_arbitrary_key_id";
@@ -74,14 +75,41 @@ pub(crate) const BITCOIND_RPC_PASSWORD: &str = "Wjh4u6SAjT4UMJKxPmoZ0AN2r9qbE-ks
 
 const BITCOIND_RPC_AUTH : &str = "btc-dev-preview:8555f1162d473af8e1f744aa056fd728$afaf9cb17b8cf0e8e65994d1195e4b3a4348963b08897b4084d210e5ee588bcb";
 
-const BITCOIND_RPC_PORT: u16 = 8332;
-
 const BITCOIN_CLI_PORT: u16 = 18444;
 
 const HTTPS_PORT: u16 = 20443;
 
-pub fn ckbtc_config(env: TestEnv) {
-    let btc_node_ipv6 = setup_bitcoind_uvm(&env);
+#[derive(Copy, Clone)]
+pub enum TokenType {
+    Bitcoin,
+    Dogecoin,
+}
+
+impl TokenType {
+    fn image_name(&self) -> &str {
+        match self {
+            TokenType::Bitcoin => "bitcoind",
+            TokenType::Dogecoin => "dogecoind",
+        }
+    }
+
+    fn config_name(&self) -> &str {
+        match self {
+            TokenType::Bitcoin => "bitcoin.conf",
+            TokenType::Dogecoin => "dogecoin.conf",
+        }
+    }
+
+    fn rpc_port(&self) -> u16 {
+        match self {
+            TokenType::Bitcoin => 8332,
+            TokenType::Dogecoin => 18332,
+        }
+    }
+}
+
+fn ckbtc_config(env: TestEnv, token: TokenType) {
+    let btc_node_ipv6 = setup_bitcoind_uvm(&env, token);
     InternetComputer::new()
         .with_bitcoind_addr(SocketAddr::new(IpAddr::V6(btc_node_ipv6), BITCOIN_CLI_PORT))
         .add_subnet(
@@ -116,8 +144,8 @@ pub fn ckbtc_config(env: TestEnv) {
         .expect("failed to setup IC under test");
 }
 
-pub fn adapter_test_config(env: TestEnv) {
-    let btc_node_ipv6 = setup_bitcoind_uvm(&env);
+fn adapter_test_config(env: TestEnv, token: TokenType) {
+    let btc_node_ipv6 = setup_bitcoind_uvm(&env, token);
     InternetComputer::new()
         .with_bitcoind_addr(SocketAddr::new(IpAddr::V6(btc_node_ipv6), BITCOIN_CLI_PORT))
         .add_subnet(
@@ -130,7 +158,7 @@ pub fn adapter_test_config(env: TestEnv) {
         .expect("failed to setup IC under test");
 }
 
-fn setup_bitcoind_uvm(env: &TestEnv) -> Ipv6Addr {
+fn setup_bitcoind_uvm(env: &TestEnv, token: TokenType) -> Ipv6Addr {
     UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
         .with_config_img(get_dependency_path(
             env::var("CKBTC_UVM_CONFIG_PATH").expect("CKBTC_UVM_CONFIG_PATH not set"),
@@ -142,6 +170,9 @@ fn setup_bitcoind_uvm(env: &TestEnv) -> Ipv6Addr {
     let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
     let universal_vm = deployed_universal_vm.get_vm().unwrap();
     let btc_node_ipv6 = universal_vm.ipv6;
+    let rpc_port = token.rpc_port();
+    let config_name = token.config_name();
+    let image_name = token.image_name();
 
     // Regtest bitcoin node listens on 18444
     // docker bitcoind image uses 8332 for the rpc server
@@ -168,22 +199,22 @@ docker run -d --name=proxy -e ENABLE_IPV6=true -e DEFAULT_HOST=localhost -p 80:8
            -v /tmp/certs:/etc/nginx/certs -v /var/run/docker.sock:/tmp/docker.sock:ro \
            nginx-proxy:image
 
-# Setup bitcoin.conf and run bitcoind
+# Setup config file and run the image
 # The following variable assignment prevents the dollar sign in Rust's BITCOIND_RPC_AUTH string
 # from being interpreted by shell.
 BITCOIND_RPC_AUTH='{BITCOIND_RPC_AUTH}'
-cat >/tmp/bitcoin.conf <<END
+cat >/tmp/{config_name} <<END
     regtest=1
     debug=1
     whitelist=::/0
     fallbackfee=0.0002
     rpcauth=$BITCOIND_RPC_AUTH
 END
-docker load -i /config/bitcoind.tar
-docker run  --name=bitcoind-node -d \
-  -e VIRTUAL_HOST=localhost -e VIRTUAL_PORT={BITCOIND_RPC_PORT} -v /tmp:/bitcoin/.bitcoin \
-  -p {BITCOIN_CLI_PORT}:{BITCOIN_CLI_PORT} -p {BITCOIND_RPC_PORT}:{BITCOIND_RPC_PORT} \
-  bitcoind:image
+docker load -i /config/{image_name}.tar
+docker run  --name={image_name}-node -d \
+  -e VIRTUAL_HOST=localhost -e VIRTUAL_PORT={rpc_port} -v /tmp:/bitcoin/.bitcoin \
+  -p {BITCOIN_CLI_PORT}:{BITCOIN_CLI_PORT} -p {rpc_port}:{rpc_port} \
+  {image_name}:image
 
 # docker load -i /config/httpbin.tar
 # docker run --rm -d -p {HTTPS_PORT}:80 -v /tmp/certs:/certs --name httpbin httpbin:image \
@@ -195,16 +226,23 @@ docker run  --name=bitcoind-node -d \
 }
 
 pub fn ckbtc_setup(env: TestEnv) {
+    let token = TokenType::Bitcoin;
     // Use the ckbtc integration setup.
-    ckbtc_config(env.clone());
+    ckbtc_config(env.clone(), token);
     check_nodes_health(&env);
     check_ecdsa_works(&env);
     install_nns_canisters_at_ids(&env);
 }
 
-pub fn adapter_test_setup(env: TestEnv) {
+pub fn btc_adapter_test_setup(env: TestEnv) {
     // Use the adapter test integration setup.
-    adapter_test_config(env.clone());
+    adapter_test_config(env.clone(), TokenType::Bitcoin);
+    check_nodes_health(&env);
+}
+
+pub fn doge_adapter_test_setup(env: TestEnv) {
+    // Use the adapter test integration setup.
+    adapter_test_config(env.clone(), TokenType::Dogecoin);
     check_nodes_health(&env);
 }
 

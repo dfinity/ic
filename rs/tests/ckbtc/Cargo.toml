@@ -14,6 +14,7 @@ bitcoincore-rpc = { workspace = true }
 candid = { workspace = true }
 canister-test = { path = "../../rust_canisters/canister_test" }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
+dogecoincore-rpc = { git = "http://github.com/dfinity/rust-bitcoincore-rpc", rev = "4ccf4bb69d09c55fe0d9b5819c490bd70a8a8a70" }
 futures = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
