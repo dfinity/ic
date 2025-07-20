@@ -136,6 +136,16 @@ oci.pull(
 )
 use_repo(oci, "bitcoind", "bitcoind_linux_amd64")
 
+# bitcoin container used in test
+oci.pull(
+    name = "dogecoind",
+    image = "hub.docker.com/r/vasilyvsg/dogecoind@sha256:b51ddbe181281056f4edb94738715e9eb435577a3d04cc0884d90f98ac72f666",
+    platforms = [
+        "linux/amd64",
+    ],
+)
+use_repo(oci, "dogecoind", "dogecoind_linux_amd64")
+
 # IC HTTP Gateway container used in tests
 oci.pull(
     name = "ic_gatewayd",
