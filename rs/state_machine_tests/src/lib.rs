@@ -1385,7 +1385,7 @@ impl StateMachineBuilder {
         ));
 
         let adapters_config = AdaptersConfig {
-            bitcoin_testnet_uds_path: bitcoin_testnet_uds_path,
+            bitcoin_testnet_uds_path,
             ..Default::default()
         };
         let bitcoin_clients = setup_bitcoin_adapter_clients(
