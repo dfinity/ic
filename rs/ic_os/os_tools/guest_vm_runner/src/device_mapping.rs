@@ -11,26 +11,12 @@ use std::ops::Deref;
 use std::os::fd::AsRawFd;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::thread;
 use tempfile::{NamedTempFile, TempPath};
 
 pub trait DeviceTrait: Send + Sync {
     fn len(&self) -> Sectors;
     fn device(&self) -> Device;
-
-    #[cfg(debug_assertions)]
-    fn assert_valid(&self) {
-        let len: u64 = std::fs::read_to_string(format!("/sys/dev/block/{}/size", self.device()))
-            .expect("Could not read size from sysfs")
-            .trim()
-            .parse()
-            .expect("Could not parse size");
-        assert_eq!(
-            len,
-            self.len().0,
-            "Device {} has unexpected size",
-            self.device()
-        );
-    }
 }
 
 impl DeviceTrait for MappedDevice {
@@ -132,10 +118,7 @@ impl BaseDevice {
 
 impl Drop for BaseDevice {
     fn drop(&mut self) {
-        #[cfg(debug_assertions)]
-        {
-            self.assert_valid()
-        }
+        debug_assert_valid(self);
     }
 }
 
@@ -214,22 +197,23 @@ impl Drop for LoopDeviceWrapper {
     fn drop(&mut self) {
         #[cfg(debug_assertions)]
         {
-            let major = self.major().expect("Could not get major number");
-            let minor = self.minor().expect("Could not get minor number");
-            let backing_file_path = std::fs::read_to_string(format!(
-                "/sys/dev/block/{major}:{minor}/loop/backing_file"
-            ))
-            .expect("Could not read backing file from sysfs");
+            if !thread::panicking() {
+                let major = self.major().expect("Could not get major number");
+                let minor = self.minor().expect("Could not get minor number");
+                let backing_file_path = std::fs::read_to_string(format!(
+                    "/sys/dev/block/{major}:{minor}/loop/backing_file"
+                ))
+                .expect("Could not read backing file from sysfs");
 
-            assert!(
-                Path::new(backing_file_path.trim()).exists(),
-                "LoopDeviceWrapper backing file does not exist: {backing_file_path}"
-            );
+                assert!(
+                    Path::new(backing_file_path.trim()).exists(),
+                    "LoopDeviceWrapper backing file does not exist: {backing_file_path}"
+                );
+            }
         }
 
         if let Err(err) = self.0.detach() {
-            debug_assert!(false, "Failed to detach loop device: {err}");
-            eprintln!("Failed to detach loop device: {err}");
+            debug_panic(&format!("Failed to detach loop device: {err}"));
         }
     }
 }
@@ -365,18 +349,44 @@ impl MappedDevice {
 
 impl Drop for MappedDevice {
     fn drop(&mut self) {
-        #[cfg(debug_assertions)]
-        {
-            for dep in &self._dependencies {
-                dep.assert_valid();
-            }
-        }
+        debug_assert_valid(self);
+
         if let Err(err) = self.device_mapper.device_remove(
             &DevId::Name(DmName::new(self.name).unwrap()),
             DmOptions::default(),
         ) {
-            debug_assert!(false, "Failed to remove device mapper device: {err}");
-            eprintln!("Failed to remove device mapper device: {err}");
+            debug_panic(&format!("Failed to remove device mapper device: {err}"));
         }
     }
+}
+
+fn debug_assert_valid(device: &dyn DeviceTrait) {
+    #[cfg(debug_assertions)]
+    {
+        if thread::panicking() {
+            return;
+        }
+        let len: u64 = std::fs::read_to_string(format!("/sys/dev/block/{}/size", device.device()))
+            .expect("Could not read size from sysfs")
+            .trim()
+            .parse()
+            .expect("Could not parse size");
+        assert_eq!(
+            len,
+            device.len().0,
+            "Device {} has unexpected size",
+            device.device()
+        );
+    }
+}
+
+/// Prints a message to stderr and panics in debug builds if not already panicking.
+fn debug_panic(msg: &str) {
+    #[cfg(debug_assertions)]
+    {
+        if !thread::panicking() {
+            panic!("{msg}");
+        }
+    }
+    eprintln!("{msg}");
 }
