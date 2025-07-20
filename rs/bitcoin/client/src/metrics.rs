@@ -17,10 +17,10 @@ pub struct Metrics {
 }
 
 impl Metrics {
-    pub fn new(metrics_registry: &MetricsRegistry) -> Self {
+    pub fn new(name: &str, metrics_registry: &MetricsRegistry) -> Self {
         Self {
             requests: metrics_registry.histogram_vec(
-                "replica_bitcoin_client_request_duration_seconds",
+                name,
                 "Request latencies in seconds.",
                 decimal_buckets(-3, 1),
                 // 1ms, 2ms, 5ms, 10ms, 20ms, ..., 10s, 20s, 50s

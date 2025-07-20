@@ -160,7 +160,7 @@ impl RpcAdapterClient<BitcoinAdapterRequestWrapper> for BrokenConnectionBitcoinC
     }
 }
 
-fn setup_bitcoin_adapter_client(
+fn setup_adapter_client(
     log: ReplicaLogger,
     metrics: Metrics,
     rt_handle: tokio::runtime::Handle,
@@ -233,7 +233,10 @@ pub fn setup_dogecoin_adapter_clients(
     rt_handle: tokio::runtime::Handle,
     adapters_config: AdaptersConfig,
 ) -> DogecoinAdapterClients {
-    let metrics = Metrics::new(metrics_registry);
+    let metrics = Metrics::new(
+        "replica_dogecoin_client_request_duration_seconds",
+        metrics_registry,
+    );
 
     // Register bitcoin adapters metrics.
     if let Some(metrics_uds_path) = adapters_config.dogecoin_testnet_uds_metrics_path {
@@ -252,13 +255,13 @@ pub fn setup_dogecoin_adapter_clients(
     }
 
     DogecoinAdapterClients {
-        doge_testnet_client: setup_bitcoin_adapter_client(
+        doge_testnet_client: setup_adapter_client(
             log.clone(),
             metrics.clone(),
             rt_handle.clone(),
             adapters_config.dogecoin_testnet_uds_path,
         ),
-        doge_mainnet_client: setup_bitcoin_adapter_client(
+        doge_mainnet_client: setup_adapter_client(
             log,
             metrics,
             rt_handle,
@@ -273,7 +276,10 @@ pub fn setup_bitcoin_adapter_clients(
     rt_handle: tokio::runtime::Handle,
     adapters_config: AdaptersConfig,
 ) -> BitcoinAdapterClients {
-    let metrics = Metrics::new(metrics_registry);
+    let metrics = Metrics::new(
+        "replica_bitcoin_client_request_duration_seconds",
+        metrics_registry,
+    );
 
     // Register bitcoin adapters metrics.
     if let Some(metrics_uds_path) = adapters_config.bitcoin_testnet_uds_metrics_path {
@@ -292,13 +298,13 @@ pub fn setup_bitcoin_adapter_clients(
     }
 
     BitcoinAdapterClients {
-        btc_testnet_client: setup_bitcoin_adapter_client(
+        btc_testnet_client: setup_adapter_client(
             log.clone(),
             metrics.clone(),
             rt_handle.clone(),
             adapters_config.bitcoin_testnet_uds_path,
         ),
-        btc_mainnet_client: setup_bitcoin_adapter_client(
+        btc_mainnet_client: setup_adapter_client(
             log,
             metrics,
             rt_handle,
