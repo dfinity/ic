@@ -167,8 +167,8 @@ fn can_successfully_create_bitcoin_payload() {
     bitcoin_payload_builder_test(
         MockBitcoinAdapterClient::new(),
         mock_adapter(),
-        mock_adapter(),
-        mock_adapter(),
+        MockBitcoinAdapterClient::new(),
+        MockBitcoinAdapterClient::new(),
         state_manager,
         registry_client,
         |proposal_context, bitcoin_payload_builder| {
@@ -239,8 +239,8 @@ fn includes_responses_in_the_payload() {
     bitcoin_payload_builder_test(
         MockBitcoinAdapterClient::new(),
         mock_adapter(),
-        mock_adapter(),
-        mock_adapter(),
+        MockBitcoinAdapterClient::new(),
+        MockBitcoinAdapterClient::new(),
         state_manager,
         registry_client,
         |proposal_context, bitcoin_payload_builder| {
