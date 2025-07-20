@@ -268,6 +268,9 @@ pub struct Config {
     /// Bitcoin configuration.
     pub bitcoin: BitcoinConfig,
 
+    /// Dogecoin configuration.
+    pub dogecoin: DogecoinConfig,
+
     /// Indicates whether composite queries are available or not.
     pub composite_queries: FlagStatus,
 
@@ -380,6 +383,7 @@ impl Default for Config {
                 testnet_canister_id: Some(bitcoin_testnet_canister_id),
                 mainnet_canister_id: Some(bitcoin_mainnet_canister_id),
             },
+            dogecoin: DogecoinConfig::default(),
             composite_queries: FlagStatus::Enabled,
             query_caching: FlagStatus::Enabled,
             query_cache_capacity: QUERY_CACHE_CAPACITY,
@@ -411,5 +415,19 @@ pub struct BitcoinConfig {
     pub testnet_canister_id: Option<CanisterId>,
 
     /// The bitcoin mainnet canister to forward requests to.
+    pub mainnet_canister_id: Option<CanisterId>,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
+pub struct DogecoinConfig {
+    /// Canisters that have access to privileged dogecoin  API (e.g. `dogecoin_get_successors`)
+    /// This list is intentionally separate from the dogecoin canister IDs below because it
+    /// allows us to spin up new dogecoin canisters without necessarily routing requests to them.
+    pub privileged_access: Vec<CanisterId>,
+
+    /// The dogecoin testnet canister to forward requests to.
+    pub testnet_canister_id: Option<CanisterId>,
+
+    /// The dogecoin mainnet canister to forward requests to.
     pub mainnet_canister_id: Option<CanisterId>,
 }

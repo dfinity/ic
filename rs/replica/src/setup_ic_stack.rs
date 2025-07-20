@@ -2,7 +2,10 @@ use crate::setup::get_subnet_type;
 use ic_artifact_pool::{
     consensus_pool::ConsensusPoolImpl, ensure_persistent_pool_replica_version_compatibility,
 };
-use ic_btc_adapter_client::{setup_bitcoin_adapter_clients, BitcoinAdapterClients};
+use ic_btc_adapter_client::{
+    setup_bitcoin_adapter_clients, setup_dogecoin_adapter_clients, BitcoinAdapterClients,
+    DogecoinAdapterClients,
+};
 use ic_btc_consensus::BitcoinPayloadBuilder;
 use ic_config::{artifact_pool::ArtifactPoolConfig, subnet_config::SubnetConfig, Config};
 use ic_consensus_certification::VerifierImpl;
@@ -268,11 +271,22 @@ pub fn construct_ic_stack(
         rt_handle_main.clone(),
         config.adapters_config.clone(),
     );
+    let DogecoinAdapterClients {
+        doge_testnet_client,
+        doge_mainnet_client,
+    } = setup_dogecoin_adapter_clients(
+        log.clone(),
+        metrics_registry,
+        rt_handle_main.clone(),
+        config.adapters_config.clone(),
+    );
     let self_validating_payload_builder = Arc::new(BitcoinPayloadBuilder::new(
         state_manager.clone(),
         metrics_registry,
         btc_mainnet_client,
         btc_testnet_client,
+        doge_mainnet_client,
+        doge_testnet_client,
         subnet_id,
         registry.clone(),
         config.bitcoin_payload_builder_config,

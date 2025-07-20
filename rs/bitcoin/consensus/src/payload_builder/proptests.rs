@@ -52,7 +52,7 @@ fn proptest_round(
 
     // TODO: What to put in here?
     let state_manager =
-        mock_state_manager(vec![BitcoinAdapterRequestWrapper::GetSuccessorsRequest(
+        mock_state_manager(vec![BitcoinAdapterRequestWrapper::GetBtcSuccessorsRequest(
             GetSuccessorsRequestInitial {
                 processed_block_hashes: vec![vec![10; 32]],
                 anchor: vec![10; 32],
@@ -65,6 +65,8 @@ fn proptest_round(
         &MetricsRegistry::new(),
         Box::new(MockBitcoinAdapterClient::new()),
         Box::new(adapter_client),
+        Box::new(MockBitcoinAdapterClient::new()),
+        Box::new(MockBitcoinAdapterClient::new()),
         subnet_test_id(0),
         Arc::new(mock_registry_client(NumBytes::new(
             MAX_BTC_BLOCK_SIZE as u64,
