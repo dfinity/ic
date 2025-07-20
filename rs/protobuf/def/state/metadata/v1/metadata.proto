@@ -377,7 +377,6 @@ message SystemMetadata {
   repeated ApiBoundaryNodeEntry api_boundary_nodes = 21;
 
   repeated BitcoinGetSuccessorsFollowUpResponses dogecoin_get_successors_follow_up_responses = 22;
-
 }
 
 message StableMemory {
