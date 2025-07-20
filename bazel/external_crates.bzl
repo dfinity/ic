@@ -324,6 +324,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             "bitcoincore-rpc": crate.spec(
                 version = "^0.19.0",
             ),
+            "dogecoincore-rpc": crate.spec(
+                git = "https://github.com/dfinity/rust-bitcoincore-rpc",
+                rev = "4ccf4bb69d09c55fe0d9b5819c490bd70a8a8a70",
+            ),
             "bitcoind": crate.spec(
                 version = "^0.32.0",
             ),
