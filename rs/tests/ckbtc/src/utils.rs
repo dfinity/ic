@@ -23,11 +23,14 @@ use crate::ADDRESS_LENGTH;
 use assert_matches::assert_matches;
 use bitcoincore_rpc::{
     bitcoin::{Address, Amount, Txid},
-    bitcoincore_rpc_json::{self, LoadWalletResult},
-    Auth, Client, RpcApi,
+    bitcoincore_rpc_json, Client as BtcClient, RpcApi as BtcRpcApi,
 };
 use candid::{Decode, Encode, Nat};
 use canister_test::Canister;
+use dogecoincore_rpc::{
+    dogecoincore_rpc_json, json::import::Network as DogeNetwork, Client as DogeClient,
+    RpcApi as DogeRpcApi,
+};
 use ic_ckbtc_agent::CkBtcMinterAgent;
 use ic_ckbtc_minter::state::RetrieveBtcStatus;
 use ic_ckbtc_minter::updates::retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError};
@@ -72,7 +75,7 @@ pub async fn start_canister(canister: &Canister<'_>) {
 }
 
 /// Mint some blocks to the given address.
-pub fn generate_blocks(btc_client: &Client, logger: &Logger, nb_blocks: u64, address: &Address) {
+pub fn generate_blocks(btc_client: &BtcClient, logger: &Logger, nb_blocks: u64, address: &Address) {
     let generated_blocks = btc_client.generate_to_address(nb_blocks, address).unwrap();
     info!(&logger, "Generated {} btc blocks.", generated_blocks.len());
     assert_eq!(
@@ -134,13 +137,37 @@ pub async fn wait_for_ledger_balance(
 
 /// Wait until we have a tx in btc mempool
 /// Timeout after SHORT_TIMEOUT if the minter doesn't successfully find a new tx in the timeframe.
-pub async fn wait_for_mempool_change(btc_rpc: &Client, logger: &Logger) -> Vec<Txid> {
+pub async fn wait_for_mempool_change(btc_rpc: &BtcClient, logger: &Logger) -> Vec<Txid> {
     let start = Instant::now();
     loop {
         if start.elapsed() >= SHORT_TIMEOUT {
             panic!("No new utxos in mempool timeout");
         };
         match btc_rpc.get_raw_mempool() {
+            Ok(r) => {
+                for txid in r.iter() {
+                    info!(&logger, "Tx in mempool : {:?}", txid);
+                }
+                if !r.is_empty() {
+                    return r;
+                }
+            }
+            Err(e) => {
+                info!(&logger, "Error {}", e.to_string());
+            }
+        };
+    }
+}
+
+/// Wait until we have a tx in btc mempool
+/// Timeout after SHORT_TIMEOUT if the minter doesn't successfully find a new tx in the timeframe.
+pub async fn doge_wait_for_mempool_change(doge_rpc: &DogeClient, logger: &Logger) -> Vec<Txid> {
+    let start = Instant::now();
+    loop {
+        if start.elapsed() >= SHORT_TIMEOUT {
+            panic!("No new utxos in mempool timeout");
+        };
+        match doge_rpc.get_raw_mempool() {
             Ok(r) => {
                 for txid in r.iter() {
                     info!(&logger, "Tx in mempool : {:?}", txid);
@@ -234,7 +261,7 @@ pub async fn wait_for_signed_tx(
 /// * The transfer didn't finalize after `LONG_TIMEOUT`.
 /// * The minter rejected the retrieval because the amount was too low to cover the fees.
 pub async fn wait_for_finalization(
-    btc_client: &Client,
+    btc_client: &BtcClient,
     ckbtc_minter_agent: &CkBtcMinterAgent,
     logger: &Logger,
     block_index: u64,
@@ -385,7 +412,7 @@ pub async fn get_btc_address(
     address.parse::<Address<_>>().unwrap().assume_checked()
 }
 
-pub async fn send_to_btc_address(btc_rpc: &Client, logger: &Logger, dst: &Address, amount: u64) {
+pub async fn send_to_btc_address(btc_rpc: &BtcClient, logger: &Logger, dst: &Address, amount: u64) {
     match btc_rpc.send_to_address(
         dst,
         Amount::from_sat(amount),
@@ -406,15 +433,15 @@ pub async fn send_to_btc_address(btc_rpc: &Client, logger: &Logger, dst: &Addres
 }
 
 /// Create a client for bitcoind.
-pub fn get_btc_client(env: &TestEnv) -> Client {
+pub fn get_btc_client(env: &TestEnv) -> BtcClient {
     let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
-    Client::new(
+    BtcClient::new(
         &format!(
             "http://[{}]:{}",
             deployed_universal_vm.get_vm().unwrap().ipv6,
             crate::TokenType::Bitcoin.rpc_port(),
         ),
-        Auth::UserPass(
+        bitcoincore_rpc::Auth::UserPass(
             crate::BITCOIND_RPC_USER.to_string(),
             crate::BITCOIND_RPC_PASSWORD.to_string(),
         ),
@@ -423,15 +450,16 @@ pub fn get_btc_client(env: &TestEnv) -> Client {
 }
 
 /// Create a client for dogecoind.
-pub fn get_doge_client(env: &TestEnv) -> Client {
+pub fn get_doge_client(env: &TestEnv) -> DogeClient {
     let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
-    Client::new(
+    DogeClient::new(
+        DogeNetwork::Regtest,
         &format!(
             "http://[{}]:{}",
             deployed_universal_vm.get_vm().unwrap().ipv6,
             crate::TokenType::Dogecoin.rpc_port(),
         ),
-        Auth::UserPass(
+        dogecoincore_rpc::Auth::UserPass(
             crate::BITCOIND_RPC_USER.to_string(),
             crate::BITCOIND_RPC_PASSWORD.to_string(),
         ),
@@ -644,7 +672,7 @@ pub async fn assert_temporarily_unavailable(agent: &CkBtcMinterAgent, subaccount
 }
 
 /// Ensure wallet existence by creating one if required.
-pub fn ensure_wallet(btc_rpc: &Client, logger: &Logger) {
+pub fn ensure_wallet(btc_rpc: &BtcClient, logger: &Logger) {
     let mut wallets: Vec<String> = vec![];
     let start = Instant::now();
     while wallets.is_empty() {
@@ -663,7 +691,7 @@ pub fn ensure_wallet(btc_rpc: &Client, logger: &Logger) {
     }
     if wallets.is_empty() {
         // Create wallet if not existing yet.
-        let mut res = LoadWalletResult {
+        let mut res = bitcoincore_rpc_json::LoadWalletResult {
             name: Default::default(),
             warning: None,
         };
@@ -672,6 +700,50 @@ pub fn ensure_wallet(btc_rpc: &Client, logger: &Logger) {
                 panic!("create_wallet timeout");
             };
             match btc_rpc.create_wallet("mywallet", None, None, None, None) {
+                Ok(r) => res = r,
+                Err(e) => {
+                    info!(&logger, "Error while creating wallet : {:?}", e)
+                }
+            }
+        }
+        info!(&logger, "Created wallet: {}", res.name);
+    } else {
+        info!(&logger, "Existing wallets:");
+        for w in wallets {
+            info!(&logger, "- wallet: {}", w);
+        }
+    }
+}
+
+/// Ensure wallet existence by creating one if required.
+pub fn doge_ensure_wallet(doge_rpc: &DogeClient, logger: &Logger) {
+    let mut wallets: Vec<String> = vec![];
+    let start = Instant::now();
+    while wallets.is_empty() {
+        if start.elapsed() >= SHORT_TIMEOUT {
+            panic!("list_wallets timeout");
+        };
+        match doge_rpc.list_wallets() {
+            Ok(wallet) => {
+                wallets = wallet;
+                break;
+            }
+            Err(e) => {
+                info!(&logger, "Error while retrieving wallets : {}", e);
+            }
+        }
+    }
+    if wallets.is_empty() {
+        // Create wallet if not existing yet.
+        let mut res = dogecoincore_rpc_json::LoadWalletResult {
+            name: Default::default(),
+            warning: None,
+        };
+        while res.name.is_empty() {
+            if start.elapsed() >= SHORT_TIMEOUT {
+                panic!("create_wallet timeout");
+            };
+            match doge_rpc.create_wallet("mywallet", None, None, None, None) {
                 Ok(r) => res = r,
                 Err(e) => {
                     info!(&logger, "Error while creating wallet : {:?}", e)
