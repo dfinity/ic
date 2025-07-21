@@ -320,6 +320,9 @@ pub struct Config {
 
     /// Whether environment variables are supported.
     pub environment_variables: FlagStatus,
+
+    /// Enables the replicated query inter-canister calls to `fetch_canister_logs`.
+    pub replicated_query_inter_canister_log_fetch: FlagStatus,
 }
 
 impl Default for Config {
@@ -396,6 +399,7 @@ impl Default for Config {
             canister_snapshot_download: FlagStatus::Disabled,
             canister_snapshot_upload: FlagStatus::Disabled,
             environment_variables: FlagStatus::Disabled,
+            replicated_query_inter_canister_log_fetch: FlagStatus::Disabled,
         }
     }
 }
