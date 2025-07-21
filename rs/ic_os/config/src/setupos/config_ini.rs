@@ -133,9 +133,9 @@ fn config_map_from_path(config_file_path: &Path) -> Result<ConfigMap> {
 
     // Flatten all sections into a single HashMap
     let config_map: ConfigMap = parsed_ini
-        .iter()
-        .flat_map(|(_, properties)| properties.iter())
-        .map(|(key, value)| (key.to_lowercase(), value.to_string()))
+        .into_iter()
+        .flat_map(|(_, properties)| properties.into_iter())
+        .map(|(key, value)| (key.to_lowercase(), value))
         .collect();
 
     Ok(config_map)
