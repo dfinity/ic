@@ -171,11 +171,10 @@ async fn read_batch<T>(receiver: &mut Receiver<T>, recv_timeout: Duration) -> Op
     .await
     {
         Ok(received) if received > 0 => Some(artifacts),
-        Ok(_) => {
-            // Channel was closed and p2p is stopped
-            None
-        }
-        // Timeout
+        // Stream has finished because the abortable broadcast/p2p has stopped.
+        // This is infallible.
+        Ok(_) => None,
+        // First value didn't arrive on time
         Err(_) => Some(artifacts),
     }
 }
