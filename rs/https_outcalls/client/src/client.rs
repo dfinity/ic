@@ -133,6 +133,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
         // After receiving the response from the adapter an optional transform is applied by doing an upcall to execution.
         // Once final response is available send the response over to the channel making it available to the client.
         self.rt_handle.spawn(async move {
+            let request_size = canister_http_request.context.variable_parts_size();
             // Destruct canister http request to avoid partial moves of the canister http request.
             let CanisterHttpRequest {
                 id: request_id,
@@ -194,6 +195,16 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                         headers,
                         content: body,
                     } = adapter_response.into_inner();
+
+                    info!(
+                        log,
+                        "Received canister http response from adapter: process id: {}, request size: {} bytes, response time {} ms, downloaded bytes {} for request {}",
+                        std::process::id(),
+                        request_size,
+                        adapter_req_timer.elapsed().as_millis(),
+                        body.len(),
+                        request_id
+                    );
 
                     let canister_http_payload = CanisterHttpResponsePayload {
                         status: status as u128,
