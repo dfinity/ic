@@ -1600,13 +1600,16 @@ impl Governance {
         cmc: Arc<dyn CMC>,
         mut randomness: Box<dyn RandomnessGenerator>,
     ) -> Self {
-        let (heap_governance_proto, maybe_rng_seed) = split_governance_proto(governance_proto);
+        let (mut heap_governance_proto, maybe_rng_seed) = split_governance_proto(governance_proto);
 
         // Carry over the previous rng seed to avoid race conditions in handling queued ingress
         // messages that may require a functioning RNG.
         if let Some(rng_seed) = maybe_rng_seed {
             randomness.seed_rng(rng_seed);
         }
+
+        heap_governance_proto.node_providers =
+            migrate_node_provider_accounts(heap_governance_proto.node_providers);
 
         Self {
             heap_data: heap_governance_proto,
@@ -4288,6 +4291,46 @@ impl Governance {
                                 );
                                 return;
                             }
+
+                            // TODO(NNS1-3976): Extract this validation and make it less dumb.
+                            let account_in_request = node_provider.reward_account.clone();
+                            if let Some(submitted_proto_account) = account_in_request {
+                                let conversion_result = AccountIdentifier::try_from(&submitted_proto_account)
+                                    .map_err(|e| {
+                                        GovernanceError::new_with_message(
+                                            ErrorType::InvalidCommand,
+                                            format!(
+                                                "The node provider's reward account is invalid due to: {}",
+                                                e
+                                            ),
+                                        )
+                                    });
+
+                                match conversion_result {
+                                    Ok(account_identifier) => {
+                                        let derived_proto =
+                                            icp_ledger::protobuf::AccountIdentifier::from(
+                                                account_identifier,
+                                            );
+                                        if derived_proto != submitted_proto_account {
+                                            self.set_proposal_execution_status(
+                                                pid,
+                                                Err(GovernanceError::new_with_message(
+                                                    ErrorType::InvalidCommand,
+                                                    "The node provider's reward account did not contain a CRC checksum.",
+                                                )),
+                                            );
+                                            return;
+                                        }
+                                        // Valid, so continue
+                                    }
+                                    Err(e) => {
+                                        self.set_proposal_execution_status(pid, Err(e));
+                                        return;
+                                    }
+                                }
+                            }
+
                             self.heap_data.node_providers.push(node_provider.clone());
                             self.set_proposal_execution_status(pid, Ok(()));
                         }
@@ -7019,6 +7062,7 @@ impl Governance {
             })?;
 
         if let Some(new_reward_account) = update.reward_account {
+            // TODO(NNS1-3976): Validate the account here
             node_provider.reward_account = Some(new_reward_account);
         } else {
             return Err(GovernanceError::new_with_message(
@@ -7965,6 +8009,23 @@ impl Governance {
     pub fn get_restore_aging_summary(&self) -> Option<RestoreAgingSummary> {
         self.heap_data.restore_aging_summary.clone()
     }
+}
+
+fn migrate_node_provider_accounts(node_providers: &[NodeProvider]) -> Vec<NodeProvider> {
+    node_providers
+        .iter()
+        .map(|np| {
+            let mut migrated_np = np.clone();
+            migrated_np.reward_account = np.reward_account.as_ref().map(|id| {
+                // TODO DO NOT MERGE - what to do on failed migration?  What action could we take?
+                // Do we need to do anything?
+                icp_ledger::protobuf::AccountIdentifier::from(
+                    AccountIdentifier::try_from(id).expect("Could not convert"),
+                )
+            });
+            migrated_np
+        })
+        .collect()
 }
 
 impl From<NeuronSubsetMetrics> for NeuronSubsetMetricsPb {
