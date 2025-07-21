@@ -201,26 +201,6 @@ pub async fn bless_replica_version(
     bless_replica_version_with_urls(nns_node, target_version, upgrade_url, sha256, logger).await;
 }
 
-pub async fn bless_public_replica_version(
-    nns_node: &IcNodeSnapshot,
-    target_version: &str,
-    logger: &Logger,
-) {
-    let upgrade_url = get_public_update_image_url(target_version);
-    info!(logger, "Upgrade URL: {}", upgrade_url);
-
-    let sha256 = fetch_update_file_sha256_with_retry(logger, target_version).await;
-
-    bless_replica_version_with_urls(
-        nns_node,
-        target_version,
-        vec![upgrade_url.clone()],
-        sha256,
-        logger,
-    )
-    .await;
-}
-
 pub async fn bless_replica_version_with_urls(
     nns_node: &IcNodeSnapshot,
     target_version: &str,

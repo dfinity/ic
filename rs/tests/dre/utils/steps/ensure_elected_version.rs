@@ -1,6 +1,9 @@
 use std::time::Duration;
 
-use ic_consensus_system_test_utils::upgrade::bless_public_replica_version;
+use ic_consensus_system_test_utils::upgrade::{
+    bless_replica_version_with_urls, fetch_update_file_sha256_with_retry,
+    get_public_update_image_url,
+};
 use ic_system_test_driver::driver::test_env_api::{
     GetFirstHealthyNodeSnapshot, HasTopologySnapshot,
 };
@@ -28,9 +31,19 @@ impl Step for EnsureElectedVersion {
 
         let nns_node = env.get_first_healthy_system_node_snapshot();
 
-        rt.block_on(bless_public_replica_version(
+        let upgrade_url = get_public_update_image_url(&self.version);
+        info!(env.logger(), "Upgrade URL: {}", upgrade_url);
+
+        let sha256 = rt.block_on(fetch_update_file_sha256_with_retry(
+            &env.logger(),
+            &self.version,
+        ));
+
+        rt.block_on(bless_replica_version_with_urls(
             &nns_node,
             &self.version,
+            vec![upgrade_url.clone()],
+            sha256,
             &env.logger(),
         ));
 
