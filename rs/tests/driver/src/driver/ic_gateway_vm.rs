@@ -123,7 +123,7 @@ impl IcGatewayVm {
             .map(|node| {
                 let url = node.get_public_url().to_string();
                 node.await_status_is_healthy()
-                    .expect(&format!("Expect {} to be healthy!", url));
+                    .unwrap_or_else(|_| panic!("Expect {} to be healthy!", url));
                 url
             })
             .collect();
