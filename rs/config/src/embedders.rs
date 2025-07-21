@@ -132,6 +132,8 @@ pub struct FeatureFlags {
     pub canister_backtrace: FlagStatus,
     /// If this flag is enabled, then the environment variables are supported.
     pub environment_variables: FlagStatus,
+    /// Enables the replicated query inter-canister calls to `fetch_canister_logs`.
+    pub replicated_query_inter_canister_log_fetch: FlagStatus,
 }
 
 impl FeatureFlags {
@@ -142,6 +144,7 @@ impl FeatureFlags {
             wasm64: FlagStatus::Enabled,
             canister_backtrace: FlagStatus::Enabled,
             environment_variables: FlagStatus::Disabled,
+            replicated_query_inter_canister_log_fetch: FlagStatus::Disabled,
         }
     }
 }
