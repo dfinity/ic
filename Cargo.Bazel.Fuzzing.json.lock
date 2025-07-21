@@ -1,5 +1,5 @@
 {
-  "checksum": "b3897231381416ac6a10988ae7f3279e33ecbef821897d618124e1ee8716c7b1",
+  "checksum": "a0c7458ce0436021f5d47765179daec4023e9224f71212d29e19c2914321744f",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -20016,6 +20016,123 @@
       ],
       "license_file": "LICENSE"
     },
+    "derive_more 2.0.1": {
+      "name": "derive_more",
+      "version": "2.0.1",
+      "package_url": "https://github.com/JelteF/derive_more",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/derive_more/2.0.1/download",
+          "sha256": "093242cf7570c207c83073cf82f79706fe7b8317e98620a47d5be7c3d8497678"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "derive_more",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "derive_more",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "from",
+            "std"
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "derive_more-impl 2.0.1",
+              "target": "derive_more_impl"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "2.0.1"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
+    "derive_more-impl 2.0.1": {
+      "name": "derive_more-impl",
+      "version": "2.0.1",
+      "package_url": "https://github.com/JelteF/derive_more",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/derive_more-impl/2.0.1/download",
+          "sha256": "bda628edc44c4bb645fbe0f758797143e4e07926f7ebf4e9bdfbd3d2ce621df3"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "derive_more_impl",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "derive_more_impl",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "from"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro2 1.0.95",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.40",
+              "target": "quote"
+            },
+            {
+              "id": "syn 2.0.101",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "2.0.1"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
     "dfx-core 0.1.4": {
       "name": "dfx-core",
       "version": "0.1.4",
@@ -20791,6 +20908,10 @@
               "target": "der"
             },
             {
+              "id": "derive_more 2.0.1",
+              "target": "derive_more"
+            },
+            {
               "id": "dfx-core 0.1.4",
               "target": "dfx_core"
             },
@@ -21278,6 +21399,10 @@
             {
               "id": "parking_lot 0.12.1",
               "target": "parking_lot"
+            },
+            {
+              "id": "parse-display 0.10.0",
+              "target": "parse_display"
             },
             {
               "id": "pcre2 0.2.6",
@@ -53323,6 +53448,144 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "parse-display 0.10.0": {
+      "name": "parse-display",
+      "version": "0.10.0",
+      "package_url": "https://github.com/frozenlib/parse-display",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/parse-display/0.10.0/download",
+          "sha256": "287d8d3ebdce117b8539f59411e4ed9ec226e0a4153c7f55495c6070d68e6f72"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "parse_display",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "parse_display",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "regex",
+            "regex-syntax",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "regex 1.11.1",
+              "target": "regex"
+            },
+            {
+              "id": "regex-syntax 0.8.5",
+              "target": "regex_syntax"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "parse-display-derive 0.10.0",
+              "target": "parse_display_derive"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.10.0"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
+    "parse-display-derive 0.10.0": {
+      "name": "parse-display-derive",
+      "version": "0.10.0",
+      "package_url": "https://github.com/frozenlib/parse-display",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/parse-display-derive/0.10.0/download",
+          "sha256": "7fc048687be30d79502dea2f623d052f3a074012c6eac41726b7ab17213616b1"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "parse_display_derive",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "parse_display_derive",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro2 1.0.95",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.40",
+              "target": "quote"
+            },
+            {
+              "id": "regex 1.11.1",
+              "target": "regex"
+            },
+            {
+              "id": "regex-syntax 0.8.5",
+              "target": "regex_syntax"
+            },
+            {
+              "id": "structmeta 0.3.0",
+              "target": "structmeta"
+            },
+            {
+              "id": "syn 2.0.101",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.10.0"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
     "parse-size 1.1.0": {
       "name": "parse-size",
       "version": "1.1.0",
@@ -74387,6 +74650,71 @@
       ],
       "license_file": null
     },
+    "structmeta 0.3.0": {
+      "name": "structmeta",
+      "version": "0.3.0",
+      "package_url": "https://github.com/frozenlib/structmeta",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/structmeta/0.3.0/download",
+          "sha256": "2e1575d8d40908d70f6fd05537266b90ae71b15dbbe7a8b7dffa2b759306d329"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "structmeta",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "structmeta",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro2 1.0.95",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.40",
+              "target": "quote"
+            },
+            {
+              "id": "syn 2.0.101",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "structmeta-derive 0.3.0",
+              "target": "structmeta_derive"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.3.0"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
     "structmeta-derive 0.2.0": {
       "name": "structmeta-derive",
       "version": "0.2.0",
@@ -74435,6 +74763,62 @@
         },
         "edition": "2021",
         "version": "0.2.0"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
+    "structmeta-derive 0.3.0": {
+      "name": "structmeta-derive",
+      "version": "0.3.0",
+      "package_url": "https://github.com/frozenlib/structmeta",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/structmeta-derive/0.3.0/download",
+          "sha256": "152a0b65a590ff6c3da95cabe2353ee04e6167c896b28e3b14478c2636c922fc"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "structmeta_derive",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "structmeta_derive",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro2 1.0.95",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.40",
+              "target": "quote"
+            },
+            {
+              "id": "syn 2.0.101",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.3.0"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -94099,6 +94483,7 @@
     "dashmap 5.5.3",
     "der 0.7.8",
     "derive-new 0.7.0",
+    "derive_more 2.0.1",
     "dfx-core 0.1.4",
     "dyn-clone 1.0.14",
     "ed25519-dalek 2.1.1",
@@ -94224,6 +94609,7 @@
     "p256 0.13.2",
     "pairing 0.23.0",
     "parking_lot 0.12.1",
+    "parse-display 0.10.0",
     "paste 1.0.15",
     "pcre2 0.2.6",
     "pem 1.1.1",
