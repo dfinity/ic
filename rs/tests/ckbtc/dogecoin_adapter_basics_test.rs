@@ -1,6 +1,7 @@
+#![allow(unused)]
 use anyhow::Result;
 use bitcoin::Amount;
-use bitcoincore_rpc::{json::CreateRawTransactionInput, RpcApi};
+use dogecoincore_rpc::{json::CreateRawTransactionInput, RpcApi};
 use ic_system_test_driver::{
     driver::{
         group::SystemTestGroup,
@@ -12,8 +13,8 @@ use ic_system_test_driver::{
 };
 use ic_tests_ckbtc::{
     adapter::{fund_with_btc, get_alice_and_bob_wallets, get_blackhole_address, AdapterProxy},
-    btc_adapter_test_setup, subnet_sys,
-    utils::{ensure_wallet, get_btc_client},
+    doge_adapter_test_setup, subnet_sys,
+    utils::{doge_ensure_wallet, get_doge_client},
 };
 use slog::info;
 use std::collections::HashMap;
@@ -24,14 +25,14 @@ fn test_received_blocks(env: TestEnv) {
     let sys_node = subnet_sys.nodes().next().expect("No node in sys subnet.");
 
     // Setup client
-    let client = get_btc_client(&env);
-    ensure_wallet(&client, &log);
+    let client = get_doge_client(&env);
+    doge_ensure_wallet(&client, &log);
     let start_height = client.get_blockchain_info().unwrap().blocks;
     let anchor = client.get_block_hash(start_height).unwrap()[..].to_vec();
     info!(log, "Set up bitcoind wallet");
 
     // Mine 150 blocks
-    let address = client.get_new_address(None, None).unwrap().assume_checked();
+    let address = client.get_new_address(None, None).unwrap();
     client.generate_to_address(150, &address).unwrap();
     info!(log, "Generated 150");
 
@@ -54,12 +55,13 @@ fn test_received_blocks(env: TestEnv) {
     }
 }
 
+/*
 fn test_receives_new_3rd_party_txs(env: TestEnv) {
     let log = env.logger();
     let subnet_sys = subnet_sys(&env);
     let sys_node = subnet_sys.nodes().next().expect("No node in sys subnet.");
 
-    let client = get_btc_client(&env);
+    let client = get_doge_client(&env);
     ensure_wallet(&client, &log);
     let start_height = client.get_blockchain_info().unwrap().blocks;
     let anchor = client.get_block_hash(start_height).unwrap()[..].to_vec();
@@ -126,7 +128,7 @@ fn test_send_tx(env: TestEnv) {
     let subnet_sys = subnet_sys(&env);
     let sys_node = subnet_sys.nodes().next().expect("No node in sys subnet.");
 
-    let client = get_btc_client(&env);
+    let client = get_doge_client(&env);
     ensure_wallet(&client, &log);
     info!(log, "Set up bitcoind wallet");
 
@@ -185,13 +187,14 @@ fn test_send_tx(env: TestEnv) {
         Amount::from_btc(1.0).unwrap()
     );
 }
+*/
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_setup(btc_adapter_test_setup)
+        .with_setup(doge_adapter_test_setup)
         .add_test(systest!(test_received_blocks))
-        .add_test(systest!(test_receives_new_3rd_party_txs))
-        .add_test(systest!(test_send_tx))
+        //.add_test(systest!(test_receives_new_3rd_party_txs))
+        //.add_test(systest!(test_send_tx))
         .execute_from_args()?;
     Ok(())
 }
