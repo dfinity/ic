@@ -23,7 +23,7 @@ use ic_crypto::CryptoComponent;
 use ic_crypto_node_key_generation::{generate_node_keys_once, NodeKeyGenerationError};
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
 use ic_image_upgrader::ImageUpgrader;
-use ic_logger::{error, info, new_replica_logger_from_config, warn, ReplicaLogger};
+use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_registry_replicator::RegistryReplicator;
 use ic_sys::utility_command::UtilityCommand;
@@ -150,11 +150,11 @@ impl Orchestrator {
         let registry_replicator = Arc::new(RegistryReplicator::new_from_config(
             logger.clone(),
             Some(node_id),
-            &config,
+            config,
         ));
 
         let (nns_urls, nns_pub_key) =
-            registry_replicator.parse_registry_access_info_from_config(&config);
+            registry_replicator.parse_registry_access_info_from_config(config);
 
         match registry_replicator
             .start_polling(nns_urls, nns_pub_key)
