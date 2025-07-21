@@ -53,7 +53,7 @@ use crate::{
                 self, NeuronsFundNeuron as NeuronsFundNeuronPb,
             },
             swap_background_information, ArchivedMonthlyNodeProviderRewards, Ballot,
-            CreateServiceNervousSystem, ExecuteNnsFunction, Followees,
+            CreateServiceNervousSystem, ExecuteNnsFunction, Followees, FulfillSubnetRentalRequest,
             GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
             Governance as GovernanceProto, GovernanceError, InstallCode, KnownNeuron,
             ListKnownNeuronsResponse, ListProposalInfo, ManageNeuron, MonthlyNodeProviderRewards,
@@ -4376,10 +4376,10 @@ impl Governance {
                 self.perform_update_canister_settings(pid, update_settings)
                     .await;
             }
-            // This is currently unreachable, because creating such proposals is
-            // currently blocked by a feature flag. As you would guess, this
-            // will be implemented imminently.
-            Action::FulfillSubnetRentalRequest(_) => todo!(),
+            Action::FulfillSubnetRentalRequest(fulfill_subnet_rental_request) => {
+                self.perform_fulfill_subnet_rental_request(pid, fulfill_subnet_rental_request)
+                    .await
+            }
         }
     }
 
@@ -4450,6 +4450,17 @@ impl Governance {
     ) {
         let result = self
             .perform_call_canister(proposal_id, update_settings)
+            .await;
+        self.set_proposal_execution_status(proposal_id, result);
+    }
+
+    async fn perform_fulfill_subnet_rental_request(
+        &mut self,
+        proposal_id: u64,
+        fulfill_subnet_rental_request: FulfillSubnetRentalRequest,
+    ) {
+        let result = fulfill_subnet_rental_request
+            .execute(ProposalId { id: proposal_id }, &self.env)
             .await;
         self.set_proposal_execution_status(proposal_id, result);
     }
