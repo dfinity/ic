@@ -555,7 +555,7 @@ impl ExecutionEnvironment {
 
                             info!(
                                 self.log,
-                                "Canister Http request with payload size {}, max response size {}, subnet size {}, request id {} and process id {}",
+                                "Canister Http request with payload_size {}, max_response_size {}, subnet_size {}, request_id {}, process_id {}",
                                 response.payload_size_bytes().get(),
                                 max_response_size,
                                 registry_settings.subnet_size,

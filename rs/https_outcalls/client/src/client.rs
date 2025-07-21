@@ -190,19 +190,22 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                     )
                 })
                 .and_then(|adapter_response| async move {
+                    //TODO: We should also log the downloaded bytes when the adapter returns an error.
                     let HttpsOutcallResponse {
                         status,
                         headers,
                         content: body,
                     } = adapter_response.into_inner();
 
+                    let headers_size: usize = headers.iter().map(|h| h.name.len() + h.value.len()).sum();
+
                     info!(
                         log,
-                        "Received canister http response from adapter: process id: {}, request size: {} bytes, response time {} ms, downloaded bytes {} for request {}",
+                        "Received canister http response from adapter: process_id: {}, request_size: {}, response_time {}, downloaded_bytes {}, request_id {}",
                         std::process::id(),
                         request_size,
                         adapter_req_timer.elapsed().as_millis(),
-                        body.len(),
+                        body.len() + headers_size,
                         request_id
                     );
 
