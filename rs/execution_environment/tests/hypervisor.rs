@@ -1108,8 +1108,8 @@ fn ic0_canister_version() {
                 another_canister_id,
                 "update",
                 call_args()
-                    .other_side(trap.clone()) // triggers reject callback
-                    .on_reject(trap.clone()), // trap in reject callback
+                    .other_side(reply.clone()) // triggers reply callback
+                    .on_reply(trap.clone()), // trap in reply callback
             )
             .build(),
     )
@@ -1415,7 +1415,8 @@ fn ic0_canister_version() {
     test.stop_canister(canister_id);
     expected_ctr += 1;
 
-    // Transitioning from stopping to stopped bumps the canister version.
+    // Transitioning from stopping to stopped bumps the canister version,
+    // but we can't check the canister version now since the canister is not running.
     test.process_stopping_canisters();
     expected_ctr += 1;
 
@@ -1490,7 +1491,6 @@ fn ic0_canister_version() {
 
     // Failed start/stop/uninstall does not bump the canister version.
     test.start_canister(canister_id).unwrap_err();
-    check_canister_version(&mut test, expected_ctr);
     test.stop_canister(canister_id);
     test.process_stopping_canisters();
     test.uninstall_code(canister_id)
