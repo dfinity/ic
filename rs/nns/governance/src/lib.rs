@@ -601,14 +601,30 @@ pub fn encode_metrics(
     encode_timer_task_metrics(w)?;
 
     // Voting power snapshots
-    let latest_snapshot_is_spike = VOTING_POWER_SNAPSHOTS.with_borrow(|voting_power_snapshots| {
-        voting_power_snapshots.is_latest_snapshot_a_spike(now_seconds())
-    });
+    let now_seconds = now_seconds();
+    let (latest_snapshot_is_spike, latest_snapshot_timestamp_seconds) = VOTING_POWER_SNAPSHOTS
+        .with_borrow(|voting_power_snapshots| {
+            let latest_snapshot_is_spike =
+                voting_power_snapshots.is_latest_snapshot_a_spike(now_seconds);
+            let latest_snapshot_timestamp_seconds =
+                voting_power_snapshots.latest_snapshot_timestamp_seconds();
+            (latest_snapshot_is_spike, latest_snapshot_timestamp_seconds)
+        });
 
     w.encode_gauge(
         "governance_voting_power_snapshots_latest_snapshot_is_spike",
         if latest_snapshot_is_spike { 1.0 } else { 0.0 },
         "Indicates whether the latest voting power snapshot is a spike compared to previous snapshots.",
+    )?;
+
+    w.encode_gauge(
+        "governance_voting_power_snapshots_time_since_latest_snapshot_seconds",
+        if let Some(latest_snapshot_timestamp_seconds) = latest_snapshot_timestamp_seconds {
+            now_seconds.saturating_sub(latest_snapshot_timestamp_seconds) as f64
+        } else {
+            f64::INFINITY
+        },
+        "Time since the latest voting power snapshot, in seconds. If no snapshot has been taken yet, this will be infinity.",
     )?;
 
     // Periodically Calculated (almost entirely detailed neuron breakdowns/rollups)

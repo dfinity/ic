@@ -63,13 +63,21 @@
     "rev": "250daf4dd0cf7ea74c496b45457dd47ced16368c",
     "sha256": "28df08368379862ee17f69542b0779670deec200a08f23540c3e6168c07cc9aa"
   },
+  "cycles_ledger": {
+    "sha256": "a2a0c65a94559aed373801a149bf4a31b176cb8cbabf77465eb25143ae880f37",
+    "tag": "cycles-ledger-v1.0.5"
+  },
+  "cycles_ledger_index": {
+    "rev": "2190613d3b5bcd9b74c382b22d151580b8ac271a",
+    "sha256": "d615ea66e7ec7e39a3912889ffabfabb9b6f200584b9656789c3578fae1afac7"
+  },
   "genesis-token": {
     "rev": "02571e8215fa3e77da791e693cc238b2de3beae9",
     "sha256": "f897870b7b6d6c15f657496bc731b0e341c34468ddbb8fa0722ec7beb6b51cee"
   },
   "governance": {
-    "rev": "2f87fe95207dc6371a2f2dc273362ba03b41e0e9",
-    "sha256": "f3e28dd6102fd0a9a959a4b0fecdd052b7391aab6ecd626e194e6afeeb36f07f"
+    "rev": "5128134d24b7a5b8e24a3d5d40c4cce9d81fd375",
+    "sha256": "2dfffe9149d8e5b61f2e5a3de79c6fece4e50cc57d1653ae519914dec2de68d4"
   },
   "governance-canister_test": {
     "rev": "2f87fe95207dc6371a2f2dc273362ba03b41e0e9",
@@ -88,12 +96,12 @@
     "sha256": "8c8eb285de53ca5609abd7dc41ba3ec8eeb67708b81469311fd670e6738d7d0a"
   },
   "node-rewards": {
-    "rev": "02571e8215fa3e77da791e693cc238b2de3beae9",
-    "sha256": "a82f68db07ae20c3406dea3bf0c9441732c2522c87a44d33b248b5ef65d0cfa8"
+    "rev": "5128134d24b7a5b8e24a3d5d40c4cce9d81fd375",
+    "sha256": "59d76a35284b7f2dfd06e74e16841b593e24d538b323e5eca90224713258e8e6"
   },
   "registry": {
-    "rev": "2f87fe95207dc6371a2f2dc273362ba03b41e0e9",
-    "sha256": "14958999c5dd64e5666c1552b69aa2155c0b343215fe76d9fd3e6a22b00f173e"
+    "rev": "5128134d24b7a5b8e24a3d5d40c4cce9d81fd375",
+    "sha256": "aa91c2298025569b78a7f6bc88150e6d0d799925f13a18043e500feb1bdb36ab"
   },
   "root": {
     "rev": "2f87fe95207dc6371a2f2dc273362ba03b41e0e9",
@@ -128,7 +136,7 @@
     "sha256": "80f2fc15a12043ff07927fb63f1dd88334f4eebee6626451f0d8669fe9db7856"
   },
   "swap": {
-    "rev": "b3d031ec7efff83f033adaeb80c04dec0537d0bc",
-    "sha256": "eeaa883855a9e431bc4a2995e658a60e3820837e275b5f7b714998f44c637497"
+    "rev": "5128134d24b7a5b8e24a3d5d40c4cce9d81fd375",
+    "sha256": "65e7d7898539c2a36d9e1b93d62b3e3708a300a134da9bc1dfeaa726afd99381"
   }
 }
