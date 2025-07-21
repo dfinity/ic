@@ -307,7 +307,8 @@ pub struct KeyConfig {
     /// The key's identifier.
     #[prost(message, optional, tag = "1")]
     pub key_id: ::core::option::Option<super::super::super::types::v1::MasterPublicKeyId>,
-    /// Number of pre-signatures to create in advance.
+    /// The size of the pre-signature stash, i.e. the maximum number of
+    /// pre-signatures that can be stored at once.
     #[prost(uint32, optional, tag = "3")]
     pub pre_signatures_to_create_in_advance: ::core::option::Option<u32>,
     /// The maximum number of signature requests that can be enqueued at once.
@@ -327,10 +328,8 @@ pub struct ChainKeyConfig {
     /// If none is specified, key rotation is disabled.
     #[prost(uint64, optional, tag = "3")]
     pub idkg_key_rotation_period_ms: ::core::option::Option<u64>,
-    /// Maximum number of pre-signature transcripts that can be created inside the
-    /// replicated state.
-    /// If none is specified, pre-signature transcripts are stored in the blocks
-    /// instead.
+    /// Maximum number of pre-signature transcripts that can be worked on in
+    /// parallel to fill the pre-signature stash.
     #[prost(uint32, optional, tag = "4")]
     pub max_pre_signature_transcripts_in_creation: ::core::option::Option<u32>,
 }

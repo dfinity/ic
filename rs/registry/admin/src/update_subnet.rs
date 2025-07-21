@@ -141,8 +141,8 @@ pub(crate) struct ProposeToUpdateSubnetCmd {
     pub idkg_key_rotation_period_ms: Option<u64>,
 
     /// Configuration for chain key:
-    /// Maximum number of pre-signature transcripts that can be created inside the replicated state.
-    /// If none is specified, pre-signature transcripts are stored in the blocks instead.
+    /// Maximum number of pre-signature transcripts that can be worked on in parallel to fill the
+    /// pre-signature stash.
     #[clap(long)]
     pub max_pre_signature_transcripts_in_creation: Option<u32>,
 
