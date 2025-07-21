@@ -128,8 +128,7 @@ pub fn get_config_ini_settings(config_file_path: &Path) -> Result<ConfigIniSetti
 }
 
 fn config_map_from_path(config_file_path: &Path) -> Result<ConfigMap> {
-    let parsed_ini = Ini::load_from_file(config_file_path)
-        .map_err(|e| anyhow!("Failed to parse INI file: {}", e))?;
+    let parsed_ini = Ini::load_from_file(config_file_path).context("Failed to parse INI file")?;
 
     // Flatten all sections into a single HashMap
     let config_map: ConfigMap = parsed_ini
