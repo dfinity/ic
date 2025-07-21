@@ -543,14 +543,16 @@ impl From<SubnetConfigSet> for ExtendedSubnetConfigSet {
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
 pub struct IcpFeatures {
     pub registry: bool,
-    pub cmc: bool,
+    pub cycles_minting: bool,
+    pub icp_token: bool,
 }
 
 impl IcpFeatures {
     pub fn all_icp_features() -> Self {
         Self {
             registry: true,
-            cmc: true,
+            cycles_minting: true,
+            icp_token: true,
         }
     }
 }
@@ -705,13 +707,23 @@ impl ExtendedSubnetConfigSet {
             }
             Ok(())
         };
-        if icp_features.registry {
-            check_empty_subnet(&self.nns, "NNS", "registry")?;
-            self.nns = Some(self.nns.unwrap_or_default());
-        }
-        if icp_features.cmc {
-            check_empty_subnet(&self.nns, "NNS", "cmc")?;
-            self.nns = Some(self.nns.unwrap_or_default());
+        // using `let IcpFeatures { }` with explicit field names
+        // to force an update after adding a new field to `IcpFeatures`
+        let IcpFeatures {
+            registry,
+            cycles_minting,
+            icp_token,
+        } = icp_features;
+        // NNS canisters
+        for (flag, icp_feature_str) in [
+            (*registry, "registry"),
+            (*cycles_minting, "cycles_minting"),
+            (*icp_token, "icp_token"),
+        ] {
+            if flag {
+                check_empty_subnet(&self.nns, "NNS", icp_feature_str)?;
+                self.nns = Some(self.nns.unwrap_or_default());
+            }
         }
         Ok(self)
     }

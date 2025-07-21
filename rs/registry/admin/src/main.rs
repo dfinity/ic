@@ -449,6 +449,9 @@ enum SubCommand {
     /// Submits a proposal to express the interest in renting a subnet.
     ProposeToRentSubnet(ProposeToRentSubnetCmd),
 
+    /// Propose to fulfill a subnet rental request
+    ProposeToFulfillSubnetRentalRequest(ProposeToFulfillSubnetRentalRequestCmd),
+
     /// Propose to modify the routing table. Step 2 of canister migration.
     ProposeToRerouteCanisterRanges(ProposeToRerouteCanisterRangesCmd),
 
@@ -1213,6 +1216,47 @@ impl ProposalPayload<SubnetRentalRequest> for ProposeToRentSubnetCmd {
             user: self.user,
             rental_condition_id: self.rental_condition_id,
         }
+    }
+}
+/// Sub-command to submit a subnet rental request proposal.
+#[derive_common_proposal_fields]
+#[derive(Parser, ProposalMetadata)]
+struct ProposeToFulfillSubnetRentalRequestCmd {
+    /// The principal ID of the user whose rental request should be fulfilled
+    #[clap(long)]
+    user: PrincipalId,
+
+    /// Node IDs that will be members of the subnet
+    #[clap(long, num_args(1..))]
+    node_ids: Vec<PrincipalId>,
+
+    /// Replica version ID (40 character hexadecimal git commit ID)
+    #[clap(long)]
+    replica_version_id: String,
+}
+
+impl ProposalTitle for ProposeToFulfillSubnetRentalRequestCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => format!(
+                "Fulfill Subnet Rental Request for {}",
+                self.user.to_string().split('-').next().unwrap_or("")
+            ),
+        }
+    }
+}
+
+#[async_trait]
+impl ProposalAction for ProposeToFulfillSubnetRentalRequestCmd {
+    async fn action(&self) -> ProposalActionRequest {
+        ProposalActionRequest::FulfillSubnetRentalRequest(
+            ic_nns_governance_api::FulfillSubnetRentalRequest {
+                user: Some(self.user),
+                node_ids: Some(self.node_ids.clone()),
+                replica_version_id: Some(self.replica_version_id.clone()),
+            },
+        )
     }
 }
 
@@ -3697,6 +3741,7 @@ async fn main() {
             SubCommand::ProposeToRemoveNodeOperators(_) => (),
             SubCommand::ProposeToRemoveNodes(_) => (),
             SubCommand::ProposeToRentSubnet(_) => (),
+            SubCommand::ProposeToFulfillSubnetRentalRequest(_) => (),
             SubCommand::ProposeToRerouteCanisterRanges(_) => (),
             SubCommand::ProposeToReviseElectedGuestosVersions(_) => (),
             SubCommand::ProposeToReviseElectedHostosVersions(_) => (),
@@ -4926,6 +4971,16 @@ async fn main() {
                 proposer,
             )
             .await;
+        }
+        SubCommand::ProposeToFulfillSubnetRentalRequest(cmd) => {
+            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            let canister_client = make_canister_client(
+                reachable_nns_urls,
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file,
+                sender,
+            );
+            propose_action_from_command(cmd, canister_client, proposer).await;
         }
         SubCommand::ProposeToUpdateCanisterSettings(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
