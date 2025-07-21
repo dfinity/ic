@@ -12,6 +12,7 @@ mod metrics;
 mod query_handler;
 mod scheduler;
 mod types;
+mod canister_logs;
 pub mod util;
 
 use crate::ingress_filter::IngressFilterServiceImpl;

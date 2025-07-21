@@ -9,7 +9,7 @@ use ic_types::{
     CanisterId, NumInstructions, PrincipalId,
 };
 
-fn fetch_canister_logs(
+pub(crate) fn fetch_canister_logs(
     sender: PrincipalId,
     state: &ReplicatedState,
     args: FetchCanisterLogsRequest,
