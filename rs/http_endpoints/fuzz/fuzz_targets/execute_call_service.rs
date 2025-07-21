@@ -14,7 +14,7 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_test_utilities::crypto::temp_crypto_component_with_fake_registry;
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
-use ic_types::{messages::SignedIngressContent, PrincipalId};
+use ic_types::{artifact::MAX_P2P_IO_CHANNEL_SIZE, messages::SignedIngressContent, PrincipalId};
 use ic_validator_http_request_arbitrary::AnonymousContent;
 use libfuzzer_sys::fuzz_target;
 use std::{
@@ -188,7 +188,7 @@ fn new_call_service(
     let ingress_pool_throttler = MockIngressPoolThrottler::new(throttler_rx);
 
     let ingress_throttler = Arc::new(RwLock::new(ingress_pool_throttler));
-    let (ingress_tx, _ingress_rx) = tokio::sync::mpsc::channel(100000);
+    let (ingress_tx, _ingress_rx) = tokio::sync::mpsc::channel(MAX_P2P_IO_CHANNEL_SIZE);
 
     let sig_verifier = Arc::new(temp_crypto_component_with_fake_registry(node_test_id(1)));
     let call_handler = IngressValidatorBuilder::builder(

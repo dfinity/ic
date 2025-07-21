@@ -1,4 +1,4 @@
-use ic_consensus_manager::{AbortableBroadcastChannel, MAX_IO_CHANNEL_SIZE};
+use ic_consensus_manager::AbortableBroadcastChannel;
 use ic_interfaces::{
     p2p::{
         artifact_manager::JoinGuard,
@@ -190,7 +190,7 @@ fn process_messages<Artifact: IdentifiableArtifact + 'static>(
             let mut artifacts = vec![];
             match timeout(
                 recv_timeout,
-                receiver.recv_many(&mut artifacts, MAX_IO_CHANNEL_SIZE),
+                receiver.recv_many(&mut artifacts, MAX_P2P_IO_CHANNEL_SIZE),
             )
             .await
             {

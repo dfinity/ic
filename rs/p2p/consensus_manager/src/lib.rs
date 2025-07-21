@@ -11,7 +11,9 @@ use ic_interfaces::p2p::consensus::{ArtifactAssembler, ArtifactTransmit};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_quic_transport::{ConnId, Shutdown, SubnetTopology, Transport};
-use ic_types::artifact::{IdentifiableArtifact, PbArtifact, UnvalidatedArtifactMutation};
+use ic_types::artifact::{
+    IdentifiableArtifact, PbArtifact, UnvalidatedArtifactMutation, MAX_P2P_IO_CHANNEL_SIZE,
+};
 use phantom_newtype::AmountOf;
 use tokio::{
     runtime::Handle,
@@ -27,11 +29,6 @@ mod sender;
 
 type StartConsensusManagerFn =
     Box<dyn FnOnce(Arc<dyn Transport>, watch::Receiver<SubnetTopology>) -> Vec<Shutdown>>;
-
-/// Same order of magnitude as the number of active artifacts.
-/// Please note that we put fairly big number mainly for perfomance reasons so either side of a channel doesn't await.
-/// The replica code should be designed in such a way that if we put a channel of size 1, the protocol should still work.
-pub const MAX_IO_CHANNEL_SIZE: usize = 100_000;
 
 pub type AbortableBroadcastSender<T> = Sender<ArtifactTransmit<T>>;
 pub type AbortableBroadcastReceiver<T> = Receiver<UnvalidatedArtifactMutation<T>>;
@@ -72,8 +69,8 @@ impl AbortableBroadcastChannelBuilder {
         (assembler, assembler_router): (F, Router),
         slot_limit: usize,
     ) -> AbortableBroadcastChannel<Artifact> {
-        let (outbound_tx, outbound_rx) = tokio::sync::mpsc::channel(MAX_IO_CHANNEL_SIZE);
-        let (inbound_tx, inbound_rx) = tokio::sync::mpsc::channel(MAX_IO_CHANNEL_SIZE);
+        let (outbound_tx, outbound_rx) = tokio::sync::mpsc::channel(MAX_P2P_IO_CHANNEL_SIZE);
+        let (inbound_tx, inbound_rx) = tokio::sync::mpsc::channel(MAX_P2P_IO_CHANNEL_SIZE);
 
         assert!(uri_prefix::<WireArtifact>()
             .chars()

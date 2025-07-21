@@ -43,7 +43,7 @@ use ic_test_utilities::crypto::{temp_crypto_component_with_fake_registry, Crypto
 use ic_test_utilities_state::ReplicatedStateBuilder;
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::{
-    artifact::UnvalidatedArtifactMutation,
+    artifact::{UnvalidatedArtifactMutation, MAX_P2P_IO_CHANNEL_SIZE},
     batch::RawQueryStats,
     consensus::certification::{Certification, CertificationContent},
     crypto::{
@@ -470,7 +470,7 @@ impl HttpEndpointBuilder {
         let sig_verifier = Arc::new(temp_crypto_component_with_fake_registry(node_test_id(0)));
         let crypto = Arc::new(CryptoReturningOk::default());
 
-        let (ingress_tx, ingress_rx) = channel(100000);
+        let (ingress_tx, ingress_rx) = channel(MAX_P2P_IO_CHANNEL_SIZE);
 
         let log = no_op_logger();
 

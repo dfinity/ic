@@ -67,6 +67,7 @@ use ic_state_machine_tests::{
     StateMachineBuilder, StateMachineConfig, StateMachineStateDir, SubmitIngressError, Subnets,
 };
 use ic_state_manager::StateManagerImpl;
+use ic_types::artifact::MAX_P2P_IO_CHANNEL_SIZE;
 use ic_types::batch::BlockmakerMetrics;
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::{
@@ -2662,7 +2663,7 @@ impl Operation for CallRequest {
             Err(e) => OpOut::Error(PocketIcError::RequestRoutingError(e)),
             Ok(subnet) => {
                 let node = &subnet.nodes[0];
-                let (s, mut r) = mpsc::channel(100000);
+                let (s, mut r) = mpsc::channel(MAX_P2P_IO_CHANNEL_SIZE);
                 let ingress_filter = subnet.ingress_filter.clone();
 
                 let ingress_validator = IngressValidatorBuilder::builder(
