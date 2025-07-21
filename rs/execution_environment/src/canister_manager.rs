@@ -250,10 +250,10 @@ impl CanisterManager {
                     count: environment_variables.len(),
                 });
             }
-            for (key, value) in environment_variables.iter() {
-                if key.len() > self.config.max_environment_variable_name_length {
+            for (name, value) in environment_variables.iter() {
+                if name.len() > self.config.max_environment_variable_name_length {
                     return Err(CanisterManagerError::EnvironmentVariablesNameTooLong {
-                        name: key.clone(),
+                        name: name.clone(),
                         max_name_length: self.config.max_environment_variable_name_length,
                     });
                 }

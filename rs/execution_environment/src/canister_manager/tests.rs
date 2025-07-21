@@ -6842,7 +6842,7 @@ fn test_environment_variables_are_not_set_when_too_many_keys() {
         })
         .build();
 
-    let env_vars = (0..11)
+    let env_vars = (0..MAX_ENVIRONMENT_VARIABLES + 1)
         .map(|i| (format!("KEY{}", i), "VAL".to_string()))
         .map(|(k, v)| EnvironmentVariable { name: k, value: v })
         .collect::<Vec<_>>();
@@ -6860,7 +6860,7 @@ fn test_environment_variables_are_not_set_when_too_many_keys() {
     assert_eq!(
         err,
         UserError::new(
-            ErrorCode::CanisterContractViolation,
+            ErrorCode::InvalidManagementPayload,
             format!(
                 "Too many environment variables: {} (max: {})",
                 env_vars.len(),
@@ -6903,7 +6903,7 @@ fn test_environment_variables_are_not_set_when_key_is_too_long() {
     assert_eq!(
         err,
         UserError::new(
-            ErrorCode::CanisterContractViolation,
+            ErrorCode::InvalidManagementPayload,
             format!(
                 "Environment variable name \"{}\" exceeds the maximum allowed length of {}.",
                 long_key, MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH
@@ -6945,7 +6945,7 @@ fn test_environment_variables_are_not_set_when_value_is_too_long() {
     assert_eq!(
         err,
         UserError::new(
-            ErrorCode::CanisterContractViolation,
+            ErrorCode::InvalidManagementPayload,
             format!(
                 "Environment variable value \"{}\" exceeds the maximum allowed length of {}.",
                 long_value, MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH
@@ -6986,7 +6986,7 @@ fn test_environment_variables_are_not_set_duplicate_keys() {
     assert_eq!(
         err,
         UserError::new(
-            ErrorCode::CanisterContractViolation,
+            ErrorCode::InvalidManagementPayload,
             "Duplicate environment variables are not allowed".to_string(),
         )
     );

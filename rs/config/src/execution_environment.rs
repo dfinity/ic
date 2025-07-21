@@ -161,7 +161,7 @@ pub const MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT: usize = 3000;
 pub const DEFAULT_WASM_MEMORY_LIMIT: NumBytes = NumBytes::new(3 * GIB);
 
 /// The maximum number of environment variables allowed per canister.
-pub const MAX_ENVIRONMENT_VARIABLES: usize = 10;
+pub const MAX_ENVIRONMENT_VARIABLES: usize = 20;
 
 /// The maximum length of an environment variable name.
 pub const MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH: usize = 128;

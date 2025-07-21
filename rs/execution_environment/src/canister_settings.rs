@@ -359,7 +359,7 @@ impl From<UpdateSettingsError> for UserError {
                 ),
             ),
             UpdateSettingsError::DuplicateEnvironmentVariables => UserError::new(
-                ErrorCode::CanisterContractViolation,
+                ErrorCode::InvalidManagementPayload,
                 "Duplicate environment variables are not allowed".to_string(),
             ),
         }

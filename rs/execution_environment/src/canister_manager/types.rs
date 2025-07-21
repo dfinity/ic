@@ -1093,19 +1093,19 @@ impl From<CanisterManagerError> for UserError {
             }
             EnvironmentVariablesTooMany { max, count } => {
                 Self::new(
-                    ErrorCode::CanisterContractViolation,
+                    ErrorCode::InvalidManagementPayload,
                     format!("Too many environment variables: {} (max: {})", count, max),
                 )
             }
             EnvironmentVariablesNameTooLong { name, max_name_length } => {
                 Self::new(
-                    ErrorCode::CanisterContractViolation,
+                    ErrorCode::InvalidManagementPayload,
                     format!("Environment variable name \"{}\" exceeds the maximum allowed length of {}.", name, max_name_length),
                 )
             }
             EnvironmentVariablesValueTooLong { value, max_value_length } => {
                 Self::new(
-                    ErrorCode::CanisterContractViolation,
+                    ErrorCode::InvalidManagementPayload,
                     format!("Environment variable value \"{}\" exceeds the maximum allowed length of {}.", value, max_value_length),
                 )
             }
