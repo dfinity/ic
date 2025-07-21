@@ -350,7 +350,7 @@ fn disburse_maturity(
     if let ManageNeuron {
         command:
             Some(Command::DisburseMaturity(manage_neuron::DisburseMaturity {
-                to_account,
+                to_account: _, // TODO: use it
                 percentage_to_disburse,
                 to_account_identifier,
             })),

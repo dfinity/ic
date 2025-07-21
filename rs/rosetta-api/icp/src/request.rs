@@ -360,7 +360,7 @@ impl TryFrom<&models::Request> for Request {
             RequestType::DisburseMaturity { neuron_index } => {
                 let command = manage_neuron()?;
                 if let Some(Command::DisburseMaturity(manage_neuron::DisburseMaturity {
-                    to_account,
+                    to_account: _, // TODO: use it
                     percentage_to_disburse,
                     to_account_identifier,
                 })) = command
