@@ -311,7 +311,7 @@ impl IngressMessageSubmitter {
         } = self;
 
         // Submission will fail if P2P is not running, meaning there is
-        // no receiver for the ingress message.
+        // no receiver for the ingress message, or if the channel is full.
         ingress_tx
             .try_send(UnvalidatedArtifactMutation::Insert((message, node_id)))
             .map_err(|err| match err {
