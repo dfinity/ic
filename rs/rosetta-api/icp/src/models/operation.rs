@@ -25,4 +25,5 @@ pub enum OperationType {
     ListNeurons,
     Follow,
     RefreshVotingPower,
+    DisburseMaturity,
 }
