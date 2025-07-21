@@ -27,9 +27,9 @@ async fn main() {
         _ = cancellation_token.cancelled() => {},
     }
 
+    info!(logger, "Shutting down orchestrator...");
     cancellation_token.cancel();
 
-    info!(logger, "Shutting down orchestrator...");
     match join_handle.await {
         Err(err) if err.is_panic() => {
             warn!(logger, "Orchestrator panicked: {err}")
