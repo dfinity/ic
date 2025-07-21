@@ -13,6 +13,7 @@ byte-unit = "4.0.14"
 bytes = { workspace = true }
 futures = { workspace = true }
 futures-util = { workspace = true }
+ic-logger = { path = "../../monitoring/logger" }
 hyper = { workspace = true }
 slog = { workspace = true }
 tokio = { workspace = true }

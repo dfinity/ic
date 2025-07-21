@@ -15,7 +15,10 @@ use crate::{
 };
 use backoff::ExponentialBackoffBuilder;
 use get_if_addrs::get_if_addrs;
-use ic_config::metrics::{Config as MetricsConfig, Exporter};
+use ic_config::{
+    metrics::{Config as MetricsConfig, Exporter},
+    Config,
+};
 use ic_crypto::CryptoComponent;
 use ic_crypto_node_key_generation::{generate_node_keys_once, NodeKeyGenerationError};
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
@@ -25,7 +28,6 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_replicator::RegistryReplicator;
 use ic_sys::utility_command::UtilityCommand;
 use ic_types::{hostos_version::HostosVersion, ReplicaVersion, SubnetId};
-use slog_async::AsyncGuard;
 use std::{
     collections::HashMap,
     convert::TryFrom,
@@ -42,7 +44,6 @@ const CHECK_INTERVAL_SECS: Duration = Duration::from_secs(10);
 
 pub struct Orchestrator {
     pub logger: ReplicaLogger,
-    _async_log_guard: AsyncGuard,
     _metrics_runtime: MetricsHttpEndpoint,
     upgrade: Option<Upgrade>,
     hostos_upgrade: Option<HostosUpgrader>,
@@ -83,10 +84,13 @@ fn load_version_from_file(logger: &ReplicaLogger, path: &Path) -> Result<Replica
 }
 
 impl Orchestrator {
-    pub async fn new(args: OrchestratorArgs) -> Result<Self, OrchestratorInstantiationError> {
+    pub async fn new(
+        args: OrchestratorArgs,
+        config: &Config,
+        logger: ReplicaLogger,
+    ) -> Result<Self, OrchestratorInstantiationError> {
         args.create_dirs();
         let metrics_addr = args.get_metrics_addr();
-        let config = args.get_ic_config();
         let crypto_config = config.crypto.clone();
         let node_id = tokio::task::spawn_blocking(move || {
             generate_node_keys_once(&crypto_config, Some(tokio::runtime::Handle::current()))
@@ -100,8 +104,6 @@ impl Orchestrator {
         .await
         .unwrap()?;
 
-        let (logger, _async_log_guard) =
-            new_replica_logger_from_config(&config.orchestrator_logger);
         let metrics_registry = MetricsRegistry::global();
         let replica_version = load_version_from_file(&logger, &args.version_file)
             .map_err(|()| OrchestratorInstantiationError::VersionFileError)?;
@@ -213,7 +215,7 @@ impl Orchestrator {
             registry_local_store.clone(),
         );
 
-        let replica_process = Arc::new(Mutex::new(ProcessManager::new(slog_logger.clone())));
+        let replica_process = Arc::new(Mutex::new(ProcessManager::new(logger.clone())));
         let ic_binary_directory = args
             .ic_binary_directory
             .as_ref()
@@ -330,7 +332,6 @@ impl Orchestrator {
 
         Ok(Self {
             logger,
-            _async_log_guard,
             _metrics_runtime,
             upgrade,
             hostos_upgrade,
