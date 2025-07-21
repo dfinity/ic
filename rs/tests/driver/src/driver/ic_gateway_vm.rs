@@ -37,7 +37,7 @@ const IC_GATEWAY_VMS_DIR: &str = "ic_gateway_vms";
 const PLAYNET_FILE: &str = "playnet.json";
 const IC_GATEWAY_AAAA_RECORDS_CREATED_EVENT_NAME: &str = "ic_gateway_aaaa_records_created_event";
 const IC_GATEWAY_A_RECORDS_CREATED_EVENT_NAME: &str = "ic_gateway_a_records_created_event";
-const READY_TIMEOUT: Duration = Duration::from_secs(600);
+const READY_TIMEOUT: Duration = Duration::from_secs(360);
 const RETRY_INTERVAL: Duration = Duration::from_secs(5);
 
 /// Represents an IC HTTP Gateway VM, it is a wrapper around Farm's Universal VM.
