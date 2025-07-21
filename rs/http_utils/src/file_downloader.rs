@@ -5,7 +5,6 @@ use ic_logger::{log, ReplicaLogger};
 use reqwest::{Client, Response};
 use slog::Level;
 use std::error::Error;
-use std::fmt::{self, Display};
 use std::fs::{self, File};
 use std::io;
 use std::io::prelude::*;
@@ -27,6 +26,26 @@ pub struct FileDownloader {
     /// This is a timeout that is applied to the whole operation of downloading
     /// a specific resource.
     overall_timeout: Duration,
+}
+
+macro_rules! maybe_log {
+    ($self:expr, $level:expr, $($arg:tt)+) => {
+        if let Some(logger) = $self.logger.as_ref() {
+            log!(logger, $level, $($arg)+);
+        }
+    };
+}
+
+macro_rules! maybe_info {
+    ($self:expr, $($arg:tt)+) => {
+        maybe_log!($self, slog::Level::Info, $($arg)+);
+    };
+}
+
+macro_rules! maybe_warn {
+    ($self:expr, $($arg:tt)+) => {
+        maybe_log!($self, slog::Level::Warning, $($arg)+);
+    };
 }
 
 impl FileDownloader {
@@ -63,20 +82,6 @@ impl FileDownloader {
         Ok(())
     }
 
-    fn log<S: Display>(&self, level: Level, message: S) {
-        if let Some(logger) = self.logger.as_ref() {
-            log!(logger, level, "{}", message);
-        }
-    }
-
-    fn info<S: Display>(&self, message: S) {
-        self.log(Level::Info, message);
-    }
-
-    fn warn<S: Display>(&self, message: S) {
-        self.log(Level::Warning, message);
-    }
-
     /// Make a GET HTTP request to `url`, stream the response body to
     /// `file_path` and verify that the resulting file has hash
     /// `expected_sha256_hex`.
@@ -103,21 +108,25 @@ impl FileDownloader {
             // a hash check is required, try the hash check
             // first to save time if possible.
             Some(hash) if file_path.exists() => {
-                self.info("File already exists. Checking hash.");
+                maybe_info!(self, "File already exists. Checking hash.");
                 match check_file_hash(file_path, hash) {
                     Ok(()) => return Ok(()),
                     Err(e) => {
-                        self.warn(format!(
+                        maybe_warn!(
+                            self,
                             "Hash mismatch. Assuming incomplete file. Error: {:?}",
                             e
-                        ));
+                        );
                     }
                 }
             }
             // If the hash check wasn't required assume that
             // the file on the disk is stale and remove it.
             None if file_path.exists() => {
-                self.info("Expected hash not provided and the file already exist. Removing file.");
+                maybe_info!(
+                    self,
+                    "Expected hash not provided and the file already exist. Removing file."
+                );
                 fs::remove_file(file_path)
                     .map_err(|e| FileDownloadError::file_remove_error(file_path, e))?;
             }
@@ -134,13 +143,15 @@ impl FileDownloader {
             // We have some parts of the file but still require to fetch the
             // rest from the server.
             let offset = metadata.len();
-            self.info(format!(
+            maybe_info!(
+                self,
                 "Resuming downloading file from {} starting from byte {}",
-                url, offset
-            ));
+                url,
+                offset
+            );
             offset
         } else {
-            self.info(format!("Downloading file from: {}", url));
+            maybe_info!(self, "Downloading file from: {}", url);
             0
         };
 
@@ -148,11 +159,12 @@ impl FileDownloader {
 
         // There are new bytes that should be written
         if let Some(response) = maybe_response {
-            self.info(format!(
+            maybe_info!(
+                self,
                 "Download request initiated to {:?}, headers: {:?}",
                 response.remote_addr(),
                 response.headers()
-            ));
+            );
             let file = fs::OpenOptions::new()
                 .create(true)
                 .append(true)
@@ -165,17 +177,18 @@ impl FileDownloader {
 
         match expected_sha256_hex.as_ref() {
             Some(expected_hash) => {
-                self.info("Response read. Checking hash.");
+                maybe_info!(self, "Response read. Checking hash.");
                 match check_file_hash(file_path, expected_hash) {
                     Ok(()) => {
-                        self.info("Hash check passed successfully.");
+                        maybe_info!(self, "Hash check passed successfully.");
                         Ok(())
                     }
                     Err(hash_invalid_err) => {
-                        self.warn(format!(
+                        maybe_warn!(
+                            self,
                             "Hash check failed: {:?} - deleting file",
                             hash_invalid_err
-                        ));
+                        );
                         fs::remove_file(file_path)
                             .map_err(|err| FileDownloadError::file_remove_error(file_path, err))?;
                         Err(hash_invalid_err)
@@ -183,7 +196,10 @@ impl FileDownloader {
                 }
             }
             None => {
-                self.info("Response read. Skipping hash verification since it wasn't provided.");
+                maybe_info!(
+                    self,
+                    "Response read. Skipping hash verification since it wasn't provided."
+                );
                 Ok(())
             }
         }
@@ -205,10 +221,12 @@ impl FileDownloader {
         if response.status().is_success() {
             Ok(Some(response))
         } else if response.status() == http::StatusCode::RANGE_NOT_SATISFIABLE {
-            self.warn(format!(
+            maybe_warn!(
+                self,
                 "Requesting resource '{}' from offset {}, resulted in `RANGE_NOT_SATISFIABLE`",
-                url, offset,
-            ));
+                url,
+                offset,
+            );
             Ok(None)
         } else {
             Err(FileDownloadError::NonSuccessResponse(Method::GET, response))
