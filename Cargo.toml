@@ -703,6 +703,7 @@ reqwest = { version = "0.12.15", default-features = false, features = [
 rolling-file = "0.2.0"
 rsa = { version = "0.9.6", features = ["sha2"] }
 rstest = "0.19.0"
+rust-ini = "0.21.2"
 rustc-demangle = { version = "0.1.16" }
 rustls = { version = "0.23.18", default-features = false, features = [
     "ring",
@@ -717,7 +718,10 @@ serde_cbor = "0.11.2"
 serde_json = { version = "^1.0.107" }
 serde_with = "1.14.0"
 serde_yaml = "0.9.33"
-sev = { version = "6.2", default-features = false, features = ["crypto_nossl", "snp"] }
+sev = { version = "6.2", default-features = false, features = [
+    "crypto_nossl",
+    "snp",
+] }
 sha2 = "0.10.9"
 sha3 = "0.10.8"
 signature = "2.2.0"
