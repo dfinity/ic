@@ -2,12 +2,11 @@ use ic00::{
     CanisterSettingsArgsBuilder, CanisterSnapshotResponse, LoadCanisterSnapshotArgs,
     TakeCanisterSnapshotArgs,
 };
-use ic_base_types::PrincipalId;
+use ic_base_types::{EnvironmentVariables, PrincipalId};
 use ic_config::flag_status::FlagStatus;
 use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
 use ic_crypto_sha2::Sha256;
 use ic_error_types::{ErrorCode, UserError};
-use ic_execution_environment::EnvironmentVariables;
 use ic_management_canister_types_private::CanisterInstallMode::{Install, Reinstall, Upgrade};
 use ic_management_canister_types_private::{
     self as ic00, CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterIdRecord,
@@ -437,6 +436,7 @@ fn canister_history_tracks_controllers_change() {
     let user_id2 = user_test_id(8).get();
 
     // create canister via ingress from user_id1
+    // overriding controllers with a list containing repeated controllers
     let wasm_result = env
         .execute_ingress_as(
             user_id1,
@@ -446,7 +446,9 @@ fn canister_history_tracks_controllers_change() {
                 amount: Some(candid::Nat::from(INITIAL_CYCLES_BALANCE.get())),
                 settings: Some(
                     CanisterSettingsArgsBuilder::new()
-                        .with_controllers(vec![user_id1, user_id2])
+                        .with_controllers(vec![
+                            user_id2, user_id1, user_id2, user_id1, user_id1, user_id2,
+                        ])
                         .build(),
                 ),
                 specified_id: None,
@@ -462,6 +464,7 @@ fn canister_history_tracks_controllers_change() {
         WasmResult::Reject(reason) => panic!("create_canister call rejected: {}", reason),
     };
     // update reference canister history
+    // the list of controllers in the canister history is sorted and contains no duplicates
     let mut reference_change_entries: Vec<CanisterChange> = vec![CanisterChange::new(
         now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
         0,
@@ -470,8 +473,10 @@ fn canister_history_tracks_controllers_change() {
     )];
 
     for i in 1..MAX_CANISTER_HISTORY_CHANGES + 42 {
-        // update controllers via ingress from user_id2 (effectively the same set of controllers, but canister history still updated)
-        let new_controllers = vec![user_id1, user_id2];
+        // update controllers via ingress from user_id2
+        // (effectively the same set of controllers provided as a list containing repeated controllers,
+        // but canister history still updated)
+        let new_controllers = vec![user_id2, user_id1, user_id2, user_id1, user_id1, user_id2];
         now += Duration::from_secs(5);
         env.set_time(now);
         env.execute_ingress_as(
@@ -489,11 +494,12 @@ fn canister_history_tracks_controllers_change() {
         )
         .unwrap();
         // check canister history
+        // the list of controllers in the canister history is sorted and contains no duplicates
         reference_change_entries.push(CanisterChange::new(
             now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
             i,
             CanisterChangeOrigin::from_user(user_id2),
-            CanisterChangeDetails::controllers_change(new_controllers),
+            CanisterChangeDetails::controllers_change(vec![user_id1, user_id2]),
         ));
         let history = get_canister_history(&env, canister_id);
         assert_eq!(history.get_total_num_changes(), i + 1);
@@ -1246,15 +1252,138 @@ fn check_environment_variables_for_create_canister_history(
     let canister_state = state.canister_state(&canister_id).unwrap();
     match environment_variables_flag {
         FlagStatus::Enabled => {
-            assert_eq!(&canister_state.system_state.environment_variables, env_vars);
+            assert_eq!(
+                canister_state.system_state.environment_variables,
+                EnvironmentVariables::new(env_vars.clone())
+            );
         }
         FlagStatus::Disabled => {
             assert_eq!(
                 canister_state.system_state.environment_variables,
-                BTreeMap::new()
+                EnvironmentVariables::new(BTreeMap::new())
             );
         }
     }
+}
+
+#[test]
+fn canister_history_tracking_env_vars_update_settings() {
+    let user_id = user_test_id(7).get();
+    let initial_env_vars = BTreeMap::from([
+        ("NODE_ENV".to_string(), "production".to_string()),
+        ("LOG_LEVEL".to_string(), "info".to_string()),
+    ]);
+    let initial_env_vars_hash = EnvironmentVariables::new(initial_env_vars.clone()).hash();
+
+    // Set up StateMachine.
+    let env = setup_state_machine(FlagStatus::Enabled);
+    // Set time of StateMachine to current system time.
+    let mut now = std::time::SystemTime::now();
+    env.set_time(now);
+
+    let canister_id = env.create_canister_with_cycles(
+        None,
+        INITIAL_CYCLES_BALANCE,
+        Some(
+            CanisterSettingsArgsBuilder::new()
+                .with_controllers(vec![user_id])
+                .with_environment_variables(initial_env_vars)
+                .build(),
+        ),
+    );
+
+    // Update settings with new environment variables.
+    now += Duration::from_secs(5);
+    env.set_time(now);
+    let env_vars = BTreeMap::from([
+        ("NODE_ENV".to_string(), "production".to_string()),
+        ("LOG_LEVEL".to_string(), "debug".to_string()),
+    ]);
+    env.execute_ingress_as(
+        user_id,
+        ic00::IC_00,
+        Method::UpdateSettings,
+        UpdateSettingsArgs {
+            canister_id: canister_id.into(),
+            sender_canister_version: Some(2),
+            settings: CanisterSettingsArgsBuilder::new()
+                .with_environment_variables(env_vars.clone())
+                .build(),
+        }
+        .encode(),
+    )
+    .unwrap();
+
+    // Expected canister history change after update settings.
+    let env_vars_hash = EnvironmentVariables::new(env_vars.clone()).hash();
+    let reference_change = CanisterChange::new(
+        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
+        1,
+        CanisterChangeOrigin::from_user(user_id),
+        CanisterChangeDetails::settings_change(None, Some(env_vars_hash)),
+    );
+
+    // Verify canister history is updated.
+    let history = get_canister_history(&env, canister_id);
+    assert_eq!(history.get_total_num_changes(), 2);
+    let changes = history
+        .get_changes(history.get_total_num_changes() as usize)
+        .map(|c| (**c).clone())
+        .collect::<Vec<CanisterChange>>();
+    assert_eq!(
+        changes[0].details(),
+        &CanisterChangeDetails::canister_creation(vec![user_id], Some(initial_env_vars_hash))
+    );
+    assert_eq!(changes[1], reference_change);
+
+    // Verify the environment variables of the canister state.
+    let state = env.get_latest_state();
+    let canister_state = state.canister_state(&canister_id).unwrap();
+    assert_eq!(
+        canister_state.system_state.environment_variables,
+        EnvironmentVariables::new(env_vars)
+    );
+}
+
+#[test]
+fn canister_history_no_change_during_update_settings() {
+    let user_id = user_test_id(7).get();
+    let env = setup_state_machine(FlagStatus::Enabled);
+    let canister_id = env.create_canister_with_cycles(
+        None,
+        INITIAL_CYCLES_BALANCE,
+        Some(
+            CanisterSettingsArgsBuilder::new()
+                .with_controllers(vec![user_id])
+                .build(),
+        ),
+    );
+
+    // Update settings with no controllers and no environment variables.
+    env.execute_ingress_as(
+        user_id,
+        ic00::IC_00,
+        Method::UpdateSettings,
+        UpdateSettingsArgs {
+            canister_id: canister_id.into(),
+            sender_canister_version: Some(2),
+            settings: CanisterSettingsArgsBuilder::new().build(),
+        }
+        .encode(),
+    )
+    .unwrap();
+
+    // Verify canister history contains only the canister creation change.
+    let history = get_canister_history(&env, canister_id);
+    assert_eq!(history.get_total_num_changes(), 1);
+    let changes = history
+        .get_changes(history.get_total_num_changes() as usize)
+        .map(|c| (**c).clone())
+        .collect::<Vec<CanisterChange>>();
+    assert_eq!(
+        changes[0].details(),
+        &CanisterChangeDetails::canister_creation(vec![user_id], None)
+    );
 }
 
 #[test]
@@ -1338,4 +1467,50 @@ fn canister_history_tracking_env_vars_provisional_create_canister() {
         user_id1,
         user_id2,
     );
+}
+
+#[test]
+fn canister_history_memory_usage_ignored_in_invariant_checks() {
+    let now = std::time::SystemTime::now();
+    let (env, _test_canister, _test_canister_sha256) = test_setup(SubnetType::Application, now);
+
+    let canister_id = env
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            vec![],
+            None,
+            INITIAL_CYCLES_BALANCE,
+        )
+        .unwrap();
+    let memory_size = || {
+        let status = env.canister_status(canister_id).unwrap().unwrap();
+        status.memory_size().get()
+    };
+
+    // Set the canister memory allocation to its current memory size.
+    let current_memory_size = memory_size();
+    let settings = CanisterSettingsArgsBuilder::new()
+        .with_memory_allocation(current_memory_size)
+        .build();
+    env.update_settings(&canister_id, settings).unwrap();
+
+    // Reinstalling the canister increases the memory size by the size of the new canister history entry.
+    env.reinstall_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec(), vec![])
+        .unwrap();
+    assert!(memory_size() > current_memory_size);
+
+    // Execute an ingress message on the canister to make it "active" and trigger canister invariant checks:
+    // they pass because canister history memory usage is ignored in canister invariant checks,
+    // but the update calls fails because it cannot grow its memory beyond the memory allocation.
+    let err = env
+        .execute_ingress_as(
+            PrincipalId::new_anonymous(),
+            canister_id,
+            "update",
+            wasm().reply().build(),
+        )
+        .unwrap_err();
+    assert!(err
+        .description()
+        .contains("Canister cannot grow its memory usage."));
 }

@@ -45,7 +45,7 @@ benches:
     total:
       instructions: 1780000
       heap_increase: 0
-      stable_memory_increase: 0
+      stable_memory_increase: 256
     scopes: {}
   distribute_rewards_with_stable_neurons:
     total:
@@ -148,10 +148,24 @@ benches:
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
-  voting_power_snapshots_is_latest_snapshot_a_spike:
+  voting_power_snapshots_is_latest_snapshot_a_spike_false:
     total:
       calls: 1
-      instructions: 31207
+      instructions: 31190
+      heap_increase: 0
+      stable_memory_increase: 0
+    scopes: {}
+  voting_power_snapshots_is_latest_snapshot_a_spike_true:
+    total:
+      calls: 1
+      instructions: 31201
+      heap_increase: 0
+      stable_memory_increase: 0
+    scopes: {}
+  voting_power_snapshots_latest_snapshot_timestamp_seconds:
+    total:
+      calls: 1
+      instructions: 7551
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}

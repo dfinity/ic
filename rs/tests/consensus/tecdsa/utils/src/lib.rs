@@ -43,7 +43,8 @@ use ic_vetkeys::{DerivedPublicKey, EncryptedVetKey, TransportSecretKey};
 use k256::ecdsa::{signature::hazmat::PrehashVerifier, Signature, VerifyingKey};
 use registry_canister::mutations::{
     do_create_subnet::{
-        CreateSubnetPayload, InitialChainKeyConfig, KeyConfig as KeyConfigCreate, KeyConfigRequest,
+        CanisterCyclesCostSchedule, CreateSubnetPayload, InitialChainKeyConfig,
+        KeyConfig as KeyConfigCreate, KeyConfigRequest,
     },
     do_recover_subnet::RecoverSubnetPayload,
     do_update_subnet::{ChainKeyConfig, KeyConfig as KeyConfigUpdate, UpdateSubnetPayload},
@@ -255,13 +256,7 @@ pub fn run_chain_key_signature_test(
         let public_key = get_public_key_with_retries(key_id, canister, logger, 100)
             .await
             .unwrap();
-        // TODO(CRP-2798): Re-enable vetKD public key equality check as soon as
-        // https://github.com/dfinity/ic/pull/5088 is deployed on the NNS subnet.
-        if let MasterPublicKeyId::VetKd(_vetkd_key_id) = key_id {
-            // skip canister public key equality check because of https://github.com/dfinity/ic/pull/5088
-        } else {
-            assert_eq!(existing_key, public_key);
-        }
+        assert_eq!(existing_key, public_key);
         let signature = get_signature_with_logger(
             message_hash.clone(),
             ECDSA_SIGNATURE_FEE,
@@ -829,7 +824,7 @@ pub async fn generate_dummy_ecdsa_signature_with_logger(
     key_id: &EcdsaKeyId,
     sig_can: &SignerCanister<'_>,
     logger: &Logger,
-) -> Result<SignWithEcdsaResponse, String> {
+) -> Result<SignWithEcdsaResponse, AgentError> {
     let signature_request = GenEcdsaParams {
         derivation_path_length,
         derivation_path_element_size,
@@ -874,7 +869,7 @@ pub async fn generate_dummy_schnorr_signature_with_logger(
     key_id: &SchnorrKeyId,
     sig_can: &SignerCanister<'_>,
     logger: &Logger,
-) -> Result<SignWithSchnorrResponse, String> {
+) -> Result<SignWithSchnorrResponse, AgentError> {
     let signature_request = GenSchnorrParams {
         message_size,
         derivation_path_length,
@@ -919,7 +914,7 @@ pub async fn generate_dummy_vetkd_key_with_logger(
     key_id: &VetKdKeyId,
     sig_can: &SignerCanister<'_>,
     logger: &Logger,
-) -> Result<VetKDDeriveKeyResult, String> {
+) -> Result<VetKDDeriveKeyResult, AgentError> {
     let key_request = GenVetkdParams {
         context_size,
         input_size,
@@ -1103,6 +1098,8 @@ pub async fn create_new_subnet_with_keys(
         ssh_readonly_access: vec![],
         ssh_backup_access: vec![],
         chain_key_config: Some(chain_key_config),
+        canister_cycles_cost_schedule: Some(CanisterCyclesCostSchedule::Normal),
+
         // Unused section follows
         ingress_bytes_per_block_soft_cap: Default::default(),
         gossip_max_artifact_streams_per_peer: Default::default(),

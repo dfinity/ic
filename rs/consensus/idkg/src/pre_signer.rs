@@ -1360,7 +1360,7 @@ impl TranscriptState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{test_utils::*, utils::algorithm_for_key_id};
+    use crate::test_utils::*;
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_canister_threshold_sigs::{
         setup_masked_random_params, CanisterThresholdSigTestEnvironment, IDkgParticipants,
@@ -1372,7 +1372,7 @@ mod tests {
     use ic_test_utilities_types::ids::{NODE_1, NODE_2, NODE_3, NODE_4};
     use ic_types::{
         consensus::idkg::{IDkgMasterPublicKeyId, IDkgObject},
-        crypto::{BasicSig, BasicSigOf, CryptoHash},
+        crypto::{AlgorithmId, BasicSig, BasicSigOf, CryptoHash},
         time::UNIX_EPOCH,
         Height, RegistryVersion,
     };
@@ -2770,7 +2770,7 @@ mod tests {
         );
         let params = setup_masked_random_params(
             &env,
-            algorithm_for_key_id(&key_id),
+            AlgorithmId::from(key_id.inner()),
             &dealers,
             &receivers,
             &mut rng,

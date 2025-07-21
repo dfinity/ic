@@ -10,14 +10,17 @@ DEPENDENCIES = [
     "//rs/ic_os/deterministic_ips",
     "//rs/ic_os/grub",
     "//rs/ic_os/metrics_tool",
+    "//rs/ic_os/sev",
     "@crate_index//:anyhow",
     "@crate_index//:askama",
+    "@crate_index//:clap",
     "@crate_index//:gpt",
     "@crate_index//:macaddr",
     "@crate_index//:regex",
     "@crate_index//:sys-mount",
     "@crate_index//:systemd",
     "@crate_index//:tempfile",
+    "@crate_index//:thiserror",
     "@crate_index//:tokio",
     "@crate_index//:tokio-util",
     "@crate_index//:uuid",
@@ -78,6 +81,9 @@ rust_test(
 
 rust_test(
     name = "guest_vm_runner_integration_tests",
+    # the test sometimes times out on CI with default timeout
+    # of "moderate" (5 minutes) - 2025-07-04
+    timeout = "long",
     crate = ":guest_vm_runner_dev",
     crate_features = [
         "dev",
