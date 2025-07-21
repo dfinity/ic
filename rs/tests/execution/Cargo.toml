@@ -14,6 +14,7 @@ futures = { workspace = true }
 ic-agent = { workspace = true }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
+ic-registry-nns-data-provider = { path = "../../registry/nns_data_provider" }
 ic-system-test-driver = { path = "../driver" }
 ic-universal-canister = { path = "../../universal_canister/lib" }
 ic-utils = { workspace = true }
@@ -29,6 +30,8 @@ rand_chacha = { workspace = true }
 reqwest = { workspace = true }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
 ic-nns-constants = { path = "../../nns/constants" }
+ic-nns-test-utils = { path = "../../nns/test_utils" }
+ic-nns-governance-api = { path = "../../nns/governance/api" }
 lazy_static = { workspace = true }
 serde_cbor = { workspace = true }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
@@ -36,6 +39,8 @@ tokio = { workspace = true }
 wat = { workspace = true }
 assert_matches = { workspace = true }
 ic-registry-routing-table = { path = "../../registry/routing_table" }
+registry-canister = { path = "../../registry/canister" }
+
 
 [[bin]]
 name = "compute_allocation_test"
@@ -74,5 +79,5 @@ name = "btc_get_balance_test"
 path = "btc_get_balance_test.rs"
 
 [[bin]]
-name = "cost_schedule_tests"
-path = "cost_schedule_tests.rs"
+name = "cycles_cost_schedule_test"
+path = "cycles_cost_schedule_test.rs"

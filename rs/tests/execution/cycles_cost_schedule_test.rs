@@ -1,53 +1,31 @@
-/* tag::catalog[]
-Title:: Create Subnet
-
-Goal:: Ensure that subnets can be created from unassigned nodes
-
-Runbook::
-. set up the NNS subnet and unassigned nodes
-. submit and adopt multiple proposals for creating subnets at the same time
-. validate proposal execution by checking if the new subnets have been registered as expected
-. validate that all subnets are operational by installing and querying a universal canister
-
-Success::
-. subnet creation proposal is adopted and executed
-. registry subnet list equals OldSubnetIDs ∪ NewSubnetIDs
-. newly created subnet endpoints come to life within 2 minutes
-. universal canisters can be installed onto all subnets
-. universal canisters are responsive
-
-end::catalog[] */
-
 use anyhow::Result;
 use ic_nns_governance_api::ProposalStatus;
 use ic_nns_test_utils::governance::wait_for_final_state;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
-use ic_system_test_driver::driver::test_env::TestEnv;
-use ic_system_test_driver::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
-};
-use ic_system_test_driver::nns::{
-    self, get_software_version_from_snapshot, submit_create_application_subnet_proposal,
-};
-use ic_system_test_driver::nns::{get_subnet_list_from_registry, vote_on_proposal};
-use ic_system_test_driver::systest;
-use ic_system_test_driver::util::{
-    assert_create_agent, block_on, runtime_from_url, UniversalCanister,
-};
-use ic_types::{Height, RegistryVersion};
+use ic_types::RegistryVersion;
+use ic_universal_canister::{wasm, UNIVERSAL_CANISTER_WASM};
+use ic_utils::interfaces::ManagementCanister;
 use registry_canister::mutations::do_create_subnet::CanisterCyclesCostSchedule;
-use slog::info;
-use std::collections::HashSet;
-use std::iter::FromIterator;
-use std::time::Duration;
+use std::{collections::HashSet, time::Duration};
 
-const NNS_PRE_MASTER: usize = 4;
-const APP_PRE_MASTER: usize = 4;
-const DKG_INTERVAL_LENGTH: u64 = 29;
-const APP_SUBNETS: usize = 5;
+use ic_system_test_driver::{
+    driver::{
+        group::SystemTestGroup,
+        ic::{InternetComputer, Subnet},
+        test_env::TestEnv,
+        test_env_api::{
+            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
+        },
+    },
+    nns::{
+        self, get_software_version_from_snapshot, get_subnet_list_from_registry,
+        submit_create_application_subnet_proposal, vote_on_proposal,
+    },
+    systest,
+    util::{assert_create_agent, block_on, runtime_from_url, UniversalCanister},
+};
+use slog::info;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
@@ -57,14 +35,10 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-// Small IC for correctness test pre-master
 pub fn setup(env: TestEnv) {
     InternetComputer::new()
-        .add_subnet(
-            Subnet::fast(SubnetType::System, NNS_PRE_MASTER)
-                .with_dkg_interval_length(Height::from(DKG_INTERVAL_LENGTH)),
-        )
-        .with_unassigned_nodes(APP_PRE_MASTER * APP_SUBNETS)
+        .add_subnet(Subnet::fast(SubnetType::System, 1))
+        .with_unassigned_nodes(1)
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
     env.topology_snapshot().subnets().for_each(|subnet| {
@@ -81,7 +55,18 @@ pub fn test(env: TestEnv) {
     let log = &env.logger();
 
     // [Phase I] Prepare NNS
-    install_nns_canisters(&env);
+    let nns_node = env
+        .topology_snapshot()
+        .root_subnet()
+        .nodes()
+        .next()
+        .expect("there is no NNS node");
+
+    NnsInstallationBuilder::new()
+        .install(&nns_node, &env)
+        .expect("NNS canisters not installed");
+    info!(&env.logger(), "NNS canisters installed");
+
     let topology_snapshot = &env.topology_snapshot();
     let subnet = topology_snapshot.root_subnet();
     let endpoint = subnet.nodes().next().unwrap();
@@ -111,38 +96,32 @@ pub fn test(env: TestEnv) {
         let governance = nns::get_governance_canister(&nns);
 
         // Submit and adopt the configured number of create subnet proposals
-        let mut proposal_ids = vec![];
-        for _ in 0..APP_SUBNETS {
-            let nodes = unassigned_nodes.by_ref().take(APP_PRE_MASTER).collect();
-            info!(
-                log,
-                "Submitting proposal to create subnet with nodes: {nodes:?}"
-            );
-            let proposal_id = submit_create_application_subnet_proposal(
-                &governance,
-                nodes,
-                version.clone(),
-                Some(CanisterCyclesCostSchedule::Normal),
-            )
-            .await;
-            info!(log, "Voting on proposal {proposal_id}");
-            vote_on_proposal(&governance, proposal_id).await;
-            proposal_ids.push(proposal_id);
-        }
+        let nodes = unassigned_nodes.by_ref().take(1).collect();
+        info!(
+            log,
+            "Submitting proposal to create subnet with nodes: {nodes:?}"
+        );
+        let proposal_id = submit_create_application_subnet_proposal(
+            &governance,
+            nodes,
+            version.clone(),
+            Some(CanisterCyclesCostSchedule::Free),
+        )
+        .await;
+        info!(log, "Voting on proposal {proposal_id}");
+        vote_on_proposal(&governance, proposal_id).await;
 
         // Wait until all proposals are executed
-        for proposal_id in proposal_ids {
-            info!(log, "Waiting on proposal {proposal_id}");
-            let proposal_info = wait_for_final_state(&governance, proposal_id).await;
-            assert_eq!(
-                proposal_info.status,
-                ProposalStatus::Executed as i32,
-                "proposal {proposal_id} did not execute: {proposal_info:?}"
-            );
-        }
+        info!(log, "Waiting on proposal {proposal_id}");
+        let proposal_info = wait_for_final_state(&governance, proposal_id).await;
+        assert_eq!(
+            proposal_info.status,
+            ProposalStatus::Executed as i32,
+            "proposal {proposal_id} did not execute: {proposal_info:?}"
+        );
 
         let new_topology_snapshot = topology_snapshot
-            .block_for_min_registry_version(RegistryVersion::new(APP_SUBNETS as u64 + 1))
+            .block_for_min_registry_version(RegistryVersion::new(2))
             .await
             .expect("Could not obtain updated registry.");
 
@@ -152,11 +131,11 @@ pub fn test(env: TestEnv) {
 
         let original_subnet_set = set(&original_subnets);
         let final_subnet_set = set(&final_subnets);
-        // check that there are exactly APP_SUBNETS added subnets
+        // check that there are exactly 1 added subnets
         assert_eq!(
-            original_subnet_set.len() + APP_SUBNETS,
+            original_subnet_set.len() + 1,
             final_subnet_set.len(),
-            "final number of subnets should be {APP_SUBNETS} above number of original subnets"
+            "final number of subnets should be 1 above number of original subnets"
         );
         assert!(
             original_subnet_set.is_subset(&final_subnet_set),
@@ -190,9 +169,24 @@ pub fn test(env: TestEnv) {
                 "successfully created agent for endpoint of subnet node"
             );
 
-            let universal_canister =
-                UniversalCanister::new_with_retries(&agent, endpoint.effective_canister_id(), log)
-                    .await;
+            // create a canister without using cycles or the provisional API
+            let mgr = ManagementCanister::create(&agent);
+            let canister_id = mgr
+                .create_canister()
+                .with_effective_canister_id(endpoint.effective_canister_id())
+                .call_and_wait()
+                .await
+                .unwrap()
+                .0;
+
+            // Install the universal canister.
+            mgr.install_code(&canister_id, &UNIVERSAL_CANISTER_WASM)
+                .with_raw_arg(wasm().stable_grow(1).build())
+                .call_and_wait()
+                .await
+                .unwrap();
+
+            let universal_canister = UniversalCanister::from_parts(&agent, canister_id);
             info!(log, "successfully created a universal canister instance");
 
             const UPDATE_MSG_1: &[u8] =
@@ -214,17 +208,4 @@ pub fn test(env: TestEnv) {
 
 fn set<H: Clone + std::cmp::Eq + std::hash::Hash>(data: &[H]) -> HashSet<H> {
     HashSet::from_iter(data.iter().cloned())
-}
-
-pub fn install_nns_canisters(env: &TestEnv) {
-    let nns_node = env
-        .topology_snapshot()
-        .root_subnet()
-        .nodes()
-        .next()
-        .expect("there is no NNS node");
-    NnsInstallationBuilder::new()
-        .install(&nns_node, env)
-        .expect("NNS canisters not installed");
-    info!(&env.logger(), "NNS canisters installed");
 }
