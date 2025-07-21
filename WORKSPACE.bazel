@@ -50,6 +50,7 @@ canisters(
         "sns_index": "ic-icrc1-index-ng.wasm.gz",
         "node-rewards": "node-rewards-canister.wasm.gz",
         "cycles_ledger": "cycles-ledger.wasm.gz",
+        "cycles_ledger_index": "ic-icrc1-index-ng-u256.wasm.gz",
     },
     path = "//:mainnet-canister-revisions.json",
     reponames = {
@@ -86,6 +87,7 @@ canisters(
         "sns_index": "mainnet_ic-icrc1-index-ng",
         "node-rewards": "mainnet_node-rewards-canister",
         "cycles_ledger": "mainnet_cycles_ledger_canister",
+        "cycles_ledger_index": "mainnet_cycles_ledger_index",
     },
     repositories = {
         "cycles_ledger": "dfinity/cycles-ledger",
