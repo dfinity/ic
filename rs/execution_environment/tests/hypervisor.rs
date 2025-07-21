@@ -992,7 +992,7 @@ fn ic0_canister_version() {
     let canister_id = test.universal_canister().unwrap();
     let another_canister_id = test.universal_canister().unwrap();
 
-    // Universal canister gadgets.
+    // Common universal canister payloads.
     let ctr = wasm().canister_version().reply_int64().build();
     let reply = wasm().reply().build();
     let trap = wasm().trap().build();
