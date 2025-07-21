@@ -106,17 +106,22 @@ def image_deps(mode, malicious = False):
         deps["rootfs"].update({"//rs/ic_os/release:config_dev": "/opt/ic/bin/config:0755"})
 
     # Update recovery component_files
-    # Service files must be added to components instead of rootfs so that the service is enabled by the Dockerfile
-    if "recovery" == mode:
+    # Service files and SELinux policies must be added to components instead of rootfs so that they are processed by the Dockerfile
+    if mode in ["recovery", "recovery-dev"]:
         local_component_files.update({
-            Label("//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.sh"): "/opt/ic/bin/guestos-recovery-engine.sh",
             Label("//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.service"): "/etc/systemd/system/guestos-recovery-engine.service",
+            Label("//ic-os/components:selinux/guestos-recovery-engine/guestos-recovery-engine.fc"): "/prep/guestos-recovery-engine/guestos-recovery-engine.fc",
+            Label("//ic-os/components:selinux/guestos-recovery-engine/guestos-recovery-engine.te"): "/prep/guestos-recovery-engine/guestos-recovery-engine.te",
         })
-    if "recovery-dev" == mode:
-        local_component_files.update({
-            Label("//ic-os/guestos/envs/recovery-dev:recovery_archive_guestos-recovery-engine.sh"): "/opt/ic/bin/guestos-recovery-engine.sh",
-            Label("//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.service"): "/etc/systemd/system/guestos-recovery-engine.service",
-        })
+
+        if mode == "recovery":
+            local_component_files.update({
+                Label("//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.sh"): "/opt/ic/bin/guestos-recovery-engine.sh",
+            })
+        elif mode == "recovery-dev":
+            local_component_files.update({
+                Label("//ic-os/guestos/envs/recovery-dev:recovery_archive_guestos-recovery-engine.sh"): "/opt/ic/bin/guestos-recovery-engine.sh",
+            })
 
     deps["component_files"] = local_component_files
 

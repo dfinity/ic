@@ -91,9 +91,7 @@ sudo chown -R "$OWNER_UID:$GROUP_UID" "cup.proto"
 
 echo "Applying recovery artifacts..."
 echo "Syncing ic_registry_local_store to target location..."
-setenforce 0
 sudo rsync -a --delete ic_registry_local_store/ /var/lib/ic/data/ic_registry_local_store/
-setenforce 1
 echo "Copying cup.proto to target location..."
 sudo cp "cup.proto" /var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb
 
