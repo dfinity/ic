@@ -295,7 +295,7 @@ impl CanisterManager {
         subnet_memory_saturation: &ResourceSaturation,
         canister_compute_allocation: ComputeAllocation,
         subnet_compute_allocation_usage: u64,
-        default_freezing_threshold: NumSeconds,
+        canister_freezing_threshold: NumSeconds,
         canister_cycles_balance: Cycles,
         subnet_size: usize,
         canister_reserved_balance: Cycles,
@@ -378,7 +378,7 @@ impl CanisterManager {
 
         let freezing_threshold = settings
             .freezing_threshold
-            .unwrap_or(default_freezing_threshold);
+            .unwrap_or(canister_freezing_threshold);
 
         let threshold = self.cycles_account_manager.freeze_threshold_cycles(
             freezing_threshold,

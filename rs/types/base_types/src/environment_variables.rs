@@ -51,6 +51,10 @@ impl EnvironmentVariables {
     pub fn len(&self) -> usize {
         self.map.len()
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.map.is_empty()
+    }
 }
 
 impl From<EnvironmentVariables> for BTreeMap<String, String> {
