@@ -40,7 +40,7 @@ use registry_canister::{
         do_add_node_operator::AddNodeOperatorPayload,
         do_add_nodes_to_subnet::AddNodesToSubnetPayload,
         do_change_subnet_membership::ChangeSubnetMembershipPayload,
-        do_create_subnet::CreateSubnetPayload,
+        do_create_subnet::{CreateSubnetPayload, NewSubnet},
         do_deploy_guestos_to_all_subnet_nodes::DeployGuestosToAllSubnetNodesPayload,
         do_deploy_guestos_to_all_unassigned_nodes::DeployGuestosToAllUnassignedNodesPayload,
         do_recover_subnet::RecoverSubnetPayload,
@@ -588,10 +588,15 @@ fn create_subnet() {
     });
 }
 
+/// Currently, this does not return Err, but for the sake of consistency the
+/// return type is Result. Currently, if the operation cannot be completed, this
+/// panics instead of returning Err (ensuring any partial changes do not get
+/// committed).
 #[candid_method(update, rename = "create_subnet")]
-async fn create_subnet_(payload: CreateSubnetPayload) {
-    registry_mut().do_create_subnet(payload).await;
+async fn create_subnet_(payload: CreateSubnetPayload) -> Result<NewSubnet, String> {
+    let new_subnet = registry_mut().do_create_subnet(payload).await;
     recertify_registry();
+    Ok(new_subnet)
 }
 
 #[export_name = "canister_update add_nodes_to_subnet"]
