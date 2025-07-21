@@ -336,6 +336,8 @@ impl RegistryReplicator {
         let poll_delay = self.poll_delay;
 
         let future = async move {
+            // TODO: consider having only one way of cancelling this future,
+            // instead of having both `cancelled` and `cancellation_token`.
             while !cancelled.load(Ordering::Relaxed) {
                 let timer = metrics.poll_duration.start_timer();
                 // The relevant I/O-operation of the poll() function is querying
