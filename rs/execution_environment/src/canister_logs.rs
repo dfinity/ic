@@ -1,13 +1,10 @@
+use candid::Encode;
 use ic_error_types::{ErrorCode, UserError};
 use ic_management_canister_types_private::{
-    FetchCanisterLogsRequest, FetchCanisterLogsResponse, LogVisibilityV2, Payload, QueryMethod,
+    FetchCanisterLogsRequest, FetchCanisterLogsResponse, LogVisibilityV2, QueryMethod,
 };
 use ic_replicated_state::ReplicatedState;
-use ic_types::{
-    ingress::WasmResult,
-    messages::{Blob, Certificate, CertificateDelegation, Query},
-    CanisterId, NumInstructions, PrincipalId,
-};
+use ic_types::{ingress::WasmResult, PrincipalId};
 
 pub(crate) fn fetch_canister_logs(
     sender: PrincipalId,
