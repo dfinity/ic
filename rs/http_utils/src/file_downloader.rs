@@ -5,6 +5,7 @@ use ic_logger::{log, ReplicaLogger};
 use reqwest::{Client, Response};
 use slog::Level;
 use std::error::Error;
+use std::fmt;
 use std::fs::{self, File};
 use std::io;
 use std::io::prelude::*;
@@ -38,13 +39,13 @@ macro_rules! maybe_log {
 
 macro_rules! maybe_info {
     ($self:expr, $($arg:tt)+) => {
-        maybe_log!($self, slog::Level::Info, $($arg)+);
+        maybe_log!($self, Level::Info, $($arg)+);
     };
 }
 
 macro_rules! maybe_warn {
     ($self:expr, $($arg:tt)+) => {
-        maybe_log!($self, slog::Level::Warning, $($arg)+);
+        maybe_log!($self, Level::Warning, $($arg)+);
     };
 }
 
