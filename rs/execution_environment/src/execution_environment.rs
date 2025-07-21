@@ -1515,17 +1515,23 @@ impl ExecutionEnvironment {
                 }
             },
 
-            Ok(Ic00Method::FetchCanisterLogs) => ExecuteSubnetMessageResult::Finished {
-                response: Err(UserError::new(
-                    ErrorCode::CanisterRejectedMessage,
-                    format!(
-                        "{} API is only accessible in non-replicated mode",
-                        Ic00Method::FetchCanisterLogs
-                    ),
-                )),
-                refund: msg.take_cycles(),
-            },
-
+            Ok(Ic00Method::FetchCanisterLogs) => {
+                match self.config.replicated_query_inter_canister_log_fetch {
+                    FlagStatus::Disabled => ExecuteSubnetMessageResult::Finished {
+                        response: Err(UserError::new(
+                            ErrorCode::CanisterRejectedMessage,
+                            format!(
+                                "{} API is only accessible in non-replicated mode",
+                                Ic00Method::FetchCanisterLogs
+                            ),
+                        )),
+                        refund: msg.take_cycles(),
+                    },
+                    FlagStatus::Enabled => {
+                        todo!("add implementation");
+                    }
+                }
+            }
             Ok(Ic00Method::TakeCanisterSnapshot) => match TakeCanisterSnapshotArgs::decode(payload)
             {
                 Err(err) => ExecuteSubnetMessageResult::Finished {
