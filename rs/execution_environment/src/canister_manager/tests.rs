@@ -6905,7 +6905,7 @@ fn test_environment_variables_are_not_set_when_key_is_too_long() {
         UserError::new(
             ErrorCode::CanisterContractViolation,
             format!(
-                "Environment variable name too long: {} (max: {})",
+                "Environment variable name \"{}\" exceeds the maximum allowed length of {}.",
                 long_key, MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH
             )
         )
@@ -6947,7 +6947,7 @@ fn test_environment_variables_are_not_set_when_value_is_too_long() {
         UserError::new(
             ErrorCode::CanisterContractViolation,
             format!(
-                "Environment variable value too long: {} (max: {})",
+                "Environment variable value \"{}\" exceeds the maximum allowed length of {}.",
                 long_value, MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH
             )
         )

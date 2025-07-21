@@ -714,11 +714,11 @@ impl AsErrorHelp for CanisterManagerError {
                 doc_link: "".to_string(),
             },
             CanisterManagerError::EnvironmentVariablesNameTooLong { .. } => ErrorHelp::UserError {
-                suggestion: "Try reducing the length of the environment variable name.".to_string(),
+                suggestion: "Shorten the environment variable name to fit within the allowed limit.".to_string(),
                 doc_link: "".to_string(),
             },
             CanisterManagerError::EnvironmentVariablesValueTooLong { .. } => ErrorHelp::UserError {
-                suggestion: "Try reducing the length of the environment variable value.".to_string(),
+                suggestion: "Shorten the environment variable value to fit within the allowed limit.".to_string(),
                 doc_link: "".to_string(),
             },
         }
@@ -1100,13 +1100,13 @@ impl From<CanisterManagerError> for UserError {
             EnvironmentVariablesNameTooLong { name, max_name_length } => {
                 Self::new(
                     ErrorCode::CanisterContractViolation,
-                    format!("Environment variable name too long: {} (max: {})", name, max_name_length),
+                    format!("Environment variable name \"{}\" exceeds the maximum allowed length of {}.", name, max_name_length),
                 )
             }
             EnvironmentVariablesValueTooLong { value, max_value_length } => {
                 Self::new(
                     ErrorCode::CanisterContractViolation,
-                    format!("Environment variable value too long: {} (max: {})", value, max_value_length),
+                    format!("Environment variable value \"{}\" exceeds the maximum allowed length of {}.", value, max_value_length),
                 )
             }
         }
