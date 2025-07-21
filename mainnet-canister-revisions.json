@@ -76,8 +76,8 @@
     "sha256": "f897870b7b6d6c15f657496bc731b0e341c34468ddbb8fa0722ec7beb6b51cee"
   },
   "governance": {
-    "rev": "5128134d24b7a5b8e24a3d5d40c4cce9d81fd375",
-    "sha256": "2dfffe9149d8e5b61f2e5a3de79c6fece4e50cc57d1653ae519914dec2de68d4"
+    "rev": "65f66f13fe07b3266ac9d1b44413fd5f0e9b4463",
+    "sha256": "10ced0fec20794640fe45d0e44960faeecaeda8b1b032a04082c758192f24ac6"
   },
   "index": {
     "rev": "3ae3649a2366aaca83404b692fc58e4c6e604a25",
@@ -96,8 +96,8 @@
     "sha256": "59d76a35284b7f2dfd06e74e16841b593e24d538b323e5eca90224713258e8e6"
   },
   "registry": {
-    "rev": "5128134d24b7a5b8e24a3d5d40c4cce9d81fd375",
-    "sha256": "aa91c2298025569b78a7f6bc88150e6d0d799925f13a18043e500feb1bdb36ab"
+    "rev": "65f66f13fe07b3266ac9d1b44413fd5f0e9b4463",
+    "sha256": "24465ad08cc136ac79e44512d5e82352fd2d916acaa44411aba217dce932b79a"
   },
   "root": {
     "rev": "2f87fe95207dc6371a2f2dc273362ba03b41e0e9",
@@ -128,8 +128,8 @@
     "sha256": "3d808fa63a3d8ebd4510c0400aa078e99a31afaa0515f0b68778f929ce4b2a46"
   },
   "sns_root": {
-    "rev": "02571e8215fa3e77da791e693cc238b2de3beae9",
-    "sha256": "80f2fc15a12043ff07927fb63f1dd88334f4eebee6626451f0d8669fe9db7856"
+    "rev": "65f66f13fe07b3266ac9d1b44413fd5f0e9b4463",
+    "sha256": "899329e5829e127afb5ad4f1a60056d3a70b08942bb7a4e467615e3300f8b17a"
   },
   "swap": {
     "rev": "5128134d24b7a5b8e24a3d5d40c4cce9d81fd375",
