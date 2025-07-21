@@ -183,7 +183,7 @@ pub async fn test_async(env: TestEnv) {
         &nns_node,
         &branch_version,
         &logger,
-        &sha256,
+        sha256,
         vec![upgrade_url.to_string()],
     )
     .await;

@@ -191,57 +191,14 @@ pub fn get_assigned_replica_version(node: &IcNodeSnapshot) -> Result<String, Str
     }
 }
 
-async fn bless_replica_version_with_sha(
-    nns_node: &IcNodeSnapshot,
-    target_version: &str,
-    logger: &Logger,
-    sha256: &String,
-    upgrade_url: Vec<String>,
-) {
-    let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
-    let governance_canister = get_governance_canister(&nns);
-
-    let proposal_sender = Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR);
-    let test_neuron_id = NeuronId(TEST_NEURON_1_ID);
-
-    let replica_version = ReplicaVersion::try_from(target_version).unwrap();
-
-    let registry_canister = RegistryCanister::new(vec![nns_node.get_public_url()]);
-    let blessed_versions = get_blessed_replica_versions(&registry_canister).await;
-    info!(logger, "Initial: {:?}", blessed_versions);
-
-    info!(
-        logger,
-        "Blessing replica version {} with sha256 {} and upgrade urls: {:?}",
-        replica_version,
-        sha256,
-        &upgrade_url
-    );
-
-    let proposal_id = submit_update_elected_replica_versions_proposal(
-        &governance_canister,
-        proposal_sender.clone(),
-        test_neuron_id,
-        Some(replica_version),
-        Some(sha256.clone()),
-        upgrade_url,
-        vec![],
-    )
-    .await;
-    vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;
-
-    let blessed_versions = get_blessed_replica_versions(&registry_canister).await;
-    info!(logger, "Updated: {:?}", blessed_versions);
-}
-
 pub async fn bless_replica_version(
     nns_node: &IcNodeSnapshot,
     target_version: &str,
     logger: &Logger,
-    sha256: &String,
+    sha256: String,
     upgrade_url: Vec<String>,
 ) {
-    bless_replica_version_with_sha(nns_node, target_version, logger, sha256, upgrade_url).await;
+    bless_replica_version_with_urls(nns_node, target_version, upgrade_url, sha256, logger).await;
 }
 
 pub async fn bless_public_replica_version(
@@ -254,12 +211,12 @@ pub async fn bless_public_replica_version(
 
     let sha256 = fetch_update_file_sha256_with_retry(logger, target_version).await;
 
-    bless_replica_version_with_sha(
+    bless_replica_version_with_urls(
         nns_node,
         target_version,
-        logger,
-        &sha256,
         vec![upgrade_url.clone()],
+        sha256,
+        logger,
     )
     .await;
 }

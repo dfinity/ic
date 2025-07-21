@@ -78,7 +78,7 @@ fn test(test_env: TestEnv) {
         &nns_node,
         &target_version,
         &logger,
-        &sha256,
+        sha256,
         vec![upgrade_url.to_string()],
     ));
 

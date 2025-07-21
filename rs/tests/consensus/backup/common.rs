@@ -113,7 +113,7 @@ pub fn test(env: TestEnv) {
         &nns_node,
         &target_version,
         &log,
-        &sha256,
+        sha256,
         vec![upgrade_url.to_string()],
     ));
     info!(log, "TARGET_VERSION: {}", target_version);
