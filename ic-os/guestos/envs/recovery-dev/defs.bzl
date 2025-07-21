@@ -57,7 +57,7 @@ def generate_dummy_recovery_archive(name, seed):
             base64 -w 0 ic_registry_local_store/08090a0b0c/0d/0e/0f.pb > ic_registry_local_store_2.b64
 
 
-            cp -a $< guestos-recovery-engine.sh
+            cp $< guestos-recovery-engine.sh
             RECOVERY_HASH="$$(sha256sum recovery.tar.zst | cut -d' ' -f1)"
             sed -i "s/readonly EXPECTED_RECOVERY_HASH=\"\"/readonly EXPECTED_RECOVERY_HASH=\"$$RECOVERY_HASH\"/" guestos-recovery-engine.sh
             echo "$$RECOVERY_HASH" > recovery.tar.zst.sha256
