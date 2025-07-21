@@ -22,8 +22,6 @@ async fn main() {
     let join_handle =
         tokio::spawn(async move { orchestrator.start_tasks(cancellation_token_clone).await });
 
-    shutdown_signal(logger.inner_logger.root.clone()).await;
-
     tokio::select! {
         _ = shutdown_signal(logger.clone()) => {},
         _ = cancellation_token.cancelled() => {},
