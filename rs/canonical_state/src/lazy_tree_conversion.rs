@@ -329,7 +329,11 @@ impl<'a> LazyFork<'a> for CanisterRangesFork<'a> {
             Some(split_ranges) => split_ranges.get(&idx).map(|_| {
                 blob({
                     let split_ranges = Arc::clone(split_ranges);
-                    move || encode_subnet_canister_ranges(split_ranges.get(&idx))
+                    move || {
+                        encode_subnet_canister_ranges(
+                            split_ranges.get(&idx).map(|arc| arc.as_ref()),
+                        )
+                    }
                 })
             }),
             None => {
@@ -354,17 +358,11 @@ impl<'a> LazyFork<'a> for CanisterRangesFork<'a> {
 
     fn children(&self) -> Box<dyn Iterator<Item = (Label, LazyTree<'a>)> + '_> {
         match &self.split_ranges {
-            Some(split_ranges) => Box::new(split_ranges.keys().map(|idx| {
+            Some(split_ranges) => Box::new(split_ranges.iter().map(|(idx, ranges)| {
                 let idx = idx.to_owned();
+                let ranges = Arc::clone(ranges);
                 (idx.to_label(), {
-                    blob({
-                        let split_ranges = self.split_ranges.clone();
-                        move || {
-                            encode_subnet_canister_ranges(
-                                split_ranges.as_ref().and_then(move |s| s.get(&idx)),
-                            )
-                        }
-                    })
+                    blob(move || encode_subnet_canister_ranges(Some(&ranges)))
                 })
             })),
             None => Box::new(std::iter::once((
@@ -393,7 +391,7 @@ fn invert_routing_table(
 }
 
 /// The canister ranges of a single subnet, split into multiple chunks.
-type SplitRanges = BTreeMap<PrincipalId, Vec<(PrincipalId, PrincipalId)>>;
+type SplitRanges = BTreeMap<PrincipalId, Arc<Vec<(PrincipalId, PrincipalId)>>>;
 /// The entire routing table in the format required for the /canister_ranges subtree.
 type SplitRoutingTable = BTreeMap<SubnetId, Arc<SplitRanges>>;
 
@@ -407,7 +405,7 @@ fn split_inverted_routing_table(
         .map(|(k, v)| {
             let splits: BTreeMap<_, _> = v
                 .chunks(max_ranges_per_leaf)
-                .map(|v| (v[0].0, v.to_owned()))
+                .map(|v| (v[0].0, Arc::new(v.to_owned())))
                 .collect();
             (*k, Arc::new(splits))
         })
