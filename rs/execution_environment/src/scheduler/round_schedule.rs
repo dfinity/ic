@@ -249,10 +249,7 @@ impl RoundSchedule {
     pub(super) fn partition_canisters_to_cores(
         &self,
         mut canisters: BTreeMap<CanisterId, CanisterState>,
-    ) -> (
-        Vec<Vec<ExecutionCanisterState>>,
-        BTreeMap<CanisterId, CanisterState>,
-    ) {
+    ) -> (Vec<Vec<CanisterState>>, BTreeMap<CanisterId, CanisterState>) {
         let mut canisters_partitioned_by_cores = vec![vec![]; self.scheduler_cores];
 
         let mut idx = 0;
