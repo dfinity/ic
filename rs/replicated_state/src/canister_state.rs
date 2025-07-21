@@ -263,7 +263,7 @@ impl CanisterState {
             input_queue_type,
         )
     }
-    
+
     /// See `SystemState::has_input` for documentation.
     pub fn has_input(&self) -> bool {
         self.system_state.has_input()
@@ -672,6 +672,104 @@ impl CanisterState {
                 self.memory_usage(),
                 self.wasm_memory_usage(),
             )
+    }
+}
+
+impl CanisterStateV2 {
+    pub fn canister_id(&self) -> CanisterId {
+        self.system_state.canister_id()
+    }
+
+    /// Returns true if there is at least one message in the canister's output
+    /// queues, false otherwise.
+    pub fn has_output(&self) -> bool {
+        self.messaging.queues().has_output()
+    }
+
+    /// Returns the amount of execution memory (heap, stable, globals, Wasm)
+    /// currently used by the canister in bytes.
+    pub fn execution_memory_usage(&self) -> NumBytes {
+        self.execution_state
+            .as_ref()
+            .map_or(NumBytes::new(0), |es| es.memory_usage())
+    }
+
+    /// Returns the amount of memory used by canisters that have custom Wasm
+    /// sections defined.
+    pub fn wasm_custom_sections_memory_usage(&self) -> NumBytes {
+        self.execution_state
+            .as_ref()
+            .map_or(NumBytes::new(0), |es| es.metadata.memory_usage())
+    }
+
+    /// Returns the amount of memory used by canister history in bytes.
+    pub fn canister_history_memory_usage(&self) -> NumBytes {
+        self.system_state.canister_history_memory_usage()
+    }
+
+    /// Returns the memory usage of the wasm chunk store in bytes.
+    pub fn wasm_chunk_store_memory_usage(&self) -> NumBytes {
+        self.system_state.wasm_chunk_store.memory_usage()
+    }
+
+    pub fn snapshots_memory_usage(&self) -> NumBytes {
+        self.system_state.snapshots_memory_usage
+    }
+
+    /// Returns the current memory allocation of the canister.
+    pub fn memory_allocation(&self) -> MemoryAllocation {
+        self.system_state.memory_allocation
+    }
+
+    /// See `IdleMessaging::push_input` for documentation.
+    ///
+    /// The function is public as we push directly to the Canister state in
+    /// `SchedulerImpl::induct_messages_on_same_subnet()`
+    pub fn push_input(
+        &mut self,
+        msg: RequestOrResponse,
+        subnet_available_guaranteed_response_memory: &mut i64,
+        own_subnet_type: SubnetType,
+        input_queue_type: InputQueueType,
+    ) -> Result<bool, (StateError, RequestOrResponse)> {
+        self.messaging.push_input(
+            msg,
+            subnet_available_guaranteed_response_memory,
+            own_subnet_type,
+            input_queue_type,
+        )
+    }
+
+    /// Unconditionally pushes an ingress message into the ingress pool of the
+    /// canister.
+    pub fn push_ingress(&mut self, msg: Ingress) {
+        self.messaging.push_ingress(msg)
+    }
+
+    /// Silently discards in-progress subnet messages being executed by the
+    /// canister, in the second phase of a subnet split. This should only be called
+    /// on canisters that have migrated to a new subnet (*subnet B*), which does not
+    /// have a matching call context.
+    ///
+    /// The other subnet (which must be *subnet A'*), produces reject responses (for
+    /// calls originating from canisters); and fails ingress messages (for calls
+    /// originating from ingress messages); for the matching subnet calls. This is
+    /// the only way to ensure consistency for messages that would otherwise be
+    /// executing on one subnet, but for which a response may only be produced by
+    /// another subnet.
+    pub fn drop_in_progress_management_calls_after_split(&mut self) {
+        // Destructure `self` in order for the compiler to enforce an explicit decision
+        // whenever new fields are added.
+        //
+        // (!) DO NOT USE THE ".." WILDCARD, THIS SERVES THE SAME FUNCTION AS a `match`!
+        let CanisterStateV2 {
+            system_state: _,
+            ref mut messaging,
+            execution_state: _,
+            scheduler_state: _,
+        } = self;
+
+        messaging.drop_in_progress_management_calls_after_split();
     }
 }
 

@@ -7,6 +7,7 @@ pub use self::task_queue::{is_low_wasm_memory_hook_condition_satisfied, TaskQueu
 use self::wasm_chunk_store::{WasmChunkStore, WasmChunkStoreMetadata};
 use super::queues::{can_push, CanisterInput};
 pub use super::queues::{memory_usage_of_request, CanisterOutputQueuesIterator};
+use crate::canister_state::CanisterStateV2;
 use crate::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use crate::page_map::PageAllocatorFileDescriptor;
 use crate::replicated_state::MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN;
@@ -813,6 +814,17 @@ pub enum CanisterStatusV2 {
     },
 }
 
+impl CanisterStatusV2 {
+    fn call_context_manager_mut(&mut self) -> Option<&mut CallContextManager> {
+        match self {
+            Self::Idle { idle_status, .. } | Self::PausedExecution { idle_status, .. } => {
+                Some(&mut idle_status.call_context_manager)
+            }
+            Self::Stopped => None,
+        }
+    }
+}
+
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct IdleStatus {
     call_context_manager: CallContextManager,
@@ -852,6 +864,206 @@ pub struct AbortedExecution {
 }
 
 impl IdleMessaging {
+    pub fn queues(&self) -> &CanisterQueues {
+        &self.queues
+    }
+    /*
+        pub fn status(&self) -> &CanisterStatusV2 {
+            &self.status
+        }
+    */
+
+    pub fn is_stopped(&self) -> bool {
+        matches!(self.status, CanisterStatusV2::Stopped)
+    }
+
+    /// Returns an iterator that loops over the canister's output queues,
+    /// popping one message at a time from each in a round robin fashion. The
+    /// iterator consumes all popped messages.
+    pub fn output_into_iter(&mut self) -> CanisterOutputQueuesIterator {
+        self.queues.output_into_iter()
+    }
+
+    /// Returns the memory currently used by or reserved for guaranteed response
+    /// canister messages.
+    pub fn guaranteed_response_message_memory_usage(&self) -> NumBytes {
+        (self.queues.guaranteed_response_memory_usage() as u64).into()
+    }
+
+    /// Returns the memory currently used by best-effort canister messages.
+    ///
+    /// This returns zero iff there are zero best-effort messages enqueued.
+    pub fn best_effort_message_memory_usage(&self) -> NumBytes {
+        (self.queues.best_effort_message_memory_usage() as u64).into()
+    }
+
+    /// Garbage collects empty input and output queue pairs.
+    pub fn garbage_collect_canister_queues(&mut self) {
+        self.queues.garbage_collect();
+    }
+
+    /// Queries whether any of the `OutputQueues` in `self.queues` hold messages
+    /// with expired deadlines in them.
+    pub fn has_expired_message_deadlines(&self, current_time: Time) -> bool {
+        self.queues.has_expired_deadlines(current_time)
+    }
+
+    /// Drops expired messages given a current time. Returns the total amount of
+    /// attached cycles that was lost.
+    ///
+    /// See [`CanisterQueues::time_out_messages`] for further details.
+    pub fn time_out_messages(
+        &mut self,
+        current_time: Time,
+        own_canister_id: &CanisterId,
+        local_canisters: &BTreeMap<CanisterId, CanisterStateV2>,
+        metrics: &impl DroppedMessageMetrics,
+    ) -> Cycles {
+        self.queues
+            .time_out_messages(current_time, own_canister_id, local_canisters, metrics)
+    }
+
+    /// Queries whether the `CallContextManager` in `self.state` holds any not
+    /// previouosly expired (i.e. returned by `time_out_callbacks()`) callbacks with
+    /// deadlines `< current_time`.
+    pub fn has_expired_callbacks(&self, current_time: CoarseTime) -> bool {
+        self.call_context_manager()
+            .map(|ccm| ccm.has_expired_callbacks(current_time))
+            .unwrap_or(false)
+    }
+
+    /// Enqueues "deadline expired" references for all expired best-effort callbacks
+    /// without a response.
+    ///
+    /// Returns the number of expired callbacks; plus one `StateError` for every
+    /// instance where a `SystemState` internal inconsistency prevented a "deadline
+    /// expired" reference from being enqueued.
+    #[must_use]
+    pub fn time_out_callbacks(
+        &mut self,
+        current_time: CoarseTime,
+        own_canister_id: &CanisterId,
+        local_canisters: &BTreeMap<CanisterId, CanisterStateV2>,
+    ) -> (usize, Vec<StateError>) {
+        let Self {
+            ref mut queues,
+            ref mut status,
+        } = self;
+
+        let Some(call_context_manager) = status.call_context_manager_mut() else {
+            // Stopped canisters have no call context manager, so no callbacks.
+            return (0, Vec::new());
+        };
+
+        /*
+         * Callbacks for aborted and paused executions are not in the call context manager anymore.
+         */
+        //let aborted_or_paused_callback_id = self
+        //    .aborted_or_paused_response()
+        //    .map(|response| response.originator_reply_callback);
+
+        let mut expired_callback_count = 0;
+        let mut errors = Vec::new();
+        let expired_callbacks = call_context_manager
+            .expire_callbacks(current_time)
+            .collect::<Vec<_>>();
+        for callback_id in expired_callbacks {
+            //if Some(callback_id) == aborted_or_paused_callback_id {
+            //    // This callback is already executing, don't produce a second response for it.
+            //    continue;
+            //}
+
+            // Safe to unwrap because this is a callback ID we just got from the
+            // `CallContextManager`.
+            let callback = call_context_manager.callbacks().get(&callback_id).unwrap();
+            //self.queues
+            queues
+                .try_push_deadline_expired_input(
+                    callback_id,
+                    &callback.respondent,
+                    own_canister_id,
+                    local_canisters,
+                )
+                .map(|pushed| {
+                    if pushed {
+                        expired_callback_count += 1;
+                    }
+                })
+                .unwrap_or_else(|err_str| {
+                    errors.push(StateError::NonMatchingResponse {
+                        err_str,
+                        originator: callback.originator,
+                        callback_id,
+                        respondent: callback.respondent,
+                        deadline: callback.deadline,
+                    });
+                    expired_callback_count += 1;
+                });
+        }
+
+        (expired_callback_count, errors)
+    }
+
+    /// Removes the largest best-effort message in the underlying pool. Returns
+    /// `true` if a message was removed; `false` otherwise; along with any attached
+    /// cycles that were lost (if a reject response with a refund was not enqueued).
+    ///
+    /// Time complexity: `O(log(n))`.
+    pub fn shed_largest_message(
+        &mut self,
+        own_canister_id: &CanisterId,
+        local_canisters: &BTreeMap<CanisterId, CanisterStateV2>,
+        metrics: &impl DroppedMessageMetrics,
+    ) -> (bool, Cycles) {
+        self.queues
+            .shed_largest_message(own_canister_id, local_canisters, metrics)
+    }
+
+    /// Re-partitions the local and remote input schedules of `self.queues`
+    /// following a canister migration, based on the updated set of local canisters.
+    ///
+    /// See [`CanisterQueues::split_input_schedules`] for further details.
+    pub(crate) fn split_input_schedules(
+        &mut self,
+        own_canister_id: &CanisterId,
+        local_canisters: &BTreeMap<CanisterId, CanisterStateV2>,
+    ) {
+        self.queues
+            .split_input_schedules(own_canister_id, local_canisters);
+    }
+
+    /// Silently discards in-progress subnet messages being executed by the
+    /// canister, in the second phase of a subnet split. This should only be called
+    /// on canisters that have migrated to a new subnet (*subnet B*), which does not
+    /// have a matching call context.
+    ///
+    /// The other subnet (which must be *subnet A'*), produces reject responses (for
+    /// calls originating from canisters); and fails ingress messages (for calls
+    /// originating from ingress messages); for the matching subnet calls. This is
+    /// the only way to ensure consistency for messages that would otherwise be
+    /// executing on one subnet, but for which a response may only be produced by
+    /// another subnet.
+    pub fn drop_in_progress_management_calls_after_split(&mut self) {
+        // Remove aborted install code task.
+        // TODO: what about this?
+        //self.task_queue.remove_aborted_install_code_task();
+
+        // Roll back `Stopping` canister states to `Running` and drop all their stop
+        // contexts (the calls corresponding to the dropped stop contexts will be
+        // rejected by subnet A').
+        match self.status {
+            CanisterStatusV2::Idle {
+                idle_status: IdleStatus { ref mut status, .. },
+                ..
+            }
+            | CanisterStatusV2::PausedExecution {
+                idle_status: IdleStatus { ref mut status, .. },
+                ..
+            } => *status = RunningOrStopping::Running,
+            CanisterStatusV2::Stopped => {}
+        }
+    }
+
     pub(super) fn push_input(
         &mut self,
         msg: RequestOrResponse,
@@ -936,17 +1148,22 @@ impl IdleMessaging {
             }
         }
     }
-    /*
-        fn call_context_manager(&self) -> Option<&CallContextManager> {
-            match &self.status {
-                CanisterStatusV2::Idle { idle_status, .. }
-                | CanisterStatusV2::PausedExecution { idle_status, .. } => {
-                    Some(&idle_status.call_context_manager)
-                }
-                CanisterStatusV2::Stopped => None,
-            }
-        }
 
+    /// Pushes an ingress message into the induction pool.
+    pub(crate) fn push_ingress(&mut self, msg: Ingress) {
+        self.queues.push_ingress(msg)
+    }
+
+    pub(crate) fn call_context_manager(&self) -> Option<&CallContextManager> {
+        match &self.status {
+            CanisterStatusV2::Idle { idle_status, .. }
+            | CanisterStatusV2::PausedExecution { idle_status, .. } => {
+                Some(&idle_status.call_context_manager)
+            }
+            CanisterStatusV2::Stopped => None,
+        }
+    }
+    /*
         fn call_context_manager_mut(&mut self) -> Option<&mut CallContextManager> {
             match &mut self.status {
                 CanisterStatusV2::Idle { idle_status, .. }
@@ -2458,22 +2675,22 @@ impl SystemState {
     pub fn has_expired_message_deadlines(&self, current_time: Time) -> bool {
         self.queues.has_expired_deadlines(current_time)
     }
-
-    /// Drops expired messages given a current time. Returns the total amount of
-    /// attached cycles that was lost.
-    ///
-    /// See [`CanisterQueues::time_out_messages`] for further details.
-    pub fn time_out_messages(
-        &mut self,
-        current_time: Time,
-        own_canister_id: &CanisterId,
-        local_canisters: &BTreeMap<CanisterId, CanisterState>,
-        metrics: &impl DroppedMessageMetrics,
-    ) -> Cycles {
-        self.queues
-            .time_out_messages(current_time, own_canister_id, local_canisters, metrics)
-    }
-
+    /*
+        /// Drops expired messages given a current time. Returns the total amount of
+        /// attached cycles that was lost.
+        ///
+        /// See [`CanisterQueues::time_out_messages`] for further details.
+        pub fn time_out_messages(
+            &mut self,
+            current_time: Time,
+            own_canister_id: &CanisterId,
+            local_canisters: &BTreeMap<CanisterId, CanisterState>,
+            metrics: &impl DroppedMessageMetrics,
+        ) -> Cycles {
+            self.queues
+                .time_out_messages(current_time, own_canister_id, local_canisters, metrics)
+        }
+    */
     /// Queries whether the `CallContextManager` in `self.state` holds any not
     /// previouosly expired (i.e. returned by `time_out_callbacks()`) callbacks with
     /// deadlines `< current_time`.
@@ -2482,101 +2699,103 @@ impl SystemState {
             .map(|ccm| ccm.has_expired_callbacks(current_time))
             .unwrap_or(false)
     }
-
-    /// Enqueues "deadline expired" references for all expired best-effort callbacks
-    /// without a response.
-    ///
-    /// Returns the number of expired callbacks; plus one `StateError` for every
-    /// instance where a `SystemState` internal inconsistency prevented a "deadline
-    /// expired" reference from being enqueued.
-    #[must_use]
-    pub fn time_out_callbacks(
-        &mut self,
-        current_time: CoarseTime,
-        own_canister_id: &CanisterId,
-        local_canisters: &BTreeMap<CanisterId, CanisterState>,
-    ) -> (usize, Vec<StateError>) {
-        if self.status == CanisterStatus::Stopped {
-            // Stopped canisters have no call context manager, so no callbacks.
-            return (0, Vec::new());
-        }
-
-        let aborted_or_paused_callback_id = self
-            .aborted_or_paused_response()
-            .map(|response| response.originator_reply_callback);
-
-        // Safe to unwrap because we just checked that the status is not `Stopped`.
-        let call_context_manager = call_context_manager_mut(&mut self.status).unwrap();
-
-        let mut expired_callback_count = 0;
-        let mut errors = Vec::new();
-        let expired_callbacks = call_context_manager
-            .expire_callbacks(current_time)
-            .collect::<Vec<_>>();
-        for callback_id in expired_callbacks {
-            if Some(callback_id) == aborted_or_paused_callback_id {
-                // This callback is already executing, don't produce a second response for it.
-                continue;
+    /*
+        /// Enqueues "deadline expired" references for all expired best-effort callbacks
+        /// without a response.
+        ///
+        /// Returns the number of expired callbacks; plus one `StateError` for every
+        /// instance where a `SystemState` internal inconsistency prevented a "deadline
+        /// expired" reference from being enqueued.
+        #[must_use]
+        pub fn time_out_callbacks(
+            &mut self,
+            current_time: CoarseTime,
+            own_canister_id: &CanisterId,
+            local_canisters: &BTreeMap<CanisterId, CanisterState>,
+        ) -> (usize, Vec<StateError>) {
+            if self.status == CanisterStatus::Stopped {
+                // Stopped canisters have no call context manager, so no callbacks.
+                return (0, Vec::new());
             }
 
-            // Safe to unwrap because this is a callback ID we just got from the
-            // `CallContextManager`.
-            let callback = call_context_manager.callbacks().get(&callback_id).unwrap();
-            self.queues
-                .try_push_deadline_expired_input(
-                    callback_id,
-                    &callback.respondent,
-                    own_canister_id,
-                    local_canisters,
-                )
-                .map(|pushed| {
-                    if pushed {
-                        expired_callback_count += 1;
-                    }
-                })
-                .unwrap_or_else(|err_str| {
-                    errors.push(StateError::NonMatchingResponse {
-                        err_str,
-                        originator: callback.originator,
+            let aborted_or_paused_callback_id = self
+                .aborted_or_paused_response()
+                .map(|response| response.originator_reply_callback);
+
+            // Safe to unwrap because we just checked that the status is not `Stopped`.
+            let call_context_manager = call_context_manager_mut(&mut self.status).unwrap();
+
+            let mut expired_callback_count = 0;
+            let mut errors = Vec::new();
+            let expired_callbacks = call_context_manager
+                .expire_callbacks(current_time)
+                .collect::<Vec<_>>();
+            for callback_id in expired_callbacks {
+                if Some(callback_id) == aborted_or_paused_callback_id {
+                    // This callback is already executing, don't produce a second response for it.
+                    continue;
+                }
+
+                // Safe to unwrap because this is a callback ID we just got from the
+                // `CallContextManager`.
+                let callback = call_context_manager.callbacks().get(&callback_id).unwrap();
+                self.queues
+                    .try_push_deadline_expired_input(
                         callback_id,
-                        respondent: callback.respondent,
-                        deadline: callback.deadline,
+                        &callback.respondent,
+                        own_canister_id,
+                        local_canisters,
+                    )
+                    .map(|pushed| {
+                        if pushed {
+                            expired_callback_count += 1;
+                        }
+                    })
+                    .unwrap_or_else(|err_str| {
+                        errors.push(StateError::NonMatchingResponse {
+                            err_str,
+                            originator: callback.originator,
+                            callback_id,
+                            respondent: callback.respondent,
+                            deadline: callback.deadline,
+                        });
+                        expired_callback_count += 1;
                     });
-                    expired_callback_count += 1;
-                });
+            }
+
+            (expired_callback_count, errors)
         }
-
-        (expired_callback_count, errors)
-    }
-
-    /// Removes the largest best-effort message in the underlying pool. Returns
-    /// `true` if a message was removed; `false` otherwise; along with any attached
-    /// cycles that were lost (if a reject response with a refund was not enqueued).
-    ///
-    /// Time complexity: `O(log(n))`.
-    pub fn shed_largest_message(
-        &mut self,
-        own_canister_id: &CanisterId,
-        local_canisters: &BTreeMap<CanisterId, CanisterState>,
-        metrics: &impl DroppedMessageMetrics,
-    ) -> (bool, Cycles) {
-        self.queues
-            .shed_largest_message(own_canister_id, local_canisters, metrics)
-    }
-
-    /// Re-partitions the local and remote input schedules of `self.queues`
-    /// following a canister migration, based on the updated set of local canisters.
-    ///
-    /// See [`CanisterQueues::split_input_schedules`] for further details.
-    pub(crate) fn split_input_schedules(
-        &mut self,
-        own_canister_id: &CanisterId,
-        local_canisters: &BTreeMap<CanisterId, CanisterState>,
-    ) {
-        self.queues
-            .split_input_schedules(own_canister_id, local_canisters);
-    }
-
+    */
+    /*
+        /// Removes the largest best-effort message in the underlying pool. Returns
+        /// `true` if a message was removed; `false` otherwise; along with any attached
+        /// cycles that were lost (if a reject response with a refund was not enqueued).
+        ///
+        /// Time complexity: `O(log(n))`.
+        pub fn shed_largest_message(
+            &mut self,
+            own_canister_id: &CanisterId,
+            local_canisters: &BTreeMap<CanisterId, CanisterState>,
+            metrics: &impl DroppedMessageMetrics,
+        ) -> (bool, Cycles) {
+            self.queues
+                .shed_largest_message(own_canister_id, local_canisters, metrics)
+        }
+    */
+    /*
+        /// Re-partitions the local and remote input schedules of `self.queues`
+        /// following a canister migration, based on the updated set of local canisters.
+        ///
+        /// See [`CanisterQueues::split_input_schedules`] for further details.
+        pub(crate) fn split_input_schedules(
+            &mut self,
+            own_canister_id: &CanisterId,
+            local_canisters: &BTreeMap<CanisterId, CanisterState>,
+        ) {
+            self.queues
+                .split_input_schedules(own_canister_id, local_canisters);
+        }
+    */
     /// Increments 'cycles_balance' and in case of refund for consumed cycles
     /// decrements the metric `consumed_cycles`.
     pub fn add_cycles(&mut self, amount: Cycles, use_case: CyclesUseCase) {

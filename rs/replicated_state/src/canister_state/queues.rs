@@ -10,6 +10,7 @@ use self::message_pool::{
     Context, InboundReference, Kind, MessagePool, OutboundReference, SomeReference,
 };
 use self::queue::{CanisterQueue, IngressQueue, InputQueue, OutputQueue};
+use crate::canister_state::CanisterStateV2;
 use crate::page_map::int_map::MutableIntMap;
 use crate::replicated_state::MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN;
 use crate::{
@@ -848,7 +849,7 @@ impl CanisterQueues {
         callback_id: CallbackId,
         respondent: &CanisterId,
         own_canister_id: &CanisterId,
-        local_canisters: &BTreeMap<CanisterId, CanisterState>,
+        local_canisters: &BTreeMap<CanisterId, CanisterStateV2>,
     ) -> Result<bool, String> {
         // For a not yet executed callback, there must be a queue with either a reserved
         // slot or an enqueued response.
@@ -1419,7 +1420,7 @@ impl CanisterQueues {
         &mut self,
         current_time: Time,
         own_canister_id: &CanisterId,
-        local_canisters: &BTreeMap<CanisterId, CanisterState>,
+        local_canisters: &BTreeMap<CanisterId, CanisterStateV2>,
         metrics: &impl DroppedMessageMetrics,
     ) -> Cycles {
         let expired_messages = self.store.pool.expire_messages(current_time);
@@ -1452,7 +1453,7 @@ impl CanisterQueues {
     pub fn shed_largest_message(
         &mut self,
         own_canister_id: &CanisterId,
-        local_canisters: &BTreeMap<CanisterId, CanisterState>,
+        local_canisters: &BTreeMap<CanisterId, CanisterStateV2>,
         metrics: &impl DroppedMessageMetrics,
     ) -> (bool, Cycles) {
         if let Some((reference, msg)) = self.store.pool.shed_largest_message() {
@@ -1627,7 +1628,7 @@ impl CanisterQueues {
     pub(crate) fn split_input_schedules(
         &mut self,
         own_canister_id: &CanisterId,
-        local_canisters: &BTreeMap<CanisterId, CanisterState>,
+        local_canisters: &BTreeMap<CanisterId, CanisterStateV2>,
     ) {
         let input_queue_type_fn = input_queue_type_fn(own_canister_id, local_canisters);
         self.input_schedule.split(&input_queue_type_fn);
@@ -1762,7 +1763,7 @@ fn generate_timeout_response(request: &Request) -> Response {
 /// mutating a canister's queues if they were still under `local_canisters`).
 fn input_queue_type_fn<'a>(
     own_canister_id: &'a CanisterId,
-    local_canisters: &'a BTreeMap<CanisterId, CanisterState>,
+    local_canisters: &'a BTreeMap<CanisterId, CanisterStateV2>,
 ) -> impl Fn(&CanisterId) -> InputQueueType + 'a {
     move |sender| {
         if sender == own_canister_id || local_canisters.contains_key(sender) {

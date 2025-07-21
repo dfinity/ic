@@ -2255,7 +2255,7 @@ impl StateManagerImpl {
         heights.into_iter().collect()
     }
 
-    // Creates a checkpoint and switches state to it.
+    /// Creates a checkpoint and switches state to it.
     fn create_checkpoint_and_switch(
         &self,
         state: ReplicatedState,
