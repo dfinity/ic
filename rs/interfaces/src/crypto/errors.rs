@@ -422,6 +422,8 @@ impl ErrorReproducibility for RegistryClientError {
             RegistryClientError::PollingLatestVersionFailed { .. } => false,
             // true, as the registry is guaranteed to be consistent across replicas
             RegistryClientError::DecodeError { .. } => true,
+            // false, as depends on the data available to the registry
+            RegistryClientError::NoVersionsBefore { .. } => false,
         }
     }
 }
