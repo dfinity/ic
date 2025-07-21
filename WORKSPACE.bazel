@@ -41,7 +41,6 @@ canisters(
         "ck_eth_ledger_v2_noledgerversion": "ic-icrc1-ledger-u256.wasm.gz",
         "ck_eth_ledger_v3": "ic-icrc1-ledger-u256.wasm.gz",
         "ck_eth_index": "ic-icrc1-index-ng-u256.wasm.gz",
-        "cycles_ledger_index": "ic-icrc1-index-ng-u256.wasm.gz",
         "sns_root": "sns-root-canister.wasm.gz",
         "sns_governance": "sns-governance-canister.wasm.gz",
         "swap": "sns-swap-canister.wasm.gz",
@@ -51,6 +50,7 @@ canisters(
         "sns_index": "ic-icrc1-index-ng.wasm.gz",
         "node-rewards": "node-rewards-canister.wasm.gz",
         "cycles_ledger": "cycles-ledger.wasm.gz",
+        "cycles_ledger_index": "ic-icrc1-index-ng-u256.wasm.gz",
     },
     path = "//:mainnet-canister-revisions.json",
     reponames = {
@@ -78,7 +78,6 @@ canisters(
         "ck_eth_ledger_v2_noledgerversion": "mainnet_cketh_ic-icrc1-ledger-u256-v2-noledgerversion",
         "ck_eth_ledger_v3": "mainnet_cketh_ic-icrc1-ledger-u256-v3",
         "ck_eth_index": "mainnet_cketh-index-ng",
-        "cycles_ledger_index": "mainnet_cycles_ledger_index",
         "sns_root": "mainnet_sns-root-canister",
         "sns_governance": "mainnet_sns-governance-canister",
         "swap": "mainnet_sns-swap-canister",
@@ -88,6 +87,7 @@ canisters(
         "sns_index": "mainnet_ic-icrc1-index-ng",
         "node-rewards": "mainnet_node-rewards-canister",
         "cycles_ledger": "mainnet_cycles_ledger_canister",
+        "cycles_ledger_index": "mainnet_cycles_ledger_index",
     },
     repositories = {
         "cycles_ledger": "dfinity/cycles-ledger",
