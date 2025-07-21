@@ -1,0 +1,61 @@
+name: "Canscan CLI"
+description: "Run the `canscan` CLI tool to analyze a canister's exposed endpoints"
+
+inputs:
+  canscan_version:
+    description: "Version or tag of the `canscan` binary to download (default: latest)"
+    required: false
+    default: latest
+
+  wasm:
+    description: "Path to the canister's WASM file (required)"
+    required: true
+
+  candid:
+    description: "Path to the canister's Candid file (required)"
+    required: true
+
+  hidden:
+    description: |
+      Optional hidden endpoints passed as multiple --hidden flags.
+      Separate values by newlines. Example:
+      ```
+      value1
+      value2
+      value3
+      ```
+    required: false
+    default: ""
+
+runs:
+  using: "composite"
+  steps:
+    - name: "Download canscan binary"
+      shell: bash
+      run: |
+        echo "Downloading canscan binary version '${{ inputs.canscan_version }}'"
+        if [ "${{ inputs.canscan_version }}" = "latest" ]; then
+          curl -sSL -o canscan \
+            "https://github.com/dfinity/ic/releases/latest/download/canscan"
+        else
+          curl -sSL -o canscan \
+            "https://github.com/dfinity/ic/releases/download/${{ inputs.canscan_version }}/canscan"
+        fi
+        chmod +x canscan
+
+    - name: "Run canscan CLI"
+      shell: bash
+      run: |
+        cmd="./canscan --wasm '${{ inputs.wasm }}' --candid '${{ inputs.candid }}'"
+
+        if [ -n "${{ inputs.hidden }}" ]; then
+          while IFS= read -r endpoint; do
+            # Skip empty lines
+            if [ -n "$endpoint" ]; then
+              cmd="$cmd --hidden '$endpoint'"
+            fi
+          done <<< "${{ inputs.hidden }}"
+        fi
+
+        echo "Running command: $cmd"
+        eval $cmd
