@@ -2127,7 +2127,7 @@ dependencies = [
  "abnf_to_pest",
  "base16",
  "base64-url",
- "chrono",
+ "chrono 0.4.38",
  "ciborium",
  "clap 3.2.25",
  "codespan-reporting",
@@ -2221,6 +2221,14 @@ dependencies = [
  "serde",
  "wasm-bindgen",
  "windows-targets 0.52.6",
+]
+
+[[package]]
+name = "chrono"
+version = "0.4.41"
+source = "git+https://github.com/chronotope/chrono.git?tag=v0.4.41#d1de1d95ead4e59472622761ad545dc4a940992b"
+dependencies = [
+ "num-traits",
 ]
 
 [[package]]
@@ -2382,7 +2390,7 @@ name = "cloudflare"
 version = "0.12.0"
 source = "git+https://github.com/dfinity/cloudflare-rs.git?rev=8b011d170d9d61eaad77bb9645371f6219285104#8b011d170d9d61eaad77bb9645371f6219285104"
 dependencies = [
- "chrono",
+ "chrono 0.4.38",
  "http 0.2.12",
  "percent-encoding",
  "reqwest 0.11.27",
@@ -3496,7 +3504,8 @@ dependencies = [
  "cddl",
  "cfg-if 1.0.0",
  "chacha20poly1305",
- "chrono",
+ "chrono 0.4.38",
+ "chrono 0.4.41",
  "ciborium",
  "cidr",
  "clap 4.5.20",
@@ -4319,7 +4328,7 @@ checksum = "c0a17f0708692024db9956b31d7a20163607d2745953f5ae8125ab368ba280ad"
 dependencies = [
  "arrayvec 0.7.4",
  "bytes",
- "chrono",
+ "chrono 0.4.38",
  "const-hex",
  "elliptic-curve 0.13.8",
  "ethabi",
@@ -7039,7 +7048,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "19501afb943ae5806548bc3ebd7f3374153ca057a38f480ef30adfde5ef09755"
 dependencies = [
  "base64 0.22.1",
- "chrono",
+ "chrono 0.4.38",
  "schemars",
  "serde",
  "serde-value",
@@ -7109,7 +7118,7 @@ checksum = "18ec0fcafd3add30b413b096a61d69b0a37f94d3f95b6f505a57ea3d27cec2a7"
 dependencies = [
  "base64 0.22.1",
  "bytes",
- "chrono",
+ "chrono 0.4.38",
  "either",
  "futures",
  "home",
@@ -7145,7 +7154,7 @@ version = "0.94.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a50c095f051dada37740d883b6d47ad0430e95082140718073b773c8a70f231c"
 dependencies = [
- "chrono",
+ "chrono 0.4.38",
  "form_urlencoded",
  "http 1.3.1",
  "k8s-openapi",
@@ -8508,7 +8517,7 @@ dependencies = [
  "arc-swap",
  "base64 0.22.1",
  "bytes",
- "chrono",
+ "chrono 0.4.38",
  "http 1.3.1",
  "itertools 0.14.0",
  "prometheus 0.14.0",
@@ -9826,7 +9835,7 @@ version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c2aa5feb83bf4b2c8919eaf563f51dbab41183de73ba2353c0e03cd7b6bd892"
 dependencies = [
- "chrono",
+ "chrono 0.4.38",
  "itertools 0.10.5",
  "once_cell",
  "regex",
@@ -10387,7 +10396,7 @@ dependencies = [
  "bitvec",
  "bitvec-nom2",
  "bytes",
- "chrono",
+ "chrono 0.4.38",
  "either",
  "jzon",
  "konst",
@@ -10888,7 +10897,7 @@ version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8395b4f860856b740f20a296ea2cd4d823e81a2658cf05ef61be22916026a906"
 dependencies = [
- "chrono",
+ "chrono 0.4.38",
 ]
 
 [[package]]
@@ -11113,7 +11122,7 @@ dependencies = [
  "async-web-client",
  "base64 0.22.1",
  "blocking",
- "chrono",
+ "chrono 0.4.38",
  "futures",
  "futures-rustls",
  "http 1.3.1",
@@ -11746,7 +11755,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "07ff71d2c147a7b57362cead5e22f772cd52f6ab31cfcd9edcd7f6aeb2a0afbe"
 dependencies = [
  "base64 0.13.1",
- "chrono",
+ "chrono 0.4.38",
  "hex",
  "indexmap 1.9.3",
  "serde",
@@ -11762,7 +11771,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6b6f7f2fcb69f747921f79f3926bd1e203fce4fef62c268dd3abfb6d86029aa"
 dependencies = [
  "base64 0.22.1",
- "chrono",
+ "chrono 0.4.38",
  "hex",
  "indexmap 1.9.3",
  "indexmap 2.7.1",
@@ -14063,7 +14072,7 @@ checksum = "a23c883a3a494a5f55a6c1c326df3c84c69c91f0a337c9ae16f9bea279740fb2"
 dependencies = [
  "bytes",
  "cfg-if 1.0.0",
- "chrono",
+ "chrono 0.4.38",
  "clap 4.5.20",
  "lalrpop 0.22.1",
  "lz4_flex",
