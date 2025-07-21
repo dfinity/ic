@@ -10,6 +10,7 @@ mod tests;
 
 use crate::execution_environment::subnet_memory_capacity;
 use crate::{
+    canister_logs::fetch_canister_logs,
     hypervisor::Hypervisor,
     metrics::{MeasurementScope, QueryHandlerMetrics},
 };
@@ -295,46 +296,6 @@ impl InternalHttpQueryHandler {
         }
         result
     }
-}
-
-fn fetch_canister_logs(
-    sender: PrincipalId,
-    state: &ReplicatedState,
-    args: FetchCanisterLogsRequest,
-) -> Result<WasmResult, UserError> {
-    let canister_id = args.get_canister_id();
-    let canister = state.canister_state(&canister_id).ok_or_else(|| {
-        UserError::new(
-            ErrorCode::CanisterNotFound,
-            format!("Canister {canister_id} not found"),
-        )
-    })?;
-
-    match canister.log_visibility() {
-        LogVisibilityV2::Public => Ok(()),
-        LogVisibilityV2::Controllers if canister.controllers().contains(&sender) => Ok(()),
-        LogVisibilityV2::AllowedViewers(principals) if principals.get().contains(&sender) => Ok(()),
-        LogVisibilityV2::AllowedViewers(_) if canister.controllers().contains(&sender) => Ok(()),
-        LogVisibilityV2::AllowedViewers(_) | LogVisibilityV2::Controllers => Err(UserError::new(
-            ErrorCode::CanisterRejectedMessage,
-            format!(
-                "Caller {} is not allowed to query ic00 method {}",
-                sender,
-                QueryMethod::FetchCanisterLogs
-            ),
-        )),
-    }?;
-
-    let response = FetchCanisterLogsResponse {
-        canister_log_records: canister
-            .system_state
-            .canister_log
-            .records()
-            .iter()
-            .cloned()
-            .collect(),
-    };
-    Ok(WasmResult::Reply(Encode!(&response).unwrap()))
 }
 
 impl HttpQueryHandler {
