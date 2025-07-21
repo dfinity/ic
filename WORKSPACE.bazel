@@ -57,7 +57,7 @@ canisters(
     reponames = {
         "registry": "mainnet_nns_registry_canister",
         "governance": "mainnet_nns_governance_canister",
-        "governance-canister_test": "mainnet_nns_governance_canister_test",
+        "governance-canister_test": "nns_governance_canister_test_at_mainnet_commit",
         "ledger": "mainnet_icp_ledger_canister",
         "archive": "mainnet_icp_ledger-archive-node-canister",
         "index": "mainnet_icp_index_canister",
