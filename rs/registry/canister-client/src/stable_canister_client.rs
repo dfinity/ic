@@ -245,21 +245,37 @@ impl<S: RegistryDataStableMemory> CanisterRegistryClient for StableCanisterRegis
         self.timestamp_to_versions_map.read().unwrap().clone()
     }
 
-    fn with_registry_map<R>(
+    fn get_registry_mutations(
         &self,
-        callback: impl for<'b> FnOnce(Box<dyn Iterator<Item = crate::RegistryRecord> + 'b>) -> R,
-    ) -> R {
-        S::with_registry_map(|registry| {
-            let result = Box::new(registry.iter().map(|(k, v)| {
-                (
-                    k.key,
-                    RegistryVersion::from(k.version),
-                    k.timestamp_nanoseconds,
-                    v.0,
-                )
-            }));
-            callback(result)
-        })
+        key_prefix: &str,
+        version: RegistryVersion,
+    ) -> Result<Vec<crate::RegistryRecord>, RegistryClientError> {
+        if self.get_latest_version() < version {
+            return Err(RegistryClientError::VersionNotAvailable { version });
+        }
+        let version_end = version.get();
+        let start_range = StorableRegistryKey {
+            key: key_prefix.to_string(),
+            ..Default::default()
+        };
+
+        let mutations = S::with_registry_map(|registry| {
+            registry
+                .range(start_range..)
+                .filter(|(k, _)| k.version <= version_end)
+                .take_while(|(k, _)| k.key.starts_with(key_prefix))
+                .map(|(key, value)| {
+                    (
+                        key.key,
+                        RegistryVersion::from(key.version),
+                        key.timestamp_nanoseconds,
+                        value.0,
+                    )
+                })
+                .collect::<Vec<_>>()
+        });
+
+        Ok(mutations)
     }
 }
 

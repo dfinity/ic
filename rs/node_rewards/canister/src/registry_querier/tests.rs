@@ -141,7 +141,7 @@ fn add_dummy_data() {
     add_record_helper_ts(&node_3_k, 39677, Some(node_3_v), ts("2025-07-16") + 2);
 }
 
-fn client_for_tests() -> RegistryQuerier<StableCanisterRegistryClient<DummyState>> {
+fn client_for_tests() -> RegistryQuerier {
     add_dummy_data();
 
     RegistryQuerier {
