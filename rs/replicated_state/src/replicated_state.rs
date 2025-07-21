@@ -1,6 +1,5 @@
 use super::{
-    //canister_state::CanisterState,
-    canister_state::CanisterStateV2,
+    canister_state::CanisterState,
     metadata_state::{
         subnet_call_context_manager::{ReshareChainKeyContext, SignWithThresholdContext},
         IngressHistoryState, Stream, StreamMap, SystemMetadata,
@@ -147,7 +146,7 @@ struct OutputIterator<'a> {
 
 impl<'a> OutputIterator<'a> {
     fn new(
-        canisters: &'a mut BTreeMap<CanisterId, CanisterStateV2>,
+        canisters: &'a mut BTreeMap<CanisterId, CanisterState>,
         subnet_queues: &'a mut CanisterQueues,
         seed: u64,
     ) -> Self {
@@ -465,7 +464,7 @@ impl SubAssign<MessageMemoryUsage> for MessageMemoryUsage {
 pub struct ReplicatedState {
     /// States of all canisters, indexed by canister ids.
     #[validate_eq(CompareWithValidateEq)]
-    pub canister_states: BTreeMap<CanisterId, CanisterStateV2>,
+    pub canister_states: BTreeMap<CanisterId, CanisterState>,
 
     /// Deterministic processing metadata.
     #[validate_eq(CompareWithValidateEq)]
@@ -517,7 +516,7 @@ impl ReplicatedState {
 
     /// Creates a replicated state from a checkpoint.
     pub fn new_from_checkpoint(
-        canister_states: BTreeMap<CanisterId, CanisterStateV2>,
+        canister_states: BTreeMap<CanisterId, CanisterState>,
         metadata: SystemMetadata,
         subnet_queues: CanisterQueues,
         epoch_query_stats: RawQueryStats,
@@ -537,7 +536,7 @@ impl ReplicatedState {
     pub fn component_refs(
         &self,
     ) -> (
-        &BTreeMap<CanisterId, CanisterStateV2>,
+        &BTreeMap<CanisterId, CanisterState>,
         &SystemMetadata,
         &CanisterQueues,
         &Vec<ConsensusResponse>,
@@ -561,19 +560,19 @@ impl ReplicatedState {
             canister_snapshots,
         )
     }
-    pub fn canister_state(&self, canister_id: &CanisterId) -> Option<&CanisterStateV2> {
+    pub fn canister_state(&self, canister_id: &CanisterId) -> Option<&CanisterState> {
         self.canister_states.get(canister_id)
     }
 
-    pub fn canister_state_mut(&mut self, canister_id: &CanisterId) -> Option<&mut CanisterStateV2> {
+    pub fn canister_state_mut(&mut self, canister_id: &CanisterId) -> Option<&mut CanisterState> {
         self.canister_states.get_mut(canister_id)
     }
 
-    pub fn take_canister_state(&mut self, canister_id: &CanisterId) -> Option<CanisterStateV2> {
+    pub fn take_canister_state(&mut self, canister_id: &CanisterId) -> Option<CanisterState> {
         self.canister_states.remove(canister_id)
     }
 
-    pub fn take_canister_states(&mut self) -> BTreeMap<CanisterId, CanisterStateV2> {
+    pub fn take_canister_states(&mut self) -> BTreeMap<CanisterId, CanisterState> {
         std::mem::take(&mut self.canister_states)
     }
 
@@ -599,7 +598,7 @@ impl ReplicatedState {
     /// responsibility of the caller of this function to ensure that any
     /// relevant state associated with the older canister state are properly
     /// cleaned up.
-    pub fn put_canister_state(&mut self, canister_state: CanisterStateV2) {
+    pub fn put_canister_state(&mut self, canister_state: CanisterState) {
         self.canister_states
             .insert(canister_state.canister_id(), canister_state);
     }
@@ -610,7 +609,7 @@ impl ReplicatedState {
     /// call `put_canister_states()` after `take_canister_states()`, with no
     /// other canister-related calls in-between, in order to prevent concurrent
     /// mutations from replacing each other.
-    pub fn put_canister_states(&mut self, canisters: BTreeMap<CanisterId, CanisterStateV2>) {
+    pub fn put_canister_states(&mut self, canisters: BTreeMap<CanisterId, CanisterState>) {
         assert!(self.canister_states.is_empty());
         self.canister_states = canisters;
     }
@@ -618,14 +617,14 @@ impl ReplicatedState {
     /// Returns an iterator over canister states, ordered by canister ID.
     pub fn canisters_iter(
         &self,
-    ) -> std::collections::btree_map::Values<'_, CanisterId, CanisterStateV2> {
+    ) -> std::collections::btree_map::Values<'_, CanisterId, CanisterState> {
         self.canister_states.values()
     }
 
     /// Returns a mutable iterator over canister states, ordered by canister ID.
     pub fn canisters_iter_mut(
         &mut self,
-    ) -> std::collections::btree_map::ValuesMut<'_, CanisterId, CanisterStateV2> {
+    ) -> std::collections::btree_map::ValuesMut<'_, CanisterId, CanisterState> {
         self.canister_states.values_mut()
     }
 
@@ -634,7 +633,7 @@ impl ReplicatedState {
     pub fn get_active_canister(
         &self,
         canister_id: &CanisterId,
-    ) -> Result<&CanisterStateV2, UserError> {
+    ) -> Result<&CanisterState, UserError> {
         let canister = self.canister_state(canister_id).ok_or_else(|| {
             UserError::new(
                 ErrorCode::CanisterNotFound,

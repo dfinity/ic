@@ -6,7 +6,7 @@ mod tests;
 
 use crate::canister_state::queues::CanisterOutputQueuesIterator;
 use crate::canister_state::system_state::{
-    ExecutionMessaging, ExecutionTask, IdleMessaging, SystemState, SystemStateV2,
+    ExecutionMessaging, ExecutionTask, IdleMessaging, SystemState, SystemStateV0,
 };
 use crate::{InputQueueType, MessageMemoryUsage, StateError};
 pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions};
@@ -113,10 +113,10 @@ impl SchedulerState {
 
 /// The full state of a single canister.
 #[derive(Clone, PartialEq, Debug, ValidateEq)]
-pub struct CanisterState {
+pub struct CanisterStateV0 {
     /// See `SystemState` for documentation.
     #[validate_eq(CompareWithValidateEq)]
-    pub system_state: SystemState,
+    pub system_state: SystemStateV0,
 
     /// See `ExecutionState` for documentation.
     ///
@@ -134,10 +134,10 @@ pub struct CanisterState {
 
 /// The full state of a single canister.
 #[derive(Clone, PartialEq, Debug, ValidateEq)]
-pub struct CanisterStateV2 {
+pub struct CanisterState {
     /// See `SystemState` for documentation.
     #[validate_eq(CompareWithValidateEq)]
-    pub system_state: SystemStateV2,
+    pub system_state: SystemState,
 
     #[validate_eq(CompareWithValidateEq)]
     pub messaging: IdleMessaging,
@@ -159,7 +159,7 @@ pub struct CanisterStateV2 {
 #[derive(Clone, Debug)]
 pub struct ExecutionCanisterState {
     /// See `SystemState` for documentation.
-    pub system_state: SystemStateV2,
+    pub system_state: SystemState,
 
     pub messaging: ExecutionMessaging,
 
@@ -170,7 +170,7 @@ pub struct ExecutionCanisterState {
     pub scheduler_state: SchedulerState,
 }
 
-impl CanisterStateV2 {
+impl CanisterState {
     pub fn to_executing(self, time: Time) -> Result<ExecutionCanisterState, Self> {
         match self {
             Self {
@@ -200,9 +200,9 @@ impl CanisterStateV2 {
     }
 }
 
-impl CanisterState {
+impl CanisterStateV0 {
     pub fn new(
-        system_state: SystemState,
+        system_state: SystemStateV0,
         execution_state: Option<ExecutionState>,
         scheduler_state: SchedulerState,
     ) -> Self {
@@ -394,7 +394,7 @@ impl CanisterState {
             .induct_messages_to_self(subnet_available_guaranteed_response_memory, own_subnet_type)
     }
 
-    pub fn into_parts(self) -> (Option<ExecutionState>, SystemState, SchedulerState) {
+    pub fn into_parts(self) -> (Option<ExecutionState>, SystemStateV0, SchedulerState) {
         (
             self.execution_state,
             self.system_state,
@@ -625,7 +625,7 @@ impl CanisterState {
         // whenever new fields are added.
         //
         // (!) DO NOT USE THE ".." WILDCARD, THIS SERVES THE SAME FUNCTION AS a `match`!
-        let CanisterState {
+        let CanisterStateV0 {
             ref mut system_state,
             execution_state: _,
             scheduler_state: _,
@@ -675,7 +675,7 @@ impl CanisterState {
     }
 }
 
-impl CanisterStateV2 {
+impl CanisterState {
     pub fn canister_id(&self) -> CanisterId {
         self.system_state.canister_id()
     }
@@ -762,7 +762,7 @@ impl CanisterStateV2 {
         // whenever new fields are added.
         //
         // (!) DO NOT USE THE ".." WILDCARD, THIS SERVES THE SAME FUNCTION AS a `match`!
-        let CanisterStateV2 {
+        let CanisterState {
             system_state: _,
             ref mut messaging,
             execution_state: _,

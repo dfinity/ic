@@ -1,3 +1,4 @@
+use crate::canister_state::CanisterStateV0;
 use crate::{
     canister_state::{
         execution_state::{Memory, WasmExecutionMode},
@@ -377,7 +378,7 @@ impl CanisterSnapshot {
     /// performed. If that changes, the instructions used in this method
     /// have to be accounted for in the caller.
     pub fn from_canister(
-        canister: &CanisterState,
+        canister: &CanisterStateV0,
         taken_at_timestamp: Time,
     ) -> Result<Self, CanisterSnapshotError> {
         let canister_id = canister.canister_id();

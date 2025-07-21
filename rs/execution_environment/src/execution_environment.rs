@@ -65,7 +65,7 @@ use ic_replicated_state::{
         SubnetCallContext, ThresholdArguments, VetKdArguments,
     },
     page_map::PageAllocatorFileDescriptor,
-    CanisterState, ExecutionTask, NetworkTopology, ReplicatedState,
+    CanisterState, ExecutionCanisterState, ExecutionTask, NetworkTopology, ReplicatedState,
 };
 use ic_types::{
     canister_http::CanisterHttpRequestContext,
@@ -4355,6 +4355,20 @@ pub fn execute_canister(
     round_limits: &mut RoundLimits,
     subnet_size: usize,
 ) -> ExecuteCanisterResult {
+    /*
+    match canister.to_executing(time) {
+        Ok(canister) => match canister.messaging.paused
+        }
+        Err(canister) => ExecuteCanisterResult {
+            canister,
+            instructions_used: None,
+            heap_delta: NumBytes::from(0),
+            ingress_status: None,
+            description: None,
+        }
+    }
+    */
+
     match canister.next_execution() {
         NextExecution::None | NextExecution::ContinueInstallCode => {
             return ExecuteCanisterResult {
