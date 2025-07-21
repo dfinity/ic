@@ -162,6 +162,24 @@ fn run_artifact_processor<Artifact: IdentifiableArtifact>(
     Box::new(ArtifactProcessorJoinGuard::new(handle, shutdown))
 }
 
+async fn read_batch<T>(receiver: &mut Receiver<T>, recv_timeout: Duration) -> Option<Vec<T>> {
+    let mut artifacts = vec![];
+    match timeout(
+        recv_timeout,
+        receiver.recv_many(&mut artifacts, MAX_P2P_IO_CHANNEL_SIZE),
+    )
+    .await
+    {
+        Ok(received) if received > 0 => Some(artifacts),
+        Ok(_) => {
+            // Channel was closed and p2p is stopped
+            None
+        }
+        // Timeout
+        Err(_) => Some(artifacts),
+    }
+}
+
 // The artifact processor thread loop
 fn process_messages<Artifact: IdentifiableArtifact + 'static>(
     time_source: Arc<dyn TimeSource>,
@@ -186,22 +204,8 @@ fn process_messages<Artifact: IdentifiableArtifact + 'static>(
             Duration::from_millis(ARTIFACT_MANAGER_TIMER_DURATION_MSEC)
         };
 
-        let batched_artifact_events = current_thread_rt.block_on(async {
-            let mut artifacts = vec![];
-            match timeout(
-                recv_timeout,
-                receiver.recv_many(&mut artifacts, MAX_P2P_IO_CHANNEL_SIZE),
-            )
-            .await
-            {
-                Ok(x) if x > 0 => Some(artifacts),
-                Ok(_) => {
-                    // p2p is stopped
-                    None
-                }
-                Err(_) => Some(artifacts),
-            }
-        });
+        let batched_artifact_events =
+            current_thread_rt.block_on(read_batch(&mut receiver, recv_timeout));
         let Some(batched_artifact_events) = batched_artifact_events else {
             return;
         };
@@ -397,8 +401,32 @@ mod tests {
     use ic_metrics::MetricsRegistry;
     use ic_types::artifact::UnvalidatedArtifactMutation;
     use std::{convert::Infallible, sync::Arc};
+    use tokio::sync::mpsc::channel;
 
     use crate::{run_artifact_processor, ArtifactProcessor};
+
+    #[tokio::test]
+    async fn test_read_batch_with_closing_channel_after_consuming_all() {
+        let (tx, mut rx) = channel(100);
+        let recv_timeout = Duration::from_secs(100);
+        tx.send(1).await.unwrap();
+        assert_eq!(read_batch(&mut rx, recv_timeout).await, Some(vec![1]));
+        tx.send(2).await.unwrap();
+        tx.send(3).await.unwrap();
+        assert_eq!(read_batch(&mut rx, recv_timeout).await, Some(vec![2, 3]));
+        std::mem::drop(tx);
+        assert_eq!(read_batch(&mut rx, recv_timeout).await, None);
+    }
+
+    #[tokio::test]
+    async fn test_read_batch_with_closing_channel_before_consuming_all() {
+        let (tx, mut rx) = channel(100);
+        let recv_timeout = Duration::from_secs(100);
+        tx.send(1).await.unwrap();
+        tx.send(2).await.unwrap();
+        std::mem::drop(tx);
+        assert_eq!(read_batch(&mut rx, recv_timeout).await, Some(vec![1, 2]));
+    }
 
     #[test]
     fn send_initial_artifacts() {
