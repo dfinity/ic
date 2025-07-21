@@ -205,7 +205,7 @@ impl PocketIc {
             log_level: log_level.map(|l| l.to_string()),
             bitcoind_addr,
             icp_features: Some(icp_features),
-            allow_corrupted_state: Some(false),
+            allow_incomplete_state: Some(false),
         };
 
         let test_driver_pid = std::process::id();

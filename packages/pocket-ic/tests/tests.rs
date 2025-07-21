@@ -463,7 +463,7 @@ fn time_on_resumed_instance() {
 
 // Killing the PocketIC server inside WSL is challenging => skipping this test on Windows.
 #[cfg(not(windows))]
-async fn resume_killed_instance_impl(allow_corrupted_state: Option<bool>) -> Result<(), String> {
+async fn resume_killed_instance_impl(allow_incomplete_state: Option<bool>) -> Result<(), String> {
     let (mut server, server_url) = start_server(StartServerParams::default()).await;
     let temp_dir = TempDir::new().unwrap();
 
@@ -503,7 +503,7 @@ async fn resume_killed_instance_impl(allow_corrupted_state: Option<bool>) -> Res
         log_level: None,
         bitcoind_addr: None,
         icp_features: None,
-        allow_corrupted_state,
+        allow_incomplete_state,
     };
     let response = client
         .post(server_url.join("instances").unwrap())
@@ -538,7 +538,7 @@ async fn resume_killed_instance_impl(allow_corrupted_state: Option<bool>) -> Res
 #[tokio::test]
 async fn resume_killed_instance_default() {
     let err = resume_killed_instance_impl(None).await.unwrap_err();
-    assert!(err.contains("The state of subnet with seed 7712b2c09cb96b3aa3fbffd4034a21a39d5d13f80e043161d1d71f4c593434af is corrupted."));
+    assert!(err.contains("The state of subnet with seed 7712b2c09cb96b3aa3fbffd4034a21a39d5d13f80e043161d1d71f4c593434af is incomplete."));
 }
 
 // Killing the PocketIC server inside WSL is challenging => skipping this test on Windows.
@@ -546,7 +546,7 @@ async fn resume_killed_instance_default() {
 #[tokio::test]
 async fn resume_killed_instance_strict() {
     let err = resume_killed_instance_impl(Some(false)).await.unwrap_err();
-    assert!(err.contains("The state of subnet with seed 7712b2c09cb96b3aa3fbffd4034a21a39d5d13f80e043161d1d71f4c593434af is corrupted."));
+    assert!(err.contains("The state of subnet with seed 7712b2c09cb96b3aa3fbffd4034a21a39d5d13f80e043161d1d71f4c593434af is incomplete."));
 }
 
 // Killing the PocketIC server inside WSL is challenging => skipping this test on Windows.

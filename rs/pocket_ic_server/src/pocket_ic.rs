@@ -722,7 +722,7 @@ impl PocketIcSubnets {
             let actual_time: SystemTime = sm.get_state_time().into();
             if actual_time != expected_time {
                 return Err(format!(
-                    "The state of subnet with seed {} is corrupted.",
+                    "The state of subnet with seed {} is incomplete.",
                     hex::encode(subnet_seed)
                 ));
             }
@@ -1331,7 +1331,7 @@ impl PocketIc {
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
         icp_features: Option<IcpFeatures>,
-        allow_corrupted_state: Option<bool>,
+        allow_incomplete_state: Option<bool>,
     ) -> Result<Self, String> {
         if let Some(ref icp_features) = icp_features {
             subnet_configs = subnet_configs.try_with_icp_features(icp_features)?;
@@ -1378,7 +1378,7 @@ impl PocketIc {
                     if let Some(allocation_range) = config.alloc_range {
                         range_gen.add_assigned(vec![allocation_range]).unwrap();
                     }
-                    let time = if let Some(true) = allow_corrupted_state {
+                    let time = if let Some(true) = allow_incomplete_state {
                         None
                     } else {
                         Some(topology.time)

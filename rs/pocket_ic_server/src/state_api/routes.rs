@@ -1213,7 +1213,7 @@ pub async fn create_instance(
                 log_level,
                 instance_config.bitcoind_addr,
                 instance_config.icp_features,
-                instance_config.allow_corrupted_state,
+                instance_config.allow_incomplete_state,
             )
         })
         .await
