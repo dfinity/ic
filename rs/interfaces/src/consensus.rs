@@ -25,6 +25,8 @@ use ic_types::{
     Height, Time,
 };
 
+pub mod errors;
+
 /// The [`PayloadBuilder`] is responsible for creating and validating payload that
 /// is included in consensus blocks.
 pub trait PayloadBuilder: Send + Sync {

@@ -231,3 +231,27 @@ uvm_config_image(
     ],
     tags = ["manual"],  # this target will be built if required as a dependency of another target
 )
+
+oci_tar(
+    name = "vector-with-log-fetcher.tar",
+    image = "@vector-with-log-fetcher",
+    repo_tags = [
+        "vector-with-log-fetcher:image",
+    ],
+)
+
+exports_files([
+    "vector_activate.sh",
+])
+
+uvm_config_image(
+    name = "vector_with_log_fetcher_image",
+    srcs = [
+        ":vector-with-log-fetcher.tar",
+        ":vector_activate.sh",
+    ],
+    remap_paths = {
+        "vector_activate.sh": "activate",
+    },
+    tags = ["manual"],
+)

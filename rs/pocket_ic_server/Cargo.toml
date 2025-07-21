@@ -44,6 +44,7 @@ ic-http-endpoints-public = { path = "../http_endpoints/public" }
 ic-https-outcalls-adapter = { path = "../https_outcalls/adapter" }
 ic-https-outcalls-adapter-client = { path = "../https_outcalls/client" }
 ic-https-outcalls-service = { path = "../https_outcalls/service" }
+ic-icp-index = { path = "../ledger_suite/icp/index" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-adapter-client = { path = "../interfaces/adapter_client" }
 ic-interfaces-registry = { path = "../interfaces/registry" }

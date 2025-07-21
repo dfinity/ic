@@ -1,9 +1,12 @@
 use candid::{CandidType, Principal};
 use pocket_ic::common::rest::{ExtendedSubnetConfigSet, IcpFeatures, InstanceConfig, SubnetSpec};
-use pocket_ic::{start_or_reuse_server, update_candid, PocketIc, PocketIcBuilder, PocketIcState};
+use pocket_ic::{
+    start_server, update_candid, PocketIc, PocketIcBuilder, PocketIcState, StartServerParams,
+};
 use reqwest::StatusCode;
 use serde::Deserialize;
 use std::collections::BTreeMap;
+use std::time::Duration;
 use tempfile::TempDir;
 #[cfg(windows)]
 use wslpath::windows_to_wsl;
@@ -11,6 +14,57 @@ use wslpath::windows_to_wsl;
 #[test]
 fn with_all_icp_features() {
     let _pic = PocketIcBuilder::new().with_all_icp_features().build();
+}
+
+#[derive(CandidType)]
+struct AccountBalanceArgs {
+    account: Vec<u8>,
+}
+
+#[derive(CandidType, Deserialize)]
+struct Tokens {
+    e8s: u64,
+}
+
+#[test]
+fn test_icp_ledger() {
+    let pic = PocketIcBuilder::new().with_all_icp_features().build();
+
+    let test_account_hex = "5b315d2f6702cb3a27d826161797d7b2c2e131cd312aece51d4d5574d1247087";
+    let test_account = hex::decode(test_account_hex).unwrap();
+
+    // Check balance via ICP ledger.
+    let icp_ledger_id = Principal::from_text("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap();
+    let account_balance_args = AccountBalanceArgs {
+        account: test_account,
+    };
+    let balance = update_candid::<_, (Tokens,)>(
+        &pic,
+        icp_ledger_id,
+        "account_balance",
+        (account_balance_args,),
+    )
+    .unwrap()
+    .0
+    .e8s;
+    const E8S_PER_ICP: u64 = 100_000_000;
+    assert_eq!(balance, 1_000_000_000 * E8S_PER_ICP);
+
+    // The ICP index only syncs with the ICP ledger after 1s from its deployment.
+    pic.advance_time(Duration::from_secs(1));
+    pic.tick();
+
+    // Check balance via ICP index.
+    let icp_index_id = Principal::from_text("qhbym-qaaaa-aaaaa-aaafq-cai").unwrap();
+    let balance = update_candid::<_, (u64,)>(
+        &pic,
+        icp_index_id,
+        "get_account_identifier_balance",
+        (test_account_hex,),
+    )
+    .unwrap()
+    .0;
+    assert_eq!(balance, 1_000_000_000 * E8S_PER_ICP);
 }
 
 #[derive(CandidType, Deserialize)]
@@ -323,7 +377,7 @@ async fn with_all_icp_features_and_nns_subnet_state() {
         .unwrap()
         .into();
 
-    let url = start_or_reuse_server(None).await;
+    let (_, url) = start_server(StartServerParams::default()).await;
     let client = reqwest::Client::new();
     let instance_config = InstanceConfig {
         subnet_config_set: ExtendedSubnetConfigSet {
@@ -335,6 +389,7 @@ async fn with_all_icp_features_and_nns_subnet_state() {
         log_level: None,
         bitcoind_addr: None,
         icp_features: Some(IcpFeatures::all_icp_features()),
+        allow_incomplete_state: None,
     };
     let response = client
         .post(url.join("instances").unwrap())

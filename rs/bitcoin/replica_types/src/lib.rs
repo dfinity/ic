@@ -16,6 +16,23 @@ use serde::{Deserialize, Serialize};
 use std::convert::{TryFrom, TryInto};
 use std::mem::size_of_val;
 
+fn from_btc_network(network: Network) -> v1::Network {
+    match network {
+        Network::Testnet => v1::Network::Testnet,
+        Network::Mainnet => v1::Network::Mainnet,
+        Network::Regtest => v1::Network::Regtest,
+    }
+}
+
+fn to_btc_network(network: i32) -> Result<Network, ProxyDecodeError> {
+    match v1::Network::try_from(network) {
+        Ok(v1::Network::Testnet) => Ok(Network::Testnet),
+        Ok(v1::Network::Mainnet) => Ok(Network::Mainnet),
+        Ok(v1::Network::Regtest) => Ok(Network::Regtest),
+        _ => Err(ProxyDecodeError::MissingField("network")),
+    }
+}
+
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct SendTransactionRequest {
     pub network: Network,
@@ -26,11 +43,7 @@ pub struct SendTransactionRequest {
 impl From<&SendTransactionRequest> for v1::SendTransactionRequest {
     fn from(request: &SendTransactionRequest) -> Self {
         Self {
-            network: match request.network {
-                Network::Testnet => 1,
-                Network::Mainnet => 2,
-                Network::Regtest => 3,
-            },
+            network: from_btc_network(request.network) as i32,
             transaction: request.transaction.clone(),
         }
     }
@@ -40,16 +53,7 @@ impl TryFrom<v1::SendTransactionRequest> for SendTransactionRequest {
     type Error = ProxyDecodeError;
     fn try_from(request: v1::SendTransactionRequest) -> Result<Self, Self::Error> {
         Ok(SendTransactionRequest {
-            network: match request.network {
-                1 => Network::Testnet,
-                2 => Network::Mainnet,
-                3 => Network::Regtest,
-                _ => {
-                    return Err(ProxyDecodeError::MissingField(
-                        "SendTransactionRequest::network",
-                    ))
-                }
-            },
+            network: to_btc_network(request.network)?,
             transaction: request.transaction,
         })
     }
@@ -654,11 +658,7 @@ pub struct GetSuccessorsRequestInitial {
 impl From<&GetSuccessorsRequestInitial> for v1::GetSuccessorsRequestInitial {
     fn from(request: &GetSuccessorsRequestInitial) -> Self {
         Self {
-            network: match request.network {
-                Network::Testnet => 1,
-                Network::Mainnet => 2,
-                Network::Regtest => 3,
-            },
+            network: from_btc_network(request.network) as i32,
             anchor: request.anchor.clone(),
             processed_block_hashes: request.processed_block_hashes.clone(),
         }
@@ -669,16 +669,7 @@ impl TryFrom<v1::GetSuccessorsRequestInitial> for GetSuccessorsRequestInitial {
     type Error = ProxyDecodeError;
     fn try_from(request: v1::GetSuccessorsRequestInitial) -> Result<Self, Self::Error> {
         Ok(GetSuccessorsRequestInitial {
-            network: match request.network {
-                1 => Network::Testnet,
-                2 => Network::Mainnet,
-                3 => Network::Regtest,
-                _ => {
-                    return Err(ProxyDecodeError::MissingField(
-                        "GetSuccessorsRequestInitial::network",
-                    ))
-                }
-            },
+            network: to_btc_network(request.network)?,
             anchor: request.anchor,
             processed_block_hashes: request.processed_block_hashes,
         })
