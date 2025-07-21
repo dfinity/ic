@@ -118,7 +118,10 @@ http_archive(
     name = "rules_rust",
     integrity = "sha256-ydWjnLPhzqys6Y8Z8J1hxLVQNLw0pWW9z3zYDrTEEq8=",
     patch_args = ["-p1"],
-    patches = ["//bazel:rules_rust.patch"],
+    patches = [
+        "//bazel:rules_rust_san.patch",
+        "//bazel:rules_rust_env.patch",
+    ],
     urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.62.0/rules_rust-0.62.0.tar.gz"],
 )
 
@@ -139,13 +142,7 @@ rust_register_toolchains(
         "fastbuild": "none",
         "opt": "none",
     }},
-    # The nightly version is required to compile fuzz tests from Bazel.
-    # The version below is chosen so that it is in sync with the non-nightly version.
-    versions = [
-        "1.86.0",
-        # Use the nightly version from the day before the branch.
-        "nightly/2025-03-08",
-    ],
+    versions = ["1.86.0"],
 )
 
 load("//bazel:external_crates.bzl", "external_crates_repository")
