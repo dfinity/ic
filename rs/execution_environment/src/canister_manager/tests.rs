@@ -6852,7 +6852,7 @@ fn test_environment_variables_are_not_set_when_too_many_keys() {
         .create_canister_with_settings(
             Cycles::new(1_000_000_000_000_000),
             CanisterSettingsArgsBuilder::new()
-                .with_environment_variables(env_vars.clone().into())
+                .with_environment_variables(env_vars.clone())
                 .build(),
         )
         .unwrap_err();
@@ -6895,7 +6895,7 @@ fn test_environment_variables_are_not_set_when_key_is_too_long() {
         .create_canister_with_settings(
             Cycles::new(1_000_000_000_000_000),
             CanisterSettingsArgsBuilder::new()
-                .with_environment_variables(env_vars.clone().into())
+                .with_environment_variables(env_vars.clone())
                 .build(),
         )
         .unwrap_err();
@@ -6937,7 +6937,7 @@ fn test_environment_variables_are_not_set_when_value_is_too_long() {
         .create_canister_with_settings(
             Cycles::new(1_000_000_000_000_000),
             CanisterSettingsArgsBuilder::new()
-                .with_environment_variables(env_vars.clone().into())
+                .with_environment_variables(env_vars.clone())
                 .build(),
         )
         .unwrap_err();
@@ -6978,7 +6978,7 @@ fn test_environment_variables_are_not_set_duplicate_keys() {
         .create_canister_with_settings(
             Cycles::new(1_000_000_000_000_000),
             CanisterSettingsArgsBuilder::new()
-                .with_environment_variables(env_vars.clone().into())
+                .with_environment_variables(env_vars.clone())
                 .build(),
         )
         .unwrap_err();
