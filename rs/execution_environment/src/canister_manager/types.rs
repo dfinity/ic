@@ -93,7 +93,7 @@ pub(crate) struct CanisterMgrConfig {
     pub(crate) default_wasm_memory_limit: NumBytes,
     pub(crate) max_number_of_snapshots_per_canister: usize,
     pub(crate) max_environment_variables: usize,
-    pub(crate) max_environment_variable_key_length: usize,
+    pub(crate) max_environment_variable_name_length: usize,
     pub(crate) max_environment_variable_value_length: usize,
 }
 
@@ -118,7 +118,7 @@ impl CanisterMgrConfig {
         default_wasm_memory_limit: NumBytes,
         max_number_of_snapshots_per_canister: usize,
         max_environment_variables: usize,
-        max_environment_variable_key_length: usize,
+        max_environment_variable_name_length: usize,
         max_environment_variable_value_length: usize,
     ) -> Self {
         Self {
@@ -140,7 +140,7 @@ impl CanisterMgrConfig {
             default_wasm_memory_limit,
             max_number_of_snapshots_per_canister,
             max_environment_variables,
-            max_environment_variable_key_length,
+            max_environment_variable_name_length,
             max_environment_variable_value_length,
         }
     }
@@ -487,17 +487,17 @@ pub(crate) enum CanisterManagerError {
     },
     RenameCanisterNotStopped(CanisterId),
     RenameCanisterHasSnapshot(CanisterId),
-    EnvironmentVariablesTooManyKeys {
-        max_keys: usize,
-        provided_keys: usize,
+    EnvironmentVariablesTooMany {
+        max: usize,
+        count: usize,
     },
-    EnvironmentVariablesKeyTooLong {
-        key: String,
-        max_length: usize,
+    EnvironmentVariablesNameTooLong {
+        name: String,
+        max_name_length: usize,
     },
     EnvironmentVariablesValueTooLong {
         value: String,
-        max_length: usize,
+        max_value_length: usize,
     },
 }
 
@@ -709,12 +709,12 @@ impl AsErrorHelp for CanisterManagerError {
                     doc_link: "".to_string(),
                 }
             },
-            CanisterManagerError::EnvironmentVariablesTooManyKeys { .. } => ErrorHelp::UserError {
+            CanisterManagerError::EnvironmentVariablesTooMany { .. } => ErrorHelp::UserError {
                 suggestion: "Try reducing the number of environment variables.".to_string(),
                 doc_link: "".to_string(),
             },
-            CanisterManagerError::EnvironmentVariablesKeyTooLong { .. } => ErrorHelp::UserError {
-                suggestion: "Try reducing the length of the environment variable key.".to_string(),
+            CanisterManagerError::EnvironmentVariablesNameTooLong { .. } => ErrorHelp::UserError {
+                suggestion: "Try reducing the length of the environment variable name.".to_string(),
                 doc_link: "".to_string(),
             },
             CanisterManagerError::EnvironmentVariablesValueTooLong { .. } => ErrorHelp::UserError {
@@ -1091,22 +1091,22 @@ impl From<CanisterManagerError> for UserError {
                     message,
                 )
             }
-            EnvironmentVariablesTooManyKeys { max_keys, provided_keys } => {
+            EnvironmentVariablesTooMany { max, count } => {
                 Self::new(
                     ErrorCode::CanisterContractViolation,
-                    format!("Too many environment variables: {} (max: {})", provided_keys, max_keys),
+                    format!("Too many environment variables: {} (max: {})", count, max),
                 )
             }
-            EnvironmentVariablesKeyTooLong { key, max_length } => {
+            EnvironmentVariablesNameTooLong { name, max_name_length } => {
                 Self::new(
                     ErrorCode::CanisterContractViolation,
-                    format!("Environment variable key too long: {} (max: {})", key, max_length),
+                    format!("Environment variable name too long: {} (max: {})", name, max_name_length),
                 )
             }
-            EnvironmentVariablesValueTooLong { value, max_length } => {
+            EnvironmentVariablesValueTooLong { value, max_value_length } => {
                 Self::new(
                     ErrorCode::CanisterContractViolation,
-                    format!("Environment variable value too long: {} (max: {})", value, max_length),
+                    format!("Environment variable value too long: {} (max: {})", value, max_value_length),
                 )
             }
         }

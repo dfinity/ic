@@ -245,22 +245,22 @@ impl CanisterManager {
     ) -> Result<(), CanisterManagerError> {
         if let Some(environment_variables) = settings.environment_variables() {
             if environment_variables.len() > self.config.max_environment_variables {
-                return Err(CanisterManagerError::EnvironmentVariablesTooManyKeys {
-                    max_keys: self.config.max_environment_variables,
-                    provided_keys: environment_variables.len(),
+                return Err(CanisterManagerError::EnvironmentVariablesTooMany {
+                    max: self.config.max_environment_variables,
+                    count: environment_variables.len(),
                 });
             }
             for (key, value) in environment_variables.iter() {
-                if key.len() > self.config.max_environment_variable_key_length {
-                    return Err(CanisterManagerError::EnvironmentVariablesKeyTooLong {
-                        key: key.clone(),
-                        max_length: self.config.max_environment_variable_key_length,
+                if key.len() > self.config.max_environment_variable_name_length {
+                    return Err(CanisterManagerError::EnvironmentVariablesNameTooLong {
+                        name: key.clone(),
+                        max_name_length: self.config.max_environment_variable_name_length,
                     });
                 }
                 if value.len() > self.config.max_environment_variable_value_length {
                     return Err(CanisterManagerError::EnvironmentVariablesValueTooLong {
                         value: value.clone(),
-                        max_length: self.config.max_environment_variable_value_length,
+                        max_value_length: self.config.max_environment_variable_value_length,
                     });
                 }
             }

@@ -31,7 +31,6 @@ use ic_protobuf::types::v1::{
     CanisterUpgradeOptions as CanisterUpgradeOptionsProto,
     WasmMemoryPersistence as WasmMemoryPersistenceProto,
 };
-use std::collections::BTreeMap;
 use std::hash::{Hash, Hasher};
 
 use num_traits::cast::ToPrimitive;

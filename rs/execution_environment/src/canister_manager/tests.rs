@@ -17,7 +17,7 @@ use ic_base_types::{EnvironmentVariables, NumSeconds, PrincipalId};
 use ic_config::{
     execution_environment::{
         Config, CANISTER_GUARANTEED_CALLBACK_QUOTA, DEFAULT_WASM_MEMORY_LIMIT,
-        MAX_ENVIRONMENT_VARIABLES, MAX_ENVIRONMENT_VARIABLE_KEY_LENGTH,
+        MAX_ENVIRONMENT_VARIABLES, MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH,
         MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH, MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER,
         SUBNET_CALLBACK_SOFT_LIMIT,
     },
@@ -327,7 +327,7 @@ fn canister_manager_config(
         DEFAULT_WASM_MEMORY_LIMIT,
         MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER,
         MAX_ENVIRONMENT_VARIABLES,
-        MAX_ENVIRONMENT_VARIABLE_KEY_LENGTH,
+        MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH,
         MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH,
     )
 }
@@ -6844,9 +6844,6 @@ fn test_environment_variables_are_not_set_when_too_many_keys() {
 
     let env_vars = (0..11)
         .map(|i| (format!("KEY{}", i), "VAL".to_string()))
-        .collect::<Vec<_>>();
-    let env_vars = env_vars
-        .into_iter()
         .map(|(k, v)| EnvironmentVariable { name: k, value: v })
         .collect::<Vec<_>>();
 
@@ -6882,7 +6879,7 @@ fn test_environment_variables_are_not_set_when_key_is_too_long() {
         })
         .build();
 
-    let long_key = "K".repeat(129);
+    let long_key = "K".repeat(MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH + 1);
     let env_vars = [
         ("KEY1".to_string(), "VALUE1".to_string()),
         ("KEY2".to_string(), "VALUE2".to_string()),
@@ -6908,8 +6905,8 @@ fn test_environment_variables_are_not_set_when_key_is_too_long() {
         UserError::new(
             ErrorCode::CanisterContractViolation,
             format!(
-                "Environment variable key too long: {} (max: {})",
-                long_key, MAX_ENVIRONMENT_VARIABLE_KEY_LENGTH
+                "Environment variable name too long: {} (max: {})",
+                long_key, MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH
             )
         )
     );
@@ -6924,7 +6921,7 @@ fn test_environment_variables_are_not_set_when_value_is_too_long() {
         })
         .build();
 
-    let long_value = "V".repeat(129);
+    let long_value = "V".repeat(MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH + 1);
     let env_vars = [
         ("KEY1".to_string(), "VALUE1".to_string()),
         ("KEY2".to_string(), "VALUE2".to_string()),
@@ -6990,7 +6987,7 @@ fn test_environment_variables_are_not_set_duplicate_keys() {
         err,
         UserError::new(
             ErrorCode::CanisterContractViolation,
-            "Duplicate environment variable keys are not allowed".to_string(),
+            "Duplicate environment variables are not allowed".to_string(),
         )
     );
 }

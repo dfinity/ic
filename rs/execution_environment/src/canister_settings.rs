@@ -155,12 +155,12 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
 
         let environment_variables = match input.environment_variables {
             Some(env_vars) => {
-                let length = env_vars.len();
+                let original_length = env_vars.len();
                 let environment_variables = env_vars
                     .into_iter()
                     .map(|e| (e.name, e.value))
                     .collect::<BTreeMap<String, String>>();
-                if environment_variables.len() != length {
+                if environment_variables.len() != original_length {
                     return Err(UpdateSettingsError::DuplicateEnvironmentVariables);
                 }
                 Some(EnvironmentVariables::new(environment_variables))
@@ -360,7 +360,7 @@ impl From<UpdateSettingsError> for UserError {
             ),
             UpdateSettingsError::DuplicateEnvironmentVariables => UserError::new(
                 ErrorCode::CanisterContractViolation,
-                "Duplicate environment variable keys are not allowed".to_string(),
+                "Duplicate environment variables are not allowed".to_string(),
             ),
         }
     }
