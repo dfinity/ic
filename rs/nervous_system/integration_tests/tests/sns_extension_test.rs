@@ -219,24 +219,26 @@ async fn test_treasury_manager() {
     };
 
     let empty_sns_balance_book = BalanceBook::empty()
-        .with_treasury_owner(treasury_sns_account, "SNS token treasury".to_string())
+        .with_treasury_owner(treasury_sns_account, "DAO Treasury".to_string())
         .with_treasury_manager(
             sns_treasury_manager::Account {
                 owner: adaptor_canister_id.0,
                 subaccount: None,
             },
-            format("KongSwapAdaptor({})", adaptor_canister_id),
-        );
+            format!("KongSwapAdaptor({})", adaptor_canister_id),
+        )
+        .with_fee_collector(None, None);
 
     let empty_icp_balance_book = BalanceBook::empty()
-        .with_treasury_owner(treasury_icp_account, "ICP treasury".to_string())
+        .with_treasury_owner(treasury_icp_account, "DAO Treasury".to_string())
         .with_treasury_manager(
             sns_treasury_manager::Account {
                 owner: adaptor_canister_id.0,
                 subaccount: None,
             },
-            format("KongSwapAdaptor({})", adaptor_canister_id),
-        );
+            format!("KongSwapAdaptor({})", adaptor_canister_id),
+        )
+        .with_fee_collector(None, None);
 
     for _ in 0..100 {
         pocket_ic.tick().await;
@@ -268,7 +270,15 @@ async fn test_treasury_manager() {
         let request = AuditTrailRequest {};
         let response = pocket_ic.call(adaptor_canister_id, request).await.unwrap();
 
-        // println!(">>> AuditTrail: {:#?}", response);
+        println!(">>> AuditTrail: {:#?}", response);
+    }
+
+    // Wait for the KongSwap Adaptor to be ready for the next operation.
+    //
+    // This shoudl be less than 1 hour to avoid hitting the next periodic task.
+    for _ in 0..100 {
+        pocket_ic.tick().await;
+        pocket_ic.advance_time(Duration::from_secs(35)).await;
     }
 
     let _withdrawn_amounts = {
@@ -292,10 +302,13 @@ async fn test_treasury_manager() {
             Some(btreemap! {
                 sns_token => empty_sns_balance_book
                     .clone()
-                    .treasury_owner(initial_sns_balance_e8s - 5 * SNS_FEE),
+                    .treasury_owner(initial_sns_balance_e8s - 5 * SNS_FEE)
+                    .fee_collector(5 * SNS_FEE),
                 icp_token => empty_icp_balance_book
                     .clone()
-                    .treasury_owner(initial_icp_balance_e8s - 5 * SNS_FEE)
+                    .treasury_owner(initial_icp_balance_e8s - 5 * ICP_FEE)
+                    .fee_collector(5 * ICP_FEE),
+
             }),
         );
     };
