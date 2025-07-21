@@ -103,10 +103,10 @@ impl Ic00MethodPermissions {
                 method,
                 // `FetchCanisterLogs` method is only allowed for messages sent by users,
                 // all inter-canister call permissions are irrelevant and therefore set to false.
-                allow_remote_subnet_sender: false,
+                allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
-                counts_toward_round_limit: false,
-                does_not_run_on_aborted_canister: false,
+                counts_toward_round_limit: true,
+                does_not_run_on_aborted_canister: true,
                 installs_code: false,
             },
             Ic00Method::UploadChunk | Ic00Method::TakeCanisterSnapshot => Self {
