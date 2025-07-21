@@ -25,7 +25,7 @@ def generate_dummy_recovery_archive(name, seed):
         ],
         outs = [
             "recovery.tar.zst",
-            "recovery_hash.txt",
+            "recovery.tar.zst.sha256",
             "cup.proto.b64",
             "ic_registry_local_store_1.b64",
             "ic_registry_local_store_2.b64",
@@ -60,9 +60,9 @@ def generate_dummy_recovery_archive(name, seed):
             cp -a $< guestos-recovery-engine.sh
             RECOVERY_HASH="$$(sha256sum recovery.tar.zst | cut -d' ' -f1)"
             sed -i "s/readonly EXPECTED_RECOVERY_HASH=\"\"/readonly EXPECTED_RECOVERY_HASH=\"$$RECOVERY_HASH\"/" guestos-recovery-engine.sh
-            echo "$$RECOVERY_HASH" > recovery_hash.txt
+            echo "$$RECOVERY_HASH" > recovery.tar.zst.sha256
 
-            mv recovery.tar.zst recovery_hash.txt cup.proto.b64 ic_registry_local_store_1.b64 ic_registry_local_store_2.b64 guestos-recovery-engine.sh $(RULEDIR)
+            mv recovery.tar.zst recovery.tar.zst.sha256 cup.proto.b64 ic_registry_local_store_1.b64 ic_registry_local_store_2.b64 guestos-recovery-engine.sh $(RULEDIR)
         """.format(seed = seed),
         visibility = [
             "//rs:ic-os-pkg",
@@ -78,8 +78,8 @@ def generate_dummy_recovery_archive(name, seed):
     )
 
     native.filegroup(
-        name = name + "_recovery_hash.txt",
-        srcs = ["recovery_hash.txt"],
+        name = name + "_recovery.tar.zst.sha256",
+        srcs = ["recovery.tar.zst.sha256"],
         visibility = [
             "//rs:system-tests-pkg",
         ],
