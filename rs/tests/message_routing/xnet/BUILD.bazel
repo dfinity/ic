@@ -15,8 +15,6 @@ system_test_nns(
         "system_test_large",
     ],
     test_timeout = "eternal",
-    uses_guestos_img = False,
-    uses_guestos_mainnet_img = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + XNET_TEST_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = [
         "//rs/tests/driver:ic-system-test-driver",
@@ -36,8 +34,6 @@ system_test_nns(
         "system_test_large",
     ],
     test_timeout = "long",
-    uses_guestos_img = False,
-    uses_guestos_mainnet_img = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + XNET_TEST_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = [
         "//rs/tests/driver:ic-system-test-driver",
@@ -57,8 +53,6 @@ system_test_nns(
         "system_test_large",
     ],
     test_timeout = "long",
-    uses_guestos_img = False,
-    uses_guestos_mainnet_img = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + XNET_TEST_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = [
         "//rs/tests/driver:ic-system-test-driver",
@@ -79,8 +73,6 @@ system_test_nns(
         "system_test_large",
     ],
     test_timeout = "eternal",
-    uses_guestos_img = False,
-    uses_guestos_mainnet_img = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + XNET_TEST_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = [
         "//rs/tests/driver:ic-system-test-driver",
