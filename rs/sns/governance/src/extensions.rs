@@ -45,7 +45,7 @@ impl Display for ExtensionSpec {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "SNS Extension {{ name: {}, topic: {:?}, kind: {} }}",
+            "SNS Extension {{ name: {}, topic: {}, kind: {} }}",
             self.name, self.topic, self.kind,
         )
     }
