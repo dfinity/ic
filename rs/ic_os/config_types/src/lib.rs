@@ -67,11 +67,11 @@ pub struct HostOSConfig {
 #[serde(rename_all = "snake_case")]
 #[strum(serialize_all = "snake_case")]
 pub enum GuestVMType {
-    /// The Guest VM brought up temporarily during the GuestOS upgrade process.
-    Upgrade,
     /// This is what runs most of the time, executing the replica, serving requests, etc.
     #[default]
     Default,
+    /// The Guest VM brought up temporarily during the GuestOS upgrade process.
+    Upgrade,
     /// Unknown variant fallback for forward compatibility with future versions.
     #[serde(other)]
     Unknown,
