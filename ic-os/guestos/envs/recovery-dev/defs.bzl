@@ -34,8 +34,8 @@ def generate_dummy_recovery_archive(name):
 
             DATA="DATA"
 
-            # Dummy CUP (100 MB)
-            head -c $$((100 * 1024 * 1024)) < <(yes "$$DATA") > cup.proto
+            # Dummy CUP (5 MB)
+            head -c $$((5 * 1024 * 1024)) < <(yes "$$DATA") > cup.proto
 
             # Dummy Local Store (500 MB total)
             mkdir -p ic_registry_local_store/0001020304/05/06
