@@ -219,7 +219,7 @@ impl CanisterHttpPoolManagerImpl {
         let request_ids_in_pool: BTreeSet<_> = canister_http_pool
             .get_validated_shares()
             .filter_map(|share| {
-                if share.signature.signer == self.replica_config.node_id {
+                if share.signature.signer != self.replica_config.node_id {
                     Some(share.content.id)
                 } else {
                     None
