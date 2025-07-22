@@ -2,7 +2,7 @@
 Helper function to generate a dummy recovery archive for testing purposes.
 """
 
-def generate_dummy_recovery_archive(name, seed):
+def generate_dummy_recovery_archive(name):
     """ Generates a dummy recovery archive for testing purposes.
 
     Generating the dummy recovery archive is done with a genrule that outputs a tarball containing a dummy CUP
@@ -12,7 +12,6 @@ def generate_dummy_recovery_archive(name, seed):
 
     Args:
         name: The name of the genrule target.
-        seed: A seed string used to generate dummy data.
     Returns:
         This function does not return anything, but it defines one target for generating the recovery archive and
         one target for each of the output files.
@@ -34,17 +33,17 @@ def generate_dummy_recovery_archive(name, seed):
         cmd = r"""
             set -euo pipefail
 
-            SEED="{seed}"
+            DATA="DATA"
 
             # Dummy CUP (100 MB)
-            head -c $$((100 * 1024 * 1024)) < <(yes "$$SEED") > cup.proto
+            head -c $$((100 * 1024 * 1024)) < <(yes "$$DATA") > cup.proto
 
             # Dummy Local Store (500 MB total)
             mkdir -p ic_registry_local_store/0001020304/05/06
-            head -c $$((250 * 1024 * 1024)) < <(yes "$$SEED-store1") > ic_registry_local_store/0001020304/05/06/07.pb
+            head -c $$((250 * 1024 * 1024)) < <(yes "$$DATA") > ic_registry_local_store/0001020304/05/06/07.pb
 
             mkdir -p ic_registry_local_store/08090a0b0c/0d/0e
-            head -c $$((250 * 1024 * 1024)) < <(yes "$$SEED-store2") > ic_registry_local_store/08090a0b0c/0d/0e/0f.pb
+            head -c $$((250 * 1024 * 1024)) < <(yes "$$DATA") > ic_registry_local_store/08090a0b0c/0d/0e/0f.pb
 
             # Archive the local store
             tar zcf ic_registry_local_store.tar.zst -C ic_registry_local_store .
@@ -63,7 +62,7 @@ def generate_dummy_recovery_archive(name, seed):
             echo "$$RECOVERY_HASH" > recovery.tar.zst.sha256
 
             mv recovery.tar.zst recovery.tar.zst.sha256 cup.proto.b64 ic_registry_local_store_1.b64 ic_registry_local_store_2.b64 guestos-recovery-engine.sh $(RULEDIR)
-        """.format(seed = seed),
+        """,
         visibility = [
             "//rs:ic-os-pkg",
         ],

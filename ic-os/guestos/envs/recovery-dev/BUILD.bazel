@@ -40,5 +40,4 @@ file_size_check(
 
 generate_dummy_recovery_archive(
     name = "recovery_archive",
-    seed = "SEED",
 )
