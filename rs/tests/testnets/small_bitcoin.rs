@@ -47,7 +47,6 @@ use ic_system_test_driver::driver::{
     prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
     test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder},
-    vector_vm::HasVectorTargets,
 };
 use slog::info;
 use std::time::Duration;
@@ -87,7 +86,6 @@ pub fn setup(env: TestEnv) {
     let ic_gateway_url = ic_gateway.get_public_url();
     let ic_gateway_domain = ic_gateway_url.domain().unwrap();
     env.sync_with_prometheus_by_name("", Some(ic_gateway_domain.to_string()));
-    env.sync_with_vector().unwrap();
 }
 
 fn await_nodes_healthy(env: &TestEnv) {

@@ -46,6 +46,7 @@ fn get_vector_toml() -> String {
 
 pub struct VectorVm {
     universal_vm: UniversalVm,
+    container_running: bool,
 }
 
 impl Default for VectorVm {
@@ -68,6 +69,7 @@ impl VectorVm {
                     memory_kibibytes: Some(AmountOfMemoryKiB::new(16780000)), // 16GiB
                     boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(30)),
                 }),
+            container_running: false,
         }
     }
 
@@ -84,6 +86,153 @@ impl VectorVm {
         self.universal_vm.start(env)?;
 
         info!(logger, "Spawned vector vm");
+        Ok(())
+    }
+
+    pub fn sync_with_vector(&mut self, env: &TestEnv) -> anyhow::Result<()> {
+        let mut sources = BTreeMap::new();
+        let mut transforms = BTreeMap::new();
+
+        let log = env.logger();
+        info!(log, "Syncing vector targets.");
+        let snapshot = env.topology_snapshot();
+        let nodes = snapshot
+            .subnets()
+            .flat_map(|s| s.nodes())
+            .chain(snapshot.unassigned_nodes())
+            .chain(snapshot.api_boundary_nodes());
+
+        for node in nodes {
+            let node_id = node.node_id.get();
+            let ip = node.get_ip_addr();
+
+            let labels = [
+                // We don't have host os in these tests so this is the only job.
+                // It is here to keep consistency between mainnet and testnet logs.
+                (JOB, "node_exporter".to_string()),
+                (IS_API_BN, node.is_api_boundary_node().to_string()),
+                (IS_MALICIOUS, node.is_malicious().to_string()),
+            ]
+            .into_iter()
+            .chain(match node.subnet_id() {
+                None => vec![],
+                Some(s) => vec![(IC_SUBNET, s.get().to_string())],
+            })
+            .map(|(key, val)| (key.to_string(), val))
+            .collect();
+
+            add_custom_target(
+                &mut sources,
+                &mut transforms,
+                node_id.to_string(),
+                ip,
+                Some(labels),
+            );
+        }
+
+        // Extend with custom targets
+        let custom_targets = env.get_custom_vector_targets()?;
+        for (key, val) in custom_targets {
+            add_custom_target(&mut sources, &mut transforms, key, val.ip, val.labels);
+        }
+
+        if sources.is_empty() && transforms.is_empty() {
+            info!(
+                log,
+                "Still no targets found. Skipping running vector container."
+            );
+            return Ok(());
+        }
+
+        // For all targets add an IC label
+        let infra_group_name = GroupSetup::read_attribute(env).infra_group_name;
+        for transform in transforms.values_mut() {
+            transform
+                .labels
+                .insert(IC.to_string(), infra_group_name.clone());
+        }
+
+        let vector_local_dir = env.get_path("vector").join("generated");
+        info!(log, "Writing vector config to {vector_local_dir:?}");
+        std::fs::create_dir_all(&vector_local_dir).map_err(anyhow::Error::from)?;
+
+        std::fs::write(vector_local_dir.join("vector.toml"), get_vector_toml())
+            .map_err(anyhow::Error::from)?;
+
+        let mut generated_config = BTreeMap::new();
+        generated_config.insert(
+            "sources".to_string(),
+            serde_json::to_value(&sources).unwrap(),
+        );
+        generated_config.insert(
+            "transforms".to_string(),
+            serde_json::to_value(&transforms).unwrap(),
+        );
+
+        std::fs::write(
+            vector_local_dir.join("generated_config.json"),
+            serde_json::to_string_pretty(&generated_config).unwrap(),
+        )
+        .map_err(anyhow::Error::from)?;
+
+        let deployed_vm = env.get_deployed_universal_vm("vector").unwrap();
+        let session = deployed_vm
+            .block_on_ssh_session()
+            .unwrap_or_else(|e| panic!("Failed to setup SSH session to vector because: {e:?}!",));
+
+        for file in vector_local_dir.read_dir().map_err(anyhow::Error::from)? {
+            let file = match file {
+                Ok(f) => f,
+                Err(e) => {
+                    warn!(log, "Failed to read an entry in vector local dir {:?}", e);
+                    continue;
+                }
+            };
+
+            let from = file.path();
+            let to = Path::new("/etc/vector/config").join(file.path().file_name().unwrap());
+            let size = std::fs::metadata(&from).unwrap().len();
+            retry_with_msg!(
+                format!("scp {from:?} to vector:{to:?}"),
+                env.logger(),
+                SCP_RETRY_TIMEOUT,
+                SCP_RETRY_BACKOFF,
+                || {
+                    let mut remote_file = session.scp_send(&to, 0o644, size, None)?;
+                    let mut from_file = File::open(&from)?;
+                    std::io::copy(&mut from_file, &mut remote_file)?;
+                    Ok(())
+                }
+            )
+            .unwrap_or_else(|e| panic!("Failed to scp {from:?} to vector:{to:?} because: {e:?}!",));
+        }
+
+        if !self.container_running {
+            info!(log, "Issuing command to run vector container.");
+            deployed_vm
+                .block_on_bash_script_from_session(
+                    &session,
+                    &format!(
+                        r#"
+docker run -d --name vector \
+    -v /etc/vector/config:/etc/vector/config \
+    --network host \
+    --entrypoint vector \
+    -e ELASTICSEARCH_URL="{ELASTICSEARCH_URL}" \
+    -e ELASTICSEARCH_INDEX="{ELASTICSEARCH_INDEX}" \
+    vector-with-log-fetcher:image \
+    -w --config-dir /etc/vector/config
+        "#,
+                    ),
+                )
+                .unwrap();
+            self.container_running = true;
+
+            emit_kibana_url_event(&log, &infra_group_name);
+        }
+
+        info!(log, "Vector targets sync complete.");
+
         Ok(())
     }
 }
@@ -220,9 +369,6 @@ pub trait HasVectorTargets {
         ip: IpAddr,
         labels: Option<BTreeMap<String, String>>,
     ) -> anyhow::Result<()>;
-
-    // Sync with vector VM to add scraping targets.
-    fn sync_with_vector(&self) -> anyhow::Result<()>;
 }
 
 impl HasVectorTargets for TestEnv {
@@ -246,142 +392,6 @@ impl HasVectorTargets for TestEnv {
             serde_json::to_string_pretty(&custom_targets)?,
         )
         .map_err(anyhow::Error::from)
-    }
-
-    fn sync_with_vector(&self) -> anyhow::Result<()> {
-        let mut sources = BTreeMap::new();
-        let mut transforms = BTreeMap::new();
-
-        let log = self.logger();
-        info!(log, "Syncing vector targets.");
-        let snapshot = self.topology_snapshot();
-        let nodes = snapshot
-            .subnets()
-            .flat_map(|s| s.nodes())
-            .chain(snapshot.unassigned_nodes())
-            .chain(snapshot.api_boundary_nodes());
-
-        for node in nodes {
-            let node_id = node.node_id.get();
-            let ip = node.get_ip_addr();
-
-            let labels = [
-                // We don't have host os in these tests so this is the only job.
-                // It is here to keep consistency between mainnet and testnet logs.
-                (JOB, "node_exporter".to_string()),
-                (IS_API_BN, node.is_api_boundary_node().to_string()),
-                (IS_MALICIOUS, node.is_malicious().to_string()),
-            ]
-            .into_iter()
-            .chain(match node.subnet_id() {
-                None => vec![],
-                Some(s) => vec![(IC_SUBNET, s.get().to_string())],
-            })
-            .map(|(key, val)| (key.to_string(), val))
-            .collect();
-
-            add_custom_target(
-                &mut sources,
-                &mut transforms,
-                node_id.to_string(),
-                ip,
-                Some(labels),
-            );
-        }
-
-        // Extend with custom targets
-        let custom_targets = self.get_custom_vector_targets()?;
-        for (key, val) in custom_targets {
-            add_custom_target(&mut sources, &mut transforms, key, val.ip, val.labels);
-        }
-
-        // For all targets add an IC label
-        let infra_group_name = GroupSetup::read_attribute(self).infra_group_name;
-        for transform in transforms.values_mut() {
-            transform
-                .labels
-                .insert(IC.to_string(), infra_group_name.clone());
-        }
-
-        let vector_local_dir = self.get_path("vector").join("generated");
-        info!(log, "Writing vector config to {vector_local_dir:?}");
-        std::fs::create_dir_all(&vector_local_dir).map_err(anyhow::Error::from)?;
-
-        std::fs::write(vector_local_dir.join("vector.toml"), get_vector_toml())
-            .map_err(anyhow::Error::from)?;
-
-        let mut generated_config = BTreeMap::new();
-        generated_config.insert(
-            "sources".to_string(),
-            serde_json::to_value(&sources).unwrap(),
-        );
-        generated_config.insert(
-            "transforms".to_string(),
-            serde_json::to_value(&transforms).unwrap(),
-        );
-
-        std::fs::write(
-            vector_local_dir.join("generated_config.json"),
-            serde_json::to_string_pretty(&generated_config).unwrap(),
-        )
-        .map_err(anyhow::Error::from)?;
-
-        let deployed_vm = self.get_deployed_universal_vm("vector").unwrap();
-        let session = deployed_vm
-            .block_on_ssh_session()
-            .unwrap_or_else(|e| panic!("Failed to setup SSH session to vector because: {e:?}!",));
-
-        for file in vector_local_dir.read_dir().map_err(anyhow::Error::from)? {
-            let file = match file {
-                Ok(f) => f,
-                Err(e) => {
-                    warn!(log, "Failed to read an entry in vector local dir {:?}", e);
-                    continue;
-                }
-            };
-
-            let from = file.path();
-            let to = Path::new("/etc/vector/config").join(file.path().file_name().unwrap());
-            let size = std::fs::metadata(&from).unwrap().len();
-            retry_with_msg!(
-                format!("scp {from:?} to vector:{to:?}"),
-                self.logger(),
-                SCP_RETRY_TIMEOUT,
-                SCP_RETRY_BACKOFF,
-                || {
-                    let mut remote_file = session.scp_send(&to, 0o644, size, None)?;
-                    let mut from_file = File::open(&from)?;
-                    std::io::copy(&mut from_file, &mut remote_file)?;
-                    Ok(())
-                }
-            )
-            .unwrap_or_else(|e| panic!("Failed to scp {from:?} to vector:{to:?} because: {e:?}!",));
-        }
-
-        info!(log, "Issuing command to run vector container.");
-        if let Err(e) = deployed_vm.block_on_bash_script_from_session(
-            &session,
-            &format!(
-                r#"
-docker run -d --name vector \
-    -v /etc/vector/config:/etc/vector/config \
-    --network host \
-    --entrypoint vector \
-    -e ELASTICSEARCH_URL="{ELASTICSEARCH_URL}" \
-    -e ELASTICSEARCH_INDEX="{ELASTICSEARCH_INDEX}" \
-    vector-with-log-fetcher:image \
-    -w --config-dir /etc/vector/config
-        "#,
-            ),
-        ) {
-            warn!(log, "Failed to run vector container due to: {:?}", e);
-            return Ok(());
-        }
-        emit_kibana_url_event(&log, &infra_group_name);
-
-        info!(log, "Vector targets sync complete.");
-
-        Ok(())
     }
 }
 

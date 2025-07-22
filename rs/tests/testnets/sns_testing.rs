@@ -41,7 +41,6 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::ic_gateway_vm::{
     HasIcGatewayVm, IcGatewayVm, IC_GATEWAY_VM_NAME,
 };
-use ic_system_test_driver::driver::vector_vm::HasVectorTargets;
 use ic_system_test_driver::driver::{
     group::SystemTestGroup,
     ic::{InternetComputer, Subnet},
@@ -88,7 +87,6 @@ pub fn setup(env: TestEnv) {
     let ic_gateway_url = ic_gateway.get_public_url();
     let ic_gateway_domain = ic_gateway_url.domain().unwrap();
     env.sync_with_prometheus_by_name("", Some(ic_gateway_domain.to_string()));
-    env.sync_with_vector().unwrap();
 
     let topology = env.topology_snapshot();
     let mut app_subnets = topology

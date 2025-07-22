@@ -673,6 +673,39 @@ impl SystemTestGroup {
             Box::from(EmptyTask::new(keepalive_task_id)) as Box<dyn Task>
         };
 
+        let log_plan = {
+            let logger = group_ctx.logger().clone();
+            let group_ctx = group_ctx.clone();
+
+            let log_task = subproc(
+                TaskId::Test("vector-logging".to_string()),
+                move || {
+                    debug!(logger, ">>> log_fn");
+                    let env = ensure_setup_env(group_ctx);
+                    let mut vector_vm = VectorVm::new();
+                    vector_vm.start(&env).expect("Failed to start Vector VM");
+
+                    loop {
+                        if let Err(e) = vector_vm.sync_with_vector(&env) {
+                            warn!(logger, "Failed to sync with vector vm due to: {:?}", e);
+                        }
+
+                        std::thread::sleep(KEEPALIVE_INTERVAL);
+                    }
+                },
+                &mut compose_ctx,
+            );
+
+            timed(
+                Plan::Leaf {
+                    task: Box::from(log_task),
+                },
+                compose_ctx.timeout_per_test,
+                None,
+                &mut compose_ctx,
+            )
+        };
+
         let setup_plan = {
             let logger = group_ctx.logger().clone();
             let group_ctx = group_ctx.clone();
@@ -684,11 +717,6 @@ impl SystemTestGroup {
                 move || {
                     debug!(logger, ">>> setup_fn");
                     let env = ensure_setup_env(group_ctx);
-
-                    // Configure logging for testnets
-                    let vector_vm = VectorVm::new();
-                    vector_vm.start(&env).expect("Failed to start Vector VM");
-
                     setup_fn(env.clone());
                     SetupResult {}.write_attribute(&env);
                 },
@@ -729,7 +757,7 @@ impl SystemTestGroup {
             let uvms_stream_plan = compose(
                 Some(uvms_logs_stream_task),
                 EvalOrder::Sequential,
-                vec![keepalive_plan],
+                vec![keepalive_plan, log_plan],
                 &mut compose_ctx,
             );
 

@@ -45,7 +45,6 @@ use ic_system_test_driver::driver::{
     prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
     test_env_api::HasTopologySnapshot,
-    vector_vm::HasVectorTargets,
 };
 use nns_dapp::{
     install_ii_nns_dapp_and_subnet_rental, nns_dapp_customizations, set_authorized_subnets,
@@ -81,7 +80,6 @@ pub fn setup(env: TestEnv) {
     let ic_gateway_url = ic_gateway.get_public_url();
     let ic_gateway_domain = ic_gateway_url.domain().unwrap();
     env.sync_with_prometheus_by_name("", Some(ic_gateway_domain.to_string()));
-    env.sync_with_vector().unwrap();
 
     install_ii_nns_dapp_and_subnet_rental(&env, &ic_gateway_url, None);
     set_authorized_subnets(&env);

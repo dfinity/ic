@@ -65,9 +65,6 @@ pub fn config(env: TestEnv, mainnet_config: bool) {
         .start(&env)
         .expect("failed to setup ic-gateway");
 
-    // Initial sync to scrape the network.
-    env.sync_with_vector().unwrap();
-
     setup_nested_vm(env.clone(), HOST_VM_NAME);
 
     let vm = env.get_nested_vm(HOST_VM_NAME).unwrap_or_else(|e| {
@@ -95,9 +92,6 @@ pub fn config(env: TestEnv, mainnet_config: bool) {
         )
         .unwrap();
     }
-
-    // Additional sync to generate new config for the nested vm.
-    env.sync_with_vector().unwrap();
 }
 
 /// Allow the nested GuestOS to install and launch, and check that it can

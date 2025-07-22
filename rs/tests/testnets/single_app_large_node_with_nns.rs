@@ -56,7 +56,6 @@ use ic_system_test_driver::driver::ic::{
 use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{HasTopologySnapshot, NnsCustomizations};
-use ic_system_test_driver::driver::vector_vm::HasVectorTargets;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
@@ -88,5 +87,4 @@ pub fn setup(env: TestEnv) {
         NnsCustomizations::default(),
     );
     env.sync_with_prometheus();
-    env.sync_with_vector().unwrap();
 }

@@ -43,7 +43,6 @@ use ic_system_test_driver::driver::ic::{
 };
 use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
 use ic_system_test_driver::driver::test_env::TestEnv;
-use ic_system_test_driver::driver::vector_vm::HasVectorTargets;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
@@ -70,5 +69,4 @@ pub fn setup(env: TestEnv) {
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
     env.sync_with_prometheus();
-    env.sync_with_vector().unwrap();
 }

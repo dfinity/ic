@@ -6,7 +6,6 @@ use ic_system_test_driver::driver::{
     prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
     test_env_api::{HasTopologySnapshot, NnsCustomizations},
-    vector_vm::HasVectorTargets,
 };
 use serde::Deserialize;
 use slog::info;
@@ -88,7 +87,6 @@ pub fn setup(env: TestEnv, config: IcConfig) {
     );
 
     env.sync_with_prometheus();
-    env.sync_with_vector().unwrap();
 }
 
 fn update_env_variables(env: &TestEnv, pairs: Vec<(String, &str)>) {
