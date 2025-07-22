@@ -294,6 +294,7 @@ system_test_nns(
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/nns/nns_dapp",
         "@crate_index//:anyhow",
+        "@crate_index//:slog",
     ],
 )
 

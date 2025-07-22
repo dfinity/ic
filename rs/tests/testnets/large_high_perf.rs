@@ -1,11 +1,16 @@
+// This test is designed for scenarios where high IO performance is essential.
+// It leverages dedicated performance hosts with LVM partitions composed of multiple high-performance SSDs, mirroring production environments.
+// Specify the hosts via the PERF_HOSTS environment variable; each listed host will be allocated to a replica node.
+//
 // Set up a testnet containing:
-//   one 4-node System, a single API boundary node, single ic-gateway/s and a p8s (with grafana) VM.
-// All replica nodes use the following resources: 64 vCPUs, 480GiB of RAM, and 2,000 GiB disk.
+//   one System subnet with the hosts specified in the PERF_HOSTS environment variable,
+//   a single API boundary node, single ic-gateway/s and a p8s (with grafana) VM.
+// All replica nodes use the following resources: 64 vCPUs, 480GiB of RAM, and 5 TiB disk.
 //
 // You can setup this testnet with a lifetime of 180 mins by executing the following commands:
 //
 //   $ ./ci/tools/docker-run
-//   $ ict testnet create large_high_perf --lifetime-mins=180 --output-dir=./large_high_perf -- --test_tmpdir=./large_high_perf
+//   $ PERF_HOSTS="dm1-dll29.dm1.dfinity.network" ict testnet create large_high_perf --lifetime-mins=1440 --output-dir=./large_high_perf -- --test_tmpdir=./large_high_perf
 //
 // The --output-dir=./large_high_perf will store the debug output of the test driver in the specified directory.
 // The --test_tmpdir=./large_high_perf will store the remaining test output in the specified directory.
@@ -56,16 +61,27 @@ use ic_system_test_driver::driver::{
     test_env_api::HasTopologySnapshot,
 };
 use nns_dapp::{nns_dapp_customizations, set_authorized_subnets, set_icp_xdr_exchange_rate};
+use slog::info;
 
 const NUM_IC_GATEWAYS: u64 = 1;
+const DEFAULT_IMAGE_SIZE_GIB: u64 = 5120;
 
 fn main() -> Result<()> {
-    let config = Config::new(vec![
-        "dm1-dll33.dm1.dfinity.network".to_string(),
-        "dm1-dll34.dm1.dfinity.network".to_string(),
-        "dm1-dll45.dm1.dfinity.network".to_string(),
-        "dm1-dll46.dm1.dfinity.network".to_string(),
-    ]);
+    // No default value is set for PERF_HOSTS to ensure users consciously select dedicated performance hosts and understand their significance.
+    let perf_hosts = std::env::var("PERF_HOSTS").unwrap_or_else(|_| {
+        panic!("PERF_HOSTS environment variable must be set (comma-separated list of host names)")
+    });
+
+    // By default, the image size is set to 5 TiB, which supports testing up to 2 TiB of state under heavy write workloads.
+    // Note: Migrating such a large image to the LVM partition on the hosts can be time-consuming.
+    // To use a different image size, set the IMAGE_SIZE_GIB environment variable.
+    let image_size_gib = std::env::var("IMAGE_SIZE_GIB")
+        .ok()
+        .and_then(|s| s.parse::<u64>().ok())
+        .unwrap_or(DEFAULT_IMAGE_SIZE_GIB);
+
+    let perf_hosts: Vec<String> = perf_hosts.split(',').map(|s| s.to_string()).collect();
+    let config = Config::new(perf_hosts, image_size_gib);
 
     SystemTestGroup::new()
         .with_setup(config.build())
@@ -76,11 +92,15 @@ fn main() -> Result<()> {
 #[derive(Clone, Debug)]
 pub struct Config {
     hosts: Vec<String>,
+    image_size_gib: u64,
 }
 
 impl Config {
-    pub fn new(hosts: Vec<String>) -> Config {
-        Config { hosts }
+    pub fn new(hosts: Vec<String>, image_size_gib: u64) -> Config {
+        Config {
+            hosts,
+            image_size_gib,
+        }
     }
 
     /// Builds the IC instance.
@@ -101,12 +121,19 @@ pub fn setup(env: TestEnv, config: Config) {
     let vm_resources = VmResources {
         vcpus: Some(NrOfVCPUs::new(64)),
         memory_kibibytes: Some(AmountOfMemoryKiB::new(512_142_680)),
-        boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(5120)),
+        boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(config.image_size_gib)),
     };
     let mut ic = InternetComputer::new()
         .with_api_boundary_nodes(1)
         .with_default_vm_resources(vm_resources);
     let mut subnet = Subnet::new(SubnetType::System);
+    let logger = env.logger();
+    info!(
+        logger,
+        "Adding {} nodes with hosts: {:?}",
+        config.hosts.len(),
+        config.hosts
+    );
     for host in config.hosts.iter() {
         subnet = subnet.add_node_with_required_host_features(vec![HostFeature::Host(host.clone())]);
     }
@@ -116,6 +143,7 @@ pub fn setup(env: TestEnv, config: Config) {
         .expect("Failed to setup IC under test");
 
     // set up NNS canisters
+    // Installing the NNS canisters enables submitting proposals to upgrade the replica version without needing to redeploy the testnet.
     install_nns_with_customizations_and_check_progress(
         env.topology_snapshot(),
         nns_dapp_customizations(),
