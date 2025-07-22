@@ -375,7 +375,8 @@ where
             | Request::NeuronInfo(NeuronInfo { account, .. })
             | Request::ListNeurons(ListNeurons { account, .. })
             | Request::RefreshVotingPower(RefreshVotingPower { account, .. })
-            | Request::Follow(Follow { account, .. }) => {
+            | Request::Follow(Follow { account, .. })
+            | Request::DisburseMaturity(DisburseMaturity { account, .. }) => {
                 all_sender_account_ids.push(to_model_account_identifier(&account));
             }
             Request::Transfer(Operation::Burn { .. }) => {
