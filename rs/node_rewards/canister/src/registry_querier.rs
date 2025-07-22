@@ -6,7 +6,7 @@ use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_protobuf::registry::node_rewards::v2::NodeRewardsTable;
 use ic_protobuf::registry::subnet::v1::SubnetListRecord;
 use ic_registry_canister_client::{
-    get_decoded_value, CanisterRegistryClient, CanisterRegistryClientExt, RegistryDataStableMemory,
+    get_decoded_value, CanisterRegistryClient, CanisterRegistryClientExt,
 };
 use ic_registry_keys::{
     make_data_center_record_key, make_node_operator_record_key, make_subnet_list_record_key,
