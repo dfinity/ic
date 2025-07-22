@@ -109,12 +109,12 @@ impl FileDownloader {
             // a hash check is required, try the hash check
             // first to save time if possible.
             Some(hash) if file_path.exists() => {
-                maybe_info!(self, "File already exists. Checking hash.");
+                maybe_info!(self.logger, "File already exists. Checking hash.");
                 match check_file_hash(file_path, hash) {
                     Ok(()) => return Ok(()),
                     Err(e) => {
                         maybe_warn!(
-                            self,
+                            self.logger,
                             "Hash mismatch. Assuming incomplete file. Error: {:?}",
                             e
                         );
@@ -125,7 +125,7 @@ impl FileDownloader {
             // the file on the disk is stale and remove it.
             None if file_path.exists() => {
                 maybe_info!(
-                    self,
+                    self.logger,
                     "Expected hash not provided and the file already exist. Removing file."
                 );
                 fs::remove_file(file_path)
@@ -145,14 +145,14 @@ impl FileDownloader {
             // rest from the server.
             let offset = metadata.len();
             maybe_info!(
-                self,
+                self.logger,
                 "Resuming downloading file from {} starting from byte {}",
                 url,
                 offset
             );
             offset
         } else {
-            maybe_info!(self, "Downloading file from: {}", url);
+            maybe_info!(self.logger, "Downloading file from: {}", url);
             0
         };
 
@@ -161,7 +161,7 @@ impl FileDownloader {
         // There are new bytes that should be written
         if let Some(response) = maybe_response {
             maybe_info!(
-                self,
+                self.logger,
                 "Download request initiated to {:?}, headers: {:?}",
                 response.remote_addr(),
                 response.headers()
@@ -178,15 +178,15 @@ impl FileDownloader {
 
         match expected_sha256_hex.as_ref() {
             Some(expected_hash) => {
-                maybe_info!(self, "Response read. Checking hash.");
+                maybe_info!(self.logger, "Response read. Checking hash.");
                 match check_file_hash(file_path, expected_hash) {
                     Ok(()) => {
-                        maybe_info!(self, "Hash check passed successfully.");
+                        maybe_info!(self.logger, "Hash check passed successfully.");
                         Ok(())
                     }
                     Err(hash_invalid_err) => {
                         maybe_warn!(
-                            self,
+                            self.logger,
                             "Hash check failed: {:?} - deleting file",
                             hash_invalid_err
                         );
@@ -198,7 +198,7 @@ impl FileDownloader {
             }
             None => {
                 maybe_info!(
-                    self,
+                    self.logger,
                     "Response read. Skipping hash verification since it wasn't provided."
                 );
                 Ok(())
@@ -223,7 +223,7 @@ impl FileDownloader {
             Ok(Some(response))
         } else if response.status() == http::StatusCode::RANGE_NOT_SATISFIABLE {
             maybe_warn!(
-                self,
+                self.logger,
                 "Requesting resource '{}' from offset {}, resulted in `RANGE_NOT_SATISFIABLE`",
                 url,
                 offset,
