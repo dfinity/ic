@@ -11,8 +11,8 @@ use crate::common::rest::{
 use crate::wsl_path;
 pub use crate::DefaultEffectiveCanisterIdError;
 use crate::{
-    copy_dir, start_or_reuse_server, IngressStatusResult, PocketIcBuilder, PocketIcState,
-    RejectResponse, Time,
+    copy_dir, start_server, IngressStatusResult, PocketIcBuilder, PocketIcState, RejectResponse,
+    StartServerParams, Time,
 };
 use backoff::backoff::Backoff;
 use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
@@ -144,7 +144,12 @@ impl PocketIc {
         let server_url = if let Some(server_url) = server_url {
             server_url
         } else {
-            start_or_reuse_server(server_binary).await
+            let (_, server_url) = start_server(StartServerParams {
+                server_binary,
+                reuse: true,
+            })
+            .await;
+            server_url
         };
 
         let subnet_config_set = subnet_config_set
@@ -200,6 +205,7 @@ impl PocketIc {
             log_level: log_level.map(|l| l.to_string()),
             bitcoind_addr,
             icp_features: Some(icp_features),
+            allow_incomplete_state: Some(false),
         };
 
         let test_driver_pid = std::process::id();
@@ -314,7 +320,12 @@ impl PocketIc {
     /// List all instances and their status.
     #[instrument(ret)]
     pub async fn list_instances() -> Vec<String> {
-        let url = start_or_reuse_server(None).await.join("instances").unwrap();
+        let (_, server_url) = start_server(StartServerParams {
+            reuse: true,
+            ..Default::default()
+        })
+        .await;
+        let url = server_url.join("instances").unwrap();
         let instances: Vec<String> = reqwest::Client::new()
             .get(url)
             .send()

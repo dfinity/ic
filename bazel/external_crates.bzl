@@ -383,6 +383,16 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "serde",
                 ],
             ),
+            # Required because chrono uses canisters incompatible features
+            "chrono_canisters": crate.spec(
+                git = "https://github.com/chronotope/chrono.git",
+                package = "chrono",
+                tag = "v0.4.41",
+                default_features = False,
+                features = [
+                    "alloc",
+                ],
+            ),
             "ciborium": crate.spec(
                 version = "^0.2.1",
             ),
@@ -1146,6 +1156,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "rustc-hash": crate.spec(
                 version = "^1.1.0",
+            ),
+            "rust-ini": crate.spec(
+                version = "^0.21.2",
             ),
             "rustls": crate.spec(
                 version = "^0.23.18",

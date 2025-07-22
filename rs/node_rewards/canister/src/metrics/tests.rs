@@ -5,7 +5,8 @@ use ic_cdk::api::call::{CallResult, RejectionCode};
 use ic_management_canister_types::{NodeMetrics, NodeMetricsHistoryArgs, NodeMetricsHistoryRecord};
 use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
 use ic_stable_structures::DefaultMemoryImpl;
-use rewards_calculation::types::{DayEnd, NodeMetricsDailyRaw};
+use rewards_calculation::rewards_calculator_results::DayUTC;
+use rewards_calculation::types::NodeMetricsDailyRaw;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
 
@@ -219,7 +220,6 @@ async fn partial_failures_are_handled_correctly() {
 }
 
 const MAX_TIMES: usize = 20;
-type FromTS = u64;
 type Proposed = u64;
 type Failed = u64;
 
@@ -248,12 +248,12 @@ impl NodeMetricsHistoryResponseTracker {
     fn add_node_metrics(
         mut self,
         node_id: NodeId,
-        metrics: Vec<(FromTS, Vec<(Proposed, Failed)>)>,
+        metrics: Vec<(DayUTC, Vec<(Proposed, Failed)>)>,
     ) -> Self {
-        for (from_ts, proposed_failed) in metrics {
-            for (i, (proposed, failed)) in proposed_failed.into_iter().enumerate() {
-                let ts = from_ts + (i as u64) * ONE_DAY_NANOS;
-                let entry = self.subnets_responses.entry(ts).or_default();
+        for (from, proposed_failed) in metrics {
+            let mut metrics_day = from;
+            for (proposed, failed) in proposed_failed {
+                let entry = self.subnets_responses.entry(metrics_day.get()).or_default();
                 let entry_sub = entry.entry(self.current_subnet).or_default();
 
                 entry_sub.push(NodeMetrics {
@@ -261,6 +261,7 @@ impl NodeMetricsHistoryResponseTracker {
                     num_block_failures_total: failed,
                     node_id: node_id.get().0,
                 });
+                metrics_day = metrics_day.next_day();
             }
         }
         self
@@ -301,11 +302,14 @@ async fn _daily_metrics_correct_different_update_size(size: usize) {
         .with_subnet(subnet_id(1))
         .add_node_metrics(
             node_id(1),
-            vec![(0, vec![(7, 5), (10, 6), (15, 6), (25, 50)])],
+            vec![(0.into(), vec![(7, 5), (10, 6), (15, 6), (25, 50)])],
         )
-        .add_node_metrics(node_id(2), vec![(0, vec![(19, 21), (32, 22)])])
+        .add_node_metrics(node_id(2), vec![(0.into(), vec![(19, 21), (32, 22)])])
         // Node 2 is redeployed to subnet 1 on day 2
-        .add_node_metrics(node_id(2), vec![(3 * ONE_DAY_NANOS, vec![(10, 10)])]);
+        .add_node_metrics(
+            node_id(2),
+            vec![((3 * ONE_DAY_NANOS).into(), vec![(10, 10)])],
+        );
 
     let mut mock = mock::MockCanisterClient::new();
     mock.expect_node_metrics_history()
@@ -316,7 +320,7 @@ async fn _daily_metrics_correct_different_update_size(size: usize) {
         mm.update_subnets_metrics(vec![subnet_id(1)]).await;
     }
     let daily_metrics: Vec<Vec<NodeMetricsDailyRaw>> = mm
-        .daily_metrics_by_subnet(0, 4 * ONE_DAY_NANOS)
+        .daily_metrics_by_subnet(0.into(), (4 * ONE_DAY_NANOS).into())
         .into_values()
         .collect();
 
@@ -364,11 +368,11 @@ async fn daily_metrics_correct_2_subs() {
 
     let tracker = NodeMetricsHistoryResponseTracker::new()
         .with_subnet(subnet_1)
-        .add_node_metrics(node_1, vec![(0, vec![(1, 1), (2, 2), (3, 3)])])
+        .add_node_metrics(node_1, vec![(0.into(), vec![(1, 1), (2, 2), (3, 3)])])
         .with_subnet(subnet_2)
         .add_node_metrics(
             node_1,
-            vec![(3 * ONE_DAY_NANOS, vec![(4, 4), (6, 6), (8, 8)])],
+            vec![((3 * ONE_DAY_NANOS).into(), vec![(4, 4), (6, 6), (8, 8)])],
         );
 
     let mut mock = mock::MockCanisterClient::new();
@@ -381,7 +385,7 @@ async fn daily_metrics_correct_2_subs() {
     }
 
     let node_1_daily_metrics = mm
-        .daily_metrics_by_subnet(0, 8 * ONE_DAY_NANOS)
+        .daily_metrics_by_subnet(0.into(), (8 * ONE_DAY_NANOS).into())
         .into_iter()
         .collect::<BTreeMap<_, _>>()
         .into_iter()
@@ -451,16 +455,16 @@ async fn daily_metrics_correct_overlapping_days() {
 
     let tracker = NodeMetricsHistoryResponseTracker::new()
         .with_subnet(subnet_1)
-        .add_node_metrics(node_1, vec![(0, vec![(1, 1), (2, 2), (3, 3)])])
+        .add_node_metrics(node_1, vec![(0.into(), vec![(1, 1), (2, 2), (3, 3)])])
         .with_subnet(subnet_2)
         // Node 1 redeployed to subnet 2 on day 2
         .add_node_metrics(
             node_1,
-            vec![(2 * ONE_DAY_NANOS, vec![(4, 4), (6, 6), (8, 8)])],
+            vec![((2 * ONE_DAY_NANOS).into(), vec![(4, 4), (6, 6), (8, 8)])],
         )
         .add_node_metrics(
             node_2,
-            vec![(2 * ONE_DAY_NANOS, vec![(1, 1), (3, 3), (6, 6)])],
+            vec![((2 * ONE_DAY_NANOS).into(), vec![(1, 1), (3, 3), (6, 6)])],
         );
 
     let mut mock = mock::MockCanisterClient::new();
@@ -474,7 +478,7 @@ async fn daily_metrics_correct_overlapping_days() {
     }
 
     let daily_metrics = mm
-        .daily_metrics_by_subnet(0, 4 * ONE_DAY_NANOS)
+        .daily_metrics_by_subnet(0.into(), (4 * ONE_DAY_NANOS).into())
         .into_iter()
         .collect::<BTreeMap<_, _>>()
         .into_iter()
@@ -488,9 +492,7 @@ async fn daily_metrics_correct_overlapping_days() {
 
     let overlapping_sub_1 = daily_metrics
         .iter()
-        .find(|(sub, day, _)| {
-            sub == &subnet_1 && day.unix_ts_at_day_end() == DayEnd::from(2 * ONE_DAY_NANOS).get()
-        })
+        .find(|(sub, day, _)| sub == &subnet_1 && *day == (2 * ONE_DAY_NANOS).into())
         .map(|(_, _, node_metrics)| node_metrics)
         .unwrap();
 
@@ -499,9 +501,7 @@ async fn daily_metrics_correct_overlapping_days() {
 
     let overlapping_sub_2 = daily_metrics
         .iter()
-        .find(|(sub, day, _)| {
-            sub == &subnet_2 && day.unix_ts_at_day_end() == DayEnd::from(2 * ONE_DAY_NANOS).get()
-        })
+        .find(|(sub, day, _)| sub == &subnet_2 && *day == (2 * ONE_DAY_NANOS).into())
         .map(|(_, _, node_metrics)| node_metrics)
         .unwrap();
 
