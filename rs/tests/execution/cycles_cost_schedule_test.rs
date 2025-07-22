@@ -5,8 +5,7 @@ use ic_nns_test_utils::governance::wait_for_final_state;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{Cycles, RegistryVersion};
-use ic_universal_canister::{management, wasm, UNIVERSAL_CANISTER_WASM};
-use ic_utils::interfaces::ManagementCanister;
+use ic_universal_canister::{management, wasm};
 use registry_canister::mutations::do_create_subnet::CanisterCyclesCostSchedule;
 use std::{collections::HashSet, time::Duration};
 
