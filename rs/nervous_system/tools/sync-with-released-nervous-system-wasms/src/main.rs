@@ -10,14 +10,16 @@ use ic_nns_constants::{
 };
 use reqwest::Client;
 use serde::Deserialize;
+use sha2::Digest;
 use std::env;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
 
-pub const NNS_CANISTER_NAME_TO_ID: [(&str, CanisterId); 10] = [
+pub const NNS_CANISTER_NAME_TO_ID: [(&str, CanisterId); 11] = [
     ("registry", REGISTRY_CANISTER_ID),
     ("governance", GOVERNANCE_CANISTER_ID),
+    ("governance-canister_test", GOVERNANCE_CANISTER_ID),
     ("ledger", LEDGER_CANISTER_ID),
     ("root", ROOT_CANISTER_ID),
     ("lifeline", LIFELINE_CANISTER_ID),
@@ -45,6 +47,7 @@ const EXTERNAL_CANISTER_NAME_TO_INFO: [(&str, ExternalCanisterInfo); 1] = [(
 
 async fn get_mainnet_canister_git_commit_id_and_module_hash(
     agent: &Agent,
+    canister_name: &str,
     canister_id: CanisterId,
 ) -> Result<(String, String)> {
     use std::fmt::Write;
@@ -59,15 +62,29 @@ async fn get_mainnet_canister_git_commit_id_and_module_hash(
         git_commit_id.pop();
     }
 
-    let module_hash = agent
-        .read_state_canister_info(canister_id, "module_hash")
-        .await?;
-    let module_hash = module_hash.iter().fold(String::new(), |mut output, x| {
+    let module_hash = if canister_name.ends_with("_test") {
+        // we get the module hash of a test canister from AWS
+        let module_url = format!(
+            "https://download.dfinity.systems/ic/{git_commit_id}/canisters/{canister_name}.wasm.gz"
+        );
+        let module_bytes = reqwest::get(module_url)
+            .await?
+            .error_for_status()?
+            .bytes()
+            .await?;
+        sha2::Sha256::digest(&module_bytes).to_vec()
+    } else {
+        // we get the module hash of a production canister from the ICP mainnet
+        agent
+            .read_state_canister_info(canister_id, "module_hash")
+            .await?
+    };
+    let module_hash_str = module_hash.iter().fold(String::new(), |mut output, x| {
         let _ = write!(output, "{:02x}", x);
         output
     });
 
-    Ok((git_commit_id, module_hash))
+    Ok((git_commit_id, module_hash_str))
 }
 
 /// This function fetches the given canister's module hash deployed on the ICP mainnet (based on `canister_id`)
@@ -222,8 +239,12 @@ async fn main() -> Result<()> {
     let mut canister_updates = stream::iter(NNS_CANISTER_NAME_TO_ID.iter())
         .then(|(canister_name, canister_id)| async {
             let canister_name = canister_name.to_string();
-            let (new_git_hash, new_sha256) =
-                get_mainnet_canister_git_commit_id_and_module_hash(&agent, *canister_id).await?;
+            let (new_git_hash, new_sha256) = get_mainnet_canister_git_commit_id_and_module_hash(
+                &agent,
+                &canister_name,
+                *canister_id,
+            )
+            .await?;
             Ok(CanisterUpdate {
                 canister_name,
                 new_git_ref: GitRef::Rev(new_git_hash),
