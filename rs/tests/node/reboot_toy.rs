@@ -26,7 +26,6 @@ fn test(env: TestEnv) {
     let logger = env.logger();
     let topology = env.topology_snapshot();
     let node = topology.root_subnet().nodes().next().unwrap();
-    eprintln!("QQQ Node: {:#?}", &node);
 
     let s = node
         .block_on_ssh_session()
