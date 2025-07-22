@@ -2,6 +2,8 @@
 
 set -e
 
+source /opt/ic/bin/config.sh
+
 copy_ssh_keys() {
     local SOURCE_FILE="$1"
     local DEST_FILE="$2"
@@ -10,6 +12,8 @@ copy_ssh_keys() {
         chmod 600 "${DEST_FILE}"
     fi
 }
+
+ENABLE_TEE=$(get_config_value '.icos_settings.enable_trusted_execution_environment')
 
 for ACCOUNT in backup readonly admin; do
     HOMEDIR=$(getent passwd "${ACCOUNT}" | cut -d: -f6)
@@ -22,7 +26,10 @@ for ACCOUNT in backup readonly admin; do
     HOSTOS_AUTHORIZED_SSH_KEYS="/boot/config/ssh_authorized_keys/${ACCOUNT}"
     AUTHORIZED_KEYS_FILE="${HOMEDIR}/.ssh/authorized_keys"
 
-    copy_ssh_keys "${GUESTOS_AUTHORIZED_SSH_KEYS}" "${AUTHORIZED_KEYS_FILE}"
+    if [ "${ENABLE_TEE}" != "true" ]; then
+        copy_ssh_keys "${GUESTOS_AUTHORIZED_SSH_KEYS}" "${AUTHORIZED_KEYS_FILE}"
+    fi
+
     copy_ssh_keys "${HOSTOS_AUTHORIZED_SSH_KEYS}" "${AUTHORIZED_KEYS_FILE}"
 
     chown -R "${ACCOUNT}:${GROUP}" "${HOMEDIR}"
