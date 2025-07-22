@@ -315,6 +315,18 @@ fn test_fetch_canister_logs_via_inter_canister_query_call() {
             .build_wasm(),
     );
 
+    env.advance_time(Duration::from_secs(1));
+    let timestamp1 = env.time();
+    let _ = env.execute_ingress(canister_b, "test", vec![]);
+    env.advance_time(Duration::from_secs(1));
+
+    let timestamp2 = env.time();
+    let _ = env.execute_ingress(canister_b, "test", vec![]);
+
+    env.advance_time(Duration::from_secs(1));
+    let timestamp3 = env.time();
+    let _ = env.execute_ingress(canister_b, "test", vec![]);
+
     let result = env.execute_ingress(
         canister_a,
         "update",
@@ -328,8 +340,14 @@ fn test_fetch_canister_logs_via_inter_canister_query_call() {
             )
             .build(),
     );
-    let data = FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap();
-    println!("data: {:?}", data);
+    assert_eq!(
+        readable_logs_without_backtraces(result),
+        vec![
+            (0, timestamp1, "message".to_string()),
+            (1, timestamp2, "message".to_string()),
+            (2, timestamp3, "message".to_string()),
+        ]
+    );
 }
 
 #[test]

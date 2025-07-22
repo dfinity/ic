@@ -1,16 +1,15 @@
-use candid::Encode;
 use ic_error_types::{ErrorCode, UserError};
 use ic_management_canister_types_private::{
     FetchCanisterLogsRequest, FetchCanisterLogsResponse, LogVisibilityV2, QueryMethod,
 };
 use ic_replicated_state::ReplicatedState;
-use ic_types::{ingress::WasmResult, PrincipalId};
+use ic_types::PrincipalId;
 
 pub(crate) fn fetch_canister_logs(
     sender: PrincipalId,
     state: &ReplicatedState,
     args: FetchCanisterLogsRequest,
-) -> Result<WasmResult, UserError> {
+) -> Result<FetchCanisterLogsResponse, UserError> {
     let canister_id = args.get_canister_id();
     let canister = state.canister_state(&canister_id).ok_or_else(|| {
         UserError::new(
@@ -34,7 +33,7 @@ pub(crate) fn fetch_canister_logs(
         )),
     }?;
 
-    let response = FetchCanisterLogsResponse {
+    Ok(FetchCanisterLogsResponse {
         canister_log_records: canister
             .system_state
             .canister_log
@@ -42,6 +41,5 @@ pub(crate) fn fetch_canister_logs(
             .iter()
             .cloned()
             .collect(),
-    };
-    Ok(WasmResult::Reply(Encode!(&response).unwrap()))
+    })
 }

@@ -14,6 +14,7 @@ use crate::{
     hypervisor::Hypervisor,
     metrics::{MeasurementScope, QueryHandlerMetrics},
 };
+use candid::Encode;
 use ic_config::execution_environment::Config;
 use ic_config::flag_status::FlagStatus;
 use ic_crypto_tree_hash::{flatmap, Label, LabeledTree, LabeledTree::SubTree};
@@ -201,11 +202,12 @@ impl InternalHttpQueryHandler {
             match QueryMethod::from_str(&query.method_name) {
                 Ok(QueryMethod::FetchCanisterLogs) => {
                     let since = Instant::now(); // Start logging execution time.
-                    let result = fetch_canister_logs(
+                    let response = fetch_canister_logs(
                         query.source(),
                         state.get_ref(),
                         FetchCanisterLogsRequest::decode(&query.method_payload)?,
-                    );
+                    )?;
+                    let result = Ok(WasmResult::Reply(Encode!(&response).unwrap()));
                     self.metrics.observe_subnet_query_message(
                         QueryMethod::FetchCanisterLogs,
                         since.elapsed().as_secs_f64(),

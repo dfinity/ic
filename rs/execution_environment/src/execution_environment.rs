@@ -1,4 +1,5 @@
 use crate::{
+    canister_logs::fetch_canister_logs,
     canister_manager::{
         types::{
             CanisterManagerError, CanisterMgrConfig, DtsInstallCodeResult, InstallCodeContext,
@@ -39,9 +40,9 @@ use ic_management_canister_types_private::{
     CanisterChangeOrigin, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInfoRequest,
     CanisterInfoResponse, CanisterStatusType, ClearChunkStoreArgs, CreateCanisterArgs,
     DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EmptyBlob,
-    InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
-    MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs, Payload as Ic00Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
+    FetchCanisterLogsRequest, InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs,
+    LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs,
+    Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
     ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs, RenameCanisterArgs,
     ReshareChainKeyArgs, SchnorrAlgorithm, SchnorrPublicKeyArgs, SchnorrPublicKeyResponse,
     SetupInitialDKGArgs, SignWithECDSAArgs, SignWithSchnorrArgs, SignWithSchnorrAux,
@@ -1528,11 +1529,25 @@ impl ExecutionEnvironment {
                         )),
                         refund: msg.take_cycles(),
                     },
-                    FlagStatus::Enabled => {
-                        todo!("add implementation");
-                    }
+                    FlagStatus::Enabled => match FetchCanisterLogsRequest::decode(payload) {
+                        Err(err) => ExecuteSubnetMessageResult::Finished {
+                            response: Err(err),
+                            refund: msg.take_cycles(),
+                        },
+                        Ok(args) => match fetch_canister_logs(*msg.sender(), &state, args) {
+                            Err(err) => ExecuteSubnetMessageResult::Finished {
+                                response: Err(err),
+                                refund: msg.take_cycles(),
+                            },
+                            Ok(response) => ExecuteSubnetMessageResult::Finished {
+                                response: Ok((Encode!(&response).unwrap(), None)),
+                                refund: msg.take_cycles(),
+                            },
+                        },
+                    },
                 }
             }
+
             Ok(Ic00Method::TakeCanisterSnapshot) => match TakeCanisterSnapshotArgs::decode(payload)
             {
                 Err(err) => ExecuteSubnetMessageResult::Finished {
