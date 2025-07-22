@@ -166,6 +166,7 @@ use ic_nns_governance_api::Neuron;
 use ic_nns_init::read_initial_mutations_from_local_store_dir;
 use ic_nns_test_utils::{common::NnsInitPayloadsBuilder, itest_helpers::NnsCanisters};
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
+use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
 use ic_protobuf::registry::{
     node::v1 as pb_node,
     replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
@@ -1194,6 +1195,12 @@ pub fn get_malicious_ic_os_img_sha256() -> Result<String> {
     Ok(std::env::var("ENV_DEPS__GUESTOS_MALICIOUS_DISK_IMG_HASH")?)
 }
 
+pub fn get_malicious_ic_os_launch_measurements() -> Result<GuestLaunchMeasurements> {
+    read_guest_launch_measurements(&std::env::var(
+        "ENV_DEPS__GUESTOS_MALICIOUS_LAUNCH_MEASUREMENTS",
+    )?)
+}
+
 pub fn get_ic_os_update_img_url() -> Result<Url> {
     let url = std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_URL")?;
     Ok(Url::parse(&url)?)
@@ -1210,6 +1217,16 @@ pub fn get_ic_os_update_img_test_url() -> Result<Url> {
 
 pub fn get_ic_os_update_img_test_sha256() -> Result<String> {
     Ok(std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_TEST_HASH")?)
+}
+
+pub fn get_ic_os_launch_measurements() -> Result<GuestLaunchMeasurements> {
+    read_guest_launch_measurements(&std::env::var("ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS")?)
+}
+
+pub fn get_ic_os_launch_measurements_test() -> Result<GuestLaunchMeasurements> {
+    read_guest_launch_measurements(&std::env::var(
+        "ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_TEST",
+    )?)
 }
 
 pub fn get_malicious_ic_os_update_img_url() -> Result<Url> {
@@ -1270,6 +1287,10 @@ pub fn get_empty_disk_img_url() -> Result<Url> {
 
 pub fn get_empty_disk_img_sha256() -> Result<String> {
     Ok(std::env::var("ENV_DEPS__EMPTY_DISK_IMG_HASH")?)
+}
+
+fn read_guest_launch_measurements(json: &str) -> Result<GuestLaunchMeasurements> {
+    serde_json::from_str(json).context("Could not deserialize guest launch measurements")
 }
 
 pub const FETCH_SHA256SUMS_RETRY_TIMEOUT: Duration = Duration::from_secs(120);

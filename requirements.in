@@ -25,6 +25,7 @@ pytest
 pytest-cov
 PyYAML>=6.0.2
 requests>=2.26.0
+sev-snp-measure
 simple-parsing
 tqdm
 uuid

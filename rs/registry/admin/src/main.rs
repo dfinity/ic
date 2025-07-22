@@ -69,6 +69,7 @@ use ic_nns_governance_api::{
 use ic_nns_handler_root::root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot};
 use ic_nns_init::make_hsm_sender;
 use ic_nns_test_utils::governance::{HardResetNnsRootToVersionPayload, UpgradeRootProposal};
+use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
 use ic_protobuf::registry::{
     api_boundary_node::v1::ApiBoundaryNodeRecord,
     crypto::v1::{PublicKey, X509PublicKeyCert},
@@ -191,7 +192,8 @@ const IC_DOMAINS: &[&str; 3] = &["ic0.app", "icp0.io", "icp-api.io"];
 #[derive(Parser)]
 #[clap(version = "1.0")]
 struct Opts {
-    #[clap(short = 'r', long, aliases = &["registry-url", "nns-url"], value_delimiter = ',', global = true, default_value = "https://ic0.app")]
+    #[clap(short = 'r', long, aliases = &["registry-url", "nns-url"], value_delimiter = ',', global = true, default_value = "https://ic0.app"
+    )]
     /// The URL of an NNS entry point. That is, the URL of any replica on the
     /// NNS subnet.
     nns_urls: Vec<Url>,
@@ -949,6 +951,24 @@ struct ProposeToReviseElectedGuestsOsVersionsCmd {
     #[clap(long, num_args(1..), visible_alias = "replica-versions-to-unelect")]
     /// The GuestOS version ids to remove.
     pub guestos_versions_to_unelect: Vec<String>,
+
+    // TODO: populate this arg in clients and make it required
+    #[clap(long)]
+    /// Path to the json containing the guest launch measurements
+    /// (schema: registry.replica_version.v1.GuestLaunchMeasurements)
+    pub guest_launch_measurements_path: Option<PathBuf>,
+}
+
+impl ProposeToReviseElectedGuestsOsVersionsCmd {
+    /// Reads and returns the SEV-SNP measurements from the input file.
+    fn read_guest_launch_measurements(&self) -> Option<GuestLaunchMeasurements> {
+        self.guest_launch_measurements_path.as_ref().map(|path| {
+            let guest_launch_measurements_json =
+                std::fs::read(path).unwrap_or_else(|_| panic!("Failed to read {}", path.display()));
+            serde_json::from_slice::<GuestLaunchMeasurements>(&guest_launch_measurements_json)
+                .expect("Could not decode GuestLaunchMeasurements")
+        })
+    }
 }
 
 impl ProposalTitle for ProposeToReviseElectedGuestsOsVersionsCmd {
@@ -972,7 +992,7 @@ impl ProposalPayload<ReviseElectedGuestosVersionsPayload>
             replica_version_to_elect: self.guestos_version_to_elect.clone(),
             release_package_sha256_hex: self.release_package_sha256_hex.clone(),
             release_package_urls: self.release_package_urls.clone(),
-            guest_launch_measurement_sha256_hex: None,
+            guest_launch_measurements: self.read_guest_launch_measurements(),
             replica_versions_to_unelect: self.guestos_versions_to_unelect.clone(),
         };
         payload.validate().expect("Failed to validate payload");
@@ -6190,12 +6210,12 @@ impl GovernanceCanisterClient {
             }))),
             id: Some((*self.0.proposal_author()).into()),
         })
-        .map_err(|e| {
-            format!(
-                "Cannot candid-serialize the submit_add_or_remove_node_provider_proposal payload: {}",
-                e
-            )
-        })?;
+            .map_err(|e| {
+                format!(
+                    "Cannot candid-serialize the submit_add_or_remove_node_provider_proposal payload: {}",
+                    e
+                )
+            })?;
         let response = self
             .0
             .execute_update("manage_neuron", serialized)

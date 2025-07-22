@@ -120,12 +120,15 @@ pub fn test_upgrade(env: TestEnv) {
     // Bless branch version
     let sha256 = get_ic_os_update_img_test_sha256().unwrap();
     let upgrade_url = get_ic_os_update_img_test_url().unwrap();
+    let guest_launch_measurements =
+        get_ic_os_launch_measurements_test().expect("Failed to get guest launch measurements");
     block_on(bless_replica_version(
         &nns_node,
         &original_branch_version,
         UpdateImageType::ImageTest,
         &log,
         &sha256,
+        guest_launch_measurements,
         vec![upgrade_url.to_string()],
     ));
     info!(log, "TARGET_VERSION: {}", branch_version);
