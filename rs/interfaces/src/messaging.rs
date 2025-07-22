@@ -168,7 +168,7 @@ impl std::fmt::Display for IngressInductionError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             IngressInductionError::CanisterNotFound(canister_id) => {
-                write!(f, "Canister {} not found", canister_id)
+                write!(f, "Canister {} not found BLA6", canister_id)
             }
             IngressInductionError::CanisterStopped(canister_id) => {
                 write!(f, "Canister {} is stopped", canister_id)

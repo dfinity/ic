@@ -401,6 +401,78 @@ fn test_fetch_canister_logs_via_composite_query_call() {
     );
 }
 
+/*
+bazel test //rs/execution_environment:execution_environment_misc_integration_tests/canister_logging_test \
+  --test_output=streamed \
+  --test_arg=--nocapture \
+  --test_arg=test_fetch_canister_logs_via_composite_query_call_inter_canister_calls_enabled
+
+*/
+#[ignore]
+#[test]
+fn test_fetch_canister_logs_via_composite_query_call_inter_canister_calls_enabled() {
+    // Test that fetch_canister_logs API is not accessible via composite query call.
+    // There are 3 actors with the following controller relatioship: user -> canister_a -> canister_b.
+    // The user uses composite_query to canister_a to fetch logs of canister_b, which should fail.
+    //let (env, canister_a, user) = setup_with_controller(UNIVERSAL_CANISTER_WASM.to_vec());
+
+    let user = PrincipalId::new_user_test_id(42);
+    let env = setup_env_with(FlagStatus::Enabled);
+    let canister_a = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_visibility(LogVisibilityV2::Controllers)
+            .with_controllers(vec![user])
+            .build(),
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+    );
+
+    // Create canister_b controlled by canister_a.
+    let canister_b = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_controllers(vec![canister_a.get()])
+            .build(),
+        wat_canister()
+            .update("test", wat_fn().debug_print(b"message"))
+            .build_wasm(),
+    );
+    // Record some logs in canister_b.
+    let _ = env.execute_ingress(canister_b, "test", vec![]);
+
+    // User attempts to fetch logs of canister_b via canister_a.
+    let actual_result = env.query_as(
+        user,
+        canister_a,
+        "composite_query",
+        wasm()
+            .call_simple(
+                CanisterId::ic_00(),
+                "fetch_canister_logs",
+                call_args()
+                    .other_side(FetchCanisterLogsRequest::new(canister_b).encode())
+                    .on_reject(wasm().reject_message().reject()),
+            )
+            .build(),
+    );
+
+    println!("ABC user: {user:?}");
+    println!("ABC canister_a: {canister_a:?}");
+    println!("ABC canister_b: {canister_b:?}");
+
+    // This is expected to fail, because fetch_canister_logs is not accessible via composite query.
+    let error = actual_result.unwrap_err();
+    assert_eq!(error.code(), ErrorCode::CanisterDidNotReply);
+    // TODO(EXC-1655): fix reject response propagation.
+    let expected_error_message = "did not produce a response";
+    assert!(
+        error.description().contains(expected_error_message),
+        "Expected: {}\nActual: {}",
+        expected_error_message,
+        error.description()
+    );
+}
+
 #[test]
 fn test_log_visibility_of_fetch_canister_logs() {
     // Test combinations of log_visibility and sender for fetch_canister_logs API call.

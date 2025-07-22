@@ -193,6 +193,7 @@ impl<'a> QueryContext<'a> {
         measurement_scope: &MeasurementScope<'b>,
     ) -> Result<WasmResult, UserError> {
         let canister_id = query.receiver;
+        println!("ABC run");
         let old_canister = self.state.get_ref().get_active_canister(&canister_id)?;
         let call_origin = CallOrigin::Query(query.source().into());
 
@@ -810,6 +811,7 @@ impl<'a> QueryContext<'a> {
         // Add the canister to the set of evaluated canisters early, i.e. before any errors.
         self.add_evaluated_canister_stats(canister_id, &QueryStats::default());
 
+        println!("ABC handle_request");
         let canister = match self.state.get_ref().get_active_canister(&canister_id) {
             Ok(canister) => canister,
             Err(err) => {

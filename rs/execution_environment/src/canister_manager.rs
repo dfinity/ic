@@ -196,7 +196,7 @@ impl CanisterManager {
                     Some(canister_id) => {
                         let canister = state.canister_state(&canister_id).ok_or_else(|| UserError::new(
                             ErrorCode::CanisterNotFound,
-                            format!("Canister {} not found", canister_id),
+                            format!("Canister {} not found BLA2", canister_id),
                         ))?;
                         match canister.controllers().contains(&sender.get()) {
                             true => Ok(()),
