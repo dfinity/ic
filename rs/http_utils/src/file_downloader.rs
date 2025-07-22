@@ -30,22 +30,22 @@ pub struct FileDownloader {
 }
 
 macro_rules! maybe_log {
-    ($self:expr, $level:expr, $($arg:tt)+) => {
-        if let Some(logger) = $self.logger.as_ref() {
+    ($logger:expr, $level:expr, $($arg:tt)+) => {
+        if let Some(logger) = $logger.as_ref() {
             log!(logger, $level, $($arg)+);
         }
     };
 }
 
 macro_rules! maybe_info {
-    ($self:expr, $($arg:tt)+) => {
-        maybe_log!($self, Level::Info, $($arg)+);
+    ($logger:expr, $($arg:tt)+) => {
+        maybe_log!($logger, Level::Info, $($arg)+);
     };
 }
 
 macro_rules! maybe_warn {
-    ($self:expr, $($arg:tt)+) => {
-        maybe_log!($self, Level::Warning, $($arg)+);
+    ($logger:expr, $($arg:tt)+) => {
+        maybe_log!($logger, Level::Warning, $($arg)+);
     };
 }
 
