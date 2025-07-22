@@ -296,7 +296,7 @@ impl std::fmt::Display for StateError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             StateError::CanisterNotFound(canister_id) => {
-                write!(f, "Canister {} not found BLA7", canister_id)
+                write!(f, "Canister {} not found", canister_id)
             }
             StateError::CanisterStopped(canister_id) => {
                 write!(f, "Canister {} is stopped", canister_id)
@@ -635,10 +635,13 @@ impl ReplicatedState {
         canister_id: &CanisterId,
     ) -> Result<&CanisterState, UserError> {
         let canister = self.canister_state(canister_id).ok_or_else(|| {
-            println!("ABC register canister not found BLA8: {}", canister_id);
+            println!(
+                "ABC register canister not found in get_active_canister: {}",
+                canister_id
+            );
             UserError::new(
                 ErrorCode::CanisterNotFound,
-                format!("Canister {} not found BLA8", canister_id),
+                format!("Canister {} not found in get_active_canister", canister_id),
             )
         })?;
 

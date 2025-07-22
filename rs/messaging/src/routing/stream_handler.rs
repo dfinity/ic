@@ -1113,7 +1113,7 @@ fn generate_reject_response_for(reason: RejectReason, request: &Request) -> Requ
         ),
         RejectReason::CanisterNotFound => (
             RejectCode::DestinationInvalid,
-            format!("Canister {} not found BLA5", request.receiver),
+            format!("Canister {} not found", request.receiver),
         ),
         RejectReason::CanisterStopped => (
             RejectCode::CanisterError,

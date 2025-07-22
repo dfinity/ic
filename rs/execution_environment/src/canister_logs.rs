@@ -16,7 +16,7 @@ pub(crate) fn fetch_canister_logs(
     let canister = state.canister_state(&canister_id).ok_or_else(|| {
         UserError::new(
             ErrorCode::CanisterNotFound,
-            format!("Canister {canister_id} not found BLA1"),
+            format!("Canister {canister_id} not found"),
         )
     })?;
 

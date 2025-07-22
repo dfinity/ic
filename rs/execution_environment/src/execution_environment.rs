@@ -2831,7 +2831,7 @@ impl ExecutionEnvironment {
                 Some(canister) => Ok(canister),
                 None => Err(UserError::new(
                     ErrorCode::CanisterNotFound,
-                    format!("Canister {} not found BLA3", canister_id),
+                    format!("Canister {} not found", canister_id),
                 )),
             }
         };
