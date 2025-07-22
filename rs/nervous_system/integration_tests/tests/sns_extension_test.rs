@@ -141,8 +141,8 @@ async fn test_treasury_manager() {
         ledger_fee_decimals: Nat::from(ICP_FEE),
     };
 
-    let initial_icp_balance_e8s = 64_999_999_990_000;
-    let initial_sns_balance_e8s = 40_000_000_000;
+    let initial_icp_balance_e8s = 650_000 * E8 - ICP_FEE;
+    let initial_sns_balance_e8s = 400 * E8;
 
     validate_treasury_balances(
         "Before registering KongSwapAdaptor",
@@ -153,6 +153,9 @@ async fn test_treasury_manager() {
     )
     .await
     .unwrap();
+
+    let treasury_allocation_icp_e8s = 150 * E8 + 2 * ICP_FEE;
+    let treasury_allocation_sns_e8s = 350 * E8 + 2 * SNS_FEE;
 
     let adaptor_canister_id = {
         let (neuron_id, sender) = sns::governance::find_neuron_with_majority_voting_power(
@@ -184,8 +187,8 @@ async fn test_treasury_manager() {
                 wasm_path,
                 proposal_url: Url::try_from("https://example.com").unwrap(),
                 summary: "Register KongSwap Adaptor".to_string(),
-                treasury_allocation_icp_e8s: Some(150 * E8 + 2 * ICP_FEE),
-                treasury_allocation_sns_e8s: Some(350 * E8 + 2 * SNS_FEE),
+                treasury_allocation_icp_e8s: Some(treasury_allocation_icp_e8s),
+                treasury_allocation_sns_e8s: Some(treasury_allocation_sns_e8s),
             },
             &agent,
         )
@@ -227,7 +230,11 @@ async fn test_treasury_manager() {
             },
             format!("KongSwapAdaptor({})", adaptor_canister_id),
         )
-        .with_fee_collector(None, None);
+        .with_external_custodian(None, None)
+        .with_fee_collector(None, None)
+        .with_payees(None, None)
+        .with_payers(None, None)
+        .with_suspense(None);
 
     let empty_icp_balance_book = BalanceBook::empty()
         .with_treasury_owner(treasury_icp_account, "DAO Treasury".to_string())
@@ -238,7 +245,11 @@ async fn test_treasury_manager() {
             },
             format!("KongSwapAdaptor({})", adaptor_canister_id),
         )
-        .with_fee_collector(None, None);
+        .with_external_custodian(None, None)
+        .with_fee_collector(None, None)
+        .with_payees(None, None)
+        .with_payers(None, None)
+        .with_suspense(None);
 
     for _ in 0..100 {
         pocket_ic.tick().await;
@@ -266,13 +277,6 @@ async fn test_treasury_manager() {
         println!(">>> Balances: {:#?}", response);
     }
 
-    {
-        let request = AuditTrailRequest {};
-        let response = pocket_ic.call(adaptor_canister_id, request).await.unwrap();
-
-        println!(">>> AuditTrail: {:#?}", response);
-    }
-
     // Wait for the KongSwap Adaptor to be ready for the next operation.
     //
     // This shoudl be less than 1 hour to avoid hitting the next periodic task.
@@ -297,17 +301,24 @@ async fn test_treasury_manager() {
             .unwrap()
             .unwrap();
 
+        {
+            let request = AuditTrailRequest {};
+            let response = pocket_ic.call(adaptor_canister_id, request).await.unwrap();
+
+            println!(">>> AuditTrail: {:#?}", response);
+        }
+
         assert_eq!(
             response.asset_to_balances,
             Some(btreemap! {
                 sns_token => empty_sns_balance_book
                     .clone()
-                    .treasury_owner(initial_sns_balance_e8s - 5 * SNS_FEE)
-                    .fee_collector(5 * SNS_FEE),
+                    .treasury_owner(treasury_allocation_sns_e8s - 4 * SNS_FEE)
+                    .fee_collector(4 * SNS_FEE),
                 icp_token => empty_icp_balance_book
                     .clone()
-                    .treasury_owner(initial_icp_balance_e8s - 5 * ICP_FEE)
-                    .fee_collector(5 * ICP_FEE),
+                    .treasury_owner(treasury_allocation_icp_e8s - 4 * ICP_FEE)
+                    .fee_collector(4 * ICP_FEE),
 
             }),
         );
