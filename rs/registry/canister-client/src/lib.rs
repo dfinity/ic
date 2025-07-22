@@ -21,7 +21,7 @@ pub use stable_memory::{RegistryDataStableMemory, StorableRegistryKey, StorableR
 /// method to retrieve the "timestamp" that a version was first added to the local
 /// canister.
 #[async_trait]
-pub trait CanisterRegistryClient: Send + Sync {
+pub trait CanisterRegistryClient {
     /// The following holds:
     ///
     /// (1) ∀ k: get_value(k, get_latest_version()).is_ok()
@@ -89,12 +89,6 @@ pub trait CanisterRegistryClient: Send + Sync {
         version: RegistryVersion,
     ) -> Result<Vec<(String, Vec<u8>)>, RegistryClientError>;
 
-    fn get_key_family_entries_before_timestamp(
-        &self,
-        key_prefix: &str,
-        timestamp: &UnixTsNanos,
-    ) -> BTreeMap<(String, UnixTsNanos, RegistryVersion), Option<Vec<u8>>>;
-
     /// Returns a particular value for a key at a given version.
     fn get_value(&self, key: &str, version: RegistryVersion) -> RegistryClientResult<Vec<u8>> {
         self.get_versioned_value(key, version).map(|vr| vr.value)
@@ -110,16 +104,29 @@ pub trait CanisterRegistryClient: Send + Sync {
     /// the local registry data will not be in sync with the data in the Registry canister.
     async fn sync_registry_stored(&self) -> Result<RegistryVersion, String>;
 
-    /// Returns a map of timestamps to registry versions, where the keys are the timestamps
-    /// when the versions were first added to the registry.
-    fn timestamp_to_versions_map(&self) -> BTreeMap<u64, HashSet<RegistryVersion>>;
+    /// Returns a map from timestamps in nanoseconds to a set of `RegistryVersion`s.
+    /// Each key represents the timestamps when the registry versions have been added,
+    /// and the associated value is the set of all registry versions introduced at that timestamp.
+    fn timestamp_to_versions_map(&self) -> BTreeMap<UnixTsNanos, HashSet<RegistryVersion>>;
+
+    fn with_registry_map<R>(
+        &self,
+        callback: impl for<'b> FnOnce(Box<dyn Iterator<Item = RegistryRecord> + 'b>) -> R,
+    ) -> R;
 }
+
+pub type RegistryRecord = (
+    String,          // Key
+    RegistryVersion, // Version
+    UnixTsNanos,     // Timestamp when the version was added
+    Option<Vec<u8>>, // Value
+);
 
 // Helpers
 
 /// Get the decoded value of a key from the registry.
-pub fn get_decoded_value<T: prost::Message + Default>(
-    registry_client: &dyn CanisterRegistryClient,
+pub fn get_decoded_value<T: prost::Message + Default, S: CanisterRegistryClient>(
+    registry_client: &S,
     key: &str,
     version: RegistryVersion,
 ) -> RegistryClientResult<T> {

@@ -63,11 +63,7 @@ system_test_nns(
     env = {
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
-    tags = [
-        "long_testasdfasdf",
-        "manual",
-    ],
+    tags = ["manual"],  # not meant to be run on CI
     test_timeout = "eternal",
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +

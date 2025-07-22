@@ -350,6 +350,7 @@ pub mod registry_client_error {
 
     proptest_strategy_for_enum!(RegistryClientError;
         VersionNotAvailable => {version in arb_registry_version()},
+        NoVersionsBefore => {timestamp_nanoseconds in any::<u64>()},
         DataProviderQueryFailed => {source in  arb_registry_data_provider_error()},
         PollLockFailed => {error in ".*"},
         PollingLatestVersionFailed => {retries in any::<usize>()},

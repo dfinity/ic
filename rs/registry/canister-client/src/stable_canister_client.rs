@@ -1,6 +1,4 @@
-use crate::stable_memory::{
-    RegistryDataStableMemory, StorableRegistryKey, StorableRegistryValue, UnixTsNanos,
-};
+use crate::stable_memory::{RegistryDataStableMemory, StorableRegistryKey, StorableRegistryValue};
 use crate::CanisterRegistryClient;
 use async_trait::async_trait;
 use ic_cdk::println;
@@ -184,28 +182,6 @@ impl<S: RegistryDataStableMemory> CanisterRegistryClient for StableCanisterRegis
         self.get_key_family_base(key_prefix, version, Box::new(|k, v| (k, v.unwrap())))
     }
 
-    fn get_key_family_entries_before_timestamp(
-        &self,
-        key_prefix: &str,
-        timestamp: &UnixTsNanos,
-    ) -> BTreeMap<(String, UnixTsNanos, RegistryVersion), Option<Vec<u8>>> {
-        let start_range = StorableRegistryKey {
-            key: key_prefix.to_string(),
-            ..Default::default()
-        };
-
-        S::with_registry_map(|map| {
-            map.range(start_range..)
-                .filter(|(k, _)| k.timestamp_nanoseconds <= *timestamp)
-                .take_while(|(k, _)| k.key.starts_with(key_prefix))
-                .map(|(k, v)| {
-                    let version = RegistryVersion::from(k.version);
-                    ((k.key, k.timestamp_nanoseconds, version), v.0)
-                })
-                .collect::<BTreeMap<_, _>>()
-        })
-    }
-
     fn get_value(&self, key: &str, version: RegistryVersion) -> RegistryClientResult<Vec<u8>> {
         self.get_versioned_value(key, version).map(|vr| vr.value)
     }
@@ -267,6 +243,23 @@ impl<S: RegistryDataStableMemory> CanisterRegistryClient for StableCanisterRegis
 
     fn timestamp_to_versions_map(&self) -> BTreeMap<u64, HashSet<RegistryVersion>> {
         self.timestamp_to_versions_map.read().unwrap().clone()
+    }
+
+    fn with_registry_map<R>(
+        &self,
+        callback: impl for<'b> FnOnce(Box<dyn Iterator<Item = crate::RegistryRecord> + 'b>) -> R,
+    ) -> R {
+        S::with_registry_map(|registry| {
+            let result = Box::new(registry.iter().map(|(k, v)| {
+                (
+                    k.key,
+                    RegistryVersion::from(k.version),
+                    k.timestamp_nanoseconds,
+                    v.0,
+                )
+            }));
+            callback(result)
+        })
     }
 }
 

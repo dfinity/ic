@@ -141,7 +141,6 @@ impl CanisterManager {
             | Ok(Ic00Method::ECDSAPublicKey)
             | Ok(Ic00Method::SetupInitialDKG)
             | Ok(Ic00Method::SignWithECDSA)
-            | Ok(Ic00Method::ComputeInitialIDkgDealings)
             | Ok(Ic00Method::ReshareChainKey)
             | Ok(Ic00Method::SchnorrPublicKey)
             | Ok(Ic00Method::SignWithSchnorr)
@@ -740,18 +739,18 @@ impl CanisterManager {
             Some(canister) => canister,
         };
 
-        let result = match validate_controller(canister, stop_context.sender()) {
-            Err(err) => StopCanisterResult::Failure {
+        if let Err(err) = validate_controller(canister, stop_context.sender()) {
+            return StopCanisterResult::Failure {
                 error: err,
                 cycles_to_return: stop_context.take_cycles(),
-            },
+            };
+        }
 
-            Ok(()) => match canister.system_state.begin_stopping(stop_context) {
-                Some(mut stop_context) => StopCanisterResult::AlreadyStopped {
-                    cycles_to_return: stop_context.take_cycles(),
-                },
-                None => StopCanisterResult::RequestAccepted,
+        let result = match canister.system_state.begin_stopping(stop_context) {
+            Some(mut stop_context) => StopCanisterResult::AlreadyStopped {
+                cycles_to_return: stop_context.take_cycles(),
             },
+            None => StopCanisterResult::RequestAccepted,
         };
         canister.system_state.canister_version += 1;
         result
