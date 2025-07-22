@@ -1529,6 +1529,13 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "wasmparser",
                 ],
             ),
+            "wasm-smith": crate.spec(
+                version = "^0.233.0",
+                default_features = False,
+                features = [
+                    "wasmparser",
+                ],
+            ),
             "wasmparser": crate.spec(
                 version = "^0.233.0",
             ),

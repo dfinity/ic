@@ -1,5 +1,5 @@
 {
-  "checksum": "d547c429b3b3bfddefc143b24c9fded10912b50b4cf75cc15c72f53ac6dce413",
+  "checksum": "82b9dc1b062e2f10c65f9e6226ef253310ebe9b68e9e3e55c7c6d387b030097b",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -2666,7 +2666,23 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": {
+          "common": [
+            "derive",
+            "derive_arbitrary"
+          ],
+          "selects": {}
+        },
         "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "derive_arbitrary 1.4.1",
+              "target": "derive_arbitrary"
+            }
+          ],
+          "selects": {}
+        },
         "version": "1.4.1"
       },
       "license": "MIT OR Apache-2.0",
@@ -19854,6 +19870,62 @@
       ],
       "license_file": "LICENSE"
     },
+    "derive_arbitrary 1.4.1": {
+      "name": "derive_arbitrary",
+      "version": "1.4.1",
+      "package_url": "https://github.com/rust-fuzz/arbitrary",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/derive_arbitrary/1.4.1/download",
+          "sha256": "30542c1ad912e0e3d22a1935c290e12e8a29d704a420177a31faad4a601a0800"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "derive_arbitrary",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "derive_arbitrary",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro2 1.0.95",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.40",
+              "target": "quote"
+            },
+            {
+              "id": "syn 2.0.101",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "1.4.1"
+      },
+      "license": "MIT/Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "derive_more 0.99.17": {
       "name": "derive_more",
       "version": "0.99.17",
@@ -21756,6 +21828,10 @@
             {
               "id": "wasm-encoder 0.233.0",
               "target": "wasm_encoder"
+            },
+            {
+              "id": "wasm-smith 0.233.0",
+              "target": "wasm_smith"
             },
             {
               "id": "wasmparser 0.233.0",
@@ -85712,6 +85788,76 @@
       ],
       "license_file": null
     },
+    "wasm-smith 0.233.0": {
+      "name": "wasm-smith",
+      "version": "0.233.0",
+      "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasm-smith",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/wasm-smith/0.233.0/download",
+          "sha256": "2820810ea8e870fd5ae956750b457e0997099c806e4747d0abc4d5e608c4e59f"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "wasm_smith",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "wasm_smith",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "wasmparser"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "anyhow 1.0.98",
+              "target": "anyhow"
+            },
+            {
+              "id": "arbitrary 1.4.1",
+              "target": "arbitrary"
+            },
+            {
+              "id": "flagset 0.4.4",
+              "target": "flagset"
+            },
+            {
+              "id": "wasm-encoder 0.233.0",
+              "target": "wasm_encoder"
+            },
+            {
+              "id": "wasmparser 0.233.0",
+              "target": "wasmparser"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.233.0"
+      },
+      "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
     "wasm-streams 0.4.0": {
       "name": "wasm-streams",
       "version": "0.4.0",
@@ -93981,6 +94127,7 @@
     "warp 0.3.7",
     "wasm-bindgen 0.2.100",
     "wasm-encoder 0.233.0",
+    "wasm-smith 0.233.0",
     "wasmparser 0.233.0",
     "wasmprinter 0.233.0",
     "wasmtime 34.0.1",
