@@ -155,7 +155,7 @@ fn create_network_info(
             &ipv6_config.gateway.to_string(),
         )?),
         Ipv6Config::Unknown => {
-            anyhow::bail!("Unknown Ipv6Config variant");
+            bail!("Unknown Ipv6Config variant");
         }
     };
 
