@@ -72,7 +72,8 @@ pub enum GuestVMType {
     Default,
     /// The Guest VM brought up temporarily during the GuestOS upgrade process.
     Upgrade,
-    /// Unknown variant fallback for forward compatibility with future versions.
+    /// Unknown variant fallback for forward compatibility with future version
+    /// (used in case a newer HostOS sends a value that an older GuestOS does not understand)
     #[serde(other)]
     Unknown,
 }
@@ -268,7 +269,8 @@ pub enum Ipv6Config {
     Deterministic(DeterministicIpv6Config),
     Fixed(FixedIpv6Config),
     RouterAdvertisement,
-    /// Unknown variant for forward compatibility with future versions.
+    /// Unknown variant for forward compatibility with future versions
+    /// (used in case a newer HostOS sends a value that an older GuestOS does not understand)
     #[serde(other)]
     Unknown,
 }
