@@ -27,7 +27,7 @@ use registry_canister::{
     },
 };
 
-const MOCK_HASH: &str = "d1bc8d3ba4afc7e109612cb73acbdddac052c93025aa1f82942edabb7deb82a1";
+const MOCK_HASH: &str = "098c8d3ba4afc7e109612cb73acbdddac052c93025aa1f82942edabb7deb82a0";
 
 #[test]
 fn test_the_anonymous_user_cannot_elect_a_version() {
@@ -166,6 +166,12 @@ fn test_accepted_proposal_mutates_the_registry() {
             ic_nns_constants::GOVERNANCE_CANISTER_ID
         );
 
+        let value = get_value_or_panic::<BlessedReplicaVersions>(
+            &registry,
+            make_blessed_replica_versions_key().as_bytes(),
+        )
+        .await;
+
         // We can bless a new version, the version already in the registry is 42
         let payload_v43 = ReviseElectedGuestosVersionsPayload {
             replica_version_to_elect: Some("version_43".into()),
@@ -219,7 +225,7 @@ fn test_accepted_proposal_mutates_the_registry() {
         assert_eq!(
             get_value_or_panic::<ReplicaVersionRecord>(
                 &registry,
-                make_replica_version_key(ReplicaVersion::default()).as_bytes()
+                make_replica_version_key("version_43".to_string()).as_bytes()
             )
             .await,
             ReplicaVersionRecord {
