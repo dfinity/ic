@@ -9,26 +9,21 @@ on:
 
 jobs:
   build-and-release:
-    runs-on: ubuntu-latest
+    runs-on:
+      labels: dind-large
 
     steps:
-      - name: Checkout repo
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Bazel
-        uses: bazelbuild/setup-bazelisk@v2
-
-      - name: Build canscan with Bazel
-        run: |
-          bazel build //canscan:canscan
-          mkdir -p dist
-          cp bazel-bin/canscan/canscan dist/canscan
+      - name: Build canscan
+        run: bazel build //packages/canscan:canscan
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ github.event.inputs.version }}
-          name: "Canscan ${{ github.event.inputs.version }}"
-          files: dist/canscan
+          tag_name: canscan-${{ github.event.inputs.version }}
+          name: "canscan-${{ github.event.inputs.version }}"
+          files: bazel-bin/packages/canscan/canscan
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
