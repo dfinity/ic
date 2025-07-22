@@ -12,6 +12,7 @@ use ic_node_rewards_canister_api::monthly_rewards::{
 };
 use ic_registry_canister_client::CanisterRegistryClient;
 use ic_registry_canister_client::StableCanisterRegistryClient;
+use rewards_calculation::types::RewardPeriod;
 use std::cell::RefCell;
 use std::sync::Arc;
 use std::time::Duration;

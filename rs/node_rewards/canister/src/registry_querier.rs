@@ -5,7 +5,9 @@ use ic_protobuf::registry::node::v1::{NodeRecord, NodeRewardType};
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_protobuf::registry::node_rewards::v2::NodeRewardsTable;
 use ic_protobuf::registry::subnet::v1::SubnetListRecord;
-use ic_registry_canister_client::{get_decoded_value, CanisterRegistryClient};
+use ic_registry_canister_client::{
+    get_decoded_value, CanisterRegistryClient, CanisterRegistryClientExt, RegistryDataStableMemory,
+};
 use ic_registry_keys::{
     make_data_center_record_key, make_node_operator_record_key, make_subnet_list_record_key,
     NODE_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY,
@@ -19,6 +21,7 @@ use rewards_calculation::types::{
 use std::collections::{BTreeMap, BTreeSet};
 use std::str::FromStr;
 use std::sync::Arc;
+use std::thread::LocalKey;
 
 pub struct RegistryQuerier {
     registry_client: Arc<dyn CanisterRegistryClient>,
@@ -66,7 +69,10 @@ impl RegistryQuerier {
             })
             .unwrap_or_default()
     }
+}
 
+// Exposed API Methods
+impl RegistryQuerier {
     /// Computes the set of rewardable nodes, grouped by node provider, for the given range of UTC days.
     ///
     /// A node is considered rewardable on a specific UTC day if it exists in the registry on that day.
@@ -74,12 +80,13 @@ impl RegistryQuerier {
     ///
     /// Nodes without a specified `node_reward_type` are excluded from the rewardable set.
     pub fn get_rewardable_nodes_per_provider(
-        &self,
+        client: &'static LocalKey<Arc<impl CanisterRegistryClientExt>>,
         reward_period: RewardPeriod,
     ) -> Result<BTreeMap<PrincipalId, ProviderRewardableNodes>, RegistryClientError> {
         let mut rewardable_nodes_per_provider: BTreeMap<_, ProviderRewardableNodes> =
             BTreeMap::new();
-        let nodes_in_range = self.nodes_in_registry_between(reward_period.from, reward_period.to);
+        let nodes_in_range =
+            Self::nodes_in_registry_between(client, reward_period.from, reward_period.to);
 
         for (node_id, (node_record, latest_version, rewardable_days)) in nodes_in_range {
             let node_operator_id: PrincipalId = node_record
@@ -92,7 +99,7 @@ impl RegistryQuerier {
                 dc_id,
                 region,
                 ..
-            }) = self.node_operator_data(node_operator_id, latest_version)?
+            }) = Self::node_operator_data(client, node_operator_id, latest_version)?
             else {
                 ic_cdk::println!("Node {} has no NodeOperatorData: skipping", node_id);
                 continue;
@@ -144,98 +151,91 @@ impl RegistryQuerier {
     /// - the corresponding `RegistryVersion`,
     /// - the sorted list of `DayUTC`s the node is in the registry.
     fn nodes_in_registry_between(
-        &self,
+        store: &'static LocalKey<Arc<impl CanisterRegistryClientExt>>,
         day_start: DayUTC,
         day_end: DayUTC,
     ) -> BTreeMap<NodeId, (NodeRecord, RegistryVersion, Vec<DayUTC>)> {
         let start_ts = day_start.unix_ts_at_day_start();
         let end_ts = day_end.unix_ts_at_day_end();
         let prefix_length = NODE_RECORD_KEY_PREFIX.len();
+        let c = store.with(|c| c.clone());
 
-        let version = self
-            .registry_client
-            .timestamp_to_versions_map()
-            .range(..=end_ts)
-            .next_back()
-            .map(|(_, versions)| versions.iter().max().cloned().expect("No versions found"))
-            .unwrap_or_default();
+        c.with_registry_map(|registry_map| {
+            registry_map
+                .into_iter()
+                .filter(|(key, _, ts, _)| ts <= &end_ts && key.starts_with(NODE_RECORD_KEY_PREFIX))
+                .group_by(|(node_key, _, _, _)| node_key.clone())
+                .into_iter()
+                .filter_map(|(node_key, node_mutations)| {
+                    let mut days = BTreeSet::new();
+                    let mut last_present_ts: Option<UnixTsNanos> = None;
+                    let mut latest_value: Option<Vec<u8>> = None;
+                    let mut latest_version: RegistryVersion = RegistryVersion::default();
 
-        // Fetch all mutations for NodeRecord keys within the specified time range
-        // and group them by node key to iterate over each node's history.
-        self.registry_client
-            .get_registry_mutations(&NODE_RECORD_KEY_PREFIX, version)
-            .unwrap()
-            .into_iter()
-            .group_by(|(node_key, _, _, _)| node_key.clone())
-            .into_iter()
-            .filter_map(|(node_key, node_mutations)| {
-                let mut days = BTreeSet::new();
-                let mut last_present_ts: Option<UnixTsNanos> = None;
-                let mut latest_value: Option<Vec<u8>> = None;
-                let mut latest_version: RegistryVersion = RegistryVersion::default();
-
-                // Process node's mutations history.
-                for (_, version, ts, maybe_value) in node_mutations {
-                    if maybe_value.is_some() {
-                        // A creation or update
-                        latest_value = maybe_value;
-                        latest_version = version;
-                        if last_present_ts.is_none() {
-                            // Node was absent, now it's present.
-                            // If it became present before the window, track it from the start.
-                            // Otherwise, track it from the actual timestamp.
-                            last_present_ts = Some(ts.max(start_ts));
-                        }
-                    } else {
-                        // A deletion
-                        if let Some(start_of_interval) = last_present_ts.take() {
-                            // The node was present and is now gone. Finalize the interval.
-                            let days_between =
-                                DayUTC::from(start_of_interval).days_until(&DayUTC::from(ts));
-                            days.extend(days_between.unwrap_or_default());
+                    // Process node's mutations history.
+                    for (_, version, ts, maybe_value) in node_mutations {
+                        if maybe_value.is_some() {
+                            // A creation or update
+                            latest_value = maybe_value;
+                            latest_version = version;
+                            if last_present_ts.is_none() {
+                                // Node was absent, now it's present.
+                                // If it became present before the window, track it from the start.
+                                // Otherwise, track it from the actual timestamp.
+                                last_present_ts = Some(ts.max(start_ts));
+                            }
+                        } else {
+                            // A deletion
+                            if let Some(start_of_interval) = last_present_ts.take() {
+                                // The node was present and is now gone. Finalize the interval.
+                                let days_between =
+                                    DayUTC::from(start_of_interval).days_until(&DayUTC::from(ts));
+                                days.extend(days_between.unwrap_or_default());
+                            }
                         }
                     }
-                }
 
-                // After all mutations, if the node is still present, finalize the last interval.
-                if let Some(start_of_interval) = last_present_ts {
-                    let days_between =
-                        DayUTC::from(start_of_interval).days_until(&DayUTC::from(end_ts));
-                    days.extend(days_between.unwrap_or_default());
-                }
-
-                // If the node was present at any time and we have its record, decode and return it.
-                if !days.is_empty() {
-                    if let Some(final_value) = latest_value {
-                        let principal = PrincipalId::from_str(&node_key[prefix_length..])
-                            .expect("Invalid node key");
-                        let node_id = NodeId::from(principal);
-                        let node_record = NodeRecord::decode(final_value.as_slice())
-                            .expect("Failed to decode NodeRecord");
-
-                        return Some((
-                            node_id,
-                            (
-                                node_record,
-                                latest_version,
-                                days.into_iter().sorted().collect(),
-                            ),
-                        ));
+                    // After all mutations, if the node is still present, finalize the last interval.
+                    if let Some(start_of_interval) = last_present_ts {
+                        let days_between =
+                            DayUTC::from(start_of_interval).days_until(&DayUTC::from(end_ts));
+                        days.extend(days_between.unwrap_or_default());
                     }
-                }
-                None
-            })
-            .collect()
+
+                    // If the node was present at any time and we have its record, decode and return it.
+                    if !days.is_empty() {
+                        if let Some(final_value) = latest_value {
+                            let principal = PrincipalId::from_str(&node_key[prefix_length..])
+                                .expect("Invalid node key");
+                            let node_id = NodeId::from(principal);
+                            let node_record = NodeRecord::decode(final_value.as_slice())
+                                .expect("Failed to decode NodeRecord");
+
+                            return Some((
+                                node_id,
+                                (
+                                    node_record,
+                                    latest_version,
+                                    days.into_iter().sorted().collect(),
+                                ),
+                            ));
+                        }
+                    }
+                    None
+                })
+                .collect()
+        })
     }
 
     fn node_operator_data(
-        &self,
+        client: &'static LocalKey<Arc<impl CanisterRegistryClientExt>>,
         node_operator: PrincipalId,
         version: RegistryVersion,
     ) -> Result<Option<NodeOperatorData>, RegistryClientError> {
         let node_operator_record_key = make_node_operator_record_key(node_operator);
+        let client = client.with(|c| c.clone());
         let Some(node_operator_record) = get_decoded_value::<NodeOperatorRecord>(
-            &*self.registry_client,
+            &*client,
             node_operator_record_key.as_str(),
             version,
         )
@@ -247,14 +247,11 @@ impl RegistryQuerier {
         };
 
         let data_center_key = make_data_center_record_key(node_operator_record.dc_id.as_str());
-        let Some(data_center_record) = get_decoded_value::<DataCenterRecord>(
-            &*self.registry_client,
-            data_center_key.as_str(),
-            version,
-        )
-        .map_err(|e| RegistryClientError::DecodeError {
-            error: format!("Failed to decode DataCenterRecord: {}", e),
-        })?
+        let Some(data_center_record) =
+            get_decoded_value::<DataCenterRecord>(&*client, data_center_key.as_str(), version)
+                .map_err(|e| RegistryClientError::DecodeError {
+                    error: format!("Failed to decode DataCenterRecord: {}", e),
+                })?
         else {
             return Ok(None);
         };
