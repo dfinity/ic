@@ -219,7 +219,7 @@ fn test_accepted_proposal_mutates_the_registry() {
         assert_eq!(
             get_value_or_panic::<ReplicaVersionRecord>(
                 &registry,
-                make_replica_version_key("version_43".to_string()).as_bytes()
+                make_replica_version_key("version_43").as_bytes()
             )
             .await,
             ReplicaVersionRecord {
