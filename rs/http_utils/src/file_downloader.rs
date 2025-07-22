@@ -49,6 +49,11 @@ macro_rules! maybe_info {
 }
 
 macro_rules! maybe_warn {
+    (every_n_seconds => $seconds:expr, $logger:expr, $($arg:tt)+) => {
+        if let Some(logger) = $logger.as_ref() {
+            warn!(every_n_seconds => $seconds, logger, $($arg)+);
+        }
+    };
     ($logger:expr, $($arg:tt)+) => {
         maybe_log!($logger, Level::Warning, $($arg)+);
     };
