@@ -20,9 +20,6 @@ def image_deps(mode, malicious = False):
       A dict containing inputs to build this image.
     """
 
-    # Create a local copy of component_files for potential modification
-    local_component_files = dict(component_files)
-
     deps = {
         "base_dockerfile": "//ic-os/guestos/context:Dockerfile.base",
         "dockerfile": "//ic-os/guestos/context:Dockerfile",
@@ -64,7 +61,7 @@ def image_deps(mode, malicious = False):
 
         # Set various configuration values
         "container_context_files": Label("//ic-os/guestos/context:context-files"),
-        "component_files": local_component_files,
+        "component_files": dict(component_files),
         "partition_table": Label("//ic-os/guestos:partitions.csv"),
         "expanded_size": "50G",
         "rootfs_size": "3G",
@@ -108,21 +105,19 @@ def image_deps(mode, malicious = False):
     # Update recovery component_files
     # Service files and SELinux policies must be added to components instead of rootfs so that they are processed by the Dockerfile
     if mode in ["recovery", "recovery-dev"]:
-        local_component_files.update({
+        deps["component_files"].update({
             Label("//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.service"): "/etc/systemd/system/guestos-recovery-engine.service",
             Label("//ic-os/components:selinux/guestos-recovery-engine/guestos-recovery-engine.fc"): "/prep/guestos-recovery-engine/guestos-recovery-engine.fc",
             Label("//ic-os/components:selinux/guestos-recovery-engine/guestos-recovery-engine.te"): "/prep/guestos-recovery-engine/guestos-recovery-engine.te",
         })
 
         if mode == "recovery":
-            local_component_files.update({
+            deps["component_files"].update({
                 Label("//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.sh"): "/opt/ic/bin/guestos-recovery-engine.sh",
             })
         elif mode == "recovery-dev":
-            local_component_files.update({
+            deps["component_files"].update({
                 Label("//ic-os/guestos/envs/recovery-dev:recovery_archive_guestos-recovery-engine.sh"): "/opt/ic/bin/guestos-recovery-engine.sh",
             })
-
-    deps["component_files"] = local_component_files
 
     return deps
