@@ -48,6 +48,7 @@ rust_library(
         "@crate_index//:tempfile",
         "@crate_index//:tokio",
         "@crate_index//:wasm-encoder",
+        "@crate_index//:wasm-smith",
         "@crate_index//:wasmparser",
         "@crate_index//:wasmtime",
     ],
