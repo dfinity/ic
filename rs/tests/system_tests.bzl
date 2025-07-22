@@ -302,6 +302,13 @@ def system_test(
     if use_empty_image:
         icos_images["ENV_DEPS__EMPTY_DISK_IMG"] = "//rs/tests/nested:empty-disk-img.tar.zst"
 
+    # Always add vector runtime and environment variables
+    env["VECTOR_VM_PATH"] = "$(rootpath //rs/tests:vector_with_log_fetcher_image)"
+
+    # Make runtime_deps mutable
+    runtime_deps = list(runtime_deps)
+    runtime_deps.append("//rs/tests:vector_with_log_fetcher_image")
+
     run_system_test(
         name = name,
         src = test_driver_target,
