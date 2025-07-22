@@ -43,7 +43,7 @@ use ic_system_test_driver::driver::ic::{
 };
 use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
 use ic_system_test_driver::driver::test_env::TestEnv;
-use ic_system_test_driver::driver::vector_vm::VectorVm;
+use ic_system_test_driver::driver::vector_vm::{HasVectorTargets, VectorVm};
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
@@ -56,8 +56,6 @@ pub fn setup(env: TestEnv) {
     PrometheusVm::default()
         .start(&env)
         .expect("failed to start prometheus VM");
-    let mut vector_vm = VectorVm::new();
-    vector_vm.start(&env).expect("Failed to start Vector VM");
 
     InternetComputer::new()
         .add_subnet(
@@ -72,7 +70,5 @@ pub fn setup(env: TestEnv) {
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
     env.sync_with_prometheus();
-    vector_vm
-        .sync_targets(&env)
-        .expect("Failed to sync Vector targets");
+    env.sync_with_vector().unwrap();
 }

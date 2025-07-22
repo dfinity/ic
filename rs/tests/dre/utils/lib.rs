@@ -6,7 +6,7 @@ use ic_system_test_driver::driver::{
     prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
     test_env_api::{HasTopologySnapshot, NnsCustomizations},
-    vector_vm::VectorVm,
+    vector_vm::HasVectorTargets,
 };
 use serde::Deserialize;
 use slog::info;
@@ -23,8 +23,6 @@ pub const IC_CONFIG: &str = "IC_CONFIG";
 
 pub fn setup(env: TestEnv, config: IcConfig) {
     let mut ic = InternetComputer::new();
-    let mut vector_vm = VectorVm::new();
-    vector_vm.start(&env).expect("Failed to start Vector VM");
 
     if let Some(v) = config.initial_version {
         ic = ic.with_initial_replica(NodeSoftwareVersion {
@@ -90,9 +88,7 @@ pub fn setup(env: TestEnv, config: IcConfig) {
     );
 
     env.sync_with_prometheus();
-    vector_vm
-        .sync_targets(&env)
-        .expect("Failed to sync Vector targets");
+    env.sync_with_vector().unwrap();
 }
 
 fn update_env_variables(env: &TestEnv, pairs: Vec<(String, &str)>) {

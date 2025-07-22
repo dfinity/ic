@@ -296,7 +296,7 @@ impl HasVectorTargets for TestEnv {
         }
 
         // For all targets add an IC label
-        let infra_group_name = GroupSetup::read_attribute(&self).infra_group_name;
+        let infra_group_name = GroupSetup::read_attribute(self).infra_group_name;
         for transform in transforms.values_mut() {
             transform
                 .labels
@@ -359,11 +359,10 @@ impl HasVectorTargets for TestEnv {
         }
 
         info!(log, "Issuing command to run vector container.");
-        deployed_vm
-            .block_on_bash_script_from_session(
-                &session,
-                &format!(
-                    r#"
+        if let Err(e) = deployed_vm.block_on_bash_script_from_session(
+            &session,
+            &format!(
+                r#"
 docker run -d --name vector \
     -v /etc/vector/config:/etc/vector/config \
     --network host \
@@ -373,9 +372,11 @@ docker run -d --name vector \
     vector-with-log-fetcher:image \
     -w --config-dir /etc/vector/config
         "#,
-                ),
-            )
-            .expect("Failed to start docker container for vector");
+            ),
+        ) {
+            warn!(log, "Failed to run vector container due to: {:?}", e);
+            return Ok(());
+        }
         emit_kibana_url_event(&log, &infra_group_name);
 
         info!(log, "Vector targets sync complete.");

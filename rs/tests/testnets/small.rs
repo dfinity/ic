@@ -45,7 +45,7 @@ use ic_system_test_driver::driver::{
     prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
     test_env_api::{HasTopologySnapshot, NnsCustomizations},
-    vector_vm::VectorVm,
+    vector_vm::VectorVm::HasVectorTargets,
 };
 
 fn main() -> Result<()> {
