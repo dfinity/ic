@@ -65,4 +65,3 @@ def generate_dummy_recovery_archive(name):
             "//rs:system-tests-pkg",
         ],
     )
-
