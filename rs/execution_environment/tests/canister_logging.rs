@@ -12,7 +12,7 @@ use ic_state_machine_tests::{
     ErrorCode, StateMachine, StateMachineBuilder, StateMachineConfig, SubmitIngressError, UserError,
 };
 use ic_test_utilities::universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
-use ic_test_utilities_execution_environment::{get_reply, wat_canister, wat_fn};
+use ic_test_utilities_execution_environment::{get_reject, get_reply, wat_canister, wat_fn};
 use ic_test_utilities_metrics::{fetch_histogram_stats, fetch_histogram_vec_stats, labels};
 use ic_types::{
     ingress::WasmResult, CanisterId, Cycles, NumInstructions, MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE,
@@ -73,7 +73,7 @@ fn readable_logs_without_backtraces(
         .collect()
 }
 
-fn setup_env() -> StateMachine {
+fn setup_env_with(replicated_query_inter_canister_log_fetch: FlagStatus) -> StateMachine {
     let subnet_type = SubnetType::Application;
     let mut subnet_config = SubnetConfig::new(subnet_type);
     subnet_config.scheduler_config.max_instructions_per_round = MAX_INSTRUCTIONS_PER_ROUND;
@@ -82,7 +82,7 @@ fn setup_env() -> StateMachine {
     let config = StateMachineConfig::new(
         subnet_config,
         ExecutionConfig {
-            replicated_query_inter_canister_log_fetch: FlagStatus::Disabled, // TODO: remove debug code.
+            replicated_query_inter_canister_log_fetch,
             ..Default::default()
         },
     );
@@ -91,6 +91,10 @@ fn setup_env() -> StateMachine {
         .with_subnet_type(subnet_type)
         .with_checkpoints_enabled(false)
         .build()
+}
+
+fn setup_env() -> StateMachine {
+    setup_env_with(FlagStatus::Disabled)
 }
 
 fn create_canister(env: &StateMachine, settings: CanisterSettingsArgs) -> CanisterId {
@@ -243,32 +247,28 @@ fn test_metrics_for_fetch_canister_logs_via_query_call() {
 }
 
 #[test]
-fn test_fetch_canister_logs_via_composite_query_call() {
-    // Test that fetch_canister_logs API is not accessible via composite query call.
-    // There are 3 actors with the following controller relatioship: user -> canister_a -> canister_b.
-    // The user uses composite_query to canister_a to fetch logs of canister_b, which should fail.
-    let (env, canister_a, user) = setup_with_controller(UNIVERSAL_CANISTER_WASM.to_vec());
-
-    // Create canister_b controlled by canister_a.
+fn test_fetch_canister_logs_via_inter_canister_query_call() {
+    let env = setup_env();
+    let canister_a = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new().build(),
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+    );
     let canister_b = create_and_install_canister(
         &env,
         CanisterSettingsArgsBuilder::new()
-            .with_controllers(vec![canister_a.get()])
+            .with_log_visibility(LogVisibilityV2::Public)
             .build(),
         wat_canister()
             .update("test", wat_fn().debug_print(b"message"))
             .build_wasm(),
     );
-
-    let _ = env.execute_ingress(canister_b, "test", vec![]);
-    let _ = env.execute_ingress(canister_b, "test", vec![]);
+    // Record some logs in canister_b.
     let _ = env.execute_ingress(canister_b, "test", vec![]);
 
-    // User attempts to fetch logs of canister_b via canister_a.
-    let actual_result = env.query_as(
-        user,
+    let result = env.execute_ingress(
         canister_a,
-        "composite_query",
+        "update",
         wasm()
             .call_simple(
                 CanisterId::ic_00(),
@@ -279,17 +279,14 @@ fn test_fetch_canister_logs_via_composite_query_call() {
             )
             .build(),
     );
-
-    // This is expected to fail, because fetch_canister_logs is not accessible via composite query.
-    let error = actual_result.unwrap_err();
-    assert_eq!(error.code(), ErrorCode::CanisterDidNotReply);
-    // TODO(EXC-1655): fix reject response propagation.
-    let expected_error_message = "did not produce a response";
+    let reject_message = get_reject(result);
+    let expected_message =
+        "fetch_canister_logs API is only accessible to end users in non-replicated mode";
     assert!(
-        error.description().contains(expected_error_message),
+        reject_message.contains(expected_message),
         "Expected: {}\nActual: {}",
-        expected_error_message,
-        error.description()
+        expected_message,
+        reject_message
     );
 }
 
@@ -303,7 +300,7 @@ bazel test //rs/execution_environment:execution_environment_misc_integration_tes
 
 #[ignore]
 #[test]
-fn test_fetch_canister_logs_via_inter_canister_query_call() {
+fn test_fetch_canister_logs_via_inter_canister_query_call_enabled() {
     let env = setup_env();
     let canister_a = create_and_install_canister(
         &env,
@@ -352,6 +349,55 @@ fn test_fetch_canister_logs_via_inter_canister_query_call() {
             (1, timestamp2, "message".to_string()),
             (2, timestamp3, "message".to_string()),
         ]
+    );
+}
+
+#[test]
+fn test_fetch_canister_logs_via_composite_query_call() {
+    // Test that fetch_canister_logs API is not accessible via composite query call.
+    // There are 3 actors with the following controller relatioship: user -> canister_a -> canister_b.
+    // The user uses composite_query to canister_a to fetch logs of canister_b, which should fail.
+    let (env, canister_a, user) = setup_with_controller(UNIVERSAL_CANISTER_WASM.to_vec());
+
+    // Create canister_b controlled by canister_a.
+    let canister_b = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_controllers(vec![canister_a.get()])
+            .build(),
+        wat_canister()
+            .update("test", wat_fn().debug_print(b"message"))
+            .build_wasm(),
+    );
+    // Record some logs in canister_b.
+    let _ = env.execute_ingress(canister_b, "test", vec![]);
+
+    // User attempts to fetch logs of canister_b via canister_a.
+    let actual_result = env.query_as(
+        user,
+        canister_a,
+        "composite_query",
+        wasm()
+            .call_simple(
+                CanisterId::ic_00(),
+                "fetch_canister_logs",
+                call_args()
+                    .other_side(FetchCanisterLogsRequest::new(canister_b).encode())
+                    .on_reject(wasm().reject_message().reject()),
+            )
+            .build(),
+    );
+
+    // This is expected to fail, because fetch_canister_logs is not accessible via composite query.
+    let error = actual_result.unwrap_err();
+    assert_eq!(error.code(), ErrorCode::CanisterDidNotReply);
+    // TODO(EXC-1655): fix reject response propagation.
+    let expected_error_message = "did not produce a response";
+    assert!(
+        error.description().contains(expected_error_message),
+        "Expected: {}\nActual: {}",
+        expected_error_message,
+        error.description()
     );
 }
 

@@ -2504,12 +2504,19 @@ impl ExecutionTestBuilder {
 pub fn get_reply(result: Result<WasmResult, UserError>) -> Vec<u8> {
     match result {
         Ok(WasmResult::Reply(data)) => data,
-        Ok(WasmResult::Reject(error)) => {
-            unreachable!("Expected reply, got: {:?}", error);
+        Ok(WasmResult::Reject(message)) => {
+            unreachable!("Expected reply, got reject: {:?}", message)
         }
-        Err(error) => {
-            unreachable!("Expected reply, got: {:?}", error);
-        }
+
+        Err(error) => unreachable!("Expected reply, got: {:?}", error),
+    }
+}
+
+pub fn get_reject(result: Result<WasmResult, UserError>) -> String {
+    match result {
+        Ok(WasmResult::Reply(data)) => unreachable!("Expected reject, got reply: {:?}", data),
+        Ok(WasmResult::Reject(message)) => message,
+        Err(error) => unreachable!("Expected reply, got error: {:?}", error),
     }
 }
 
