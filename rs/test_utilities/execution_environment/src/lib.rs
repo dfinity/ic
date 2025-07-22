@@ -2500,23 +2500,23 @@ impl ExecutionTestBuilder {
     }
 }
 
-/// A helper to extract the reply from an execution result.
+/// Extracts the reply data from a successful Wasm execution result.
+/// Panics if the result is a reject or an error.
 pub fn get_reply(result: Result<WasmResult, UserError>) -> Vec<u8> {
     match result {
         Ok(WasmResult::Reply(data)) => data,
-        Ok(WasmResult::Reject(message)) => {
-            unreachable!("Expected reply, got reject: {:?}", message)
-        }
-
-        Err(error) => unreachable!("Expected reply, got: {:?}", error),
+        Ok(WasmResult::Reject(msg)) => unreachable!("Expected reply, got reject: {}", msg),
+        Err(err) => unreachable!("Expected reply, got error: {:?}", err),
     }
 }
 
+/// Extracts the reject message from a failed Wasm execution result.
+/// Panics if the result is a successful reply or an error.
 pub fn get_reject(result: Result<WasmResult, UserError>) -> String {
     match result {
+        Ok(WasmResult::Reject(msg)) => msg,
         Ok(WasmResult::Reply(data)) => unreachable!("Expected reject, got reply: {:?}", data),
-        Ok(WasmResult::Reject(message)) => message,
-        Err(error) => unreachable!("Expected reply, got error: {:?}", error),
+        Err(err) => unreachable!("Expected reject, got error: {:?}", err),
     }
 }
 
