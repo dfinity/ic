@@ -181,6 +181,7 @@ pub fn test(env: TestEnv) {
                 .map(|res| Decode!(&res, CreateCanisterResult).unwrap())
                 .unwrap();
             let new_uni_can = UniversalCanister::new(&agent, new_canister_id.into()).await;
+            // this universal canister has no cycles, but can execute this message, and use memory
             new_uni_can
                 .update(wasm().stable_grow(1).reply())
                 .await
