@@ -277,7 +277,7 @@ impl FileDownloader {
                 .map_err(|e| FileDownloadError::file_write_error(file_path, e))?;
         }
         maybe_info!(
-            self,
+            self.logger,
             "Streamed {} chunks totalling {} bytes to file {:?}.",
             chunks_cnt,
             chunks_total_len,
