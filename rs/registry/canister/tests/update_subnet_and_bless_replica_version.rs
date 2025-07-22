@@ -166,12 +166,6 @@ fn test_accepted_proposal_mutates_the_registry() {
             ic_nns_constants::GOVERNANCE_CANISTER_ID
         );
 
-        let value = get_value_or_panic::<BlessedReplicaVersions>(
-            &registry,
-            make_blessed_replica_versions_key().as_bytes(),
-        )
-        .await;
-
         // We can bless a new version, the version already in the registry is 42
         let payload_v43 = ReviseElectedGuestosVersionsPayload {
             replica_version_to_elect: Some("version_43".into()),
