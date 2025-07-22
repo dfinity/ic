@@ -300,8 +300,9 @@ pub fn test_no_upgrade_without_chain_keys_local(env: TestEnv) {
 fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     let logger = env.logger();
 
-    let master_version = env.get_initial_replica_version().unwrap();
-    info!(logger, "IC_VERSION_ID: {master_version:?}");
+    let initial_version = get_guestos_img_version().unwrap();
+    let initial_version = ReplicaVersion::try_from(initial_version).unwrap();
+    info!(logger, "IC_VERSION_ID: {initial_version:?}");
     let topology_snapshot = env.topology_snapshot();
 
     // Choose a node from the nns subnet
@@ -349,7 +350,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
                 &nns_canister,
                 source_subnet_id,
                 cfg.subnet_size,
-                master_version.clone(),
+                initial_version.clone(),
                 key_ids.clone(),
                 &logger,
             )
@@ -417,7 +418,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     let recovery_args = RecoveryArgs {
         dir: recovery_dir,
         nns_url: nns_node.get_public_url(),
-        replica_version: Some(master_version.clone()),
+        replica_version: Some(initial_version.clone()),
         key_file: Some(ssh_authorized_priv_keys_dir.join(SSH_USERNAME)),
         test_mode: true,
         skip_prompts: true,
@@ -442,9 +443,9 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
 
     let version_is_broken = cfg.upgrade && unassigned_nodes_ids.is_empty();
     let working_version = if version_is_broken {
-        format!("{}-test", master_version)
+        get_guestos_update_img_version().unwrap()
     } else {
-        master_version.to_string()
+        initial_version.to_string()
     };
 
     let subnet_args = AppSubnetRecoveryArgs {
@@ -452,8 +453,8 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         subnet_id,
         upgrade_version: version_is_broken
             .then(|| ReplicaVersion::try_from(working_version.clone()).unwrap()),
-        upgrade_image_url: get_ic_os_update_img_test_url().ok(),
-        upgrade_image_hash: get_ic_os_update_img_test_sha256().ok(),
+        upgrade_image_url: get_guestos_update_img_url().ok(),
+        upgrade_image_hash: get_guestos_update_img_sha256(&env).ok(),
         replacement_nodes: Some(unassigned_nodes_ids.clone()),
         replay_until_height: None, // We will set this after breaking/halting the subnet, see below
         // If the latest CUP is corrupted we can't deploy read-only access
