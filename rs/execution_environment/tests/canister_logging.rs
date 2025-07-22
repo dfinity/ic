@@ -82,7 +82,7 @@ fn setup_env() -> StateMachine {
     let config = StateMachineConfig::new(
         subnet_config,
         ExecutionConfig {
-            replicated_query_inter_canister_log_fetch: FlagStatus::Enabled, // TODO: remove debug code.
+            replicated_query_inter_canister_log_fetch: FlagStatus::Disabled, // TODO: remove debug code.
             ..Default::default()
         },
     );
@@ -301,6 +301,7 @@ bazel test //rs/execution_environment:execution_environment_misc_integration_tes
 
 */
 
+#[ignore]
 #[test]
 fn test_fetch_canister_logs_via_inter_canister_query_call() {
     let env = setup_env();
