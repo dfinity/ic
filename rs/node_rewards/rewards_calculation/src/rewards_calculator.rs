@@ -3,7 +3,7 @@ use crate::rewards_calculator_results::{
     RewardCalculatorError, RewardsCalculatorResults, XDRPermyriad,
 };
 use crate::types::{
-    NodeMetricsDailyRaw, ProviderRewardableNodes, Region, RewardPeriod, SubnetMetricsDailyKey,
+    NodeMetricsDailyRaw, Region, RewardPeriod, RewardableNode, SubnetMetricsDailyKey,
 };
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_protobuf::registry::node::v1::NodeRewardType;
@@ -20,7 +20,7 @@ pub struct RewardsCalculatorInput {
     pub reward_period: RewardPeriod,
     pub rewards_table: NodeRewardsTable,
     pub daily_metrics_by_subnet: HashMap<SubnetMetricsDailyKey, Vec<NodeMetricsDailyRaw>>,
-    pub rewardable_nodes: Vec<ProviderRewardableNodes>,
+    pub provider_rewardable_nodes: BTreeMap<PrincipalId, Vec<RewardableNode>>,
 }
 
 fn validate_input(input: &RewardsCalculatorInput) -> Result<(), RewardCalculatorError> {
@@ -96,17 +96,20 @@ const FULL_REWARDS_MACHINES_LIMIT: usize = 4;
 /// 30.4375 = 2629800 / 86400
 const REWARDS_TABLE_DAYS: Decimal = dec!(30.4375);
 
-fn avg(values: &[Decimal]) -> Decimal {
-    values.iter().sum::<Decimal>() / Decimal::from(values.len().max(1))
+fn avg(values: &[Decimal]) -> Option<Decimal> {
+    if values.is_empty() {
+        None
+    } else {
+        Some(values.iter().sum::<Decimal>() / Decimal::from(values.len()))
+    }
 }
-
 type RewardsCoefficientPercent = Decimal;
 type RegionKey = String;
 
 #[derive(Default, Clone)]
 struct IntermediateResults {
-    original_nodes_fr: BTreeMap<(DayUTC, NodeId), Percent>,
     subnets_fr: BTreeMap<(DayUTC, SubnetId), Percent>,
+    original_nodes_fr: BTreeMap<(DayUTC, NodeId), Percent>,
     relative_nodes_fr: BTreeMap<(DayUTC, NodeId), Percent>,
     extrapolated_fr: BTreeMap<(PrincipalId, DayUTC), Percent>,
     reward_reduction: BTreeMap<(DayUTC, NodeId), Percent>,
@@ -140,27 +143,55 @@ impl RewardsCalculatorPipeline<Initialized> {
     }
 }
 
-/// Calculates the daily failure rate for each node in each subnet and for the subnet itself.
+/// Calculates the daily failure rate original/relative for each rewardable node in each subnet and for the subnet itself.
+///
 /// - The failure rate for a node is calculated as the ratio of blocks failed to total blocks.
 /// - The failure rate for a subnet is calculated as the 'SUBNET_FAILURE_RATE_PERCENTILE' of the failure rates of its nodes.
+/// - The relative failure rate for a node is calculated as the difference between its original failure rate and the subnet's failure rate.
 impl RewardsCalculatorPipeline<ComputeSubnetsNodesFR> {
-    pub(crate) fn next(mut self) -> RewardsCalculatorPipeline<ComputeProvidersExtrapolatedFR> {
-        fn calculate_daily_node_fr(num_blocks_proposed: u64, num_blocks_failed: u64) -> Decimal {
-            let total_blocks = Decimal::from(num_blocks_proposed + num_blocks_failed);
-            if total_blocks == Decimal::ZERO {
-                Decimal::ZERO
-            } else {
-                let num_blocks_failed = Decimal::from(num_blocks_failed);
-                num_blocks_failed / total_blocks
+    fn calculate_daily_node_fr(num_blocks_proposed: u64, num_blocks_failed: u64) -> Decimal {
+        let total_blocks = Decimal::from(num_blocks_proposed + num_blocks_failed);
+        if total_blocks == Decimal::ZERO {
+            Decimal::ZERO
+        } else {
+            let num_blocks_failed = Decimal::from(num_blocks_failed);
+            num_blocks_failed / total_blocks
+        }
+    }
+
+    fn calculate_daily_subnet_fr(nodes_fr: &[Decimal]) -> Decimal {
+        let failure_rates = nodes_fr.iter().sorted().collect::<Vec<_>>();
+        let index = ((nodes_fr.len() as f64) * SUBNET_FAILURE_RATE_PERCENTILE).ceil() as usize - 1;
+        *failure_rates[index]
+    }
+
+    fn insert_rewardable_nodes_fr(
+        intermediate_results: &mut IntermediateResults,
+        rewardable_nodes: &HashSet<NodeId>,
+        original_nodes_fr: &BTreeMap<(DayUTC, NodeId), Decimal>,
+        subnet_fr: Decimal,
+    ) {
+        for ((day, node_id), original_fr) in original_nodes_fr {
+            if rewardable_nodes.contains(node_id) {
+                let original_fr = *original_fr;
+                let relative_fr = max(Decimal::ZERO, original_fr - subnet_fr);
+                intermediate_results
+                    .original_nodes_fr
+                    .insert((day.clone(), *node_id), original_fr);
+                intermediate_results
+                    .relative_nodes_fr
+                    .insert((day.clone(), *node_id), relative_fr);
             }
         }
+    }
 
-        fn calculate_daily_subnet_fr(nodes_fr: &[Decimal]) -> Decimal {
-            let failure_rates = nodes_fr.iter().sorted().collect::<Vec<_>>();
-            let index =
-                ((nodes_fr.len() as f64) * SUBNET_FAILURE_RATE_PERCENTILE).ceil() as usize - 1;
-            *failure_rates[index]
-        }
+    pub(crate) fn next(mut self) -> RewardsCalculatorPipeline<ComputeProvidersExtrapolatedFR> {
+        let all_rewardable_nodes = self
+            .input
+            .provider_rewardable_nodes
+            .values()
+            .flat_map(|nodes| nodes.iter().map(|node| node.node_id))
+            .collect::<HashSet<_>>();
 
         for (SubnetMetricsDailyKey { subnet_id, day }, subnet_nodes_metrics) in
             &self.input.daily_metrics_by_subnet
@@ -168,7 +199,7 @@ impl RewardsCalculatorPipeline<ComputeSubnetsNodesFR> {
             let original_nodes_fr = subnet_nodes_metrics
                 .iter()
                 .map(|metrics| {
-                    let original_fr = calculate_daily_node_fr(
+                    let original_fr = Self::calculate_daily_node_fr(
                         metrics.num_blocks_proposed,
                         metrics.num_blocks_failed,
                     );
@@ -176,27 +207,20 @@ impl RewardsCalculatorPipeline<ComputeSubnetsNodesFR> {
                 })
                 .collect::<BTreeMap<_, _>>();
 
-            let subnet_fr = calculate_daily_subnet_fr(
+            let subnet_fr = Self::calculate_daily_subnet_fr(
                 original_nodes_fr.values().cloned().collect_vec().as_slice(),
             );
 
-            let relative_nodes_fr = original_nodes_fr
-                .iter()
-                .map(|(key, original_fr)| {
-                    let relative_fr = max(Decimal::ZERO, *original_fr - subnet_fr);
-                    (key.clone(), relative_fr)
-                })
-                .collect::<BTreeMap<_, _>>();
-
-            self.intermediate_results
-                .original_nodes_fr
-                .extend(original_nodes_fr);
             self.intermediate_results
                 .subnets_fr
                 .insert((day.clone(), subnet_id.clone()), subnet_fr);
-            self.intermediate_results
-                .relative_nodes_fr
-                .extend(relative_nodes_fr);
+
+            Self::insert_rewardable_nodes_fr(
+                &mut self.intermediate_results,
+                &all_rewardable_nodes,
+                &original_nodes_fr,
+                subnet_fr,
+            );
         }
 
         RewardsCalculatorPipeline::transition(self)
@@ -209,35 +233,35 @@ impl RewardsCalculatorPipeline<ComputeSubnetsNodesFR> {
 /// for that day of the nodes of the node provider.
 impl RewardsCalculatorPipeline<ComputeProvidersExtrapolatedFR> {
     pub fn next(mut self) -> RewardsCalculatorPipeline<ComputeNodesPerformanceMultiplier> {
-        for ProviderRewardableNodes {
-            provider_id,
-            rewardable_nodes,
-        } in &self.input.rewardable_nodes
-        {
-            let provider_nodes = rewardable_nodes
-                .iter()
-                .map(|node| node.node_id)
-                .collect::<HashSet<_>>();
+        for (provider_id, rewardable_nodes) in &self.input.provider_rewardable_nodes {
+            let node_ids: HashSet<_> = rewardable_nodes.iter().map(|n| n.node_id).collect();
 
-            let provider_extrapolated_fr = self
-                .intermediate_results
-                .relative_nodes_fr
-                .iter()
-                .filter(|((_, node_id), _)| !provider_nodes.contains(node_id))
-                .map(|((day, _), relative_node_fr)| (day.clone(), *relative_node_fr))
-                .into_group_map()
-                .into_iter()
-                .map(|(day, relative_nodes_fr)| {
-                    (
-                        (provider_id.clone(), day),
-                        avg(relative_nodes_fr.as_slice()),
-                    )
-                })
-                .collect::<BTreeMap<(PrincipalId, DayUTC), Decimal>>();
+            // Collect all relative FRs for this provider's nodes
+            let mut grouped_fr: BTreeMap<DayUTC, Vec<Decimal>> = BTreeMap::new();
+            for ((day, node_id), relative_fr) in &self.intermediate_results.relative_nodes_fr {
+                if node_ids.contains(node_id) {
+                    grouped_fr
+                        .entry(day.clone())
+                        .or_default()
+                        .push(*relative_fr);
+                }
+            }
 
-            self.intermediate_results
-                .extrapolated_fr
-                .extend(provider_extrapolated_fr);
+            // Include all rewardable days even if there was no data
+            let all_rewardable_days: HashSet<DayUTC> = rewardable_nodes
+                .iter()
+                .flat_map(|n| n.rewardable_days.clone())
+                .collect();
+
+            for day in all_rewardable_days {
+                let frs = grouped_fr.remove(&day).unwrap_or_default();
+
+                // If there are no relative FRs for this day, the extrapolated FR is set to 0.
+                let avg_fr = avg(&frs).unwrap_or_default();
+                self.intermediate_results
+                    .extrapolated_fr
+                    .insert((provider_id.clone(), day), avg_fr);
+            }
         }
 
         RewardsCalculatorPipeline::transition(self)
@@ -259,11 +283,7 @@ impl RewardsCalculatorPipeline<ComputeNodesPerformanceMultiplier> {
             }
         }
 
-        for ProviderRewardableNodes {
-            provider_id,
-            rewardable_nodes,
-        } in &self.input.rewardable_nodes
-        {
+        for (provider_id, rewardable_nodes) in &self.input.provider_rewardable_nodes {
             for node in rewardable_nodes {
                 for day in &node.rewardable_days {
                     let daily_fr_used;
@@ -275,16 +295,13 @@ impl RewardsCalculatorPipeline<ComputeNodesPerformanceMultiplier> {
                     {
                         // If the node is assigned on this day, use the relative failure rate for that day.
                         daily_fr_used = *relative_fr;
-                    } else if let Some(extrapolated_fr) = self
-                        .intermediate_results
-                        .extrapolated_fr
-                        .get(&(provider_id.clone(), *day))
-                    {
-                        // If the node is not assigned on this day, use the extrapolated failure rate for that day.
-                        daily_fr_used = *extrapolated_fr;
                     } else {
-                        // If there is no extrapolated failure rate for this day, will be rewarded fully.
-                        daily_fr_used = Decimal::zero();
+                        // If the node is not assigned on this day, use the extrapolated failure rate for that day.
+                        daily_fr_used = *self
+                            .intermediate_results
+                            .extrapolated_fr
+                            .get(&(provider_id.clone(), *day))
+                            .expect("Extrapolated FR expected for every provider");
                     }
                     let rewards_reduction = calculate_rewards_reduction(daily_fr_used);
                     let performance_multiplier = dec!(1) - rewards_reduction;
@@ -343,11 +360,7 @@ impl RewardsCalculatorPipeline<ComputeBaseRewardsTypeRegion> {
     pub fn next(mut self) -> RewardsCalculatorPipeline<ComputeBaseRewards> {
         let mut type3_base_rewards = BTreeMap::new();
 
-        for ProviderRewardableNodes {
-            provider_id,
-            rewardable_nodes,
-        } in &self.input.rewardable_nodes
-        {
+        for (provider_id, rewardable_nodes) in &self.input.provider_rewardable_nodes {
             for node in rewardable_nodes {
                 let (base_rewards_daily, coefficient) = get_daily_rate(
                     &self.input.rewards_table,
@@ -394,8 +407,8 @@ impl RewardsCalculatorPipeline<ComputeBaseRewardsTypeRegion> {
             .into_iter()
             .map(|(key, (rates, coeff))| {
                 let rates_len = rates.len();
-                let avg_rate = avg(rates.as_slice());
-                let avg_coeff = avg(coeff.as_slice());
+                let avg_rate = avg(rates.as_slice()).unwrap_or_default();
+                let avg_coeff = avg(coeff.as_slice()).unwrap_or_default();
 
                 let mut running_coefficient = dec!(1);
                 let mut region_rewards = Vec::new();
@@ -403,7 +416,7 @@ impl RewardsCalculatorPipeline<ComputeBaseRewardsTypeRegion> {
                     region_rewards.push(avg_rate * running_coefficient);
                     running_coefficient *= avg_coeff;
                 }
-                let region_rewards_avg = avg(&region_rewards);
+                let region_rewards_avg = avg(&region_rewards).unwrap_or_default();
 
                 (key, region_rewards_avg)
             })
@@ -418,11 +431,7 @@ impl RewardsCalculatorPipeline<ComputeBaseRewardsTypeRegion> {
 impl RewardsCalculatorPipeline<ComputeBaseRewards> {
     pub fn next(mut self) -> RewardsCalculatorPipeline<ComputeNodesCount> {
         let mut base_rewards = BTreeMap::new();
-        for ProviderRewardableNodes {
-            provider_id,
-            rewardable_nodes,
-        } in &self.input.rewardable_nodes
-        {
+        for (provider_id, rewardable_nodes) in &self.input.provider_rewardable_nodes {
             for node in rewardable_nodes {
                 for day in &node.rewardable_days {
                     let base_rewards_for_day;
@@ -459,11 +468,7 @@ impl RewardsCalculatorPipeline<ComputeNodesCount> {
     pub fn next(mut self) -> RewardsCalculatorPipeline<AdjustNodesRewards> {
         let mut nodes_count = BTreeMap::new();
 
-        for ProviderRewardableNodes {
-            provider_id,
-            rewardable_nodes,
-        } in &self.input.rewardable_nodes
-        {
+        for (provider_id, rewardable_nodes) in &self.input.provider_rewardable_nodes {
             for node in rewardable_nodes {
                 for day in &node.rewardable_days {
                     nodes_count
@@ -483,11 +488,7 @@ impl RewardsCalculatorPipeline<ComputeNodesCount> {
 impl RewardsCalculatorPipeline<AdjustNodesRewards> {
     pub fn next(mut self) -> RewardsCalculatorPipeline<ComputeRewardsTotal> {
         let mut adjusted_rewards = BTreeMap::new();
-        for ProviderRewardableNodes {
-            provider_id,
-            rewardable_nodes,
-        } in &self.input.rewardable_nodes
-        {
+        for (provider_id, rewardable_nodes) in &self.input.provider_rewardable_nodes {
             for node in rewardable_nodes {
                 for day in &node.rewardable_days {
                     let provider_nodes_count = self
@@ -536,11 +537,7 @@ impl RewardsCalculatorPipeline<ComputeRewardsTotal> {
     pub fn next(mut self) -> RewardsCalculatorPipeline<RewardsTotalComputed> {
         let mut rewards_total = BTreeMap::new();
 
-        for ProviderRewardableNodes {
-            provider_id,
-            rewardable_nodes,
-        } in &self.input.rewardable_nodes
-        {
+        for (provider_id, rewardable_nodes) in &self.input.provider_rewardable_nodes {
             for node in rewardable_nodes {
                 for day in &node.rewardable_days {
                     let node_rewards = *self
@@ -604,11 +601,7 @@ impl RewardsCalculatorPipeline<RewardsTotalComputed> {
             }
         }
 
-        for ProviderRewardableNodes {
-            provider_id,
-            rewardable_nodes,
-        } in self.input.rewardable_nodes
-        {
+        for (provider_id, rewardable_nodes) in self.input.provider_rewardable_nodes {
             let mut node_results = BTreeMap::new();
 
             for node in rewardable_nodes {

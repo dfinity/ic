@@ -3,6 +3,7 @@ use crate::types::RewardableNode;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use ic_base_types::PrincipalId;
 use ic_protobuf::registry::node_rewards::v2::{NodeRewardRate, NodeRewardRates};
+use maplit::btreemap;
 
 // --- Test Helpers ---
 fn test_node_id(id: u64) -> NodeId {
@@ -51,7 +52,7 @@ fn default_test_input() -> RewardsCalculatorInput {
             table: BTreeMap::new(),
         },
         daily_metrics_by_subnet: HashMap::new(),
-        rewardable_nodes: vec![],
+        provider_rewardable_nodes: btreemap![],
     }
 }
 
@@ -73,20 +74,16 @@ fn build_daily_metrics(
 }
 
 fn generate_rewardable_nodes(
-    p0: PrincipalId,
     nodes_with_rewardable_days: Vec<(NodeId, Vec<DayUTC>)>,
-) -> ProviderRewardableNodes {
-    ProviderRewardableNodes {
-        provider_id: p0,
-        rewardable_nodes: nodes_with_rewardable_days
-            .into_iter()
-            .map(|(node_id, rewardable_days)| RewardableNode {
-                node_id,
-                rewardable_days,
-                ..Default::default()
-            })
-            .collect(),
-    }
+) -> Vec<RewardableNode> {
+    nodes_with_rewardable_days
+        .into_iter()
+        .map(|(node_id, rewardable_days)| RewardableNode {
+            node_id,
+            rewardable_days,
+            ..Default::default()
+        })
+        .collect()
 }
 
 #[test]
@@ -106,6 +103,22 @@ fn test_compute_subnets_nodes_fr() {
     // Nodes for Subnet 2
     let s2_node1 = test_node_id(21);
     let s2_node2 = test_node_id(22);
+
+    let p1 = test_provider_id(1);
+    let p2 = test_provider_id(2);
+
+    input.provider_rewardable_nodes = btreemap! {
+        p1 => generate_rewardable_nodes( vec![
+            (s1_node1, vec![day1, day2]),
+            (s1_node2, vec![day1]),
+            (s1_node3, vec![day1]),
+            (s2_node2, vec![day1]),
+        ]),
+        p2 => generate_rewardable_nodes( vec![
+            (s1_node4, vec![day1, day2]),
+            (s2_node1, vec![day1]),
+        ]),
+    };
 
     // --- Data Setup ---
     input.daily_metrics_by_subnet.extend(vec![
@@ -196,6 +209,7 @@ fn test_compute_providers_extrapolated_fr() {
     let mut intermediate_results = IntermediateResults::default();
     let day = "2024-01-01".into();
     let p1 = test_provider_id(1);
+    let p2 = test_provider_id(2);
     let p1_node1 = test_node_id(1);
     let p2_node1 = test_node_id(2); // Belongs to other provider
     let p2_node2 = test_node_id(3); // Belongs to other provider
@@ -207,8 +221,15 @@ fn test_compute_providers_extrapolated_fr() {
         .relative_nodes_fr
         .insert((day, p2_node2), dec!(0.4));
 
+    let provider_rewardable_nodes = btreemap! {
+        p1 => generate_rewardable_nodes(vec![(p1_node1, vec![day])]),
+        p2 => generate_rewardable_nodes(vec![
+            (p2_node1, vec![day]),
+            (p2_node2, vec![day]),
+        ]),
+    };
     let input = RewardsCalculatorInput {
-        rewardable_nodes: vec![generate_rewardable_nodes(p1, vec![(p1_node1, vec![])])],
+        provider_rewardable_nodes,
         ..default_test_input()
     };
 
@@ -221,11 +242,17 @@ fn test_compute_providers_extrapolated_fr() {
     let result = pipeline.next();
     let intermediate = result.intermediate_results;
 
-    // Extrapolated FR for P1 should be the average of other nodes' relative FR
+    // Extrapolated FR for P2 should be the average of other nodes' relative FR
     let expected_fr = (dec!(0.2) + dec!(0.4)) / dec!(2); // 0.3
     assert_eq!(
-        intermediate.extrapolated_fr.get(&(p1, day)),
+        intermediate.extrapolated_fr.get(&(p2, day)),
         Some(&expected_fr)
+    );
+
+    // Extrapolated FR for P1 should be 0 since no nodes are assigned
+    assert_eq!(
+        intermediate.extrapolated_fr.get(&(p1, day)),
+        Some(&Decimal::zero())
     );
 }
 
@@ -254,16 +281,16 @@ fn test_compute_nodes_performance_multiplier() {
         .extrapolated_fr
         .insert((p1, day), dec!(0.35));
 
-    let input = RewardsCalculatorInput {
-        rewardable_nodes: vec![generate_rewardable_nodes(
-            p1,
-            vec![
+    let provider_rewardable_nodes = btreemap! {
+        p1 => generate_rewardable_nodes(vec![
                 (node_good, vec![day]),
                 (node_mid, vec![day]),
                 (node_bad, vec![day]),
                 (node_unassigned, vec![day]),
-            ],
-        )],
+            ])
+    };
+    let input = RewardsCalculatorInput {
+        provider_rewardable_nodes,
         ..default_test_input()
     };
 
@@ -372,9 +399,8 @@ fn test_compute_base_rewards() {
 
     let input = RewardsCalculatorInput {
         rewards_table: create_rewards_table_for_region_test(),
-        rewardable_nodes: vec![ProviderRewardableNodes {
-            provider_id: p1,
-            rewardable_nodes: vec![
+        provider_rewardable_nodes: btreemap![
+            p1 => vec![
                 RewardableNode {
                     node_id: type1_node,
                     node_reward_type: NodeRewardType::Type1,
@@ -397,7 +423,7 @@ fn test_compute_base_rewards() {
                     dc_id: "dc3".into(),
                 },
             ],
-        }],
+        ],
         ..default_test_input()
     };
 
@@ -458,11 +484,11 @@ fn test_compute_nodes_count() {
     let node1 = test_node_id(1);
     let node2 = test_node_id(2);
 
+    let provider_rewardable_nodes = btreemap! {
+        p1 => generate_rewardable_nodes(vec![(node1, vec![day1, day2]), (node2, vec![day1])])
+    };
     let input = RewardsCalculatorInput {
-        rewardable_nodes: vec![generate_rewardable_nodes(
-            p1,
-            vec![(node1, vec![day1, day2]), (node2, vec![day1])],
-        )],
+        provider_rewardable_nodes,
         ..default_test_input()
     };
 
@@ -582,11 +608,11 @@ fn test_compute_rewards_total() {
         .adjusted_rewards
         .insert((day1, node2), dec!(50));
 
+    let provider_rewardable_nodes = btreemap! {
+        p1 => generate_rewardable_nodes(vec![(node1, vec![day1, day2]), (node2, vec![day1])])
+    };
     let input = RewardsCalculatorInput {
-        rewardable_nodes: vec![generate_rewardable_nodes(
-            p1,
-            vec![(node1, vec![day1, day2]), (node2, vec![day1])],
-        )],
+        provider_rewardable_nodes,
         ..default_test_input()
     };
 

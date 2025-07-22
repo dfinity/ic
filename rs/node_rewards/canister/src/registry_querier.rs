@@ -14,7 +14,7 @@ use ic_types::registry::RegistryClientError;
 use itertools::Itertools;
 use rewards_calculation::rewards_calculator_results::DayUTC;
 use rewards_calculation::types::{
-    NodeType, ProviderRewardableNodes, Region, RewardPeriod, RewardableNode, UnixTsNanos,
+    ProviderRewardableNodes, Region, RewardPeriod, RewardableNode, UnixTsNanos,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::str::FromStr;
@@ -106,9 +106,6 @@ impl<T: CanisterRegistryClient> RegistryQuerier<T> {
             let node_reward_type =
                 NodeRewardType::try_from(some_reward_type).expect("Invalid node_reward_type value");
 
-            // TODO: Modify RewardableNode to use NodeRewardType instead of NodeType.
-            let node_type = NodeType(node_reward_type.into());
-
             rewardable_nodes_per_provider
                 .entry(node_provider_id)
                 .or_insert(ProviderRewardableNodes {
@@ -119,7 +116,7 @@ impl<T: CanisterRegistryClient> RegistryQuerier<T> {
                 .push(RewardableNode {
                     node_id,
                     rewardable_days,
-                    node_type,
+                    node_reward_type,
                     dc_id: dc_id.clone(),
                     region: region.clone(),
                 });
@@ -256,13 +253,11 @@ impl<T: CanisterRegistryClient> RegistryQuerier<T> {
             .node_provider_principal_id
             .try_into()
             .expect("Failed to parse PrincipalId");
-        let dc_id = node_operator_record.dc_id;
-        let region = Region(data_center_record.region.clone());
 
         Ok(Some(NodeOperatorData {
             node_provider_id,
-            dc_id,
-            region,
+            dc_id: node_operator_record.dc_id,
+            region: data_center_record.region.clone(),
         }))
     }
 }

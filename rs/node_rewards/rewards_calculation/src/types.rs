@@ -104,11 +104,6 @@ impl fmt::Display for RewardPeriodError {
 
 impl Error for RewardPeriodError {}
 
-#[derive(Default)]
-pub struct ProviderRewardableNodes {
-    pub provider_id: PrincipalId,
-    pub rewardable_nodes: Vec<RewardableNode>,
-}
 #[derive(Eq, Hash, PartialEq, Clone, Ord, PartialOrd, Debug)]
 pub struct RewardableNode {
     pub node_id: NodeId,
