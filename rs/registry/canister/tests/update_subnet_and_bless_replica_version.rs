@@ -27,7 +27,7 @@ use registry_canister::{
     },
 };
 
-const MOCK_HASH: &str = "098c8d3ba4afc7e109612cb73acbdddac052c93025aa1f82942edabb7deb82a0";
+const MOCK_HASH: &str = "acdcacdcacdcacdcacdcacdcacdcacdcacdcacdcacdcacdcacdcacdcacdcacdc";
 
 #[test]
 fn test_the_anonymous_user_cannot_elect_a_version() {
