@@ -1,0 +1,29 @@
+name: Release `canscan`
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g., v1.0.0)"
+        required: true
+
+jobs:
+  build-and-release:
+    runs-on:
+      labels: dind-large
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build canscan
+        run: bazel build //packages/canscan:canscan
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: canscan-${{ github.event.inputs.version }}
+          name: "canscan-${{ github.event.inputs.version }}"
+          files: bazel-bin/packages/canscan/canscan
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
