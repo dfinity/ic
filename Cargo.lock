@@ -2616,6 +2616,7 @@ dependencies = [
  "network",
  "once_cell",
  "regex",
+ "rust-ini",
  "serde",
  "serde_json",
  "serde_with 1.14.0",
@@ -2848,6 +2849,26 @@ name = "const-oid"
 version = "0.9.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2459377285ad874054d797f3ccebf984978aa39129f6eafde5cdc8315b612f8"
+
+[[package]]
+name = "const-random"
+version = "0.1.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "87e00182fe74b066627d63b85fd550ac2998d4b0bd86bfed477a0ae4c7c71359"
+dependencies = [
+ "const-random-macro",
+]
+
+[[package]]
+name = "const-random-macro"
+version = "0.1.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f9d839f2a20b0aee515dc581a6172f2321f96cab76c1a38a4c584a194955390e"
+dependencies = [
+ "getrandom 0.2.15",
+ "once_cell",
+ "tiny-keccak",
+]
 
 [[package]]
 name = "const_panic"
@@ -3756,6 +3777,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "devicemapper"
+version = "0.34.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cfc1218171f91b60cfeb178048f076a79930acf1fe7c295e9304bd871da1bd35"
+dependencies = [
+ "bitflags 2.9.0",
+ "devicemapper-sys",
+ "env_logger",
+ "log",
+ "nix 0.29.0",
+ "once_cell",
+ "rand 0.8.5",
+ "retry",
+ "semver",
+ "serde",
+]
+
+[[package]]
+name = "devicemapper-sys"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "893c021558a1dc78c60171bb832e52340e7006ce0e05e6127df73de8825d0a09"
+dependencies = [
+ "bindgen 0.71.1",
+ "pkg-config",
+]
+
+[[package]]
 name = "dflate"
 version = "0.1.0"
 dependencies = [
@@ -3999,6 +4048,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.101",
+]
+
+[[package]]
+name = "dlv-list"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "442039f5147480ba31067cb00ada1adae6892028e40e45fc5de7b7df6dcc1b5f"
+dependencies = [
+ "const-random",
 ]
 
 [[package]]
@@ -4309,6 +4367,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "186e05a59d4c50738528153b83b0b0194d3a29507dfec16eccd4b342903397d0"
 dependencies = [
  "log",
+ "regex",
 ]
 
 [[package]]
@@ -4317,7 +4376,10 @@ version = "0.11.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dcaee3d8e3cfc3fd92428d477bc97fc29ec8716d180c0d74c643bb26166660e0"
 dependencies = [
+ "anstream",
+ "anstyle",
  "env_filter",
+ "humantime",
  "log",
 ]
 
@@ -5259,13 +5321,15 @@ dependencies = [
  "config",
  "config_types",
  "deterministic_ips",
+ "devicemapper",
  "goldenfile",
  "gpt",
  "grub",
  "ic-metrics-tool",
  "ic_sev",
+ "loopdev-3",
  "macaddr",
- "nix 0.29.0",
+ "nix 0.24.3",
  "partition_tools",
  "regex",
  "sys-mount",
@@ -9327,6 +9391,7 @@ dependencies = [
  "futures",
  "futures-util",
  "hyper 1.6.0",
+ "ic-logger",
  "rand 0.8.5",
  "slog",
  "tokio",
@@ -18114,6 +18179,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ordered-multimap"
+version = "0.7.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "49203cdcae0030493bad186b28da2fa25645fa276a51b6fec8010d281e02ef79"
+dependencies = [
+ "dlv-list",
+ "hashbrown 0.14.5",
+]
+
+[[package]]
 name = "os_qualification_utils"
 version = "0.9.0"
 dependencies = [
@@ -20366,6 +20441,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "retry"
+version = "2.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a1e211f878258887b3e65dd3c8ff9f530fe109f441a117ee0cdc27f341355032"
+
+[[package]]
 name = "rewards-calculation"
 version = "0.9.0"
 dependencies = [
@@ -20707,6 +20788,16 @@ dependencies = [
  "rand_pcg 0.3.1",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "rust-ini"
+version = "0.21.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e7295b7ce3bf4806b419dc3420745998b447178b7005e2011947b38fc5aa6791"
+dependencies = [
+ "cfg-if 1.0.0",
+ "ordered-multimap",
 ]
 
 [[package]]
@@ -22525,6 +22616,7 @@ dependencies = [
  "rgb",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "tempfile",
  "tokio",
 ]

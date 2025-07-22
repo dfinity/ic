@@ -2556,6 +2556,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "28c122c3980598d243d63d9a704629a2d748d101f278052ff068be5a4423ab6f"
 
 [[package]]
+name = "const-random"
+version = "0.1.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "87e00182fe74b066627d63b85fd550ac2998d4b0bd86bfed477a0ae4c7c71359"
+dependencies = [
+ "const-random-macro",
+]
+
+[[package]]
+name = "const-random-macro"
+version = "0.1.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f9d839f2a20b0aee515dc581a6172f2321f96cab76c1a38a4c584a194955390e"
+dependencies = [
+ "getrandom 0.2.10",
+ "once_cell",
+ "tiny-keccak",
+]
+
+[[package]]
 name = "const_panic"
 version = "0.2.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3360,6 +3380,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "devicemapper"
+version = "0.34.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cfc1218171f91b60cfeb178048f076a79930acf1fe7c295e9304bd871da1bd35"
+dependencies = [
+ "bitflags 2.9.0",
+ "devicemapper-sys",
+ "env_logger 0.11.2",
+ "log",
+ "nix 0.29.0",
+ "once_cell",
+ "rand 0.8.5",
+ "retry",
+ "semver",
+ "serde",
+]
+
+[[package]]
+name = "devicemapper-sys"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2edf94f6d3ca216380413446f38d1aa3035ac2c503a21b6929ead7e32f66a0b9"
+dependencies = [
+ "bindgen 0.69.4",
+ "pkg-config",
+]
+
+[[package]]
 name = "dfx-core"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3526,6 +3574,7 @@ dependencies = [
  "dashmap 5.5.3",
  "der 0.7.8",
  "derive-new",
+ "devicemapper",
  "dfx-core",
  "dyn-clone",
  "ed25519-dalek",
@@ -3623,6 +3672,7 @@ dependencies = [
  "lmdb-rkv",
  "lmdb-rkv-sys",
  "local-ip-address",
+ "loopdev-3",
  "lru",
  "macaddr",
  "maplit",
@@ -3697,6 +3747,7 @@ dependencies = [
  "rstest",
  "rusb",
  "rusqlite",
+ "rust-ini",
  "rust_decimal",
  "rust_decimal_macros",
  "rustc-demangle",
@@ -3893,6 +3944,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.101",
+]
+
+[[package]]
+name = "dlv-list"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "442039f5147480ba31067cb00ada1adae6892028e40e45fc5de7b7df6dcc1b5f"
+dependencies = [
+ "const-random",
 ]
 
 [[package]]
@@ -4172,6 +4232,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4f2c92ceda6ceec50f43169f9ee8424fe2db276791afde7b2cd8bc084cb376ab"
 dependencies = [
  "log",
+ "regex",
 ]
 
 [[package]]
@@ -4190,7 +4251,10 @@ version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6c012a26a7f605efc424dd53697843a72be7dc86ad2d01f7814337794a12231d"
 dependencies = [
+ "anstream",
+ "anstyle",
  "env_filter",
+ "humantime",
  "log",
 ]
 
@@ -8916,6 +8980,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ordered-multimap"
+version = "0.7.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "49203cdcae0030493bad186b28da2fa25645fa276a51b6fec8010d281e02ef79"
+dependencies = [
+ "dlv-list",
+ "hashbrown 0.14.5",
+]
+
+[[package]]
 name = "os_str_bytes"
 version = "6.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9411,9 +9485,9 @@ dependencies = [
 
 [[package]]
 name = "pkg-config"
-version = "0.3.27"
+version = "0.3.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "26072860ba924cbfa98ea39c8c19b4dd6a4a25423dbdf219c1eca91aa0cf6964"
+checksum = "7edddbd0b52d732b21ad9a5fab5c704c14cd949e5e9a1ec5929a24fded1b904c"
 
 [[package]]
 name = "plotters"
@@ -10758,6 +10832,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "retry"
+version = "2.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a1e211f878258887b3e65dd3c8ff9f530fe109f441a117ee0cdc27f341355032"
+
+[[package]]
 name = "rfc6979"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10972,6 +11052,16 @@ dependencies = [
  "hashlink",
  "libsqlite3-sys",
  "smallvec",
+]
+
+[[package]]
+name = "rust-ini"
+version = "0.21.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e7295b7ce3bf4806b419dc3420745998b447178b7005e2011947b38fc5aa6791"
+dependencies = [
+ "cfg-if 1.0.0",
+ "ordered-multimap",
 ]
 
 [[package]]

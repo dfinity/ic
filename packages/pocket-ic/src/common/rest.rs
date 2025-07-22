@@ -565,6 +565,7 @@ pub struct InstanceConfig {
     pub log_level: Option<String>,
     pub bitcoind_addr: Option<Vec<SocketAddr>>,
     pub icp_features: Option<IcpFeatures>,
+    pub allow_incomplete_state: Option<bool>,
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
