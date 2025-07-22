@@ -30,6 +30,8 @@ const MAX_INSTRUCTIONS_PER_ROUND: NumInstructions = NumInstructions::new(5 * B);
 const MAX_INSTRUCTIONS_PER_MESSAGE: NumInstructions = NumInstructions::new(20 * B);
 const MAX_INSTRUCTIONS_PER_SLICE: NumInstructions = NumInstructions::new(B);
 
+const CANISTER_INIT_CYCLES: Cycles = Cycles::new(301_000_000_000_u128);
+
 fn system_time_to_nanos(t: SystemTime) -> u64 {
     t.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos() as u64
 }
@@ -71,7 +73,7 @@ fn readable_logs_without_backtraces(
         .collect()
 }
 
-fn setup(settings: CanisterSettingsArgs) -> (StateMachine, CanisterId) {
+fn setup_env() -> StateMachine {
     let subnet_type = SubnetType::Application;
     let mut subnet_config = SubnetConfig::new(subnet_type);
     subnet_config.scheduler_config.max_instructions_per_round = MAX_INSTRUCTIONS_PER_ROUND;
@@ -84,22 +86,23 @@ fn setup(settings: CanisterSettingsArgs) -> (StateMachine, CanisterId) {
             ..Default::default()
         },
     );
-    let env = StateMachineBuilder::new()
+    StateMachineBuilder::new()
         .with_config(Some(config))
         .with_subnet_type(subnet_type)
         .with_checkpoints_enabled(false)
-        .build();
-    let canister_id =
-        env.create_canister_with_cycles(None, Cycles::from(301_000_000_000_u128), Some(settings));
+        .build()
+}
 
-    (env, canister_id)
+fn create_canister(env: &StateMachine, settings: CanisterSettingsArgs) -> CanisterId {
+    env.create_canister_with_cycles(None, CANISTER_INIT_CYCLES, Some(settings))
 }
 
 fn setup_and_install_wasm(
     settings: CanisterSettingsArgs,
     wasm: Vec<u8>,
 ) -> (StateMachine, CanisterId) {
-    let (env, canister_id) = setup(settings);
+    let env = setup_env();
+    let canister_id = create_canister(&env, settings);
     env.install_wasm_in_mode(canister_id, CanisterInstallMode::Install, wasm, vec![])
         .unwrap();
 
@@ -827,7 +830,9 @@ fn test_logging_debug_print_persists_over_upgrade() {
 
 #[test]
 fn test_logging_trap_at_install_start() {
-    let (env, canister_id) = setup(
+    let env = setup_env();
+    let canister_id = create_canister(
+        &env,
         CanisterSettingsArgsBuilder::new()
             .with_log_visibility(LogVisibilityV2::Public)
             .build(),
@@ -860,7 +865,9 @@ fn test_logging_trap_at_install_start() {
 
 #[test]
 fn test_logging_trap_at_install_init() {
-    let (env, canister_id) = setup(
+    let env = setup_env();
+    let canister_id = create_canister(
+        &env,
         CanisterSettingsArgsBuilder::new()
             .with_log_visibility(LogVisibilityV2::Public)
             .build(),
