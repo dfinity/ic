@@ -250,15 +250,19 @@ fn test_fetch_canister_logs_via_composite_query_call() {
     let (env, canister_a, user) = setup_with_controller(UNIVERSAL_CANISTER_WASM.to_vec());
 
     // Create canister_b controlled by canister_a.
-    let canister_b = env.create_canister_with_cycles(
-        None,
-        Cycles::from(100_000_000_000_u128),
-        Some(
-            CanisterSettingsArgsBuilder::new()
-                .with_controllers(vec![canister_a.get()])
-                .build(),
-        ),
+    let canister_b = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_controllers(vec![canister_a.get()])
+            .build(),
+        wat_canister()
+            .update("test", wat_fn().debug_print(b"message"))
+            .build_wasm(),
     );
+
+    let _ = env.execute_ingress(canister_b, "test", vec![]);
+    let _ = env.execute_ingress(canister_b, "test", vec![]);
+    let _ = env.execute_ingress(canister_b, "test", vec![]);
 
     // User attempts to fetch logs of canister_b via canister_a.
     let actual_result = env.query_as(
