@@ -15,7 +15,6 @@ def generate_dummy_recovery_archive(name):
     Returns:
         This function does not return anything, but it defines one target for generating the recovery archive and
         one target for each of the output files.
-        It does not return anything.
     """
     native.genrule(
         name = name,
