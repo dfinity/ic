@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 use crate::driver::constants;
+use crate::driver::vector_vm::VectorVm;
 use crate::driver::{
     farm::{Farm, HostFeature},
     resource::AllocatedVm,
@@ -403,6 +404,7 @@ pub struct SystemTestGroup {
     timeout_per_test: Option<Duration>,
     overall_timeout: Option<Duration>,
     with_farm: bool,
+    with_logs: bool,
 }
 
 impl Default for SystemTestGroup {
@@ -428,6 +430,7 @@ impl SystemTestGroup {
             timeout_per_test: None,
             overall_timeout: None,
             with_farm: true,
+            with_logs: true,
         }
     }
 
@@ -437,6 +440,11 @@ impl SystemTestGroup {
 
     pub fn without_farm(mut self) -> Self {
         self.with_farm = false;
+        self
+    }
+
+    pub fn without_logs(mut self) -> Self {
+        self.with_logs = false;
         self
     }
 
@@ -676,6 +684,11 @@ impl SystemTestGroup {
                 move || {
                     debug!(logger, ">>> setup_fn");
                     let env = ensure_setup_env(group_ctx);
+
+                    // Configure logging for testnets
+                    let vector_vm = VectorVm::new();
+                    vector_vm.start(&env).expect("Failed to start Vector VM");
+
                     setup_fn(env.clone());
                     SetupResult {}.write_attribute(&env);
                 },
