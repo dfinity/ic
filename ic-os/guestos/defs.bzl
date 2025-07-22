@@ -105,19 +105,13 @@ def image_deps(mode, malicious = False):
     # Update recovery component_files
     # Service files and SELinux policies must be added to components instead of rootfs so that they are processed by the Dockerfile
     if mode in ["recovery", "recovery-dev"]:
+        recovery_engine_path = "//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.sh" if mode == "recovery" else "//ic-os/guestos/envs/recovery-dev:guestos-recovery-engine.sh"
+
         deps["component_files"].update({
+            recovery_engine_path: "/opt/ic/bin/guestos-recovery-engine.sh",
             Label("//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.service"): "/etc/systemd/system/guestos-recovery-engine.service",
             Label("//ic-os/components:selinux/guestos-recovery-engine/guestos-recovery-engine.fc"): "/prep/guestos-recovery-engine/guestos-recovery-engine.fc",
             Label("//ic-os/components:selinux/guestos-recovery-engine/guestos-recovery-engine.te"): "/prep/guestos-recovery-engine/guestos-recovery-engine.te",
         })
-
-        if mode == "recovery":
-            deps["component_files"].update({
-                Label("//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.sh"): "/opt/ic/bin/guestos-recovery-engine.sh",
-            })
-        elif mode == "recovery-dev":
-            deps["component_files"].update({
-                Label("//ic-os/guestos/envs/recovery-dev:guestos-recovery-engine.sh"): "/opt/ic/bin/guestos-recovery-engine.sh",
-            })
 
     return deps
