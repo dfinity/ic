@@ -182,8 +182,8 @@ pub(super) mod internal_to_encoder {
     }
 
     /// Convert [`wasmparser::Operator`] to [`wasm_encoder::Instruction`]. A
-    /// simplified example of the conversion done in wasm-mutate
-    /// [here](https://github.com/bytecodealliance/wasm-tools/blob/a8c4fddd239b0cb8978c76e6dfd856d5bd29b860/crates/wasm-mutate/src/mutators/translate.rs#L279).
+    /// simplified example of the conversion done in wasm-encoder
+    /// [here](https://github.com/bytecodealliance/wasm-tools/blob/14096f0f365e456f9c3670dd655f6e0d00bae001/crates/wasm-encoder/src/reencode.rs#L1621-L1721).
     #[allow(unused_variables)]
     pub(crate) fn op(op: wasmparser::Operator<'_>) -> Result<wasm_encoder::Instruction<'static>> {
         use wasm_encoder::Instruction as I;
@@ -264,9 +264,14 @@ pub(super) mod internal_to_encoder {
 
             // Special cases with a single argument.
             (build BrTable $arg:ident) => (Ok(I::BrTable($arg.0, $arg.1)));
+            (build TypedSelectMulti $arg:ident) => (
+                Ok(I::TypedSelectMulti(Cow::from($arg.iter()
+                    .map(|arg| wasm_encoder::ValType::try_from(*arg).map_err(|_err| Error::ConversionError(format!("Failed to convert type: {:?}", $arg)))).collect::<Result<Vec<_>>>()?
+                )))
+            );
             (build TryTable $arg:ident) => (Ok(I::TryTable($arg.0, $arg.1)));
-            (build F32Const $arg:ident) => (Ok(I::F32Const(f32::from_bits($arg.bits()))));
-            (build F64Const $arg:ident) => (Ok(I::F64Const(f64::from_bits($arg.bits()))));
+            (build F32Const $arg:ident) => (Ok(I::F32Const(f32::from_bits($arg.bits()).into())));
+            (build F64Const $arg:ident) => (Ok(I::F64Const(f64::from_bits($arg.bits()).into())));
             (build V128Const $arg:ident) => (Ok(I::V128Const($arg.i128())));
 
             // Standard case with a single argument.

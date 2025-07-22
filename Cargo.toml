@@ -790,11 +790,11 @@ uuid = { version = "=1.12.1", features = ["v4", "serde"] }
 virt = "0.4"
 walkdir = "2.3.3"
 walrus = "0.23.3"
-wasm-encoder = { version = "0.228.0", features = ["wasmparser"] }
-wasmparser = "0.228.0"
-wasmprinter = "0.228.0"
-wast = "228.0.0"
-wat = "1.228.0"
+wasm-encoder = { version = "0.233.0", features = ["wasmparser"] }
+wasmparser = "0.233.0"
+wasmprinter = "0.233.0"
+wast = "233.0.0"
+wat = "1.233.0"
 which = "6.0.3"
 x509-cert = { version = "0.2.5", features = ["builder", "hazmat"] }
 x509-parser = { version = "0.16.0" }
