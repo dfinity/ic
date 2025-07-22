@@ -9,6 +9,7 @@ use ic_interfaces::{
     },
     time_source::TimeSource,
 };
+use ic_limits::MAX_P2P_IO_CHANNEL_SIZE;
 use ic_metrics::MetricsRegistry;
 use ic_types::{artifact::*, messages::SignedIngress};
 use prometheus::{histogram_opts, labels, Histogram};

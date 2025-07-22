@@ -20,11 +20,6 @@ use std::{
     hash::Hash,
 };
 
-/// Same order of magnitude as the number of active artifacts.
-/// Please note that we put fairly big number mainly for perfomance reasons so either side of a channel doesn't await.
-/// The replica code should be designed in such a way that if we put a channel of size 1, the protocol should still work.
-pub const MAX_P2P_IO_CHANNEL_SIZE: usize = 100_000;
-
 pub trait IdentifiableArtifact: Send + 'static {
     const NAME: &'static str;
     type Id: Hash + Clone + PartialEq + Eq + Send + Sync + 'static;

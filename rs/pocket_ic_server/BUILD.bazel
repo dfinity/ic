@@ -25,6 +25,7 @@ LIB_DEPENDENCIES = [
     "//rs/interfaces/state_manager",
     "//rs/ledger_suite/icp:icp_ledger",
     "//rs/ledger_suite/icp/index:ic-icp-index",
+    "//rs/limits",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
     "//rs/nns/cmc",

@@ -20,6 +20,7 @@ use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_registry_mocks::MockRegistryClient;
 use ic_interfaces_state_manager::{CertifiedStateSnapshot, Labeled, StateReader};
 use ic_interfaces_state_manager_mocks::MockStateManager;
+use ic_limits::MAX_P2P_IO_CHANNEL_SIZE;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_pprof::{Pprof, PprofCollector};
@@ -43,7 +44,7 @@ use ic_test_utilities::crypto::{temp_crypto_component_with_fake_registry, Crypto
 use ic_test_utilities_state::ReplicatedStateBuilder;
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::{
-    artifact::{UnvalidatedArtifactMutation, MAX_P2P_IO_CHANNEL_SIZE},
+    artifact::UnvalidatedArtifactMutation,
     batch::RawQueryStats,
     consensus::certification::{Certification, CertificationContent},
     crypto::{

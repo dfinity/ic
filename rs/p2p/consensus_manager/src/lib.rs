@@ -8,12 +8,11 @@ use crate::{
 use axum::Router;
 use ic_base_types::NodeId;
 use ic_interfaces::p2p::consensus::{ArtifactAssembler, ArtifactTransmit};
+use ic_limits::MAX_P2P_IO_CHANNEL_SIZE;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_quic_transport::{ConnId, Shutdown, SubnetTopology, Transport};
-use ic_types::artifact::{
-    IdentifiableArtifact, PbArtifact, UnvalidatedArtifactMutation, MAX_P2P_IO_CHANNEL_SIZE,
-};
+use ic_types::artifact::{IdentifiableArtifact, PbArtifact, UnvalidatedArtifactMutation};
 use phantom_newtype::AmountOf;
 use tokio::{
     runtime::Handle,
