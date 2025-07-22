@@ -280,8 +280,9 @@ fn test_fetch_canister_logs_via_inter_canister_query_call() {
             .build(),
     );
     let reject_message = get_reject(result);
-    let expected_message =
-        "fetch_canister_logs API is only accessible to end users in non-replicated mode";
+    // let expected_message =
+    //     "fetch_canister_logs API is only accessible to end users in non-replicated mode";
+    let expected_message = "fetch_canister_logs API is only accessible in non-replicated mode";
     assert!(
         reject_message.contains(expected_message),
         "Expected: {}\nActual: {}",
@@ -298,10 +299,9 @@ bazel test //rs/execution_environment:execution_environment_misc_integration_tes
 
 */
 
-#[ignore]
 #[test]
 fn test_fetch_canister_logs_via_inter_canister_query_call_enabled() {
-    let env = setup_env();
+    let env = setup_env_with(FlagStatus::Enabled);
     let canister_a = create_and_install_canister(
         &env,
         CanisterSettingsArgsBuilder::new().build(),
