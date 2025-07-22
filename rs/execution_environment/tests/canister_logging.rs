@@ -1,5 +1,6 @@
 use ic_base_types::PrincipalId;
 use ic_config::execution_environment::Config as ExecutionConfig;
+use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SubnetConfig;
 use ic_management_canister_types_private::{
     self as ic00, BoundedAllowedViewers, CanisterIdRecord, CanisterInstallMode, CanisterLogRecord,
@@ -76,7 +77,13 @@ fn setup(settings: CanisterSettingsArgs) -> (StateMachine, CanisterId) {
     subnet_config.scheduler_config.max_instructions_per_round = MAX_INSTRUCTIONS_PER_ROUND;
     subnet_config.scheduler_config.max_instructions_per_message = MAX_INSTRUCTIONS_PER_MESSAGE;
     subnet_config.scheduler_config.max_instructions_per_slice = MAX_INSTRUCTIONS_PER_SLICE;
-    let config = StateMachineConfig::new(subnet_config, ExecutionConfig::default());
+    let config = StateMachineConfig::new(
+        subnet_config,
+        ExecutionConfig {
+            replicated_query_inter_canister_log_fetch: FlagStatus::Enabled, // TODO: remove debug code.
+            ..Default::default()
+        },
+    );
     let env = StateMachineBuilder::new()
         .with_config(Some(config))
         .with_subnet_type(subnet_type)
