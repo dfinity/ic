@@ -772,7 +772,7 @@ impl SubnetSnapshot {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct IcNodeSnapshot {
     pub ic_name: String,
     pub node_id: NodeId,

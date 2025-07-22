@@ -97,18 +97,6 @@ pub fn download_golden_state_or_panic(state_source: StateSource, destination: &P
     let source = state_source.to_argument();
     println!("Downloading {} to {:?} ...", source, destination);
 
-    println!(
-        "SSH_AUTH_SOCK: {:#?}",
-        Command::new("sh")
-            .arg("-c")
-            .arg("echo $SSH_AUTH_SOCK")
-            .output()
-            .unwrap()
-    );
-    println!(
-        "Forwarding: {:?}",
-        Command::new("ssh-add").arg("-L").output().unwrap()
-    );
     // Actually download.
     let scp_out = Command::new("scp")
         .arg("-oUserKnownHostsFile=/dev/null")
@@ -117,7 +105,7 @@ pub fn download_golden_state_or_panic(state_source: StateSource, destination: &P
         .arg(source.clone())
         .arg(destination)
         .output()
-        .unwrap_or_else(|err| panic!("Could not scp from {:?} because: {:#?}!", source, err));
+        .unwrap_or_else(|err| panic!("Could not scp from {:?} because: {:?}!", source, err));
 
     // Inspect result.
     if !scp_out.status.success() {

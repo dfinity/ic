@@ -20,7 +20,6 @@ use ic_types::{crypto::threshold_sig::ThresholdSigPublicKey, CanisterId, Registr
 pub const MAX_NUM_SSH_KEYS: usize = 50;
 
 /// A higher level helper to interact with the registry canister.
-#[derive(Debug)]
 pub struct RegistryCanister {
     canister_id: CanisterId,
     agent: Vec<Agent>,

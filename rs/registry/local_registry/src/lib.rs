@@ -26,7 +26,6 @@ use ic_registry_client_helpers::{
     subnet::{SubnetRegistry, SubnetTransportRegistry},
 };
 
-#[derive(Debug)]
 pub struct LocalRegistry {
     registry_cache: FakeRegistryClient,
     local_store_writer: LocalStoreImpl,
@@ -241,7 +240,7 @@ impl RegistryClient for LocalRegistry {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 struct RootSubnetInfo {
     registry_version: RegistryVersion,
     urls_and_pubkey: (Vec<Url>, ThresholdSigPublicKey),

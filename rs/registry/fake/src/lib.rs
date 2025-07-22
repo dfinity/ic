@@ -21,12 +21,6 @@ pub struct FakeRegistryClient {
     cache: Arc<RwLock<CacheState>>,
 }
 
-impl std::fmt::Debug for FakeRegistryClient {
-    fn fmt(&self, _: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
-        Ok(())
-    }
-}
-
 impl FakeRegistryClient {
     /// After creation, the cache is empty.
     pub fn new(data_provider: Arc<dyn RegistryDataProvider>) -> Self {
