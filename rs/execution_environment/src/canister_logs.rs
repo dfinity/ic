@@ -18,20 +18,8 @@ pub(crate) fn fetch_canister_logs(
         )
     })?;
 
-    match canister.log_visibility() {
-        LogVisibilityV2::Public => Ok(()),
-        LogVisibilityV2::Controllers if canister.controllers().contains(&sender) => Ok(()),
-        LogVisibilityV2::AllowedViewers(principals) if principals.get().contains(&sender) => Ok(()),
-        LogVisibilityV2::AllowedViewers(_) if canister.controllers().contains(&sender) => Ok(()),
-        LogVisibilityV2::AllowedViewers(_) | LogVisibilityV2::Controllers => Err(UserError::new(
-            ErrorCode::CanisterRejectedMessage,
-            format!(
-                "Caller {} is not allowed to query ic00 method {}",
-                sender,
-                QueryMethod::FetchCanisterLogs
-            ),
-        )),
-    }?;
+    // Check if the sender has permission to access logs
+    check_log_access_permission(&sender, canister.log_visibility(), canister.controllers())?;
 
     Ok(FetchCanisterLogsResponse {
         canister_log_records: canister
@@ -42,4 +30,32 @@ pub(crate) fn fetch_canister_logs(
             .cloned()
             .collect(),
     })
+}
+
+/// Checks if the sender has permission to access canister logs based on visibility settings
+fn check_log_access_permission(
+    sender: &PrincipalId,
+    log_visibility: &LogVisibilityV2,
+    controllers: &std::collections::BTreeSet<PrincipalId>,
+) -> Result<(), UserError> {
+    let has_access = match log_visibility {
+        LogVisibilityV2::Public => true,
+        LogVisibilityV2::Controllers => controllers.contains(sender),
+        LogVisibilityV2::AllowedViewers(principals) => {
+            principals.get().contains(sender) || controllers.contains(sender)
+        }
+    };
+
+    if has_access {
+        Ok(())
+    } else {
+        Err(UserError::new(
+            ErrorCode::CanisterRejectedMessage,
+            format!(
+                "Caller {} is not allowed to query ic00 method {}",
+                sender,
+                QueryMethod::FetchCanisterLogs
+            ),
+        ))
+    }
 }
