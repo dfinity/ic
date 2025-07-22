@@ -373,17 +373,15 @@ impl pb::Topic {
     pub fn get_topic_for_native_action(action: &pb::proposal::Action) -> Option<Self> {
         // Check if the topic comes from the extension spec.
         if let pb::proposal::Action::RegisterExtension(pb::RegisterExtension {
-            chunked_canister_wasm,
+            chunked_canister_wasm:
+                Some(pb::ChunkedCanisterWasm {
+                    wasm_module_hash, ..
+                }),
             ..
         }) = action
         {
-            if let Some(pb::ChunkedCanisterWasm {
-                wasm_module_hash, ..
-            }) = chunked_canister_wasm
-            {
-                if let Ok(extension_spec) = extensions::validate_extension_wasm(wasm_module_hash) {
-                    return Some(extension_spec.topic);
-                }
+            if let Ok(extension_spec) = extensions::validate_extension_wasm(wasm_module_hash) {
+                return Some(extension_spec.topic);
             }
         }
 
