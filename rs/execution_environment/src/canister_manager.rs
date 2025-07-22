@@ -221,7 +221,7 @@ impl CanisterManager {
                     FlagStatus::Disabled => Err(UserError::new(
                         ErrorCode::CanisterRejectedMessage,
                         format!(
-                            "{} API is only accessible in non-replicated mode",
+                            "{} API is only accessible in BLA1 non-replicated mode",
                             Ic00Method::FetchCanisterLogs
                         ),
                     )),
