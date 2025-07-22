@@ -289,6 +289,49 @@ fn test_fetch_canister_logs_via_composite_query_call() {
     );
 }
 
+/*
+bazel test //rs/execution_environment:execution_environment_misc_integration_tests/canister_logging_test \
+  --test_output=streamed \
+  --test_arg=--nocapture \
+  --test_arg=test_fetch_canister_logs_via_inter_canister_query_call
+
+*/
+
+#[test]
+fn test_fetch_canister_logs_via_inter_canister_query_call() {
+    let env = setup_env();
+    let canister_a = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new().build(),
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+    );
+    let canister_b = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_visibility(LogVisibilityV2::Public)
+            .build(),
+        wat_canister()
+            .update("test", wat_fn().debug_print(b"message"))
+            .build_wasm(),
+    );
+
+    let result = env.execute_ingress(
+        canister_a,
+        "update",
+        wasm()
+            .call_simple(
+                CanisterId::ic_00(),
+                "fetch_canister_logs",
+                call_args()
+                    .other_side(FetchCanisterLogsRequest::new(canister_b).encode())
+                    .on_reject(wasm().reject_message().reject()),
+            )
+            .build(),
+    );
+    let data = FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap();
+    println!("data: {:?}", data);
+}
+
 #[test]
 fn test_log_visibility_of_fetch_canister_logs() {
     // Test combinations of log_visibility and sender for fetch_canister_logs API call.
