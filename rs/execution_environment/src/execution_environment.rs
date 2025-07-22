@@ -1529,21 +1529,45 @@ impl ExecutionEnvironment {
                         )),
                         refund: msg.take_cycles(),
                     },
-                    FlagStatus::Enabled => match FetchCanisterLogsRequest::decode(payload) {
-                        Err(err) => ExecuteSubnetMessageResult::Finished {
-                            response: Err(err),
-                            refund: msg.take_cycles(),
-                        },
-                        Ok(args) => match fetch_canister_logs(*msg.sender(), &state, args) {
-                            Err(err) => ExecuteSubnetMessageResult::Finished {
-                                response: Err(err),
-                                refund: msg.take_cycles(),
-                            },
-                            Ok(response) => ExecuteSubnetMessageResult::Finished {
-                                response: Ok((Encode!(&response).unwrap(), None)),
-                                refund: msg.take_cycles(),
-                            },
-                        },
+                    FlagStatus::Enabled => match &msg {
+                        CanisterCall::Request(request) => {
+                            let fetch_canister_logs_fee = Cycles::new(1_000_000);
+                            if request.payment < fetch_canister_logs_fee {
+                                ExecuteSubnetMessageResult::Finished {
+                                    response: Err(UserError::new(
+                                        ErrorCode::CanisterRejectedMessage,
+                                        format!(
+                                        "{} request sent with {} cycles, but {} cycles are required.",
+                                        Ic00Method::FetchCanisterLogs,
+                                        request.payment, fetch_canister_logs_fee
+                                        ),
+                                    )),
+                                    refund: msg.take_cycles(),
+                                }
+                            } else {
+                                match FetchCanisterLogsRequest::decode(payload) {
+                                    Err(err) => ExecuteSubnetMessageResult::Finished {
+                                        response: Err(err),
+                                        refund: msg.take_cycles(),
+                                    },
+                                    Ok(args) => {
+                                        match fetch_canister_logs(*msg.sender(), &state, args) {
+                                            Err(err) => ExecuteSubnetMessageResult::Finished {
+                                                response: Err(err),
+                                                refund: msg.take_cycles(),
+                                            },
+                                            Ok(response) => ExecuteSubnetMessageResult::Finished {
+                                                response: Ok((Encode!(&response).unwrap(), None)),
+                                                refund: msg.take_cycles(),
+                                            },
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        CanisterCall::Ingress(_) => {
+                            self.reject_unexpected_ingress(Ic00Method::FetchCanisterLogs)
+                        }
                     },
                 }
             }
@@ -1816,8 +1840,10 @@ impl ExecutionEnvironment {
             Err(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!(
-                    "http_request request sent with {} cycles, but {} cycles are required.",
-                    request.payment, http_request_fee
+                    "{} request sent with {} cycles, but {} cycles are required.",
+                    Ic00Method::HttpRequest,
+                    request.payment,
+                    http_request_fee
                 ),
             ))
         } else {

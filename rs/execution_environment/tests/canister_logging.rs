@@ -304,12 +304,13 @@ fn test_fetch_canister_logs_via_inter_canister_query_call() {
         canister_a,
         "update",
         wasm()
-            .call_simple(
+            .call_with_cycles(
                 CanisterId::ic_00(),
                 "fetch_canister_logs",
                 call_args()
                     .other_side(FetchCanisterLogsRequest::new(canister_b).encode())
                     .on_reject(wasm().reject_message().reject()),
+                Cycles::new(2_000_000),
             )
             .build(),
     );
@@ -367,12 +368,13 @@ fn test_fetch_canister_logs_via_inter_canister_query_call_enabled() {
         canister_a,
         "update",
         wasm()
-            .call_simple(
+            .call_with_cycles(
                 CanisterId::ic_00(),
                 "fetch_canister_logs",
                 call_args()
                     .other_side(FetchCanisterLogsRequest::new(canister_b).encode())
                     .on_reject(wasm().reject_message().reject()),
+                Cycles::new(2_000_000),
             )
             .build(),
     );
