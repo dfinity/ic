@@ -19,6 +19,7 @@ canisters(
     filenames = {
         "registry": "registry-canister.wasm.gz",
         "governance": "governance-canister.wasm.gz",
+        "governance-canister_test": "governance-canister_test.wasm.gz",
         "ledger": "ledger-canister_notify-method.wasm.gz",
         "archive": "ledger-archive-node-canister.wasm.gz",
         "index": "ic-icp-index-canister.wasm.gz",
@@ -49,11 +50,14 @@ canisters(
         "sns_archive": "ic-icrc1-archive.wasm.gz",
         "sns_index": "ic-icrc1-index-ng.wasm.gz",
         "node-rewards": "node-rewards-canister.wasm.gz",
+        "cycles_ledger": "cycles-ledger.wasm.gz",
+        "cycles_ledger_index": "ic-icrc1-index-ng-u256.wasm.gz",
     },
     path = "//:mainnet-canister-revisions.json",
     reponames = {
         "registry": "mainnet_nns_registry_canister",
         "governance": "mainnet_nns_governance_canister",
+        "governance-canister_test": "nns_governance_canister_test_at_mainnet_commit",
         "ledger": "mainnet_icp_ledger_canister",
         "archive": "mainnet_icp_ledger-archive-node-canister",
         "index": "mainnet_icp_index_canister",
@@ -84,6 +88,11 @@ canisters(
         "sns_archive": "mainnet_ic-icrc1-archive",
         "sns_index": "mainnet_ic-icrc1-index-ng",
         "node-rewards": "mainnet_node-rewards-canister",
+        "cycles_ledger": "mainnet_cycles_ledger_canister",
+        "cycles_ledger_index": "mainnet_cycles_ledger_index",
+    },
+    repositories = {
+        "cycles_ledger": "dfinity/cycles-ledger",
     },
 )
 
@@ -109,10 +118,13 @@ sol_register_toolchains(
 
 http_archive(
     name = "rules_rust",
-    integrity = "sha256-U8G6x+xI985IxMHGqgBvJ1Fa3SrrBXJZNyJObgDsfOo=",
+    integrity = "sha256-ydWjnLPhzqys6Y8Z8J1hxLVQNLw0pWW9z3zYDrTEEq8=",
     patch_args = ["-p1"],
-    patches = ["//bazel:rules_rust.patch"],
-    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.61.0/rules_rust-0.61.0.tar.gz"],
+    patches = [
+        "//bazel:rules_rust_san.patch",
+        "//bazel:rules_rust_env.patch",
+    ],
+    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.62.0/rules_rust-0.62.0.tar.gz"],
 )
 
 load("@rules_rust//crate_universe:repositories.bzl", "crate_universe_dependencies")
@@ -132,13 +144,7 @@ rust_register_toolchains(
         "fastbuild": "none",
         "opt": "none",
     }},
-    # The nightly version is required to compile fuzz tests from Bazel.
-    # The version below is chosen so that it is in sync with the non-nightly version.
-    versions = [
-        "1.86.0",
-        # Use the nightly version from the day before the branch.
-        "nightly/2025-03-08",
-    ],
+    versions = ["1.86.0"],
 )
 
 load("//bazel:external_crates.bzl", "external_crates_repository")
