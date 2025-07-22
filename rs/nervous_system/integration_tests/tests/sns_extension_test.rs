@@ -30,7 +30,6 @@ use maplit::btreemap;
 use pocket_ic::nonblocking::PocketIc;
 use pocket_ic::PocketIcBuilder;
 use pretty_assertions::assert_eq;
-use sns_treasury_manager;
 use sns_treasury_manager::Asset;
 use sns_treasury_manager::AuditTrailRequest;
 use sns_treasury_manager::BalanceBook;
@@ -285,7 +284,7 @@ async fn test_treasury_manager() {
         pocket_ic.advance_time(Duration::from_secs(35)).await;
     }
 
-    let _withdrawn_amounts = {
+    {
         let ledger_id_to_account = btreemap! {
             sns.ledger.canister_id.0 => treasury_sns_account,
             LEDGER_CANISTER_ID.get().0 => treasury_icp_account,
@@ -347,6 +346,7 @@ async fn test_treasury_manager() {
     panic!("  Directed by\nROBERT B. WEIDE.");
 }
 
+#[allow(unused)]
 async fn dbg_print_block(
     pocket_ic: &PocketIc,
     sns_ledger_canister_id: PrincipalId,
@@ -359,7 +359,7 @@ async fn dbg_print_block(
         panic!("Expected a block with details, got: {:?}", block.blocks[0]);
     };
 
-    let Value::Map(tx_details) = block_details.get("tx").clone().unwrap() else {
+    let Value::Map(tx_details) = block_details.get("tx").unwrap() else {
         panic!(
             "Expected a transaction in the block details, got: {:?}",
             block_details.get("tx")
