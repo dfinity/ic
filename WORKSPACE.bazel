@@ -50,6 +50,7 @@ canisters(
         "sns_archive": "ic-icrc1-archive.wasm.gz",
         "sns_index": "ic-icrc1-index-ng.wasm.gz",
         "node-rewards": "node-rewards-canister.wasm.gz",
+        "internet_identity": "internet_identity_dev.wasm.gz",
         "cycles_ledger": "cycles-ledger.wasm.gz",
         "cycles_ledger_index": "ic-icrc1-index-ng-u256.wasm.gz",
     },
@@ -88,11 +89,13 @@ canisters(
         "sns_archive": "mainnet_ic-icrc1-archive",
         "sns_index": "mainnet_ic-icrc1-index-ng",
         "node-rewards": "mainnet_node-rewards-canister",
+        "internet_identity": "mainnet_internet_identity_canister",
         "cycles_ledger": "mainnet_cycles_ledger_canister",
         "cycles_ledger_index": "mainnet_cycles_ledger_index",
     },
     repositories = {
         "cycles_ledger": "dfinity/cycles-ledger",
+        "internet_identity": "dfinity/internet-identity",
     },
 )
 

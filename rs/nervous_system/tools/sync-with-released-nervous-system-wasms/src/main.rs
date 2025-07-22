@@ -1,12 +1,13 @@
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Error, Result};
 use futures::{stream, StreamExt};
 use ic_agent::Agent;
 use ic_base_types::CanisterId;
 use ic_nervous_system_agent::nns::sns_wasm;
 use ic_nns_constants::{
     CYCLES_LEDGER_CANISTER_ID, CYCLES_LEDGER_INDEX_CANISTER_ID, CYCLES_MINTING_CANISTER_ID,
-    GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID,
-    NODE_REWARDS_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
+    GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID, IDENTITY_CANISTER_ID, LEDGER_CANISTER_ID,
+    LIFELINE_CANISTER_ID, NODE_REWARDS_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
+    SNS_WASM_CANISTER_ID,
 };
 use reqwest::Client;
 use serde::Deserialize;
@@ -34,24 +35,44 @@ struct ExternalCanisterInfo<'a> {
     repository: &'a str,
     canister_id: CanisterId,
     filename: &'a str,
+    test_filename: Option<&'a str>,
 }
 
-const EXTERNAL_CANISTER_NAME_TO_INFO: [(&str, ExternalCanisterInfo); 1] = [(
-    "cycles_ledger",
-    ExternalCanisterInfo {
-        repository: "dfinity/cycles-ledger",
-        filename: "cycles-ledger.wasm.gz",
-        canister_id: CYCLES_LEDGER_CANISTER_ID,
-    },
-)];
+const EXTERNAL_CANISTER_NAME_TO_INFO: [(&str, ExternalCanisterInfo); 2] = [
+    (
+        "cycles_ledger",
+        ExternalCanisterInfo {
+            repository: "dfinity/cycles-ledger",
+            filename: "cycles-ledger.wasm.gz",
+            test_filename: None,
+            canister_id: CYCLES_LEDGER_CANISTER_ID,
+        },
+    ),
+    (
+        "internet_identity",
+        ExternalCanisterInfo {
+            repository: "dfinity/internet-identity",
+            filename: "internet_identity_production.wasm.gz",
+            test_filename: Some("internet_identity_dev.wasm.gz"),
+            canister_id: IDENTITY_CANISTER_ID,
+        },
+    ),
+];
+
+fn module_hash_hex(module_hash: Vec<u8>) -> String {
+    use std::fmt::Write;
+
+    module_hash.iter().fold(String::new(), |mut output, x| {
+        let _ = write!(output, "{:02x}", x);
+        output
+    })
+}
 
 async fn get_mainnet_canister_git_commit_id_and_module_hash(
     agent: &Agent,
     canister_name: &str,
     canister_id: CanisterId,
 ) -> Result<(String, String)> {
-    use std::fmt::Write;
-
     let canister_id = canister_id.get().0;
 
     let git_commit_id = agent
@@ -79,32 +100,33 @@ async fn get_mainnet_canister_git_commit_id_and_module_hash(
             .read_state_canister_info(canister_id, "module_hash")
             .await?
     };
-    let module_hash_str = module_hash.iter().fold(String::new(), |mut output, x| {
-        let _ = write!(output, "{:02x}", x);
-        output
-    });
 
-    Ok((git_commit_id, module_hash_str))
+    Ok((git_commit_id, module_hash_hex(module_hash)))
 }
 
 /// This function fetches the given canister's module hash deployed on the ICP mainnet (based on `canister_id`)
 /// and then finds a git tag in the given `canister_repository` (e.g., `dfinity/cycles-ledger`)
 /// which contains a release asset whose name matches `canister_name`
 /// and whose sha256 hash matches the module hash deployed on the ICP mainnet
-/// (the sha256 hash is fetched from a dedicated release asset whose name has the form `{canister_name}.sha256`).
+/// (if available, the sha256 hash is fetched from a dedicated release asset whose name has the form `{canister_name}.sha256`).
 /// To find the git tag, the function proceeds as follows:
 ///   - it crawls all git tags of the given `canister_repository`;
-///   - for every git tag, it lists all release assets and looks for a release asset whose name has the form `{canister_name}.sha256`:
-///     if that release asset contains the expected module hash (as deployed on the ICP mainnet),
-///     then the corresponding tag is returned.
+///   - for every git tag, it lists all release assets and
+///     - looks for a release asset whose name has the form `{canister_name}.sha256`:
+///       if that release asset contains the expected module hash (as deployed on the ICP mainnet), then the corresponding tag is returned;
+///     - otherwise, it looks for a release asset whose name matches `{canister_name}`:
+///       if that release asset has the expected module hash (as deployed on the ICP mainnet), then the corresponding tag is returned.
+///
+/// This function then returns the git tag and the module hash of the canister.
+/// If a test canister name is provided, then the returned module hash is that of a release asset whose name matches `{canister_test_name}`
+/// for the same git tag.
 async fn get_mainnet_canister_git_tag_and_module_hash(
     agent: &Agent,
     canister_id: CanisterId,
     canister_repository: String,
     canister_name: String,
+    canister_test_name: Option<String>,
 ) -> Result<(String, String)> {
-    use std::fmt::Write;
-
     #[derive(Debug, Deserialize)]
     struct Tag {
         name: String,
@@ -129,10 +151,13 @@ async fn get_mainnet_canister_git_tag_and_module_hash(
     let module_hash = agent
         .read_state_canister_info(canister_id, "module_hash")
         .await?;
-    let module_hash = module_hash.iter().fold(String::new(), |mut output, x| {
-        let _ = write!(output, "{:02x}", x);
-        output
-    });
+    let module_hash_str = module_hash_hex(module_hash);
+    if module_hash_str.len() != 64 {
+        return Err(anyhow!(
+            "Unexpected sha256 length {}",
+            module_hash_str.len()
+        ));
+    }
 
     let token = std::env::var("GITHUB_TOKEN").expect("Set GITHUB_TOKEN env var");
 
@@ -171,11 +196,40 @@ async fn get_mainnet_canister_git_tag_and_module_hash(
                     ));
                 }
 
+                let final_module_hash = async {
+                    if let Some(ref canister_test_name) = canister_test_name {
+                        let canister_test_url = release
+                            .assets
+                            .iter()
+                            .find(|asset| asset.name == *canister_test_name)
+                            .map(|asset| asset.browser_download_url.clone())
+                            .ok_or(anyhow!("Did not find release asset {canister_test_name}"))?;
+                        let module_bytes = client
+                            .get(canister_test_url)
+                            .bearer_auth(&token)
+                            .send()
+                            .await?
+                            .bytes()
+                            .await?;
+
+                        Ok::<_, Error>(module_hash_hex(
+                            sha2::Sha256::digest(&module_bytes).to_vec(),
+                        ))
+                    } else {
+                        Ok(module_hash_str.clone())
+                    }
+                };
+
                 let canister_sha256_name = format!("{canister_name}.sha256");
                 let canister_sha256_url = release
                     .assets
                     .iter()
                     .find(|asset| asset.name == canister_sha256_name)
+                    .map(|asset| asset.browser_download_url.clone());
+                let canister_url = release
+                    .assets
+                    .iter()
+                    .find(|asset| asset.name == canister_name)
                     .map(|asset| asset.browser_download_url.clone());
                 if let Some(canister_sha256_url) = canister_sha256_url {
                     let canister_sha256 = client
@@ -185,28 +239,36 @@ async fn get_mainnet_canister_git_tag_and_module_hash(
                         .await?
                         .text()
                         .await?;
-                    if module_hash.len() != 64 {
-                        return Err(anyhow!(
-                            "Unexpected sha256 length {}",
-                            canister_sha256.len()
-                        ));
-                    }
                     // The asset `{canister_name}.sha256` has the form:
                     // `a2a0c65a94559aed373801a149bf4a31b176cb8cbabf77465eb25143ae880f37  cycles-ledger.wasm.gz`
                     // so we check if it starts with the expected module hash
                     // (having checked its length before to avoid trivial matches if the expected module hash was empty due to a bug).
-                    if canister_sha256.starts_with(&module_hash) {
-                        return Ok(true);
+                    if canister_sha256.starts_with(&module_hash_str) {
+                        return Ok(Some(final_module_hash.await?));
+                    }
+                } else if let Some(ref canister_url) = canister_url {
+                    let module_bytes = client
+                        .get(canister_url)
+                        .bearer_auth(&token)
+                        .send()
+                        .await?
+                        .bytes()
+                        .await?;
+                    let canister_sha256 =
+                        module_hash_hex(sha2::Sha256::digest(&module_bytes).to_vec());
+
+                    if canister_sha256 == module_hash_str {
+                        return Ok(Some(final_module_hash.await?));
                     }
                 }
             }
 
-            Ok(false)
+            Ok(None)
         };
 
         match check_tag.await {
-            Ok(true) => return Ok((tag.name, module_hash)),
-            Ok(false) => (),
+            Ok(Some(module_hash_str)) => return Ok((tag.name, module_hash_str)),
+            Ok(None) => (),
             Err(e) => eprintln!(
                 "Error while checking the GitHub tag {} for canister {}: {}",
                 tag.name, canister_name, e
@@ -325,11 +387,15 @@ async fn main() -> Result<()> {
             let canister_name = canister_name.to_string();
             let canister_repository = canister_info.repository.to_string();
             let canister_filename = canister_info.filename.to_string();
+            let canister_test_filename = canister_info
+                .test_filename
+                .map(|test_filename| test_filename.to_string());
             let (new_tag, new_sha256) = get_mainnet_canister_git_tag_and_module_hash(
                 &agent,
                 canister_info.canister_id,
                 canister_repository.clone(),
                 canister_filename.clone(),
+                canister_test_filename.clone(),
             )
             .await?;
             Ok(CanisterUpdate {
