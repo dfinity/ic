@@ -10,8 +10,6 @@ async fn main() {
     let config = args.get_ic_config();
     let (logger, _async_log_guard) = new_replica_logger_from_config(&config.orchestrator_logger);
 
-    let config = args.get_ic_config();
-    let (logger, _async_log_guard) = new_replica_logger_from_config(&config.orchestrator_logger);
     let cancellation_token = CancellationToken::new();
     let cancellation_token_clone = cancellation_token.clone();
 
