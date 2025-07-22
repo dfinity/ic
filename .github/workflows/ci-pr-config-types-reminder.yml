@@ -52,7 +52,7 @@ jobs:
 
               Please ensure you have followed the **Configuration Update Protocol** guidelines——particularly if adding a new enum or enum variants:
 
-              1. **Enum Variant Forward Compatibility**: If adding new variants to an enum, ensure older versions can handle unknown variants gracefully by using \`#[serde(other)]\` on a fallback variant. See examples: \`GuestVMType::Unknown\` and \`Ipv6Config::Unknown\`.
+              **Enum Variant Forward Compatibility Guidelines**: If adding a new enum or new variants to an enum, ensure older versions can handle unknown variants gracefully by using \`#[serde(other)]\` on a fallback variant. See examples: \`GuestVMType::Unknown\` and \`Ipv6Config::Unknown\`.
 
 
               To acknowledge this reminder and unblock the PR, dismiss this code review by:
