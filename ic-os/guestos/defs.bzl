@@ -117,7 +117,7 @@ def image_deps(mode, malicious = False):
             })
         elif mode == "recovery-dev":
             deps["component_files"].update({
-                Label("//ic-os/guestos/envs/recovery-dev:recovery_archive_guestos-recovery-engine.sh"): "/opt/ic/bin/guestos-recovery-engine.sh",
+                Label("//ic-os/guestos/envs/recovery-dev:guestos-recovery-engine.sh"): "/opt/ic/bin/guestos-recovery-engine.sh",
             })
 
     return deps

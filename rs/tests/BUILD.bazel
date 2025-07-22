@@ -231,7 +231,7 @@ uvm_config_image(
         ":static-file-server.tar",
         "//ic-os/components:networking/dev-certs/canister_http_test_ca.cert",
         "//ic-os/components:networking/dev-certs/canister_http_test_ca.key",
-        "//ic-os/guestos/envs/recovery-dev:recovery_archive_recovery.tar.zst",
+        "//ic-os/guestos/envs/recovery-dev:recovery.tar.zst",
     ],
     remap_paths = {
         "canister_http_test_ca.cert": "minica.pem",

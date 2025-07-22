@@ -249,20 +249,20 @@ system_test(
     name = "guestos_recovery_engine_smoke_test",
     env = {
         "GUESTOS_RECOVERY_ENGINE_UVM_CONFIG_PATH": "$(rootpath //rs/tests:guestos_recovery_engine_uvm_config_image)",
-        "RECOVERY_HASH_PATH": "$(rootpath //ic-os/guestos/envs/recovery-dev:recovery_archive_recovery.tar.zst.sha256)",
-        "RECOVERY_CUP_B64_PATH": "$(rootpath //ic-os/guestos/envs/recovery-dev:recovery_archive_cup.proto.b64)",
-        "RECOVERY_STORE_1_B64_PATH": "$(rootpath //ic-os/guestos/envs/recovery-dev:recovery_archive_ic_registry_local_store_1.b64)",
-        "RECOVERY_STORE_2_B64_PATH": "$(rootpath //ic-os/guestos/envs/recovery-dev:recovery_archive_ic_registry_local_store_2.b64)",
+        "RECOVERY_HASH_PATH": "$(rootpath //ic-os/guestos/envs/recovery-dev:recovery.tar.zst.sha256)",
+        "RECOVERY_CUP_B64_PATH": "$(rootpath //ic-os/guestos/envs/recovery-dev:cup.proto.b64)",
+        "RECOVERY_STORE_1_B64_PATH": "$(rootpath //ic-os/guestos/envs/recovery-dev:ic_registry_local_store_1.b64)",
+        "RECOVERY_STORE_2_B64_PATH": "$(rootpath //ic-os/guestos/envs/recovery-dev:ic_registry_local_store_2.b64)",
     },
     tags = [
         "k8s",
     ],
     uses_guestos_recovery_dev = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + [
-        "//ic-os/guestos/envs/recovery-dev:recovery_archive_cup.proto.b64",
-        "//ic-os/guestos/envs/recovery-dev:recovery_archive_ic_registry_local_store_1.b64",
-        "//ic-os/guestos/envs/recovery-dev:recovery_archive_ic_registry_local_store_2.b64",
-        "//ic-os/guestos/envs/recovery-dev:recovery_archive_recovery.tar.zst.sha256",
+        "//ic-os/guestos/envs/recovery-dev:cup.proto.b64",
+        "//ic-os/guestos/envs/recovery-dev:ic_registry_local_store_1.b64",
+        "//ic-os/guestos/envs/recovery-dev:ic_registry_local_store_2.b64",
+        "//ic-os/guestos/envs/recovery-dev:recovery.tar.zst.sha256",
         "//rs/tests:guestos_recovery_engine_uvm_config_image",
     ],
     deps = [

@@ -62,54 +62,7 @@ def generate_dummy_recovery_archive(name):
             mv recovery.tar.zst recovery.tar.zst.sha256 cup.proto.b64 ic_registry_local_store_1.b64 ic_registry_local_store_2.b64 guestos-recovery-engine.sh $(RULEDIR)
         """,
         visibility = [
-            "//rs:ic-os-pkg",
-        ],
-    )
-
-    native.filegroup(
-        name = name + "_recovery.tar.zst",
-        srcs = ["recovery.tar.zst"],
-        visibility = [
             "//rs:system-tests-pkg",
         ],
     )
 
-    native.filegroup(
-        name = name + "_recovery.tar.zst.sha256",
-        srcs = ["recovery.tar.zst.sha256"],
-        visibility = [
-            "//rs:system-tests-pkg",
-        ],
-    )
-
-    native.filegroup(
-        name = name + "_cup.proto.b64",
-        srcs = ["cup.proto.b64"],
-        visibility = [
-            "//rs:system-tests-pkg",
-        ],
-    )
-
-    native.filegroup(
-        name = name + "_ic_registry_local_store_1.b64",
-        srcs = ["ic_registry_local_store_1.b64"],
-        visibility = [
-            "//rs:system-tests-pkg",
-        ],
-    )
-
-    native.filegroup(
-        name = name + "_ic_registry_local_store_2.b64",
-        srcs = ["ic_registry_local_store_2.b64"],
-        visibility = [
-            "//rs:system-tests-pkg",
-        ],
-    )
-
-    native.filegroup(
-        name = name + "_guestos-recovery-engine.sh",
-        srcs = ["guestos-recovery-engine.sh"],
-        visibility = [
-            "//rs:ic-os-pkg",
-        ],
-    )
