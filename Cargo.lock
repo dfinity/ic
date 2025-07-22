@@ -9355,6 +9355,7 @@ dependencies = [
  "futures",
  "futures-util",
  "hyper 1.6.0",
+ "ic-logger",
  "rand 0.8.5",
  "slog",
  "tokio",
