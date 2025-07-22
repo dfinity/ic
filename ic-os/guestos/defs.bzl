@@ -61,7 +61,7 @@ def image_deps(mode, malicious = False):
 
         # Set various configuration values
         "container_context_files": Label("//ic-os/guestos/context:context-files"),
-        "component_files": dict(component_files),  # Make a copy because `component_files` is a frozen dict
+        "component_files": dict(component_files),  # Make a copy because we might update it later
         "partition_table": Label("//ic-os/guestos:partitions.csv"),
         "expanded_size": "50G",
         "rootfs_size": "3G",
