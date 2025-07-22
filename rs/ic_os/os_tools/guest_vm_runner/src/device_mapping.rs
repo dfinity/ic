@@ -11,7 +11,6 @@ use std::ops::Deref;
 use std::os::fd::AsRawFd;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::thread;
 use tempfile::{NamedTempFile, TempPath};
 
 pub trait DeviceTrait: Send + Sync {
@@ -197,7 +196,7 @@ impl Drop for LoopDeviceWrapper {
     fn drop(&mut self) {
         #[cfg(debug_assertions)]
         {
-            if !thread::panicking() {
+            if !std::thread::panicking() {
                 let major = self.major().expect("Could not get major number");
                 let minor = self.minor().expect("Could not get minor number");
                 let backing_file_path = std::fs::read_to_string(format!(
@@ -360,22 +359,22 @@ impl Drop for MappedDevice {
     }
 }
 
-fn debug_assert_valid(device: &dyn DeviceTrait) {
+fn debug_assert_valid(_device: &dyn DeviceTrait) {
     #[cfg(debug_assertions)]
     {
-        if thread::panicking() {
+        if std::thread::panicking() {
             return;
         }
-        let len: u64 = std::fs::read_to_string(format!("/sys/dev/block/{}/size", device.device()))
+        let len: u64 = std::fs::read_to_string(format!("/sys/dev/block/{}/size", _device.device()))
             .expect("Could not read size from sysfs")
             .trim()
             .parse()
             .expect("Could not parse size");
         assert_eq!(
             len,
-            device.len().0,
+            _device.len().0,
             "Device {} has unexpected size",
-            device.device()
+            _device.device()
         );
     }
 }
@@ -384,7 +383,7 @@ fn debug_assert_valid(device: &dyn DeviceTrait) {
 fn debug_panic(msg: &str) {
     #[cfg(debug_assertions)]
     {
-        if !thread::panicking() {
+        if !std::thread::panicking() {
             panic!("{msg}");
         }
     }
