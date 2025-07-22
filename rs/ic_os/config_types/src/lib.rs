@@ -70,10 +70,11 @@ pub enum GuestVMType {
     /// The Guest VM brought up temporarily during the GuestOS upgrade process.
     Upgrade,
     /// This is what runs most of the time, executing the replica, serving requests, etc.
-    /// Also serves as the fallback for unknown variants during deserialization.
     #[default]
-    #[serde(other)]
     Default,
+    /// Unknown variant fallback for forward compatibility with future versions.
+    #[serde(other)]
+    Unknown,
 }
 
 /// GuestOS configuration. In production, this struct inherits settings from `HostOSConfig`.
@@ -267,6 +268,9 @@ pub enum Ipv6Config {
     Deterministic(DeterministicIpv6Config),
     Fixed(FixedIpv6Config),
     RouterAdvertisement,
+    /// Unknown variant for forward compatibility with future versions.
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
@@ -315,7 +319,7 @@ mod tests {
 
     #[test]
     fn test_guest_vm_type_forward_compatibility() -> Result<(), Box<dyn std::error::Error>> {
-        // Test that unknown enum variants deserialize to Default
+        // Test that unknown enum variants deserialize to Unknown
         // Create a minimal GuestOSConfig with the unknown variant
         let config_json = serde_json::json!({
             "config_version": CONFIG_VERSION,
@@ -341,9 +345,9 @@ mod tests {
             "guest_vm_type": "unknown_future_variant"
         });
 
-        // This should not fail and should deserialize guest_vm_type to Default
+        // This should not fail and should deserialize guest_vm_type to Unknown
         let config: GuestOSConfig = serde_json::from_value(config_json)?;
-        assert_eq!(config.guest_vm_type, GuestVMType::Default);
+        assert_eq!(config.guest_vm_type, GuestVMType::Unknown);
 
         Ok(())
     }

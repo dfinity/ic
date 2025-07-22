@@ -37,6 +37,7 @@ pub fn generate_network_config(
                 &ipv6_address,
             )
         }
+        Ipv6Config::Unknown => Err(anyhow!("Unknown Ipv6Config variant")),
     }
 }
 
