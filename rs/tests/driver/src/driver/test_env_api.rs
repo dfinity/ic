@@ -2200,7 +2200,7 @@ where
                 break Ok(v);
             }
             Err(err) => {
-                let err_msg = err.to_string();
+                let err_msg = format!("{:?}", err);
                 if start.elapsed() > timeout {
                     break Err(err.context(format!(
                         "Func=\"{msg}\" timed out after {:?} on attempt {attempt}. Last error: {err_msg}",
