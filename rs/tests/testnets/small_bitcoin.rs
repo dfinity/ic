@@ -47,7 +47,7 @@ use ic_system_test_driver::driver::{
     prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
     test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder},
-    vector_vm::{HasVectorTargets, VectorVm},
+    vector_vm::HasVectorTargets,
 };
 use slog::info;
 use std::time::Duration;

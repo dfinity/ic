@@ -45,7 +45,7 @@ use ic_system_test_driver::driver::{
     prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
     test_env_api::HasTopologySnapshot,
-    vector_vm::{HasVectorTargets, VectorVm},
+    vector_vm::HasVectorTargets,
 };
 use nns_dapp::{
     install_ii_nns_dapp_and_subnet_rental, nns_dapp_customizations, set_authorized_subnets,

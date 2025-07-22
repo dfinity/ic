@@ -14,7 +14,7 @@ use ic_system_test_driver::{
         nested::NestedVms,
         test_env::TestEnv,
         test_env_api::*,
-        vector_vm::{HasVectorTargets, VectorVm},
+        vector_vm::HasVectorTargets,
     },
     retry_with_msg, retry_with_msg_async,
     util::block_on,
@@ -92,7 +92,8 @@ pub fn config(env: TestEnv, mainnet_config: bool) {
                     .map(|(k, v)| (k.to_string(), v.to_string()))
                     .collect(),
             ),
-        );
+        )
+        .unwrap();
     }
 
     // Additional sync to generate new config for the nested vm.
