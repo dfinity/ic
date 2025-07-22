@@ -64,7 +64,7 @@ runs:
                 # get bazel targets that changed in the commit range and take the union with
                 # the targets that are expected to be built.
                 comm -12 \
-                  <("${CI_PROJECT_DIR:-}"/ci/bazel-scripts/diff.sh "$commit_range" | sort) \
+                  <("${CI_PROJECT_DIR:-}"/ci/bazel-scripts/diff.sh test "$commit_range" | sort) \
                   <(IFS='+'; bazel query "//... except attr(tags, \"manual\", //...)" | sort; ) > "$target_pattern_file"
 
                 # if bazel targets is empty we don't need to run any tests
