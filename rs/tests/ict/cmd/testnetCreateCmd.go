@@ -85,6 +85,7 @@ type TestnetConfig struct {
 	requiredHostFeatures string
 	icConfigPath         string
 	k8sBranch            string
+	with_ssh_auth_sock   bool
 }
 
 // Testnet config summary published to json file.
@@ -219,6 +220,9 @@ func TestnetCommand(cfg *TestnetConfig) func(cmd *cobra.Command, args []string) 
 		if config != "" {
 			command = append(command, fmt.Sprintf("--test_env=IC_CONFIG='%s'", config))
 		}
+		if cfg.with_ssh_auth_sock {
+			command = append(command, "--test_env=SSH_AUTH_SOCK")
+		}
 		// Append all bazel args following the --, i.e. "ict test target -- --verbose_explanations --test_timeout=20 ..."
 		// Note: arguments provided by the user might override the ones above, i.e. test_timeout, cache_test_results, etc.
 		command = append(command, args[1:]...)
@@ -295,6 +299,7 @@ func NewTestnetCreateCmd() *cobra.Command {
 		RunE:              TestnetCommand(&cfg),
 	}
 	cmd.Flags().BoolVarP(&cfg.verbose, "verbose", "", false, "Print all testnet deployment log to stdout")
+	cmd.Flags().BoolVarP(&cfg.with_ssh_auth_sock, "with_ssh_auth_sock", "", false, "Forward SSH_AUTH_SOCK for test setup to run SSH")
 	cmd.Flags().StringVarP(&cfg.outputDir, "output-dir", "", "", fmt.Sprintf("Docker path to testnet deployment result files (default: %s)", os.TempDir()))
 	cmd.Flags().IntVar(&cfg.lifetimeMins, "lifetime-mins", 0, fmt.Sprintf("Keep testnet alive for this duration in mins, max=%d", MAX_TESTNET_LIFETIME_MINS))
 	cmd.Flags().BoolVarP(&cfg.noTTL, "no-ttl", "", false, "Do not set a Time-To-Live (expiration time) for the testnet.\nIf set the --lifetime-mins setting is ignored.\nBE CAREFUL WITH THIS OPTION BECAUSE THIS WILL CAUSE RESOURCE EXHAUSTION\nIF YOU FORGET TO DELETE THE TESTNET MANUALLY WHEN NO LONGER USED!")

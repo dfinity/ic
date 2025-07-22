@@ -7,8 +7,8 @@
 //   $ ./ci/tools/docker-run
 //   $ ict testnet create medium --lifetime-mins=180 --output-dir=./medium -- --test_tmpdir=./medium
 //
-// The --output-dir=./medium will store the debug output of the test driver in the specified directory.
-// The --test_tmpdir=./medium will store the remaining test output in the specified directory.
+// The --output-dir=./large will store the debug output of the test driver in the specified directory.
+// The --test_tmpdir=./large will store the remaining test output in the specified directory.
 // This is useful to have access to in case you need to SSH into an IC node for example like:
 //
 //   $ ssh -i medium/_tmp/*/setup/ssh/authorized_priv_keys/admin admin@

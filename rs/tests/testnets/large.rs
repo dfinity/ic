@@ -47,7 +47,6 @@ use ic_system_test_driver::driver::ic::{
 };
 use ic_system_test_driver::driver::ic_gateway_vm::{HasIcGatewayVm, IcGatewayVm};
 use ic_system_test_driver::driver::{
-    farm::HostFeature,
     group::SystemTestGroup,
     prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
@@ -59,7 +58,7 @@ use nns_dapp::{
     set_authorized_subnets, set_icp_xdr_exchange_rate, set_sns_subnet,
 };
 
-const NUM_FULL_CONSENSUS_APP_SUBNETS: u64 = 0;
+const NUM_FULL_CONSENSUS_APP_SUBNETS: u64 = 1;
 const NUM_SINGLE_NODE_APP_SUBNETS: u64 = 1;
 const NUM_IC_GATEWAYS: u64 = 1;
 
@@ -68,42 +67,6 @@ fn main() -> Result<()> {
         .with_setup(setup)
         .execute_from_args()?;
     Ok(())
-}
-
-fn switch_to_ssd(_host: &str) -> Result<()> {
-    let script = r"#
-#!/bin/bash
-set -e
-# virsh prints four lines for a single instance running, two lines of header,
-# VM info and trailing empty line. The script should fail if the format is
-# different or there are multiple VMs running. The trailing line is lost when
-# assigning to a variable.
-virsh_list=$(sudo virsh list)
-if [ $(echo "$virsh_list" | wc -l) -ne 3 ]; then
-	echo "Unexpected virsh list output"
-	exit 2
-fi
-VMNAME=$(sudo virsh list | awk '{ if (NR==3) print $2 }')
-echo Moving $VMNAME to /dev/hostlvm/guest
-sudo virsh shutdown $VMNAME
-for i in {1..300}; do
-	if [ $(sudo virsh list | grep $VMNAME | wc -l) -eq 0 ]; then
-		break
-	fi
-	echo Waiting for shutdown of $VMNAME: retry $i...
-	sleep 1
-done
-CONFIG=$(mktemp)
-sudo virsh dumpxml $VMNAME > $CONFIG
-IMAGE=$(cat $CONFIG | sed -n 46p | cut -d\' -f 2) 
-echo "dd'ing file"
-sudo dd if=$IMAGE of=/dev/hostlvm/guestos status=progress bs=512MiB oflag=direct iflag=direct
-sed -i '44s/file/block/' $CONFIG
-sed -i "45s/\/>/ discard=\'unmap\' cache=\'none\'\/>/" $CONFIG
-sed -i "46s/file.*/dev='\/dev\/hostlvm\/guestos'\/>/" $CONFIG
-sudo virsh create $CONFIG
-rm $CONFIG
-    #";
 }
 
 pub fn setup(env: TestEnv) {
@@ -118,22 +81,15 @@ pub fn setup(env: TestEnv) {
         memory_kibibytes: Some(AmountOfMemoryKiB::new(480 << 20)),
         boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(2000)),
     };
-    let mut ic = InternetComputer::new().with_api_boundary_nodes(1).with_default_vm_resources(vm_resources);
-    ic = ic.add_subnet(
-        Subnet::new(SubnetType::System)
-            .add_nodes(1),
-    );
+    let mut ic = InternetComputer::new()
+        .with_api_boundary_nodes(1)
+        .with_default_vm_resources(vm_resources);
+    ic = ic.add_subnet(Subnet::new(SubnetType::System).add_nodes(4));
     for _ in 0..NUM_FULL_CONSENSUS_APP_SUBNETS {
         ic = ic.add_subnet(Subnet::new(SubnetType::Application).add_nodes(4));
     }
     for _ in 0..NUM_SINGLE_NODE_APP_SUBNETS {
-        ic = ic.add_subnet(
-            Subnet::new(SubnetType::Application)
-                .with_required_host_features(vec![HostFeature::Host(
-                    "dm1-dll29.dm1.dfinity.network".to_string(),
-                )])
-                .add_nodes(1),
-        );
+        ic = ic.add_subnet(Subnet::new(SubnetType::Application).add_nodes(1));
     }
     ic.setup_and_start(&env)
         .expect("Failed to setup IC under test");

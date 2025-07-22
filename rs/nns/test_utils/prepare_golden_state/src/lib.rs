@@ -98,7 +98,7 @@ pub fn download_golden_state_or_panic(state_source: StateSource, destination: &P
     println!("Downloading {} to {:?} ...", source, destination);
 
     println!(
-        "SSH_AUTH_SOCKET: {:#?}",
+        "SSH_AUTH_SOCK: {:#?}",
         Command::new("sh")
             .arg("-c")
             .arg("echo $SSH_AUTH_SOCK")

@@ -270,6 +270,34 @@ system_test_nns(
 )
 
 system_test_nns(
+    name = "perf_benchmark",
+    env = SNS_CANISTER_ENV | {
+        "II_WASM_PATH": "$(rootpath @ii_dev_canister//file)",
+        "NNS_DAPP_WASM_PATH": "$(rootpath @nns_dapp_canister//file)",
+        "SNS_AGGREGATOR_WASM_PATH": "$(rootpath @sns_aggregator//file)",
+        "SUBNET_RENTAL_WASM_PATH": "$(rootpath @subnet_rental_canister//file)",
+    },
+    tags = [
+        "dynamic_testnet",
+        "manual",
+    ],
+    runtime_deps = GUESTOS_RUNTIME_DEPS + SNS_CANISTER_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE + GRAFANA_RUNTIME_DEPS + [
+        "@ii_dev_canister//file",
+        "@nns_dapp_canister//file",
+        "@sns_aggregator//file",
+        "@subnet_rental_canister//file",
+    ],
+    deps = [
+        # Keep sorted.
+        "//rs/registry/subnet_type",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/nns/nns_dapp",
+        "@crate_index//:anyhow",
+    ],
+)
+
+system_test_nns(
     name = "src_testing",
     env = SNS_CANISTER_ENV | {
         "XRC_WASM_PATH": "$(rootpath //rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister)",

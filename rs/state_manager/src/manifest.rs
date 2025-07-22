@@ -22,7 +22,7 @@ use crate::{
 use bit_vec::BitVec;
 use hash::{chunk_hasher, file_hasher, manifest_hasher, ManifestHash};
 use ic_crypto_sha2::Sha256;
-use ic_logger::{error, fatal, replica_logger::no_op_logger, ReplicaLogger};
+use ic_logger::{error, fatal, info, replica_logger::no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_state_layout::{CheckpointLayout, ReadOnly, CANISTER_FILE, UNVERIFIED_CHECKPOINT_MARKER};
 use ic_sys::{mmap::ScopedMmap, PAGE_SIZE};
@@ -34,6 +34,8 @@ use std::fmt;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, Weak};
+
+use std::time::Instant;
 
 /// When computing a manifest, we recompute the hash of every
 /// `REHASH_EVERY_NTH_CHUNK` chunk, even if we know it to be unchanged and
@@ -781,6 +783,7 @@ pub fn compute_manifest(
     opt_manifest_delta: Option<ManifestDelta>,
     rehash: RehashManifest,
 ) -> Result<Manifest, CheckpointError> {
+    let start = Instant::now();
     let mut files = {
         let mut files = Vec::new();
         files_with_sizes(checkpoint.raw_path(), "".into(), &mut files)?;
@@ -789,6 +792,7 @@ pub fn compute_manifest(
         files
     };
 
+    info!(log, "Got files: {:?}", start.elapsed());
     // Currently, the unverified checkpoint marker file should already be removed by the time we reach this point.
     // If it accidentally exists, the replica will crash in the outer function `handle_compute_manifest_request`.
     //
@@ -837,6 +841,7 @@ pub fn compute_manifest(
         None => default_hash_plan(&files, max_chunk_size),
     };
 
+    info!(log, "Got chunk actions: {:?}", start.elapsed());
     #[cfg(debug_assertions)]
     let (seq_file_table, seq_chunk_table) = {
         let metrics_registry = ic_metrics::MetricsRegistry::new();
@@ -863,6 +868,7 @@ pub fn compute_manifest(
         version,
     );
 
+    info!(log, "Got chunk table: {:?}", start.elapsed());
     #[cfg(debug_assertions)]
     {
         assert_eq!(file_table, seq_file_table);
@@ -870,6 +876,7 @@ pub fn compute_manifest(
     }
 
     let manifest = Manifest::new(version, file_table, chunk_table);
+    info!(log, "Got manifest: {:?}", start.elapsed());
     metrics
         .manifest_size
         .set(encode_manifest(&manifest).len() as i64);
@@ -897,6 +904,7 @@ pub fn compute_manifest(
     // Sanity check: ensure that we have produced a valid manifest.
     debug_assert_eq!(Ok(()), validate_manifest_internal_consistency(&manifest));
 
+    info!(log, "Got all: {:?}", start.elapsed());
     Ok(manifest)
 }
 
