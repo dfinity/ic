@@ -170,11 +170,11 @@ async fn read_batch<T>(receiver: &mut Receiver<T>, recv_timeout: Duration) -> Op
     )
     .await
     {
-        Ok(received) if received > 0 => Some(artifacts),
+        Ok(1..) => Some(artifacts),
         // Stream has finished because the abortable broadcast/p2p has stopped.
         // This is infallible.
-        Ok(_) => None,
-        // First value didn't arrive on time
+        Ok(0) => None,
+        // No values arrived on time
         Err(_) => Some(artifacts),
     }
 }
@@ -425,6 +425,13 @@ mod tests {
         tx.send(2).await.unwrap();
         std::mem::drop(tx);
         assert_eq!(read_batch(&mut rx, recv_timeout).await, Some(vec![1, 2]));
+    }
+
+    #[tokio::test]
+    async fn test_read_batch_with_empty_channel_returns_empty_vec() {
+        let (_tx, mut rx) = channel::<i32>(100);
+        let recv_timeout = Duration::from_secs(1);
+        assert_eq!(read_batch(&mut rx, recv_timeout).await, Some(vec![]));
     }
 
     #[test]
