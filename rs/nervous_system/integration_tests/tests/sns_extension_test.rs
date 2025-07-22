@@ -22,6 +22,7 @@ use ic_sns_cli::register_extension;
 use ic_sns_cli::register_extension::RegisterExtensionArgs;
 use ic_sns_cli::register_extension::RegisterExtensionInfo;
 use ic_sns_governance::governance::TREASURY_SUBACCOUNT_NONCE;
+use ic_sns_governance_api::pb::v1::PreciseValue;
 use ic_sns_swap::pb::v1::Lifecycle;
 use icp_ledger::{Tokens, DEFAULT_TRANSFER_FEE};
 use icrc_ledger_types::icrc::generic_value::Value;
@@ -156,6 +157,11 @@ async fn test_treasury_manager() {
     let treasury_allocation_icp_e8s = 150 * E8 + 2 * ICP_FEE;
     let treasury_allocation_sns_e8s = 350 * E8 + 2 * SNS_FEE;
 
+    let extension_init = Some(PreciseValue::Map(btreemap! {
+        "treasury_allocation_icp_e8s".to_string() => PreciseValue::Nat(treasury_allocation_icp_e8s),
+        "treasury_allocation_sns_e8s".to_string() => PreciseValue::Nat(treasury_allocation_sns_e8s),
+    }));
+
     let adaptor_canister_id = {
         let (neuron_id, sender) = sns::governance::find_neuron_with_majority_voting_power(
             &pocket_ic,
@@ -182,12 +188,11 @@ async fn test_treasury_manager() {
             RegisterExtensionArgs {
                 sns_neuron_id: Some(ParsedSnsNeuron(neuron_id)),
                 sns_root_canister_id,
-                fiduciary_subnet_id: Some(PrincipalId(fiduciary_subnet_id)),
+                subnet_id: Some(PrincipalId(fiduciary_subnet_id)),
                 wasm_path,
                 proposal_url: Url::try_from("https://example.com").unwrap(),
                 summary: "Register KongSwap Adaptor".to_string(),
-                treasury_allocation_icp_e8s: Some(treasury_allocation_icp_e8s),
-                treasury_allocation_sns_e8s: Some(treasury_allocation_sns_e8s),
+                extension_init,
             },
             &agent,
         )
@@ -334,7 +339,6 @@ async fn test_treasury_manager() {
     .unwrap();
 
     // let audit_trail = adaptor_canister_id.audit_trail();
-
     // println!("{:#?}", audit_trail.transactions());
 
     // dbg_print_block(&pocket_ic, sns_ledger_canister_id, 0).await;

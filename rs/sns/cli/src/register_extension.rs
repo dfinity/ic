@@ -311,7 +311,7 @@ pub async fn exec<C: CallCanisters>(
 
     let sns = find_sns(agent, sns_root_canister_id).await?.unwrap();
 
-    print!("Creating the extension canister on the fiduciary subnet ... ");
+    print!("Creating the extension canister ... ");
     std::io::stdout().flush().unwrap();
     let extension_canister_controllers = vec![
         caller_principal,
