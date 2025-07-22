@@ -1,0 +1,30 @@
+[package]
+name = "canscan"
+version = "0.1.0"
+description = "CLI tool to analyze the endpoints a canister's WASM exposes."
+license = "Apache-2.0"
+readme = "README.md"
+include = ["src", "Cargo.toml", "CHANGELOG.md", "LICENSE", "README.md"]
+repository = "https://github.com/dfinity/ic"
+authors.workspace = true
+edition.workspace = true
+documentation = "https://docs.rs/canlog"
+
+[[bin]]
+name = "canscan"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+candid = { workspace = true }
+candid_parser = { workspace = true }
+clap = { workspace = true }
+derive_more = { version = "2.0.1", features = ["from"] }
+flate2 = { workspace = true }
+parse-display = "0.10.0"
+wasmparser = { workspace = true }
+
+[dev-dependencies]
+assert_cmd = { workspace = true }
+predicates = { workspace = true }
+maplit = "1.0.2"
