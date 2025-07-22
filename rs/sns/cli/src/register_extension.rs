@@ -16,12 +16,14 @@ use ic_nervous_system_agent::{
     CallCanisters, Request,
 };
 use ic_nns_constants::CYCLES_LEDGER_CANISTER_ID;
-use ic_sns_governance_api::pb::v1::{
-    proposal::Action, ChunkedCanisterWasm, ExtensionInit, PreciseValue, Proposal, ProposalId,
-    RegisterExtension,
+use ic_sns_governance_api::{
+    pb::v1::{
+        proposal::Action, ChunkedCanisterWasm, ExtensionInit, PreciseValue, Proposal, ProposalId,
+        RegisterExtension,
+    },
+    precise_value::parse_precise_value,
 };
 use ic_wasm::{metadata, utils::parse_wasm};
-use maplit::btreemap;
 use serde::Deserialize;
 use std::{
     fs::File,
@@ -48,9 +50,15 @@ pub struct RegisterExtensionArgs {
     #[clap(long)]
     pub sns_neuron_id: Option<ParsedSnsNeuron>,
 
+    /// The Root canister ID of the SNS to which the extension is being registered.
     pub sns_root_canister_id: CanisterId,
 
-    pub fiduciary_subnet_id: Option<PrincipalId>,
+    /// The ID of the subnet on which the extension canister will be created.
+    ///
+    /// Some extensions may require a specific subnet to operate correctly.
+    ///
+    /// The default is the fiduciary subnet.
+    pub subnet_id: Option<PrincipalId>,
 
     /// Path to a ICP WASM module file (may be gzipped).
     #[clap(long)]
@@ -64,8 +72,9 @@ pub struct RegisterExtensionArgs {
     #[clap(long)]
     pub summary: String,
 
-    pub treasury_allocation_icp_e8s: Option<u64>,
-    pub treasury_allocation_sns_e8s: Option<u64>,
+    /// JSON-encoded initialization arguments for the extension.
+    #[clap(long, value_parser = parse_precise_value)]
+    pub extension_init: Option<PreciseValue>,
 }
 
 pub struct Wasm {
@@ -197,12 +206,12 @@ pub fn validate_candid_arg_for_wasm(wasm: &Wasm, args: Option<String>) -> Result
 /// Returns the ID of the newly created canister in the Ok result.
 pub async fn create_extension_canister<C: CallCanisters>(
     agent: &C,
-    fiduciary_subnet_id: Option<PrincipalId>,
+    subnet_id: Option<PrincipalId>,
     controllers: Vec<PrincipalId>,
     cycles_amount: u128,
     name: &str,
 ) -> Result<CanisterId> {
-    let subnet = if let Some(subnet) = fiduciary_subnet_id {
+    let subnet = if let Some(subnet) = subnet_id {
         subnet
     } else {
         PrincipalId::from_str("pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt45d-h3h6c-q3mxf-vpeq5-fk5o7-yae")
@@ -286,12 +295,11 @@ pub async fn exec<C: CallCanisters>(
     let RegisterExtensionArgs {
         sns_neuron_id,
         sns_root_canister_id,
-        fiduciary_subnet_id,
+        subnet_id,
         wasm_path,
         proposal_url,
         summary,
-        treasury_allocation_icp_e8s,
-        treasury_allocation_sns_e8s,
+        extension_init,
     } = args;
 
     let caller_principal = PrincipalId(agent.caller()?);
@@ -313,7 +321,7 @@ pub async fn exec<C: CallCanisters>(
     let cycles_amount = EXTENSION_CANISTER_INITIAL_CYCLES_BALANCE;
     let extension_canister_id = create_extension_canister(
         agent,
-        fiduciary_subnet_id,
+        subnet_id,
         extension_canister_controllers,
         cycles_amount,
         "my-extension-canister",
@@ -349,6 +357,7 @@ pub async fn exec<C: CallCanisters>(
     let sns_governance = sns::governance::GovernanceCanister {
         canister_id: sns.governance.canister_id,
     };
+
     let proposal = Proposal {
         title: format!(
             "Register SNS extension canister {}",
@@ -363,10 +372,7 @@ pub async fn exec<C: CallCanisters>(
                 chunk_hashes_list,
             }),
             extension_init: Some(ExtensionInit {
-                value: Some(PreciseValue::Map(btreemap! {
-                    "treasury_allocation_icp_e8s".to_string() => PreciseValue::Nat(treasury_allocation_icp_e8s.unwrap()),
-                    "treasury_allocation_sns_e8s".to_string() => PreciseValue::Nat(treasury_allocation_sns_e8s.unwrap()),
-                })),
+                value: extension_init,
             }),
         })),
     };

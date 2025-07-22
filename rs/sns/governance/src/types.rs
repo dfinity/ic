@@ -2786,23 +2786,33 @@ impl Wasm {
         }
     }
 
-    pub fn description(&self) -> String {
+    pub fn sha256sum(&self) -> Vec<u8> {
         match self {
             Self::Bytes(bytes) => {
-                let canister_wasm_sha256 = {
-                    let mut state = Sha256::new();
-                    state.write(&bytes[..]);
-                    let sha = state.finish();
-                    sha.to_vec()
-                };
+                let mut state = Sha256::new();
+                state.write(&bytes[..]);
+                state.finish().to_vec()
+            }
+            Self::Chunked {
+                wasm_module_hash, ..
+            } => wasm_module_hash.clone(),
+        }
+    }
+
+    pub fn description(&self) -> String {
+        let wasm_module_hash = self.sha256sum();
+        let wasm_module_hash = format_full_hash(&wasm_module_hash);
+
+        match self {
+            Self::Bytes(bytes) => {
                 format!(
                     "Embedded module with {} bytes and SHA256 `{}`.",
                     bytes.len(),
-                    format_full_hash(&canister_wasm_sha256)
+                    wasm_module_hash,
                 )
             }
             Self::Chunked {
-                wasm_module_hash,
+                wasm_module_hash: _, // computed above
                 store_canister_id,
                 chunk_hashes_list,
             } => {
@@ -2810,7 +2820,7 @@ impl Wasm {
                     "Remote module stored on canister {} with SHA256 `{}`. \
                      Split into {} chunks:\n  - {}",
                     store_canister_id.get(),
-                    format_full_hash(wasm_module_hash),
+                    wasm_module_hash,
                     chunk_hashes_list.len(),
                     chunk_hashes_list
                         .iter()

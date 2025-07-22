@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, fmt::Display};
 
 use candid::Nat;
 use ic_base_types::CanisterId;
@@ -26,11 +26,29 @@ pub enum ExtensionKind {
     TreasuryManager,
 }
 
+impl Display for ExtensionKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::TreasuryManager => write!(f, "TreasuryManager"),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ExtensionSpec {
     pub name: String,
     pub topic: Topic,
     pub kind: ExtensionKind,
+}
+
+impl Display for ExtensionSpec {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "SNS Extension {{ name: {}, topic: {:?}, kind: {} }}",
+            self.name, self.topic, self.kind,
+        )
+    }
 }
 
 pub struct ValidatedRegisterExtension {

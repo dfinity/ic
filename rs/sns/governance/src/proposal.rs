@@ -1,4 +1,5 @@
 use crate::cached_upgrade_steps::render_two_versions_as_markdown_table;
+use crate::extensions::validate_extension_wasm;
 use crate::pb::v1::{
     AdvanceSnsTargetVersion, RegisterExtension, SetTopicsForCustomProposals, Topic,
 };
@@ -1553,12 +1554,22 @@ async fn validate_and_render_register_extension(
 
     let (wasm, canister_id) = wasm_and_canister_id.unwrap();
 
+    let extension_spec = match validate_extension_wasm(&wasm.sha256sum()) {
+        Err(err) => {
+            return Err(format!(
+                "RegisterExtension proposal was invalid because: {}",
+                err
+            ));
+        }
+        Ok(spec) => spec,
+    };
+
     let wasm_info = wasm.description();
 
     let extension_init = format!("{:#?}", extension_init.unwrap());
 
     Ok(format!(
-        r"# Proposal to Register SNS Extension
+        r"# Proposal to Register {extension_spec}
 
 ## Extension canister: {canister_id}
 

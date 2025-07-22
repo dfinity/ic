@@ -1,3 +1,6 @@
+// Prevents warnings from the Derivative macro.
+#![allow(clippy::needless_lifetimes)]
+
 use candid::{CandidType, Nat, Principal};
 use derivative::Derivative;
 use serde::{Deserialize, Serialize, Serializer};
@@ -155,7 +158,7 @@ fn fmt_principal_as_string(
     principal: &Principal,
     f: &mut std::fmt::Formatter,
 ) -> Result<(), std::fmt::Error> {
-    write!(f, "{}", principal.to_string())
+    write!(f, "{}", principal)
 }
 
 #[derive(CandidType, Clone, Derivative, Deserialize, PartialEq, Serialize)]
