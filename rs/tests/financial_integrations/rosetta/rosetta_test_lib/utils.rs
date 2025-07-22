@@ -28,9 +28,9 @@ use ic_rosetta_api::{
         transaction_results::TransactionResults, Request,
     },
     request_types::{
-        AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, ListNeurons, NeuronInfo,
-        RefreshVotingPower, RegisterVote, RemoveHotKey, SetDissolveTimestamp, Spawn, Stake,
-        StakeMaturity, StartDissolve, StopDissolve,
+        AddHotKey, ChangeAutoStakeMaturity, Disburse, DisburseMaturity, Follow, ListNeurons,
+        NeuronInfo, RefreshVotingPower, RegisterVote, RemoveHotKey, SetDissolveTimestamp, Spawn,
+        Stake, StakeMaturity, StartDissolve, StopDissolve,
     },
     transaction_id::TransactionIdentifier,
     DEFAULT_TOKEN_SYMBOL,
