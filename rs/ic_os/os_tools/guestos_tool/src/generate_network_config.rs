@@ -146,14 +146,14 @@ fn create_network_info(
     ipv4_info: Option<IpAddressInfo>,
 ) -> Result<NetworkInfo> {
     let ipv6_info = match ipv6_config {
-        Ipv6Config::RouterAdvertisement => None,
-        Ipv6Config::Deterministic(_) => {
-            bail!("GuestOSConfig Ipv6Config should not be of type Deterministic.");
-        }
         Ipv6Config::Fixed(ipv6_config) => Some(IpAddressInfo::new_ipv6_address(
             &ipv6_config.address,
             &ipv6_config.gateway.to_string(),
         )?),
+        Ipv6Config::RouterAdvertisement => None,
+        Ipv6Config::Deterministic(_) => {
+            bail!("GuestOSConfig Ipv6Config should not be of type Deterministic.");
+        }
         Ipv6Config::Unknown => {
             bail!("Unknown Ipv6Config variant");
         }
