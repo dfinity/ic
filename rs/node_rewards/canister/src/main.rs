@@ -4,7 +4,6 @@ use ic_cdk::{init, post_upgrade, pre_upgrade, spawn, update};
 use ic_nervous_system_canisters::registry::RegistryCanister;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_node_rewards_canister::canister::NodeRewardsCanister;
-use ic_node_rewards_canister::registry_querier::RegistryQuerier;
 use ic_node_rewards_canister::storage::clear_registry_store;
 use ic_node_rewards_canister::storage::RegistryStoreStableMemoryBorrower;
 use ic_node_rewards_canister_api::monthly_rewards::{
@@ -12,7 +11,6 @@ use ic_node_rewards_canister_api::monthly_rewards::{
 };
 use ic_registry_canister_client::CanisterRegistryClient;
 use ic_registry_canister_client::StableCanisterRegistryClient;
-use rewards_calculation::types::RewardPeriod;
 use std::cell::RefCell;
 use std::sync::Arc;
 use std::time::Duration;
