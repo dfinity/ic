@@ -1,10 +1,11 @@
 use anyhow::Result;
+use candid::Decode;
 use ic_nns_governance_api::ProposalStatus;
 use ic_nns_test_utils::governance::wait_for_final_state;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::RegistryVersion;
-use ic_universal_canister::{wasm, UNIVERSAL_CANISTER_WASM};
+use ic_types::{Cycles, RegistryVersion};
+use ic_universal_canister::{management, wasm, UNIVERSAL_CANISTER_WASM};
 use ic_utils::interfaces::ManagementCanister;
 use registry_canister::mutations::do_create_subnet::CanisterCyclesCostSchedule;
 use std::{collections::HashSet, time::Duration};
@@ -23,6 +24,7 @@ use ic_system_test_driver::{
         submit_create_application_subnet_proposal, vote_on_proposal,
     },
     systest,
+    types::CreateCanisterResult,
     util::{assert_create_agent, block_on, runtime_from_url, UniversalCanister},
 };
 use slog::info;
@@ -61,7 +63,6 @@ pub fn test(env: TestEnv) {
         .nodes()
         .next()
         .expect("there is no NNS node");
-
     NnsInstallationBuilder::new()
         .install(&nns_node, &env)
         .expect("NNS canisters not installed");
@@ -161,7 +162,10 @@ pub fn test(env: TestEnv) {
             .nodes()
             .next()
             .expect("Could not find any node in newly created subnet.");
-
+        // skip nns subnet, only test new subnet which has free cycles schedule
+        if subnet_id == nns_node.subnet_id().unwrap() {
+            continue;
+        }
         block_on(async move {
             let agent = assert_create_agent(endpoint.get_public_url().as_str()).await;
             info!(
@@ -173,6 +177,7 @@ pub fn test(env: TestEnv) {
             let mgr = ManagementCanister::create(&agent);
             let canister_id = mgr
                 .create_canister()
+                .as_provisional_create_with_amount(None)
                 .with_effective_canister_id(endpoint.effective_canister_id())
                 .call_and_wait()
                 .await
@@ -180,15 +185,26 @@ pub fn test(env: TestEnv) {
                 .0;
 
             // Install the universal canister.
+            let arg = wasm().stable_grow(1).build();
             mgr.install_code(&canister_id, &UNIVERSAL_CANISTER_WASM)
-                .with_raw_arg(wasm().stable_grow(1).build())
+                .with_raw_arg(arg)
                 .call_and_wait()
                 .await
                 .unwrap();
 
             let universal_canister = UniversalCanister::from_parts(&agent, canister_id);
-            info!(log, "successfully created a universal canister instance");
-
+            let old_id = endpoint.get_last_canister_id_in_allocation_ranges();
+            let CreateCanisterResult {
+                canister_id: new_canister_id,
+            } = universal_canister
+                .update(wasm().call(management::create_canister(Cycles::new(0))))
+                .await
+                .map(|res| Decode!(&res, CreateCanisterResult).unwrap())
+                .unwrap();
+            println!("{}", new_canister_id);
+            let new_id = endpoint.get_last_canister_id_in_allocation_ranges();
+            // these are not equal if we have successfully created a new canister without cycles.
+            assert_ne!(old_id, new_id);
             const UPDATE_MSG_1: &[u8] =
                 b"This beautiful prose should be persisted for future generations";
 
