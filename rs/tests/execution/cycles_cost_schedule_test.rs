@@ -168,32 +168,11 @@ pub fn test(env: TestEnv) {
         }
         block_on(async move {
             let agent = assert_create_agent(endpoint.get_public_url().as_str()).await;
-            info!(
-                log,
-                "successfully created agent for endpoint of subnet node"
-            );
 
-            // create a canister without using cycles or the provisional API
-            let mgr = ManagementCanister::create(&agent);
-            let canister_id = mgr
-                .create_canister()
-                .as_provisional_create_with_amount(None)
-                .with_effective_canister_id(endpoint.effective_canister_id())
-                .call_and_wait()
-                .await
-                .unwrap()
-                .0;
-
-            // Install the universal canister.
-            let arg = wasm().stable_grow(1).build();
-            mgr.install_code(&canister_id, &UNIVERSAL_CANISTER_WASM)
-                .with_raw_arg(arg)
-                .call_and_wait()
-                .await
-                .unwrap();
-
-            let universal_canister = UniversalCanister::from_parts(&agent, canister_id);
-            let old_id = endpoint.get_last_canister_id_in_allocation_ranges();
+            // this one is created with the provisional API
+            let universal_canister =
+                UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
+            // this universal canister is created with the normal API, but without cycles.
             let CreateCanisterResult {
                 canister_id: new_canister_id,
             } = universal_canister
@@ -201,18 +180,19 @@ pub fn test(env: TestEnv) {
                 .await
                 .map(|res| Decode!(&res, CreateCanisterResult).unwrap())
                 .unwrap();
-            println!("{}", new_canister_id);
-            let new_id = endpoint.get_last_canister_id_in_allocation_ranges();
-            // these are not equal if we have successfully created a new canister without cycles.
-            assert_ne!(old_id, new_id);
+            let new_uni_can = UniversalCanister::new(&agent, new_canister_id.into()).await;
+            new_uni_can
+                .update(wasm().stable_grow(1).reply())
+                .await
+                .unwrap();
             const UPDATE_MSG_1: &[u8] =
                 b"This beautiful prose should be persisted for future generations";
 
-            universal_canister.store_to_stable(0, UPDATE_MSG_1).await;
+            new_uni_can.store_to_stable(0, UPDATE_MSG_1).await;
             info!(log, "successfully saved message in the universal canister");
 
             assert_eq!(
-                universal_canister
+                new_uni_can
                     .try_read_stable(0, UPDATE_MSG_1.len() as u32)
                     .await,
                 UPDATE_MSG_1.to_vec(),

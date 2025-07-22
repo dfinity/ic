@@ -170,10 +170,6 @@ impl<'a> UniversalCanister<'a> {
             .expect("Could not create universal canister.")
     }
 
-    pub fn from_parts(agent: &'a Agent, canister_id: Principal) -> Self {
-        Self { agent, canister_id }
-    }
-
     pub async fn try_new(
         agent: &'a Agent,
         effective_canister_id: PrincipalId,
