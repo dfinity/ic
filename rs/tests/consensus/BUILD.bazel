@@ -254,6 +254,7 @@ system_test(
         "RECOVERY_STORE_1_B64_PATH": "$(rootpath //ic-os/guestos/envs/recovery-dev:ic_registry_local_store_1.b64)",
         "RECOVERY_STORE_2_B64_PATH": "$(rootpath //ic-os/guestos/envs/recovery-dev:ic_registry_local_store_2.b64)",
     },
+    uses_guestos_img = False,
     uses_guestos_recovery_dev = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + [
         "//ic-os/guestos/envs/recovery-dev:cup.proto.b64",

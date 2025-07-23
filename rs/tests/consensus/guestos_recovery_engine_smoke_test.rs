@@ -251,7 +251,6 @@ pub fn setup(env: TestEnv) {
     let server_ipv6 = setup_upstream_uvm(&env);
 
     InternetComputer::new()
-        .use_recovery_image()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
