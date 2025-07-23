@@ -157,7 +157,7 @@ fn step_0_subnets_nodes_fr(
             .collect::<BTreeMap<_, _>>();
 
         let subnet_fr =
-            calculate_daily_subnet_fr(&nodes_original_fr.values().map(|fr| *fr).collect());
+            calculate_daily_subnet_fr(&nodes_original_fr.values().cloned().collect::<Vec<_>>());
         result.subnets_fr.insert((day, subnet_id), subnet_fr);
 
         for NodeMetricsDailyRaw {
