@@ -674,7 +674,8 @@ fn test_canister_log_in_state_stays_within_limit() {
     // Test that the total size of canister log in canister state stays within the limit
     // even if the are many log messages sent in different calls (both via print and trap).
     const MESSAGES_NUMBER: usize = 10;
-    let (env, canister_id, _user_controller) = setup_with_controller(
+    let user_controller = PrincipalId::new_user_test_id(42);
+    let (env, canister_id) = setup_with_controller(
         user_controller,
         wat_canister()
             .update(
