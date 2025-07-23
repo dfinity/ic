@@ -61,6 +61,7 @@ impl From<&CanisterHttpResponseWithConsensus> for pb::CanisterHttpResponseWithCo
             }),
             hash: payload.proof.content.content_hash.clone().get().0,
             registry_version: payload.proof.content.registry_version.get(),
+            replica_version: payload.proof.content.replica_version.clone().into(),
             signatures: payload
                 .proof
                 .signature
@@ -115,7 +116,8 @@ impl TryFrom<pb::CanisterHttpResponseWithConsensus> for CanisterHttpResponseWith
                         payload.hash,
                     )),
                     registry_version: RegistryVersion::new(payload.registry_version),
-                    replica_version: todo!(),
+                    replica_version: ReplicaVersion::try_from(payload.replica_version)
+                        .map_err(|err| ProxyDecodeError::ReplicaVersionParseError(Box::new(err)))?,
                 },
                 signature: BasicSignatureBatch {
                     signatures_map: payload

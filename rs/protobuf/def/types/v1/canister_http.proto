@@ -55,6 +55,7 @@ message CanisterHttpResponseWithConsensus {
   CanisterHttpResponse response = 1;
   bytes hash = 2;
   uint64 registry_version = 3;
+  string replica_version = 8;
   reserved 4;
   reserved 5;
   reserved 6;
