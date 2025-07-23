@@ -363,7 +363,7 @@ async fn test_treasury_manager() {
     // dbg_print_block(&pocket_ic, sns_ledger_canister_id, 3).await;
     // dbg_print_block(&pocket_ic, sns_ledger_canister_id, 4).await;
 
-    panic!("  Directed by\nROBERT B. WEIDE.");
+    // panic!("  Directed by\nROBERT B. WEIDE.");
 }
 
 #[allow(unused)]
