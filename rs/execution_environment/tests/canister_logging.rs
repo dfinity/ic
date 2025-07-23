@@ -301,10 +301,6 @@ fn test_fetch_canister_logs_via_composite_query_call() {
     // Record some logs in canister_b.
     let _ = env.execute_ingress(canister_b, "test", vec![]);
 
-    println!("ABC user: {user:?}");
-    println!("ABC canister_a: {canister_a:?}");
-    println!("ABC canister_b: {canister_b:?}");
-
     // User attempts to fetch logs of canister_b via canister_a.
     let actual_result = env.query_as(
         user,
