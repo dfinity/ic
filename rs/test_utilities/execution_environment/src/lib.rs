@@ -216,7 +216,7 @@ pub fn cycles_reserved_for_app_and_verified_app_subnets<T: Fn(SubnetType)>(test:
 /// let wat = r#"(module (func (export "canister_query query")))"#;
 /// let canister_id = test.canister_from_wat(wat).unwrap();
 /// let result = test.ingress(canister_id, "query", vec![]);
-/// assert_empty_reply(result);
+/// expect_canister_did_not_reply(result);
 /// ```
 pub struct ExecutionTest {
     // Mutable fields that change after message execution.
