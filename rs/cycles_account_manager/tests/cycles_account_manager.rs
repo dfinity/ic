@@ -1497,3 +1497,66 @@ fn test_storage_reservation_cycles() {
         cam.storage_reservation_cycles(NumBytes::new(1000 * GB), &rs0, 13, cost_schedule)
     )
 }
+
+#[test]
+fn test_storage_reservation_cycles_free() {
+    let cost_schedule = CanisterCyclesCostSchedule::Free;
+    const GB: u64 = 1024 * 1024 * 1024;
+
+    let cam = CyclesAccountManagerBuilder::new().build();
+
+    // Allocation of 100GB below the threshold.
+    assert_eq!(
+        Cycles::new(0),
+        cam.storage_reservation_cycles(
+            NumBytes::new(100 * GB),
+            &ResourceSaturation::new(0, 100 * GB, 200 * GB),
+            SMALL_APP_SUBNET_MAX_SIZE,
+            cost_schedule,
+        )
+    );
+
+    // Allocation of 101GB at (usage=0GB, threshold=100GB, capacity=200GB).
+    assert_eq!(
+        Cycles::new(0),
+        cam.storage_reservation_cycles(
+            NumBytes::new(101 * GB),
+            &ResourceSaturation::new(0, 100 * GB, 200 * GB),
+            SMALL_APP_SUBNET_MAX_SIZE,
+            cost_schedule,
+        )
+    );
+
+    // Allocation of 40GB at (usage=90GB, threshold=100GB, capacity=200GB).
+    assert_eq!(
+        Cycles::new(0),
+        cam.storage_reservation_cycles(
+            NumBytes::new(40 * GB),
+            &ResourceSaturation::new(90 * GB, 100 * GB, 200 * GB),
+            SMALL_APP_SUBNET_MAX_SIZE,
+            cost_schedule,
+        )
+    );
+
+    // Allocation of 40GB at (usage=100GB, threshold=100GB, capacity=200GB).
+    assert_eq!(
+        Cycles::new(0),
+        cam.storage_reservation_cycles(
+            NumBytes::new(40 * GB),
+            &ResourceSaturation::new(100 * GB, 100 * GB, 200 * GB),
+            SMALL_APP_SUBNET_MAX_SIZE,
+            cost_schedule,
+        )
+    );
+
+    // Allocation of 40GB at (usage=160GB, threshold=100GB, capacity=200GB).
+    assert_eq!(
+        Cycles::new(0),
+        cam.storage_reservation_cycles(
+            NumBytes::new(40 * GB),
+            &ResourceSaturation::new(160 * GB, 100 * GB, 200 * GB),
+            SMALL_APP_SUBNET_MAX_SIZE,
+            cost_schedule,
+        )
+    );
+}
