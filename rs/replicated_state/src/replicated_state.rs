@@ -749,7 +749,7 @@ impl ReplicatedState {
 
         let stopped = canister_state.system_state.status() == CanisterStatusType::Stopped;
 
-        stopped && !canister_state.has_output() && streams_flushed()
+        stopped && !canister_state.has_input() && !canister_state.has_output() && streams_flushed()
     }
 
     /// Computes the memory taken by different types of memory resources.
