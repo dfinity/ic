@@ -132,14 +132,13 @@ fn test_update_node_provider_not_found() {
 
 // Helper function to create governance with a node provider
 fn create_governance_with_node_provider(node_provider_id: PrincipalId) -> Governance {
-    let node_provider = NodeProvider {
-        id: Some(node_provider_id),
-        reward_account: None,
+    let initial_governance = ic_nns_governance_api::Governance {
+        node_providers: vec![NodeProvider {
+            id: Some(node_provider_id),
+            reward_account: None,
+        }],
+        ..Default::default()
     };
-
-    let mut initial_governance = ic_nns_governance_api::Governance::default();
-
-    initial_governance.node_providers = vec![node_provider];
 
     Governance::new(
         initial_governance,

@@ -1736,7 +1736,7 @@ fn test_validate_add_or_remove_node_provider() {
         Box::new(MockRandomness::new()),
     );
 
-    let existing_node_provider = NodeProvider::try_from(existing_node_provider).unwrap();
+    let existing_node_provider = NodeProvider::from(existing_node_provider);
 
     // Test case 1: No change field
     let add_or_remove_no_change = AddOrRemoveNodeProvider { change: None };
