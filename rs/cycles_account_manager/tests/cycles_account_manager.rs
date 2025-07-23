@@ -631,6 +631,62 @@ fn do_not_charge_canister_for_memory_usage_free_schedule() {
 }
 
 #[test]
+fn do_not_charge_canister_for_compute_allocation_free_schedule() {
+    let cost_schedule = CanisterCyclesCostSchedule::Normal;
+    with_test_replica_logger(|log| {
+        const HOUR: Duration = Duration::from_secs(3600);
+        let compute_allocation = ComputeAllocation::try_from(20).unwrap();
+
+        let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
+
+        let canister_id = canister_test_id(1);
+        let mut canister = new_canister_state(
+            canister_id,
+            canister_test_id(11).get(),
+            Cycles::zero(),
+            NumSeconds::from(0),
+        );
+        canister.scheduler_state.compute_allocation = compute_allocation;
+        canister
+            .push_output_request(
+                RequestBuilder::new().sender(canister_id).build().into(),
+                UNIX_EPOCH,
+            )
+            .unwrap();
+        canister
+            .push_output_request(
+                RequestBuilder::new()
+                    .sender(canister_id)
+                    .deadline(CoarseTime::from_secs_since_unix_epoch(1))
+                    .build()
+                    .into(),
+                UNIX_EPOCH,
+            )
+            .unwrap();
+        cycles_account_manager
+            .charge_canister_for_resource_allocation_and_usage(
+                &log,
+                &mut canister,
+                HOUR,
+                SMALL_APP_SUBNET_MAX_SIZE,
+                cost_schedule,
+            )
+            .unwrap();
+
+        let expected_fee = cycles_account_manager.compute_allocation_cost(
+            compute_allocation,
+            HOUR,
+            SMALL_APP_SUBNET_MAX_SIZE,
+            cost_schedule,
+        );
+        assert_eq!(expected_fee, Cycles::zero());
+
+        let cycles_burned = canister.system_state.balance();
+        assert_eq!(cycles_burned, Cycles::new(0));
+    })
+}
+
+#[test]
 fn cycles_withdraw_no_threshold() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
 
