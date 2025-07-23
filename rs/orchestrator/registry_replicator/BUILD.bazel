@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -27,6 +27,12 @@ DEPENDENCIES = [
     "@crate_index//:url",
 ]
 
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/registry/fake",
+    "//rs/registry/proto_data_provider",
+]
+
 MACRO_DEPENDENCIES = []
 
 ALIASES = {}
@@ -45,4 +51,10 @@ rust_binary(
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [":registry_replicator"],
+)
+
+rust_test(
+    name = "registry_replicator_test",
+    crate = ":registry_replicator",
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

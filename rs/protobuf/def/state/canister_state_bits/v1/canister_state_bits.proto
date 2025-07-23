@@ -283,6 +283,18 @@ message CanisterSettingsChange {
   optional bytes environment_variables_hash = 2;
 }
 
+message CanisterRename {
+  types.v1.PrincipalId canister_id = 1;
+  uint64 total_num_changes = 2;
+  RenameTo rename_to = 3;
+}
+
+message RenameTo {
+  types.v1.PrincipalId canister_id = 1;
+  uint64 version = 2;
+  uint64 total_num_changes = 3;
+}
+
 message CanisterChange {
   uint64 timestamp_nanos = 1;
   uint64 canister_version = 2;
@@ -297,6 +309,7 @@ message CanisterChange {
     CanisterControllersChange canister_controllers_change = 8;
     CanisterLoadSnapshot canister_load_snapshot = 9;
     CanisterSettingsChange canister_settings_change = 10;
+    CanisterRename canister_rename = 11;
   }
 }
 

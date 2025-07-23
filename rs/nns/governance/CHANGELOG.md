@@ -11,6 +11,35 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-07-18: Proposal 137499
+
+http://dashboard.internetcomputer.org/proposal/137499
+
+## Added
+
+* Minor improvements on voting power spike detection mechanism.
+
+# 2025-07-11: Proposal 137346
+
+http://dashboard.internetcomputer.org/proposal/137346
+
+## Added
+
+* Add new unreleased proposal type.
+
+# 2025-07-06: Proposal 137252
+
+http://dashboard.internetcomputer.org/proposal/137252
+
+## Added
+
+* Add a metric for the nubmer of spawning neurons.
+* Use a previous voting power snapshot to create ballots if a voting power spike is detected.
+
+## Changed
+
+* Rename a metric related to voting power spike according to convention.
+
 # 2025-06-20: Proposal 137080
 
 http://dashboard.internetcomputer.org/proposal/137080
@@ -20,7 +49,6 @@ http://dashboard.internetcomputer.org/proposal/137080
 * Neurons can now perform SetFollowing to configure their following on multiple
   topics at once. Whereas, before, they would have to perform multiple Follow
   operations, one for each topic. This brings NNS into alignment with SNS.
-
 
 # 2025-06-13: Proposal 136987
 
@@ -36,7 +64,6 @@ http://dashboard.internetcomputer.org/proposal/136987
 * The `account_identifier_to_disburse_to` in the maturity disbursement now contains a 32-byte
   address rather than the 28-byte one without checksum.
 
-
 # 2025-06-06: Proposal 136890
 
 http://dashboard.internetcomputer.org/proposal/136890
@@ -44,7 +71,6 @@ http://dashboard.internetcomputer.org/proposal/136890
 ## Added
 
 * Support disbursing maturity to an account identifier, in addition to icrc1 account.
-
 
 # 2025-05-31: Proposal 136795
 
@@ -59,14 +85,14 @@ http://dashboard.internetcomputer.org/proposal/136795
 
 * `MAX_NEURON_CREATION_SPIKE` is increased from 120 to 300.
 
-
 # 2025-05-16: Proposal 136693
 
 http://dashboard.internetcomputer.org/proposal/136693
 
 ## Added
 
-* The `DisburseMaturity` neuron command is enabled. See https://forum.dfinity.org/t/disburse-maturity-in-nns/43228 for more details.
+* The `DisburseMaturity` neuron command is enabled. See https://forum.dfinity.org/t/disburse-maturity-in-nns/43228 for
+  more details.
 
 ## Changed
 
@@ -77,8 +103,8 @@ http://dashboard.internetcomputer.org/proposal/136693
 * The `IcpXdrConversionRate` proposal is now obsolete and cannot be submitted.
 
 ## Security
-Enforce a lower bound for `min_participant_icp_e8s` of `1_000_000`.
 
+Enforce a lower bound for `min_participant_icp_e8s` of `1_000_000`.
 
 # 2025-05-10: Proposal 136580
 
@@ -87,7 +113,6 @@ http://dashboard.internetcomputer.org/proposal/136580
 ## Removed
 
 * The `governance_heap_neuron_count` metric is removed as there are no neurons in the heap anymore.
-
 
 # 2025-05-02: Proposal 136427
 
@@ -102,7 +127,6 @@ http://dashboard.internetcomputer.org/proposal/136427
 * All the `_pb` methods are removed as they already always panic, as well as decoding the init arg
   as protobuf.
 
-
 # 2025-04-25: Proposal 136370
 
 http://dashboard.internetcomputer.org/proposal/136370
@@ -110,7 +134,6 @@ http://dashboard.internetcomputer.org/proposal/136370
 ## Fixed
 
 * Use `StableBTreeMap::init` instead of `::new` for voting power snapshots.
-
 
 # 2025-04-15: Proposal 136285
 
@@ -124,7 +147,6 @@ http://dashboard.internetcomputer.org/proposal/136285
 
 * Turned off `DisburseMaturity` that was incorrectly turned on before.
 
-
 # 2025-04-11: Proposal 136224
 
 http://dashboard.internetcomputer.org/proposal/136224
@@ -136,7 +158,6 @@ http://dashboard.internetcomputer.org/proposal/136224
 ## Changed
 
 * The `_pb` methods now always panic.
-
 
 # 2025-04-05: Proposal 136071
 
@@ -185,7 +206,6 @@ http://dashboard.internetcomputer.org/proposal/135933
 * Refactor `prune_following` task to use the `timer_task` library, and therefore enables metrics to
   be collected about its execution.
 
-
 # 2025-03-17: Proposal 135847
 
 https://dashboard.internetcomputer.org/proposal/135847
@@ -198,7 +218,6 @@ https://dashboard.internetcomputer.org/proposal/135847
 
 * Removed a migration mechanism previously used for data migrations through heartbeat.
 
-
 # 2025-03-08: Proposal 135702
 
 http://dashboard.internetcomputer.org/proposal/135702
@@ -207,16 +226,16 @@ http://dashboard.internetcomputer.org/proposal/135702
 
 * Collect metrics about timer tasks defined using ic_nervous_system_timer_task library.
 * Re-enable neuron migration to stable memory:
-  * Setting `MIGRATE_ACTIVE_NEURONS_TO_STABLE_MEMORY` to true, which will cause active neurons
-  to be continously moved from heap memory to stable memory.
-  * Compared to the last time it was enabled, several improvements were made:
-    * Distribute rewards is moved to timer, and has a mechanism to distribute in batches in
-    multiple messages.
-    * Unstaking maturity task has a limit of 100 neurons per message, which prevents it from 
-    exceeding instruction limit.
-    * The execution of `ApproveGenesisKyc` proposals have a limit of 1000 neurons, above which
-    the proposal will fail.
-    * More benchmarks were added.
+    * Setting `MIGRATE_ACTIVE_NEURONS_TO_STABLE_MEMORY` to true, which will cause active neurons
+      to be continously moved from heap memory to stable memory.
+    * Compared to the last time it was enabled, several improvements were made:
+        * Distribute rewards is moved to timer, and has a mechanism to distribute in batches in
+          multiple messages.
+        * Unstaking maturity task has a limit of 100 neurons per message, which prevents it from
+          exceeding instruction limit.
+        * The execution of `ApproveGenesisKyc` proposals have a limit of 1000 neurons, above which
+          the proposal will fail.
+        * More benchmarks were added.
 * Enable timer task metrics for better observability.
 
 ## Changed
@@ -224,14 +243,13 @@ http://dashboard.internetcomputer.org/proposal/135702
 * Voting Rewards will be scheduled by a timer instead of by heartbeats.
 * Unstaking maturity task will be processing up to 100 neurons in a single message, to avoid
   exceeding the instruction limit in a single execution.
-* Voting Rewards will be distributed asynchronously in the background after being calculated.  
-  * This will allow rewards to be compatible with neurons being stored in Stable Memory. 
+* Voting Rewards will be distributed asynchronously in the background after being calculated.
+    * This will allow rewards to be compatible with neurons being stored in Stable Memory.
 * Ramp up the failure rate of _pb method to 0.7 again.
 
 ## Fixed
 
 * Avoid applying `approve_genesis_kyc` to an unbounded number of neurons, but at most 1000 neurons.
-
 
 # 2025-03-01: Proposal 135613
 
@@ -246,7 +264,6 @@ http://dashboard.internetcomputer.org/proposal/135613
 
 * NnsCanisterUpgrade/NnsRootUpgrade NNS funtions are made obsolete.
 
-
 # 2025-02-21: Proposal 135436
 
 http://dashboard.internetcomputer.org/proposal/135436
@@ -259,14 +276,13 @@ http://dashboard.internetcomputer.org/proposal/135436
 * Added validation for ManageNetworkEconomics proposals. Previously, there was
   none. The result must have all the following properties:
 
-  * All "optional" fields are actually set.
+    * All "optional" fields are actually set.
 
-  * `maximum_icp_xdr_rate >= minimum_icp_xdr_rate`
+    * `maximum_icp_xdr_rate >= minimum_icp_xdr_rate`
 
-  * Decimal fields have parsable `human_readable` values.
+    * Decimal fields have parsable `human_readable` values.
 
-  * `one_third_participation_milestone_xdr < full_participation_milestone_xdr`
-
+    * `one_third_participation_milestone_xdr < full_participation_milestone_xdr`
 
 # 2025-02-11: Proposal 135265
 
@@ -278,7 +294,6 @@ https://dashboard.internetcomputer.org/proposal/135265
   reward distribution. It has already been rolled back with a hotfix ([proposal
   135265](https://dashboard.internetcomputer.org/proposal/135265))
 
-
 # 2025-02-07: Proposal 135206
 
 http://dashboard.internetcomputer.org/proposal/135206
@@ -287,11 +302,11 @@ http://dashboard.internetcomputer.org/proposal/135206
 
 ### List Neurons API Change: Query by Subaccount
 
-The `list_neurons` API now supports querying by neuron subaccount.  This is useful for neuron holders who
+The `list_neurons` API now supports querying by neuron subaccount. This is useful for neuron holders who
 have many neurons and want to list only the neurons associated with a particular subaccount.
 
 A new field `neuron_subaccounts` is added to the request, which is a list of subaccounts to query
-for.  If this field is present, any neurons found will be added to the response.  If duplicate
+for. If this field is present, any neurons found will be added to the response. If duplicate
 neurons are found between this field and others, they will be deduplicated before returning the value.
 
 This new field works in the same way that the existing `neuron_ids` field works.
@@ -331,7 +346,6 @@ No neurons are actually migrated yet.
   was default to true before, and now it's default to true. More details can be found at:
   https://forum.dfinity.org/t/listneurons-api-change-empty-neurons/40311
 
-
 # 2021-01-27: Proposal 134988
 
 https://dashboard.internetcomputer.org/proposal/134988
@@ -342,16 +356,16 @@ https://dashboard.internetcomputer.org/proposal/134988
 
 Two new fields are added to the request, and one to the response.
 
-The request now supports `page_size` and `page_number`.  If `page_size` is greater than 
+The request now supports `page_size` and `page_number`. If `page_size` is greater than
 `MAX_LIST_NEURONS_RESULTS` (currently 500), the API will treat it as `MAX_LIST_NEURONS_RESULTS`, and
-continue procesisng the request.  If `page_number` is None, the API will treat it as Some(0)
+continue procesisng the request. If `page_number` is None, the API will treat it as Some(0)
 
 In the response, a field `total_pages_available` is available to tell the user how many
 additional requests need to be made.
 
 This will only affect neuron holders with more than 500 neurons, which is a small minority.
 
-This allows neuron holders with many neurons to list all of their neurons, whereas before, 
+This allows neuron holders with many neurons to list all of their neurons, whereas before,
 responses could be too large to be sent by the protocol.
 
 ## Changed
@@ -390,10 +404,9 @@ the neuron. More precisely,
 
 2. If a neuron has not refreshed in 7 months,
 
-    a. It stops following other neurons (except on the NeuronManagement topic;
-       those followees are retained).
+   a. It stops following other neurons (except on the NeuronManagement topic;
+   those followees are retained).
 
-    b. Its influence on proposals goes to 0.
-
+   b. Its influence on proposals goes to 0.
 
 END

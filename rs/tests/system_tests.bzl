@@ -242,6 +242,7 @@ def system_test(
             name = bin_name,
             testonly = True,
             srcs = original_srcs + [name + ".rs"],
+            target_compatible_with = ["@platforms//os:linux"],
             **kwargs
         )
         test_driver_target = bin_name
@@ -357,7 +358,7 @@ def system_test(
     )
     return struct(test_driver_target = test_driver_target)
 
-def system_test_nns(name, extra_head_nns_tags = ["system_test_nightly"], **kwargs):
+def system_test_nns(name, extra_head_nns_tags = ["system_test_large"], **kwargs):
     """Declares a system-test that uses the mainnet NNS and a variant that use the HEAD NNS.
 
     Declares two system-tests:
@@ -365,7 +366,7 @@ def system_test_nns(name, extra_head_nns_tags = ["system_test_nightly"], **kwarg
     * One with the given name which uses the NNS from mainnet as specified by mainnet-canisters.bzl.
     * One with the given name suffixed with "_head_nns" which uses the NNS from the HEAD of the repo.
 
-    The latter one is additionally tagged with "system_test_nightly" such that it only runs daily and not on PRs.
+    The latter one is additionally tagged with "system_test_large" so that it can be excluded.
     You can override the latter behaviour by specifying different `extra_head_nns_tags`.
     If you set `extra_head_nns_tags` to `[]` the head_nns variant will have the same tags as the default variant.
 
@@ -395,20 +396,17 @@ def system_test_nns(name, extra_head_nns_tags = ["system_test_nightly"], **kwarg
     )
 
     original_tags = kwargs.pop("tags", [])
-    tags = extra_head_nns_tags
-    tags = tags + [tag for tag in original_tags if tag not in tags]
-    tags = tags + ["system_test_head_nns"]
     kwargs["test_driver_target"] = mainnet_nns_systest.test_driver_target
     system_test(
         name + "_head_nns",
         env = env | NNS_CANISTER_ENV,
         runtime_deps = runtime_deps + NNS_CANISTER_RUNTIME_DEPS,
-        tags = tags,
+        tags = [tag for tag in original_tags if tag not in extra_head_nns_tags] + extra_head_nns_tags,
         **kwargs
     )
     return struct(test_driver_target = mainnet_nns_systest.test_driver_target)
 
-def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_paths = None):
+def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_paths = None, testonly = True):
     """This macro creates bazel targets for uvm config images.
 
     Args:
@@ -418,6 +416,7 @@ def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_pa
         srcs: Source files that are copied into a vfat image.
         remap_paths: Dict that maps a current filename to a desired filename,
             e.g. {"activate.sh": "activate"}
+        testonly: If True, the target is only available in test configurations.
     """
     native.genrule(
         name = name + "_size",
@@ -427,6 +426,7 @@ def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_pa
         tags = ["manual"],
         target_compatible_with = ["@platforms//os:linux"],
         visibility = ["//visibility:private"],
+        testonly = testonly,
     )
 
     # TODO: install dosfstools as dependency
@@ -441,6 +441,7 @@ def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_pa
         tags = ["manual"],
         target_compatible_with = ["@platforms//os:linux"],
         visibility = ["//visibility:private"],
+        testonly = testonly,
     )
 
     mcopy(
@@ -451,6 +452,7 @@ def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_pa
         tags = ["manual"],
         target_compatible_with = ["@platforms//os:linux"],
         visibility = ["//visibility:private"],
+        testonly = testonly,
     )
 
     zstd_compress(
@@ -459,6 +461,7 @@ def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_pa
         target_compatible_with = ["@platforms//os:linux"],
         tags = tags,
         visibility = ["//visibility:private"],
+        testonly = testonly,
     )
 
     native.alias(
@@ -467,6 +470,7 @@ def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_pa
         tags = tags,
         target_compatible_with = ["@platforms//os:linux"],
         visibility = visibility,
+        testonly = testonly,
     )
 
 def oci_tar(name, image, repo_tags = []):

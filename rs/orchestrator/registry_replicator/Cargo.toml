@@ -29,6 +29,10 @@ tempfile = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }
 
+[dev-dependencies]
+ic-registry-client-fake = { path = "../../registry/fake" }
+ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
+
 [[bin]]
 name = "ic-registry-replicator"
 path = "src/main.rs"

@@ -383,6 +383,16 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "serde",
                 ],
             ),
+            # Required because chrono uses canisters incompatible features
+            "chrono_canisters": crate.spec(
+                git = "https://github.com/chronotope/chrono.git",
+                package = "chrono",
+                tag = "v0.4.41",
+                default_features = False,
+                features = [
+                    "alloc",
+                ],
+            ),
             "ciborium": crate.spec(
                 version = "^0.2.1",
             ),
@@ -455,8 +465,15 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "dashmap": crate.spec(
                 version = "^5.3.4",
             ),
+            "der": crate.spec(
+                version = "0.7",
+                default_features = False,
+            ),
             "derive-new": crate.spec(
                 version = "^0.7.0",
+            ),
+            "devicemapper": crate.spec(
+                version = "0.34",
             ),
             "dfx-core": crate.spec(
                 version = "^0.1.4",
@@ -818,6 +835,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "local-ip-address": crate.spec(
                 version = "^0.5.6",
             ),
+            "loopdev-3": crate.spec(
+                version = "0.5",
+            ),
             "lru": crate.spec(
                 version = "^0.7.8",
                 default_features = False,
@@ -956,6 +976,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "pem": crate.spec(
                 version = "^1.0.1",
+                default_features = False,
             ),
             "pin-project-lite": crate.spec(
                 version = "^0.2",
@@ -1136,6 +1157,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "rustc-hash": crate.spec(
                 version = "^1.1.0",
             ),
+            "rust-ini": crate.spec(
+                version = "^0.21.2",
+            ),
             "rustls": crate.spec(
                 version = "^0.23.18",
                 default_features = False,
@@ -1209,6 +1233,14 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "serde_yaml": crate.spec(
                 version = "^0.9.33",
+            ),
+            "sev": crate.spec(
+                version = "6.2",
+                default_features = False,
+                features = [
+                    "crypto_nossl",
+                    "snp",
+                ],
             ),
             "sha2": crate.spec(
                 version = "^0.10.9",
@@ -1387,6 +1419,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "tokio-test": crate.spec(
                 version = "^0.4.4",
             ),
+            "tokio-tungstenite": crate.spec(
+                version = "^0.26.0",
+            ),
             "tokio-util": crate.spec(
                 version = "^0.7.13",
                 features = [
@@ -1514,7 +1549,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.228.0",
             ),
             "wasmtime": crate.spec(
-                version = "^33.0.0",
+                version = "^34.0.1",
                 default_features = False,
                 features = [
                     "cranelift",
@@ -1525,7 +1560,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "wasmtime-environ": crate.spec(
-                version = "^33.0.0",
+                version = "^34.0.1",
             ),
             "wast": crate.spec(
                 version = "^228.0.0",

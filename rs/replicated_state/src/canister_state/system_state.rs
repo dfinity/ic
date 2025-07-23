@@ -15,7 +15,7 @@ use crate::{
     PageMap, StateError,
 };
 pub use call_context_manager::{CallContext, CallContextAction, CallContextManager, CallOrigin};
-use ic_base_types::NumSeconds;
+use ic_base_types::{EnvironmentVariables, NumSeconds};
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::HypervisorError;
 use ic_logger::{error, ReplicaLogger};
@@ -280,6 +280,11 @@ impl CanisterHistory {
         self.total_num_changes
     }
 
+    /// Overwrites the `total_num_changes`, which can happen in the context of canister migration.
+    pub fn set_total_num_changes(&mut self, total_num_changes: u64) {
+        self.total_num_changes = total_num_changes;
+    }
+
     pub fn get_memory_usage(&self) -> NumBytes {
         self.canister_history_memory_usage
     }
@@ -400,7 +405,7 @@ pub struct SystemState {
     pub snapshots_memory_usage: NumBytes,
 
     /// Environment variables.
-    pub environment_variables: BTreeMap<String, String>,
+    pub environment_variables: EnvironmentVariables,
 }
 
 /// A wrapper around the different canister statuses.
@@ -844,7 +849,7 @@ impl SystemState {
             wasm_memory_limit,
             next_snapshot_id,
             snapshots_memory_usage,
-            environment_variables,
+            environment_variables: EnvironmentVariables::new(environment_variables),
         };
         system_state.check_invariants().unwrap_or_else(|msg| {
             metrics.observe_broken_soft_invariant(msg);
@@ -1950,6 +1955,12 @@ impl SystemState {
             change_details,
         );
         self.canister_history.add_canister_change(new_change);
+    }
+
+    /// Overwrite the `total_num_changes` of the canister history. This can happen in the context of canister migration.
+    pub fn set_canister_history_total_num_changes(&mut self, total_num_changes: u64) {
+        self.canister_history
+            .set_total_num_changes(total_num_changes);
     }
 
     pub fn get_canister_history(&self) -> &CanisterHistory {

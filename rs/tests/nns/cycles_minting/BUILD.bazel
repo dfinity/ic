@@ -6,7 +6,6 @@ rust_library(
     name = "cycles_minting",
     testonly = True,
     srcs = ["cycles_minting.rs"],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     deps = [
         "//rs/canister_client",
         "//rs/canister_client/sender",

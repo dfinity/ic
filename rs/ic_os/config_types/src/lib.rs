@@ -26,9 +26,10 @@ use std::collections::HashMap;
 use std::fmt;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::str::FromStr;
+use strum::EnumString;
 use url::Url;
 
-pub const CONFIG_VERSION: &str = "1.2.0";
+pub const CONFIG_VERSION: &str = "1.4.0";
 
 /// List of field names that have been removed and should not be reused.
 pub static RESERVED_FIELD_NAMES: &[&str] = &[];
@@ -59,6 +60,24 @@ pub struct HostOSConfig {
     pub guestos_settings: GuestOSSettings,
 }
 
+/// The type of the virtual machine running the GuestOS.
+#[derive(Serialize, Deserialize, Copy, Clone, Eq, PartialEq, Debug, EnumString, Default)]
+#[serde(rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
+pub enum GuestVMType {
+    /// This is what runs most of the time, executing the replica, serving requests, etc.
+    #[default]
+    Default,
+    /// The Guest VM brought up temporarily during the GuestOS upgrade process.
+    Upgrade,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
+pub struct TrustedExecutionEnvironmentConfig {
+    /// AMD SEV-SNP certificate chain in PEM format.
+    pub sev_cert_chain_pem: String,
+}
+
 /// GuestOS configuration. In production, this struct inherits settings from `HostOSConfig`.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct GuestOSConfig {
@@ -67,6 +86,14 @@ pub struct GuestOSConfig {
     pub network_settings: NetworkSettings,
     pub icos_settings: ICOSSettings,
     pub guestos_settings: GuestOSSettings,
+    #[serde(default)]
+    pub guest_vm_type: GuestVMType,
+    #[serde(default)]
+    pub upgrade_config: GuestOSUpgradeConfig,
+    /// This is only filled in when running on SEV-SNP capable hardware and trusted execution
+    /// environment is enabled in icos_settings.enable_trusted_execution_environment
+    #[serde(default)]
+    pub trusted_execution_environment_config: Option<TrustedExecutionEnvironmentConfig>,
 }
 
 #[serde_as]
@@ -132,6 +159,16 @@ impl Default for HostOSSettings {
 
 const fn default_vm_nr_of_vcpus() -> u32 {
     64
+}
+
+/// Config specific to the GuestOS upgrade process.
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Default, Clone)]
+pub struct GuestOSUpgradeConfig {
+    /// IPv6 address of the peer Guest virtual machine.
+    /// Inside the Default VM, it's the address of the Upgrade VM.
+    /// Inside the Upgrade VM, it's the address of the Default VM.
+    #[serde(default)]
+    pub peer_guest_vm_address: Option<Ipv6Addr>,
 }
 
 /// GuestOS-specific settings.

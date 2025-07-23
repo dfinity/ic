@@ -3,9 +3,8 @@ use async_trait::async_trait;
 use gpt::GptDisk;
 use std::fs::File;
 use std::path::{Path, PathBuf};
-use sys_mount::FilesystemType;
 #[cfg(target_os = "linux")]
-use sys_mount::{Mount, MountFlags, UnmountDrop, UnmountFlags};
+use sys_mount::{FilesystemType, Mount, MountFlags, UnmountDrop, UnmountFlags};
 use tempfile::TempDir;
 use uuid::Uuid;
 
@@ -82,9 +81,6 @@ impl FileSystem {
 
 #[derive(Copy, Clone)]
 pub struct MountOptions {
-    /// Whether to mount the partition read-only
-    pub readonly: bool,
-
     pub file_system: FileSystem,
 }
 
@@ -102,6 +98,9 @@ pub struct GptPartitionProvider {
 }
 
 impl GptPartitionProvider {
+    /// Creates a new [GptPartitionProvider] for the given device.
+    /// The `device` must be a block device or a disk image with a valid GPT partition table and
+    /// must be valid for the entire lifetime of the constructed object.
     pub fn new(device: PathBuf) -> Result<Self> {
         #[cfg(target_os = "linux")]
         return Self::with_mounter(device, Box::new(LoopDeviceMounter));
@@ -111,12 +110,23 @@ impl GptPartitionProvider {
     }
 
     pub fn with_mounter(device: PathBuf, mounter: Box<dyn Mounter>) -> Result<Self> {
-        let gpt = gpt::disk::read_disk(&device).context("Could not read GPT from device")?;
+        let gpt = gpt::disk::read_disk(&device)
+            .with_context(|| format!("Could not read GPT from device {}", device.display()))?;
         Ok(Self {
             device,
             gpt,
             mounter,
         })
+    }
+}
+
+impl Drop for GptPartitionProvider {
+    fn drop(&mut self) {
+        debug_assert!(
+            self.device.exists(),
+            "Device {} does not exist",
+            self.device.display()
+        );
     }
 }
 
@@ -176,18 +186,14 @@ impl Mounter for LoopDeviceMounter {
     ) -> Result<Box<dyn MountedPartition>> {
         let mount = tokio::task::spawn_blocking(move || {
             let tempdir = TempDir::new()?;
-            let target = tempdir.path();
+            let mount_point = tempdir.path();
             Ok::<LoopDeviceMount, Error>(LoopDeviceMount {
                 mount: Mount::builder()
                     .fstype(FilesystemType::Manual(options.file_system.as_str()))
                     .loopback_offset(offset_bytes)
-                    .flags(if options.readonly {
-                        MountFlags::RDONLY
-                    } else {
-                        MountFlags::empty()
-                    })
+                    .flags(MountFlags::empty())
                     .explicit_loopback()
-                    .mount_autodrop(device, target, UnmountFlags::empty())?,
+                    .mount_autodrop(device, mount_point, UnmountFlags::empty())?,
                 _tempdir: tempdir,
             })
         })
@@ -197,9 +203,10 @@ impl Mounter for LoopDeviceMounter {
 }
 
 #[cfg(test)]
+#[allow(dead_code)]
 pub mod testing {
     use super::*;
-    use anyhow::{ensure, Context};
+    use anyhow::Context;
     use partition_tools::ext::ExtPartition;
     use partition_tools::fat::FatPartition;
     use partition_tools::Partition;
@@ -207,7 +214,6 @@ pub mod testing {
     use std::path::{Path, PathBuf};
     use std::sync::Arc;
     use tempfile::TempDir;
-    use tokio::process::Command;
 
     /// Test partition provider that uses pre-populated directories
     pub struct MockPartitionProvider {
@@ -225,25 +231,12 @@ pub mod testing {
         async fn mount_partition(
             &self,
             partition_uuid: Uuid,
-            options: MountOptions,
+            _options: MountOptions,
         ) -> Result<Box<dyn MountedPartition>> {
             let partition_dir = self
                 .partitions
                 .get(&partition_uuid)
                 .with_context(|| format!("Could not find partition {partition_uuid}"))?;
-
-            if options.readonly {
-                ensure!(
-                    Command::new("chmod")
-                        .arg("-R")
-                        .arg("-w")
-                        .arg(partition_dir.path())
-                        .status()
-                        .await?
-                        .success(),
-                    "Could not chmod directory"
-                );
-            }
 
             Ok(Box::new(MockMount {
                 mount_point: partition_dir.clone(),
@@ -262,10 +255,20 @@ pub mod testing {
         }
     }
 
+    /// Map (device, offset, len) -> TempDir
+    type PartitionMap = HashMap<(PathBuf, u64, u64), Arc<TempDir>>;
+
     /// Filesystem mounter for testing that extracts partition contents to temp directories.
     /// This is an alternative to real filesystem mounts when mounts are not possible (e.g. limited
     /// permissions in tests).
-    pub struct ExtractingFilesystemMounter;
+    ///
+    /// The mounter "remembers" the extracted partitions, so extracting the same device/offset/len
+    /// always returns the same directory.
+    #[derive(Clone)]
+    pub struct ExtractingFilesystemMounter {
+        #[allow(clippy::disallowed_types)] // Using tokio Mutex in testing is fine.
+        mounts: Arc<tokio::sync::Mutex<PartitionMap>>,
+    }
 
     #[async_trait]
     impl Mounter for ExtractingFilesystemMounter {
@@ -276,6 +279,42 @@ pub mod testing {
             len_bytes: u64,
             options: MountOptions,
         ) -> Result<Box<dyn MountedPartition>> {
+            let key = (device.clone(), offset_bytes, len_bytes);
+            let mut mounts = self.mounts.lock().await;
+            if !mounts.contains_key(&key) {
+                mounts.insert(
+                    key.clone(),
+                    self.extract_partition_to_tempdir(
+                        device.clone(),
+                        offset_bytes,
+                        len_bytes,
+                        options,
+                    )
+                    .await?,
+                );
+            }
+
+            Ok(Box::new(MockMount {
+                mount_point: mounts.get(&key).unwrap().clone(),
+            }))
+        }
+    }
+
+    impl ExtractingFilesystemMounter {
+        #[allow(dead_code)]
+        pub fn new() -> Self {
+            Self {
+                mounts: Default::default(),
+            }
+        }
+
+        async fn extract_partition_to_tempdir(
+            &self,
+            device: PathBuf,
+            offset_bytes: u64,
+            len_bytes: u64,
+            options: MountOptions,
+        ) -> Result<Arc<TempDir>> {
             async fn extract_partition<P: Partition>(
                 device: &Path,
                 offset_bytes: u64,
@@ -299,7 +338,7 @@ pub mod testing {
                         len_bytes,
                         extraction_dir.path(),
                     )
-                    .await?
+                    .await
                 }
                 FileSystem::Ext4 => {
                     extract_partition::<ExtPartition>(
@@ -308,26 +347,15 @@ pub mod testing {
                         len_bytes,
                         extraction_dir.path(),
                     )
-                    .await?
+                    .await
                 }
-            };
-
-            if options.readonly {
-                ensure!(
-                    Command::new("chmod")
-                        .arg("-R")
-                        .arg("-w")
-                        .arg(extraction_dir.path())
-                        .status()
-                        .await?
-                        .success(),
-                    "Could not chmod directory"
-                );
             }
+            .context(format!(
+                "Could not extract partition to {}",
+                extraction_dir.path().display()
+            ))?;
 
-            Ok(Box::new(MockMount {
-                mount_point: Arc::new(extraction_dir),
-            }))
+            Ok(Arc::new(extraction_dir))
         }
     }
 }

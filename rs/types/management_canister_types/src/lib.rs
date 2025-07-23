@@ -14,7 +14,8 @@ pub use http::{
     HttpMethod, TransformArgs, TransformContext, TransformFunc,
 };
 use ic_base_types::{
-    CanisterId, NodeId, NumBytes, PrincipalId, RegistryVersion, SnapshotId, SubnetId,
+    CanisterId, EnvironmentVariables, NodeId, NumBytes, PrincipalId, RegistryVersion, SnapshotId,
+    SubnetId,
 };
 use ic_error_types::{ErrorCode, UserError};
 use ic_protobuf::proxy::ProxyDecodeError;
@@ -44,7 +45,7 @@ use strum_macros::{Display, EnumCount, EnumIter, EnumString};
 /// The id of the management canister.
 pub const IC_00: CanisterId = CanisterId::ic_00();
 pub const MAX_CONTROLLERS: usize = 10;
-const WASM_HASH_LENGTH: usize = 32;
+pub const HASH_LENGTH: usize = 32;
 /// The maximum length of a BIP32 derivation path
 ///
 /// The extended public key format uses a byte to represent the derivation
@@ -86,7 +87,6 @@ pub enum Method {
     StopCanister,
     UninstallCode,
     UpdateSettings,
-    ComputeInitialIDkgDealings,
     ReshareChainKey,
 
     // Schnorr interface.
@@ -136,6 +136,9 @@ pub enum Method {
     ReadCanisterSnapshotData,
     UploadCanisterSnapshotMetadata,
     UploadCanisterSnapshotData,
+
+    // Support for canister migration
+    RenameCanister,
 }
 
 fn candid_error_to_user_error(err: candid::Error) -> UserError {
@@ -264,7 +267,7 @@ impl CanisterChangeOrigin {
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct CanisterCreationRecord {
     controllers: Vec<PrincipalId>,
-    environment_variables_hash: Option<Vec<u8>>,
+    environment_variables_hash: Option<[u8; HASH_LENGTH]>,
 }
 
 impl CanisterCreationRecord {
@@ -272,8 +275,8 @@ impl CanisterCreationRecord {
         &self.controllers
     }
 
-    pub fn environment_variables_hash(&self) -> Option<Vec<u8>> {
-        self.environment_variables_hash.clone()
+    pub fn environment_variables_hash(&self) -> Option<[u8; HASH_LENGTH]> {
+        self.environment_variables_hash
     }
 }
 
@@ -287,14 +290,14 @@ impl CanisterCreationRecord {
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct CanisterCodeDeploymentRecord {
     mode: CanisterInstallMode,
-    module_hash: [u8; WASM_HASH_LENGTH],
+    module_hash: [u8; HASH_LENGTH],
 }
 
 impl CanisterCodeDeploymentRecord {
     pub fn mode(&self) -> CanisterInstallMode {
         self.mode
     }
-    pub fn module_hash(&self) -> [u8; WASM_HASH_LENGTH] {
+    pub fn module_hash(&self) -> [u8; HASH_LENGTH] {
         self.module_hash
     }
 }
@@ -363,7 +366,7 @@ impl CanisterLoadSnapshotRecord {
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct CanisterSettingsChangeRecord {
     controllers: Option<Vec<PrincipalId>>,
-    environment_variables_hash: Option<Vec<u8>>,
+    environment_variables_hash: Option<[u8; HASH_LENGTH]>,
 }
 
 impl CanisterSettingsChangeRecord {
@@ -371,9 +374,35 @@ impl CanisterSettingsChangeRecord {
         self.controllers.as_deref()
     }
 
-    pub fn environment_variables_hash(&self) -> Option<Vec<u8>> {
-        self.environment_variables_hash.clone()
+    pub fn environment_variables_hash(&self) -> Option<[u8; HASH_LENGTH]> {
+        self.environment_variables_hash
     }
+}
+
+/// `CandidType` for `CanisterRenameRecord`
+/// ```text
+/// record {
+///    canister_id : principal;
+///    total_num_changes : nat64;
+///    rename_to : record {
+///        canister_id : principal;
+///        version : nat64;
+///        total_num_changes : nat64;
+///    };
+/// }
+/// ```
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+pub struct CanisterRenameRecord {
+    canister_id: PrincipalId,
+    total_num_changes: u64,
+    rename_to: RenameToRecord,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+pub struct RenameToRecord {
+    canister_id: PrincipalId,
+    version: u64,
+    total_num_changes: u64,
 }
 
 /// `CandidType` for `CanisterChangeDetails`
@@ -381,6 +410,7 @@ impl CanisterSettingsChangeRecord {
 /// variant {
 ///   creation : record {
 ///     controllers : vec principal;
+///     environment_variables_hash: opt blob;
 ///   };
 ///   code_uninstall;
 ///   code_deployment : record {
@@ -415,12 +445,14 @@ pub enum CanisterChangeDetails {
     CanisterLoadSnapshot(CanisterLoadSnapshotRecord),
     #[serde(rename = "settings_change")]
     CanisterSettingsChange(CanisterSettingsChangeRecord),
+    #[serde(rename = "rename_canister")]
+    CanisterRename(CanisterRenameRecord),
 }
 
 impl CanisterChangeDetails {
     pub fn canister_creation(
         controllers: Vec<PrincipalId>,
-        environment_variables_hash: Option<Vec<u8>>,
+        environment_variables_hash: Option<[u8; HASH_LENGTH]>,
     ) -> CanisterChangeDetails {
         CanisterChangeDetails::CanisterCreation(CanisterCreationRecord {
             controllers,
@@ -430,7 +462,7 @@ impl CanisterChangeDetails {
 
     pub fn code_deployment(
         mode: CanisterInstallMode,
-        module_hash: [u8; WASM_HASH_LENGTH],
+        module_hash: [u8; HASH_LENGTH],
     ) -> CanisterChangeDetails {
         CanisterChangeDetails::CanisterCodeDeployment(CanisterCodeDeploymentRecord {
             mode,
@@ -458,12 +490,32 @@ impl CanisterChangeDetails {
 
     pub fn settings_change(
         controllers: Option<Vec<PrincipalId>>,
-        environment_variables_hash: Option<Vec<u8>>,
+        environment_variables_hash: Option<[u8; HASH_LENGTH]>,
     ) -> CanisterChangeDetails {
         CanisterChangeDetails::CanisterSettingsChange(CanisterSettingsChangeRecord {
             controllers,
             environment_variables_hash,
         })
+    }
+
+    pub fn rename_canister(
+        canister_id: PrincipalId,
+        total_num_changes: u64,
+        to_canister_id: PrincipalId,
+        to_version: u64,
+        to_total_num_changes: u64,
+    ) -> CanisterChangeDetails {
+        let rename_to = RenameToRecord {
+            canister_id: to_canister_id,
+            version: to_version,
+            total_num_changes: to_total_num_changes,
+        };
+        let record = CanisterRenameRecord {
+            canister_id,
+            total_num_changes,
+            rename_to,
+        };
+        CanisterChangeDetails::CanisterRename(record)
     }
 }
 
@@ -521,24 +573,27 @@ impl CanisterChange {
     /// the controllers are stored on heap and thus not accounted
     /// for in `size_of::<CanisterChange>()`.
     pub fn count_bytes(&self) -> NumBytes {
-        let controllers_memory_size = match &self.details {
+        let num_controllers = match &self.details {
             CanisterChangeDetails::CanisterCreation(canister_creation) => {
-                std::mem::size_of_val(canister_creation.controllers())
+                canister_creation.controllers().len()
             }
             CanisterChangeDetails::CanisterControllersChange(canister_controllers_change) => {
-                std::mem::size_of_val(canister_controllers_change.controllers())
+                canister_controllers_change.controllers().len()
             }
             CanisterChangeDetails::CanisterSettingsChange(canister_settings_change) => {
-                match canister_settings_change.controllers() {
-                    Some(controllers) => std::mem::size_of_val(controllers),
-                    None => 0,
-                }
+                canister_settings_change
+                    .controllers()
+                    .map(|controllers| controllers.len())
+                    .unwrap_or_default()
             }
             CanisterChangeDetails::CanisterCodeDeployment(_)
             | CanisterChangeDetails::CanisterCodeUninstall
-            | CanisterChangeDetails::CanisterLoadSnapshot(_) => 0,
+            | CanisterChangeDetails::CanisterLoadSnapshot(_)
+            | CanisterChangeDetails::CanisterRename(_) => 0,
         };
-        NumBytes::from((size_of::<CanisterChange>() + controllers_memory_size) as u64)
+        NumBytes::from(
+            (size_of::<CanisterChange>() + num_controllers * size_of::<PrincipalId>()) as u64,
+        )
     }
 
     pub fn canister_version(&self) -> u64 {
@@ -691,7 +746,7 @@ impl From<&CanisterChangeDetails> for pb_canister_state_bits::canister_change::C
                             .collect::<Vec<ic_protobuf::types::v1::PrincipalId>>(),
                         environment_variables_hash: canister_creation
                             .environment_variables_hash
-                            .clone(),
+                            .map(|hash| hash.to_vec()),
                     },
                 )
             }
@@ -741,7 +796,20 @@ impl From<&CanisterChangeDetails> for pb_canister_state_bits::canister_change::C
                         ),
                         environment_variables_hash: canister_settings_change
                             .environment_variables_hash
-                            .clone(),
+                            .map(|hash| hash.to_vec()),
+                    },
+                )
+            }
+            CanisterChangeDetails::CanisterRename(canister_rename) => {
+                pb_canister_state_bits::canister_change::ChangeDetails::CanisterRename(
+                    pb_canister_state_bits::CanisterRename {
+                        canister_id: Some(canister_rename.canister_id.into()),
+                        total_num_changes: canister_rename.total_num_changes,
+                        rename_to: Some(pb_canister_state_bits::RenameTo {
+                            canister_id: Some(canister_rename.rename_to.canister_id.into()),
+                            version: canister_rename.rename_to.version,
+                            total_num_changes: canister_rename.rename_to.total_num_changes,
+                        }),
                     },
                 )
             }
@@ -758,14 +826,21 @@ impl TryFrom<pb_canister_state_bits::canister_change::ChangeDetails> for Caniste
         match item {
             pb_canister_state_bits::canister_change::ChangeDetails::CanisterCreation(
                 canister_creation,
-            ) => Ok(CanisterChangeDetails::canister_creation(
-                canister_creation
-                    .controllers
-                    .into_iter()
-                    .map(TryInto::try_into)
-                    .collect::<Result<Vec<PrincipalId>, _>>()?,
-                canister_creation.environment_variables_hash.clone(),
-            )),
+            ) => {
+                let environment_variables_hash = match canister_creation.environment_variables_hash
+                {
+                    Some(bytes) => Some(try_decode_hash(bytes)?),
+                    None => None,
+                };
+                Ok(CanisterChangeDetails::canister_creation(
+                    canister_creation
+                        .controllers
+                        .into_iter()
+                        .map(TryInto::try_into)
+                        .collect::<Result<Vec<PrincipalId>, _>>()?,
+                    environment_variables_hash,
+                ))
+            }
             pb_canister_state_bits::canister_change::ChangeDetails::CanisterCodeUninstall(_) => {
                 Ok(CanisterChangeDetails::CanisterCodeUninstall)
             }
@@ -829,9 +904,40 @@ impl TryFrom<pb_canister_state_bits::canister_change::ChangeDetails> for Caniste
                             .collect::<Result<Vec<PrincipalId>, _>>()?,
                     ),
                 };
+                let environment_variables_hash =
+                    match canister_settings_change.environment_variables_hash {
+                        Some(bytes) => Some(try_decode_hash(bytes)?),
+                        None => None,
+                    };
                 Ok(CanisterChangeDetails::settings_change(
                     controllers,
-                    canister_settings_change.environment_variables_hash.clone(),
+                    environment_variables_hash,
+                ))
+            }
+            pb_canister_state_bits::canister_change::ChangeDetails::CanisterRename(
+                canister_rename,
+            ) => {
+                let rename_to = canister_rename
+                    .rename_to
+                    .ok_or(ProxyDecodeError::MissingField("CanisterRename::rename_to"))?;
+                Ok(CanisterChangeDetails::rename_canister(
+                    canister_rename
+                        .canister_id
+                        .as_ref()
+                        .ok_or(ProxyDecodeError::MissingField(
+                            "CanisterRename::canister_id",
+                        ))?
+                        .to_owned()
+                        .try_into()?,
+                    canister_rename.total_num_changes,
+                    rename_to
+                        .canister_id
+                        .as_ref()
+                        .ok_or(ProxyDecodeError::MissingField("RenameTo::canister_id"))?
+                        .to_owned()
+                        .try_into()?,
+                    rename_to.version,
+                    rename_to.total_num_changes,
                 ))
             }
         }
@@ -999,6 +1105,7 @@ impl TryFrom<pb_canister_state_bits::LogVisibilityV2> for LogVisibilityV2 {
 ///     log_visibility: log_visibility;
 ///     wasm_memory_limit: nat;
 ///     wasm_memory_threshold: nat;
+///     environment_variables: vec environment_variable;
 /// })`
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct DefiniteCanisterSettingsArgs {
@@ -1011,6 +1118,7 @@ pub struct DefiniteCanisterSettingsArgs {
     log_visibility: LogVisibilityV2,
     wasm_memory_limit: candid::Nat,
     wasm_memory_threshold: candid::Nat,
+    environment_variables: Vec<EnvironmentVariable>,
 }
 
 impl DefiniteCanisterSettingsArgs {
@@ -1024,10 +1132,18 @@ impl DefiniteCanisterSettingsArgs {
         log_visibility: LogVisibilityV2,
         wasm_memory_limit: Option<u64>,
         wasm_memory_threshold: u64,
+        environment_variables: EnvironmentVariables,
     ) -> Self {
         let memory_allocation = candid::Nat::from(memory_allocation.unwrap_or(0));
         let reserved_cycles_limit = candid::Nat::from(reserved_cycles_limit.unwrap_or(0));
         let wasm_memory_limit = candid::Nat::from(wasm_memory_limit.unwrap_or(0));
+        let environment_variables = environment_variables
+            .iter()
+            .map(|(name, value)| EnvironmentVariable {
+                name: name.clone(),
+                value: value.clone(),
+            })
+            .collect::<Vec<EnvironmentVariable>>();
         Self {
             controller,
             controllers,
@@ -1038,6 +1154,7 @@ impl DefiniteCanisterSettingsArgs {
             log_visibility,
             wasm_memory_limit,
             wasm_memory_threshold: candid::Nat::from(wasm_memory_threshold),
+            environment_variables,
         }
     }
 
@@ -1071,6 +1188,10 @@ impl DefiniteCanisterSettingsArgs {
 
     pub fn freezing_threshold(&self) -> candid::Nat {
         self.freezing_threshold.clone()
+    }
+
+    pub fn environment_variables(&self) -> &[EnvironmentVariable] {
+        &self.environment_variables
     }
 }
 
@@ -1171,6 +1292,7 @@ impl CanisterStatusResultV2 {
         query_egress_payload_size: u128,
         wasm_memory_limit: Option<u64>,
         wasm_memory_threshold: u64,
+        environment_variables: EnvironmentVariables,
     ) -> Self {
         Self {
             status,
@@ -1201,6 +1323,7 @@ impl CanisterStatusResultV2 {
                 log_visibility,
                 wasm_memory_limit,
                 wasm_memory_threshold,
+                environment_variables,
             ),
             freezing_threshold: candid::Nat::from(freezing_threshold),
             idle_cycles_burned_per_day: candid::Nat::from(idle_cycles_burned_per_day),
@@ -3118,6 +3241,7 @@ pub use ic_btc_replica_types::{
     GetSuccessorsRequestInitial as BitcoinGetSuccessorsRequestInitial,
     GetSuccessorsResponse as BitcoinGetSuccessorsResponse,
     GetSuccessorsResponseComplete as BitcoinGetSuccessorsResponseComplete,
+    GetSuccessorsResponsePartial as BitcoinGetSuccessorsResponsePartial,
     SendTransactionRequest as BitcoinSendTransactionInternalArgs,
 };
 
@@ -3920,7 +4044,7 @@ impl Payload<'_> for ReadCanisterSnapshotMetadataResponse {}
 
 /// An inner type of [`ReadCanisterSnapshotMetadataResponse`].
 ///
-/// Corresponds to the internal `CanisterTimer`, but is candid de/encodable.  
+/// Corresponds to the internal `CanisterTimer`, but is candid de/encodable.
 #[derive(Copy, Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub enum GlobalTimer {
     #[serde(rename = "inactive")]
@@ -4267,6 +4391,49 @@ pub enum CanisterSnapshotDataOffset {
     StableMemory { offset: u64 },
     #[serde(rename = "wasm_chunk")]
     WasmChunk,
+}
+
+/// Struct to encode/decode
+/// (record {
+///   canister_id : principal;
+///   rename_to : record {
+///     canister_id : principal;
+///     version : nat64;
+///     total_num_changes : nat64;
+///   };
+///   sender_canister_version : nat64;
+/// };)
+
+#[derive(Clone, Debug, Deserialize, CandidType, Serialize, PartialEq)]
+pub struct RenameCanisterArgs {
+    pub canister_id: PrincipalId,
+    pub rename_to: RenameToArgs,
+    pub sender_canister_version: u64,
+}
+
+impl Payload<'_> for RenameCanisterArgs {}
+
+impl RenameCanisterArgs {
+    pub fn get_canister_id(&self) -> CanisterId {
+        CanisterId::unchecked_from_principal(self.canister_id)
+    }
+
+    pub fn get_sender_canister_version(&self) -> Option<u64> {
+        Some(self.sender_canister_version)
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, CandidType, Serialize, PartialEq)]
+pub struct RenameToArgs {
+    pub canister_id: PrincipalId,
+    pub version: u64,
+    pub total_num_changes: u64,
+}
+
+impl RenameToArgs {
+    pub fn get_canister_id(&self) -> CanisterId {
+        CanisterId::unchecked_from_principal(self.canister_id)
+    }
 }
 
 #[cfg(test)]
@@ -4677,5 +4844,25 @@ mod tests {
                 result.description()
             );
         }
+    }
+
+    #[test]
+    fn canister_change_count_bytes() {
+        let change_bytes = |controllers| {
+            let timestamp_nanos = 0;
+            let canister_version = 0;
+            let origin = CanisterChangeOrigin::from_canister(PrincipalId::default(), Some(0));
+            let details = CanisterChangeDetails::canister_creation(controllers, None);
+            let change = CanisterChange::new(timestamp_nanos, canister_version, origin, details);
+            change.count_bytes()
+        };
+
+        assert_eq!(size_of::<PrincipalId>(), 30);
+        let controllers = vec![PrincipalId::default(); 2];
+        let num_controllers = controllers.len() as u64;
+        assert_eq!(
+            change_bytes(controllers),
+            change_bytes(vec![]) + NumBytes::new(num_controllers * 30)
+        );
     }
 }

@@ -190,6 +190,7 @@ def icos_build(
                         (version_txt, "/version.txt:0644"),
                         (boot_args, "/boot_args:0644"),
                         (extra_boot_args, "/extra_boot_args:0644"),
+                        (image_deps["grub_config"], "/grub.cfg:0644"),
                     ]
                 )
             },
@@ -297,6 +298,21 @@ def icos_build(
         expanded_size = image_deps.get("expanded_size", default = None),
         tags = ["manual", "no-cache"],
         target_compatible_with = ["@platforms//os:linux"],
+    )
+
+    disk_image(
+        name = "disk-img-for-tests.tar",
+        layout = image_deps["partition_table"],
+        partitions = partitions,
+        expanded_size = image_deps.get("expanded_size", default = None),
+        populate_b_partitions = True,
+        tags = ["manual", "no-cache"],
+        testonly = True,
+        target_compatible_with = ["@platforms//os:linux"],
+        visibility = [
+            "//ic-os:__subpackages__",
+            "//rs/ic_os:__subpackages__",
+        ],
     )
 
     # Disk images just for testing.

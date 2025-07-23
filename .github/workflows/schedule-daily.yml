@@ -15,7 +15,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
+      image: ghcr.io/dfinity/ic-build@sha256:d8f7308e97e095a9c9b0cdb1b6f260f459424e3792ebd49bb7c6ff6098941a34
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 120
@@ -59,7 +59,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
+      image: ghcr.io/dfinity/ic-build@sha256:d8f7308e97e095a9c9b0cdb1b6f260f459424e3792ebd49bb7c6ff6098941a34
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 720 # 12 hours
@@ -97,7 +97,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
+      image: ghcr.io/dfinity/ic-build@sha256:d8f7308e97e095a9c9b0cdb1b6f260f459424e3792ebd49bb7c6ff6098941a34
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 30
@@ -135,7 +135,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
+      image: ghcr.io/dfinity/ic-build@sha256:d8f7308e97e095a9c9b0cdb1b6f260f459424e3792ebd49bb7c6ff6098941a34
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 480
@@ -147,15 +147,23 @@ jobs:
         uses: ./.github/actions/bazel
         with:
           run: |
-            # note: there's just one performance cluster, so the job can't be parallelized
-            # (hence --jobs=1)
-            # we exclude 'system_test_head_nns' tests to avoid running every benchmark
-            # effectively twice (we don't care about the different between mainnet & head NNS)
+            set -euo pipefail
+
+            # NOTE: we use `bazel query` to list the targets explicitly because (at the
+            # time of writing) benchmark targets are labeled as manual and would not be
+            # picked up by e.g. `bazel test //...`
+            target_pattern_file=$(mktemp)
+            bazel query 'attr(tags, system_test_benchmark, //rs/...)' | grep -v head_nns > "$target_pattern_file"
+
+            echo "inferred system test benchmark targets:"
+            cat "$target_pattern_file"
+
+            # note: there's just one performance cluster, so the job can't be parallelized (hence --jobs=1)
             bazel test \
               --config=stamped \
-              --test_tag_filters="system_test_benchmark,-system_test_head_nns" \
-              //rs/... \
+              --test_tag_filters=system_test_benchmark \
               --//bazel:enable_upload_perf_systest_results=True \
+              --target_pattern_file="$target_pattern_file" \
               --test_env=SSH_AUTH_SOCK --test_env=NNS_CANISTER_UPGRADE_SEQUENCE=all \
               --keep_going --jobs=1
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
@@ -173,7 +181,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
+      image: ghcr.io/dfinity/ic-build@sha256:d8f7308e97e095a9c9b0cdb1b6f260f459424e3792ebd49bb7c6ff6098941a34
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 60
@@ -224,7 +232,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2e7a20ff226ac7c35227853804f13a2294e530e772a302504467bb4f5264b02a
+      image: ghcr.io/dfinity/ic-build@sha256:d8f7308e97e095a9c9b0cdb1b6f260f459424e3792ebd49bb7c6ff6098941a34
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 120
