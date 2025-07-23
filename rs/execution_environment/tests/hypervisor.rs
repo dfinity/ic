@@ -8340,6 +8340,7 @@ fn invoke_cost_http_request() {
         request_size.into(),
         Some(max_res_bytes.into()),
         subnet_size,
+        CanisterCyclesCostSchedule::Normal,
     );
     let Ok(WasmResult::Reply(bytes)) = res else {
         panic!("Expected reply, got {:?}", res);

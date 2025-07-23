@@ -516,6 +516,7 @@ impl ExecutionEnvironment {
         round_limits: &mut RoundLimits,
     ) -> (ReplicatedState, Option<NumInstructions>) {
         let since = Instant::now(); // Start logging execution time.
+        let cost_schedule = state.metadata.cost_schedule;
 
         let mut msg = match msg {
             CanisterMessage::Response(response) => {
@@ -535,12 +536,14 @@ impl ExecutionEnvironment {
                                 context.variable_parts_size(),
                                 context.max_response_bytes,
                                 registry_settings.subnet_size,
+                                cost_schedule,
                             );
 
                             let new_price = self.cycles_account_manager.http_request_fee_beta(
                                 context.variable_parts_size(),
                                 context.max_response_bytes,
                                 registry_settings.subnet_size,
+                                cost_schedule,
                                 NumBytes::from(response.payload_size_bytes()),
                             );
 
@@ -1772,6 +1775,7 @@ impl ExecutionEnvironment {
             canister_http_request_context.variable_parts_size(),
             canister_http_request_context.max_response_bytes,
             registry_settings.subnet_size,
+            state.metadata.cost_schedule,
         );
         // Here we make sure that we do not let upper layers open new
         // http calls while the maximum number of calls is in-flight.

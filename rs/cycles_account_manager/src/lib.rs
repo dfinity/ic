@@ -1320,7 +1320,11 @@ impl CyclesAccountManager {
         request_size: NumBytes,
         response_size_limit: Option<NumBytes>,
         subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
     ) -> Cycles {
+        if cost_schedule == CanisterCyclesCostSchedule::Free {
+            return Cycles::new(0);
+        }
         let response_size = match response_size_limit {
             Some(response_size) => response_size.get(),
             // Defaults to maximum response size.
@@ -1339,8 +1343,12 @@ impl CyclesAccountManager {
         request_size: NumBytes,
         response_size_limit: Option<NumBytes>,
         subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
         payload_size: NumBytes,
     ) -> Cycles {
+        if cost_schedule == CanisterCyclesCostSchedule::Free {
+            return Cycles::new(0);
+        }
         let max_response_size = match response_size_limit {
             Some(response_size) => response_size.get(),
             // Defaults to maximum response size.
@@ -1510,13 +1518,19 @@ mod tests {
                 request_size,
                 None,
                 reference_subnet_size as usize,
+                CanisterCyclesCostSchedule::Normal,
             ),
             Cycles::from(1_603_786_800u64) * reference_subnet_size
         );
 
         // Check the fee for a 34-node subnet.
         assert_eq!(
-            cycles_account_manager.http_request_fee(request_size, None, subnet_size as usize),
+            cycles_account_manager.http_request_fee(
+                request_size,
+                None,
+                subnet_size as usize,
+                CanisterCyclesCostSchedule::Normal,
+            ),
             Cycles::from(1_605_046_800u64) * subnet_size
         );
     }

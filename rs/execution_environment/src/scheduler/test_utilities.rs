@@ -641,6 +641,7 @@ impl SchedulerTest {
             request_size,
             response_size_limit,
             self.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
         )
     }
 

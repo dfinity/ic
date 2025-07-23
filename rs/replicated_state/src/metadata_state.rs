@@ -103,8 +103,8 @@ pub struct SystemMetadata {
 
     pub own_subnet_features: SubnetFeatures,
 
-    /// This flag determines whether cycles are charged for execution,
-    /// messages and memory. The flag is pulled from the registry every round.
+    /// This flag determines whether cycles are charged. The flag is pulled from
+    /// the registry every round.
     pub cost_schedule: CanisterCyclesCostSchedule,
 
     /// DER-encoded public keys of the subnet's nodes.

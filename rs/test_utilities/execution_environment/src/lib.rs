@@ -479,6 +479,7 @@ impl ExecutionTest {
             request_size,
             response_size_limit,
             self.subnet_size(),
+            self.cost_schedule(),
         )
     }
 

@@ -4213,7 +4213,12 @@ impl SystemApi for SystemApiImpl {
         let cost = self
             .sandbox_safe_system_state
             .get_cycles_account_manager()
-            .http_request_fee(request_size.into(), Some(max_res_bytes.into()), subnet_size);
+            .http_request_fee(
+                request_size.into(),
+                Some(max_res_bytes.into()),
+                subnet_size,
+                self.get_cost_schedule(),
+            );
         copy_cycles_to_heap(cost, dst, heap, "ic0_cost_http_request")?;
         trace_syscall!(self, CostHttpRequest, cost);
         Ok(())
