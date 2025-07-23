@@ -273,7 +273,6 @@ system_test_nns(
 
 system_test_nns(
     name = "io_perf_benchmark",
-    env = VECTOR_ENV,
     tags = [
         "dynamic_testnet",
         "manual",
