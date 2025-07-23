@@ -9,7 +9,6 @@ use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_protobuf::registry::node::v1::NodeRewardType;
 use ic_protobuf::registry::node_rewards::v2::NodeRewardsTable;
 use itertools::Itertools;
-use rust_decimal::prelude::Zero;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use std::cmp::max;
