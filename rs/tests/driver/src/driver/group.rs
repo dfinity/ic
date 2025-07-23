@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 use crate::driver::constants;
+use crate::driver::test_env::HasIcPrepDir;
 use crate::driver::vector_vm::VectorVm;
 use crate::driver::{
     farm::{Farm, HostFeature},
@@ -673,7 +674,7 @@ impl SystemTestGroup {
             Box::from(EmptyTask::new(keepalive_task_id)) as Box<dyn Task>
         };
 
-        let log_plan = {
+        let log_task = {
             let logger = group_ctx.logger().clone();
             let group_ctx = group_ctx.clone();
 
@@ -681,7 +682,14 @@ impl SystemTestGroup {
                 TaskId::Test("vector-logging".to_string()),
                 move || {
                     debug!(logger, ">>> log_fn");
-                    let env = ensure_setup_env(group_ctx);
+
+                    let setup_dir = group_ctx.group_dir.join(constants::GROUP_SETUP_DIR);
+                    let env = TestEnv::new_without_duplicating_logger(setup_dir, logger.clone());
+                    while !setup_dir.exists() || env.prep_dir("").is_none() {
+                        info!(logger, "Setup and/or prep directories not created yet.");
+                        std::thread::sleep(KEEPALIVE_INTERVAL);
+                    }
+
                     let mut vector_vm = VectorVm::new();
                     vector_vm.start(&env).expect("Failed to start Vector VM");
 
@@ -696,14 +704,7 @@ impl SystemTestGroup {
                 &mut compose_ctx,
             );
 
-            timed(
-                Plan::Leaf {
-                    task: Box::from(log_task),
-                },
-                compose_ctx.timeout_per_test,
-                None,
-                &mut compose_ctx,
-            )
+            Box::from(log_task) as Box<dyn Task>
         };
 
         let setup_plan = {
@@ -757,7 +758,14 @@ impl SystemTestGroup {
             let uvms_stream_plan = compose(
                 Some(uvms_logs_stream_task),
                 EvalOrder::Sequential,
-                vec![keepalive_plan, log_plan],
+                vec![keepalive_plan],
+                &mut compose_ctx,
+            );
+
+            let logs_plan = compose(
+                Some(log_task),
+                EvalOrder::Sequential,
+                vec![uvms_stream_plan],
                 &mut compose_ctx,
             );
 
@@ -769,13 +777,13 @@ impl SystemTestGroup {
                 EvalOrder::Sequential,
                 vec![if let Some(overall_timeout) = self.overall_timeout {
                     timed(
-                        uvms_stream_plan,
+                        logs_plan,
                         overall_timeout,
                         Some(String::from("::group")),
                         &mut compose_ctx,
                     )
                 } else {
-                    uvms_stream_plan
+                    logs_plan
                 }],
                 &mut compose_ctx,
             ));
@@ -797,6 +805,13 @@ impl SystemTestGroup {
             Some(uvms_logs_stream_task),
             EvalOrder::Sequential,
             vec![keepalive_plan],
+            &mut compose_ctx,
+        );
+
+        let logs_plan = compose(
+            Some(log_task),
+            EvalOrder::Sequential,
+            vec![uvms_stream_plan],
             &mut compose_ctx,
         );
 
@@ -824,7 +839,7 @@ impl SystemTestGroup {
         Ok(compose(
             Some(keepalive_task),
             EvalOrder::Parallel,
-            vec![report_plan, uvms_stream_plan],
+            vec![report_plan, logs_plan],
             &mut compose_ctx,
         ))
     }
