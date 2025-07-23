@@ -20,7 +20,7 @@ use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     canister_http::*, consensus::HasHeight, crypto::Signed, messages::CallbackId,
-    replica_config::ReplicaConfig, Height,
+    replica_config::ReplicaConfig, Height, ReplicaVersion,
 };
 use rand::Rng;
 use std::{
@@ -300,6 +300,7 @@ impl CanisterHttpPoolManagerImpl {
                         timeout: response.timeout,
                         registry_version,
                         content_hash: ic_types::crypto::crypto_hash(&response),
+                        replica_version: ReplicaVersion::default(),
                     };
                     let signature = if let Ok(signature) = self
                         .crypto
@@ -635,6 +636,7 @@ pub mod test {
                         timeout: ic_types::Time::from_nanos_since_unix_epoch(10),
                         registry_version: RegistryVersion::from(1),
                         content_hash: CryptoHashOf::new(CryptoHash(vec![])),
+                        replica_version: ReplicaVersion::default(),
                     };
 
                     let signature = crypto
@@ -727,6 +729,7 @@ pub mod test {
                     timeout: ic_types::Time::from_nanos_since_unix_epoch(10),
                     registry_version: RegistryVersion::from(1),
                     content_hash: CryptoHashOf::new(CryptoHash(vec![])),
+                    replica_version: ReplicaVersion::default(),
                 };
 
                 let mut canister_http_pool =
@@ -852,6 +855,7 @@ pub mod test {
                     timeout: ic_types::Time::from_nanos_since_unix_epoch(10),
                     registry_version: RegistryVersion::from(1),
                     content_hash: CryptoHashOf::new(CryptoHash(vec![])),
+                    replica_version: ReplicaVersion::default(),
                 };
 
                 let signature = crypto
@@ -1029,6 +1033,7 @@ pub mod test {
                     timeout: ic_types::Time::from_nanos_since_unix_epoch(10),
                     registry_version: RegistryVersion::from(1),
                     content_hash: CryptoHashOf::new(CryptoHash(vec![])),
+                    replica_version: ReplicaVersion::default(),
                 };
 
                 let signature = crypto
