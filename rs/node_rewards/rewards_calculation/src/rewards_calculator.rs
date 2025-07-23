@@ -411,7 +411,7 @@ fn step_4_compute_base_rewards_type_region(
                             Vec<XDRPermyriad>,
                             Vec<RewardsCoefficientPercent>,
                         )| {
-                            rates.push(base_rewards_daily.clone());
+                            rates.push(base_rewards_daily);
                             coeffs.push(coefficient);
                         },
                     )
@@ -446,19 +446,17 @@ fn step_4_compute_base_rewards_type_region(
 
     for node in rewardable_nodes {
         for day in &node.rewardable_days {
-            let base_rewards_for_day;
-
-            if is_type3(&node.node_reward_type) {
+            let base_rewards_for_day = if is_type3(&node.node_reward_type) {
                 let region_key = type3_region_key(&node.region);
 
-                base_rewards_for_day = base_rewards_type3
+                base_rewards_type3
                     .get(&(day, region_key))
                     .expect("Type3 base rewards expected for provider")
             } else {
-                base_rewards_for_day = base_rewards
-                    .get(&(node.node_reward_type.clone(), node.region.clone()))
+                base_rewards
+                    .get(&(node.node_reward_type, node.region.clone()))
                     .expect("base rewards expected for each node")
-            }
+            };
 
             base_rewards_per_node.insert((*day, node.node_id), *base_rewards_for_day);
         }
@@ -566,23 +564,19 @@ fn step_6_construct_provider_results(
 
             let rewards_reduction = reward_reduction
                 .remove(&(day, node.node_id))
-                .expect("Rewards reduction should be present in rewards")
-                .into();
+                .expect("Rewards reduction should be present in rewards");
 
             let performance_multiplier = performance_multiplier
                 .remove(&(day, node.node_id))
-                .expect("Performance multiplier should be present in rewards")
-                .into();
+                .expect("Performance multiplier should be present in rewards");
 
             let base_rewards = base_rewards
                 .remove(&(day, node.node_id))
-                .expect("Base rewards should be present in rewards")
-                .into();
+                .expect("Base rewards should be present in rewards");
 
             let adjusted_rewards = adjusted_rewards
                 .remove(&(day, node.node_id))
-                .expect("Adjusted rewards should be present in rewards")
-                .into();
+                .expect("Adjusted rewards should be present in rewards");
 
             rewards_total += adjusted_rewards;
 
