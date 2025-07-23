@@ -1659,7 +1659,7 @@ impl StateManagerImpl {
             })?;
         Some((state, certification, hash_tree))
     }
-
+/*
     /// Returns the state hash of the latest state, irrespective of whether that state was
     /// certified or not. Primarily used for testing.
     pub fn latest_state_certification_hash(&self) -> Option<(Height, CryptoHash)> {
@@ -1671,7 +1671,7 @@ impl StateManagerImpl {
             .next_back()
             .map(|(h, m)| (*h, m.certified_state_hash.clone()))
     }
-
+*/
     /// Returns the manifest of the latest checkpoint on disk with its
     /// checkpoint layout.
     fn latest_manifest(&self) -> Option<(Manifest, CheckpointLayout<ReadOnly>)> {
@@ -1963,12 +1963,7 @@ impl StateManagerImpl {
         // state machine discover a newer state the next time it calls
         // `take_tip()` and update the tip accordingly.
     }
-
-    /// Wait till deallocation queue is empty.
-    pub fn flush_deallocation_channel(&self) {
-        self.deallocator_thread.flush_deallocation_channel();
-    }
-
+    
     /// Remove any inmemory state at height h with h < last_height_to_keep
     /// except for any heights provided in `extra_inmemory_heights_to_keep`, and
     /// any checkpoint at height h < last_checkpoint_to_keep
@@ -2414,10 +2409,6 @@ impl StateManagerImpl {
             .with_label_values(&["create"])
             .observe(elapsed.as_secs_f64());
         result
-    }
-
-    pub fn test_only_send_wait_to_tip_channel(&self, sender: Sender<()>) {
-        self.tip_channel.send(TipRequest::Wait { sender }).unwrap();
     }
 
     fn certified_state_reader(&self) -> Option<CertifiedStateSnapshotImpl> {
@@ -3749,7 +3740,7 @@ impl PageAllocatorFileDescriptorImpl {
             }
         }
     }
-
+    
     #[cfg(not(target_os = "linux"))]
     fn get_memory_backed_fd(&self) -> RawFd {
         self.create_backing_file_portable()
@@ -3774,6 +3765,9 @@ pub mod testing {
     pub trait StateManagerTesting {
         /// Testing only: Purges the `manifest` at `height` in `states.states_metadata`.
         fn purge_manifest(&mut self, height: Height) -> bool;
+        
+        /// Testing only: Wait till deallocation queue is empty.
+        fn flush_deallocation_channel(&self);
     }
 
     impl StateManagerTesting for StateManagerImpl {
@@ -3796,6 +3790,10 @@ pub mod testing {
                 );
             }
             purged
+        }
+        
+        fn flush_deallocation_channel(&self) {
+            self.deallocator_thread.flush_deallocation_channel();
         }
     }
 }
