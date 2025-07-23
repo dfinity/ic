@@ -367,3 +367,11 @@ pub async fn wait_for_target_guest_version(
     )
     .await
 }
+
+/// Get the current boot ID from a HostOS node.
+pub(crate) fn get_host_boot_id(node: &NestedVm) -> String {
+    node.block_on_bash_script("journalctl -q --list-boots | tail -n1 | awk '{print $2}'")
+        .expect("Failed to retrieve boot ID")
+        .trim()
+        .to_string()
+}

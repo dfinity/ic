@@ -24,8 +24,8 @@ use slog::info;
 
 mod util;
 use util::{
-    check_guestos_version, check_hostos_version, elect_guestos_version, elect_hostos_version,
-    get_blessed_guestos_versions, get_unassigned_nodes_config, setup_nested_vm,
+    check_hostos_version, elect_guestos_version, elect_hostos_version,
+    get_blessed_guestos_versions, get_host_boot_id, get_unassigned_nodes_config, setup_nested_vm,
     simple_setup_nested_vm, start_nested_vm, update_nodes_hostos_version, update_unassigned_nodes,
     wait_for_guest_version, wait_for_target_guest_version,
 };
@@ -207,13 +207,7 @@ pub fn upgrade_hostos(env: TestEnv) {
     info!(logger, "Elected target HostOS version");
 
     info!(logger, "Retrieving the current boot ID from the host before we upgrade so we can determine when it rebooted post upgrade...");
-    let retrieve_host_boot_id = || {
-        host.block_on_bash_script("journalctl -q --list-boots | tail -n1 | awk '{print $2}'")
-            .unwrap()
-            .trim()
-            .to_string()
-    };
-    let host_boot_id_pre_upgrade = retrieve_host_boot_id();
+    let host_boot_id_pre_upgrade = get_host_boot_id(&host);
     info!(
         logger,
         "Host boot ID pre upgrade: '{}'", host_boot_id_pre_upgrade
@@ -242,7 +236,7 @@ pub fn upgrade_hostos(env: TestEnv) {
         Duration::from_secs(5 * 60),
         Duration::from_secs(5),
         || {
-            let host_boot_id = retrieve_host_boot_id();
+            let host_boot_id = get_host_boot_id(&host);
             if host_boot_id != host_boot_id_pre_upgrade {
                 info!(
                     logger,
@@ -305,13 +299,7 @@ pub fn recovery_upgrader_test(env: TestEnv) {
         .expect("guest didn't come up as expected");
 
         info!(logger, "Retrieving the current boot ID from the host before we update boot_args so we can determine when it rebooted...");
-        let retrieve_host_boot_id = || {
-            host.block_on_bash_script("journalctl -q --list-boots | tail -n1 | awk '{print $2}'")
-                .unwrap()
-                .trim()
-                .to_string()
-        };
-        let host_boot_id_pre_reboot = retrieve_host_boot_id();
+        let host_boot_id_pre_reboot = get_host_boot_id(&host);
         info!(
             logger,
             "Host boot ID pre reboot: '{}'", host_boot_id_pre_reboot
@@ -366,7 +354,7 @@ pub fn recovery_upgrader_test(env: TestEnv) {
             Duration::from_secs(5 * 60),
             Duration::from_secs(5),
             || {
-                let host_boot_id = retrieve_host_boot_id();
+                let host_boot_id = get_host_boot_id(&host);
                 if host_boot_id != host_boot_id_pre_reboot {
                     info!(
                         logger,
