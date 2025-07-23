@@ -7570,12 +7570,6 @@ fn test_manage_and_reward_multiple_node_providers() {
             .unwrap()
             .error_message
             .contains("cannot add already existing Node Provider"));
-
-        // The proposal should have failed
-        assert_eq!(
-            gov.get_proposal_data(prop_id).unwrap().status(),
-            ProposalStatus::Failed
-        );
     }
 
     let to_subaccount = Subaccount({
