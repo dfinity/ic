@@ -61,6 +61,9 @@ def generate_dummy_recovery_archive(name):
 
             mv recovery.tar.zst recovery.tar.zst.sha256 cup.proto.b64 ic_registry_local_store_1.b64 ic_registry_local_store_2.b64 guestos-recovery-engine.sh $(RULEDIR)
         """,
+        target_compatible_with = [
+            "@platforms//os:linux",
+        ],
         visibility = [
             "//rs:system-tests-pkg",
         ],

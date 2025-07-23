@@ -269,6 +269,11 @@ IC_UNSAFE_ROOT_KEY_FETCH=true
 LISTEN_TLS=[::]:443
 CERT_PROVIDER_DIR=/certs
 METRICS_LISTEN=[::]:9325
+LOG_STDOUT=true
+LOG_STDOUT_JSON=true
+LOG_LEVEL=info
+# For logging each request enable this
+# LOG_REQUESTS=true
 EOF
 
 # Load the docker image from the tarball
@@ -279,6 +284,7 @@ docker run --name=ic-gateway -d \
   -v /tmp/certs:/certs \
   --network host \
   --env-file ic-gateway.env \
+  --log-driver=journald \
   ic_gatewayd:image
 "#,
             key = playnet.playnet_cert.cert.priv_key_pem,

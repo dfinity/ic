@@ -406,6 +406,9 @@ impl ExecutionEnvironment {
             canister_snapshot_data_baseline_instructions,
             config.default_wasm_memory_limit,
             config.max_number_of_snapshots_per_canister,
+            config.max_environment_variables,
+            config.max_environment_variable_name_length,
+            config.max_environment_variable_value_length,
         );
         let metrics = ExecutionEnvironmentMetrics::new(metrics_registry);
         let canister_manager = CanisterManager::new(
