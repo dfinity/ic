@@ -22,7 +22,8 @@ use ic_replicated_state::{
 };
 use ic_test_utilities::assert_utils::assert_balance_equals;
 use ic_test_utilities_execution_environment::{
-    expect_canister_did_not_reply, check_ingress_status, get_reply, ExecutionTest, ExecutionTestBuilder,
+    check_ingress_status, expect_canister_did_not_reply, get_reply, ExecutionTest,
+    ExecutionTestBuilder,
 };
 use ic_test_utilities_metrics::{fetch_histogram_vec_count, metric_vec};
 use ic_types::{
