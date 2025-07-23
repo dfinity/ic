@@ -211,11 +211,9 @@ impl Destination {
         let account_identifer = self.try_into_account_identifier().ok()?;
         // Note we should not use `AccountIdentifierProto::from` directly here, since it simply
         // outputs a 28-byte hash without the 4-byte checksum. Instead, we should use the
-        // `AccountIdentifier::to_address` which computes and prepends the checksum.
-        let address = account_identifer.to_address();
-        Some(AccountIdentifierProto {
-            hash: address.to_vec(),
-        })
+        // `AccountIdentifier::to_vec` which computes and prepends the checksum.
+        let hash = account_identifer.to_vec();
+        Some(AccountIdentifierProto { hash })
     }
 }
 

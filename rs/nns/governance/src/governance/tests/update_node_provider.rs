@@ -2,12 +2,11 @@ use crate::governance::tests::{MockEnvironment, StubCMC, StubIcpLedger};
 use crate::test_utils::MockRandomness;
 use crate::{
     governance::Governance,
-    pb::v1::{governance_error::ErrorType, GovernanceError, NetworkEconomics, UpdateNodeProvider},
+    pb::v1::{governance_error::ErrorType, UpdateNodeProvider},
 };
 use ic_base_types::PrincipalId;
-use ic_nervous_system_common::E8;
 use ic_nns_governance_api::NodeProvider;
-use icp_ledger::{AccountIdentifier, Subaccount};
+use icp_ledger::AccountIdentifier;
 use std::sync::Arc;
 
 #[test]

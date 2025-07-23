@@ -4,15 +4,31 @@ use ic_nns_governance_api as pb_api;
 
 use crate::pb::proposal_conversions::convert_proposal;
 
+#[cfg(test)]
+mod tests;
+
 // TODO add validation for inputs
 // TODO Ensure reward_account always has checksum when turned into API response.
 // TODO - see if we can safely do data migration (how hard to test with confidence)
 
 impl From<pb::NodeProvider> for pb_api::NodeProvider {
     fn from(item: pb::NodeProvider) -> Self {
+        let reward_account = item.reward_account.map(|account| {
+            match icp_ledger::AccountIdentifier::try_from(&account) {
+                // If it's valid, we make sure it has the checksum.
+                Ok(account) => icp_ledger::protobuf::AccountIdentifier {
+                    hash: account.to_vec(),
+                },
+                Err(_) => {
+                    // If it fails, we return what is there, since this is going from internal
+                    // to API, and there's no good way to recover at this point
+                    account
+                }
+            }
+        });
         Self {
             id: item.id,
-            reward_account: item.reward_account,
+            reward_account,
         }
     }
 }
