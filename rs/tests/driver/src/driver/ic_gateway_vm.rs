@@ -270,8 +270,10 @@ LISTEN_TLS=[::]:443
 CERT_PROVIDER_DIR=/certs
 METRICS_LISTEN=[::]:9325
 LOG_STDOUT=true
+LOG_STDOUT_JSON=true
 LOG_LEVEL=info
-LOG_REQUESTS=true
+# For logging each request enable this
+# LOG_REQUESTS=true
 EOF
 
 # Load the docker image from the tarball

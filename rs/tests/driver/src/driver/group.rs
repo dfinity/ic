@@ -1122,7 +1122,6 @@ async fn stream_journald_from_cursor(
     let buf_reader = BufReader::new(stream);
     let mut lines = buf_reader.lines();
     while let Some(line) = unwrap_or_return!(cursor, lines.next_line().await) {
-        println!("line printed [uvm={uvm_name}] {line}");
         let record_result: Result<JournalRecord, serde_json::Error> = serde_json::from_str(&line);
         if let Ok(record) = record_result {
             println!("[uvm={uvm_name}] {record}");
