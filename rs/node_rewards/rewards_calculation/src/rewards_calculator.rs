@@ -74,7 +74,7 @@ pub fn calculate_rewards(
         // Step 3: Compute performance multiplier for each node for each provider
         let relative_nodes_fr = provider_nodes_metrics_daily
             .iter()
-            .map(|((day, node_id), metrics)| ((*day, *node_id), metrics.relative_fr.into()))
+            .map(|((day, node_id), metrics)| ((*day, *node_id), metrics.relative_fr))
             .collect::<BTreeMap<_, _>>();
         let Step3Results {
             reward_reduction,
@@ -107,7 +107,7 @@ pub fn calculate_rewards(
     }
 
     Ok(RewardsCalculatorResults {
-        subnets_fr: subnets_fr.into_iter().map(|(k, v)| (k, v.into())).collect(),
+        subnets_fr: subnets_fr.into_iter().map(|(k, v)| (k, v)).collect(),
         provider_results: results_per_provider,
     })
 }
@@ -156,15 +156,9 @@ fn step_0_subnets_nodes_fr(
             })
             .collect::<BTreeMap<_, _>>();
 
-        let subnet_fr = calculate_daily_subnet_fr(
-            &nodes_original_fr
-                .iter()
-                .map(|(_, fr)| *fr)
-                .collect::<Vec<_>>(),
-        );
-        result
-            .subnets_fr
-            .insert((day, subnet_id.clone()), subnet_fr);
+        let subnet_fr =
+            calculate_daily_subnet_fr(&nodes_original_fr.values().map(|fr| *fr).collect());
+        result.subnets_fr.insert((day, subnet_id), subnet_fr);
 
         for NodeMetricsDailyRaw {
             node_id,
@@ -178,7 +172,7 @@ fn step_0_subnets_nodes_fr(
             result.nodes_metrics_daily.insert(
                 (day, node_id),
                 NodeMetricsDaily {
-                    subnet_assigned: subnet_id.clone(),
+                    subnet_assigned: subnet_id,
                     subnet_assigned_fr: subnet_fr,
                     num_blocks_proposed,
                     num_blocks_failed,
@@ -226,7 +220,7 @@ struct Step2Results {
     extrapolated_fr: HashMap<DayUTC, Decimal>,
 }
 fn step_2_extrapolated_fr(
-    rewardable_nodes: &Vec<RewardableNode>,
+    rewardable_nodes: &[RewardableNode],
     nodes_metrics_daily: &BTreeMap<(DayUTC, NodeId), NodeMetricsDaily>,
 ) -> Step2Results {
     let mut result = Step2Results::default();
@@ -355,9 +349,9 @@ fn step_4_compute_base_rewards_type_region(
                 let reward_coefficient_percent =
                     Decimal::from(rate.reward_coefficient_percent.unwrap_or(80)) / dec!(100);
 
-                (base_rewards_daily.into(), reward_coefficient_percent)
+                (base_rewards_daily, reward_coefficient_percent)
             })
-            .unwrap_or((dec!(1).into(), dec!(100)))
+            .unwrap_or((dec!(1), dec!(100)))
     }
 
     fn is_type3(node_type: &NodeRewardType) -> bool {
@@ -382,7 +376,7 @@ fn step_4_compute_base_rewards_type_region(
             get_daily_rate(node_rewards_table, &node.region, &node.node_reward_type);
 
         base_rewards
-            .entry((node.node_reward_type.clone(), node.region.clone()))
+            .entry((node.node_reward_type, node.region.clone()))
             .or_insert_with(|| {
                 base_rewards_log.push(format!(
                     "Region: {}, Type: {}, Base Rewards Daily: {}, Coefficient: {}",
