@@ -1,3 +1,4 @@
+use crate::extensions;
 use crate::logs::ERROR;
 use crate::pb::v1::{self as pb, NervousSystemFunction};
 use crate::types::native_action_ids::{self, SET_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION};
@@ -43,7 +44,7 @@ pub struct ListTopicsResponse {
 }
 
 /// Returns an exhaustive list of topic descriptions, each corresponding to a topic.
-/// Topics may be nested within other topics, and each topic may have a list of built-in functions that are categorized within that topic.
+/// Each topic may have a list of built-in functions that are categorized within that topic.
 pub fn topic_descriptions() -> [TopicInfo<NativeFunctions>; 7] {
     use crate::types::native_action_ids::{
         ADD_GENERIC_NERVOUS_SYSTEM_FUNCTION, ADVANCE_SNS_TARGET_VERSION, DEREGISTER_DAPP_CANISTERS,
@@ -370,6 +371,20 @@ impl pb::Topic {
     }
 
     pub fn get_topic_for_native_action(action: &pb::proposal::Action) -> Option<Self> {
+        // Check if the topic comes from the extension spec.
+        if let pb::proposal::Action::RegisterExtension(pb::RegisterExtension {
+            chunked_canister_wasm:
+                Some(pb::ChunkedCanisterWasm {
+                    wasm_module_hash, ..
+                }),
+            ..
+        }) = action
+        {
+            if let Ok(extension_spec) = extensions::validate_extension_wasm(wasm_module_hash) {
+                return Some(extension_spec.topic);
+            }
+        }
+
         let action_code = u64::from(action);
 
         topic_descriptions()
