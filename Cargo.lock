@@ -9852,6 +9852,7 @@ dependencies = [
  "ic-ledger-core",
  "ic-ledger-suite-state-machine-tests",
  "ic-limits",
+ "ic-management-canister-types",
  "ic-rosetta-api",
  "ic-rosetta-test-utils",
  "ic-sys",

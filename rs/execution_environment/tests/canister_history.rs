@@ -10,8 +10,8 @@ use ic_error_types::{ErrorCode, UserError};
 use ic_management_canister_types_private::CanisterInstallMode::{Install, Reinstall, Upgrade};
 use ic_management_canister_types_private::{
     self as ic00, CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterIdRecord,
-    CanisterInfoRequest, CanisterInfoResponse, CreateCanisterArgs, InstallCodeArgs, Method,
-    Payload, ProvisionalCreateCanisterWithCyclesArgs, UpdateSettingsArgs,
+    CanisterInfoRequest, CanisterInfoResponse, CreateCanisterArgs, EnvironmentVariable,
+    InstallCodeArgs, Method, Payload, ProvisionalCreateCanisterWithCyclesArgs, UpdateSettingsArgs,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::{
@@ -1269,11 +1269,11 @@ fn check_environment_variables_for_create_canister_history(
 #[test]
 fn canister_history_tracking_env_vars_update_settings() {
     let user_id = user_test_id(7).get();
-    let initial_env_vars = BTreeMap::from([
+    let intial_env_vars = EnvironmentVariables::new(BTreeMap::from([
         ("NODE_ENV".to_string(), "production".to_string()),
         ("LOG_LEVEL".to_string(), "info".to_string()),
-    ]);
-    let initial_env_vars_hash = EnvironmentVariables::new(initial_env_vars.clone()).hash();
+    ]));
+    let initial_env_vars_hash = intial_env_vars.hash();
 
     // Set up StateMachine.
     let env = setup_state_machine(FlagStatus::Enabled);
@@ -1287,7 +1287,15 @@ fn canister_history_tracking_env_vars_update_settings() {
         Some(
             CanisterSettingsArgsBuilder::new()
                 .with_controllers(vec![user_id])
-                .with_environment_variables(initial_env_vars)
+                .with_environment_variables(
+                    intial_env_vars
+                        .iter()
+                        .map(|(name, value)| EnvironmentVariable {
+                            name: name.clone(),
+                            value: value.clone(),
+                        })
+                        .collect::<Vec<_>>(),
+                )
                 .build(),
         ),
     );
@@ -1295,10 +1303,11 @@ fn canister_history_tracking_env_vars_update_settings() {
     // Update settings with new environment variables.
     now += Duration::from_secs(5);
     env.set_time(now);
-    let env_vars = BTreeMap::from([
+    let env_vars = EnvironmentVariables::new(BTreeMap::from([
         ("NODE_ENV".to_string(), "production".to_string()),
         ("LOG_LEVEL".to_string(), "debug".to_string()),
-    ]);
+    ]));
+
     env.execute_ingress_as(
         user_id,
         ic00::IC_00,
@@ -1307,7 +1316,15 @@ fn canister_history_tracking_env_vars_update_settings() {
             canister_id: canister_id.into(),
             sender_canister_version: Some(2),
             settings: CanisterSettingsArgsBuilder::new()
-                .with_environment_variables(env_vars.clone())
+                .with_environment_variables(
+                    env_vars
+                        .iter()
+                        .map(|(name, value)| EnvironmentVariable {
+                            name: name.clone(),
+                            value: value.clone(),
+                        })
+                        .collect::<Vec<_>>(),
+                )
                 .build(),
         }
         .encode(),
@@ -1315,7 +1332,7 @@ fn canister_history_tracking_env_vars_update_settings() {
     .unwrap();
 
     // Expected canister history change after update settings.
-    let env_vars_hash = EnvironmentVariables::new(env_vars.clone()).hash();
+    let env_vars_hash = env_vars.hash();
     let reference_change = CanisterChange::new(
         now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
         1,
@@ -1339,10 +1356,7 @@ fn canister_history_tracking_env_vars_update_settings() {
     // Verify the environment variables of the canister state.
     let state = env.get_latest_state();
     let canister_state = state.canister_state(&canister_id).unwrap();
-    assert_eq!(
-        canister_state.system_state.environment_variables,
-        EnvironmentVariables::new(env_vars)
-    );
+    assert_eq!(canister_state.system_state.environment_variables, env_vars);
 }
 
 #[test]
@@ -1400,7 +1414,13 @@ fn canister_history_tracking_env_vars_create_canister() {
         settings: Some(
             CanisterSettingsArgsBuilder::new()
                 .with_controllers(vec![user_id1, user_id2])
-                .with_environment_variables(env_vars.clone())
+                .with_environment_variables(
+                    env_vars
+                        .clone()
+                        .into_iter()
+                        .map(|(k, v)| EnvironmentVariable { name: k, value: v })
+                        .collect::<Vec<_>>(),
+                )
                 .build(),
         ),
         sender_canister_version: Some(2),
@@ -1442,7 +1462,13 @@ fn canister_history_tracking_env_vars_provisional_create_canister() {
         settings: Some(
             CanisterSettingsArgsBuilder::new()
                 .with_controllers(vec![user_id1, user_id2])
-                .with_environment_variables(env_vars.clone())
+                .with_environment_variables(
+                    env_vars
+                        .clone()
+                        .into_iter()
+                        .map(|(k, v)| EnvironmentVariable { name: k, value: v })
+                        .collect::<Vec<_>>(),
+                )
                 .build(),
         ),
         specified_id: None,
