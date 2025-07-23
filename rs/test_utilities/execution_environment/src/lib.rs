@@ -216,7 +216,7 @@ pub fn cycles_reserved_for_app_and_verified_app_subnets<T: Fn(SubnetType)>(test:
 /// let wat = r#"(module (func (export "canister_query query")))"#;
 /// let canister_id = test.canister_from_wat(wat).unwrap();
 /// let result = test.ingress(canister_id, "query", vec![]);
-/// assert_empty_reply(result);
+/// expect_canister_did_not_reply(result);
 /// ```
 pub struct ExecutionTest {
     // Mutable fields that change after message execution.
@@ -2542,11 +2542,12 @@ pub fn get_reject(result: Result<WasmResult, UserError>) -> String {
     }
 }
 
-/// A helper to assert that execution was successful and produced no reply.
-pub fn assert_empty_reply(result: Result<WasmResult, UserError>) {
+/// Expects that the canister did not reply (i.e., `CanisterDidNotReply` error).
+/// Panics if the result is not an error with that specific code.
+pub fn expect_canister_did_not_reply(result: Result<WasmResult, UserError>) {
     match result {
         Err(err) if err.code() == ErrorCode::CanisterDidNotReply => {}
-        _ => unreachable!("Expected empty reply, got {:?}", result),
+        _ => unreachable!("Expected CanisterDidNotReply error, got {:?}", result),
     }
 }
 
