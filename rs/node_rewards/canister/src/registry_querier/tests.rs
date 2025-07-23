@@ -30,6 +30,12 @@ thread_local! {
         let mgr = MemoryManager::init(DefaultMemoryImpl::default());
         StableBTreeMap::init(mgr.get(MemoryId::new(0)))
     });
+
+    static REGISTRY_STORE: Arc<StableCanisterRegistryClient<DummyState>> = {
+        let store = StableCanisterRegistryClient::<DummyState>::new(
+            Arc::new(RegistryCanister::new()));
+        Arc::new(store)
+    };
 }
 
 test_registry_data_stable_memory_impl!(DummyState, STATE);
@@ -141,13 +147,12 @@ fn add_dummy_data() {
     add_record_helper_ts(&node_3_k, 39677, Some(node_3_v), ts("2025-07-16") + 2);
 }
 
-fn client_for_tests() -> RegistryQuerier<StableCanisterRegistryClient<DummyState>> {
+fn client_for_tests() -> RegistryQuerier {
     add_dummy_data();
+    let store = REGISTRY_STORE.with(|store| store.clone());
 
     RegistryQuerier {
-        registry_client: Arc::new(StableCanisterRegistryClient::<DummyState>::new(Arc::new(
-            RegistryCanister::new(),
-        ))),
+        registry_client: store,
     }
 }
 
@@ -228,7 +233,7 @@ fn test_get_rewards_table_returns_correct_record() {
 
 #[test]
 fn test_nodes_in_registry_returns_expected_days() {
-    let client = client_for_tests();
+    let _client = client_for_tests();
 
     // Time range where:
     // - node_1 exists until 2025-07-07
@@ -236,8 +241,7 @@ fn test_nodes_in_registry_returns_expected_days() {
     // - node_3 appears on 2025-07-11
     let from = ts("2025-07-03").into();
     let to = ts("2025-07-16").into();
-
-    let nodes_map = client.nodes_in_registry_between(from, to);
+    let nodes_map = RegistryQuerier::nodes_in_registry_between::<DummyState>(from, to);
 
     let node_1_id = NodeId::from(PrincipalId::new_node_test_id(1));
     let node_2_id = NodeId::from(PrincipalId::new_node_test_id(2));
@@ -286,17 +290,18 @@ fn test_nodes_in_registry_returns_expected_days() {
 
 #[test]
 fn test_rewardable_nodes_deleted_nodes() {
-    let client = client_for_tests();
-
+    let _client = client_for_tests();
     // Define the range for which we want to check rewardable nodes.
     // This is *after* node_1 was deleted.
     let from = ts("2025-07-12");
     let to = ts("2025-07-13");
     let reward_period = RewardPeriod::new(from, to).expect("Failed to create reward period");
 
-    let mut rewardables = client
-        .get_rewardable_nodes_per_provider(reward_period)
-        .expect("Failed to fetch rewardable nodes");
+    let mut rewardables = RegistryQuerier::get_rewardable_nodes_per_provider::<DummyState>(
+        &REGISTRY_STORE,
+        reward_period,
+    )
+    .expect("Failed to fetch rewardable nodes");
 
     let np_1_id = PrincipalId::new_user_test_id(20);
     let np_1_rewardables = rewardables
@@ -326,7 +331,7 @@ fn test_rewardable_nodes_deleted_nodes() {
 
 #[test]
 fn test_rewardable_nodes_rewardables_till_deleted() {
-    let client = client_for_tests();
+    let _client = client_for_tests();
 
     // Define a time range that spans:
     // - The active time of node_1 (until deletion on 2025-07-08),
@@ -336,9 +341,11 @@ fn test_rewardable_nodes_rewardables_till_deleted() {
     let to = ts("2025-07-12");
     let reward_period = RewardPeriod::new(from, to).expect("Failed to create reward period");
 
-    let mut rewardables = client
-        .get_rewardable_nodes_per_provider(reward_period)
-        .expect("Failed to fetch rewardable nodes");
+    let mut rewardables = RegistryQuerier::get_rewardable_nodes_per_provider::<DummyState>(
+        &REGISTRY_STORE,
+        reward_period,
+    )
+    .expect("Failed to fetch rewardable nodes");
 
     let np_1_id = PrincipalId::new_user_test_id(20);
     let np_1_rewardables = rewardables
@@ -389,16 +396,18 @@ fn test_node_re_registered_after_deletion() {
 
     add_record_helper(&node_key, 39668, Some(node_record), "2025-07-11");
 
-    let client = client_for_tests();
+    let _client = client_for_tests();
 
     // Range that includes both the deletion and re-registration periods
     let from = ts("2025-07-07");
     let to = ts("2025-07-12");
     let reward_period = RewardPeriod::new(from, to).expect("Failed to create reward period");
 
-    let mut rewardables = client
-        .get_rewardable_nodes_per_provider(reward_period)
-        .expect("Failed to fetch rewardables");
+    let mut rewardables = RegistryQuerier::get_rewardable_nodes_per_provider::<DummyState>(
+        &REGISTRY_STORE,
+        reward_period,
+    )
+    .expect("Failed to fetch rewardables");
 
     let np_1_id = PrincipalId::new_user_test_id(20);
     let np_1_rewardables = rewardables
@@ -420,12 +429,11 @@ fn test_node_re_registered_after_deletion() {
 
 #[test]
 fn test_node_operator_data_returns_expected_data() {
-    let client = client_for_tests();
+    let _client = client_for_tests();
 
     let version = 39667;
     let no_2_id = PrincipalId::new_user_test_id(30);
-    let data = client
-        .node_operator_data(no_2_id, version.into())
+    let data = RegistryQuerier::node_operator_data(&REGISTRY_STORE, no_2_id, version.into())
         .unwrap()
         .unwrap();
 
@@ -435,8 +443,7 @@ fn test_node_operator_data_returns_expected_data() {
 
     let version = 39675;
     let no_1_id = PrincipalId::new_user_test_id(10);
-    let data = client
-        .node_operator_data(no_1_id, version.into())
+    let data = RegistryQuerier::node_operator_data(&REGISTRY_STORE, no_1_id, version.into())
         .unwrap()
         .unwrap();
 
@@ -445,9 +452,12 @@ fn test_node_operator_data_returns_expected_data() {
     assert_eq!(data.region.0, "A");
 
     let not_yet_added_no_version = 39652;
-    let data = client
-        .node_operator_data(no_1_id, not_yet_added_no_version.into())
-        .unwrap();
+    let data = RegistryQuerier::node_operator_data(
+        &REGISTRY_STORE,
+        no_1_id,
+        not_yet_added_no_version.into(),
+    )
+    .unwrap();
     assert!(
         data.is_none(),
         "Data should not exist for version {} because Operator was not yet added",

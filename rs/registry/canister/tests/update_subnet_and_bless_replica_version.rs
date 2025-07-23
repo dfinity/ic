@@ -27,7 +27,7 @@ use registry_canister::{
     },
 };
 
-const MOCK_HASH: &str = "d1bc8d3ba4afc7e109612cb73acbdddac052c93025aa1f82942edabb7deb82a1";
+const MOCK_HASH: &str = "acdcacdcacdcacdcacdcacdcacdcacdcacdcacdcacdcacdcacdcacdcacdcacdc";
 
 #[test]
 fn test_the_anonymous_user_cannot_elect_a_version() {
@@ -219,7 +219,7 @@ fn test_accepted_proposal_mutates_the_registry() {
         assert_eq!(
             get_value_or_panic::<ReplicaVersionRecord>(
                 &registry,
-                make_replica_version_key(ReplicaVersion::default()).as_bytes()
+                make_replica_version_key("version_43").as_bytes()
             )
             .await,
             ReplicaVersionRecord {

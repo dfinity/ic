@@ -1,7 +1,7 @@
 use ic_protobuf::registry::subnet::v1::SubnetType;
 use ic_system_test_driver::driver::{
     group::SystemTestGroup,
-    test_env_api::{get_mainnet_nns_revision, read_dependency_from_env_to_string},
+    test_env_api::{get_current_branch_version, get_mainnet_nns_revision},
 };
 use os_qualification_utils::{
     defs::QualificationExecutor,
@@ -66,7 +66,7 @@ pub fn main() -> anyhow::Result<()> {
         Some(new_version) => (old_version, new_version),
         None => (
             // Should be: 0000000000000000000000000000000000000000
-            read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")?,
+            get_current_branch_version()?,
             old_version,
         ),
     };
