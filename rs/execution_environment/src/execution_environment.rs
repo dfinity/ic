@@ -555,11 +555,12 @@ impl ExecutionEnvironment {
 
                             info!(
                                 self.log,
-                                "Canister Http request with request size {}, payload size {}, max response size {} and subnet size {}",
-                                context.variable_parts_size().get(),
+                                "Canister Http request with payload_size {}, max_response_size {}, subnet_size {}, request_id {}, process_id {}",
                                 response.payload_size_bytes().get(),
                                 max_response_size,
-                                registry_settings.subnet_size
+                                registry_settings.subnet_size,
+                                context.request.sender_reply_callback,
+                                std::process::id(),
                             );
                         }
 
