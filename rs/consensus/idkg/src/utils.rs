@@ -1018,7 +1018,7 @@ mod tests {
                 get_idkg_subnet_public_keys_and_pre_signatures(&block, &block, &pool_reader, &log);
 
             assert_eq!(public_keys.len(), 1);
-            assert!(public_keys.get(key_id.inner()).is_some());
+            assert!(public_keys.contains_key(key_id.inner()));
 
             assert_eq!(pre_signatures.len(), 1);
             let delivered_pre_signatures = pre_signatures.get(key_id.inner()).unwrap();
