@@ -31,10 +31,12 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 #[cfg(windows)]
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+#[cfg(not(windows))]
+use std::time::Instant;
 use std::{
     io::Read,
     sync::OnceLock,
-    time::{Duration, Instant, SystemTime},
+    time::{Duration, SystemTime},
 };
 use tempfile::{NamedTempFile, TempDir};
 #[cfg(windows)]
