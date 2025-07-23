@@ -101,19 +101,18 @@ fn create_and_install_canister(
     canister_id
 }
 
-fn setup_with_controller(wasm: Vec<u8>) -> (StateMachine, CanisterId, PrincipalId) {
-    let user_controller = PrincipalId::new_user_test_id(42);
+fn setup_with_controller(controller: PrincipalId, wasm: Vec<u8>) -> (StateMachine, CanisterId) {
     let env = setup_env();
     let canister_id = create_and_install_canister(
         &env,
         CanisterSettingsArgsBuilder::new()
             .with_log_visibility(LogVisibilityV2::Controllers)
-            .with_controllers(vec![user_controller])
+            .with_controllers(vec![controller])
             .build(),
         wasm,
     );
 
-    (env, canister_id, user_controller)
+    (env, canister_id)
 }
 
 fn restart_node(env: StateMachine) -> StateMachine {
@@ -228,7 +227,8 @@ fn test_metrics_for_fetch_canister_logs_via_query_call() {
         ]))
         .map_or(0, |stats| stats.count)
     }
-    let (env, canister_id, user_controller) = setup_with_controller(wat_canister().build_wasm());
+    let user_controller = PrincipalId::new_user_test_id(42);
+    let (env, canister_id) = setup_with_controller(user_controller, wat_canister().build_wasm());
 
     assert_eq!(fetch_canister_logs_count(&env), 0);
     let _ = fetch_canister_logs(&env, user_controller, canister_id);
@@ -286,8 +286,9 @@ fn test_fetch_canister_logs_via_composite_query_call() {
     // Test that fetch_canister_logs API is not accessible via composite query call.
     // There are 3 actors with the following controller relatioship: user -> canister_a -> canister_b.
     // The user uses composite_query to canister_a to fetch logs of canister_b, which should fail.
-    let (env, canister_a, user_controller) =
-        setup_with_controller(UNIVERSAL_CANISTER_WASM.to_vec());
+    let user_controller = PrincipalId::new_user_test_id(42);
+    let (env, canister_a) =
+        setup_with_controller(user_controller, UNIVERSAL_CANISTER_WASM.to_vec());
 
     // Create canister_b controlled by canister_a.
     let canister_b = create_and_install_canister(
@@ -398,7 +399,9 @@ fn test_log_visibility_of_fetch_canister_logs() {
 #[test_strategy::proptest(ProptestConfig { cases: 5, ..ProptestConfig::default() })]
 fn test_appending_logs_in_replied_update_call(#[strategy("\\PC*")] message: String) {
     prop_assume!(message.len() < MAX_LOG_MESSAGE_LEN);
-    let (env, canister_id, user_controller) = setup_with_controller(
+    let user_controller = PrincipalId::new_user_test_id(42);
+    let (env, canister_id) = setup_with_controller(
+        user_controller,
         wat_canister()
             .update("test", wat_fn().debug_print(message.as_bytes()))
             .build_wasm(),
@@ -417,7 +420,9 @@ fn test_appending_logs_in_replied_update_call(#[strategy("\\PC*")] message: Stri
 #[test_strategy::proptest(ProptestConfig { cases: 5, ..ProptestConfig::default() })]
 fn test_appending_logs_in_trapped_update_call(#[strategy("\\PC*")] message: String) {
     prop_assume!(message.len() < MAX_LOG_MESSAGE_LEN);
-    let (env, canister_id, user_controller) = setup_with_controller(
+    let user_controller = PrincipalId::new_user_test_id(42);
+    let (env, canister_id) = setup_with_controller(
+        user_controller,
         wat_canister()
             .update("test", wat_fn().debug_print(message.as_bytes()).trap())
             .build_wasm(),
@@ -439,7 +444,9 @@ fn test_appending_logs_in_trapped_update_call(#[strategy("\\PC*")] message: Stri
 #[test_strategy::proptest(ProptestConfig { cases: 5, ..ProptestConfig::default() })]
 fn test_appending_logs_in_replied_replicated_query_call(#[strategy("\\PC*")] message: String) {
     prop_assume!(message.len() < MAX_LOG_MESSAGE_LEN);
-    let (env, canister_id, user_controller) = setup_with_controller(
+    let user_controller = PrincipalId::new_user_test_id(42);
+    let (env, canister_id) = setup_with_controller(
+        user_controller,
         wat_canister()
             .query("test", wat_fn().debug_print(message.as_bytes()))
             .build_wasm(),
@@ -458,7 +465,9 @@ fn test_appending_logs_in_replied_replicated_query_call(#[strategy("\\PC*")] mes
 #[test_strategy::proptest(ProptestConfig { cases: 5, ..ProptestConfig::default() })]
 fn test_appending_logs_in_trapped_replicated_query_call(#[strategy("\\PC*")] message: String) {
     prop_assume!(message.len() < MAX_LOG_MESSAGE_LEN);
-    let (env, canister_id, user_controller) = setup_with_controller(
+    let user_controller = PrincipalId::new_user_test_id(42);
+    let (env, canister_id) = setup_with_controller(
+        user_controller,
         wat_canister()
             .query("test", wat_fn().debug_print(message.as_bytes()).trap())
             .build_wasm(),
@@ -481,7 +490,9 @@ fn test_appending_logs_in_trapped_replicated_query_call(#[strategy("\\PC*")] mes
 fn test_canister_log_record_index_increment_for_different_calls() {
     // Test that the index of the log records is incremented for each log message,
     // both for logging them in the same and different update calls.
-    let (env, canister_id, user_controller) = setup_with_controller(
+    let user_controller = PrincipalId::new_user_test_id(42);
+    let (env, canister_id) = setup_with_controller(
+        user_controller,
         wat_canister()
             .update(
                 "test1",
@@ -521,7 +532,9 @@ fn test_canister_log_record_index_increment_for_different_calls() {
 fn test_canister_log_record_index_increment_after_node_restart() {
     // Test that the index of the log records is incremented for each log message
     // even after checkpoint and node restart.
-    let (env, canister_id, user_controller) = setup_with_controller(
+    let user_controller = PrincipalId::new_user_test_id(42);
+    let (env, canister_id) = setup_with_controller(
+        user_controller,
         wat_canister()
             .update(
                 "test1",
@@ -563,7 +576,9 @@ fn test_canister_log_record_index_increment_after_node_restart() {
 
 #[test]
 fn test_logging_in_trapped_wasm_execution() {
-    let (env, canister_id, user_controller) = setup_with_controller(
+    let user_controller = PrincipalId::new_user_test_id(42);
+    let (env, canister_id) = setup_with_controller(
+        user_controller,
         wat_canister()
             .update("test", wat_fn().stable_grow(1).stable_read(0, 0, 70_000))
             .build_wasm(),
@@ -586,8 +601,11 @@ fn test_logging_in_trapped_wasm_execution() {
 
 #[test]
 fn test_logging_explicit_canister_trap_without_message() {
-    let (env, canister_id, user_controller) =
-        setup_with_controller(wat_canister().update("test", wat_fn().trap()).build_wasm());
+    let user_controller = PrincipalId::new_user_test_id(42);
+    let (env, canister_id) = setup_with_controller(
+        user_controller,
+        wat_canister().update("test", wat_fn().trap()).build_wasm(),
+    );
     // advance time so that time does not grow implicitly when executing a round
     env.advance_time(Duration::from_secs(1));
     let timestamp = env.time();
@@ -601,7 +619,9 @@ fn test_logging_explicit_canister_trap_without_message() {
 
 #[test]
 fn test_logging_explicit_canister_trap_with_message() {
-    let (env, canister_id, user_controller) = setup_with_controller(
+    let user_controller = PrincipalId::new_user_test_id(42);
+    let (env, canister_id) = setup_with_controller(
+        user_controller,
         wat_canister()
             .update("test", wat_fn().trap_with_blob(b"some text"))
             .build_wasm(),
@@ -622,7 +642,9 @@ fn test_canister_log_stays_within_limit() {
     // Test that the total size of canister log records stays within the limit
     // even if the are many log messages sent in different calls.
     const MESSAGES_NUMBER: usize = 10;
-    let (env, canister_id, user_controller) = setup_with_controller(
+    let user_controller = PrincipalId::new_user_test_id(42);
+    let (env, canister_id) = setup_with_controller(
+        user_controller,
         wat_canister()
             .update(
                 "test",
@@ -653,6 +675,7 @@ fn test_canister_log_in_state_stays_within_limit() {
     // even if the are many log messages sent in different calls (both via print and trap).
     const MESSAGES_NUMBER: usize = 10;
     let (env, canister_id, _user_controller) = setup_with_controller(
+        user_controller,
         wat_canister()
             .update(
                 "test",
@@ -673,7 +696,9 @@ fn test_canister_log_in_state_stays_within_limit() {
 
 #[test]
 fn test_logging_trap_in_heartbeat() {
-    let (env, canister_id, user_controller) = setup_with_controller(
+    let user_controller = PrincipalId::new_user_test_id(42);
+    let (env, canister_id) = setup_with_controller(
+        user_controller,
         wat_canister()
             .heartbeat(
                 wat_fn()
@@ -695,7 +720,9 @@ fn test_logging_trap_in_heartbeat() {
 
 #[test]
 fn test_logging_trap_in_timer() {
-    let (env, canister_id, user_controller) = setup_with_controller(
+    let user_controller = PrincipalId::new_user_test_id(42);
+    let (env, canister_id) = setup_with_controller(
+        user_controller,
         wat_canister()
             .init(wat_fn().api_global_timer_set(1))
             .global_timer(
@@ -719,7 +746,9 @@ fn test_logging_trap_in_timer() {
 #[test]
 fn test_deleting_logs_on_reinstall() {
     // Test logs are deleted on canister reinstall.
-    let (env, canister_id, user_controller) = setup_with_controller(
+    let user_controller = PrincipalId::new_user_test_id(42);
+    let (env, canister_id) = setup_with_controller(
+        user_controller,
         wat_canister()
             .start(wat_fn().debug_print(b"start_1"))
             .init(wat_fn().debug_print(b"init_1"))
@@ -780,7 +809,9 @@ fn test_deleting_logs_on_reinstall() {
 #[test]
 fn test_deleting_logs_on_uninstall() {
     // Test logs are deleted when the canister is uninstalled.
-    let (env, canister_id, user_controller) = setup_with_controller(
+    let user_controller = PrincipalId::new_user_test_id(42);
+    let (env, canister_id) = setup_with_controller(
+        user_controller,
         wat_canister()
             .start(wat_fn().debug_print(b"start_1"))
             .init(wat_fn().debug_print(b"init_1"))
@@ -828,7 +859,9 @@ fn test_deleting_logs_on_uninstall() {
 
 #[test]
 fn test_logging_debug_print_persists_over_upgrade() {
-    let (env, canister_id, user_controller) = setup_with_controller(
+    let user_controller = PrincipalId::new_user_test_id(42);
+    let (env, canister_id) = setup_with_controller(
+        user_controller,
         wat_canister()
             .start(wat_fn().debug_print(b"start_1"))
             .init(wat_fn().debug_print(b"init_1"))
@@ -953,7 +986,9 @@ fn test_logging_trap_at_install_init() {
 
 #[test]
 fn test_logging_trap_in_pre_upgrade() {
-    let (env, canister_id, user_controller) = setup_with_controller(
+    let user_controller = PrincipalId::new_user_test_id(42);
+    let (env, canister_id) = setup_with_controller(
+        user_controller,
         wat_canister()
             .start(wat_fn().debug_print(b"start_1"))
             .init(wat_fn().debug_print(b"init_1"))
@@ -1014,7 +1049,9 @@ fn test_logging_trap_in_pre_upgrade() {
 
 #[test]
 fn test_logging_trap_after_upgrade_in_start() {
-    let (env, canister_id, user_controller) = setup_with_controller(
+    let user_controller = PrincipalId::new_user_test_id(42);
+    let (env, canister_id) = setup_with_controller(
+        user_controller,
         wat_canister()
             .start(wat_fn().debug_print(b"start_1"))
             .init(wat_fn().debug_print(b"init_1"))
@@ -1072,7 +1109,9 @@ fn test_logging_trap_after_upgrade_in_start() {
 
 #[test]
 fn test_logging_trap_after_upgrade_in_post_upgrade() {
-    let (env, canister_id, user_controller) = setup_with_controller(
+    let user_controller = PrincipalId::new_user_test_id(42);
+    let (env, canister_id) = setup_with_controller(
+        user_controller,
         wat_canister()
             .start(wat_fn().debug_print(b"start_1"))
             .init(wat_fn().debug_print(b"init_1"))
@@ -1139,7 +1178,9 @@ fn test_logging_debug_print_over_dts() {
     // Check that log messages are available only after the message is finished.
     let number_of_slices = 4;
     let instructions_per_slice = MAX_INSTRUCTIONS_PER_SLICE.get() as i64;
-    let (env, canister_id, user_controller) = setup_with_controller(
+    let user_controller = PrincipalId::new_user_test_id(42);
+    let (env, canister_id) = setup_with_controller(
+        user_controller,
         wat_canister()
             .update(
                 "test",
@@ -1192,7 +1233,9 @@ fn test_logging_trap_over_dts() {
     // Check that log messages are available only after the message is finished.
     let number_of_slices = 4;
     let instructions_per_slice = MAX_INSTRUCTIONS_PER_SLICE.get() as i64;
-    let (env, canister_id, user_controller) = setup_with_controller(
+    let user_controller = PrincipalId::new_user_test_id(42);
+    let (env, canister_id) = setup_with_controller(
+        user_controller,
         wat_canister()
             .update(
                 "test",
@@ -1247,7 +1290,9 @@ fn test_logging_of_long_running_dts_over_checkpoint() {
     assert_lt!(1, checkpoint_slice_idx); // This is due to using `send_ingress` 2 times for sending long and short messages.
     assert_lt!(checkpoint_slice_idx, number_of_slices);
     let instructions_per_slice = MAX_INSTRUCTIONS_PER_SLICE.get() as i64;
-    let (env, canister_id, user_controller) = setup_with_controller(
+    let user_controller = PrincipalId::new_user_test_id(42);
+    let (env, canister_id) = setup_with_controller(
+        user_controller,
         wat_canister()
             .update(
                 "test_long",
@@ -1343,7 +1388,9 @@ fn test_canister_log_memory_usage_bytes() {
     // Test canister logging metrics record the size of the log.
     let metric = "canister_log_memory_usage_bytes_v2";
     const PAYLOAD_SIZE: usize = 1_000;
-    let (env, canister_id, _user_controller) = setup_with_controller(
+    let user_controller = PrincipalId::new_user_test_id(42);
+    let (env, canister_id) = setup_with_controller(
+        user_controller,
         wat_canister()
             .update("test", wat_fn().debug_print(&[37; PAYLOAD_SIZE]))
             .build_wasm(),
@@ -1364,8 +1411,9 @@ fn test_canister_log_memory_usage_bytes() {
 #[test]
 fn test_canister_log_on_reply() {
     // Test that the log is recorded inside response callback.
-    let (env, canister_id, user_controller) =
-        setup_with_controller(UNIVERSAL_CANISTER_WASM.to_vec());
+    let user_controller = PrincipalId::new_user_test_id(42);
+    let (env, canister_id) =
+        setup_with_controller(user_controller, UNIVERSAL_CANISTER_WASM.to_vec());
 
     let instructions_per_slice = MAX_INSTRUCTIONS_PER_SLICE.get();
     // advance time so that time does not grow implicitly when executing a round
@@ -1422,8 +1470,9 @@ fn test_canister_log_on_reply() {
 #[test]
 fn test_canister_log_on_cleanup() {
     // Test that the log is recorded inside cleanup callback.
-    let (env, canister_id, user_controller) =
-        setup_with_controller(UNIVERSAL_CANISTER_WASM.to_vec());
+    let user_controller = PrincipalId::new_user_test_id(42);
+    let (env, canister_id) =
+        setup_with_controller(user_controller, UNIVERSAL_CANISTER_WASM.to_vec());
 
     // advance time so that time does not grow implicitly when executing a round
     env.advance_time(Duration::from_secs(1));
