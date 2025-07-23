@@ -260,11 +260,23 @@ impl From<pb::reward_node_provider::RewardToAccount>
     for pb_api::reward_node_provider::RewardToAccount
 {
     fn from(item: pb::reward_node_provider::RewardToAccount) -> Self {
-        Self {
-            to_account: item.to_account,
-        }
+        let to_account = item.to_account.map(|account| {
+            match icp_ledger::AccountIdentifier::try_from(&account) {
+                // If it's valid, we make sure it has the checksum.
+                Ok(account) => icp_ledger::protobuf::AccountIdentifier {
+                    hash: account.to_vec(),
+                },
+                Err(_) => {
+                    // If it fails, we return what is there, since this is going from internal
+                    // to API, and there's no good way to recover at this point
+                    account
+                }
+            }
+        });
+        Self { to_account }
     }
 }
+
 impl From<pb_api::reward_node_provider::RewardToAccount>
     for pb::reward_node_provider::RewardToAccount
 {

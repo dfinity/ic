@@ -54,7 +54,7 @@ impl NodeInfo {
         operator_id: PrincipalId,
         provider_id: PrincipalId,
         provider_account: AccountIdentifier,
-        reward_account: Option<icp_ledger::protobuf::AccountIdentifier>,
+        reward_account: Option<AccountIdentifier>,
     ) -> Self {
         NodeInfo {
             operator_id,
@@ -62,7 +62,7 @@ impl NodeInfo {
             provider_account,
             provider: NodeProvider {
                 id: Some(provider_id),
-                reward_account,
+                reward_account: reward_account.map(|id| id.into_proto_with_checksum()),
             },
         }
     }
@@ -334,10 +334,10 @@ fn test_automated_node_provider_remuneration() {
         *TEST_USER5_PRINCIPAL,
         *TEST_USER6_PRINCIPAL,
         AccountIdentifier::from(*TEST_USER7_PRINCIPAL),
-        Some(AccountIdentifier::from(*TEST_USER7_PRINCIPAL).into()),
+        Some(AccountIdentifier::from(*TEST_USER7_PRINCIPAL)),
     );
     let reward_mode_3 = Some(RewardMode::RewardToAccount(RewardToAccount {
-        to_account: Some(node_info_3.provider_account.into()),
+        to_account: Some(node_info_3.provider.reward_account.clone().unwrap()),
     }));
     let expected_rewards_e8s_3 =
         (((19 * 234_000) + (33 * 907_000) + (4 * 103_000)) * TOKEN_SUBDIVIDABLE_BY) / 155_000;
@@ -418,15 +418,30 @@ fn test_automated_node_provider_remuneration() {
 
     let monthly_node_provider_rewards = monthly_node_provider_rewards_result.unwrap();
     assert_eq!(monthly_node_provider_rewards.rewards.len(), 3);
-    assert!(monthly_node_provider_rewards
-        .rewards
-        .contains(&expected_node_provider_reward_1));
-    assert!(monthly_node_provider_rewards
-        .rewards
-        .contains(&expected_node_provider_reward_2));
-    assert!(monthly_node_provider_rewards
-        .rewards
-        .contains(&expected_node_provider_reward_3));
+    assert!(
+        monthly_node_provider_rewards
+            .rewards
+            .contains(&expected_node_provider_reward_1),
+        "Expected reward 1: {:?} not found in monthly rewards: {:?}",
+        expected_node_provider_reward_2,
+        monthly_node_provider_rewards
+    );
+    assert!(
+        monthly_node_provider_rewards
+            .rewards
+            .contains(&expected_node_provider_reward_2),
+        "Expected reward 2: {:?} not found in monthly rewards: {:?}",
+        expected_node_provider_reward_1,
+        monthly_node_provider_rewards
+    );
+    assert!(
+        monthly_node_provider_rewards
+            .rewards
+            .contains(&expected_node_provider_reward_3),
+        "Expected reward 3: {:?} not found in monthly rewards: {:?}",
+        expected_node_provider_reward_3,
+        monthly_node_provider_rewards
+    );
 
     // Assert account balances are 0
     assert_account_balance(&state_machine, node_info_1.provider_account, 0);
