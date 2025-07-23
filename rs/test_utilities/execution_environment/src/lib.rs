@@ -2542,11 +2542,12 @@ pub fn get_reject(result: Result<WasmResult, UserError>) -> String {
     }
 }
 
-/// A helper to assert that execution was successful and produced no reply.
-pub fn assert_empty_reply(result: Result<WasmResult, UserError>) {
+/// Expects that the canister did not reply (i.e., `CanisterDidNotReply` error).
+/// Panics if the result is not an error with that specific code.
+pub fn expect_canister_did_not_reply(result: Result<WasmResult, UserError>) {
     match result {
         Err(err) if err.code() == ErrorCode::CanisterDidNotReply => {}
-        _ => unreachable!("Expected empty reply, got {:?}", result),
+        _ => unreachable!("Expected CanisterDidNotReply error, got {:?}", result),
     }
 }
 
