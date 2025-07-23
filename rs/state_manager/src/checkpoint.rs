@@ -59,10 +59,15 @@ pub(crate) fn make_unvalidated_checkpoint(
     metrics: &CheckpointMetrics,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 ) -> Result<(Arc<ReplicatedState>, CheckpointLayout<ReadOnly>), Box<dyn std::error::Error + Send>> {
+    let _timer = metrics
+        .make_checkpoint_step_duration
+        .with_label_values(&["make_unvalidated_checkpoint"])
+        .start_timer();
+
     {
         let _timer = metrics
             .make_checkpoint_step_duration
-            .with_label_values(&["flush_page_map_deltas"])
+            .with_label_values(&["flush_page_map_deltas_preprocessing"])
             .start_timer();
         flush_canister_snapshots_and_page_maps(&mut state, height, tip_channel);
     }
@@ -81,23 +86,17 @@ pub(crate) fn make_unvalidated_checkpoint(
         })
         .unwrap();
 
-    {
-        let _timer = metrics
-            .make_checkpoint_step_duration
-            .with_label_values(&["tip_to_checkpoint"])
-            .start_timer();
-        #[allow(clippy::disallowed_methods)]
-        let (send, recv) = unbounded();
-        tip_channel
-            .send(TipRequest::TipToCheckpointAndSwitch {
-                height,
-                state,
-                fd_factory,
-                sender: send,
-            })
-            .unwrap();
-        recv.recv().unwrap()
-    }
+    #[allow(clippy::disallowed_methods)]
+    let (send, recv) = unbounded();
+    tip_channel
+        .send(TipRequest::TipToCheckpointAndSwitch {
+            height,
+            state,
+            fd_factory,
+            sender: send,
+        })
+        .unwrap();
+    recv.recv().unwrap()
 }
 
 pub(crate) fn validate_and_finalize_checkpoint_and_remove_unverified_marker(
