@@ -210,7 +210,7 @@ fn test_compute_providers_extrapolated_fr() {
     let p1_metrics = BTreeMap::new(); // No metrics available
     let result_p1 = step_2_extrapolated_fr(&p1_nodes, &p1_metrics);
     // Extrapolated FR for P1 should be 0 since no nodes are assigned
-    assert_eq!(result_p1.extrapolated_fr.get(&day), Some(&Decimal::zero()));
+    assert_eq!(result_p1.extrapolated_fr.get(&day), Some(&Decimal::ZERO));
 
     // --- P2 Data: Two nodes with metrics ---
     let p2_nodes = generate_rewardable_nodes(vec![(p2_node1, vec![day]), (p2_node2, vec![day])]);
