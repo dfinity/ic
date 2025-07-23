@@ -356,11 +356,14 @@ rust_test(
         "tests/sns_extension_test.rs",
     ],
     aliases = ALIASES,
-    data = DEV_DATA + ["@kong_backend_canister//file", "@kongswap-adaptor-canister//file"],
+    data = DEV_DATA + [
+        "@kong_backend_canister//file",
+        "@kongswap-adaptor-canister//file",
+    ],
     env = DEV_ENV | {
         "KONG_BACKEND_CANISTER_WASM_PATH": "$(rootpath @kong_backend_canister//file)",
         "KONGSWAP_ADAPTOR_CANISTER_WASM_PATH": "$(rootpath @kongswap-adaptor-canister//file)",
-        "RUST_TEST_NOCAPTURE": "1"
+        "RUST_TEST_NOCAPTURE": "1",
     },
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
