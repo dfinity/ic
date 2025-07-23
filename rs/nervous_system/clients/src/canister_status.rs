@@ -262,6 +262,7 @@ impl CanisterStatusResultFromManagementCanister {
             status: CanisterStatusType::Running,
             module_hash: None,
             memory_size: candid::Nat::from(42_u32),
+            memory_metrics: Default::default(),
             settings: DefiniteCanisterSettingsFromManagementCanister {
                 controllers,
                 compute_allocation: candid::Nat::from(44_u32),
@@ -514,6 +515,16 @@ mod tests {
             status: CanisterStatusType::Running,
             module_hash: Some(vec![1, 2, 3]),
             memory_size: candid::Nat::from(100_u32),
+            memory_metrics: MemoryMetrics {
+                wasm_memory_size: candid::Nat::from(10_u32),
+                stable_memory_size: candid::Nat::from(20_u32),
+                global_memory_size: candid::Nat::from(30_u32),
+                wasm_binary_size: candid::Nat::from(40_u32),
+                custom_sections_size: candid::Nat::from(50_u32),
+                canister_history_size: candid::Nat::from(60_u32),
+                wasm_chunk_store_size: candid::Nat::from(70_u32),
+                snapshots_size: candid::Nat::from(80_u32),
+            },
             settings: DefiniteCanisterSettingsFromManagementCanister {
                 controllers: vec![test_principal],
                 compute_allocation: candid::Nat::from(99_u32),
@@ -557,6 +568,16 @@ mod tests {
                 num_instructions_total: Some(candid::Nat::from(92_u32)),
                 request_payload_bytes_total: Some(candid::Nat::from(91_u32)),
                 response_payload_bytes_total: Some(candid::Nat::from(90_u32)),
+            }),
+            memory_metrics: Some(MemoryMetrics {
+                wasm_memory_size: candid::Nat::from(10_u32),
+                stable_memory_size: candid::Nat::from(20_u32),
+                global_memory_size: candid::Nat::from(30_u32),
+                wasm_binary_size: candid::Nat::from(40_u32),
+                custom_sections_size: candid::Nat::from(50_u32),
+                canister_history_size: candid::Nat::from(60_u32),
+                wasm_chunk_store_size: candid::Nat::from(70_u32),
+                snapshots_size: candid::Nat::from(80_u32),
             }),
         };
 
