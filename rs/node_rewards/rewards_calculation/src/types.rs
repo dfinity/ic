@@ -1,5 +1,5 @@
 use crate::rewards_calculator_results::DayUTC;
-use ic_base_types::{NodeId, PrincipalId, SubnetId};
+use ic_base_types::{NodeId, SubnetId};
 use ic_protobuf::registry::node::v1::NodeRewardType;
 use ic_types::Time;
 use std::error::Error;
