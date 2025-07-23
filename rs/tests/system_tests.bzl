@@ -9,7 +9,7 @@ load("@rules_oci//oci:defs.bzl", "oci_load")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("//bazel:defs.bzl", "mcopy", "zstd_compress")
 load("//bazel:mainnet-icos-images.bzl", "base_download_url")
-load("//rs/tests:common.bzl", "GUESTOS_DEV_VERSION", "MAINNET_NNS_CANISTER_ENV", "MAINNET_NNS_CANISTER_RUNTIME_DEPS", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "MAINNET_NNS_CANISTER_ENV", "MAINNET_NNS_CANISTER_RUNTIME_DEPS", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 
 def _run_system_test(ctx):
     run_test_script_file = ctx.actions.declare_file(ctx.label.name + "/run-test.sh")
@@ -28,7 +28,7 @@ def _run_system_test(ctx):
             # RUN_SCRIPT_ICOS_IMAGES:
             # For every ic-os image specified, first ensure it's in remote
             # storage, then export its download URL and HASH as environment variables.
-            if [ -n "$RUN_SCRIPT_ICOS_IMAGES" ]; then
+            if [ -n "${{RUN_SCRIPT_ICOS_IMAGES:-}}" ]; then
               # split the ";"-delimited list of "env_prefix:filepath;env_prefix2:filepath2;..."
               # into an array
               IFS=';' read -ra icos_images <<<"$RUN_SCRIPT_ICOS_IMAGES"
@@ -49,14 +49,8 @@ def _run_system_test(ctx):
               done
             fi
 
-            if [ "${{RUN_SCRIPT_HOSTOS_UPDATE_IMG_TEST}}" = "true" ]; then
-                export ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION="$(cat ${{ENV_DEPS__IC_VERSION_FILE}})-test"
-                export ENV_DEPS__HOSTOS_UPDATE_IMG_URL="${{ENV_DEPS__HOSTOS_UPDATE_IMG_TEST_URL:-}}"
-                export ENV_DEPS__HOSTOS_UPDATE_IMG_SHA="${{ENV_DEPS__HOSTOS_UPDATE_IMG_TEST_HASH:-}}"
-            fi
-
             # clean up the env for the test
-            unset RUN_SCRIPT_ICOS_IMAGES RUN_SCRIPT_UPLOAD_SYSTEST_DEP RUN_SCRIPT_HOSTOS_UPDATE_IMG_TEST
+            unset RUN_SCRIPT_ICOS_IMAGES RUN_SCRIPT_UPLOAD_SYSTEST_DEP
 
             # We export RUNFILES such that the from_location_specified_by_env_var() function in
             # rs/rust_canisters/canister_test/src/canister.rs can find canisters
@@ -177,13 +171,16 @@ def system_test(
         colocated_test_driver_vm_required_host_features = [],
         colocated_test_driver_vm_enable_ipv4 = False,
         colocated_test_driver_vm_forward_ssh_agent = False,
-        uses_guestos_dev = False,
-        uses_guestos_dev_test = False,
-        uses_setupos_dev = False,
-        uses_setupos_mainnet = False,
-        uses_hostos_dev_test = False,
-        uses_hostos_mainnet_update_img = False,
-        use_empty_image = False,
+        uses_guestos_img = True,
+        uses_guestos_mainnet_img = False,
+        uses_guestos_update = False,
+        uses_guestos_test_update = False,
+        uses_guestos_mainnet_update = False,
+        uses_setupos_img = False,
+        uses_setupos_mainnet_img = False,
+        uses_hostos_update = False,
+        uses_hostos_test_update = False,
+        uses_hostos_mainnet_update = False,
         env = {},
         env_inherit = [],
         additional_colocate_tags = [],
@@ -211,13 +208,16 @@ def system_test(
       colocated_test_driver_vm_forward_ssh_agent: forward the SSH agent to the colocated test-driver VM.
       specifying the required host features of the colocated test-driver VM.
       For example: [ "performance" ]
-      uses_guestos_dev: the test uses ic-os/guestos/envs/dev (will be also automatically added as dependency).
-      uses_guestos_dev_test: the test uses //ic-os/guestos/envs/dev:update-img-test (will be also automatically added as dependency).
-      uses_setupos_dev: the test uses ic-os/setupos/envs/dev (will be also automatically added as dependency).
-      uses_hostos_dev_test: the test uses ic-os/hostos/envs/dev:update-img-test (will be also automatically added as dependency).
-      uses_hostos_mainnet_update_img: the test uses mainnet HostOS update image version marked in mainnet-icos-revisions.json.
-      uses_setupos_mainnet: the test uses mainnet SetupOS image version marked in mainnet-icos-revisions.json.
-      use_empty_image: the test uses the empty disk image: //rs/tests/nested:empty_disk_image.tar.zst (will be also automatically added as dependency)
+      uses_guestos_img: the test uses the branch GuestOS image
+      uses_guestos_mainnet_img: the test uses the mainnet GuestOS image
+      uses_guestos_update: the test uses the branch GuestOS update image
+      uses_guestos_test_update: the test uses the branch GuestOS update-test image
+      uses_guestos_mainnet_update: the test uses the mainnet GuestOS update image
+      uses_setupos_img: the test uses the branch SetupOS image
+      uses_setupos_mainnet_img: the test uses the mainnet SetupOS image
+      uses_hostos_update: the test uses the branch HostOS update image
+      uses_hostos_test_update: the test uses the branch HostOS update-test image
+      uses_hostos_mainnet_update: the test uses the mainnet HostOS update image
       env: environment variables to set in the test (subject to Make variable expansion)
       env_inherit: specifies additional environment variables to inherit from
       the external environment when the test is executed by bazel test.
@@ -247,12 +247,6 @@ def system_test(
         )
         test_driver_target = bin_name
 
-    # Automatically detect system tests that use guestos dev
-    for _d in runtime_deps:
-        if _d == GUESTOS_DEV_VERSION:
-            uses_guestos_dev = True
-            break
-
     # Environment variable names to targets (targets are resolved)
     _env_deps = {}
 
@@ -262,45 +256,93 @@ def system_test(
     # NOTE: we use "ENV_DEPS__" as prefix for env variables, which are passed to system-tests via Bazel.
     _env_deps["ENV_DEPS__IC_VERSION_FILE"] = _guestos + "version.txt"
 
+    # Guardrails for specifying source and target images
+    if int(uses_guestos_img) + int(uses_guestos_mainnet_img) >= 2:
+        fail("More than one initial GuestOS (disk) image was specified!")
+
+    if int(uses_guestos_update) + int(uses_guestos_test_update) + int(uses_guestos_mainnet_update) >= 2:
+        fail("More than one target GuestOS (upgrade) image was specified!")
+
+    if int(uses_setupos_img) + int(uses_setupos_mainnet_img) >= 2:
+        fail("More than one initial SetupOS (disk) image was provided!")
+
+    if int(uses_hostos_update) + int(uses_hostos_test_update) + int(uses_hostos_mainnet_update) >= 2:
+        fail("More than one target HostOS (upgrade) image was specified!")
+
     icos_images = dict()
 
-    if uses_guestos_dev:
+    if uses_guestos_img:
+        # TODO: Until the version can be passed directly in the env variable, pass the file and let the test driver resolve it, instead.
+        _env_deps["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = _guestos + "version.txt"
         icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = _guestos + "disk-img.tar.zst"
+        icos_images["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG"] = _guestos + "update-img.tar.zst"
+
+    if uses_guestos_mainnet_img:
+        mainnet_guestos_version = mainnet_icos_versions["hostos"]["latest_release"]["version"]
+        env["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = mainnet_guestos_version
+        icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = "//ic-os/setupos:mainnet-guest-img.tar.zst"
+        env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_URL"] = base_download_url(mainnet_guestos_version, "guest-os", True, False) + "update-img.tar.zst"
+
+        # TODO: Until the update hash is stored in the repo, pass the URL and let the test driver resolve it, instead.
+        env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_HASH"] = base_download_url(mainnet_guestos_version, "guest-os", True, False)
+
+    if uses_guestos_update:
+        # TODO: Until the version can be passed directly in the env variable, pass the file and let the test driver resolve it, instead.
+        _env_deps["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = _guestos + "version.txt"
         icos_images["ENV_DEPS__GUESTOS_UPDATE_IMG"] = _guestos + "update-img.tar.zst"
 
-    if uses_hostos_dev_test:
-        icos_images["ENV_DEPS__HOSTOS_UPDATE_IMG_TEST"] = "//ic-os/hostos/envs/dev:update-img-test.tar.zst"
+    if uses_guestos_test_update:
+        # TODO: Until the version can be passed directly in the env variable, pass the file and let the test driver resolve it, instead.
+        _env_deps["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = _guestos + "version-test.txt"
+        icos_images["ENV_DEPS__GUESTOS_UPDATE_IMG"] = _guestos + "update-img-test.tar.zst"
 
-    if uses_hostos_mainnet_update_img:
+    if uses_guestos_mainnet_update:
+        mainnet_guestos_version = mainnet_icos_versions["hostos"]["latest_release"]["version"]
+        env["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = mainnet_guestos_version
+        env["ENV_DEPS__GUESTOS_UPDATE_IMG_URL"] = base_download_url(mainnet_guestos_version, "guest-os", True, False) + "update-img.tar.zst"
+
+        # TODO: Until the update hash is stored in the repo, pass the URL and let the test driver resolve it, instead.
+        env["ENV_DEPS__GUESTOS_UPDATE_IMG_HASH"] = base_download_url(mainnet_guestos_version, "guest-os", True, False)
+
+    if uses_setupos_img:
+        icos_images["ENV_DEPS__EMPTY_DISK_IMG"] = "//rs/tests/nested:empty-disk-img.tar.zst"
+
+        # TODO: Until the version can be passed directly in the env variable, pass the file and let the test driver resolve it, instead.
+        _env_deps["ENV_DEPS__SETUPOS_DISK_IMG_VERSION"] = _guestos + "version.txt"
+        icos_images["ENV_DEPS__SETUPOS_DISK_IMG"] = "//ic-os/setupos:test-img.tar.zst"
+
+        _env_deps["ENV_DEPS__SETUPOS_BUILD_CONFIG"] = "//ic-os:dev-tools/build-setupos-config-image.sh"
+        _env_deps["ENV_DEPS__SETUPOS_CREATE_CONFIG"] = "//rs/ic_os/dev_test_tools/setupos-image-config:setupos-create-config"
+
+    if uses_setupos_mainnet_img:
+        icos_images["ENV_DEPS__EMPTY_DISK_IMG"] = "//rs/tests/nested:empty-disk-img.tar.zst"
+        env["ENV_DEPS__SETUPOS_DISK_IMG_VERSION"] = mainnet_icos_versions["hostos"]["latest_release"]["version"]
+        icos_images["ENV_DEPS__SETUPOS_DISK_IMG"] = "//ic-os/setupos:mainnet-test-img.tar.zst"
+
+        _env_deps["ENV_DEPS__SETUPOS_BUILD_CONFIG"] = "//ic-os:dev-tools/build-setupos-config-image.sh"
+        _env_deps["ENV_DEPS__SETUPOS_CREATE_CONFIG"] = "//rs/ic_os/dev_test_tools/setupos-image-config:setupos-create-config"
+
+    if uses_hostos_update:
+        # TODO: Until the version can be passed directly in the env variable, pass the file and let the test driver resolve it, instead.
+        _env_deps["ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION"] = _guestos + "version.txt"
+        icos_images["ENV_DEPS__HOSTOS_UPDATE_IMG"] = "//ic-os/hostos/envs/dev:update-img.tar.zst"
+
+    if uses_hostos_test_update:
+        # TODO: Until the version can be passed directly in the env variable, pass the file and let the test driver resolve it, instead.
+        _env_deps["ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION"] = _guestos + "version-test.txt"
+        icos_images["ENV_DEPS__HOSTOS_UPDATE_IMG"] = "//ic-os/hostos/envs/dev:update-img-test.tar.zst"
+
+    if uses_hostos_mainnet_update:
         mainnet_hostos_version = mainnet_icos_versions["hostos"]["latest_release"]["version"]
         env["ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION"] = mainnet_hostos_version
         env["ENV_DEPS__HOSTOS_UPDATE_IMG_URL"] = base_download_url(mainnet_hostos_version, "host-os", True, False) + "update-img.tar.zst"
-        env["ENV_DEPS__HOSTOS_UPDATE_IMG_SHA"] = mainnet_icos_versions["hostos"]["latest_release"]["update_img_hash"]
-        env["RUN_SCRIPT_HOSTOS_UPDATE_IMG_TEST"] = "false"
-    else:
-        env["RUN_SCRIPT_HOSTOS_UPDATE_IMG_TEST"] = "true"
-
-    if uses_setupos_mainnet:
-        icos_images["ENV_DEPS__SETUPOS_DISK_IMG"] = "//ic-os/setupos:mainnet-test-img.tar.zst"
-        _env_deps["ENV_DEPS__SETUPOS_BUILD_CONFIG"] = "//ic-os:dev-tools/build-setupos-config-image.sh"
-        _env_deps["ENV_DEPS__SETUPOS_CREATE_CONFIG"] = "//rs/ic_os/dev_test_tools/setupos-image-config:setupos-create-config"
-
-    if uses_setupos_dev:
-        icos_images["ENV_DEPS__SETUPOS_DISK_IMG"] = "//ic-os/setupos:test-img.tar.zst"
-        _env_deps["ENV_DEPS__SETUPOS_BUILD_CONFIG"] = "//ic-os:dev-tools/build-setupos-config-image.sh"
-        _env_deps["ENV_DEPS__SETUPOS_CREATE_CONFIG"] = "//rs/ic_os/dev_test_tools/setupos-image-config:setupos-create-config"
-
-    if uses_guestos_dev_test:
-        icos_images["ENV_DEPS__GUESTOS_UPDATE_IMG_TEST"] = _guestos + "update-img-test.tar.zst"
+        env["ENV_DEPS__HOSTOS_UPDATE_IMG_HASH"] = mainnet_icos_versions["hostos"]["latest_release"]["update_img_hash"]
 
     if malicious:
         _guestos_malicous = "//ic-os/guestos/envs/dev-malicious:"
 
         icos_images["ENV_DEPS__GUESTOS_MALICIOUS_DISK_IMG"] = _guestos_malicous + "disk-img.tar.zst"
         icos_images["ENV_DEPS__GUESTOS_MALICIOUS_UPDATE_IMG"] = _guestos_malicous + "update-img.tar.zst"
-
-    if use_empty_image:
-        icos_images["ENV_DEPS__EMPTY_DISK_IMG"] = "//rs/tests/nested:empty-disk-img.tar.zst"
 
     run_system_test(
         name = name,
@@ -406,7 +448,7 @@ def system_test_nns(name, extra_head_nns_tags = ["system_test_large"], **kwargs)
     )
     return struct(test_driver_target = mainnet_nns_systest.test_driver_target)
 
-def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_paths = None):
+def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_paths = None, testonly = True):
     """This macro creates bazel targets for uvm config images.
 
     Args:
@@ -416,6 +458,7 @@ def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_pa
         srcs: Source files that are copied into a vfat image.
         remap_paths: Dict that maps a current filename to a desired filename,
             e.g. {"activate.sh": "activate"}
+        testonly: If True, the target is only available in test configurations.
     """
     native.genrule(
         name = name + "_size",
@@ -425,6 +468,7 @@ def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_pa
         tags = ["manual"],
         target_compatible_with = ["@platforms//os:linux"],
         visibility = ["//visibility:private"],
+        testonly = testonly,
     )
 
     # TODO: install dosfstools as dependency
@@ -439,6 +483,7 @@ def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_pa
         tags = ["manual"],
         target_compatible_with = ["@platforms//os:linux"],
         visibility = ["//visibility:private"],
+        testonly = testonly,
     )
 
     mcopy(
@@ -449,6 +494,7 @@ def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_pa
         tags = ["manual"],
         target_compatible_with = ["@platforms//os:linux"],
         visibility = ["//visibility:private"],
+        testonly = testonly,
     )
 
     zstd_compress(
@@ -457,6 +503,7 @@ def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_pa
         target_compatible_with = ["@platforms//os:linux"],
         tags = tags,
         visibility = ["//visibility:private"],
+        testonly = testonly,
     )
 
     native.alias(
@@ -465,6 +512,7 @@ def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_pa
         tags = tags,
         target_compatible_with = ["@platforms//os:linux"],
         visibility = visibility,
+        testonly = testonly,
     )
 
 def oci_tar(name, image, repo_tags = []):

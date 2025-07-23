@@ -46,7 +46,6 @@ import IC.Test.Agent.Calls (httpbin_proto)
 import IC.Test.Agent.SafeCalls
 import IC.Test.Agent.UnsafeCalls
 import IC.Test.Agent.UserCalls
-import IC.Test.Spec.CanisterVersion
 import IC.Test.Spec.Timer
 import IC.Test.Spec.Utils
 import IC.Test.Universal
@@ -1214,7 +1213,6 @@ icTests my_sub other_sub conf =
                                                                                       query cid (replyData getGlobal) >>= as2Word64 >>= bothSame
                                                                                   ],
                                                                             testGroup "canister global timer" $ canister_timer_tests ecid,
-                                                                            testGroup "canister version" $ canister_version_tests ecid,
                                                                             testGroup "is_controller system API" $
                                                                               [ simpleTestCase "argument is controller" ecid $ \cid -> do
                                                                                   res <- query cid (replyData $ i2b $ isController (bytes defaultUser)) >>= asWord32

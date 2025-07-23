@@ -675,6 +675,65 @@
 			"arch": "amd64",
 			"dependencies": [
 				{
+          "key": "libdevmapper1.02.1_2-1.02.185-3ubuntu3.1_amd64",
+          "name": "libdevmapper1.02.1",
+          "version": "2:1.02.185-3ubuntu3.1"
+        },
+        {
+          "key": "libudev1_255.4-1ubuntu8.4_amd64",
+          "name": "libudev1",
+          "version": "255.4-1ubuntu8.4"
+        },
+        {
+          "key": "libcap2_1-2.66-5ubuntu2_amd64",
+          "name": "libcap2",
+          "version": "1:2.66-5ubuntu2"
+        },
+        {
+          "key": "libc6_2.39-0ubuntu8.3_amd64",
+          "name": "libc6",
+          "version": "2.39-0ubuntu8.3"
+        },
+        {
+          "key": "libgcc-s1_14-20240412-0ubuntu1_amd64",
+          "name": "libgcc-s1",
+          "version": "14-20240412-0ubuntu1"
+        },
+        {
+          "key": "gcc-14-base_14-20240412-0ubuntu1_amd64",
+          "name": "gcc-14-base",
+          "version": "14-20240412-0ubuntu1"
+        },
+        {
+          "key": "libselinux1_3.5-2ubuntu2_amd64",
+          "name": "libselinux1",
+          "version": "3.5-2ubuntu2"
+        },
+        {
+          "key": "libpcre2-8-0_10.42-4ubuntu2_amd64",
+          "name": "libpcre2-8-0",
+          "version": "10.42-4ubuntu2"
+        }
+      ],
+      "key": "dmsetup_2-1.02.185-3ubuntu3.1_amd64",
+      "name": "dmsetup",
+      "sha256": "8dcd6626fc44c1c0f88c63ce1c40b237804f70e5839eff7e36a7513840a3a6c9",
+      "url": "https://snapshot.ubuntu.com/ubuntu/20240923T000000Z/pool/main/l/lvm2/dmsetup_1.02.185-3ubuntu3.1_amd64.deb",
+      "version": "2:1.02.185-3ubuntu3.1"
+    },
+    {
+      "arch": "amd64",
+      "dependencies": [],
+      "key": "libdevmapper1.02.1_2-1.02.185-3ubuntu3.1_amd64",
+      "name": "libdevmapper1.02.1",
+      "sha256": "bf553e148a406bd77714581bc28963bac64dd0ecf2fb29b68b2fc4ecdac4cdb6",
+      "url": "https://snapshot.ubuntu.com/ubuntu/20240923T000000Z/pool/main/l/lvm2/libdevmapper1.02.1_1.02.185-3ubuntu3.1_amd64.deb",
+      "version": "2:1.02.185-3ubuntu3.1"
+    },
+    {
+      "arch": "amd64",
+      "dependencies": [
+        {
 					"key": "libc6_2.39-0ubuntu8.3_amd64",
 					"name": "libc6",
 					"version": "2.39-0ubuntu8.3"
@@ -1664,6 +1723,113 @@
 			"sha256": "8eb801f9ce084dab9bf4cbc3ec0ee5ac75516a4cc1f25e3f92298c632e75b700",
 			"url": "https://snapshot.ubuntu.com/ubuntu/20240923T000000Z/pool/main/i/init-system-helpers/init-system-helpers_1.66ubuntu1_all.deb",
 			"version": "1.66ubuntu1"
+    },
+    {
+      "arch": "amd64",
+      "dependencies": [
+        {
+          "key": "systemd-dev_255.4-1ubuntu8.4_amd64",
+          "name": "systemd-dev",
+          "version": "255.4-1ubuntu8.4"
+        },
+        {
+          "key": "libudev1_255.4-1ubuntu8.4_amd64",
+          "name": "libudev1",
+          "version": "255.4-1ubuntu8.4"
+        },
+        {
+          "key": "libcap2_1-2.66-5ubuntu2_amd64",
+          "name": "libcap2",
+          "version": "1:2.66-5ubuntu2"
+        },
+        {
+          "key": "libc6_2.39-0ubuntu8.3_amd64",
+          "name": "libc6",
+          "version": "2.39-0ubuntu8.3"
+        },
+        {
+          "key": "libgcc-s1_14-20240412-0ubuntu1_amd64",
+          "name": "libgcc-s1",
+          "version": "14-20240412-0ubuntu1"
+        },
+        {
+          "key": "gcc-14-base_14-20240412-0ubuntu1_amd64",
+          "name": "gcc-14-base",
+          "version": "14-20240412-0ubuntu1"
+        },
+        {
+          "key": "libselinux1_3.5-2ubuntu2_amd64",
+          "name": "libselinux1",
+          "version": "3.5-2ubuntu2"
+        },
+        {
+          "key": "libpcre2-8-0_10.42-4ubuntu2_amd64",
+          "name": "libpcre2-8-0",
+          "version": "10.42-4ubuntu2"
+        },
+        {
+          "key": "libkmod2_31-p-20240202-2ubuntu7_amd64",
+          "name": "libkmod2",
+          "version": "31+20240202-2ubuntu7"
+        },
+        {
+          "key": "libzstd1_1.5.5-p-dfsg2-2build1.1_amd64",
+          "name": "libzstd1",
+          "version": "1.5.5+dfsg2-2build1.1"
+        },
+        {
+          "key": "libssl3t64_3.0.13-0ubuntu3.4_amd64",
+          "name": "libssl3t64",
+          "version": "3.0.13-0ubuntu3.4"
+        },
+        {
+          "key": "liblzma5_5.6.1-p-really5.4.5-1build0.1_amd64",
+          "name": "liblzma5",
+          "version": "5.6.1+really5.4.5-1build0.1"
+        },
+        {
+          "key": "libblkid1_2.39.3-9ubuntu6.1_amd64",
+          "name": "libblkid1",
+          "version": "2.39.3-9ubuntu6.1"
+        },
+        {
+          "key": "libacl1_2.3.2-1build1_amd64",
+          "name": "libacl1",
+          "version": "2.3.2-1build1"
+        }
+      ],
+      "key": "udev_255.4-1ubuntu8.4_amd64",
+      "name": "udev",
+      "sha256": "03fa1ad676e5949ca6cd9c7c91b777ed7a442c49fe7c98758cf1caf92bb1f568",
+      "url": "https://snapshot.ubuntu.com/ubuntu/20240923T000000Z/pool/main/s/systemd/udev_255.4-1ubuntu8.4_amd64.deb",
+      "version": "255.4-1ubuntu8.4"
+    },
+    {
+      "arch": "amd64",
+      "dependencies": [],
+      "key": "systemd-dev_255.4-1ubuntu8.4_amd64",
+      "name": "systemd-dev",
+      "sha256": "242a806b46a415c401754f3756d3951e01b5d994dcdff9278f1b944391a906da",
+      "url": "https://snapshot.ubuntu.com/ubuntu/20240923T000000Z/pool/main/s/systemd/systemd-dev_255.4-1ubuntu8.4_all.deb",
+      "version": "255.4-1ubuntu8.4"
+    },
+    {
+      "arch": "amd64",
+      "dependencies": [],
+      "key": "libkmod2_31-p-20240202-2ubuntu7_amd64",
+      "name": "libkmod2",
+      "sha256": "43858c80a67c3a8a5a10d8e6769e7d92614d9eb19cb14e159b4311a16b9cf54b",
+      "url": "https://snapshot.ubuntu.com/ubuntu/20240923T000000Z/pool/main/k/kmod/libkmod2_31+20240202-2ubuntu7_amd64.deb",
+      "version": "31+20240202-2ubuntu7"
+    },
+    {
+      "arch": "amd64",
+      "dependencies": [],
+      "key": "libblkid1_2.39.3-9ubuntu6.1_amd64",
+      "name": "libblkid1",
+      "sha256": "17cd545f7011331d837c48dc541cc2eee47950abe5539d33939c2842c7773fe4",
+      "url": "https://snapshot.ubuntu.com/ubuntu/20240923T000000Z/pool/main/u/util-linux/libblkid1_2.39.3-9ubuntu6.1_amd64.deb",
+      "version": "2.39.3-9ubuntu6.1"
 		},
 		{
 			"arch": "amd64",
