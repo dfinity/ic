@@ -1,4 +1,4 @@
-name: Config Types Forward Compatibility Reminder
+name: IC-OS Config Types Forward Compatibility Reminder
 
 on:
   pull_request:
@@ -21,7 +21,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/github-script@v6
-        id: mainStep
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           retries: 3
