@@ -87,8 +87,6 @@ MACRO_DEPENDENCIES = [
 
 DEV_DEPENDENCIES = []
 
-MACRO_DEV_DEPENDENCIES = []
-
 ALIASES = {}
 
 DEV_DATA = [
@@ -211,7 +209,7 @@ rust_test_suite_with_extra_srcs(
     data = DEV_DATA,
     env = DEV_ENV,
     extra_srcs = ["tests/sns_upgrade_test_utils.rs"],
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "cpu:6",
     ],
@@ -229,7 +227,7 @@ rust_test(
     crate_root = "tests/upgrade_everything_test.rs",
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "cpu:6",
     ],
@@ -245,7 +243,7 @@ rust_test(
     aliases = ALIASES,
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "cpu:4",
     ],
@@ -261,7 +259,7 @@ rust_test(
     aliases = ALIASES,
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "cpu:4",
     ],
@@ -277,7 +275,7 @@ rust_test(
     aliases = ALIASES,
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "cpu:4",
     ],
@@ -294,7 +292,7 @@ rust_test(
     aliases = ALIASES,
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "cpu:4",
     ],
@@ -310,7 +308,7 @@ rust_test(
     aliases = ALIASES,
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "cpu:4",
     ],
@@ -326,7 +324,7 @@ rust_test(
     aliases = ALIASES,
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "cpu:4",
     ],
@@ -342,7 +340,7 @@ rust_test(
     aliases = ALIASES,
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "cpu:4",
     ],
@@ -365,7 +363,7 @@ rust_test(
         "KONGSWAP_ADAPTOR_CANISTER_WASM_PATH": "$(rootpath @kongswap-adaptor-canister//file)",
         "RUST_TEST_NOCAPTURE": "1",
     },
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "cpu:4",
     ],
