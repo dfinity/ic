@@ -136,7 +136,10 @@ pub fn setup(env: TestEnv, config: Config) {
         config.hosts
     );
     for host in config.hosts.iter() {
-        subnet = subnet.add_node_with_required_host_features(vec![HostFeature::Host(host.clone())]);
+        subnet = subnet.add_node_with_required_host_features(vec![
+            HostFeature::Host(host.clone()),
+            HostFeature::IoPerformance,
+        ]);
     }
     ic = ic.add_subnet(subnet);
 
