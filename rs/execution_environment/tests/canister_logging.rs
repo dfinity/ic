@@ -236,7 +236,7 @@ fn test_metrics_for_fetch_canister_logs_via_query_call() {
 }
 
 #[test]
-fn test_fetch_canister_logs_via_inter_canister_query_call() {
+fn test_fetch_canister_logs_via_inter_canister_update_call() {
     let env = setup_env();
     let canister_a = create_and_install_canister(
         &env,
