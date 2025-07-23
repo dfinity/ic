@@ -14,7 +14,7 @@ use url::Url;
 
 use crate::{
     driver::{
-        farm::{DnsRecord, DnsRecordType, PlaynetCertificate},
+        farm::{DnsRecord, DnsRecordType, HostFeature, PlaynetCertificate},
         log_events,
         resource::AllocatedVm,
         test_env::{TestEnv, TestEnvAttribute},

@@ -10,6 +10,7 @@ use slog::{info, warn};
 
 use crate::{
     driver::{
+        farm::HostFeature,
         log_events::LogEvent,
         prometheus_vm::{SCP_RETRY_BACKOFF, SCP_RETRY_TIMEOUT},
         test_env::TestEnvAttribute,
