@@ -9,7 +9,7 @@ load("@rules_oci//oci:defs.bzl", "oci_load")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("//bazel:defs.bzl", "mcopy", "zstd_compress")
 load("//bazel:mainnet-icos-images.bzl", "base_download_url")
-load("//rs/tests:common.bzl", "MAINNET_NNS_CANISTER_ENV", "MAINNET_NNS_CANISTER_RUNTIME_DEPS", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "MAINNET_NNS_CANISTER_ENV", "MAINNET_NNS_CANISTER_RUNTIME_DEPS", "MAINNET_NNS_SUBNET_HASH", "MAINNET_NNS_SUBNET_REVISION", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 
 def _run_system_test(ctx):
     run_test_script_file = ctx.actions.declare_file(ctx.label.name + "/run-test.sh")
@@ -280,13 +280,10 @@ def system_test(
         icos_images["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG"] = _guestos + "update-img.tar.zst"
 
     if uses_guestos_mainnet_img:
-        mainnet_guestos_version = mainnet_icos_versions["hostos"]["latest_release"]["version"]
-        env["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = mainnet_guestos_version
+        env["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = MAINNET_NNS_SUBNET_REVISION
         icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = "//ic-os/setupos:mainnet-guest-img.tar.zst"
         env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_URL"] = base_download_url(mainnet_guestos_version, "guest-os", True, False) + "update-img.tar.zst"
-
-        # TODO: Until the update hash is stored in the repo, pass the URL and let the test driver resolve it, instead.
-        env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_HASH"] = base_download_url(mainnet_guestos_version, "guest-os", True, False)
+        env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_HASH"] = MAINNET_NNS_SUBNET_HASH
 
     if uses_guestos_recovery_dev_img:
         # TODO: Until the version can be passed directly in the env variable, pass the file and let the test driver resolve it, instead.
@@ -306,12 +303,9 @@ def system_test(
         icos_images["ENV_DEPS__GUESTOS_UPDATE_IMG"] = _guestos + "update-img-test.tar.zst"
 
     if uses_guestos_mainnet_update:
-        mainnet_guestos_version = mainnet_icos_versions["hostos"]["latest_release"]["version"]
-        env["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = mainnet_guestos_version
+        env["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = MAINNET_NNS_SUBNET_REVISION
         env["ENV_DEPS__GUESTOS_UPDATE_IMG_URL"] = base_download_url(mainnet_guestos_version, "guest-os", True, False) + "update-img.tar.zst"
-
-        # TODO: Until the update hash is stored in the repo, pass the URL and let the test driver resolve it, instead.
-        env["ENV_DEPS__GUESTOS_UPDATE_IMG_HASH"] = base_download_url(mainnet_guestos_version, "guest-os", True, False)
+        env["ENV_DEPS__GUESTOS_UPDATE_IMG_HASH"] = MAINNET_NNS_SUBNET_HASH
 
     if uses_setupos_img:
         icos_images["ENV_DEPS__EMPTY_DISK_IMG"] = "//rs/tests/nested:empty-disk-img.tar.zst"
