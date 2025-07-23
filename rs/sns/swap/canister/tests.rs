@@ -73,6 +73,7 @@ async fn test_get_canister_status() {
                 status: CanisterStatusType::Running,
                 module_hash: Some(vec![0_u8]),
                 memory_size: candid::Nat::from(0_u32),
+                memory_metrics: Default::default(),
                 settings: DefiniteCanisterSettingsFromManagementCanister {
                     controllers: vec![PrincipalId::new_user_test_id(0_u64)],
                     compute_allocation: candid::Nat::from(0_u32),
