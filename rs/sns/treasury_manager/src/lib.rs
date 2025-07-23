@@ -481,9 +481,6 @@ pub struct Transfer {
 /// a token to a DEX for the first time.
 #[derive(CandidType, Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub enum TransactionWitness {
-
-    Pending,
-
     Ledger(Vec<Transfer>),
 
     /// Represents a transaction that is not related to the ledger, e.g., DEX operations.
