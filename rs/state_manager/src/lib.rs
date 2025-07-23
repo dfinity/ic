@@ -1659,19 +1659,7 @@ impl StateManagerImpl {
             })?;
         Some((state, certification, hash_tree))
     }
-/*
-    /// Returns the state hash of the latest state, irrespective of whether that state was
-    /// certified or not. Primarily used for testing.
-    pub fn latest_state_certification_hash(&self) -> Option<(Height, CryptoHash)> {
-        let states = self.states.read();
 
-        states
-            .certifications_metadata
-            .iter()
-            .next_back()
-            .map(|(h, m)| (*h, m.certified_state_hash.clone()))
-    }
-*/
     /// Returns the manifest of the latest checkpoint on disk with its
     /// checkpoint layout.
     fn latest_manifest(&self) -> Option<(Manifest, CheckpointLayout<ReadOnly>)> {
@@ -3768,6 +3756,10 @@ pub mod testing {
         
         /// Testing only: Wait till deallocation queue is empty.
         fn flush_deallocation_channel(&self);
+    
+        /// Returns the state hash of the latest state, irrespective of whether that state was
+        /// certified or not. Primarily used for testing.
+        fn latest_state_certification_hash(&self) -> Option<(Height, CryptoHash)>;
     }
 
     impl StateManagerTesting for StateManagerImpl {
@@ -3794,6 +3786,16 @@ pub mod testing {
         
         fn flush_deallocation_channel(&self) {
             self.deallocator_thread.flush_deallocation_channel();
+        }
+        
+        fn latest_state_certification_hash(&self) -> Option<(Height, CryptoHash)> {
+            let states = self.states.read();
+
+            states
+                .certifications_metadata
+                .iter()
+                .next_back()
+                .map(|(h, m)| (*h, m.certified_state_hash.clone()))
         }
     }
 }
