@@ -194,7 +194,7 @@ struct Step1Results {
 }
 
 fn step_1_provider_nodes_metrics_daily(
-    rewardable_nodes: &Vec<RewardableNode>,
+    rewardable_nodes: &[RewardableNode],
     node_metrics_daily: &mut BTreeMap<(DayUTC, NodeId), NodeMetricsDaily>,
 ) -> Step1Results {
     let mut provider_nodes_metrics_daily = BTreeMap::new();
@@ -270,7 +270,7 @@ struct Step3Results {
     performance_multiplier: HashMap<(DayUTC, NodeId), Decimal>,
 }
 fn step_3_performance_multiplier(
-    rewardable_nodes: &Vec<RewardableNode>,
+    rewardable_nodes: &[RewardableNode],
     relative_nodes_fr: &BTreeMap<(DayUTC, NodeId), Decimal>,
     extrapolated_fr: &HashMap<DayUTC, Decimal>,
 ) -> Step3Results {
@@ -330,7 +330,7 @@ struct Step4Results {
 }
 fn step_4_compute_base_rewards_type_region(
     node_rewards_table: &NodeRewardsTable,
-    rewardable_nodes: &Vec<RewardableNode>,
+    rewardable_nodes: &[RewardableNode],
 ) -> Step4Results {
     fn get_daily_rate(
         rewards_table: &NodeRewardsTable,
@@ -473,7 +473,7 @@ struct Step5Results {
     adjusted_rewards: BTreeMap<(DayUTC, NodeId), XDRPermyriad>,
 }
 fn step_5_adjust_node_rewards(
-    rewardable_nodes: &Vec<RewardableNode>,
+    rewardable_nodes: &[RewardableNode],
     base_rewards: &BTreeMap<(DayUTC, NodeId), XDRPermyriad>,
     performance_multiplier: &HashMap<(DayUTC, NodeId), Decimal>,
 ) -> Step5Results {
