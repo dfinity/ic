@@ -4,6 +4,10 @@ use ic_nns_governance_api as pb_api;
 
 use crate::pb::proposal_conversions::convert_proposal;
 
+// TODO add validation for inputs
+// TODO Ensure reward_account always has checksum when turned into API response.
+// TODO - see if we can safely do data migration (how hard to test with confidence)
+
 impl From<pb::NodeProvider> for pb_api::NodeProvider {
     fn from(item: pb::NodeProvider) -> Self {
         Self {
