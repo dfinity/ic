@@ -259,7 +259,7 @@ def system_test(
     _env_deps["ENV_DEPS__IC_VERSION_FILE"] = _guestos + "version.txt"
 
     # Guardrails for specifying source and target images
-    if int(uses_guestos_img) + int(uses_guestos_mainnet_img) >= 2:
+    if int(uses_guestos_img) + int(uses_guestos_mainnet_img) + int(uses_guestos_recovery_dev) >= 2:
         fail("More than one initial GuestOS (disk) image was specified!")
 
     if int(uses_guestos_update) + int(uses_guestos_test_update) + int(uses_guestos_mainnet_update) >= 2:
