@@ -1,5 +1,6 @@
 //! Canister threshold transcripts and references related defininitions.
 use crate::{
+    consensus::idkg::{ecdsa::PreSignatureQuadrupleError, schnorr::PreSignatureTranscriptError},
     crypto::{
         canister_threshold_sig::{
             error::IDkgParamsValidationError,
@@ -1027,6 +1028,30 @@ impl TryFrom<&pb::PreSignatureInCreation> for PreSignatureInCreation {
     }
 }
 
+#[derive(Clone, Debug)]
+pub enum PreSignatureError {
+    Ecdsa(PreSignatureQuadrupleError),
+    Schnorr(PreSignatureTranscriptError),
+}
+
+type PreSignatureResult = Result<PreSignature, PreSignatureError>;
+
+fn ok_ecdsa2(pre_sig: EcdsaPreSignatureQuadruple) -> PreSignatureResult {
+    Ok(PreSignature::Ecdsa(Arc::new(pre_sig)))
+}
+
+fn ok_schnorr2(pre_sig: SchnorrPreSignatureTranscript) -> PreSignatureResult {
+    Ok(PreSignature::Schnorr(Arc::new(pre_sig)))
+}
+
+fn err_ecdsa2(err: PreSignatureQuadrupleError) -> PreSignatureResult {
+    Err(PreSignatureError::Ecdsa(err))
+}
+
+fn err_schnorr2(err: PreSignatureTranscriptError) -> PreSignatureResult {
+    Err(PreSignatureError::Schnorr(err))
+}
+
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum PreSignatureRef {
@@ -1055,6 +1080,17 @@ impl PreSignatureRef {
         match self {
             Self::Schnorr(x) => x.key_unmasked_ref,
             Self::Ecdsa(x) => x.key_unmasked_ref,
+        }
+    }
+
+    pub fn translate(&self, resolver: &dyn IDkgBlockReader) -> PreSignatureResult {
+        match self {
+            PreSignatureRef::Ecdsa(quadruple_ref) => quadruple_ref
+                .translate(resolver)
+                .map_or_else(err_ecdsa2, ok_ecdsa2),
+            PreSignatureRef::Schnorr(transcript_ref) => transcript_ref
+                .translate(resolver)
+                .map_or_else(err_schnorr2, ok_schnorr2),
         }
     }
 }
