@@ -99,6 +99,7 @@ use pocket_ic::{copy_dir, ErrorCode, RejectCode, RejectResponse};
 use registry_canister::init::RegistryCanisterInitPayload;
 use serde::{Deserialize, Serialize};
 use slog::Level;
+use std::cmp::max;
 use std::hash::Hash;
 use std::str::FromStr;
 use std::{
@@ -201,15 +202,10 @@ fn compute_subnet_seed(
 
 #[derive(Clone, Deserialize, Serialize)]
 struct RawTopologyInternal {
-    pub subnet_configs: Vec<RawSubnetConfigInternal>,
+    pub subnet_configs: Vec<SubnetConfigInternal>,
     pub default_effective_canister_id: RawCanisterId,
     pub icp_features: Option<IcpFeatures>,
     pub synced_registry_version: Option<u64>,
-}
-
-#[derive(Clone, Deserialize, Serialize)]
-struct RawSubnetConfigInternal {
-    pub subnet_config: SubnetConfigInternal,
     pub time: SystemTime,
 }
 
@@ -491,7 +487,6 @@ impl PocketIcSubnets {
         instruction_config: SubnetInstructionConfig,
         registry_data_provider: Arc<ProtoRegistryDataProvider>,
         create_at_registry_version: RegistryVersion,
-        time: SystemTime,
         nonmainnet_features: bool,
         log_level: Option<Level>,
         bitcoin_adapter_uds_path: Option<PathBuf>,
@@ -537,18 +532,12 @@ impl PocketIcSubnets {
             .feature_flags
             .rate_limiting_of_debug_prints = FlagStatus::Disabled;
         let state_machine_config = StateMachineConfig::new(subnet_config, hypervisor_config);
-        let t = time
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos() as u64;
-        let time = Time::from_nanos_since_unix_epoch(t);
         StateMachineBuilder::new()
             .with_runtime(runtime)
             .with_config(Some(state_machine_config))
             .with_subnet_seed(subnet_seed)
             .with_subnet_size(subnet_size.try_into().unwrap())
             .with_subnet_type(subnet_type)
-            .with_time(time)
             .with_state_machine_state_dir(state_machine_state_dir)
             .with_registry_data_provider(registry_data_provider.clone())
             .with_log_level(log_level)
@@ -591,6 +580,21 @@ impl PocketIcSubnets {
         }
     }
 
+    fn persist_topology(&self, default_effective_canister_id: Principal) {
+        if let Some(ref state_dir) = self.state_dir {
+            let raw_topology: RawTopologyInternal = RawTopologyInternal {
+                subnet_configs: self.subnet_configs.clone(),
+                default_effective_canister_id: default_effective_canister_id.into(),
+                icp_features: self.icp_features.clone(),
+                synced_registry_version: Some(self.synced_registry_version.get()),
+                time: self.time(),
+            };
+            let topology_json = serde_json::to_string(&raw_topology).unwrap();
+            let mut topology_file = File::create(state_dir.join("topology.json")).unwrap();
+            topology_file.write_all(topology_json.as_bytes()).unwrap();
+        }
+    }
+
     fn get_all(&self) -> Vec<Arc<Subnet>> {
         self.subnets.get_all()
     }
@@ -620,7 +624,10 @@ impl PocketIcSubnets {
             .unwrap_or(GENESIS.into())
     }
 
-    fn create_subnet(&mut self, subnet_config_info: SubnetConfigInfo) -> SubnetConfigInternal {
+    fn create_subnet(
+        &mut self,
+        subnet_config_info: SubnetConfigInfo,
+    ) -> Result<SubnetConfigInternal, String> {
         let SubnetConfigInfo {
             ranges,
             alloc_range,
@@ -628,18 +635,8 @@ impl PocketIcSubnets {
             subnet_state_dir,
             subnet_kind,
             instruction_config,
-            mut time,
+            time,
         } = subnet_config_info;
-
-        // All subnets must eventually have the same time and time can only advance =>
-        // advance time of the new subnet if other subnets have higher time;
-        // the maximum time must be determined before adding a `StateMachine`
-        // for the new subnet to `self.subnets` because `self.time()`
-        // is only sound if all subnets in `self.subnets` have the same time.
-        let current_time = self.time();
-        if current_time > time {
-            time = current_time;
-        }
 
         let subnet_seed = compute_subnet_seed(ranges.clone(), alloc_range);
 
@@ -672,7 +669,6 @@ impl PocketIcSubnets {
             instruction_config.clone(),
             self.registry_data_provider.clone(),
             create_at_registry_version,
-            time,
             self.nonmainnet_features,
             self.log_level,
             bitcoin_adapter_uds_path.clone(),
@@ -721,6 +717,16 @@ impl PocketIcSubnets {
         // The actual subnet ID (matching the subnet ID in the input `SubnetConfigInfo`
         // if one was provided).
         let subnet_id = sm.get_subnet_id();
+
+        if let Some(expected_time) = time {
+            let actual_time: SystemTime = sm.get_state_time().into();
+            if actual_time != expected_time {
+                return Err(format!(
+                    "The state of subnet with seed {} is incomplete.",
+                    hex::encode(subnet_seed)
+                ));
+            }
+        }
 
         // The subnet created first is marked as the NNS subnet.
         if self.nns_subnet.is_none() {
@@ -787,6 +793,13 @@ impl PocketIcSubnets {
             subnet.state_machine.reload_registry();
         }
 
+        // All subnets must have the same time and time can only advance =>
+        // set the time to the maximum time in the latest state across all subnets.
+        let mut time: SystemTime = GENESIS.into();
+        for subnet in self.subnets.get_all() {
+            time = max(time, subnet.state_machine.get_state_time().into());
+        }
+
         // Make sure time is strictly monotone.
         time += Duration::from_nanos(1);
 
@@ -836,7 +849,7 @@ impl PocketIcSubnets {
             }
         }
 
-        subnet_config
+        Ok(subnet_config)
     }
 
     fn get_nns(&self) -> Option<Arc<StateMachine>> {
@@ -1232,7 +1245,7 @@ pub struct PocketIc {
 
 impl Drop for PocketIc {
     fn drop(&mut self) {
-        if let Some(ref state_dir) = self.subnets.state_dir {
+        if self.subnets.state_dir.is_some() {
             let subnets = self.subnets.get_all();
             for subnet in &subnets {
                 subnet.state_machine.checkpointed_tick();
@@ -1240,27 +1253,8 @@ impl Drop for PocketIc {
             for subnet in &subnets {
                 subnet.state_machine.await_state_hash();
             }
-            let subnet_configs = self
-                .subnets
-                .subnet_configs
-                .iter()
-                .map(|config| {
-                    let time = self.subnets.get(config.subnet_id).unwrap().time();
-                    RawSubnetConfigInternal {
-                        subnet_config: config.clone(),
-                        time,
-                    }
-                })
-                .collect();
-            let raw_topology: RawTopologyInternal = RawTopologyInternal {
-                subnet_configs,
-                default_effective_canister_id: self.default_effective_canister_id.into(),
-                icp_features: self.subnets.icp_features.clone(),
-                synced_registry_version: Some(self.subnets.synced_registry_version.get()),
-            };
-            let topology_json = serde_json::to_string(&raw_topology).unwrap();
-            let mut topology_file = File::create(state_dir.join("topology.json")).unwrap();
-            topology_file.write_all(topology_json.as_bytes()).unwrap();
+            self.subnets
+                .persist_topology(self.default_effective_canister_id);
         }
         for subnet in self.subnets.get_all() {
             subnet.state_machine.drop_payload_builder();
@@ -1337,6 +1331,7 @@ impl PocketIc {
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
         icp_features: Option<IcpFeatures>,
+        allow_incomplete_state: Option<bool>,
     ) -> Result<Self, String> {
         if let Some(ref icp_features) = icp_features {
             subnet_configs = subnet_configs.try_with_icp_features(icp_features)?;
@@ -1379,20 +1374,23 @@ impl PocketIc {
                 .subnet_configs
                 .into_iter()
                 .map(|config| {
-                    range_gen
-                        .add_assigned(config.subnet_config.ranges.clone())
-                        .unwrap();
-                    if let Some(allocation_range) = config.subnet_config.alloc_range {
+                    range_gen.add_assigned(config.ranges.clone()).unwrap();
+                    if let Some(allocation_range) = config.alloc_range {
                         range_gen.add_assigned(vec![allocation_range]).unwrap();
                     }
+                    let time = if let Some(true) = allow_incomplete_state {
+                        None
+                    } else {
+                        Some(topology.time)
+                    };
                     SubnetConfigInfo {
-                        ranges: config.subnet_config.ranges,
-                        alloc_range: config.subnet_config.alloc_range,
-                        subnet_id: Some(config.subnet_config.subnet_id),
+                        ranges: config.ranges,
+                        alloc_range: config.alloc_range,
+                        subnet_id: Some(config.subnet_id),
                         subnet_state_dir: None,
-                        subnet_kind: config.subnet_config.subnet_kind,
-                        instruction_config: config.subnet_config.instruction_config,
-                        time: config.time,
+                        subnet_kind: config.subnet_kind,
+                        instruction_config: config.instruction_config,
+                        time,
                     }
                 })
                 .collect()
@@ -1440,7 +1438,7 @@ impl PocketIc {
             let mut subnet_config_info: Vec<SubnetConfigInfo> = vec![];
 
             for (subnet_kind, subnet_state_dir, instruction_config) in all_subnets {
-                let (ranges, alloc_range, subnet_id, time) = if let Some(ref subnet_state_dir) =
+                let (ranges, alloc_range, subnet_id) = if let Some(ref subnet_state_dir) =
                     subnet_state_dir
                 {
                     match std::fs::read_dir(subnet_state_dir) {
@@ -1490,7 +1488,6 @@ impl PocketIc {
                     };
 
                     let subnet_id = metadata.own_subnet_id;
-                    let time = metadata.batch_time;
                     let ranges: Vec<_> = metadata
                         .network_topology
                         .routing_table
@@ -1525,14 +1522,14 @@ impl PocketIc {
                         }
                     }
 
-                    (ranges, None, Some(subnet_id), time)
+                    (ranges, None, Some(subnet_id))
                 } else {
                     let RangeConfig {
                         canister_id_ranges: ranges,
                         canister_allocation_range: alloc_range,
                     } = get_range_config(subnet_kind, &mut range_gen)?;
 
-                    (ranges, alloc_range, None, GENESIS)
+                    (ranges, alloc_range, None)
                 };
 
                 subnet_config_info.push(SubnetConfigInfo {
@@ -1542,7 +1539,7 @@ impl PocketIc {
                     subnet_state_dir,
                     subnet_kind,
                     instruction_config,
-                    time: time.into(),
+                    time: None,
                 });
             }
 
@@ -1568,7 +1565,7 @@ impl PocketIc {
         );
         let mut subnet_configs = Vec::new();
         for subnet_config_info in subnet_config_info.into_iter() {
-            let subnet_config_internal = subnets.create_subnet(subnet_config_info);
+            let subnet_config_internal = subnets.create_subnet(subnet_config_info)?;
             subnet_configs.push(subnet_config_internal);
         }
 
@@ -1595,6 +1592,8 @@ impl PocketIc {
                     })
             })
             .default_effective_canister_id();
+
+        subnets.persist_topology(default_effective_canister_id);
 
         let state_label = StateLabel::new(seed);
 
@@ -1790,7 +1789,7 @@ struct SubnetConfigInfo {
     pub subnet_state_dir: Option<PathBuf>,
     pub subnet_kind: SubnetKind,
     pub instruction_config: SubnetInstructionConfig,
-    pub time: SystemTime,
+    pub time: Option<SystemTime>,
 }
 
 // ---------------------------------------------------------------------------------------- //
@@ -3368,8 +3367,10 @@ fn route(
                         subnet_state_dir: None,
                         subnet_kind,
                         instruction_config,
-                        time: GENESIS.into(),
-                    });
+                        time: None,
+                    })?;
+                    pic.subnets
+                        .persist_topology(pic.default_effective_canister_id);
                     Ok(pic.try_route_canister(canister_id).unwrap())
                 } else {
                     // If the request is not an update call to create a canister using the provisional API,
@@ -3473,6 +3474,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
             )
             .unwrap();
             let mut pic1 = PocketIc::try_new(
@@ -3484,6 +3486,7 @@ mod tests {
                 },
                 None,
                 false,
+                None,
                 None,
                 None,
                 None,
