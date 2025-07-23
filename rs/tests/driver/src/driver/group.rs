@@ -405,7 +405,6 @@ pub struct SystemTestGroup {
     timeout_per_test: Option<Duration>,
     overall_timeout: Option<Duration>,
     with_farm: bool,
-    with_logs: bool,
 }
 
 impl Default for SystemTestGroup {
@@ -431,7 +430,6 @@ impl SystemTestGroup {
             timeout_per_test: None,
             overall_timeout: None,
             with_farm: true,
-            with_logs: true,
         }
     }
 
@@ -441,11 +439,6 @@ impl SystemTestGroup {
 
     pub fn without_farm(mut self) -> Self {
         self.with_farm = false;
-        self
-    }
-
-    pub fn without_logs(mut self) -> Self {
-        self.with_logs = false;
         self
     }
 
