@@ -171,12 +171,8 @@ pub(super) fn resolve_destination(
         }
         Ok(Ic00Method::SubnetInfo) => Ok(SubnetInfoArgs::decode(payload)?.subnet_id),
         Ok(Ic00Method::FetchCanisterLogs) => {
-            let args = FetchCanisterLogsRequest::decode(payload)?;
-            let canister_id = args.get_canister_id();
-            let subnet_id =
-                route_canister_id(canister_id, Ic00Method::FetchCanisterLogs, network_topology);
-            //println!("ABC route_canister_id: {canister_id:?} {:?}", subnet_id);
-            subnet_id
+            let canister_id = FetchCanisterLogsRequest::decode(payload)?.get_canister_id();
+            route_canister_id(canister_id, Ic00Method::FetchCanisterLogs, network_topology)
 
             // Err(ResolveDestinationError::UserError(UserError::new(
             //     ic_error_types::ErrorCode::CanisterRejectedMessage,
