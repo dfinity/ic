@@ -5796,6 +5796,7 @@ fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples() {
         .with_chain_key(MasterPublicKeyId::Ecdsa(key_id.clone()))
         .build();
     let pre_sig_id = PreSigId(0);
+    // TODO(CON-1545): Update signature contexts with full pre-signatures
     let pre_signatures = BTreeMap::from_iter([(pre_sig_id, None)]);
     inject_ecdsa_signing_request(&mut test, &key_id);
     let master_key_id = MasterPublicKeyId::Ecdsa(key_id);
@@ -5875,6 +5876,7 @@ fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys() {
         .build();
 
     // Deliver 2 quadruples for the first key, 1 for the second, 0 for the third
+    // TODO(CON-1545): Update signature contexts with full pre-signatures
     let pre_sig_ids0 = BTreeMap::from_iter([(PreSigId(0), None), (PreSigId(1), None)]);
     let pre_sig_ids1 = BTreeMap::from_iter([(PreSigId(2), None)]);
     let pre_signatures = BTreeMap::from_iter([
