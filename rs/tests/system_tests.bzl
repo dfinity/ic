@@ -347,14 +347,17 @@ def system_test(
     # Always add vector runtime and environment variables
     env["VECTOR_VM_PATH"] = "$(rootpath //rs/tests:vector_with_log_fetcher_image)"
 
-    # Make runtime_deps mutable
-    runtime_deps = list(runtime_deps)
-    runtime_deps.append("//rs/tests:vector_with_log_fetcher_image")
+    deps = ["//rs/tests:vector_with_log_fetcher_image"]
+    for dep in runtime_deps:
+        if dep not in UNIVERSAL_VM_RUNTIME_DEPS:
+            deps.append(dep)
+
+    deps = deps + UNIVERSAL_VM_RUNTIME_DEPS
 
     run_system_test(
         name = name,
         src = test_driver_target,
-        runtime_deps = runtime_deps,
+        runtime_deps = deps,
         env_deps = _env_deps,
         env = env,
         icos_images = icos_images,
@@ -365,11 +368,6 @@ def system_test(
         timeout = test_timeout,
         flaky = flaky,
     )
-
-    deps = []
-    for dep in runtime_deps:
-        if dep not in UNIVERSAL_VM_RUNTIME_DEPS:
-            deps.append(dep)
 
     env = env | {
         "COLOCATED_TEST": name,
@@ -389,7 +387,7 @@ def system_test(
         name = name + "_colocate",
         src = "//rs/tests/idx:colocate_test_bin",
         colocated_test_bin = test_driver_target,
-        runtime_deps = deps + UNIVERSAL_VM_RUNTIME_DEPS + [
+        runtime_deps = deps + [
             "//rs/tests:colocate_uvm_config_image",
             test_driver_target,
         ],
