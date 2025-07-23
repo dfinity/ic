@@ -15,8 +15,8 @@ DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
-    "@crate_index//:tabled",
     "@crate_index//:maplit",
+    "@crate_index//:tabled",
 ]
 
 MACRO_DEPENDENCIES = [
