@@ -1601,7 +1601,7 @@ impl Governance {
         cmc: Arc<dyn CMC>,
         mut randomness: Box<dyn RandomnessGenerator>,
     ) -> Self {
-        let (mut heap_governance_proto, maybe_rng_seed) = split_governance_proto(governance_proto);
+        let (heap_governance_proto, maybe_rng_seed) = split_governance_proto(governance_proto);
 
         // Carry over the previous rng seed to avoid race conditions in handling queued ingress
         // messages that may require a functioning RNG.
@@ -1609,10 +1609,6 @@ impl Governance {
             randomness.seed_rng(rng_seed);
         }
 
-        // TODO NNS1-3976 Migrate the node providers and the node provider rewards data.
-        // heap_governance_proto.node_providers =
-        //     migrate_node_provider_accounts(heap_governance_proto.node_providers);
-        // TODO would also need historical NP rewards data migration (regardless of approach)
         Self {
             heap_data: heap_governance_proto,
             neuron_store: NeuronStore::new_restored(),
@@ -4293,24 +4289,6 @@ impl Governance {
                                 );
                                 return;
                             }
-
-                            // TODO(NNS1-3976): Write a test for this
-                            let account_in_request = node_provider.reward_account.clone();
-                            if let Some(submitted_proto_account) = account_in_request {
-                                if let Err(e) =
-                                    validate_account_identifier(&submitted_proto_account)
-                                {
-                                    self.set_proposal_execution_status(
-                                        pid,
-                                        Err(GovernanceError::new_with_message(
-                                            ErrorType::InvalidCommand,
-                                            e,
-                                        )),
-                                    );
-                                    return;
-                                }
-                            }
-
                             self.heap_data.node_providers.push(node_provider.clone());
                             self.set_proposal_execution_status(pid, Ok(()));
                         }
@@ -5206,12 +5184,11 @@ impl Governance {
                 };
 
                 // Validate that np exists
-                if self
+                if !self
                     .heap_data
                     .node_providers
                     .iter()
-                    .find(|np| np.id.as_ref() == Some(&np_id))
-                    .is_none()
+                    .any(|np| np.id.as_ref() == Some(&np_id))
                 {
                     return Err(GovernanceError::new_with_message(
                         ErrorType::InvalidProposal,
@@ -7122,7 +7099,6 @@ impl Governance {
                 )
             })?;
 
-        // TODO(NNS1-3976): Write a test for this
         if let Some(new_reward_account) = update.reward_account {
             if let Err(e) = validate_account_identifier(&new_reward_account) {
                 return Err(GovernanceError::new_with_message(
@@ -8079,23 +8055,6 @@ impl Governance {
     pub fn get_restore_aging_summary(&self) -> Option<RestoreAgingSummary> {
         self.heap_data.restore_aging_summary.clone()
     }
-}
-
-fn migrate_node_provider_accounts(node_providers: &[NodeProvider]) -> Vec<NodeProvider> {
-    node_providers
-        .iter()
-        .map(|np| {
-            let mut migrated_np = np.clone();
-            migrated_np.reward_account = np.reward_account.as_ref().map(|id| {
-                // TODO DO NOT MERGE - what to do on failed migration?  What action could we take?
-                // Do we need to do anything?
-                icp_ledger::protobuf::AccountIdentifier::from(
-                    AccountIdentifier::try_from(id).expect("Could not convert"),
-                )
-            });
-            migrated_np
-        })
-        .collect()
 }
 
 impl From<NeuronSubsetMetrics> for NeuronSubsetMetricsPb {
