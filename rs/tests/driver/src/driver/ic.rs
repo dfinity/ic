@@ -2,7 +2,7 @@ use crate::driver::{
     bootstrap::{init_ic, setup_and_start_vms},
     farm::{Farm, HostFeature},
     node_software_version::NodeSoftwareVersion,
-    resource::{allocate_resources, get_resource_request, ResourceGroup},
+    resource::{allocate_resources, get_resource_request, AllocatedVm, ResourceGroup},
     test_env::{TestEnv, TestEnvAttribute},
     test_env_api::{HasRegistryLocalStore, HasTopologySnapshot},
     test_setup::{GroupSetup, InfraProvider},
@@ -21,6 +21,7 @@ use phantom_newtype::AmountOf;
 use serde::{Deserialize, Serialize};
 use slog::info;
 use std::collections::hash_map::DefaultHasher;
+use std::collections::BTreeMap;
 use std::hash::{Hash, Hasher};
 use std::net::{Ipv6Addr, SocketAddr};
 use std::path::Path;
@@ -210,7 +211,10 @@ impl InternetComputer {
         self
     }
 
-    pub fn setup_and_start(&mut self, env: &TestEnv) -> Result<()> {
+    pub fn setup_and_start_return_vms(
+        &mut self,
+        env: &TestEnv,
+    ) -> Result<BTreeMap<String, AllocatedVm>> {
         // propagate required host features and resource settings to all vms
         let farm = Farm::from_test_env(env, "Internet Computer");
         for node in self
@@ -272,6 +276,11 @@ impl InternetComputer {
         // Emit a json log event, to be consumed by log post-processing tools.
         topology_snapshot.emit_log_event(&env.logger());
         setup_and_start_vms(&init_ic, self, env, &farm, &group_name)?;
+        Ok(res_group.vms)
+    }
+
+    pub fn setup_and_start(&mut self, env: &TestEnv) -> Result<()> {
+        self.setup_and_start_return_vms(env)?;
         Ok(())
     }
 
