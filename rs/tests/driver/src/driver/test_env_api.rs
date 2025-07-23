@@ -1182,13 +1182,7 @@ pub fn get_mainnet_application_subnet_revision() -> String {
 
 /// Pull the version of the initial GuestOS image from the environment.
 pub fn get_guestos_img_version() -> Result<String> {
-    // TODO: Until the version can be passed directly in the env variable, resolve it from a file, instead.
-    if let Ok(from_file) = read_dependency_from_env_to_string("ENV_DEPS__GUESTOS_DISK_IMG_VERSION")
-    {
-        Ok(from_file)
-    } else {
-        Ok(std::env::var("ENV_DEPS__GUESTOS_DISK_IMG_VERSION")?)
-    }
+    Ok(std::env::var("ENV_DEPS__GUESTOS_DISK_IMG_VERSION")?)
 }
 
 /// Pull the URL of the initial GuestOS image from the environment.
@@ -1221,14 +1215,7 @@ pub fn get_guestos_initial_update_img_sha256() -> Result<String> {
 
 /// Pull the version of the target GuestOS update image from the environment.
 pub fn get_guestos_update_img_version() -> Result<String> {
-    // TODO: Until the version can be passed directly in the env variable, resolve it from a file, instead.
-    if let Ok(from_file) =
-        read_dependency_from_env_to_string("ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION")
-    {
-        Ok(from_file)
-    } else {
-        Ok(std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION")?)
-    }
+    Ok(std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION")?)
 }
 
 /// Pull the URL of the target GuestOS update image from the environment.
@@ -1244,13 +1231,7 @@ pub fn get_guestos_update_img_sha256() -> Result<String> {
 
 /// Pull the version of the initial SetupOS image from the environment.
 pub fn get_setupos_img_version() -> Result<String> {
-    // TODO: Until the version can be passed directly in the env variable, resolve it from a file, instead.
-    if let Ok(from_file) = read_dependency_from_env_to_string("ENV_DEPS__SETUPOS_DISK_IMG_VERSION")
-    {
-        Ok(from_file)
-    } else {
-        Ok(std::env::var("ENV_DEPS__SETUPOS_DISK_IMG_VERSION")?)
-    }
+    Ok(std::env::var("ENV_DEPS__SETUPOS_DISK_IMG_VERSION")?)
 }
 
 /// Pull the URL of the initial SetupOS image from the environment.
@@ -1266,13 +1247,7 @@ pub fn get_setupos_img_sha256() -> Result<String> {
 
 /// Pull the version of the target HostOS update image from the environment.
 pub fn get_hostos_update_img_version() -> Result<String> {
-    // TODO: Until the version can be passed directly in the env variable, resolve it from a file, instead.
-    if let Ok(from_file) = read_dependency_from_env_to_string("ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION")
-    {
-        Ok(from_file)
-    } else {
-        Ok(std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION")?)
-    }
+    Ok(std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION")?)
 }
 
 /// Pull the URL of the target HostOS update image from the environment.

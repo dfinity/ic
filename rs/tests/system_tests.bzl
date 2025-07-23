@@ -49,8 +49,27 @@ def _run_system_test(ctx):
               done
             fi
 
+            # RUN_SCRIPT_INFO_FILE_VARS:
+            # For every var specified, pull the value from info_file, and
+            # expose it to the test plus the given suffix.
+            if [ -n "${{RUN_SCRIPT_INFO_FILE_VARS:-}}" ]; then
+              # split the ";"-delimited list of "env_var:info_var:suffix;env_var2:info_var2:suffix;..."
+              # into an array
+              IFS=';' read -ra vars <<<"$RUN_SCRIPT_INFO_FILE_VARS"
+              for var in "${{vars[@]}}"; do
+                  # split "envvar:infovar:suffix"
+                  IFS=':' read -ra parts <<<"$var"
+                  env_var_name="${{parts[0]}}"
+                  info_var_name="${{parts[1]}}"
+                  suffix="${{parts[2]:-}}"
+
+                  # Expose the variable to the test.
+                  export "${{env_var_name}}"="$(grep <{info_file} -e ${{info_var_name}} | cut -d' ' -f2)${{suffix}}"
+              done
+            fi
+
             # clean up the env for the test
-            unset RUN_SCRIPT_ICOS_IMAGES RUN_SCRIPT_UPLOAD_SYSTEST_DEP
+            unset RUN_SCRIPT_ICOS_IMAGES RUN_SCRIPT_UPLOAD_SYSTEST_DEP RUN_SCRIPT_INFO_FILE_VARS
 
             # We export RUNFILES such that the from_location_specified_by_env_var() function in
             # rs/rust_canisters/canister_test/src/canister.rs can find canisters
@@ -69,6 +88,7 @@ def _run_system_test(ctx):
             k8s = "--k8s" if k8s else "",
             group_base_name = ctx.label.name,
             no_summary_report = "--no-summary-report" if ctx.executable.colocated_test_bin != None else "",
+            info_file = ctx.info_file.short_path,
         ),
     )
 
@@ -99,6 +119,15 @@ def _run_system_test(ctx):
     env_deps = dict(env_deps, **icos_images)
 
     env["RUN_SCRIPT_UPLOAD_SYSTEST_DEP"] = ctx.executable._upload_systest_dep.short_path
+
+    # RUN_SCRIPT_INFO_FILE_VARS:
+    # Have the run script resolve some vars from info_file.
+    # The run script expects a map of enviromment variables to their info_file counterparts plus a suffix. e.g.
+    # RUN_SCRIPT_INFO_FILE_VARS=ENV_DEPS__GUESTOS_DISK_IMG_VERSION:STABLE_VERSION;ENV_DEPS__OTHER:STABLE_OTHER:suffix
+    info_file_vars = ctx.attr.info_file_vars
+    env |= {
+        "RUN_SCRIPT_INFO_FILE_VARS": ";".join([k + ":" + ":".join(v) for k, v in info_file_vars.items()]),
+    }
 
     if ctx.executable.colocated_test_bin != None:
         env["COLOCATED_TEST_BIN"] = ctx.executable.colocated_test_bin.short_path
@@ -149,6 +178,7 @@ run_system_test = rule(
         "runtime_deps": attr.label_list(allow_files = True),
         "env_deps": attr.string_keyed_label_dict(allow_files = True),
         "icos_images": attr.string_keyed_label_dict(doc = "Specifies images to be used by the test. Values will be replaced with actual download URLs and hashes.", allow_files = True),
+        "info_file_vars": attr.string_list_dict(doc = "Specifies variables to be pulled from info_file. Expects a map of varname to [infovar_name, optional_suffix]."),
         "env_inherit": attr.string_list(doc = "Specifies additional environment variables to inherit from the external environment when the test is executed by bazel test."),
     },
 )
@@ -272,46 +302,42 @@ def system_test(
         fail("More than one target HostOS (upgrade) image was specified!")
 
     icos_images = dict()
+    info_file_vars = dict()
 
     if uses_guestos_img:
-        # TODO: Until the version can be passed directly in the env variable, pass the file and let the test driver resolve it, instead.
-        _env_deps["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = _guestos + "version.txt"
+        info_file_vars["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = ["STABLE_VERSION"]
         icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = _guestos + "disk-img.tar.zst"
         icos_images["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG"] = _guestos + "update-img.tar.zst"
 
     if uses_guestos_mainnet_img:
+        # NOTE: Uses the "NNS" subnet to determine mainnet version
         env["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = MAINNET_NNS_SUBNET_REVISION
         icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = "//ic-os/setupos:mainnet-guest-img.tar.zst"
-        env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_URL"] = base_download_url(mainnet_guestos_version, "guest-os", True, False) + "update-img.tar.zst"
+        env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_URL"] = base_download_url(MAINNET_NNS_SUBNET_REVISION, "guest-os", True, False) + "update-img.tar.zst"
         env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_HASH"] = MAINNET_NNS_SUBNET_HASH
 
     if uses_guestos_recovery_dev_img:
-        # TODO: Until the version can be passed directly in the env variable, pass the file and let the test driver resolve it, instead.
-        _env_deps["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = _guestos + "version.txt"
-        _guestos_recovery_dev = "//ic-os/guestos/envs/recovery-dev:"
-        icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = _guestos_recovery_dev + "disk-img.tar.zst"
+        info_file_vars["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = ["STABLE_VERSION"]
+        icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = "//ic-os/guestos/envs/recovery-dev:disk-img.tar.zst"
         icos_images["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG"] = _guestos + "update-img.tar.zst"  # use the branch update image for initial update image
 
     if uses_guestos_update:
-        # TODO: Until the version can be passed directly in the env variable, pass the file and let the test driver resolve it, instead.
-        _env_deps["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = _guestos + "version.txt"
+        info_file_vars["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = ["STABLE_VERSION"]
         icos_images["ENV_DEPS__GUESTOS_UPDATE_IMG"] = _guestos + "update-img.tar.zst"
 
     if uses_guestos_test_update:
-        # TODO: Until the version can be passed directly in the env variable, pass the file and let the test driver resolve it, instead.
-        _env_deps["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = _guestos + "version-test.txt"
+        info_file_vars["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = ["STABLE_VERSION", "-test"]
         icos_images["ENV_DEPS__GUESTOS_UPDATE_IMG"] = _guestos + "update-img-test.tar.zst"
 
     if uses_guestos_mainnet_update:
+        # NOTE: Uses the "NNS" subnet to determine mainnet version
         env["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = MAINNET_NNS_SUBNET_REVISION
-        env["ENV_DEPS__GUESTOS_UPDATE_IMG_URL"] = base_download_url(mainnet_guestos_version, "guest-os", True, False) + "update-img.tar.zst"
+        env["ENV_DEPS__GUESTOS_UPDATE_IMG_URL"] = base_download_url(MAINNET_NNS_SUBNET_REVISION, "guest-os", True, False) + "update-img.tar.zst"
         env["ENV_DEPS__GUESTOS_UPDATE_IMG_HASH"] = MAINNET_NNS_SUBNET_HASH
 
     if uses_setupos_img:
         icos_images["ENV_DEPS__EMPTY_DISK_IMG"] = "//rs/tests/nested:empty-disk-img.tar.zst"
-
-        # TODO: Until the version can be passed directly in the env variable, pass the file and let the test driver resolve it, instead.
-        _env_deps["ENV_DEPS__SETUPOS_DISK_IMG_VERSION"] = _guestos + "version.txt"
+        info_file_vars["ENV_DEPS__SETUPOS_DISK_IMG_VERSION"] = ["STABLE_VERSION", "-test"]
         icos_images["ENV_DEPS__SETUPOS_DISK_IMG"] = "//ic-os/setupos:test-img.tar.zst"
 
         _env_deps["ENV_DEPS__SETUPOS_BUILD_CONFIG"] = "//ic-os:dev-tools/build-setupos-config-image.sh"
@@ -326,13 +352,11 @@ def system_test(
         _env_deps["ENV_DEPS__SETUPOS_CREATE_CONFIG"] = "//rs/ic_os/dev_test_tools/setupos-image-config:setupos-create-config"
 
     if uses_hostos_update:
-        # TODO: Until the version can be passed directly in the env variable, pass the file and let the test driver resolve it, instead.
-        _env_deps["ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION"] = _guestos + "version.txt"
+        info_file_vars["ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION"] = ["STABLE_VERSION"]
         icos_images["ENV_DEPS__HOSTOS_UPDATE_IMG"] = "//ic-os/hostos/envs/dev:update-img.tar.zst"
 
     if uses_hostos_test_update:
-        # TODO: Until the version can be passed directly in the env variable, pass the file and let the test driver resolve it, instead.
-        _env_deps["ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION"] = _guestos + "version-test.txt"
+        info_file_vars["ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION"] = ["STABLE_VERSION", "-test"]
         icos_images["ENV_DEPS__HOSTOS_UPDATE_IMG"] = "//ic-os/hostos/envs/dev:update-img-test.tar.zst"
 
     if uses_hostos_mainnet_update:
@@ -354,6 +378,7 @@ def system_test(
         env_deps = _env_deps,
         env = env,
         icos_images = icos_images,
+        info_file_vars = info_file_vars,
         env_inherit = env_inherit,
         tags = tags + ["requires-network", "system_test"] +
                (["manual"] if "experimental_system_test_colocation" in tags else []),
@@ -393,6 +418,7 @@ def system_test(
         env_inherit = env_inherit,
         env = env,
         icos_images = icos_images,
+        info_file_vars = info_file_vars,
         tags = tags + ["requires-network", "system_test"] +
                (["colocated"] if "experimental_system_test_colocation" in tags else ["manual"]) +
                additional_colocate_tags,
