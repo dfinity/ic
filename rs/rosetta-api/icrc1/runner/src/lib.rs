@@ -141,11 +141,9 @@ pub async fn start_rosetta(rosetta_bin: &Path, arguments: RosettaOptions) -> Ros
                     println!("Expected port in port file, got {}: {}", port_str, e);
                 }
             }
-        } else {
-            if let Some(exit_status) = child_process.try_wait().unwrap() {
-                println!("Rosetta exited with status: {}", exit_status);
-                break;
-            }
+        } else if let Some(exit_status) = child_process.try_wait().unwrap() {
+            println!("Rosetta exited with status: {}", exit_status);
+            break;
         }
         sleep(Duration::from_millis(100)).await;
         tries_left -= 1;
