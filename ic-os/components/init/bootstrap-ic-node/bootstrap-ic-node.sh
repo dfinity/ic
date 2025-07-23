@@ -100,12 +100,6 @@ function process_bootstrap() {
         fi
     done
 
-    for FILE in config.json; do
-        if [ -e "${TMPDIR}/${FILE}" ]; then
-            echo "Setting up ${FILE}"
-            cp "${TMPDIR}/${FILE}" "${CONFIG_ROOT}/${FILE}"
-        fi
-    done
     for DIR in accounts_ssh_authorized_keys; do
         if [ -e "${TMPDIR}/${DIR}" ]; then
             echo "Setting up accounts_ssh_authorized_keys"
@@ -118,6 +112,25 @@ function process_bootstrap() {
     # Synchronize the above cached writes to persistent storage
     # to make sure the system can boot successfully after a hard shutdown.
     sync
+}
+
+# Process config.json from bootstrap package
+# Arguments:
+# - $1: path to the bootstrap package (typically /mnt/ic-bootstrap.tar)
+# - $2: path to config space (typically /boot/config)
+function process_config_json() {
+    local BOOTSTRAP_TAR="$1"
+    local CONFIG_ROOT="$2"
+
+    local TMPDIR=$(mktemp -d)
+    tar xf "${BOOTSTRAP_TAR}" -C "${TMPDIR}"
+
+    if [ -e "${TMPDIR}/config.json" ]; then
+        echo "Setting up config.json"
+        cp "${TMPDIR}/config.json" "${CONFIG_ROOT}/config.json"
+    fi
+
+    rm -rf "${TMPDIR}"
 }
 
 MAX_TRIES=10
@@ -176,6 +189,19 @@ while [ ! -f /boot/config/CONFIGURED ]; do
         umount /mnt
     fi
 done
+
+# Process config.json every boot (not just on first bootstrap)
+echo "Checking for config.json updates"
+DEV="$(find_config_devices)"
+if [ "${DEV}" != "" ]; then
+    echo "Found CONFIG device at ${DEV}"
+    mount -t vfat -o ro "${DEV}" /mnt
+    process_config_json /mnt/ic-bootstrap.tar /boot/config
+    umount /mnt
+elif [ -e /mnt/ic-bootstrap.tar ]; then
+    echo "Processing config.json from pre-mounted bootstrap"
+    process_config_json /mnt/ic-bootstrap.tar /boot/config
+fi
 
 node_operator_private_key_exists=0
 if [ -f "/var/lib/ic/data/node_operator_private_key.pem" ]; then

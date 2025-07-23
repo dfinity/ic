@@ -484,6 +484,7 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
 
         let signature_request_timeout_ns = Some(12345);
         let idkg_key_rotation_period_ms = Some(12345);
+        let max_parallel_pre_signature_transcripts_in_creation = Some(12345);
 
         let chain_key_config = ChainKeyConfig {
             key_configs: vec![KeyConfig {
@@ -497,6 +498,7 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
             }],
             signature_request_timeout_ns,
             idkg_key_rotation_period_ms,
+            max_parallel_pre_signature_transcripts_in_creation,
         };
 
         // update payload message

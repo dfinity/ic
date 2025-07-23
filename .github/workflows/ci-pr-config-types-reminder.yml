@@ -1,0 +1,78 @@
+name: IC-OS Config Types Forward Compatibility Reminder
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+    paths:
+      - 'rs/ic_os/config_types/src/lib.rs'
+
+# This helps avoid duplicate reviews from this bot.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  pull-requests: write
+
+jobs:
+  mainJob:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          retries: 3
+          script: |
+            const pullRequestNumber = context.payload.number;
+
+            // Skip reminder if we already reminded (to avoid spam).
+            const reviews = await github.rest.pulls.listReviews({
+              owner: "dfinity",
+              repo: "ic",
+              pull_number: pullRequestNumber,
+            });
+            const alreadyRemindedConfigTypes = reviews
+              .data
+              .some(review => review
+                .body
+                .includes("CONFIG_TYPES_COMPATIBILITY_REMINDER_DEDUP")
+              );
+            console.log("alreadyRemindedConfigTypes = " + alreadyRemindedConfigTypes);
+            if (alreadyRemindedConfigTypes) {
+              return;
+            }
+
+            // Post a review to remind about forward compatibility for enum variants
+            console.log("Adding reminder about config types forward compatibility...");
+            const reminderText = `
+              This pull request modifies the IC-OS configuration types library (\`rs/ic_os/config_types/src/lib.rs\`).
+
+              Please ensure you have followed the **Configuration Update Protocol** guidelines——particularly if adding a new enum or enum variants:
+
+              **Enum Variant Forward Compatibility Guidelines**: If adding a new enum or new variants to an enum, ensure older versions can handle unknown variants gracefully by using \`#[serde(other)]\` on a fallback variant. See examples: \`GuestVMType::Unknown\` and \`Ipv6Config::Unknown\`.
+
+
+              To acknowledge this reminder and unblock the PR, dismiss this code review by:
+              - Going to the bottom of the pull request page  
+              - Finding where this bot is requesting changes
+              - Clicking the three dots on the right
+              - Selecting "Dismiss review"
+
+              For complete guidelines, see the documentation at the top of \`rs/ic_os/config_types/src/lib.rs\`.
+
+              CONFIG_TYPES_COMPATIBILITY_REMINDER_DEDUP
+            `
+            .replace(/^ +/gm, '')
+            .trim();
+
+            await github.rest.pulls.createReview({
+              owner: "dfinity",
+              repo: "ic",
+              pull_number: pullRequestNumber,
+              body: reminderText,
+              // This is what forces the author to explicitly acknowledge.
+              event: "REQUEST_CHANGES",
+            });
+            console.log("Config types compatibility reminder was added successfully."); 
