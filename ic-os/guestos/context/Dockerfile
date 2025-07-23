@@ -111,7 +111,8 @@ RUN systemctl disable \
     motd-news.service \
     motd-news.timer \
     fstrim.service \
-    fstrim.timer
+    fstrim.timer \
+    filebeat.service
 
 # ------ GUESTOS WORK --------------------------------------------
 
