@@ -312,7 +312,7 @@ mod test {
             key_configs: vec![key_config],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
-            max_pre_signature_transcripts_in_creation: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
         }));
         registry.maybe_apply_mutation_internal(add_fake_subnet(
             subnet_id,
@@ -369,7 +369,7 @@ mod test {
             key_configs: vec![key_config],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: Some(idkg_key_rotation_period_ms),
-            max_pre_signature_transcripts_in_creation: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
         }));
         registry.maybe_apply_mutation_internal(add_fake_subnet(
             subnet_id,
@@ -436,7 +436,7 @@ mod test {
             key_configs: vec![key_config],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: Some(idkg_key_rotation_period_ms),
-            max_pre_signature_transcripts_in_creation: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
         }));
         registry.maybe_apply_mutation_internal(add_fake_subnet(
             subnet_id,

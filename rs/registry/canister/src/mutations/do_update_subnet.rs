@@ -266,7 +266,7 @@ pub struct ChainKeyConfig {
     pub key_configs: Vec<KeyConfig>,
     pub signature_request_timeout_ns: Option<u64>,
     pub idkg_key_rotation_period_ms: Option<u64>,
-    pub max_pre_signature_transcripts_in_creation: Option<u32>,
+    pub max_parallel_pre_signature_transcripts_in_creation: Option<u32>,
 }
 
 impl From<ChainKeyConfigInternal> for ChainKeyConfig {
@@ -275,7 +275,7 @@ impl From<ChainKeyConfigInternal> for ChainKeyConfig {
             key_configs,
             signature_request_timeout_ns,
             idkg_key_rotation_period_ms,
-            max_pre_signature_transcripts_in_creation,
+            max_parallel_pre_signature_transcripts_in_creation,
         } = src;
 
         let key_configs = key_configs
@@ -297,7 +297,7 @@ impl From<ChainKeyConfigInternal> for ChainKeyConfig {
             key_configs,
             signature_request_timeout_ns,
             idkg_key_rotation_period_ms,
-            max_pre_signature_transcripts_in_creation,
+            max_parallel_pre_signature_transcripts_in_creation,
         }
     }
 }
@@ -310,7 +310,7 @@ impl TryFrom<ChainKeyConfig> for ChainKeyConfigInternal {
             key_configs,
             signature_request_timeout_ns,
             idkg_key_rotation_period_ms,
-            max_pre_signature_transcripts_in_creation,
+            max_parallel_pre_signature_transcripts_in_creation,
         } = src;
 
         let mut errors = vec![];
@@ -336,7 +336,7 @@ impl TryFrom<ChainKeyConfig> for ChainKeyConfigInternal {
             key_configs,
             signature_request_timeout_ns,
             idkg_key_rotation_period_ms,
-            max_pre_signature_transcripts_in_creation,
+            max_parallel_pre_signature_transcripts_in_creation,
         })
     }
 }
@@ -585,7 +585,7 @@ mod tests {
             }],
             signature_request_timeout_ns: Some(333),
             idkg_key_rotation_period_ms: Some(444),
-            max_pre_signature_transcripts_in_creation: Some(555),
+            max_parallel_pre_signature_transcripts_in_creation: Some(555),
         };
 
         let payload = UpdateSubnetPayload {
@@ -798,7 +798,7 @@ mod tests {
             }],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
-            max_pre_signature_transcripts_in_creation: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
         });
 
         payload.chain_key_signing_enable = Some(vec![MasterPublicKeyId::Ecdsa(key)]);
@@ -854,7 +854,7 @@ mod tests {
             ],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
-            max_pre_signature_transcripts_in_creation: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
         });
 
         payload.chain_key_signing_enable = Some(vec![MasterPublicKeyId::Ecdsa(key)]);
@@ -902,7 +902,7 @@ mod tests {
             }],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
-            max_pre_signature_transcripts_in_creation: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
         });
 
         subnet_holding_key_record.chain_key_config = chain_key_config.map(|chain_key_config| {
@@ -946,7 +946,7 @@ mod tests {
             }],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
-            max_pre_signature_transcripts_in_creation: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
         });
 
         registry.do_update_subnet(payload);
@@ -1086,7 +1086,7 @@ mod tests {
             }],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
-            max_pre_signature_transcripts_in_creation: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
         });
 
         subnet_holding_key_record.chain_key_config = chain_key_config.map(|chain_key_config| {
@@ -1112,7 +1112,7 @@ mod tests {
             }],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
-            max_pre_signature_transcripts_in_creation: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
         });
 
         payload.chain_key_signing_enable = Some(vec![master_public_key_held_by_subnet.clone()]);
@@ -1197,7 +1197,7 @@ mod tests {
             }],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
-            max_pre_signature_transcripts_in_creation: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
         });
 
         let subnet_id = subnet_test_id(1000);
@@ -1218,7 +1218,7 @@ mod tests {
             }],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
-            max_pre_signature_transcripts_in_creation: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
         });
 
         payload.chain_key_signing_enable = Some(vec![MasterPublicKeyId::Ecdsa(key.clone())]);
@@ -1279,7 +1279,7 @@ mod tests {
             ],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
-            max_pre_signature_transcripts_in_creation: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
         };
 
         let subnet_id = subnet_test_id(1000);

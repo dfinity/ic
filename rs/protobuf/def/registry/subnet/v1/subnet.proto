@@ -322,7 +322,7 @@ message ChainKeyConfig {
   optional uint64 idkg_key_rotation_period_ms = 3;
   // Maximum number of pre-signature transcripts that can be worked on in
   // parallel to fill the pre-signature stash.
-  optional uint32 max_pre_signature_transcripts_in_creation = 4;
+  optional uint32 max_parallel_pre_signature_transcripts_in_creation = 4;
 }
 
 // How to charge canisters for their use of computational resources (such as

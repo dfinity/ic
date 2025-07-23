@@ -138,7 +138,7 @@ pub struct ChainKeyConfig {
     pub key_configs: Vec<KeyConfig>,
     pub signature_request_timeout_ns: Option<u64>,
     pub idkg_key_rotation_period_ms: Option<u64>,
-    pub max_pre_signature_transcripts_in_creation: Option<u32>,
+    pub max_parallel_pre_signature_transcripts_in_creation: Option<u32>,
 }
 
 impl ChainKeyConfig {
@@ -156,7 +156,7 @@ impl From<ChainKeyConfig> for pb::ChainKeyConfig {
             key_configs,
             signature_request_timeout_ns,
             idkg_key_rotation_period_ms,
-            max_pre_signature_transcripts_in_creation,
+            max_parallel_pre_signature_transcripts_in_creation,
         } = src;
 
         let key_configs = key_configs.into_iter().map(pb::KeyConfig::from).collect();
@@ -165,7 +165,7 @@ impl From<ChainKeyConfig> for pb::ChainKeyConfig {
             key_configs,
             signature_request_timeout_ns,
             idkg_key_rotation_period_ms,
-            max_pre_signature_transcripts_in_creation,
+            max_parallel_pre_signature_transcripts_in_creation,
         }
     }
 }
@@ -182,8 +182,8 @@ impl TryFrom<pb::ChainKeyConfig> for ChainKeyConfig {
             key_configs,
             signature_request_timeout_ns: value.signature_request_timeout_ns,
             idkg_key_rotation_period_ms: value.idkg_key_rotation_period_ms,
-            max_pre_signature_transcripts_in_creation: value
-                .max_pre_signature_transcripts_in_creation,
+            max_parallel_pre_signature_transcripts_in_creation: value
+                .max_parallel_pre_signature_transcripts_in_creation,
         })
     }
 }
@@ -237,7 +237,7 @@ mod tests {
             ],
             signature_request_timeout_ns: Some(123_456),
             idkg_key_rotation_period_ms: Some(321_654),
-            max_pre_signature_transcripts_in_creation: Some(123_654),
+            max_parallel_pre_signature_transcripts_in_creation: Some(123_654),
         };
 
         let chain_key_config_pb = pb::ChainKeyConfig::from(chain_key_config.clone());
@@ -272,7 +272,7 @@ mod tests {
             ],
             signature_request_timeout_ns: Some(123_456),
             idkg_key_rotation_period_ms: Some(321_654),
-            max_pre_signature_transcripts_in_creation: Some(123_654),
+            max_parallel_pre_signature_transcripts_in_creation: Some(123_654),
         };
 
         assert_eq!(chain_key_config_pb, expected_chain_key_config_pb,);

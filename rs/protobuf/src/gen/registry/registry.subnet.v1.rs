@@ -340,7 +340,7 @@ pub struct ChainKeyConfig {
     /// Maximum number of pre-signature transcripts that can be worked on in
     /// parallel to fill the pre-signature stash.
     #[prost(uint32, optional, tag = "4")]
-    pub max_pre_signature_transcripts_in_creation: ::core::option::Option<u32>,
+    pub max_parallel_pre_signature_transcripts_in_creation: ::core::option::Option<u32>,
 }
 #[derive(
     serde::Serialize,

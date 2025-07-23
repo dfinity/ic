@@ -315,7 +315,7 @@ pub struct InitialChainKeyConfig {
     pub key_configs: Vec<KeyConfigRequest>,
     pub signature_request_timeout_ns: Option<u64>,
     pub idkg_key_rotation_period_ms: Option<u64>,
-    pub max_pre_signature_transcripts_in_creation: Option<u32>,
+    pub max_parallel_pre_signature_transcripts_in_creation: Option<u32>,
 }
 
 impl From<InitialChainKeyConfigInternal> for InitialChainKeyConfig {
@@ -324,7 +324,7 @@ impl From<InitialChainKeyConfigInternal> for InitialChainKeyConfig {
             key_configs,
             signature_request_timeout_ns,
             idkg_key_rotation_period_ms,
-            max_pre_signature_transcripts_in_creation,
+            max_parallel_pre_signature_transcripts_in_creation,
         } = src;
 
         let key_configs = key_configs
@@ -336,7 +336,7 @@ impl From<InitialChainKeyConfigInternal> for InitialChainKeyConfig {
             key_configs,
             signature_request_timeout_ns,
             idkg_key_rotation_period_ms,
-            max_pre_signature_transcripts_in_creation,
+            max_parallel_pre_signature_transcripts_in_creation,
         }
     }
 }
@@ -349,7 +349,7 @@ impl TryFrom<InitialChainKeyConfig> for InitialChainKeyConfigInternal {
             key_configs,
             signature_request_timeout_ns,
             idkg_key_rotation_period_ms,
-            max_pre_signature_transcripts_in_creation,
+            max_parallel_pre_signature_transcripts_in_creation,
         } = src;
 
         let mut key_config_validation_errors = vec![];
@@ -376,7 +376,7 @@ impl TryFrom<InitialChainKeyConfig> for InitialChainKeyConfigInternal {
             key_configs,
             signature_request_timeout_ns,
             idkg_key_rotation_period_ms,
-            max_pre_signature_transcripts_in_creation,
+            max_parallel_pre_signature_transcripts_in_creation,
         })
     }
 }
@@ -609,7 +609,7 @@ mod test {
                 }],
                 signature_request_timeout_ns: None,
                 idkg_key_rotation_period_ms: None,
-                max_pre_signature_transcripts_in_creation: None,
+                max_parallel_pre_signature_transcripts_in_creation: None,
             }),
             ..Default::default()
         };
@@ -645,7 +645,7 @@ mod test {
             }],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
-            max_pre_signature_transcripts_in_creation: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
         };
         subnet_record.chain_key_config = Some(ChainKeyConfigPb::from(chain_key_config));
 
@@ -671,7 +671,7 @@ mod test {
                 }],
                 signature_request_timeout_ns: None,
                 idkg_key_rotation_period_ms: None,
-                max_pre_signature_transcripts_in_creation: None,
+                max_parallel_pre_signature_transcripts_in_creation: None,
             }),
             ..Default::default()
         };
@@ -709,7 +709,7 @@ mod test {
             }],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
-            max_pre_signature_transcripts_in_creation: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
         };
         subnet_record.chain_key_config = Some(ChainKeyConfigPb::from(chain_key_config));
 
@@ -735,7 +735,7 @@ mod test {
                 }],
                 signature_request_timeout_ns: None,
                 idkg_key_rotation_period_ms: None,
-                max_pre_signature_transcripts_in_creation: None,
+                max_parallel_pre_signature_transcripts_in_creation: None,
             }),
             ..Default::default()
         };
@@ -771,7 +771,7 @@ mod test {
             }],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
-            max_pre_signature_transcripts_in_creation: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
         };
 
         let chain_key_config_pb = ChainKeyConfigPb::from(chain_key_config);
@@ -800,7 +800,7 @@ mod test {
                 key_configs: vec![key_config_request; 2],
                 signature_request_timeout_ns: None,
                 idkg_key_rotation_period_ms: None,
-                max_pre_signature_transcripts_in_creation: None,
+                max_parallel_pre_signature_transcripts_in_creation: None,
             }),
             ..Default::default()
         };

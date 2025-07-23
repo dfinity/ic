@@ -130,7 +130,7 @@ pub(crate) struct ProposeToCreateSubnetCmd {
     /// Maximum number of pre-signature transcripts that can be worked on in parallel to fill the
     /// pre-signature stash.
     #[clap(long)]
-    pub max_pre_signature_transcripts_in_creation: Option<u32>,
+    pub max_parallel_pre_signature_transcripts_in_creation: Option<u32>,
 
     /// The list of public keys whose owners have "readonly" SSH access to all
     /// replicas on this subnet.
@@ -252,7 +252,9 @@ impl ProposeToCreateSubnetCmd {
 
         let chain_key_config = if self.signature_request_timeout_ns.is_none()
             && self.idkg_key_rotation_period_ms.is_none()
-            && self.max_pre_signature_transcripts_in_creation.is_none()
+            && self
+                .max_parallel_pre_signature_transcripts_in_creation
+                .is_none()
             && self.initial_chain_key_configs_to_request.is_none()
         {
             None
@@ -263,8 +265,8 @@ impl ProposeToCreateSubnetCmd {
                 key_configs,
                 signature_request_timeout_ns: self.signature_request_timeout_ns,
                 idkg_key_rotation_period_ms: self.idkg_key_rotation_period_ms,
-                max_pre_signature_transcripts_in_creation: self
-                    .max_pre_signature_transcripts_in_creation,
+                max_parallel_pre_signature_transcripts_in_creation: self
+                    .max_parallel_pre_signature_transcripts_in_creation,
             })
         };
 
@@ -366,7 +368,7 @@ mod tests {
             initial_chain_key_configs_to_request: None,
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
-            max_pre_signature_transcripts_in_creation: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
             max_number_of_canisters: None,
             features: None,
         }
@@ -400,14 +402,14 @@ mod tests {
         let initial_chain_key_configs_to_request = Some(initial_chain_key_configs_to_request);
         let signature_request_timeout_ns = Some(111);
         let idkg_key_rotation_period_ms = Some(222);
-        let max_pre_signature_transcripts_in_creation = Some(333);
+        let max_parallel_pre_signature_transcripts_in_creation = Some(333);
 
         // Run code under test
         let cmd = ProposeToCreateSubnetCmd {
             initial_chain_key_configs_to_request,
             signature_request_timeout_ns,
             idkg_key_rotation_period_ms,
-            max_pre_signature_transcripts_in_creation,
+            max_parallel_pre_signature_transcripts_in_creation,
 
             replica_version_id: Some(replica_version_id.clone()),
             features: Some(features),
@@ -460,7 +462,7 @@ mod tests {
                     ],
                     signature_request_timeout_ns: Some(111),
                     idkg_key_rotation_period_ms: Some(222),
-                    max_pre_signature_transcripts_in_creation: Some(333),
+                    max_parallel_pre_signature_transcripts_in_creation: Some(333),
                 }),
                 replica_version_id: replica_version_id.to_string(),
                 features: SubnetFeaturesPb::from(features),

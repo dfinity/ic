@@ -655,7 +655,7 @@ mod chain_key_enabled_subnet_lists {
             ],
             signature_request_timeout_ns: Some(10_000),
             idkg_key_rotation_period_ms: Some(20_000),
-            max_pre_signature_transcripts_in_creation: Some(30_000),
+            max_parallel_pre_signature_transcripts_in_creation: Some(30_000),
         }
     }
 
