@@ -118,7 +118,7 @@ fn setup_with_controller(controller: PrincipalId, wasm: Vec<u8>) -> (StateMachin
         &env,
         CanisterSettingsArgsBuilder::new()
             .with_log_visibility(LogVisibilityV2::Controllers)
-            .with_controllers(vec![user_controller])
+            .with_controllers(vec![controller])
             .build(),
         wasm,
     );
