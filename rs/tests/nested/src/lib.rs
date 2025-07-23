@@ -273,7 +273,7 @@ pub fn upgrade_hostos(env: TestEnv) {
 }
 
 /// Test the guestos-recovery-upgrader component: tests upgrading the GuestOS
-/// from the HostOS based on injected version/hash boot parameters
+/// from the HostOS based on injected version/hash boot parameters.
 pub fn recovery_upgrader_test(env: TestEnv) {
     let logger = env.logger();
 
@@ -333,30 +333,32 @@ pub fn recovery_upgrader_test(env: TestEnv) {
             .expect("Failed to read /boot/boot_args file");
         info!(logger, "Current boot_args content:\n{}", current_boot_args);
 
+        // Get the guestos update image version and hash
+        let target_version =
+            get_guestos_update_img_version().expect("Failed to get target guestos version");
+        let target_short_hash =
+            &get_guestos_update_img_sha256(&env).expect("Failed to get target guestos hash")[..6]; // node providers only expected to input the first 6 characters of the hash
+
+        info!(
+            logger,
+            "Using target version: {} and short hash: {}", target_version, target_short_hash
+        );
+
         // Remount /boot as read-write and update the boot_args file
         info!(
             logger,
             "Remounting /boot as read-write and updating boot_args file"
         );
-        // TODO: need the guestos update image hash
-        let update_result = host.block_on_bash_script(
-            "sudo mount -o remount,rw /boot && sudo sed -i 's/\\(BOOT_ARGS_A=\".*\\)enforcing=0\"/\\1enforcing=0 recovery=1 version=e915efecc8af90993ccfc499721ebe826aadba60 hash=12e130\"/' /boot/boot_args && sudo mount -o remount,ro /boot"
+        let boot_args_command = format!(
+            "sudo mount -o remount,rw /boot && sudo sed -i 's/\\(BOOT_ARGS_A=\".*\\)enforcing=0\"/\\1enforcing=0 recovery=1 version={} hash={}\"/' /boot/boot_args && sudo mount -o remount,ro /boot",
+            target_version, target_short_hash
         );
-
-        match update_result {
-            Ok(output) => {
-                info!(
-                    logger,
-                    "Boot_args file updated successfully. Output: {}", output
-                );
-            }
-            Err(e) => {
-                panic!("Failed to update boot_args file: {}", e);
-            }
-        }
+        host.block_on_bash_script(&boot_args_command)
+            .expect("Failed to update boot_args file");
+        info!(logger, "Boot_args file updated successfully.");
 
         // Verify the update worked
-        info!(logger, "Verifying boot_args file was updated");
+        info!(logger, "Verifying boot_args file contents");
         let updated_boot_args = host
             .block_on_bash_script("cat /boot/boot_args")
             .expect("Failed to read updated /boot/boot_args file");
