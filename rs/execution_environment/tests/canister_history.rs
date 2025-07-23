@@ -1503,12 +1503,6 @@ fn canister_history_tracking_env_vars_update_with_identical_values() {
         ("LOG_LEVEL".to_string(), "info".to_string()),
     ]));
     let env_vars_hash = env_vars.hash();
-
-    // Set up StateMachine with environment variables tracking enabled.
-    let env = setup_state_machine(FlagStatus::Enabled);
-    let mut now = std::time::SystemTime::now();
-    env.set_time(now);
-
     let env_vars_args = env_vars
         .iter()
         .map(|(name, value)| EnvironmentVariable {
@@ -1516,6 +1510,12 @@ fn canister_history_tracking_env_vars_update_with_identical_values() {
             value: value.clone(),
         })
         .collect::<Vec<_>>();
+
+    // Set up StateMachine with environment variables tracking enabled.
+    let env = setup_state_machine(FlagStatus::Enabled);
+    let mut now = std::time::SystemTime::now();
+    env.set_time(now);
+
     // Create canister with initial environment variables.
     let canister_id = env.create_canister_with_cycles(
         None,
