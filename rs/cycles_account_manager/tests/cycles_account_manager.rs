@@ -31,6 +31,22 @@ use std::{convert::TryFrom, time::Duration};
 const WASM_EXECUTION_MODE: WasmExecutionMode = WasmExecutionMode::Wasm32;
 
 #[test]
+fn xnet_call_total_fee_free() {
+    let cost_schedule = CanisterCyclesCostSchedule::Free;
+    let cam = CyclesAccountManagerBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+    assert_eq!(
+        Cycles::new(0),
+        cam.xnet_call_total_fee(
+            NumBytes::new(9999),
+            WasmExecutionMode::Wasm32,
+            cost_schedule
+        )
+    );
+}
+
+#[test]
 fn test_can_charge_application_subnets() {
     let cost_schedule = CanisterCyclesCostSchedule::Normal;
     with_test_replica_logger(|log| {
