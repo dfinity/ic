@@ -6,7 +6,7 @@ mod tests;
 
 use crate::canister_state::queues::CanisterOutputQueuesIterator;
 use crate::canister_state::system_state::{
-    ExecutionMessaging, ExecutionTask, IdleMessaging, SystemState, SystemStateV0,
+    ExecutionMessaging, ExecutionTask, IdleMessaging, SystemState, SystemStateV0, PausedExecutionId,
 };
 use crate::{InputQueueType, MessageMemoryUsage, StateError};
 pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions};
@@ -16,9 +16,11 @@ use ic_types::batch::TotalQueryStats;
 use ic_types::methods::SystemMethod;
 use ic_types::time::UNIX_EPOCH;
 use ic_types::{
-    messages::{CanisterMessage, Ingress, Request, RequestOrResponse, Response},
+    messages::{
+        CanisterMessage, CanisterMessageOrTask, Ingress, Request, RequestOrResponse, Response,
+    },
     methods::WasmMethod,
-    AccumulatedPriority, CanisterId, CanisterLog, ComputeAllocation, ExecutionRound,
+    AccumulatedPriority, CanisterId, CanisterLog, ComputeAllocation, Cycles, ExecutionRound,
     MemoryAllocation, NumBytes, PrincipalId, Time,
 };
 use ic_types::{LongExecutionMode, NumInstructions};
@@ -171,7 +173,10 @@ pub struct ExecutionCanisterState {
 }
 
 impl CanisterState {
-    pub fn to_executing(self, time: Time) -> Result<ExecutionCanisterState, Self> {
+    pub fn to_executing(
+        self,
+        time: Time,
+    ) -> Result<(ExecutionCanisterState, CanisterMessageOrTask, Option<PausedExecutionId>, Option<Cycles>), Self> {
         match self {
             Self {
                 execution_state: None,
@@ -183,12 +188,15 @@ impl CanisterState {
                 execution_state: Some(execution_state),
                 scheduler_state,
             } => match messaging.to_executing(time) {
-                Ok(messaging) => Ok(ExecutionCanisterState {
-                    system_state,
-                    messaging,
-                    execution_state,
-                    scheduler_state,
-                }),
+                Ok((messaging, input, paused_execution_id, prepaid_execution_cycles)) => {
+                    let canister_state = ExecutionCanisterState {
+                        system_state,
+                        messaging,
+                        execution_state,
+                        scheduler_state,
+                    };
+                    Ok((canister_state, input, paused_execution_id, prepaid_execution_cycles))
+                }
                 Err(messaging) => Err(Self {
                     system_state,
                     messaging,

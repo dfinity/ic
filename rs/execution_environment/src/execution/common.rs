@@ -525,13 +525,14 @@ pub fn apply_canister_state_changes(
 
 pub(crate) fn finish_call_with_error(
     user_error: UserError,
-    canister: CanisterState,
+    canister: ExecutionCanisterState,
     call_or_task: CanisterCallOrTask,
     instructions_used: NumInstructions,
     time: Time,
     subnet_type: SubnetType,
     log: &ReplicaLogger,
 ) -> ExecuteMessageResult {
+    let canister = canister.abort_with_error();
     let response = match call_or_task {
         CanisterCallOrTask::Update(CanisterCall::Request(request))
         | CanisterCallOrTask::Query(CanisterCall::Request(request)) => {

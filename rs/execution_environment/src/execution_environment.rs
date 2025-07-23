@@ -1881,7 +1881,7 @@ impl ExecutionEnvironment {
     #[allow(clippy::too_many_arguments)]
     pub fn execute_canister_input(
         &self,
-        canister: CanisterState,
+        canister: ExecutionCanisterState,
         instruction_limits: InstructionLimits,
         max_instructions_per_message_without_dts: NumInstructions,
         input: CanisterMessageOrTask,
@@ -1891,6 +1891,7 @@ impl ExecutionEnvironment {
         round_limits: &mut RoundLimits,
         subnet_size: usize,
     ) -> ExecuteMessageResult {
+        /*
         match canister.next_execution() {
             NextExecution::None | NextExecution::StartNew => {}
             NextExecution::ContinueLong | NextExecution::ContinueInstallCode => {
@@ -1902,6 +1903,7 @@ impl ExecutionEnvironment {
                 );
             }
         }
+        */
 
         let round_counters = RoundCounters {
             execution_refund_error: &self.metrics.execution_cycles_refund_error,
@@ -2042,7 +2044,7 @@ impl ExecutionEnvironment {
     /// Executes a canister task of a given canister.
     fn execute_canister_task(
         &self,
-        canister: CanisterState,
+        canister: ExecutionCanisterState,
         task: CanisterTask,
         prepaid_execution_cycles: Option<Cycles>,
         instruction_limits: InstructionLimits,
@@ -2090,18 +2092,22 @@ impl ExecutionEnvironment {
     /// instruction limit and available subnet memory counter.
     fn execution_parameters(
         &self,
-        canister: &CanisterState,
+        canister: &ExecutionCanisterState,
         instruction_limits: InstructionLimits,
         execution_mode: ExecutionMode,
         subnet_memory_saturation: ResourceSaturation,
     ) -> ExecutionParameters {
+        /*
         let wasm_execution_mode = match &canister.execution_state {
             // The canister is not already installed, so we do not know what kind of canister it is.
             // Therefore we can assume it is Wasm64 because Wasm64 can have a larger memory limit.
             None => WasmExecutionMode::Wasm64,
             Some(execution_state) => execution_state.wasm_execution_mode,
         };
+
         let max_memory_size = self.max_canister_memory_size(wasm_execution_mode);
+        */
+        let max_memory_size = self.max_canister_memory_size(canister.execution_state.wasm_execution_mode);
 
         ExecutionParameters {
             instruction_limits,
@@ -2778,7 +2784,7 @@ impl ExecutionEnvironment {
     #[allow(clippy::too_many_arguments)]
     pub fn execute_canister_response(
         &self,
-        canister: CanisterState,
+        canister: ExecutionCanisterState,
         response: Arc<Response>,
         instruction_limits: InstructionLimits,
         time: Time,
@@ -4313,7 +4319,7 @@ fn execute_canister_input(
     input: CanisterMessageOrTask,
     prepaid_execution_cycles: Option<Cycles>,
     exec_env: &ExecutionEnvironment,
-    canister: CanisterState,
+    canister: ExecutionCanisterState,
     instruction_limits: InstructionLimits,
     max_instructions_per_message_without_dts: NumInstructions,
     network_topology: Arc<NetworkTopology>,
@@ -4355,20 +4361,67 @@ pub fn execute_canister(
     round_limits: &mut RoundLimits,
     subnet_size: usize,
 ) -> ExecuteCanisterResult {
-    /*
     match canister.to_executing(time) {
-        Ok(canister) => match canister.messaging.paused
+        Ok((canister, input, Some(id), _)) => {
+            let paused = exec_env.take_paused_execution(id).unwrap();
+            let round_counters = RoundCounters {
+                execution_refund_error: &exec_env.metrics.execution_cycles_refund_error,
+                state_changes_error: &exec_env.metrics.state_changes_error,
+                invalid_system_call_error: &exec_env.metrics.invalid_system_call_error,
+                charging_from_balance_error: &exec_env.metrics.charging_from_balance_error,
+                unexpected_response_error: &exec_env.metrics.unexpected_response_error,
+                response_cycles_refund_error: &exec_env.metrics.response_cycles_refund_error,
+                invalid_canister_state_error: &exec_env.metrics.invalid_canister_state_error,
+                ingress_with_cycles_error: &exec_env.metrics.ingress_with_cycles_error,
+            };
+            let round_context = RoundContext {
+                network_topology: &network_topology,
+                hypervisor: &exec_env.hypervisor,
+                cycles_account_manager: &exec_env.cycles_account_manager,
+                counters: round_counters,
+                log: &exec_env.log,
+                time,
+            };
+            let result = paused.resume(
+                canister,
+                round_context,
+                round_limits,
+                subnet_size,
+                &exec_env.call_tree_metrics,
+                exec_env.deallocator_thread.sender(),
+            );
+            let (canister, instructions_used, heap_delta, ingress_status) =
+                exec_env.process_result(result);
+            
+            ExecuteCanisterResult {
+                canister,
+                instructions_used,
+                heap_delta,
+                ingress_status,
+                description: Some("paused execution".to_string()),
+            }
         }
+        Ok((canister, input, None, prepaid_execution_cycles)) => execute_canister_input(
+            input,
+            prepaid_execution_cycles,
+            exec_env,
+            canister,
+            instruction_limits,
+            max_instructions_per_message_without_dts,
+            network_topology,
+            time,
+            round_limits,
+            subnet_size,
+        ),
         Err(canister) => ExecuteCanisterResult {
             canister,
             instructions_used: None,
             heap_delta: NumBytes::from(0),
             ingress_status: None,
             description: None,
-        }
+        },
     }
-    */
-
+/*
     match canister.next_execution() {
         NextExecution::None | NextExecution::ContinueInstallCode => {
             return ExecuteCanisterResult {
@@ -4464,6 +4517,7 @@ pub fn execute_canister(
         round_limits,
         subnet_size,
     )
+*/
 }
 
 fn get_master_public_key<'a>(

@@ -40,7 +40,7 @@ mod tests;
 // Execute an inter-canister call message or a canister task.
 #[allow(clippy::too_many_arguments)]
 pub fn execute_call_or_task(
-    clean_canister: CanisterState,
+    clean_canister: ExecutionCanisterState,
     call_or_task: CanisterCallOrTask,
     method: WasmMethod,
     prepaid_execution_cycles: Option<Cycles>,
@@ -65,10 +65,13 @@ pub fn execute_call_or_task(
                     .map(|caller| canister.controllers().contains(&caller))
                     .unwrap_or_default();
 
+                let wasm_execution_mode = canister.execution_state.wasm_execution_mode;
+                /*
                 let wasm_execution_mode = canister
                     .execution_state
                     .as_ref()
                     .map_or(WasmExecutionMode::Wasm32, |es| es.wasm_execution_mode);
+                */
 
                 let prepaid_execution_cycles = match round
                     .cycles_account_manager
@@ -125,6 +128,8 @@ pub fn execute_call_or_task(
         clean_canister.system_state.reserved_balance(),
     );
 
+    let request_metadata = canister.call_context().metadata().clone();
+    /*
     let request_metadata = match &call_or_task {
         CanisterCallOrTask::Update(CanisterCall::Request(request))
         | CanisterCallOrTask::Query(CanisterCall::Request(request)) => {
@@ -134,6 +139,7 @@ pub fn execute_call_or_task(
         | CanisterCallOrTask::Query(CanisterCall::Ingress(_))
         | CanisterCallOrTask::Task(_) => RequestMetadata::for_new_call_tree(time),
     };
+    */
 
     let original = OriginalContext {
         call_origin: CallOrigin::from(&call_or_task),
@@ -197,7 +203,8 @@ pub fn execute_call_or_task(
     let message_memory_usage = helper.canister().message_memory_usage();
     let result = round.hypervisor.execute_dts(
         api_type,
-        helper.canister().execution_state.as_ref().unwrap(),
+        &helper.canister().execution_state,
+        //helper.canister().execution_state.as_ref().unwrap(),
         &helper.canister().system_state,
         memory_usage,
         message_memory_usage,
@@ -263,7 +270,7 @@ pub fn execute_call_or_task(
 /// change that is applied to the clean canister state is refunding the prepaid
 /// execution cycles.
 fn finish_err(
-    clean_canister: CanisterState,
+    clean_canister: ExecutionCanisterState,
     instructions_left: NumInstructions,
     err: UserError,
     original: OriginalContext,
@@ -277,10 +284,13 @@ fn finish_err(
         round.counters.charging_from_balance_error,
     );
 
+    let wasm_execution_mode = canister.execution_state.wasm_execution_mode;
+    /*
     let wasm_execution_mode = canister
         .execution_state
         .as_ref()
         .map_or(WasmExecutionMode::Wasm32, |es| es.wasm_execution_mode);
+    */
 
     let instruction_limit = original.execution_parameters.instruction_limits.message();
     round.cycles_account_manager.refund_unused_execution_cycles(
@@ -326,15 +336,15 @@ struct OriginalContext {
 /// call execution.
 #[derive(Debug)]
 struct PausedCallOrTaskHelper {
-    call_context_id: CallContextId,
+    //call_context_id: CallContextId,
     initial_cycles_balance: Cycles,
 }
 
 /// A helper that implements and keeps track of update call steps.
 /// It is used to safely pause and resume an update call execution.
 struct CallOrTaskHelper {
-    canister: CanisterState,
-    call_context_id: CallContextId,
+    canister: ExecutionCanisterState,
+//    call_context_id: CallContextId,
     initial_cycles_balance: Cycles,
     deallocation_sender: DeallocationSender,
 }
@@ -342,22 +352,25 @@ struct CallOrTaskHelper {
 impl CallOrTaskHelper {
     /// Applies the initial state changes and performs the initial validation.
     fn new(
-        clean_canister: &CanisterState,
+        clean_canister: &ExecuteCanisterState,
         original: &OriginalContext,
         deallocation_sender: &DeallocationSender,
     ) -> Result<Self, UserError> {
-        let mut canister = clean_canister.clone();
+        //let mut canister = clean_canister.clone();
 
         validate_message(&canister, &original.method)?;
 
         match original.call_or_task {
             CanisterCallOrTask::Update(_) => {
+                let wasm_memory_usage = num_bytes_try_from(canister.execution_state.wasm_memory.size).unwrap();
+                /*
                 let wasm_memory_usage = canister
                     .execution_state
                     .as_ref()
                     .map_or(NumBytes::new(0), |es| {
                         num_bytes_try_from(es.wasm_memory.size).unwrap()
                     });
+                */
 
                 if let Some(wasm_memory_limit) = clean_canister.system_state.wasm_memory_limit {
                     // A Wasm memory limit of 0 means unlimited.
@@ -383,7 +396,8 @@ impl CallOrTaskHelper {
                 }
             }
         }
-
+        
+        /*
         let call_context_id = canister
             .system_state
             .new_call_context(
@@ -393,6 +407,7 @@ impl CallOrTaskHelper {
                 original.request_metadata.clone(),
             )
             .unwrap();
+        */
 
         let initial_cycles_balance = canister.system_state.balance();
 
@@ -408,8 +423,8 @@ impl CallOrTaskHelper {
         }
 
         Ok(Self {
-            canister,
-            call_context_id,
+            canister: clean_canister,
+//            call_context_id,
             initial_cycles_balance,
             deallocation_sender: deallocation_sender.clone(),
         })
@@ -420,7 +435,7 @@ impl CallOrTaskHelper {
     fn pause(self) -> PausedCallOrTaskHelper {
         self.deallocation_sender.send(Box::new(self.canister));
         PausedCallOrTaskHelper {
-            call_context_id: self.call_context_id,
+            //call_context_id: self.call_context_id,
             initial_cycles_balance: self.initial_cycles_balance,
         }
     }
@@ -473,7 +488,7 @@ impl CallOrTaskHelper {
     fn finish(
         mut self,
         mut output: WasmExecutionOutput,
-        clean_canister: CanisterState,
+        clean_canister: ExecutionCanisterState,
         canister_state_changes: CanisterStateChanges,
         original: OriginalContext,
         round: RoundContext,
@@ -530,7 +545,8 @@ impl CallOrTaskHelper {
             CanisterCallOrTask::Update(_) | CanisterCallOrTask::Task(_) => {
                 apply_canister_state_changes(
                     canister_state_changes,
-                    self.canister.execution_state.as_mut().unwrap(),
+                    &mut self.canister.execution_state,
+                    //self.canister.execution_state.as_mut().unwrap(),
                     &mut self.canister.system_state,
                     &mut output,
                     round_limits,
