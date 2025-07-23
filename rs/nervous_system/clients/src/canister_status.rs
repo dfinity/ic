@@ -71,6 +71,18 @@ pub struct DefiniteCanisterSettings {
     pub wasm_memory_threshold: Option<candid::Nat>,
 }
 
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+pub struct MemoryMetrics {
+    wasm_memory_size: candid::Nat,
+    stable_memory_size: candid::Nat,
+    global_memory_size: candid::Nat,
+    wasm_binary_size: candid::Nat,
+    custom_sections_size: candid::Nat,
+    canister_history_size: candid::Nat,
+    wasm_chunk_store_size: candid::Nat,
+    snapshots_size: candid::Nat,
+}
+
 /// Partial copy-paste of `ic_management_canister_types_private::CanisterStatusResultV2`, and it's used for
 /// the response type in the NNS/SNS Root `canister_status` method.
 ///
@@ -87,6 +99,7 @@ pub struct CanisterStatusResult {
     pub idle_cycles_burned_per_day: Option<candid::Nat>,
     pub reserved_cycles: Option<candid::Nat>,
     pub query_stats: Option<QueryStats>,
+    pub memory_metrics: Option<MemoryMetrics>,
 }
 
 /// Partial copy-paste of `ic_management_canister_types_private::QueryStats`, and it's used for the response
