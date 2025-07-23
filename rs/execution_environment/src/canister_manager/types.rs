@@ -92,6 +92,9 @@ pub(crate) struct CanisterMgrConfig {
     pub(crate) canister_snapshot_data_baseline_instructions: NumInstructions,
     pub(crate) default_wasm_memory_limit: NumBytes,
     pub(crate) max_number_of_snapshots_per_canister: usize,
+    pub(crate) max_environment_variables: usize,
+    pub(crate) max_environment_variable_name_length: usize,
+    pub(crate) max_environment_variable_value_length: usize,
 }
 
 impl CanisterMgrConfig {
@@ -114,6 +117,9 @@ impl CanisterMgrConfig {
         canister_snapshot_data_baseline_instructions: NumInstructions,
         default_wasm_memory_limit: NumBytes,
         max_number_of_snapshots_per_canister: usize,
+        max_environment_variables: usize,
+        max_environment_variable_name_length: usize,
+        max_environment_variable_value_length: usize,
     ) -> Self {
         Self {
             subnet_memory_capacity,
@@ -133,6 +139,9 @@ impl CanisterMgrConfig {
             canister_snapshot_data_baseline_instructions,
             default_wasm_memory_limit,
             max_number_of_snapshots_per_canister,
+            max_environment_variables,
+            max_environment_variable_name_length,
+            max_environment_variable_value_length,
         }
     }
 }
@@ -478,6 +487,18 @@ pub(crate) enum CanisterManagerError {
     },
     RenameCanisterNotStopped(CanisterId),
     RenameCanisterHasSnapshot(CanisterId),
+    EnvironmentVariablesTooMany {
+        max: usize,
+        count: usize,
+    },
+    EnvironmentVariablesNameTooLong {
+        name: String,
+        max_name_length: usize,
+    },
+    EnvironmentVariablesValueTooLong {
+        value: String,
+        max_value_length: usize,
+    },
 }
 
 impl AsErrorHelp for CanisterManagerError {
@@ -687,7 +708,19 @@ impl AsErrorHelp for CanisterManagerError {
                     suggestion: "Delete all snapshots before renaming.".to_string(),
                     doc_link: "".to_string(),
                 }
-            }
+            },
+            CanisterManagerError::EnvironmentVariablesTooMany { .. } => ErrorHelp::UserError {
+                suggestion: "Try reducing the number of environment variables.".to_string(),
+                doc_link: "".to_string(),
+            },
+            CanisterManagerError::EnvironmentVariablesNameTooLong { .. } => ErrorHelp::UserError {
+                suggestion: "Shorten the environment variable name to fit within the allowed limit.".to_string(),
+                doc_link: "".to_string(),
+            },
+            CanisterManagerError::EnvironmentVariablesValueTooLong { .. } => ErrorHelp::UserError {
+                suggestion: "Shorten the environment variable value to fit within the allowed limit.".to_string(),
+                doc_link: "".to_string(),
+            },
         }
     }
 }
@@ -1056,6 +1089,24 @@ impl From<CanisterManagerError> for UserError {
                 Self::new(
                     ErrorCode::InvalidManagementPayload,
                     message,
+                )
+            }
+            EnvironmentVariablesTooMany { max, count } => {
+                Self::new(
+                    ErrorCode::InvalidManagementPayload,
+                    format!("Too many environment variables: {} (max: {})", count, max),
+                )
+            }
+            EnvironmentVariablesNameTooLong { name, max_name_length } => {
+                Self::new(
+                    ErrorCode::InvalidManagementPayload,
+                    format!("Environment variable name \"{}\" exceeds the maximum allowed length of {}.", name, max_name_length),
+                )
+            }
+            EnvironmentVariablesValueTooLong { value, max_value_length } => {
+                Self::new(
+                    ErrorCode::InvalidManagementPayload,
+                    format!("Environment variable value \"{}\" exceeds the maximum allowed length of {}.", value, max_value_length),
                 )
             }
         }
