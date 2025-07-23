@@ -29,8 +29,8 @@ name = "large"
 path = "large.rs"
 
 [[bin]]
-name = "large_high_perf"
-path = "large_high_perf.rs"
+name = "large_high_io_perf"
+path = "large_high_io_perf.rs"
 
 [[bin]]
 name = "medium"

@@ -10,13 +10,13 @@
 // You can setup this testnet with a lifetime of 180 mins by executing the following commands:
 //
 //   $ ./ci/tools/docker-run
-//   $ PERF_HOSTS="dm1-dll29.dm1.dfinity.network" ict testnet create large_high_perf --lifetime-mins=1440 --output-dir=./large_high_perf -- --test_tmpdir=./large_high_perf
+//   $ PERF_HOSTS="dm1-dll29.dm1.dfinity.network" ict testnet create large_high_io_perf --lifetime-mins=1440 --output-dir=./large_high_io_perf -- --test_tmpdir=./large_high_io_perf
 //
-// The --output-dir=./large_high_perf will store the debug output of the test driver in the specified directory.
-// The --test_tmpdir=./large_high_perf will store the remaining test output in the specified directory.
+// The --output-dir=./large_high_io_perf will store the debug output of the test driver in the specified directory.
+// The --test_tmpdir=./large_high_io_perf will store the remaining test output in the specified directory.
 // This is useful to have access to in case you need to SSH into an IC node for example like:
 //
-//   $ ssh -i large_high_perf/_tmp/*/setup/ssh/authorized_priv_keys/admin admin@$ipv6
+//   $ ssh -i large_high_io_perf/_tmp/*/setup/ssh/authorized_priv_keys/admin admin@$ipv6
 //
 // Note that you can get the $ipv6 address of the IC node from the ict console output:
 //
@@ -37,9 +37,9 @@
 //
 // To get access to P8s and Grafana look for the following lines in the ict console output:
 //
-//     "prometheus": "Prometheus Web UI at http://prometheus.large_high_perf--1692597750709.testnet.farm.dfinity.systems",
-//     "grafana": "Grafana at http://grafana.large_high_perf--1692597750709.testnet.farm.dfinity.systems",
-//     "progress_clock": "IC Progress Clock at http://grafana.large_high_perf--1692597750709.testnet.farm.dfinity.systems/d/ic-progress-clock/ic-progress-clock?refresh=10s\u0026from=now-5m\u0026to=now",
+//     "prometheus": "Prometheus Web UI at http://prometheus.large_high_io_perf--1692597750709.testnet.farm.dfinity.systems",
+//     "grafana": "Grafana at http://grafana.large_high_io_perf--1692597750709.testnet.farm.dfinity.systems",
+//     "progress_clock": "IC Progress Clock at http://grafana.large_high_io_perf--1692597750709.testnet.farm.dfinity.systems/d/ic-progress-clock/ic-progress-clock?refresh=10s\u0026from=now-5m\u0026to=now",
 //
 // Happy testing!
 
