@@ -215,8 +215,8 @@ fn test_compute_providers_extrapolated_fr() {
     // --- P2 Data: Two nodes with metrics ---
     let p2_nodes = generate_rewardable_nodes(vec![(p2_node1, vec![day]), (p2_node2, vec![day])]);
     let p2_metrics = btreemap! {
-        (day, p2_node1) => NodeMetricsDaily { relative_fr: dec!(0.2).into(), ..Default::default() },
-        (day, p2_node2) => NodeMetricsDaily { relative_fr: dec!(0.4).into(), ..Default::default() },
+        (day, p2_node1) => NodeMetricsDaily { relative_fr: dec!(0.2), ..Default::default() },
+        (day, p2_node2) => NodeMetricsDaily { relative_fr: dec!(0.4), ..Default::default() },
     };
     let result_p2 = step_2_extrapolated_fr(&p2_nodes, &p2_metrics);
     // Extrapolated FR for P2 should be the average of its nodes' relative FR
@@ -413,7 +413,7 @@ fn test_adjust_nodes_rewards() {
     let mut performance_multiplier = HashMap::new();
     for node in &rewardable_nodes {
         for day in &node.rewardable_days {
-            base_rewards.insert((*day, node.node_id), dec!(1000).into());
+            base_rewards.insert((*day, node.node_id), dec!(1000));
             performance_multiplier.insert((*day, node.node_id), dec!(0.5));
         }
     }
