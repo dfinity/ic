@@ -358,7 +358,7 @@ impl ExecutionTest {
     }
 
     pub fn cost_schedule(&self) -> CanisterCyclesCostSchedule {
-        self.state().metadata.cost_schedule
+        self.registry_settings.canister_cycles_cost_schedule
     }
 
     pub fn executed_instructions(&self) -> NumInstructions {
@@ -1782,6 +1782,7 @@ pub struct ExecutionTestBuilder {
     replica_version: ReplicaVersion,
     precompiled_universal_canister: bool,
     cycles_account_manager_config: Option<CyclesAccountManagerConfig>,
+    cost_schedule: CanisterCyclesCostSchedule,
 }
 
 impl Default for ExecutionTestBuilder {
@@ -1830,6 +1831,7 @@ impl Default for ExecutionTestBuilder {
             replica_version: ReplicaVersion::default(),
             precompiled_universal_canister: true,
             cycles_account_manager_config: None,
+            cost_schedule: CanisterCyclesCostSchedule::Normal,
         }
     }
 }
@@ -1837,6 +1839,13 @@ impl Default for ExecutionTestBuilder {
 impl ExecutionTestBuilder {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn with_cost_schedule(self, cost_schedule: CanisterCyclesCostSchedule) -> Self {
+        Self {
+            cost_schedule,
+            ..self
+        }
     }
 
     pub fn with_execution_config(self, execution_config: Config) -> Self {
@@ -2475,6 +2484,8 @@ impl ExecutionTestBuilder {
             Arc::clone(&cycles_account_manager),
             query_stats_collector,
         );
+        state.metadata.cost_schedule = self.cost_schedule;
+        self.registry_settings.canister_cycles_cost_schedule = self.cost_schedule;
         ExecutionTest {
             state: Some(state),
             message_id: 0,

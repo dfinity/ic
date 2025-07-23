@@ -772,6 +772,52 @@ fn create_canister_updates_consumed_cycles_metric_correctly() {
 }
 
 #[test]
+fn create_canister_free() {
+    let cost_schedule = CanisterCyclesCostSchedule::Free;
+    let mut test = ExecutionTestBuilder::new()
+        .with_cost_schedule(cost_schedule)
+        .build();
+
+    let canister_id = test
+        .universal_canister_with_cycles(*INITIAL_CYCLES * 2u64)
+        .unwrap();
+
+    let create_canister_args = CreateCanisterArgs {
+        settings: None,
+        sender_canister_version: None,
+    }
+    .encode();
+    let payload = wasm()
+        .call_with_cycles(
+            CanisterId::ic_00(),
+            Method::CreateCanister,
+            call_args()
+                .other_side(create_canister_args)
+                .on_reply(wasm().message_payload().append_and_reply()),
+            *INITIAL_CYCLES,
+        )
+        .build();
+
+    test.ingress(canister_id, "update", payload).unwrap();
+
+    let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
+    let creation_fee =
+        cycles_account_manager.canister_creation_fee(SMALL_APP_SUBNET_MAX_SIZE, cost_schedule);
+    assert_eq!(creation_fee, Cycles::new(0));
+    // There's only 2 canisters on the subnet, so the one created from the first one
+    // with have the test id corresponding to `1`.
+    let canister = test.canister_state(canister_test_id(1));
+    assert_eq!(
+        canister.system_state.canister_metrics.consumed_cycles.get(),
+        creation_fee.get()
+    );
+    assert_eq!(
+        canister.system_state.balance(),
+        *INITIAL_CYCLES - creation_fee
+    );
+}
+
+#[test]
 fn provisional_create_canister_has_no_creation_fee() {
     let mut test = ExecutionTestBuilder::new().build();
 
