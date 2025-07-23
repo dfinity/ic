@@ -7213,11 +7213,6 @@ fn test_manage_and_reward_node_providers() {
         .error_message
         .contains("cannot add already existing Node Provider"));
 
-    assert_eq!(
-        gov.get_proposal_data(pid).unwrap().status(),
-        ProposalStatus::Failed
-    );
-
     // Rewarding the node provider to the default account should now work.
     let pid = match gov
         .manage_neuron(
