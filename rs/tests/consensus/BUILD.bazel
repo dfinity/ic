@@ -29,7 +29,7 @@ system_test(
         "long_test",
     ],
     test_timeout = "eternal",
-    uses_guestos_dev = True,
+    uses_guestos_img = True,
     runtime_deps = GRAFANA_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -49,7 +49,7 @@ system_test(
         "k8s",
         "long_test",
     ],
-    uses_guestos_dev = True,
+    uses_guestos_img = True,
     runtime_deps = GRAFANA_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -108,8 +108,8 @@ system_test(
     tags = [
         "k8s",
     ],
-    uses_guestos_dev = True,
-    uses_guestos_dev_test = True,
+    uses_guestos_img = True,
+    uses_guestos_test_update = True,
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -252,8 +252,8 @@ system_test(
     tags = [
         "k8s",
     ],
-    uses_guestos_dev = True,
-    uses_guestos_dev_test = True,
+    uses_guestos_img = True,
+    uses_guestos_test_update = True,
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -274,8 +274,8 @@ system_test(
     tags = [
         "k8s",
     ],
-    uses_guestos_dev = True,
-    uses_guestos_dev_test = True,
+    uses_guestos_img = True,
+    uses_guestos_test_update = True,
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -303,8 +303,8 @@ system_test(
     tags = [
         "k8s",
     ],
-    uses_guestos_dev = True,
-    uses_guestos_dev_test = True,
+    uses_guestos_img = True,
+    uses_guestos_test_update = True,
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.

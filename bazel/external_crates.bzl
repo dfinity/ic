@@ -472,6 +472,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "derive-new": crate.spec(
                 version = "^0.7.0",
             ),
+            "devicemapper": crate.spec(
+                version = "0.34",
+            ),
             "dfx-core": crate.spec(
                 version = "^0.1.4",
             ),
@@ -832,6 +835,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "local-ip-address": crate.spec(
                 version = "^0.5.6",
             ),
+            "loopdev-3": crate.spec(
+                version = "0.5",
+            ),
             "lru": crate.spec(
                 version = "^0.7.8",
                 default_features = False,
@@ -1150,6 +1156,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "rustc-hash": crate.spec(
                 version = "^1.1.0",
+            ),
+            "rust-ini": crate.spec(
+                version = "^0.21.2",
             ),
             "rustls": crate.spec(
                 version = "^0.23.18",
