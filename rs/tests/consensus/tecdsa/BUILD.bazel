@@ -10,8 +10,8 @@ system_test_nns(
     tags = [
         "k8s",
     ],
-    uses_guestos_dev = True,
-    uses_guestos_dev_test = True,
+    uses_guestos_img = True,
+    uses_guestos_test_update = True,
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -326,7 +326,10 @@ system_test_nns(
     additional_colocate_tags = [
         "system_test_benchmark",
     ],
-    colocated_test_driver_vm_required_host_features = ["performance"],
+    colocated_test_driver_vm_required_host_features = [
+        "performance",
+        "spm",
+    ],
     colocated_test_driver_vm_resources = {
         "vcpus": 64,
         "memory_kibibytes": 512142680,
@@ -351,7 +354,10 @@ system_test_nns(
     additional_colocate_tags = [
         "system_test_benchmark",
     ],
-    colocated_test_driver_vm_required_host_features = ["performance"],
+    colocated_test_driver_vm_required_host_features = [
+        "performance",
+        "spm",
+    ],
     colocated_test_driver_vm_resources = {
         "vcpus": 64,
         "memory_kibibytes": 512142680,
@@ -376,7 +382,10 @@ system_test_nns(
     additional_colocate_tags = [
         "system_test_benchmark",
     ],
-    colocated_test_driver_vm_required_host_features = ["performance"],
+    colocated_test_driver_vm_required_host_features = [
+        "performance",
+        "spm",
+    ],
     colocated_test_driver_vm_resources = {
         "vcpus": 64,
         "memory_kibibytes": 512142680,
@@ -401,7 +410,10 @@ system_test_nns(
     additional_colocate_tags = [
         "system_test_benchmark",
     ],
-    colocated_test_driver_vm_required_host_features = ["performance"],
+    colocated_test_driver_vm_required_host_features = [
+        "performance",
+        "spm",
+    ],
     colocated_test_driver_vm_resources = {
         "vcpus": 64,
         "memory_kibibytes": 512142680,

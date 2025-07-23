@@ -316,7 +316,7 @@ fn main() -> io::Result<()> {
         let _drop_sigpipe_handler = sigpipe_handler;
         info!(logger, "IC Replica Running");
         // Blocking on `SIGINT` or `SIGTERM`.
-        shutdown_signal(logger.inner_logger.root.clone()).await
+        shutdown_signal(logger.clone()).await
     });
     info!(save_logger, "IC Replica Terminating");
 

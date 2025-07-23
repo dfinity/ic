@@ -35,8 +35,8 @@ use ic_consensus_system_test_utils::{
         wait_until_authentication_is_granted, AuthMean,
     },
     upgrade::{
-        assert_assigned_replica_version, bless_public_replica_version,
-        deploy_guestos_to_all_subnet_nodes, get_assigned_replica_version, UpdateImageType,
+        assert_assigned_replica_version, deploy_guestos_to_all_subnet_nodes,
+        get_assigned_replica_version, UpdateImageType,
     },
 };
 use ic_consensus_threshold_sig_system_test_utils::{
@@ -68,89 +68,56 @@ const DKG_INTERVAL: u64 = 9;
 const SUBNET_SIZE: usize = 4;
 const DIVERGENCE_LOG_STR: &str = "The state hash of the CUP at height ";
 
-fn setup_common() -> InternetComputer {
-    InternetComputer::new().add_subnet(
-        Subnet::new(SubnetType::System)
-            .add_nodes(SUBNET_SIZE)
-            .with_chain_key_config(ChainKeyConfig {
-                key_configs: make_key_ids_for_all_schemes()
-                    .into_iter()
-                    .map(|key_id| KeyConfig {
-                        max_queue_size: 20,
-                        pre_signatures_to_create_in_advance: if key_id.requires_pre_signatures() {
-                            7
-                        } else {
-                            0
-                        },
-                        key_id,
-                    })
-                    .collect(),
-                signature_request_timeout_ns: None,
-                idkg_key_rotation_period_ms: None,
-                max_pre_signature_transcripts_in_creation: None,
-            })
-            .with_dkg_interval_length(Height::from(DKG_INTERVAL)),
-    )
-}
-
-pub fn setup_upgrade(env: TestEnv) {
-    setup_common()
-        .with_mainnet_config()
+pub fn setup(env: TestEnv) {
+    InternetComputer::new()
+        .add_subnet(
+            Subnet::new(SubnetType::System)
+                .add_nodes(SUBNET_SIZE)
+                .with_chain_key_config(ChainKeyConfig {
+                    key_configs: make_key_ids_for_all_schemes()
+                        .into_iter()
+                        .map(|key_id| KeyConfig {
+                            max_queue_size: 20,
+                            pre_signatures_to_create_in_advance: if key_id.requires_pre_signatures()
+                            {
+                                7
+                            } else {
+                                0
+                            },
+                            key_id,
+                        })
+                        .collect(),
+                    signature_request_timeout_ns: None,
+                    idkg_key_rotation_period_ms: None,
+                    max_pre_signature_transcripts_in_creation: None,
+                })
+                .with_dkg_interval_length(Height::from(DKG_INTERVAL)),
+        )
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 
     install_nns_and_check_progress(env.topology_snapshot());
 }
 
-pub fn setup_downgrade(env: TestEnv) {
-    setup_common()
-        .setup_and_start(&env)
-        .expect("failed to setup IC under test");
-
-    install_nns_and_check_progress(env.topology_snapshot());
-}
-
-pub fn test_upgrade(env: TestEnv) {
+pub fn test(env: TestEnv) {
     let log = env.logger();
     let nns_node = get_nns_node(&env.topology_snapshot());
-    info!(log, "Elect the branch replica version");
-    let original_branch_version = read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")
-        .expect("tip-of-branch IC version");
-    let branch_version = format!("{}-test", original_branch_version);
+    info!(log, "Elect the target replica version");
+    let binary_version = get_current_branch_version().expect("tip-of-branch IC version");
+    let target_version = get_guestos_update_img_version().expect("target IC version");
 
-    // Bless branch version
-    let sha256 = get_ic_os_update_img_test_sha256().unwrap();
-    let upgrade_url = get_ic_os_update_img_test_url().unwrap();
+    // Bless target version
+    let sha256 = get_guestos_update_img_sha256(&env).unwrap();
+    let upgrade_url = get_guestos_update_img_url().unwrap();
     block_on(bless_replica_version(
         &nns_node,
-        &original_branch_version,
-        UpdateImageType::ImageTest,
+        &target_version,
+        UpdateImageType::Image,
         &log,
         &sha256,
         vec![upgrade_url.to_string()],
     ));
-    info!(log, "TARGET_VERSION: {}", branch_version);
-    test(env, branch_version.clone(), branch_version);
-}
-
-pub fn test_downgrade(env: TestEnv) {
-    let log = env.logger();
-    let nns_node = get_nns_node(&env.topology_snapshot());
-    let initial_version =
-        get_assigned_replica_version(&nns_node).expect("There should be assigned replica version");
-    let mainnet_version = get_mainnet_nns_revision();
-    info!(log, "Elect the mainnet replica version");
-    info!(log, "TARGET_VERSION: {}", mainnet_version);
-    block_on(bless_public_replica_version(
-        &nns_node,
-        &mainnet_version,
-        &log,
-    ));
-    test(env, initial_version, mainnet_version);
-}
-
-fn test(env: TestEnv, binary_version: String, target_version: String) {
-    let log = env.logger();
+    info!(log, "TARGET_VERSION: {}", target_version);
 
     info!(log, "Create all directories");
     let root_dir = tempfile::TempDir::new()
