@@ -49,7 +49,7 @@ fn get_vector_toml() -> String {
 pub struct VectorVm {
     universal_vm: UniversalVm,
     container_running: bool,
-    hash: u64,
+    config_hash: u64,
 }
 
 impl Default for VectorVm {
@@ -73,7 +73,7 @@ impl VectorVm {
                     boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(30)),
                 }),
             container_running: false,
-            hash: 0,
+            config_hash: 0,
         }
     }
 
@@ -106,13 +106,13 @@ impl VectorVm {
 
         let new_hash = hasher.finish();
 
-        if new_hash != self.hash {
+        if new_hash != self.config_hash {
             debug!(
                 logger,
-                "Vector targets hash changed from {} to {new_hash}", self.hash
+                "Vector targets hash changed from {} to {new_hash}", self.config_hash
             );
 
-            self.hash = new_hash;
+            self.config_hash = new_hash;
             return true;
         }
 
@@ -151,7 +151,7 @@ impl VectorVm {
             .map(|(key, val)| (key.to_string(), val))
             .collect();
 
-            add_custom_target(
+            add_vector_target(
                 &mut sources,
                 &mut transforms,
                 node_id.to_string(),
@@ -161,9 +161,9 @@ impl VectorVm {
         }
 
         // Extend with custom targets
-        let custom_targets = env.get_custom_vector_targets()?;
+        let custom_targets = env.get_custom_vector_targets();
         for (key, val) in custom_targets {
-            add_custom_target(&mut sources, &mut transforms, key, val.ip, val.labels);
+            add_vector_target(&mut sources, &mut transforms, key, val.ip, val.labels);
         }
 
         if sources.is_empty() && transforms.is_empty() {
@@ -375,7 +375,7 @@ impl Serialize for VectorTransform {
     }
 }
 
-fn add_custom_target(
+fn add_vector_target(
     sources: &mut BTreeMap<String, VectorSource>,
     transforms: &mut BTreeMap<String, VectorTransform>,
     target_id: String,
@@ -415,35 +415,19 @@ impl HasVectorTargets for TestEnv {
         ip: IpAddr,
         labels: Option<BTreeMap<String, String>>,
     ) -> anyhow::Result<()> {
-        // Get current targets, if any
-        let vector_dir = self.get_path("vector");
-        std::fs::create_dir_all(&vector_dir).map_err(anyhow::Error::from)?;
-        let current_custom_targets = vector_dir.join("custom_targets.json");
-
-        let mut custom_targets = self.get_custom_vector_targets()?;
+        let mut custom_targets = self.get_custom_vector_targets();
 
         custom_targets.insert(target_id, CustomTarget { ip, labels });
 
-        std::fs::write(
-            current_custom_targets,
-            serde_json::to_string_pretty(&custom_targets)?,
-        )
-        .map_err(anyhow::Error::from)
+        custom_targets.write_attribute(self);
+        Ok(())
     }
 }
 
 impl TestEnv {
-    fn get_custom_vector_targets(&self) -> anyhow::Result<BTreeMap<String, CustomTarget>> {
+    fn get_custom_vector_targets(&self) -> BTreeMap<String, CustomTarget> {
         // Get current targets, if any
-        let vector_dir = self.get_path("vector");
-        std::fs::create_dir_all(&vector_dir).map_err(anyhow::Error::from)?;
-        let current_custom_targets = vector_dir.join("custom_targets.json");
-
-        match current_custom_targets.exists() {
-            true => serde_json::from_reader(std::fs::File::open(&current_custom_targets)?)
-                .map_err(anyhow::Error::from),
-            false => Ok(BTreeMap::new()),
-        }
+        CustomVectorTargets::try_read_attribute(self).unwrap_or_default()
     }
 }
 
@@ -451,4 +435,11 @@ impl TestEnv {
 struct CustomTarget {
     ip: IpAddr,
     labels: Option<BTreeMap<String, String>>,
+}
+
+type CustomVectorTargets = BTreeMap<String, CustomTarget>;
+impl TestEnvAttribute for CustomVectorTargets {
+    fn attribute_name() -> String {
+        "vector_custom_targets.json".to_string()
+    }
 }
