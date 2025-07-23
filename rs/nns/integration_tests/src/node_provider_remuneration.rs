@@ -302,7 +302,7 @@ fn test_automated_node_provider_remuneration() {
         None,
     );
     let reward_mode_1 = Some(RewardMode::RewardToAccount(RewardToAccount {
-        to_account: Some(node_info_1.provider_account.into()),
+        to_account: Some(node_info_1.provider_account.into_proto_with_checksum()),
     }));
     let expected_rewards_e8s_1 =
         (((10 * 24_000) + (21 * 68_000) + (6 * 11_000)) * TOKEN_SUBDIVIDABLE_BY) / 155_000;
@@ -319,7 +319,7 @@ fn test_automated_node_provider_remuneration() {
         None,
     );
     let reward_mode_2 = Some(RewardMode::RewardToAccount(RewardToAccount {
-        to_account: Some(node_info_2.provider_account.into()),
+        to_account: Some(node_info_2.provider_account.into_proto_with_checksum()),
     }));
     let expected_rewards_e8s_2 =
         (((35 * 68_000) + (17 * 11_000)) * TOKEN_SUBDIVIDABLE_BY) / 155_000;
