@@ -65,7 +65,9 @@ fn test(env: TestEnv) {
     let original_version = get_assigned_replica_version(&nns_node).unwrap();
     info!(logger, "Original replica version: {}", original_version);
 
-    let upgrade_url = get_ic_os_update_img_test_url().expect("no image URL");
+    let target_version = get_guestos_update_img_version().expect("target IC version");
+
+    let upgrade_url = get_guestos_update_img_url().expect("no image URL");
     info!(logger, "Upgrade URL: {}", upgrade_url);
 
     // A list of URLs, among which only one is valid:
@@ -83,25 +85,25 @@ fn test(env: TestEnv) {
     );
     block_on(bless_replica_version_with_urls(
         &nns_node,
-        &original_version,
-        UpdateImageType::ImageTest,
+        &target_version,
+        UpdateImageType::Image,
         release_package_urls,
-        get_ic_os_update_img_test_sha256().expect("no SHA256 hash"),
+        get_guestos_update_img_sha256(&env).expect("no SHA256 hash"),
         &logger,
     ));
 
     info!(logger, "Proposing to upgrade the subnet replica version");
-    let test_version = format!("{}-test", original_version);
+    let target_version = get_guestos_update_img_version().unwrap();
     block_on(deploy_guestos_to_all_subnet_nodes(
         &nns_node,
-        &ReplicaVersion::try_from(test_version.clone()).unwrap(),
+        &ReplicaVersion::try_from(target_version.clone()).unwrap(),
         subnet_id,
     ));
 
     info!(logger, "Waiting until the subnet is upgraded");
 
     // Wait until the subnet is upgraded.
-    assert_assigned_replica_version(&nns_node, &test_version, logger);
+    assert_assigned_replica_version(&nns_node, &target_version, logger);
 }
 
 fn main() -> Result<()> {

@@ -20,23 +20,6 @@ fn current_time() -> Time {
     ic_types::time::current_time()
 }
 
-// Wrapper types for TimestampNanos.
-// Used to ensure that the wrapped timestamp is aligned to the end of the day.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Ord, PartialOrd, Hash, Default)]
-pub struct DayEnd(UnixTsNanos);
-
-impl From<UnixTsNanos> for DayEnd {
-    fn from(ts: UnixTsNanos) -> Self {
-        Self(((ts / NANOS_PER_DAY) + 1) * NANOS_PER_DAY - 1)
-    }
-}
-
-impl DayEnd {
-    pub fn get(&self) -> UnixTsNanos {
-        self.0
-    }
-}
-
 /// Reward period in which we want to reward the node providers
 ///
 /// This period ensures that all `BlockmakerMetrics` collected during the reward period are included consistently
@@ -45,6 +28,12 @@ impl DayEnd {
 pub struct RewardPeriod {
     pub from: DayUTC,
     pub to: DayUTC,
+}
+
+impl RewardPeriod {
+    pub fn days(&self) -> Vec<DayUTC> {
+        self.from.days_until(&self.to).expect("Always valid days")
+    }
 }
 
 impl Display for RewardPeriod {
@@ -71,20 +60,20 @@ impl RewardPeriod {
         if unaligned_start_ts > unaligned_end_ts {
             return Err(RewardPeriodError::StartTimestampAfterEndTimestamp);
         }
-        let start_ts: DayEnd = unaligned_start_ts.into();
-        let end_ts: DayEnd = unaligned_end_ts.into();
+        let start_day: DayUTC = unaligned_start_ts.into();
+        let end_day: DayUTC = unaligned_end_ts.into();
 
         // Metrics are collected at the end of the day, so we need to ensure that
         // the end timestamp is not later than the first ts of today.
-        let today: DayEnd = current_time().as_nanos_since_unix_epoch().into();
+        let today: DayUTC = current_time().as_nanos_since_unix_epoch().into();
 
-        if end_ts.0 >= today.0 {
+        if end_day >= today {
             return Err(RewardPeriodError::EndTimestampLaterThanToday);
         }
 
         Ok(Self {
-            from: start_ts.into(),
-            to: end_ts.into(),
+            from: start_day,
+            to: end_day,
         })
     }
 
@@ -131,9 +120,9 @@ pub struct ProviderRewardableNodes {
 #[derive(Eq, Hash, PartialEq, Clone, Ord, PartialOrd, Debug)]
 pub struct RewardableNode {
     pub node_id: NodeId,
-    pub rewardable_from: DayUTC,
-    pub rewardable_to: DayUTC,
+    pub rewardable_days: Vec<DayUTC>,
     pub region: Region,
+    // TODO: remove this when rewards_calculation is performed with NodeRewardType
     pub node_type: NodeType,
     pub dc_id: String,
 }
