@@ -671,11 +671,6 @@ impl SystemTestGroup {
         };
 
         let logging_task_id = TaskId::Test(String::from("vector-logging"));
-        info!(
-            logger,
-            "Came to here, evaluating if the vector vm should be spawned. Logs enabled value: {}",
-            group_ctx.logs_enabled.to_string()
-        );
         let log_task = if group_ctx.logs_enabled {
             let logger = group_ctx.logger().clone();
             let group_ctx = group_ctx.clone();

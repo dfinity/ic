@@ -68,7 +68,13 @@ impl Task for SubprocessTask {
             .arg("--working-dir") // TODO: rename as --group-dir
             .arg(self.group_ctx.group_dir().as_os_str())
             .arg("--group-base-name")
-            .arg(self.group_ctx.group_base_name.clone())
+            .arg(self.group_ctx.group_base_name.clone());
+
+        if self.group_ctx.logs_enabled {
+            child_cmd.arg("--logs");
+        }
+
+        child_cmd
             .arg("spawn-child")
             .arg(self.task_id.name())
             .arg(sock_id.to_string());
