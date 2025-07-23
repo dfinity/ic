@@ -112,9 +112,10 @@ impl Config {
 pub fn setup(env: TestEnv, config: Config) {
     // start p8s for metrics and dashboards
     PrometheusVm::default()
+        .with_required_host_features(vec![HostFeature::Performance])
         .start(&env)
         .expect("Failed to start prometheus VM");
-    let mut vector_vm = VectorVm::new();
+    let mut vector_vm = VectorVm::new().with_required_host_features(vec![HostFeature::Performance]);
     vector_vm.start(&env).expect("Failed to start Vector VM");
 
     // set up IC overriding the default resources to be more powerful
@@ -159,6 +160,7 @@ pub fn setup(env: TestEnv, config: Config) {
     for i in 0..NUM_IC_GATEWAYS {
         let ic_gateway_name = format!("ic-gateway-{}", i);
         IcGatewayVm::new(&ic_gateway_name)
+            .with_required_host_features(vec![HostFeature::Performance])
             .start(&env)
             .expect("failed to setup ic-gateway");
     }

@@ -82,6 +82,13 @@ impl VectorVm {
         self
     }
 
+    pub fn with_required_host_features(mut self, required_host_features: Vec<HostFeature>) -> Self {
+        self.universal_vm = self
+            .universal_vm
+            .with_required_host_features(required_host_features);
+        self
+    }
+
     pub fn start(&self, env: &TestEnv) -> anyhow::Result<()> {
         let logger = env.logger();
 

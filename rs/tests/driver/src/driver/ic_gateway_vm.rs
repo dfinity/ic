@@ -79,6 +79,13 @@ impl IcGatewayVm {
         Self { universal_vm }
     }
 
+    pub fn with_required_host_features(mut self, required_host_features: Vec<HostFeature>) -> Self {
+        self.universal_vm = self
+            .universal_vm
+            .with_required_host_features(required_host_features);
+        self
+    }
+
     pub fn disable_ipv4(mut self) -> Self {
         self.universal_vm.has_ipv4 = false;
         self
