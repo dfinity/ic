@@ -1,5 +1,5 @@
 use crate::stable_memory::{RegistryDataStableMemory, StorableRegistryKey, StorableRegistryValue};
-use crate::{CanisterRegistryClient, CanisterRegistryClientExt};
+use crate::CanisterRegistryClient;
 use async_trait::async_trait;
 use ic_cdk::println;
 use ic_interfaces_registry::{
@@ -243,25 +243,6 @@ impl<S: RegistryDataStableMemory> CanisterRegistryClient for StableCanisterRegis
 
     fn timestamp_to_versions_map(&self) -> BTreeMap<u64, HashSet<RegistryVersion>> {
         self.timestamp_to_versions_map.read().unwrap().clone()
-    }
-}
-
-impl<S: RegistryDataStableMemory> CanisterRegistryClientExt for StableCanisterRegistryClient<S> {
-    fn with_registry_map<R>(
-        &self,
-        callback: impl for<'b> FnOnce(Box<dyn Iterator<Item = crate::RegistryRecord> + 'b>) -> R,
-    ) -> R {
-        S::with_registry_map(|local_registry| {
-            let iter = local_registry.iter().map(|(k, v)| {
-                (
-                    k.key,
-                    RegistryVersion::from(k.version),
-                    k.timestamp_nanoseconds,
-                    v.0,
-                )
-            });
-            callback(Box::new(iter))
-        })
     }
 }
 

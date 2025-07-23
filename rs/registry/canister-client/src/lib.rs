@@ -110,20 +110,6 @@ pub trait CanisterRegistryClient {
     fn timestamp_to_versions_map(&self) -> BTreeMap<UnixTsNanos, HashSet<RegistryVersion>>;
 }
 
-pub trait CanisterRegistryClientExt: CanisterRegistryClient {
-    fn with_registry_map<R>(
-        &self,
-        callback: impl for<'b> FnOnce(Box<dyn Iterator<Item = RegistryRecord> + 'b>) -> R,
-    ) -> R;
-}
-
-pub type RegistryRecord = (
-    String,          // Key
-    RegistryVersion, // Version
-    UnixTsNanos,     // Timestamp when the version was added
-    Option<Vec<u8>>, // Value
-);
-
 // Helpers
 
 /// Get the decoded value of a key from the registry.

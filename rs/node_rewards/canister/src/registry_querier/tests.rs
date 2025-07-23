@@ -241,7 +241,7 @@ fn test_nodes_in_registry_returns_expected_days() {
     // - node_3 appears on 2025-07-11
     let from = ts("2025-07-03").into();
     let to = ts("2025-07-16").into();
-    let nodes_map = RegistryQuerier::nodes_in_registry_between(&REGISTRY_STORE, from, to);
+    let nodes_map = RegistryQuerier::nodes_in_registry_between::<DummyState>(from, to);
 
     let node_1_id = NodeId::from(PrincipalId::new_node_test_id(1));
     let node_2_id = NodeId::from(PrincipalId::new_node_test_id(2));
@@ -297,9 +297,11 @@ fn test_rewardable_nodes_deleted_nodes() {
     let to = ts("2025-07-13");
     let reward_period = RewardPeriod::new(from, to).expect("Failed to create reward period");
 
-    let mut rewardables =
-        RegistryQuerier::get_rewardable_nodes_per_provider(&REGISTRY_STORE, reward_period)
-            .expect("Failed to fetch rewardable nodes");
+    let mut rewardables = RegistryQuerier::get_rewardable_nodes_per_provider::<DummyState>(
+        &REGISTRY_STORE,
+        reward_period,
+    )
+    .expect("Failed to fetch rewardable nodes");
 
     let np_1_id = PrincipalId::new_user_test_id(20);
     let np_1_rewardables = rewardables
@@ -339,9 +341,11 @@ fn test_rewardable_nodes_rewardables_till_deleted() {
     let to = ts("2025-07-12");
     let reward_period = RewardPeriod::new(from, to).expect("Failed to create reward period");
 
-    let mut rewardables =
-        RegistryQuerier::get_rewardable_nodes_per_provider(&REGISTRY_STORE, reward_period)
-            .expect("Failed to fetch rewardable nodes");
+    let mut rewardables = RegistryQuerier::get_rewardable_nodes_per_provider::<DummyState>(
+        &REGISTRY_STORE,
+        reward_period,
+    )
+    .expect("Failed to fetch rewardable nodes");
 
     let np_1_id = PrincipalId::new_user_test_id(20);
     let np_1_rewardables = rewardables
@@ -399,9 +403,11 @@ fn test_node_re_registered_after_deletion() {
     let to = ts("2025-07-12");
     let reward_period = RewardPeriod::new(from, to).expect("Failed to create reward period");
 
-    let mut rewardables =
-        RegistryQuerier::get_rewardable_nodes_per_provider(&REGISTRY_STORE, reward_period)
-            .expect("Failed to fetch rewardables");
+    let mut rewardables = RegistryQuerier::get_rewardable_nodes_per_provider::<DummyState>(
+        &REGISTRY_STORE,
+        reward_period,
+    )
+    .expect("Failed to fetch rewardables");
 
     let np_1_id = PrincipalId::new_user_test_id(20);
     let np_1_rewardables = rewardables

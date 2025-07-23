@@ -19,7 +19,7 @@ impl Storable for StorableRegistryValue {
     const BOUND: Bound = Bound::Unbounded;
 }
 
-#[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Default)]
+#[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Default, Debug)]
 pub struct StorableRegistryKey {
     pub key: String,
     pub version: u64,
