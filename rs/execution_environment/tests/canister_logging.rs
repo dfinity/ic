@@ -1,5 +1,6 @@
 use ic_base_types::PrincipalId;
 use ic_config::execution_environment::Config as ExecutionConfig;
+use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SubnetConfig;
 use ic_management_canister_types_private::{
     self as ic00, BoundedAllowedViewers, CanisterIdRecord, CanisterInstallMode, CanisterLogRecord,
@@ -11,7 +12,7 @@ use ic_state_machine_tests::{
     ErrorCode, StateMachine, StateMachineBuilder, StateMachineConfig, SubmitIngressError, UserError,
 };
 use ic_test_utilities::universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
-use ic_test_utilities_execution_environment::{get_reply, wat_canister, wat_fn};
+use ic_test_utilities_execution_environment::{get_reject, get_reply, wat_canister, wat_fn};
 use ic_test_utilities_metrics::{fetch_histogram_stats, fetch_histogram_vec_stats, labels};
 use ic_types::{
     ingress::WasmResult, CanisterId, Cycles, NumInstructions, MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE,
@@ -28,6 +29,8 @@ const B: u64 = 1_000_000_000;
 const MAX_INSTRUCTIONS_PER_ROUND: NumInstructions = NumInstructions::new(5 * B);
 const MAX_INSTRUCTIONS_PER_MESSAGE: NumInstructions = NumInstructions::new(20 * B);
 const MAX_INSTRUCTIONS_PER_SLICE: NumInstructions = NumInstructions::new(B);
+
+const CANISTER_INIT_CYCLES: Cycles = Cycles::new(301_000_000_000_u128);
 
 fn system_time_to_nanos(t: SystemTime) -> u64 {
     t.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos() as u64
@@ -70,45 +73,48 @@ fn readable_logs_without_backtraces(
         .collect()
 }
 
-fn setup(settings: CanisterSettingsArgs) -> (StateMachine, CanisterId) {
+fn setup_env() -> StateMachine {
     let subnet_type = SubnetType::Application;
     let mut subnet_config = SubnetConfig::new(subnet_type);
     subnet_config.scheduler_config.max_instructions_per_round = MAX_INSTRUCTIONS_PER_ROUND;
     subnet_config.scheduler_config.max_instructions_per_message = MAX_INSTRUCTIONS_PER_MESSAGE;
     subnet_config.scheduler_config.max_instructions_per_slice = MAX_INSTRUCTIONS_PER_SLICE;
     let config = StateMachineConfig::new(subnet_config, ExecutionConfig::default());
-    let env = StateMachineBuilder::new()
+    StateMachineBuilder::new()
         .with_config(Some(config))
         .with_subnet_type(subnet_type)
         .with_checkpoints_enabled(false)
-        .build();
-    let canister_id =
-        env.create_canister_with_cycles(None, Cycles::from(301_000_000_000_u128), Some(settings));
-
-    (env, canister_id)
+        .build()
 }
 
-fn setup_and_install_wasm(
+fn create_canister(env: &StateMachine, settings: CanisterSettingsArgs) -> CanisterId {
+    env.create_canister_with_cycles(None, CANISTER_INIT_CYCLES, Some(settings))
+}
+
+fn create_and_install_canister(
+    env: &StateMachine,
     settings: CanisterSettingsArgs,
     wasm: Vec<u8>,
-) -> (StateMachine, CanisterId) {
-    let (env, canister_id) = setup(settings);
+) -> CanisterId {
+    let canister_id = create_canister(env, settings);
     env.install_wasm_in_mode(canister_id, CanisterInstallMode::Install, wasm, vec![])
         .unwrap();
-
-    (env, canister_id)
+    canister_id
 }
 
 fn setup_with_controller(wasm: Vec<u8>) -> (StateMachine, CanisterId, PrincipalId) {
-    let controller = PrincipalId::new_user_test_id(42);
-    let (env, canister_id) = setup_and_install_wasm(
+    let user_controller = PrincipalId::new_user_test_id(42);
+    let env = setup_env();
+    let canister_id = create_and_install_canister(
+        &env,
         CanisterSettingsArgsBuilder::new()
             .with_log_visibility(LogVisibilityV2::Controllers)
-            .with_controllers(vec![controller])
+            .with_controllers(vec![user_controller])
             .build(),
         wasm,
     );
-    (env, canister_id, controller)
+
+    (env, canister_id, user_controller)
 }
 
 fn restart_node(env: StateMachine) -> StateMachine {
@@ -133,7 +139,9 @@ fn fetch_canister_logs(
 
 #[test]
 fn test_fetch_canister_logs_via_submit_ingress() {
-    let (env, canister_id) = setup_and_install_wasm(
+    let env = setup_env();
+    let canister_id = create_and_install_canister(
+        &env,
         CanisterSettingsArgsBuilder::new()
             .with_log_visibility(LogVisibilityV2::Public)
             .build(),
@@ -157,7 +165,9 @@ fn test_fetch_canister_logs_via_submit_ingress() {
 #[test]
 fn test_fetch_canister_logs_via_execute_ingress() {
     // Test fetch_canister_logs API call results.
-    let (env, canister_id) = setup_and_install_wasm(
+    let env = setup_env();
+    let canister_id = create_and_install_canister(
+        &env,
         CanisterSettingsArgsBuilder::new()
             .with_log_visibility(LogVisibilityV2::Public)
             .build(),
@@ -181,7 +191,9 @@ fn test_fetch_canister_logs_via_execute_ingress() {
 #[test]
 fn test_fetch_canister_logs_via_query_call() {
     // Test fetch_canister_logs API call results.
-    let (env, canister_id) = setup_and_install_wasm(
+    let env = setup_env();
+    let canister_id = create_and_install_canister(
+        &env,
         CanisterSettingsArgsBuilder::new()
             .with_log_visibility(LogVisibilityV2::Public)
             .build(),
@@ -225,6 +237,51 @@ fn test_metrics_for_fetch_canister_logs_via_query_call() {
 }
 
 #[test]
+fn test_fetch_canister_logs_via_inter_canister_query_call() {
+    let env = setup_env();
+    let canister_a = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new().build(),
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+    );
+    let canister_b = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_visibility(LogVisibilityV2::Public)
+            .build(),
+        wat_canister()
+            .update("test", wat_fn().debug_print(b"message"))
+            .build_wasm(),
+    );
+    // Record some logs in canister_b.
+    let _ = env.execute_ingress(canister_b, "test", vec![]);
+
+    let result = env.execute_ingress(
+        canister_a,
+        "update",
+        wasm()
+            .call_with_cycles(
+                CanisterId::ic_00(),
+                "fetch_canister_logs",
+                call_args()
+                    .other_side(FetchCanisterLogsRequest::new(canister_b).encode())
+                    .on_reject(wasm().reject_message().reject()),
+                Cycles::new(2_000_000),
+            )
+            .build(),
+    );
+    let reject_message = get_reject(result);
+    let expected_message =
+        "fetch_canister_logs API is only accessible to end users in non-replicated mode";
+    assert!(
+        reject_message.contains(expected_message),
+        "Expected: {}\nActual: {}",
+        expected_message,
+        reject_message
+    );
+}
+
+#[test]
 fn test_fetch_canister_logs_via_composite_query_call() {
     // Test that fetch_canister_logs API is not accessible via composite query call.
     // There are 3 actors with the following controller relatioship: user -> canister_a -> canister_b.
@@ -232,15 +289,21 @@ fn test_fetch_canister_logs_via_composite_query_call() {
     let (env, canister_a, user) = setup_with_controller(UNIVERSAL_CANISTER_WASM.to_vec());
 
     // Create canister_b controlled by canister_a.
-    let canister_b = env.create_canister_with_cycles(
-        None,
-        Cycles::from(100_000_000_000_u128),
-        Some(
-            CanisterSettingsArgsBuilder::new()
-                .with_controllers(vec![canister_a.get()])
-                .build(),
-        ),
+    let canister_b = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_controllers(vec![canister_a.get()])
+            .build(),
+        wat_canister()
+            .update("test", wat_fn().debug_print(b"message"))
+            .build_wasm(),
     );
+    // Record some logs in canister_b.
+    let _ = env.execute_ingress(canister_b, "test", vec![]);
+
+    println!("ABC user: {user:?}");
+    println!("ABC canister_a: {canister_a:?}");
+    println!("ABC canister_b: {canister_b:?}");
 
     // User attempts to fetch logs of canister_b via canister_a.
     let actual_result = env.query_as(
@@ -318,7 +381,9 @@ fn test_log_visibility_of_fetch_canister_logs() {
         ),
     ];
     for (log_visibility, sender, expected_result) in test_cases {
-        let (env, canister_id) = setup_and_install_wasm(
+        let env = setup_env();
+        let canister_id = create_and_install_canister(
+            &env,
             CanisterSettingsArgsBuilder::new()
                 .with_log_visibility(log_visibility.clone())
                 .with_controllers(vec![controller])
@@ -820,7 +885,9 @@ fn test_logging_debug_print_persists_over_upgrade() {
 
 #[test]
 fn test_logging_trap_at_install_start() {
-    let (env, canister_id) = setup(
+    let env = setup_env();
+    let canister_id = create_canister(
+        &env,
         CanisterSettingsArgsBuilder::new()
             .with_log_visibility(LogVisibilityV2::Public)
             .build(),
@@ -853,7 +920,9 @@ fn test_logging_trap_at_install_start() {
 
 #[test]
 fn test_logging_trap_at_install_init() {
-    let (env, canister_id) = setup(
+    let env = setup_env();
+    let canister_id = create_canister(
+        &env,
         CanisterSettingsArgsBuilder::new()
             .with_log_visibility(LogVisibilityV2::Public)
             .build(),
