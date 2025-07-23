@@ -499,9 +499,11 @@ async fn resume_killed_instance_impl(allow_incomplete_state: Option<bool>) -> Re
         if start.elapsed() > Duration::from_secs(300) {
             panic!("Timed out waiting for a checkpoint to be written to disk.");
         }
-        // Check if the expected checkpoint dir exists and is not empty.
-        if let Ok(mut dir) = std::fs::read_dir(&expected_checkpoint_dir) {
-            if dir.next().is_some() {
+        // Check if the expected checkpoint dir exists and does not contain the "unverified checkpoint marker".
+        if std::fs::read_dir(&expected_checkpoint_dir).is_ok() {
+            let unverified_checkpoint_marker =
+                expected_checkpoint_dir.join("unverified_checkpoint_marker");
+            if !unverified_checkpoint_marker.is_file() {
                 break;
             }
         }
