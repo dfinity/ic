@@ -2,8 +2,8 @@ use ic_base_types::{EnvironmentVariables, NumBytes, NumSeconds};
 use ic_error_types::{ErrorCode, UserError};
 use ic_management_canister_types_private::{CanisterSettingsArgs, LogVisibilityV2};
 use ic_types::{
-    batch::CanisterCyclesCostSchedule, ComputeAllocation, Cycles, InvalidComputeAllocationError,
-    InvalidMemoryAllocationError, MemoryAllocation, PrincipalId,
+    ComputeAllocation, Cycles, InvalidComputeAllocationError, InvalidMemoryAllocationError,
+    MemoryAllocation, PrincipalId,
 };
 use num_traits::cast::ToPrimitive;
 use std::collections::BTreeMap;

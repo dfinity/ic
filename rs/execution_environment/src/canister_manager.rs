@@ -299,6 +299,7 @@ impl CanisterManager {
         canister_freezing_threshold: NumSeconds,
         canister_cycles_balance: Cycles,
         subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
         canister_reserved_balance: Cycles,
         canister_reserved_balance_limit: Option<Cycles>,
     ) -> Result<ValidatedCanisterSettings, CanisterManagerError> {
@@ -388,6 +389,7 @@ impl CanisterManager {
             canister_message_memory_usage,
             new_compute_allocation,
             subnet_size,
+            cost_schedule,
             canister_reserved_balance,
         );
 
@@ -421,6 +423,7 @@ impl CanisterManager {
             allocated_bytes,
             subnet_memory_saturation,
             subnet_size,
+            cost_schedule,
         );
         let reserved_balance_limit = settings
             .reserved_cycles_limit()
