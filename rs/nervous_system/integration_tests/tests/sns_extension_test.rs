@@ -315,7 +315,7 @@ async fn test_treasury_manager() {
             withdraw_accounts: Some(ledger_id_to_account),
         };
 
-        let response = PocketIcAgent::new(&pocket_ic, sns.root.canister_id)
+        let _response = PocketIcAgent::new(&pocket_ic, sns.root.canister_id)
             .call(adaptor_canister_id, request)
             .await
             .unwrap()
