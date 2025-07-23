@@ -326,14 +326,12 @@ pub fn recovery_upgrader_test(env: TestEnv) {
             "Host boot ID pre reboot: '{}'", host_boot_id_pre_reboot
         );
 
-        // First, let's check if the boot_args file exists and see its current content
         info!(logger, "Checking current boot_args file content");
         let current_boot_args = host
             .block_on_bash_script("cat /boot/boot_args")
             .expect("Failed to read /boot/boot_args file");
         info!(logger, "Current boot_args content:\n{}", current_boot_args);
 
-        // Get the guestos update image version and hash
         let target_version =
             get_guestos_update_img_version().expect("Failed to get target guestos version");
         let target_short_hash =
@@ -344,7 +342,6 @@ pub fn recovery_upgrader_test(env: TestEnv) {
             "Using target version: {} and short hash: {}", target_version, target_short_hash
         );
 
-        // Remount /boot as read-write and update the boot_args file
         info!(
             logger,
             "Remounting /boot as read-write and updating boot_args file"
@@ -357,30 +354,15 @@ pub fn recovery_upgrader_test(env: TestEnv) {
             .expect("Failed to update boot_args file");
         info!(logger, "Boot_args file updated successfully.");
 
-        // Verify the update worked
         info!(logger, "Verifying boot_args file contents");
         let updated_boot_args = host
             .block_on_bash_script("cat /boot/boot_args")
             .expect("Failed to read updated /boot/boot_args file");
         info!(logger, "Updated boot_args content:\n{}", updated_boot_args);
 
-        // Now reboot the host
         info!(logger, "Rebooting the host");
-        let reboot_result = host.block_on_bash_script("sudo reboot");
-        match reboot_result {
-            Ok(output) => {
-                info!(
-                    logger,
-                    "Reboot command sent successfully. Output: {}", output
-                );
-            }
-            Err(e) => {
-                info!(
-                    logger,
-                    "Reboot command execution (connection may be terminated by reboot): {}", e
-                );
-            }
-        }
+        host.block_on_bash_script("sudo reboot")
+            .expect("Failed to send reboot command (connection may be terminated by reboot)");
 
         info!(logger, "Waiting for host to reboot...");
 
@@ -516,7 +498,7 @@ pub fn upgrade_guestos(env: TestEnv) {
             || async {
                 let current_version = check_guestos_version(&client, &guest_ipv6)
                     .await
-                    .unwrap_or("unavaiblable".to_string());
+                    .unwrap_or("unavailable".to_string());
                 if current_version == original_version {
                     info!(logger, "Guest upgraded to '{}'", current_version);
                     Ok(())
