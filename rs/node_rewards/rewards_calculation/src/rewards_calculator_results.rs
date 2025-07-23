@@ -1,9 +1,11 @@
 use crate::types::{RewardPeriod, RewardPeriodError, UnixTsNanos, NANOS_PER_DAY};
+use chrono::DateTime;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use rust_decimal::Decimal;
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::fmt;
+use std::fmt::Display;
 
 pub type XDRPermyriad = Decimal;
 pub type Percent = Decimal;
@@ -21,6 +23,17 @@ impl From<UnixTsNanos> for DayUTC {
 impl Default for DayUTC {
     fn default() -> Self {
         DayUTC::from(0)
+    }
+}
+
+impl Display for DayUTC {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let dd_mm_yyyy = DateTime::from_timestamp_nanos(self.unix_ts_at_day_end() as i64)
+            .naive_utc()
+            .format("%d-%m-%Y")
+            .to_string();
+
+        write!(f, "{}", dd_mm_yyyy)
     }
 }
 
@@ -66,6 +79,7 @@ impl DayUTC {
 #[derive(Clone, PartialEq, Debug)]
 pub struct NodeMetricsDaily {
     pub subnet_assigned: SubnetId,
+    pub subnet_assigned_fr: Percent,
     pub num_blocks_proposed: u64,
     pub num_blocks_failed: u64,
     /// The failure rate before subnet failure rate reduction.
@@ -98,6 +112,7 @@ pub struct NodeResults {
 
 pub struct NodeProviderResults {
     pub rewards_total: XDRPermyriad,
+    pub computation_log: String,
     pub node_results: BTreeMap<NodeId, NodeResults>,
 }
 
