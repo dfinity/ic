@@ -34,7 +34,7 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::{
     io::Read,
     sync::OnceLock,
-    time::{Duration, SystemTime},
+    time::{Duration, Instant, SystemTime},
 };
 use tempfile::{NamedTempFile, TempDir};
 #[cfg(windows)]
@@ -477,9 +477,33 @@ async fn resume_killed_instance_impl(allow_incomplete_state: Option<bool>) -> Re
 
     let canister_id = pic.create_canister().await;
 
-    // Execute many rounds to trigger a checkpoint.
-    for _ in 0..600 {
+    // Execute sufficiently many rounds to trigger a checkpoint.
+    let expected_checkpoint_height = 500;
+    for _ in 0..expected_checkpoint_height {
         pic.tick().await;
+    }
+
+    // Wait until the checkpoint is written to disk.
+    let topology = pic.topology().await;
+    let subnet_id = topology.get_app_subnets()[0];
+    let subnet_seed = hex::encode(topology.subnet_configs.get(&subnet_id).unwrap().subnet_seed);
+    let expected_checkpoint_dir = temp_dir
+        .path()
+        .join(subnet_seed)
+        .join("checkpoints")
+        .join(format!("{:016x}", expected_checkpoint_height));
+    let start = Instant::now();
+    loop {
+        if start.elapsed() > Duration::from_secs(300) {
+            panic!("Timed out waiting for a checkpoint to be written to disk.");
+        }
+        // Check if the expected checkpoint dir exists and is not empty.
+        if let Ok(mut dir) = std::fs::read_dir(&expected_checkpoint_dir) {
+            if dir.next().is_some() {
+                break;
+            }
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
     }
 
     // The following (most recent) changes will be lost after killing the instance.

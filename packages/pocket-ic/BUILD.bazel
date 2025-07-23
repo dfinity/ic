@@ -87,6 +87,7 @@ rust_test_suite(
         "TEST_WASM": "$(rootpath //packages/pocket-ic/test_canister:test_canister.wasm.gz)",
     },
     proc_macro_deps = MACRO_DEPENDENCIES,
+    flaky = True,
     tags = [
         "cpu:16",
         # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
