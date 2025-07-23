@@ -746,7 +746,6 @@ fn test_multi_tokens_mode_with_all_ledgers_out_of_cycles() {
             offline: false,
             symbol: None,
             decimals: None,
-            port_file_timeout_retries: Some(60u64),
             ..RosettaOptions::default()
         },
     ));

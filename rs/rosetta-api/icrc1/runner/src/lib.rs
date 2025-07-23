@@ -9,11 +9,6 @@ use tokio::time::{sleep, Duration};
 
 pub const DEFAULT_DECIMAL_PLACES: u8 = 8;
 pub const DEFAULT_TOKEN_SYMBOL: &str = "XTST";
-/// The number of retries, with 100ms sleep between each retry, to wait for the rosetta server to
-/// start up. The default is 600 retries, which is 60 seconds in total. However, 60s is also the TTL
-/// for the PocketIC server, and if the PocketIC server dies before a test ends, then the test
-/// cleanup may fail (stopping PocketIC live mode fails), leading the test to fail.
-pub const DEFAULT_STARTUP_RETRIES: u64 = 600;
 
 struct KillOnDrop(Child);
 pub struct RosettaContext {
@@ -54,8 +49,6 @@ pub struct RosettaOptions {
     pub multi_tokens: Option<String>,
 
     pub multi_tokens_store_dir: Option<String>,
-
-    pub port_file_timeout_retries: Option<u64>,
 }
 
 impl Default for RosettaOptions {
@@ -71,7 +64,6 @@ impl Default for RosettaOptions {
             decimals: Some(DEFAULT_DECIMAL_PLACES.into()),
             multi_tokens: None,
             multi_tokens_store_dir: None,
-            port_file_timeout_retries: None,
         }
     }
 }
@@ -126,7 +118,7 @@ pub async fn start_rosetta(rosetta_bin: &Path, arguments: RosettaOptions) -> Ros
         command.arg("--exit-on-sync");
     }
 
-    let child_process = command.spawn().unwrap_or_else(|e| {
+    let mut child_process = command.spawn().unwrap_or_else(|e| {
         panic!(
             "Failed to execute ic-icrc-rosetta-bin (path = {}, exists? = {}): {}",
             rosetta_bin.display(),
@@ -135,9 +127,7 @@ pub async fn start_rosetta(rosetta_bin: &Path, arguments: RosettaOptions) -> Ros
         )
     });
 
-    let mut tries_left = arguments
-        .port_file_timeout_retries
-        .unwrap_or(DEFAULT_STARTUP_RETRIES);
+    let mut tries_left = 600; // 600*100ms = 60s
     let mut maybe_port: Option<u16> = None;
     while tries_left > 0 {
         if port_file.exists() {
@@ -150,6 +140,11 @@ pub async fn start_rosetta(rosetta_bin: &Path, arguments: RosettaOptions) -> Ros
                 Err(e) => {
                     println!("Expected port in port file, got {}: {}", port_str, e);
                 }
+            }
+        } else {
+            if let Some(exit_status) = child_process.try_wait().unwrap() {
+                println!("Rosetta exited with status: {}", exit_status);
+                break;
             }
         }
         sleep(Duration::from_millis(100)).await;
