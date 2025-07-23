@@ -472,6 +472,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "derive-new": crate.spec(
                 version = "^0.7.0",
             ),
+            "devicemapper": crate.spec(
+                version = "0.34",
+            ),
             "dfx-core": crate.spec(
                 version = "^0.1.4",
             ),
@@ -831,6 +834,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "local-ip-address": crate.spec(
                 version = "^0.5.6",
+            ),
+            "loopdev-3": crate.spec(
+                version = "0.5",
             ),
             "lru": crate.spec(
                 version = "^0.7.8",
