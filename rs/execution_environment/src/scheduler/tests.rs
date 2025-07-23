@@ -4167,6 +4167,99 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
 }
 
 #[test]
+fn http_outcalls_free() {
+    let mut test = SchedulerTestBuilder::new().build();
+    let caller_canister = test.create_canister();
+
+    test.state_mut().metadata.own_subnet_features.http_requests = true;
+    test.set_cost_schedule(CanisterCyclesCostSchedule::Free);
+
+    observe_replicated_state_metrics(
+        test.scheduler().own_subnet_id,
+        test.state(),
+        0.into(),
+        &test.scheduler().metrics,
+        &no_op_logger(),
+    );
+
+    let consumed_cycles_before = NominalCycles::from(
+        fetch_gauge(
+            test.metrics_registry(),
+            "replicated_state_consumed_cycles_since_replica_started",
+        )
+        .unwrap() as u128,
+    );
+
+    // Create payload of the request.
+    let url = "https://".to_string();
+    let response_size_limit = 1000u64;
+    let transform_method_name = "transform".to_string();
+    let transform_context = vec![0, 1, 2];
+    let args = CanisterHttpRequestArgs {
+        url,
+        max_response_bytes: Some(response_size_limit),
+        headers: BoundedHttpHeaders::new(vec![]),
+        body: None,
+        method: HttpMethod::GET,
+        transform: Some(TransformContext {
+            function: TransformFunc(candid::Func {
+                principal: caller_canister.get().0,
+                method: transform_method_name,
+            }),
+            context: transform_context,
+        }),
+        is_replicated: None,
+    };
+
+    // Create request to `HttpRequest` method.
+    let payment = Cycles::new(0);
+    let payload = args.encode();
+    test.inject_call_to_ic00(
+        Method::HttpRequest,
+        payload,
+        payment,
+        caller_canister,
+        InputQueueType::RemoteSubnet,
+    );
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // Check that the SubnetCallContextManager contains the request.
+    let canister_http_request_contexts = &test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .canister_http_request_contexts;
+    assert_eq!(canister_http_request_contexts.len(), 1);
+
+    let http_request_context = canister_http_request_contexts
+        .get(&CallbackId::from(0))
+        .unwrap();
+
+    let fee = test.http_request_fee(
+        http_request_context.variable_parts_size(),
+        Some(NumBytes::from(response_size_limit)),
+    );
+
+    observe_replicated_state_metrics(
+        test.scheduler().own_subnet_id,
+        test.state(),
+        0.into(),
+        &test.scheduler().metrics,
+        &no_op_logger(),
+    );
+    let consumed_cycles_after = NominalCycles::from(
+        fetch_gauge(
+            test.metrics_registry(),
+            "replicated_state_consumed_cycles_since_replica_started",
+        )
+        .unwrap() as u128,
+    );
+
+    assert_eq!(fee, Cycles::new(0));
+    assert_eq!(consumed_cycles_before, consumed_cycles_after);
+}
+
+#[test]
 fn consumed_cycles_are_updated_from_valid_canisters() {
     let mut test = SchedulerTestBuilder::new().build();
 

@@ -739,6 +739,8 @@ impl CyclesAccountManager {
         self.scale_cost(
             self.config.ecdsa_signature_fee,
             subnet_size,
+            // If ecdsa keys are ever hosted on a rental subnet, this needs to be passed
+            // as an argument from the target subnet, just like subnet_size.
             CanisterCyclesCostSchedule::Normal,
         )
     }
@@ -748,6 +750,8 @@ impl CyclesAccountManager {
         self.scale_cost(
             self.config.schnorr_signature_fee,
             subnet_size,
+            // If schnorr keys are ever hosted on a rental subnet, this needs to be passed
+            // as an argument from the target subnet, just like subnet_size.
             CanisterCyclesCostSchedule::Normal,
         )
     }
@@ -757,6 +761,8 @@ impl CyclesAccountManager {
         self.scale_cost(
             self.config.vetkd_fee,
             subnet_size,
+            // If vetkd keys are ever hosted on a rental subnet, this needs to be passed
+            // as an argument from the target subnet, just like subnet_size.
             CanisterCyclesCostSchedule::Normal,
         )
     }

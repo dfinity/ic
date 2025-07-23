@@ -182,6 +182,11 @@ impl SchedulerTest {
         &self.registry_settings
     }
 
+    pub fn set_cost_schedule(&mut self, cost_schedule: CanisterCyclesCostSchedule) {
+        self.state.as_mut().unwrap().metadata.cost_schedule = cost_schedule;
+        self.registry_settings.canister_cycles_cost_schedule = cost_schedule;
+    }
+
     /// Returns how many instructions were executed by a canister on a thread
     /// and in an execution round. The order of elements is important and
     /// matches the execution order for a fixed thread.
@@ -206,7 +211,7 @@ impl SchedulerTest {
         self.scheduler.cycles_account_manager.execution_cost(
             num_instructions,
             self.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
+            self.state.as_ref().unwrap().metadata.cost_schedule,
             WasmExecutionMode::Wasm32,
         )
     }
@@ -641,7 +646,7 @@ impl SchedulerTest {
             request_size,
             response_size_limit,
             self.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
+            self.state.as_ref().unwrap().metadata.cost_schedule,
         )
     }
 
@@ -650,7 +655,7 @@ impl SchedulerTest {
             bytes,
             duration,
             self.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
+            self.state.as_ref().unwrap().metadata.cost_schedule,
         )
     }
 
@@ -1357,7 +1362,7 @@ impl TestWasmExecutorCore {
             .cycles_account_manager
             .prepayment_for_response_execution(
                 self.subnet_size,
-                CanisterCyclesCostSchedule::Normal,
+                system_state.cost_schedule(),
                 WasmExecutionMode::from_is_wasm64(system_state.is_wasm64_execution),
             );
         let prepayment_for_response_transmission = self
