@@ -684,7 +684,8 @@ impl SystemTestGroup {
                     debug!(logger, ">>> log_fn");
 
                     let setup_dir = group_ctx.group_dir.join(constants::GROUP_SETUP_DIR);
-                    let env = TestEnv::new_without_duplicating_logger(setup_dir, logger.clone());
+                    let env =
+                        TestEnv::new_without_duplicating_logger(setup_dir.clone(), logger.clone());
                     while !setup_dir.exists() || env.prep_dir("").is_none() {
                         info!(logger, "Setup and/or prep directories not created yet.");
                         std::thread::sleep(KEEPALIVE_INTERVAL);

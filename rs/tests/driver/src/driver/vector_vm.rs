@@ -1,12 +1,13 @@
 use std::{
     collections::BTreeMap,
     fs::File,
+    hash::{DefaultHasher, Hash, Hasher},
     net::{IpAddr, SocketAddr},
     path::Path,
 };
 
 use serde::{ser::SerializeStruct, Deserialize, Serialize, Serializer};
-use slog::{info, warn};
+use slog::{debug, info, warn, Logger};
 
 use crate::{
     driver::{
@@ -47,6 +48,7 @@ fn get_vector_toml() -> String {
 pub struct VectorVm {
     universal_vm: UniversalVm,
     container_running: bool,
+    hash: u64,
 }
 
 impl Default for VectorVm {
@@ -70,6 +72,7 @@ impl VectorVm {
                     boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(30)),
                 }),
             container_running: false,
+            hash: 0,
         }
     }
 
@@ -87,6 +90,25 @@ impl VectorVm {
 
         info!(logger, "Spawned vector vm");
         Ok(())
+    }
+
+    fn hash_updated(&mut self, content: &str, logger: &Logger) -> bool {
+        let mut hasher = DefaultHasher::new();
+        content.hash(&mut hasher);
+
+        let new_hash = hasher.finish();
+
+        if new_hash != self.hash {
+            debug!(
+                logger,
+                "Vector targets hash changed from {} to {new_hash}", self.hash
+            );
+
+            self.hash = new_hash;
+            return true;
+        }
+
+        false
     }
 
     pub fn sync_with_vector(&mut self, env: &TestEnv) -> anyhow::Result<()> {
@@ -156,9 +178,6 @@ impl VectorVm {
         info!(log, "Writing vector config to {vector_local_dir:?}");
         std::fs::create_dir_all(&vector_local_dir).map_err(anyhow::Error::from)?;
 
-        std::fs::write(vector_local_dir.join("vector.toml"), get_vector_toml())
-            .map_err(anyhow::Error::from)?;
-
         let mut generated_config = BTreeMap::new();
         generated_config.insert(
             "sources".to_string(),
@@ -169,11 +188,21 @@ impl VectorVm {
             serde_json::to_value(&transforms).unwrap(),
         );
 
+        let generated_content = serde_json::to_string_pretty(&generated_config).unwrap();
+
+        if !self.hash_updated(&generated_content, &log) {
+            debug!(log, "Skipping updating vector targets.");
+            return Ok(());
+        }
+
         std::fs::write(
             vector_local_dir.join("generated_config.json"),
-            serde_json::to_string_pretty(&generated_config).unwrap(),
+            &generated_content,
         )
         .map_err(anyhow::Error::from)?;
+
+        std::fs::write(vector_local_dir.join("vector.toml"), get_vector_toml())
+            .map_err(anyhow::Error::from)?;
 
         let deployed_vm = env.get_deployed_universal_vm("vector").unwrap();
         let session = deployed_vm
