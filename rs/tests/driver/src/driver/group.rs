@@ -66,6 +66,7 @@ const DEBUG_KEEPALIVE_TASK_NAME: &str = "debug_keepalive";
 const REPORT_TASK_NAME: &str = "report";
 const KEEPALIVE_TASK_NAME: &str = "keepalive";
 const UVMS_LOGS_STREAM_TASK_NAME: &str = "uvms_logs_stream";
+const VECTOR_TASK_NAME: &str = "vector_logging";
 const SETUP_TASK_NAME: &str = "setup";
 const LIFETIME_GUARD_TASK_PREFIX: &str = "lifetime_guard_";
 pub const COLOCATE_CONTAINER_NAME: &str = "system_test";
@@ -197,7 +198,7 @@ impl TestEnvAttribute for SetupResult {
 }
 
 pub fn is_task_visible_to_user(task_id: &TaskId) -> bool {
-    matches!(task_id, TaskId::Test(task_name) if task_name.ne(REPORT_TASK_NAME) && task_name.ne(KEEPALIVE_TASK_NAME) && task_name.ne(UVMS_LOGS_STREAM_TASK_NAME) && !task_name.starts_with(LIFETIME_GUARD_TASK_PREFIX) && !task_name.starts_with("dummy("))
+    matches!(task_id, TaskId::Test(task_name) if task_name.ne(REPORT_TASK_NAME) && task_name.ne(KEEPALIVE_TASK_NAME) && task_name.ne(UVMS_LOGS_STREAM_TASK_NAME) && task_name.ne(VECTOR_TASK_NAME) && !task_name.starts_with(LIFETIME_GUARD_TASK_PREFIX) && !task_name.starts_with("dummy("))
 }
 
 pub struct ComposeContext<'a> {
@@ -670,7 +671,7 @@ impl SystemTestGroup {
             Box::from(EmptyTask::new(keepalive_task_id)) as Box<dyn Task>
         };
 
-        let logging_task_id = TaskId::Test(String::from("vector-logging"));
+        let logging_task_id = TaskId::Test(String::from(VECTOR_TASK_NAME));
         let log_task = if group_ctx.logs_enabled {
             let logger = group_ctx.logger().clone();
             let group_ctx = group_ctx.clone();
