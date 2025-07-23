@@ -156,7 +156,7 @@ fn client_for_tests() -> RegistryQuerier {
     }
 }
 
-fn node_rewardable_days(rewardable_nodes: &Vec<RewardableNode>, node_id: u64) -> Vec<DayUTC> {
+fn node_rewardable_days(rewardable_nodes: &[RewardableNode], node_id: u64) -> Vec<DayUTC> {
     let node_id = NodeId::from(PrincipalId::new_node_test_id(node_id));
 
     rewardable_nodes
