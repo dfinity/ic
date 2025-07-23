@@ -256,7 +256,7 @@ class BazelRustDependencyManager(DependencyManager):
         path = self.root.parent / project.path
 
         # currently only the ic repo uses bazel
-        use_bazel = repository_name == "ic"
+        use_bazel = repository_name == "ic" or repository_name == "utopia"
         if use_bazel:
             logging.info("Performing cargo audit on old Cargo.lock")
             old_cargo_audit = self.executor.get_cargo_audit_output(path)
@@ -264,8 +264,8 @@ class BazelRustDependencyManager(DependencyManager):
 
             # move Cargo.Bazel.toml.lock to Cargo.lock
             logging.info("Moving Cargo.Bazel.toml.lock to Cargo.lock")
-            src = self.root / "Cargo.Bazel.toml.lock"
-            dst = self.root / "Cargo.lock"
+            src = path / "Cargo.Bazel.toml.lock"
+            dst = path / "Cargo.lock"
 
             if src.is_file() and dst.is_file():
                 shutil.copy(src, dst)
