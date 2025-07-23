@@ -1,6 +1,6 @@
 use std::io::Read;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use ic_canister_client::Sender;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::NeuronId;
@@ -29,6 +29,7 @@ use ic_system_test_driver::{
         submit_update_nodes_hostos_version_proposal,
         submit_update_unassigned_node_version_proposal, vote_execute_proposal_assert_executed,
     },
+    retry_with_msg_async,
     util::runtime_from_url,
 };
 use ic_types::{hostos_version::HostosVersion, NodeId, ReplicaVersion};
@@ -36,8 +37,9 @@ use prost::Message;
 use regex::Regex;
 use reqwest::Client;
 use std::net::Ipv6Addr;
+use std::time::Duration;
 
-use slog::info;
+use slog::{info, Logger};
 
 /// Use an SSH channel to check the version on the running HostOS.
 pub(crate) fn check_hostos_version(node: &NestedVm) -> String {
@@ -300,4 +302,68 @@ pub(crate) fn start_nested_vm(env: TestEnv) {
     let group_name: String = group_setup.infra_group_name;
 
     start_nested_vms(&env, &farm, &group_name).expect("Unable to start nested VMs.");
+}
+
+/// Wait for the guest to return any available version (not "unavailable").
+/// Returns the version string when available.
+pub async fn wait_for_guest_version(
+    client: &Client,
+    guest_ipv6: &Ipv6Addr,
+    logger: &Logger,
+    timeout: Duration,
+    backoff: Duration,
+) -> Result<String> {
+    retry_with_msg_async!(
+        "Waiting until the guest returns a version",
+        logger,
+        timeout,
+        backoff,
+        || async {
+            let current_version = check_guestos_version(client, guest_ipv6)
+                .await
+                .unwrap_or("unavailable".to_string());
+            if current_version != "unavailable" {
+                info!(logger, "Guest reported version '{}'", current_version);
+                Ok(current_version)
+            } else {
+                bail!("Guest version is still unavailable")
+            }
+        }
+    )
+    .await
+}
+
+/// Wait for the guest to reach a specific target version.
+pub async fn wait_for_target_guest_version(
+    client: &Client,
+    guest_ipv6: &Ipv6Addr,
+    target_version: &str,
+    logger: &Logger,
+    timeout: Duration,
+    backoff: Duration,
+) -> Result<()> {
+    retry_with_msg_async!(
+        format!(
+            "Waiting until the guest is on the target version '{}'",
+            target_version
+        ),
+        logger,
+        timeout,
+        backoff,
+        || async {
+            let current_version = check_guestos_version(client, guest_ipv6)
+                .await
+                .unwrap_or("unavailable".to_string());
+            if current_version == target_version {
+                info!(
+                    logger,
+                    "Guest is now on target version '{}'", current_version
+                );
+                Ok(())
+            } else {
+                bail!("Guest is still on version '{}'", current_version)
+            }
+        }
+    )
+    .await
 }

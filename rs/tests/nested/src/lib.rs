@@ -14,7 +14,7 @@ use ic_system_test_driver::{
         test_env_api::*,
         vector_vm::VectorVm,
     },
-    retry_with_msg, retry_with_msg_async,
+    retry_with_msg,
     util::block_on,
 };
 use ic_types::{hostos_version::HostosVersion, ReplicaVersion};
@@ -27,6 +27,7 @@ use util::{
     check_guestos_version, check_hostos_version, elect_guestos_version, elect_hostos_version,
     get_blessed_guestos_versions, get_unassigned_nodes_config, setup_nested_vm,
     simple_setup_nested_vm, start_nested_vm, update_nodes_hostos_version, update_unassigned_nodes,
+    wait_for_guest_version, wait_for_target_guest_version,
 };
 
 use anyhow::bail;
@@ -293,22 +294,12 @@ pub fn recovery_upgrader_test(env: TestEnv) {
             .build()
             .expect("Failed to build HTTP client");
 
-        let original_version = retry_with_msg_async!(
-            "Waiting until the guest returns a version",
+        let original_version = wait_for_guest_version(
+            &client,
+            &guest_ipv6,
             &logger,
-            Duration::from_secs(10 * 60), // long wait for setupOS to to install
+            Duration::from_secs(10 * 60), // long wait for setupOS to install
             Duration::from_secs(5),
-            || async {
-                let current_version = check_guestos_version(&client, &guest_ipv6)
-                    .await
-                    .unwrap_or("unavailable".to_string());
-                if current_version != "unavailable" {
-                    info!(logger, "Guest reported version '{}'", current_version);
-                    Ok(current_version)
-                } else {
-                    bail!("Guest version is still unavailable")
-                }
-            }
         )
         .await
         .expect("guest didn't come up as expected");
@@ -391,22 +382,12 @@ pub fn recovery_upgrader_test(env: TestEnv) {
         )
         .unwrap();
 
-        let new_version = retry_with_msg_async!(
-            "Waiting until the guest returns a version",
+        let new_version = wait_for_guest_version(
+            &client,
+            &guest_ipv6,
             &logger,
             Duration::from_secs(5 * 60),
             Duration::from_secs(5),
-            || async {
-                let current_version = check_guestos_version(&client, &guest_ipv6)
-                    .await
-                    .unwrap_or("unavailable".to_string());
-                if current_version != "unavailable" {
-                    info!(logger, "Guest reported version '{}'", current_version);
-                    Ok(current_version)
-                } else {
-                    bail!("Guest version is still unavailable")
-                }
-            }
         )
         .await
         .expect("guest didn't come up as expected");
@@ -487,25 +468,13 @@ pub fn upgrade_guestos(env: TestEnv) {
             .build()
             .expect("Failed to build HTTP client");
 
-        retry_with_msg_async!(
-            format!(
-                "Waiting until the guest is on the right version '{}'",
-                original_version
-            ),
+        wait_for_target_guest_version(
+            &client,
+            &guest_ipv6,
+            &original_version,
             &logger,
             Duration::from_secs(5 * 60),
             Duration::from_secs(5),
-            || async {
-                let current_version = check_guestos_version(&client, &guest_ipv6)
-                    .await
-                    .unwrap_or("unavailable".to_string());
-                if current_version == original_version {
-                    info!(logger, "Guest upgraded to '{}'", current_version);
-                    Ok(())
-                } else {
-                    bail!("Guest is still on version '{}'", current_version)
-                }
-            }
         )
         .await
         .expect("guest didn't come up as expected");
@@ -544,25 +513,13 @@ pub fn upgrade_guestos(env: TestEnv) {
         );
 
         // Check that GuestOS is on the expected version (upgrade version)
-        retry_with_msg_async!(
-            format!(
-                "Waiting until the guest is on the right version '{}'",
-                target_version
-            ),
+        wait_for_target_guest_version(
+            &client,
+            &guest_ipv6,
+            &target_version_str,
             &logger,
             Duration::from_secs(5 * 60),
             Duration::from_secs(5),
-            || async {
-                let current_version = check_guestos_version(&client, &guest_ipv6)
-                    .await
-                    .unwrap_or("unavaiblable".to_string());
-                if current_version == target_version_str {
-                    info!(logger, "Guest upgraded to '{}'", current_version);
-                    Ok(())
-                } else {
-                    bail!("Guest is still on version '{}'", current_version)
-                }
-            }
         )
         .await
         .expect("guest failed to upgrade");
