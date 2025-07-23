@@ -22,7 +22,13 @@ fn new_routing_table(ranges: Vec<((u64, u64), u64)>) -> RoutingTable {
         };
         map.insert(range, subnet_test_id(subnet_id));
     }
-    RoutingTable(map)
+
+    let subnets = map.values().cloned().collect();
+
+    RoutingTable {
+        ranges: map,
+        subnets,
+    }
 }
 
 fn new_canister_migrations(migrations: Vec<((u64, u64), Vec<u64>)>) -> CanisterMigrations {
@@ -235,6 +241,17 @@ fn canister_id_ranges_is_empty_start_end() {
     assert_eq!(2, ranges.len());
     assert_eq!(Some(10.into()), ranges.start());
     assert_eq!(Some(39.into()), ranges.end());
+}
+
+#[test]
+fn canister_id_ranges_contains() {
+    let ranges = new_canister_id_ranges(vec![(5, 10), (12, 15), (17, 17)]);
+    for i in [0, 1, 2, 3, 4, 11, 16, 18, 19, 20] {
+        assert!(!ranges.contains(&CanisterId::from(i)))
+    }
+    for i in [5, 6, 7, 8, 9, 10, 12, 13, 14, 15, 17] {
+        assert!(ranges.contains(&CanisterId::from(i)))
+    }
 }
 
 #[test]
