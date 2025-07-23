@@ -132,6 +132,9 @@ pub struct CliArgs {
         value_parser = CliArgs::parse_host_feature
     )]
     pub required_host_features: Option<Vec<HostFeature>>,
+
+    #[clap(long = "logs", help = "If set, the vector vm will not be spawned.")]
+    pub logs: bool,
 }
 
 impl CliArgs {
@@ -667,12 +670,18 @@ impl SystemTestGroup {
             Box::from(EmptyTask::new(keepalive_task_id)) as Box<dyn Task>
         };
 
-        let log_task = {
+        let logging_task_id = TaskId::Test(String::from("vector-logging"));
+        info!(
+            logger,
+            "Came to here, evaluating if the vector vm should be spawned. Logs enabled value: {}",
+            group_ctx.logs_enabled.to_string()
+        );
+        let log_task = if group_ctx.logs_enabled {
             let logger = group_ctx.logger().clone();
             let group_ctx = group_ctx.clone();
 
             let log_task = subproc(
-                TaskId::Test("vector-logging".to_string()),
+                logging_task_id,
                 move || {
                     debug!(logger, ">>> log_fn");
 
@@ -699,6 +708,9 @@ impl SystemTestGroup {
             );
 
             Box::from(log_task) as Box<dyn Task>
+        } else {
+            debug!(group_ctx.logger(), "Not spawning logs task");
+            Box::from(EmptyTask::new(logging_task_id)) as Box<dyn Task>
         };
 
         let setup_plan = {
@@ -859,6 +871,7 @@ impl SystemTestGroup {
             args.no_farm_keepalive || args.no_group_ttl,
             args.group_base_name,
             args.k8s,
+            args.logs,
         )?;
 
         let with_farm = self.with_farm && !args.k8s;
