@@ -50,6 +50,7 @@ TEST_DEPENDENCIES = [
 rust_library(
     name = "pocket-ic",
     srcs = glob(["src/**/*.rs"]),
+    compile_data = ["README.md"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "9.0.2",
     deps = DEPENDENCIES,
@@ -63,6 +64,7 @@ rust_doc_test(
 rust_test(
     name = "pocket-ic-test",
     srcs = glob(["src/**/*.rs"]),
+    compile_data = ["README.md"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + TEST_DEPENDENCIES,
 )

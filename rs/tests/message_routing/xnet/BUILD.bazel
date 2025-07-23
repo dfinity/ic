@@ -114,7 +114,9 @@ system_test_nns(
         "long_test",
     ],
     test_timeout = "long",
-    uses_guestos_dev_test = True,
+    uses_guestos_img = False,
+    uses_guestos_mainnet_img = True,
+    uses_guestos_update = True,
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         XNET_TEST_CANISTER_RUNTIME_DEPS +

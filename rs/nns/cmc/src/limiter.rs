@@ -1,3 +1,4 @@
+use crate::LIMITER_REJECT_COUNT;
 use candid::CandidType;
 use ic_types::Cycles;
 use serde::{Deserialize, Serialize};
@@ -28,9 +29,35 @@ impl Limiter {
         }
     }
 
+    /// This function clears old events, checks against the provided limit, and returns an
+    /// error if the cycles cannot be added due to exceeding the limit.
+    pub fn check_and_add_cycles(
+        &mut self,
+        now: SystemTime,
+        cycles_to_mint: Cycles,
+        limit: Cycles,
+    ) -> Result<(), String> {
+        self.purge_old(now);
+        let count = self.get_count();
+
+        if count + cycles_to_mint > limit {
+            LIMITER_REJECT_COUNT.with(|count| {
+                count.set(count.get().saturating_add(1));
+            });
+
+            return Err(format!(
+                "More than {} cycles have been minted in the last {} seconds, please try again later.",
+                limit,
+                self.get_max_age().as_secs(),
+            ));
+        }
+        self.add(now, cycles_to_mint);
+        Ok(())
+    }
+
     /// Record a cycles minting event at time `now`. It's expected
     /// that `now` is monotonically non-decreasing.
-    pub fn add(&mut self, now: SystemTime, cycles: Cycles) {
+    fn add(&mut self, now: SystemTime, cycles: Cycles) {
         self.purge_old(now);
 
         let window = self.time_to_window(now);
@@ -53,7 +80,7 @@ impl Limiter {
 
     /// Forget about all cycles minting events older than `now -
     /// self.max_age`.
-    pub fn purge_old(&mut self, now: SystemTime) {
+    fn purge_old(&mut self, now: SystemTime) {
         while let Some(oldest) = self.time_windows.front() {
             if self.window_to_time(oldest.window + 1) + self.max_age <= now {
                 self.total_count -= oldest.count;
@@ -80,7 +107,7 @@ impl Limiter {
         self.total_count
     }
 
-    pub fn get_max_age(&self) -> Duration {
+    fn get_max_age(&self) -> Duration {
         self.max_age
     }
 }
