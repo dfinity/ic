@@ -59,10 +59,6 @@ pub struct BalanceBook {
 }
 
 impl BalanceBook {
-    pub fn validate(&self, other: &Self) -> Result<(), String> {
-        todo!()
-    }
-
     pub fn empty() -> Self {
         Self {
             treasury_owner: None,
