@@ -65,7 +65,7 @@ impl RewardPeriod {
         // the end timestamp is not later than the first ts of today.
         let today: DayUTC = current_time().as_nanos_since_unix_epoch().into();
 
-        if start_day >= today {
+        if end_day >= today {
             return Err(RewardPeriodError::EndTimestampLaterThanToday);
         }
 

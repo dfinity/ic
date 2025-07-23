@@ -107,7 +107,7 @@ pub fn calculate_rewards(
     }
 
     Ok(RewardsCalculatorResults {
-        subnets_fr: subnets_fr.into_iter().map(|(k, v)| (k, v)).collect(),
+        subnets_fr,
         provider_results: results_per_provider,
     })
 }
