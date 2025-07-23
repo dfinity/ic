@@ -71,7 +71,7 @@ pub struct DefiniteCanisterSettings {
     pub wasm_memory_threshold: Option<candid::Nat>,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
 pub struct MemoryMetrics {
     wasm_memory_size: candid::Nat,
     stable_memory_size: candid::Nat,
@@ -122,6 +122,7 @@ pub struct CanisterStatusResultFromManagementCanister {
     pub status: CanisterStatusType,
     pub module_hash: Option<Vec<u8>>,
     pub memory_size: candid::Nat,
+    pub memory_metrics: MemoryMetrics,
     pub settings: DefiniteCanisterSettingsFromManagementCanister,
     pub cycles: candid::Nat,
     pub idle_cycles_burned_per_day: candid::Nat,
@@ -162,6 +163,7 @@ impl From<CanisterStatusResultFromManagementCanister> for CanisterStatusResult {
             status,
             module_hash,
             memory_size,
+            memory_metrics,
             settings,
             cycles,
             idle_cycles_burned_per_day,
@@ -175,10 +177,13 @@ impl From<CanisterStatusResultFromManagementCanister> for CanisterStatusResult {
         let idle_cycles_burned_per_day = Some(idle_cycles_burned_per_day);
         let reserved_cycles = Some(reserved_cycles);
 
+        let memory_metrics = Some(memory_metrics);
+
         CanisterStatusResult {
             status,
             module_hash,
             memory_size,
+            memory_metrics,
             settings,
             cycles,
             idle_cycles_burned_per_day,
