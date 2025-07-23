@@ -205,7 +205,7 @@ impl IngressValidator {
         let ingress_pool_is_full = ingress_throttler.read().unwrap().exceeds_threshold();
         if ingress_pool_is_full {
             Err(HttpError {
-                status: StatusCode::TOO_MANY_REQUESTS,
+                status: StatusCode::SERVICE_UNAVAILABLE,
                 message: "Service is overloaded, try again later.".to_string(),
             })?;
         }
@@ -316,7 +316,7 @@ impl IngressMessageSubmitter {
             .try_send(UnvalidatedArtifactMutation::Insert((message, node_id)))
             .map_err(|err| match err {
                 TrySendError::Full(_) => HttpError {
-                    status: StatusCode::TOO_MANY_REQUESTS,
+                    status: StatusCode::SERVICE_UNAVAILABLE,
                     message: "Service is overloaded, try again later.".to_string(),
                 },
                 TrySendError::Closed(_) => HttpError {
