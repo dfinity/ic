@@ -704,6 +704,54 @@ fn test_multi_tokens_mode_with_one_ledger_out_of_cycles() {
         .unwrap();
 }
 
+#[should_panic = "Error: No metadata loaded for any token."]
+#[test]
+fn test_multi_tokens_mode_with_all_ledgers_out_of_cycles() {
+    let rt = Runtime::new().unwrap();
+    let icrc1_ledger_1_builder = Icrc1LedgerBuilder::new(*TEST_LEDGER_CANISTER_ID)
+        .with_symbol("SYM1")
+        .with_decimals(6)
+        .with_infinite_freezing_threshold();
+
+    let icrc1_ledger_2_builder = Icrc1LedgerBuilder::new(*TEST_LEDGER_CANISTER_ID_OTHER)
+        .with_symbol("SYM2")
+        .with_decimals(6)
+        // After canister installation, set an infinite freezing threshold, so that
+        // any calls to the ledger will return an out of cycles error.
+        .with_infinite_freezing_threshold();
+
+    let setup = Setup::builder()
+        .add_icrc1_ledger_builder(icrc1_ledger_1_builder)
+        .add_icrc1_ledger_builder(icrc1_ledger_2_builder)
+        .build(&rt);
+
+    let rosetta_ledger_setup_1_builder =
+        RosettaLedgerTestingEnvironmentBuilder::new(&setup.icrc1_ledgers[0], setup.port)
+            .with_icrc1_symbol("SYM1".to_string());
+
+    let rosetta_ledger_setup_2_builder =
+        RosettaLedgerTestingEnvironmentBuilder::new(&setup.icrc1_ledgers[1], setup.port)
+            .with_icrc1_symbol("SYM2".to_string());
+
+    let rosetta_testing_env_builder = RosettaTestingEnvironmentBuilder::new(false, setup.port)
+        .add_rosetta_ledger_testing_env_builder(rosetta_ledger_setup_1_builder)
+        .add_rosetta_ledger_testing_env_builder(rosetta_ledger_setup_2_builder);
+
+    let replica_url = format!("http://localhost:{}", setup.port);
+    let _ = rt.block_on(start_rosetta(
+        &rosetta_bin(),
+        RosettaOptions {
+            multi_tokens: Some(rosetta_testing_env_builder.multitoken_param_value()),
+            network_url: Some(replica_url),
+            offline: false,
+            symbol: None,
+            decimals: None,
+            port_file_timeout_retries: Some(60u64),
+            ..RosettaOptions::default()
+        },
+    ));
+}
+
 #[test]
 fn test_blocks() {
     let mut runner = TestRunner::new(TestRunnerConfig {
