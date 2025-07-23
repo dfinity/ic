@@ -280,7 +280,7 @@ system_test_nns(
 )
 
 system_test_nns(
-    name = "large_high_io_perf",
+    name = "io_perf_benchmark",
     env = VECTOR_ENV,
     tags = [
         "dynamic_testnet",
