@@ -6,7 +6,9 @@ mod tests;
 
 use crate::canister_state::execution_state::WasmExecutionMode;
 use crate::canister_state::queues::CanisterOutputQueuesIterator;
-use crate::canister_state::system_state::{ExecutionTask, SystemState};
+use crate::canister_state::system_state::{
+    ExecutionMessaging, ExecutionTask, IdleMessaging, SystemState, SystemStateV0,
+};
 use crate::{InputQueueType, MessageMemoryUsage, StateError};
 pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions};
 use ic_config::embedders::Config as HypervisorConfig;
@@ -113,10 +115,10 @@ impl SchedulerState {
 
 /// The full state of a single canister.
 #[derive(Clone, PartialEq, Debug, ValidateEq)]
-pub struct CanisterState {
+pub struct CanisterStateV0 {
     /// See `SystemState` for documentation.
     #[validate_eq(CompareWithValidateEq)]
-    pub system_state: SystemState,
+    pub system_state: SystemStateV0,
 
     /// See `ExecutionState` for documentation.
     ///
@@ -132,9 +134,77 @@ pub struct CanisterState {
     pub scheduler_state: SchedulerState,
 }
 
+/// The full state of a single canister.
+#[derive(Clone, PartialEq, Debug, ValidateEq)]
+pub struct CanisterState {
+    /// See `SystemState` for documentation.
+    #[validate_eq(CompareWithValidateEq)]
+    pub system_state: SystemState,
+
+    #[validate_eq(CompareWithValidateEq)]
+    pub messaging: IdleMessaging,
+
+    /// See `ExecutionState` for documentation.
+    ///
+    /// This may or may not exist depending on whether or not the canister has
+    /// an actual wasm module. A valid canister is not required to contain a
+    /// Wasm module. Canisters without Wasm modules can exist as a store of
+    /// ICP; temporarily when they are being upgraded, etc.
+    #[validate_eq(CompareWithValidateEq)]
+    pub execution_state: Option<ExecutionState>,
+
+    /// See `SchedulerState` for documentation.
+    #[validate_eq(CompareWithValidateEq)]
+    pub scheduler_state: SchedulerState,
+}
+
+#[derive(Clone, Debug)]
+pub struct ExecutionCanisterState {
+    /// See `SystemState` for documentation.
+    pub system_state: SystemState,
+
+    pub messaging: ExecutionMessaging,
+
+    /// See `ExecutionState` for documentation.
+    pub execution_state: ExecutionState,
+
+    /// See `SchedulerState` for documentation.
+    pub scheduler_state: SchedulerState,
+}
+
 impl CanisterState {
+    pub fn to_executing(self, time: Time) -> Result<ExecutionCanisterState, Self> {
+        match self {
+            Self {
+                execution_state: None,
+                ..
+            } => Err(self),
+            Self {
+                system_state,
+                messaging,
+                execution_state: Some(execution_state),
+                scheduler_state,
+            } => match messaging.to_executing(time) {
+                Ok(messaging) => Ok(ExecutionCanisterState {
+                    system_state,
+                    messaging,
+                    execution_state,
+                    scheduler_state,
+                }),
+                Err(messaging) => Err(Self {
+                    system_state,
+                    messaging,
+                    execution_state: Some(execution_state),
+                    scheduler_state,
+                }),
+            },
+        }
+    }
+}
+
+impl CanisterStateV0 {
     pub fn new(
-        system_state: SystemState,
+        system_state: SystemStateV0,
         execution_state: Option<ExecutionState>,
         scheduler_state: SchedulerState,
     ) -> Self {
@@ -194,14 +264,6 @@ impl CanisterState {
             own_subnet_type,
             input_queue_type,
         )
-    }
-
-    /// See `SystemState::pop_input` for documentation.
-    ///
-    /// The function is public as we pop directly from the Canister state in
-    /// `SchedulerImpl::execute_canisters_on_thread()`
-    pub fn pop_input(&mut self) -> Option<CanisterMessage> {
-        self.system_state.pop_input()
     }
 
     /// See `SystemState::has_input` for documentation.
@@ -334,7 +396,7 @@ impl CanisterState {
             .induct_messages_to_self(subnet_available_guaranteed_response_memory, own_subnet_type)
     }
 
-    pub fn into_parts(self) -> (Option<ExecutionState>, SystemState, SchedulerState) {
+    pub fn into_parts(self) -> (Option<ExecutionState>, SystemStateV0, SchedulerState) {
         (
             self.execution_state,
             self.system_state,
@@ -576,7 +638,7 @@ impl CanisterState {
         // whenever new fields are added.
         //
         // (!) DO NOT USE THE ".." WILDCARD, THIS SERVES THE SAME FUNCTION AS a `match`!
-        let CanisterState {
+        let CanisterStateV0 {
             ref mut system_state,
             execution_state: _,
             scheduler_state: _,
@@ -623,6 +685,104 @@ impl CanisterState {
                 self.memory_usage(),
                 self.wasm_memory_usage(),
             )
+    }
+}
+
+impl CanisterState {
+    pub fn canister_id(&self) -> CanisterId {
+        self.system_state.canister_id()
+    }
+
+    /// Returns true if there is at least one message in the canister's output
+    /// queues, false otherwise.
+    pub fn has_output(&self) -> bool {
+        self.messaging.queues().has_output()
+    }
+
+    /// Returns the amount of execution memory (heap, stable, globals, Wasm)
+    /// currently used by the canister in bytes.
+    pub fn execution_memory_usage(&self) -> NumBytes {
+        self.execution_state
+            .as_ref()
+            .map_or(NumBytes::new(0), |es| es.memory_usage())
+    }
+
+    /// Returns the amount of memory used by canisters that have custom Wasm
+    /// sections defined.
+    pub fn wasm_custom_sections_memory_usage(&self) -> NumBytes {
+        self.execution_state
+            .as_ref()
+            .map_or(NumBytes::new(0), |es| es.metadata.memory_usage())
+    }
+
+    /// Returns the amount of memory used by canister history in bytes.
+    pub fn canister_history_memory_usage(&self) -> NumBytes {
+        self.system_state.canister_history_memory_usage()
+    }
+
+    /// Returns the memory usage of the wasm chunk store in bytes.
+    pub fn wasm_chunk_store_memory_usage(&self) -> NumBytes {
+        self.system_state.wasm_chunk_store.memory_usage()
+    }
+
+    pub fn snapshots_memory_usage(&self) -> NumBytes {
+        self.system_state.snapshots_memory_usage
+    }
+
+    /// Returns the current memory allocation of the canister.
+    pub fn memory_allocation(&self) -> MemoryAllocation {
+        self.system_state.memory_allocation
+    }
+
+    /// See `IdleMessaging::push_input` for documentation.
+    ///
+    /// The function is public as we push directly to the Canister state in
+    /// `SchedulerImpl::induct_messages_on_same_subnet()`
+    pub fn push_input(
+        &mut self,
+        msg: RequestOrResponse,
+        subnet_available_guaranteed_response_memory: &mut i64,
+        own_subnet_type: SubnetType,
+        input_queue_type: InputQueueType,
+    ) -> Result<bool, (StateError, RequestOrResponse)> {
+        self.messaging.push_input(
+            msg,
+            subnet_available_guaranteed_response_memory,
+            own_subnet_type,
+            input_queue_type,
+        )
+    }
+
+    /// Unconditionally pushes an ingress message into the ingress pool of the
+    /// canister.
+    pub fn push_ingress(&mut self, msg: Ingress) {
+        self.messaging.push_ingress(msg)
+    }
+
+    /// Silently discards in-progress subnet messages being executed by the
+    /// canister, in the second phase of a subnet split. This should only be called
+    /// on canisters that have migrated to a new subnet (*subnet B*), which does not
+    /// have a matching call context.
+    ///
+    /// The other subnet (which must be *subnet A'*), produces reject responses (for
+    /// calls originating from canisters); and fails ingress messages (for calls
+    /// originating from ingress messages); for the matching subnet calls. This is
+    /// the only way to ensure consistency for messages that would otherwise be
+    /// executing on one subnet, but for which a response may only be produced by
+    /// another subnet.
+    pub fn drop_in_progress_management_calls_after_split(&mut self) {
+        // Destructure `self` in order for the compiler to enforce an explicit decision
+        // whenever new fields are added.
+        //
+        // (!) DO NOT USE THE ".." WILDCARD, THIS SERVES THE SAME FUNCTION AS a `match`!
+        let CanisterState {
+            system_state: _,
+            ref mut messaging,
+            execution_state: _,
+            scheduler_state: _,
+        } = self;
+
+        messaging.drop_in_progress_management_calls_after_split();
     }
 }
 

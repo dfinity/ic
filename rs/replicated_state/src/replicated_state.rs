@@ -153,7 +153,7 @@ impl<'a> OutputIterator<'a> {
         let mut canister_iterators: VecDeque<_> = canisters
             .values_mut()
             .filter(|canister| canister.has_output())
-            .map(|canister| canister.system_state.output_into_iter())
+            .map(|canister| canister.messaging.output_into_iter())
             .collect();
 
         let mut rng = ChaChaRng::seed_from_u64(seed);
@@ -455,8 +455,8 @@ impl SubAssign<MessageMemoryUsage> for MessageMemoryUsage {
 }
 
 /// ReplicatedState is the deterministic replicated state of the system.
-/// Broadly speaking it consists of two parts:  CanisterState used for canister
-/// execution and SystemMetadata used for message routing and history queries.
+/// Broadly speaking it consists of two parts: `CanisterState` used for canister
+/// execution and `SystemMetadata` used for message routing and history queries.
 //
 // * We don't derive `Serialize` and `Deserialize` because these are handled by
 // our OP layer.
@@ -628,8 +628,8 @@ impl ReplicatedState {
         self.canister_states.values_mut()
     }
 
-    // Loads a fresh version of the canister from the state and ensures that it
-    // has a call context manager i.e. it is not stopped.
+    /// Loads a fresh version of the canister from the state and ensures that it
+    /// has a call context manager i.e. it is not stopped.
     pub fn get_active_canister(
         &self,
         canister_id: &CanisterId,
@@ -641,7 +641,7 @@ impl ReplicatedState {
             )
         })?;
 
-        if canister.system_state.call_context_manager().is_none() {
+        if canister.messaging.is_stopped() {
             Err(UserError::new(
                 ErrorCode::CanisterStopped,
                 format!(
@@ -747,9 +747,7 @@ impl ReplicatedState {
             None => return false,
         };
 
-        let stopped = canister_state.system_state.status() == CanisterStatusType::Stopped;
-
-        stopped && !canister_state.has_output() && streams_flushed()
+        canister_state.messaging.is_stopped() && !canister_state.has_output() && streams_flushed()
     }
 
     /// Computes the memory taken by different types of memory resources.
@@ -770,9 +768,9 @@ impl ReplicatedState {
                         MemoryAllocation::BestEffort => canister.execution_memory_usage(),
                     },
                     canister
-                        .system_state
+                        .messaging
                         .guaranteed_response_message_memory_usage(),
-                    canister.system_state.best_effort_message_memory_usage(),
+                    canister.messaging.best_effort_message_memory_usage(),
                     canister.wasm_custom_sections_memory_usage(),
                     canister.canister_history_memory_usage(),
                     canister.wasm_chunk_store_memory_usage(),
@@ -818,7 +816,7 @@ impl ReplicatedState {
             .canisters_iter()
             .map(|canister| {
                 canister
-                    .system_state
+                    .messaging
                     .guaranteed_response_message_memory_usage()
             })
             .sum();
@@ -832,7 +830,7 @@ impl ReplicatedState {
     pub fn best_effort_message_memory_taken(&self) -> NumBytes {
         let canisters_memory_usage: NumBytes = self
             .canisters_iter()
-            .map(|canister| canister.system_state.best_effort_message_memory_usage())
+            .map(|canister| canister.messaging.best_effort_message_memory_usage())
             .sum();
         let subnet_memory_usage =
             (self.subnet_queues.best_effort_message_memory_usage() as u64).into();
@@ -850,7 +848,7 @@ impl ReplicatedState {
         self.canisters_iter()
             .map(|canister| {
                 canister
-                    .system_state
+                    .messaging
                     .call_context_manager()
                     .map_or(0, |ccm| ccm.callbacks().len())
             })
@@ -1055,7 +1053,7 @@ impl ReplicatedState {
     /// Garbage collects empty canister and subnet queues.
     pub fn garbage_collect_canister_queues(&mut self) {
         for (_canister_id, canister) in self.canister_states.iter_mut() {
-            canister.system_state.garbage_collect_canister_queues();
+            canister.messaging.garbage_collect_canister_queues();
         }
         self.subnet_queues.garbage_collect();
     }
@@ -1085,7 +1083,7 @@ impl ReplicatedState {
             .iter()
             .filter(|(_, canister_state)| {
                 canister_state
-                    .system_state
+                    .messaging
                     .has_expired_message_deadlines(current_time)
             })
             .map(|(canister_id, _)| *canister_id)
@@ -1094,7 +1092,7 @@ impl ReplicatedState {
         let mut cycles_lost = Cycles::zero();
         for canister_id in canister_ids_with_expired_deadlines {
             let mut canister = self.canister_states.remove(&canister_id).unwrap();
-            let canister_cycles_lost = canister.system_state.time_out_messages(
+            let canister_cycles_lost = canister.messaging.time_out_messages(
                 current_time,
                 &canister_id,
                 &self.canister_states,
@@ -1134,9 +1132,7 @@ impl ReplicatedState {
             .canister_states
             .iter()
             .filter(|(_, canister_state)| {
-                canister_state
-                    .system_state
-                    .has_expired_callbacks(current_time)
+                canister_state.messaging.has_expired_callbacks(current_time)
             })
             .map(|(canister_id, _)| *canister_id)
             .collect::<Vec<_>>();
@@ -1146,7 +1142,7 @@ impl ReplicatedState {
         for canister_id in canister_ids_with_expired_callbacks {
             let mut canister = self.canister_states.remove(&canister_id).unwrap();
             let (canister_expired_callback_count, canister_errors) = canister
-                .system_state
+                .messaging
                 .time_out_callbacks(current_time, &canister_id, &self.canister_states);
             expired_callback_count += canister_expired_callback_count;
             errors.extend(canister_errors);
@@ -1182,7 +1178,7 @@ impl ReplicatedState {
             .canister_states
             .iter()
             .filter_map(|(canister_id, canister)| {
-                let memory_usage = canister.system_state.best_effort_message_memory_usage();
+                let memory_usage = canister.messaging.best_effort_message_memory_usage();
                 if memory_usage > ZERO_BYTES {
                     Some((memory_usage, *canister_id))
                 } else {
@@ -1222,10 +1218,9 @@ impl ReplicatedState {
                     // replace it.
                     let mut canister = self.canister_states.remove(&canister_id).unwrap();
                     let (message_shed, message_cycles_lost) = canister
-                        .system_state
+                        .messaging
                         .shed_largest_message(&canister_id, &self.canister_states, metrics);
-                    let memory_usage_after =
-                        canister.system_state.best_effort_message_memory_usage();
+                    let memory_usage_after = canister.messaging.best_effort_message_memory_usage();
                     self.canister_states.insert(canister_id, canister);
                     (message_shed, memory_usage_after, message_cycles_lost)
                 };
@@ -1427,7 +1422,7 @@ impl ReplicatedState {
         for canister_id in local_canister_ids.iter() {
             let mut canister_state = canister_states.remove(canister_id).unwrap();
             canister_state
-                .system_state
+                .messaging
                 .split_input_schedules(canister_id, canister_states);
             canister_states.insert(*canister_id, canister_state);
         }
@@ -1551,7 +1546,7 @@ pub mod testing {
         fn output_message_count(&self) -> usize {
             self.canister_states
                 .values()
-                .map(|canister| canister.system_state.queues().output_queues_message_count())
+                .map(|canister| canister.messaging.queues().output_queues_message_count())
                 .sum::<usize>()
                 + self.subnet_queues.output_queues_message_count()
         }

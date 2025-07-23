@@ -230,7 +230,7 @@ impl TryFrom<pb::wasm_method::SystemMethod> for SystemMethod {
 /// If the canister migrates from `wasm32` to `wasm64` or back having some
 /// outstanding calls, we will try to convert the stored values into
 /// the required type and call the function.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Hash, Deserialize, Serialize)]
 pub struct WasmClosure {
     pub func_idx: u32,
     pub env: u64,
@@ -251,7 +251,7 @@ pub const UNKNOWN_CANISTER_ID: CanisterId =
 /// Callback holds references to functions executed when a response is received.
 /// It also tracks information about the origin of the request.
 /// This information is used to validate the response when it is received.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Hash, Deserialize, Serialize)]
 pub struct Callback {
     pub call_context_id: CallContextId,
     /// The request sender's ID.
