@@ -255,6 +255,7 @@ fn test_fetch_canister_logs_via_inter_canister_query_call() {
     // Record some logs in canister_b.
     let _ = env.execute_ingress(canister_b, "test", vec![]);
 
+    // Fetch logs of canister_b via canister_a.
     let result = env.execute_ingress(
         canister_a,
         "update",
