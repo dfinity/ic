@@ -49,7 +49,7 @@ processors:
 # ================================== Outputs ===================================
 
 output.elasticsearch:
-  enabled: true
+  enabled: false
 
   hosts: [{{ elasticsearch_hosts }}]
 
