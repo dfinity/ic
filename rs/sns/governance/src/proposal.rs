@@ -2814,7 +2814,7 @@ mod tests {
     use ic_crypto_sha2::Sha256;
     use ic_management_canister_types_private::{CanisterIdRecord, ChunkHash, StoredChunksReply};
     use ic_nervous_system_clients::canister_status::{
-        CanisterStatusResultV2, CanisterStatusType, MemoryMetrics,
+        CanisterStatusResultV2, CanisterStatusType, MemoryMetricsFromManagementCanister,
     };
     use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
     use ic_nns_constants::SNS_WASM_CANISTER_ID;
@@ -3755,7 +3755,7 @@ Upgrade argument with 8 bytes and SHA256 `0a141e28323c4650`."#
             0,
             0,
             0,
-            MemoryMetrics::default(),
+            MemoryMetricsFromManagementCanister::default(),
         )
     }
 

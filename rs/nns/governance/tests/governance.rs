@@ -16,7 +16,7 @@ use futures::future::FutureExt;
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_clients::canister_status::{
-    CanisterStatusResultV2, CanisterStatusType, MemoryMetrics,
+    CanisterStatusResultV2, CanisterStatusType, MemoryMetricsFromManagementCanister,
 };
 use ic_nervous_system_common::{
     ledger, ledger::compute_neuron_staking_subaccount_bytes, NervousSystemError, E8,
@@ -11704,7 +11704,7 @@ lazy_static! {
                     268693, // idle_cycles_burned_per_day
                     (3.5 * (1 << 30) as f32) as u64, // wasm_memory_limit (3.5gb)
                     123478, // wasm_memory_threshold
-                    MemoryMetrics::default(), // memory_metrics
+                    MemoryMetricsFromManagementCanister::default(), // memory_metrics
                 )),
             }),
             governance: Some(ic_sns_root::CanisterSummary {
@@ -11746,7 +11746,6 @@ lazy_static! {
                 cycles: Some(766182),
                 freezing_threshold: Some(448076),
                 idle_cycles_burned_per_day: Some(268693),
-                memory_metrics: Some(MemoryMetrics::default()),
             }),
         }),
 

@@ -73,6 +73,19 @@ pub struct DefiniteCanisterSettings {
 
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
 pub struct MemoryMetrics {
+    pub wasm_memory_size: Option<candid::Nat>,
+    pub stable_memory_size: Option<candid::Nat>,
+    pub global_memory_size: Option<candid::Nat>,
+    pub wasm_binary_size: Option<candid::Nat>,
+    pub custom_sections_size: Option<candid::Nat>,
+    pub canister_history_size: Option<candid::Nat>,
+    pub wasm_chunk_store_size: Option<candid::Nat>,
+    pub snapshots_size: Option<candid::Nat>,
+}
+
+/// Copy-paste of memory metrics from management canister types, used for the management canister `canister_status` method.
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
+pub struct MemoryMetricsFromManagementCanister {
     pub wasm_memory_size: candid::Nat,
     pub stable_memory_size: candid::Nat,
     pub global_memory_size: candid::Nat,
@@ -122,7 +135,7 @@ pub struct CanisterStatusResultFromManagementCanister {
     pub status: CanisterStatusType,
     pub module_hash: Option<Vec<u8>>,
     pub memory_size: candid::Nat,
-    pub memory_metrics: MemoryMetrics,
+    pub memory_metrics: MemoryMetricsFromManagementCanister,
     pub settings: DefiniteCanisterSettingsFromManagementCanister,
     pub cycles: candid::Nat,
     pub idle_cycles_burned_per_day: candid::Nat,
@@ -177,7 +190,7 @@ impl From<CanisterStatusResultFromManagementCanister> for CanisterStatusResult {
         let idle_cycles_burned_per_day = Some(idle_cycles_burned_per_day);
         let reserved_cycles = Some(reserved_cycles);
 
-        let memory_metrics = Some(memory_metrics);
+        let memory_metrics = Some(MemoryMetrics::from(memory_metrics));
 
         CanisterStatusResult {
             status,
@@ -246,6 +259,32 @@ impl From<QueryStatsFromManagementCanister> for QueryStats {
             num_instructions_total,
             request_payload_bytes_total,
             response_payload_bytes_total,
+        }
+    }
+}
+
+impl From<MemoryMetricsFromManagementCanister> for MemoryMetrics {
+    fn from(value: MemoryMetricsFromManagementCanister) -> Self {
+        let MemoryMetricsFromManagementCanister {
+            wasm_memory_size,
+            stable_memory_size,
+            global_memory_size,
+            wasm_binary_size,
+            custom_sections_size,
+            canister_history_size,
+            wasm_chunk_store_size,
+            snapshots_size,
+        } = value;
+
+        MemoryMetrics {
+            wasm_memory_size: Some(wasm_memory_size),
+            stable_memory_size: Some(stable_memory_size),
+            global_memory_size: Some(global_memory_size),
+            wasm_binary_size: Some(wasm_binary_size),
+            custom_sections_size: Some(custom_sections_size),
+            canister_history_size: Some(canister_history_size),
+            wasm_chunk_store_size: Some(wasm_chunk_store_size),
+            snapshots_size: Some(snapshots_size),
         }
     }
 }
@@ -325,13 +364,13 @@ impl CanisterStatusResultV2 {
         idle_cycles_burned_per_day: u128,
         wasm_memory_limit: u64,
         wasm_memory_threshold: u64,
-        memory_metrics: MemoryMetrics,
+        memory_metrics: MemoryMetricsFromManagementCanister,
     ) -> Self {
         Self {
             status,
             module_hash,
             memory_size: candid::Nat::from(memory_size.get()),
-            memory_metrics: Some(memory_metrics),
+            memory_metrics: Some(MemoryMetrics::from(memory_metrics)),
             cycles: candid::Nat::from(cycles),
             // the following is spec 0.12/0.13 compat;
             // "\x00" denotes cycles
@@ -395,7 +434,7 @@ impl CanisterStatusResultV2 {
             46,                       // idle_cycles_burned_per_day
             47,                       // wasm_memory_limit
             41,                       // wasm_memory_threshold
-            MemoryMetrics::default(), // memory_metrics
+            MemoryMetricsFromManagementCanister::default(), // memory_metrics
         )
     }
 
@@ -509,6 +548,7 @@ mod tests {
     use crate::canister_status::{
         CanisterStatusResult, CanisterStatusResultFromManagementCanister, CanisterStatusType,
         DefiniteCanisterSettings, DefiniteCanisterSettingsFromManagementCanister,
+        MemoryMetrics, MemoryMetricsFromManagementCanister,
     };
     use ic_base_types::PrincipalId;
 
@@ -520,7 +560,7 @@ mod tests {
             status: CanisterStatusType::Running,
             module_hash: Some(vec![1, 2, 3]),
             memory_size: candid::Nat::from(100_u32),
-            memory_metrics: MemoryMetrics {
+            memory_metrics: MemoryMetricsFromManagementCanister {
                 wasm_memory_size: candid::Nat::from(10_u32),
                 stable_memory_size: candid::Nat::from(20_u32),
                 global_memory_size: candid::Nat::from(30_u32),
@@ -575,14 +615,14 @@ mod tests {
                 response_payload_bytes_total: Some(candid::Nat::from(90_u32)),
             }),
             memory_metrics: Some(MemoryMetrics {
-                wasm_memory_size: candid::Nat::from(10_u32),
-                stable_memory_size: candid::Nat::from(20_u32),
-                global_memory_size: candid::Nat::from(30_u32),
-                wasm_binary_size: candid::Nat::from(40_u32),
-                custom_sections_size: candid::Nat::from(50_u32),
-                canister_history_size: candid::Nat::from(60_u32),
-                wasm_chunk_store_size: candid::Nat::from(70_u32),
-                snapshots_size: candid::Nat::from(80_u32),
+                wasm_memory_size: Some(candid::Nat::from(10_u32)),
+                stable_memory_size: Some(candid::Nat::from(20_u32)),
+                global_memory_size: Some(candid::Nat::from(30_u32)),
+                wasm_binary_size: Some(candid::Nat::from(40_u32)),
+                custom_sections_size: Some(candid::Nat::from(50_u32)),
+                canister_history_size: Some(candid::Nat::from(60_u32)),
+                wasm_chunk_store_size: Some(candid::Nat::from(70_u32)),
+                snapshots_size: Some(candid::Nat::from(80_u32)),
             }),
         };
 
