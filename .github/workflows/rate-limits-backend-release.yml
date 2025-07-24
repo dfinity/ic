@@ -32,7 +32,7 @@ jobs:
       labels: dind-large
 
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:d8f7308e97e095a9c9b0cdb1b6f260f459424e3792ebd49bb7c6ff6098941a34
+      image: ghcr.io/dfinity/ic-build@sha256:4e413cc86bac97c7077a9c7857b7ba1ab2e2c8104697f863585ad0ce70aab41f
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
 
