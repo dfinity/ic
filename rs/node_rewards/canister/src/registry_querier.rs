@@ -5,7 +5,9 @@ use ic_protobuf::registry::node::v1::{NodeRecord, NodeRewardType};
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_protobuf::registry::node_rewards::v2::NodeRewardsTable;
 use ic_protobuf::registry::subnet::v1::SubnetListRecord;
-use ic_registry_canister_client::{get_decoded_value, CanisterRegistryClient};
+use ic_registry_canister_client::{
+    get_decoded_value, CanisterRegistryClient, RegistryDataStableMemory, StorableRegistryKey,
+};
 use ic_registry_keys::{
     make_data_center_record_key, make_node_operator_record_key, make_subnet_list_record_key,
     NODE_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY,
@@ -19,9 +21,10 @@ use rewards_calculation::types::{
 use std::collections::{BTreeMap, BTreeSet};
 use std::str::FromStr;
 use std::sync::Arc;
+use std::thread::LocalKey;
 
-pub struct RegistryQuerier<T: CanisterRegistryClient> {
-    registry_client: Arc<T>,
+pub struct RegistryQuerier {
+    registry_client: Arc<dyn CanisterRegistryClient>,
 }
 
 struct NodeOperatorData {
@@ -30,8 +33,8 @@ struct NodeOperatorData {
     region: Region,
 }
 
-impl<T: CanisterRegistryClient> RegistryQuerier<T> {
-    pub fn new(registry_client: Arc<T>) -> Self {
+impl RegistryQuerier {
+    pub fn new(registry_client: Arc<dyn CanisterRegistryClient>) -> Self {
         RegistryQuerier { registry_client }
     }
 
@@ -66,20 +69,24 @@ impl<T: CanisterRegistryClient> RegistryQuerier<T> {
             })
             .unwrap_or_default()
     }
+}
 
+// Exposed API Methods
+impl RegistryQuerier {
     /// Computes the set of rewardable nodes, grouped by node provider, for the given range of UTC days.
     ///
     /// A node is considered rewardable on a specific UTC day if it exists in the registry on that day.
     /// See the `nodes_in_registry_between` method for details on how this is determined.
     ///
     /// Nodes without a specified `node_reward_type` are excluded from the rewardable set.
-    pub fn get_rewardable_nodes_per_provider(
-        &self,
+    pub fn get_rewardable_nodes_per_provider<S: RegistryDataStableMemory>(
+        registry_client: &'static LocalKey<Arc<impl CanisterRegistryClient>>,
         reward_period: RewardPeriod,
     ) -> Result<BTreeMap<PrincipalId, ProviderRewardableNodes>, RegistryClientError> {
         let mut rewardable_nodes_per_provider: BTreeMap<_, ProviderRewardableNodes> =
             BTreeMap::new();
-        let nodes_in_range = self.nodes_in_registry_between(reward_period.from, reward_period.to);
+        let nodes_in_range =
+            Self::nodes_in_registry_between::<S>(reward_period.from, reward_period.to);
 
         for (node_id, (node_record, latest_version, rewardable_days)) in nodes_in_range {
             let node_operator_id: PrincipalId = node_record
@@ -92,7 +99,7 @@ impl<T: CanisterRegistryClient> RegistryQuerier<T> {
                 dc_id,
                 region,
                 ..
-            }) = self.node_operator_data(node_operator_id, latest_version)?
+            }) = Self::node_operator_data(registry_client, node_operator_id, latest_version)?
             else {
                 ic_cdk::println!("Node {} has no NodeOperatorData: skipping", node_id);
                 continue;
@@ -143,8 +150,7 @@ impl<T: CanisterRegistryClient> RegistryQuerier<T> {
     /// - the most recent `NodeRecord` before `B` inclusive,
     /// - the corresponding `RegistryVersion`,
     /// - the sorted list of `DayUTC`s the node is in the registry.
-    fn nodes_in_registry_between(
-        &self,
+    fn nodes_in_registry_between<S: RegistryDataStableMemory>(
         day_start: DayUTC,
         day_end: DayUTC,
     ) -> BTreeMap<NodeId, (NodeRecord, RegistryVersion, Vec<DayUTC>)> {
@@ -152,19 +158,25 @@ impl<T: CanisterRegistryClient> RegistryQuerier<T> {
         let end_ts = day_end.unix_ts_at_day_end();
         let prefix_length = NODE_RECORD_KEY_PREFIX.len();
 
-        // Fetch all mutations for NodeRecord keys within the specified time range
-        // and group them by node key to iterate over each node's history.
-        self.registry_client.with_registry_map(|registry_map| {
+        let start_key = StorableRegistryKey {
+            key: NODE_RECORD_KEY_PREFIX.to_string(),
+            ..Default::default()
+        };
+
+        S::with_registry_map(|registry_map| {
             registry_map
-                .into_iter()
-                .filter(|(key, _, ts, _)| ts <= &end_ts && key.starts_with(NODE_RECORD_KEY_PREFIX))
+                .range(start_key..)
+                .filter(|(k, _)| {
+                    k.timestamp_nanoseconds <= end_ts && k.key.starts_with(NODE_RECORD_KEY_PREFIX)
+                })
+                .map(|(k, v)| (k.key, k.version, k.timestamp_nanoseconds, v.0))
                 .group_by(|(node_key, _, _, _)| node_key.clone())
                 .into_iter()
                 .filter_map(|(node_key, node_mutations)| {
                     let mut days = BTreeSet::new();
                     let mut last_present_ts: Option<UnixTsNanos> = None;
                     let mut latest_value: Option<Vec<u8>> = None;
-                    let mut latest_version: RegistryVersion = RegistryVersion::default();
+                    let mut latest_version = RegistryVersion::default().get();
 
                     // Process node's mutations history.
                     for (_, version, ts, maybe_value) in node_mutations {
@@ -209,7 +221,7 @@ impl<T: CanisterRegistryClient> RegistryQuerier<T> {
                                 node_id,
                                 (
                                     node_record,
-                                    latest_version,
+                                    RegistryVersion::from(latest_version),
                                     days.into_iter().sorted().collect(),
                                 ),
                             ));
@@ -222,13 +234,14 @@ impl<T: CanisterRegistryClient> RegistryQuerier<T> {
     }
 
     fn node_operator_data(
-        &self,
+        registry_client: &'static LocalKey<Arc<impl CanisterRegistryClient>>,
         node_operator: PrincipalId,
         version: RegistryVersion,
     ) -> Result<Option<NodeOperatorData>, RegistryClientError> {
         let node_operator_record_key = make_node_operator_record_key(node_operator);
-        let Some(node_operator_record) = get_decoded_value::<NodeOperatorRecord, T>(
-            &self.registry_client,
+        let client = registry_client.with(|c| c.clone());
+        let Some(node_operator_record) = get_decoded_value::<NodeOperatorRecord>(
+            &*client,
             node_operator_record_key.as_str(),
             version,
         )
@@ -240,14 +253,11 @@ impl<T: CanisterRegistryClient> RegistryQuerier<T> {
         };
 
         let data_center_key = make_data_center_record_key(node_operator_record.dc_id.as_str());
-        let Some(data_center_record) = get_decoded_value::<DataCenterRecord, T>(
-            &self.registry_client,
-            data_center_key.as_str(),
-            version,
-        )
-        .map_err(|e| RegistryClientError::DecodeError {
-            error: format!("Failed to decode DataCenterRecord: {}", e),
-        })?
+        let Some(data_center_record) =
+            get_decoded_value::<DataCenterRecord>(&*client, data_center_key.as_str(), version)
+                .map_err(|e| RegistryClientError::DecodeError {
+                    error: format!("Failed to decode DataCenterRecord: {}", e),
+                })?
         else {
             return Ok(None);
         };

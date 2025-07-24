@@ -98,6 +98,9 @@ pub struct GptPartitionProvider {
 }
 
 impl GptPartitionProvider {
+    /// Creates a new [GptPartitionProvider] for the given device.
+    /// The `device` must be a block device or a disk image with a valid GPT partition table and
+    /// must be valid for the entire lifetime of the constructed object.
     pub fn new(device: PathBuf) -> Result<Self> {
         #[cfg(target_os = "linux")]
         return Self::with_mounter(device, Box::new(LoopDeviceMounter));
@@ -107,12 +110,23 @@ impl GptPartitionProvider {
     }
 
     pub fn with_mounter(device: PathBuf, mounter: Box<dyn Mounter>) -> Result<Self> {
-        let gpt = gpt::disk::read_disk(&device).context("Could not read GPT from device")?;
+        let gpt = gpt::disk::read_disk(&device)
+            .with_context(|| format!("Could not read GPT from device {}", device.display()))?;
         Ok(Self {
             device,
             gpt,
             mounter,
         })
+    }
+}
+
+impl Drop for GptPartitionProvider {
+    fn drop(&mut self) {
+        debug_assert!(
+            self.device.exists(),
+            "Device {} does not exist",
+            self.device.display()
+        );
     }
 }
 
@@ -189,6 +203,7 @@ impl Mounter for LoopDeviceMounter {
 }
 
 #[cfg(test)]
+#[allow(dead_code)]
 pub mod testing {
     use super::*;
     use anyhow::Context;

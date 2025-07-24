@@ -733,7 +733,7 @@ impl ReplicatedState {
     }
 
     /// Canister migrations require that a canister is stopped, has no guaranteed responses
-    /// in any outgoing stream, and nothing in the output queue (guaranteed or otherwise).
+    /// in any outgoing stream, and nothing in the input or output queue (guaranteed or otherwise).
     pub fn ready_for_migration(&self, canister: &CanisterId) -> bool {
         let streams_flushed = || {
             self.metadata
@@ -749,7 +749,7 @@ impl ReplicatedState {
 
         let stopped = canister_state.system_state.status() == CanisterStatusType::Stopped;
 
-        stopped && !canister_state.has_output() && streams_flushed()
+        stopped && !canister_state.has_input() && !canister_state.has_output() && streams_flushed()
     }
 
     /// Computes the memory taken by different types of memory resources.

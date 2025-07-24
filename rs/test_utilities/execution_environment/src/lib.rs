@@ -216,7 +216,7 @@ pub fn cycles_reserved_for_app_and_verified_app_subnets<T: Fn(SubnetType)>(test:
 /// let wat = r#"(module (func (export "canister_query query")))"#;
 /// let canister_id = test.canister_from_wat(wat).unwrap();
 /// let result = test.ingress(canister_id, "query", vec![]);
-/// assert_empty_reply(result);
+/// expect_canister_did_not_reply(result);
 /// ```
 pub struct ExecutionTest {
     // Mutable fields that change after message execution.
@@ -2522,24 +2522,32 @@ impl ExecutionTestBuilder {
     }
 }
 
-/// A helper to extract the reply from an execution result.
+/// Extracts the reply data from a successful Wasm execution result.
+/// Panics if the result is a reject or an error.
 pub fn get_reply(result: Result<WasmResult, UserError>) -> Vec<u8> {
     match result {
         Ok(WasmResult::Reply(data)) => data,
-        Ok(WasmResult::Reject(error)) => {
-            unreachable!("Expected reply, got: {:?}", error);
-        }
-        Err(error) => {
-            unreachable!("Expected reply, got: {:?}", error);
-        }
+        Ok(WasmResult::Reject(msg)) => unreachable!("Expected reply, got reject: {}", msg),
+        Err(err) => unreachable!("Expected reply, got error: {:?}", err),
     }
 }
 
-/// A helper to assert that execution was successful and produced no reply.
-pub fn assert_empty_reply(result: Result<WasmResult, UserError>) {
+/// Extracts the reject message from a failed Wasm execution result.
+/// Panics if the result is a successful reply or an error.
+pub fn get_reject(result: Result<WasmResult, UserError>) -> String {
+    match result {
+        Ok(WasmResult::Reject(msg)) => msg,
+        Ok(WasmResult::Reply(data)) => unreachable!("Expected reject, got reply: {:?}", data),
+        Err(err) => unreachable!("Expected reject, got error: {:?}", err),
+    }
+}
+
+/// Expects that the canister did not reply (i.e., `CanisterDidNotReply` error).
+/// Panics if the result is not an error with that specific code.
+pub fn expect_canister_did_not_reply(result: Result<WasmResult, UserError>) {
     match result {
         Err(err) if err.code() == ErrorCode::CanisterDidNotReply => {}
-        _ => unreachable!("Expected empty reply, got {:?}", result),
+        _ => unreachable!("Expected CanisterDidNotReply error, got {:?}", result),
     }
 }
 

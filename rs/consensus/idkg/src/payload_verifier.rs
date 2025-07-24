@@ -40,7 +40,9 @@ use ic_interfaces::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
-use ic_management_canister_types_private::{Payload, SignWithECDSAReply, SignWithSchnorrReply};
+use ic_management_canister_types_private::{
+    Payload, ReshareChainKeyResponse, SignWithECDSAReply, SignWithSchnorrReply,
+};
 use ic_replicated_state::{
     metadata_state::subnet_call_context_manager::{
         IDkgSignWithThresholdContext, SignWithThresholdContext,
@@ -597,24 +599,16 @@ fn validate_reshare_dealings(
     Ok(new_dealings)
 }
 
-// TODO(CRP-2613): Remove the ComputeInitialIDkgDealingsResponse case, once the migration of the registry has happened
 fn decode_initial_dealings(data: &[u8]) -> Result<InitialIDkgDealings, InvalidIDkgPayloadReason> {
-    use ic_management_canister_types_private::{
-        ComputeInitialIDkgDealingsResponse, ReshareChainKeyResponse,
-    };
-    let initial_dealings = match ComputeInitialIDkgDealingsResponse::decode(data) {
-        Ok(dealings_response) => dealings_response.initial_dkg_dealings,
-        Err(_) => {
-            let reshare_chain_key_response = ReshareChainKeyResponse::decode(data)
-                .map_err(|err| InvalidIDkgPayloadReason::DecodingError(format!("{:?}", err)))?;
-            match reshare_chain_key_response {
-                ReshareChainKeyResponse::IDkg(initial_idkg_dealings) => initial_idkg_dealings,
-                ReshareChainKeyResponse::NiDkg(_) => {
-                    return Err(InvalidIDkgPayloadReason::DecodingError(
-                        "Found an NiDkg response".to_string(),
-                    ))
-                }
-            }
+    let reshare_chain_key_response = ReshareChainKeyResponse::decode(data)
+        .map_err(|err| InvalidIDkgPayloadReason::DecodingError(format!("{:?}", err)))?;
+
+    let initial_dealings = match reshare_chain_key_response {
+        ReshareChainKeyResponse::IDkg(initial_idkg_dealings) => initial_idkg_dealings,
+        ReshareChainKeyResponse::NiDkg(_) => {
+            return Err(InvalidIDkgPayloadReason::DecodingError(
+                "Found an NiDkg response".to_string(),
+            ))
         }
     };
 

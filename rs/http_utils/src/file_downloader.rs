@@ -1,7 +1,7 @@
 use flate2::read::GzDecoder;
 use http::Method;
 use ic_crypto_sha2::Sha256;
-use ic_logger::{log, ReplicaLogger};
+use ic_logger::{info, log, ReplicaLogger};
 use reqwest::{Client, Response};
 use slog::Level;
 use std::error::Error;
@@ -38,12 +38,22 @@ macro_rules! maybe_log {
 }
 
 macro_rules! maybe_info {
+    (every_n_seconds => $seconds:expr, $logger:expr, $($arg:tt)+) => {
+        if let Some(logger) = $logger.as_ref() {
+            info!(every_n_seconds => $seconds, logger, $($arg)+);
+        }
+    };
     ($logger:expr, $($arg:tt)+) => {
         maybe_log!($logger, Level::Info, $($arg)+);
     };
 }
 
 macro_rules! maybe_warn {
+    (every_n_seconds => $seconds:expr, $logger:expr, $($arg:tt)+) => {
+        if let Some(logger) = $logger.as_ref() {
+            warn!(every_n_seconds => $seconds, logger, $($arg)+);
+        }
+    };
     ($logger:expr, $($arg:tt)+) => {
         maybe_log!($logger, Level::Warning, $($arg)+);
     };
@@ -241,6 +251,8 @@ impl FileDownloader {
         mut file: fs::File,
         file_path: &Path,
     ) -> FileDownloadResult<()> {
+        let mut chunks_cnt: i32 = 0;
+        let mut chunks_total_len: usize = 0;
         while let Some(chunk) = tokio::time::timeout(self.chunk_timeout, response.chunk())
             .await
             // This error comes from `tokio::time::timeout`
@@ -256,9 +268,26 @@ impl FileDownloader {
                 }
             })?
         {
+            chunks_cnt += 1;
+            chunks_total_len += chunk.len();
+            maybe_info!(
+                every_n_seconds => 1,
+                self.logger,
+                "Streaming {} bytes to {:?} (this is chunk #{} from the beginning).",
+                chunk.len(),
+                file_path,
+                chunks_cnt
+            );
             file.write_all(&chunk)
                 .map_err(|e| FileDownloadError::file_write_error(file_path, e))?;
         }
+        maybe_info!(
+            self.logger,
+            "Streamed {} chunks totalling {} bytes to file {:?}.",
+            chunks_cnt,
+            chunks_total_len,
+            file_path
+        );
         Ok(())
     }
 }
