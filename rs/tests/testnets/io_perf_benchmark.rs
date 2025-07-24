@@ -1,6 +1,7 @@
 // This test is designed for scenarios where high IO performance is essential.
 // It leverages dedicated performance hosts with LVM partitions composed of multiple high-performance SSDs, mirroring production environments.
 // Specify the hosts via the PERF_HOSTS environment variable; each listed host will be allocated to a replica node.
+// Alternatively, you can specify the number of hosts via the NUM_PERF_HOSTS environment variable.
 //
 // Set up a testnet containing:
 //   one System subnet with the hosts specified in the PERF_HOSTS environment variable,
@@ -72,13 +73,15 @@ fn main() -> Result<()> {
         .map(|s| s.split(',').map(|s| s.to_string()).collect::<Vec<String>>())
         .ok();
 
-    let num_hosts = std::env::var("NUM_HOSTS")
+    // If hosts is not specified, Farm will automatically select this number of available hosts to use.
+    // If both hosts and num_hosts are set, hosts will be used and num_hosts will be ignored.
+    let num_hosts = std::env::var("NUM_PERF_HOSTS")
         .ok()
         .and_then(|s| s.parse::<u64>().ok());
 
     // By default, the image size is set to 5 TiB, which supports testing up to 2 TiB of state under heavy write workloads.
     // Note: Migrating such a large image to the LVM partition on the hosts can be time-consuming.
-    // To use a different image size, set the IMAGE_SIZE_GIB environment variable.
+    // To use a different image size, set the `IMAGE_SIZE_GIB` environment variable.
     let image_size_gib = std::env::var("IMAGE_SIZE_GIB")
         .ok()
         .and_then(|s| s.parse::<u64>().ok())
@@ -95,7 +98,6 @@ fn main() -> Result<()> {
 #[derive(Clone, Debug)]
 pub struct Config {
     hosts: Option<Vec<String>>,
-    // If hosts is not specified, Farm will automatically select this number of available hosts to use.
     num_hosts: Option<u64>,
     image_size_gib: u64,
 }
