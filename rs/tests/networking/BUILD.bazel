@@ -316,6 +316,7 @@ system_test_nns(
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS,
     deps = COMMON_DEPS + [
         "//rs/types/types",
+        "//rs/tests/consensus/utils",
         "@crate_index//:tokio",
         "@crate_index//:tokio-util",
     ],
