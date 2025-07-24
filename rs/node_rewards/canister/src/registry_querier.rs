@@ -15,9 +15,7 @@ use ic_registry_keys::{
 use ic_types::registry::RegistryClientError;
 use itertools::Itertools;
 use rewards_calculation::rewards_calculator_results::DayUTC;
-use rewards_calculation::types::{
-    NodeType, ProviderRewardableNodes, Region, RewardPeriod, RewardableNode, UnixTsNanos,
-};
+use rewards_calculation::types::{Region, RewardPeriod, RewardableNode, UnixTsNanos};
 use std::collections::{BTreeMap, BTreeSet};
 use std::str::FromStr;
 use std::sync::Arc;
@@ -82,9 +80,8 @@ impl RegistryQuerier {
     pub fn get_rewardable_nodes_per_provider<S: RegistryDataStableMemory>(
         registry_client: &'static LocalKey<Arc<impl CanisterRegistryClient>>,
         reward_period: RewardPeriod,
-    ) -> Result<BTreeMap<PrincipalId, ProviderRewardableNodes>, RegistryClientError> {
-        let mut rewardable_nodes_per_provider: BTreeMap<_, ProviderRewardableNodes> =
-            BTreeMap::new();
+    ) -> Result<BTreeMap<PrincipalId, Vec<RewardableNode>>, RegistryClientError> {
+        let mut rewardable_nodes_per_provider: BTreeMap<_, Vec<RewardableNode>> = BTreeMap::new();
         let nodes_in_range =
             Self::nodes_in_registry_between::<S>(reward_period.from, reward_period.to);
 
@@ -113,20 +110,13 @@ impl RegistryQuerier {
             let node_reward_type =
                 NodeRewardType::try_from(some_reward_type).expect("Invalid node_reward_type value");
 
-            // TODO: Modify RewardableNode to use NodeRewardType instead of NodeType.
-            let node_type = NodeType(node_reward_type.into());
-
             rewardable_nodes_per_provider
                 .entry(node_provider_id)
-                .or_insert(ProviderRewardableNodes {
-                    provider_id: node_provider_id,
-                    ..Default::default()
-                })
-                .rewardable_nodes
+                .or_default()
                 .push(RewardableNode {
                     node_id,
                     rewardable_days,
-                    node_type,
+                    node_reward_type,
                     dc_id: dc_id.clone(),
                     region: region.clone(),
                 });
@@ -266,13 +256,11 @@ impl RegistryQuerier {
             .node_provider_principal_id
             .try_into()
             .expect("Failed to parse PrincipalId");
-        let dc_id = node_operator_record.dc_id;
-        let region = Region(data_center_record.region.clone());
 
         Ok(Some(NodeOperatorData {
             node_provider_id,
-            dc_id,
-            region,
+            dc_id: node_operator_record.dc_id,
+            region: data_center_record.region.clone(),
         }))
     }
 }

@@ -1349,6 +1349,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "sys-mount": crate.spec(
                 version = "3.0",
             ),
+            "tabled": crate.spec(
+                version = "^0.20.0",
+            ),
             "tar": crate.spec(
                 version = "^0.4.38",
             ),
