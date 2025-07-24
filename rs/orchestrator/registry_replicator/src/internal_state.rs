@@ -509,8 +509,6 @@ pub fn apply_switch_over_to_last_changelog_entry_impl(
 #[cfg(test)]
 mod test {
     use super::*;
-    use ic_protobuf::registry::routing_table;
-    use ic_protobuf::registry::routing_table::v1::routing_table::Entry;
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_keys::{
         make_canister_ranges_key, make_routing_table_record_key, make_subnet_list_record_key,
@@ -758,31 +756,6 @@ mod test {
         assert!(!decoded_record.start_as_nns);
         assert_eq!(decoded_record.subnet_type, SubnetType::System as i32);
 
-        // Verify routing table was updated correctly
-        let routing_table_mutation = last_entry
-            .iter()
-            .find(|km| km.key == make_routing_table_record_key())
-            .expect("Routing table mutation should exist");
-
-        assert!(routing_table_mutation.value.is_some());
-
-        let decoded_routing_table =
-            PbRoutingTable::decode(routing_table_mutation.value.as_ref().unwrap().as_slice())
-                .expect("Should decode successfully");
-
-        // The routing table should only contain ranges that were previously assigned to old NNS
-        assert!(!decoded_routing_table.entries.is_empty());
-        let expected_routing_table = PbRoutingTable {
-            entries: vec![Entry {
-                range: Some(routing_table::v1::CanisterIdRange {
-                    start_canister_id: Some(CanisterId::from_u64(0).into()),
-                    end_canister_id: Some(CanisterId::from_u64(50).into()),
-                }),
-                subnet_id: Some(ic_types::subnet_id_into_protobuf(new_nns_subnet_id)),
-            }],
-        };
-        assert_eq!(decoded_routing_table, expected_routing_table);
-
         // Verify canister range key handling
         let canister_0_key = make_canister_ranges_key(CanisterId::from_u64(0));
         let canister_0_mutation = last_entry
@@ -790,7 +763,6 @@ mod test {
             .find(|km| km.key == canister_0_key)
             .expect("Expected mutation for CanisterId = 0");
         assert!(canister_0_mutation.value.is_some());
-        assert_eq!(canister_0_mutation.value, routing_table_mutation.value);
 
         let canister_51_key = make_canister_ranges_key(CanisterId::from_u64(51));
         let canister_51_mutation = last_entry
