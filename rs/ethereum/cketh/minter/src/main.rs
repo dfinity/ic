@@ -151,6 +151,51 @@ async fn minter_address() -> String {
     state::minter_address().await.to_string()
 }
 
+#[cfg(target_family = "wasm")]
+mod sys {
+    #[link(wasm_import_module = "ic0")]
+    extern "C" {
+        pub fn subnet_num_nodes() -> usize;
+        pub fn subnet_node_id_copy(node_index: usize, dst: usize, offset: usize, size: usize);
+        pub fn subnet_node_id_size(node_index: usize) -> usize;
+    }
+}
+
+#[cfg(target_family = "wasm")]
+#[query]
+async fn node_ids() -> Vec<candid::Principal> {
+    fn subnet_num_nodes() -> usize {
+        // SAFETY: ic0.subnet_self_size is always safe to call.
+        unsafe { sys::subnet_self_size() }
+    }
+    fn subnet_node_id_size(node_index: usize) -> usize {
+        // SAFETY: ic0.subnet_node_id_size is always safe to call.
+        unsafe { sys::subnet_node_id_size(node_index) }
+    }
+    fn subnet_node_id_copy(node_index: usize, dst: &mut [u8]) {
+        // SAFETY: ic0.subnet_node_id_copy is always safe to call.
+        unsafe {
+            sys::subnet_node_id_copy(
+                node_index,
+                dst.as_mut_ptr() as usize,
+                0,
+                dst.len(),
+            );
+        }
+    }
+
+    fn subnet_id(node_index:usize) -> candid::Principal {
+        let size = subnet_node_id_size(node_index);
+        let mut id = vec![0u8; size];
+        subnet_node_id_copy(node_index, &mut id);
+        candid::Principal::from_slice(&id)
+    }
+
+    (0..subnet_num_nodes())
+        .map(subnet_id)
+        .collect()
+}
+
 #[query]
 async fn smart_contract_address() -> String {
     read_state(|s| {
