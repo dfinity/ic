@@ -39,6 +39,10 @@ function reboot_setupos() {
 main() {
     log_start "$(basename $0)"
     start_setupos
+
+    echo "TEST FAILURE"
+    exit 1
+    
     /opt/ic/bin/check-setupos-age.sh
     /opt/ic/bin/check-config.sh
     /opt/ic/bin/check-hardware.sh
