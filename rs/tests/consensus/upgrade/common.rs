@@ -20,7 +20,6 @@ use ic_consensus_system_test_utils::rw_message::{
 use ic_consensus_system_test_utils::subnet::enable_chain_key_signing_on_subnet;
 use ic_consensus_system_test_utils::upgrade::{
     assert_assigned_replica_version, bless_replica_version, deploy_guestos_to_all_subnet_nodes,
-    UpdateImageType,
 };
 use ic_consensus_threshold_sig_system_test_utils::run_chain_key_signature_test;
 use ic_management_canister_types_private::MasterPublicKeyId;
@@ -52,7 +51,6 @@ pub fn bless_target_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> String 
     block_on(bless_replica_version(
         nns_node,
         &target_version,
-        UpdateImageType::Image,
         &logger,
         &sha256,
         vec![upgrade_url.to_string()],

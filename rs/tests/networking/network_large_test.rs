@@ -182,7 +182,9 @@ pub fn test(env: TestEnv) {
         Height::new(50),
     );
 
+    info!(log, "Storing message '{}' ...", UPDATE_MSG_5);
     block_on(message_canister.try_store_msg(UPDATE_MSG_5)).expect("Update canister call failed.");
+    info!(log, "Reading message '{}' ...", UPDATE_MSG_5);
     assert_eq!(
         block_on(message_canister.try_read_msg()),
         Ok(Some(UPDATE_MSG_5.to_string()))
