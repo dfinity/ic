@@ -374,7 +374,6 @@ impl CanisterHttpPoolManagerImpl {
             .filter(|share| share.content.id < next_callback_id)
             .filter_map(|share| {
                 if !is_current_protocol_version(&share.content.replica_version) {
-                    dbg!("protocol version invalid");
                     return Some(CanisterHttpChangeAction::RemoveUnvalidated(share.clone()));
                 };
 
@@ -720,6 +719,8 @@ pub mod test {
                     replication: Replication::FullyReplicated,
                 };
 
+                // NOTE: We need at least some context in the state, otherwise next_callback_id will be 0 and no
+                // artifacts can have a smaller callback_id and be valid
                 state_manager
                     .get_mut()
                     .expect_get_latest_state()
