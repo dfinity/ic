@@ -3711,6 +3711,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "derivative"
+version = "2.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fcc3dd5e9e9c0b295d6e1e4d811fb6f157d5ffd784b8d202fc62eac8035a770b"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "derive-new"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9844,6 +9855,7 @@ dependencies = [
  "ic-ledger-core",
  "ic-ledger-suite-state-machine-tests",
  "ic-limits",
+ "ic-management-canister-types",
  "ic-rosetta-api",
  "ic-rosetta-test-utils",
  "ic-sys",
@@ -10732,6 +10744,7 @@ dependencies = [
  "registry-canister",
  "serde",
  "serde_cbor",
+ "sns-treasury-manager",
  "tempfile",
  "thiserror 2.0.12",
  "tokio",
@@ -10982,6 +10995,7 @@ dependencies = [
  "ic-error-types 0.2.0",
  "ic-icrc1",
  "ic-icrc1-index-ng",
+ "ic-icrc1-ledger",
  "ic-icrc1-tokens-u64",
  "ic-interfaces-registry",
  "ic-ledger-core",
@@ -11037,6 +11051,7 @@ dependencies = [
  "rust_decimal_macros",
  "rustc-hash 1.1.0",
  "serde",
+ "sns-treasury-manager",
  "tempfile",
  "tokio",
  "url",
@@ -13079,6 +13094,7 @@ dependencies = [
  "itertools 0.12.1",
  "json-patch",
  "lazy_static",
+ "maplit",
  "pretty_assertions",
  "serde",
  "serde_cbor",
@@ -13164,6 +13180,7 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_json",
+ "sns-treasury-manager",
  "strum 0.26.3",
  "strum_macros 0.26.4",
  "tempfile",
@@ -22168,6 +22185,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.101",
+]
+
+[[package]]
+name = "sns-treasury-manager"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "derivative",
+ "serde",
 ]
 
 [[package]]

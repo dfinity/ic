@@ -6,7 +6,7 @@ use slog::Logger;
 use tokio::runtime::{Builder, Runtime};
 
 use ic_consensus_system_test_upgrade_common::{
-    bless_branch_version, get_chain_key_canister_and_public_key, upgrade,
+    bless_target_version, get_chain_key_canister_and_public_key, upgrade,
 };
 use ic_consensus_system_test_utils::rw_message::{
     can_read_msg_with_retries, install_nns_and_check_progress,
@@ -22,7 +22,7 @@ use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    get_mainnet_nns_revision, GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot,
+    get_guestos_img_version, GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot,
     IcNodeContainer, SubnetSnapshot,
 };
 use ic_system_test_driver::generic_workload_engine::engine::Engine;
@@ -60,10 +60,10 @@ fn setup(env: TestEnv) {
                 .collect(),
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
         });
 
     InternetComputer::new()
-        .with_mainnet_config()
         .add_subnet(Subnet::fast_single_node(SubnetType::System))
         .add_subnet(subnet_under_test)
         .setup_and_start(&env)
@@ -72,10 +72,10 @@ fn setup(env: TestEnv) {
     install_nns_and_check_progress(env.topology_snapshot());
 }
 
-// Tests an upgrade of the app subnet to the branch version and a downgrade back to the mainnet version
+// Tests an upgrade of the app subnet to the target version and a downgrade back to the initial version
 fn upgrade_downgrade_app_subnet(env: TestEnv) {
     let nns_node = env.get_first_healthy_system_node_snapshot();
-    let branch_version = bless_branch_version(&env, &nns_node);
+    let target_version = bless_target_version(&env, &nns_node);
     let agent = nns_node.with_default_agent(|agent| async move { agent });
     let key_ids = make_key_ids_for_all_schemes();
     get_chain_key_canister_and_public_key(
@@ -114,15 +114,15 @@ fn upgrade_downgrade_app_subnet(env: TestEnv) {
     let (faulty_node, can_id, msg) = upgrade(
         &env,
         &nns_node,
-        &branch_version,
+        &target_version,
         SubnetType::Application,
         None,
     );
-    let mainnet_version = get_mainnet_nns_revision();
+    let initial_version = get_guestos_img_version().expect("target IC version");
     upgrade(
         &env,
         &nns_node,
-        &mainnet_version,
+        &initial_version,
         SubnetType::Application,
         None,
     );

@@ -4,6 +4,7 @@ pub mod index;
 pub mod ledger;
 pub mod root;
 pub mod swap;
+pub mod treasury_manager;
 
 use core::convert::TryFrom;
 

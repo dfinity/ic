@@ -265,6 +265,7 @@ fn test_accepted_proposal_with_chain_key_gets_keys_from_other_subnet(key_id: Mas
             }],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
         }));
 
         let modify_base_subnet_mutate = RegistryAtomicMutateRequest {
@@ -294,6 +295,7 @@ fn test_accepted_proposal_with_chain_key_gets_keys_from_other_subnet(key_id: Mas
         // Create payload message with KeyConfigRequest
         let signature_request_timeout_ns = Some(12345);
         let idkg_key_rotation_period_ms = Some(12345);
+        let max_parallel_pre_signature_transcripts_in_creation = Some(12345);
         let payload = CreateSubnetPayload {
             chain_key_config: Some(InitialChainKeyConfig {
                 key_configs: vec![KeyConfigRequest {
@@ -310,6 +312,7 @@ fn test_accepted_proposal_with_chain_key_gets_keys_from_other_subnet(key_id: Mas
                 }],
                 signature_request_timeout_ns,
                 idkg_key_rotation_period_ms,
+                max_parallel_pre_signature_transcripts_in_creation,
             }),
             ..make_create_subnet_payload(node_ids.clone())
         };
@@ -347,6 +350,10 @@ fn test_accepted_proposal_with_chain_key_gets_keys_from_other_subnet(key_id: Mas
         assert_eq!(
             chain_key_config.idkg_key_rotation_period_ms,
             idkg_key_rotation_period_ms
+        );
+        assert_eq!(
+            chain_key_config.max_parallel_pre_signature_transcripts_in_creation,
+            max_parallel_pre_signature_transcripts_in_creation
         );
         assert_eq!(
             chain_key_config.key_configs,

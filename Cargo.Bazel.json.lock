@@ -1,5 +1,5 @@
 {
-  "checksum": "a550823cb09c4e2049c3154badf0a98af84be9d73ea7014bfbd2e2694f14fc68",
+  "checksum": "ffadea42d5cf0be8ef8cef5a3d76ef938257a4b8ac31b174d492e776ef563102",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -19626,6 +19626,62 @@
       ],
       "license_file": "LICENSE-Apache"
     },
+    "derivative 2.2.0": {
+      "name": "derivative",
+      "version": "2.2.0",
+      "package_url": "https://github.com/mcarton/rust-derivative",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/derivative/2.2.0/download",
+          "sha256": "fcc3dd5e9e9c0b295d6e1e4d811fb6f157d5ffd784b8d202fc62eac8035a770b"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "derivative",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "derivative",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro2 1.0.95",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.40",
+              "target": "quote"
+            },
+            {
+              "id": "syn 1.0.109",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2015",
+        "version": "2.2.0"
+      },
+      "license": "MIT/Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "derive-new 0.7.0": {
       "name": "derive-new",
       "version": "0.7.0",
@@ -21938,6 +21994,10 @@
             {
               "id": "async-trait 0.1.83",
               "target": "async_trait"
+            },
+            {
+              "id": "derivative 2.2.0",
+              "target": "derivative"
             },
             {
               "id": "derive-new 0.7.0",
@@ -94366,6 +94426,7 @@
     "darling 0.20.11",
     "dashmap 5.5.0",
     "der 0.7.7",
+    "derivative 2.2.0",
     "derive-new 0.7.0",
     "devicemapper 0.34.4",
     "dfx-core 0.1.4",

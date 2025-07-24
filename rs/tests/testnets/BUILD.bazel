@@ -280,6 +280,25 @@ system_test_nns(
 )
 
 system_test_nns(
+    name = "io_perf_benchmark",
+    env = VECTOR_ENV,
+    tags = [
+        "dynamic_testnet",
+        "manual",
+    ],
+    runtime_deps = SYSTEM_TESTNET_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE,
+    deps = [
+        # Keep sorted.
+        "//rs/registry/subnet_type",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/nns/nns_dapp",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+    ],
+)
+
+system_test_nns(
     name = "src_testing",
     env = SNS_CANISTER_ENV | VECTOR_ENV | {
         "XRC_WASM_PATH": "$(rootpath //rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister)",
