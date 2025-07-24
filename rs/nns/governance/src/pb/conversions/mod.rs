@@ -12,9 +12,7 @@ impl From<pb::NodeProvider> for pb_api::NodeProvider {
         let reward_account = item.reward_account.map(|account| {
             match icp_ledger::AccountIdentifier::try_from(&account) {
                 // If it's valid, we make sure it has the checksum.
-                Ok(account) => icp_ledger::protobuf::AccountIdentifier {
-                    hash: account.to_vec(),
-                },
+                Ok(account) => account.into_proto_with_checksum(),
                 Err(_) => {
                     // If it fails, we return what is there, since this is going from internal
                     // to API, and there's no good way to recover at this point
@@ -263,9 +261,7 @@ impl From<pb::reward_node_provider::RewardToAccount>
         let to_account = item.to_account.map(|account| {
             match icp_ledger::AccountIdentifier::try_from(&account) {
                 // If it's valid, we make sure it has the checksum.
-                Ok(account) => icp_ledger::protobuf::AccountIdentifier {
-                    hash: account.to_vec(),
-                },
+                Ok(account) => account.into_proto_with_checksum(),
                 Err(_) => {
                     // If it fails, we return what is there, since this is going from internal
                     // to API, and there's no good way to recover at this point

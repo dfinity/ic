@@ -1708,15 +1708,6 @@ fn test_compute_ballots_for_new_proposal() {
     );
 }
 
-fn valid_proto_account_identifier(
-    id: AccountIdentifier,
-) -> icp_ledger::protobuf::AccountIdentifier {
-    icp_ledger::protobuf::AccountIdentifier {
-        // different than From impl, as we use the to_vec on the object which adds checksum
-        hash: id.to_vec(),
-    }
-}
-
 #[test]
 fn test_validate_add_or_remove_node_provider() {
     let node_provider_id = PrincipalId::new_user_test_id(1);
@@ -1749,7 +1740,7 @@ fn test_validate_add_or_remove_node_provider() {
 
     let new_node_provider = NodeProvider {
         id: Some(new_node_provider_id),
-        reward_account: Some(valid_proto_account_identifier(valid_account)),
+        reward_account: Some(valid_account.into_proto_with_checksum()),
     };
     let add_or_remove_add_new = AddOrRemoveNodeProvider {
         change: Some(Change::ToAdd(new_node_provider)),
@@ -1816,7 +1807,7 @@ fn test_validate_add_or_remove_node_provider() {
     // Test Case 8: ToAdd with no NodeProvider ID (should fail)
     let node_provider_without_id = NodeProvider {
         id: None,
-        reward_account: Some(valid_proto_account_identifier(valid_account)),
+        reward_account: Some(valid_account.into_proto_with_checksum()),
     };
     let add_or_remove_no_id = AddOrRemoveNodeProvider {
         change: Some(Change::ToAdd(node_provider_without_id)),
