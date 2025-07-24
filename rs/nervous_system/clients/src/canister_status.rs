@@ -424,16 +424,16 @@ impl CanisterStatusResultV2 {
     pub fn dummy_with_controllers(controllers: Vec<PrincipalId>) -> CanisterStatusResultV2 {
         CanisterStatusResultV2::new(
             CanisterStatusType::Running,
-            None,                     // module_hash
-            controllers,              // controllers
-            NumBytes::new(42),        // memory_size
-            43,                       // cycles
-            44,                       // compute_allocation
-            None,                     // memory_allocation
-            45,                       // freezing_threshold
-            46,                       // idle_cycles_burned_per_day
-            47,                       // wasm_memory_limit
-            41,                       // wasm_memory_threshold
+            None,                                           // module_hash
+            controllers,                                    // controllers
+            NumBytes::new(42),                              // memory_size
+            43,                                             // cycles
+            44,                                             // compute_allocation
+            None,                                           // memory_allocation
+            45,                                             // freezing_threshold
+            46,                                             // idle_cycles_burned_per_day
+            47,                                             // wasm_memory_limit
+            41,                                             // wasm_memory_threshold
             MemoryMetricsFromManagementCanister::default(), // memory_metrics
         )
     }
@@ -528,7 +528,7 @@ impl From<CanisterStatusResultFromManagementCanister> for CanisterStatusResultV2
                 wasm_memory_threshold: Some(value.settings.wasm_memory_threshold),
             },
             memory_size: value.memory_size,
-            memory_metrics: Some(value.memory_metrics),
+            memory_metrics: Some(MemoryMetrics::from(value.memory_metrics)),
             cycles: value.cycles,
             idle_cycles_burned_per_day: value.idle_cycles_burned_per_day,
             query_stats: Some(QueryStats {
@@ -547,8 +547,8 @@ mod tests {
 
     use crate::canister_status::{
         CanisterStatusResult, CanisterStatusResultFromManagementCanister, CanisterStatusType,
-        DefiniteCanisterSettings, DefiniteCanisterSettingsFromManagementCanister,
-        MemoryMetrics, MemoryMetricsFromManagementCanister,
+        DefiniteCanisterSettings, DefiniteCanisterSettingsFromManagementCanister, MemoryMetrics,
+        MemoryMetricsFromManagementCanister,
     };
     use ic_base_types::PrincipalId;
 
