@@ -1,12 +1,12 @@
 use super::RawHttpRequestVal;
 use crate::{crypto::SignedBytesWithoutDomainSeparator, CountBytes};
+use ic_base_types::hash_of_map;
 use ic_crypto_sha2::Sha256;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::proxy::ProxyDecodeError;
 use serde::{de::Deserializer, ser::Serializer, Deserialize, Serialize};
 use std::{
-    collections::BTreeMap,
     convert::{AsRef, TryFrom},
     error::Error,
     fmt,
@@ -158,37 +158,39 @@ fn hash_val(val: &RawHttpRequestVal) -> Vec<u8> {
         RawHttpRequestVal::Bytes(bytes) => hash_bytes(bytes),
         RawHttpRequestVal::U64(integer) => hash_u64(*integer),
         RawHttpRequestVal::Array(elements) => hash_array(elements),
-        RawHttpRequestVal::Map(map) => hash_of_map(map).to_vec(),
+        RawHttpRequestVal::Map(map) => {
+            hash_of_map(map, |key, value| hash_key_val(key, value)).to_vec()
+        }
     }
 }
 
-fn hash_key_val(key: String, val: &RawHttpRequestVal) -> Vec<u8> {
-    let mut key_hash = hash_string(&key);
+pub(crate) fn hash_key_val(key: &String, val: &RawHttpRequestVal) -> Vec<u8> {
+    let mut key_hash = hash_string(key);
     let mut val_hash = hash_val(val);
     key_hash.append(&mut val_hash);
     key_hash
 }
 
-/// Describes `hash_of_map` as specified in the public spec.
-pub(crate) fn hash_of_map<S: ToString>(map: &BTreeMap<S, RawHttpRequestVal>) -> [u8; 32] {
-    let mut hashes: Vec<Vec<u8>> = Vec::new();
-    for (key, val) in map.iter() {
-        hashes.push(hash_key_val(key.to_string(), val));
-    }
+// /// Describes `hash_of_map` as specified in the public spec.
+// pub(crate) fn hash_of_map<S: ToString>(map: &BTreeMap<S, RawHttpRequestVal>) -> [u8; 32] {
+//     let mut hashes: Vec<Vec<u8>> = Vec::new();
+//     for (key, val) in map.iter() {
+//         hashes.push(hash_key_val(key.to_string(), val));
+//     }
 
-    // Computes hash by first sorting by "field name" hash, which is the
-    // same as sorting by concatenation of H(field name) · H(field value)
-    // (although in practice it's actually more stable in the presence of
-    // duplicated field names).  Then concatenate all the hashes.
-    hashes.sort();
+//     // Computes hash by first sorting by "field name" hash, which is the
+//     // same as sorting by concatenation of H(field name) · H(field value)
+//     // (although in practice it's actually more stable in the presence of
+//     // duplicated field names).  Then concatenate all the hashes.
+//     hashes.sort();
 
-    let mut hasher = Sha256::new();
-    for hash in hashes {
-        hasher.write(&hash);
-    }
+//     let mut hasher = Sha256::new();
+//     for hash in hashes {
+//         hasher.write(&hash);
+//     }
 
-    hasher.finish()
-}
+//     hasher.finish()
+// }
 
 impl From<&MessageId> for u32 {
     fn from(message_id: &MessageId) -> u32 {
@@ -277,7 +279,7 @@ mod tests {
         };
 
         assert_eq!(
-            hash_of_map(&outer_map),
+            hash_of_map(&outer_map, |key, value| { hash_key_val(key, value) }),
             hex!("ace3c6e84b170c6235faff2ee1152d831c332a7e3c932fb7d129f973d6913ff2")
         );
     }
@@ -286,7 +288,7 @@ mod tests {
     fn message_id_icf_key_val_reference_1() {
         assert_eq!(
             hash_key_val(
-                "request_type".to_string(),
+                &"request_type".to_string(),
                 &RawHttpRequestVal::String("call".to_string())
             ),
             hex!(

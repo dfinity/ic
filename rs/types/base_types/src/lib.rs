@@ -24,6 +24,12 @@ pub use principal_id::{
     PrincipalIdError as PrincipalIdParseError,
 };
 
+use ic_crypto_sha2::Sha256;
+use std::collections::BTreeMap;
+
+/// The length of a hash result in bytes.
+pub const HASH_LENGTH: usize = 32;
+
 pub struct RegistryVersionTag {}
 /// A type representing the registry's version.
 pub type RegistryVersion = AmountOf<RegistryVersionTag, u64>;
@@ -115,6 +121,36 @@ pub fn subnet_id_try_from_protobuf(value: pb::SubnetId) -> Result<SubnetId, Prox
             .ok_or(ProxyDecodeError::MissingField("SubnetId::principal_id"))?,
     )?;
     Ok(SubnetId::from(principal_id))
+}
+
+/// A generic function that computes the hash of a `BTreeMap` using a provided key-value hashing function.
+///
+/// This implementation follows the `hash_of_map` specification described in the Internet Computer public spec:
+/// https://internetcomputer.org/docs/current/references/ic-interface-spec#hash-of-map.
+///
+/// The `hash_key_val` function must hash both the key and the value, and return their concatenated result.
+pub fn hash_of_map<K, V, F>(map: &BTreeMap<K, V>, hash_key_val: F) -> [u8; HASH_LENGTH]
+where
+    F: Fn(&K, &V) -> Vec<u8>,
+{
+    // Create a vector to store the hashes of key-value pairs
+    let mut pair_hashes: Vec<Vec<u8>> = Vec::with_capacity(map.len());
+
+    // 1. For each key-value pair, hash the key and value, and concatenate the hashes.
+    for (key, value) in map {
+        pair_hashes.push(hash_key_val(key, value));
+    }
+
+    // 2. Sort the concatenated hashes.
+    pair_hashes.sort();
+
+    // 3. Concatenate the sorted hashes, and hash the result.
+    let mut hasher = Sha256::new();
+    for hash in pair_hashes {
+        hasher.write(&hash);
+    }
+
+    hasher.finish()
 }
 
 /// From its protobuf definition convert to a SubnetId.  Normally, we would
