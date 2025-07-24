@@ -725,36 +725,24 @@ pub fn generate_pre_signature(
     }
 }
 
-fn make_key_ids() -> Vec<(IDkgMasterPublicKeyId, AlgorithmId)> {
-    vec![
-        (
-            MasterPublicKeyId::Ecdsa(EcdsaKeyId {
-                curve: EcdsaCurve::Secp256k1,
-                name: "key1".into(),
-            })
-            .try_into()
-            .unwrap(),
-            AlgorithmId::ThresholdEcdsaSecp256k1,
-        ),
-        (
-            MasterPublicKeyId::Schnorr(SchnorrKeyId {
-                algorithm: SchnorrAlgorithm::Ed25519,
-                name: "key1".into(),
-            })
-            .try_into()
-            .unwrap(),
-            AlgorithmId::ThresholdEd25519,
-        ),
-        (
-            MasterPublicKeyId::Schnorr(SchnorrKeyId {
-                algorithm: SchnorrAlgorithm::Bip340Secp256k1,
-                name: "key1".into(),
-            })
-            .try_into()
-            .unwrap(),
-            AlgorithmId::ThresholdSchnorrBip340,
-        ),
+fn make_key_ids() -> Vec<IDkgMasterPublicKeyId> {
+    [
+        MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+            curve: EcdsaCurve::Secp256k1,
+            name: "key1".into(),
+        }),
+        MasterPublicKeyId::Schnorr(SchnorrKeyId {
+            algorithm: SchnorrAlgorithm::Ed25519,
+            name: "key1".into(),
+        }),
+        MasterPublicKeyId::Schnorr(SchnorrKeyId {
+            algorithm: SchnorrAlgorithm::Bip340Secp256k1,
+            name: "key1".into(),
+        }),
     ]
+    .into_iter()
+    .flat_map(IDkgMasterPublicKeyId::try_from)
+    .collect()
 }
 
 #[test]
@@ -763,10 +751,11 @@ fn pre_signature_stash_roundtrip() {
     let env = CanisterThresholdSigTestEnvironment::new(34, rng);
     let (dealers, receivers) =
         env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
-    let key_id_alg = make_key_ids();
+    let key_ids = make_key_ids();
     let mut stashes = BTreeMap::new();
     // create some stashes with pre-signatures
-    for (key_id, alg) in key_id_alg {
+    for key_id in key_ids {
+        let alg = AlgorithmId::from(key_id.inner());
         let key_transcript = generate_key_transcript(&env, &dealers, &receivers, alg, rng);
         let mut pre_signatures = BTreeMap::new();
         for i in 1..10 {
@@ -820,7 +809,8 @@ fn sign_with_threshold_context_roundtrip() {
     let env = CanisterThresholdSigTestEnvironment::new(34, rng);
     let (dealers, receivers) =
         env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
-    let transcripts = make_key_ids().into_iter().map(|(key_id, alg)| {
+    let transcripts = make_key_ids().into_iter().map(|key_id| {
+        let alg = AlgorithmId::from(key_id.inner());
         let key_transcript = generate_key_transcript(&env, &dealers, &receivers, alg, rng);
         let pre_signature =
             generate_pre_signature(&env, &dealers, &receivers, &key_transcript, rng);
