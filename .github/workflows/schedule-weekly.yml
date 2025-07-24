@@ -10,7 +10,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:4e413cc86bac97c7077a9c7857b7ba1ab2e2c8104697f863585ad0ce70aab41f
+      image: ghcr.io/dfinity/ic-build@sha256:a5edec0ae2b045ef86bc957f9a3155a360edc2a273a700eabd0670dc489d809c
       options: >-
         -e NODE_NAME
     timeout-minutes: 60 # 1 hour
