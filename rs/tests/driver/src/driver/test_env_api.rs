@@ -1817,7 +1817,7 @@ impl HasPublicApiUrl for IcNodeSnapshot {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct NnsCustomizations {
     /// Summarizes the custom parameters that a newly installed NNS should have.
     pub ledger_balances: Option<HashMap<AccountIdentifier, Tokens>>,
@@ -1828,6 +1828,8 @@ pub struct NnsCustomizations {
 pub struct NnsInstallationBuilder {
     customizations: NnsCustomizations,
     installation_timeout: Duration,
+    is_mock_exchange_rate_canister_enabled: bool,
+    is_subnet_rental_canister_enabled: bool,
 }
 
 impl Default for NnsInstallationBuilder {
@@ -1841,6 +1843,8 @@ impl NnsInstallationBuilder {
         Self {
             customizations: NnsCustomizations::default(),
             installation_timeout: NNS_CANISTER_INSTALL_TIMEOUT,
+            is_mock_exchange_rate_canister_enabled: false,
+            is_subnet_rental_canister_enabled: false,
         }
     }
 
@@ -1859,6 +1863,20 @@ impl NnsInstallationBuilder {
         self
     }
 
+    // Actually, it's a stub, but almost nobody remembers the fine distinctions
+    // between the various types of test doubles, and so even though it isn't
+    // technically a mock (as defined by Martin Fowler et. al.), it is called
+    // that, and this method is named accordingly.
+    pub fn with_mock_exchange_rate_canister(mut self) -> Self {
+        self.is_mock_exchange_rate_canister_enabled = true;
+        self
+    }
+
+    pub fn with_subnet_rental_canister(mut self) -> Self {
+        self.is_subnet_rental_canister_enabled = true;
+        self
+    }
+
     pub fn install(&self, node: &IcNodeSnapshot, test_env: &TestEnv) -> Result<()> {
         let log = test_env.logger();
         let ic_name = node.ic_name();
@@ -1874,10 +1892,7 @@ impl NnsInstallationBuilder {
             &log,
             url,
             &prep_dir,
-            true,
-            self.customizations.install_at_ids,
-            self.customizations.ledger_balances.clone(),
-            self.customizations.neurons.clone(),
+            self,
         );
         block_on(async {
             let timeout_result =
@@ -2253,17 +2268,30 @@ pub async fn install_nns_canisters(
     logger: &Logger,
     url: Url,
     ic_prep_state_dir: &IcPrepStateDir,
-    nns_test_neurons_present: bool,
-    install_at_ids: bool,
-    ledger_balances: Option<HashMap<AccountIdentifier, Tokens>>,
-    neurons: Option<Vec<Neuron>>,
+    nns_installation_builder: &NnsInstallationBuilder,
 ) {
     info!(
         logger,
         "Compiling/installing NNS canisters (might take a while)."
     );
+
+    let NnsCustomizations {
+        install_at_ids,
+        ledger_balances,
+        neurons,
+    } = nns_installation_builder.customizations.clone();
+
     let mut init_payloads = NnsInitPayloadsBuilder::new();
-    if nns_test_neurons_present {
+
+    if nns_installation_builder.is_mock_exchange_rate_canister_enabled {
+        init_payloads.with_mock_exchange_rate_canister();
+    }
+    if nns_installation_builder.is_subnet_rental_canister_enabled {
+        init_payloads.with_subnet_rental_canister();
+    }
+
+    // Neurons.
+    {
         let mut ledger_balances = ledger_balances.unwrap_or_default();
         let neurons = neurons.unwrap_or_default();
         ledger_balances.insert(
@@ -2299,6 +2327,7 @@ pub async fn install_nns_canisters(
             .with_additional_neurons(neurons)
             .with_ledger_init_state(ledger_init_payload);
     }
+
     let registry_local_store = ic_prep_state_dir.registry_local_store_path();
     let initial_mutations = read_initial_mutations_from_local_store_dir(&registry_local_store);
     init_payloads.with_initial_mutations(initial_mutations);

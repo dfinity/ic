@@ -11,7 +11,7 @@ use crate::{
     driver::test_env_api::{HasPublicApiUrl, IcNodeSnapshot},
     util::{create_agent, runtime_from_url},
 };
-use candid::CandidType;
+use candid::{CandidType, Deserialize, Principal};
 use canister_test::{Canister, Runtime};
 use cycles_minting_canister::{
     ChangeSubnetTypeAssignmentArgs, SetAuthorizedSubnetworkListArgs, SubnetListWithType,
@@ -458,6 +458,68 @@ pub async fn submit_external_proposal_with_test_id<T: CandidType>(
         "".to_string(),
     )
     .await
+}
+
+/// Does the following:
+///
+///   1. Submits an ExecuteNnsFunction proposal (in some places, this is weirdly
+///      called an "external" proposal for no discernable good reason).
+///
+///   2. Votes on it so that it gets adopted.
+///
+///   3. Waits for execution to complete.
+///
+///   4. Asserts that the proposal is marked as "successful".
+pub async fn execute_nns_function(
+    an_nns_subnet_node: &IcNodeSnapshot,
+    nns_function: NnsFunction,
+    payload: impl CandidType,
+) -> ProposalId {
+    // Construct Governance canister client.
+    let nns_subnet = runtime_from_url(
+        an_nns_subnet_node.get_public_url(),
+        // ID of a canister in the subnet that the node belongs to.
+        an_nns_subnet_node.effective_canister_id(),
+    );
+    let governance = get_governance_canister(&nns_subnet);
+
+    let proposal_id = submit_external_proposal_with_test_id(&governance, nns_function, payload).await;
+    vote_on_proposal(&governance, proposal_id).await;
+    let proposal_info = wait_for_final_state(&governance, proposal_id).await;
+
+    assert_eq!(
+        proposal_info.status,
+        ProposalStatus::Executed as i32,
+        "Execution of proposal {proposal_id} was NOT successful: {proposal_info:?}"
+    );
+
+    proposal_id
+}
+
+pub async fn execute_subnet_rental_request(an_nns_subnet_node: &IcNodeSnapshot, user: PrincipalId) {
+    // TODO( DO NOT MERGE )
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, CandidType, Deserialize, Hash)]
+    pub enum RentalConditionId {
+        App13CH,
+    }
+
+    #[derive(Clone, CandidType, Deserialize)]
+    pub struct SubnetRentalProposalPayload {
+        pub user: Principal,
+        pub rental_condition_id: RentalConditionId,
+    }
+
+    let user = Principal::from(user);
+
+    execute_nns_function(
+        an_nns_subnet_node,
+        NnsFunction::SubnetRentalRequest,
+        SubnetRentalProposalPayload {
+            user,
+            rental_condition_id: RentalConditionId::App13CH,
+        },
+    )
+    .await;
 }
 
 /// Submits a proposal for electing or unelecting a replica software versions.

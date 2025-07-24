@@ -72,3 +72,4 @@ rand = { workspace = true }
 registry-canister = { path = "../../registry/canister" }
 serde = { workspace = true }
 tokio = { workspace = true }
+xrc-mock = { path = "../../rosetta-api/tvl/xrc_mock" }
