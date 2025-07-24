@@ -23,8 +23,8 @@ benches:
   measure_routing_table_invariant_checks_shards_and_unsharded:
     total:
       calls: 1
-      instructions: 263440048
-      heap_increase: 81
+      instructions: 264040963
+      heap_increase: 138
       stable_memory_increase: 0
     scopes: {}
   measure_snapshot_creation_with_1000_individual_entries:
@@ -113,13 +113,13 @@ benches:
   upgrade_with_routing_table_1k:
     total:
       calls: 1
-      instructions: 698692556
+      instructions: 681079660
       heap_increase: 40
       stable_memory_increase: 0
     scopes:
       post_upgrade:
         calls: 1
-        instructions: 695801334
+        instructions: 678200881
         heap_increase: 25
         stable_memory_increase: 0
       pre_upgrade:
