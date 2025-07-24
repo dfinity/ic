@@ -71,7 +71,7 @@ pub const NNS_CANISTER_WASMS: [&str; 13] = [
 /// WARNING: This count is incomplete. See comments on NNS_CANISTER_WASMS.
 ///
 /// As of May 2024, this is only used by nns itest_helpers.
-pub const NUM_NNS_CANISTERS: usize = ALL_NNS_CANISTER_IDS.len();
+pub const NUM_NNS_CANISTERS: usize = ALL_NNS_CANISTER_IDS.len(); // DO NOT MERGE
 
 /// 0: rwlgt-iiaaa-aaaaa-aaaaa-cai
 pub const REGISTRY_CANISTER_ID: CanisterId =
@@ -182,6 +182,8 @@ pub const PROTOCOL_CANISTER_IDS: [&CanisterId; 19] = [
     &ICP_LEDGER_ARCHIVE_2_CANISTER_ID,
     &ICP_LEDGER_ARCHIVE_3_CANISTER_ID,
     &NODE_REWARDS_CANISTER_ID,
+
+    // Not in ALL_NNS_CANISTER_IDS (not sure why).
     &EXCHANGE_RATE_CANISTER_ID,
     &BITCOIN_MAINNET_CANISTER_ID,
     &BITCOIN_TESTNET_CANISTER_ID,

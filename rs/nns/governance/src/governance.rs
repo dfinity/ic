@@ -4460,9 +4460,17 @@ impl Governance {
         proposal_id: u64,
         fulfill_subnet_rental_request: FulfillSubnetRentalRequest,
     ) {
+        println!(
+            "{}Executing FulfillSubnetRentalRequest proposal {}...",
+            LOG_PREFIX, proposal_id,
+        );
         let result = fulfill_subnet_rental_request
             .execute(ProposalId { id: proposal_id }, &self.env)
             .await;
+        println!(
+            "{}Done executing FulfillSubnetRentalRequest proposal {}. Result: {:?}",
+            LOG_PREFIX, proposal_id, result,
+        );
         self.set_proposal_execution_status(proposal_id, result);
     }
 
