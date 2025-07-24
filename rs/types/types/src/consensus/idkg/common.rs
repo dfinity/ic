@@ -1036,19 +1036,19 @@ pub enum PreSignatureError {
 
 type PreSignatureResult = Result<PreSignature, PreSignatureError>;
 
-fn ok_ecdsa2(pre_sig: EcdsaPreSignatureQuadruple) -> PreSignatureResult {
+fn ok_ecdsa_pre_sig(pre_sig: EcdsaPreSignatureQuadruple) -> PreSignatureResult {
     Ok(PreSignature::Ecdsa(Arc::new(pre_sig)))
 }
 
-fn ok_schnorr2(pre_sig: SchnorrPreSignatureTranscript) -> PreSignatureResult {
+fn ok_schnorr_pre_sig(pre_sig: SchnorrPreSignatureTranscript) -> PreSignatureResult {
     Ok(PreSignature::Schnorr(Arc::new(pre_sig)))
 }
 
-fn err_ecdsa2(err: PreSignatureQuadrupleError) -> PreSignatureResult {
+fn err_ecdsa_pre_sig(err: PreSignatureQuadrupleError) -> PreSignatureResult {
     Err(PreSignatureError::Ecdsa(err))
 }
 
-fn err_schnorr2(err: PreSignatureTranscriptError) -> PreSignatureResult {
+fn err_schnorr_pre_sig(err: PreSignatureTranscriptError) -> PreSignatureResult {
     Err(PreSignatureError::Schnorr(err))
 }
 
@@ -1087,10 +1087,10 @@ impl PreSignatureRef {
         match self {
             PreSignatureRef::Ecdsa(quadruple_ref) => quadruple_ref
                 .translate(resolver)
-                .map_or_else(err_ecdsa2, ok_ecdsa2),
+                .map_or_else(err_ecdsa_pre_sig, ok_ecdsa_pre_sig),
             PreSignatureRef::Schnorr(transcript_ref) => transcript_ref
                 .translate(resolver)
-                .map_or_else(err_schnorr2, ok_schnorr2),
+                .map_or_else(err_schnorr_pre_sig, ok_schnorr_pre_sig),
         }
     }
 }
